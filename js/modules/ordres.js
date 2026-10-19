@@ -335,6 +335,10 @@ const Ordres = (() => {
     } else if (cible === 'Clôturé techniquement') {
       const manques = verifierCloture(ot);
       if (manques.length) erreurs.push('Il manque : ' + manques.join(' ; ') + '.');
+    } else if (cible === 'Clôturé administrativement') {
+      // RG4 revérifiée : la clôture technique doit être encore complète (aucune saisie ne l'a défaite).
+      const manques = verifierCloture(ot);
+      if (manques.length) erreurs.push('La clôture technique n\'est plus complète, il manque : ' + manques.join(' ; ') + '. Rouvrez l\'OT pour compléter.');
     }
     return { ok: erreurs.length === 0, erreurs, avertissements, piecesManquantes: manquantes };
   }
@@ -438,11 +442,19 @@ const Ordres = (() => {
     }, { action: 'création de l\'OT (' + (valeurs.origine || 'manuel') + ')' });
   }
 
-  /** Modifie des champs d'un OT non verrouillé ; renvoie la liste des champs réellement changés. */
+  /**
+   * Modifie des champs d'un OT non verrouillé ; renvoie la liste des champs réellement changés.
+   * Un OT « Clôturé techniquement » (sur la ligne fraîche) refuse tout changement : sa clôture
+   * (RG4) a été vérifiée ; il faut que le responsable le rouvre pour modifier ses saisies.
+   */
   async function modifierOt(otId, changements, action) {
     return Donnees.modifier('ordres_travail', (lignes) => {
       const ligne = ligneOt(lignes, otId, true);
       const changes = Object.keys(changements).filter((nom) => texte(ligne[nom]) !== texte(changements[nom]));
+      if (changes.length && ligne.statut === 'Clôturé techniquement') {
+        throw ErreurValidation('L\'OT ' + otId + ' est « Clôturé techniquement » (sans doute sur un autre poste) : '
+          + 'ses saisies ne peuvent plus être modifiées. Le responsable peut le rouvrir.');
+      }
       changes.forEach((nom) => { ligne[nom] = changements[nom]; });
       return changes;
     }, { action });
@@ -1025,8 +1037,15 @@ const Ordres = (() => {
     return { ok: true, enregistres };
   }
 
-  /** Réaffiche la fiche après un enregistrement (saisie terminée, défilement conservé). */
+  /**
+   * Réaffiche la fiche après un enregistrement (saisie terminée, défilement conservé). Les autres
+   * blocs modifiés mais pas encore enregistrés le sont d'abord : le réaffichage ne doit perdre
+   * aucune saisie (ex. « Travail à faire » tapé avant « Enregistrer les pièces »). Si l'un d'eux est
+   * refusé, la fiche n'est pas réaffichée : la saisie reste à l'écran avec son message.
+   */
   async function apresEnregistrement() {
+    const autres = await enregistrerFormulairesModifies();
+    if (!autres.ok) return;
     App.marquerSaisie(false);
     await App.reafficher();
   }
@@ -1292,8 +1311,7 @@ const Ordres = (() => {
       return false;
     }
     const nouvelle = { operation: (UI.$('[name="nouvelle_operation"]', formulaire) || {}).value || '', valeur_attendue: (UI.$('[name="nouvelle_valeur"]', formulaire) || {}).value || '' };
-    const resultat = await pendant(UI.$('button[type=submit]', formulaire), () => Donnees.modifier('ot_operations', (lignes, outils) => {
-      verifierOtModifiable(ot.id);
+    const resultat = await pendant(UI.$('button[type=submit]', formulaire), () => modifierLieeAOt(ot.id, 'ot_operations', (lignes, outils) => {
       modifiees.forEach((op) => {
         const ligne = lignes.find((l) => l.id === op.id && l.ot_id === ot.id);
         if (ligne) { ligne.operation = op.operation; ligne.valeur_attendue = op.valeur_attendue; }
@@ -1308,11 +1326,28 @@ const Ordres = (() => {
     return resultat === true;
   }
 
-  // Refus d'écrire dans une table liée si l'OT est verrouillé (relu dans le cache à jour).
+  // Refus d'écrire dans une table liée (temps, pièces, opérations) si l'OT est verrouillé ou
+  // clôturé techniquement. Lit le cache : appeler via modifierLieeAOt, qui le relit juste avant.
   function verifierOtModifiable(otId) {
     const ot = Donnees.trouver('ordres_travail', otId);
     if (!ot) throw ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
-    if (estVerrouille(ot)) throw ErreurValidation('L\'OT ' + otId + ' est « ' + ot.statut + ' » : il ne peut plus être modifié.');
+    if (estVerrouille(ot) || ot.statut === 'Clôturé techniquement') {
+      throw ErreurValidation('L\'OT ' + otId + ' est « ' + ot.statut + ' » (sans doute sur un autre poste) : il ne peut plus être modifié.');
+    }
+  }
+
+  /**
+   * Écrit dans une table liée à l'OT (ot_temps, ot_pieces, ot_operations) après avoir relu
+   * ordres_travail sur le stockage : un OT clôturé ou annulé sur un autre poste est refusé.
+   * Le contrôle est refait dans la fonction de mutation (rejouée en cas de conflit).
+   */
+  async function modifierLieeAOt(otId, table, fonction, options) {
+    await Donnees.rechargerTable('ordres_travail');
+    verifierOtModifiable(otId);
+    return Donnees.modifier(table, (lignes, outils) => {
+      verifierOtModifiable(otId);
+      return fonction(lignes, outils);
+    }, options);
   }
 
   // --- Pièces prévues (ot_pieces) : stock disponible, alerte si insuffisant ; quantité 0 = retirée ---
@@ -1386,8 +1421,7 @@ const Ordres = (() => {
       UI.toast('Quantités : saisissez des nombres positifs (0 pour retirer une pièce).', 'attention');
       return false;
     }
-    const resultat = await pendant(UI.$('button[type=submit]', formulaire), () => Donnees.modifier('ot_pieces', (lignes, outils) => {
-      verifierOtModifiable(ot.id);
+    const resultat = await pendant(UI.$('button[type=submit]', formulaire), () => modifierLieeAOt(ot.id, 'ot_pieces', (lignes, outils) => {
       quantites.forEach((q) => {
         const ligne = lignes.find((l) => l.id === q.id && l.ot_id === ot.id);
         if (ligne && nombre(ligne.quantite_prevue) !== q.quantite) ligne.quantite_prevue = String(q.quantite);
@@ -1477,8 +1511,7 @@ const Ordres = (() => {
     }, 'exécution'), 'exécution');
     if (changes === undefined) return false;
     if (!checkListe.length) return true;
-    const resultat = await pendant(bouton, () => Donnees.modifier('ot_operations', (lignes) => {
-      verifierOtModifiable(ot.id);
+    const resultat = await pendant(bouton, () => modifierLieeAOt(ot.id, 'ot_operations', (lignes) => {
       checkListe.forEach((op) => {
         const ligne = lignes.find((l) => l.id === op.id && l.ot_id === ot.id);
         if (ligne) { ligne.fait = op.fait; ligne.valeur_mesuree = op.valeur_mesuree; }
@@ -1526,8 +1559,7 @@ const Ordres = (() => {
       UI.toast('Temps passé : choisissez le technicien, la date et un nombre d\'heures entre 0 et 24 (ex. 1,5).', 'attention');
       return false;
     }
-    const resultat = await pendant(UI.$('button[type=submit]', formulaire), () => Donnees.modifier('ot_temps', (lignes, outils) => {
-      verifierOtModifiable(ot.id);
+    const resultat = await pendant(UI.$('button[type=submit]', formulaire), () => modifierLieeAOt(ot.id, 'ot_temps', (lignes, outils) => {
       lignes.push({ id: outils.nouvelId(lignes), ot_id: ot.id, technicien_id: valeurs.technicien_id, date: valeurs.date, heures: String(heures) });
       return true;
     }, { action: 'temps passé sur ' + ot.id }), 'temps passé');

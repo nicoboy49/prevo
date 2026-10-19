@@ -82,6 +82,7 @@
 @media (max-width: 640px) {
   .ot-liste-tableau { display: none; }
   .ot-liste-cartes { display: block; }
+  .ot-lien-equipement { min-height: 48px; display: inline-flex; align-items: center; }
   .ot-liste-tete .btn { flex: 1 1 auto; }
   .ot-entete .actions { width: 100%; }
   .ot-filtres select { flex: 1 1 140px; min-width: 0; }

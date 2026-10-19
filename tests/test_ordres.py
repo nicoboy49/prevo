@@ -15,6 +15,7 @@ Lancer depuis la racine du projet :
 import csv
 import datetime
 import io
+import re
 import unittest
 from pathlib import Path
 
@@ -407,6 +408,143 @@ class TestParcours(CasOrdres):
             # Avec un électricien habilité : plus d'avertissement
             page.select_option("#form-preparation [name=technicien_id]", "TEC-0001")
             page.wait_for_function("!document.querySelector('#form-preparation .ot-zone-habilitation .alerte')")
+
+
+# ---------------------------------------------------------------------------
+# Deux postes sur le même OT ; saisies de la fiche conservées (relecture des vagues 4-5)
+# ---------------------------------------------------------------------------
+
+# Prépare OT-2026-0108 (En cours) pour qu'il soit clôturable : date de fin, codes, compte rendu, temps.
+PREPARER_CLOTURE_0108_JS = """async () => {
+  await Donnees.modifier('ordres_travail', (l) => { Object.assign(l.find((x) => x.id === 'OT-2026-0108'), {
+    date_fin: Donnees.maintenant(), cause_code: 'C01', remede_code: 'R01',
+    compte_rendu: 'Filtre à huile remplacé, radiateur nettoyé.', remise_service: '1' }); });
+  await Donnees.modifier('ot_temps', (l, o) => { l.push({ id: o.nouvelId(l), ot_id: 'OT-2026-0108',
+    technicien_id: 'TEC-0004', date: Donnees.aujourdhui(), heures: '2' }); });
+}"""
+
+
+class TestDeuxPostes(CasOrdres):
+
+    def autre_poste(self, serveur, route, profil="responsable", technicien_id=""):
+        contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1280, "height": 900})
+        self.addCleanup(contexte.close)
+        contexte.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
+        preregler_profil(contexte, profil, technicien_id=technicien_id, poste="Poste B")
+        page = contexte.new_page()
+        self.surveiller(page)
+        page.goto(serveur.url + "/" + route)
+        attendre_pret(page)
+        return page
+
+    def ligne(self, serveur, nom, ot_id):
+        return next(o for o in lire_csv(serveur.dossier, nom) if o["id"] == ot_id)
+
+    def test_rg4_cloture_administrative_reverifie_la_cloture_technique(self):
+        with ServeurPrevo() as serveur:
+            self.ouvrir(serveur, "#/ot")
+            ot = {"id": "X", "statut": "Clôturé techniquement", "type": "correctif différé", "date_debut": "2026-10-19 08:00",
+                  "date_fin": "2026-10-19 10:00", "cause_code": "", "remede_code": "R01", "compte_rendu": "RAS",
+                  "remise_service": "1"}
+            passage = self.page.evaluate("(ot) => Ordres.verifierPassage(ot, 'Clôturé administrativement')", ot)
+            self.assertFalse(passage["ok"], passage)
+            texte = " ".join(passage["erreurs"])
+            self.assertIn("code cause", texte)
+            self.assertIn("RAS", texte)
+
+    def test_rg4_compte_rendu_d_un_poste_refuse_apres_la_cloture_technique_d_un_autre(self):
+        # Le poste A écrit avec une version périmée d'ordres_travail.csv : 409, relecture, puis refus.
+        self.autoriser_erreur(re.compile(r"status of 409.*/api/csv/ordres_travail"))
+        page = self.page
+        with ServeurPrevo() as serveur:
+            poste_b = self.autre_poste(serveur, "#/ot/OT-2026-0108")
+            poste_b.evaluate(PREPARER_CLOTURE_0108_JS)
+            # Poste A : compte rendu « RAS » sans code cause, pas encore enregistré
+            self.ouvrir(serveur, "#/ot/OT-2026-0108", profil="technicien", technicien_id="TEC-0004")
+            self.attendre_fiche("OT-2026-0108")
+            self.onglet("compte-rendu")
+            page.fill("#form-compte-rendu [name=compte_rendu]", "RAS")
+            page.select_option("#form-compte-rendu [name=cause_code]", "")
+            # Poste B clôture techniquement pendant ce temps
+            self.assertEqual(poste_b.evaluate("Ordres.changerStatut('OT-2026-0108', 'En cours', 'Clôturé techniquement')"),
+                             "Clôturé techniquement")
+            page.click("#form-compte-rendu button[type=submit]")
+            page.wait_for_function("document.getElementById('toast').textContent.includes('Clôturé techniquement')")
+            ligne = self.ligne(serveur, "ordres_travail.csv", "OT-2026-0108")
+            self.assertEqual((ligne["compte_rendu"], ligne["cause_code"]), ("Filtre à huile remplacé, radiateur nettoyé.", "C01"))
+            # La clôture administrative reste possible (l'OT est intact) et le compte rendu est le bon
+            poste_b.evaluate("Donnees.rafraichir()")
+            self.assertEqual(poste_b.evaluate(
+                "Ordres.changerStatut('OT-2026-0108', 'Clôturé techniquement', 'Clôturé administrativement')"),
+                "Clôturé administrativement")
+            ligne = self.ligne(serveur, "ordres_travail.csv", "OT-2026-0108")
+            self.assertEqual((ligne["statut"], ligne["compte_rendu"], ligne["cause_code"]),
+                             ("Clôturé administrativement", "Filtre à huile remplacé, radiateur nettoyé.", "C01"))
+
+    def test_ot_verrouille_sur_un_autre_poste_temps_refuse(self):
+        page = self.page
+        with ServeurPrevo() as serveur:
+            poste_b = self.autre_poste(serveur, "#/ot/OT-2026-0108")
+            poste_b.evaluate(PREPARER_CLOTURE_0108_JS)
+            temps_avant = [t["heures"] for t in lire_csv(serveur.dossier, "ot_temps.csv") if t["ot_id"] == "OT-2026-0108"]
+            # Poste A : onglet Exécution ouvert, puis B clôture administrativement
+            self.ouvrir(serveur, "#/ot/OT-2026-0108", profil="technicien", technicien_id="TEC-0004")
+            self.attendre_fiche("OT-2026-0108")
+            self.onglet("execution")
+            self.assertEqual(poste_b.evaluate("""async () => {
+                await Ordres.changerStatut('OT-2026-0108', 'En cours', 'Clôturé techniquement');
+                return Ordres.changerStatut('OT-2026-0108', 'Clôturé techniquement', 'Clôturé administrativement'); }"""),
+                "Clôturé administrativement")
+            page.fill("#ot-temps-heures", "5")
+            page.click("#form-temps button[type=submit]")
+            page.wait_for_function("document.getElementById('toast').textContent.includes('ne peut plus être modifié')")
+            temps_apres = [t["heures"] for t in lire_csv(serveur.dossier, "ot_temps.csv") if t["ot_id"] == "OT-2026-0108"]
+            self.assertEqual(temps_apres, temps_avant)
+
+    def test_ot_annule_sur_un_autre_poste_pieces_refusees(self):
+        with ServeurPrevo() as serveur:
+            poste_b = self.autre_poste(serveur, "#/ot/OT-2026-0104")
+            # Un responsable (poste C) prépare OT-2026-0104 pendant que B l'annule
+            poste_c = self.autre_poste(serveur, "#/ot/OT-2026-0104")
+            poste_c.wait_for_selector(".ot-fiche .ot-numero")
+            poste_c.click(".onglet[data-onglet='preparation']")
+            poste_c.wait_for_selector("#ot-nouvel-article")
+            poste_b.evaluate("Donnees.rafraichir()")
+            self.assertEqual(poste_b.evaluate(
+                "Ordres.changerStatut('OT-2026-0104', 'Créé', 'Annulé', { motif_annulation: 'doublon' })"), "Annulé")
+            poste_c.select_option("#ot-nouvel-article", "ART-0016")
+            poste_c.click("#form-pieces button[type=submit]")
+            poste_c.wait_for_function("document.getElementById('toast').textContent.includes('ne peut plus être modifié')")
+            self.assertEqual([p for p in lire_csv(serveur.dossier, "ot_pieces.csv") if p["ot_id"] == "OT-2026-0104"], [])
+
+    def test_saisies_des_autres_blocs_conservees_apres_un_enregistrement(self):
+        page = self.page
+        with ServeurPrevo() as serveur:
+            # Préparation : « Travail à faire » tapé, puis « Enregistrer les pièces »
+            self.ouvrir(serveur, "#/ot/OT-2026-0097")
+            self.attendre_fiche("OT-2026-0097")
+            self.onglet("preparation")
+            page.fill("#form-preparation [name=travail_a_faire]", "Texte saisi avant d'ajouter une pièce")
+            page.select_option("#ot-nouvel-article", "ART-0016")
+            page.click("#form-pieces button[type=submit]")
+            self.attendre_js("Donnees.lignes('ot_pieces').some((p) => p.ot_id === 'OT-2026-0097' && p.article_id === 'ART-0016')")
+            page.wait_for_function("document.getElementById('toast').textContent.includes('Pièces prévues enregistrées')")
+            self.assertEqual(page.input_value("#form-preparation [name=travail_a_faire]"), "Texte saisi avant d'ajouter une pièce")
+            self.assertEqual(self.ligne(serveur, "ordres_travail.csv", "OT-2026-0097")["travail_a_faire"],
+                             "Texte saisi avant d'ajouter une pièce")
+
+            # Exécution : « Maintenant » pour la date de fin, puis « Ajouter le temps »
+            self.aller("#/ot/OT-2026-0107")
+            self.attendre_fiche("OT-2026-0107")
+            self.onglet("execution")
+            page.click("#form-execution .ot-maintenant")
+            date_fin = page.input_value("#form-execution [name=date_fin]")
+            self.assertTrue(date_fin)
+            page.fill("#ot-temps-heures", "1,5")
+            page.click("#form-temps button[type=submit]")
+            page.wait_for_function("document.getElementById('toast').textContent.includes('Temps ajouté')")
+            self.assertEqual(page.input_value("#form-execution [name=date_fin]"), date_fin)
+            self.assertEqual(self.ligne(serveur, "ordres_travail.csv", "OT-2026-0107")["date_fin"], date_fin.replace("T", " "))
 
 
 # ---------------------------------------------------------------------------
