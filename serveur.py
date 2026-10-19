@@ -283,8 +283,15 @@ def est_une_adresse_ip(texte):
         return False
 
 
+# Suffixes de réseau local acceptés derrière le nom du PC (« pc-atelier.local »…). Un suffixe
+# quelconque (« pc-atelier.site-pirate.example ») ouvrirait la porte au « DNS rebinding » : un site
+# web malveillant ferait pointer son propre nom vers ce PC. D'autres noms : option --hote.
+SUFFIXES_RESEAU_LOCAL = ('.local', '.lan', '.home', '.localdomain', '.home.arpa', '.internal', '.intranet')
+
+
 def hote_autorise(valeur_host, config):
-    """Accepte une adresse IP, « localhost », le nom du PC (avec ou sans suffixe) et --hote."""
+    """Accepte une adresse IP, « localhost », le nom du PC (seul ou suivi d'un suffixe de réseau
+    local) et les noms donnés par --hote."""
     if not valeur_host:
         return False
     hote = extraire_nom_hote(valeur_host)
@@ -292,7 +299,9 @@ def hote_autorise(valeur_host, config):
         return False
     if est_une_adresse_ip(hote) or hote == 'localhost':
         return True
-    if hote == config.nom_pc or hote.startswith(config.nom_pc + '.'):
+    if hote == config.nom_pc:
+        return True
+    if hote.startswith(config.nom_pc + '.') and hote[len(config.nom_pc):] in SUFFIXES_RESEAU_LOCAL:
         return True
     return hote in config.hotes_supplementaires
 
@@ -357,7 +366,11 @@ def chemin_sous(dossier, *morceaux):
     if chemins_egaux(chemin, base) or not est_sous_dossier(chemin, base):
         raise ErreurHttp(400, 'Chemin refusé.')
     # Après résolution (raccourcis Windows « GIT~1 », liens…), aucun morceau caché.
-    for morceau in os.path.relpath(chemin, base).split(os.sep):
+    try:
+        relatif = os.path.relpath(chemin, base)
+    except ValueError:                  # « nul », « con »… : périphériques Windows, autre « lecteur »
+        raise ErreurHttp(400, 'Chemin refusé.')
+    for morceau in relatif.split(os.sep):
         if morceau.startswith('.'):
             raise ErreurHttp(400, 'Chemin refusé.')
     return chemin
@@ -400,7 +413,9 @@ def empreinte(octets):
 
 
 def lire_octets(chemin):
-    """Contenu du fichier, ou None s'il n'existe pas."""
+    """Contenu du fichier, ou None s'il n'existe pas (un dossier compte comme absent)."""
+    if os.path.isdir(chemin):
+        return None
     try:
         with open(chemin, 'rb') as fichier:
             return fichier.read()
@@ -554,10 +569,21 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
     tables = tables_a_restaurer(dossier_sauvegarde, tables_demandees)
     copie_securite = nouveau_nom_horodate(config, '_avant-restauration')
     copier_tables_dans_sauvegarde(config, copie_securite)
+    restaurees = []
     for table in tables:
         octets = lire_octets(os.path.join(dossier_sauvegarde, table + '.csv'))
-        ecrire_atomique(chemin_table(config, table), octets)
-    return {'restaurees': tables, 'copie_securite': copie_securite}
+        try:
+            ecrire_atomique(chemin_table(config, table), octets)
+        except ErreurHttp as erreur:
+            # Restauration partielle : on le dit clairement, avec la copie de sécurité à utiliser.
+            raise ErreurHttp(
+                erreur.statut,
+                '%s Restauration interrompue à la table %s ; tables déjà restaurées : %s. '
+                "L'état d'avant la restauration est dans la sauvegarde %s."
+                % (erreur.message, table, ', '.join(restaurees) or 'aucune', copie_securite),
+                restaurees=restaurees, copie_securite=copie_securite)
+        restaurees.append(table)
+    return {'restaurees': restaurees, 'copie_securite': copie_securite}
 
 
 # ---------------------------------------------------------------------------

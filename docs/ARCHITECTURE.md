@@ -198,6 +198,9 @@ Donnees.problemes()                  // [{ gravite: 'erreur'|'attention'|'info',
 Donnees.nombre(v)                    // Number ou null
 Donnees.aujourdhui() / Donnees.maintenant()   // 'AAAA-MM-JJ' / 'AAAA-MM-JJ HH:MM' (heure locale)
 Donnees.stockArticle(articleId)      // recalculé depuis mouvements_stock (un inventaire fixe la valeur)
+await Donnees.journaliser(table, idLigne, action)   // entrée de journal sans modification (ex. avertissement RG8)
+Donnees.instantane()                 // { table: Uint8Array } des 22 tables sérialisées (export ZIP, copie de la démo)
+Donnees.baseVide()                   // vrai si aucun des 22 fichiers n'existe
 Donnees.csv.analyser(table, octets)  // → { lignes, colonnesInconnues, problemes, encodage }
 Donnees.csv.serialiser(table, lignes, colonnesInconnues) // → Uint8Array
 Donnees.csv.ecrireValeur(champ, v) / Donnees.csv.relireValeur(champ, s)   // §3.2
@@ -289,7 +292,9 @@ d'abord l'état courant dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-restauration/`
 Réponses JSON `{"erreur": "message en français"}` en cas d'erreur. Toute requête qui écrit
 (`PUT`, `POST`) exige l'en-tête **`X-Prevo: 1`** (sinon 403). Corps limité à **10 Mo**
 (`Content-Length` obligatoire : 411 sinon, 413 au-delà). En-tête `Host` accepté seulement pour
-une adresse IP, `localhost` ou le nom du PC (avec ou sans suffixe) — sinon 403.
+une adresse IP, `localhost`, le nom du PC seul ou suivi d'un suffixe de réseau local
+(`.local`, `.lan`, `.home`, `.localdomain`, `.home.arpa`, `.internal`, `.intranet`) ou un nom donné
+par `--hote` — sinon 403 (un suffixe quelconque permettrait le « DNS rebinding »).
 
 | Méthode et chemin | Réponse |
 | --- | --- |
@@ -458,7 +463,7 @@ Option `--volume EQUIPEMENTS,OT --sortie DOSSIER` : jeu de charge (test de perfo
 
 ## 12. Tests
 
-`py -m unittest discover -s tests -v` lance tout. Outils communs dans `tests/outils.py` :
+`py -m unittest discover -s tests -v` lance tout. Outils communs dans `tests/commun.py` :
 serveur de test (copie du jeu de démo dans un dossier temporaire, `--sans-navigateur`, port
 libre), serveur statique (pour le dossier simulé), lancement de Chromium headless, collecte des
 erreurs console (**toute erreur JavaScript fait échouer le test**), dossier simulé (OPFS

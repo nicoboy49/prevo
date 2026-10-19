@@ -459,7 +459,10 @@ class TestApiServeur(CasAvecServeur):
         self.assertFalse(os.path.exists(self.chemin_donnee('achats.csv')))
 
     def test_host_evil_403(self):
-        for hote in ('evil.example', 'evil.example:%d' % self.serveur.port, '', 'localhost.evil.example'):
+        nom_pc = socket.gethostname()
+        # Le nom du PC suivi d'un domaine quelconque ouvrirait la porte au « DNS rebinding ».
+        for hote in ('evil.example', 'evil.example:%d' % self.serveur.port, '', 'localhost.evil.example',
+                     '%s.attacker.example' % nom_pc, '%s.attacker.example:%d' % (nom_pc, self.serveur.port)):
             with self.subTest(hote=hote):
                 self.assertEqual(self.requete('GET', '/api/ping', hote=hote).statut, 403)
         reponse = self.requete('PUT', '/api/csv/achats', b'id\r\n',
@@ -472,9 +475,19 @@ class TestApiServeur(CasAvecServeur):
         nom_pc = socket.gethostname()
         for hote in ('127.0.0.1:%d' % port, 'localhost:%d' % port, '192.168.1.10:%d' % port,
                      '[::1]:%d' % port, nom_pc, '%s:%d' % (nom_pc.upper(), port),
-                     '%s.local:%d' % (nom_pc, port)):
+                     '%s.local:%d' % (nom_pc, port), '%s.lan' % nom_pc, '%s.home.arpa' % nom_pc):
             with self.subTest(hote=hote):
                 self.assertEqual(self.requete('GET', '/api/ping', hote=hote).statut, 200)
+
+    def test_peripherique_windows_refuse_sans_erreur_interne(self):
+        # « nul », « con »… désignent des périphériques sous Windows : refus propre, jamais 500.
+        for chemin in ('/nul', '/con', '/NUL.txt', '/api/documents/nul.pdf'):
+            with self.subTest(chemin=chemin):
+                self.assertIn(self.requete('GET', chemin).statut, (400, 404))
+
+    def test_dossier_dans_documents_404(self):
+        os.makedirs(self.chemin_donnee('documents', 'rep.pdf'), exist_ok=True)
+        self.assertEqual(self.requete('GET', '/api/documents/rep.pdf').statut, 404)
 
     def test_aucun_fichier_temporaire_apres_ecriture(self):
         version = self.mettre_csv('articles', BOM + b'id\r\n').json()['version']
@@ -631,6 +644,18 @@ class TestFichierVerrouille(CasAvecServeur):
         # Fichier fermé : l'écriture passe.
         reponse = self.mettre_csv('achats', BOM + b'id\r\nACH-0001\r\n', version)
         self.assertEqual(reponse.statut, 200)
+
+    def test_restauration_interrompue_donne_la_copie_de_securite(self):
+        sauvegarde = self.requete('POST', '/api/sauvegarde', b'').json()['sauvegarde']
+        chemin = self.chemin_donnee('achats.csv')
+        with open(chemin, 'r+b'):              # Excel tient le fichier pendant la restauration
+            reponse = self.requete('POST', '/api/restauration',
+                                   json.dumps({'sauvegarde': sauvegarde}).encode('utf-8'))
+        self.assertEqual(reponse.statut, 423)
+        corps = reponse.json()
+        self.assertTrue(corps['copie_securite'].endswith('_avant-restauration'))
+        self.assertIn(corps['copie_securite'], corps['erreur'])
+        self.assertTrue(os.path.isdir(self.chemin_donnee('sauvegardes', corps['copie_securite'])))
 
 
 # ---------------------------------------------------------------------------
