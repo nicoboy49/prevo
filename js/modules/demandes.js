@@ -241,15 +241,41 @@ const Demandes = (() => {
     }, { action: 'acceptation de ' + diId + (changementPriorite ? ' ; ' + changementPriorite : '') });
 
     // (2) La DI : encore à traiter ? (sinon un autre poste a décidé entre-temps)
-    await Donnees.modifier('demandes', (lignes, outils) => {
-      const ligne = lignes.find((l) => l.id === diId);
-      verifierATraiter(ligne, diId);
-      ligne.statut = 'Acceptée';
-      ligne.ot_id = otId;
-      ligne.date_decision = outils.maintenant();
-      ligne.motif_decision = changementPriorite ? changementPriorite.charAt(0).toUpperCase() + changementPriorite.slice(1) : '';
-    }, { action: 'acceptée → ' + otId + (changementPriorite ? ' ; ' + changementPriorite : '') });
+    let vue = null;          // la DI telle que lue (fraîche) par la fonction de mutation
+    try {
+      await Donnees.modifier('demandes', (lignes, outils) => {
+        const ligne = lignes.find((l) => l.id === diId);
+        vue = ligne ? { statut: ligne.statut, ot_id: ligne.ot_id } : null;
+        verifierATraiter(ligne, diId);
+        ligne.statut = 'Acceptée';
+        ligne.ot_id = otId;
+        ligne.date_decision = outils.maintenant();
+        ligne.motif_decision = changementPriorite ? changementPriorite.charAt(0).toUpperCase() + changementPriorite.slice(1) : '';
+      }, { action: 'acceptée → ' + otId + (changementPriorite ? ' ; ' + changementPriorite : '') });
+    } catch (erreur) {
+      // La DI a été refusée, différée ou regroupée ailleurs entre les deux étapes : l'OT créé à
+      // l'étape 1 n'a plus de raison d'être. (Acceptée ailleurs avec CET OT : il est conservé.)
+      if (erreur instanceof Donnees.ErreurValidation && !(vue && vue.ot_id === otId)) {
+        await annulerOtOrphelin(diId, otId);
+      }
+      throw erreur;
+    }
     return otId;
+  }
+
+  /** Annule l'OT créé pour une DI finalement traitée sur un autre poste (s'il est encore « Créé »). */
+  async function annulerOtOrphelin(diId, otId) {
+    const motif = 'DI traitée sur un autre poste';
+    try {
+      await Donnees.modifier('ordres_travail', (lignes) => {
+        const ot = lignes.find((l) => l.id === otId);
+        if (!ot || ot.di_id !== diId || ot.statut !== 'Créé') return;
+        ot.statut = 'Annulé';
+        ot.motif_annulation = motif;
+      }, { action: 'statut Créé → Annulé : ' + motif });
+    } catch (erreur) {
+      App.signalerErreur(erreur, 'annulation de l\'OT ' + otId);
+    }
   }
 
   /** Rattache la DI à un OT ouvert du même équipement (statut « Regroupée »). */

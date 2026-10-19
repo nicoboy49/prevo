@@ -524,6 +524,38 @@ class TestServeurDeuxPostes(CasDemandes):
             self.assertEqual(len(ordres), 1)
             self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", "DI-2026-0069")["ot_id"], ordres[0]["id"])
 
+    def test_serveur_acceptation_pendant_un_refus_ailleurs_l_ot_cree_est_annule(self):
+        """Le poste A a créé l'OT (étape 1) ; le poste B refuse la DI avant l'étape 2 de A :
+        l'acceptation de A échoue et son OT, devenu orphelin, est annulé aussitôt."""
+        self.autoriser_erreur(CONFLIT_DEMANDES)       # A écrit demandes.csv sur une version périmée
+        preregler_profil(self.contexte, "responsable")
+        page_a = self.page
+        page_b = self.contexte.new_page()
+        self.surveiller(page_b)
+        with ServeurPrevo() as serveur:
+            self.ouvrir(serveur, "#/accueil", page_a)
+            self.ouvrir(serveur, "#/accueil", page_b)
+            # A : l'écriture de demandes.csv attend le signal window.__go (latence entre les deux étapes)
+            page_a.evaluate("""() => {
+              const origine = Donnees.modifier;
+              window.__attente = new Promise((r) => { window.__go = r; });
+              Donnees.modifier = async function (table, ...reste) {
+                if (table === 'demandes') await window.__attente;
+                return origine.call(this, table, ...reste);
+              };
+              window.__resultat = Demandes.accepter('DI-2026-0072').then((x) => 'accepté ' + x, (e) => e.constructor.name + ' : ' + e.message);
+            }""")
+            # L'OT de A est écrit (étape 1) avant le refus de B
+            page_a.wait_for_function("Donnees.lignes('ordres_travail').some((o) => o.di_id === 'DI-2026-0072')")
+            self.assertEqual(page_b.evaluate("Demandes.refuser('DI-2026-0072', 'doublon').then(() => 'refusée')"), "refusée")
+            page_a.evaluate("window.__go()")
+            resultat = page_a.evaluate("window.__resultat")
+            self.assertIn("ErreurValidation", resultat)
+            self.assertIn(MESSAGE_DEJA_TRAITEE, resultat)
+            ordres = [o for o in lire_csv(serveur.dossier / "ordres_travail.csv") if o["di_id"] == "DI-2026-0072"]
+            self.assertEqual([(o["statut"], o["motif_annulation"]) for o in ordres], [("Annulé", "DI traitée sur un autre poste")])
+            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", "DI-2026-0072")["statut"], "Refusée")
+
     def test_serveur_course_exacte_deux_acceptations_simultanees_un_seul_ot(self):
         """Les deux postes lisent la DI « Nouvelle » au même instant : la vérification préalable
         passe des deux côtés ; c'est l'enchaînement idempotent (D18) qui doit protéger."""
