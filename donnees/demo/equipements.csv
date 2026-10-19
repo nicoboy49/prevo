@@ -14,12 +14,12 @@ EQ-0003;'RA-01;Réservoir d'air comprimé 1000 L;LOC-0004;;Cuveltech;RV-1000;'00
 2. Fermer la vanne d'isolement d'air comprimé, la cadenasser, puis purger le circuit jusqu'à 0 bar.
 3. Le réservoir reste sous pression tant que la vanne de départ réseau n'est pas fermée.
 4. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0004;'PO-01;Pompe de circulation d'eau glacée;LOC-0004;;Hydrion;HC 65-200;'HY-65-18-3321;2018-06-04;B;en service;16;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+EQ-0004;'PO-01;Pompe de circulation d'eau glacée;LOC-0004;;Hydronel;HC 65-200;'HY-65-18-3321;2018-06-04;B;en service;16;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
 2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
 3. Isoler la partie concernée du circuit d'eau et la vidanger.
 4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
 5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0005;'PO-02;Pompe centrifuge eau de refroidissement;LOC-0004;;Hydrion;HC 50-160;'HY-50-17-2987;2017-09-18;B;en service;16;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+EQ-0005;'PO-02;Pompe centrifuge eau de refroidissement;LOC-0004;;Hydronel;HC 50-160;'HY-50-17-2987;2017-09-18;B;en service;16;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
 2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
 3. Isoler la partie concernée du circuit d'eau et la vidanger.
 4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
@@ -44,20 +44,20 @@ EQ-0009;'VE-02;Extracteur des fumées de soudage;LOC-0004;;Aéraulys;EX-4;'AE-04
 3. Immobiliser les masses mobiles (cales, béquilles ou goupilles de sécurité).
 4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
 5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0010;'AE-01;Armoire électrique générale basse tension (TGBT);LOC-0004;;Voltaris;TGBT-400;'VT-400-15-0092;2015-01-20;A;en service;24;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+EQ-0010;'AE-01;Armoire électrique générale basse tension (TGBT);LOC-0004;;Voltavel;TGBT-400;'VT-400-15-0092;2015-01-20;A;en service;24;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
 2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
 3. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
 4. Armoire alimentée par le transformateur : prévenir le chef d'atelier avant de couper.
 5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0011;'AE-02;Armoire de distribution de l'atelier Usinage;LOC-0002;;Voltaris;AD-250;'VT-250-15-0310;2015-01-20;B;en service;16;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+EQ-0011;'AE-02;Armoire de distribution de l'atelier Usinage;LOC-0002;;Voltavel;AD-250;'VT-250-15-0310;2015-01-20;B;en service;16;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
 2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
 3. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
 4. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0012;'AE-03;Armoire de commande de la ligne de conditionnement;LOC-0005;;Voltaris;AC-160;'VT-160-19-0654;2019-08-26;B;en service;16;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+EQ-0012;'AE-03;Armoire de commande de la ligne de conditionnement;LOC-0005;;Voltavel;AC-160;'VT-160-19-0654;2019-08-26;B;en service;16;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
 2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
 3. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
 4. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0013;'AE-04;Armoire de distribution de l'atelier Assemblage;LOC-0003;;Voltaris;AD-160;'VT-160-17-0508;2017-02-13;C;en service;;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+EQ-0013;'AE-04;Armoire de distribution de l'atelier Assemblage;LOC-0003;;Voltavel;AD-160;'VT-160-17-0508;2017-02-13;C;en service;;BR;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
 2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
 3. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
 4. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
@@ -115,7 +115,7 @@ EQ-0023;'CV-02;Convoyeur à rouleaux motorisé;LOC-0005;;Convexa;CR-450;'CX-450-
 3. Immobiliser les masses mobiles (cales, béquilles ou goupilles de sécurité).
 4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
 5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0024;'CV-02.M;Motoréducteur du convoyeur CV-02;LOC-0005;EQ-0023;Motorix;MR-0.75;'MO-075-17-5521;2017-06-12;B;en service;8;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+EQ-0024;'CV-02.M;Motoréducteur du convoyeur CV-02;LOC-0005;EQ-0023;Motorvel;MR-0.75;'MO-075-17-5521;2017-06-12;B;en service;8;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
 2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
 3. Immobiliser les masses mobiles (cales, béquilles ou goupilles de sécurité).
 4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
@@ -125,7 +125,7 @@ EQ-0025;'CV-03;Convoyeur de sortie de ligne;LOC-0005;;Convexa;CB-400;'CX-400-19-
 3. Immobiliser les masses mobiles (cales, béquilles ou goupilles de sécurité).
 4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
 5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0026;'EM-01;Fardeleuse sous film rétractable;LOC-0005;;Emballex;FX-90;'EX-90-18-0140;2018-04-16;B;en service;8;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+EQ-0026;'EM-01;Fardeleuse sous film rétractable;LOC-0005;;Emballor;FX-90;'EX-90-18-0140;2018-04-16;B;en service;8;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
 2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
 3. Fermer la vanne d'isolement d'air comprimé, la cadenasser, puis purger le circuit jusqu'à 0 bar.
 4. Immobiliser les masses mobiles (cales, béquilles ou goupilles de sécurité).
@@ -137,7 +137,7 @@ EQ-0027;'ET-01;Étiqueteuse automatique;LOC-0005;;Étiquex;ES-300;'EQ-300-20-095
 3. Fermer la vanne d'isolement d'air comprimé, la cadenasser, puis purger le circuit jusqu'à 0 bar.
 4. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
 5. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0028;'RB-01;Robot de palettisation;LOC-0005;;Robotech;PAL-6;'202409871234567;2024-09-02;B;en service;8;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+EQ-0028;'RB-01;Robot de palettisation;LOC-0005;;Robalys;PAL-6;'202409871234567;2024-09-02;B;en service;8;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
 2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
 3. Fermer la vanne d'isolement d'air comprimé, la cadenasser, puis purger le circuit jusqu'à 0 bar.
 4. Immobiliser les masses mobiles (cales, béquilles ou goupilles de sécurité).
@@ -148,8 +148,8 @@ EQ-0029;'BA-01;Balance de contrôle pondéral;LOC-0005;;Pesatec;CP-60;'PT-60-21-
 2. Ouvrir le sectionneur de l'équipement (ou le départ dans l'armoire) et le cadenasser avec son cadenas personnel.
 3. Vérifier l'absence de tension (VAT) avant de toucher à quoi que ce soit.
 4. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0030;'CH-01;Chariot élévateur électrique 2 t;LOC-0003;;Manuvia;E20;'MV-E20-19-1043;2019-06-04;B;en service;6;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
+EQ-0030;'CH-01;Chariot élévateur électrique 2 t;LOC-0003;;Manutrel;E20;'MV-E20-19-1043;2019-06-04;B;en service;6;;"1. Arrêter l'équipement en fin de cycle et prévenir le conducteur.
 2. Poser toute charge au sol : aucune charge ne reste suspendue pendant l'intervention.
 3. Débrancher la batterie de traction et retirer la clé du chariot.
 4. Afficher la pancarte « Consignation en cours » et garder la clé du cadenas sur soi.";;1
-EQ-0031;'PE-01;Perceuse à colonne (réformée en 2025);LOC-0002;;Foratec;PC-32;'FT-32-09-0710;2009-02-02;C;rebut;8;;;;0
+EQ-0031;'PE-01;Perceuse à colonne (réformée en 2025);LOC-0002;;Foradel;PC-32;'FT-32-09-0710;2009-02-02;C;rebut;8;;;;0

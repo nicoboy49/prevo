@@ -203,7 +203,9 @@ DEBUT_DANGEREUX = re.compile(r'[=+\-@\t\r]')   # formule ou tiret en tête
 
 def ressemble_nombre_date_fraction(valeur):
     """Vrai si Excel risque d'abîmer la valeur (nombre, date, fraction, heure, pourcentage)."""
-    valeur = valeur.strip()
+    # Retrait explicite de [ \t\r\n] aux deux bords (et non strip()) : identique à
+    # ressembleNombreDateFraction dans js/donnees.js.
+    valeur = valeur.strip(' \t\r\n')
     return any(motif.fullmatch(valeur) for motif in MOTIFS_FORME_NUMERIQUE)
 
 
@@ -490,7 +492,7 @@ NOMS_SUPPLEMENTAIRES = [    # techniciens ajoutés par le jeu de charge
 
 FOURNISSEURS = [        # (nom, contact, téléphone, e-mail)
     ('Mécaroule Distribution', 'Claire Rousseau', '0465710001', 'commandes@mecaroule-demo.example'),
-    ('Hydropneu Services', 'Bruno Faure', '0465710002', 'ventes@hydropneu-demo.example'),
+    ('Fluidalpes Services', 'Bruno Faure', '0465710002', 'ventes@fluidalpes-demo.example'),
     ('Électro-Alpes Distribution', 'Émilie Vasseur', '0465710003', 'comptoir@electro-alpes-demo.example'),
     ('Lubrifix Industrie', 'Olivier Brun', '0465710004', 'contact@lubrifix-demo.example'),
     ('Garnitech Pompes', 'Nathalie Joly', '0465710005', 'sav@garnitech-demo.example')]
@@ -551,10 +553,10 @@ EQUIPEMENTS_DEMO = [
                        'RV-1000', '00481723', '2019-03-12', 'B', None, '', 'pneu',
                        "Le réservoir reste sous pression tant que la vanne de départ réseau n'est pas fermée.",
                        'reservoir', 0),
-    definir_equipement('PO-01', "Pompe de circulation d'eau glacée", 'utilites', None, 'Hydrion',
+    definir_equipement('PO-01', "Pompe de circulation d'eau glacée", 'utilites', None, 'Hydronel',
                        'HC 65-200', 'HY-65-18-3321', '2018-06-04', 'B', 16, '', 'elec,fluide', '',
                        'pompe', 0.25),
-    definir_equipement('PO-02', 'Pompe centrifuge eau de refroidissement', 'utilites', None, 'Hydrion',
+    definir_equipement('PO-02', 'Pompe centrifuge eau de refroidissement', 'utilites', None, 'Hydronel',
                        'HC 50-160', 'HY-50-17-2987', '2017-09-18', 'B', 16, '', 'elec,fluide', '',
                        'pompe', 0),
     definir_equipement('PO-03', 'Pompe de relevage des eaux pluviales', 'utilites', None, 'Submersa',
@@ -568,17 +570,17 @@ EQUIPEMENTS_DEMO = [
     definir_equipement('VE-02', 'Extracteur des fumées de soudage', 'utilites', None, 'Aéraulys', 'EX-4',
                        'AE-04-2021-044', '2021-04-12', 'C', 6, '', 'elec,meca', '', 'ventilation', 0.15),
     definir_equipement('AE-01', 'Armoire électrique générale basse tension (TGBT)', 'utilites', None,
-                       'Voltaris', 'TGBT-400', 'VT-400-15-0092', '2015-01-20', 'A', 24, 'BR', 'elec',
+                       'Voltavel', 'TGBT-400', 'VT-400-15-0092', '2015-01-20', 'A', 24, 'BR', 'elec',
                        "Armoire alimentée par le transformateur : prévenir le chef d'atelier avant de couper.",
                        'electrique', 0.1),
     definir_equipement('AE-02', "Armoire de distribution de l'atelier Usinage", 'usinage', None,
-                       'Voltaris', 'AD-250', 'VT-250-15-0310', '2015-01-20', 'B', 16, 'BR', 'elec', '',
+                       'Voltavel', 'AD-250', 'VT-250-15-0310', '2015-01-20', 'B', 16, 'BR', 'elec', '',
                        'electrique', 0.15),
     definir_equipement('AE-03', 'Armoire de commande de la ligne de conditionnement', 'ligne_cond', None,
-                       'Voltaris', 'AC-160', 'VT-160-19-0654', '2019-08-26', 'B', 16, 'BR', 'elec', '',
+                       'Voltavel', 'AC-160', 'VT-160-19-0654', '2019-08-26', 'B', 16, 'BR', 'elec', '',
                        'electrique', 0.25),
     definir_equipement('AE-04', "Armoire de distribution de l'atelier Assemblage", 'assemblage', None,
-                       'Voltaris', 'AD-160', 'VT-160-17-0508', '2017-02-13', 'C', None, 'BR', 'elec', '',
+                       'Voltavel', 'AD-160', 'VT-160-17-0508', '2017-02-13', 'C', None, 'BR', 'elec', '',
                        'electrique', 0.1),
     # --- Atelier Usinage
     definir_equipement('CN-01', 'Tour à commande numérique', 'cellule_cn', None, 'Tornex', 'T-520',
@@ -605,25 +607,25 @@ EQUIPEMENTS_DEMO = [
                        0.35),
     definir_equipement('CV-02', 'Convoyeur à rouleaux motorisé', 'ligne_cond', None, 'Convexa', 'CR-450',
                        'CX-450-17-0306', '2017-06-12', 'B', 8, '', 'elec,meca', '', 'convoyeur', 0),
-    definir_equipement('CV-02.M', 'Motoréducteur du convoyeur CV-02', 'ligne_cond', 'CV-02', 'Motorix',
+    definir_equipement('CV-02.M', 'Motoréducteur du convoyeur CV-02', 'ligne_cond', 'CV-02', 'Motorvel',
                        'MR-0.75', 'MO-075-17-5521', '2017-06-12', 'B', 8, '', 'elec,meca', '', 'moteur',
                        0.1),
     definir_equipement('CV-03', 'Convoyeur de sortie de ligne', 'ligne_cond', None, 'Convexa', 'CB-400',
                        'CX-400-19-0411', '2019-10-07', 'C', 8, '', 'elec,meca', '', 'convoyeur', 0.25),
-    definir_equipement('EM-01', 'Fardeleuse sous film rétractable', 'ligne_cond', None, 'Emballex', 'FX-90',
+    definir_equipement('EM-01', 'Fardeleuse sous film rétractable', 'ligne_cond', None, 'Emballor', 'FX-90',
                        'EX-90-18-0140', '2018-04-16', 'B', 8, '', 'elec,pneu,meca,therm', '', 'emballage',
                        0.5),
     definir_equipement('ET-01', 'Étiqueteuse automatique', 'ligne_cond', None, 'Étiquex', 'ES-300',
                        'EQ-300-20-0952', '2020-01-27', 'C', 8, '', 'elec,pneu', '', 'emballage', 0.35),
-    definir_equipement('RB-01', 'Robot de palettisation', 'ligne_cond', None, 'Robotech', 'PAL-6',
+    definir_equipement('RB-01', 'Robot de palettisation', 'ligne_cond', None, 'Robalys', 'PAL-6',
                        '202409871234567', '2024-09-02', 'B', 8, '', 'elec,pneu,meca',
                        'Arrêter le robot et ouvrir la barrière de la zone avant de consigner.',
                        'emballage', 0.3),
     definir_equipement('BA-01', 'Balance de contrôle pondéral', 'ligne_cond', None, 'Pesatec', 'CP-60',
                        'PT-60-21-0377', '2021-03-15', 'C', 8, '', 'elec', '', 'emballage', 0),
-    definir_equipement('CH-01', 'Chariot élévateur électrique 2 t', 'assemblage', None, 'Manuvia', 'E20',
+    definir_equipement('CH-01', 'Chariot élévateur électrique 2 t', 'assemblage', None, 'Manutrel', 'E20',
                        'MV-E20-19-1043', '2019-06-04', 'B', 6, '', 'batt,charge', '', 'levage', 0.3),
-    definir_equipement('PE-01', 'Perceuse à colonne (réformée en 2025)', 'usinage', None, 'Foratec',
+    definir_equipement('PE-01', 'Perceuse à colonne (réformée en 2025)', 'usinage', None, 'Foradel',
                        'PC-32', 'FT-32-09-0710', '2009-02-02', 'C', 8, '', '', '', 'usinage', 0,
                        statut='rebut'),
 ]
@@ -631,16 +633,16 @@ EQUIPEMENTS_DEMO = [
 # Familles du jeu de charge : (famille, préfixe, désignation, marque, modèle, énergies, heures/jour,
 # taux de pannes par mois, poids dans le parc, habilitation)
 FAMILLES_VOLUME = [
-    ('pompe', 'PO', 'Pompe centrifuge', 'Hydrion', 'HC 50-160', 'elec,fluide', 16, 0.35, 12, ''),
+    ('pompe', 'PO', 'Pompe centrifuge', 'Hydronel', 'HC 50-160', 'elec,fluide', 16, 0.35, 12, ''),
     ('convoyeur', 'CV', 'Convoyeur', 'Convexa', 'CB-600', 'elec,meca', 8, 0.5, 16, ''),
     ('compresseur', 'CP', 'Compresseur à vis', 'Aerovis', 'AV 30 D', 'elec,pneu,therm', 16, 0.4, 3, ''),
     ('presse', 'PR', 'Presse hydraulique', 'Presto-Form', 'PH-100', 'elec,hydr,meca', 8, 0.6, 5, ''),
     ('usinage', 'MO', "Machine d'usinage", 'Fraistral', 'VMC-760', 'elec,pneu,meca', 14, 0.6, 9, ''),
-    ('electrique', 'AE', 'Armoire électrique', 'Voltaris', 'AD-250', 'elec', 24, 0.2, 12, 'BR'),
+    ('electrique', 'AE', 'Armoire électrique', 'Voltavel', 'AD-250', 'elec', 24, 0.2, 12, 'BR'),
     ('ventilation', 'VE', 'Ventilation', 'Aéraulys', 'EX-4', 'elec,meca', 10, 0.25, 8, ''),
     ('froid', 'GF', 'Groupe froid', 'Frigora', 'GF-80 R', 'elec,fluide,therm', 16, 0.4, 3, 'BR'),
     ('levage', 'PT', 'Appareil de levage', 'Levamax', 'PR-5T', 'elec,charge', 5, 0.3, 5, ''),
-    ('emballage', 'EM', "Machine d'emballage", 'Emballex', 'FX-90', 'elec,pneu,meca', 8, 0.7, 12, ''),
+    ('emballage', 'EM', "Machine d'emballage", 'Emballor', 'FX-90', 'elec,pneu,meca', 8, 0.7, 12, ''),
 ]
 
 
@@ -1028,38 +1030,38 @@ ARTICLES = [
     definir_article('filtre_air_cp', 'FIL', 'Filtre à air compresseur CP-01', 'Filtravel', 'FA-3011', 'u', 38.0, 1, 2, 4, 5, 4, 0, ['CP-01']),
     definir_article('filtre_huile_cp', 'FIL', 'Cartouche filtre à huile CP-01', 'Filtravel', 'FH-2208', 'u', 27.5, 2, 3, 6, 5, 4, 1, ['CP-01'], 1, cible=2),
     definir_article('separ_cp', 'FIL', 'Séparateur air/huile CP-01', 'Filtravel', 'SO-5520', 'u', 142.0, 1, 1, 2, 8, 4, 1, ['CP-01']),
-    definir_article('huile_cp', 'LUB', 'Huile compresseur à vis (bidon 20 L)', 'Lubrisol', 'HC-20', 'bidon', 118.0, 1, 2, 3, 4, 4, 0, ['CP-01']),
+    definir_article('huile_cp', 'LUB', 'Huile compresseur à vis (bidon 20 L)', 'Lubrazur', 'HC-20', 'bidon', 118.0, 1, 2, 3, 4, 4, 0, ['CP-01']),
     definir_article('filtre_hydr', 'FIL', 'Filtre hydraulique presse PR-01', 'Filtravel', 'FHY-410', 'u', 46.0, 1, 2, 3, 5, 4, 0, ['PR-01', 'PR-01.GH']),
-    definir_article('huile_hlp46', 'LUB', 'Huile hydraulique HLP 46 (bidon 20 L)', 'Lubrisol', 'HL-46-20', 'bidon', 72.0, 1, 2, 3, 4, 4, 0, ['PR-01', 'PR-01.GH']),
-    definir_article('graisse', 'LUB', 'Graisse EP2 (cartouche 400 g)', 'Lubrisol', 'GR-EP2', 'cartouche', 6.5, 10, 20, 48, 3, 4, 0, ['@convoyeur', '@pompe', '@usinage', '@levage', '@emballage', '@presse', '@ventilation', '@broche', '@changeur', '@moteur']),
-    definir_article('liq_coupe', 'LUB', 'Liquide de coupe soluble (bidon 20 L)', 'Lubrisol', 'LC-20', 'bidon', 94.0, 1, 2, 3, 5, 4, 0, ['CN-01', 'CU-01']),
+    definir_article('huile_hlp46', 'LUB', 'Huile hydraulique HLP 46 (bidon 20 L)', 'Lubrazur', 'HL-46-20', 'bidon', 72.0, 1, 2, 3, 4, 4, 0, ['PR-01', 'PR-01.GH']),
+    definir_article('graisse', 'LUB', 'Graisse EP2 (cartouche 400 g)', 'Lubrazur', 'GR-EP2', 'cartouche', 6.5, 10, 20, 48, 3, 4, 0, ['@convoyeur', '@pompe', '@usinage', '@levage', '@emballage', '@presse', '@ventilation', '@broche', '@changeur', '@moteur']),
+    definir_article('liq_coupe', 'LUB', 'Liquide de coupe soluble (bidon 20 L)', 'Lubrazur', 'LC-20', 'bidon', 94.0, 1, 2, 3, 5, 4, 0, ['CN-01', 'CU-01']),
     definir_article('filtre_g4', 'FIL', 'Filtre à air G4 592x592', 'Filtravel', 'G4-592', 'u', 22.0, 4, 8, 16, 5, 4, 0, ['VE-01', 'VE-02']),
     definir_article('filtre_eau', 'FIL', 'Cartouche filtrante circuit eau glacée', 'Filtravel', 'CE-25', 'u', 16.0, 2, 4, 8, 5, 4, 0, ['GF-01', 'PO-01']),
     definir_article('cart_secheur', 'FIL', "Cartouche déshydratante du sécheur d'air", 'Filtravel', 'CD-80', 'u', 49.0, 1, 2, 4, 6, 4, 0, ['CP-01.SEC']),
-    definir_article('nettoyant', 'LUB', 'Nettoyant contacts et capteurs (aérosol)', 'Lubrisol', 'NC-400', 'u', 7.2, 4, 8, 24, 3, 4, 0, ['@convoyeur', '@emballage', '@levage', '@froid', '@pompe', '@usinage', '@changeur']),
+    definir_article('nettoyant', 'LUB', 'Nettoyant contacts et capteurs (aérosol)', 'Lubrazur', 'NC-400', 'u', 7.2, 4, 8, 24, 3, 4, 0, ['@convoyeur', '@emballage', '@levage', '@froid', '@pompe', '@usinage', '@changeur']),
     # --- Électricité et automatisme (Électro-Alpes)
-    definir_article('contacteur_25', 'ELE', 'Contacteur tripolaire 25 A bobine 24 V', 'Voltaris', 'VC-25-24', 'u', 29.0, 2, 3, 6, 4, 3, 1, ['@electrique', '@convoyeur', '@emballage'], 1, cible=1),
-    definir_article('contacteur_40', 'ELE', 'Contacteur tripolaire 40 A bobine 230 V', 'Voltaris', 'VC-40-230', 'u', 41.0, 1, 2, 3, 4, 3, 0, ['PT-01', 'CH-01', 'CP-01', '@pompe']),
-    definir_article('relais_th', 'ELE', 'Relais thermique 9-13 A', 'Voltaris', 'RT-913', 'u', 38.0, 1, 2, 3, 4, 3, 0, ['@pompe', 'CP-01']),
-    definir_article('disj_moteur', 'ELE', 'Disjoncteur moteur 10-16 A', 'Voltaris', 'DM-1016', 'u', 52.0, 1, 2, 3, 4, 3, 0, ['@electrique', 'CP-01']),
-    definir_article('fusible', 'ELE', 'Fusibles gG 25 A (boîte de 10)', 'Voltaris', 'FU-25-10', 'boîte', 17.0, 1, 2, 4, 3, 3, 0, ['@electrique']),
+    definir_article('contacteur_25', 'ELE', 'Contacteur tripolaire 25 A bobine 24 V', 'Voltavel', 'VC-25-24', 'u', 29.0, 2, 3, 6, 4, 3, 1, ['@electrique', '@convoyeur', '@emballage'], 1, cible=1),
+    definir_article('contacteur_40', 'ELE', 'Contacteur tripolaire 40 A bobine 230 V', 'Voltavel', 'VC-40-230', 'u', 41.0, 1, 2, 3, 4, 3, 0, ['PT-01', 'CH-01', 'CP-01', '@pompe']),
+    definir_article('relais_th', 'ELE', 'Relais thermique 9-13 A', 'Voltavel', 'RT-913', 'u', 38.0, 1, 2, 3, 4, 3, 0, ['@pompe', 'CP-01']),
+    definir_article('disj_moteur', 'ELE', 'Disjoncteur moteur 10-16 A', 'Voltavel', 'DM-1016', 'u', 52.0, 1, 2, 3, 4, 3, 0, ['@electrique', 'CP-01']),
+    definir_article('fusible', 'ELE', 'Fusibles gG 25 A (boîte de 10)', 'Voltavel', 'FU-25-10', 'boîte', 17.0, 1, 2, 4, 3, 3, 0, ['@electrique']),
     definir_article('capteur_m18', 'ELE', 'Capteur inductif M18 PNP', 'Detectis', 'DI-M18-PNP', 'u', 17.5, 3, 4, 8, 4, 3, 1, ['@convoyeur', '@emballage', 'PR-01', '@changeur'], 1, cible=3),
     definir_article('cellule', 'ELE', 'Cellule photoélectrique réflex', 'Detectis', 'PE-R30', 'u', 36.0, 1, 2, 4, 5, 3, 0, ['@convoyeur', '@emballage', 'PT-01']),
-    definir_article('arret_urg', 'ELE', "Bouton d'arrêt d'urgence à clé", 'Voltaris', 'AU-22-K', 'u', 24.0, 1, 2, 3, 4, 3, 1, ['@electrique', '@convoyeur']),
-    definir_article('relais_secu', 'ELE', 'Relais de sécurité 24 V', 'Voltaris', 'RS-24', 'u', 128.0, 1, 1, 2, 8, 3, 1, ['PR-01', 'RB-01', 'CN-01']),
-    definir_article('alim_24v', 'ELE', 'Alimentation 24 V 10 A', 'Voltaris', 'AL-2410', 'u', 92.0, 1, 1, 2, 6, 3, 0, ['@electrique', 'RB-01', 'EM-01']),
-    definir_article('variateur', 'ELE', 'Variateur de fréquence 2,2 kW', 'Voltaris', 'VF-22', 'u', 310.0, 1, 1, 2, 12, 3, 1, ['@convoyeur', 'VE-01']),
-    definir_article('res_soudure', 'ELE', 'Résistance de soudure de fardeleuse', 'Emballex', 'RS-90', 'u', 46.0, 1, 2, 3, 8, 3, 0, ['EM-01']),
-    # --- Pneumatique, hydraulique, outillage (Hydropneu et Mécaroule)
-    definir_article('flex_hydr', 'HYD', 'Flexible hydraulique DN10 serti (1 m)', 'Hydrion', 'FX-DN10', 'u', 34.0, 2, 3, 6, 5, 2, 0, ['PR-01', 'PR-01.GH']),
-    definir_article('flex_air', 'PNE', 'Flexible air comprimé DN13 (au mètre)', 'Hydrion', 'FA-DN13', 'm', 5.6, 5, 10, 30, 4, 2, 0, ['CP-01', '@emballage', '@presse']),
-    definir_article('raccord', 'PNE', 'Raccord rapide pneumatique G1/4', 'Hydrion', 'RR-14', 'u', 6.4, 6, 10, 30, 3, 2, 0, ['CP-01', '@emballage', '@usinage']),
-    definir_article('electrovanne', 'PNE', 'Électrovanne 5/2 24 V G1/4', 'Hydrion', 'EV-52-24', 'u', 74.0, 1, 2, 3, 6, 2, 0, ['@emballage', 'PR-01', 'CN-01']),
-    definir_article('verin', 'PNE', 'Vérin pneumatique ISO Ø40 course 100', 'Hydrion', 'VP-40-100', 'u', 118.0, 1, 1, 2, 8, 2, 0, ['@emballage', 'CV-03']),
+    definir_article('arret_urg', 'ELE', "Bouton d'arrêt d'urgence à clé", 'Voltavel', 'AU-22-K', 'u', 24.0, 1, 2, 3, 4, 3, 1, ['@electrique', '@convoyeur']),
+    definir_article('relais_secu', 'ELE', 'Relais de sécurité 24 V', 'Voltavel', 'RS-24', 'u', 128.0, 1, 1, 2, 8, 3, 1, ['PR-01', 'RB-01', 'CN-01']),
+    definir_article('alim_24v', 'ELE', 'Alimentation 24 V 10 A', 'Voltavel', 'AL-2410', 'u', 92.0, 1, 1, 2, 6, 3, 0, ['@electrique', 'RB-01', 'EM-01']),
+    definir_article('variateur', 'ELE', 'Variateur de fréquence 2,2 kW', 'Voltavel', 'VF-22', 'u', 310.0, 1, 1, 2, 12, 3, 1, ['@convoyeur', 'VE-01']),
+    definir_article('res_soudure', 'ELE', 'Résistance de soudure de fardeleuse', 'Emballor', 'RS-90', 'u', 46.0, 1, 2, 3, 8, 3, 0, ['EM-01']),
+    # --- Pneumatique, hydraulique, outillage (Fluidalpes et Mécaroule)
+    definir_article('flex_hydr', 'HYD', 'Flexible hydraulique DN10 serti (1 m)', 'Hydronel', 'FX-DN10', 'u', 34.0, 2, 3, 6, 5, 2, 0, ['PR-01', 'PR-01.GH']),
+    definir_article('flex_air', 'PNE', 'Flexible air comprimé DN13 (au mètre)', 'Hydronel', 'FA-DN13', 'm', 5.6, 5, 10, 30, 4, 2, 0, ['CP-01', '@emballage', '@presse']),
+    definir_article('raccord', 'PNE', 'Raccord rapide pneumatique G1/4', 'Hydronel', 'RR-14', 'u', 6.4, 6, 10, 30, 3, 2, 0, ['CP-01', '@emballage', '@usinage']),
+    definir_article('electrovanne', 'PNE', 'Électrovanne 5/2 24 V G1/4', 'Hydronel', 'EV-52-24', 'u', 74.0, 1, 2, 3, 6, 2, 0, ['@emballage', 'PR-01', 'CN-01']),
+    definir_article('verin', 'PNE', 'Vérin pneumatique ISO Ø40 course 100', 'Hydronel', 'VP-40-100', 'u', 118.0, 1, 1, 2, 8, 2, 0, ['@emballage', 'CV-03']),
     definir_article('plaquettes', 'OUT', 'Plaquettes de tournage CNMG 120408 (boîte de 10)', 'Outilix', 'CN-120408', 'boîte', 62.0, 2, 4, 8, 4, 1, 0, ['CN-01']),
     definir_article('foret', 'OUT', 'Foret carbure Ø8', 'Outilix', 'FC-08', 'u', 21.0, 3, 5, 10, 4, 1, 0, ['CU-01']),
     definir_article('pince_er32', 'OUT', 'Pince de serrage ER32 Ø10', 'Outilix', 'ER32-10', 'u', 38.0, 1, 2, 3, 5, 1, 0, ['CU-01', 'CU-01.CH']),
-    definir_article('roue_chariot', 'DIV', 'Roue polyuréthane de chariot Ø200', 'Manuvia', 'RP-200', 'u', 54.0, 2, 3, 4, 10, 1, 0, ['CH-01'], 4),
+    definir_article('roue_chariot', 'DIV', 'Roue polyuréthane de chariot Ø200', 'Manutrel', 'RP-200', 'u', 54.0, 2, 3, 4, 10, 1, 0, ['CH-01'], 4),
 ]
 
 # Quelques pièces ont une version propre à un équipement : (repère, clé générique) -> clé spécifique.

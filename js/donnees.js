@@ -236,7 +236,9 @@ const Donnees = (() => {
   ];
 
   function ressembleNombreDateFraction(valeur) {
-    const sansEspacesAuxBords = valeur.trim();
+    // Retrait explicite de [ \t\r\n] aux deux bords (et non trim()) : règle identique à celle de
+    // ressemble_nombre_date_fraction dans outils/generer_demo.py.
+    const sansEspacesAuxBords = valeur.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
     for (const motif of MOTIFS_NOMBRE_DATE_FRACTION) {
       if (motif.test(sansEspacesAuxBords)) { return true; }
     }
@@ -439,8 +441,10 @@ const Donnees = (() => {
     switch (champ.type) {
       case 'texte':
       case 'texte_long': {
-        const valeur = relireValeur(champ, nettoye);
-        if (MOTIF_NOTATION_SCIENTIFIQUE_EXCEL.test(valeur)) {
+        // On lit d'abord la cellule brute (sinon « '<tab> » perdrait son contenu), puis on retire la fin parasite.
+        const valeur = relireValeur(champ, brut).replace(MOTIF_FIN_PARASITE, '');
+        // Une valeur protégée par apostrophe (« '1,5E+3 ») est voulue : seule une cellule brute sans apostrophe est suspecte.
+        if (!brut.startsWith("'") && MOTIF_NOTATION_SCIENTIFIQUE_EXCEL.test(valeur)) {
           return { valeur: valeur, probleme: { gravite: 'attention', type: 'excel',
             explication: "valeur probablement abîmée par Excel (nombre long transformé en notation scientifique). "
               + "Retrouvez la valeur d'origine et saisissez-la précédée d'une apostrophe, par exemple '123456789012345" } };

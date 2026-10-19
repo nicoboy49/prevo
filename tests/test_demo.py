@@ -675,7 +675,9 @@ class TestAvecNavigateur(CasNavigateur):
         generateur = charger_generateur()
         echantillon = ['- remplacer joint', '00123', '123456789012345', '1/2', '2026-10', "'déjà", '12:30', '50 %',
                        '1,5E+3', '=SOMME(A1)', 'texte normal', 'Joint à lèvres 35x52x7', '3.5', '@nom', '+33 1', ' 12 ',
-                       '12 mm', '6 à 7,5 bar', '1.2.3', '1-12', '2026-10-19', '', 'A', '0']
+                       '12 mm', '6 à 7,5 bar', '1.2.3', '1-12', '2026-10-19', '', 'A', '0',
+                       # bords : BOM, NEL (U+0085), espaces et tabulations (retrait explicite de [ \t\r\n])
+                       '﻿12', '12\x85', '\t12', '\t', '  ', '12 ', '\n12 ']
         for type_champ in ('texte', 'texte_long'):
             for protege in (False, True):
                 champ = {'nom': 'x', 'type': type_champ}
