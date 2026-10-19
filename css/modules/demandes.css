@@ -1,2 +1,146 @@
 /* Prévo — mise en page propre au module Demandes d'intervention (js/modules/demandes.js).
-   Fichier d'attente (tâche T11), rempli par la tâche T13. Uniquement des variables de la charte. */
+   « Signaler » est pensé téléphone d'abord : une colonne, gros boutons (≥ 48 px, utilisables avec
+   des gants). Composants communs (tuiles, bandeau sécurité, cartes, tableau) : css/style.css.
+   Uniquement des variables de la charte : aucune couleur écrite en dur. */
+
+/* =========================================================================================
+   1. Signaler un problème (#/di/nouvelle) et confirmation
+   ========================================================================================= */
+
+.di-nouvelle, .di-confirmation { max-width: 720px; margin: 0 auto; }
+.di-formulaire { gap: 14px; }
+.di-etape { margin-bottom: 0; }
+.di-etape .champ > .libelle { font-size: 1.125rem; font-weight: 700; color: var(--texte); }
+.di-etape .champ > .libelle .aide { font-weight: 500; }
+.di-etape .champ.en-erreur { border-radius: 12px; }
+.di-alerte-equipement:empty { display: none; }
+.di-alerte-equipement { margin-bottom: 14px; }
+
+/* Suggestions de symptômes (libellés des codes symptôme) : puces assez grosses pour un doigt ganté */
+.di-suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: .25rem; }
+.di-puce {
+  min-height: var(--tactile); padding: .45rem .95rem; border-radius: 999px; cursor: pointer;
+  font: 600 .9375rem/1.2 Sora, sans-serif; color: var(--texte-2);
+  background: var(--champ); border: 1px solid var(--trait-2);
+}
+.di-puce:hover, .di-puce:focus-visible { border-color: var(--bleu); color: var(--texte); background: var(--teinte-bleu-faible); }
+
+/* Impact : 4 gros boutons (.tuiles de la charte) ; bandeau rouge juste dessous si « sécurité » */
+.di-impacts .tuile > span { min-height: 76px; font-size: 1.0625rem; }
+.di-zone-securite:empty { display: none; }
+.di-formulaire .di-zone-securite .bandeau-securite { margin: .9rem 0 0; }
+.di-confirmation .di-zone-securite .bandeau-securite { margin: 0 0 14px; }
+.di-priorite { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: .8rem 0 0; font-weight: 600; color: var(--texte); }
+.di-priorite .badge { font-size: 1rem; padding-top: 4px; padding-bottom: 4px; }
+
+/* Photo : le vrai <input type=file> est caché, son libellé sert de gros bouton */
+.di-fichier-photo { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.champ:has(.di-fichier-photo:focus-visible) .di-bouton-photo { outline: 2px solid var(--cyan); outline-offset: 2px; }
+/* un <label> est en colonne dans la charte : on remet le gros bouton en ligne */
+.di-bouton-photo { cursor: pointer; flex-direction: row; justify-content: flex-start; align-items: center; }
+.di-bouton-photo > span { display: flex; flex-direction: column; min-width: 0; }
+.di-apercu { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: .4rem; }
+.di-apercu-image {
+  display: block; max-width: 100%; max-height: 240px; border-radius: 12px; border: 1px solid var(--trait-2);
+  background: var(--champ); object-fit: contain;
+}
+.di-etat-photo:empty { display: none; }
+
+.di-demandeur { margin: 0; color: var(--texte-2); }
+.di-demandeur b { color: var(--texte); }
+.di-envoyer { justify-content: center; }
+
+/* Confirmation : le numéro en grand */
+.di-confirmation-carte { text-align: center; padding-top: 28px; padding-bottom: 26px; }
+.di-confirmation-icone {
+  width: 64px; height: 64px; margin: 0 auto 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--teinte-vert); color: var(--vert);
+}
+.di-confirmation-icone .icone { width: 34px; height: 34px; stroke-width: 2.4; }
+.di-confirmation-titre { font-size: 1.25rem; font-weight: 700; color: var(--texte); margin: 0; }
+.di-numero {
+  font-size: clamp(2.2rem, 10vw, 3.5rem); font-weight: 800; letter-spacing: -.02em; line-height: 1.1;
+  color: var(--fort); margin: .35rem 0 .6rem; overflow-wrap: anywhere;
+}
+.di-confirmation-texte { color: var(--texte-2); margin: 0; }
+
+/* =========================================================================================
+   2. Liste des demandes (#/di) : tableau sur grand écran, cartes sur téléphone
+   ========================================================================================= */
+
+.di-liste .filtres select { flex: 1 1 180px; }
+.di-compte { color: var(--muted); font-size: .9375rem; margin: 0 0 .5rem; }
+.di-puce-filtre { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 0 0 .6rem; color: var(--texte-2); }
+.di-puce-filtre b { color: var(--texte); }
+.di-cartes { display: none; }
+/* cellules compactes : 2 lignes au plus (texte complet au survol et dans la fiche) */
+.di-coupe { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.di-eq, .di-date { display: flex; flex-direction: column; min-width: 0; }
+.di-eq b { font-weight: 700; color: var(--fort); white-space: nowrap; }
+.di-eq small { color: var(--texte-2); font-size: .875rem; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
+.di-date { white-space: nowrap; }
+.di-date small { color: var(--muted); font-size: .875rem; }
+.table td.di-col-motif { color: var(--texte-2); font-size: .9375rem; }
+.table td.di-col-symptome { min-width: 12rem; }
+.di-eq { max-width: 10rem; }
+/* 8 colonnes dans la largeur de l'écran : marges réduites, en-têtes sur deux lignes si besoin */
+.di-zone-tableau .table th, .di-zone-tableau .table td { padding-left: .5rem; padding-right: .5rem; }
+.di-zone-tableau .table th .tri { white-space: normal; text-align: left; }
+.di-motif { font-size: .9375rem; color: var(--texte-2); margin-top: .2rem; overflow-wrap: anywhere; }
+.di-motif b { color: var(--texte); }
+
+/* =========================================================================================
+   3. Fiche d'une demande (#/di/<id>) et panneau de décision
+   ========================================================================================= */
+
+.di-entete-fiche h1 { overflow-wrap: anywhere; }
+.di-entete-badges { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin-top: .6rem !important; }
+.di-entete-badges b { color: var(--fort); font-weight: 800; }
+.di-texte-long { white-space: pre-wrap; }
+.di-photo { margin-top: 1.1rem; }
+.di-photo h3 { margin-bottom: .5rem; }
+.di-lien-photo { display: inline-block; max-width: 100%; cursor: zoom-in; }
+.di-photo-image { display: block; max-width: 100%; max-height: 420px; border-radius: 12px; border: 1px solid var(--trait-2); }
+.di-photo-etat:empty { display: none; }
+.di-fiche { align-items: start; }
+.di-cote { min-width: 0; }
+.di-suivi p { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; color: var(--texte-2); }
+.di-suivi .valeurs { grid-template-columns: minmax(0, 1fr); gap: .1rem; }
+.di-suivi .valeurs dd { margin-bottom: .5rem; }
+.di-motif-fiche { white-space: pre-wrap; }
+.di-rappel-priorite { display: flex; align-items: center; gap: .5rem; margin: 0 0 .2rem; color: var(--texte-2); }
+.di-panneau-decision .aide { margin-bottom: .9rem; }
+.di-panneau-decision .btn-gros > span { display: flex; flex-direction: column; min-width: 0; }
+
+/* Fenêtres de décision */
+.di-choix-ot { border: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.di-option-ot {
+  align-items: flex-start; padding: .65rem .8rem; border: 1px solid var(--trait-2); border-radius: 12px; background: var(--champ);
+}
+.di-option-ot:has(input:checked) { border-color: var(--bleu); background: var(--teinte-bleu-faible); }
+.di-option-ot input { margin-top: 2px; }
+.di-option-ot .badge { margin-left: .2rem; }
+.di-fenetre-accepter p { margin: 0; }
+
+/* =========================================================================================
+   4. Téléphone (≤ 640 px) : cartes au lieu du tableau, zones tactiles de 48 px
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  .di-cartes { display: flex; }
+  .di-zone-tableau { display: none; }
+  .di-liste { padding: 12px; }
+  /* les suggestions tiennent sur une ligne qui défile (le champ reste visible sans scroller la page) */
+  .di-suggestions { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .di-puce { min-height: 48px; flex: none; white-space: nowrap; }
+  .di-apercu-image { max-height: 180px; }
+  .di-impacts .tuile > span { min-height: 84px; }
+  .di-etape { padding: 16px 14px; }
+  .di-fiche .c8, .di-fiche .c4 { grid-column: span 12; }
+  /* sur téléphone, la décision passe avant le détail */
+  .di-fiche { display: flex; flex-direction: column-reverse; }
+}
+
+@media print {
+  .di-panneau-decision, .di-suggestions, .di-bouton-photo { display: none !important; }
+}
