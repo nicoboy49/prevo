@@ -80,6 +80,10 @@ const UI = (function () {
    * Renvoie un fragment sûr (String(fragment) donne le texte HTML).
    */
   function html(morceaux, ...valeurs) {
+    // Appelé comme une fonction ordinaire (UI.html(chaine)), il laisserait passer du HTML non échappé.
+    if (!morceaux || !Array.isArray(morceaux.raw)) {
+      throw new Error("UI.html s'utilise comme gabarit : UI.html`…`");
+    }
     let resultat = morceaux[0];
     for (let i = 0; i < valeurs.length; i += 1) {
       resultat += valeurVersHtml(valeurs[i]) + morceaux[i + 1];
@@ -309,19 +313,30 @@ const UI = (function () {
    * type : 'succes' | 'erreur' | 'attention' | 'info' (défaut). Un clic le ferme.
    */
   function toast(message, type) {
-    let zone = document.getElementById('toast');
+    // Réutilise la zone fournie vide par la page (les lecteurs d'écran annoncent alors le premier
+    // message) ; sinon la crée vide, l'insère, puis la remplit au tour suivant.
+    let zone = document.getElementById('toast') || document.querySelector('.toast[role="status"]');
+    let tourSuivant = false;
     if (!zone) {
       zone = document.createElement('div');
       zone.id = 'toast';
       zone.setAttribute('role', 'status');
       zone.setAttribute('aria-live', 'polite');
-      zone.addEventListener('click', () => zone.classList.remove('visible'));
+      zone.className = 'toast';
       document.body.appendChild(zone);
+      tourSuivant = true;
     }
-    zone.className = 'toast' + (type && type !== 'info' ? ' ' + type : '');
-    remplir(zone, message);
-    void zone.offsetWidth; // relance la transition si un toast était déjà affiché
-    zone.classList.add('visible');
+    if (!zone.dataset.fermeture) {
+      zone.dataset.fermeture = '1';
+      zone.addEventListener('click', () => zone.classList.remove('visible'));
+    }
+    const afficher = () => {
+      zone.className = 'toast' + (type && type !== 'info' ? ' ' + type : '');
+      remplir(zone, message);
+      void zone.offsetWidth; // relance la transition si un toast était déjà affiché
+      zone.classList.add('visible');
+    };
+    if (tourSuivant) setTimeout(afficher, 0); else afficher();
     clearTimeout(minuteurToast);
     minuteurToast = setTimeout(() => zone.classList.remove('visible'), type === 'erreur' ? 7000 : 4000);
     return zone;

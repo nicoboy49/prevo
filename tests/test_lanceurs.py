@@ -96,6 +96,39 @@ class TestBat(LancementMixin, unittest.TestCase):
         self.assertIn("chcp 65001", t)
         self.assertIn("%*", t)
 
+    def test_python_absent_ou_alias_store_refuse_sans_installer(self):
+        """Faux py/python (code 9009, comme l'alias du Store) : aucun serveur, lien python.org.
+
+        Un faux winget (en tête du PATH du sous-processus seulement) note tout appel
+        d'installation dans un journal : la réponse « N » doit mener à l'aide manuelle.
+        """
+        dossier = Path(tempfile.mkdtemp(prefix="prevo_faux_python_"))
+        try:
+            for nom in ("py.cmd", "python.cmd"):
+                (dossier / nom).write_text("@echo off\r\nexit /b 9009\r\n", encoding="ascii")
+            (dossier / "winget.cmd").write_text(
+                "@echo off\r\n"
+                'if "%1"=="--version" exit /b 0\r\n'
+                'echo installation >> "%~dp0winget-appel.log"\r\n'
+                "exit /b 1\r\n", encoding="ascii")
+            env = dict(os.environ)
+            env["PATH"] = str(dossier) + os.pathsep + env.get("PATH", "")
+            r = subprocess.run(["cmd", "/c", ".\\Lancer_GMAO.bat"], cwd=str(RACINE), env=env,
+                               input=b"N\r\n\r\n\r\n", stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, timeout=60)
+            sortie = r.stdout.decode("utf-8", errors="replace")
+            self.assertFalse((dossier / "winget-appel.log").exists(), "winget install a été lancé")
+            self.assertIn("Installer Python maintenant", sortie)   # la question a bien été posée
+            self.assertIn("https://www.python.org/downloads/", sortie)
+            self.assertNotIn("pare-feu", sortie)                   # le serveur n'a pas été préparé
+            self.assertNotIn("Le serveur s'est arrêté", sortie)
+            self.assertEqual(r.returncode, 1, sortie)
+        finally:
+            shutil.rmtree(dossier, ignore_errors=True)
+
+    def test_version_minimale_verifiee(self):
+        self.assertIn("sys.version_info < (3, 8)", self.texte)
+
     def test_lancement(self):
         self.verifier_lancement(["cmd", "/c", ".\\Lancer_GMAO.bat"])
 

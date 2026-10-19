@@ -365,6 +365,8 @@ serveur, sinon `GMAO:<id>`), `App.chargerScriptDemo()`.
 `prevo.menuReplie`), icônes seules de 641 à 1099 px, barre du bas sur téléphone (≤ 640 px :
 4 entrées + « Plus »). Badge de signature en bas du menu : « Développé par Claude (Anthropic) à
 la demande de Nicolas Briand — SELECTIS » → `#/apropos`.
+`#impression` doit être un enfant direct de `<body>` (la feuille d'impression masque tous les autres
+enfants de `body`) ; `#toast` (vide, `role="status"`) est présent dans `index.html` dès le chargement.
 
 ## 9. Interface (`js/interface.js`, `css/style.css`)
 

@@ -608,6 +608,8 @@ class TestFixturesExcel(CasCsv):
 class TestExcelReel(CasCsv):
 
     def setUp(self):
+        if not excel.excel_reel_demande():
+            self.skipTest("Excel réel non demandé : définir PREVO_TEST_EXCEL=1")
         if not excel.excel_disponible():
             self.skipTest("Microsoft Excel n'est pas disponible sur ce poste")
         super().setUp()

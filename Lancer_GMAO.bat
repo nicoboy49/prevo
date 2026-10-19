@@ -12,32 +12,47 @@ title Prévo — GMAO
 rem Se placer dans le dossier où se trouve ce fichier.
 cd /d "%~dp0"
 
-rem ----- Étape 1 : chercher Python sur l'ordinateur -----
+rem ----- Étape 1 : chercher Python (version 3.8 ou plus récente) sur l'ordinateur -----
 set "PYTHON="
+set "TROP_ANCIEN="
+rem Un Python n'est accepté que si « import sys; sys.exit(version < 3.8) » renvoie 0.
+rem Cela écarte aussi le faux « python » du Microsoft Store (il renvoie un code non nul).
+rem « call » permet d'appeler aussi bien un .exe qu'un .cmd sans quitter ce fichier.
 rem Premier essai : le lanceur « py » installé avec Python sous Windows.
-py -3 --version >nul 2>&1
+call py -3 -c "import sys; sys.exit(sys.version_info < (3, 8))" >nul 2>&1
 if not errorlevel 1 set "PYTHON=py -3"
-rem Second essai : la commande « python » (testée, car Windows peut fournir
-rem un faux « python » du Microsoft Store qui ne fait rien).
 if not defined PYTHON (
-    python --version >nul 2>&1
-    if not errorlevel 1 set "PYTHON=python"
+    call py -3 --version >nul 2>&1
+    if not errorlevel 1 set "TROP_ANCIEN=1"
+)
+if defined PYTHON goto lancer
+rem Second essai : la commande « python ».
+call python -c "import sys; sys.exit(sys.version_info < (3, 8))" >nul 2>&1
+if not errorlevel 1 set "PYTHON=python"
+if not defined PYTHON (
+    call python --version >nul 2>&1
+    if not errorlevel 1 set "TROP_ANCIEN=1"
 )
 if defined PYTHON goto lancer
 
 rem ----- Étape 2 : Python est absent, on explique et on propose de l'installer -----
 echo.
-echo  Python n'est pas installé sur cet ordinateur.
+if defined TROP_ANCIEN (
+    echo  Le Python présent sur cet ordinateur est trop ancien : la GMAO Prévo demande Python 3.8 ou plus récent.
+    echo  Installez une version récente depuis https://www.python.org/downloads/ puis relancez ce fichier.
+) else (
+    echo  Python n'est pas installé sur cet ordinateur.
+)
 echo  La GMAO Prévo en a besoin pour fonctionner (gratuit, officiel).
 echo.
 rem Winget est l'installateur intégré à Windows 10/11 : est-il disponible ?
-winget --version >nul 2>&1
+call winget --version >nul 2>&1
 if errorlevel 1 goto manuel
 echo  Je peux installer Python 3.12 automatiquement avec winget.
 choice /C ON /M "Installer Python maintenant (O = Oui, N = Non)"
 rem choice renvoie 1 pour O et 2 pour N.
 if errorlevel 2 goto manuel
-winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements
+call winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements
 if errorlevel 1 goto manuel
 echo.
 echo  Python est installé. Fermez cette fenêtre puis relancez Lancer_GMAO.bat

@@ -39,11 +39,14 @@
   --fort: #FFFFFF;                       /* texte mis en avant (b dans les alertes, chiffres) */
   --sur-couleur: #FFFFFF;                /* texte sur un bouton bleu */
   --sur-clair: #0B1226;                  /* texte sur un fond de couleur vive (P1, toast) */
-  --bleu-survol: #5E8BFF;
+  /* Fond des boutons primaires : --bleu n'atteint que 3,7:1 avec du texte blanc ; ce bleu plus sombre
+     donne 5,02:1 (WCAG), le survol 5,94:1. --bleu reste inchangé pour le reste de la charte. */
+  --bleu-bouton: #3366E6; --bleu-survol: #2B5AD6;
   --texte-bleu: #CFDBFF;  --texte-info: #AFC4FF;
   --texte-rouge: #FFB3B6; --texte-important: #FFC9CB;
   --texte-ambre: #F7D9A3; --texte-vert: #BDF3D7;
-  --placeholder: #5D6894;
+  --placeholder: #8390BF;                /* sur --champ : 5,66:1 (avant : 3,27:1) */
+  --texte-violet: #B39DFF;               /* badge violet sur sa teinte : 6,1:1 (--violet seul : 4,4:1) */
   --teinte-bleu: rgba(76,125,255,.16);   --teinte-bleu-forte: rgba(76,125,255,.26); --teinte-bleu-faible: rgba(76,125,255,.10);
   --bord-bleu: rgba(76,125,255,.25);     --bord-bleu-fort: rgba(76,125,255,.35);
   --teinte-rouge: rgba(255,107,112,.12); --teinte-rouge-faible: rgba(255,107,112,.08); --bord-rouge: rgba(255,107,112,.32);
@@ -76,19 +79,20 @@
   color-scheme: light;
   --fond: #EEF1F8; --carte: #FFFFFF; --carte-2: #E4EAFB; --champ: #FFFFFF;
   --texte: #0E1630; --texte-2: #34406A; --muted: #56628C; --trait: rgba(14,22,48,.09); --trait-2: rgba(14,22,48,.18);
-  --bleu: #2F5BEA; --cyan: #0A7894; --vert: #137A4B; --rouge: #C42F36; --ambre: #9A5C00; --violet: #6343D6;
+  --bleu: #2F5BEA; --cyan: #07647E; --vert: #137A4B; --rouge: #C42F36; --ambre: #9A5C00; --violet: #6343D6;
   --fort: #0E1630; --sur-couleur: #FFFFFF; --sur-clair: #FFFFFF;
-  --bleu-survol: #2449C4;
+  --bleu-bouton: #2F5BEA; --bleu-survol: #2449C4;   /* texte blanc : 5,52:1 puis > 7:1 */
   --texte-bleu: #1E3A9E; --texte-info: #1E3A9E;
   --texte-rouge: #9E1F25; --texte-important: #8A1B20;
   --texte-ambre: #6E4200; --texte-vert: #0E5C38;
-  --placeholder: #7C86A8;
+  --placeholder: #68729A;                /* sur fond blanc : 4,71:1 */
+  --texte-violet: #6343D6;
   --teinte-bleu: rgba(47,91,234,.10); --teinte-bleu-forte: rgba(47,91,234,.18); --teinte-bleu-faible: rgba(47,91,234,.07);
   --bord-bleu: rgba(47,91,234,.28); --bord-bleu-fort: rgba(47,91,234,.40);
   --teinte-rouge: rgba(196,47,54,.10); --teinte-rouge-faible: rgba(196,47,54,.06); --bord-rouge: rgba(196,47,54,.35);
   --teinte-ambre: rgba(154,92,0,.12); --teinte-ambre-faible: rgba(154,92,0,.07); --bord-ambre: rgba(154,92,0,.35);
   --teinte-vert: rgba(19,122,75,.12); --teinte-vert-faible: rgba(19,122,75,.07); --bord-vert: rgba(19,122,75,.30);
-  --teinte-cyan: rgba(10,120,148,.12); --teinte-violet: rgba(99,67,214,.12);
+  --teinte-cyan: rgba(7,100,126,.12); --teinte-violet: rgba(99,67,214,.12);
   --teinte-neutre: rgba(14,22,48,.07);
   --survol: rgba(14,22,48,.04);
   --panneau: #F8F9FD; --barre-fond: rgba(255,255,255,.97);
@@ -153,7 +157,7 @@ img, svg, video, canvas { max-width: 100%; }
   transition: background-color .15s, color .15s, box-shadow .15s;
 }
 .btn .icone { width: 20px; height: 20px; }
-.btn-primaire { background: var(--bleu); color: var(--sur-couleur); }
+.btn-primaire { background: var(--bleu-bouton); color: var(--sur-couleur); }
 .btn-primaire:hover { background: var(--bleu-survol); }
 .btn-secondaire { background: var(--teinte-bleu); color: var(--texte-bleu); }
 .btn-secondaire:hover { background: var(--teinte-bleu-forte); }
@@ -526,7 +530,7 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
 .badge.info { background: var(--teinte-bleu); color: var(--texte-info); }
 .badge.attention { background: var(--teinte-ambre); color: var(--ambre); }
 .badge.cyan { background: var(--teinte-cyan); color: var(--cyan); }
-.badge.violet { background: var(--teinte-violet); color: var(--violet); }
+.badge.violet { background: var(--teinte-violet); color: var(--texte-violet); }
 .badge.neutre { background: var(--teinte-neutre); color: var(--texte-2); }
 .badge.barre { text-decoration: line-through; }
 /* Priorités : couleur de la charte ET libellé P1…P4 (jamais la couleur seule) */
@@ -760,7 +764,8 @@ a.vignette img, button.vignette img { width: 100%; height: 100%; object-fit: cov
   .etapes li.courant, .etapes li[aria-current="step"] { border-left-color: var(--bleu); }
   .etapes li.hors { border-left-color: var(--ambre); }
   .check-liste li { grid-template-columns: minmax(0, 1fr); }
-  .table th .tri { min-height: 40px; }
+  .table th .tri { min-height: 48px; }
+  .lien-bouton { min-height: 48px; display: inline-flex; align-items: center; }
   .vue-tableau summary { min-height: 48px; }
   .arbre summary, .arbre .feuille { min-height: 48px; }
   .dialogue { width: calc(100% - 16px); padding: 18px 16px; }

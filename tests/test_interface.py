@@ -214,11 +214,39 @@ class TestComposantsInteractifs(CasGuide):
 
     def test_toast_role_status(self):
         self.evaluer("() => UI.toast('DI-2026-0042 créée.', 'succes')")
+        # le toast est rempli au tour suivant : on attend qu'il soit visible avant de lire son texte
+        self.page.wait_for_function(
+            "document.querySelector('#toast') && document.querySelector('#toast').classList.contains('visible')")
         toast = self.page.locator("#toast")
         self.assertEqual(toast.get_attribute("role"), "status")
         self.assertEqual(toast.inner_text(), "DI-2026-0042 créée.")
         self.assertIn("succes", toast.get_attribute("class"))
-        self.page.wait_for_function("document.querySelector('#toast').classList.contains('visible')")
+
+    def test_toast_cree_vide_puis_rempli_au_tour_suivant(self):
+        resultat = self.evaluer("""() => {
+            const zone = UI.toast('Bonjour', 'info');
+            return [zone.textContent, zone.getAttribute('role'), document.querySelectorAll('#toast').length];
+        }""")
+        self.assertEqual(resultat, ["", "status", 1])
+        self.page.wait_for_function("document.querySelector('#toast').textContent === 'Bonjour'")
+
+    def test_toast_reutilise_la_zone_existante(self):
+        resultat = self.evaluer("""() => {
+            const zone = document.createElement('div');
+            zone.id = 'toast'; zone.className = 'toast'; zone.setAttribute('role', 'status');
+            document.body.appendChild(zone);
+            const rendu = UI.toast('Réutilisé', 'erreur');
+            return [rendu === zone, zone.textContent, zone.className, document.querySelectorAll('#toast').length];
+        }""")
+        self.assertEqual(resultat, [True, "Réutilisé", "toast erreur visible", 1])
+
+    def test_html_refuse_l_appel_sans_gabarit(self):
+        for appel in ("UI.html('<img src=x onerror=alert(1)>')", "UI.html(42)", "UI.html()"):
+            message = self.evaluer("""(appel) => {
+                try { new Function('return ' + appel)(); return null; } catch (e) { return e.message; }
+            }""", appel)
+            self.assertIsNotNone(message, appel)
+            self.assertIn("UI.html s'utilise comme gabarit", message)
 
     def test_onglets(self):
         onglet = self.page.locator("#demo-onglets [role=tab]:has-text('Exécution')")
@@ -429,6 +457,55 @@ class TestFeuilleDeStyle(CasGuide):
         self.assertGreater(len(hauteurs), 20)
         trop_petits = [h for h in hauteurs if h[1] < 47.5]
         self.assertEqual(trop_petits, [])
+
+    def test_telephone_en_tetes_de_tri_et_liens_boutons_48_px(self):
+        self.ouvrir_guide(375, 812)
+        hauteurs = self.evaluer("""() => UI.$$('.table th .tri, .lien-bouton')
+            .filter((e) => e.getClientRects().length > 0)
+            .map((e) => [e.className, e.getBoundingClientRect().height])""")
+        self.assertGreaterEqual(len(hauteurs), 2)
+        self.assertEqual([h for h in hauteurs if h[1] < 47.5], [])
+
+    def test_contrastes_wcag_texte_normal(self):
+        """Ratio >= 4,5:1 (luminances relatives WCAG) sur les couleurs réellement calculées."""
+        script = """(theme) => {
+            const calme = document.createElement('style');   // pas de transition en cours pendant la mesure
+            calme.textContent = '*, *::before, *::after { transition: none !important; }';
+            document.head.appendChild(calme);
+            const racine = document.documentElement;
+            if (theme === 'clair') racine.dataset.theme = 'clair'; else delete racine.dataset.theme;
+            const lire = (c) => { const m = c.match(/[0-9.]+/g).map(Number); return { r: m[0], g: m[1], b: m[2], a: m.length > 3 ? m[3] : 1 }; };
+            const sur = (dessus, dessous) => ({ r: dessus.r * dessus.a + dessous.r * (1 - dessus.a),
+                g: dessus.g * dessus.a + dessous.g * (1 - dessus.a), b: dessus.b * dessus.a + dessous.b * (1 - dessus.a), a: 1 });
+            const fondDe = (el) => {
+                const pile = [];
+                for (let e = el; e; e = e.parentElement) pile.push(lire(getComputedStyle(e).backgroundColor));
+                let fond = { r: 255, g: 255, b: 255, a: 1 };
+                for (let i = pile.length - 1; i >= 0; i -= 1) fond = sur(pile[i], fond);
+                return fond;
+            };
+            const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+                return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+            const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+            const mesures = [];
+            const mesurer = (nom, el, pseudo) => {
+                if (!el) { mesures.push([nom, 0]); return; }
+                const fond = fondDe(el);
+                const texte = sur(lire(getComputedStyle(el, pseudo || null).color), fond);
+                mesures.push([nom, Math.round(ratio(texte, fond) * 100) / 100]);
+            };
+            mesurer('btn-primaire', UI.$('.btn-primaire'));
+            mesurer('badge violet', UI.$('.badge.violet'));
+            mesurer('badge cyan', UI.$('.badge.cyan'));
+            mesurer('placeholder', UI.$('input[placeholder]:not(.mesure)'), '::placeholder');
+            mesurer('lien-bouton (cyan)', UI.$('.lien-bouton'));
+            mesurer('lien (cyan)', UI.$('main a'));
+            return mesures;
+        }"""
+        for theme in ("sombre", "clair"):
+            for nom, ratio in self.evaluer(script, theme):
+                with self.subTest(theme=theme, element=nom):
+                    self.assertGreaterEqual(ratio, 4.5, "%s (%s) : %s:1" % (nom, theme, ratio))
 
     def test_navigation_selon_la_largeur(self):
         def etat():

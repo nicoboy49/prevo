@@ -14,6 +14,7 @@ Le script ne contient que des caractères ASCII : les autres caractères passent
 Bibliothèque standard seulement. Utilisé par tests/test_csv.py.
 """
 import functools
+import json
 import os
 import shutil
 import subprocess
@@ -85,19 +86,62 @@ End Sub
 """
 
 
+def excel_reel_demande():
+    """Vrai si l'environnement demande de piloter le vrai Excel (PREVO_TEST_EXCEL=1)."""
+    return os.environ.get("PREVO_TEST_EXCEL") == "1"
+
+
+def _processus_excel():
+    """Dictionnaire {pid: ligne de commande} des EXCEL.EXE en cours (PowerShell, Get-CimInstance)."""
+    commande = ("Get-CimInstance Win32_Process -Filter \"Name='EXCEL.EXE'\" | "
+                "Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress")
+    try:
+        resultat = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", commande],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60)
+        texte = resultat.stdout.decode("utf-8", errors="replace").strip()
+        donnees = json.loads(texte) if texte else []
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return {}
+    if isinstance(donnees, dict):
+        donnees = [donnees]
+    return {int(d["ProcessId"]): d.get("CommandLine") or "" for d in donnees}
+
+
+def _arreter_excel_apparus(avant):
+    """Arrête les EXCEL.EXE apparus depuis `avant` et lancés par automatisation.
+
+    Seuls sont visés les processus absents de `avant` dont la ligne de commande contient
+    /automation ou -Embedding : jamais un Excel que l'utilisateur avait déjà ouvert.
+    """
+    for pid, ligne in _processus_excel().items():
+        minuscule = ligne.lower()
+        if pid not in avant and ("/automation" in minuscule or "-embedding" in minuscule):
+            subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                           stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=30)
+
+
 def _executer_vbs(corps):
     """Écrit le script dans un dossier temporaire, le lance par cscript et le supprime.
 
     Renvoie (code_retour, sortie_console). Lève subprocess.TimeoutExpired si Excel ne répond pas.
     """
     dossier = Path(tempfile.mkdtemp(prefix="prevo-excel-"))
+    avant = set(_processus_excel()) if os.name == "nt" else set()
     try:
         script = dossier / "excel.vbs"
         script.write_text(MODELE_VBS.replace("{corps}", corps), encoding="ascii", newline="\r\n")
-        resultat = subprocess.run(
-            ["cscript", "//nologo", str(script)],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            timeout=DELAI_EXCEL_S)
+        try:
+            resultat = subprocess.run(
+                ["cscript", "//nologo", str(script)],
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                timeout=DELAI_EXCEL_S)
+        except subprocess.TimeoutExpired:
+            # Excel est resté ouvert : on n'arrête que ceux apparus pendant cet appel
+            if os.name == "nt":
+                _arreter_excel_apparus(avant)
+            raise
         sortie = resultat.stdout.decode("oem" if os.name == "nt" else "latin-1", errors="replace")
         return resultat.returncode, sortie.strip()
     finally:
