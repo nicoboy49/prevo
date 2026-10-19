@@ -1,0 +1,874 @@
+/* Prévo — charte « Cockpit » adaptée à la maintenance (ARCHITECTURE.md §9, brief §2 bis).
+
+   Repris tels quels de la charte Cockpit (reference-design/style.css) : variables, police Sora, boutons,
+   champs, cartes, grille 12 colonnes, instruments, alertes, légendes, tables, badges, dialogue,
+   toast. Adapté : texte courant, champs, boutons et cellules en 16 px ; coque d'application avec
+   menu latéral repliable, barre du bas sur téléphone, bandeaux, composants des modules,
+   impression noir sur blanc (bon de travail A4).
+
+   Règles pour les modules :
+   - ce fichier porte TOUS les composants communs ; un module ne met dans css/modules/<module>.css
+     que sa mise en page propre ;
+   - une couleur s'écrit toujours avec une variable ci-dessous (jamais de code couleur en dur).
+
+   Sommaire : 1 police et variables · 2 base · 3 contrôles · 4 formulaires · 5 coque (menu,
+   en-tête mobile, barre du bas, bandeaux) · 6 cartes, grille, instruments · 7 alertes et
+   encadrés · 8 tables et badges · 9 composants métier · 10 dialogue, toast · 11 tablette ·
+   12 téléphone · 13 animations réduites · 14 impression et bon de travail. */
+
+/* =========================================================================================
+   1. Police et variables
+   ========================================================================================= */
+
+@font-face {
+  font-family: Sora;
+  src: url(polices/sora-latin-wght-normal.woff2) format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+  /* --- charte Cockpit (reprise telle quelle) --- */
+  --fond: #0B1226; --carte: #121B36; --carte-2: #172245; --champ: #0F1730;
+  --texte: #E8EDFF; --texte-2: #B7C1E6; --muted: #7D89B5; --trait: rgba(255,255,255,.07); --trait-2: rgba(255,255,255,.12);
+  --bleu: #4C7DFF; --cyan: #2BD4F0; --vert: #3DD68C; --rouge: #FF6B70; --ambre: #F5B544; --violet: #9B7BFF;
+  --rayon: 20px;
+
+  /* --- nuances dérivées (valeurs de la référence, nommées pour ne jamais coder une couleur) --- */
+  --fort: #FFFFFF;                       /* texte mis en avant (b dans les alertes, chiffres) */
+  --sur-couleur: #FFFFFF;                /* texte sur un bouton bleu */
+  --sur-clair: #0B1226;                  /* texte sur un fond de couleur vive (P1, toast) */
+  --bleu-survol: #5E8BFF;
+  --texte-bleu: #CFDBFF;  --texte-info: #AFC4FF;
+  --texte-rouge: #FFB3B6; --texte-important: #FFC9CB;
+  --texte-ambre: #F7D9A3; --texte-vert: #BDF3D7;
+  --placeholder: #5D6894;
+  --teinte-bleu: rgba(76,125,255,.16);   --teinte-bleu-forte: rgba(76,125,255,.26); --teinte-bleu-faible: rgba(76,125,255,.10);
+  --bord-bleu: rgba(76,125,255,.25);     --bord-bleu-fort: rgba(76,125,255,.35);
+  --teinte-rouge: rgba(255,107,112,.12); --teinte-rouge-faible: rgba(255,107,112,.08); --bord-rouge: rgba(255,107,112,.32);
+  --teinte-ambre: rgba(245,181,68,.12);  --teinte-ambre-faible: rgba(245,181,68,.08);  --bord-ambre: rgba(245,181,68,.32);
+  --teinte-vert: rgba(61,214,140,.12);   --teinte-vert-faible: rgba(61,214,140,.08);   --bord-vert: rgba(61,214,140,.25);
+  --teinte-cyan: rgba(43,212,240,.12);   --teinte-violet: rgba(155,123,255,.14);
+  --teinte-neutre: rgba(255,255,255,.07);
+  --survol: rgba(255,255,255,.04);       /* fond d'une ligne ou d'un lien survolé */
+  --panneau: #0E1631;                    /* menu latéral, barre du bas, en-tête mobile */
+  --barre-fond: rgba(18,27,54,.96);
+  --halo-1: rgba(76,125,255,.20); --halo-2: rgba(43,212,240,.08);
+  --lueur-logo: rgba(76,125,255,.45);
+  --logo-debut: #2F5BEA; --logo-fin: #22C3E6;   /* dégradé du favicon */
+  --voile: rgba(5,9,22,.7);
+  --ombre: rgba(0,0,0,.5);
+  --selection: rgba(76,125,255,.4);
+  --reflet-carte: rgba(255,255,255,.03);  /* léger reflet en haut des cartes */
+  /* QR code et papier : toujours noir sur blanc, quel que soit le thème */
+  --qr-fond: #FFFFFF; --qr-encre: #000000;
+  --papier: #FFFFFF; --encre: #000000; --encre-2: #333333; --encre-trait: #888888;
+
+  /* --- mesures --- */
+  --largeur-menu: 264px;
+  --largeur-menu-icones: 84px;
+  --tactile: 44px;                       /* hauteur mini d'une zone cliquable (48 px sur téléphone) */
+}
+
+/* Thème clair à l'écran (facultatif : <html data-theme="clair">, réglé dans Paramètres). */
+:root[data-theme="clair"] {
+  color-scheme: light;
+  --fond: #EEF1F8; --carte: #FFFFFF; --carte-2: #E4EAFB; --champ: #FFFFFF;
+  --texte: #0E1630; --texte-2: #34406A; --muted: #56628C; --trait: rgba(14,22,48,.09); --trait-2: rgba(14,22,48,.18);
+  --bleu: #2F5BEA; --cyan: #0A7894; --vert: #137A4B; --rouge: #C42F36; --ambre: #9A5C00; --violet: #6343D6;
+  --fort: #0E1630; --sur-couleur: #FFFFFF; --sur-clair: #FFFFFF;
+  --bleu-survol: #2449C4;
+  --texte-bleu: #1E3A9E; --texte-info: #1E3A9E;
+  --texte-rouge: #9E1F25; --texte-important: #8A1B20;
+  --texte-ambre: #6E4200; --texte-vert: #0E5C38;
+  --placeholder: #7C86A8;
+  --teinte-bleu: rgba(47,91,234,.10); --teinte-bleu-forte: rgba(47,91,234,.18); --teinte-bleu-faible: rgba(47,91,234,.07);
+  --bord-bleu: rgba(47,91,234,.28); --bord-bleu-fort: rgba(47,91,234,.40);
+  --teinte-rouge: rgba(196,47,54,.10); --teinte-rouge-faible: rgba(196,47,54,.06); --bord-rouge: rgba(196,47,54,.35);
+  --teinte-ambre: rgba(154,92,0,.12); --teinte-ambre-faible: rgba(154,92,0,.07); --bord-ambre: rgba(154,92,0,.35);
+  --teinte-vert: rgba(19,122,75,.12); --teinte-vert-faible: rgba(19,122,75,.07); --bord-vert: rgba(19,122,75,.30);
+  --teinte-cyan: rgba(10,120,148,.12); --teinte-violet: rgba(99,67,214,.12);
+  --teinte-neutre: rgba(14,22,48,.07);
+  --survol: rgba(14,22,48,.04);
+  --panneau: #F8F9FD; --barre-fond: rgba(255,255,255,.97);
+  --halo-1: rgba(47,91,234,.08); --halo-2: rgba(10,120,148,.05);
+  --lueur-logo: rgba(47,91,234,.30);
+  --voile: rgba(14,22,48,.45); --ombre: rgba(14,22,48,.18); --selection: rgba(47,91,234,.25);
+  --reflet-carte: transparent;
+}
+
+/* =========================================================================================
+   2. Base
+   ========================================================================================= */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  color: var(--texte);
+  font: 16px/1.5 Sora, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  background: radial-gradient(900px 500px at 85% -10%, var(--halo-1), transparent 60%),
+              radial-gradient(700px 400px at -10% 30%, var(--halo-2), transparent 60%), var(--fond);
+  background-attachment: fixed;
+  min-height: 100vh;
+  -webkit-text-size-adjust: 100%;
+  overflow-wrap: break-word;
+}
+::selection { background: var(--selection); color: var(--fort); }
+[hidden] { display: none !important; }
+h1, h2, h3 { margin: 0; letter-spacing: -.02em; line-height: 1.25; }
+h1 { font-size: 1.75rem; font-weight: 700; }
+h2 { font-size: 1.125rem; font-weight: 700; }
+h3 { font-size: 1rem; font-weight: 700; }
+p { margin: 0 0 .75rem; }
+a { color: var(--cyan); }
+img, svg, video, canvas { max-width: 100%; }
+.muted { color: var(--muted); margin: 0 0 .6rem; }
+.erreur { color: var(--rouge); min-height: 1.2em; margin: .4rem 0 0; }
+.note { color: var(--texte-2); font-size: .9375rem; margin: .7rem 0 0; }
+.num { text-align: right; white-space: nowrap; }
+.sans-coupure { white-space: nowrap; }
+.h { color: var(--vert); } .b { color: var(--rouge); }
+.fort { color: var(--fort); font-weight: 700; }
+/* Masqué à l'écran mais lu par les lecteurs d'écran */
+.visuellement-cache {
+  position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+/* Icônes SVG au trait (UI.icone) */
+.icone {
+  width: 1.25em; height: 1.25em; flex: none; vertical-align: -.25em;
+  fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* =========================================================================================
+   3. Contrôles (boutons)
+   ========================================================================================= */
+
+.btn {
+  border: 0; border-radius: 12px; padding: .6rem 1.1rem; min-height: var(--tactile);
+  font: 600 1rem/1.25 Sora, sans-serif; cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  transition: background-color .15s, color .15s, box-shadow .15s;
+}
+.btn .icone { width: 20px; height: 20px; }
+.btn-primaire { background: var(--bleu); color: var(--sur-couleur); }
+.btn-primaire:hover { background: var(--bleu-survol); }
+.btn-secondaire { background: var(--teinte-bleu); color: var(--texte-bleu); }
+.btn-secondaire:hover { background: var(--teinte-bleu-forte); }
+.btn-fantome { background: transparent; color: var(--texte-2); }
+.btn-fantome:hover { background: var(--survol); color: var(--texte); }
+.btn-danger { background: var(--teinte-rouge); color: var(--texte-rouge); }
+.btn-danger:hover { background: var(--bord-rouge); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.btn[aria-busy="true"] { cursor: progress; }
+/* Bouton carré qui ne porte qu'une icône (donner un aria-label) */
+.btn-icone { padding: 0; width: var(--tactile); min-width: var(--tactile); }
+/* Gros bouton d'action (téléphone, écran DI) */
+.btn-gros {
+  width: 100%; min-height: 64px; padding: 1rem 1.25rem; border-radius: 16px;
+  font-size: 1.125rem; font-weight: 700; justify-content: flex-start; gap: .85rem; text-align: left;
+}
+.btn-gros .icone { width: 28px; height: 28px; }
+.btn-gros small { display: block; font-size: .875rem; font-weight: 500; opacity: .85; }
+.pile-gros { display: flex; flex-direction: column; gap: 12px; }
+.lien-bouton {
+  background: none; border: 0; color: var(--cyan); font: 600 1rem Sora, sans-serif;
+  cursor: pointer; padding: .3rem; text-decoration: underline; text-underline-offset: 3px;
+}
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; border-radius: 6px; }
+
+/* =========================================================================================
+   4. Formulaires
+   ========================================================================================= */
+
+input, select, textarea {
+  font: 500 1rem/1.4 Sora, sans-serif; color: var(--texte); background: var(--champ);
+  border: 1px solid var(--trait-2); border-radius: 11px; padding: .6rem .8rem;
+  min-height: var(--tactile); width: 100%;
+}
+textarea { min-height: 7.5rem; resize: vertical; }
+input::placeholder, textarea::placeholder { color: var(--placeholder); }
+input:hover, select:hover, textarea:hover { border-color: var(--bord-bleu-fort); }
+input[readonly], textarea[readonly], input:disabled, select:disabled, textarea:disabled {
+  background: transparent; color: var(--texte-2); border-style: dashed; cursor: default;
+}
+input[type=checkbox], input[type=radio] {
+  width: 22px; height: 22px; min-height: 0; margin: 0; flex: none; accent-color: var(--bleu); cursor: pointer;
+}
+input[type=file] { padding: .5rem; }
+input[type=search]::-webkit-search-cancel-button { cursor: pointer; }
+[aria-invalid="true"] { border-color: var(--rouge) !important; box-shadow: 0 0 0 1px var(--rouge); }
+label { display: flex; flex-direction: column; gap: .35rem; font-size: 1rem; font-weight: 600; color: var(--texte-2); }
+label.case { flex-direction: row; align-items: center; gap: .65rem; min-height: var(--tactile); font-weight: 500; color: var(--texte); cursor: pointer; }
+.form-colonne { display: flex; flex-direction: column; gap: 1rem; }
+.form-ligne { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
+.form-ligne > label, .form-ligne > .champ { flex: 1 1 180px; }
+/* Formulaire en grille : 2 colonnes, une seule sur téléphone ; .large occupe toute la ligne */
+.form-grille { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.25rem; }
+.form-grille > .large, .form-grille > .actions { grid-column: 1 / -1; }
+fieldset { border: 1px solid var(--trait-2); border-radius: 14px; padding: 1rem 1.1rem 1.1rem; margin: 0; min-width: 0; }
+legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
+.actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .8rem; align-items: center; }
+.espace { flex: 1; }
+
+/* Champ produit par UI.champ : libellé, contrôle, aide, erreur */
+.champ { display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
+.champ > .libelle { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: .3rem; }
+.requis { color: var(--ambre); font-weight: 800; }
+.mention-requis { font-size: .875rem; color: var(--muted); }
+.mention-requis .requis { margin-right: .2rem; }
+.aide { font-size: .875rem; color: var(--muted); margin: 0; }
+.erreur-champ { font-size: .9375rem; font-weight: 600; color: var(--rouge); margin: 0; }
+.erreur-champ::before { content: "⚠ "; }
+.champ.en-erreur > .libelle { color: var(--texte-rouge); }
+.champ .case { min-height: var(--tactile); }
+
+/* Tuiles de choix (boutons radio en grand : impact d'une DI…) */
+.tuiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; border: 0; padding: 0; margin: 0; }
+.tuile { position: relative; display: block; font-weight: 700; color: var(--texte); cursor: pointer; }
+.tuile input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.tuile > span {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .2rem; text-align: center;
+  min-height: 64px; padding: .7rem .8rem; border-radius: 14px; border: 2px solid var(--trait-2); background: var(--champ);
+  transition: border-color .15s, background-color .15s;
+}
+.tuile > span small { font-size: .875rem; font-weight: 500; color: var(--texte-2); }
+.tuile:hover > span { border-color: var(--bord-bleu-fort); }
+.tuile input:checked + span { border-color: var(--bleu); background: var(--teinte-bleu); }
+.tuile > span { position: relative; }
+.tuile input:checked + span::before { content: "✓"; position: absolute; top: 6px; right: 10px; color: var(--bleu); font-weight: 800; }
+.tuile input:focus-visible + span { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.tuile.securite input:checked + span { border-color: var(--rouge); background: var(--teinte-rouge); }
+.tuile.securite input:checked + span::before { color: var(--rouge); }
+
+/* Sélecteur d'équipement (UI.selecteurEquipement) */
+.selecteur-equipement { display: flex; flex-direction: column; gap: .6rem; }
+.selecteur-ligne { display: flex; gap: .6rem; }
+.selecteur-ligne input { flex: 1 1 auto; min-width: 0; }
+.selecteur-resultats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.selecteur-option {
+  width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .1rem .75rem; align-items: baseline;
+  text-align: left; background: var(--champ); border: 1px solid var(--trait-2); border-radius: 12px;
+  padding: .6rem .85rem; min-height: var(--tactile); color: var(--texte); font: 500 1rem Sora, sans-serif; cursor: pointer;
+}
+.selecteur-option:hover, .selecteur-option:focus-visible { border-color: var(--bleu); background: var(--teinte-bleu-faible); }
+.selecteur-option b { font-weight: 800; color: var(--fort); white-space: nowrap; }
+.selecteur-option small { grid-column: 2; color: var(--muted); font-size: .875rem; }
+.selecteur-choisi {
+  display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; padding: .7rem .9rem;
+  border-radius: 14px; border: 1px solid var(--bord-bleu-fort); background: var(--teinte-bleu-faible);
+}
+.selecteur-choisi .selecteur-resume { flex: 1 1 200px; min-width: 0; }
+.selecteur-choisi b { color: var(--fort); font-weight: 800; margin-right: .4rem; }
+.selecteur-choisi small { display: block; color: var(--texte-2); font-size: .875rem; }
+
+/* =========================================================================================
+   5. Coque de l'application
+   <div class="coque [replie]">
+     <aside class="menu-lateral"> .menu-tete (logo, titre, .menu-replier) · nav.menu · a.signature </aside>
+     <div class="zone-principale"> header.entete-mobile · .bandeau-demo · .bandeau-changement · main.contenu </div>
+     <nav class="barre-bas"> 4 entrées + « Plus » </nav>
+   </div>
+   ========================================================================================= */
+
+.coque { display: grid; grid-template-columns: var(--largeur-menu) minmax(0, 1fr); min-height: 100vh; }
+.coque.replie { grid-template-columns: var(--largeur-menu-icones) minmax(0, 1fr); }
+
+/* Logo : carré dégradé avec l'engrenage du favicon (UI.logo) */
+.logo {
+  width: 40px; height: 40px; border-radius: 12px; flex: none; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--logo-debut), var(--logo-fin));
+  box-shadow: 0 0 24px var(--lueur-logo); color: var(--sur-couleur);
+}
+.logo svg { width: 100%; height: 100%; fill: currentColor; }
+.logo.grand { width: 56px; height: 56px; border-radius: 16px; }
+
+/* --- menu latéral --- */
+.menu-lateral {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column; gap: 6px; padding: 16px 12px;
+  background: var(--panneau); border-right: 1px solid var(--trait);
+}
+.menu-tete { display: flex; align-items: center; gap: 12px; padding: 4px 6px 14px; min-height: 56px; }
+.menu-tete .titre { min-width: 0; flex: 1; }
+.menu-tete .titre b { display: block; font-size: 1.125rem; letter-spacing: -.01em; color: var(--texte); }
+.menu-tete .titre small { display: block; color: var(--muted); font-size: .75rem; letter-spacing: .2em; font-weight: 700; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu-replier { color: var(--muted); }
+.menu { display: flex; flex-direction: column; gap: 2px; }
+.menu-groupe { font-size: .75rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: var(--muted); padding: 14px 14px 4px; }
+.menu a {
+  display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 14px; border-radius: 12px;
+  color: var(--texte-2); text-decoration: none; font-weight: 600; font-size: 1rem; position: relative;
+}
+.menu a .icone { width: 22px; height: 22px; }
+.menu a:hover { background: var(--survol); color: var(--texte); }
+.menu a.actif, .menu a[aria-current="page"] { background: var(--carte-2); color: var(--texte); box-shadow: inset 0 0 0 1px var(--bord-bleu-fort); }
+.menu a.actif .icone, .menu a[aria-current="page"] .icone { color: var(--cyan); }
+/* Compteur sur une entrée de menu (ex. DI à traiter) */
+.pastille {
+  margin-left: auto; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px; display: inline-grid; place-items: center;
+  font-size: .8125rem; font-weight: 800; background: var(--teinte-rouge); color: var(--rouge);
+}
+.pastille.info { background: var(--teinte-bleu); color: var(--texte-info); }
+/* Badge de signature en bas du menu → #/apropos */
+.signature {
+  margin-top: auto; display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--trait); color: var(--muted); text-decoration: none; font-size: .8125rem; line-height: 1.4;
+}
+.signature .icone { width: 18px; height: 18px; margin-top: 1px; }
+.signature b { color: var(--texte-2); font-weight: 600; }
+.signature:hover { color: var(--texte-2); border-color: var(--trait-2); }
+.etat-poste { font-size: .8125rem; color: var(--muted); padding: 6px 12px; display: flex; gap: 8px; align-items: center; }
+
+/* Menu en icônes seules (replié sur grand écran, ou tablette) */
+.coque.replie .menu-lateral { padding: 16px 10px; align-items: stretch; }
+.coque.replie .menu-tete { flex-direction: column; padding: 4px 0 12px; gap: 10px; }
+.coque.replie .menu-tete .titre, .coque.replie .menu-groupe { display: none; }
+.coque.replie .menu a, .coque.replie .signature, .coque.replie .etat-poste { justify-content: center; padding: 0; }
+.coque.replie .menu a .libelle, .coque.replie .signature .libelle, .coque.replie .etat-poste .libelle {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+.coque.replie .signature { min-height: 44px; align-items: center; }
+.coque.replie .pastille { position: absolute; top: 3px; right: 6px; min-width: 20px; height: 20px; font-size: .75rem; padding: 0 5px; }
+.coque.replie .menu-replier .icone { transform: rotate(180deg); }
+
+/* --- zone principale --- */
+.zone-principale { min-width: 0; display: flex; flex-direction: column; }
+.contenu { width: 100%; max-width: 1320px; margin: 0 auto; padding: 24px 32px 64px; flex: 1; }
+.entete-page { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 20px; }
+.entete-page p { margin: 4px 0 0; color: var(--texte-2); max-width: 70ch; }
+.entete-page .actions { margin-top: 0; }
+.fil { font-size: .9375rem; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.fil a { color: var(--texte-2); }
+
+/* --- en-tête mobile (téléphone seulement) --- */
+.entete-mobile {
+  display: none; position: sticky; top: 0; z-index: 20; align-items: center; gap: 10px;
+  padding: 8px 12px calc(8px) 16px; padding-top: calc(8px + env(safe-area-inset-top));
+  background: var(--panneau); border-bottom: 1px solid var(--trait);
+}
+.entete-mobile .logo { width: 36px; height: 36px; border-radius: 10px; }
+.entete-mobile .titre { flex: 1; min-width: 0; font-weight: 700; font-size: 1.0625rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* --- barre du bas (téléphone seulement) --- */
+.barre-bas {
+  display: none; position: fixed; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 30;
+  grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; padding: 5px 4px;
+  background: var(--barre-fond); border: 1px solid var(--trait-2); border-radius: 18px; box-shadow: 0 10px 30px var(--ombre);
+}
+.barre-bas a, .barre-bas button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  min-height: 56px; padding: 4px 0; border: 0; border-radius: 12px; background: none; cursor: pointer;
+  color: var(--muted); text-decoration: none; font: 600 .75rem/1.1 Sora, sans-serif; letter-spacing: -.01em; position: relative; min-width: 0;
+}
+.barre-bas .icone { width: 24px; height: 24px; }
+.barre-bas .libelle { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barre-bas .actif, .barre-bas [aria-current="page"] { background: var(--carte-2); color: var(--texte); box-shadow: inset 0 0 0 1px var(--bord-bleu-fort); }
+.barre-bas .actif .icone, .barre-bas [aria-current="page"] .icone { color: var(--cyan); }
+.barre-bas .pastille { position: absolute; top: 2px; right: calc(50% - 26px); min-width: 20px; height: 20px; font-size: .75rem; padding: 0 5px; }
+/* Liste « Plus » (dans une fenêtre .dialogue.feuille) */
+.liste-plus { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.liste-plus a {
+  display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 0 14px; border-radius: 12px;
+  color: var(--texte); text-decoration: none; font-weight: 600;
+}
+.liste-plus a:hover, .liste-plus a.actif { background: var(--carte-2); }
+.liste-plus .icone { width: 22px; height: 22px; color: var(--texte-2); }
+
+/* --- bandeaux de la coque --- */
+.bandeau-demo, .bandeau-changement {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  padding: 8px 32px; font-weight: 600; font-size: 1rem; border-bottom: 1px solid;
+}
+.bandeau-changement { position: sticky; top: 0; z-index: 15; }
+.bandeau-demo .libelle-bandeau, .bandeau-changement .libelle-bandeau { flex: 1 1 auto; min-width: 0; }
+.bandeau-demo { background: linear-gradient(var(--teinte-ambre), var(--teinte-ambre)), var(--fond); color: var(--texte-ambre); border-color: var(--bord-ambre); }
+.bandeau-changement { background: linear-gradient(var(--teinte-bleu), var(--teinte-bleu)), var(--fond); color: var(--texte-bleu); border-color: var(--bord-bleu-fort); }
+.bandeau-demo .icone, .bandeau-changement .icone { width: 22px; height: 22px; }
+.bandeau-demo .btn, .bandeau-changement .btn { min-height: 38px; padding: .35rem .9rem; margin-left: auto; }
+
+/* =========================================================================================
+   6. Cartes, grille 12 colonnes, instruments, graphiques
+   ========================================================================================= */
+
+.carte {
+  background: linear-gradient(180deg, var(--reflet-carte), transparent), var(--carte);
+  border: 1px solid var(--trait); border-radius: var(--rayon); padding: 20px 22px; min-width: 0; margin-bottom: 18px;
+}
+.carte > h2 { margin-bottom: .6rem; }
+.entete-carte { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.entete-carte h2 { margin: 0; }
+.grille { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 0 18px; }
+.c3 { grid-column: span 3; } .c4 { grid-column: span 4; } .c5 { grid-column: span 5; } .c6 { grid-column: span 6; }
+.c7 { grid-column: span 7; } .c8 { grid-column: span 8; } .c9 { grid-column: span 9; } .c10 { grid-column: span 10; }
+.c11 { grid-column: span 11; } .c12 { grid-column: span 12; }
+
+/* Bandeau d'indicateurs (accueil). Un indicateur peut être un lien vers la liste filtrée. */
+.instruments { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin: 4px 0 22px; }
+.instruments > div, .instruments > a { padding-top: 14px; border-top: 2px solid var(--trait-2); color: inherit; text-decoration: none; min-width: 0; }
+.instruments > :first-child { border-top-color: var(--bleu); }
+.instruments > a:hover .chiffre { color: var(--cyan); }
+.instruments > .rouge { border-top-color: var(--rouge); } .instruments > .ambre { border-top-color: var(--ambre); }
+.instruments > .vert { border-top-color: var(--vert); } .instruments > .cyan { border-top-color: var(--cyan); }
+.instruments .lib { font-size: .9375rem; color: var(--texte-2); font-weight: 500; }
+.instruments .chiffre { font-size: 2rem; font-weight: 700; letter-spacing: -.03em; margin: 2px 0; color: var(--fort); }
+.instruments .comp { font-size: .875rem; color: var(--muted); }
+.evol { font-weight: 800; font-size: .8125rem; padding: 2px 7px; border-radius: 7px; margin-right: 6px; white-space: nowrap; }
+.evol.hausse { color: var(--vert); background: var(--teinte-vert); }
+.evol.baisse { color: var(--rouge); background: var(--teinte-rouge); }
+
+.graph { width: 100%; height: 290px; }
+.legende { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .875rem; color: var(--texte-2); margin: 8px 0 2px; }
+.legende span { display: inline-flex; align-items: center; gap: 6px; }
+.lg-trait { width: 18px; border-top: 3px solid; display: inline-block; border-radius: 2px; }
+.lg-trait.fin { border-top-width: 2px; } .lg-trait.pointille { border-top: 2px dashed; }
+.lg-bande, .lg-carre { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.vue-tableau summary { cursor: pointer; color: var(--cyan); font-size: .9375rem; margin-top: .3rem; min-height: 32px; display: flex; align-items: center; }
+.lignes { display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; color: var(--texte-2); margin-top: 12px; }
+.lignes b { color: var(--texte); text-align: right; white-space: nowrap; }
+.lignes .total { border-top: 1px solid var(--trait-2); padding-top: 8px; color: var(--fort); font-weight: 700; }
+
+/* Zone de dépôt de fichiers (CSV, photos) */
+.depot {
+  display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: 26px 16px; margin-bottom: 18px;
+  border: 2px dashed var(--bord-bleu-fort); border-radius: var(--rayon); cursor: pointer; text-align: center; background: var(--teinte-bleu-faible);
+}
+.depot .icone { width: 34px; height: 34px; color: var(--cyan); }
+.depot.survol { background: var(--teinte-bleu); border-color: var(--bleu); }
+.filtres { display: flex; gap: .6rem; flex-wrap: wrap; margin-bottom: .8rem; align-items: center; }
+.filtres input[type=search] { flex: 2 1 220px; width: auto; }
+.filtres select { flex: 1 1 160px; width: auto; }
+
+/* =========================================================================================
+   7. Alertes, bandeaux (UI.bandeau), encadrés
+   ========================================================================================= */
+
+.alertes { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.alerte {
+  display: flex; gap: .7rem; align-items: flex-start; padding: .75rem 1rem; border-radius: 12px; font-size: 1rem;
+  background: var(--teinte-bleu-faible); border: 1px solid var(--bord-bleu); color: var(--texte-bleu);
+}
+.alerte > .icone { width: 22px; height: 22px; margin-top: 1px; }
+.alerte .alerte-texte { flex: 1; min-width: 0; }
+.alerte .alerte-texte > :last-child { margin-bottom: 0; }
+.alerte.attention { background: var(--teinte-ambre-faible); border-color: var(--bord-ambre); color: var(--texte-ambre); }
+.alerte.important { background: var(--teinte-rouge-faible); border-color: var(--bord-rouge); color: var(--texte-important); }
+.alerte.succes { background: var(--teinte-vert-faible); border-color: var(--bord-vert); color: var(--texte-vert); }
+.alerte b { color: var(--fort); }
+.alerte .btn { margin-left: auto; min-height: 38px; padding: .35rem .9rem; }
+
+/* Bandeau sécurité : DI à impact « sécurité », consignation obligatoire… (texte toujours présent) */
+.bandeau-securite {
+  display: flex; gap: .85rem; align-items: flex-start; padding: 14px 18px; margin-bottom: 18px; border-radius: 14px;
+  background: var(--rouge); color: var(--sur-clair); font-weight: 700; font-size: 1.0625rem; line-height: 1.4;
+}
+.bandeau-securite > .icone { width: 28px; height: 28px; stroke-width: 2.2; }
+.bandeau-securite .alerte-texte { flex: 1; min-width: 0; }
+.bandeau-securite .alerte-texte > :last-child { margin-bottom: 0; }
+.bandeau-securite b, .bandeau-securite strong { font-weight: 800; }
+
+.encadre { margin: 14px 0; border-radius: 14px; padding: 12px 16px; font-size: 1rem; border: 1px solid var(--trait-2); background: var(--survol); color: var(--texte-2); }
+.encadre > :last-child { margin-bottom: 0; }
+.encadre h3 { margin-bottom: .4rem; color: var(--texte); }
+.encadre.manque { background: var(--teinte-rouge-faible); border-color: var(--bord-rouge); color: var(--texte-important); }
+.encadre.ok { background: var(--teinte-vert-faible); border-color: var(--bord-vert); color: var(--texte-vert); }
+.encadre.info { background: var(--teinte-bleu-faible); border-color: var(--bord-bleu); color: var(--texte-bleu); }
+.encadre.attention { background: var(--teinte-ambre-faible); border-color: var(--bord-ambre); color: var(--texte-ambre); }
+.encadre b { color: var(--fort); }
+.encadre ul { margin: .3rem 0 0; padding-left: 1.2rem; }
+.gros-pct { font-size: 3.1rem; font-weight: 700; letter-spacing: -.04em; line-height: 1; color: var(--fort); margin: 12px 0 4px; }
+.niveau { font-weight: 800; font-size: .8125rem; padding: 3px 10px; border-radius: 7px; white-space: nowrap; }
+.niveau.rouge { color: var(--rouge); background: var(--teinte-rouge); }
+.niveau.orange { color: var(--ambre); background: var(--teinte-ambre); }
+.niveau.vert { color: var(--vert); background: var(--teinte-vert); }
+
+/* =========================================================================================
+   8. Tables et badges
+   ========================================================================================= */
+
+.table-defile { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.table { border-collapse: collapse; width: 100%; font-size: 1rem; }
+.table th {
+  text-align: left; font-size: .8125rem; letter-spacing: .02em; color: var(--muted); font-weight: 700;
+  padding: .55rem .75rem; border-bottom: 1px solid var(--trait-2); white-space: nowrap; vertical-align: bottom;
+}
+.table td { padding: .7rem .75rem; border-bottom: 1px solid var(--trait); vertical-align: middle; }
+.table td:first-child, .table td.sans-coupure { white-space: nowrap; }   /* identifiants (OT-2026-0107) jamais coupés */
+.table tr:last-child td { border-bottom: 0; }
+.table th.num, .table td.num { text-align: right; }
+.table tr.attenue td { color: var(--muted); }
+.table tr.attenue td.barre { text-decoration: line-through; }
+.table input, .table select { min-height: 38px; padding: .35rem .55rem; }
+.table tbody tr.cliquable { cursor: pointer; }
+.table tbody tr.cliquable:hover td { background: var(--survol); }
+.table tbody tr.cliquable:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+.table td.vide-table { text-align: center; color: var(--muted); padding: 1.5rem .75rem; }
+/* En-tête triable (UI.tableau) */
+.table th .tri {
+  background: none; border: 0; padding: .2rem 0; margin: 0; min-height: 30px; cursor: pointer;
+  font: inherit; color: inherit; letter-spacing: inherit; display: inline-flex; align-items: center; gap: .35rem;
+}
+.table th .tri:hover, .table th[aria-sort] .tri { color: var(--texte); }
+.table th .sens { width: .7em; display: inline-block; text-align: center; color: var(--cyan); }
+.table th[aria-sort="ascending"] .sens::before { content: "▲"; font-size: .75em; }
+.table th[aria-sort="descending"] .sens::before { content: "▼"; font-size: .75em; }
+.table th.num .tri { flex-direction: row-reverse; }
+
+.badge {
+  display: inline-block; padding: .15rem .6rem; border-radius: 8px; font-size: .8125rem; font-weight: 700; line-height: 1.5;
+  background: var(--teinte-neutre); color: var(--texte-2); white-space: nowrap; vertical-align: middle;
+}
+.badge.ok { background: var(--teinte-vert); color: var(--vert); }
+.badge.ko { background: var(--teinte-rouge); color: var(--rouge); }
+.badge.info { background: var(--teinte-bleu); color: var(--texte-info); }
+.badge.attention { background: var(--teinte-ambre); color: var(--ambre); }
+.badge.cyan { background: var(--teinte-cyan); color: var(--cyan); }
+.badge.violet { background: var(--teinte-violet); color: var(--violet); }
+.badge.neutre { background: var(--teinte-neutre); color: var(--texte-2); }
+.badge.barre { text-decoration: line-through; }
+/* Priorités : couleur de la charte ET libellé P1…P4 (jamais la couleur seule) */
+.prio-p1, .prio-p2, .prio-p3, .prio-p4 { font-weight: 800; letter-spacing: .02em; min-width: 2.6em; text-align: center; }
+.prio-p1 { background: var(--rouge); color: var(--sur-clair); }
+.prio-p2 { background: var(--ambre); color: var(--sur-clair); }
+.prio-p3 { background: var(--cyan); color: var(--sur-clair); }
+.prio-p4 { background: var(--muted); color: var(--sur-clair); }
+
+/* =========================================================================================
+   9. Composants métier
+   ========================================================================================= */
+
+/* --- onglets (UI.onglets) --- */
+.barre-onglets {
+  display: flex; gap: 4px; border-bottom: 1px solid var(--trait-2); overflow-x: auto; scrollbar-width: thin; margin-bottom: 18px;
+}
+.onglet {
+  background: none; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; color: var(--texte-2);
+  font: 600 1rem Sora, sans-serif; padding: .7rem 1rem; min-height: 48px; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: .5rem; border-radius: 8px 8px 0 0;
+}
+.onglet:hover { color: var(--texte); background: var(--survol); }
+.onglet[aria-selected="true"] { color: var(--texte); border-bottom-color: var(--bleu); }
+.onglet .badge { font-size: .8125rem; }
+.panneau-onglet:focus-visible { outline-offset: 4px; }
+
+/* --- arborescence (parc : sites > ateliers > lignes > équipements) --- */
+.arbre, .arbre ul { list-style: none; margin: 0; padding: 0; }
+.arbre ul { margin-left: 15px; padding-left: 12px; border-left: 1px solid var(--trait-2); }
+.arbre summary, .arbre .feuille {
+  display: flex; align-items: center; gap: .6rem; min-height: var(--tactile); padding: .3rem .6rem; border-radius: 10px;
+  cursor: pointer; color: var(--texte); text-decoration: none; list-style: none;
+}
+.arbre summary::-webkit-details-marker { display: none; }
+.arbre summary::before {
+  content: ""; width: 8px; height: 8px; flex: none; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg); transition: transform .15s; margin-right: 2px;
+}
+.arbre details[open] > summary::before { transform: rotate(45deg); }
+.arbre summary:hover, .arbre .feuille:hover { background: var(--survol); }
+.arbre .feuille { padding-left: 1.6rem; }
+.arbre .feuille b, .arbre summary b { font-weight: 800; color: var(--fort); white-space: nowrap; }
+.arbre .feuille span, .arbre summary span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.arbre .type { margin-left: auto; font-size: .8125rem; color: var(--muted); white-space: nowrap; }
+.arbre .selectionne, .arbre [aria-current="true"] { background: var(--carte-2); box-shadow: inset 0 0 0 1px var(--bord-bleu-fort); }
+
+/* --- fiche clé / valeur --- */
+.valeurs { display: grid; grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr); gap: .55rem 1.25rem; margin: 0; }
+.valeurs dt { color: var(--muted); font-weight: 600; }
+.valeurs dd { margin: 0; color: var(--texte); min-width: 0; overflow-wrap: anywhere; }
+.valeurs dd:empty::before { content: "—"; color: var(--muted); }
+
+/* --- étapes de statut (OT : Créé → … → Clôturé) --- */
+.etapes { display: flex; gap: 6px; list-style: none; margin: 0 0 18px; padding: 0; }
+.etapes li { flex: 1 1 0; min-width: 0; hyphens: auto; overflow-wrap: normal; padding-top: 10px; border-top: 4px solid var(--trait-2); font-size: .875rem; font-weight: 600; color: var(--muted); }
+.etapes li.fait { border-top-color: var(--vert); color: var(--texte-2); }
+.etapes li.fait::before { content: "✓ "; color: var(--vert); font-weight: 800; }
+.etapes li.courant, .etapes li[aria-current="step"] { border-top-color: var(--bleu); color: var(--fort); font-weight: 800; }
+.etapes li.courant::before { content: "● "; color: var(--bleu); }
+.etapes li.hors { border-top-color: var(--ambre); color: var(--ambre); }   /* En attente, Annulé */
+
+/* --- check-liste (opérations d'un OT ou d'une gamme) --- */
+.check-liste { list-style: none; margin: 0; padding: 0; }
+.check-liste li {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(8rem, 11rem); gap: .5rem 1rem; align-items: center;
+  padding: .55rem 0; border-bottom: 1px solid var(--trait);
+}
+.check-liste li:last-child { border-bottom: 0; }
+.check-liste label.case { align-items: flex-start; font-weight: 500; }
+.check-liste label.case input { width: 26px; height: 26px; margin-top: 1px; }
+.check-liste .operation { display: block; color: var(--texte); }
+.check-liste .attendu { display: block; font-size: .875rem; color: var(--muted); }
+.check-liste li.fait .operation { color: var(--texte-2); }
+.check-liste .mesure { min-height: 40px; }
+
+/* --- liste de cartes (listes sur téléphone) --- */
+.liste-cartes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.liste-cartes > li > a, .liste-cartes > li > .carte-ligne {
+  display: flex; flex-direction: column; gap: .25rem; padding: 14px 16px; min-height: 64px; border-radius: 16px;
+  background: var(--carte); border: 1px solid var(--trait); color: var(--texte); text-decoration: none;
+}
+.liste-cartes > li > a:hover { border-color: var(--bord-bleu-fort); background: var(--carte-2); }
+.carte-tete { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.carte-tete b { font-weight: 800; color: var(--fort); white-space: nowrap; }
+.carte-tete .badge:first-of-type { margin-left: auto; }
+.carte-titre { font-weight: 600; color: var(--texte); overflow-wrap: anywhere; }
+.carte-meta { font-size: .875rem; color: var(--texte-2); display: flex; flex-wrap: wrap; gap: .2rem .8rem; }
+.liste-cartes .accent-p1 { border-left: 5px solid var(--rouge); }
+.liste-cartes .accent-p2 { border-left: 5px solid var(--ambre); }
+
+/* --- vignettes photo --- */
+.vignettes { display: flex; flex-wrap: wrap; gap: 10px; }
+.vignette {
+  width: 96px; height: 96px; border-radius: 12px; object-fit: cover; display: block; flex: none;
+  border: 1px solid var(--trait-2); background: var(--champ);
+}
+a.vignette, button.vignette { padding: 0; cursor: zoom-in; overflow: hidden; }
+a.vignette img, button.vignette img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vignette-ajout {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer;
+  border: 2px dashed var(--bord-bleu-fort); color: var(--texte-bleu); font-size: .875rem; font-weight: 600; text-align: center;
+}
+.vignette-ajout .icone { width: 28px; height: 28px; }
+.vignette-ajout input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.photo-grande { max-width: 100%; max-height: 70vh; border-radius: 12px; display: block; margin: 0 auto; }
+
+/* --- QR code (toujours noir sur blanc, repère en clair dessous) --- */
+.qr {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 12px 10px; border-radius: 14px;
+  background: var(--qr-fond); color: var(--qr-encre); max-width: 100%;
+}
+.qr svg { display: block; height: auto; }
+.qr .repere { font-weight: 800; font-size: 1.125rem; letter-spacing: .02em; }
+.qr .adresse { font-size: .75rem; max-width: 220px; text-align: center; overflow-wrap: anywhere; }
+
+/* --- état vide, chargement --- */
+.vide { display: flex; flex-direction: column; align-items: center; gap: .4rem; text-align: center; padding: 32px 16px; color: var(--texte-2); }
+.vide > .icone { width: 40px; height: 40px; color: var(--muted); margin-bottom: .3rem; }
+.vide b { color: var(--texte); font-size: 1.125rem; }
+.vide p { max-width: 46ch; margin: 0; }
+.vide .actions { justify-content: center; }
+.chargement { display: flex; align-items: center; gap: .75rem; color: var(--texte-2); padding: 18px 0; }
+.chargement::before {
+  content: ""; width: 22px; height: 22px; flex: none; border-radius: 50%;
+  border: 3px solid var(--trait-2); border-top-color: var(--cyan); animation: rotation .8s linear infinite;
+}
+.squelette { border-radius: 10px; min-height: 1.2em; background: linear-gradient(90deg, var(--teinte-neutre), var(--survol), var(--teinte-neutre)); background-size: 200% 100%; animation: reflet 1.4s ease-in-out infinite; }
+@keyframes rotation { to { transform: rotate(360deg); } }
+@keyframes reflet { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* --- scanner QR (UI.scannerQR) --- */
+.scanner { position: relative; border-radius: 14px; overflow: hidden; background: var(--fond); aspect-ratio: 4 / 3; }
+.scanner video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scanner-viseur {
+  position: absolute; inset: 15% 22%; border: 3px solid var(--cyan); border-radius: 16px;
+  box-shadow: 0 0 0 999px var(--voile); pointer-events: none;
+}
+
+/* =========================================================================================
+   10. Dialogue (UI.fenetre) et toast (UI.toast)
+   ========================================================================================= */
+
+.dialogue {
+  border: 1px solid var(--trait-2); border-radius: var(--rayon); padding: 22px; width: min(520px, calc(100% - 32px));
+  max-height: calc(100vh - 32px); overflow-y: auto; background: var(--carte); color: var(--texte); box-shadow: 0 30px 80px var(--ombre);
+}
+.dialogue.large { width: min(760px, calc(100% - 32px)); }
+.dialogue::backdrop { background: var(--voile); }
+.fenetre-tete { display: flex; align-items: flex-start; gap: .75rem; margin-bottom: .9rem; }
+.fenetre-tete h2 { flex: 1; font-size: 1.25rem; padding-top: .45rem; }
+.fenetre-tete .btn-icone { margin: -4px -6px 0 0; }
+.fenetre-corps > :last-child { margin-bottom: 0; }
+.fenetre-actions { justify-content: flex-end; margin-top: 1.2rem; }
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(150%); z-index: 50;
+  background: var(--texte); color: var(--fond); font-weight: 600; padding: .8rem 1.2rem; border-radius: 12px;
+  max-width: calc(100% - 32px); visibility: hidden; transition: transform .2s, visibility .2s; box-shadow: 0 10px 30px var(--ombre); cursor: pointer;
+}
+.toast.visible { transform: translateX(-50%) translateY(0); visibility: visible; }
+.toast.succes { background: var(--vert); color: var(--sur-clair); }
+.toast.erreur { background: var(--rouge); color: var(--sur-clair); }
+.toast.attention { background: var(--ambre); color: var(--sur-clair); }
+:root[data-theme="clair"] .toast.succes, :root[data-theme="clair"] .toast.erreur, :root[data-theme="clair"] .toast.attention { color: var(--sur-couleur); }
+
+/* Zone d'impression : vide et invisible à l'écran (voir §14) */
+#impression { display: none; }
+
+/* =========================================================================================
+   11. Tablette (641 à 1099 px) : menu en icônes seules
+   ========================================================================================= */
+
+@media (max-width: 1099.98px) {
+  .coque, .coque.replie { grid-template-columns: var(--largeur-menu-icones) minmax(0, 1fr); }
+  .menu-lateral { padding: 16px 10px; }
+  .menu-tete { flex-direction: column; padding: 4px 0 12px; gap: 10px; }
+  .menu-tete .titre, .menu-groupe, .menu-replier { display: none; }
+  .menu a, .signature, .etat-poste { justify-content: center; padding: 0; }
+  .menu a .libelle, .signature .libelle, .etat-poste .libelle {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .signature { min-height: 44px; align-items: center; }
+  .pastille { position: absolute; top: 3px; right: 6px; min-width: 20px; height: 20px; font-size: .75rem; padding: 0 5px; }
+  .contenu { padding: 22px 24px 60px; }
+  .bandeau-demo, .bandeau-changement { padding: 8px 24px; }
+  .instruments { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .c3, .c4, .c5, .c6, .c7, .c8, .c9, .c10, .c11 { grid-column: span 12; }
+}
+
+/* =========================================================================================
+   12. Téléphone (≤ 640 px) : en-tête mobile, barre du bas, zones tactiles ≥ 48 px
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  :root { --tactile: 48px; }
+  .coque, .coque.replie { display: block; }
+  .menu-lateral { display: none; }
+  .entete-mobile { display: flex; }
+  .barre-bas { display: grid; }
+  .contenu { padding: 16px 16px calc(104px + env(safe-area-inset-bottom)); }
+  .bandeau-demo, .bandeau-changement { padding: 6px 8px 6px 16px; font-size: .9375rem; flex-wrap: nowrap; gap: .6rem; }
+  .bandeau-changement { top: calc(52px + env(safe-area-inset-top)); }
+  .bandeau-demo .btn, .bandeau-changement .btn { min-height: 48px; }
+  /* sur téléphone, le bouton du bandeau démo ne garde que son icône (garder un aria-label) */
+  .bandeau-demo .btn .libelle {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .bandeau-demo .btn { width: 48px; padding: 0; }
+  h1 { font-size: 1.4rem; }
+  .entete-page { margin-bottom: 16px; }
+  .carte { padding: 16px; border-radius: 18px; }
+  .btn { min-height: 48px; }
+  .alerte .btn { min-height: 48px; }
+  .btn-icone { width: 48px; min-width: 48px; }
+  .actions .btn { flex: 1 1 auto; }
+  .fenetre-actions .btn { flex: 1 1 40%; }
+  input, select, textarea { min-height: 48px; font-size: 1rem; }
+  .table input, .table select { min-height: 48px; }
+  .check-liste .mesure { min-height: 48px; }
+  input[type=checkbox], input[type=radio] { width: 26px; height: 26px; }
+  .form-grille { grid-template-columns: minmax(0, 1fr); }
+  .valeurs { grid-template-columns: minmax(0, 1fr); gap: .1rem; }
+  .valeurs dd { margin-bottom: .55rem; }
+  .instruments { gap: 14px; }
+  .instruments .chiffre { font-size: 1.5rem; }
+  .gros-pct { font-size: 2.4rem; }
+  .graph { height: 240px; }
+  .etapes { flex-direction: column; gap: 0; }
+  .etapes li { border-top: 0; border-left: 4px solid var(--trait-2); padding: 5px 0 5px 12px; font-size: .9375rem; }
+  .etapes li.fait { border-left-color: var(--vert); }
+  .etapes li.courant, .etapes li[aria-current="step"] { border-left-color: var(--bleu); }
+  .etapes li.hors { border-left-color: var(--ambre); }
+  .check-liste li { grid-template-columns: minmax(0, 1fr); }
+  .table th .tri { min-height: 40px; }
+  .vue-tableau summary { min-height: 48px; }
+  .arbre summary, .arbre .feuille { min-height: 48px; }
+  .dialogue { width: calc(100% - 16px); padding: 18px 16px; }
+  /* Fenêtre « feuille » : collée en bas de l'écran (liste « Plus » de la barre du bas) */
+  .dialogue.feuille { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: var(--rayon) var(--rayon) 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .qr .adresse { max-width: 180px; }
+}
+
+/* =========================================================================================
+   13. Animations réduites
+   ========================================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+
+/* =========================================================================================
+   14. Impression : noir sur blanc, sans menu ni boutons ; bon de travail A4
+   - .sans-impression masque un élément à l'impression ;
+   - si #impression contient quelque chose (bon de travail), SEUL #impression est imprimé.
+   ========================================================================================= */
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  :root, :root[data-theme] {
+    color-scheme: light;
+    --fond: #FFFFFF; --carte: #FFFFFF; --carte-2: #FFFFFF; --champ: #FFFFFF; --panneau: #FFFFFF;
+    --texte: #000000; --texte-2: #000000; --muted: #333333; --fort: #000000;
+    --trait: #999999; --trait-2: #000000;
+    --bleu: #000000; --cyan: #000000; --vert: #000000; --rouge: #000000; --ambre: #000000; --violet: #000000;
+    --texte-bleu: #000000; --texte-info: #000000; --texte-rouge: #000000; --texte-important: #000000; --texte-ambre: #000000; --texte-vert: #000000;
+    --sur-clair: #000000; --sur-couleur: #000000;
+    --teinte-bleu: transparent; --teinte-bleu-forte: transparent; --teinte-bleu-faible: transparent;
+    --teinte-rouge: transparent; --teinte-rouge-faible: transparent; --teinte-ambre: transparent; --teinte-ambre-faible: transparent;
+    --teinte-vert: transparent; --teinte-vert-faible: transparent; --teinte-cyan: transparent; --teinte-violet: transparent; --teinte-neutre: transparent;
+    --bord-bleu: #000000; --bord-bleu-fort: #000000; --bord-rouge: #000000; --bord-ambre: #000000; --bord-vert: #000000;
+    --survol: transparent; --halo-1: transparent; --halo-2: transparent; --reflet-carte: transparent;
+  }
+  html, body { background: var(--fond); color: var(--texte); }
+  body { font-size: 11pt; min-height: 0; }
+  .menu-lateral, .barre-bas, .entete-mobile, .bandeau-demo, .bandeau-changement, .toast, dialog,
+  .btn, button:not(.tri), .barre-onglets, .filtres, .depot, .vignette-ajout, input[type=file], .sans-impression { display: none !important; }
+  .coque, .coque.replie { display: block; }
+  .contenu { max-width: none; padding: 0; }
+  .carte { background: none; border: 1px solid var(--trait); border-radius: 6px; padding: 10pt 12pt; break-inside: avoid; }
+  .grille { display: block; }
+  .instruments { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  a { color: inherit; text-decoration: none; }
+  .table-defile { overflow: visible; }
+  .table th, .table td { border-bottom: 1px solid var(--trait); padding: 4pt 6pt; }
+  .table th .sens { display: none; }
+  .badge { border: 1px solid var(--encre); background: none; color: var(--encre); }
+  .prio-p1 { border-width: 2px; }
+  .bandeau-securite { background: none; border: 3px solid var(--encre); color: var(--encre); }
+  .alerte, .encadre { border: 1px solid var(--encre); background: none; color: var(--encre); }
+  .chargement::before, .squelette { display: none; }
+  /* Bon de travail : quand #impression est rempli, on n'imprime que lui */
+  body:has(#impression > *) > :not(#impression) { display: none !important; }
+  #impression { display: block; }
+  .apercu-papier { box-shadow: none; padding: 0; border: 0; max-width: none; overflow: visible; }
+}
+
+/* --- Bon de travail (dans #impression, ou dans .apercu-papier pour un aperçu à l'écran) --- */
+.apercu-papier {
+  background: var(--papier); color: var(--encre); border-radius: 6px; padding: 14mm 12mm; max-width: 210mm;
+  overflow-x: auto; box-shadow: 0 20px 50px var(--ombre);
+}
+.bon-travail {
+  font: 10.5pt/1.35 Sora, system-ui, sans-serif; color: var(--encre); background: var(--papier);
+  display: flex; flex-direction: column; gap: 9pt;
+}
+.bon-travail h1 { font-size: 17pt; letter-spacing: -.01em; }
+.bon-travail h2 {
+  font-size: 10pt; text-transform: uppercase; letter-spacing: .08em; font-weight: 800;
+  border-bottom: 1.5pt solid var(--encre); padding-bottom: 2pt; margin: 0 0 5pt;
+}
+.bon-travail p { margin: 0 0 4pt; }
+.bon-travail section { break-inside: avoid; }
+.bt-entete { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10pt; align-items: start; border-bottom: 2.5pt solid var(--encre); padding-bottom: 8pt; }
+.bt-entreprise { font-size: 9pt; text-transform: uppercase; letter-spacing: .12em; font-weight: 700; color: var(--encre-2); }
+.bt-numero { font-size: 13pt; font-weight: 800; margin-top: 2pt; }
+.bt-meta { display: flex; flex-wrap: wrap; gap: 3pt 14pt; margin-top: 5pt; font-size: 9.5pt; }
+.bt-meta b { font-weight: 800; }
+.bt-qr { display: flex; flex-direction: column; align-items: center; gap: 2pt; font-size: 8.5pt; font-weight: 800; }
+.bt-qr svg { width: 26mm; height: 26mm; }
+.bt-priorite { display: inline-block; border: 2pt solid var(--encre); padding: 1pt 7pt; font-weight: 800; font-size: 12pt; }
+.bt-colonnes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9pt 14pt; }
+.bon-travail .valeurs { grid-template-columns: max-content minmax(0, 1fr); gap: 1pt 8pt; font-size: 9.5pt; }
+.bon-travail .valeurs dt { color: var(--encre-2); font-weight: 600; }
+.bon-travail .valeurs dd { color: var(--encre); }
+.bt-consignation { border: 2pt solid var(--encre); padding: 6pt 8pt; }
+.bt-consignation h2 { border-bottom-width: 1pt; }
+.bt-rappel { font-weight: 800; }
+.bt-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+.bt-table th, .bt-table td { border: .8pt solid var(--encre); padding: 3pt 5pt; text-align: left; vertical-align: top; }
+.bt-table th { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .04em; font-weight: 800; }
+.bt-table .bt-etroit { width: 1%; white-space: nowrap; text-align: center; }
+.bt-table td.bt-a-remplir { height: 17pt; }
+.bt-coche { display: inline-block; width: 11pt; height: 11pt; border: 1.2pt solid var(--encre); vertical-align: middle; margin-right: 4pt; }
+.bt-case { display: flex; align-items: center; gap: 4pt; margin-top: 4pt; font-weight: 700; }
+.bt-lignes { display: flex; flex-direction: column; }
+.bt-lignes > span { display: block; height: 19pt; border-bottom: .8pt solid var(--encre-trait); }
+.bt-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8pt; }
+.bt-signature { border: .8pt solid var(--encre); min-height: 54pt; padding: 4pt 6pt; font-size: 9pt; }
+.bt-signature b { display: block; font-size: 9.5pt; }
+.bt-pied { font-size: 8pt; color: var(--encre-2); display: flex; justify-content: space-between; gap: 8pt; flex-wrap: wrap; border-top: .8pt solid var(--encre-trait); padding-top: 3pt; }
+@media screen and (max-width: 640px) {
+  .apercu-papier { padding: 16px 12px; }
+  .bt-entete, .bt-colonnes, .bt-signatures { grid-template-columns: minmax(0, 1fr); }
+}

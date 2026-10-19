@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0B1226">
+  <title>Guide de style — Prévo</title>
+  <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../css/style.css">
+  <!-- Mise en page propre au guide (comme un css/modules/*.css : variables de la charte seulement) -->
+  <style>
+    .guide-section { scroll-margin-top: 70px; }
+    .guide-section > h2 { font-size: 1.375rem; margin: 34px 0 6px; }
+    .guide-section > .muted { margin-bottom: 14px; }
+    .guide-rangee { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .guide-nuancier { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+    .guide-nuancier div { border-radius: 14px; border: 1px solid var(--trait-2); overflow: hidden; background: var(--carte); }
+    .guide-nuancier span { display: block; height: 46px; }
+    .guide-nuancier code { display: block; padding: 6px 10px; font-size: .875rem; color: var(--texte-2); }
+    .guide-icones { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+    .guide-icones div { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px; border-radius: 12px; background: var(--champ); font-size: .8125rem; color: var(--texte-2); }
+    .guide-icones .icone { width: 26px; height: 26px; color: var(--texte); }
+    .guide-telephone { max-width: 420px; }
+  </style>
+</head>
+<body>
+<div class="coque" id="coque">
+
+  <!-- ===================================================== menu latéral (≥ 641 px) -->
+  <aside class="menu-lateral" aria-label="Menu">
+    <div class="menu-tete">
+      <span data-ui="logo"></span>
+      <div class="titre"><b>Prévo</b><small>GMAO · Atelier démo</small></div>
+      <button type="button" class="btn btn-fantome btn-icone menu-replier" id="btn-replier" aria-label="Replier le menu" aria-expanded="true"><span data-icone="replier"></span></button>
+    </div>
+    <nav class="menu" aria-label="Navigation principale">
+      <a href="#couleurs" class="actif" aria-current="page" title="Accueil"><span data-icone="accueil"></span><span class="libelle">Accueil</span></a>
+      <a href="#formulaires" title="Demandes"><span data-icone="demandes"></span><span class="libelle">Demandes</span><span class="pastille">3</span></a>
+      <a href="#tableaux" title="Ordres de travail"><span data-icone="ordres"></span><span class="libelle">Ordres de travail</span></a>
+      <a href="#metier" title="Parc"><span data-icone="parc"></span><span class="libelle">Parc</span></a>
+      <div class="menu-groupe">Administration</div>
+      <a href="#fenetres" title="Contrôle de la base"><span data-icone="controle"></span><span class="libelle">Contrôle de la base</span></a>
+      <a href="#impression-guide" title="Paramètres"><span data-icone="parametres"></span><span class="libelle">Paramètres</span></a>
+    </nav>
+    <div class="etat-poste" title="Profil : Responsable — Poste atelier"><span data-icone="utilisateur"></span><span class="libelle">Responsable · Poste atelier</span></div>
+    <a class="signature" href="#apropos" title="À propos">
+      <span data-icone="apropos"></span>
+      <span class="libelle">Développé par <b>Claude (Anthropic)</b> à la demande de <b>Nicolas Briand — SELECTIS</b></span>
+    </a>
+  </aside>
+
+  <div class="zone-principale">
+    <!-- ===================================================== en-tête mobile (≤ 640 px) -->
+    <header class="entete-mobile">
+      <span data-ui="logo"></span>
+      <span class="titre">Guide de style</span>
+      <button type="button" class="btn btn-fantome btn-icone" aria-label="Profil"><span data-icone="utilisateur"></span></button>
+    </header>
+
+    <div class="bandeau-demo" role="status"><span data-icone="alerte"></span><span class="libelle-bandeau">Démo — rien n'est enregistré</span>
+      <button type="button" class="btn btn-secondaire" aria-label="Exporter en ZIP"><span data-icone="export"></span><span class="libelle">Exporter en ZIP</span></button></div>
+    <div class="bandeau-changement" role="status" id="bandeau-changement"><span data-icone="actualiser"></span><span class="libelle-bandeau">Des données ont changé sur un autre poste</span>
+      <button type="button" class="btn btn-primaire">Actualiser</button></div>
+
+    <main class="contenu" id="contenu">
+      <div class="entete-page">
+        <div>
+          <div class="fil"><a href="#couleurs">Accueil</a> › <span>Guide de style</span></div>
+          <h1>Guide de style</h1>
+          <p>Tous les composants communs de Prévo (css/style.css et js/interface.js). Sert de référence visuelle et de page de test.</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn btn-secondaire" id="btn-theme"><span data-icone="engrenage"></span>Thème clair / sombre</button>
+          <button type="button" class="btn btn-primaire"><span data-icone="ajouter"></span>Nouvelle demande</button>
+        </div>
+      </div>
+
+      <!-- ===================================================== couleurs et icônes -->
+      <section class="guide-section" id="couleurs">
+        <h2>Couleurs, typographie, icônes</h2>
+        <p class="muted">Couleurs de la charte Cockpit, toujours appelées par leur variable.</p>
+        <div class="guide-nuancier" id="nuancier"></div>
+        <article class="carte" style="margin-top:18px">
+          <h1>Titre de page (h1)</h1>
+          <h2>Titre de carte (h2)</h2>
+          <p>Texte courant en 16 px, police Sora. <a href="#couleurs">Un lien</a>. <span class="muted">Texte secondaire.</span> <span class="fort">Texte mis en avant.</span></p>
+          <p class="note">Note : précision en 15 px.</p>
+        </article>
+        <div class="guide-icones" id="icones"></div>
+      </section>
+
+      <!-- ===================================================== boutons -->
+      <section class="guide-section" id="boutons">
+        <h2>Boutons</h2>
+        <div class="guide-rangee">
+          <button type="button" class="btn btn-primaire">Enregistrer</button>
+          <button type="button" class="btn btn-secondaire"><span data-icone="imprimer"></span>Imprimer</button>
+          <button type="button" class="btn btn-fantome">Annuler</button>
+          <button type="button" class="btn btn-danger">Annuler l'OT</button>
+          <button type="button" class="btn btn-primaire" disabled>Désactivé</button>
+          <button type="button" class="btn btn-secondaire btn-icone" aria-label="Rechercher"><span data-icone="recherche"></span></button>
+          <button type="button" class="lien-bouton">Lien bouton</button>
+        </div>
+        <div class="guide-telephone pile-gros">
+          <button type="button" class="btn btn-primaire btn-gros"><span data-icone="demandes"></span><span>Signaler un problème<small>Créer une demande d'intervention</small></span></button>
+          <button type="button" class="btn btn-secondaire btn-gros"><span data-icone="qr"></span><span>Scanner un équipement</span></button>
+          <button type="button" class="btn btn-secondaire btn-gros"><span data-icone="photo"></span><span>Ajouter une photo</span></button>
+        </div>
+      </section>
+
+      <!-- ===================================================== indicateurs, alertes -->
+      <section class="guide-section" id="alertes">
+        <h2>Indicateurs, alertes, bandeaux</h2>
+        <div class="instruments">
+          <a href="#tableaux"><div class="lib">DI à traiter</div><div class="chiffre">3</div><div class="comp">dont 1 sécurité</div></a>
+          <div class="rouge"><div class="lib">P1 ouverts</div><div class="chiffre">2</div><div class="comp"><span class="evol baisse">+1</span>depuis hier</div></div>
+          <div class="ambre"><div class="lib">OT en retard</div><div class="chiffre">5</div><div class="comp">date prévue dépassée</div></div>
+          <div class="vert"><div class="lib">Préventifs de la semaine</div><div class="chiffre">7</div><div class="comp"><span class="evol hausse">92 %</span>respect</div></div>
+        </div>
+        <div class="alertes" id="zone-bandeaux"></div>
+        <div class="legende"><span><i class="lg-carre" style="background:var(--bleu)"></i>Correctif</span><span><i class="lg-carre" style="background:var(--cyan)"></i>Préventif</span><span><i class="lg-trait pointille" style="color:var(--muted)"></i>Objectif</span></div>
+        <details class="vue-tableau"><summary>Voir les valeurs</summary><p class="note">Tableau des valeurs du graphique.</p></details>
+      </section>
+
+      <!-- ===================================================== badges -->
+      <section class="guide-section" id="badges">
+        <h2>Badges</h2>
+        <p class="muted">Priorité : couleur de la charte et libellé, jamais la couleur seule.</p>
+        <div class="guide-rangee" id="badges-priorite"></div>
+        <div class="guide-rangee" id="badges-statut"></div>
+      </section>
+
+      <!-- ===================================================== formulaires -->
+      <section class="guide-section" id="formulaires">
+        <h2>Formulaires</h2>
+        <div class="grille">
+          <article class="carte c7">
+            <div class="entete-carte"><h2>Champs du schéma (UI.champ)</h2><span class="mention-requis"><span class="requis">*</span>obligatoire</span></div>
+            <form id="formulaire-demo" class="form-grille" novalidate></form>
+          </article>
+          <article class="carte c5">
+            <h2>Nouvelle demande (téléphone)</h2>
+            <form id="formulaire-di" class="form-colonne" novalidate>
+              <div class="champ">
+                <span class="libelle">Équipement <span class="requis" aria-hidden="true">*</span></span>
+                <div id="selecteur-demo"></div>
+              </div>
+              <fieldset class="tuiles" id="tuiles-impact">
+                <legend class="visuellement-cache">Impact</legend>
+                <label class="tuile securite"><input type="radio" name="impact" value="sécurité"><span>Sécurité<small>danger pour une personne</small></span></label>
+                <label class="tuile"><input type="radio" name="impact" value="arrêt" checked><span>Arrêt<small>la machine ne tourne plus</small></span></label>
+                <label class="tuile"><input type="radio" name="impact" value="dégradé"><span>Dégradé<small>tourne mal</small></span></label>
+                <label class="tuile"><input type="radio" name="impact" value="gêne"><span>Gêne<small>peut attendre</small></span></label>
+              </fieldset>
+              <div class="vignettes">
+                <img class="vignette" alt="Photo jointe" id="vignette-demo">
+                <label class="vignette vignette-ajout"><input type="file" accept="image/*" capture="environment"><span data-icone="photo"></span>Photo</label>
+              </div>
+              <button type="submit" class="btn btn-primaire btn-gros"><span data-icone="valider"></span>Envoyer la demande</button>
+            </form>
+          </article>
+        </div>
+      </section>
+
+      <!-- ===================================================== tableaux -->
+      <section class="guide-section" id="tableaux">
+        <h2>Tableau triable et onglets</h2>
+        <article class="carte">
+          <div class="filtres">
+            <input type="search" placeholder="Rechercher un OT, un équipement…" aria-label="Rechercher">
+            <select aria-label="Statut"><option>Tous les statuts</option></select>
+          </div>
+          <div id="demo-tableau"></div>
+        </article>
+        <article class="carte">
+          <div id="demo-onglets"></div>
+        </article>
+      </section>
+
+      <!-- ===================================================== composants métier -->
+      <section class="guide-section" id="metier">
+        <h2>Composants métier</h2>
+        <div class="grille">
+          <article class="carte c6">
+            <h2>Étapes de statut</h2>
+            <ol class="etapes">
+              <li class="fait">Créé</li><li class="fait">Préparé</li><li class="courant" aria-current="step">Planifié</li><li>En cours</li><li>Clôturé techniquement</li>
+            </ol>
+            <h2>Fiche équipement</h2>
+            <dl class="valeurs">
+              <dt>Repère</dt><dd>CMP-01</dd>
+              <dt>Désignation</dt><dd>Compresseur à vis 37 kW</dd>
+              <dt>Localisation</dt><dd>Atelier Usinage › Ligne 2</dd>
+              <dt>Criticité</dt><dd><span class="badge ko">A</span></dd>
+              <dt>N° de série</dt><dd>00123-AZ-2019</dd>
+              <dt>Mise en service</dt><dd></dd>
+            </dl>
+          </article>
+          <article class="carte c6">
+            <h2>Arborescence du parc</h2>
+            <ul class="arbre">
+              <li><details open><summary><span>Site de démonstration</span><span class="type">site</span></summary>
+                <ul>
+                  <li><details open><summary><span>Atelier Usinage</span><span class="type">atelier</span></summary>
+                    <ul>
+                      <li><a class="feuille selectionne" href="#metier"><b>CMP-01</b><span>Compresseur à vis</span></a></li>
+                      <li><a class="feuille" href="#metier"><b>TOUR-CN-02</b><span>Tour à commande numérique</span></a></li>
+                    </ul></details></li>
+                  <li><details><summary><span>Atelier Expédition</span><span class="type">atelier</span></summary>
+                    <ul><li><a class="feuille" href="#metier"><b>PONT-01</b><span>Pont roulant 5 t</span></a></li></ul></details></li>
+                </ul></details></li>
+            </ul>
+          </article>
+          <article class="carte c6">
+            <h2>Check-liste d'opérations</h2>
+            <ul class="check-liste">
+              <li class="fait"><label class="case"><input type="checkbox" checked><span><span class="operation">1. Consigner l'équipement</span><span class="attendu">Procédure affichée sur l'OT</span></span></label><input class="mesure" aria-label="Mesure" placeholder="—"></li>
+              <li><label class="case"><input type="checkbox"><span><span class="operation">2. Contrôler la pression de service</span><span class="attendu">Attendu : 7 à 8 bar</span></span></label><input class="mesure" aria-label="Mesure relevée" placeholder="Mesure" inputmode="decimal"></li>
+              <li><label class="case"><input type="checkbox"><span><span class="operation">3. Remplacer le filtre à air</span><span class="attendu">Réf. ART-0012</span></span></label><input class="mesure" aria-label="Mesure" placeholder="—"></li>
+            </ul>
+          </article>
+          <article class="carte c6">
+            <h2>Liste de cartes (téléphone)</h2>
+            <ul class="liste-cartes" id="demo-liste-cartes"></ul>
+          </article>
+          <article class="carte c4">
+            <h2>QR code d'équipement</h2>
+            <div id="demo-qr"></div>
+          </article>
+          <article class="carte c8">
+            <h2>Encadrés</h2>
+            <div class="encadre manque"><b>Clôture impossible :</b><ul><li>code cause manquant ;</li><li>« RAS » n'est pas un compte rendu sur un correctif.</li></ul></div>
+            <div class="encadre ok"><b>Pièces disponibles</b> : le kit garniture est en stock (2).</div>
+            <div class="encadre attention"><b>Habilitation</b> : TEC-0004 n'a pas de BR valide au 21/10/2026.</div>
+            <div class="encadre info">La procédure de consignation s'affiche sur l'OT.</div>
+          </article>
+          <article class="carte c6"><h2>État vide</h2><div id="demo-vide"></div></article>
+          <article class="carte c6"><h2>Chargement</h2><div id="demo-chargement"></div><div class="squelette" style="height:18px;margin:8px 0"></div><div class="squelette" style="height:18px;width:70%"></div></article>
+        </div>
+      </section>
+
+      <!-- ===================================================== fenêtres -->
+      <section class="guide-section" id="fenetres">
+        <h2>Fenêtres et notifications</h2>
+        <div class="guide-rangee">
+          <button type="button" class="btn btn-secondaire" id="btn-fenetre">Ouvrir une fenêtre</button>
+          <button type="button" class="btn btn-secondaire" id="btn-confirmer">Confirmer</button>
+          <button type="button" class="btn btn-danger" id="btn-motif">Refuser (motif)</button>
+          <button type="button" class="btn btn-secondaire" id="btn-toast">Toast succès</button>
+          <button type="button" class="btn btn-secondaire" id="btn-toast-erreur">Toast erreur</button>
+        </div>
+        <p class="muted" id="resultat-fenetre" role="status"></p>
+      </section>
+
+      <!-- ===================================================== grille -->
+      <section class="guide-section" id="grille">
+        <h2>Grille 12 colonnes</h2>
+        <div class="grille">
+          <div class="carte c4"><b>.c4</b></div><div class="carte c4"><b>.c4</b></div><div class="carte c4"><b>.c4</b></div>
+          <div class="carte c8"><b>.c8</b></div><div class="carte c4"><b>.c4</b></div>
+        </div>
+      </section>
+
+      <!-- ===================================================== impression -->
+      <section class="guide-section" id="impression-guide">
+        <h2>Bon de travail (aperçu de l'impression A4)</h2>
+        <p class="muted">À l'impression, l'application place ce bloc dans <code>#impression</code> : seul lui est imprimé, en noir sur blanc.</p>
+        <div class="apercu-papier">
+          <article class="bon-travail" id="bon-demo">
+            <header class="bt-entete">
+              <div>
+                <div class="bt-entreprise">Atelier démo — Prévo</div>
+                <h1>Bon de travail</h1>
+                <div class="bt-numero">OT-2026-0107 <span class="bt-priorite">P2</span></div>
+                <div class="bt-meta"><span>Type : <b>correctif différé</b></span><span>Prévu le : <b>21/10/2026</b></span><span>Technicien : <b>L. Martin</b></span><span>Temps prévu : <b>2 h</b></span></div>
+              </div>
+              <div class="bt-qr" id="bt-qr"></div>
+            </header>
+            <div class="bt-colonnes">
+              <section class="bt-equipement"><h2>Équipement</h2>
+                <dl class="valeurs"><dt>Repère</dt><dd>POMPE-03</dd><dt>Désignation</dt><dd>Pompe centrifuge eau glycolée</dd><dt>Localisation</dt><dd>Atelier Usinage › Ligne 1</dd><dt>Criticité</dt><dd>A</dd></dl>
+              </section>
+              <section class="bt-travail"><h2>Travail à faire</h2>
+                <p>Fuite à la garniture mécanique côté accouplement. Remplacer le kit garniture et contrôler l'alignement.</p>
+                <p><b>Demande :</b> DI-2026-0042 (fuite, dégradé)</p>
+              </section>
+            </div>
+            <section class="bt-consignation"><h2>Consignation</h2>
+              <p>Séparer : sectionneur Q12 armoire A2 · Condamner : cadenas personnel · Vérifier l'absence de tension · Vidanger le circuit.</p>
+              <p class="bt-rappel">Cocher une case ne consigne rien : appliquez la procédure.</p>
+              <div class="bt-case"><span class="bt-coche"></span>Consignation appliquée par : ______________________</div>
+            </section>
+            <section class="bt-operations"><h2>Opérations</h2>
+              <table class="bt-table"><thead><tr><th class="bt-etroit">N°</th><th>Opération</th><th>Valeur attendue</th><th>Mesure</th><th class="bt-etroit">Fait</th></tr></thead>
+                <tbody>
+                  <tr><td class="bt-etroit">1</td><td>Déposer l'accouplement</td><td></td><td class="bt-a-remplir"></td><td class="bt-etroit"><span class="bt-coche"></span></td></tr>
+                  <tr><td class="bt-etroit">2</td><td>Remplacer la garniture mécanique</td><td></td><td class="bt-a-remplir"></td><td class="bt-etroit"><span class="bt-coche"></span></td></tr>
+                  <tr><td class="bt-etroit">3</td><td>Contrôler l'alignement</td><td>≤ 0,05 mm</td><td class="bt-a-remplir"></td><td class="bt-etroit"><span class="bt-coche"></span></td></tr>
+                </tbody></table>
+            </section>
+            <section class="bt-pieces"><h2>Pièces</h2>
+              <table class="bt-table"><thead><tr><th>Référence</th><th>Désignation</th><th>Emplacement</th><th class="bt-etroit">Prévu</th><th class="bt-etroit">Utilisé</th></tr></thead>
+                <tbody><tr><td>ART-0012</td><td>Kit garniture mécanique 35 mm</td><td>A3-02</td><td class="bt-etroit">1</td><td class="bt-a-remplir"></td></tr></tbody></table>
+            </section>
+            <section class="bt-temps"><h2>Temps passés</h2>
+              <table class="bt-table"><thead><tr><th>Date</th><th>Technicien</th><th class="bt-etroit">Heures</th></tr></thead>
+                <tbody><tr><td class="bt-a-remplir"></td><td></td><td></td></tr><tr><td class="bt-a-remplir"></td><td></td><td></td></tr></tbody></table>
+            </section>
+            <section class="bt-compte-rendu"><h2>Compte rendu</h2>
+              <p>Cause : ________ Remède : ________ Arrêt de production : ☐ oui ☐ non — durée : ______ h</p>
+              <div class="bt-lignes"><span></span><span></span><span></span><span></span></div>
+              <div class="bt-case"><span class="bt-coche"></span>Équipement remis en service en sécurité</div>
+            </section>
+            <section class="bt-signatures">
+              <div class="bt-signature"><b>Technicien</b>Nom, date et signature</div>
+              <div class="bt-signature"><b>Production (remise en service)</b>Nom, date et signature</div>
+              <div class="bt-signature"><b>Responsable maintenance</b>Nom, date et signature</div>
+            </section>
+            <footer class="bt-pied"><span>Prévo — bon imprimé le 19/10/2026 à 15:30</span><span>Page 1</span></footer>
+          </article>
+        </div>
+        <p class="sans-impression note">Ce paragraphe porte <code>.sans-impression</code> : il disparaît à l'impression.</p>
+      </section>
+
+      <section class="guide-section" id="apropos"><h2>À propos</h2><p>Prévo — GMAO libre (licence MIT).</p></section>
+    </main>
+  </div>
+
+  <!-- ===================================================== barre du bas (≤ 640 px) -->
+  <nav class="barre-bas" aria-label="Navigation principale">
+    <a href="#couleurs" class="actif" aria-current="page"><span data-icone="accueil"></span><span class="libelle">Accueil</span></a>
+    <a href="#formulaires"><span data-icone="demandes"></span><span class="libelle">Demandes</span><span class="pastille">3</span></a>
+    <a href="#tableaux"><span data-icone="ordres"></span><span class="libelle">Ordres</span></a>
+    <a href="#metier"><span data-icone="parc"></span><span class="libelle">Parc</span></a>
+    <button type="button" id="btn-plus"><span data-icone="plus"></span><span class="libelle">Plus</span></button>
+  </nav>
+</div>
+
+<div id="impression"></div>
+
+<script src="../../js/lib/papaparse.min.js"></script>
+<script src="../../js/lib/qrcode.js"></script>
+<script src="../../js/lib/jsQR.js"></script>
+<script src="../../js/lib/jszip.min.js"></script>
+<script src="../../js/interface.js"></script>
+<script>
+'use strict';
+// Remplissage du guide : uniquement des appels à UI (aucune donnée réelle).
+(function () {
+  // Icônes et logo déclarés dans le HTML par data-icone / data-ui
+  UI.$$('[data-icone]').forEach((place) => { place.outerHTML = String(UI.icone(place.dataset.icone)); });
+  UI.$$('[data-ui="logo"]').forEach((place) => { place.outerHTML = String(UI.logo()); });
+
+  // Menu repliable (dans l'application : App mémorise prevo.menuReplie)
+  UI.$('#btn-replier').addEventListener('click', () => {
+    const replie = UI.$('#coque').classList.toggle('replie');
+    UI.$('#btn-replier').setAttribute('aria-expanded', String(!replie));
+  });
+  UI.$('#btn-theme').addEventListener('click', () => {
+    const racine = document.documentElement;
+    if (racine.dataset.theme === 'clair') delete racine.dataset.theme; else racine.dataset.theme = 'clair';
+  });
+
+  // Nuancier et icônes
+  const couleurs = ['--fond', '--carte', '--carte-2', '--champ', '--texte', '--texte-2', '--muted', '--bleu', '--cyan', '--vert', '--rouge', '--ambre', '--violet'];
+  UI.$('#nuancier').innerHTML = UI.html`${couleurs.map((c) => UI.html`<div><span style="background:var(${c})"></span><code>${c}</code></div>`)}`;
+  UI.$('#icones').innerHTML = UI.html`${UI.nomsIcones().map((nom) => UI.html`<div>${UI.icone(nom)}<span>${nom}</span></div>`)}`;
+
+  // Bandeaux
+  const zone = UI.$('#zone-bandeaux');
+  zone.appendChild(UI.bandeau('securite', UI.html`<b>Impact sécurité — priorité P1.</b> Baliser la zone et prévenir le responsable immédiatement.`));
+  zone.appendChild(UI.bandeau('important', UI.html`<b>2 références cassées</b> dans ordres_travail.csv : voir « Contrôle de la base ».`));
+  zone.appendChild(UI.bandeau('attention', UI.html`<b>Verrou :</b> le dossier semble ouvert sur « POSTE-MAGASIN » depuis 2 minutes.`));
+  zone.appendChild(UI.bandeau('info', 'Le jeu de démo se termine aujourd\'hui : les dates ont été décalées.'));
+  zone.appendChild(UI.bandeau('succes', 'Sauvegarde 2026-10-19_153012 créée.'));
+
+  // Badges
+  UI.$('#badges-priorite').innerHTML = UI.html`${['P1', 'P2', 'P3', 'P4'].map((p) => UI.badgePriorite(p))}`;
+  const statuts = ['Nouvelle', 'Acceptée', 'Regroupée', 'Différée', 'Refusée', 'Créé', 'Préparé', 'Planifié', 'En cours', 'En attente', 'Clôturé techniquement', 'Annulé', 'en service', 'arrêt'];
+  UI.$('#badges-statut').innerHTML = UI.html`${statuts.map((s) => UI.badgeStatut(s))}`;
+
+  // Formulaire construit avec UI.champ (définitions au format de js/schema.js)
+  const formulaire = UI.$('#formulaire-demo');
+  const definitions = [
+    [{ nom: 'titre', type: 'texte', libelle: 'Titre', obligatoire: true }, '', { aide: 'Ce qu\'il faut faire, en quelques mots.' }],
+    [{ nom: 'num_serie', type: 'texte', libelle: 'N° de série', protege: true }, '00123'],
+    [{ nom: 'priorite', type: 'choix', libelle: 'Priorité', valeurs: ['P1', 'P2', 'P3', 'P4'], obligatoire: true }, 'P2'],
+    [{ nom: 'technicien_id', type: 'ref', table: 'techniciens', libelle: 'Technicien' }, 'TEC-0002',
+      { liste: [{ valeur: 'TEC-0001', libelle: 'Léa Martin (électricité)' }, { valeur: 'TEC-0002', libelle: 'Karim Benali (mécanique)' }] }],
+    [{ nom: 'date_prevue', type: 'date', libelle: 'Date prévue' }, '2026-10-21'],
+    [{ nom: 'date_debut', type: 'date_heure', libelle: 'Début' }, '2026-10-21 08:30'],
+    [{ nom: 'temps_prevu_h', type: 'decimal', libelle: 'Temps prévu (h)' }, '1.5'],
+    [{ nom: 'quantite', type: 'entier', libelle: 'Quantité' }, 'abc', { erreur: 'Saisissez un nombre entier (ex. 12).' }],
+    [{ nom: 'compte_rendu', type: 'texte_long', libelle: 'Compte rendu', obligatoire: true }, '', { placeholder: 'Constat, cause, action, pièces, reste à faire' }],
+    [{ nom: 'remise_service', type: 'booleen', libelle: 'Équipement remis en service en sécurité', obligatoire: true }, '0'],
+  ];
+  definitions.forEach(([definition, valeur, options]) => {
+    const bloc = UI.champ(definition, valeur, options);
+    if (definition.type === 'texte_long' || definition.type === 'booleen') bloc.classList.add('large');
+    formulaire.appendChild(bloc);
+  });
+  formulaire.appendChild(UI.element(UI.html`<div class="actions"><span class="espace"></span>
+    <button type="button" class="btn btn-fantome">Annuler</button><button type="submit" class="btn btn-primaire">Enregistrer</button></div>`));
+  formulaire.addEventListener('submit', (evenement) => {
+    evenement.preventDefault();
+    const erreurs = UI.verifierFormulaire(formulaire);
+    if (erreurs.length) UI.toast(erreurs.length + ' champ(s) à corriger.', 'erreur');
+    else UI.toast('Enregistré : ' + JSON.stringify(UI.lireFormulaire(formulaire)), 'succes');
+  });
+
+  // Sélecteur d'équipement (listes passées en paramètre)
+  window.equipementsDemo = [
+    { id: 'EQ-0001', repere: 'CMP-01', designation: 'Compresseur à vis 37 kW', localisation_id: 'LOC-0002', actif: '1' },
+    { id: 'EQ-0003', repere: 'POMPE-03', designation: 'Pompe centrifuge eau glycolée', localisation_id: 'LOC-0002', actif: '1' },
+    { id: 'EQ-0007', repere: 'PONT-01', designation: 'Pont roulant 5 t', localisation_id: 'LOC-0003', actif: '1' },
+    { id: 'EQ-0009', repere: 'TOUR-CN-02', designation: 'Tour à commande numérique', localisation_id: 'LOC-0002', actif: '1' },
+    { id: 'EQ-0012', repere: 'VIEUX-01', designation: 'Ancienne perceuse', localisation_id: 'LOC-0002', actif: '0' },
+  ];
+  window.localisationsDemo = [
+    { id: 'LOC-0001', libelle: 'Site de démonstration' }, { id: 'LOC-0002', libelle: 'Atelier Usinage' }, { id: 'LOC-0003', libelle: 'Atelier Expédition' },
+  ];
+  window.selecteurDemo = UI.selecteurEquipement(UI.$('#selecteur-demo'), {
+    equipements: window.equipementsDemo, localisations: window.localisationsDemo, valeur: '',
+    surChoix: (equipement) => { window.equipementChoisi = equipement ? equipement.id : null; },
+  });
+
+  // Vignette : une petite image dessinée (aucun fichier externe)
+  const toile = document.createElement('canvas');
+  toile.width = 96; toile.height = 96;
+  const pinceau = toile.getContext('2d');
+  pinceau.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--carte-2');
+  pinceau.fillRect(0, 0, 96, 96);
+  pinceau.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--cyan');
+  pinceau.beginPath(); pinceau.arc(48, 52, 22, 0, Math.PI * 2); pinceau.fill();
+  UI.$('#vignette-demo').src = toile.toDataURL('image/png');
+
+  // Tableau triable
+  window.lignesTableau = [
+    { id: 'OT-2026-0107', equipement: 'POMPE-03', priorite: 'P2', statut: 'Planifié', date_prevue: '2026-10-21', cout: '184.5' },
+    { id: 'OT-2026-0098', equipement: 'CMP-01', priorite: 'P1', statut: 'En cours', date_prevue: '2026-10-18', cout: '1240' },
+    { id: 'OT-2026-0110', equipement: 'PONT-01', priorite: 'P4', statut: 'Créé', date_prevue: '', cout: '' },
+    { id: 'OT-2026-0101', equipement: 'TOUR-CN-02', priorite: 'P3', statut: 'En attente', date_prevue: '2026-10-25', cout: '96' },
+  ];
+  window.lignesCliquees = [];
+  UI.$('#demo-tableau').appendChild(UI.tableau({
+    libelle: 'Ordres de travail',
+    colonnes: [
+      { cle: 'id', libelle: 'N°' },
+      { cle: 'equipement', libelle: 'Équipement' },
+      { cle: 'priorite', libelle: 'Priorité', rendu: (l) => UI.badgePriorite(l.priorite) },
+      { cle: 'statut', libelle: 'Statut', rendu: (l) => UI.badgeStatut(l.statut) },
+      { cle: 'date_prevue', libelle: 'Prévu le', type: 'date', rendu: (l) => UI.dateFr(l.date_prevue) },
+      { cle: 'cout', libelle: 'Coût', type: 'nombre', rendu: (l) => UI.euro(l.cout) },
+    ],
+    lignes: window.lignesTableau,
+    triInitial: { cle: 'date_prevue', sens: 'asc' },
+    surClic: (ligne) => { window.lignesCliquees.push(ligne.id); },
+  }));
+
+  // Onglets
+  UI.onglets(UI.$('#demo-onglets'), [
+    { id: 'preparation', libelle: 'Préparation', contenu: UI.html`<p>Travail à faire, pièces prévues, technicien.</p>` },
+    { id: 'execution', libelle: 'Exécution', compteur: 3, afficher: (panneau) => { panneau.innerHTML = UI.html`<p>Opérations à cocher, temps passés.</p>`; } },
+    { id: 'compte-rendu', libelle: 'Compte rendu', contenu: 'Codes de défaillance, compte rendu, remise en service.' },
+    { id: 'historique', libelle: 'Historique équipement', contenu: UI.vide('Aucun autre OT', 'Les interventions passées sur cet équipement apparaîtront ici.', 'horloge') },
+  ], { libelle: 'Fiche OT' });
+
+  // Liste de cartes
+  UI.$('#demo-liste-cartes').innerHTML = UI.html`
+    <li><a href="#metier" class="accent-p1"><div class="carte-tete"><b>DI-2026-0042</b>${UI.badgePriorite('P1')}${UI.badgeStatut('Nouvelle')}</div>
+      <div class="carte-titre">Fuite d'huile importante sous le compresseur</div>
+      <div class="carte-meta"><span>CMP-01</span><span>${UI.dateHeureFr('2026-10-19 08:05')}</span></div></a></li>
+    <li><a href="#metier"><div class="carte-tete"><b>OT-2026-0107</b>${UI.badgePriorite('P3')}${UI.badgeStatut('Planifié')}</div>
+      <div class="carte-titre">Remplacer le kit garniture</div>
+      <div class="carte-meta"><span>POMPE-03</span><span>prévu le ${UI.dateFr('2026-10-21')}</span><span>${UI.heures('1.5')}</span></div></a></li>`;
+
+  // QR codes
+  UI.$('#demo-qr').innerHTML = UI.html`<div class="qr">${UI.qrSvg('http://192.168.1.10:8080/#/equipement/EQ-0007', 168)}
+    <span class="repere">PONT-01</span><span class="adresse">http://192.168.1.10:8080/#/equipement/EQ-0007</span></div>`;
+  UI.$('#bt-qr').innerHTML = UI.html`${UI.qrSvg('http://192.168.1.10:8080/#/ot/OT-2026-0107', 100)}<span>OT-2026-0107</span>`;
+
+  // État vide, chargement
+  UI.$('#demo-vide').innerHTML = UI.html`${UI.vide('Aucune demande à traiter', 'Les nouvelles demandes d\'intervention apparaîtront ici dès leur création.', 'demandes')}`;
+  UI.$('#demo-chargement').innerHTML = UI.chargement('Chargement des 22 tables…');
+
+  // Fenêtres et toasts
+  const resultat = UI.$('#resultat-fenetre');
+  UI.$('#btn-fenetre').addEventListener('click', async () => {
+    const choix = await UI.fenetre({
+      titre: 'Mettre en attente', contenu: UI.html`<p>L'OT <b>OT-2026-0107</b> attend une pièce.</p>`,
+      boutons: [{ libelle: 'Annuler', valeur: null, classe: 'btn-fantome' }, { libelle: 'Mettre en attente', valeur: 'attente', classe: 'btn-primaire', defaut: true }],
+    });
+    resultat.textContent = 'Fenêtre : ' + choix;
+  });
+  UI.$('#btn-confirmer').addEventListener('click', async () => {
+    resultat.textContent = 'Confirmation : ' + await UI.confirmer('Annuler cet ordre de travail ?', { oui: 'Annuler l\'OT', non: 'Garder', danger: true });
+  });
+  UI.$('#btn-motif').addEventListener('click', async () => {
+    resultat.textContent = 'Motif : ' + await UI.demanderMotif('Refuser la demande', 'Motif du refus (visible du demandeur)');
+  });
+  UI.$('#btn-toast').addEventListener('click', () => UI.toast('Demande DI-2026-0042 créée.', 'succes'));
+  UI.$('#btn-toast-erreur').addEventListener('click', () => UI.toast('Le fichier ordres_travail.csv est ouvert dans Excel : fermez-le puis réessayez.', 'erreur'));
+  UI.$('#btn-plus').addEventListener('click', () => UI.fenetre({
+    titre: 'Plus', classe: 'feuille',
+    contenu: UI.html`<ul class="liste-plus">
+      <li><a href="#fenetres">${UI.icone('controle')}Contrôle de la base</a></li>
+      <li><a href="#impression-guide">${UI.icone('parametres')}Paramètres</a></li>
+      <li><a href="#apropos">${UI.icone('apropos')}À propos</a></li></ul>`,
+  }));
+
+  document.documentElement.dataset.etat = 'pret';
+})();
+</script>
+</body>
+</html>
