@@ -228,6 +228,66 @@ class TestApiServeur(CasAvecServeur):
         self.assertEqual(reponse.entetes['cache-control'], 'no-store')
         self.assertTrue(reponse.entetes['content-type'].startswith('application/json'))
 
+    def test_rafale_de_connexions_simultanees_ni_refus_ni_attente(self):
+        """Un navigateur ouvre ~6 connexions d'un coup par page (HTTP/1.0 : une par requête),
+        plusieurs postes et téléphones s'ajoutent. Avec la file d'écoute par défaut de socketserver
+        (5), Windows réinitialise (WinError 10054, ERR_CONNECTION_RESET) ou retarde d'une seconde
+        (nouvel envoi du SYN) les connexions en trop : le ping de détection (2 s) échouait alors."""
+        nombre = 60
+        resultats = []
+        depart = threading.Event()
+
+        def ping():
+            depart.wait()
+            debut = time.monotonic()
+            try:
+                connexion = http.client.HTTPConnection('127.0.0.1', self.serveur.port, timeout=10)
+                connexion.request('GET', '/api/ping')
+                statut = connexion.getresponse().status
+                connexion.close()
+                resultats.append((statut, time.monotonic() - debut))
+            except OSError as erreur:
+                resultats.append((repr(erreur), time.monotonic() - debut))
+
+        for _ in range(3):
+            resultats.clear()
+            depart.clear()
+            fils = [threading.Thread(target=ping) for _ in range(nombre)]
+            for fil in fils:
+                fil.start()
+            depart.set()
+            for fil in fils:
+                fil.join()
+            self.assertEqual([r for r in resultats if r[0] != 200], [])
+            lents = sorted(round(duree, 2) for _, duree in resultats if duree > 0.9)
+            self.assertEqual(lents, [], "réponses de plus de 0,9 s (connexion mise en attente par le système)")
+
+    def test_connexion_persistante_http_1_1(self):
+        """Plusieurs requêtes (lecture, écriture, erreur 404) sur UNE connexion : le navigateur
+        réutilise ses connexions au lieu d'en ouvrir une par requête (ERR_NO_BUFFER_SPACE)."""
+        connexion = http.client.HTTPConnection('127.0.0.1', self.serveur.port, timeout=10)
+        try:
+            connexion.request('GET', '/api/ping')
+            premiere = connexion.getresponse()
+            premiere.read()
+            self.assertEqual((premiere.status, premiere.version), (200, 11))
+            self.assertFalse(premiere.will_close, 'le serveur ferme la connexion après chaque réponse')
+            prise = connexion.sock
+            for methode, chemin, corps, attendu in (
+                    ('GET', '/index.html', None, 200),
+                    ('GET', '/api/csv/table_inconnue', None, 404),
+                    ('PUT', '/api/documents/persistante-test.txt', b'texte', 201),
+                    ('GET', '/api/versions', None, 200)):
+                entetes = {'X-Prevo': '1', 'Content-Type': 'text/csv; charset=utf-8'} if corps is not None else {}
+                connexion.request(methode, chemin, corps, entetes)
+                reponse = connexion.getresponse()
+                reponse.read()
+                with self.subTest(chemin=chemin):
+                    self.assertEqual(reponse.status, attendu)
+                    self.assertIs(connexion.sock, prise, 'nouvelle connexion ouverte')
+        finally:
+            connexion.close()
+
     def test_aucune_entete_cors(self):
         for chemin in ('/api/ping', '/api/versions', '/serveur.py'):
             reponse = self.requete('GET', chemin, entetes={'Origin': 'http://evil.example'})

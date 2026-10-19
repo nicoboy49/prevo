@@ -698,6 +698,12 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     server_version = '%s/%s' % (NOM_APPLICATION, VERSION_APPLICATION)
     sys_version = ''                    # ne pas annoncer la version de Python
     timeout = 60                        # une connexion muette est coupée au bout de 60 s
+    # Connexions persistantes (HTTP/1.1) : un navigateur réutilise ses ~6 connexions au lieu d'en
+    # ouvrir une par requête (~45 par chargement en HTTP/1.0). Sous Windows, ce renouvellement
+    # incessant de connexions faisait échouer de temps en temps l'ouverture d'une connexion
+    # (ERR_NO_BUFFER_SPACE) : l'application retombait alors sur l'écran de démarrage.
+    # Toutes les réponses portent Content-Length (envoyer) ; le corps des requêtes est toujours lu.
+    protocol_version = 'HTTP/1.1'
 
     # --- Points d'entrée appelés par http.server ---------------------------
 
@@ -732,12 +738,16 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         return chemin == '/api' or chemin.startswith('/api/')
 
     def traiter(self, methode):
+        # Corps de la requête entièrement lu ? Sinon la connexion (persistante) doit être fermée
+        # après la réponse : les octets non lus seraient pris pour la requête suivante.
+        self.corps_lu = methode not in ('PUT', 'POST')
         try:
             corps = b''
             if methode in ('PUT', 'POST'):
                 # Le corps est lu AVANT tout refus : fermer une connexion dont le corps
                 # n'est pas lu ferait perdre la réponse au navigateur (« connexion réinitialisée »).
                 corps = self.lire_corps()
+                self.corps_lu = True
             if not hote_autorise(self.headers.get('Host'), self.config):
                 raise ErreurHttp(403, 'Nom d\'hôte refusé. Utilisez l\'adresse IP du PC.')
             if methode in ('PUT', 'POST'):
@@ -916,6 +926,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             self.send_header('X-Content-Type-Options', 'nosniff')
             for nom, valeur in (entetes_supplementaires or {}).items():
                 self.send_header(nom, valeur)
+            if self.close_connection:
+                self.send_header('Connection', 'close')     # annoncé : le client ne la réutilise pas
             self.end_headers()
             self.wfile.write(octets)
         except (ConnectionError, socket.timeout):
@@ -928,7 +940,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     def envoyer_erreur(self, erreur):
         donnees = {'erreur': erreur.message}
         donnees.update(erreur.champs_supplementaires)
-        self.close_connection = True     # le corps n'a peut-être pas été lu
+        if not getattr(self, 'corps_lu', False):
+            self.close_connection = True     # le corps n'a pas (entièrement) été lu
         self.envoyer_json(erreur.statut, donnees)
 
 
@@ -940,6 +953,11 @@ class ServeurPrevo(http.server.ThreadingHTTPServer):
     """Serveur HTTP multi-connexions (un fil d'exécution par requête)."""
 
     daemon_threads = True
+    # File d'attente des connexions pas encore acceptées. La valeur par défaut de socketserver (5)
+    # est trop courte : un navigateur ouvre ~6 connexions d'un coup par page (une par requête en
+    # HTTP/1.0), et plusieurs postes s'ajoutent ; au-delà, Windows réinitialise la connexion
+    # (ERR_CONNECTION_RESET) ou la retarde d'une seconde ou plus (le ping de détection échoue).
+    request_queue_size = 128
     # Sous Windows, SO_REUSEADDR permettrait d'écouter sur un port DÉJÀ utilisé :
     # on le désactive et on demande l'usage exclusif du port.
     allow_reuse_address = (os.name != 'nt')
