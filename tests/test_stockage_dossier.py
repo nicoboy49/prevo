@@ -102,6 +102,64 @@ window.aide = (() => {
 })();
 """ % ('"%s"' % NOM_DOSSIER_SIMULE)
 
+# Enveloppe d'un dossier OPFS pour simuler un « autre poste » qui écrit au pire moment.
+# window.crochets (modifiable depuis les tests) :
+#   avantCreateWritable(nom) : appelé avant chaque createWritable d'un fichier de la racine ;
+#   ecritureEnEchec(nom)     : vrai → le flux rendu échoue à l'écriture (NoModificationAllowedError) ;
+#   avantGetFileHandle(nom)  : appelé avant chaque getFileHandle de la racine ;
+#   avantGetDirectoryHandle(nom, options) : appelé avant chaque getDirectoryHandle de la racine.
+# aide.autrePoste(nom, texte, ajout) écrit directement dans le vrai dossier (ajout = en fin).
+ENVELOPPE_JS = """
+(() => {
+  window.crochets = {};
+  function enveloppeFichier(nom, vraie) {
+    return {
+      kind: 'file', name: vraie.name,
+      getFile: () => vraie.getFile(),
+      createWritable: async (options) => {
+        if (crochets.avantCreateWritable) { await crochets.avantCreateWritable(nom); }
+        const flux = await vraie.createWritable(options);
+        if (crochets.ecritureEnEchec && crochets.ecritureEnEchec(nom)) {
+          return {
+            seek: (p) => flux.seek(p),
+            write: async () => {
+              const erreur = new Error('écriture refusée (simulée)');
+              erreur.name = 'NoModificationAllowedError';
+              throw erreur;
+            },
+            close: () => flux.close(),
+            abort: () => flux.abort(),
+          };
+        }
+        return flux;
+      },
+    };
+  }
+  aide.vraiDossier = async () => (await navigator.storage.getDirectory()).getDirectoryHandle(%s, { create: true });
+  aide.envelopper = (vrai) => ({
+    name: vrai.name, kind: 'directory',
+    getFileHandle: async (nom, options) => {
+      if (crochets.avantGetFileHandle) { await crochets.avantGetFileHandle(nom); }
+      return enveloppeFichier(nom, await vrai.getFileHandle(nom, options));
+    },
+    getDirectoryHandle: async (nom, options) => {
+      if (crochets.avantGetDirectoryHandle) { await crochets.avantGetDirectoryHandle(nom, options); }
+      return vrai.getDirectoryHandle(nom, options);
+    },
+    removeEntry: (nom, options) => vrai.removeEntry(nom, options),
+    values: () => vrai.values(),
+  });
+  aide.autrePoste = async (nom, texte, ajout) => {
+    const poignee = await (await aide.vraiDossier()).getFileHandle(nom, { create: true });
+    const taille = (await poignee.getFile()).size;
+    const flux = await poignee.createWritable({ keepExistingData: Boolean(ajout) });
+    if (ajout) { await flux.seek(taille); }
+    await flux.write(new TextEncoder().encode(texte));
+    await flux.close();
+  };
+})();
+""" % ('"%s"' % NOM_DOSSIER_SIMULE)
+
 
 def empreinte(octets):
     """Version attendue : SHA-256 du contenu, 16 premiers caractères hexadécimaux."""
@@ -147,6 +205,14 @@ class TestStockageDossier(CasNavigateur):
         else:
             page.goto(self.statique.url + PAGE)
         page.add_script_tag(content=AIDE_JS)
+        page.add_script_tag(content=ENVELOPPE_JS)
+
+    def choisir_dossier_enveloppe(self, page=None, poste="Poste A"):
+        """Comme choisir_dossier, mais l'adaptateur travaille sur le dossier enveloppé (crochets)."""
+        (page or self.page).evaluate("""async (poste) => {
+            await StockageDossier.choisir();
+            window.dos = await StockageDossier.creer(aide.envelopper(await aide.vraiDossier()), { poste: poste });
+        }""", poste)
 
     def choisir_dossier(self, page=None, poste="Poste A"):
         """Choisit le dossier simulé et crée l'adaptateur (window.dos). Renvoie le libellé."""
@@ -503,16 +569,30 @@ class TestStockageDossier(CasNavigateur):
 
     def test_verrou_ancien_ou_illisible_ignore(self):
         self.choisir_dossier(poste="Poste A")
-        vieux = self.page.evaluate("aide.dateHeure(-10 * 60 * 1000)")
-        self.ecrire_opfs("verrou.txt", ("Poste X;%s;autre-session" % vieux).encode("utf-8"))
-        self.assertEqual(self.reussir("verifierVerrou"), {"autreSession": None})
-
         recent = self.page.evaluate("aide.dateHeure(-60 * 1000)")
         self.ecrire_opfs("verrou.txt", ("Poste X;%s;autre-session" % recent).encode("utf-8"))
         self.assertEqual(self.reussir("verifierVerrou")["autreSession"]["poste"], "Poste X")
 
+        # Le même verrou, 10 minutes plus tard (horloge de la page avancée) : abandonné.
+        self.page.evaluate("""() => {
+            const vraiNow = Date.now.bind(Date);
+            Date.now = () => vraiNow() + 10 * 60 * 1000;
+        }""")
+        self.assertEqual(self.reussir("verifierVerrou"), {"autreSession": None})
+
         self.ecrire_opfs("verrou.txt", b"n'importe quoi")
         self.assertEqual(self.reussir("verifierVerrou"), {"autreSession": None})
+
+    def test_verrou_d_un_pc_dont_l_horloge_retarde(self):
+        """L'autre PC écrit une heure en retard de 10 min, mais son verrou vient d'être écrit :
+        c'est la date de modification du fichier qui compte, pas le texte."""
+        self.choisir_dossier(poste="Poste A")
+        en_retard = self.page.evaluate("aide.dateHeure(-10 * 60 * 1000)")
+        self.ecrire_opfs("verrou.txt", ("Poste X;%s;autre-session" % en_retard).encode("utf-8"))
+        verrou = self.reussir("verifierVerrou")["autreSession"]
+        self.assertIsNotNone(verrou, "verrou récent ignoré à cause de l'horloge de l'autre PC")
+        self.assertEqual(verrou["poste"], "Poste X")
+        self.assertEqual(verrou["heure"], en_retard)
 
     def test_poste_sans_point_virgule_dans_le_verrou(self):
         self.choisir_dossier(poste="Atelier;nord\nbis")
@@ -520,6 +600,214 @@ class TestStockageDossier(CasNavigateur):
         self.assertRegex(self.lire_opfs("verrou.txt").decode("utf-8"),
                          r"^Atelier nord bis;\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2};[a-z0-9]+$")
         self.reussir("arreterVerrou")
+
+    # -- concurrence avec un autre poste (relecture vague 3) -------------------------------
+
+    ENTETE_JOURNAL = "id;date_heure;poste;profil;table;id_ligne;action"
+    LIGNE_AUTRE = "J-AUTRE-POSTE-LIGNE-LONGUE;2026-10-19 10:00;autre;autre;t;x;action de l autre poste\r\n"
+
+    def ligne_journal(self, identifiant):
+        return "%s;2026-10-19 10:00;p;p;t;x;a\r\n" % identifiant
+
+    def corps_journal(self, identifiant):
+        return octets_js((self.ENTETE_JOURNAL + "\r\n" + self.ligne_journal(identifiant)).encode("utf-8"))
+
+    def test_ajout_en_fin_n_ecrase_pas_la_ligne_d_un_autre_poste(self):
+        """CRITIQUE 1 : un autre poste ajoute une ligne entre notre lecture et notre écriture."""
+        self.choisir_dossier_enveloppe()
+        self.reussir("ajouter", "journal", self.corps_journal("J-1"))
+        self.reussir("ajouter", "journal", self.corps_journal("J-2"))      # sauvegarde du jour faite
+        self.page.evaluate("""(ligne) => {
+            let fait = false;
+            crochets.avantCreateWritable = async (nom) => {
+                if (nom === 'journal.csv' && !fait) { fait = true; await aide.autrePoste('journal.csv', ligne, true); }
+            };
+        }""", self.LIGNE_AUTRE)
+        resultat = self.appeler("ajouter", "journal", self.corps_journal("J-MOI"))
+        self.page.evaluate("() => { crochets.avantCreateWritable = null; }")
+
+        avant = BOM + (self.ENTETE_JOURNAL + "\r\n" + self.ligne_journal("J-1") + self.ligne_journal("J-2")
+                       + self.LIGNE_AUTRE).encode("utf-8")
+        fichier = self.lire_opfs("journal.csv")
+        if resultat["ok"]:
+            self.assertEqual(fichier, avant + self.ligne_journal("J-MOI").encode("utf-8"))
+        else:
+            self.assertEqual(resultat["nom"], "ErreurConflit", resultat)
+            self.assertEqual(fichier, avant, "la ligne de l'autre poste a été abîmée")
+
+    def test_ajout_concurrent_via_donnees_le_repli_garde_les_deux_lignes(self):
+        """CRITIQUE 1, de bout en bout : Donnees.journaliser se replie sur modifier et rien n'est perdu."""
+        self.choisir_dossier_enveloppe()
+        self.reussir("ajouter", "journal", self.corps_journal("J-1"))
+        self.reussir("ajouter", "journal", self.corps_journal("J-2"))
+        resultat = self.page.evaluate("""async (ligne) => {
+            Donnees.initialiser(window.dos, { poste: 'A', profil: 'P' });
+            await Donnees.chargerTout();
+            let fait = false;
+            crochets.avantCreateWritable = async (nom) => {
+                if (nom === 'journal.csv' && !fait) { fait = true; await aide.autrePoste('journal.csv', ligne, true); }
+            };
+            const id = await Donnees.journaliser('equipements', 'EQ-0001', 'essai');
+            crochets.avantCreateWritable = null;
+            const lu = Donnees.csv.analyser('journal', (await window.dos.charger('journal')).octets);
+            return { id: id, ids: lu.lignes.map((l) => l.id), problemes: lu.problemes.length };
+        }""", self.LIGNE_AUTRE)
+        self.assertIsNotNone(resultat["id"])
+        self.assertEqual(resultat["ids"], ["J-1", "J-2", "J-AUTRE-POSTE-LIGNE-LONGUE", resultat["id"]])
+        self.assertEqual(resultat["problemes"], 0)
+
+    def test_ecriture_d_un_autre_poste_pendant_la_sauvegarde_du_jour_donne_un_conflit(self):
+        """CRITIQUE 2 : un autre poste écrit pendant la sauvegarde quotidienne."""
+        self.choisir_dossier_enveloppe()
+        v1 = self.enregistrer("equipements", csv("id;nom\nEQ-0001;a\n"), None)   # pas de sauvegarde (1re fois)
+        self.assertIsNone(self.lister_opfs("sauvegardes"))
+        autre = csv("id;nom\nEQ-0001;a\nEQ-0002;ajout autre poste\n")
+        self.page.evaluate("""(texte) => {
+            let fait = false;
+            crochets.avantGetDirectoryHandle = async (nom, options) => {
+                if (nom === 'sauvegardes' && options && options.create && !fait) {
+                    fait = true;
+                    await aide.autrePoste('equipements.csv', texte, false);
+                }
+            };
+        }""", autre.decode("utf-8"))
+        resultat = self.appeler("enregistrer", "equipements", octets_js(csv("id;nom\nEQ-0001;modifié\n")), v1)
+        self.assertFalse(resultat["ok"], "écriture de l'autre poste écrasée sans conflit : %s" % resultat)
+        self.assertEqual(resultat["nom"], "ErreurConflit")
+        self.assertEqual(resultat["versionActuelle"], empreinte(autre))
+        self.assertEqual(self.lire_opfs("equipements.csv"), autre)
+
+    def test_ecriture_d_un_autre_poste_juste_avant_la_notre_donne_un_conflit(self):
+        """CRITIQUE 2 (fenêtre finale) : l'autre poste écrit après notre contrôle de version."""
+        self.choisir_dossier_enveloppe()
+        v1 = self.enregistrer("equipements", csv("id;nom\nEQ-0001;a\n"), None)
+        v2 = self.enregistrer("equipements", csv("id;nom\nEQ-0001;b\n"), v1)       # sauvegarde du jour faite
+        autre = csv("id;nom\nEQ-0001;b\nEQ-0002;autre poste\n")
+        self.page.evaluate("""(texte) => {
+            let fait = false;
+            crochets.avantCreateWritable = async (nom) => {
+                if (nom === 'equipements.csv' && !fait) { fait = true; await aide.autrePoste(nom, texte, false); }
+            };
+        }""", autre.decode("utf-8"))
+        resultat = self.appeler("enregistrer", "equipements", octets_js(csv("id;nom\nEQ-0001;c\n")), v2)
+        self.assertFalse(resultat["ok"], "écriture de l'autre poste écrasée sans conflit : %s" % resultat)
+        self.assertEqual(resultat["nom"], "ErreurConflit")
+        self.assertEqual(self.lire_opfs("equipements.csv"), autre)
+
+    def test_creation_concurrente_d_un_fichier_absent(self):
+        """Fichier absent au contrôle, créé par un autre poste avant notre écriture : conflit."""
+        self.choisir_dossier_enveloppe()
+        autre = csv("id;nom\nEQ-0009;autre poste\n")
+        self.page.evaluate("""(texte) => {
+            let fait = false;
+            crochets.avantCreateWritable = async (nom) => {
+                if (nom === 'equipements.csv' && !fait) { fait = true; await aide.autrePoste(nom, texte, false); }
+            };
+        }""", autre.decode("utf-8"))
+        resultat = self.appeler("enregistrer", "equipements", octets_js(csv("id;nom\nEQ-0001;moi\n")), None)
+        self.assertFalse(resultat["ok"], resultat)
+        self.assertEqual(resultat["nom"], "ErreurConflit")
+        self.assertEqual(self.lire_opfs("equipements.csv"), autre)
+
+    def test_echec_d_ecriture_ne_supprime_pas_le_fichier_d_un_autre_poste(self):
+        """Notre écriture échoue ; entre-temps un autre poste a créé le fichier : il doit rester."""
+        self.choisir_dossier_enveloppe()
+        autre = csv("id;nom\nEQ-0009;autre poste\n")
+        self.page.evaluate("""(texte) => {
+            crochets.avantCreateWritable = async (nom) => {
+                if (nom === 'equipements.csv') { await aide.autrePoste(nom, texte, false); }
+            };
+            crochets.ecritureEnEchec = (nom) => nom === 'equipements.csv';
+        }""", autre.decode("utf-8"))
+        resultat = self.appeler("enregistrer", "equipements", octets_js(csv("id;nom\nEQ-0001;moi\n")), None)
+        self.assertFalse(resultat["ok"], resultat)
+        self.assertEqual(self.lire_opfs("equipements.csv"), autre, "le fichier de l'autre poste a été supprimé")
+
+    def test_echec_d_ecriture_d_un_nouveau_fichier_ne_laisse_pas_de_fichier_vide(self):
+        self.choisir_dossier_enveloppe()
+        self.page.evaluate("() => { crochets.ecritureEnEchec = (nom) => nom === 'equipements.csv'; }")
+        resultat = self.appeler("enregistrer", "equipements", octets_js(csv("id;nom\nEQ-0001;moi\n")), None)
+        self.assertFalse(resultat["ok"], resultat)
+        self.assertEqual(resultat["nom"], "ErreurStockage")
+        self.assertIsNone(self.lire_opfs("equipements.csv"))
+
+    def test_dossier_de_donnees_disparu_donne_une_erreur(self):
+        """Dossier supprimé ou clé USB débranchée : erreur, et non « fichier absent » (base vide)."""
+        self.choisir_dossier()
+        self.enregistrer("equipements", csv("id;nom\nEQ-0001;a\n"), None)
+        self.page.evaluate("""async () => {
+            await (await navigator.storage.getDirectory()).removeEntry(%s, { recursive: true });
+        }""" % ('"%s"' % NOM_DOSSIER_SIMULE))
+        for methode, arguments in [("charger", ("equipements",)), ("charger", ("journal",)),
+                                   ("listerVersions", ())]:
+            with self.subTest(methode=methode, arguments=arguments):
+                erreur = self.echouer(methode, *arguments)
+                self.assertEqual(erreur["nom"], "ErreurStockage")
+                self.assertIn("introuvable ou inaccessible", erreur["message"])
+
+    def test_sauvegarde_du_jour_interrompue_est_refaite(self):
+        """Onglet fermé pendant la copie de la sauvegarde du jour : elle est refaite plus tard
+        par un autre onglet, et n'apparaît pas dans la liste tant qu'elle est incomplète."""
+        jour = self.date_du_jour()
+        equipements = csv("id;nom\nEQ-0001;a\n")
+        journal = csv(self.ENTETE_JOURNAL + "\n" + self.ligne_journal("J-1"))
+        self.ecrire_opfs("equipements.csv", equipements)
+        self.ecrire_opfs("journal.csv", journal)
+
+        # Onglet 1 : la copie reste bloquée sur journal.csv, puis l'onglet est fermé.
+        self.choisir_dossier_enveloppe()
+        self.page.evaluate("""() => {
+            crochets.avantGetFileHandle = (nom) => (nom === 'journal.csv' ? new Promise(() => {}) : null);
+            window.dos.enregistrer('parametres', new TextEncoder().encode('cle;valeur\\r\\n'), null);
+        }""")
+        self.page.wait_for_function("""async () => {
+            const noms = await aide.listerOpfs('sauvegardes/' + aide.dateDuJour());
+            return Boolean(noms) && noms.includes('equipements.csv');
+        }""", polling=50, timeout=5000)
+        self.page.close()
+
+        # Onglet 2, un peu plus tard (horloge avancée de 10 minutes).
+        seconde = self.contexte.new_page()
+        self.surveiller(seconde)
+        self.ouvrir(seconde)
+        self.choisir_dossier(page=seconde, poste="Poste B")
+        seconde.evaluate("""() => {
+            const vraiNow = Date.now.bind(Date);
+            Date.now = () => vraiNow() + 10 * 60 * 1000;
+        }""")
+        liste = self.reussir("listerSauvegardes", page=seconde)
+        self.assertNotIn(jour, [s["nom"] for s in liste], "sauvegarde incomplète listée : %s" % liste)
+        erreur = self.echouer("restaurer", jour, page=seconde)
+        self.assertEqual(erreur["nom"], "ErreurStockage")
+        self.assertIn("incomplète", erreur["message"])
+
+        version = empreinte(equipements)
+        self.reussir("enregistrer", "equipements", octets_js(csv("id;nom\nEQ-0001;b\n")), version, page=seconde)
+        self.assertEqual(self.lire_opfs("sauvegardes/%s/equipements.csv" % jour, page=seconde), equipements)
+        self.assertEqual(self.lire_opfs("sauvegardes/%s/journal.csv" % jour, page=seconde), journal)
+        liste = self.reussir("listerSauvegardes", page=seconde)
+        du_jour = [s for s in liste if s["nom"] == jour]
+        self.assertEqual(len(du_jour), 1, liste)
+        self.assertEqual(du_jour[0]["tables"], ["equipements", "journal"])
+        self.assertEqual([n for n in self.lister_opfs("sauvegardes/%s" % jour, page=seconde)
+                          if not n.startswith(".")], ["equipements.csv", "journal.csv"])
+        seconde.close()
+
+    def test_sauvegarde_en_cours_sur_un_autre_poste_n_est_pas_effacee(self):
+        """Marqueur « en cours » récent : un autre poste copie en ce moment ; on ne la refait pas."""
+        jour = self.date_du_jour()
+        self.ecrire_opfs("equipements.csv", csv("id;nom\nEQ-0001;a\n"))
+        self.page.evaluate("""async (jour) => {
+            const racine = await aide.vraiDossier();
+            const s = await (await racine.getDirectoryHandle('sauvegardes', { create: true }))
+                .getDirectoryHandle(jour, { create: true });
+            const f = await (await s.getFileHandle('.en-cours', { create: true })).createWritable();
+            await f.write('autre poste'); await f.close();
+        }""", jour)
+        self.choisir_dossier()
+        self.reussir("enregistrer", "equipements", octets_js(csv("id;nom\nEQ-0001;b\n")),
+                     empreinte(csv("id;nom\nEQ-0001;a\n")))
+        self.assertEqual(self.lister_opfs("sauvegardes/%s" % jour), [".en-cours"])
 
 
 if __name__ == "__main__":

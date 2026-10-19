@@ -4,7 +4,8 @@
 // Tout passe par fetch vers /api/… (même origine que la page). Ce fichier n'utilise ni crypto,
 // ni presse-papiers : il doit marcher en http://192.168.x.x:8080 depuis un téléphone
 // (contexte non sécurisé). Les versions (SHA-256) et les sauvegardes sont calculées par le serveur.
-// Dépendance : Donnees (js/donnees.js) pour les erreurs ErreurConflit et ErreurStockage.
+// Dépendances : Donnees (js/donnees.js) pour les erreurs ErreurConflit et ErreurStockage, Schema
+// (js/schema.js) pour la liste des tables ; lues au moment des appels, pas au chargement.
 
 const StockageServeur = (() => {
 
@@ -12,6 +13,13 @@ const StockageServeur = (() => {
   const NOM_APPLICATION = 'Prévo';
   const MESSAGE_SERVEUR_INJOIGNABLE =
     'Le serveur Prévo ne répond pas. Vérifiez que la fenêtre du serveur est ouverte sur le PC.';
+  // Délai maximal d'une requête (réponse et lecture du corps comprises).
+  const DELAI_REPONSE_MS = 15000;
+  const MESSAGE_DELAI_DEPASSE = 'Le serveur Prévo met trop de temps à répondre. Vérifiez le réseau puis '
+    + 'réessayez ; si vous enregistriez, rechargez la page pour voir si la modification a été faite.';
+  // Réponse « réussie » mais illisible (ex. page d'un portail Wi-Fi, proxy) : l'écriture a pu se faire.
+  const MESSAGE_REPONSE_INATTENDUE =
+    'Réponse inattendue du serveur ; l\'opération a peut-être été faite, rechargez la page.';
 
   // ===========================================================================
   // Détection
@@ -61,14 +69,27 @@ const StockageServeur = (() => {
     return new Donnees.ErreurStockage(message);
   }
 
+  // Erreur pendant l'envoi ou la lecture : délai dépassé (requête abandonnée) ou serveur injoignable.
+  function erreurReseau(erreur) {
+    if (erreur && erreur.name === 'AbortError') {
+      return new Donnees.ErreurStockage(MESSAGE_DELAI_DEPASSE, erreur);
+    }
+    return new Donnees.ErreurStockage(MESSAGE_SERVEUR_INJOIGNABLE, erreur);
+  }
+
   // Envoie la requête et rend la réponse, quel que soit son code (l'appelant décide).
   // Échec réseau (serveur arrêté, câble débranché) → ErreurStockage au message prévu.
+  // Pas de réponse en 15 s → requête abandonnée, ErreurStockage « met trop de temps à répondre ».
+  // Le minuteur n'est pas arrêté à la réception des en-têtes : il couvre aussi la lecture du
+  // corps (abandonner une requête déjà entièrement lue n'a aucun effet).
   // Toute requête qui écrit (PUT, POST) envoie un corps, même vide, et l'en-tête X-Prevo: 1.
   async function appeler(url, options) {
+    const controleur = new AbortController();
+    setTimeout(function () { controleur.abort(); }, DELAI_REPONSE_MS);
     try {
-      return await fetch(url, Object.assign({ cache: 'no-store' }, options));
+      return await fetch(url, Object.assign({ cache: 'no-store' }, options, { signal: controleur.signal }));
     } catch (erreur) {
-      throw new Donnees.ErreurStockage(MESSAGE_SERVEUR_INJOIGNABLE, erreur);
+      throw erreurReseau(erreur);
     }
   }
 
@@ -79,20 +100,32 @@ const StockageServeur = (() => {
     return reponse;
   }
 
-  // Lit le JSON d'une réponse réussie ; un échec de lecture en route = serveur injoignable.
+  // Lit l'objet JSON d'une réponse réussie. Échec de lecture en route = délai ou serveur
+  // injoignable ; corps lu mais qui n'est pas un objet JSON = réponse inattendue.
   async function lireJson(reponse) {
+    let texte;
     try {
-      return await reponse.json();
+      texte = await reponse.text();
     } catch (erreur) {
-      throw new Donnees.ErreurStockage(MESSAGE_SERVEUR_INJOIGNABLE, erreur);
+      throw erreurReseau(erreur);
     }
+    let donnees;
+    try {
+      donnees = JSON.parse(texte);
+    } catch (erreur) {
+      throw new Donnees.ErreurStockage(MESSAGE_REPONSE_INATTENDUE, erreur);
+    }
+    if (donnees === null || typeof donnees !== 'object') {
+      throw new Donnees.ErreurStockage(MESSAGE_REPONSE_INATTENDUE);
+    }
+    return donnees;
   }
 
   async function lireOctets(reponse) {
     try {
       return new Uint8Array(await reponse.arrayBuffer());
     } catch (erreur) {
-      throw new Donnees.ErreurStockage(MESSAGE_SERVEUR_INJOIGNABLE, erreur);
+      throw erreurReseau(erreur);
     }
   }
 
@@ -114,7 +147,10 @@ const StockageServeur = (() => {
 
     async function charger(table) {
       const reponse = await appeler(urlTable(table), { method: 'GET' });
-      if (reponse.status === 404) { return { octets: null, version: null }; }
+      // 404 = fichier absent, mais seulement pour une table du schéma (sinon : table inconnue).
+      if (reponse.status === 404 && Schema.nomsTables().indexOf(table) !== -1) {
+        return { octets: null, version: null };
+      }
       if (reponse.status >= 400) { throw await erreurDepuisReponse(reponse); }
       return { octets: await lireOctets(reponse), version: reponse.headers.get('X-Version') };
     }
@@ -148,6 +184,9 @@ const StockageServeur = (() => {
     async function listerVersions() {
       const reponse = await appelerOuErreur(base + '/api/versions', { method: 'GET' });
       const donnees = await lireJson(reponse);
+      if (!donnees.tables || typeof donnees.tables !== 'object' || Array.isArray(donnees.tables)) {
+        throw new Donnees.ErreurStockage(MESSAGE_REPONSE_INATTENDUE);
+      }
       const versions = {};
       Object.keys(donnees.tables).forEach(function (table) {
         const detail = donnees.tables[table];
@@ -178,7 +217,7 @@ const StockageServeur = (() => {
       try {
         return await reponse.blob();
       } catch (erreur) {
-        throw new Donnees.ErreurStockage(MESSAGE_SERVEUR_INJOIGNABLE, erreur);
+        throw erreurReseau(erreur);
       }
     }
 

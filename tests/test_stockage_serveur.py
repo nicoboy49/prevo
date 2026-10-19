@@ -412,5 +412,77 @@ class TestInfoEtServeurArrete(CasStockageServeur):
                     self.assertEqual(erreur["message"], MESSAGE_SERVEUR_INJOIGNABLE)
 
 
+class TestReponsesAnormales(CasStockageServeur):
+    """fetch simulé (page servie par un simple serveur statique) : délais, réponses inattendues."""
+
+    # window.reponses : file de réponses { statut, corps } ou 'jamais' (aucune réponse ; la
+    # promesse n'est rejetée que si la requête est abandonnée par son signal).
+    # setTimeout est accéléré : un délai de 15 s devient 50 ms.
+    FETCH_SIMULE = """() => {
+      window.reponses = [];
+      window.fetch = (url, options) => {
+        const r = window.reponses.shift();
+        if (r === 'jamais') {
+          return new Promise((_, rejeter) => {
+            const signal = options && options.signal;
+            if (signal) {
+              signal.addEventListener('abort', () => rejeter(new DOMException('abandon', 'AbortError')));
+            }
+          });
+        }
+        return Promise.resolve(new Response(r.corps, { status: r.statut, headers: r.entetes || {} }));
+      };
+      const vraiSetTimeout = window.setTimeout.bind(window);
+      window.setTimeout = (f, delai, ...reste) => vraiSetTimeout(f, delai >= 15000 ? 50 : delai, ...reste);
+    }"""
+
+    def setUp(self):
+        super().setUp()
+        self.statique = ServeurStatique(RACINE)
+        self.statique.demarrer()
+        self.addCleanup(self.statique.arreter)
+        self.page.goto(self.statique.url + CHEMIN_PAGE)
+        self.page.wait_for_function("typeof StockageServeur === 'object'")
+        self.page.evaluate(self.FETCH_SIMULE)
+
+    def reponses(self, *reponses):
+        self.page.evaluate("(liste) => { window.reponses.push(...liste); }", list(reponses))
+
+    def test_serveur_qui_ne_repond_jamais_donne_une_erreur_de_delai(self):
+        self.reponses("jamais")
+        resultat = self.page.evaluate("""async () => {
+          const stockage = StockageServeur.creer();
+          const essai = stockage.enregistrer('equipements', new Uint8Array([1]), 'abc')
+            .then(() => 'réussi', (e) => e.name + ' | ' + e.message);
+          return Promise.race([essai, new Promise((r) => window.setTimeout(() => r('TOUJOURS EN ATTENTE'), 3000))]);
+        }""")
+        self.assertTrue(resultat.startswith("ErreurStockage | Le serveur Prévo met trop de temps à répondre"),
+                        resultat)
+
+    def test_reponse_200_qui_n_est_pas_du_json(self):
+        self.reponses({"statut": 200, "corps": "<html>portail captif</html>"})
+        erreur = self.executer_erreur("return await stockage.enregistrer('equipements', new Uint8Array([1]), 'abc');")
+        self.assertTrue(erreur["estStockage"], erreur)
+        self.assertNotEqual(erreur["message"], MESSAGE_SERVEUR_INJOIGNABLE)
+        self.assertIn("Réponse inattendue du serveur", erreur["message"])
+        self.assertIn("rechargez la page", erreur["message"])
+
+    def test_404_d_une_table_hors_schema_n_est_pas_un_fichier_absent(self):
+        self.reponses({"statut": 404, "corps": '{"erreur":"Table inconnue : zz."}'})
+        erreur = self.executer_erreur("return await stockage.charger('zz');")
+        self.assertTrue(erreur["estStockage"], erreur)
+        self.assertIn("Table inconnue", erreur["message"])
+        # Une table du schéma en 404 reste un fichier absent.
+        self.reponses({"statut": 404, "corps": '{"erreur":"Fichier absent."}'})
+        self.assertEqual(self.executer_ok("return await stockage.charger('equipements');"),
+                         {"octets": None, "version": None})
+
+    def test_versions_sans_cle_tables(self):
+        self.reponses({"statut": 200, "corps": "{}"})
+        erreur = self.executer_erreur("return await stockage.listerVersions();")
+        self.assertEqual(erreur["nom"], "ErreurStockage", erreur)
+        self.assertTrue(erreur["estStockage"], erreur)
+
+
 if __name__ == "__main__":
     unittest.main()

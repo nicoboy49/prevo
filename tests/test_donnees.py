@@ -329,7 +329,8 @@ class TestModifier(CasDonnees):
           };
         }""")
         journal = resultat["journal"]
-        self.assertEqual(resultat["avantRelecture"], 0, "le journal n'est pas tenu à jour ligne à ligne")
+        # Nos propres entrées sont ajoutées au cache (la table reste périmée pour modifier).
+        self.assertEqual(resultat["avantRelecture"], 3)
         self.assertEqual(len(journal), 3)
         # Une entrée par ligne, dans l'ordre des lignes de la table (EQ-0001 avant la ligne ajoutée).
         modification, creation, avertissement = journal
@@ -410,8 +411,8 @@ class TestAjouter(CasDonnees):
         self.assertTrue(resultat["texte"].startswith("﻿id;date_heure;poste;profil;table;id_ligne;action\r\n"))
         self.assertEqual(resultat["texte"].count("﻿"), 1)
         self.assertIn("J-20261019100000-AAAA;2026-10-19 10:00;P1;Test;equipements;EQ-0001;essai\r\n", resultat["texte"])
-        self.assertEqual(resultat["avant"], 0)
-        self.assertEqual(resultat["relues"], ["journal"])
+        self.assertEqual(resultat["avant"], 2, "nos propres lignes sont dans le cache")
+        self.assertEqual(resultat["relues"], ["journal"], "rafraichir() explicite relit la table périmée")
         self.assertEqual(resultat["apres"], ["J-20261019100000-AAAA", "J-20261019100000-BBBB"])
         self.assertEqual(resultat["evenements"], 0, "un changement du seul journal n'est pas signalé")
 
@@ -437,6 +438,93 @@ class TestAjouter(CasDonnees):
         self.assertEqual(resultat["second"], {"repli": False}, "en-tête relu avec la colonne inconnue")
         self.assertEqual(resultat["ids"], ["J-20261001080000-XXXX", "J-20261019100000-CCCC", "J-20261019100001-DDDD"])
         self.assertEqual(resultat["remarque"], "notée à la main")
+
+    # Adaptateur de démo espionné : compte les lectures complètes du journal et les listerVersions.
+    # window.avantAjout (facultatif) : appelé avant chaque adaptateur.ajouter (« autre poste »).
+    ESPION = """(adaptateur) => {
+      window.compteurs = { lecturesJournal: 0, versions: 0 };
+      const vraiCharger = adaptateur.charger;
+      const vraiAjouter = adaptateur.ajouter;
+      const vraiListerVersions = adaptateur.listerVersions;
+      adaptateur.charger = async (table) => {
+        if (table === 'journal') { compteurs.lecturesJournal += 1; }
+        return vraiCharger(table);
+      };
+      adaptateur.listerVersions = async () => { compteurs.versions += 1; return vraiListerVersions(); };
+      adaptateur.ajouter = async (table, octets) => {
+        if (window.avantAjout) { const f = window.avantAjout; window.avantAjout = null; await f(); }
+        return vraiAjouter(table, octets);
+      };
+      adaptateur.ajouterAutrePoste = (identifiant) => vraiAjouter('journal', new TextEncoder().encode(
+        'id;date_heure;poste;profil;table;id_ligne;action\\r\\n' + identifiant
+        + ';2026-10-19 09:00;Autre poste;P;equipements;EQ-0002;ailleurs\\r\\n'));
+      return adaptateur;
+    }"""
+
+    # Laisse tourner la surveillance (période 20 ms) jusqu'à `n` listerVersions de plus.
+    ATTENDRE_TOURS = """async (n) => {
+      const cible = compteurs.versions + n;
+      const debut = Date.now();
+      while (compteurs.versions < cible && Date.now() - debut < 3000) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      await new Promise((r) => setTimeout(r, 30));      // le dernier rafraîchissement se termine
+      return compteurs.versions >= cible;
+    }"""
+
+    def demarrer_espionne(self):
+        self.js("""async (espion) => {
+          window.adaptateur = (eval(espion))(StockageDemo.creer(DEMO_DONNEES.tables));
+          await demarrer(window.adaptateur);
+        }""", self.ESPION)
+
+    def tours_de_surveillance(self, n=3):
+        self.js("() => Donnees.demarrerSurveillance(20)")
+        self.assertTrue(self.js(self.ATTENDRE_TOURS, n), "la surveillance n'a pas tourné")
+        self.js("() => Donnees.arreterSurveillance()")
+
+    def ids_journal_stockage(self):
+        return self.js("""async () => Donnees.csv.analyser('journal',
+          (await adaptateur.charger('journal')).octets).lignes.map((l) => l.id)""")
+
+    def test_ajout_puis_surveillance_sans_relire_le_journal(self):
+        """(a) Après notre propre ajout, si rien d'autre n'a changé, le journal n'est pas relu."""
+        self.demarrer_espionne()
+        identifiant = self.js("() => Donnees.journaliser('equipements', 'EQ-0001', 'essai')")
+        self.assertIsNotNone(identifiant)
+        self.js("() => { compteurs.lecturesJournal = 0; }")
+        self.tours_de_surveillance(3)
+        self.assertEqual(self.js("() => compteurs.lecturesJournal"), 0,
+                         "journal relu en entier alors que seul notre ajout l'a changé")
+        # Nos propres lignes sont visibles sans relecture.
+        self.assertEqual(self.js("() => Donnees.lignes('journal').map((l) => l.id)"), [identifiant])
+        # Un rafraîchissement demandé explicitement (ex. avant l'export) relit tout.
+        self.assertEqual(self.js("() => Donnees.rafraichir()"), ["journal"])
+        self.assertEqual(self.js("() => compteurs.lecturesJournal"), 1)
+
+    def test_ajout_puis_ajout_d_un_autre_poste_relu_par_la_surveillance(self):
+        """(b) Un autre poste ajoute après nous : la version diffère, le journal est relu."""
+        self.demarrer_espionne()
+        identifiant = self.js("() => Donnees.journaliser('equipements', 'EQ-0001', 'essai')")
+        self.js("() => adaptateur.ajouterAutrePoste('J-AUTRE')")
+        self.js("() => { compteurs.lecturesJournal = 0; }")
+        self.tours_de_surveillance(3)
+        self.assertEqual(self.js("() => compteurs.lecturesJournal"), 1)
+        self.assertEqual(self.js("() => Donnees.lignes('journal').map((l) => l.id)"), [identifiant, "J-AUTRE"])
+
+    def test_modifier_journal_apres_ajout_ne_perd_pas_la_ligne_d_un_autre_poste(self):
+        """(c) L'autre poste ajoute juste AVANT notre ajout (même version ensuite) : la surveillance
+        ne relit pas, mais modifier('journal') relit avant d'écrire et ne perd rien."""
+        self.demarrer_espionne()
+        self.js("() => { window.avantAjout = () => adaptateur.ajouterAutrePoste('J-AUTRE'); }")
+        identifiant = self.js("() => Donnees.journaliser('equipements', 'EQ-0001', 'essai')")
+        self.tours_de_surveillance(3)
+        self.js("""() => Donnees.modifier('journal', (lignes) => {
+          lignes.push(Object.assign({}, lignes[lignes.length - 1], { id: 'J-MANUEL' }));
+        }, { journal: false })""")
+        self.assertEqual(self.ids_journal_stockage(), ["J-AUTRE", identifiant, "J-MANUEL"])
+        self.assertEqual(self.js("() => Donnees.lignes('journal').map((l) => l.id)"),
+                         ["J-AUTRE", identifiant, "J-MANUEL"])
 
 
 # ---------------------------------------------------------------------------

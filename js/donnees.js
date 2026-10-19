@@ -638,8 +638,12 @@ const Donnees = (() => {
   //   - index             : Map clé → ligne (première ligne si la clé est en double) ;
   //   - problemesLecture  : problèmes trouvés par csv.analyser ;
   //   - perime            : vrai si le fichier a changé sans que le cache soit à jour (ajout au
-  //                         journal) : la table sera relue avant usage ou au rafraîchissement ;
-  //   - absente           : vrai si le fichier n'existe pas.
+  //                         journal) : la table sera relue avant toute réécriture (modifier) et
+  //                         au rafraîchissement (voir versionApresAjout) ;
+  //   - absente           : vrai si le fichier n'existe pas ;
+  //   - versionApresAjout : (facultatif) version rendue par notre dernier ajout direct ; nos
+  //                         lignes ajoutées sont déjà dans `lignes`. Tant que le stockage a cette
+  //                         version, la surveillance ne relit pas la table (elle reste périmée).
 
   const NOMBRE_ESSAIS = 3;
   const RAFRAICHISSEMENT_PAR_DEFAUT_S = 20;
@@ -1221,39 +1225,71 @@ const Donnees = (() => {
     const colonnesInconnues = entreeDe(nomTable).colonnesInconnues;
     const propres = lignesAAjouter.map((ligne) => ligneNormalisee(description, colonnesInconnues, ligne));
     const octets = serialiser(nomTable, propres, colonnesInconnues, { bom: false });
-    let repli = false;
+    let reponse;
     try {
-      await adaptateurActif.ajouter(nomTable, octets);
+      reponse = await adaptateurActif.ajouter(nomTable, octets);
     } catch (erreur) {
       if (!(erreur instanceof ErreurConflit)) { throw erreur; }
-      repli = true;
       await modifier(nomTable, (lignesActuelles) => {
         for (const ligne of lignesAAjouter) { lignesActuelles.push(Object.assign({}, ligne)); }
       }, { journal: false });
+      return { repli: true };              // modifier a relu puis réécrit la table : cache exact
     }
+    marquerApresAjout(nomTable, propres, reponse);
+    return { repli: false };
+  }
+
+  // Après un ajout direct : nos lignes sont ajoutées au cache (pour l'affichage et l'export),
+  // la table reste PÉRIMÉE (modifier la relira avant toute réécriture : un autre poste a pu
+  // ajouter des lignes avant les nôtres, absentes du cache) et la version rendue par
+  // l'adaptateur est mémorisée dans `versionApresAjout` : tant que le stockage a exactement
+  // cette version, la surveillance n'a pas besoin de relire la table (seul notre ajout l'a
+  // changée depuis). La version du cache (`version`) n'est jamais « devinée ».
+  function marquerApresAjout(nomTable, propres, reponse) {
     const entree = cache.get(nomTable);
-    if (entree) { entree.perime = true; }
-    else { cache.set(nomTable, Object.assign(entreeAbsente(), { perime: true })); }
-    return { repli: repli };
+    if (!entree) {
+      cache.set(nomTable, Object.assign(entreeAbsente(), { perime: true }));
+      return;
+    }
+    const lignesCompletees = entree.lignes.concat(propres);
+    const versionRendue = reponse && typeof reponse.version === 'string' ? reponse.version : null;
+    cache.set(nomTable, Object.assign({}, entree, {
+      lignes: lignesCompletees,
+      index: indexer(descriptionTable(nomTable), lignesCompletees),
+      perime: true,
+      absente: false,
+      versionApresAjout: versionRendue,
+    }));
+    aRecalculer();
+  }
+
+  // Vrai si la table, périmée, n'a été changée que par nos propres ajouts : le stockage a encore
+  // exactement la version rendue par notre dernier ajout.
+  function changeeSeulementParNosAjouts(entree, versionStockage) {
+    return Boolean(entree) && entree.perime && typeof entree.versionApresAjout === 'string'
+      && entree.versionApresAjout === versionStockage;
   }
 
   // --- 4.9 Rafraîchissement (ARCHITECTURE.md §5.5) ------------------------------------------
 
-  async function rafraichirMaintenant() {
+  // complet : vrai → toute table périmée est relue ; faux (surveillance) → une table périmée
+  // seulement par nos propres ajouts (même version qu'après notre dernier ajout) n'est pas
+  // relue et reste périmée (modifier la relira avant toute réécriture).
+  async function rafraichirMaintenant(complet) {
     verifierInitialise();
     const versions = await adaptateurActif.listerVersions();
-    const aRelire = Schema.nomsTables().filter((nomTable) => {
+    const aRelireMaintenant = (nomTable) => {
       const entree = cache.get(nomTable);
-      if (!entree || entree.perime) { return true; }
-      if (!Object.prototype.hasOwnProperty.call(versions, nomTable)) { return false; }
+      const connue = Object.prototype.hasOwnProperty.call(versions, nomTable);
       const versionStockage = versions[nomTable] === undefined ? null : versions[nomTable];
-      return versionStockage !== entree.version;
-    });
+      if (!entree) { return true; }
+      if (entree.perime) { return complet || !connue || !changeeSeulementParNosAjouts(entree, versionStockage); }
+      return connue && versionStockage !== entree.version;
+    };
+    const aRelire = Schema.nomsTables().filter(aRelireMaintenant);
     const relues = await Promise.all(aRelire.map((nomTable) => enSerie(nomTable, async () => {
       // Une écriture de ce poste (modifier) a pu relire la table entre-temps : rien à faire alors.
-      const entree = cache.get(nomTable);
-      const versionStockage = versions[nomTable] === undefined ? null : versions[nomTable];
-      if (entree && !entree.perime && entree.version === versionStockage) { return null; }
+      if (!aRelireMaintenant(nomTable)) { return null; }
       await rechargerSansAttente(nomTable);
       return nomTable;
     })));
@@ -1262,18 +1298,32 @@ const Donnees = (() => {
     return changees;
   }
 
-  // Relit les tables modifiées ailleurs (version différente) ou périmées. Événement « changement »
-  // (origine « distant ») si au moins une table autre que le journal a changé. Renvoie leurs noms.
-  function rafraichir() {
-    if (!rafraichissementEnCours) {
-      rafraichissementEnCours = rafraichirMaintenant().finally(() => { rafraichissementEnCours = null; });
-    }
-    return rafraichissementEnCours;
+  // Un seul rafraîchissement à la fois. Une demande complète arrivant pendant un rafraîchissement
+  // léger (surveillance) est enchaînée après lui ; toute autre demande partage celui en cours.
+  function lancerRafraichissement(complet) {
+    const enCours = rafraichissementEnCours;
+    if (enCours && (enCours.complet || !complet)) { return enCours.promesse; }
+    const avant = enCours ? enCours.promesse.catch(() => undefined) : Promise.resolve();
+    const etat = { complet: complet, promesse: null };
+    etat.promesse = avant.then(() => rafraichirMaintenant(complet)).finally(() => {
+      if (rafraichissementEnCours === etat) { rafraichissementEnCours = null; }
+    });
+    rafraichissementEnCours = etat;
+    return etat.promesse;
   }
 
+  // Relit les tables modifiées ailleurs (version différente) ou périmées (toutes, y compris le
+  // journal après nos propres ajouts : à appeler avant instantane(), ex. pour l'export).
+  // Événement « changement » (origine « distant ») si au moins une table autre que le journal a
+  // changé. Renvoie leurs noms.
+  function rafraichir() {
+    return lancerRafraichissement(true);
+  }
+
+  // Rafraîchissement de la surveillance : léger (voir rafraichirMaintenant).
   async function rafraichirSansErreur() {
     try {
-      await rafraichir();
+      await lancerRafraichissement(false);
     } catch (erreur) {
       console.warn('Prévo : rafraîchissement impossible (' + (erreur && erreur.message) + ').', erreur);
     }

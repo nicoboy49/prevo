@@ -27,6 +27,14 @@ const StockageDossier = (() => {
   const NOM_DOSSIER_SAUVEGARDES = 'sauvegardes';
   const NOM_FICHIER_VERROU = 'verrou.txt';
   const SUFFIXE_AVANT_RESTAURATION = '_avant-restauration';
+  // Marqueur posé dans une sauvegarde pendant sa copie, retiré à la fin : une sauvegarde qui le
+  // contient encore est incomplète (onglet fermé pendant la copie). Un marqueur plutôt qu'un
+  // témoin « complet » : les sauvegardes faites par serveur.py (dossier renommé à la fin, donc
+  // toujours complètes) n'ont aucun fichier en plus et restent reconnues comme complètes.
+  const NOM_MARQUEUR_EN_COURS = '.en-cours';
+  // Marqueur plus récent que 2 minutes : la copie est sans doute en cours sur un autre poste
+  // (il est réécrit avant chaque table copiée).
+  const DUREE_SAUVEGARDE_EN_COURS_MS = 2 * 60 * 1000;
 
   // Un verrou plus ancien que 3 minutes est considéré comme abandonné ; on le réécrit toutes les 60 s.
   const DUREE_VALIDITE_VERROU_MS = 3 * 60 * 1000;
@@ -214,42 +222,73 @@ const StockageDossier = (() => {
     }
   }
 
-  // Contenu d'un fichier (Uint8Array), ou null s'il n'existe pas.
+  // Lève une ErreurStockage si le dossier ne répond plus (supprimé, déplacé, clé USB ou partage
+  // réseau débranché, autorisation retirée). Un dossier vivant, même vide, se laisse parcourir.
+  async function verifierDossierAccessible(dossier) {
+    try {
+      await dossier.values().next();
+    } catch (erreur) {
+      throw erreurStockage('Le dossier de données est introuvable ou inaccessible (supprimé, déplacé, '
+        + 'clé USB ou partage réseau débranché ?). Rebranchez-le ou rechoisissez le dossier.', erreur);
+    }
+  }
+
+  // Contenu d'un fichier (Uint8Array), ou null s'il n'existe pas. « N'existe pas » n'est répondu
+  // que si le dossier lui-même répond encore : sinon ErreurStockage (jamais une base vide).
   async function lireOctets(dossier, nom) {
     const poigneeFichier = await trouverFichier(dossier, nom);
-    if (!poigneeFichier) { return null; }
+    if (!poigneeFichier) {
+      await verifierDossierAccessible(dossier);
+      return null;
+    }
     const fichier = await poigneeFichier.getFile();
     return new Uint8Array(await fichier.arrayBuffer());
   }
 
-  // Écrit (ou remplace) un fichier : createWritable → write → close. Chrome écrit dans un fichier
-  // temporaire et ne remplace l'original qu'à la fermeture : un échec ne laisse pas de fichier
-  // à moitié écrit. Si le fichier venait d'être créé et que l'écriture échoue, on le supprime.
-  async function ecrireFichier(dossier, nom, contenu) {
-    const existait = (await trouverFichier(dossier, nom)) !== null;
-    const poigneeFichier = await dossier.getFileHandle(nom, { create: true });
-    let flux = null;
+  // Vrai si le fichier a toujours le contenu `attendu` (null = absent, ou vide car tout juste
+  // créé par nous). La taille est comparée d'abord : le contenu n'est relu que si elle est égale.
+  async function contenuInchange(dossier, nom, attendu) {
+    const poigneeFichier = await trouverFichier(dossier, nom);
+    const fichier = poigneeFichier ? await poigneeFichier.getFile() : null;
+    if (attendu === null) { return fichier === null || fichier.size === 0; }
+    if (fichier === null || fichier.size !== attendu.length) { return false; }
+    return octetsEgaux(new Uint8Array(await fichier.arrayBuffer()), attendu);
+  }
+
+  // Supprime un fichier que l'on vient de créer, mais seulement s'il est encore vide : s'il a
+  // un contenu, c'est qu'un autre poste l'a écrit entre-temps, et on n'y touche pas.
+  async function supprimerSiToujoursVide(dossier, nom, poigneeFichier) {
     try {
-      flux = await poigneeFichier.createWritable();
-      await flux.write(contenu);
-      await flux.close();
-    } catch (erreur) {
-      if (flux) { try { await flux.abort(); } catch (erreurAbandon) { /* déjà fermé */ } }
-      if (!existait) { try { await dossier.removeEntry(nom); } catch (erreurSuppression) { /* rien à nettoyer */ } }
-      throw erreur;
+      if ((await poigneeFichier.getFile()).size === 0) { await dossier.removeEntry(nom); }
+    } catch (erreurSuppression) {
+      // rien à nettoyer (déjà supprimé, ou dossier devenu inaccessible)
     }
   }
 
-  // Ajoute des octets à la fin d'un fichier existant (les octets déjà écrits sont conservés).
-  async function ajouterEnFin(dossier, nom, octets, tailleActuelle) {
-    const poigneeFichier = await dossier.getFileHandle(nom);
-    const flux = await poigneeFichier.createWritable({ keepExistingData: true });
+  // Écrit (ou remplace) un fichier : createWritable → write → close. Chrome écrit dans un fichier
+  // temporaire et ne remplace l'original qu'à la fermeture : un échec ne laisse pas de fichier
+  // à moitié écrit. Réglages facultatifs :
+  //   - enFin : ajoute `contenu` à partir de l'octet `enFin` (le fichier temporaire part d'une copie
+  //     du fichier, keepExistingData) ; le fichier doit exister ;
+  //   - controle : fonction async appelée après l'écriture et juste avant la fermeture (qui rend
+  //     l'écriture visible) ; si elle lève une erreur, rien n'est écrit. C'est la fenêtre la plus
+  //     courte possible entre le dernier contrôle et l'écriture effective.
+  // Si le fichier venait d'être créé et que l'écriture échoue, il est supprimé s'il est encore vide.
+  async function ecrireFichier(dossier, nom, contenu, reglages) {
+    const options = reglages || {};
+    const ajout = options.enFin !== undefined;
+    const existait = ajout || (await trouverFichier(dossier, nom)) !== null;
+    const poigneeFichier = await dossier.getFileHandle(nom, { create: !ajout });
+    let flux = null;
     try {
-      await flux.seek(tailleActuelle);
-      await flux.write(octets);
+      flux = await poigneeFichier.createWritable({ keepExistingData: ajout });
+      if (ajout) { await flux.seek(options.enFin); }
+      await flux.write(contenu);
+      if (options.controle) { await options.controle(); }
       await flux.close();
     } catch (erreur) {
-      try { await flux.abort(); } catch (erreurAbandon) { /* déjà fermé */ }
+      if (flux) { try { await flux.abort(); } catch (erreurAbandon) { /* déjà fermé */ } }
+      if (!existait) { await supprimerSiToujoursVide(dossier, nom, poigneeFichier); }
       throw erreur;
     }
   }
@@ -454,17 +493,37 @@ const StockageDossier = (() => {
 
     // --- Sauvegardes -----------------------------------------------------------------------
 
-    // Crée sauvegardes/<nom>/ avec une copie des tables données. Si la copie échoue, le dossier
-    // à moitié rempli est supprimé : une sauvegarde est complète ou n'existe pas.
+    // Crée sauvegardes/<nom>/ avec une copie des tables données. Le marqueur « .en-cours » est
+    // posé d'abord (et réécrit avant chaque table), retiré en dernier. Si la copie échoue, le
+    // dossier à moitié rempli est supprimé ; si l'onglet est fermé pendant la copie, le marqueur
+    // reste et la sauvegarde est vue comme incomplète (ignorée par la liste, refaite si c'est
+    // celle du jour).
     async function creerSauvegarde(nom, tables) {
       const dossierSauvegardes = await trouverDossier(racine, NOM_DOSSIER_SAUVEGARDES, true);
       const dossierSauvegarde = await trouverDossier(dossierSauvegardes, nom, true);
+      const marqueur = encodeurUtf8.encode(poste + ';' + idSession);
       try {
-        await copierTables(racine, dossierSauvegarde, tables);
+        for (const table of tables) {
+          await ecrireFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS, marqueur);
+          await copierTables(racine, dossierSauvegarde, [table]);
+        }
+        await ecrireFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS, marqueur);
+        await dossierSauvegarde.removeEntry(NOM_MARQUEUR_EN_COURS);
       } catch (erreur) {
         try { await dossierSauvegardes.removeEntry(nom, { recursive: true }); } catch (erreurNettoyage) { /* tant pis */ }
         throw erreur;
       }
+    }
+
+    // 'complete', 'en-cours' (marqueur récent : un autre poste copie) ou 'interrompue'
+    // (marqueur ancien, ou aucun CSV : l'onglet a été fermé pendant la copie).
+    async function etatSauvegarde(dossierSauvegarde) {
+      const marqueur = await trouverFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS);
+      if (marqueur) {
+        const age = Date.now() - (await marqueur.getFile()).lastModified;
+        return age < DUREE_SAUVEGARDE_EN_COURS_MS ? 'en-cours' : 'interrompue';
+      }
+      return (await tablesPresentes(dossierSauvegarde)).length > 0 ? 'complete' : 'interrompue';
     }
 
     // « AAAA-MM-JJ_HHMMSS » + suffixe, en attendant la seconde suivante si ce nom est déjà pris.
@@ -479,11 +538,16 @@ const StockageDossier = (() => {
     }
 
     // Avant la première écriture du jour : copie de tous les CSV dans sauvegardes/AAAA-MM-JJ/
-    // (rien si elle existe déjà ou s'il n'y a encore aucun CSV). À appeler dans enSerie.
+    // (rien si elle existe déjà complète, si un autre poste est en train de la faire, ou s'il n'y
+    // a encore aucun CSV ; refaite si elle a été interrompue). À appeler dans enSerie.
     async function sauvegardeQuotidienneSiBesoin() {
       const nom = dateDuJour();
       const dossierSauvegardes = await trouverDossier(racine, NOM_DOSSIER_SAUVEGARDES, false);
-      if (dossierSauvegardes && await trouverDossier(dossierSauvegardes, nom, false)) { return; }
+      const existante = dossierSauvegardes ? await trouverDossier(dossierSauvegardes, nom, false) : null;
+      if (existante) {
+        if ((await etatSauvegarde(existante)) !== 'interrompue') { return; }
+        await dossierSauvegardes.removeEntry(nom, { recursive: true });
+      }
       const tables = await tablesPresentes(racine);
       if (tables.length === 0) { return; }
       await creerSauvegarde(nom, tables);
@@ -508,6 +572,8 @@ const StockageDossier = (() => {
       const resultat = [];
       for (const nom of noms) {
         const dossierSauvegarde = await dossierSauvegardes.getDirectoryHandle(nom);
+        // Sauvegarde incomplète (copie en cours ou interrompue) : pas proposée à la restauration.
+        if (await trouverFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS)) { continue; }
         resultat.push({ nom: nom, tables: await tablesPresentes(dossierSauvegarde) });
       }
       return resultat;
@@ -535,6 +601,10 @@ const StockageDossier = (() => {
         const dossierSauvegardes = await trouverDossier(racine, NOM_DOSSIER_SAUVEGARDES, false);
         const dossierSauvegarde = dossierSauvegardes ? await trouverDossier(dossierSauvegardes, nom, false) : null;
         if (!dossierSauvegarde) { throw erreurStockage('Sauvegarde introuvable : ' + nom + '.'); }
+        if (await trouverFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS)) {
+          throw erreurStockage('La sauvegarde ' + nom + ' est incomplète (copie interrompue ou en cours) : '
+            + 'choisissez-en une autre.');
+        }
         const aRestaurer = choisirTablesARestaurer(await tablesPresentes(dossierSauvegarde), tables);
 
         const copieSecurite = await nouveauNomHorodate(SUFFIXE_AVANT_RESTAURATION);
@@ -559,13 +629,30 @@ const StockageDossier = (() => {
 
     // --- Écriture des CSV ------------------------------------------------------------------
 
+    // Contrôle à faire juste avant de valider une écriture : le fichier doit être resté tel qu'on
+    // l'a lu (`lu` : octets lus, ou null s'il était absent). Sinon ErreurConflit, avec sa version.
+    function controleInchange(nomFichier, lu) {
+      return async function () {
+        if (await contenuInchange(racine, nomFichier, lu)) { return; }
+        const actuel = await lireOctets(racine, nomFichier);
+        const vide = actuel === null || (lu === null && actuel.length === 0);
+        throw new Donnees.ErreurConflit('Le fichier ' + nomFichier + ' vient d\'être modifié par un autre poste.',
+          vide ? null : await empreinte(actuel));
+      };
+    }
+
     // Remplace le CSV si sa version actuelle est celle attendue (null = le fichier ne doit pas
     // exister) ; sinon ErreurConflit.
+    // Ordre (relecture vague 3) : la sauvegarde quotidienne d'abord (copie des 22 CSV, longue),
+    // PUIS lecture et contrôle de version, écriture dans le fichier temporaire, dernier contrôle
+    // (contenu inchangé) et fermeture. Une écriture d'un autre poste pendant la sauvegarde ou
+    // pendant notre écriture donne un conflit au lieu d'être écrasée.
     async function enregistrer(table, octets, versionAttendue) {
       verifierNomTable(table);
       const nouveauContenu = enOctets(octets);
       const attendue = versionAttendue === undefined ? null : versionAttendue;
       return enSerie(async function () {
+        await sauvegardeQuotidienneSiBesoin();
         const actuel = await lireOctets(racine, table + '.csv');
         const versionActuelle = actuel === null ? null : await empreinte(actuel);
         if (attendue !== versionActuelle) {
@@ -579,8 +666,8 @@ const StockageDossier = (() => {
           }
           throw new Donnees.ErreurConflit(message, versionActuelle);
         }
-        await sauvegardeQuotidienneSiBesoin();
-        await ecrireFichier(racine, table + '.csv', nouveauContenu);
+        await ecrireFichier(racine, table + '.csv', nouveauContenu,
+          { controle: controleInchange(table + '.csv', actuel) });
         return { version: await empreinte(nouveauContenu) };
       });
     }
@@ -588,6 +675,13 @@ const StockageDossier = (() => {
     // Ajoute des lignes en fin de fichier (journal). `octets` = ligne d'en-tête + lignes (UTF-8
     // sans BOM). Mêmes règles que le serveur : fichier absent ou vide → BOM + corps ; sinon le
     // fichier doit être de l'UTF-8 valide avec le même en-tête, sinon ErreurConflit.
+    // Ajout en fin : le fichier temporaire part d'une copie du fichier faite au createWritable,
+    // qui a pu grandir depuis notre lecture (ligne ajoutée par un autre poste). On écrit à la
+    // taille lue, puis on vérifie, juste avant la fermeture, que le fichier est toujours
+    // exactement celui qu'on a lu ; sinon on abandonne (rien n'est écrit) et on lève
+    // ErreurConflit : Donnees.ajouter se replie alors sur modifier, qui relit tout. Se placer à
+    // la « taille réelle » ne suffirait pas : on ne sait pas si la copie a été faite avant ou
+    // après l'écriture de l'autre poste, ni si celui-ci a réécrit le fichier au lieu d'ajouter.
     async function ajouter(table, octets) {
       verifierNomTable(table);
       const corps = sansBom(enOctets(octets));
@@ -597,12 +691,13 @@ const StockageDossier = (() => {
         throw erreurStockage('Le contenu à ajouter doit commencer par la ligne d\'en-tête.');
       }
       return enSerie(async function () {
+        await sauvegardeQuotidienneSiBesoin();
         const actuel = await lireOctets(racine, table + '.csv');
+        const controle = controleInchange(table + '.csv', actuel);
 
         if (actuel === null || estVide(actuel)) {
           const nouveau = concatener([Uint8Array.from(BOM_UTF8), corps]);
-          await sauvegardeQuotidienneSiBesoin();
-          await ecrireFichier(racine, table + '.csv', nouveau);
+          await ecrireFichier(racine, table + '.csv', nouveau, { controle: controle });
           return { version: await empreinte(nouveau) };
         }
 
@@ -618,8 +713,7 @@ const StockageDossier = (() => {
 
         const finissaitParSaut = actuel[actuel.length - 1] === OCTET_SAUT_DE_LIGNE;
         const aAjouter = concatener([Uint8Array.from(finissaitParSaut ? [] : FIN_DE_LIGNE), decoupe.reste]);
-        await sauvegardeQuotidienneSiBesoin();
-        await ajouterEnFin(racine, table + '.csv', aAjouter, actuel.length);
+        await ecrireFichier(racine, table + '.csv', aAjouter, { enFin: actuel.length, controle: controle });
         return { version: await empreinte(concatener([actuel, aAjouter])) };
       });
     }
@@ -659,19 +753,22 @@ const StockageDossier = (() => {
     // --- Verrou (avertissement non bloquant : deux postes sur le même dossier) --------------
 
     // { autreSession: { poste, heure } } si verrou.txt a moins de 3 minutes et vient d'une autre
-    // session ; sinon { autreSession: null }.
+    // session ; sinon { autreSession: null }. L'âge se mesure avec la date de modification du
+    // fichier (donnée par le système de fichiers), pas avec l'heure écrite dedans : l'horloge de
+    // l'autre PC peut être décalée. L'heure écrite sert seulement à l'affichage.
     async function verifierVerrou() {
       try {
-        const octets = await lireOctets(racine, NOM_FICHIER_VERROU);
-        if (octets === null) { return { autreSession: null }; }
+        const poigneeVerrou = await trouverFichier(racine, NOM_FICHIER_VERROU);
+        if (poigneeVerrou === null) { return { autreSession: null }; }
+        const fichierVerrou = await poigneeVerrou.getFile();
+        const octets = new Uint8Array(await fichierVerrou.arrayBuffer());
         const morceaux = new TextDecoder().decode(octets).trim().split(';');
         if (morceaux.length < 3) { return { autreSession: null }; }
         const idAutreSession = morceaux[morceaux.length - 1].trim();
         const heure = morceaux[morceaux.length - 2].trim();
         const nomPoste = morceaux.slice(0, -2).join(';').trim();
-        const dateVerrou = lireDateHeureVerrou(heure);
-        if (!dateVerrou || idAutreSession === idSession) { return { autreSession: null }; }
-        if (Date.now() - dateVerrou.getTime() >= DUREE_VALIDITE_VERROU_MS) { return { autreSession: null }; }
+        if (!lireDateHeureVerrou(heure) || idAutreSession === idSession) { return { autreSession: null }; }
+        if (Date.now() - fichierVerrou.lastModified >= DUREE_VALIDITE_VERROU_MS) { return { autreSession: null }; }
         return { autreSession: { poste: nomPoste, heure: heure } };
       } catch (erreur) {
         return { autreSession: null };                   // verrou illisible : on ne bloque personne
