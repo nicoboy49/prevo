@@ -1,2 +1,116 @@
 /* Prévo — mise en page propre au module Parc (js/modules/parc.js).
-   Fichier d'attente (tâche T11), rempli par la tâche T12. Uniquement des variables de la charte. */
+   Arborescence, fiche équipement (consignation, QR, historiques), formulaires.
+   Les composants communs (.arbre, .carte, .valeurs, .qr, .badge…) viennent de css/style.css :
+   ici seulement ce qui est propre au parc, avec les variables de la charte (aucune couleur en dur). */
+
+/* --- liste du parc ------------------------------------------------------------------------ */
+
+.parc-filtres { align-items: center; }
+.parc-filtres .case { flex: 0 1 auto; white-space: nowrap; }
+.parc-resultat { margin: 0 0 .6rem; min-height: 1.4em; }
+.parc-resultat:empty { display: none; }
+.parc-arbre { padding: 12px 14px; }
+
+/* Une ligne d'équipement : repère, désignation (qui peut passer à la ligne), badges à droite */
+.parc .arbre .feuille { flex-wrap: wrap; row-gap: 0; column-gap: .6rem; }
+.parc .arbre .feuille .parc-designation { flex: 1 1 12rem; overflow: visible; text-overflow: clip; min-width: 0; overflow-wrap: anywhere; }
+.parc .arbre .feuille .parc-designation small { color: var(--muted); font-size: .875rem; }
+.parc .arbre .feuille .parc-badges { display: inline-flex; flex-wrap: wrap; gap: .35rem; margin-left: auto; overflow: visible; flex: none; }
+.parc .arbre .feuille.attenue { opacity: .7; }
+.parc .arbre .feuille.attenue .parc-designation { text-decoration: line-through; text-decoration-color: var(--muted); }
+
+/* Ligne de localisation : le bouton « Modifier » reste à droite et ne replie pas l'arbre */
+.parc .arbre summary { flex-wrap: wrap; }
+.parc .arbre summary b { font-size: 1.0625rem; white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.parc .arbre summary .type { margin-left: auto; }
+.parc .arbre summary .parc-modifier-localisation { min-height: 36px; padding: .2rem .6rem; font-size: .9375rem; }
+.parc .arbre summary .parc-modifier-localisation .icone { width: 18px; height: 18px; }
+.parc-vide-loc { margin: .2rem 0 .4rem 1.6rem; }
+
+/* --- fiche équipement --------------------------------------------------------------------- */
+
+.parc-badges-fiche { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+
+/* Actions : « Signaler un problème » en grand, les actions du responsable à côté */
+.parc-actions { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: stretch; margin-bottom: 18px; }
+.parc-actions .parc-signaler { flex: 1 1 340px; max-width: 520px; width: auto; }
+.parc-actions .actions { flex: 1 1 auto; margin-top: 0; align-items: center; }
+.parc-actions .actions .btn { min-height: 52px; }
+
+/* Bloc consignation : bien visible, bordure ambre, rappel en gras */
+.parc-consignation {
+  border-color: var(--bord-ambre); border-left: 6px solid var(--ambre);
+  background: linear-gradient(var(--teinte-ambre-faible), var(--teinte-ambre-faible)), var(--carte);
+}
+.parc-consignation .entete-carte h2 { display: flex; align-items: center; gap: .5rem; color: var(--fort); }
+.parc-consignation .entete-carte h2 .icone { color: var(--ambre); width: 1.4em; height: 1.4em; }
+.parc-habilitation { font-size: .9375rem; padding: .3rem .8rem; }
+.parc-rappel { font-size: 1.0625rem; color: var(--texte-ambre); margin-bottom: .8rem; }
+.parc-rappel b { color: var(--texte-ambre); font-weight: 800; }
+.parc-procedure { white-space: pre-line; color: var(--texte); font-size: 1.0625rem; line-height: 1.6; overflow-wrap: anywhere; }
+
+/* QR code : centré dans sa carte, consigne dessous */
+.parc-qr-carte { text-align: center; }
+.parc-qr-carte h2 { text-align: left; }
+.parc-qr-carte .qr { margin: .4rem auto .2rem; }
+.parc-qr-carte .qr svg { width: 200px; max-width: 100%; }
+.parc-qr-carte .note { margin-top: .6rem; }
+
+.parc-compteurs { list-style: none; margin: 0; padding: 0; display: grid; gap: .8rem; }
+.parc-compteurs li { display: flex; flex-direction: column; gap: .15rem; }
+.parc-compteurs li > b { color: var(--fort); }
+
+.parc-liste .liste-cartes .carte-ligne { min-height: 0; }
+.parc-liste .table td { vertical-align: top; }
+
+/* --- formulaire --------------------------------------------------------------------------- */
+
+#parc-formulaire .champ.large, #parc-formulaire .mention-requis.large { grid-column: 1 / -1; }
+#parc-formulaire textarea { min-height: 11rem; }
+.parc-formulaire-localisation { min-width: 0; }
+.parc-formulaire-localisation .mention-requis { margin: 0; }
+
+/* --- tablette : l'étiquette QR passe sous la fiche technique ------------------------------ */
+
+@media (max-width: 1099.98px) {
+  .parc-qr-carte { text-align: left; }
+  .parc-qr-carte .qr { margin-left: 0; }
+}
+
+/* --- téléphone ---------------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  .parc-arbre { padding: 8px 6px; }
+  .parc .arbre ul { margin-left: 9px; padding-left: 6px; }
+  .parc .arbre .feuille { padding-left: .9rem; padding-right: .4rem; }
+  .parc .arbre .feuille .parc-designation { flex-basis: 100%; order: 3; }
+  .parc .arbre .feuille .parc-badges { order: 2; }
+  .parc .arbre summary { flex-wrap: nowrap; padding-right: .3rem; gap: .3rem .5rem; }
+  .parc .arbre summary b { flex: 1 1 auto; }
+  .parc .arbre summary .type { flex: none; overflow: visible; }
+  /* sur téléphone, la ligne de localisation ne garde que le nombre d'équipements, en pastille */
+  .parc .arbre summary .parc-type-loc, .parc .arbre summary .parc-mot-equip { display: none; }
+  .parc .arbre summary .parc-nombre {
+    display: inline-block; min-width: 2rem; padding: .1rem .5rem; border-radius: 8px; text-align: center;
+    background: var(--teinte-neutre); color: var(--texte-2); font-weight: 700;
+  }
+  /* le bouton « Modifier » d'une localisation ne garde que son icône */
+  .parc-libelle-bouton {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .parc .arbre summary .parc-modifier-localisation { width: 48px; min-width: 48px; min-height: 48px; padding: 0; }
+  .parc-filtres .case { flex: 1 1 100%; }
+  .parc-actions .parc-signaler { flex-basis: 100%; max-width: none; }
+  .parc-actions .actions { flex-basis: 100%; }
+  .parc-qr-carte .qr { margin-left: auto; }
+  .parc-qr-carte { text-align: center; }
+  .parc-consignation { border-left-width: 5px; }
+  .parc-procedure { font-size: 1rem; }
+}
+
+/* --- impression : la fiche sort sur papier, QR et consignation compris ------------------------ */
+
+@media print {
+  .parc-actions, .parc-voir-tout { display: none !important; }
+  .parc-consignation { border-left: 6px solid var(--encre); }
+}

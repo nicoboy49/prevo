@@ -265,7 +265,9 @@ class TestServeur(CasApp):
             menu = self.texte_menu()
             self.assertIn("Ordres de travail", menu)
             self.assertIn("Paramètres", menu)
-            self.assertIn("Écran livré par la tâche T15", self.texte("#contenu"))
+            # Le responsable arrive bien sur l'écran Paramètres (contenu livré par le module, T15).
+            self.assertEqual(page.evaluate("document.querySelector('#menu a.actif').dataset.ecran"), "parametres")
+            self.assertIn("Paramètres", self.texte("#contenu h1"))
 
             # Technicien : OT oui, Paramètres non
             page.evaluate("localStorage.setItem('prevo.profil', JSON.stringify({type: 'technicien', nom: '', technicienId: 'TEC-0002'}))")
