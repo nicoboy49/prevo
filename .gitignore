@@ -1,0 +1,28 @@
+# --- Données d'atelier : jamais dans le dépôt (seul le jeu de démo est versionné)
+donnees/*
+!donnees/demo/
+!donnees/.gitkeep
+donnees/sauvegardes/
+donnees/documents/
+verrou.txt
+
+# --- Fichiers de travail, hors dépôt
+.chantier/
+reference-design/
+LISEZMOI.md
+
+# --- Python
+__pycache__/
+*.pyc
+
+# --- Résultats de tests (captures, traces)
+tests/resultats/
+
+# --- Éditeurs et système
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

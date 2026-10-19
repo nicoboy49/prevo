@@ -1,0 +1,10 @@
+# Les CSV sont stockés octet pour octet (BOM UTF-8 + fins de ligne CRLF, voir docs/ARCHITECTURE.md) :
+# git ne doit jamais convertir leurs fins de ligne.
+*.csv -text
+# Lanceur Windows : CRLF obligatoire pour cmd.exe ; lanceur Mac/Linux : LF obligatoire pour sh.
+*.bat text eol=crlf
+*.sh  text eol=lf
+# Binaires
+*.woff2 binary
+*.png   binary
+*.jpg   binary
