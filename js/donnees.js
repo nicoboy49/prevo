@@ -624,11 +624,703 @@ const Donnees = (() => {
   };
 
   // ===========================================================================
-  // 4. Chargement, mutation, journal, rafraîchissement
+  // 4. Chargement, mutation, journal, rafraîchissement (ARCHITECTURE.md §5.2 à §5.5)
   // ===========================================================================
-  // Section complétée par la tâche T08 (ARCHITECTURE.md §5.2 à §5.5) : initialiser, chargerTout,
-  // lignes, trouver, version, parametre, problemes, stockArticle, modifier, ajouter,
-  // demarrerSurveillance, evenements, statistiques.
+  // Le cache garde, pour chaque table, une « entrée » :
+  //   { lignes, colonnesInconnues, version, index, problemesLecture, perime, absente }
+  //   - lignes            : tableau d'objets (toutes les valeurs sont des chaînes) ;
+  //   - colonnesInconnues : colonnes du fichier qui ne sont pas dans le schéma (conservées) ;
+  //   - version           : version donnée par l'adaptateur (null si le fichier n'existe pas) ;
+  //   - index             : Map clé → ligne (première ligne si la clé est en double) ;
+  //   - problemesLecture  : problèmes trouvés par csv.analyser ;
+  //   - perime            : vrai si le fichier a changé sans que le cache soit à jour (ajout au
+  //                         journal) : la table sera relue avant usage ou au rafraîchissement ;
+  //   - absente           : vrai si le fichier n'existe pas.
+
+  const NOMBRE_ESSAIS = 3;
+  const RAFRAICHISSEMENT_PAR_DEFAUT_S = 20;
+  const CARACTERES_ALEATOIRES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const MOTIF_CHIFFRES = /^[0-9]+$/;
+  const MOTIF_ANNEE = /^([0-9]{4})/;
+
+  let adaptateurActif = null;
+  let identite = { poste: '', profil: '' };
+  const cache = new Map();                    // nom de table → entrée (voir ci-dessus)
+  const filesAttente = new Map();             // nom de table → promesse de la dernière tâche
+  const evenements = new EventTarget();
+  const statistiques = { conflits: 0, essais: 0 };
+
+  // Résultats calculés à la demande, oubliés à chaque changement de données (« à recalculer »).
+  let problemesCalcules = null;
+  let mouvementsParArticle = null;
+
+  let minuteurSurveillance = null;
+  let surRetourOnglet = null;
+  let rafraichissementEnCours = null;
+
+  // --- 4.1 Outils internes ------------------------------------------------------------------
+
+  function verifierInitialise() {
+    if (!adaptateurActif) {
+      throw new Error('Donnees : appelez Donnees.initialiser(adaptateur, …) avant de lire ou d\'écrire.');
+    }
+  }
+
+  // Oublie les résultats calculés : ils seront recalculés au prochain appel.
+  function aRecalculer() {
+    problemesCalcules = null;
+    mouvementsParArticle = null;
+  }
+
+  // Exécute les tâches d'une même table l'une après l'autre (jamais deux écritures en même
+  // temps sur un fichier depuis ce poste). Une tâche en échec ne bloque pas les suivantes.
+  function enSerie(nomTable, tache) {
+    const precedente = filesAttente.get(nomTable) || Promise.resolve();
+    const resultat = precedente.then(tache, tache);
+    filesAttente.set(nomTable, resultat.catch(() => undefined));
+    return resultat;
+  }
+
+  // Map clé → ligne. En cas de doublon, la première ligne est gardée ; une clé vide est ignorée.
+  function indexer(description, lignes) {
+    const index = new Map();
+    for (const ligne of lignes) {
+      const cle = ligne[description.cle];
+      if (cle !== '' && cle !== undefined && !index.has(cle)) { index.set(cle, ligne); }
+    }
+    return index;
+  }
+
+  function entreeAbsente() {
+    return { lignes: [], colonnesInconnues: [], version: null, index: new Map(),
+      problemesLecture: [], perime: false, absente: true };
+  }
+
+  // Résultat de adaptateur.charger → entrée de cache.
+  function entreeDepuisFichier(nomTable, octets, version) {
+    if (octets === null || octets === undefined) { return entreeAbsente(); }
+    const lu = analyser(nomTable, octets);
+    return {
+      lignes: lu.lignes,
+      colonnesInconnues: lu.colonnesInconnues,
+      version: version === undefined ? null : version,
+      index: indexer(descriptionTable(nomTable), lu.lignes),
+      problemesLecture: lu.problemes,
+      perime: false,
+      absente: false,
+    };
+  }
+
+  // Entrée du cache ; une table pas encore chargée est vue comme vide (et périmée).
+  function entreeDe(nomTable) {
+    descriptionTable(nomTable);                       // lève une erreur si la table n'existe pas
+    const entree = cache.get(nomTable);
+    if (entree) { return entree; }
+    const vide = entreeAbsente();
+    vide.perime = true;
+    return vide;
+  }
+
+  // Relit une table depuis l'adaptateur (sans passer par la file d'attente).
+  async function rechargerSansAttente(nomTable) {
+    verifierInitialise();
+    const resultat = await adaptateurActif.charger(nomTable);
+    const entree = entreeDepuisFichier(nomTable, resultat.octets, resultat.version);
+    cache.set(nomTable, entree);
+    aRecalculer();
+    return entree;
+  }
+
+  function signaler(nomsTables, origine) {
+    evenements.dispatchEvent(new CustomEvent('changement', {
+      detail: { tables: nomsTables, origine: origine },
+    }));
+  }
+
+  // --- 4.2 Lecture --------------------------------------------------------------------------
+
+  // adaptateur : objet du contrat ARCHITECTURE.md §6 ; options : { poste, profil } (pour le journal).
+  // Vide le cache : appeler ensuite chargerTout().
+  function initialiser(adaptateur, options) {
+    arreterSurveillance();
+    adaptateurActif = adaptateur;
+    definirIdentite(options);
+    cache.clear();
+    filesAttente.clear();
+    statistiques.conflits = 0;
+    statistiques.essais = 0;
+    rafraichissementEnCours = null;
+    aRecalculer();
+  }
+
+  // Change le poste et le profil inscrits au journal (ex. après le choix du profil).
+  function definirIdentite(options) {
+    const valeurs = options || {};
+    identite = { poste: enTexte(valeurs.poste), profil: enTexte(valeurs.profil) };
+  }
+
+  // Charge les 22 tables en parallèle. Renvoie { tablesAbsentes: [noms des fichiers absents] }.
+  async function chargerTout() {
+    verifierInitialise();
+    const noms = Schema.nomsTables();
+    const resultats = await Promise.all(noms.map((nomTable) => adaptateurActif.charger(nomTable)));
+    const tablesAbsentes = [];
+    noms.forEach((nomTable, position) => {
+      const resultat = resultats[position];
+      const entree = entreeDepuisFichier(nomTable, resultat.octets, resultat.version);
+      if (entree.absente) { tablesAbsentes.push(nomTable); }
+      cache.set(nomTable, entree);
+    });
+    aRecalculer();
+    return { tablesAbsentes: tablesAbsentes };
+  }
+
+  // Vrai si aucun des 22 fichiers n'existe (proposer « base vide » ou « données de démo »).
+  function baseVide() {
+    const noms = Schema.nomsTables();
+    return noms.every((nomTable) => cache.has(nomTable) && cache.get(nomTable).absente);
+  }
+
+  // Lignes d'une table. NE PAS MODIFIER ces objets : passer par Donnees.modifier.
+  function lignes(nomTable) {
+    return entreeDe(nomTable).lignes;
+  }
+
+  // Ligne dont la clé vaut `cle` (index Map), ou undefined.
+  function trouver(nomTable, cle) {
+    return entreeDe(nomTable).index.get(cle);
+  }
+
+  function version(nomTable) {
+    return entreeDe(nomTable).version;
+  }
+
+  // Valeur d'un paramètre de parametres.csv ; `defaut` si la clé est absente ou la valeur vide.
+  function parametre(cle, defaut) {
+    const ligne = trouver('parametres', cle);
+    if (!ligne || ligne.valeur === '') { return defaut; }
+    return ligne.valeur;
+  }
+
+  // Relit une table depuis le stockage (sans émettre d'événement). Renvoie ses lignes.
+  async function rechargerTable(nomTable) {
+    descriptionTable(nomTable);
+    const entree = await enSerie(nomTable, () => rechargerSansAttente(nomTable));
+    return entree.lignes;
+  }
+
+  // --- 4.3 Contrôle de la base : problemes() ------------------------------------------------
+
+  // Repère d'une ligne pour les messages : son identifiant, sinon sa position.
+  function reperageLigne(description, ligne, position) {
+    const cle = ligne[description.cle];
+    return cle ? cle : 'ligne de données n° ' + (position + 1) + ' (sans identifiant)';
+  }
+
+  function decrireFiltre(filtre) {
+    return Object.keys(filtre).map((nomChamp) => nomChamp + ' « ' + filtre[nomChamp] + ' »').join(', ');
+  }
+
+  // Valeurs existantes d'une cible de référence, calculées une seule fois par contrôle.
+  // Renvoie { valides: Set, toutes: Map valeur → ligne } (toutes = sans filtre, pour expliquer).
+  function ciblesReference(memoire, champ) {
+    const descriptionCible = descriptionTable(champ.table);
+    const champCible = champ.champCible || descriptionCible.cle;
+    const filtre = champ.filtre || null;
+    const cleMemoire = champ.table + '|' + champCible + '|' + (filtre ? JSON.stringify(filtre) : '');
+    let cibles = memoire.get(cleMemoire);
+    if (cibles) { return cibles; }
+    cibles = { valides: new Set(), toutes: new Map(), champCible: champCible, filtre: filtre };
+    const nomsFiltre = filtre ? Object.keys(filtre) : [];
+    for (const ligne of entreeDe(champ.table).lignes) {
+      const valeur = ligne[champCible];
+      if (valeur === '' || valeur === undefined) { continue; }
+      if (!cibles.toutes.has(valeur)) { cibles.toutes.set(valeur, ligne); }
+      if (nomsFiltre.every((nomChamp) => ligne[nomChamp] === filtre[nomChamp])) { cibles.valides.add(valeur); }
+    }
+    memoire.set(cleMemoire, cibles);
+    return cibles;
+  }
+
+  // Identifiants manquants et en double d'une table.
+  function controlerIdentifiants(nomTable, description, lignesTable, resultat) {
+    const vus = new Set();
+    lignesTable.forEach((ligne, position) => {
+      const cle = ligne[description.cle];
+      if (cle === '' || cle === undefined) {
+        resultat.push(probleme('erreur', 'identifiant', nomTable, null, null, description.cle, null,
+          description.libelle + ' : la ' + reperageLigne(description, ligne, position) + ' de '
+          + description.fichier + ' n\'a pas d\'identifiant (colonne « ' + description.cle + ' » vide). '
+          + 'Complétez-le ou supprimez la ligne dans le fichier.'));
+        return;
+      }
+      if (vus.has(cle)) {
+        resultat.push(probleme('erreur', 'doublon', nomTable, null, cle, description.cle, cle,
+          description.libelle + ' : l\'identifiant « ' + cle + ' » apparaît plusieurs fois dans '
+          + description.fichier + ' (ligne de données n° ' + (position + 1) + '). Seule la première ligne est '
+          + 'retrouvée par Prévo : donnez un identifiant unique aux autres.'));
+      }
+      vus.add(cle);
+    });
+  }
+
+  // Clés étrangères cassées d'une table (et codes de défaillance de la mauvaise famille).
+  function controlerReferences(nomTable, description, lignesTable, memoire, resultat) {
+    const champsReference = description.champs.filter((champ) => champ.type === 'ref');
+    for (const champ of champsReference) {
+      const cibles = ciblesReference(memoire, champ);
+      const descriptionCible = descriptionTable(champ.table);
+      lignesTable.forEach((ligne, position) => {
+        const valeur = ligne[champ.nom];
+        if (valeur === '' || valeur === undefined || cibles.valides.has(valeur)) { return; }
+        const reperage = description.libelle + ', ' + reperageLigne(description, ligne, position);
+        const ligneSansFiltre = cibles.toutes.get(valeur);
+        let explication;
+        if (ligneSansFiltre && cibles.filtre) {
+          const familleTrouvee = Object.keys(cibles.filtre)
+            .map((nomChamp) => nomChamp + ' « ' + ligneSansFiltre[nomChamp] + ' »').join(', ');
+          explication = 'existe dans ' + descriptionCible.libelle + ' mais avec ' + familleTrouvee
+            + ' au lieu de ' + decrireFiltre(cibles.filtre);
+        } else {
+          explication = 'n\'existe pas dans ' + descriptionCible.libelle
+            + (cibles.filtre ? ' (' + decrireFiltre(cibles.filtre) + ')' : '');
+        }
+        resultat.push(probleme('erreur', 'reference', nomTable, null, ligne[description.cle], champ.nom, valeur,
+          reperage + ' : « ' + champ.libelle + ' » vaut « ' + valeur + ' », qui ' + explication + '.'));
+      });
+    }
+  }
+
+  // Incohérences entre demandes et ordres de travail (décision D18).
+  function controlerCoherence(resultat) {
+    const indexOrdres = entreeDe('ordres_travail').index;
+    const indexDemandes = entreeDe('demandes').index;
+    for (const demande of entreeDe('demandes').lignes) {
+      if (demande.statut !== 'Acceptée') { continue; }
+      if (demande.ot_id === '') {
+        resultat.push(probleme('erreur', 'incoherence', 'demandes', null, demande.id, 'ot_id', '',
+          'Demande ' + (demande.id || '(sans identifiant)') + ' : elle est « Acceptée » mais aucun ordre de travail '
+          + 'ne lui est lié. Rouvrez-la ou liez-la à son ordre de travail.'));
+      } else if (!indexOrdres.has(demande.ot_id)) {
+        resultat.push(probleme('erreur', 'incoherence', 'demandes', null, demande.id, 'ot_id', demande.ot_id,
+          'Demande ' + (demande.id || '(sans identifiant)') + ' : elle est « Acceptée » mais son ordre de travail « '
+          + demande.ot_id + ' » n\'existe pas.'));
+      }
+    }
+    for (const ordre of entreeDe('ordres_travail').lignes) {
+      if (ordre.di_id === '') { continue; }
+      const demande = indexDemandes.get(ordre.di_id);
+      if (demande && demande.statut !== 'Acceptée' && demande.statut !== 'Regroupée') {
+        // Cas d'une acceptation interrompue (l'OT est créé avant la DI, §5.3) : accepter de nouveau
+        // la demande réutilise cet OT. Pas bloquant, d'où « attention ».
+        resultat.push(probleme('attention', 'incoherence', 'ordres_travail', null, ordre.id, 'di_id', ordre.di_id,
+          'Ordre de travail ' + (ordre.id || '(sans identifiant)') + ' : il vient de la demande « ' + ordre.di_id
+          + ' », qui est « ' + demande.statut + ' » (ni acceptée ni regroupée). Acceptez ou regroupez la demande, '
+          + 'ou annulez l\'ordre de travail.'));
+      }
+    }
+  }
+
+  function calculerProblemes() {
+    const resultat = [];
+    const memoireCibles = new Map();
+    for (const nomTable of Schema.nomsTables()) {
+      for (const lu of entreeDe(nomTable).problemesLecture) { resultat.push(lu); }
+    }
+    for (const nomTable of Schema.nomsTables()) {
+      const description = descriptionTable(nomTable);
+      const lignesTable = entreeDe(nomTable).lignes;
+      controlerIdentifiants(nomTable, description, lignesTable, resultat);
+      controlerReferences(nomTable, description, lignesTable, memoireCibles, resultat);
+    }
+    controlerCoherence(resultat);
+    return resultat;
+  }
+
+  // Tous les problèmes de la base (lecture + contrôles). Recalculé seulement après un changement.
+  // [{ gravite: 'erreur'|'attention'|'info', type, table, ligne, id, champ, valeur, message }]
+  function problemes() {
+    if (problemesCalcules === null) { problemesCalcules = calculerProblemes(); }
+    return problemesCalcules;
+  }
+
+  // --- 4.4 Stock d'un article ---------------------------------------------------------------
+
+  function comparerMouvements(a, b) {
+    if (a.date !== b.date) { return a.date < b.date ? -1 : 1; }
+    if (a.id !== b.id) { return a.id < b.id ? -1 : 1; }
+    return 0;
+  }
+
+  // Map article_id → mouvements triés par date puis identifiant (calculée une fois par changement).
+  function indexMouvements() {
+    if (mouvementsParArticle !== null) { return mouvementsParArticle; }
+    mouvementsParArticle = new Map();
+    for (const mouvement of entreeDe('mouvements_stock').lignes) {
+      let liste = mouvementsParArticle.get(mouvement.article_id);
+      if (!liste) {
+        liste = [];
+        mouvementsParArticle.set(mouvement.article_id, liste);
+      }
+      liste.push(mouvement);
+    }
+    for (const liste of mouvementsParArticle.values()) { liste.sort(comparerMouvements); }
+    return mouvementsParArticle;
+  }
+
+  // Stock recalculé depuis mouvements_stock : un inventaire fixe la valeur, une entrée ou un
+  // retour ajoute, une sortie retire. Quantité illisible = 0. Renvoie un Number (0 sans mouvement).
+  function stockArticle(articleId) {
+    const mouvements = indexMouvements().get(articleId) || [];
+    let stock = 0;
+    for (const mouvement of mouvements) {
+      const quantite = nombre(mouvement.quantite) || 0;
+      if (mouvement.type === 'inventaire') { stock = quantite; }
+      else if (mouvement.type === 'entrée' || mouvement.type === 'retour') { stock += quantite; }
+      else if (mouvement.type === 'sortie') { stock -= quantite; }
+    }
+    return Math.round(stock * 1e6) / 1e6;          // évite 0.30000000000000004
+  }
+
+  // --- 4.5 Identifiants (ARCHITECTURE.md §4) ------------------------------------------------
+
+  function horodatageCompact(date) {
+    return date.getFullYear() + deuxChiffres(date.getMonth() + 1) + deuxChiffres(date.getDate())
+      + deuxChiffres(date.getHours()) + deuxChiffres(date.getMinutes()) + deuxChiffres(date.getSeconds());
+  }
+
+  function caracteresAleatoires(nombreCaracteres) {
+    let texte = '';
+    for (let i = 0; i < nombreCaracteres; i += 1) {
+      texte += CARACTERES_ALEATOIRES[Math.floor(Math.random() * CARACTERES_ALEATOIRES.length)];
+    }
+    return texte;
+  }
+
+  // Plus grand numéro des identifiants « prefixe + chiffres » présents dans les lignes (0 si aucun).
+  function plusGrandNumero(lignesExistantes, nomCle, prefixe) {
+    let plusGrand = 0;
+    for (const ligne of lignesExistantes) {
+      const identifiant = ligne[nomCle];
+      if (typeof identifiant !== 'string' || !identifiant.startsWith(prefixe)) { continue; }
+      const suite = identifiant.slice(prefixe.length);
+      if (MOTIF_CHIFFRES.test(suite)) { plusGrand = Math.max(plusGrand, Number(suite)); }
+    }
+    return plusGrand;
+  }
+
+  // Identifiant suivant d'une table :
+  //   - séquentiel : EQ-0001 (plus grand numéro existant + 1, zéros à gauche) ;
+  //   - annuel     : DI-AAAA-0001, numérotation propre à chaque année ; l'année vient de dateIso
+  //                  ('AAAA-…') ou, à défaut, de la date du jour ;
+  //   - horodaté   : J-AAAAMMJJHHMMSS-XXXX (journal ; 4 caractères A-Z/0-9 tirés au hasard).
+  // lignesExistantes : par défaut les lignes en cache de la table.
+  function nouvelId(nomTable, lignesExistantes, dateIso) {
+    const description = descriptionTable(nomTable);
+    const format = description.identifiant;
+    if (!format) {
+      throw new Error('Donnees.nouvelId : la table « ' + nomTable + ' » n\'a pas d\'identifiant calculé.');
+    }
+    const existantes = lignesExistantes || lignes(nomTable);
+    if (format.horodate) {
+      const debut = format.prefixe + horodatageCompact(new Date()) + '-';
+      const dejaPris = new Set(existantes.map((ligne) => ligne[description.cle]));
+      let identifiant = debut + caracteresAleatoires(format.chiffres);
+      while (dejaPris.has(identifiant)) { identifiant = debut + caracteresAleatoires(format.chiffres); }
+      return identifiant;
+    }
+    let prefixe = format.prefixe;
+    if (format.annuel) {
+      const annee = MOTIF_ANNEE.exec(enTexte(dateIso));
+      prefixe += (annee ? annee[1] : aujourdhui().slice(0, 4)) + '-';
+    }
+    const suivant = plusGrandNumero(existantes, description.cle, prefixe) + 1;
+    return prefixe + String(suivant).padStart(format.chiffres, '0');
+  }
+
+  // --- 4.6 Journal --------------------------------------------------------------------------
+
+  function entreeJournal(identifiantsPris, nomTable, idLigne, action) {
+    const descriptionJournal = descriptionTable('journal');
+    // Horodatage + 4 caractères aléatoires : on ne vérifie l'unicité que dans le lot en cours
+    // (relire tout le journal à chaque entrée coûterait trop cher ; une collision est improbable).
+    let identifiant = nouvelId('journal', []);
+    while (identifiantsPris.has(identifiant)) { identifiant = nouvelId('journal', []); }
+    identifiantsPris.add(identifiant);
+    const ligne = {};
+    for (const champ of descriptionJournal.champs) { ligne[champ.nom] = ''; }
+    return Object.assign(ligne, {
+      id: identifiant, date_heure: maintenant(), poste: identite.poste, profil: identite.profil,
+      table: nomTable, id_ligne: enTexte(idLigne), action: enTexte(action),
+    });
+  }
+
+  // Écrit des entrées au journal. Un échec ne fait jamais échouer l'action de l'utilisateur :
+  // il est signalé en console (console.warn) et la fonction renvoie false.
+  async function ecrireJournal(entrees) {
+    if (entrees.length === 0) { return true; }
+    try {
+      await ajouter('journal', entrees);
+      return true;
+    } catch (erreur) {
+      console.warn('Prévo : le journal n\'a pas pu être écrit (' + (erreur && erreur.message) + ').', erreur);
+      return false;
+    }
+  }
+
+  // Entrée de journal sans modification de donnée (ex. avertissement d'habilitation RG8).
+  // Renvoie une promesse : l'identifiant de l'entrée, ou null si l'écriture a échoué.
+  async function journaliser(nomTable, idLigne, action) {
+    verifierInitialise();
+    const entree = entreeJournal(new Set(), nomTable, idLigne, action);
+    return (await ecrireJournal([entree])) ? entree.id : null;
+  }
+
+  // --- 4.7 Écriture : modifier (ARCHITECTURE.md §5.3) ---------------------------------------
+
+  // Ligne écrite par une fonction de mutation → ligne propre : tous les champs du schéma et les
+  // colonnes inconnues, en chaînes (valeur absente → valeur par défaut du schéma ou '').
+  function ligneNormalisee(description, colonnesInconnues, ligne) {
+    const propre = {};
+    for (const champ of description.champs) {
+      const valeur = ligne[champ.nom];
+      if (valeur === undefined || valeur === null) {
+        propre[champ.nom] = champ.defaut === undefined ? '' : champ.defaut;
+      } else {
+        propre[champ.nom] = typeof valeur === 'string' ? valeur : String(valeur);
+      }
+    }
+    for (const nomColonne of colonnesInconnues) { propre[nomColonne] = enTexte(ligne[nomColonne]); }
+    return propre;
+  }
+
+  // Compare les nouvelles lignes aux anciennes : [{ ligne, champs: null (création) | [noms] }].
+  // Une ligne est d'abord comparée à celle de même position (cas courant), sinon à celle de même clé.
+  function changementsEntre(description, colonnesInconnues, anciennes, ancienIndex, nouvelles) {
+    const nomsChamps = description.champs.map((champ) => champ.nom).concat(colonnesInconnues);
+    const changements = [];
+    nouvelles.forEach((ligne, position) => {
+      const cle = ligne[description.cle];
+      let ancienne = anciennes[position];
+      if (!ancienne || ancienne[description.cle] !== cle) { ancienne = cle === '' ? undefined : ancienIndex.get(cle); }
+      if (!ancienne) {
+        changements.push({ ligne: ligne, champs: null });
+        return;
+      }
+      const champsModifies = nomsChamps.filter((nom) => enTexte(ancienne[nom]) !== ligne[nom]);
+      if (champsModifies.length > 0) { changements.push({ ligne: ligne, champs: champsModifies }); }
+    });
+    return changements;
+  }
+
+  // Problèmes de lecture encore vrais après réécriture du fichier au format §3.1 : la structure,
+  // l'encodage et les colonnes absentes sont réparés ; une valeur illisible (ou abîmée par Excel)
+  // reste signalée tant qu'elle n'a pas été corrigée ; une colonne inconnue reste conservée.
+  function problemesApresReecriture(anciens, nouvelIndex, colonnesInconnues) {
+    const inconnues = new Set(colonnesInconnues);
+    return anciens.filter((p) => {
+      if (p.type === 'colonne') { return p.ligne === 1 && inconnues.has(p.champ); }
+      if ((p.type === 'valeur' || p.type === 'excel') && p.id !== null && p.champ !== null) {
+        const ligne = nouvelIndex.get(p.id);
+        return Boolean(ligne) && ligne[p.champ] === p.valeur;
+      }
+      return false;
+    });
+  }
+
+  function messageConflitPersistant(nomTable) {
+    return 'Le fichier ' + nomTable + ' est modifié en même temps sur un autre poste. Réessayez dans un instant.';
+  }
+
+  // Modifie une table : fonction(lignes, outils) reçoit une COPIE des lignes, ajoute ou modifie
+  // des objets et renvoie une valeur (renvoyée par modifier). outils : { nouvelId(lignes?, dateIso?),
+  // maintenant(), aujourdhui() }. ErreurValidation levée par la fonction : jamais réessayée.
+  // Conflit d'écriture : la table est relue et la fonction réappliquée (3 essais au total).
+  // options : { action: texte ajouté au journal, journal: false pour ne pas journaliser }.
+  async function modifier(nomTable, fonction, options) {
+    verifierInitialise();
+    const description = descriptionTable(nomTable);
+    const reglages = options || {};
+    const resultat = await enSerie(nomTable, async () => {
+      let entree = entreeDe(nomTable);
+      if (entree.perime) { entree = await rechargerSansAttente(nomTable); }
+      for (let essai = 1; essai <= NOMBRE_ESSAIS; essai += 1) {
+        statistiques.essais += 1;
+        const copie = entree.lignes.map((ligne) => Object.assign({}, ligne));
+        const outils = {
+          nouvelId: (lignesExistantes, dateIso) => nouvelId(nomTable, lignesExistantes || copie, dateIso),
+          maintenant: maintenant,
+          aujourdhui: aujourdhui,
+        };
+        const valeurRendue = await fonction(copie, outils);      // ErreurValidation : sort tout de suite
+        const nouvelles = copie.map((ligne) => ligneNormalisee(description, entree.colonnesInconnues, ligne));
+        const changements = changementsEntre(description, entree.colonnesInconnues,
+          entree.lignes, entree.index, nouvelles);
+        if (changements.length === 0 && nouvelles.length === entree.lignes.length) {
+          return { valeur: valeurRendue, changements: [] };      // rien à écrire
+        }
+        const octets = serialiser(nomTable, nouvelles, entree.colonnesInconnues);
+        let reponse;
+        try {
+          reponse = await adaptateurActif.enregistrer(nomTable, octets, entree.version);
+        } catch (erreur) {
+          if (!(erreur instanceof ErreurConflit)) { throw erreur; }
+          statistiques.conflits += 1;
+          if (essai === NOMBRE_ESSAIS) {
+            throw new ErreurConflit(messageConflitPersistant(nomTable), erreur.versionActuelle);
+          }
+          entree = await rechargerSansAttente(nomTable);
+          continue;
+        }
+        const nouvelIndex = indexer(description, nouvelles);
+        cache.set(nomTable, {
+          lignes: nouvelles,
+          colonnesInconnues: entree.colonnesInconnues,
+          version: reponse && reponse.version !== undefined ? reponse.version : null,
+          index: nouvelIndex,
+          problemesLecture: problemesApresReecriture(entree.problemesLecture, nouvelIndex, entree.colonnesInconnues),
+          perime: false,
+          absente: false,
+        });
+        aRecalculer();
+        return { valeur: valeurRendue, changements: changements };
+      }
+      throw new ErreurConflit(messageConflitPersistant(nomTable));   // jamais atteint (sécurité)
+    });
+
+    if (resultat.changements.length > 0) {
+      signaler([nomTable], 'local');
+      if (reglages.journal !== false && nomTable !== 'journal') {
+        const complement = reglages.action ? ' — ' + reglages.action : '';
+        const identifiantsPris = new Set();
+        const entrees = resultat.changements.map((changement) => entreeJournal(identifiantsPris, nomTable,
+          changement.ligne[description.cle],
+          (changement.champs === null ? 'création' : 'modification : ' + changement.champs.join(', ')) + complement));
+        await ecrireJournal(entrees);
+      }
+    }
+    return resultat.valeur;
+  }
+
+  // --- 4.8 Écriture par ajout : ajouter (ARCHITECTURE.md §5.4) ------------------------------
+
+  // Ajoute des lignes en fin de fichier (journal) : en-tête + lignes, sans BOM. Si le stockage
+  // refuse (fichier réenregistré par Excel : en-tête ou encodage différent), repli sur modifier.
+  // Le cache n'est pas complété ligne à ligne : la table est marquée périmée et sera relue
+  // (jamais de version « devinée », qui ferait perdre des lignes au prochain modifier).
+  // Renvoie { repli: vrai si le repli sur modifier a servi }.
+  async function ajouter(nomTable, nouvellesLignes) {
+    verifierInitialise();
+    const description = descriptionTable(nomTable);
+    const lignesAAjouter = nouvellesLignes || [];
+    if (lignesAAjouter.length === 0) { return { repli: false }; }
+    const colonnesInconnues = entreeDe(nomTable).colonnesInconnues;
+    const propres = lignesAAjouter.map((ligne) => ligneNormalisee(description, colonnesInconnues, ligne));
+    const octets = serialiser(nomTable, propres, colonnesInconnues, { bom: false });
+    let repli = false;
+    try {
+      await adaptateurActif.ajouter(nomTable, octets);
+    } catch (erreur) {
+      if (!(erreur instanceof ErreurConflit)) { throw erreur; }
+      repli = true;
+      await modifier(nomTable, (lignesActuelles) => {
+        for (const ligne of lignesAAjouter) { lignesActuelles.push(Object.assign({}, ligne)); }
+      }, { journal: false });
+    }
+    const entree = cache.get(nomTable);
+    if (entree) { entree.perime = true; }
+    else { cache.set(nomTable, Object.assign(entreeAbsente(), { perime: true })); }
+    return { repli: repli };
+  }
+
+  // --- 4.9 Rafraîchissement (ARCHITECTURE.md §5.5) ------------------------------------------
+
+  async function rafraichirMaintenant() {
+    verifierInitialise();
+    const versions = await adaptateurActif.listerVersions();
+    const aRelire = Schema.nomsTables().filter((nomTable) => {
+      const entree = cache.get(nomTable);
+      if (!entree || entree.perime) { return true; }
+      if (!Object.prototype.hasOwnProperty.call(versions, nomTable)) { return false; }
+      const versionStockage = versions[nomTable] === undefined ? null : versions[nomTable];
+      return versionStockage !== entree.version;
+    });
+    const relues = await Promise.all(aRelire.map((nomTable) => enSerie(nomTable, async () => {
+      // Une écriture de ce poste (modifier) a pu relire la table entre-temps : rien à faire alors.
+      const entree = cache.get(nomTable);
+      const versionStockage = versions[nomTable] === undefined ? null : versions[nomTable];
+      if (entree && !entree.perime && entree.version === versionStockage) { return null; }
+      await rechargerSansAttente(nomTable);
+      return nomTable;
+    })));
+    const changees = relues.filter((nomTable) => nomTable !== null);
+    if (changees.some((nomTable) => nomTable !== 'journal')) { signaler(changees, 'distant'); }
+    return changees;
+  }
+
+  // Relit les tables modifiées ailleurs (version différente) ou périmées. Événement « changement »
+  // (origine « distant ») si au moins une table autre que le journal a changé. Renvoie leurs noms.
+  function rafraichir() {
+    if (!rafraichissementEnCours) {
+      rafraichissementEnCours = rafraichirMaintenant().finally(() => { rafraichissementEnCours = null; });
+    }
+    return rafraichissementEnCours;
+  }
+
+  async function rafraichirSansErreur() {
+    try {
+      await rafraichir();
+    } catch (erreur) {
+      console.warn('Prévo : rafraîchissement impossible (' + (erreur && erreur.message) + ').', erreur);
+    }
+  }
+
+  function ongletVisible() {
+    return typeof document === 'undefined' || document.visibilityState !== 'hidden';
+  }
+
+  // Rafraîchit toutes les periodeMs (défaut : paramètre rafraichissement_s, 20 s) tant que
+  // l'onglet est visible, et à chaque retour sur l'onglet.
+  function demarrerSurveillance(periodeMs) {
+    verifierInitialise();
+    arreterSurveillance();
+    let periode = Number(periodeMs);
+    if (!(periode > 0)) {
+      const secondes = nombre(parametre('rafraichissement_s', String(RAFRAICHISSEMENT_PAR_DEFAUT_S)));
+      periode = (secondes && secondes > 0 ? secondes : RAFRAICHISSEMENT_PAR_DEFAUT_S) * 1000;
+    }
+    minuteurSurveillance = setInterval(() => {
+      if (ongletVisible()) { rafraichirSansErreur(); }
+    }, periode);
+    if (typeof document !== 'undefined') {
+      surRetourOnglet = () => { if (ongletVisible()) { rafraichirSansErreur(); } };
+      document.addEventListener('visibilitychange', surRetourOnglet);
+    }
+  }
+
+  function arreterSurveillance() {
+    if (minuteurSurveillance !== null) {
+      clearInterval(minuteurSurveillance);
+      minuteurSurveillance = null;
+    }
+    if (surRetourOnglet !== null && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', surRetourOnglet);
+    }
+    surRetourOnglet = null;
+  }
+
+  // --- 4.10 Instantané ----------------------------------------------------------------------
+
+  // { nomTable: Uint8Array } des 22 tables sérialisées depuis le cache (export ZIP, copie de la
+  // démo). Le journal, écrit par ajout, peut être en retard : faire `await rafraichir()` avant.
+  function instantane() {
+    const fichiers = {};
+    for (const nomTable of Schema.nomsTables()) {
+      const entree = entreeDe(nomTable);
+      fichiers[nomTable] = serialiser(nomTable, entree.lignes, entree.colonnesInconnues);
+    }
+    return fichiers;
+  }
 
   return {
     // 1. Erreurs
@@ -642,5 +1334,27 @@ const Donnees = (() => {
     normaliser: normaliser,
     // 3. CSV
     csv: csv,
+    // 4. Chargement, mutation, journal, rafraîchissement
+    initialiser: initialiser,
+    definirIdentite: definirIdentite,
+    chargerTout: chargerTout,
+    baseVide: baseVide,
+    lignes: lignes,
+    trouver: trouver,
+    version: version,
+    parametre: parametre,
+    rechargerTable: rechargerTable,
+    problemes: problemes,
+    stockArticle: stockArticle,
+    nouvelId: nouvelId,
+    modifier: modifier,
+    ajouter: ajouter,
+    journaliser: journaliser,
+    rafraichir: rafraichir,
+    demarrerSurveillance: demarrerSurveillance,
+    arreterSurveillance: arreterSurveillance,
+    instantane: instantane,
+    evenements: evenements,
+    statistiques: statistiques,
   };
 })();
