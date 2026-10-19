@@ -1,13 +1,536 @@
 'use strict';
-// Parametres : MODULE D'ATTENTE (tâche T11). Remplacé entièrement par la tâche T15
-// (paramètres, sauvegardes et restauration, contrôle de la base, export ZIP).
+// Parametres : écrans « Paramètres » (#/parametres) et « Contrôle de la base » (#/controle),
+// réservés au responsable (brief §4 sauvegarde, §6 contrôle de la base, §9 E12).
+//
+//   Paramètres : entreprise, délais par priorité, rafraîchissement (écrits dans parametres.csv par
+//                Donnees.modifier), ce poste (nom, profil), sauvegardes (créer, restaurer), lien vers
+//                le contrôle de la base, export ZIP.
+//   Contrôle   : problèmes de Donnees.problemes() groupés par gravité, attribution des identifiants
+//                manquants, relecture des fichiers, liens vers les DI / OT concernés.
 
 const Parametres = (() => {
 
-  function attente(conteneur, titre) {
-    UI.remplir(conteneur, UI.html`
-      <div class="entete-page"><div><h1>${titre}</h1><p>Écran livré par la tâche T15.</p></div></div>`);
+  // Réglages du formulaire (clé dans parametres.csv, type de champ, libellé, valeur par défaut).
+  const REGLAGES = [
+    { cle: 'entreprise_nom', type: 'texte', libelle: 'Nom de l\'entreprise', defaut: '', large: true,
+      aide: 'Affiché dans le menu et sur les bons de travail.' },
+    { cle: 'delai_p1_h', type: 'entier', libelle: 'Délai P1 (heures)', defaut: '0', min: 0, max: 8760,
+      aide: 'Date prévue d\'une demande P1 = création + ce délai. 0 : tout de suite.' },
+    { cle: 'delai_p2_h', type: 'entier', libelle: 'Délai P2 (heures)', defaut: '24', min: 0, max: 8760,
+      aide: '24 heures = le lendemain.' },
+    { cle: 'delai_p3_h', type: 'entier', libelle: 'Délai P3 (heures)', defaut: '168', min: 0, max: 8760,
+      aide: '168 heures = une semaine.' },
+    { cle: 'delai_p4', type: 'texte', libelle: 'Délai P4', defaut: 'prochain arrêt',
+      aide: 'Texte libre : une P4 n\'a pas de date prévue automatique.' },
+    { cle: 'rafraichissement_s', type: 'entier', libelle: 'Rafraîchissement (secondes)', defaut: '20', min: 2, max: 3600,
+      aide: 'Fréquence de lecture des changements faits sur les autres postes.' },
+  ];
+
+  const LIBELLES_TYPE_PROBLEME = {
+    reference: 'Référence cassée', valeur: 'Valeur illisible', excel: 'Abîmé par Excel', colonne: 'Colonne',
+    encodage: 'Encodage', doublon: 'Doublon', identifiant: 'Identifiant manquant', incoherence: 'Incohérence',
+  };
+
+  // Gravité → titre, ton du badge, explication courte.
+  const GRAVITES = [
+    { cle: 'erreur', titre: 'Erreurs', ton: 'ko', classe: 'rouge',
+      explication: 'À corriger : une donnée est cassée ou introuvable, Prévo ne peut pas s\'y fier.' },
+    { cle: 'attention', titre: 'À surveiller', ton: 'attention', classe: 'ambre',
+      explication: 'Rien de bloquant, mais un fichier ne suit pas tout à fait le format attendu.' },
+    { cle: 'info', titre: 'Informations', ton: 'info', classe: '',
+      explication: 'Pour information : Prévo a corrigé ou toléré ces points à la lecture.' },
+  ];
+
+  // Route et texte du lien vers la fiche d'une ligne (demande, ordre de travail, équipement).
+  const LIENS_FICHES = {
+    demandes: { route: '#/di/', texte: 'Ouvrir la DI' },
+    ordres_travail: { route: '#/ot/', texte: "Ouvrir l'OT" },
+    equipements: { route: '#/equipement/', texte: 'Ouvrir la fiche' },
+  };
+
+  // Message à montrer en haut de l'écran après une action (le réaffichage efface l'écran).
+  let messageEnAttente = null;
+
+  // ===========================================================================================
+  // 1. Petits outils
+  // ===========================================================================================
+
+  function pluriel(nombre, singulier, pluriel) {
+    return nombre + ' ' + (nombre > 1 ? (pluriel || singulier + 's') : singulier);
   }
+
+  // Désactive un bouton pendant une action ; une erreur gérée s'affiche proprement.
+  async function pendant(bouton, contexte, action) {
+    bouton.disabled = true;
+    bouton.setAttribute('aria-busy', 'true');
+    try {
+      return await action();
+    } catch (erreur) {
+      App.signalerErreur(erreur, contexte);
+      return undefined;
+    } finally {
+      bouton.disabled = false;
+      bouton.removeAttribute('aria-busy');
+    }
+  }
+
+  // Après une relecture complète des fichiers (restauration, « Relire »), prévient l'application
+  // (le nom de l'entreprise dans le menu peut avoir changé). Origine « local » : pas de réaffichage.
+  function annoncerRechargement() {
+    Donnees.evenements.dispatchEvent(new CustomEvent('changement', {
+      detail: { tables: Schema.nomsTables(), origine: 'local' },
+    }));
+  }
+
+  // Réaffiche l'écran courant avec un message en haut (type : succes | attention | important | info).
+  function reafficherAvecMessage(type, contenu) {
+    messageEnAttente = { type: type, contenu: contenu };
+    return App.reafficher();
+  }
+
+  // UI.bandeau rend un élément DOM : pour l'insérer dans un gabarit UI.html, on le convertit en fragment sûr
+  // (le bandeau est créé par UI.bandeau, qui échappe son contenu).
+  function bandeauHtml(type, contenu) {
+    return UI.brut(UI.bandeau(type, contenu).outerHTML);
+  }
+
+  function zoneMessage() {
+    const message = messageEnAttente;
+    messageEnAttente = null;
+    if (!message) return '';
+    return UI.html`<div class="alertes" id="message-action">${bandeauHtml(message.type, message.contenu)}</div>`;
+  }
+
+  function mettreSurLeBouton(racine, selecteur, action) {
+    const bouton = UI.$(selecteur, racine);
+    if (bouton) bouton.addEventListener('click', () => action(bouton));
+  }
+
+  // ===========================================================================================
+  // 2. Sauvegardes
+  // ===========================================================================================
+
+  // Nom d'une sauvegarde → texte lisible. « 2026-10-19 » : quotidienne ; « 2026-10-19_153012 » :
+  // manuelle ; « …_avant-restauration » : copie de sécurité faite avant une restauration.
+  function decrireSauvegarde(nom) {
+    const lu = /^(\d{4}-\d{2}-\d{2})(?:_(\d{2})(\d{2})(\d{2}))?(_avant-restauration)?$/.exec(nom);
+    if (!lu) return { date: nom, type: 'Sauvegarde', ton: 'neutre' };
+    const date = UI.dateFr(lu[1]) + (lu[2] ? ' à ' + lu[2] + ':' + lu[3] + ':' + lu[4] : '');
+    if (lu[5]) return { date: date, type: 'Copie de sécurité', ton: 'attention' };
+    return lu[2] ? { date: date, type: 'Manuelle', ton: 'info' } : { date: date, type: 'Quotidienne', ton: 'neutre' };
+  }
+
+  // { liste, indisponible } : la liste des sauvegardes, ou la raison pour laquelle elle n'existe pas.
+  async function lireSauvegardes() {
+    if (App.mode === 'demo') {
+      return { liste: [], indisponible: 'Indisponible en démo : rien n\'est enregistré, il n\'y a donc rien à sauvegarder. '
+        + 'Le bouton « Exporter en ZIP » permet de garder une copie des données.' };
+    }
+    try {
+      return { liste: await App.adaptateur.listerSauvegardes(), indisponible: '' };
+    } catch (erreur) {
+      console.warn('Prévo : liste des sauvegardes illisible (' + (erreur && erreur.message) + ').', erreur);
+      return { liste: [], indisponible: 'Les sauvegardes ne peuvent pas être lues : ' + ((erreur && erreur.message) || 'erreur inconnue') };
+    }
+  }
+
+  function tableauSauvegardes(liste) {
+    const lignes = liste.map((sauvegarde) => Object.assign({ decrite: decrireSauvegarde(sauvegarde.nom) }, sauvegarde));
+    return UI.tableau({
+      libelle: 'Sauvegardes disponibles',
+      colonnes: [
+        { cle: 'nom', libelle: 'Sauvegarde', valeurTri: (l) => l.nom,
+          rendu: (l) => UI.html`<span class="sauvegarde-nom" title="${l.nom}">${l.decrite.date}</span>` },
+        { cle: 'type', libelle: 'Type', valeurTri: (l) => l.decrite.type,
+          rendu: (l) => UI.html`<span class="badge ${l.decrite.ton}">${l.decrite.type}</span>` },
+        { cle: 'tables', libelle: 'Tables', type: 'nombre', valeurTri: (l) => l.tables.length, rendu: (l) => String(l.tables.length) },
+        { cle: 'action', libelle: '', triable: false, rendu: (l) => {
+          const bouton = UI.element(UI.html`<button type="button" class="btn btn-secondaire" data-restaurer="${l.nom}">Restaurer…</button>`);
+          bouton.addEventListener('click', () => pendant(bouton, 'restauration', () => restaurer(l)));
+          return bouton;
+        } },
+      ],
+      lignes: lignes,
+      vide: 'Aucune sauvegarde pour le moment.',
+    });
+  }
+
+  async function sauvegarderMaintenant() {
+    const nom = await App.adaptateur.sauvegarder();
+    UI.toast('Sauvegarde créée : ' + nom + '.', 'succes');
+    await reafficherAvecMessage('succes', UI.html`<b>Sauvegarde créée :</b> <span id="nom-sauvegarde-creee">${nom}</span>.
+      Elle contient tous les fichiers dans l'état où ils sont maintenant.`);
+  }
+
+  // Fenêtre de choix (toutes les tables / une table) qui explique la copie de sécurité.
+  // Renvoie null (annulé) ou { tables: undefined | [nomTable] }.
+  async function demanderRestauration(sauvegarde) {
+    const decrite = decrireSauvegarde(sauvegarde.nom);
+    const options = sauvegarde.tables.map((nomTable) => {
+      const description = Schema.table(nomTable);
+      return UI.html`<option value="${nomTable}">${description ? description.libelle : nomTable} (${nomTable}.csv)</option>`;
+    });
+    const contenu = UI.element(UI.html`<div class="form-colonne" id="fenetre-restauration">
+      <p>Sauvegarde du <b>${decrite.date}</b> (${decrite.type.toLowerCase()}) : ${pluriel(sauvegarde.tables.length, 'table')}.</p>
+      <fieldset class="restauration-choix">
+        <legend class="libelle">Que faut-il restaurer ?</legend>
+        <label class="case"><input type="radio" name="portee" value="toutes" checked><span>Toutes les tables (retour complet à cette sauvegarde)</span></label>
+        <label class="case"><input type="radio" name="portee" value="une"><span>Une seule table</span></label>
+        <div class="champ"><select name="table" aria-label="Table à restaurer" disabled>${options}</select></div>
+      </fieldset>
+      <div class="encadre attention"><b>Rien n'est perdu.</b> Avant de restaurer, Prévo copie l'état actuel
+        de <b>toutes</b> les tables dans une « copie de sécurité » (dans le dossier des sauvegardes, nom terminé par
+        « _avant-restauration »). Si la restauration ne convient pas, restaurez cette copie pour revenir en arrière.
+        Les modifications faites depuis cette sauvegarde seront remplacées dans les tables restaurées.</div>
+    </div>`);
+    const choixTable = UI.$('select[name=table]', contenu);
+    contenu.addEventListener('change', (evenement) => {
+      if (evenement.target.name === 'portee') choixTable.disabled = evenement.target.value !== 'une';
+    });
+    const reponse = await UI.fenetre({
+      titre: 'Restaurer une sauvegarde',
+      contenu: contenu,
+      boutons: [
+        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
+        { libelle: 'Restaurer', valeur: 'restaurer', classe: 'btn-danger', defaut: true },
+      ],
+    });
+    if (reponse !== 'restaurer') return null;
+    const uneSeule = UI.$('input[name=portee]:checked', contenu).value === 'une';
+    return { tables: uneSeule ? [choixTable.value] : undefined };
+  }
+
+  async function restaurer(sauvegarde) {
+    const choix = await demanderRestauration(sauvegarde);
+    if (!choix) return;
+    const resultat = await App.adaptateur.restaurer(sauvegarde.nom, choix.tables);
+    await Donnees.chargerTout();
+    annoncerRechargement();
+    UI.toast('Restauration faite. Copie de sécurité : ' + resultat.copieSecurite + '.', 'succes');
+    await reafficherAvecMessage('succes', UI.html`<b>Restauration faite :</b> ${pluriel(resultat.restaurees.length, 'table restaurée', 'tables restaurées')}
+      (${resultat.restaurees.join(', ')}). L'état d'avant a été copié dans la sauvegarde
+      <b id="nom-copie-securite">${resultat.copieSecurite}</b> : restaurez-la si ce n'est pas ce que vous vouliez.`);
+  }
+
+  // ===========================================================================================
+  // 3. Écran Paramètres
+  // ===========================================================================================
+
+  function formulaireReglages() {
+    const formulaire = UI.element(UI.html`<form id="form-parametres" class="form-grille" novalidate></form>`);
+    REGLAGES.forEach((reglage) => {
+      const bloc = UI.champ({ nom: reglage.cle, type: reglage.type, libelle: reglage.libelle },
+        Donnees.parametre(reglage.cle, reglage.defaut), { aide: reglage.aide });
+      if (reglage.large) bloc.classList.add('large');
+      formulaire.appendChild(bloc);
+    });
+    formulaire.appendChild(UI.element(UI.html`<div class="actions"><span class="espace"></span>
+      <button type="submit" class="btn btn-primaire">${UI.icone('valider')}Enregistrer</button></div>`));
+    formulaire.addEventListener('submit', (evenement) => {
+      evenement.preventDefault();
+      enregistrerReglages(formulaire);
+    });
+    return formulaire;
+  }
+
+  // Contrôle des valeurs puis écriture dans parametres.csv (une ligne par clé, créée si elle manque).
+  async function enregistrerReglages(formulaire) {
+    const bouton = UI.$('button[type=submit]', formulaire);
+    const syntaxe = UI.verifierFormulaire(formulaire);
+    const valeurs = UI.lireFormulaire(formulaire);
+    let erreurs = syntaxe.length;
+    REGLAGES.forEach((reglage) => {
+      if (reglage.min === undefined || syntaxe.some((e) => e.nom === reglage.cle)) return;
+      const nombre = Donnees.nombre(valeurs[reglage.cle]);
+      if (nombre === null || nombre < reglage.min || nombre > reglage.max) {
+        UI.erreurChamp(formulaire, reglage.cle, 'Saisissez un nombre entier entre ' + reglage.min + ' et ' + reglage.max + '.');
+        erreurs += 1;
+      }
+    });
+    if (erreurs > 0) {
+      const premier = UI.$('[aria-invalid="true"]', formulaire);
+      if (premier) premier.focus();
+      UI.toast(pluriel(erreurs, 'champ') + ' à corriger.', 'erreur');
+      return;
+    }
+    await pendant(bouton, 'enregistrement des paramètres', async () => {
+      await Donnees.modifier('parametres', (lignes) => {
+        REGLAGES.forEach((reglage) => {
+          const valeur = reglage.type === 'entier' ? String(Donnees.nombre(valeurs[reglage.cle])) : valeurs[reglage.cle];
+          const ligne = lignes.find((l) => l.cle === reglage.cle);
+          if (ligne) ligne.valeur = valeur; else lignes.push({ cle: reglage.cle, valeur: valeur });
+        });
+      }, { action: 'paramètres généraux' });
+      App.marquerSaisie(false);
+      UI.toast('Paramètres enregistrés.', 'succes');
+    });
+  }
+
+  function carteSauvegardes(sauvegardes) {
+    return UI.html`<article class="carte" id="carte-sauvegardes">
+      <div class="entete-carte"><h2>Sauvegardes</h2>
+        ${sauvegardes.indisponible ? '' : UI.html`<button type="button" class="btn btn-primaire" id="btn-sauvegarder">${UI.icone('sauvegarde')}Sauvegarder maintenant</button>`}
+      </div>
+      <p class="note sauvegardes-explication">Prévo copie tous les fichiers une fois par jour, avant la première modification de la journée.
+        Vous pouvez aussi sauvegarder à la demande, par exemple avant un gros changement.</p>
+      ${sauvegardes.indisponible
+        ? bandeauHtml('info', sauvegardes.indisponible)
+        : UI.html`<div id="zone-sauvegardes"></div>`}
+    </article>`;
+  }
+
+  async function afficherParametres(conteneur) {
+    const sauvegardes = await lireSauvegardes();
+    // Si l'utilisateur est parti ailleurs pendant l'attente, on n'écrase pas son nouvel écran.
+    if (!/^#\/parametres/.test(location.hash)) return;
+
+    const problemes = Donnees.problemes();
+    const nombreErreurs = problemes.filter((p) => p.gravite === 'erreur').length;
+    const nombreAttention = problemes.filter((p) => p.gravite === 'attention').length;
+    const resumeControle = nombreErreurs + nombreAttention === 0
+      ? UI.html`<span class="badge ok">Aucun problème</span>`
+      : UI.html`${nombreErreurs ? UI.html`<span class="badge ko">${pluriel(nombreErreurs, 'erreur')}</span> ` : ''}${nombreAttention ? UI.html`<span class="badge attention">${pluriel(nombreAttention, 'point', 'points')} à surveiller</span>` : ''}`;
+
+    UI.remplir(conteneur, UI.html`
+      <div class="entete-page"><div>
+        <h1>Paramètres</h1>
+        <p>Réglages de l'entreprise, sauvegardes et contrôle des données.</p>
+      </div></div>
+      ${zoneMessage()}
+      <div class="grille parametres-grille">
+        <div class="c7">
+          <article class="carte">
+            <div class="entete-carte"><h2>Entreprise et délais</h2></div>
+            <div id="zone-formulaire"></div>
+          </article>
+          ${carteSauvegardes(sauvegardes)}
+        </div>
+        <div class="c5">
+          <article class="carte">
+            <div class="entete-carte"><h2>Ce poste</h2></div>
+            <dl class="valeurs">
+              <dt>Nom du poste</dt><dd id="poste-nom">${App.poste}</dd>
+              <dt>Profil</dt><dd id="poste-profil">${App.libelleProfil()}</dd>
+              <dt>Stockage</dt><dd>${App.adaptateur.libelle || App.mode}</dd>
+            </dl>
+            <p class="note">Le nom du poste est inscrit au journal avec chaque modification.</p>
+            <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-changer-profil">${UI.icone('utilisateur')}Changer de profil ou de nom de poste…</button></div>
+          </article>
+          <article class="carte">
+            <div class="entete-carte"><h2>Contrôle de la base</h2>${resumeControle}</div>
+            <p>Prévo vérifie à chaque lecture que les références (équipement, technicien…), les identifiants et les valeurs des fichiers sont cohérents.</p>
+            <div class="actions"><a class="btn btn-secondaire" id="lien-controle" href="#/controle">${UI.icone('controle')}Contrôle de la base</a></div>
+          </article>
+          <article class="carte">
+            <div class="entete-carte"><h2>Exporter les données</h2></div>
+            <p>Un fichier ZIP avec les 22 fichiers CSV (lisibles dans Excel) et les documents joints.</p>
+            <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-export-zip">${UI.icone('export')}Exporter en ZIP</button></div>
+          </article>
+        </div>
+      </div>`);
+
+    UI.remplir(UI.$('#zone-formulaire', conteneur), formulaireReglages());
+    if (!sauvegardes.indisponible) {
+      UI.$('#zone-sauvegardes', conteneur).appendChild(tableauSauvegardes(sauvegardes.liste));
+      mettreSurLeBouton(conteneur, '#btn-sauvegarder', (bouton) => pendant(bouton, 'sauvegarde', sauvegarderMaintenant));
+    }
+    mettreSurLeBouton(conteneur, '#btn-changer-profil', () => { App.changerProfil(); });
+    mettreSurLeBouton(conteneur, '#btn-export-zip', (bouton) => pendant(bouton, 'export ZIP', () => App.exporterZip()));
+  }
+
+  // ===========================================================================================
+  // 4. Écran Contrôle de la base
+  // ===========================================================================================
+
+  // Numéro de la ligne dans le fichier CSV (l'en-tête est la ligne 1), ou null s'il est inconnu.
+  // Les problèmes de lecture le portent déjà ; les contrôles de cohérence le retrouvent par
+  // l'identifiant (ou par le « n° » écrit dans leur message) en comptant les retours à la ligne
+  // contenus dans les cellules des lignes précédentes.
+  function numeroLigneFichier(probleme) {
+    if (probleme.ligne !== null && probleme.ligne !== undefined) return probleme.ligne;
+    const description = Schema.table(probleme.table);
+    if (!description) return null;
+    const lignes = Donnees.lignes(probleme.table);
+    let position = -1;
+    if (probleme.type === 'identifiant' || probleme.type === 'doublon') {
+      const lu = /n° (\d+)/.exec(probleme.message || '');
+      if (lu) position = Number(lu[1]) - 1;
+    } else if (probleme.id) {
+      position = lignes.findIndex((ligne) => ligne[description.cle] === probleme.id);
+    }
+    if (position < 0 || position >= lignes.length) return null;
+    let numero = 2 + position;
+    for (let i = 0; i < position; i += 1) {
+      Object.keys(lignes[i]).forEach((nomChamp) => {
+        const sauts = String(lignes[i][nomChamp]).match(/\n/g);
+        if (sauts) numero += sauts.length;
+      });
+    }
+    return numero;
+  }
+
+  // Liens vers les fiches concernées : la ligne en cause et, pour une incohérence, la fiche liée.
+  function liensVoir(probleme) {
+    const liens = [];
+    if (probleme.id && LIENS_FICHES[probleme.table] && Donnees.trouver(probleme.table, probleme.id)) {
+      liens.push({ href: LIENS_FICHES[probleme.table].route + encodeURIComponent(probleme.id), texte: LIENS_FICHES[probleme.table].texte });
+    }
+    if (probleme.type === 'incoherence' && probleme.valeur) {
+      const tableLiee = probleme.table === 'demandes' ? 'ordres_travail' : 'demandes';
+      if (Donnees.trouver(tableLiee, probleme.valeur)) {
+        liens.push({ href: LIENS_FICHES[tableLiee].route + encodeURIComponent(probleme.valeur), texte: LIENS_FICHES[tableLiee].texte });
+      }
+    }
+    return liens;
+  }
+
+  // Problèmes avec leur numéro de ligne, rangés par table puis par ligne.
+  function problemesAvecLigne(problemes) {
+    const lignes = problemes.map((probleme) => ({ probleme: probleme, numero: numeroLigneFichier(probleme) }));
+    const rangTable = (nomTable) => Schema.nomsTables().indexOf(nomTable);
+    return lignes.sort((a, b) => rangTable(a.probleme.table) - rangTable(b.probleme.table)
+      || (a.numero === null ? 1e9 : a.numero) - (b.numero === null ? 1e9 : b.numero));
+  }
+
+  // Téléphone : une carte par problème (un tableau de 8 colonnes ne tient pas sur 375 px).
+  function listeProblemes(problemes) {
+    const cartes = problemesAvecLigne(problemes).map(({ probleme, numero }) => {
+      const description = Schema.table(probleme.table);
+      return UI.html`<li><div class="carte-ligne">
+        <div class="carte-tete"><b>${probleme.id || 'Sans identifiant'}</b><span class="badge neutre">${LIBELLES_TYPE_PROBLEME[probleme.type] || probleme.type}</span></div>
+        <div class="carte-titre">${probleme.message}</div>
+        <div class="carte-meta"><span>${description ? description.fichier : probleme.table}</span>${numero === null ? '' : UI.html`<span>ligne ${numero}</span>`}${probleme.champ ? UI.html`<span>champ ${probleme.champ}</span>` : ''}${probleme.valeur ? UI.html`<span>valeur <code>${probleme.valeur}</code></span>` : ''}</div>
+        <div class="carte-meta">${liensVoir(probleme).map((lien) => UI.html`<a class="lien-fiche" href="${lien.href}">${lien.texte}</a>`)}</div>
+      </div></li>`;
+    });
+    return UI.element(UI.html`<ul class="liste-cartes liste-problemes">${cartes}</ul>`);
+  }
+
+  function tableauProblemes(problemes) {
+    if (UI.estTelephone()) return listeProblemes(problemes);
+    const lignes = problemesAvecLigne(problemes);
+    return UI.tableau({
+      libelle: 'Problèmes détectés',
+      colonnes: [
+        { cle: 'type', libelle: 'Type', valeurTri: (l) => l.probleme.type,
+          rendu: (l) => UI.html`<span class="badge neutre">${LIBELLES_TYPE_PROBLEME[l.probleme.type] || l.probleme.type}</span>` },
+        { cle: 'table', libelle: 'Table', valeurTri: (l) => l.probleme.table,
+          rendu: (l) => { const d = Schema.table(l.probleme.table); return d ? d.fichier : l.probleme.table; } },
+        { cle: 'ligne', libelle: 'Ligne', type: 'nombre', valeurTri: (l) => l.numero, rendu: (l) => (l.numero === null ? '—' : String(l.numero)) },
+        { cle: 'id', libelle: 'Identifiant', valeurTri: (l) => l.probleme.id, rendu: (l) => l.probleme.id || '—', classe: 'sans-coupure' },
+        { cle: 'champ', libelle: 'Champ', valeurTri: (l) => l.probleme.champ, rendu: (l) => l.probleme.champ || '—' },
+        { cle: 'valeur', libelle: 'Valeur', valeurTri: (l) => l.probleme.valeur,
+          rendu: (l) => (l.probleme.valeur ? UI.html`<code>${l.probleme.valeur}</code>` : '—') },
+        { cle: 'message', libelle: 'Message', valeurTri: (l) => l.probleme.message, classe: 'message-probleme',
+          rendu: (l) => l.probleme.message },
+        { cle: 'voir', libelle: 'Voir', triable: false, classe: 'sans-coupure', rendu: (l) => {
+          const liens = liensVoir(l.probleme);
+          return liens.length ? UI.html`${liens.map((lien) => UI.html`<a class="lien-fiche" href="${lien.href}">${lien.texte}</a>`)}` : '—';
+        } },
+      ],
+      lignes: lignes,
+    });
+  }
+
+  // Tables ayant des lignes sans identifiant ET une façon de calculer un identifiant.
+  function identifiantsAttribuables() {
+    const parTable = new Map();
+    Donnees.problemes().filter((p) => p.type === 'identifiant').forEach((p) => {
+      const description = Schema.table(p.table);
+      if (description && description.identifiant) parTable.set(p.table, (parTable.get(p.table) || 0) + 1);
+    });
+    return parTable;
+  }
+
+  // Année d'un identifiant annuel (DI-2026-0001) : celle de la date de la ligne, sinon d'aujourd'hui.
+  function dateDeLigne(ligne) {
+    const date = ligne.date_heure || ligne.date_creation || '';
+    return date ? date.slice(0, 10) : undefined;
+  }
+
+  async function attribuerIdentifiants() {
+    const parTable = identifiantsAttribuables();
+    const total = Array.from(parTable.values()).reduce((somme, n) => somme + n, 0);
+    const detail = Array.from(parTable.entries()).map(([nomTable, n]) => Schema.table(nomTable).fichier + ' (' + n + ')').join(', ');
+    const accord = await UI.confirmer('Prévo va donner un identifiant à ' + pluriel(total, 'ligne') + ' qui n\'en ont pas : '
+      + detail + '. Les lignes sont conservées, chaque attribution est écrite au journal. '
+      + 'Les autres problèmes (références cassées, doublons…) ne sont pas modifiés.',
+    { titre: 'Attribuer les identifiants manquants', oui: 'Attribuer', non: 'Annuler' });
+    if (!accord) return;
+    let attribues = 0;
+    for (const nomTable of parTable.keys()) {
+      const cle = Schema.table(nomTable).cle;
+      attribues += await Donnees.modifier(nomTable, (lignes, outils) => {
+        let compte = 0;
+        lignes.forEach((ligne) => {
+          if (ligne[cle] === '') {
+            ligne[cle] = outils.nouvelId(lignes, dateDeLigne(ligne));
+            compte += 1;
+          }
+        });
+        return compte;
+      }, { action: 'attribution des identifiants manquants' });
+    }
+    UI.toast(pluriel(attribues, 'identifiant attribué', 'identifiants attribués') + '.', 'succes');
+    await reafficherAvecMessage('succes', UI.html`<b>${pluriel(attribues, 'identifiant attribué', 'identifiants attribués')}.</b>
+      Ouvrez les lignes concernées pour les compléter si besoin.`);
+  }
+
+  async function relireFichiers() {
+    await Donnees.chargerTout();
+    annoncerRechargement();
+    UI.toast('Fichiers relus.', 'succes');
+    await reafficherAvecMessage('info', 'Les fichiers ont été relus depuis le stockage : le contrôle ci-dessous est à jour.');
+  }
+
+  function carteGravite(gravite, problemes) {
+    const parType = new Map();
+    problemes.forEach((p) => parType.set(p.type, (parType.get(p.type) || 0) + 1));
+    return UI.html`<article class="carte carte-gravite" data-gravite="${gravite.cle}">
+      <div class="entete-carte"><h2>${gravite.titre}</h2><span class="badge ${gravite.ton}">${problemes.length}</span></div>
+      <p class="note">${gravite.explication}</p>
+      <p class="controle-types">${Array.from(parType.entries()).map(([type, n]) =>
+        UI.html`<span class="badge neutre">${LIBELLES_TYPE_PROBLEME[type] || type} : ${n}</span>`)}</p>
+      <div data-tableau="${gravite.cle}"></div>
+    </article>`;
+  }
+
+  function afficherControle(conteneur) {
+    const problemes = Donnees.problemes();
+    const aAttribuer = identifiantsAttribuables();
+    const totalAAttribuer = Array.from(aAttribuer.values()).reduce((somme, n) => somme + n, 0);
+    const groupes = GRAVITES.map((gravite) => ({ gravite: gravite, liste: problemes.filter((p) => p.gravite === gravite.cle) }));
+
+    UI.remplir(conteneur, UI.html`
+      <div class="entete-page"><div>
+        <div class="fil"><a href="#/parametres">Paramètres</a> › <span>Contrôle de la base</span></div>
+        <h1>Contrôle de la base</h1>
+        <p>Prévo vérifie les 22 fichiers à chaque lecture : jamais une donnée cassée n'est ignorée en silence.</p>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn btn-secondaire" id="btn-relire">${UI.icone('actualiser')}Relire les fichiers</button>
+        ${totalAAttribuer ? UI.html`<button type="button" class="btn btn-primaire" id="btn-attribuer">${UI.icone('valider')}Attribuer les identifiants manquants (${totalAAttribuer})</button>` : ''}
+      </div></div>
+      ${zoneMessage()}
+      <div class="instruments controle-compteurs">
+        ${groupes.map((g) => UI.html`<div class="${g.gravite.classe}" data-compteur="${g.gravite.cle}">
+          <div class="lib">${g.gravite.titre}</div><div class="chiffre">${g.liste.length}</div></div>`)}
+      </div>
+      ${problemes.length === 0
+        ? bandeauHtml('succes', UI.html`<b>Aucun problème détecté.</b> Les références, les identifiants et les valeurs des 22 fichiers sont cohérents.`)
+        : ''}
+      <div id="zone-groupes">${groupes.filter((g) => g.liste.length > 0).map((g) => carteGravite(g.gravite, g.liste))}</div>`);
+
+    groupes.filter((g) => g.liste.length > 0).forEach((g) => {
+      UI.$('[data-tableau="' + g.gravite.cle + '"]', conteneur).appendChild(tableauProblemes(g.liste));
+    });
+    mettreSurLeBouton(conteneur, '#btn-relire', (bouton) => pendant(bouton, 'relecture des fichiers', relireFichiers));
+    mettreSurLeBouton(conteneur, '#btn-attribuer', (bouton) => pendant(bouton, 'attribution des identifiants', attribuerIdentifiants));
+  }
+
+  // ===========================================================================================
+  // 5. Enregistrement des écrans
+  // ===========================================================================================
 
   // App est chargé après les modules : les écrans sont enregistrés une fois la page lue.
   document.addEventListener('DOMContentLoaded', () => {
@@ -15,14 +538,16 @@ const Parametres = (() => {
       id: 'parametres', route: /^#\/parametres$/, titre: 'Paramètres',
       menu: { libelle: 'Paramètres', icone: 'parametres', ordre: 90, groupe: 'Administration' },
       profils: ['responsable'], tables: ['parametres'],
-      afficher: (conteneur) => attente(conteneur, 'Paramètres'),
+      afficher: afficherParametres,
     });
     App.ecran({
       id: 'controle', route: /^#\/controle$/, titre: 'Contrôle de la base', parent: 'parametres',
-      profils: ['responsable'], tables: [],
-      afficher: (conteneur) => attente(conteneur, 'Contrôle de la base'),
+      profils: ['responsable'],
+      // Le contrôle peut changer avec n'importe quelle table (sauf le journal).
+      tables: Schema.nomsTables().filter((nomTable) => nomTable !== 'journal'),
+      afficher: afficherControle,
     });
   });
 
-  return {};
+  return { decrireSauvegarde, numeroLigneFichier };
 })();

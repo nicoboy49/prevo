@@ -1,2 +1,41 @@
 /* Prévo — mise en page propre au module Accueil (js/modules/accueil.js).
-   Fichier d'attente (tâche T11), rempli par la tâche T15. Uniquement des variables de la charte. */
+   Les composants communs (cartes, indicateurs, listes de cartes, QR) sont dans css/style.css ;
+   ici seulement ce qui est propre à l'accueil. Uniquement des variables de la charte. */
+
+/* Trois indicateurs (et non quatre) : ils se partagent toute la largeur, y compris sur téléphone. */
+.accueil-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.accueil-instruments .lib { overflow-wrap: anywhere; }
+
+/* Gros bouton « Signaler un problème » (technicien, demandeur) */
+.accueil-signaler { margin-bottom: 20px; max-width: 560px; }
+.accueil-signaler .btn-gros { text-decoration: none; }
+
+/* Listes des cartes : le lien « Voir tout » est discret, sous la liste */
+.accueil-voir-tout { margin: 14px 0 0; }
+.accueil-voir-tout a { display: inline-flex; align-items: center; min-height: var(--tactile); }
+
+/* Motif d'une décision (demande refusée ou différée), dans la carte de la demande */
+.accueil-motif {
+  margin: .6rem 0 0; padding: .55rem .8rem; border-radius: 10px; font-size: .9375rem;
+  background: var(--teinte-rouge-faible); border: 1px solid var(--bord-rouge); color: var(--texte-important);
+}
+.accueil-motif b { color: var(--fort); }
+
+/* Retard d'un OT : texte, jamais la couleur seule */
+.accueil-retard { color: var(--ambre); font-weight: 700; }
+
+/* Carte « Connecter un téléphone » : le QR à gauche, les explications à droite */
+.accueil-connexion { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.accueil-connexion .qr { flex: none; }
+.accueil-connexion-texte { flex: 1 1 280px; min-width: 0; }
+.accueil-adresse { font-size: 1.125rem; color: var(--fort); overflow-wrap: anywhere; user-select: all; }
+.accueil-rappels { margin: .4rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .35rem; color: var(--texte-2); }
+.accueil-rappels b { color: var(--texte); }
+
+@media (max-width: 640px) {
+  .accueil-instruments { gap: 10px; }
+  .accueil-instruments .lib { font-size: .8125rem; }
+  .accueil-instruments .comp { font-size: .75rem; }
+  .accueil-connexion { justify-content: center; }
+  .accueil-signaler { max-width: none; }
+}
