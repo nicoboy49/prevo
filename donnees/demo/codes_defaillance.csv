@@ -1,0 +1,37 @@
+﻿id;famille;code;libelle
+CD-0001;symptôme;S01;Fuite
+CD-0002;symptôme;S02;Bruit anormal
+CD-0003;symptôme;S03;Vibration
+CD-0004;symptôme;S04;Échauffement
+CD-0005;symptôme;S05;Arrêt intempestif
+CD-0006;symptôme;S06;Ne démarre pas
+CD-0007;symptôme;S07;Défaut qualité
+CD-0008;symptôme;S08;Pression ou débit bas
+CD-0009;symptôme;S09;Déclenchement disjoncteur
+CD-0010;symptôme;S10;Odeur de brûlé
+CD-0011;symptôme;S99;Autre symptôme
+CD-0012;cause;C01;Garniture usée
+CD-0013;cause;C02;Roulement hors service
+CD-0014;cause;C03;Courroie détendue
+CD-0015;cause;C04;Capteur encrassé
+CD-0016;cause;C05;Filtre colmaté
+CD-0017;cause;C06;Desserrage
+CD-0018;cause;C07;Défaut de lubrification
+CD-0019;cause;C08;Surcharge moteur
+CD-0020;cause;C09;Contacteur hors service
+CD-0021;cause;C10;Flexible percé
+CD-0022;cause;C11;Dérive de réglage
+CD-0023;cause;C12;Erreur de manœuvre
+CD-0024;cause;C13;Corrosion
+CD-0025;cause;C14;Pièce cassée
+CD-0026;cause;C99;Autre cause
+CD-0027;remède;R01;Remplacement de pièce
+CD-0028;remède;R02;Réglage
+CD-0029;remède;R03;Nettoyage
+CD-0030;remède;R04;Resserrage
+CD-0031;remède;R05;Graissage
+CD-0032;remède;R06;Réparation
+CD-0033;remède;R07;Remplacement de composant électrique
+CD-0034;remède;R08;Réarmement
+CD-0035;remède;R09;Modification
+CD-0036;remède;R10;Sous-traitance

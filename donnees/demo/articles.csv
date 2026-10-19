@@ -1,0 +1,53 @@
+﻿id;reference;designation;fabricant;ref_fabricant;emplacement;unite;stock;stock_securite;point_commande;qte_commande;delai_jours;prix_unitaire;fournisseur_id;critique;actif
+ART-0001;'ROU-001;Roulement à billes 6204-2RS;Rouloran;'6204-2RS;A1-01;u;9;4;8;20;3;4.8;FOU-0001;0;1
+ART-0002;'ROU-002;Roulement à billes 6205-2RS;Rouloran;'6205-2RS;A1-02;u;9;4;8;20;3;5.6;FOU-0001;0;1
+ART-0003;'ROU-003;Roulement à billes 6206-2RS;Rouloran;'6206-2RS;A1-03;u;9;4;8;16;3;6.9;FOU-0001;0;1
+ART-0004;'ROU-004;Roulement à billes 6305-2RS;Rouloran;'6305-2RS;A1-04;u;19;4;8;16;3;8.5;FOU-0001;0;1
+ART-0005;'ROU-005;Roulement à billes 6308-2Z;Rouloran;'6308-2Z;A1-05;u;5;2;4;8;4;12.4;FOU-0001;0;1
+ART-0006;'ROU-006;Roulement à rotule sur rouleaux 22210;Rouloran;'22210-E;A1-06;u;3;1;2;4;6;38;FOU-0001;0;1
+ART-0007;'ROU-007;Palier à semelle UCP205;Rouloran;'UCP-205;A1-07;u;5;2;4;6;5;24;FOU-0001;0;1
+ART-0008;'TRA-001;Courroie trapézoïdale SPZ 1000;Cordalpe;'SPZ-1000;A1-08;u;5;2;4;8;3;9.9;FOU-0001;0;1
+ART-0009;'TRA-002;Courroie trapézoïdale SPA 1250;Cordalpe;'SPA-1250;A2-01;u;4;2;3;6;3;14.5;FOU-0001;0;1
+ART-0010;'TRA-003;Courroie crantée HTD 8M-1200;Cordalpe;'8M-1200;A2-02;u;3;1;2;4;5;26;FOU-0001;0;1
+ART-0011;'TRA-004;Galet de convoyeur Ø50;Convexa;'GC-50;A2-03;u;11;6;10;20;5;11;FOU-0001;0;1
+ART-0012;'TRA-005;Chaîne à rouleaux 08B-1 (au mètre);Cordalpe;'08B-1;A2-04;m;6;3;5;10;5;18;FOU-0001;0;1
+ART-0013;'TRA-006;Bande transporteuse PVC (au mètre);Convexa;'BT-600-PVC;A2-05;m;5;2;4;10;10;42;FOU-0001;0;1
+ART-0014;'ETA-001;Accouplement élastique Ø28;Garnitec;'AE-28;E1-01;u;3;1;2;3;6;31;FOU-0005;0;1
+ART-0015;'ETA-002;Joint à lèvres 35x52x7;Garnitec;'JL-35-52-7;E1-02;u;9;4;8;20;3;3.2;FOU-0005;0;1
+ART-0016;'ETA-003;Kit garniture mécanique PO-02;Garnitec;'0044172;E1-03;kit;3;1;1;2;10;86;FOU-0005;1;1
+ART-0017;'ETA-004;Kit garniture mécanique PO-01;Garnitec;'0044168;E1-04;kit;3;1;1;2;10;74;FOU-0005;1;1
+ART-0018;'ETA-005;Kit garniture mécanique universelle Ø25;Garnitec;'GU-25-C;E1-05;kit;4;1;2;2;8;59;FOU-0005;0;1
+ART-0019;'ETA-006;Assortiment de joints toriques (boîte);Garnitec;'JT-382;E1-06;boîte;3;1;2;3;4;29;FOU-0005;0;1
+ART-0020;'FIL-001;Filtre à air compresseur CP-01;Filtravel;'FA-3011;D1-01;u;6;1;2;4;5;38;FOU-0004;0;1
+ART-0021;'FIL-002;Cartouche filtre à huile CP-01;Filtravel;'FH-2208;D1-02;u;2;2;3;6;5;27.5;FOU-0004;1;1
+ART-0022;'FIL-003;Séparateur air/huile CP-01;Filtravel;'SO-5520;D1-03;u;2;1;1;2;8;142;FOU-0004;1;1
+ART-0023;'LUB-001;Huile compresseur à vis (bidon 20 L);Lubrisol;'HC-20;D1-04;bidon;3;1;2;3;4;118;FOU-0004;0;1
+ART-0024;'FIL-004;Filtre hydraulique presse PR-01;Filtravel;'FHY-410;D1-05;u;3;1;2;3;5;46;FOU-0004;0;1
+ART-0025;'LUB-002;Huile hydraulique HLP 46 (bidon 20 L);Lubrisol;'HL-46-20;D1-06;bidon;4;1;2;3;4;72;FOU-0004;0;1
+ART-0026;'LUB-003;Graisse EP2 (cartouche 400 g);Lubrisol;'GR-EP2;D1-07;cartouche;49;10;20;48;3;6.5;FOU-0004;0;1
+ART-0027;'LUB-004;Liquide de coupe soluble (bidon 20 L);Lubrisol;'LC-20;D1-08;bidon;4;1;2;3;5;94;FOU-0004;0;1
+ART-0028;'FIL-005;Filtre à air G4 592x592;Filtravel;'G4-592;D2-01;u;9;4;8;16;5;22;FOU-0004;0;1
+ART-0029;'FIL-006;Cartouche filtrante circuit eau glacée;Filtravel;'CE-25;D2-02;u;10;2;4;8;5;16;FOU-0004;0;1
+ART-0030;'FIL-007;Cartouche déshydratante du sécheur d'air;Filtravel;'CD-80;D2-03;u;3;1;2;4;6;49;FOU-0004;0;1
+ART-0031;'LUB-005;Nettoyant contacts et capteurs (aérosol);Lubrisol;'NC-400;D2-04;u;22;4;8;24;3;7.2;FOU-0004;0;1
+ART-0032;'ELE-001;Contacteur tripolaire 25 A bobine 24 V;Voltaris;'VC-25-24;C1-01;u;1;2;3;6;4;29;FOU-0003;1;1
+ART-0033;'ELE-002;Contacteur tripolaire 40 A bobine 230 V;Voltaris;'VC-40-230;C1-02;u;5;1;2;3;4;41;FOU-0003;0;1
+ART-0034;'ELE-003;Relais thermique 9-13 A;Voltaris;'RT-913;C1-03;u;3;1;2;3;4;38;FOU-0003;0;1
+ART-0035;'ELE-004;Disjoncteur moteur 10-16 A;Voltaris;'DM-1016;C1-04;u;3;1;2;3;4;52;FOU-0003;0;1
+ART-0036;'ELE-005;Fusibles gG 25 A (boîte de 10);Voltaris;'FU-25-10;C1-05;boîte;3;1;2;4;3;17;FOU-0003;0;1
+ART-0037;'ELE-006;Capteur inductif M18 PNP;Detectis;'DI-M18-PNP;C1-06;u;3;3;4;8;4;17.5;FOU-0003;1;1
+ART-0038;'ELE-007;Cellule photoélectrique réflex;Detectis;'PE-R30;C1-07;u;3;1;2;4;5;36;FOU-0003;0;1
+ART-0039;'ELE-008;Bouton d'arrêt d'urgence à clé;Voltaris;'AU-22-K;C1-08;u;3;1;2;3;4;24;FOU-0003;1;1
+ART-0040;'ELE-009;Relais de sécurité 24 V;Voltaris;'RS-24;C2-01;u;2;1;1;2;8;128;FOU-0003;1;1
+ART-0041;'ELE-010;Alimentation 24 V 10 A;Voltaris;'AL-2410;C2-02;u;2;1;1;2;6;92;FOU-0003;0;1
+ART-0042;'ELE-011;Variateur de fréquence 2,2 kW;Voltaris;'VF-22;C2-03;u;2;1;1;2;12;310;FOU-0003;1;1
+ART-0043;'ELE-012;Résistance de soudure de fardeleuse;Emballex;'RS-90;C2-04;u;3;1;2;3;8;46;FOU-0003;0;1
+ART-0044;'HYD-001;Flexible hydraulique DN10 serti (1 m);Hydrion;'FX-DN10;B1-01;u;8;2;3;6;5;34;FOU-0002;0;1
+ART-0045;'PNE-001;Flexible air comprimé DN13 (au mètre);Hydrion;'FA-DN13;B1-02;m;36;5;10;30;4;5.6;FOU-0002;0;1
+ART-0046;'PNE-002;Raccord rapide pneumatique G1/4;Hydrion;'RR-14;B1-03;u;38;6;10;30;3;6.4;FOU-0002;0;1
+ART-0047;'PNE-003;Électrovanne 5/2 24 V G1/4;Hydrion;'EV-52-24;B1-04;u;3;1;2;3;6;74;FOU-0002;0;1
+ART-0048;'PNE-004;Vérin pneumatique ISO Ø40 course 100;Hydrion;'VP-40-100;B1-05;u;2;1;1;2;8;118;FOU-0002;0;1
+ART-0049;'OUT-001;Plaquettes de tournage CNMG 120408 (boîte de 10);Outilix;'CN-120408;A2-06;boîte;5;2;4;8;4;62;FOU-0001;0;1
+ART-0050;'OUT-002;Foret carbure Ø8;Outilix;'FC-08;A2-07;u;6;3;5;10;4;21;FOU-0001;0;1
+ART-0051;'OUT-003;Pince de serrage ER32 Ø10;Outilix;'ER32-10;A2-08;u;3;1;2;3;5;38;FOU-0001;0;1
+ART-0052;'DIV-001;Roue polyuréthane de chariot Ø200;Manuvia;'RP-200;A3-01;u;4;2;3;4;10;54;FOU-0001;0;1
