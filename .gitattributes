@@ -8,3 +8,5 @@
 *.woff2 binary
 *.png   binary
 *.jpg   binary
+# Bibliothèques tierces : copiées à l'octet près depuis les paquets vérifiés (empreintes dans tests/test_depot.py)
+js/lib/** -text
