@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="fr" data-etat="chargement">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0B1226">
+  <title>Prévo — GMAO</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <script>
+    'use strict';
+    // Préchargement de la police Sora, seulement en http(s) : en file://, Chrome refuse un
+    // préchargement de police (règle CORS) et l'inscrit en erreur dans la console.
+    (function () {
+      if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+      const prechargement = document.createElement('link');
+      prechargement.rel = 'preload';
+      prechargement.href = 'css/polices/sora-latin-wght-normal.woff2';
+      prechargement.as = 'font';
+      prechargement.type = 'font/woff2';
+      prechargement.crossOrigin = 'anonymous';
+      document.head.appendChild(prechargement);
+    })();
+  </script>
+  <!-- Charte commune, puis la mise en page propre à chaque module (ARCHITECTURE.md §9) -->
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/modules/app.css">
+  <link rel="stylesheet" href="css/modules/accueil.css">
+  <link rel="stylesheet" href="css/modules/parc.css">
+  <link rel="stylesheet" href="css/modules/demandes.css">
+  <link rel="stylesheet" href="css/modules/ordres.css">
+  <link rel="stylesheet" href="css/modules/parametres.css">
+</head>
+<body>
+
+<!-- Page unique de Prévo. Quatre écrans « plein écran » (chargement, démarrage, base vide, profil)
+     puis la coque de l'application (#app). js/app.js montre l'un d'eux à la fois.
+     Les <span data-icone="…"> et <span data-ui="logo"> sont remplacés par les dessins de UI. -->
+
+<!-- ===================================================== chargement (visible dès l'ouverture) -->
+<div id="ecran-chargement" class="ecran-plein">
+  <div class="boite-demarrage centre">
+    <span data-ui="logo" data-classe="grand"></span>
+    <div class="chargement" role="status">Chargement de Prévo…</div>
+  </div>
+</div>
+
+<!-- ===================================================== démarrage (pas de serveur Prévo) -->
+<div id="ecran-demarrage" class="ecran-plein" hidden>
+  <div class="boite-demarrage">
+    <div class="marque">
+      <span data-ui="logo" data-classe="grand"></span>
+      <div>
+        <h1>Prévo</h1>
+        <p>GMAO libre pour l'atelier : demandes, ordres de travail, parc.</p>
+      </div>
+    </div>
+
+    <div id="alerte-navigateur" hidden></div>
+
+    <h2 class="sous-titre">Où sont vos données ?</h2>
+    <div class="pile-gros">
+      <button type="button" class="btn btn-primaire btn-gros" id="btn-dossier">
+        <span data-icone="document"></span>
+        <span>Choisir le dossier de données<small>Les fichiers CSV restent sur ce PC (Chrome ou Edge)</small></span>
+      </button>
+      <button type="button" class="btn btn-secondaire btn-gros" id="btn-reprendre" hidden>
+        <span data-icone="actualiser"></span>
+        <span>Reprendre le dossier précédent<small id="nom-dossier-precedent"></small></span>
+      </button>
+      <button type="button" class="btn btn-secondaire btn-gros" id="btn-demo">
+        <span data-icone="engrenage"></span>
+        <span>Essayer avec les données de démo<small>Atelier fictif, rien n'est enregistré</small></span>
+      </button>
+    </div>
+
+    <label class="depot" id="zone-depot">
+      <span data-icone="export"></span>
+      <b>Déposer des fichiers CSV ici</b>
+      <span class="note">ou cliquer pour les choisir : démo avec vos propres fichiers, rien n'est enregistré</span>
+      <input type="file" id="fichiers-csv" class="visuellement-cache" accept=".csv,text/csv" multiple>
+    </label>
+
+    <p class="note">Plusieurs postes et des téléphones ? Lancez <b>Lancer_GMAO.bat</b> (Windows) ou
+      <b>lancer.sh</b> (Mac, Linux) : le mode serveur est reconnu tout seul.</p>
+    <p class="demarrage-pied">Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS</p>
+  </div>
+</div>
+
+<!-- ===================================================== base vide (serveur ou dossier sans CSV) -->
+<div id="ecran-base-vide" class="ecran-plein" hidden>
+  <div class="boite-demarrage">
+    <div class="marque">
+      <span data-ui="logo" data-classe="grand"></span>
+      <div>
+        <h1>Aucune donnée pour l'instant</h1>
+        <p id="texte-base-vide">Aucun des 22 fichiers de Prévo n'a été trouvé.</p>
+      </div>
+    </div>
+    <div class="pile-gros">
+      <button type="button" class="btn btn-primaire btn-gros" id="btn-base-demo">
+        <span data-icone="engrenage"></span>
+        <span>Partir des données de démo<small>Un atelier fictif complet, que vous pourrez modifier ou remplacer</small></span>
+      </button>
+      <button type="button" class="btn btn-secondaire btn-gros" id="btn-base-vide">
+        <span data-icone="document"></span>
+        <span>Créer une base vide<small>22 fichiers CSV avec leurs seuls en-têtes de colonnes</small></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================== profil (choisi une fois par poste) -->
+<div id="ecran-profil" class="ecran-plein" hidden>
+  <div class="boite-demarrage">
+    <div class="marque">
+      <span data-ui="logo" data-classe="grand"></span>
+      <div>
+        <h1>Qui utilise ce poste ?</h1>
+        <p>Le profil adapte les écrans ; ce n'est pas une sécurité.</p>
+      </div>
+    </div>
+
+    <div class="champ champ-poste">
+      <label class="libelle" for="profil-poste">Nom de ce poste</label>
+      <input type="text" id="profil-poste" autocomplete="off" spellcheck="false" maxlength="60">
+      <p class="aide">Inscrit dans le journal avec chaque modification.</p>
+    </div>
+
+    <div class="pile-gros" id="profil-choix">
+      <button type="button" class="btn btn-secondaire btn-gros" id="profil-demandeur">
+        <span data-icone="demandes"></span>
+        <span>Demandeur<small>Signaler un problème, suivre mes demandes</small></span>
+      </button>
+      <button type="button" class="btn btn-secondaire btn-gros" id="profil-technicien">
+        <span data-icone="ordres"></span>
+        <span>Technicien<small>Mes ordres de travail, comptes rendus</small></span>
+      </button>
+      <button type="button" class="btn btn-secondaire btn-gros" id="profil-responsable">
+        <span data-icone="parametres"></span>
+        <span>Responsable<small>Tout le suivi : demandes, OT, parc, paramètres</small></span>
+      </button>
+    </div>
+
+    <form id="profil-panneau-demandeur" class="carte form-colonne" hidden novalidate>
+      <div class="champ">
+        <label class="libelle" for="profil-nom">Votre nom <span class="requis" aria-hidden="true">*</span></label>
+        <input type="text" id="profil-nom" name="nom" required aria-required="true" autocomplete="name"
+          maxlength="80" aria-describedby="profil-nom-erreur">
+        <p class="erreur-champ" id="profil-nom-erreur" hidden></p>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn btn-fantome" data-retour>Retour</button>
+        <span class="espace"></span>
+        <button type="submit" class="btn btn-primaire">Continuer</button>
+      </div>
+    </form>
+
+    <div id="profil-panneau-technicien" class="carte" hidden>
+      <h2>Choisissez votre nom</h2>
+      <div class="pile-gros" id="profil-techniciens"></div>
+      <div class="actions">
+        <button type="button" class="btn btn-fantome" data-retour>Retour</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn btn-fantome" id="profil-annuler" hidden>Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================== coque de l'application -->
+<div class="coque" id="app" hidden>
+
+  <!-- menu latéral (≥ 641 px ; icônes seules de 641 à 1099 px) -->
+  <aside class="menu-lateral" aria-label="Menu">
+    <div class="menu-tete">
+      <span data-ui="logo"></span>
+      <div class="titre"><b>Prévo</b><small id="nom-entreprise">GMAO</small></div>
+      <button type="button" class="btn btn-fantome btn-icone menu-replier" id="btn-replier"
+        aria-label="Replier le menu" aria-expanded="true"><span data-icone="replier"></span></button>
+    </div>
+    <nav class="menu" id="menu" aria-label="Navigation principale"></nav>
+    <button type="button" class="etat-poste" id="etat-poste" title="Changer de profil">
+      <span data-icone="utilisateur"></span>
+      <span class="libelle"><span id="libelle-profil"></span> <span class="changer">Changer</span></span>
+    </button>
+    <a class="signature" href="#/apropos" title="À propos">
+      <span data-icone="apropos"></span>
+      <span class="libelle">Développé par <b>Claude (Anthropic)</b> à la demande de <b>Nicolas Briand — SELECTIS</b></span>
+    </a>
+  </aside>
+
+  <div class="zone-principale">
+    <!-- en-tête mobile (≤ 640 px) -->
+    <header class="entete-mobile">
+      <span data-ui="logo"></span>
+      <span class="titre" id="titre-mobile">Prévo</span>
+      <button type="button" class="btn btn-fantome btn-icone" id="btn-profil-mobile" aria-label="Changer de profil"><span data-icone="utilisateur"></span></button>
+    </header>
+
+    <div class="bandeau-demo" id="bandeau-demo" role="status" hidden>
+      <span data-icone="alerte"></span>
+      <span class="libelle-bandeau">Démo — rien n'est enregistré</span>
+      <button type="button" class="btn btn-secondaire" id="btn-export-demo" aria-label="Exporter en ZIP"><span data-icone="export"></span><span class="libelle">Exporter en ZIP</span></button>
+    </div>
+    <div class="bandeau-changement" id="bandeau-changement" role="status" hidden>
+      <span data-icone="actualiser"></span>
+      <span class="libelle-bandeau">Des données ont changé sur un autre poste</span>
+      <button type="button" class="btn btn-primaire" id="btn-actualiser">Actualiser</button>
+    </div>
+    <div class="alertes alertes-app" id="alertes-app" hidden></div>
+
+    <main class="contenu" id="contenu" tabindex="-1"></main>
+  </div>
+
+  <!-- barre du bas (≤ 640 px) : 4 entrées + « Plus » -->
+  <nav class="barre-bas" id="barre-bas" aria-label="Navigation principale"></nav>
+</div>
+
+<!-- Zone d'impression (bon de travail) : enfant direct de <body>, seule imprimée quand elle est remplie -->
+<div id="impression"></div>
+
+<!-- Messages temporaires (UI.toast) : présent dès le chargement pour les lecteurs d'écran -->
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<!-- Scripts classiques, dans l'ordre de ARCHITECTURE.md §1 (js/demo-donnees.js est chargé à la demande) -->
+<script src="js/lib/papaparse.min.js"></script>
+<script src="js/lib/qrcode.js"></script>
+<script src="js/lib/jsQR.js"></script>
+<script src="js/lib/jszip.min.js"></script>
+<script src="js/schema.js"></script>
+<script src="js/donnees.js"></script>
+<script src="js/stockage-serveur.js"></script>
+<script src="js/stockage-dossier.js"></script>
+<script src="js/stockage-demo.js"></script>
+<script src="js/interface.js"></script>
+<script src="js/modules/apropos.js"></script>
+<script src="js/modules/accueil.js"></script>
+<script src="js/modules/parc.js"></script>
+<script src="js/modules/demandes.js"></script>
+<script src="js/modules/ordres.js"></script>
+<script src="js/modules/parametres.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

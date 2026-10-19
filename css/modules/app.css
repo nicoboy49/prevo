@@ -1,0 +1,63 @@
+/* Prévo — mise en page propre à js/app.js et à l'écran « À propos » (ARCHITECTURE.md §8, §9).
+   Écrans plein écran (chargement, démarrage, base vide, profil), bouton de profil du menu,
+   zone d'alertes de la coque. Uniquement des variables de la charte (css/style.css) :
+   aucune couleur écrite en dur. */
+
+/* --- écrans plein écran : une boîte centrée, une colonne --- */
+.ecran-plein {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: calc(32px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom));
+}
+.boite-demarrage { width: 100%; max-width: 580px; min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+.boite-demarrage.centre { align-items: center; text-align: center; }
+.boite-demarrage .carte { margin-bottom: 0; }
+.boite-demarrage .depot { margin-bottom: 0; }
+.boite-demarrage .note { margin: 0; }
+.boite-demarrage .actions:empty { display: none; }
+
+/* Logo + nom de l'application en tête de chaque écran */
+.marque { display: flex; align-items: center; gap: 16px; }
+.marque > div { min-width: 0; }
+.marque h1 { font-size: 2rem; }
+.marque p { margin: 4px 0 0; color: var(--texte-2); }
+.sous-titre { color: var(--texte-2); font-size: 1rem; text-transform: uppercase; letter-spacing: .12em; margin-bottom: -6px; }
+.demarrage-pied { font-size: .8125rem; color: var(--muted); margin: 0; text-align: center; }
+
+/* Gros boutons des écrans de démarrage : le texte long passe à la ligne au lieu de déborder */
+.boite-demarrage .btn-gros > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+
+/* --- bouton de profil du menu latéral (.etat-poste, composant de style.css, ici en <button>) --- */
+button.etat-poste {
+  width: 100%; min-height: var(--tactile); background: none; border: 1px solid transparent; border-radius: 12px;
+  font-family: inherit; text-align: left; cursor: pointer;
+}
+button.etat-poste:hover { background: var(--survol); color: var(--texte-2); border-color: var(--trait); }
+.etat-poste .changer { color: var(--cyan); font-weight: 700; margin-left: .25rem; white-space: nowrap; }
+.etat-poste .libelle { min-width: 0; }
+
+/* --- alertes de la coque (ex. verrou du dossier), alignées sur le contenu --- */
+.alertes-app { width: 100%; max-width: 1320px; margin: 0 auto; padding: 16px 32px 0; }
+.alertes-app .alerte { margin: 0; }
+
+/* Le contenu reçoit le focus à chaque changement d'écran (lecteurs d'écran) : pas de cadre */
+.contenu:focus { outline: none; }
+
+/* --- À propos --- */
+.apropos-liste { margin: 0 0 .75rem; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .5rem; color: var(--texte-2); }
+.apropos-liste b { color: var(--texte); }
+.apropos-credit { display: flex; align-items: center; gap: 14px; }
+.apropos-credit p { margin: 0; font-weight: 600; }
+
+/* Tablette (641 à 1099 px) : menu en icônes, le mot « Changer » se cache avec le libellé */
+@media (max-width: 1099.98px) {
+  .alertes-app { padding: 16px 24px 0; }
+  button.etat-poste { text-align: center; }
+}
+
+/* Téléphone (≤ 640 px) */
+@media (max-width: 640px) {
+  .ecran-plein { align-items: flex-start; padding-top: calc(20px + env(safe-area-inset-top)); }
+  .marque h1 { font-size: 1.5rem; }
+  .marque .logo.grand { width: 48px; height: 48px; }
+  .alertes-app { padding: 12px 16px 0; }
+}
