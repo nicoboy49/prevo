@@ -199,7 +199,14 @@ class ServeurPrevo:
 # ---------------------------------------------------------------------------
 
 class _GestionnaireStatique(http.server.SimpleHTTPRequestHandler):
-    """Sert des fichiers sans bruit en console, avec des types MIME fiables sous Windows."""
+    """Sert des fichiers sans bruit en console, avec des types MIME fiables sous Windows.
+
+    HTTP/1.1 (connexions persistantes), comme serveur.py : face à un serveur qui ouvre une
+    connexion par requête (HTTP/1.0), Chromium sous Windows échoue environ une fois toutes les
+    8 000 connexions avec net::ERR_NO_BUFFER_SPACE, ce qui faisait échouer des tests au hasard."""
+
+    protocol_version = "HTTP/1.1"
+    timeout = 30            # une connexion muette est fermée (le fil de service se termine)
 
     extensions_map = dict(http.server.SimpleHTTPRequestHandler.extensions_map, **{
         ".js": "text/javascript", ".css": "text/css", ".html": "text/html",
@@ -214,9 +221,17 @@ class _GestionnaireStatique(http.server.SimpleHTTPRequestHandler):
         # Chromium réclame /favicon.ico : on répond « rien » plutôt que 404 (qui serait une erreur console).
         if self.path == "/favicon.ico" and not Path(self.translate_path(self.path)).exists():
             self.send_response(204)
+            self.send_header("Content-Length", "0")
             self.end_headers()
             return
         super().do_GET()
+
+
+class _ServeurHttpStatique(http.server.ThreadingHTTPServer):
+    """File d'écoute de 128 connexions (5 par défaut : une rafale de chargement de page serait
+    réinitialisée ou retardée par Windows, comme pour serveur.py)."""
+    request_queue_size = 128
+    daemon_threads = True
 
 
 class ServeurStatique:
@@ -243,7 +258,7 @@ class ServeurStatique:
 
     def demarrer(self):
         gestionnaire = functools.partial(_GestionnaireStatique, directory=str(self.racine))
-        self._serveur = http.server.ThreadingHTTPServer(("127.0.0.1", 0), gestionnaire)
+        self._serveur = _ServeurHttpStatique(("127.0.0.1", 0), gestionnaire)
         self.port = self._serveur.server_address[1]
         self.url = "http://127.0.0.1:%d" % self.port
         self._fil = threading.Thread(target=self._serveur.serve_forever, daemon=True)
@@ -309,6 +324,8 @@ class CasNavigateur(unittest.TestCase):
             emplacement = message.location or {}
             origine = "%s:%s" % (emplacement.get("url", ""), emplacement.get("lineNumber", ""))
             self.erreurs_console.append("console.error : %s (%s)" % (message.text, origine))
+            if self.PANNE_RESEAU_SYSTEME in message.text:
+                self._panne_reseau = True
 
     def _noter_erreur_page(self, erreur):
         self.erreurs_console.append("erreur JavaScript : %s" % (erreur,))
@@ -334,6 +351,62 @@ class CasNavigateur(unittest.TestCase):
             super().tearDown()
         if interdites:
             self.fail("Erreurs JavaScript détectées dans le navigateur :\n  " + "\n  ".join(interdites))
+
+    # -- Panne réseau du système : une seule relance ------------------------------------------
+    #
+    # Sur ce poste (Windows, Chromium 148), environ une NOUVELLE connexion TCP locale sur 8 000 à
+    # 30 000 échoue au hasard avec WSAENOBUFS (console : « net::ERR_NO_BUFFER_SPACE »), quel que
+    # soit le serveur : reproduit hors de Prévo (serveur Python minimal, 30 000 fetch : 1 à 4
+    # échecs, sur un ou trente ports ; aucun échec côté Python). Prévo n'y est pour rien ; les
+    # connexions persistantes (HTTP/1.1) en réduisent la fréquence, sans l'annuler sur 400 tests.
+    # Un test dont la console montre CETTE erreur est donc rejoué une fois, en le disant. Toute
+    # autre erreur, ou une seconde panne, fait échouer le test normalement.
+
+    PANNE_RESEAU_SYSTEME = "net::ERR_NO_BUFFER_SPACE"
+
+    def run(self, result=None):
+        if result is None:
+            return super().run(result)
+        enregistreur = _ResultatEnregistre()
+        self._panne_reseau = False
+        super().run(enregistreur)
+        if enregistreur.echec and self._panne_reseau:
+            sys.stderr.write("\n  [relance] %s : %s pendant le test, rejoué une fois\n"
+                             % (self.id(), self.PANNE_RESEAU_SYSTEME))
+            self._panne_reseau = False
+            return super().run(result)
+        enregistreur.rejouer(result)
+        return result
+
+
+class _ResultatEnregistre(unittest.TestResult):
+    """Résultat d'unittest qui note les appels reçus pour les rejouer ensuite sur le vrai résultat."""
+
+    METHODES = ("startTest", "stopTest", "addSuccess", "addFailure", "addError", "addSkip",
+                "addExpectedFailure", "addUnexpectedSuccess", "addSubTest", "addDuration")
+
+    def __init__(self):
+        super().__init__()
+        self.appels = []
+        self.echec = False
+
+    def __getattribute__(self, nom):
+        if nom in _ResultatEnregistre.METHODES:
+            appels = object.__getattribute__(self, "appels")
+
+            def noter(*arguments):
+                appels.append((nom, arguments))
+                if nom in ("addFailure", "addError", "addUnexpectedSuccess") or (
+                        nom == "addSubTest" and len(arguments) > 2 and arguments[2] is not None):
+                    object.__setattr__(self, "echec", True)
+            return noter
+        return object.__getattribute__(self, nom)
+
+    def rejouer(self, resultat):
+        for nom, arguments in self.appels:
+            methode = getattr(resultat, nom, None)
+            if methode is not None:
+                methode(*arguments)
 
 
 # ---------------------------------------------------------------------------
@@ -364,9 +437,21 @@ def preregler_profil(contexte, type, nom="", technicien_id="", poste="Poste test
 
 
 def attendre_pret(page, delai_ms=15000):
-    """Attend que l'application soit prête : <html data-etat="pret">."""
-    page.wait_for_function(
-        "document.documentElement.dataset.etat === 'pret'", timeout=delai_ms)
+    """Attend que l'application soit prête : <html data-etat="pret">.
+
+    En cas de dépassement, l'erreur dit où en était l'application (état, mode, texte visible),
+    pour qu'un échec passager puisse être compris."""
+    try:
+        page.wait_for_function(
+            "document.documentElement.dataset.etat === 'pret'", timeout=delai_ms)
+    except Exception as erreur:
+        try:
+            etat = page.evaluate("""() => ({ etat: document.documentElement.dataset.etat,
+                mode: (typeof App !== 'undefined' && App.mode) || null, url: location.href,
+                texte: (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').slice(0, 400) })""")
+        except Exception as autre:  # page fermée ou bloquée
+            etat = "état illisible (%s)" % (autre,)
+        raise AssertionError("application pas prête en %d ms : %r\n(%s)" % (delai_ms, etat, erreur)) from erreur
 
 
 def installer_dossier_simule(contexte, nom="donnees-test"):

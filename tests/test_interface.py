@@ -214,9 +214,12 @@ class TestComposantsInteractifs(CasGuide):
 
     def test_toast_role_status(self):
         self.evaluer("() => UI.toast('DI-2026-0042 créée.', 'succes')")
-        # le toast est rempli au tour suivant : on attend qu'il soit visible avant de lire son texte
+        # le toast est rempli au tour suivant : on attend qu'il soit visible avant de lire son texte.
+        # La classe « visible » ne suffit pas : visibility passe de hidden à visible par une transition
+        # (.2s) et, tant que la valeur calculée est encore « hidden », innerText vaut ''.
         self.page.wait_for_function(
-            "document.querySelector('#toast') && document.querySelector('#toast').classList.contains('visible')")
+            "document.querySelector('#toast') && document.querySelector('#toast').classList.contains('visible')"
+            " && getComputedStyle(document.querySelector('#toast')).visibility === 'visible'")
         toast = self.page.locator("#toast")
         self.assertEqual(toast.get_attribute("role"), "status")
         self.assertEqual(toast.inner_text(), "DI-2026-0042 créée.")
