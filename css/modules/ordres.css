@@ -1,2 +1,117 @@
 /* Prévo — mise en page propre au module Ordres de travail (js/modules/ordres.js).
-   Fichier d'attente (tâche T11), rempli par la tâche T14. Uniquement des variables de la charte. */
+   Uniquement des variables de la charte (css/style.css) : aucune couleur codée en dur.
+   Sommaire : 1 liste des OT · 2 fiche OT (en-tête, consignation, actions, messages)
+   · 3 onglets (formulaires, tableaux de saisie, temps, coût) · 4 téléphone · 5 impression. */
+
+/* =========================================================================================
+   1. Liste des OT (#/ot) : tableau sur grand écran, cartes sur téléphone
+   ========================================================================================= */
+
+.ot-liste-tete {
+  display: flex; align-items: center; justify-content: space-between; gap: .6rem 1rem; flex-wrap: wrap;
+  margin-bottom: .8rem;
+}
+.ot-liste-tete .note { margin: 0; }
+.ot-liste-tableau { padding: 8px 10px; }
+.ot-liste-tableau .table th, .ot-liste-tableau .table td { padding-left: .45rem; padding-right: .45rem; }
+.ot-liste-tableau .ot-col-titre { min-width: 11rem; }
+.ot-liste-tableau .ot-col-origine { white-space: nowrap; font-size: .9375rem; }
+.ot-liste-tableau .ot-col-date .ot-retard { display: table; margin: .25rem 0 0; }
+.ot-liste-cartes { display: none; }
+.ot-retard { margin-left: .35rem; }
+
+/* =========================================================================================
+   2. Fiche OT (#/ot/<id>)
+   ========================================================================================= */
+
+.ot-entete h1 { overflow-wrap: anywhere; }
+.ot-numero { color: var(--texte-2); font-weight: 800; margin-right: .35rem; white-space: nowrap; }
+.ot-badges { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .5rem; margin-top: .6rem; }
+.ot-lien-equipement { font-weight: 600; margin-left: .2rem; }
+
+/* Bloc consignation : procédure de l'équipement + rappel « Cocher une case ne consigne rien » */
+.ot-consignation { border-color: var(--bord-ambre); background: linear-gradient(var(--teinte-ambre-faible), var(--teinte-ambre-faible)), var(--carte); }
+.ot-consignation h2 { display: flex; align-items: center; gap: .5rem; }
+.ot-consignation h2 .icone { color: var(--ambre); }
+.ot-procedure { white-space: pre-line; color: var(--texte); }
+.ot-rappel { margin: .8rem 0 0; color: var(--texte-ambre); }
+.ot-rappel b { color: var(--texte-ambre); }
+
+/* Messages (refus de passage, manques de clôture) au-dessus des onglets */
+.ot-message:empty { display: none; }
+.ot-message { margin-bottom: 18px; scroll-margin-top: 80px; }
+.ot-manques { margin: .45rem 0 0; padding-left: 1.2rem; }
+.ot-manques li + li { margin-top: .2rem; }
+.ot-message .alerte .actions { margin-top: .7rem; }
+.ot-message .alerte .actions .btn { margin-left: 0; }
+.ot-bandeau-etat:empty { display: none; }
+.ot-bandeau-etat { margin-bottom: 18px; }
+
+/* =========================================================================================
+   3. Onglets : formulaires, tableaux de saisie, temps passés, coût
+   ========================================================================================= */
+
+/* Les <fieldset> ne servent qu'à passer un bloc en lecture seule (disabled) : pas de cadre. */
+.ot-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.ot-sous-titre {
+  margin: .4rem 0 .6rem; color: var(--texte-2); font-size: .875rem; text-transform: uppercase; letter-spacing: .08em;
+}
+.ot-sous-titre:not(:first-child) { margin-top: 1.4rem; }
+.ot-champ-lu > .libelle { font-weight: 600; color: var(--texte-2); }
+.ot-valeur { margin: 0; min-height: var(--tactile); display: flex; align-items: center; color: var(--texte); }
+.ot-table-saisie input { min-width: 9rem; }
+.ot-table-saisie td.num input { min-width: 0; width: 6.5rem; text-align: right; }
+.ot-table-saisie tr.ot-nouvelle-ligne td { border-bottom: 0; }
+.ot-ajout-piece, .ot-ajout-temps { margin-top: 1rem; }
+.ot-ajout-piece > .champ:first-child { flex: 3 1 280px; }
+.ot-ajout-temps > .champ { flex: 1 1 160px; }
+.ot-ajout-temps > .btn { flex: 0 0 auto; }
+.form-ligne > .ot-champ-quantite { flex: 0 1 8rem; }
+.ot-date-fin .libelle { justify-content: space-between; }
+.ot-date-fin .lien-bouton { font-size: .9375rem; padding: 0 .2rem; }
+.ot-actions-preparation .actions, .ot-demarrer .actions { margin-top: 0; }
+.ot-demarrer p { color: var(--texte-2); }
+.ot-remise .case { font-weight: 600; }
+.ot-lignes-cout { max-width: 34rem; }
+.ot-detail-cout { margin-top: .8rem; }
+
+/* =========================================================================================
+   4. Téléphone (≤ 640 px) : cartes à la place du tableau, champs en pleine largeur
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  .ot-liste-tableau { display: none; }
+  .ot-liste-cartes { display: block; }
+  .ot-liste-tete .btn { flex: 1 1 auto; }
+  .ot-entete .actions { width: 100%; }
+  .ot-filtres select { flex: 1 1 140px; min-width: 0; }
+  /* Tableaux de saisie (opérations, pièces) et de l'historique : une carte par ligne, chaque
+     cellule précédée du libellé de sa colonne (data-libelle) */
+  .ot-table-saisie thead, .ot-table-empilee thead { display: none; }
+  .ot-table-saisie, .ot-table-saisie tbody, .ot-table-saisie tr, .ot-table-saisie td,
+  .ot-table-empilee, .ot-table-empilee tbody, .ot-table-empilee tr, .ot-table-empilee td { display: block; width: 100%; }
+  .ot-table-saisie tr, .ot-table-empilee tr { padding: .6rem 0; border-bottom: 1px solid var(--trait-2); }
+  .ot-table-saisie tr:last-child, .ot-table-empilee tr:last-child { border-bottom: 0; }
+  .ot-table-saisie td, .ot-table-saisie td.num, .ot-table-saisie td:first-child,
+  .ot-table-empilee td, .ot-table-empilee td.num, .ot-table-empilee td:first-child {
+    border: 0; padding: .2rem 0; text-align: left; white-space: normal;
+  }
+  .ot-table-saisie tr.ot-nouvelle-ligne td.num { display: none; }
+  .ot-table-empilee tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 .8rem; }
+  .ot-table-empilee td.vide-table { grid-column: 1 / -1; }
+  .ot-table-empilee .badge { white-space: normal; }
+  .ot-table-saisie td[data-libelle]::before, .ot-table-empilee td[data-libelle]::before {
+    content: attr(data-libelle); display: block; font-size: .8125rem; font-weight: 700; color: var(--muted);
+  }
+  .ot-table-saisie input, .ot-table-saisie td.num input { min-width: 0; width: 100%; text-align: left; }
+  .form-ligne > .ot-champ-quantite, .ot-ajout-temps > .champ, .ot-ajout-temps > .btn { flex: 1 1 100%; }
+}
+
+/* =========================================================================================
+   5. Impression : le bon de travail est stylé par css/style.css (§14) ; textes multilignes
+   ========================================================================================= */
+
+.bon-travail .bt-texte { white-space: pre-line; }
+@media print {
+  .ot-consignation { background: none; }
+}
