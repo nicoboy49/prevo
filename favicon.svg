@@ -1,1 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2F5BEA"/><stop offset="1" stop-color="#22C3E6"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#g)"/><path fill="#fff" fill-rule="evenodd" d="M24.22 13.46 L27.37 13.70 L27.37 18.30 L24.22 18.54 L23.61 20.01 L25.67 22.41 L22.41 25.67 L20.01 23.61 L18.54 24.22 L18.30 27.37 L13.70 27.37 L13.46 24.22 L11.99 23.61 L9.59 25.67 L6.33 22.41 L8.39 20.01 L7.78 18.54 L4.63 18.30 L4.63 13.70 L7.78 13.46 L8.39 11.99 L6.33 9.59 L9.59 6.33 L11.99 8.39 L13.46 7.78 L13.70 4.63 L18.30 4.63 L18.54 7.78 L20.01 8.39 L22.41 6.33 L25.67 9.59 L23.61 11.99 Z M19.60 16.00 A3.6 3.6 0 1 0 12.40 16.00 A3.6 3.6 0 1 0 19.60 16.00 Z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2F5BEA"/>
+      <stop offset="1" stop-color="#22C3E6"/>
+    </linearGradient>
+  </defs>
+  <!-- carré arrondi au dégradé de la charte -->
+  <rect width="32" height="32" rx="8" fill="url(#g)"/>
+  <!-- engrenage blanc à 8 dents, moyeu évidé -->
+  <path fill="#fff" fill-rule="evenodd" d="M24.22 13.46 L27.37 13.70 L27.37 18.30 L24.22 18.54 L23.61 20.01 L25.67 22.41 L22.41 25.67 L20.01 23.61 L18.54 24.22 L18.30 27.37 L13.70 27.37 L13.46 24.22 L11.99 23.61 L9.59 25.67 L6.33 22.41 L8.39 20.01 L7.78 18.54 L4.63 18.30 L4.63 13.70 L7.78 13.46 L8.39 11.99 L6.33 9.59 L9.59 6.33 L11.99 8.39 L13.46 7.78 L13.70 4.63 L18.30 4.63 L18.54 7.78 L20.01 8.39 L22.41 6.33 L25.67 9.59 L23.61 11.99 Z M19.60 16.00 A3.6 3.6 0 1 0 12.40 16.00 A3.6 3.6 0 1 0 19.60 16.00 Z"/>
+</svg>
