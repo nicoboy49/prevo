@@ -189,19 +189,24 @@ dans Excel ; message en français).
 ### 5.2 Lecture
 ```
 Donnees.initialiser(adaptateur, { poste, profil })   // profil : texte pour le journal, ex. « Technicien TEC-0002 »
+Donnees.definirIdentite({ poste, profil })           // change l'identité du journal sans réinitialiser (changement de profil)
 await Donnees.chargerTout()          // les 22 tables en parallèle, puis contrôle de la base
+await Donnees.rechargerTable(table)  // relit une table (ex. après une restauration)
 Donnees.lignes(table)                // tableau des lignes (objets) — NE PAS MODIFIER directement
 Donnees.trouver(table, id)           // ligne par clé (index Map), ou undefined
 Donnees.version(table)
 Donnees.parametre(cle, defaut)       // valeur de parametres.csv
 Donnees.problemes()                  // [{ gravite: 'erreur'|'attention'|'info', type, table, ligne, id, champ, valeur, message }]
+Donnees.nouvelId(table, lignesExistantes, dateIso?)  // identifiant suivant (c'est ce qu'appelle outils.nouvelId, §5.3)
+Donnees.normaliser(...)              // normalisation par type (§3.3)
 Donnees.nombre(v)                    // Number ou null
 Donnees.aujourdhui() / Donnees.maintenant()   // 'AAAA-MM-JJ' / 'AAAA-MM-JJ HH:MM' (heure locale)
 Donnees.stockArticle(articleId)      // recalculé depuis mouvements_stock (un inventaire fixe la valeur)
 await Donnees.journaliser(table, idLigne, action)   // entrée de journal sans modification (ex. avertissement RG8)
 Donnees.instantane()                 // { table: Uint8Array } des 22 tables sérialisées (export ZIP, copie de la démo)
 Donnees.baseVide()                   // vrai si aucun des 22 fichiers n'existe
-Donnees.csv.analyser(table, octets)  // → { lignes, colonnesInconnues, problemes, encodage }
+Donnees.demarrerSurveillance() / Donnees.arreterSurveillance()   // §5.5
+Donnees.csv.analyser(table, entree)  // → { lignes, colonnesInconnues, problemes, encodage }
 Donnees.csv.serialiser(table, lignes, colonnesInconnues) // → Uint8Array
 Donnees.csv.ecrireValeur(champ, v) / Donnees.csv.relireValeur(champ, s)   // §3.2
 Donnees.evenements                   // EventTarget : 'changement' { detail: { tables: [...] , origine: 'local'|'distant' } }
@@ -327,7 +332,10 @@ commentaire de renvoi vers `js/schema.js`, cohérence vérifiée par un test) ; 
 les écritures ; sauvegarde quotidienne faite par le serveur avant la première écriture du jour.
 Fichiers statiques : le dossier de l'application, **sauf** `donnees/` et tout chemin dont un
 segment commence par `.` ; `/` → `index.html`. Pas d'en-têtes CORS.
-Lancement : `py serveur.py [--port 8080] [--donnees CHEMIN] [--sans-navigateur]` ; port suivant
+Le serveur parle HTTP/1.1 avec connexions persistantes (`protocol_version = 'HTTP/1.1'` : un
+navigateur réutilise ses connexions au lieu d'en ouvrir une par requête), avec une file d'attente
+d'écoute de 128 connexions (`request_queue_size = 128`) et un fil par connexion.
+Lancement : `py serveur.py [--port 8080] [--donnees CHEMIN] [--sans-navigateur] [--hote NOM]` ; port suivant
 si occupé (jusqu'à +20) ; affiche l'adresse locale et les adresses réseau ; ouvre le navigateur.
 Adresses réseau : interface de sortie trouvée par un `connect()` UDP vers une adresse privée
 (aucun paquet envoyé) + `gethostbyname_ex`, adresses de bouclage exclues.
@@ -352,22 +360,51 @@ de profil : `'profil'`.
 
 **Navigation** : routes en `#/…`. Les modules s'enregistrent :
 ```js
-App.ecran({
-  id: 'liste-di', route: /^#\/di$/, titre: 'Demandes',
-  menu: { libelle: 'Demandes', icone: 'demandes', ordre: 20 },   // facultatif
-  profils: ['demandeur', 'technicien', 'responsable'],
-  tables: ['demandes', 'equipements'],     // réaffichage si ces tables changent
-  afficher(conteneur, parametres) { … },   // parametres : groupes de la route + requête (?equipement=…)
+// App est chargé APRÈS les modules : chaque module enregistre ses écrans dans un écouteur
+// DOMContentLoaded (App existe alors) ; App démarre ensuite (son écouteur est ajouté en dernier).
+document.addEventListener('DOMContentLoaded', () => {
+  App.ecran({
+    id: 'liste-di', route: /^#\/di$/, titre: 'Demandes',
+    menu: { libelle: 'Demandes', court: 'Demandes', icone: 'demandes', ordre: 20, groupe: '…', lien: '#/di' },  // facultatif
+    profils: ['demandeur', 'technicien', 'responsable'],
+    tables: ['demandes', 'equipements'],     // réaffichage si une de ces tables change sur un autre poste
+    parent: 'parc',                          // facultatif : entrée de menu à allumer (sinon la sienne)
+    afficher(conteneur, parametres) { … },   // peut être async
+  });
 });
 ```
+Contrat tel qu'implémenté :
+- `conteneur` est `<main id="contenu">`, vidé avant chaque affichage ;
+- `parametres` : les **groupes nommés** de la route (`(?<id>[^/?]+)` → `parametres.id`),
+  `parametres.groupes` (tous les groupes, dans l'ordre), `parametres.requete` (`URLSearchParams` de
+  la partie après `?` du hash) et `parametres.chemin` ;
+- les routes sont essayées dans l'ordre d'enregistrement, la première qui correspond gagne : les
+  routes précises (`#/ot/nouveau`) se déclarent avant les routes à identifiant (`#/ot/<id>`) ;
+- un écran interdit au profil courant renvoie à l'accueil, avec un message ;
+- **saisie en cours** : tout événement `input` ou `change` dans `#contenu` la signale, sauf dans un
+  élément `[data-hors-saisie]` (ex. le formulaire de filtres d'une liste) ; `App.marquerSaisie(true|false)`
+  la pose ou l'efface (`false` après un enregistrement) ; un réaffichage l'efface aussi.
 Routes du lot 1 : `#/accueil`, `#/di/nouvelle`, `#/di`, `#/di/<id>`, `#/ot`, `#/ot/nouveau`,
-`#/ot/<id>`, `#/parc`, `#/equipement/<id>`, `#/equipement/nouveau`, `#/parametres`,
-`#/controle`, `#/apropos`. Un écran dont un formulaire a été modifié et non enregistré n'est pas
+`#/ot/<id>`, `#/parc`, `#/equipement/nouveau`, `#/equipement/<id>`,
+`#/equipement/<id>/modifier`, `#/parametres`, `#/controle`, `#/apropos`.
+Profils : l'accueil, les DI, le parc et À propos sont ouverts aux trois profils ; les OT
+(`#/ot`, `#/ot/<id>`) au technicien et au responsable ; `#/ot/nouveau`, la création et la
+modification d'équipement, `#/parametres` et `#/controle` au responsable seul.
+Paramètres d'adresse lus :
+- `#/di` : `?statut=` (ex. `Nouvelle`), `?portee=` (`mes` ou `toutes`), `?q=` (recherche), `?equipement=` ;
+- `#/ot` : `?filtre=retard` (OT en retard) ou `?filtre=p1` (P1 ouverts), liens de l'accueil ; aussi
+  `?etat=`, `?statut=`, `?priorite=`, `?technicien=`, `?type=`, `?recherche=`, `?equipement=` ;
+- `#/di/nouvelle` : `?equipement=` ; `#/ot/nouveau` : `?equipement=`, `?urgence=1`.
+
+Un écran dont un formulaire a été modifié et non enregistré n'est pas
 réaffiché par un changement distant : un bandeau « Des données ont changé sur un autre poste —
 Actualiser » s'affiche à la place.
-`App` expose : `App.mode`, `App.profil`, `App.poste`, `App.adaptateur`, `App.naviguer(hash)`,
-`App.estResponsable()`, `App.estTechnicien()`, `App.urlFicheEquipement(id)` (URL réseau en mode
-serveur, sinon `GMAO:<id>`), `App.chargerScriptDemo()`.
+`App` expose : `App.version`, `App.dateVersion`, `App.mode`, `App.profil`, `App.poste`,
+`App.adaptateur`, `App.ecran(définition)`, `App.naviguer(hash)`, `App.reafficher()`,
+`App.definirTitre(texte)`, `App.marquerSaisie(booléen)`, `App.estResponsable()`,
+`App.estTechnicien()`, `App.estDemandeur()`, `App.libelleProfil()`, `App.changerProfil()`,
+`App.urlFicheEquipement(id)` (URL réseau en mode serveur, sinon `GMAO:<id>`),
+`App.chargerScriptDemo()`, `App.exporterZip()`, `App.signalerErreur(erreur)`.
 
 **Menu** : latéral sur grand écran (≥ 1100 px), repliable en icônes (mémorisé
 `prevo.menuReplie`), icônes seules de 641 à 1099 px, barre du bas sur téléphone (≤ 640 px :
@@ -459,6 +496,31 @@ Les fonctions de règles sont **pures** et exposées pour les tests :
 `Ordres.verifierCloture(ot)` → liste des manques, `Ordres.cout(ot)`,
 `Ordres.verifierHabilitation(equipement, technicienId, dateIso)` → message ou `null`.
 
+### API effective des modules du lot 1 (`js/modules/`)
+
+Un module = un objet global ; ses écrans s'enregistrent dans `DOMContentLoaded` (§8). Les fonctions
+d'écriture sont `async`, passent par `Donnees.modifier` et lèvent `Donnees.ErreurValidation` pour un refus.
+
+- **`Parc`** : `cheminLocalisation(id)`, `libelleEquipement(id)`, `verifierEquipement`,
+  `verifierLocalisation` (règles : repère unique parmi les équipements actifs, aucun équipement
+  ancêtre de lui-même), `afficherListe`, `afficherFiche`, `afficherFormulaire`.
+- **`Demandes`** : constantes `STATUTS`, `IMPACTS`, `MATRICE_PRIORITE` ; règles pures
+  `prioriteCalculee(criticite, impact)`, `normaliserImpact`, `typePropose(priorite)`,
+  `datePrevue(priorite, aujourdhuiIso)`, `libelleEquipement` ; écritures `creer(valeurs)`,
+  `accepter(diId, options)`, `regrouper(diId, otId)`, `differer(diId, motif)`, `refuser(diId, motif)`.
+- **`Ordres`** : constantes `STATUTS`, `TYPES`, `PRIORITES`, `RAPPEL_CONSIGNATION` ; règles pures
+  `transitionsPossibles`, `verifierPassage`, `verifierCloture`, `cout`, `verifierHabilitation`,
+  `estOuvert`, `enRetard`, `estVerrouille`, `estCorrectif`, `estRienASignaler`, `piecesManquantes(otId)`,
+  `filtrer(ordres, filtres)`, `datePrevueParDefaut` ; écritures `creer(valeurs)`,
+  `changerStatut(otId, statutAttendu, cible, complement)`, `changerPriorite(otId, nouvelle, motif)`,
+  `creerOtLie(otId)` ; affichage et export `libelleEquipement`, `nomTechnicien`, `csvListe`,
+  `bonDeTravailHtml(ot)`, `imprimerBon(otId)`.
+- **`Accueil`** : `afficher`, `calculerCompteurs()` → `{ diATraiter, otEnRetard, p1Ouverts }`
+  (trois listes de lignes), `otEnRetard(ot, aujourdhui)`, `p1Ouvert(ot)`.
+- **`Parametres`** : écrans `#/parametres` et `#/controle` ; n'expose que `decrireSauvegarde(nom)`
+  et `numeroLigneFichier(probleme)` (utilitaires testés).
+- **`Apropos`** : `CREDIT`, `afficher`.
+
 ## 11. Données de démo
 
 `outils/generer_demo.py` (graine fixe, date de référence fixe `DATE_REFERENCE`) écrit
@@ -480,11 +542,26 @@ erreurs console (**toute erreur JavaScript fait échouer le test**), dossier sim
 substitué à `showDirectoryPicker`), profil préréglé (`prevo.profil` dans localStorage),
 attente de `dataset.etat === 'pret'`. Les tests ne touchent jamais `donnees/` réel.
 
+Playwright et Chromium ne sont nécessaires que pour les tests, jamais pour utiliser Prévo.
+Le test d'aller-retour par le **vrai Excel** (`tests/test_excel_reel.py`, `tests/test_csv.py`) ne
+s'exécute que si la variable d'environnement `PREVO_TEST_EXCEL=1` est définie ; sinon il est
+sauté, avec un message explicite. Sur le poste de développement, Chromium rencontre au hasard
+`net::ERR_NO_BUFFER_SPACE` (épuisement des tampons TCP de Windows, reproduit hors de Prévo avec
+un serveur Python minimal) : un test dont la console montre cette erreur précise est **rejoué une
+seule fois**, en le signalant sur la sortie d'erreur ; toute autre erreur, ou une seconde panne,
+fait échouer le test (`CasNavigateur.run` dans `tests/commun.py`). Les connexions persistantes du
+serveur (§7) en réduisent la fréquence sans l'annuler.
+
 ## 13. Points d'extension (lots suivants)
 
 - Lot 2 : `js/modules/preventif.js`, `js/modules/magasin.js` ; sorties de pièces depuis l'OT
   (mouvement `sortie` imputé à l'OT, stock négatif refusé) ; réécriture de la colonne `stock`.
 - Lot 3 : `js/modules/indicateurs.js` (ECharts), `planning.js`, `controles.js`, étiquettes QR.
+- Compteurs de l'accueil (brief E1) : le lot 1 n'affiche que DI à traiter, OT en retard et P1
+  ouverts. Les autres compteurs prévus par le brief viendront avec les lots suivants : préventifs
+  de la semaine et articles à commander (lot 2), contrôles réglementaires sous 30 jours et
+  habilitations échues ou à moins de 60 jours (lot 3). `Accueil.calculerCompteurs()` est le point
+  d'extension.
 - Lot 4 : `js/modules/ia.js`, `js/modules/ia-prompts.js`, `js/modules/dictee.js` ; les champs
   `texte_long` des formulaires portent `data-dictee` pour recevoir un bouton micro ; les
   `synonymes` du schéma servent à l'assistant d'import.
