@@ -512,6 +512,15 @@ def copier_tables_dans_sauvegarde(config, nom_sauvegarde):
     return tables
 
 
+# Marque posée par le mode dossier (js/stockage-dossier.js) pendant qu'il copie une sauvegarde :
+# un dossier qui la contient encore est une sauvegarde incomplète (onglet fermé pendant la copie).
+MARQUE_SAUVEGARDE_EN_COURS = '.en-cours'
+
+
+def sauvegarde_complete(dossier):
+    return os.path.isdir(dossier) and not os.path.exists(os.path.join(dossier, MARQUE_SAUVEGARDE_EN_COURS))
+
+
 def faire_sauvegarde_quotidienne(config):
     """Avant la première écriture CSV du jour : copie dans sauvegardes/AAAA-MM-JJ/.
 
@@ -519,8 +528,11 @@ def faire_sauvegarde_quotidienne(config):
     À appeler en tenant VERROU_ECRITURE.
     """
     nom_du_jour = datetime.date.today().strftime('%Y-%m-%d')
-    if os.path.exists(os.path.join(config.dossier_sauvegardes, nom_du_jour)):
+    dossier_du_jour = os.path.join(config.dossier_sauvegardes, nom_du_jour)
+    if sauvegarde_complete(dossier_du_jour):
         return
+    if os.path.isdir(dossier_du_jour):          # sauvegarde du jour laissée incomplète : on la refait
+        shutil.rmtree(dossier_du_jour, ignore_errors=True)
     if not tables_presentes(config.dossier_donnees):
         return
     copier_tables_dans_sauvegarde(config, nom_du_jour)
@@ -539,7 +551,7 @@ def lister_sauvegardes(config):
     """[{"nom", "tables"}], la plus récente d'abord."""
     noms = [nom for nom in os.listdir(config.dossier_sauvegardes)
             if MOTIF_NOM_SAUVEGARDE.fullmatch(nom)
-            and os.path.isdir(os.path.join(config.dossier_sauvegardes, nom))]
+            and sauvegarde_complete(os.path.join(config.dossier_sauvegardes, nom))]
     noms.sort(reverse=True)
     return [{'nom': nom, 'tables': tables_presentes(os.path.join(config.dossier_sauvegardes, nom))}
             for nom in noms]
@@ -564,8 +576,8 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
     """Copie de sécurité de l'état actuel, puis copie des tables depuis la sauvegarde."""
     verifier_nom_sauvegarde(nom_sauvegarde)
     dossier_sauvegarde = chemin_sous(config.dossier_sauvegardes, nom_sauvegarde)
-    if not os.path.isdir(dossier_sauvegarde):
-        raise ErreurHttp(404, 'Sauvegarde introuvable : %s.' % nom_sauvegarde)
+    if not sauvegarde_complete(dossier_sauvegarde):
+        raise ErreurHttp(404, 'Sauvegarde introuvable ou incomplète : %s.' % nom_sauvegarde)
     tables = tables_a_restaurer(dossier_sauvegarde, tables_demandees)
     copie_securite = nouveau_nom_horodate(config, '_avant-restauration')
     copier_tables_dans_sauvegarde(config, copie_securite)

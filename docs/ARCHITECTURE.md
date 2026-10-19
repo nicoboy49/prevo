@@ -240,9 +240,11 @@ traitée sur un autre poste »).
 `await Donnees.ajouter(table, nouvellesLignes)` sérialise l'en-tête + les nouvelles lignes
 (sans BOM) et appelle `adaptateur.ajouter(table, octets)`. Si l'adaptateur répond
 `ErreurConflit` (fichier réenregistré par Excel : encodage ou en-tête différent), repli
-automatique sur `modifier(table, l => l.push(...))`. Le cache n'est pas tenu à jour ligne à
-ligne pour les tables en ajout seul : sa version est marquée périmée et la table est relue au
-prochain rafraîchissement.
+automatique sur `modifier(table, l => l.push(...))`. Nos propres lignes ajoutées sont mises dans
+le cache, mais la table reste **périmée** : `modifier` la relit toujours avant de la réécrire
+(sinon les lignes ajoutées entre-temps par un autre poste seraient perdues). Le rafraîchissement
+périodique ne la relit que si sa version a changé depuis notre ajout ; `Donnees.rafraichir()`
+appelé explicitement (ex. avant l'export ZIP) relit tout.
 
 ### 5.5 Rafraîchissement
 `Donnees.demarrerSurveillance()` : toutes les `rafraichissement_s` secondes (20 par défaut) et à
@@ -273,14 +275,20 @@ await info()                          → { adressesReseau: [...] } (serveur) ou
 Version d'un fichier = empreinte SHA-256 du contenu, 16 premiers caractères hexadécimaux
 (décision D7). Sauvegarde quotidienne : avant la **première écriture de la journée**, copie de
 tous les CSV dans `sauvegardes/AAAA-MM-JJ/` (si ce dossier n'existe pas). Une restauration copie
-d'abord l'état courant dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-restauration/`.
+d'abord l'état courant dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-restauration/`. Le mode dossier
+pose une marque `.en-cours` dans une sauvegarde pendant qu'il la copie et l'enlève à la fin : une
+sauvegarde qui porte encore la marque est incomplète (ni listée, ni restaurable ; celle du jour est
+refaite) — le serveur applique la même règle.
 
 - **Serveur** : tout passe par l'API (§7) ; versions et sauvegardes calculées par le serveur.
 - **Dossier** : `showDirectoryPicker({ mode: 'readwrite' })` ; poignée mémorisée dans
   IndexedDB (base `prevo`, magasin `poignees`, clé `dossier`) pour « Reprendre le dossier
   précédent » (`queryPermission` puis `requestPermission`, si ces méthodes existent) ; empreintes
   par `crypto.subtle` (le mode dossier est toujours en contexte sécurisé) ; écriture par
-  `createWritable()` ; `verrou.txt` à la racine du dossier choisi (`poste;AAAA-MM-JJ HH:MM:SS;idSession`),
+  `createWritable()`, en faisant d'abord la sauvegarde quotidienne, puis en relisant et
+  comparant le fichier, et en vérifiant juste avant `close()` qu'il n'a pas changé (sinon
+  `abort()` + `ErreurConflit`) ; un dossier devenu inaccessible lève `ErreurStockage` (jamais
+  « fichier absent », qui ferait croire à une base vide) ; `verrou.txt` à la racine du dossier choisi (`poste;AAAA-MM-JJ HH:MM:SS;idSession`),
   rafraîchi toutes les 60 s : si un verrou d'une autre session a moins de 3 minutes, avertissement
   non bloquant. Sous-dossiers `documents/` et `sauvegardes/` créés au besoin.
 - **Démo** : tout en mémoire ; versions = compteur ; `sauvegarder`/`restaurer` indisponibles

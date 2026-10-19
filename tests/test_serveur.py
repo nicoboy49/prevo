@@ -616,6 +616,26 @@ class TestSauvegardeQuotidienne(CasAvecServeur):
         self.assertEqual(liste, [{'nom': aujourd_hui, 'tables': ['techniciens']}])
         self.assertEqual(self.fichiers_temporaires_restants(), [])
 
+    def test_sauvegarde_incomplete_du_mode_dossier_ignoree(self):
+        # Une sauvegarde laissée avec la marque « .en-cours » (mode dossier interrompu) n'est ni
+        # listée ni restaurable.
+        nom = '2020-01-02'
+        dossier = self.chemin_donnee('sauvegardes', nom)
+        os.makedirs(dossier)
+        with open(os.path.join(dossier, 'techniciens.csv'), 'wb') as fichier:
+            fichier.write(self.ETAT_AVANT)
+        with open(os.path.join(dossier, '.en-cours'), 'wb') as fichier:
+            fichier.write(b'')
+        try:
+            noms = [s['nom'] for s in self.requete('GET', '/api/sauvegardes').json()['sauvegardes']]
+            self.assertNotIn(nom, noms)
+            reponse = self.requete('POST', '/api/restauration',
+                                   json.dumps({'sauvegarde': nom}).encode('utf-8'))
+            self.assertEqual(reponse.statut, 404)
+        finally:
+            # Le dossier de données est partagé par la classe : ne rien laisser derrière soi.
+            shutil.rmtree(dossier, ignore_errors=True)
+
 
 # ---------------------------------------------------------------------------
 # Fichier verrouillé par un autre programme (Excel)
