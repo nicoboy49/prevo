@@ -1,0 +1,21 @@
+Fichiers de test produits par le vrai Microsoft Excel (tâche T05)
+================================================================
+
+Produits le 19/10/2026 sur un poste Windows avec Excel 16.0 en français (fr-FR :
+séparateur de liste « ; », virgule décimale), par la commande :
+
+    py tests/test_csv.py --generer-fixtures
+
+- source.csv      : 4 lignes de la table equipements écrites par Donnees.csv.serialiser
+                    (accents, guillemets, « ; », saut de ligne, dates, décimales, numéros de
+                    série à zéros en tête et à 15 chiffres, repère 1-2, désignations commençant
+                    par « - » et par « = », champ vide, apostrophe déjà présente).
+- excel-utf8.csv  : source.csv ouvert dans Excel (Local:=True) puis « Enregistrer sous »
+                    CSV UTF-8 (format 62).
+- excel-ansi.csv  : même chose, « Enregistrer sous » CSV simple (format 6, Windows-1252 sans BOM).
+- excel-ajout.csv : source.csv ouvert dans Excel, une ligne saisie en ligne 6 (EQ-0099, TR-09,
+                    « Tour à commande numérique « Ébène » », date 15/03/2024, criticité « b »),
+                    puis CSV UTF-8.
+
+Excel est piloté par VBScript (tests/excel.py). Ces fichiers sont gardés dans le dépôt pour que
+tests/test_csv.py vérifie la lecture même sur un poste sans Excel. Ne pas les modifier à la main.
