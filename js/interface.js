@@ -130,12 +130,19 @@ const UI = (function () {
   const TIRET_VALEUR_ABSENTE = '–';
   const formateursNombre = {};
 
+  // Intl sépare les milliers par l'espace fine insécable U+202F, presque invisible avec la police
+  // Sora (« 15855 h ») : l'affichage la remplace par l'espace insécable U+00A0, bien visible
+  // (demande de Nicolas). Les CSV ne sont pas concernés : ils n'ont jamais de séparateur (§3).
+  const ESPACE_FINE = / /g;
+  const ESPACE_INSECABLE = ' ';
+
   function formateurNombre(decimalesMin, decimalesMax, style) {
     const cle = decimalesMin + '/' + decimalesMax + '/' + (style || '');
     if (!formateursNombre[cle]) {
       const options = { minimumFractionDigits: decimalesMin, maximumFractionDigits: decimalesMax };
       if (style === 'euro') { options.style = 'currency'; options.currency = 'EUR'; }
-      formateursNombre[cle] = new Intl.NumberFormat('fr-FR', options);
+      const intl = new Intl.NumberFormat('fr-FR', options);
+      formateursNombre[cle] = { format: (nombre) => intl.format(nombre).replace(ESPACE_FINE, ESPACE_INSECABLE) };
     }
     return formateursNombre[cle];
   }
