@@ -9,6 +9,7 @@ Familles (le nom du test le dit) :
     point_commande : une sortie amène un article à son point de commande → onglet « À commander » ;
     achat          : demander l'achat → « Commander » → « Réceptionner » 5, par l'interface (D24) ;
     colonne_stock  : après sortie, retour, entrée et inventaire, articles.stock = stock recalculé en Python ;
+                     aussi quand un autre poste sort pendant la copie du stock (conflit, copie rejouée) ;
     inventaire     : stock compté 7 dans l'onglet Inventaire → mouvement « inventaire », stock 7 ;
     suggestion     : fiche d'un article → valeur suggérée = calcul Python (D23), « Reprendre la
                      suggestion » puis Enregistrer → point_commande écrit ;
@@ -420,6 +421,64 @@ class TestConcurrence(CasMagasin):
             self.assertEqual(stock_python(mouvements, KIT_GARNITURE), 0)
             ligne = next(a for a in lire_csv(serveur.dossier, "articles.csv") if a["id"] == KIT_GARNITURE)
             self.assertEqual(nombre(ligne["stock"]), 0)
+
+    def test_colonne_stock_juste_quand_un_autre_poste_sort_pendant_la_copie_du_stock(self):
+        """Le poste A a écrit sa sortie ; sa copie du stock dans articles.csv est retenue pendant que
+        le poste B fait toute sa sortie ; la copie de A arrive ensuite (409, articles relu, copie
+        rejouée) : la colonne doit valoir le stock recalculé depuis mouvements_stock.csv, pas le
+        stock du cache de A (qui ignore la sortie de B)."""
+        self.autoriser_erreur(re.compile(r"status of 409.*/api/csv/(articles|mouvements_stock)"))
+        with ServeurPrevo() as serveur:
+            self.ouvrir(serveur, "#/magasin")
+            contexte_b = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1280, "height": 900})
+            self.addCleanup(contexte_b.close)
+            contexte_b.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
+            preregler_profil(contexte_b, "responsable", poste="Poste B")
+            poste_b = contexte_b.new_page()
+            self.surveiller(poste_b)
+            poste_b.goto(serveur.url + "/#/magasin")
+            attendre_pret(poste_b)
+            poste_b.wait_for_load_state("networkidle")
+            # Pas de relecture automatique : seul le code de l'écriture peut voir la sortie de B
+            for page in (self.page, poste_b):
+                page.evaluate("Donnees.arreterSurveillance()")
+            self.assertTrue(self.appeler("inventorier", [{"articleId": KIT_GARNITURE, "quantite": 5}], "cinq").startswith("accepté:"))
+            poste_b.evaluate("Donnees.rafraichir()")
+
+            # A : sortie de 1 ; sa première écriture de articles.csv (la copie du stock) est retenue
+            retenues = []
+
+            def retenir(route):
+                if route.request.method == "PUT" and not retenues:
+                    retenues.append(route)
+                else:
+                    route.continue_()
+            self.page.route("**/api/csv/articles", retenir)
+            conflits_avant = self.page.evaluate("Donnees.statistiques.conflits")
+            self.page.evaluate("""([ot, article]) => { window.__a = null; Magasin.sortir(ot, article, 1, 'poste A').then(
+                (id) => { window.__a = 'accepté'; }, (erreur) => { window.__a = 'refus:' + erreur.message; }); }""",
+                               [OT_OUVERT, KIT_GARNITURE])
+            for _ in range(200):
+                if retenues:
+                    break
+                self.page.wait_for_timeout(50)
+            self.assertTrue(retenues, "la copie du stock du poste A n'a pas été écrite")
+
+            # B : sortie de 1, complète (mouvement puis colonne)
+            self.assertTrue(self.appeler("sortir", OT_OUVERT, KIT_GARNITURE, 1, "poste B", page=poste_b).startswith("accepté:"))
+            mouvements = lire_csv(serveur.dossier, "mouvements_stock.csv")
+            self.assertEqual(stock_python(mouvements, KIT_GARNITURE), 3)
+
+            # La copie de A part maintenant : conflit, articles relu, copie rejouée
+            retenues[0].continue_()
+            self.page.wait_for_function("window.__a !== null")
+            self.assertEqual(self.page.evaluate("window.__a"), "accepté")
+            self.page.unroute("**/api/csv/articles")
+            self.assertGreater(self.page.evaluate("Donnees.statistiques.conflits"), conflits_avant)
+            mouvements = lire_csv(serveur.dossier, "mouvements_stock.csv")
+            ligne = next(a for a in lire_csv(serveur.dossier, "articles.csv") if a["id"] == KIT_GARNITURE)
+            self.assertEqual(nombre(ligne["stock"]), stock_python(mouvements, KIT_GARNITURE))
+            self.assertEqual(nombre(ligne["stock"]), 3)
 
 
 # ---------------------------------------------------------------------------

@@ -90,18 +90,22 @@ Object.assign(Magasin, (() => {
   }
 
   /**
-   * Recopie dans articles.stock le stock recalculé depuis les mouvements (Donnees.stockArticle)
-   * pour les articles donnés. Idempotent : rien n'est écrit si la colonne est déjà juste.
+   * Recopie dans articles.stock le stock recalculé depuis les mouvements pour les articles donnés.
+   * Idempotent : rien n'est écrit si la colonne est déjà juste.
+   * Le stock est recalculé sur mouvements_stock RELU dans la fonction de mutation (à chaque essai) :
+   * si un autre poste a ajouté un mouvement entre-temps, l'écriture de articles part en conflit,
+   * la table est relue et la fonction rejouée avec ses mouvements (le cache de ce poste les ignore).
    * Renvoie les identifiants des articles dont la colonne a changé.
    */
   async function mettreAJourStocks(ids) {
     const aRecalculer = new Set((ids || []).map(texte).filter(Boolean));
     if (!aRecalculer.size) return [];
-    return Donnees.modifier('articles', (lignes) => {
+    return Donnees.modifier('articles', async (lignes) => {
+      const mouvements = await Donnees.rechargerTable('mouvements_stock');
       const changes = [];
       lignes.forEach((ligne) => {
         if (!aRecalculer.has(ligne.id)) return;
-        const stock = Donnees.stockArticle(ligne.id);
+        const stock = stockDepuisLignes(mouvements, ligne.id);
         if (Donnees.nombre(ligne.stock) === stock && texte(ligne.stock) !== '') return;
         ligne.stock = valeurFichier(stock);
         changes.push(ligne.id);
