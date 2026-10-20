@@ -80,12 +80,12 @@ class TestEchappementEtFormats(CasGuide):
     def test_milliers_espace_insecable_visible(self):
         # T40 (demande de Nicolas) : l'espace fine U+202F d'Intl est presque invisible avec la police
         # Sora (« 15855 h ») ; l'affichage utilise l'espace insécable U+00A0, bien visible.
-        for appel, attendu in (("UI.nombreFr(15855)", "15 855"),
-                               ("UI.euro(1234.5)", "1 234,50 €"),
-                               ("UI.heures(1500)", "1 500")):
+        for appel, attendu in (("UI.nombreFr(15855)", "15\u00a0855"),
+                               ("UI.euro(1234.5)", "1\u00a0234,50\u00a0€"),
+                               ("UI.heures(1500)", "1\u00a0500")):
             with self.subTest(appel=appel):
                 texte = self.evaluer("() => " + appel)
-                self.assertNotIn(" ", texte)
+                self.assertNotIn("\u202f", texte)
                 self.assertIn(attendu, texte)
 
     def test_nombres_euros_heures(self):

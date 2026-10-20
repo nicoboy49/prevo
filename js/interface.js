@@ -133,8 +133,8 @@ const UI = (function () {
   // Intl sépare les milliers par l'espace fine insécable U+202F, presque invisible avec la police
   // Sora (« 15855 h ») : l'affichage la remplace par l'espace insécable U+00A0, bien visible
   // (demande de Nicolas). Les CSV ne sont pas concernés : ils n'ont jamais de séparateur (§3).
-  const ESPACE_FINE = / /g;
-  const ESPACE_INSECABLE = ' ';
+  const ESPACE_FINE = /\u202F/g;
+  const ESPACE_INSECABLE = '\u00A0';
 
   function formateurNombre(decimalesMin, decimalesMax, style) {
     const cle = decimalesMin + '/' + decimalesMax + '/' + (style || '');
