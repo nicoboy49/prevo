@@ -7,6 +7,7 @@ Lancer depuis la racine du projet :
 """
 import re
 import unittest
+import xml.etree.ElementTree as ET
 
 from commun import RACINE, CasNavigateur, url_fichier
 
@@ -124,6 +125,37 @@ class TestEchappementEtFormats(CasGuide):
             svg = self.evaluer("(n) => String(UI.icone(n))", nom)
             self.assertTrue(svg.startswith('<svg class="icone"'), nom)
         self.assertEqual(self.evaluer("() => String(UI.icone('inexistante'))"), "")
+
+    def test_icones_lot2_magasin_et_preventif(self):
+        """ARCHITECTURE.md §14.2 : icônes « magasin » (carton) et « preventif » (calendrier coché),
+        SVG au trait 24 × 24 bien formé, couleur du texte (currentColor), comme les autres."""
+        calendrier = self.evaluer("() => String(UI.icone('calendrier'))")
+        for nom in ("magasin", "preventif"):
+            with self.subTest(icone=nom):
+                svg = self.evaluer("(n) => String(UI.icone(n))", nom)
+                self.assertTrue(svg.startswith('<svg class="icone"'), svg)
+                racine = ET.fromstring(svg)          # lève une erreur si le SVG est mal formé
+                self.assertEqual(racine.tag, "svg")
+                self.assertEqual(racine.get("viewBox"), "0 0 24 24")
+                traces = list(racine)
+                self.assertTrue(traces, "aucun tracé")
+                for trace in traces:
+                    self.assertIn(trace.tag, ("path", "circle", "rect"))
+                    # Ni couleur ni remplissage codés en dur : le trait vient de .icone (currentColor)
+                    self.assertIsNone(trace.get("fill"))
+                    self.assertIsNone(trace.get("stroke"))
+                self.assertNotEqual(svg, calendrier)
+                style = self.evaluer("""(n) => {
+                    const zone = document.createElement('span');
+                    zone.style.color = 'rgb(1, 2, 3)';
+                    zone.innerHTML = String(UI.icone(n));
+                    document.body.appendChild(zone);
+                    const calcule = getComputedStyle(zone.querySelector('svg'));
+                    const resultat = { trait: calcule.stroke, fond: calcule.fill };
+                    zone.remove();
+                    return resultat;
+                }""", nom)
+                self.assertEqual(style, {"trait": "rgb(1, 2, 3)", "fond": "none"})
 
 
 # ---------------------------------------------------------------------------------------------

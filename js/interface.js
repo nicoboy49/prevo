@@ -272,6 +272,9 @@ const UI = (function () {
     actualiser: '<path d="M20 11a8 8 0 0 0-14.6-4.5L4 8M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16m0 4v-4h-4"/>',
     document: '<path d="M6 2.5h9l5 5V21.5H6z"/><path d="M14 3v5h5M9 12.5h8M9 16.5h8"/>',
     calendrier: '<path d="M4 6h16v14H4zM4 10h16M8 3v5M16 3v5"/>',
+    // Lot 2 (ARCHITECTURE.md §14.2) : calendrier coché (Préventif) et carton fermé (Magasin)
+    preventif: '<path d="M4 6h16v14H4zM4 10h16M8 3v5M16 3v5"/><path d="m8.5 15 2.5 2.5 4.5-4.5"/>',
+    magasin: '<path d="M3.5 8 12 4l8.5 4v9L12 21l-8.5-4z"/><path d="M3.5 8 12 12l8.5-4M12 12v9"/><path d="m7.75 6 8.5 4v3"/>',
     replier: '<path d="m14 6-6 6 6 6M19 6v12"/>',
     chevron: '<path d="m9 6 6 6-6 6"/>',
   };

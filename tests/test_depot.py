@@ -1,9 +1,11 @@
-"""Tests du dépôt : bibliothèques tierces, police, licences, favicon et règles git.
+"""Tests du dépôt : bibliothèques tierces, police, licences, favicon, règles git et découpage des
+modules JavaScript (taille, ordre de chargement dans index.html).
 
 Bibliothèque standard seulement. Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_depot.py" -v
 """
 import hashlib
+import re
 import subprocess
 import unittest
 import xml.etree.ElementTree as ET
@@ -27,6 +29,20 @@ IGNORES = [
     "tests/resultats/x", "__pycache__/x.pyc",
 ]
 NON_IGNORES = ["donnees/demo/equipements.csv", "donnees/.gitkeep", "brief-gmao.md"]
+
+# Ordre exact des scripts js/modules/ dans index.html : RECOPIE de docs/ARCHITECTURE.md §14.2
+# (« Découpage des modules (D28) et ordre de chargement »). Le contrat et ce test changent ensemble.
+ORDRE_MODULES = [
+    "apropos.js", "accueil.js", "causes-frequentes.js",
+    "parc-regles.js", "parc-arbre.js", "parc-formulaires.js", "parc-fiche.js",
+    "demandes-regles.js", "demandes-ecritures.js", "demandes-signaler.js", "demandes-liste.js", "demandes-fiche.js",
+    "ordres-regles.js", "ordres-ecritures.js", "ordres-liste.js", "ordres-fiche.js", "ordres-onglets.js",
+    "ordres-impression.js",
+    "preventif-regles.js", "preventif-ecritures.js", "preventif-ecrans.js", "preventif-calendrier.js",
+    "magasin-regles.js", "magasin-ecritures.js", "magasin-articles.js", "magasin-mouvements.js", "magasin-achats.js",
+    "parametres.js",
+]
+LIGNES_MAX_MODULE = 700   # décision D28 : aucun fichier de js/modules/ au-delà
 
 
 def lire(chemin):
@@ -86,6 +102,45 @@ class TestGit(unittest.TestCase):
         for chemin in NON_IGNORES:
             with self.subTest(chemin=chemin):
                 self.assertFalse(self._est_ignore(chemin), "ne devrait pas être ignoré : " + chemin)
+
+
+class TestModules(unittest.TestCase):
+    """Découpage des modules (ARCHITECTURE.md §14.2, décision D28)."""
+
+    @staticmethod
+    def scripts_index():
+        """Valeurs des <script src="…"> de index.html, dans l'ordre."""
+        return re.findall(r'<script\s+src="([^"]+)"', lire("index.html"))
+
+    @staticmethod
+    def fichiers_modules():
+        return sorted((RACINE / "js" / "modules").glob("*.js"))
+
+    def test_modules_700_lignes_au_plus(self):
+        fichiers = self.fichiers_modules()
+        self.assertTrue(fichiers, "aucun fichier dans js/modules/")
+        for fichier in fichiers:
+            with self.subTest(fichier=fichier.name):
+                nombre = len(fichier.read_text(encoding="utf-8").splitlines())
+                self.assertLessEqual(nombre, LIGNES_MAX_MODULE,
+                                     "%s : %d lignes, à découper (un module = un préfixe de fichiers)"
+                                     % (fichier.name, nombre))
+
+    def test_modules_charges_dans_l_ordre_du_contrat(self):
+        scripts = self.scripts_index()
+        modules = [s[len("js/modules/"):] for s in scripts if s.startswith("js/modules/")]
+        self.assertEqual(modules, ORDRE_MODULES)
+        # Un seul bloc, juste après js/interface.js et juste avant js/app.js (chargé en dernier)
+        debut = scripts.index("js/interface.js") + 1
+        self.assertEqual(scripts[debut:debut + len(ORDRE_MODULES)], ["js/modules/" + m for m in ORDRE_MODULES])
+        self.assertEqual(scripts[debut + len(ORDRE_MODULES):], ["js/app.js"])
+
+    def test_modules_tous_charges_par_index_html(self):
+        charges = set(self.scripts_index())
+        for fichier in self.fichiers_modules():
+            with self.subTest(fichier=fichier.name):
+                self.assertIn("js/modules/" + fichier.name, charges,
+                              "fichier orphelin : js/modules/%s n'est pas chargé par index.html" % fichier.name)
 
 
 if __name__ == "__main__":
