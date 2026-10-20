@@ -1,2 +1,60 @@
-/* Prévo — écran Équipe (techniciens et habilitations) (ARCHITECTURE.md §15). Variables de la charte seulement (css/style.css).
-   Feuille d'attente (tâche T41) : la tâche du module la remplit. */
+/* Prévo — écran Équipe : techniciens et habilitations (js/modules/equipe-*.js, ARCHITECTURE.md §15.8).
+   Uniquement des variables de la charte (css/style.css) : aucune couleur codée en dur.
+   Sommaire : 1 liste et filtres · 2 habilitations (statuts, puces) · 3 fiche · 4 téléphone. */
+
+/* =========================================================================================
+   1. Liste et filtres (tableau sur grand écran, cartes sur téléphone)
+   ========================================================================================= */
+
+.equipe-consultation { margin: -6px 0 14px; }
+.equipe-compteur { margin: 0 0 .6rem; }
+.equipe-liste { padding: 8px 10px; }
+.equipe-liste .table th, .equipe-liste .table td { padding-left: .5rem; padding-right: .5rem; }
+.equipe-col-habilitations { min-width: 14rem; }
+.equipe-lien { font-weight: 600; }
+@media (min-width: 1100px) {
+  .equipe-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* =========================================================================================
+   2. Habilitations : puces de la liste, statut (badge + détail)
+   ========================================================================================= */
+
+.equipe-puces { display: flex; flex-wrap: wrap; gap: .3rem; }
+.equipe-puces:empty { display: none; }
+.equipe-habilitation { white-space: nowrap; }
+.equipe-statut { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; }
+.equipe-detail { color: var(--texte-2); font-size: .875rem; }
+.equipe-habilitations { list-style: none; margin: 0; padding: 0; display: grid; gap: .9rem; }
+.equipe-habilitations > li { display: flex; flex-direction: column; gap: .35rem; padding-bottom: .9rem; border-bottom: 1px solid var(--trait); }
+.equipe-habilitations > li:last-child { padding-bottom: 0; border-bottom: 0; }
+.equipe-tete { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .8rem; }
+.equipe-intitule { color: var(--fort); font-weight: 800; }
+.equipe-dates { color: var(--texte-2); font-size: .9375rem; }
+.equipe-actions { justify-content: flex-start; }
+
+/* =========================================================================================
+   3. Fiche d'un technicien, historique, fenêtres
+   ========================================================================================= */
+
+.equipe-fiche h1 { overflow-wrap: anywhere; }
+.equipe-badges { display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: center; margin: .2rem 0 0; color: var(--texte-2); }
+.equipe-badges:empty { display: none; }
+.equipe-lignes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.equipe-lignes li { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .7rem; padding: .5rem 0; border-bottom: 1px solid var(--trait); }
+.equipe-lignes li:last-child { border-bottom: 0; }
+.equipe-lignes .muted { margin: 0; font-size: .875rem; }
+.equipe-fenetre p { margin: 0; }
+
+/* =========================================================================================
+   4. Téléphone (≤ 640 px) : cartes sans cadre englobant, zones tactiles de 48 px
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  .equipe-liste { padding: 0; background: none; border: 0; }
+  .equipe-filtres select { flex: 1 1 140px; min-width: 0; }
+  .equipe-liste .equipe-puces { margin-top: .2rem; }
+  .equipe-tete .equipe-lien { min-height: 48px; display: inline-flex; align-items: center; }
+  .equipe-carte-habilitations .entete-carte .btn, .equipe-actions .btn { flex: 1 1 100%; }
+  .equipe-statut { align-items: flex-start; }
+}

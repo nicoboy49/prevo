@@ -6,7 +6,10 @@
     sauvegarde  : « Sauvegarder maintenant », restauration d'une table puis de toutes les tables ;
     contrôle    : références cassées, identifiants manquants, incohérence DI/OT injectés sur le disque ;
     démo        : sauvegardes indisponibles ;
-    profils     : demandeur et technicien n'ont pas accès aux Paramètres.
+    profils     : demandeur et technicien n'ont pas accès aux Paramètres ;
+    lot 3 (T46) : réglages tolérance, seuil, priorité, horizon, heures par défaut (bornes, écrits et
+                  relus) ; codes de défaillance (code proposé, ajout visible dans la fiche OT, libellé
+                  modifié, doublons refusés).
 
 Les tests ne dépendent que des écrans de ce lot : les données sont lues sur le disque du serveur de
 test ou par `Donnees`, jamais en naviguant dans les écrans Parc, Demandes ou Ordres.
@@ -243,7 +246,11 @@ class TestAccueil(CasParametres):
             self.assertEqual(cartes.count(), len(siens))
             identifiants = [cartes.nth(i).locator("b").first.inner_text() for i in range(cartes.count())]
             self.assertEqual(sorted(identifiants), sorted(o["id"] for o in siens))
-            self.assertEqual(page.locator("#contenu .instruments").count(), 0)
+            # Aucun compteur du responsable ; depuis le lot 3 (§15.9), seulement les deux indicateurs
+            # de conformité (contrôles sous 30 j, habilitations à renouveler).
+            liens = page.eval_on_selector_all("#contenu .instruments a", "l => l.map(a => a.getAttribute('href'))")
+            self.assertEqual(sorted(liens), ["#/controles?filtre=30j", "#/equipe?filtre=a-renouveler"])
+            self.assertEqual(page.locator("#contenu .instruments:not(.accueil-instruments-technicien)").count(), 0)
             signaler = page.locator("#contenu a.btn-gros")
             self.assertIn("Signaler un problème", signaler.inner_text())
             self.assertEqual(signaler.get_attribute("href"), "#/di/nouvelle")
@@ -628,6 +635,142 @@ class TestControle(CasParametres):
             page.click("#btn-relire")
             self.attendre_toast("Fichiers relus")
             self.assertIn("relus", self.texte("#message-action"))
+
+
+# ---------------------------------------------------------------------------
+# Lot 3 (tâche T46, ARCHITECTURE.md §15.11) : réglages du préventif et des indicateurs, codes de défaillance
+# ---------------------------------------------------------------------------
+
+APPEL_PARAMETRES_JS = """async ([fonction, arguments_]) => {
+  try { return 'accepté:' + JSON.stringify(await Parametres[fonction](...arguments_)); }
+  catch (erreur) { return (erreur instanceof Donnees.ErreurValidation ? 'refus:' : 'erreur:') + erreur.message; }
+}"""
+
+
+def code_propose(lignes, famille, lettre):
+    """Code proposé : lettre de la famille + numéro suivant (hors « 99 », réservé à « Autre ») sur 2 chiffres."""
+    numeros = [int(m.group(1)) for l in lignes if l["famille"] == famille
+               for m in [re.fullmatch(r"[A-Za-z]+(\d+)", sans_apostrophe(l["code"]))] if m]
+    suivant = max([n for n in numeros if n < 99] or [0]) + 1
+    return "%s%02d" % (lettre, suivant)
+
+
+class TestReglagesEtCodes(CasParametres):
+
+    def appeler(self, fonction, *arguments):
+        return self.page.evaluate(APPEL_PARAMETRES_JS, [fonction, list(arguments)])
+
+    def test_reglages_tolerance_seuil_priorite_horizon_heures_enregistres_et_relus(self):
+        with ServeurPrevo() as serveur:
+            chemin = serveur.dossier / "parametres.csv"
+            page = self.ouvrir(serveur, route="#/parametres")
+            self.attendre_ecran("Paramètres")
+            formulaire = "#form-parametres "
+            # Valeurs du fichier, ou défaut quand la clé manque (seuil_remplacement_pct n'est pas dans la démo)
+            self.assertEqual(page.input_value(formulaire + "[name=tolerance_preventif_pct]"), "10")
+            self.assertEqual(page.input_value(formulaire + "[name=seuil_remplacement_pct]"), "50")
+            self.assertEqual(page.input_value(formulaire + "[name=priorite_preventif]"), "P3")
+            self.assertEqual(page.input_value(formulaire + "[name=horizon_calendrier_semaines]"), "12")
+            self.assertEqual(page.input_value(formulaire + "[name=heures_fonct_defaut]"), "8")
+            # Bornes : refus sous le champ, fichier inchangé
+            avant = chemin.read_bytes()
+            for nom, valeur in (("tolerance_preventif_pct", "150"), ("seuil_remplacement_pct", "0"),
+                                ("horizon_calendrier_semaines", "60"), ("heures_fonct_defaut", "25")):
+                with self.subTest(nom=nom):
+                    page.fill(formulaire + "[name=%s]" % nom, valeur)
+                    page.click(formulaire + "button[type=submit]")
+                    page.wait_for_selector(formulaire + ".champ[data-champ='%s'].en-erreur" % nom)
+                    self.assertEqual(chemin.read_bytes(), avant)
+                    page.fill(formulaire + "[name=%s]" % nom, {"tolerance_preventif_pct": "10", "seuil_remplacement_pct": "50",
+                                                               "horizon_calendrier_semaines": "12", "heures_fonct_defaut": "8"}[nom])
+            # Valeurs correctes : écrites, puis relues après rechargement
+            page.fill(formulaire + "[name=tolerance_preventif_pct]", "15")
+            page.fill(formulaire + "[name=seuil_remplacement_pct]", "80")
+            page.select_option(formulaire + "[name=priorite_preventif]", "P2")
+            page.fill(formulaire + "[name=horizon_calendrier_semaines]", "26")
+            page.fill(formulaire + "[name=heures_fonct_defaut]", "7,5")
+            page.click(formulaire + "button[type=submit]")
+            self.attendre_toast("Paramètres enregistrés")
+            _, lignes = lire_csv(chemin)
+            valeurs = {ligne["cle"]: sans_apostrophe(ligne["valeur"]) for ligne in lignes}
+            self.assertEqual([valeurs[c] for c in ("tolerance_preventif_pct", "seuil_remplacement_pct", "priorite_preventif",
+                                                    "horizon_calendrier_semaines", "heures_fonct_defaut")],
+                             ["15", "80", "P2", "26", "7.5"])
+            self.assertEqual(valeurs["delai_p2_h"], "24")                         # le reste n'a pas bougé
+            page.reload()
+            attendre_pret(page)
+            self.attendre_ecran("Paramètres")
+            self.assertEqual(page.input_value(formulaire + "[name=tolerance_preventif_pct]"), "15")
+            self.assertEqual(page.input_value(formulaire + "[name=seuil_remplacement_pct]"), "80")
+            self.assertEqual(page.input_value(formulaire + "[name=priorite_preventif]"), "P2")
+            self.assertEqual(page.input_value(formulaire + "[name=heures_fonct_defaut]"), "7,5")
+            self.assertEqual(page.evaluate("Donnees.parametre('seuil_remplacement_pct', '')"), "80")
+
+    def test_codes_ajout_visible_dans_la_fiche_ot_libelle_modifie_et_doublons_refuses(self):
+        with ServeurPrevo() as serveur:
+            chemin = serveur.dossier / "codes_defaillance.csv"
+            _, codes = lire_csv(chemin)
+            attendu = code_propose(codes, "cause", "C")
+            page = self.ouvrir(serveur, route="#/parametres")
+            self.attendre_ecran("Paramètres")
+            carte = "#carte-codes "
+            page.select_option(carte + "[name=famille]", "cause")
+            page.wait_for_function("(code) => document.querySelector('#carte-codes [name=code]').value === code", arg=attendu)
+            # Doublons refusés : code existant (toutes familles), libellé existant dans la famille
+            avant = chemin.read_bytes()
+            existant = next(c for c in codes if c["famille"] == "cause")
+            page.fill(carte + "[name=code]", sans_apostrophe(existant["code"]).lower())
+            page.fill(carte + "[name=libelle]", "Libellé nouveau")
+            page.click(carte + "button[type=submit]")
+            page.wait_for_selector(carte + ".champ[data-champ='code'].en-erreur")
+            self.assertIn("existe déjà", page.inner_text(carte + ".champ[data-champ='code'] .erreur-champ"))
+            page.fill(carte + "[name=code]", attendu)
+            page.fill(carte + "[name=libelle]", existant["libelle"].upper())
+            page.click(carte + "button[type=submit]")
+            page.wait_for_selector(carte + ".champ[data-champ='libelle'].en-erreur")
+            self.assertEqual(chemin.read_bytes(), avant)
+            for valeurs, morceau in (({"famille": "cause", "libelle": "", "code": "C77"}, "libellé"),
+                                     ({"famille": "cause", "libelle": "Essai", "code": "C 7;7"}, "code"),
+                                     ({"famille": "inconnue", "libelle": "Essai", "code": "X01"}, "famille")):
+                resultat = self.appeler("ajouterCode", valeurs)
+                self.assertTrue(resultat.startswith("refus:") and morceau in resultat, resultat)
+            self.assertEqual(chemin.read_bytes(), avant)
+
+            # Ajout par la carte
+            page.fill(carte + "[name=libelle]", "Joint de couvercle usé")
+            page.click(carte + "button[type=submit]")
+            self.attendre_toast("Code ajouté")
+            _, codes = lire_csv(chemin)
+            nouveau = next(c for c in codes if c["libelle"] == "Joint de couvercle usé")
+            self.assertEqual((nouveau["famille"], sans_apostrophe(nouveau["code"])), ("cause", attendu))
+            page.wait_for_selector(carte + "[data-code='%s']" % nouveau["id"])
+            # Le code suivant est proposé
+            page.wait_for_function("(code) => document.querySelector('#carte-codes [name=code]').value !== code", arg=attendu)
+
+            # Libellé modifié (fenêtre), puis affiché
+            page.click(carte + "button[data-code-modifier='%s']" % nouveau["id"])
+            page.wait_for_selector("dialog [name=libelle]")
+            self.assertEqual(page.input_value("dialog [name=libelle]"), "Joint de couvercle usé")
+            page.fill("dialog [name=libelle]", "Joint de couvercle détérioré")
+            page.click("dialog .fenetre-actions .btn-primaire")
+            self.attendre_toast("Libellé modifié")
+            _, codes = lire_csv(chemin)
+            self.assertEqual(next(c for c in codes if c["id"] == nouveau["id"])["libelle"], "Joint de couvercle détérioré")
+            page.wait_for_function("(id) => document.querySelector(`#carte-codes [data-code='${id}']`).textContent.includes('détérioré')",
+                                   arg=nouveau["id"])
+            resultat = self.appeler("modifierLibelleCode", nouveau["id"], existant["libelle"])
+            self.assertTrue(resultat.startswith("refus:") and "existe déjà" in resultat, resultat)
+
+            # Visible dans la liste des causes de la fiche d'un OT ouvert (onglet Compte rendu)
+            ot = scenarios_demo()["ot_statut_en_cours"]
+            self.aller_a("#/ot/" + ot)
+            page.wait_for_selector(".onglet[data-onglet='compte-rendu']")
+            page.click(".onglet[data-onglet='compte-rendu']")
+            page.wait_for_selector("#form-compte-rendu [name=cause_code]")
+            options = page.eval_on_selector_all("#form-compte-rendu [name=cause_code] option", "o => o.map(e => [e.value, e.textContent])")
+            self.assertIn([attendu, attendu + " — Joint de couvercle détérioré"], options)
+            journal = (serveur.dossier / "journal.csv").read_text(encoding="utf-8")
+            self.assertIn("codes_defaillance;%s;création" % nouveau["id"], journal)
 
 
 if __name__ == "__main__":

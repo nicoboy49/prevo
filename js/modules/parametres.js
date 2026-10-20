@@ -2,19 +2,21 @@
 // Parametres : écrans « Paramètres » (#/parametres) et « Contrôle de la base » (#/controle),
 // réservés au responsable (brief §4 sauvegarde, §6 contrôle de la base, §9 E12).
 //
-//   Paramètres : entreprise, délais par priorité, rafraîchissement (écrits dans parametres.csv par
-//                Donnees.modifier), ce poste (nom, profil), sauvegardes (créer, restaurer), lien vers
-//                le contrôle de la base, export ZIP.
+//   Paramètres : entreprise, délais par priorité, préventif et indicateurs (lot 3, §15.11),
+//                rafraîchissement (écrits dans parametres.csv par Donnees.modifier), ce poste (nom,
+//                profil), sauvegardes (créer, restaurer), lien vers le contrôle de la base, export
+//                ZIP ; carte « Codes de défaillance » (parametres-codes.js, appelée par un relais).
 //   Contrôle   : problèmes de Donnees.problemes() groupés par gravité, attribution des identifiants
 //                manquants, relecture des fichiers, liens vers les DI / OT concernés.
 
 const Parametres = (() => {
 
-  // Réglages du formulaire (clé dans parametres.csv, type de champ, libellé, valeur par défaut).
+  // Réglages du formulaire (clé dans parametres.csv, type de champ, libellé, valeur par défaut,
+  // bornes min/max pour un nombre, valeurs d'un choix, section : intertitre du formulaire).
   const REGLAGES = [
-    { cle: 'entreprise_nom', type: 'texte', libelle: 'Nom de l\'entreprise', defaut: '', large: true,
+    { cle: 'entreprise_nom', type: 'texte', libelle: 'Nom de l\'entreprise', defaut: '', large: true, section: 'Entreprise',
       aide: 'Affiché dans le menu et sur les bons de travail.' },
-    { cle: 'delai_p1_h', type: 'entier', libelle: 'Délai P1 (heures)', defaut: '0', min: 0, max: 8760,
+    { cle: 'delai_p1_h', type: 'entier', libelle: 'Délai P1 (heures)', defaut: '0', min: 0, max: 8760, section: 'Délais par priorité',
       aide: 'Date prévue d\'une demande P1 = création + ce délai. 0 : tout de suite.' },
     { cle: 'delai_p2_h', type: 'entier', libelle: 'Délai P2 (heures)', defaut: '24', min: 0, max: 8760,
       aide: '24 heures = le lendemain.' },
@@ -22,9 +24,24 @@ const Parametres = (() => {
       aide: '168 heures = une semaine.' },
     { cle: 'delai_p4', type: 'texte', libelle: 'Délai P4', defaut: 'prochain arrêt',
       aide: 'Texte libre : une P4 n\'a pas de date prévue automatique.' },
+    // Lot 3 (ARCHITECTURE.md §15.11) : les deux clés du lot 2 et trois clés lues par le préventif et les indicateurs.
+    { cle: 'priorite_preventif', type: 'choix', valeurs: ['P1', 'P2', 'P3', 'P4'], libelle: 'Priorité des OT préventifs', defaut: 'P3',
+      section: 'Préventif et indicateurs', aide: 'Priorité donnée aux OT créés par les gammes échues.' },
+    { cle: 'horizon_calendrier_semaines', type: 'entier', libelle: 'Calendrier du préventif (semaines)', defaut: '12', min: 1, max: 52,
+      aide: 'Nombre de semaines affichées dans le calendrier du préventif.' },
+    { cle: 'tolerance_preventif_pct', type: 'entier', libelle: 'Tolérance du respect du préventif (%)', defaut: '10', min: 0, max: 100,
+      aide: 'Un préventif est « respecté » s\'il est clôturé au plus tard à sa date prévue + ce pourcentage de sa période.' },
+    { cle: 'seuil_remplacement_pct', type: 'entier', libelle: 'Seuil « réparer ou remplacer » (%)', defaut: '50', min: 1, max: 1000,
+      aide: 'Coût des 12 derniers mois / valeur de remplacement à partir duquel le rapport mensuel propose d\'examiner un équipement.' },
+    { cle: 'heures_fonct_defaut', type: 'decimal', libelle: 'Heures de fonctionnement par jour (défaut)', defaut: '8', min: 0, max: 24,
+      aide: 'Gammes « compteur » seulement : estime l\'échéance d\'un équipement sans heures par jour. Jamais utilisé par les indicateurs.' },
     { cle: 'rafraichissement_s', type: 'entier', libelle: 'Rafraîchissement (secondes)', defaut: '20', min: 2, max: 3600,
-      aide: 'Fréquence de lecture des changements faits sur les autres postes.' },
+      section: 'Échanges entre postes', aide: 'Fréquence de lecture des changements faits sur les autres postes.' },
   ];
+
+  // Carte « Codes de défaillance » : dans parametres-codes.js, chargé APRÈS ce fichier ; la fonction
+  // est donc cherchée au moment de l'appel (relais), pas au chargement de ce fichier.
+  const afficherCodes = (zone) => Parametres.interne.afficherCodes(zone);
 
   const LIBELLES_TYPE_PROBLEME = {
     reference: 'Référence cassée', valeur: 'Valeur illisible', excel: 'Abîmé par Excel', colonne: 'Colonne',
@@ -221,7 +238,8 @@ const Parametres = (() => {
   function formulaireReglages() {
     const formulaire = UI.element(UI.html`<form id="form-parametres" class="form-grille" novalidate></form>`);
     REGLAGES.forEach((reglage) => {
-      const bloc = UI.champ({ nom: reglage.cle, type: reglage.type, libelle: reglage.libelle },
+      if (reglage.section) formulaire.appendChild(UI.element(UI.html`<h3 class="large parametres-section">${reglage.section}</h3>`));
+      const bloc = UI.champ({ nom: reglage.cle, type: reglage.type, libelle: reglage.libelle, valeurs: reglage.valeurs },
         Donnees.parametre(reglage.cle, reglage.defaut), { aide: reglage.aide });
       if (reglage.large) bloc.classList.add('large');
       formulaire.appendChild(bloc);
@@ -235,6 +253,17 @@ const Parametres = (() => {
     return formulaire;
   }
 
+  /** Message d'erreur d'un réglage (nombre hors bornes, entier attendu, choix inconnu), sinon ''. */
+  function erreurReglage(reglage, valeur) {
+    if (reglage.valeurs) return reglage.valeurs.includes(valeur) ? '' : 'Choisissez parmi : ' + reglage.valeurs.join(', ') + '.';
+    if (reglage.min === undefined) return '';
+    const nombre = Donnees.nombre(valeur);
+    const entier = reglage.type === 'entier';
+    if (nombre !== null && nombre >= reglage.min && nombre <= reglage.max && (!entier || Number.isInteger(nombre))) return '';
+    return entier ? 'Saisissez un nombre entier entre ' + reglage.min + ' et ' + reglage.max + '.'
+      : 'Saisissez un nombre entre ' + reglage.min + ' et ' + reglage.max + ' (ex. 7,5).';
+  }
+
   // Contrôle des valeurs puis écriture dans parametres.csv (une ligne par clé, créée si elle manque).
   async function enregistrerReglages(formulaire) {
     const bouton = UI.$('button[type=submit]', formulaire);
@@ -242,10 +271,10 @@ const Parametres = (() => {
     const valeurs = UI.lireFormulaire(formulaire);
     let erreurs = syntaxe.length;
     REGLAGES.forEach((reglage) => {
-      if (reglage.min === undefined || syntaxe.some((e) => e.nom === reglage.cle)) return;
-      const nombre = Donnees.nombre(valeurs[reglage.cle]);
-      if (nombre === null || nombre < reglage.min || nombre > reglage.max) {
-        UI.erreurChamp(formulaire, reglage.cle, 'Saisissez un nombre entier entre ' + reglage.min + ' et ' + reglage.max + '.');
+      if (syntaxe.some((e) => e.nom === reglage.cle)) return;
+      const message = erreurReglage(reglage, valeurs[reglage.cle]);
+      if (message) {
+        UI.erreurChamp(formulaire, reglage.cle, message);
         erreurs += 1;
       }
     });
@@ -258,7 +287,8 @@ const Parametres = (() => {
     await pendant(bouton, 'enregistrement des paramètres', async () => {
       await Donnees.modifier('parametres', (lignes) => {
         REGLAGES.forEach((reglage) => {
-          const valeur = reglage.type === 'entier' ? String(Donnees.nombre(valeurs[reglage.cle])) : valeurs[reglage.cle];
+          const nombre = reglage.type === 'entier' || reglage.type === 'decimal';
+          const valeur = nombre ? String(Donnees.nombre(valeurs[reglage.cle])) : valeurs[reglage.cle];
           const ligne = lignes.find((l) => l.cle === reglage.cle);
           if (ligne) ligne.valeur = valeur; else lignes.push({ cle: reglage.cle, valeur: valeur });
         });
@@ -303,7 +333,7 @@ const Parametres = (() => {
       <div class="grille parametres-grille">
         <div class="c7">
           <article class="carte">
-            <div class="entete-carte"><h2>Entreprise et délais</h2></div>
+            <div class="entete-carte"><h2>Réglages</h2></div>
             <div id="zone-formulaire"></div>
           </article>
           ${carteSauvegardes(sauvegardes)}
@@ -330,9 +360,11 @@ const Parametres = (() => {
             <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-export-zip">${UI.icone('export')}Exporter en ZIP</button></div>
           </article>
         </div>
-      </div>`);
+      </div>
+      <div id="zone-codes"></div>`);
 
     UI.remplir(UI.$('#zone-formulaire', conteneur), formulaireReglages());
+    afficherCodes(UI.$('#zone-codes', conteneur));
     if (!sauvegardes.indisponible) {
       UI.$('#zone-sauvegardes', conteneur).appendChild(tableauSauvegardes(sauvegardes.liste));
       mettreSurLeBouton(conteneur, '#btn-sauvegarder', (bouton) => pendant(bouton, 'sauvegarde', sauvegarderMaintenant));
@@ -540,7 +572,7 @@ const Parametres = (() => {
     App.ecran({
       id: 'parametres', route: /^#\/parametres$/, titre: 'Paramètres',
       menu: { libelle: 'Paramètres', icone: 'parametres', ordre: 90, groupe: 'Administration' },
-      profils: ['responsable'], tables: ['parametres'],
+      profils: ['responsable'], tables: ['parametres', 'codes_defaillance'],
       afficher: afficherParametres,
     });
     App.ecran({
@@ -552,5 +584,6 @@ const Parametres = (() => {
     });
   });
 
-  return { decrireSauvegarde, numeroLigneFichier };
+  // interne : complété par parametres-codes.js (afficherCodes), usage interne au module (pas une API).
+  return { decrireSauvegarde, numeroLigneFichier, interne: {} };
 })();
