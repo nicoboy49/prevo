@@ -143,10 +143,15 @@ Object.assign(Demandes, (() => {
     }
 
     // --- OT préventif d'origine (?ot=) : bandeau, ou avertissement si l'OT ne convient pas -----
+    // Un OT verrouillé (Clôturé administrativement, Annulé : RG3) reste lié à la demande, mais il ne
+    // sera pas marqué : le bandeau le dit avant l'envoi.
     if (otDemande) {
+      const suite = origineValable && Ordres.estVerrouille(otOrigine)
+        ? UI.html`La demande sera liée à cet OT, mais l'OT ${otDemande} est verrouillé : il ne sera pas
+            marqué « anomalie constatée » (statut ${otOrigine.statut}).`
+        : UI.html`La demande sera liée à cet OT, qui sera marqué « anomalie constatée ».`;
       UI.$('.di-origine', conteneur).appendChild(origineValable
-        ? UI.bandeau('info', UI.html`<b>Anomalie constatée pendant l'OT préventif ${lienOt(otDemande)}</b><br>
-            La demande sera liée à cet OT, qui sera marqué « anomalie constatée ».`)
+        ? UI.bandeau('info', UI.html`<b>Anomalie constatée pendant l'OT préventif ${lienOt(otDemande)}</b><br>${suite}`)
         : UI.bandeau('attention', UI.html`L'ordre de travail <b>${otDemande}</b> est introuvable ou n'est pas
             un OT préventif : la demande sera créée sans lien avec lui.`));
     }
@@ -324,6 +329,11 @@ Object.assign(Demandes, (() => {
   function afficherConfirmation(conteneur, id) {
     const demande = Donnees.trouver('demandes', id) || { id, impact: '', equipement_id: '' };
     const priorite = prioriteDeLaDemande(demande);
+    // OT d'origine verrouillé (lu après l'écriture : la marque l'a relu s'il a changé ailleurs).
+    const otOrigine = demande.ot_origine_id ? Donnees.trouver('ordres_travail', demande.ot_origine_id) : null;
+    const origineVerrouillee = Ordres.estVerrouille(otOrigine)
+      ? UI.html`<br>L'OT ${demande.ot_origine_id} est verrouillé : il n'a pas été marqué « anomalie constatée »
+          (statut ${otOrigine.statut}).` : '';
     App.definirTitre('Demande envoyée');
     UI.remplir(conteneur, UI.html`
       <div class="di-confirmation" role="status">
@@ -334,7 +344,7 @@ Object.assign(Demandes, (() => {
           <p class="di-confirmation-texte">Notez ce numéro : il permet de suivre votre demande.<br>
             ${libelleEquipement(demande.equipement_id)} · priorité ${UI.badgePriorite(priorite)}</p>
           ${demande.ot_origine_id ? UI.html`<p class="di-confirmation-texte di-confirmation-origine">Anomalie signalée
-            pendant l'OT préventif ${lienOt(demande.ot_origine_id)}.</p>` : ''}
+            pendant l'OT préventif ${lienOt(demande.ot_origine_id)}.${origineVerrouillee}</p>` : ''}
         </div>
         <div class="di-zone-securite"></div>
         <div class="pile-gros">

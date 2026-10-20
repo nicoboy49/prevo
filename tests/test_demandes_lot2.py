@@ -5,11 +5,16 @@ Couvre, en mode serveur sur une copie du jeu de démo (identifiants lus dans sce
       retouché → plus de code ; casse et espaces ignorés ; texte libre → code vide ; acceptation →
       OT avec le même code (y compris un OT déjà créé pour la DI, dont le code était vide) ;
     - encart : causes fréquentes sur la fiche d'une DI (≥ 5 cas : « n cas sur N », liens vers des OT
-      existants) vues par le demandeur, le technicien et le responsable ; sous 5 cas : seulement
-      « Pas encore assez de cas pour ce symptôme (n sur 5) » ; DI sans code : pas d'encart ;
+      existants) vues par le demandeur, le technicien et le responsable (le demandeur, sans accès
+      aux OT, voit les mêmes identifiants en texte simple, sans aucun lien #/ot) ; sous 5 cas :
+      seulement « Pas encore assez de cas pour ce symptôme (n sur 5) » ; DI sans code : pas d'encart ;
     - anomalie : #/di/nouvelle?equipement=…&ot=<préventif ouvert> → bandeau, DI liée
       (ot_origine_id), OT d'origine « anomalie constatée » = 1 sur le disque (idempotent), lien sur
       la fiche, mention dans la liste ; seconde écriture en échec → DI créée et avertissement ;
+    - verrou : OT préventif d'origine verrouillé (RG3 : Clôturé administrativement, Annulé) → la DI
+      garde son lien, l'OT n'est jamais modifié (octets de sa ligne, journal), bandeau et
+      confirmation le disent ; OT annulé sur un autre poste après l'ouverture du formulaire → pas
+      marqué non plus (contrôle sur la ligne fraîche, après le conflit d'écriture) ;
     - téléphone 375 px sans défilement horizontal.
 
 Lancer depuis la racine du projet :
@@ -34,8 +39,12 @@ DI_CAUSES = SCENARIOS["di_causes_equipement"]
 DI_INSUFFISANTE = SCENARIOS["di_causes_insuffisantes"]
 DI_SANS_CODE = SCENARIOS["di_sans_symptome_code"]
 OT_PREVENTIF_OUVERT = SCENARIOS["ot_preventif_ouvert"]
+OT_PREVENTIF_VERROUILLE = SCENARIOS["ot_preventif_cloture"]      # préventif « Clôturé administrativement »
 
 STATUTS_CLOTURES = ("Clôturé techniquement", "Clôturé administrativement")
+STATUTS_VERROUILLES = ("Clôturé administrativement", "Annulé")    # RG3 : OT jamais modifié
+# Identifiant d'OT (ARCHITECTURE.md §4 : OT-AAAA-NNNN), pour le relever dans un texte.
+MOTIF_ID_OT = re.compile(r"OT-\d{4}-\d{4,}")
 
 # Zones tactiles de #contenu de moins de 48 px de haut (même règle que tests/test_recette_lot1.py :
 # case à cocher ou bouton radio : son libellé compte).
@@ -103,6 +112,22 @@ def cas_causes(dossier, equipement_id, symptome):
 def lignes_journal(dossier, morceau, identifiant):
     texte = (dossier / "journal.csv").read_text(encoding="utf-8-sig")
     return [ligne for ligne in texte.splitlines() if identifiant in ligne and morceau in ligne]
+
+
+def journal_de_la_ligne(dossier, table, identifiant):
+    """Entrées du journal qui portent sur une ligne d'une table (colonnes table et id_ligne)."""
+    return [ligne for ligne in lire_csv(dossier / "journal.csv")
+            if ligne["table"] == table and ligne["id_ligne"] == identifiant]
+
+
+def octets_de_la_ligne(chemin, identifiant):
+    """Octets exacts de la ligne d'un CSV dont le premier champ est `identifiant` (apostrophe ou
+    guillemets de protection ignorés)."""
+    for ligne in Path(chemin).read_bytes().split(b"\n"):
+        premier = ligne.split(b";", 1)[0].lstrip(b"\xef\xbb\xbf").strip(b"'\"")
+        if premier.decode("utf-8", "replace") == identifiant:
+            return ligne
+    raise AssertionError("aucune ligne %s dans %s" % (identifiant, chemin))
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +284,8 @@ class TestEncart(CasDemandesLot2):
                 texte: li.textContent,
                 ot: Array.from(li.querySelectorAll('a[href^="#/ot/"]')).map((a) => a.getAttribute('href').slice(5)),
               })),
+              // Tout lien vers les écrans des OT (fiche #/ot/… ou liste #/ot?…, « et n autres »)
+              liens_ot: Array.from(encart.querySelectorAll('a[href^="#/ot"]')).map((a) => a.getAttribute('href')),
               mention: encart.querySelector('.note') ? encart.querySelector('.note').textContent : null,
             };
         }""")
@@ -278,6 +305,8 @@ class TestEncart(CasDemandesLot2):
             self.assertLess(len(cas_insuffisants), MINIMUM)
             ot_existants = {ot["id"] for ot in lire_csv(serveur.dossier / "ordres_travail.csv")}
             ot_des_cas = {ot["id"] for ot in cas}
+            cause_de_l_ot = {ot["id"]: ot["cause_code"] for ot in cas}
+            cas_par_cause = collections.Counter(cause_de_l_ot.values())
 
             self.ouvrir(serveur, "#/accueil")
             for type_profil, nom, technicien in (("demandeur", "Lucie Martin", ""), ("technicien", "", TECHNICIEN),
@@ -298,10 +327,24 @@ class TestEncart(CasDemandesLot2):
                         self.assertIsNotNone(trouve, ligne["texte"])
                         self.assertEqual(int(trouve.group(2)), len(cas))
                         self.assertEqual(int(trouve.group(1)), par_cause[rang][1])
-                        self.assertTrue(ligne["ot"], "aucun lien vers un OT : %r" % ligne["texte"])
-                        self.assertLessEqual(len(ligne["ot"]), 5)
-                        self.assertTrue(set(ligne["ot"]) <= ot_existants, ligne["ot"])
-                        self.assertTrue(set(ligne["ot"]) <= ot_des_cas, ligne["ot"])
+                        # Identifiants montrés (les mêmes pour tous les profils) : au plus 5, de cette cause
+                        ids_texte = MOTIF_ID_OT.findall(ligne["texte"])
+                        self.assertTrue(ids_texte, "aucun identifiant d'OT : %r" % ligne["texte"])
+                        self.assertEqual(len(ids_texte), min(5, par_cause[rang][1]), ligne["texte"])
+                        self.assertTrue(set(ids_texte) <= ot_existants, ids_texte)
+                        self.assertTrue(set(ids_texte) <= ot_des_cas, ids_texte)
+                        causes = {cause_de_l_ot[i] for i in ids_texte}       # une seule cause par ligne
+                        self.assertEqual(len(causes), 1, ids_texte)
+                        self.assertEqual(cas_par_cause[causes.pop()], int(trouve.group(1)), ligne["texte"])
+                        if type_profil == "demandeur":
+                            # Pas d'accès aux OT : identifiants en texte simple, aucun lien
+                            self.assertEqual(ligne["ot"], [], "lien vers un OT pour le demandeur : %r" % ligne["texte"])
+                        else:
+                            self.assertEqual(ligne["ot"], ids_texte, "chaque identifiant est un lien : %r" % ligne["texte"])
+                    if type_profil == "demandeur":
+                        self.assertEqual(encart["liens_ot"], [], "liens vers les OT montrés au demandeur")
+                    else:
+                        self.assertTrue(encart["liens_ot"])
                     self.assertEqual(encart["mention"], "Statistique de l'historique, pas un diagnostic")
                     self.assertIn("(%s)" % SYMPTOME_CAUSES, self.page.inner_text(".di-code-symptome"))
 
@@ -404,6 +447,104 @@ class TestAnomalie(CasDemandesLot2):
             self.assertEqual(ligne_par_id(ordres_csv, autre["id"])["anomalie_constatee"], "0")
             self.attendre_toast("n'a pas pu être marqué « anomalie constatée »")
             self.assertIn(di_sans_marque + " est bien créée", page.inner_text("#toast"))
+
+
+# ---------------------------------------------------------------------------
+# verrou : un OT verrouillé (RG3) n'est jamais modifié par une DI liée
+# ---------------------------------------------------------------------------
+
+class TestVerrou(CasDemandesLot2):
+
+    def texte(self, selecteur):
+        return re.sub(r"\s+", " ", self.page.inner_text(selecteur)).strip()
+
+    def test_verrou_ot_preventif_cloture_administrativement_la_di_est_liee_l_ot_reste_intact(self):
+        preregler_profil(self.contexte, "demandeur", "Lucie Martin")
+        page = self.page
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            ordres_csv = dossier / "ordres_travail.csv"
+            ot = ligne_par_id(ordres_csv, OT_PREVENTIF_VERROUILLE)
+            self.assertEqual((ot["origine"], ot["statut"], ot["anomalie_constatee"]),
+                             ("préventif", "Clôturé administrativement", "0"))
+            self.assertIn(ot["statut"], STATUTS_VERROUILLES)
+            octets_avant = octets_de_la_ligne(ordres_csv, OT_PREVENTIF_VERROUILLE)
+            journal_avant = journal_de_la_ligne(dossier, "ordres_travail", OT_PREVENTIF_VERROUILLE)
+            self.ouvrir(serveur, "#/accueil")
+
+            # API : la DI est créée et liée ; l'OT verrouillé n'est pas touché
+            di_api = page.evaluate("""([equipement, ot]) => Demandes.creer({ equipement_id: equipement,
+                symptome: 'Bruit', impact: 'gêne', ot_origine_id: ot })""", [ot["equipement_id"], OT_PREVENTIF_VERROUILLE])
+            self.assertEqual(ligne_par_id(dossier / "demandes.csv", di_api)["ot_origine_id"], OT_PREVENTIF_VERROUILLE)
+            self.assertEqual(octets_de_la_ligne(ordres_csv, OT_PREVENTIF_VERROUILLE), octets_avant)
+            self.assertEqual(journal_de_la_ligne(dossier, "ordres_travail", OT_PREVENTIF_VERROUILLE), journal_avant)
+
+            # Écran : le bandeau prévient avant l'envoi, la confirmation le redit
+            self.aller("#/di/nouvelle?equipement=%s&ot=%s" % (ot["equipement_id"], OT_PREVENTIF_VERROUILLE), ".di-origine .alerte")
+            bandeau = self.texte(".di-origine")
+            self.assertIn("Anomalie constatée pendant l'OT préventif " + OT_PREVENTIF_VERROUILLE, bandeau)
+            self.assertIn("l'OT %s est verrouillé : il ne sera pas marqué « anomalie constatée »" % OT_PREVENTIF_VERROUILLE, bandeau)
+            self.assertNotIn("qui sera marqué", bandeau)
+            page.click(".di-puce[data-symptome='Fuite']")
+            page.click("label.tuile:has(input[value='gêne'])")
+            di = self.envoyer()
+            confirmation = self.texte(".di-confirmation")
+            self.assertIn("pendant l'OT préventif " + OT_PREVENTIF_VERROUILLE, confirmation)
+            self.assertIn("L'OT %s est verrouillé : il n'a pas été marqué « anomalie constatée »" % OT_PREVENTIF_VERROUILLE, confirmation)
+
+            # Disque : DI liée ; OT inchangé à l'octet près ; aucune entrée de journal sur l'OT
+            self.assertEqual(ligne_par_id(dossier / "demandes.csv", di)["ot_origine_id"], OT_PREVENTIF_VERROUILLE)
+            self.assertEqual(octets_de_la_ligne(ordres_csv, OT_PREVENTIF_VERROUILLE), octets_avant)
+            self.assertEqual(journal_de_la_ligne(dossier, "ordres_travail", OT_PREVENTIF_VERROUILLE), journal_avant)
+
+    def test_verrou_ot_annule_sur_un_autre_poste_apres_l_ouverture_du_formulaire_pas_marque(self):
+        # Le poste A a une version périmée de ordres_travail.csv : 409, relecture, OT vu « Annulé ».
+        self.autoriser_erreur(re.compile(r"status of 409.*/api/csv/ordres_travail"))
+        preregler_profil(self.contexte, "technicien", "", TECHNICIEN)
+        page = self.page
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            ordres_csv = dossier / "ordres_travail.csv"
+            ot = ligne_par_id(ordres_csv, OT_PREVENTIF_OUVERT)
+            self.assertNotIn(ot["statut"], STATUTS_VERROUILLES)
+            self.assertEqual(ot["anomalie_constatee"], "0")
+
+            # Poste A : formulaire ouvert sur l'OT encore ouvert (pas de relecture automatique)
+            self.ouvrir(serveur, "#/di/nouvelle?equipement=%s&ot=%s" % (ot["equipement_id"], OT_PREVENTIF_OUVERT))
+            page.evaluate("Donnees.arreterSurveillance()")
+            self.assertIn("qui sera marqué « anomalie constatée »", self.texte(".di-origine"))
+            page.click(".di-puce[data-symptome='Fuite']")
+            page.click("label.tuile:has(input[value='gêne'])")
+
+            # Poste B : le responsable annule l'OT pendant ce temps
+            contexte_b = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1280, "height": 800})
+            self.addCleanup(contexte_b.close)
+            contexte_b.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
+            preregler_profil(contexte_b, "responsable", poste="Poste B")
+            poste_b = contexte_b.new_page()
+            self.surveiller(poste_b)
+            poste_b.goto(serveur.url + "/#/accueil")
+            attendre_pret(poste_b)
+            poste_b.wait_for_load_state("networkidle")
+            statut = ligne_par_id(ordres_csv, OT_PREVENTIF_OUVERT)["statut"]
+            poste_b.evaluate("""([ot, statut]) => Ordres.changerStatut(ot, statut, 'Annulé',
+                { motif_annulation: 'Équipement déposé (essai)' })""", [OT_PREVENTIF_OUVERT, statut])
+            self.assertEqual(ligne_par_id(ordres_csv, OT_PREVENTIF_OUVERT)["statut"], "Annulé")
+            octets_annule = octets_de_la_ligne(ordres_csv, OT_PREVENTIF_OUVERT)
+            journal_annule = journal_de_la_ligne(dossier, "ordres_travail", OT_PREVENTIF_OUVERT)
+            # Le poste A ne le sait pas encore
+            self.assertEqual(page.evaluate("(id) => Donnees.trouver('ordres_travail', id).statut", OT_PREVENTIF_OUVERT), statut)
+            conflits_avant = page.evaluate("Donnees.statistiques.conflits")
+
+            # Poste A envoie : DI liée, OT annulé laissé tel quel (décision prise sur la ligne fraîche)
+            di = self.envoyer()
+            self.assertGreater(page.evaluate("Donnees.statistiques.conflits"), conflits_avant)
+            self.assertEqual(ligne_par_id(dossier / "demandes.csv", di)["ot_origine_id"], OT_PREVENTIF_OUVERT)
+            self.assertEqual(octets_de_la_ligne(ordres_csv, OT_PREVENTIF_OUVERT), octets_annule)
+            self.assertEqual(ligne_par_id(ordres_csv, OT_PREVENTIF_OUVERT)["anomalie_constatee"], "0")
+            self.assertEqual(journal_de_la_ligne(dossier, "ordres_travail", OT_PREVENTIF_OUVERT), journal_annule)
+            self.assertIn("L'OT %s est verrouillé : il n'a pas été marqué « anomalie constatée »" % OT_PREVENTIF_OUVERT,
+                          self.texte(".di-confirmation"))
 
 
 # ---------------------------------------------------------------------------

@@ -140,24 +140,37 @@ const CausesFrequentes = (() => {
   }
 
   /**
+   * Le demandeur n'a pas accès aux écrans des OT (un lien #/ot le renverrait à l'accueil) : il voit
+   * les mêmes identifiants, en texte simple (comme le lien de l'OT d'origine sur la fiche DI).
+   */
+  function sansLienVersLesOt() {
+    return typeof App !== 'undefined' && App.estDemandeur();
+  }
+
+  /**
    * « et 4 autres » après les liens montrés : lien vers la liste des OT clôturés de l'équipement
    * quand la portée est cet équipement ; texte simple pour la portée « même marque et modèle »
-   * (les OT sont alors sur plusieurs équipements : aucune liste ne les filtre ensemble).
+   * (les OT sont alors sur plusieurs équipements : aucune liste ne les filtre ensemble) et pour le
+   * demandeur.
    */
   function suiteDesLiens(reste, portee, equipementId) {
     if (reste <= 0) return '';
     const texteSuite = 'et ' + reste + (reste > 1 ? ' autres' : ' autre');
-    if (portee !== 'equipement') return UI.html` ${texteSuite}`;
+    if (portee !== 'equipement' || sansLienVersLesOt()) return UI.html` ${texteSuite}`;
     return UI.html` <a class="causes-autres" href="#/ot?equipement=${encodeURIComponent(equipementId)}&amp;etat=clotures">${texteSuite}</a>`;
   }
 
   /**
    * Une ligne de l'encart : « garniture usée — 7 cas sur 12 · remède … · dernier cas … · voir les
    * OT : … » ; au plus LIENS_PAR_CAUSE liens (les cas les plus récents), puis « et n autres ».
+   * Pour le demandeur, les identifiants sont en texte simple.
    */
   function ligneCause(cause, resultat, equipementId) {
     const montres = cause.ots.slice(0, LIENS_PAR_CAUSE);         // ots : du plus récent au plus ancien
-    const liens = montres.map((id, position) => UI.html`${position ? ', ' : ''}<a href="#/ot/${id}">${id}</a>`);
+    const sansLien = sansLienVersLesOt();
+    const liens = montres.map((id, position) => (sansLien
+      ? UI.html`${position ? ', ' : ''}${id}`
+      : UI.html`${position ? ', ' : ''}<a href="#/ot/${id}">${id}</a>`));
     const suite = suiteDesLiens(cause.ots.length - montres.length, resultat.portee, equipementId);
     const remede = cause.remede ? UI.html` · remède le plus utilisé : ${cause.remede.libelle}` : '';
     const dernier = cause.dernierCas ? UI.html` · dernier cas : ${UI.dateFr(cause.dernierCas)}` : '';

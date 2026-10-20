@@ -58,7 +58,9 @@ Object.assign(Demandes, (() => {
    * OT préventif pendant lequel l'anomalie a été constatée) }.
    * Renvoie l'identifiant (DI-AAAA-NNNN, calculé dans la fonction de mutation).
    * Avec ot_origine_id, l'OT d'origine passe ensuite « anomalie constatée » (seconde écriture,
-   * idempotente) ; si elle échoue, la DI reste créée et un toast d'avertissement le dit.
+   * idempotente) ; si elle échoue, la DI reste créée et un toast d'avertissement le dit. Un OT
+   * d'origine verrouillé (Clôturé administrativement, Annulé : RG3) garde le lien depuis la DI,
+   * mais n'est jamais modifié (voir marquerAnomalie).
    */
   async function creer(valeurs) {
     const v = valeurs || {};
@@ -107,12 +109,19 @@ Object.assign(Demandes, (() => {
   /**
    * Coche « anomalie constatée » sur un OT (D18 : idempotent ; une ligne déjà cochée n'est pas
    * réécrite, Donnees.modifier n'écrit rien quand rien ne change).
+   * RG3 : un OT verrouillé (Clôturé administrativement, Annulé) n'est jamais modifié, même par une
+   * DI liée. Le verrou est contrôlé sur la ligne FRAÎCHE reçue par la fonction de mutation : un OT
+   * clôturé ou annulé sur un autre poste après l'ouverture du formulaire n'est pas marqué (conflit
+   * d'écriture → table relue → fonction rejouée → rien à écrire).
+   * Renvoie true si l'OT porte la marque, false s'il est verrouillé (laissé tel quel).
    */
   async function marquerAnomalie(otId, diId) {
-    await Donnees.modifier('ordres_travail', (lignes) => {
+    return Donnees.modifier('ordres_travail', (lignes) => {
       const ot = lignes.find((ligne) => ligne.id === otId);
       if (!ot) throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+      if (Ordres.estVerrouille(ot)) return false;
       ot.anomalie_constatee = '1';
+      return true;
     }, { action: 'anomalie constatée (' + diId + ')' });
   }
 
