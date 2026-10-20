@@ -538,10 +538,14 @@ const App = (() => {
     zone.hidden = zone.children.length === 0;
   }
 
+  // En-tête du menu latéral (D32) : « Prévo », « GMAO », puis le nom de l'entreprise sur deux lignes
+  // au plus (au-delà, la feuille app.css le coupe) ; le nom complet reste lisible en infobulle.
   function mettreAJourEntreprise() {
-    const nom = adaptateur ? Donnees.parametre('entreprise_nom', '') : '';
-    UI.$('#nom-entreprise').textContent = nom ? 'GMAO · ' + nom : 'GMAO';
-    UI.$('#nom-entreprise').title = nom;
+    const nom = adaptateur ? String(Donnees.parametre('entreprise_nom', '')).trim() : '';
+    const zone = UI.$('#nom-entreprise');
+    zone.textContent = nom;
+    zone.title = nom;
+    zone.hidden = !nom;
   }
 
   function appliquerRepli(replie) {

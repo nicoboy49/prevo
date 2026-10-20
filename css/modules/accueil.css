@@ -2,9 +2,15 @@
    Les composants communs (cartes, indicateurs, listes de cartes, QR) sont dans css/style.css ;
    ici seulement ce qui est propre à l'accueil. Uniquement des variables de la charte. */
 
-/* Trois indicateurs (et non quatre) : ils se partagent toute la largeur, y compris sur téléphone. */
-.accueil-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Cinq indicateurs du responsable : une seule ligne sur grand écran, trois colonnes sur tablette,
+   deux sur téléphone (règles plus bas). */
+.accueil-instruments { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .accueil-instruments .lib { overflow-wrap: anywhere; }
+
+/* Technicien : ses préventifs de la semaine, puis ses autres OT, dans la même carte */
+.accueil-sous-titre { display: flex; align-items: center; gap: .5rem; font-size: 1rem; margin: 1rem 0 .6rem; color: var(--texte); }
+.accueil-mes-ordres .entete-carte + .accueil-sous-titre { margin-top: .2rem; }
+.accueil-preventifs-vide { margin: 0 0 .4rem; }
 
 /* Gros bouton « Signaler un problème » (technicien, demandeur) */
 .accueil-signaler { margin-bottom: 20px; max-width: 560px; }
@@ -32,8 +38,12 @@
 .accueil-rappels { margin: .4rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .35rem; color: var(--texte-2); }
 .accueil-rappels b { color: var(--texte); }
 
+@media (max-width: 1099.98px) {
+  .accueil-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @media (max-width: 640px) {
-  .accueil-instruments { gap: 10px; }
+  .accueil-instruments { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .accueil-instruments .lib { font-size: .8125rem; }
   .accueil-instruments .comp { font-size: .75rem; }
   .accueil-connexion { justify-content: center; }

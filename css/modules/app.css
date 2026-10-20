@@ -26,6 +26,14 @@
 /* Gros boutons des écrans de démarrage : le texte long passe à la ligne au lieu de déborder */
 .boite-demarrage .btn-gros > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 
+/* --- en-tête du menu latéral (D32) : « Prévo », « GMAO », puis le nom de l'entreprise, qui passe
+   à la ligne et tient sur deux lignes au plus (coupé au-delà, nom complet en infobulle) --- */
+.menu-tete .titre .nom-entreprise {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  margin-top: 3px; font-size: .8125rem; line-height: 1.35; font-weight: 600; color: var(--texte-2);
+  overflow-wrap: anywhere;
+}
+
 /* --- bouton de profil du menu latéral (.etat-poste, composant de style.css, ici en <button>) --- */
 button.etat-poste {
   width: 100%; min-height: var(--tactile); background: none; border: 1px solid transparent; border-radius: 12px;

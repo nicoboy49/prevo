@@ -1,18 +1,24 @@
 'use strict';
-// Accueil : écran d'arrivée (#/accueil), adapté au profil (brief §9 E1, ARCHITECTURE.md §10).
+// Accueil : écran d'arrivée (#/accueil), adapté au profil (brief §9 E1, ARCHITECTURE.md §10 et §14.6).
 //
-//   Responsable : trois indicateurs (DI à traiter, OT en retard, P1 ouverts) qui mènent à la liste
-//                 filtrée, une alerte si « Contrôle de la base » signale des erreurs, les 5 DI à
-//                 traiter et les 5 OT en retard les plus anciens.
-//   Technicien  : gros bouton « Signaler » et la liste de ses OT ouverts.
+//   Responsable : cinq indicateurs (DI à traiter, OT en retard, P1 ouverts, préventifs de la
+//                 semaine, articles à commander) qui mènent à la liste filtrée, une alerte si
+//                 « Contrôle de la base » signale des erreurs, les 5 DI à traiter et les 5 OT en
+//                 retard les plus anciens.
+//   Technicien  : gros bouton « Signaler » et la liste de ses OT ouverts : d'abord ses préventifs
+//                 de la semaine (ou la mention qu'il n'en a pas), puis ses autres OT.
 //   Demandeur   : gros bouton « Signaler un problème » et ses 5 dernières demandes (statut,
 //                 motif de refus).
-//   Tous, en mode serveur : carte « Connecter un téléphone » (QR code de l'adresse réseau du PC).
+//   Tous, en mode serveur et sauf sur téléphone (D31) : carte « Connecter un téléphone » (QR code
+//   de l'adresse réseau du PC) — sur le téléphone, on est déjà connecté.
 //
-// Définitions des compteurs (ARCHITECTURE.md §10) :
-//   DI à traiter  = demande au statut « Nouvelle » ;
-//   OT en retard  = statut ni clôturé ni annulé ET date prévue avant aujourd'hui ;
-//   P1 ouvert     = priorité P1 ET statut ni clôturé ni annulé.
+// Définitions des compteurs (ARCHITECTURE.md §10 et §14.6) :
+//   DI à traiter             = demande au statut « Nouvelle » ;
+//   OT en retard             = statut ni clôturé ni annulé ET date prévue avant aujourd'hui ;
+//   P1 ouvert                = priorité P1 ET statut ni clôturé ni annulé ;
+//   Préventif de la semaine  = OT d'origine « préventif », ni clôturé ni annulé, date prévue au
+//                              plus tard le dimanche de la semaine en cours (retards compris) ;
+//   Article à commander      = Magasin.aCommander() (article actif, stock ≤ point de commande).
 
 const Accueil = (() => {
 
@@ -20,6 +26,7 @@ const Accueil = (() => {
   const NOMBRE_LIGNES = 5;             // lignes montrées dans les listes du responsable et du demandeur
   const NOMBRE_OT_TECHNICIEN = 15;     // un technicien voit tous ses OT ouverts, jusqu'à ce nombre
   const MILLISECONDES_PAR_JOUR = 24 * 60 * 60 * 1000;
+  const ORIGINE_PREVENTIF = 'préventif';
 
   // Adresses du serveur lues une première fois puis gardées (évite un aller-retour à chaque affichage).
   let adressesEnMemoire = null;
@@ -40,14 +47,35 @@ const Accueil = (() => {
     return ot.priorite === 'P1' && otOuvert(ot);
   }
 
-  /** Les trois listes qui donnent les compteurs de l'accueil : { diATraiter, otEnRetard, p1Ouverts }. */
+  /** Dimanche de la semaine (du lundi au dimanche) d'une date ISO : '2026-10-20' (mardi) → '2026-10-25'. */
+  function dimancheDe(dateIso) {
+    const [annee, mois, jour] = dateIso.split('-').map(Number);
+    const date = new Date(Date.UTC(annee, mois - 1, jour));        // en UTC : pas de piège d'heure d'été
+    date.setUTCDate(date.getUTCDate() + (7 - date.getUTCDay()) % 7);  // getUTCDay() : 0 = dimanche
+    return date.toISOString().slice(0, 10);
+  }
+
+  /** OT préventif ouvert à faire au plus tard le `dimanche` donné (retards compris). */
+  function preventifDeLaSemaine(ot, dimanche) {
+    const prevue = String(ot.date_prevue || '').slice(0, 10);
+    return ot.origine === ORIGINE_PREVENTIF && otOuvert(ot) && prevue !== '' && prevue <= dimanche;
+  }
+
+  /**
+   * Les listes qui donnent les compteurs de l'accueil :
+   * { diATraiter, otEnRetard, p1Ouverts, preventifsSemaine } (lignes de demandes et d'OT) et
+   * articlesACommander (éléments de Magasin.aCommander() : { article, stock, pointCommande, … }).
+   */
   function calculerCompteurs() {
     const aujourdhui = Donnees.aujourdhui();
+    const dimanche = dimancheDe(aujourdhui);
     const ordres = Donnees.lignes('ordres_travail');
     return {
       diATraiter: Donnees.lignes('demandes').filter((di) => di.statut === 'Nouvelle'),
       otEnRetard: ordres.filter((ot) => otEnRetard(ot, aujourdhui)),
       p1Ouverts: ordres.filter(p1Ouvert),
+      preventifsSemaine: ordres.filter((ot) => preventifDeLaSemaine(ot, dimanche)),
+      articlesACommander: Magasin.aCommander(),
     };
   }
 
@@ -186,6 +214,8 @@ const Accueil = (() => {
     const compteurs = calculerCompteurs();
     const nombreSecurite = compteurs.diATraiter.filter((di) => di.impact === 'sécurité').length;
     const nombreP1EnCours = compteurs.p1Ouverts.filter((ot) => ot.statut === 'En cours').length;
+    const preventifsEnRetard = compteurs.preventifsSemaine.filter((ot) => otEnRetard(ot, aujourdhui)).length;
+    const articlesCritiques = compteurs.articlesACommander.filter((a) => a.article.critique === '1').length;
 
     // Demandes de sécurité d'abord, puis les plus anciennes.
     const demandes = compteurs.diATraiter.slice().sort((a, b) =>
@@ -205,6 +235,10 @@ const Accueil = (() => {
         ${indicateur('#/ot?filtre=retard', 'ambre', 'OT en retard', compteurs.otEnRetard.length, 'date prévue dépassée')}
         ${indicateur('#/ot?filtre=p1', 'rouge', 'P1 ouverts', compteurs.p1Ouverts.length,
           nombreP1EnCours ? 'dont ' + nombreP1EnCours + ' en cours' : 'priorité la plus haute')}
+        ${indicateur('#/preventif?onglet=calendrier', 'vert', 'Préventifs de la semaine', compteurs.preventifsSemaine.length,
+          preventifsEnRetard ? 'dont ' + preventifsEnRetard + ' en retard' : 'd\'ici dimanche ' + UI.dateFr(dimancheDe(aujourdhui)))}
+        ${indicateur('#/magasin?onglet=a-commander', '', 'Articles à commander', compteurs.articlesACommander.length,
+          articlesCritiques ? 'dont ' + pluriel(articlesCritiques, 'critique') : 'stock au point de commande')}
       </div>
       <div class="grille">
         <div class="c6">${carteListe('Demandes à traiter', compteurs.diATraiter.length,
@@ -218,6 +252,27 @@ const Accueil = (() => {
       </div>`;
   }
 
+  // Carte du technicien : ses préventifs de la semaine d'abord (ou la mention qu'il n'en a pas),
+  // puis ses autres OT ouverts. Un OT n'apparaît qu'une fois.
+  function carteOrdresTechnicien(mesOrdres, idsPreventifs, aujourdhui) {
+    const preventifs = mesOrdres.filter((ot) => idsPreventifs.has(ot.id));
+    const autres = mesOrdres.filter((ot) => !idsPreventifs.has(ot.id));
+    const montres = autres.slice(0, NOMBRE_OT_TECHNICIEN);
+    const reste = autres.length - montres.length;
+    return UI.html`<article class="carte accueil-mes-ordres">
+      <div class="entete-carte"><h2>Mes ordres de travail ouverts</h2><span class="badge ${mesOrdres.length > 0 ? 'info' : 'neutre'}">${mesOrdres.length}</span></div>
+      <h3 class="accueil-sous-titre">Mes préventifs de la semaine <span class="badge ${preventifs.length > 0 ? 'info' : 'neutre'}">${preventifs.length}</span></h3>
+      ${preventifs.length
+        ? UI.html`<ul class="liste-cartes accueil-preventifs">${preventifs.map((ot) => carteOrdre(ot, aujourdhui))}</ul>`
+        : UI.html`<p class="muted accueil-preventifs-vide">Aucun préventif à faire d'ici dimanche ${UI.dateFr(dimancheDe(aujourdhui))}.</p>`}
+      <h3 class="accueil-sous-titre">Autres ordres de travail <span class="badge neutre">${autres.length}</span></h3>
+      ${montres.length
+        ? UI.html`<ul class="liste-cartes">${montres.map((ot) => carteOrdre(ot, aujourdhui))}</ul>`
+        : UI.vide('Aucun autre ordre de travail ouvert', 'Rien d\'autre ne vous est affecté pour le moment.', 'ordres')}
+      <p class="accueil-voir-tout"><a href="#/ot">${reste > 0 ? 'Voir tous les ordres de travail (' + reste + ' de plus)' : 'Voir tous les ordres de travail'}</a></p>
+    </article>`;
+  }
+
   function accueilTechnicien() {
     const aujourdhui = Donnees.aujourdhui();
     const identifiant = App.profil.technicienId;
@@ -226,6 +281,9 @@ const Accueil = (() => {
       .filter((ot) => ot.technicien_id === identifiant && otOuvert(ot))
       .sort((a, b) => (rangPriorite[a.priorite] || 9) - (rangPriorite[b.priorite] || 9)
         || (a.date_prevue || '9999').localeCompare(b.date_prevue || '9999'));
+    // Ses préventifs de la semaine : même définition que le compteur du responsable.
+    const dimanche = dimancheDe(aujourdhui);
+    const idsPreventifs = new Set(mesOrdres.filter((ot) => preventifDeLaSemaine(ot, dimanche)).map((ot) => ot.id));
     return UI.html`
       <div class="entete-page"><div>
         <h1>Accueil</h1>
@@ -234,10 +292,7 @@ const Accueil = (() => {
       <div class="pile-gros accueil-signaler">
         <a href="#/di/nouvelle" class="btn btn-primaire btn-gros">${UI.icone('ajouter')}<span>Signaler un problème<small>Créer une demande d'intervention</small></span></a>
       </div>
-      ${carteListe('Mes ordres de travail ouverts', mesOrdres.length,
-        mesOrdres.slice(0, NOMBRE_OT_TECHNICIEN).map((ot) => carteOrdre(ot, aujourdhui)),
-        '#/ot', 'Voir tous les ordres de travail',
-        'Aucun ordre de travail ouvert', 'Rien ne vous est affecté pour le moment.', 'ordres')}`;
+      ${carteOrdresTechnicien(mesOrdres, idsPreventifs, aujourdhui)}`;
   }
 
   function accueilDemandeur() {
@@ -264,8 +319,11 @@ const Accueil = (() => {
   // ===========================================================================================
 
   async function afficher(conteneur) {
-    // En mode serveur, on lit l'adresse réseau AVANT d'écrire l'écran (un seul remplissage).
-    const adresses = App.mode === 'serveur' ? await lireAdressesReseau() : null;
+    // Carte « Connecter un téléphone » : en mode serveur, sauf sur un téléphone (D31 : il est déjà
+    // connecté, et le QR ne se scanne pas sur son propre écran). On lit l'adresse réseau AVANT
+    // d'écrire l'écran (un seul remplissage).
+    const avecConnexion = App.mode === 'serveur' && !UI.estTelephone();
+    const adresses = avecConnexion ? await lireAdressesReseau() : null;
     // Si l'utilisateur est parti ailleurs pendant l'attente, on n'écrase pas son nouvel écran.
     if (!/^#\/accueil/.test(location.hash)) return;
 
@@ -289,5 +347,5 @@ const Accueil = (() => {
     });
   });
 
-  return { afficher, calculerCompteurs, otEnRetard, p1Ouvert };
+  return { afficher, calculerCompteurs, otEnRetard, p1Ouvert, dimancheDe, preventifDeLaSemaine };
 })();
