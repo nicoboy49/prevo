@@ -253,6 +253,15 @@ class TestPlanning(CasRegles):
                          ["OT-2026-0002", "OT-2026-0001", "OT-2026-0008", "OT-2026-0011", "OT-2026-0003",
                           "OT-2026-0013", "OT-2026-0012"])
 
+    def test_renouvellement_lisible_l_emporte_sur_une_echeance_illisible(self):
+        # Relecture : l'ancienne ligne mal saisie (« 2026-02-30 ») ne doit plus « compter » une fois renouvelée.
+        self.js("""async () => Donnees.modifier('habilitations', (lignes) => {
+            lignes.push({ id: 'HAB-0090', technicien_id: 'TEC-0002', intitule: 'H1V', date_obtention: '2020-01-01', date_echeance: '2026-02-30' });
+            lignes.push({ id: 'HAB-0091', technicien_id: 'TEC-0002', intitule: 'H1V', date_obtention: '2026-03-01', date_echeance: '2029-03-01' }); })""")
+        comptent = self.js("() => Equipe.habilitationsQuiComptent('TEC-0002').map((h) => h.id)")
+        self.assertIn("HAB-0091", comptent)
+        self.assertNotIn("HAB-0090", comptent)
+
     def test_date_prevue_impossible_ignoree_sans_erreur(self):
         self.js("""async () => Donnees.modifier('ordres_travail', (lignes) => {
             lignes.push({ id: 'OT-2026-0099', statut: 'Planifié', technicien_id: 'TEC-0001', date_prevue: '2026-02-30',

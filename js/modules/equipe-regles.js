@@ -100,8 +100,11 @@ const Equipe = (() => {
   /** Vrai si l'habilitation `a` doit compter plutôt que `b` (même intitulé) : échéance la plus
    *  lointaine (vide = sans limite), puis obtention la plus récente, puis identifiant le plus grand. */
   function compteAvant(a, b) {
-    const echeanceA = dateIso(a.date_echeance) || '9999-12-31';
-    const echeanceB = dateIso(b.date_echeance) || '9999-12-31';
+    // Vide = sans limite (la plus lointaine) ; illisible = la plus faible : une ligne mal saisie ne
+    // l'emporte jamais sur un renouvellement lisible.
+    const rang = (valeur) => (texte(valeur) ? dateIso(valeur) || '0000-00-00' : '9999-12-31');
+    const echeanceA = rang(a.date_echeance);
+    const echeanceB = rang(b.date_echeance);
     if (echeanceA !== echeanceB) return echeanceA > echeanceB;
     const obtentionA = dateIso(a.date_obtention);
     const obtentionB = dateIso(b.date_obtention);
