@@ -9,6 +9,7 @@
 //   #/equipement/<id>            fiche complète (tous les profils)
 //   #/equipement/nouveau         formulaire de création (responsable)
 //   #/equipement/<id>/modifier   formulaire de modification (responsable)
+//   #/parc/etiquettes            étiquettes QR par lot, planches A4 (responsable, lot 3)
 //   Les localisations se créent et se modifient dans une fenêtre, depuis le parc (responsable).
 //
 // Fonctions offertes aux autres modules :

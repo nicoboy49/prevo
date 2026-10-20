@@ -8,7 +8,7 @@
 Object.assign(Parc, (() => {
 
   // Règles, outils et écrans des fichiers précédents (parc-regles.js à parc-formulaires.js).
-  const { cheminLocalisation, libelleEquipement, afficherListe, afficherFormulaire } = Parc;
+  const { cheminLocalisation, libelleEquipement, afficherListe, afficherFormulaire, afficherEtiquettes } = Parc;
   const { estActif, comparerTextes, parRepere, abreger, badgeCriticite, badgesEquipement,
     listeAdaptative, dernierReleveDe, ouvrirFenetreReleve } = Parc.interne;
 
@@ -420,6 +420,14 @@ Object.assign(Parc, (() => {
       profils: tous,
       tables: ['equipements', 'localisations'],
       afficher: afficherListe,
+    });
+    // #/parc/etiquettes : étiquettes QR par lot (parc-etiquettes.js, ARCHITECTURE.md §15.6),
+    // responsable seul ; ?localisation=, ?criticite=, ?ids=EQ-…,EQ-… sont lus par l'écran.
+    App.ecran({
+      id: 'parc-etiquettes', route: /^#\/parc\/etiquettes$/, titre: 'Étiquettes QR', parent: 'parc',
+      profils: ['responsable'],
+      tables: ['equipements', 'localisations', 'parametres'],
+      afficher: afficherEtiquettes,
     });
     // Les routes les plus précises d'abord : « nouveau » ne doit pas être pris pour un identifiant
     // (la route fiche l'exclut en plus, ARCHITECTURE.md §14.2).

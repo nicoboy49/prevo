@@ -147,6 +147,7 @@ Object.assign(Parc, (() => {
           ${responsable ? UI.html`<div class="actions">
             <a class="btn btn-primaire" href="#/equipement/nouveau">${UI.icone('ajouter')}Nouvel équipement</a>
             <button type="button" class="btn btn-secondaire" id="parc-nouvelle-localisation">${UI.icone('ajouter')}Nouvelle localisation</button>
+            <a class="btn btn-secondaire" href="#/parc/etiquettes">${UI.icone('qr')}Imprimer des étiquettes</a>
           </div>` : ''}
         </div>
         <div class="filtres parc-filtres" data-hors-saisie>
