@@ -111,7 +111,10 @@ class TestPrioriteCalculee(CasNavigateur):
     }
 
     def test_matrice_complete_securite_et_criticite_absente(self):
-        charger_scripts(self.page, ["js/schema.js", "js/donnees.js", "js/interface.js", "js/modules/demandes.js"])
+        charger_scripts(self.page, ["js/schema.js", "js/donnees.js", "js/interface.js",
+                                    "js/modules/demandes-regles.js", "js/modules/demandes-ecritures.js",
+                                    "js/modules/demandes-signaler.js", "js/modules/demandes-liste.js",
+                                    "js/modules/demandes-fiche.js"])
         calcul = "([c, i]) => Demandes.prioriteCalculee(c, i)"
         # 12 cas : 3 criticités × 4 impacts (sécurité → toujours P1)
         for (criticite, impact), attendu in self.MATRICE.items():

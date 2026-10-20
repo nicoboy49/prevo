@@ -1,0 +1,212 @@
+'use strict';
+// Demandes (2/5) — écritures du module « Demandes d'intervention » (ARCHITECTURE.md §10 RG1 et
+// §14.2) : créer une DI, l'accepter (OT créé, puis annulé s'il devient orphelin), la regrouper,
+// la différer, la refuser ; et le nom de fichier d'une photo. Toujours par Donnees.modifier, le
+// contrôle étant refait DANS la fonction de mutation. Complète l'objet Demandes.
+
+Object.assign(Demandes, (() => {
+
+  // Constantes, outils et règles de demandes-regles.js.
+  const { normaliserImpact, typePropose, datePrevue } = Demandes;
+  const { STATUTS_A_TRAITER, PRIORITES, TYPE_IMMEDIAT, TYPE_DIFFERE, MESSAGE_DEJA_TRAITEE, texte,
+    deuxChiffres, prioriteDeLaDemande, estOuvert, nomDuProfil } = Demandes.interne;
+
+  // ===========================================================================================
+  // 3. Écritures (toutes par Donnees.modifier)
+  // ===========================================================================================
+
+  // Vérifie qu'une décision est encore possible sur la DI (statut Nouvelle ou Différée).
+  function verifierATraiter(demande, diId) {
+    if (!demande) throw new Donnees.ErreurValidation('La demande ' + diId + ' est introuvable.');
+    if (!STATUTS_A_TRAITER.includes(demande.statut)) {
+      throw new Donnees.ErreurValidation(MESSAGE_DEJA_TRAITEE + ' (statut actuel : ' + demande.statut + ').');
+    }
+  }
+
+  // Relit demandes.csv avant une décision : un autre poste a peut-être déjà décidé.
+  // (Le contrôle est refait DANS la fonction de mutation : c'est lui qui fait foi.)
+  async function verifierEncoreATraiter(diId) {
+    const lignes = await Donnees.rechargerTable('demandes');
+    verifierATraiter(lignes.find((ligne) => ligne.id === diId), diId);
+  }
+
+  /**
+   * Crée une demande. valeurs : { equipement_id, symptome, impact, description, photo, demandeur }.
+   * Renvoie l'identifiant (DI-AAAA-NNNN, calculé dans la fonction de mutation).
+   */
+  async function creer(valeurs) {
+    const v = valeurs || {};
+    const equipementId = texte(v.equipement_id);
+    const symptome = texte(v.symptome).replace(/[\r\n]+/g, ' ');
+    const impact = normaliserImpact(v.impact);
+    if (!equipementId) throw new Donnees.ErreurValidation('Choisissez l\'équipement concerné.');
+    if (!Donnees.trouver('equipements', equipementId)) {
+      throw new Donnees.ErreurValidation('L\'équipement ' + equipementId + ' est inconnu.');
+    }
+    if (!symptome) throw new Donnees.ErreurValidation('Décrivez en quelques mots ce que vous constatez.');
+    if (!impact) throw new Donnees.ErreurValidation('Choisissez l\'impact : sécurité, arrêt, dégradé ou gêne.');
+    const demandeur = texte(v.demandeur) || nomDuProfil();
+    const description = texte(v.description);
+    const photo = texte(v.photo);
+
+    return Donnees.modifier('demandes', (lignes, outils) => {
+      const maintenant = outils.maintenant();
+      const id = outils.nouvelId(lignes, maintenant);       // DI-AAAA-NNNN, recalculé à chaque essai
+      lignes.push({
+        id, date_heure: maintenant, demandeur, equipement_id: equipementId, symptome, impact,
+        description, photo, statut: 'Nouvelle', motif_decision: '', date_decision: '', ot_id: '',
+      });
+      return id;
+    }, { action: 'demande signalée' });
+  }
+
+  /**
+   * Accepte une DI (RG1) : crée l'OT (ou réutilise celui qui porte déjà ce di_id) puis passe la DI
+   * « Acceptée ». options : { priorite (défaut : calculée), motifPriorite (obligatoire si la
+   * priorité change), type (défaut : P1 → correctif immédiat, sinon correctif différé) }.
+   * Renvoie l'identifiant de l'OT.
+   */
+  async function accepter(diId, options) {
+    const reglages = options || {};
+    await verifierEncoreATraiter(diId);
+    const demande = Donnees.trouver('demandes', diId);
+    const calculee = prioriteDeLaDemande(demande) || 'P3';
+    const priorite = texte(reglages.priorite) || calculee;
+    if (!PRIORITES.includes(priorite)) throw new Donnees.ErreurValidation('Priorité inconnue : ' + priorite + '.');
+    const motifPriorite = texte(reglages.motifPriorite);
+    if (priorite !== calculee && !motifPriorite) {
+      throw new Donnees.ErreurValidation('Indiquez le motif du changement de priorité (' + calculee + ' → ' + priorite + ').');
+    }
+    const type = texte(reglages.type) || typePropose(priorite);
+    if (![TYPE_IMMEDIAT, TYPE_DIFFERE].includes(type)) {
+      throw new Donnees.ErreurValidation('Type d\'ordre de travail inconnu : ' + type + '.');
+    }
+    const changementPriorite = priorite !== calculee
+      ? 'priorité ' + calculee + ' → ' + priorite + ' : ' + motifPriorite : '';
+
+    // (1) L'OT : réutilisé s'il existe déjà pour cette DI (essai précédent interrompu, autre poste),
+    //     sinon créé. Idempotent : rejoué sans risque sur conflit.
+    const otId = await Donnees.modifier('ordres_travail', (lignes, outils) => {
+      const existant = lignes.find((ot) => ot.di_id === diId);
+      if (existant) return existant.id;
+      const maintenant = outils.maintenant();
+      const id = outils.nouvelId(lignes, maintenant);
+      lignes.push({
+        id, origine: 'DI', di_id: diId, equipement_id: demande.equipement_id, type, priorite,
+        statut: 'Créé', titre: texte(demande.symptome).replace(/[\r\n]+/g, ' '),
+        travail_a_faire: demande.description || '', date_creation: maintenant,
+        date_prevue: datePrevue(priorite, outils.aujourdhui()),
+      });
+      return id;
+    }, { action: 'acceptation de ' + diId + (changementPriorite ? ' ; ' + changementPriorite : '') });
+
+    // (2) La DI : encore à traiter ? (sinon un autre poste a décidé entre-temps)
+    let vue = null;          // la DI telle que lue (fraîche) par la fonction de mutation
+    try {
+      await Donnees.modifier('demandes', (lignes, outils) => {
+        const ligne = lignes.find((l) => l.id === diId);
+        vue = ligne ? { statut: ligne.statut, ot_id: ligne.ot_id } : null;
+        verifierATraiter(ligne, diId);
+        ligne.statut = 'Acceptée';
+        ligne.ot_id = otId;
+        ligne.date_decision = outils.maintenant();
+        ligne.motif_decision = changementPriorite ? changementPriorite.charAt(0).toUpperCase() + changementPriorite.slice(1) : '';
+      }, { action: 'acceptée → ' + otId + (changementPriorite ? ' ; ' + changementPriorite : '') });
+    } catch (erreur) {
+      // La DI a été refusée, différée ou regroupée ailleurs entre les deux étapes : l'OT créé à
+      // l'étape 1 n'a plus de raison d'être. (Acceptée ailleurs avec CET OT : il est conservé.)
+      if (erreur instanceof Donnees.ErreurValidation && !(vue && vue.ot_id === otId)) {
+        await annulerOtOrphelin(diId, otId);
+      }
+      throw erreur;
+    }
+    return otId;
+  }
+
+  /** Annule l'OT créé pour une DI finalement traitée sur un autre poste (s'il est encore « Créé »). */
+  async function annulerOtOrphelin(diId, otId) {
+    const motif = 'DI traitée sur un autre poste';
+    try {
+      await Donnees.modifier('ordres_travail', (lignes) => {
+        const ot = lignes.find((l) => l.id === otId);
+        if (!ot || ot.di_id !== diId || ot.statut !== 'Créé') return;
+        ot.statut = 'Annulé';
+        ot.motif_annulation = motif;
+      }, { action: 'statut Créé → Annulé : ' + motif });
+    } catch (erreur) {
+      App.signalerErreur(erreur, 'annulation de l\'OT ' + otId);
+    }
+  }
+
+  /** Rattache la DI à un OT ouvert du même équipement (statut « Regroupée »). */
+  async function regrouper(diId, otId) {
+    await verifierEncoreATraiter(diId);
+    const demande = Donnees.trouver('demandes', diId);
+    const ordres = await Donnees.rechargerTable('ordres_travail');
+    const ot = ordres.find((ligne) => ligne.id === otId);
+    if (!ot) throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+    if (!estOuvert(ot)) throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' n\'est plus ouvert (' + ot.statut + ').');
+    if (ot.equipement_id !== demande.equipement_id) {
+      throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' concerne un autre équipement.');
+    }
+    await Donnees.modifier('demandes', (lignes, outils) => {
+      const ligne = lignes.find((l) => l.id === diId);
+      verifierATraiter(ligne, diId);
+      ligne.statut = 'Regroupée';
+      ligne.ot_id = otId;
+      ligne.date_decision = outils.maintenant();
+      ligne.motif_decision = 'Regroupée avec ' + otId + ', déjà ouvert pour cet équipement.';
+    }, { action: 'regroupée avec ' + otId });
+    return otId;
+  }
+
+  /** Diffère une DI nouvelle (motif facultatif, visible du demandeur). */
+  async function differer(diId, motif) {
+    await verifierEncoreATraiter(diId);
+    await Donnees.modifier('demandes', (lignes, outils) => {
+      const ligne = lignes.find((l) => l.id === diId);
+      verifierATraiter(ligne, diId);
+      if (ligne.statut === 'Différée') throw new Donnees.ErreurValidation('Cette demande est déjà différée.');
+      ligne.statut = 'Différée';
+      ligne.date_decision = outils.maintenant();
+      ligne.motif_decision = texte(motif);
+    }, { action: 'différée' });
+  }
+
+  /** Refuse une DI : motif obligatoire, visible du demandeur. */
+  async function refuser(diId, motif) {
+    const motifPropre = texte(motif);
+    if (!motifPropre) throw new Donnees.ErreurValidation('Le motif du refus est obligatoire : il sera montré au demandeur.');
+    await verifierEncoreATraiter(diId);
+    await Donnees.modifier('demandes', (lignes, outils) => {
+      const ligne = lignes.find((l) => l.id === diId);
+      verifierATraiter(ligne, diId);
+      ligne.statut = 'Refusée';
+      ligne.date_decision = outils.maintenant();
+      ligne.motif_decision = motifPropre;
+    }, { action: 'refusée' });
+  }
+
+  // ===========================================================================================
+  // 4. Photo : réduite à 1280 px (JPEG) dès le choix, envoyée à la validation
+  // ===========================================================================================
+
+  // photo-AAAAMMJJ-HHMMSS-XXXX.jpg (Math.random suffit : pas de crypto en contexte non sécurisé ;
+  // le stockage refuse d'écraser un document existant).
+  function nomPhoto() {
+    const d = new Date();
+    const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let hasard = '';
+    for (let i = 0; i < 4; i += 1) hasard += caracteres[Math.floor(Math.random() * caracteres.length)];
+    return 'photo-' + d.getFullYear() + deuxChiffres(d.getMonth() + 1) + deuxChiffres(d.getDate())
+      + '-' + deuxChiffres(d.getHours()) + deuxChiffres(d.getMinutes()) + deuxChiffres(d.getSeconds())
+      + '-' + hasard + '.jpg';
+  }
+
+  // Outil prêté aux fichiers suivants du module (usage interne).
+  Object.assign(Demandes.interne, { nomPhoto });
+
+  return {
+    creer, accepter, regrouper, differer, refuser,
+  };
+})());
