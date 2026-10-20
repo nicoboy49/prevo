@@ -17,7 +17,7 @@ passée à hier). Trois budgets, médiane de trois mesures, toutes affichées :
                          budget 1 000 ms.
     indicateurs (lot 3) : du changement d'adresse vers #/indicateurs (12 mois) à l'affichage du bandeau
                          et des 7 graphiques (aucune carte « en chargement ») ; la 1re mesure charge
-                         ECharts (contexte neuf) ; budget 2 000 ms, chacune des mesures ;
+                         ECharts (contexte neuf) ; budget 2 000 ms pour la première et pour la médiane ;
     planning (lot 3)   : du changement d'adresse vers #/planning?semaine=… à l'affichage de la grille
                          (.pl-grille) ; budget 1 000 ms ;
     rapport figé (lot 3) : Rapport.figer(mois) — calcul des indicateurs du mois, de M-1 et de N-1,
