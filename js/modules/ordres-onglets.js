@@ -316,6 +316,8 @@ Object.assign(Ordres, (() => {
         App.marquerSaisie(true);
       });
       UI.$('.libelle', blocDateFin).appendChild(maintenant);
+      // Pas de date de fin dans le futur : le sélecteur l'empêche, l'enregistrement le contrôle aussi.
+      UI.$('[name="date_fin"]', blocDateFin).max = Donnees.maintenant().replace(' ', 'T');
       const enregistrer = () => enregistrerExecution(ot, formulaire);
       declarerFormulaire(formulaire, enregistrer);
       formulaire.addEventListener('submit', async (evenement) => {
@@ -328,8 +330,14 @@ Object.assign(Ordres, (() => {
   }
 
   async function enregistrerExecution(ot, formulaire) {
+    const champFin = UI.$('[name="date_fin"]', formulaire);
+    if (champFin) champFin.max = Donnees.maintenant().replace(' ', 'T');     // l'heure a pu avancer
     if (UI.verifierFormulaire(formulaire).length) return false;
     const valeurs = UI.lireFormulaire(formulaire);
+    if (Ordres.dateFinDansLeFutur(valeurs.date_fin)) {
+      UI.toast('La date de fin ne peut pas être dans le futur : indiquez quand les travaux se sont réellement terminés.', 'erreur');
+      return false;
+    }
     const checkListe = UI.$$('li[data-operation]', formulaire).map((li) => ({
       id: li.dataset.operation, fait: UI.$('.ot-fait', li).checked ? '1' : '0', valeur_mesuree: UI.$('.ot-mesure', li).value.trim(),
     }));

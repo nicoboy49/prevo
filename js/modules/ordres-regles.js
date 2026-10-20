@@ -294,6 +294,19 @@ const Ordres = (() => {
   }
 
   /**
+   * Vrai si la date de fin est dans le futur (demande de Nicolas avant le lot 3 : une date de fin
+   * saisie un an trop tard faussait la gamme du préventif). Comparaison à la minute près avec
+   * l'heure locale du poste ; « AAAA-MM-JJ HH:MM », « AAAA-MM-JJTHH:MM » ou une date seule.
+   */
+  function dateFinDansLeFutur(dateFin, maintenant) {
+    const fin = texte(dateFin).replace('T', ' ');
+    if (!fin) return false;
+    const reference = (maintenant || Donnees.maintenant()).replace('T', ' ');
+    if (fin.length <= 10) return fin > reference.slice(0, 10);
+    return fin.slice(0, 16) > reference.slice(0, 16);
+  }
+
+  /**
    * Manques qui bloquent la clôture technique (RG4) : TOUS, dans un tableau de phrases.
    * options.temps : lignes ot_temps à utiliser (par défaut, celles de l'OT dans Donnees).
    */
@@ -303,6 +316,7 @@ const Ordres = (() => {
     const compteRendu = texte(ot.compte_rendu);
     if (!texte(ot.date_fin)) manques.push('la date de fin des travaux');
     else if (texte(ot.date_debut) && texte(ot.date_fin) < texte(ot.date_debut)) manques.push('une date de fin postérieure à la date de début');
+    else if (dateFinDansLeFutur(ot.date_fin)) manques.push('une date de fin qui ne soit pas dans le futur');
     if (!temps.some((ligne) => nombre(ligne.heures) > 0)) manques.push('au moins un temps passé (onglet Exécution)');
     if (!texte(ot.cause_code)) manques.push('le code cause');
     if (!texte(ot.remede_code)) manques.push('le code remède');
@@ -451,6 +465,7 @@ const Ordres = (() => {
     // règles pures (ARCHITECTURE.md §10)
     transitionsPossibles, verifierPassage, verifierCloture, cout, verifierHabilitation, estOuvert, enRetard,
     estVerrouille, estCorrectif, estRienASignaler, piecesManquantes, filtrer, datePrevueParDefaut,
+    dateFinDansLeFutur,
     // affichage (les écritures, l'export et le bon de travail sont ajoutés par les fichiers suivants)
     libelleEquipement, nomTechnicien,
     // Usage interne au module : outils prêtés aux fichiers ordres-*.js, qui y ajoutent les leurs

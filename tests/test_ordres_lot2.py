@@ -12,6 +12,7 @@ Familles (le nom du test le dit) :
                  date de fin erronée corrigée après réouverture : la date corrigée fait foi ; OT plus
                  ancien de la même gamme clôturé après coup : gamme inchangée ; second appel sans effet ;
     rg3        : refus « Planifié » : le message dit ce qui est déjà sorti pour l'OT (sinon, celui du lot 1) ;
+    date_fin   : date de fin dans le futur refusée à l'enregistrement et à la clôture (T39) ;
     encart     : causes fréquentes de la fuite de PO-02 dans Préparation et Compte rendu ;
     technicien : sortie sur son OT ; telephone : 375 px sans défilement horizontal, zones ≥ 48 px.
 
@@ -605,10 +606,11 @@ class TestGamme(CasOrdresLot2):
             self.assertTrue(any("réalisation de la gamme par l'OT " + ot_id in action for action in journal), journal)
 
     def test_gamme_date_de_fin_erronee_corrigee_apres_reouverture_la_date_corrigee_fait_foi(self):
-        """Relecture de la vague 4 : date de fin saisie un an trop tard, clôture (la gamme la prend),
-        réouverture, date corrigée, nouvelle clôture → la gamme prend la date corrigée (D22), même
+        """Relecture de la vague 4 : date de fin erronée, clôture (la gamme la prend), réouverture,
+        date corrigée PLUS ANCIENNE, nouvelle clôture → la gamme prend la date corrigée (D22), même
         si la date enregistrée dans la gamme est plus récente : l'OT est le plus récent des OT
-        clôturés de la gamme, sa date fait foi."""
+        clôturés de la gamme, sa date fait foi. (Une date de fin dans le futur étant désormais
+        refusée — T39 —, l'erreur est ici « fin saisie maintenant » au lieu de « deux jours avant ».)"""
         page = self.page
         with ServeurPrevo() as serveur:
             dossier = serveur.dossier
@@ -618,20 +620,25 @@ class TestGamme(CasOrdresLot2):
             self.ouvrir_fiche(ot_id)
             self.mener_jusqu_a_en_cours(ot_id)
             jour = datetime.date.fromisoformat(page.evaluate("Donnees.aujourdhui()"))
+            # Préparation du cas : travaux commencés il y a 3 jours (sinon une date de fin plus
+            # ancienne serait refusée comme antérieure au début).
+            page.evaluate("""async ([id, debut]) => { await Donnees.modifier('ordres_travail', (lignes) => {
+                lignes.find((l) => l.id === id).date_debut = debut; return true; }); }""",
+                          [ot_id, (jour - datetime.timedelta(days=3)).isoformat() + " 08:00"])
 
-            # 1) Date de fin erronée (un an trop tard), clôture : la gamme prend cette date
-            erronee = jour + datetime.timedelta(days=365)
-            self.saisir_date_de_fin(ot_id, erronee.isoformat() + "T10:00")
+            # 1) Date de fin erronée (« Maintenant » au lieu d'il y a deux jours), clôture : la gamme la prend
+            self.saisir_date_de_fin(ot_id)
+            erronee = datetime.date.fromisoformat(ligne_par_id(dossier, "ordres_travail.csv", ot_id)["date_fin"][:10])
             self.remplir_compte_rendu(dossier)
             self.cloturer_par_l_interface(ot_id)
             gamme = ligne_par_id(dossier, "gammes.csv", GAMME_MENSUELLE)
             self.assertEqual((gamme["derniere_realisation"], gamme["prochaine_echeance"]),
                              (erronee.isoformat(), (erronee + datetime.timedelta(days=periodicite)).isoformat()))
 
-            # 2) Réouverture (responsable), date de fin corrigée (« Maintenant »), nouvelle clôture
+            # 2) Réouverture (responsable), date de fin corrigée (il y a deux jours), nouvelle clôture
             self.avec_toast(ot_id + " : En cours.", lambda: self.transition("En cours"))
             self.attendre_statut("En cours")
-            self.saisir_date_de_fin(ot_id)
+            self.saisir_date_de_fin(ot_id, (jour - datetime.timedelta(days=2)).isoformat() + "T10:00")
             self.cloturer_par_l_interface(ot_id)
             self.assertEqual(page.locator("#ot-message .alerte").count(), 0)
 
@@ -692,6 +699,80 @@ class TestGamme(CasOrdresLot2):
 # ---------------------------------------------------------------------------
 # Encart « Causes fréquentes ici »
 # ---------------------------------------------------------------------------
+
+class TestDateFin(CasOrdresLot2):
+    """T39 (demande de Nicolas avant le lot 3) : une date de fin dans le futur est refusée, à
+    l'enregistrement de l'onglet Exécution comme à la clôture technique (RG4)."""
+
+    OT = SCENARIOS["ot_p1_ouvert"]      # OT « En cours » de la démo
+
+    def maintenant(self):
+        return self.page.evaluate("Donnees.maintenant()")      # « AAAA-MM-JJ HH:MM », heure du poste
+
+    def test_date_fin_regle_pure_futur_maintenant_passe(self):
+        with ServeurPrevo() as serveur:
+            self.ouvrir(serveur, "#/ot")
+            maintenant = self.maintenant()
+            demain = (datetime.date.fromisoformat(maintenant[:10]) + datetime.timedelta(days=1)).isoformat()
+            regle = "([fin, ref]) => Ordres.dateFinDansLeFutur(fin, ref)"
+            self.assertTrue(self.page.evaluate(regle, [demain + "T10:00", maintenant]))
+            self.assertTrue(self.page.evaluate(regle, [demain, maintenant]))
+            self.assertFalse(self.page.evaluate(regle, [maintenant, maintenant]))               # à la minute près
+            self.assertFalse(self.page.evaluate(regle, [maintenant.replace(" ", "T") + ":59", maintenant]))
+            self.assertFalse(self.page.evaluate(regle, ["2020-01-01 08:00", maintenant]))
+            self.assertFalse(self.page.evaluate(regle, ["", maintenant]))
+
+    def test_date_fin_dans_le_futur_refusee_a_l_enregistrement_rien_d_ecrit(self):
+        page = self.page
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            self.ouvrir(serveur, "#/ot")
+            avant = ligne_par_id(dossier, "ordres_travail.csv", self.OT)
+            self.ouvrir_fiche(self.OT)
+            self.onglet("execution")
+            champ = "#form-execution [name=date_fin]"
+            borne = page.get_attribute(champ, "max") or ""
+            self.assertRegex(borne, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")              # sélecteur borné à maintenant
+            self.assertLessEqual(borne, self.maintenant().replace(" ", "T"))
+            demain = (datetime.date.fromisoformat(self.maintenant()[:10]) + datetime.timedelta(days=1)).isoformat()
+            # Sans l'attribut max (navigateur qui l'ignore, valeur collée…), l'enregistrement refuse aussi.
+            page.evaluate("(s) => document.querySelector(s).removeAttribute('max')", champ)
+            page.fill(champ, demain + "T10:00")
+            page.click("#form-execution button[type=submit]")
+            self.assertIn("ne peut pas être dans le futur", self.attendre_toast_note("ne peut pas être dans le futur"))
+            self.assertEqual(ligne_par_id(dossier, "ordres_travail.csv", self.OT), avant)      # rien d'écrit
+            self.assertEqual(page.evaluate("(id) => Donnees.trouver('ordres_travail', id).date_fin", self.OT),
+                             avant["date_fin"])
+
+            # « Maintenant » est accepté et écrit.
+            page.click("#form-execution .ot-maintenant")
+            attendue = page.input_value(champ).replace("T", " ")[:16]
+            page.click("#form-execution button[type=submit]")
+            self.attendre_toast_note("^Exécution enregistrée\\.$")
+            self.assertEqual(ligne_par_id(dossier, "ordres_travail.csv", self.OT)["date_fin"][:16], attendue)
+
+    def test_date_fin_future_ecrite_ailleurs_cloture_refusee_statut_inchange(self):
+        page = self.page
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            self.ouvrir(serveur, "#/ot")
+            demain = (datetime.date.fromisoformat(self.maintenant()[:10]) + datetime.timedelta(days=1)).isoformat()
+            # Une date de fin dans le futur arrive d'ailleurs (autre poste ancien, Excel) : la clôture la refuse.
+            page.evaluate("""async ([id, fin]) => { await Donnees.modifier('ordres_travail', (lignes) => {
+                lignes.find((l) => l.id === id).date_fin = fin; return true; }); }""", [self.OT, demain + " 10:00"])
+            self.ouvrir_fiche(self.OT)
+            self.onglet("compte-rendu")
+            page.click("#form-compte-rendu button:has-text('Clôturer techniquement')")
+            page.wait_for_selector("#ot-message .alerte")
+            message = page.inner_text("#ot-message")
+            self.assertIn("Clôture technique impossible", message)
+            self.assertIn("une date de fin qui ne soit pas dans le futur", message)
+            self.assertEqual(ligne_par_id(dossier, "ordres_travail.csv", self.OT)["statut"], "En cours")
+            ot = page.evaluate("(id) => Donnees.trouver('ordres_travail', id)", self.OT)
+            self.assertIn("une date de fin qui ne soit pas dans le futur", page.evaluate("(ot) => Ordres.verifierCloture(ot)", ot))
+            ot["date_fin"] = self.maintenant()
+            self.assertNotIn("une date de fin qui ne soit pas dans le futur", page.evaluate("(ot) => Ordres.verifierCloture(ot)", ot))
+
 
 class TestEncart(CasOrdresLot2):
 
