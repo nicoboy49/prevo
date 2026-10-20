@@ -8,13 +8,14 @@
    ========================================================================================= */
 
 .pl-entete .pl-navigation { flex-wrap: wrap; }
-.pl-disposition { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+/* La grille a besoin de toute la largeur : « À planifier » est une bande au-dessus d'elle (on glisse
+   vers le bas) ; elle ne passe à droite qu'à partir de 1700 px (§ 5). */
+.pl-disposition { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.pl-disposition > .pl-a-planifier { order: -1; }
+.pl-a-planifier .pl-liste { flex-direction: row; flex-wrap: wrap; }
+.pl-a-planifier .pl-ot { flex: 0 1 260px; }
 .pl-principal { min-width: 0; }
 .pl-a-planifier { margin: 0; }
-/* Grand écran : la colonne reste visible quand on descend vers un technicien (glisser-déposer). */
-@media (min-width: 1280px) {
-  .pl-a-planifier { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
-}
 .pl-a-planifier .note { margin-top: 0; }
 #pl-message:empty { display: none; }
 #pl-message { margin-bottom: 14px; }
@@ -24,10 +25,12 @@
    ========================================================================================= */
 
 .pl-cadre { overflow-x: auto; border-radius: var(--rayon); background: var(--carte); border: 1px solid var(--trait); }
-.pl-grille { border-collapse: collapse; width: 100%; min-width: 960px; table-layout: fixed; }
+.pl-grille { border-collapse: collapse; width: 100%; min-width: 900px; table-layout: fixed; }
 .pl-grille th, .pl-grille td { border-bottom: 1px solid var(--trait); border-left: 1px solid var(--trait); padding: 8px; vertical-align: top; text-align: left; }
 .pl-grille thead th { font-size: .875rem; color: var(--texte-2); font-weight: 600; background: var(--carte-2); }
-.pl-grille thead th:first-child, .pl-grille tbody th { width: 170px; border-left: 0; }
+.pl-grille thead th:first-child, .pl-grille tbody th { width: 160px; border-left: 0; }
+/* Samedi et dimanche : colonnes étroites (rarement planifiés), toujours visibles. */
+.pl-grille thead th.pl-week-end { width: 76px; }
 .pl-grille tbody th { font-weight: 500; color: var(--texte); }
 .pl-grille tbody th b { display: block; overflow-wrap: anywhere; }
 .pl-metier { display: block; font-size: .8125rem; color: var(--muted); }
@@ -53,7 +56,11 @@
 .pl-ot.accent-p2 { border-left-color: var(--ambre); }
 .pl-ot-tete { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
 .pl-ot-tete a { font-weight: 700; color: var(--texte); }
-.pl-ot-titre { margin: 3px 0; color: var(--texte); overflow-wrap: anywhere; }
+/* Trois lignes au plus (titre complet en infobulle) ; coupure des mots avec trait d'union. */
+.pl-ot-titre {
+  margin: 3px 0; color: var(--texte); hyphens: auto; overflow-wrap: break-word;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
 .pl-ot-meta { display: flex; flex-wrap: wrap; gap: 2px 8px; color: var(--texte-2); font-size: .8125rem; }
 .pl-ot-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .pl-ot-badges:empty { display: none; }
@@ -72,8 +79,11 @@
    5. Écrans moyens et téléphone (≤ 640 px : liste par jour, pas de grille)
    ========================================================================================= */
 
-@media (max-width: 1279.98px) {
-  .pl-disposition { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1700px) {
+  .pl-disposition { grid-template-columns: minmax(0, 1fr) 300px; }
+  .pl-disposition > .pl-a-planifier { order: 0; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+  .pl-a-planifier .pl-liste { flex-direction: column; flex-wrap: nowrap; }
+  .pl-a-planifier .pl-ot { flex: none; }
 }
 
 @media (max-width: 640px) {

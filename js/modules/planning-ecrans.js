@@ -68,7 +68,7 @@ Object.assign(Planning, (() => {
     return UI.html`<div class="pl-ot ${CLASSES_PRIORITE[ot.priorite] || ''}${deplacable ? ' pl-deplacable' : ''}"
         data-ot="${ot.id}" data-statut="${ot.statut}" draggable="${deplacable ? 'true' : 'false'}">
       <div class="pl-ot-tete"><a href="#/ot/${encodeURIComponent(ot.id)}">${ot.id}</a>${UI.badgePriorite(ot.priorite)}</div>
-      <div class="pl-ot-titre">${ot.titre || '(sans titre)'}</div>
+      <div class="pl-ot-titre" title="${ot.titre || ''}">${ot.titre || '(sans titre)'}</div>
       <div class="pl-ot-meta"><span>${repere(ot.equipement_id)}</span><span>${temps}</span>${reglages.avecTechnicien && texte(ot.technicien_id)
         ? UI.html`<span>${nomTechnicien(ot.technicien_id)}</span>` : ''}${reglages.avecDate && texte(ot.date_prevue)
         ? UI.html`<span>prévu le ${UI.dateFr(ot.date_prevue)}</span>` : ''}</div>
