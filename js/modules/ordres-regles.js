@@ -1,0 +1,428 @@
+'use strict';
+// Ordres : module « Ordres de travail » (OT) de Prévo — écrans E4 (liste) et E5 (fiche),
+// création manuelle ou d'urgence, règles RG3 (statuts), RG4 (clôture), RG7 (coût), RG8
+// (habilitations) et impression du bon de travail A4 (ARCHITECTURE.md §10, brief §7 et §9).
+//
+// Le module est découpé en six fichiers, chargés dans cet ordre par index.html (ARCHITECTURE.md
+// §14.2, décision D28 : 700 lignes au plus par fichier). Une section = un sujet ; chaque fonction
+// fait une seule chose :
+//   ordres-regles.js      CE FICHIER, qui crée l'objet Ordres :
+//                           1. Constantes et petits outils (textes, dates, libellés)
+//                           2. Règles métier PURES, exposées pour les tests (aucune écriture)
+//   ordres-ecritures.js    3. Écritures : toujours par Donnees.modifier (contrôles DANS la fonction)
+//   ordres-liste.js        4. Liste des OT (#/ot) : filtres, tableau triable, cartes, export CSV
+//   ordres-fiche.js        5. Nouvel OT (#/ot/nouveau, ?equipement=…, ?urgence=1)
+//                          6. Fiche OT (#/ot/<id>) : en-tête, étapes, consignation, actions, messages
+//   ordres-onglets.js      7. Onglet Préparation   8. Onglet Exécution   9. Onglet Compte rendu
+//                         10. Onglet Historique équipement
+//   ordres-impression.js  11. Bon de travail (impression)   12. Enregistrement des écrans
+//
+// Les fichiers suivants complètent l'objet : Object.assign(Ordres, (() => { … return { … }; })()).
+// Une fonction ou une constante dont un autre fichier du module a besoin est rangée dans
+// Ordres.interne (usage interne au module : ce n'est pas une API, ni les autres modules ni les
+// tests ne s'en servent) ; l'état de la session (memoire) y est partagé.
+//
+// Règles du projet : JavaScript classique (pas de modules), compatible file:// et contexte non
+// sécurisé ; textes des données toujours échappés (UI.html) ; jamais d'alert/confirm/prompt ;
+// une erreur gérée passe par App.signalerErreur (toast + console.warn).
+
+const Ordres = (() => {
+
+  // ===========================================================================================
+  // 1. Constantes et petits outils
+  // ===========================================================================================
+
+  const STATUTS = ['Créé', 'Préparé', 'Planifié', 'En cours', 'En attente',
+    'Clôturé techniquement', 'Clôturé administrativement', 'Annulé'];
+  // Étapes « normales » affichées en haut de la fiche (En attente et Annulé sont « hors » étapes).
+  const ETAPES = ['Créé', 'Préparé', 'Planifié', 'En cours', 'Clôturé techniquement', 'Clôturé administrativement'];
+  const STATUTS_VERROUILLES = ['Clôturé administrativement', 'Annulé'];
+  const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
+  const TYPES = ['correctif immédiat', 'correctif différé', 'préventif systématique',
+    'préventif conditionnel', 'amélioration', 'réglementaire'];
+  const PRIORITES = ['P1', 'P2', 'P3', 'P4'];
+  const RAPPEL_CONSIGNATION = 'Cocher une case ne consigne rien : appliquez la procédure.';
+
+  // Mémoire du module pendant la session : filtres de la liste, onglet ouvert de chaque fiche.
+  // Partagée par les fichiers ordres-*.js (Ordres.interne.memoire).
+  const memoire = { filtres: null, profilFiltres: '', ongletParOt: {} };
+
+  function texte(valeur) {
+    return valeur === null || valeur === undefined ? '' : String(valeur).trim();
+  }
+
+  function nombre(valeur) {
+    const resultat = Donnees.nombre(valeur);
+    return resultat === null || Number.isNaN(resultat) ? 0 : resultat;
+  }
+
+  function arrondi(valeur, decimales) {
+    const facteur = Math.pow(10, decimales === undefined ? 2 : decimales);
+    return Math.round(valeur * facteur) / facteur;
+  }
+
+  /** Texte sans accents, en minuscules, ponctuation remplacée par des espaces. */
+  function texteSimple(valeur) {
+    return UI.normaliserRecherche(valeur).replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  function aujourdhui() {
+    return Donnees.aujourdhui();
+  }
+
+  function deuxChiffres(nombreEntier) {
+    return String(nombreEntier).padStart(2, '0');
+  }
+
+  function dateIso(date) {
+    return date.getFullYear() + '-' + deuxChiffres(date.getMonth() + 1) + '-' + deuxChiffres(date.getDate());
+  }
+
+  /** Date prévue par défaut d'une priorité : maintenant + delai_pN_h (vide pour P4 « prochain arrêt »). */
+  function datePrevueParDefaut(priorite) {
+    if (priorite === 'P4') return '';
+    const heures = Donnees.nombre(Donnees.parametre('delai_' + String(priorite).toLowerCase() + '_h', ''));
+    if (heures === null || Number.isNaN(heures)) return aujourdhui();
+    return dateIso(new Date(Date.now() + heures * 3600 * 1000));
+  }
+
+  function estResponsable() { return App.estResponsable(); }
+  function estTechnicien() { return App.estTechnicien(); }
+  function monTechnicienId() { return (App.profil && App.profil.technicienId) || ''; }
+
+  // --- Libellés (équipements, techniciens, articles, codes) ---------------------------------
+
+  function equipementDe(ot) {
+    return Donnees.trouver('equipements', ot.equipement_id);
+  }
+
+  function repereEquipement(id) {
+    const equipement = Donnees.trouver('equipements', id);
+    return equipement ? (equipement.repere || equipement.id) : (id || '');
+  }
+
+  /** « CP-01 — Compresseur à vis 30 kW » (repli si le module Parc n'expose rien). */
+  function libelleEquipement(id) {
+    if (typeof Parc !== 'undefined' && Parc && typeof Parc.libelleEquipement === 'function') {
+      try {
+        const libelle = Parc.libelleEquipement(id);
+        if (libelle) return libelle;
+      } catch (erreur) { /* module Parc en cours d'écriture : repli ci-dessous */ }
+    }
+    const equipement = Donnees.trouver('equipements', id);
+    if (!equipement) return id || '';
+    return (equipement.repere || equipement.id) + (equipement.designation ? ' — ' + equipement.designation : '');
+  }
+
+  /** « Site › Atelier › Ligne » d'une localisation (parents remontés, 10 niveaux au plus). */
+  function cheminLocalisation(localisationId) {
+    const morceaux = [];
+    let courant = Donnees.trouver('localisations', localisationId);
+    for (let niveau = 0; courant && niveau < 10; niveau += 1) {
+      morceaux.unshift(courant.libelle || courant.id);
+      courant = courant.parent_id ? Donnees.trouver('localisations', courant.parent_id) : null;
+    }
+    return morceaux.join(' › ');
+  }
+
+  function nomTechnicien(id) {
+    if (!id) return '';
+    const technicien = Donnees.trouver('techniciens', id);
+    if (!technicien) return id;
+    return ((technicien.prenom || '') + ' ' + (technicien.nom || '')).trim() || id;
+  }
+
+  /** Techniciens proposés dans une liste : les actifs, plus celui déjà affecté s'il est inactif. */
+  function listeTechniciens(idActuel) {
+    return Donnees.lignes('techniciens')
+      .filter((t) => t.actif !== '0' || t.id === idActuel)
+      .map((t) => ({ valeur: t.id, libelle: nomTechnicien(t.id) + (t.metier ? ' — ' + t.metier : '') }))
+      .sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr'));
+  }
+
+  function libelleArticle(article) {
+    if (!article) return '';
+    return (article.reference ? article.reference + ' — ' : '') + (article.designation || article.id);
+  }
+
+  /** Codes de défaillance d'une famille (« symptôme », « cause », « remède ») pour une liste. */
+  function listeCodes(famille) {
+    return Donnees.lignes('codes_defaillance')
+      .filter((c) => c.famille === famille && c.code)
+      .map((c) => ({ valeur: c.code, libelle: c.code + ' — ' + (c.libelle || '') }))
+      .sort((a, b) => a.valeur.localeCompare(b.valeur, 'fr', { numeric: true }));
+  }
+
+  function libelleCode(code) {
+    if (!code) return '';
+    const trouve = Donnees.lignes('codes_defaillance').find((c) => c.code === code);
+    return trouve ? code + ' — ' + trouve.libelle : code;
+  }
+
+  function lignesDeLOt(table, otId) {
+    return Donnees.lignes(table).filter((ligne) => ligne.ot_id === otId);
+  }
+
+  function operationsDe(otId) {
+    return lignesDeLOt('ot_operations', otId)
+      .slice().sort((a, b) => nombre(a.ordre) - nombre(b.ordre) || a.id.localeCompare(b.id));
+  }
+
+  /** Remplace la place <div data-place="nom" class="large"> par le champ, en gardant ses classes. */
+  function placerChamp(formulaire, nom, element) {
+    const place = UI.$('[data-place="' + nom + '"]', formulaire);
+    place.classList.forEach((classe) => element.classList.add(classe));
+    place.replaceWith(element);
+  }
+
+  /** Champ du schéma des OT rendu par UI.champ (libellé, contrôle, aide, erreur). */
+  function champOt(nom, valeur, options) {
+    return UI.champ(Schema.champ('ordres_travail', nom), valeur, options);
+  }
+
+  // ===========================================================================================
+  // 2. Règles métier PURES (ARCHITECTURE.md §10) — aucune écriture, exposées pour les tests
+  // ===========================================================================================
+
+  /** Vrai si l'OT n'est ni clôturé (techniquement ou administrativement) ni annulé. */
+  function estOuvert(ot) {
+    return Boolean(ot) && !STATUTS_CLOTURES.includes(ot.statut) && ot.statut !== 'Annulé';
+  }
+
+  /** « OT en retard » : ouvert et date prévue dépassée (dateReference : aujourd'hui par défaut). */
+  function enRetard(ot, dateReference) {
+    const reference = dateReference || aujourdhui();
+    return estOuvert(ot) && Boolean(ot.date_prevue) && ot.date_prevue.slice(0, 10) < reference;
+  }
+
+  function estVerrouille(ot) {
+    return Boolean(ot) && STATUTS_VERROUILLES.includes(ot.statut);
+  }
+
+  function estCorrectif(ot) {
+    return /^correctif/.test(texte(ot && ot.type));
+  }
+
+  function estUrgence(ot) {
+    return ot.origine === 'urgence' || ot.type === 'correctif immédiat';
+  }
+
+  /** Statut de reprise d'un OT en attente : En cours s'il a déjà démarré, sinon Préparé. */
+  function statutDeReprise(ot) {
+    return texte(ot.date_debut) ? 'En cours' : 'Préparé';
+  }
+
+  /** Statuts atteignables depuis le statut actuel (tableau RG3, sans tenir compte du profil). */
+  function transitionsPossibles(ot) {
+    if (!ot) return [];
+    switch (ot.statut) {
+      case 'Créé':
+        return estUrgence(ot) ? ['Préparé', 'En cours', 'En attente', 'Annulé'] : ['Préparé', 'En attente', 'Annulé'];
+      case 'Préparé': return ['Planifié', 'En attente', 'Annulé'];
+      case 'Planifié': return ['En cours', 'Préparé', 'En attente', 'Annulé'];
+      case 'En cours': return ['Clôturé techniquement', 'En attente'];
+      case 'En attente': return [statutDeReprise(ot), 'Annulé'];
+      case 'Clôturé techniquement': return ['Clôturé administrativement', 'En cours'];
+      default: return []; // Clôturé administrativement, Annulé : verrouillés
+    }
+  }
+
+  /** « RAS », « R.A.S. », « rien à signaler »… (seuls, sans autre information). */
+  function estRienASignaler(compteRendu) {
+    const compact = texteSimple(compteRendu).replace(/ /g, '');
+    return compact !== '' && /^(ras|rienasignaler)+$/.test(compact);
+  }
+
+  /** Pièces prévues d'un OT cumulées par article (quantité > 0 seulement) : Map article → quantité. */
+  function quantitesPrevues(otId) {
+    const cumul = new Map();
+    lignesDeLOt('ot_pieces', otId).forEach((piece) => {
+      const quantite = nombre(piece.quantite_prevue);
+      if (quantite > 0 && piece.article_id) cumul.set(piece.article_id, (cumul.get(piece.article_id) || 0) + quantite);
+    });
+    return cumul;
+  }
+
+  /** Pièces prévues dont le stock est insuffisant : [{ article_id, libelle, prevu, stock }]. */
+  function piecesManquantes(otId) {
+    const manquantes = [];
+    quantitesPrevues(otId).forEach((prevu, articleId) => {
+      const stock = Donnees.stockArticle(articleId);
+      if (stock < prevu) {
+        manquantes.push({ article_id: articleId, libelle: libelleArticle(Donnees.trouver('articles', articleId)) || articleId, prevu: arrondi(prevu, 3), stock });
+      }
+    });
+    return manquantes;
+  }
+
+  /**
+   * Manques qui bloquent la clôture technique (RG4) : TOUS, dans un tableau de phrases.
+   * options.temps : lignes ot_temps à utiliser (par défaut, celles de l'OT dans Donnees).
+   */
+  function verifierCloture(ot, options) {
+    const manques = [];
+    const temps = (options && options.temps) || lignesDeLOt('ot_temps', ot.id);
+    const compteRendu = texte(ot.compte_rendu);
+    if (!texte(ot.date_fin)) manques.push('la date de fin des travaux');
+    else if (texte(ot.date_debut) && texte(ot.date_fin) < texte(ot.date_debut)) manques.push('une date de fin postérieure à la date de début');
+    if (!temps.some((ligne) => nombre(ligne.heures) > 0)) manques.push('au moins un temps passé (onglet Exécution)');
+    if (!texte(ot.cause_code)) manques.push('le code cause');
+    if (!texte(ot.remede_code)) manques.push('le code remède');
+    if (estCorrectif(ot) && estRienASignaler(compteRendu)) {
+      manques.push('un vrai compte rendu : « RAS » ou « rien à signaler » est refusé sur un correctif (décrivez ce qui a été constaté et fait)');
+    } else if (compteRendu.length < 10) {
+      manques.push('un compte rendu d\'au moins 10 caractères');
+    }
+    if (ot.remise_service !== '1') manques.push('la case « Équipement remis en service en sécurité »');
+    return manques;
+  }
+
+  /** Habilitations requises par un équipement (« BR, B2V » ou « BR / H0V ») : tableau. */
+  function habilitationsRequises(equipement) {
+    return texte(equipement && equipement.habilitation_requise).split(/[,/]/).map((h) => h.trim()).filter(Boolean);
+  }
+
+  /** Habilitations requises qui manquent au technicien à la date donnée (tableau, vide si tout va bien). */
+  function habilitationsManquantes(equipement, technicienId, date) {
+    const habilitations = Donnees.lignes('habilitations').filter((h) => h.technicien_id === technicienId);
+    return habilitationsRequises(equipement).filter((requise) => !habilitations.some((h) =>
+      texte(h.intitule).toLowerCase() === requise.toLowerCase()
+      && (!texte(h.date_obtention) || h.date_obtention.slice(0, 10) <= date)
+      && (!texte(h.date_echeance) || date <= h.date_echeance.slice(0, 10))));
+  }
+
+  /**
+   * RG8 : message d'avertissement si le technicien n'a pas une habilitation requise valide à la
+   * date (date prévue, sinon aujourd'hui), sinon null. equipement : ligne ou identifiant.
+   * Ex. « TEC-0004 sans BR valide au 2026-10-21 ».
+   */
+  function verifierHabilitation(equipement, technicienId, dateReference) {
+    const ligne = typeof equipement === 'string' ? Donnees.trouver('equipements', equipement) : equipement;
+    if (!ligne || !technicienId) return null;
+    const date = texte(dateReference).slice(0, 10) || aujourdhui();
+    const manquantes = habilitationsManquantes(ligne, technicienId, date);
+    if (!manquantes.length) return null;
+    return technicienId + ' sans ' + manquantes.join(', ') + ' valide au ' + date;
+  }
+
+  /**
+   * Peut-on passer l'OT au statut `cible` ? → { ok, erreurs, avertissements, piecesManquantes }.
+   * `ot` porte les valeurs à jour (ex. motif_attente saisi). Contrôles : tableau RG3, motifs
+   * obligatoires, Planifié (technicien, date prévue, stock des pièces prévues), clôture RG4.
+   */
+  function verifierPassage(ot, cible) {
+    const erreurs = [];
+    const avertissements = [];
+    let manquantes = [];
+    if (!ot) return { ok: false, erreurs: ['Ordre de travail introuvable.'], avertissements, piecesManquantes: manquantes };
+    if (!transitionsPossibles(ot).includes(cible)) {
+      erreurs.push(estVerrouille(ot)
+        ? 'Cet OT est « ' + ot.statut + ' » : il est verrouillé. Une reprise se fait par un nouvel OT lié.'
+        : 'Passage de « ' + ot.statut + ' » à « ' + cible + ' » impossible.');
+    } else if (cible === 'En attente' && !texte(ot.motif_attente)) {
+      erreurs.push('Le motif de mise en attente est obligatoire.');
+    } else if (cible === 'Annulé' && !texte(ot.motif_annulation)) {
+      erreurs.push('Le motif d\'annulation est obligatoire.');
+    } else if (cible === 'Planifié') {
+      if (!texte(ot.technicien_id)) erreurs.push('Choisissez le technicien (onglet Préparation).');
+      if (!texte(ot.date_prevue)) erreurs.push('Indiquez la date prévue (onglet Préparation).');
+      manquantes = piecesManquantes(ot.id);
+      manquantes.forEach((piece) => erreurs.push('Stock insuffisant pour « ' + piece.libelle + ' » : '
+        + UI.nombreFr(piece.prevu) + ' prévu(s), ' + UI.nombreFr(piece.stock) + ' en stock.'));
+      const habilitation = verifierHabilitation(equipementDe(ot), ot.technicien_id, ot.date_prevue);
+      if (habilitation) avertissements.push('Avertissement habilitation : ' + habilitation + '.');
+    } else if (cible === 'Clôturé techniquement') {
+      const manques = verifierCloture(ot);
+      if (manques.length) erreurs.push('Il manque : ' + manques.join(' ; ') + '.');
+    } else if (cible === 'Clôturé administrativement') {
+      // RG4 revérifiée : la clôture technique doit être encore complète (aucune saisie ne l'a défaite).
+      const manques = verifierCloture(ot);
+      if (manques.length) erreurs.push('La clôture technique n\'est plus complète, il manque : ' + manques.join(' ; ') + '. Rouvrez l\'OT pour compléter.');
+    }
+    return { ok: erreurs.length === 0, erreurs, avertissements, piecesManquantes: manquantes };
+  }
+
+  /**
+   * Coût d'un OT (RG7) en euros : { heures, pieces, soustraitance, total, detail }.
+   *   heures : Σ heures passées × taux horaire du technicien (main-d'œuvre, en €) ;
+   *   pieces : Σ (sorties − retours de stock imputées à l'OT) × prix unitaire de l'article ;
+   *   soustraitance : cout_soustraitance ; total : la somme.
+   *   detail : { nombreHeures, temps: [{ technicien_id, date, heures, taux, montant }],
+   *              pieces: [{ article_id, libelle, sorties, retours, quantite, prix, montant }] }.
+   */
+  function cout(ot) {
+    const temps = lignesDeLOt('ot_temps', ot.id).map((ligne) => {
+      const technicien = Donnees.trouver('techniciens', ligne.technicien_id);
+      const taux = nombre(technicien && technicien.taux_horaire);
+      const heures = nombre(ligne.heures);
+      return { technicien_id: ligne.technicien_id, date: ligne.date, heures, taux, montant: heures * taux };
+    });
+    const parArticle = new Map();
+    Donnees.lignes('mouvements_stock').forEach((mouvement) => {
+      if (mouvement.ot_id !== ot.id || (mouvement.type !== 'sortie' && mouvement.type !== 'retour')) return;
+      const entree = parArticle.get(mouvement.article_id) || { sorties: 0, retours: 0 };
+      if (mouvement.type === 'sortie') entree.sorties += nombre(mouvement.quantite);
+      else entree.retours += nombre(mouvement.quantite);
+      parArticle.set(mouvement.article_id, entree);
+    });
+    const pieces = [];
+    parArticle.forEach((entree, articleId) => {
+      const article = Donnees.trouver('articles', articleId);
+      const prix = nombre(article && article.prix_unitaire);
+      const quantite = entree.sorties - entree.retours;
+      pieces.push({ article_id: articleId, libelle: libelleArticle(article) || articleId, sorties: entree.sorties,
+        retours: entree.retours, quantite, prix, montant: quantite * prix });
+    });
+    const montantHeures = temps.reduce((somme, ligne) => somme + ligne.montant, 0);
+    const montantPieces = pieces.reduce((somme, ligne) => somme + ligne.montant, 0);
+    const soustraitance = nombre(ot.cout_soustraitance);
+    return {
+      heures: arrondi(montantHeures),
+      pieces: arrondi(montantPieces),
+      soustraitance: arrondi(soustraitance),
+      total: arrondi(montantHeures + montantPieces + soustraitance),
+      detail: { nombreHeures: arrondi(temps.reduce((s, l) => s + l.heures, 0)), temps, pieces },
+    };
+  }
+
+  /** Filtre des OT de la liste. filtres : { etat, priorite, technicien, type, recherche }. */
+  function filtrer(ordres, filtres) {
+    const reglages = filtres || {};
+    const mots = UI.normaliserRecherche(reglages.recherche).split(' ').filter(Boolean);
+    const date = aujourdhui();
+    return ordres.filter((ot) => {
+      if (reglages.etat === 'ouverts' && !estOuvert(ot)) return false;
+      if (reglages.etat === 'retard' && !enRetard(ot, date)) return false;
+      if (reglages.etat === 'clotures' && !STATUTS_CLOTURES.includes(ot.statut)) return false;
+      if (reglages.etat === 'annules' && ot.statut !== 'Annulé') return false;
+      if (reglages.priorite && ot.priorite !== reglages.priorite) return false;
+      if (reglages.technicien === '__aucun' && ot.technicien_id) return false;
+      if (reglages.technicien && reglages.technicien !== '__aucun' && ot.technicien_id !== reglages.technicien) return false;
+      if (reglages.type && ot.type !== reglages.type) return false;
+      if (mots.length) {
+        const equipement = Donnees.trouver('equipements', ot.equipement_id) || {};
+        const cible = UI.normaliserRecherche([ot.id, ot.titre, equipement.repere, equipement.designation, ot.equipement_id].join(' '));
+        if (!mots.every((mot) => cible.includes(mot))) return false;
+      }
+      return true;
+    });
+  }
+
+  return {
+    STATUTS, TYPES, PRIORITES, RAPPEL_CONSIGNATION,
+    // règles pures (ARCHITECTURE.md §10)
+    transitionsPossibles, verifierPassage, verifierCloture, cout, verifierHabilitation, estOuvert, enRetard,
+    estVerrouille, estCorrectif, estRienASignaler, piecesManquantes, filtrer, datePrevueParDefaut,
+    // affichage (les écritures, l'export et le bon de travail sont ajoutés par les fichiers suivants)
+    libelleEquipement, nomTechnicien,
+    // Usage interne au module : outils prêtés aux fichiers ordres-*.js, qui y ajoutent les leurs
+    // par Object.assign(Ordres.interne, …). Pas une API : son contenu peut changer à tout moment.
+    interne: {
+      ETAPES, STATUTS_CLOTURES, memoire,
+      texte, nombre, arrondi, aujourdhui, estResponsable, estTechnicien, monTechnicienId,
+      equipementDe, repereEquipement, cheminLocalisation, listeTechniciens, libelleArticle, listeCodes,
+      lignesDeLOt, operationsDe, placerChamp, champOt, statutDeReprise, quantitesPrevues,
+      habilitationsManquantes,
+    },
+  };
+})();
