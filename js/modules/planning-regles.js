@@ -85,12 +85,12 @@ const Planning = (() => {
    * entre le lundi et le dimanche. Triés par priorité, date prévue, identifiant.
    */
   function ordresDeLaSemaine(lundi) {
-    const jours = joursDeLaSemaine(lundi);
-    const debut = jours[0];
-    const fin = jours[6];
+    // Les sept dates réelles de la semaine : une date impossible (« 2026-02-30 », gardée telle
+    // quelle par la lecture tolérante) n'est jamais prise pour un jour de la semaine.
+    const jours = new Set(joursDeLaSemaine(lundi));
     return Donnees.lignes('ordres_travail').filter((ot) => {
       const date = texte(ot.date_prevue).slice(0, 10);
-      return estOuvert(ot) && texte(ot.technicien_id) !== '' && date >= debut && date <= fin;
+      return estOuvert(ot) && texte(ot.technicien_id) !== '' && jours.has(date);
     }).sort(comparerOt);
   }
 

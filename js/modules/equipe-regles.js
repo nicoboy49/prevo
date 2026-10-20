@@ -40,10 +40,16 @@ const Equipe = (() => {
     return Date.UTC(Number(morceaux[1]), Number(morceaux[2]) - 1, Number(morceaux[3])) / MILLISECONDES_PAR_JOUR;
   }
 
-  /** La date ISO (10 premiers caractères) si elle est lisible, sinon ''. */
+  /** La date ISO (10 premiers caractères) si elle existe vraiment, sinon '' (« 2026-13-05 » ou
+   *  « 2026-02-30 » ne sont pas des dates : le contrôle passe alors en « date inconnue »). */
   function dateIso(valeur) {
     const date = texte(valeur).slice(0, 10);
-    return numeroJour(date) === null ? '' : date;
+    const numero = numeroJour(date);
+    if (numero === null) return '';
+    const relue = new Date(numero * MILLISECONDES_PAR_JOUR);
+    const attendue = relue.getUTCFullYear() + '-' + String(relue.getUTCMonth() + 1).padStart(2, '0')
+      + '-' + String(relue.getUTCDate()).padStart(2, '0');
+    return attendue === date ? date : '';
   }
 
   function dateDuJour(aujourdhui) {
@@ -79,6 +85,9 @@ const Equipe = (() => {
     const jour = numeroJour(dateDuJour(aujourdhui));
     const obtention = numeroJour(dateIso(habilitation.date_obtention));
     const echeance = numeroJour(dateIso(habilitation.date_echeance));
+    // Échéance saisie mais illisible (« 2026-02-30 ») : par prudence, l'habilitation est tenue pour
+    // échue (elle apparaît dans « à renouveler »), jamais pour valide sans échéance.
+    if (texte(habilitation.date_echeance) && echeance === null) return { statut: 'échue', joursRestants: null, sansEcheance: false, illisible: true };
     const joursRestants = echeance === null ? null : echeance - jour;
     const sansEcheance = echeance === null;
     let statut = 'valide';

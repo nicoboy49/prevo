@@ -175,6 +175,14 @@ class TestControles(CasRegles):
         self.assertIn("19 jours", self.etat("CTR-0001")["raison"])
         self.assertEqual(self.js("Controles.STATUTS"), ["en retard", "observations à lever", "à planifier", "à jour"])
 
+    def test_date_impossible_traitee_comme_inconnue(self):
+        etat = self.js("""(jour) => Controles.etat({ equipement_id: 'EQ-0001', prochaine_date: '2026-13-05',
+            derniere_date: '', periodicite_mois: '12', observations: '', observations_levees: '1' }, jour)""", AUJOURDHUI)
+        self.assertEqual((etat["statut"], etat["prochaine"]), ("à planifier", ""))
+        self.assertIn("date inconnue", etat["raison"])
+        self.assertEqual(self.js("""(jour) => Equipe.etatHabilitation({ date_obtention: '2020-01-01',
+            date_echeance: '2026-02-30' }, jour).statut""", AUJOURDHUI), "échue")      # illisible : prudence
+
     def test_sous_30_jours_equipements_suivis_seulement_dates_inconnues_d_abord(self):
         ids = self.js("(jour) => Controles.sous30Jours(jour).map((c) => c.id)", AUJOURDHUI)
         self.assertEqual(ids, ["CTR-0005", "CTR-0004", "CTR-0001", "CTR-0010", "CTR-0002", "CTR-0012"])
@@ -244,6 +252,14 @@ class TestPlanning(CasRegles):
         self.assertEqual(self.js("Planning.ordresDeLaSemaine('2026-10-19').map((ot) => ot.id)"),
                          ["OT-2026-0002", "OT-2026-0001", "OT-2026-0008", "OT-2026-0011", "OT-2026-0003",
                           "OT-2026-0013", "OT-2026-0012"])
+
+    def test_date_prevue_impossible_ignoree_sans_erreur(self):
+        self.js("""async () => Donnees.modifier('ordres_travail', (lignes) => {
+            lignes.push({ id: 'OT-2026-0099', statut: 'Planifié', technicien_id: 'TEC-0001', date_prevue: '2026-02-30',
+              temps_prevu_h: '4', priorite: 'P2', equipement_id: 'EQ-0001' }); })""")
+        grille = self.js("() => Planning.semaine('2026-02-23').lignes.map((l) => [l.technicien.id, l.charge])")
+        self.assertIn(["TEC-0001", 0], grille)
+        self.assertEqual(self.js("Planning.chargeSemaine('TEC-0001', '2026-02-23')"), 0)
 
     def test_charge_d_une_semaine_temps_vide_compte_zero(self):
         self.assertEqual(self.js("Planning.chargeSemaine('TEC-0001', '2026-10-21')"), 38)

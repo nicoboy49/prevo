@@ -53,10 +53,16 @@ const Controles = (() => {
     return date.getUTCFullYear() + '-' + deuxChiffres(date.getUTCMonth() + 1) + '-' + deuxChiffres(date.getUTCDate());
   }
 
-  /** La date ISO (10 premiers caractères) si elle est lisible, sinon ''. */
+  /** La date ISO (10 premiers caractères) si elle existe vraiment, sinon '' (« 2026-13-05 » ou
+   *  « 2026-02-30 » ne sont pas des dates : le contrôle passe alors en « date inconnue »). */
   function dateIso(valeur) {
     const date = texte(valeur).slice(0, 10);
-    return numeroJour(date) === null ? '' : date;
+    const numero = numeroJour(date);
+    if (numero === null) return '';
+    const relue = new Date(numero * MILLISECONDES_PAR_JOUR);
+    const attendue = relue.getUTCFullYear() + '-' + String(relue.getUTCMonth() + 1).padStart(2, '0')
+      + '-' + String(relue.getUTCDate()).padStart(2, '0');
+    return attendue === date ? date : '';
   }
 
   /** Nombre de jours de `debut` à `fin` (négatif si fin est avant). */
