@@ -1,1 +1,78 @@
 ﻿id;date_heure;poste;profil;table;id_ligne;action
+J-20260724123542-ECV5;2026-07-24 12:35;Poste démo;Demandeur Sarah Colin;demandes;DI-2026-0074;création — demande signalée
+J-20260724131506-SLSJ;2026-07-24 13:15;Poste démo;Responsable;ordres_travail;OT-2026-0125;création — acceptation de DI-2026-0074
+J-20260724131507-39CD;2026-07-24 13:15;Poste démo;Responsable;demandes;DI-2026-0074;modification : statut, date_decision, ot_id — acceptée → OT-2026-0125
+J-20260724133419-YJS8;2026-07-24 13:34;Poste démo;Responsable;ordres_travail;OT-2026-0125;modification : statut — statut Créé → Préparé
+J-20260724134119-4SU4;2026-07-24 13:41;Poste démo;Responsable;ordres_travail;OT-2026-0125;modification : statut — statut Préparé → Planifié
+J-20260727082540-GAKJ;2026-07-27 08:25;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0125;modification : statut, date_debut — statut Planifié → En cours
+J-20260727102154-2501;2026-07-27 10:21;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0125;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260728132002-057D;2026-07-28 13:20;Poste démo;Demandeur Mathieu Roux;demandes;DI-2026-0075;création — demande signalée
+J-20260728145825-TGMW;2026-07-28 14:58;Poste démo;Responsable;ordres_travail;OT-2026-0128;création — acceptation de DI-2026-0075
+J-20260728145852-E3IM;2026-07-28 14:58;Poste démo;Responsable;demandes;DI-2026-0075;modification : statut, date_decision, ot_id — acceptée → OT-2026-0128
+J-20260728154359-MO0G;2026-07-28 15:43;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0128;modification : statut, date_debut — statut Créé → En cours
+J-20260729075821-YO1J;2026-07-29 07:58;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0128;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260803084532-KPJC;2026-08-03 08:45;Poste démo;Responsable;ordres_travail;OT-2026-0128;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260807090054-JVPH;2026-08-07 09:00;Poste démo;Demandeur Lucas Perrot;demandes;DI-2026-0081;création — demande signalée
+J-20260807102716-O5KF;2026-08-07 10:27;Poste démo;Responsable;ordres_travail;OT-2026-0136;création — acceptation de DI-2026-0081
+J-20260807102748-710U;2026-08-07 10:27;Poste démo;Responsable;demandes;DI-2026-0081;modification : statut, date_decision, ot_id — acceptée → OT-2026-0136
+J-20260807104919-CZ8K;2026-08-07 10:49;Poste démo;Responsable;ordres_travail;OT-2026-0136;modification : statut — statut Créé → Préparé
+J-20260807105623-01IV;2026-08-07 10:56;Poste démo;Responsable;ordres_travail;OT-2026-0136;modification : statut — statut Préparé → Planifié
+J-20260810102551-G2HJ;2026-08-10 10:25;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0136;modification : statut, date_debut — statut Planifié → En cours
+J-20260810120237-DSSN;2026-08-10 12:02;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0136;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260814094552-AYD0;2026-08-14 09:45;Poste démo;Responsable;ordres_travail;OT-2026-0136;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260824081004-Y9JX;2026-08-24 08:10;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0142;création — création de l'OT (urgence)
+J-20260824091005-8IWW;2026-08-24 09:10;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0142;modification : statut, date_debut — statut Créé → En cours
+J-20260824111047-1514;2026-08-24 11:10;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0142;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260826095516-IZC5;2026-08-26 09:55;Poste démo;Demandeur Camille Girard;demandes;DI-2026-0084;création — demande signalée
+J-20260826110304-3HCZ;2026-08-26 11:03;Poste démo;Responsable;ordres_travail;OT-2026-0145;création — acceptation de DI-2026-0084
+J-20260826110347-9WU7;2026-08-26 11:03;Poste démo;Responsable;demandes;DI-2026-0084;modification : statut, date_decision, ot_id — acceptée → OT-2026-0145
+J-20260826113138-C75O;2026-08-26 11:31;Poste démo;Technicien TEC-0004;ordres_travail;OT-2026-0145;modification : statut, date_debut — statut Créé → En cours
+J-20260826140856-L5E1;2026-08-26 14:08;Poste démo;Technicien TEC-0004;ordres_travail;OT-2026-0145;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260827081040-7UWS;2026-08-27 08:10;Poste démo;Demandeur Camille Girard;demandes;DI-2026-0086;création — demande signalée
+J-20260827102809-3PM5;2026-08-27 10:28;Poste démo;Responsable;ordres_travail;OT-2026-0147;création — acceptation de DI-2026-0086
+J-20260827102829-AEQC;2026-08-27 10:28;Poste démo;Responsable;demandes;DI-2026-0086;modification : statut, date_decision, ot_id — acceptée → OT-2026-0147
+J-20260827103947-KA0Y;2026-08-27 10:39;Poste démo;Responsable;ordres_travail;OT-2026-0147;modification : statut — statut Créé → Préparé
+J-20260827104400-X9IB;2026-08-27 10:44;Poste démo;Responsable;ordres_travail;OT-2026-0147;modification : statut — statut Préparé → Planifié
+J-20260831091533-476R;2026-08-31 09:15;Poste démo;Responsable;ordres_travail;OT-2026-0142;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260831135504-L262;2026-08-31 13:55;Poste démo;Demandeur Léa Fontaine;demandes;DI-2026-0089;création — demande signalée
+J-20260831141548-Y42M;2026-08-31 14:15;Poste démo;Responsable;demandes;DI-2026-0089;modification : statut, motif_decision, date_decision, ot_id — regroupée avec OT-2026-0147
+J-20260901081047-JLTJ;2026-09-01 08:10;Poste démo;Demandeur Paul Dubois;demandes;DI-2026-0090;création — demande signalée
+J-20260901084524-QFIC;2026-09-01 08:45;Poste démo;Responsable;ordres_travail;OT-2026-0145;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260901091708-8VFD;2026-09-01 09:17;Poste démo;Responsable;ordres_travail;OT-2026-0150;création — acceptation de DI-2026-0090
+J-20260901091738-1N22;2026-09-01 09:17;Poste démo;Responsable;demandes;DI-2026-0090;modification : statut, date_decision, ot_id — acceptée → OT-2026-0150
+J-20260901102838-885I;2026-09-01 10:28;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0150;modification : statut, date_debut — statut Créé → En cours
+J-20260901112023-R1CF;2026-09-01 11:20;Poste démo;Technicien TEC-0004;ordres_travail;OT-2026-0147;modification : statut, date_debut — statut Planifié → En cours
+J-20260901112045-KQ5D;2026-09-01 11:20;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0150;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260901134242-LOOJ;2026-09-01 13:42;Poste démo;Technicien TEC-0004;ordres_travail;OT-2026-0147;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260907084536-9XID;2026-09-07 08:45;Poste démo;Responsable;ordres_travail;OT-2026-0150;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260907101521-MDO1;2026-09-07 10:15;Poste démo;Responsable;ordres_travail;OT-2026-0147;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260908074059-MEEQ;2026-09-08 07:40;Poste démo;Demandeur Mathieu Roux;demandes;DI-2026-0095;création — demande signalée
+J-20260908075221-X6KD;2026-09-08 07:52;Poste démo;Responsable;ordres_travail;OT-2026-0154;création — acceptation de DI-2026-0095
+J-20260908075227-WWHG;2026-09-08 07:52;Poste démo;Responsable;demandes;DI-2026-0095;modification : statut, date_decision, ot_id — acceptée → OT-2026-0154
+J-20260908080525-OHXU;2026-09-08 08:05;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0154;modification : statut, date_debut — statut Créé → En cours
+J-20260908095056-A8JO;2026-09-08 09:50;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0154;modification : statut, motif_attente — statut En cours → En attente : Pièce : moteur 5,5 kW de rechange (non tenu en stock) commandé chez Électro-Alpes Distribution, livraison demain matin.
+J-20260909081514-9TJE;2026-09-09 08:15;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0154;modification : statut — statut En attente → En cours
+J-20260909115046-1XPW;2026-09-09 11:50;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0154;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260911085504-ZMVO;2026-09-11 08:55;Poste démo;Demandeur Manon Duval;demandes;DI-2026-0096;création — demande signalée
+J-20260911090040-3NUZ;2026-09-11 09:00;Poste démo;Responsable;ordres_travail;OT-2026-0154;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260911094017-0QS9;2026-09-11 09:40;Poste démo;Responsable;ordres_travail;OT-2026-0156;création — acceptation de DI-2026-0096
+J-20260911094051-Q45I;2026-09-11 09:40;Poste démo;Responsable;demandes;DI-2026-0096;modification : statut, date_decision, ot_id — acceptée → OT-2026-0156
+J-20260911102341-ADWW;2026-09-11 10:23;Poste démo;Technicien TEC-0004;ordres_travail;OT-2026-0156;modification : statut, date_debut — statut Créé → En cours
+J-20260911133543-R8AC;2026-09-11 13:35;Poste démo;Technicien TEC-0004;ordres_travail;OT-2026-0156;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260915084521-XW65;2026-09-15 08:45;Poste démo;Responsable;ordres_travail;OT-2026-0156;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260921073026-2AT6;2026-09-21 07:30;Poste démo;Demandeur Antoine Mercier;demandes;DI-2026-0098;création — demande signalée
+J-20260921091307-Q5UZ;2026-09-21 09:13;Poste démo;Responsable;ordres_travail;OT-2026-0160;création — acceptation de DI-2026-0098
+J-20260921091349-V4TA;2026-09-21 09:13;Poste démo;Responsable;demandes;DI-2026-0098;modification : statut, date_decision, ot_id — acceptée → OT-2026-0160
+J-20260921101325-FBP1;2026-09-21 10:13;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0160;modification : statut, date_debut — statut Créé → En cours
+J-20260921132145-OQGM;2026-09-21 13:21;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0160;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260924094554-SEI4;2026-09-24 09:45;Poste démo;Responsable;ordres_travail;OT-2026-0160;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260925102007-XEUE;2026-09-25 10:20;Poste démo;Demandeur Lucas Perrot;demandes;DI-2026-0099;création — demande signalée
+J-20260925103002-EH8P;2026-09-25 10:30;Poste démo;Responsable;ordres_travail;OT-2026-0161;création — acceptation de DI-2026-0099
+J-20260925103054-X7UI;2026-09-25 10:30;Poste démo;Responsable;demandes;DI-2026-0099;modification : statut, date_decision, ot_id — acceptée → OT-2026-0161
+J-20260925105417-DM1E;2026-09-25 10:54;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0161;modification : statut, date_debut — statut Créé → En cours
+J-20260925122921-EB0Y;2026-09-25 12:29;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0161;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260928093039-9YHS;2026-09-28 09:30;Poste démo;Responsable;ordres_travail;OT-2026-0161;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20261019073610-OD7E;2026-10-19 07:36;Poste démo;Demandeur Paul Dubois;demandes;DI-2026-0122;création — demande signalée
+J-20261019075010-4D84;2026-10-19 07:50;Poste démo;Responsable;ordres_travail;OT-2026-0200;création — acceptation de DI-2026-0122
+J-20261019075028-9U49;2026-10-19 07:50;Poste démo;Responsable;demandes;DI-2026-0122;modification : statut, date_decision, ot_id — acceptée → OT-2026-0200
+J-20261019081246-94SJ;2026-10-19 08:12;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0200;modification : statut, date_debut — statut Créé → En cours

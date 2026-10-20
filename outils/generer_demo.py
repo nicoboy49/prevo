@@ -7,6 +7,13 @@ fictif complet : équipements, techniciens, articles, gammes, treize mois d'hist
 préventif, de mouvements de stock et d'achats... Aucune personne ni entreprise réelle : tous les
 noms sont inventés.
 
+Depuis le lot 3 (ARCHITECTURE.md §15.12, D49), le jeu contient aussi : des contrôles réglementaires
+dans les quatre statuts (§15.7), un planning chargé sur les 4 semaines qui commencent à la date de
+référence (dont une semaine en surcharge, l'arrêt programmé de fin octobre), des OT « Préparé » à
+planifier, une panne clôturée sans durée d'arrêt et, au journal, l'historique des statuts des pannes
+des 3 derniers mois (dont une panne qui a attendu une pièce). Ces ajouts tirent leur hasard dans un
+générateur à part (GRAINE_LOT3) : le reste du jeu des lots 1 et 2 ne change pas.
+
 Sorties par défaut :
     donnees/demo/<table>.csv          les 22 fichiers CSV (format ARCHITECTURE.md §3.1)
     js/demo-donnees.js                les mêmes textes, prêts à être chargés par la page (mode démo)
@@ -19,8 +26,9 @@ Utilisation (depuis la racine du projet) :
     py outils/generer_demo.py --volume 500,5000 --sortie C:\\temp\\charge
                                                        jeu de charge (500 équipements, 5 000 OT, 24 mois)
 
-Le script s'auto-vérifie (clés étrangères, listes de valeurs, règles RG1 à RG6, stock, scénarios) et
-s'arrête avec un message clair au moindre défaut.
+Le script s'auto-vérifie (clés étrangères, listes de valeurs, règles RG1 à RG6, stock, scénarios ; au
+lot 3 : statuts des contrôles, surcharge du planning, cohérence du journal avec les OT) et s'arrête
+avec un message clair au moindre défaut.
 
 Identifiants de scénario (tests/fixtures/demo-scenarios.json, ARCHITECTURE.md §14.8)
 -----------------------------------------------------------------------------------
@@ -94,6 +102,26 @@ du jeu (ou une liste triée de lignes, ou un code) qui a la propriété annoncé
     causes_modele_symptome           S05 (arrêt intempestif)
     causes_insuffisantes             PO-03 : de 1 à 4 cas en tout (aucun autre équipement du même modèle)
     causes_insuffisantes_symptome    S02 (bruit anormal)
+  Lot 3 (ARCHITECTURE.md §15.12) : contrôles réglementaires (statut à la date de référence, §15.7)
+    controle_en_retard               VGP du chariot CH-01 (6 mois) : prochaine date dépassée
+    controle_observations            inspection du réservoir RA-01 : observations non levées
+    controle_a_planifier             installations électriques (AE-01) : prochaine date dans moins de 30 jours
+    controle_a_jour                  VGP du pont roulant PT-01 : à jour
+  Lot 3 : planning des 4 semaines qui commencent à la date de référence (§15.5)
+    technicien_surcharge             TEC-0002 : plus d'heures prévues que sa capacité dans la semaine_surcharge
+    semaine_surcharge                lundi (AAAA-MM-JJ) de la semaine en surcharge : l'arrêt programmé
+    ot_a_planifier                   OT « Préparé » sans technicien, pièces en stock, sans habilitation (CV-02.M)
+    ot_a_planifier_br                OT « Préparé » sans technicien sur l'équipement qui exige BR (AE-03)
+    ot_a_planifier_piece_manquante   OT « Préparé » dont une pièce manque en stock : refus RG3 (CU-01.CH)
+  Lot 3 : pannes et indicateurs (§15.3)
+    panne_attente_pieces             panne clôturée de PO-01 passée par « En attente : Pièce : … » (journal)
+    panne_sans_duree                 panne clôturée de CV-02 sans durée d'arrêt (duree_arret_h vide)
+    equipements_calcul_main          liste : CP-01 (A), PO-01, CV-02 : heures connues, pannes sur 12 mois
+
+Journal (lot 3) : pour chaque panne des 3 derniers mois (OT correctif avec arrêt de production, plus une
+semaine de marge pour le décalage de la démo), les entrées que Prévo aurait écrites, au format exact de
+Donnees.modifier (« création — acceptation de DI-… », « modification : statut, date_debut — statut
+Créé → En cours »…), horodatées par les dates de l'OT et de sa DI, poste « Poste démo ».
 
 Organisation du fichier :
     1. Schéma et écriture CSV (règles §3.1 et §3.2)
@@ -101,6 +129,7 @@ Organisation du fichier :
     3. Catalogue de contenu (équipements, scénarios de pannes, articles, gammes...)
     4. Génération table par table
     5. Génération de l'historique (DI, OT, préventif)
+    5 bis. Lot 3 : planning, OT à planifier, pannes remarquables, journal des statuts
     6. Stock, achats, mouvements
     7. Identifiants, auto-vérification, identifiants de scénario, écriture, ligne de commande
 """
@@ -112,7 +141,9 @@ import random
 import re
 import sys
 import time
+from contextlib import contextmanager, nullcontext
 from datetime import date, datetime, timedelta
+from itertools import groupby
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -121,6 +152,7 @@ FICHIER_JS = RACINE / 'js' / 'demo-donnees.js'
 FICHIER_SCENARIOS = RACINE / 'tests' / 'fixtures' / 'demo-scenarios.json'
 
 GRAINE = 42                      # graine fixe : deux exécutions donnent des fichiers identiques
+GRAINE_LOT3 = 4203               # graine des ajouts du lot 3 (générateur à part : le reste ne bouge pas)
 DATE_REFERENCE = '2026-10-19'    # « aujourd'hui » du jeu de démo (un lundi)
 MOIS_PAR_DEFAUT = 13             # durée de l'historique (ARCHITECTURE.md §14.8)
 PART_DI_AVEC_CODE = 0.8          # proportion des DI dont le demandeur a choisi un code symptôme
@@ -1381,14 +1413,21 @@ COMPTEURS_DEMO = [      # clé, repère, libellé, unité, valeur au premier rel
 ]
 
 # Contrôles réglementaires : (repère, nature, texte de référence, périodicité en mois, organisme,
-# date du dernier contrôle, observations, observations levées ?)
+# date du dernier contrôle, observations, observations levées ?). Prochaine date = dernière +
+# périodicité. À la date de référence (§15.7), ils couvrent les quatre statuts : chariot en retard,
+# réservoir avec observations à lever, installations électriques à planifier (moins de 30 jours), les
+# autres à jour.
+# Textes (lot 3) : VGP tous les 6 mois pour les chariots élévateurs (arrêté du 1er mars 2004, art. 23 a,
+# qui renvoie à l'art. 20 II), 12 mois pour le pont roulant ; installations électriques : vérification
+# PÉRIODIQUE (art. R4226-16 ; R4226-14 est la vérification initiale) et son arrêté du 26 décembre 2011.
 ORGANISME_1 = 'Bureau Alpin de Contrôle (démo)'
 CONTROLES_DEMO = [
-    ('PT-01', 'Vérification générale périodique du pont roulant', 'Arrêté du 1er mars 2004 (VGP)', 12,
+    ('PT-01', 'Vérification générale périodique du pont roulant', 'Arrêté du 1er mars 2004 (VGP), art. 23', 12,
      ORGANISME_1, '2026-02-10', '', 1),
-    ('CH-01', 'Vérification générale périodique du chariot élévateur', 'Arrêté du 1er mars 2004 (VGP)', 12,
-     ORGANISME_1, '2025-09-18', '', 1),
-    ('AE-01', 'Vérification périodique des installations électriques', 'Code du travail, art. R4226-14', 12,
+    ('CH-01', 'Vérification générale périodique du chariot élévateur', 'Arrêté du 1er mars 2004 (VGP), art. 23', 6,
+     ORGANISME_1, '2026-03-18', '', 1),
+    ('AE-01', 'Vérification périodique des installations électriques',
+     'Code du travail, art. R4226-16 ; arrêté du 26 décembre 2011', 12,
      'Certif-Elec Services (démo)', '2025-11-12', '', 1),
     ('RA-01', "Inspection périodique du réservoir d'air comprimé", 'Arrêté du 20 novembre 2017', 36,
      'Bureau Alpin de Contrôle (démo)', '2025-04-03',
@@ -1398,6 +1437,11 @@ CONTROLES_DEMO = [
     ('VE-02', "Contrôle de l'aération et de l'assainissement des locaux", 'Code du travail, art. R4222-20', 12,
      ORGANISME_1, '2026-06-02', '', 1),
 ]
+# Contrôles dont la dernière date a été recalée au lot 3 (chariot : passage de 12 à 6 mois, dernière VGP
+# en mars 2026 pour rester en retard). L'OT réglementaire de cette VGP tire son hasard dans le
+# générateur du lot 3 : le reste du jeu reste identique.
+CONTROLES_RECALES_LOT3 = ('CH-01',)
+STATUTS_CONTROLE = ('en retard', 'observations à lever', 'à planifier', 'à jour')     # §15.7, dans l'ordre
 
 # Opérations ponctuelles écrites à la main : titre, équipement, jours avant la date de référence, etc.
 AMELIORATIONS_DEMO = [
@@ -1426,6 +1470,7 @@ class Contexte:
 
     def __init__(self, mois, volume=None):
         self.rng = random.Random(GRAINE)
+        self.rng_lot3 = random.Random(GRAINE_LOT3)    # hasard des ajouts du lot 3 (voir hasard_du_lot3)
         self.mois = mois
         self.volume = volume                          # None ou (nombre d'équipements, nombre d'OT)
         self.ref = jour_depuis_texte(DATE_REFERENCE)
@@ -1450,6 +1495,7 @@ class Contexte:
         self.specifications_gammes = []               # gammes à créer (démo ou jeu de charge)
         self.definitions_compteurs = []               # compteurs à créer (démo ou jeu de charge)
         self.marques = {}                             # rôle de scénario -> ligne (voir §7, scénarios)
+        self.attentes = []                            # périodes « En attente » passées des OT (§5 bis, journal)
 
     def marquer(self, role, ligne):
         """Retient la ligne qui joue un rôle de scénario (son identifiant n'est connu qu'à la fin)."""
@@ -1462,6 +1508,21 @@ class Contexte:
     def fin_historique(self):
         """Dernier jour où l'on peut avoir terminé une intervention (la veille de la date de référence)."""
         return self.ref - timedelta(days=1)
+
+
+@contextmanager
+def hasard_du_lot3(ctx):
+    """Pendant le bloc, ctx.rng est le générateur du lot 3 (graine GRAINE_LOT3).
+
+    Les ajouts du lot 3 tirent ainsi leurs nombres au hasard à part : la suite des tirages du générateur
+    principal reste la même qu'au lot 2, donc toutes les autres lignes du jeu restent identiques.
+    """
+    principal = ctx.rng
+    ctx.rng = ctx.rng_lot3
+    try:
+        yield
+    finally:
+        ctx.rng = principal
 
 
 def nouvel_identifiant(ctx, table, annee=None):
@@ -1934,7 +1995,8 @@ def generer_controles(ctx):
                     prochaine_date=texte_date(ajouter_mois(derniere_date, periodicite)),
                     observations=observations, observations_levees=levees)
         ctx.controles.append({'eq': equipement, 'nature': nature, 'organisme': organisme,
-                              'derniere': derniere, 'observations': observations})
+                              'derniere': derniere, 'observations': observations,
+                              'recale_lot3': repere in CONTROLES_RECALES_LOT3})
 
 
 def generer_parametres(ctx):
@@ -2278,16 +2340,17 @@ def creer_ot_manuel(ctx, equipement, titre, travail, jour, heures, metiers, comp
 
 
 def generer_ot_reglementaires_et_ameliorations(ctx):
-    rng = ctx.rng
     for controle in ctx.controles:
         jour = jour_depuis_texte(controle['derniere'])
         if ctx.debut <= jour <= ctx.fin_historique:
             observation = (" Observation de l'organisme à lever : " + controle['observations']
                            if controle['observations'] else ' Aucune observation.')
-            creer_ot_manuel(
-                ctx, controle['eq'], controle['nature'], 'Accompagner l\'organisme de contrôle et récupérer le rapport.',
-                jour, 1.0, [POLY, MECA], 'Contrôle réalisé par %s, rapport reçu.%s' % (controle['organisme'], observation),
-                'réglementaire', 'C99', 'R10', cout_soustraitance=rng.randrange(250, 650, 50))
+            # Contrôle recalé au lot 3 : son OT tire son hasard à part (le reste du jeu ne bouge pas).
+            with hasard_du_lot3(ctx) if controle['recale_lot3'] else nullcontext():
+                creer_ot_manuel(
+                    ctx, controle['eq'], controle['nature'], 'Accompagner l\'organisme de contrôle et récupérer le rapport.',
+                    jour, 1.0, [POLY, MECA], 'Contrôle réalisé par %s, rapport reçu.%s' % (controle['organisme'], observation),
+                    'réglementaire', 'C99', 'R10', cout_soustraitance=ctx.rng.randrange(250, 650, 50))
     if ctx.volume:
         return
     for amelioration in AMELIORATIONS_DEMO:
@@ -2703,6 +2766,388 @@ def etat_courant_demo(ctx):
 
 
 # =============================================================================
+# 5 bis. LOT 3 : PLANNING, OT À PLANIFIER, PANNES REMARQUABLES, JOURNAL (ARCHITECTURE.md §15.12)
+# =============================================================================
+# Tout ce bloc est appelé sous hasard_du_lot3 (voir construire_jeu) : ses tirages au hasard ne
+# changent pas ceux des lots 1 et 2.
+
+def ot_prevu(repere, jour, technicien, heures, titre, travail, type_ot='correctif différé', priorite='P3',
+             pieces=(), cree=7):
+    """Un OT « Planifié » du planning de démo (dictionnaire lisible, une ligne par appel).
+
+    jour        jours après la date de référence (0 = lundi de la semaine 1, 7 = lundi de la semaine 2…)
+    technicien  numéro du technicien (1 à 4, ordre de TECHNICIENS_DEMO)
+    pieces      pièces prévues [(clé d'article, quantité)] : toutes en stock (RG3)
+    cree        l'OT a été créé ce nombre de jours avant la date de référence
+    """
+    return {'repere': repere, 'jour': jour, 'technicien': technicien, 'heures': heures, 'titre': titre,
+            'travail': travail, 'type': type_ot, 'priorite': priorite, 'pieces': list(pieces), 'cree': cree}
+
+
+ARRET = ' (arrêt programmé)'
+
+# Les 4 semaines qui commencent à la date de référence (un lundi). La semaine 2 est l'arrêt programmé
+# de fin octobre (celui qu'annonce la DI différée de CV-01) : le mécanicien (n° 2) y a 38,5 h de travaux
+# pour 35 h de capacité, une surcharge que le responsable doit répartir. Les OT déjà ouverts (CU-01
+# « Planifié », CP-01 et EM-01 « En cours ») complètent la semaine 1. Les armoires (habilitation BR)
+# vont à un technicien dont le BR est valide : le seul avertissement d'habilitation de la démo reste
+# celui que l'on provoque en planifiant ot_a_planifier_br.
+PLANNING_DEMO = [
+    # --- semaine 1 (celle de la date de référence)
+    ot_prevu('AE-01', 1, 1, 2.5, 'Remplacement du parafoudre du TGBT (voyant de fin de vie allumé)',
+             "Consigner le départ du parafoudre, remplacer la cartouche, contrôler le voyant et la continuité de la terre.",
+             cree=6),
+    ot_prevu('PT-01', 2, 2, 4.0, 'Remplacement des galets de guidage du chariot du pont',
+             "Consigner le pont, poser la charge au sol, remplacer les galets de guidage usés et régler le jeu.", cree=9),
+    ot_prevu('SC-01', 3, 4, 2.0, 'Réglage du guide-lame et remplacement des brosses de nettoyage',
+             "Régler le guide-lame au jeu préconisé, remplacer les brosses de nettoyage de la lame, faire une coupe d'essai.",
+             priorite='P4', cree=8),
+    ot_prevu('RB-01', 4, 3, 2.5, 'Sauvegarde du programme du robot et contrôle des butées logicielles',
+             "Sauvegarder le programme et les paramètres du robot sur la clé du service, contrôler les butées logicielles des axes.",
+             type_ot='amélioration', cree=5),
+    # --- semaine 2 : arrêt programmé de fin octobre (le mécanicien est en surcharge)
+    ot_prevu('PR-01.GH', 7, 2, 8.0, 'Remplacement des flexibles usés du groupe hydraulique' + ARRET,
+             "Décomprimer le circuit, remplacer les flexibles marqués lors des préventifs, compléter le niveau d'huile, "
+             "purger et contrôler l'étanchéité sous pression.", pieces=[('flex_hydr', 2), ('huile_hlp46', 1)], cree=18),
+    ot_prevu('CV-02', 8, 2, 7.5, "Remplacement des rouleaux grippés de la zone d'accumulation" + ARRET,
+             "Déposer les rouleaux grippés, poser des galets neufs, contrôler l'alignement et la tension de la transmission.",
+             pieces=[('galet', 6)], cree=18),
+    ot_prevu('PO-01', 9, 2, 4.0, "Alignement laser du groupe motopompe et remplacement de l'accouplement" + ARRET,
+             "Consigner la pompe, remplacer l'accouplement élastique, aligner moteur et pompe au laser, relever les "
+             "vibrations à la remise en route.", pieces=[('accoup', 1)], cree=17),
+    ot_prevu('CN-01', 10, 2, 7.0, 'Contrôle de la géométrie et réglage des lardons du tour' + ARRET,
+             "Mesurer les jeux des glissières, régler les lardons, contrôler la géométrie au comparateur et noter les valeurs.",
+             cree=17),
+    ot_prevu('CH-01', 11, 2, 6.0, 'Remplacement des roues porteuses du chariot' + ARRET,
+             "Débrancher la batterie, lever le chariot sur chandelles, remplacer les deux roues porteuses usées, essai de roulage.",
+             pieces=[('roue_chariot', 2)], cree=16),
+    ot_prevu('RB-01', 11, 2, 6.0, 'Remplacement des ventouses et des flexibles de vide de la pince' + ARRET,
+             "Remplacer les ventouses et les flexibles de vide de la pince, contrôler le vide et la prise des colis à "
+             "vitesse réduite.", cree=16),
+    ot_prevu('AE-01', 7, 1, 7.0, 'Resserrage des jeux de barres et thermographie du TGBT' + ARRET,
+             "Consigner le TGBT pendant l'arrêt programmé, resserrer au couple les jeux de barres et les départs, faire une "
+             "thermographie à la remise sous tension.", cree=18),
+    ot_prevu('CP-01.SEC', 9, 4, 3.0, 'Nettoyage du condenseur du sécheur et contrôle du purgeur' + ARRET,
+             "Nettoyer le condenseur du sécheur, contrôler le purgeur de condensats et le point de rosée à la remise en route.",
+             pieces=[('nettoyant', 1)], cree=15),
+    ot_prevu('CN-01', 11, 3, 3.0, 'Mise à jour des compensations de la commande numérique après le réglage de la géométrie',
+             "Reprendre les compensations des axes dans la commande numérique avec les mesures du réglage, usiner une pièce "
+             "témoin.", type_ot='amélioration', cree=15),
+    # --- semaine 3
+    ot_prevu('RA-01', 15, 4, 2.0, "Remplacement du purgeur automatique du réservoir (observation du dernier contrôle)",
+             "Isoler le réservoir et le purger jusqu'à 0 bar, remplacer le purgeur automatique, contrôler son fonctionnement ; "
+             "garder la preuve pour lever l'observation de l'organisme.", cree=10),
+    ot_prevu('AE-02', 16, 1, 1.5, "Remplacement des voyants de présence tension de l'armoire",
+             "Consigner l'armoire, remplacer les voyants de présence tension défectueux, contrôler leur allumage.",
+             priorite='P4', cree=6),
+    ot_prevu('CU-01', 17, 3, 2.0, "Réglage du palpeur de mesure d'outils",
+             "Contrôler et régler le palpeur de mesure d'outils, vérifier les longueurs mesurées sur trois outils étalons.",
+             cree=4),
+    # --- semaine 4
+    ot_prevu('PO-01', 22, 2, 1.0, "Contrôle des vibrations du groupe motopompe après l'alignement",
+             "Relever les vibrations aux paliers et les comparer aux valeurs relevées après l'alignement de l'arrêt "
+             "programmé.", priorite='P4', cree=17),
+    ot_prevu('CN-01.BR', 24, 1, 1.5, "Contrôle de l'isolement et de l'intensité du moteur de broche",
+             "Mesurer l'isolement du moteur de broche au mégohmmètre et son intensité à vide et en charge, noter les valeurs.",
+             cree=3),
+]
+
+# OT « Préparé » à planifier (sans technicien) : chacun vient d'une DI acceptée puis préparée (pièces
+# prévues). `jour` = date prévue en jours après la date de référence (aucun n'est en retard).
+A_PLANIFIER_DEMO = [
+    {'role': 'ot_a_planifier', 'repere': 'CV-02.M', 'cree': 4, 'heure': 10.1, 'delai': 35, 'jour': 3,
+     'demandeur': 'Inès Marchand', 'impact': 'gêne', 'heures': 1.5, 'pieces': [('joint_spi', 1)],
+     'texte_di': "De l'huile coule sous le motoréducteur du convoyeur CV-02, une petite flaque se forme.",
+     'scenario': scenario('S01', 'C01', 'R01', 1, [MECA], (1.0, 2.0), (('gêne', 1),), (),
+                          "Fuite d'huile au joint de sortie du motoréducteur",
+                          "Remplacer le joint à lèvres de sortie du motoréducteur, compléter le niveau d'huile et nettoyer "
+                          "le carter.", [], [])},
+    # Scénario « habilitation » : AE-03 exige BR ; le planifier sur TEC-0004 (BR échue) avertit (RG8).
+    {'role': 'ot_a_planifier_br', 'repere': 'AE-03', 'cree': 3, 'heure': 13.65, 'delai': 50, 'jour': 4,
+     'demandeur': 'Camille Girard', 'impact': 'gêne', 'heures': 1.5, 'pieces': [],
+     'texte_di': "Le ventilateur de l'armoire de commande AE-03 fait un bruit de frottement.",
+     'scenario': scenario('S02', 'C02', 'R01', 1, [ELEC], (1.0, 2.0), (('gêne', 1),), (),
+                          "Ventilateur de l'armoire bruyant",
+                          "Consigner l'armoire (habilitation BR), remplacer le ventilateur et nettoyer la grille du filtre.",
+                          [], [])},
+    # Refus RG3 au planning : 4 capteurs prévus, 3 en stock (l'achat de capteurs est « commandée »).
+    {'role': 'ot_a_planifier_piece_manquante', 'repere': 'CU-01.CH', 'cree': 5, 'heure': 9.35, 'delai': 40, 'jour': 2,
+     'demandeur': 'Camille Girard', 'impact': 'gêne', 'heures': 2.5, 'pieces': [('capteur_m18', 4)],
+     'texte_di': "Le changeur d'outils de CU-01 se met en défaut de position plusieurs fois par jour.",
+     'scenario': scenario('S05', 'C04', 'R01', 1, [AUTO], (2.0, 3.0), (('gêne', 1),), (),
+                          "Défauts de position du magasin d'outils",
+                          "Remplacer les quatre capteurs de position du magasin d'outils (réglage instable), les régler et "
+                          "tester dix changements d'outil.", [], [])},
+]
+
+# Équipements dont un test recalcule les indicateurs à la main (§15.13) : un de criticité A, heures de
+# fonctionnement connues, des pannes sur les 12 derniers mois ; ensemble, ils portent la panne non
+# clôturée (CP-01), la panne qui a attendu une pièce (PO-01) et la panne sans durée d'arrêt (CV-02).
+EQUIPEMENTS_CALCUL_MAIN = ('CP-01', 'PO-01', 'CV-02')
+
+MOTIF_ATTENTE_PIECE = ('Pièce : moteur 5,5 kW de rechange (non tenu en stock) commandé chez Électro-Alpes '
+                       'Distribution, livraison demain matin.')
+
+
+def creer_ot_planifie(ctx, prevu):
+    """OT « Planifié » créé par le responsable (origine « manuel ») : technicien, date prévue, temps prévu."""
+    equipement = ctx.equipement[prevu['repere']]
+    jour_creation = jour_ouvre_avant(ctx.ref - timedelta(days=prevu['cree']))
+    creation = instant(jour_creation, 8.0) + timedelta(minutes=ctx.rng.randrange(0, 300, 5))
+    ot = creer_ligne(
+        ctx, 'ordres_travail', origine='manuel', equipement_id=equipement['id'], type=prevu['type'],
+        priorite=prevu['priorite'], statut='Planifié', titre='%s — %s' % (prevu['repere'], prevu['titre']),
+        travail_a_faire=prevu['travail'], consignes=consignes_ot(equipement), date_creation=texte_dh(creation),
+        date_prevue=texte_date(ctx.ref + timedelta(days=prevu['jour'])),
+        technicien_id=ctx.techniciens[prevu['technicien'] - 1]['id'], temps_prevu_h=prevu['heures'])
+    ajouter_pieces_ot(ctx, ot, equipement, prevu['pieces'])
+    return ot
+
+
+def creer_ot_a_planifier(ctx, definition):
+    """OT « Préparé » à planifier : DI acceptée, OT préparé (pièces prévues), sans technicien."""
+    quand = instant(jour_ouvre_avant(ctx.ref - timedelta(days=definition['cree'])), definition['heure'])
+    _demande, ot = creer_correctif(
+        ctx, ctx.equipement[definition['repere']], definition['scenario'], quand, definition['impact'], 'Préparé',
+        texte_di=definition['texte_di'], demandeur=definition['demandeur'], description='',
+        delai_decision=definition['delai'], date_prevue=ctx.ref + timedelta(days=definition['jour']),
+        temps_prevu=definition['heures'], pieces=definition['pieces'], symptome_code=definition['scenario']['symptome'])
+    ctx.marquer(definition['role'], ot)
+
+
+def creer_panne_attente_pieces(ctx):
+    """Panne de PO-01 (pompe d'eau glacée, 16 h par jour) qui a attendu une pièce non tenue en stock :
+    diagnostic le matin, « En attente : Pièce : … » vers 10 h, reprise le lendemain à la livraison.
+    L'attente (environ 22 h) est plus courte que la durée d'arrêt (du signalement à la remise en route)."""
+    equipement = ctx.equipement['PO-01']
+    jour = jour_ouvre_avant(ctx.ref - timedelta(days=41))
+    if jour < ctx.debut:
+        return
+    lendemain = jour_ouvre_apres(jour + timedelta(days=1))
+    mecanicien, electricien = ctx.techniciens[1], ctx.techniciens[0]
+    signalement = instant(jour, 7 + 40 / 60.0)
+    decision = signalement + timedelta(minutes=12)
+    debut = decision + timedelta(minutes=13)
+    mise_en_attente = instant(jour, 9 + 50 / 60.0)
+    reprise = instant(lendemain, 8.25)
+    fin = instant(lendemain, 11.5)
+    demande = creer_ligne(
+        ctx, 'demandes', date_heure=texte_dh(signalement), demandeur='Mathieu Roux', equipement_id=equipement['id'],
+        symptome="La pompe d'eau glacée PO-01 s'est arrêtée, le moteur a fait un bruit de ferraille avant de caler.",
+        impact='arrêt', description="Plus d'eau glacée sur la ligne.", statut='Acceptée', date_decision=texte_dh(decision),
+        symptome_code='S02')
+    ot = creer_ligne(
+        ctx, 'ordres_travail', origine='DI', di_id=demande, equipement_id=equipement['id'], type='correctif immédiat',
+        priorite=priorite_calculee(equipement['crit'], 'arrêt'), statut='Clôturé administrativement',
+        motif_attente=MOTIF_ATTENTE_PIECE, titre='PO-01 — Moteur de pompe bloqué, roulements grippés',
+        travail_a_faire="Diagnostiquer le moteur, le remplacer si les roulements ou le bobinage sont hors service.",
+        consignes=consignes_ot(equipement), date_creation=texte_dh(decision), date_prevue=texte_date(jour),
+        technicien_id=mecanicien['id'], temps_prevu_h=3.0, date_debut=texte_dh(debut), date_fin=texte_dh(fin),
+        arret_production=1, duree_arret_h=quart_heure((fin - signalement).total_seconds() / 3600.0),
+        symptome_code='S02', cause_code='C02', remede_code='R01', remise_service=1,
+        compte_rendu="Roulements du moteur grippés et bobinage échauffé : moteur remplacé par un moteur neuf, livré le "
+                     "lendemain matin (non tenu en stock), alignement contrôlé, intensité absorbée normale. Proposition : "
+                     "garder un moteur de rechange au magasin, la pompe alimente toute l'eau glacée.",
+        date_cloture_tech=texte_dh(fin + timedelta(minutes=20)),
+        date_cloture_admin=texte_dh(instant(jour_ouvre_apres(lendemain + timedelta(days=2)), 9.0)))
+    renseigner(demande, ot_id=ot)
+    # Temps passés : diagnostic le premier jour, remplacement le lendemain (l'électricien raccorde le moteur).
+    for technicien, jour_temps, heures in ((mecanicien, jour, 1.75), (mecanicien, lendemain, 3.25),
+                                           (electricien, lendemain, 1.5)):
+        creer_ligne(ctx, 'ot_temps', ot_id=ot, technicien_id=technicien['id'], date=texte_date(jour_temps), heures=heures)
+    ctx.attentes.append({'ot': ot, 'debut': mise_en_attente, 'fin': reprise, 'motif': MOTIF_ATTENTE_PIECE})
+    ctx.marquer('panne_attente_pieces', ot)
+
+
+def creer_panne_sans_duree(ctx):
+    """Panne clôturée de CV-02 dont la durée d'arrêt n'a pas été relevée (duree_arret_h vide) : le
+    MTTR la met à part (« sans durée d'arrêt », §15.3)."""
+    equipement = ctx.equipement['CV-02']
+    jour = jour_ouvre_avant(ctx.ref - timedelta(days=24))
+    if jour < ctx.debut:
+        return
+    signalement = instant(jour, 10 + 20 / 60.0)
+    _demande, ot = creer_correctif(
+        ctx, equipement, trouver_scenario('convoyeur', 'C04', 'S05'), signalement, 'arrêt', 'clos',
+        texte_di="Le convoyeur CV-02 s'arrête à chaque passage de colis, la ligne de conditionnement est bloquée.",
+        demandeur='Lucas Perrot', description='', delai_decision=10, symptome_code='S05', pieces=[], heures=1.0,
+        compte_rendu="Cellule de détection d'entrée encrassée par des résidus de film : nettoyée et réalignée, essais "
+                     "sur 30 minutes sans arrêt. Durée d'arrêt de la ligne non relevée.")
+    renseigner(ot, arret_production=1, duree_arret_h='', statut='Clôturé administrativement',
+               date_cloture_admin=texte_dh(instant(jour_ouvre_apres(jour + timedelta(days=3)), 9.5)))
+    ctx.marquer('panne_sans_duree', ot)
+
+
+def completer_demo_lot3(ctx):
+    """Ajouts du lot 3 au jeu de démo (§15.12) : planning, OT à planifier, pannes remarquables."""
+    for prevu in PLANNING_DEMO:
+        creer_ot_planifie(ctx, prevu)
+    for definition in A_PLANIFIER_DEMO:
+        creer_ot_a_planifier(ctx, definition)
+    creer_panne_attente_pieces(ctx)
+    creer_panne_sans_duree(ctx)
+
+
+# ---------------------------------------------------------------------------
+# Journal : historique des statuts des pannes récentes (format exact de Donnees.modifier)
+# ---------------------------------------------------------------------------
+
+POSTE_DEMO = 'Poste démo'
+CARACTERES_JOURNAL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'   # comme CARACTERES_ALEATOIRES (js/donnees.js)
+MARGE_HISTORIQUE_JOURS = 7          # la démo décale ses dates par semaines entières (§11)
+TYPES_CORRECTIFS = ('correctif immédiat', 'correctif différé')
+
+
+def instant_depuis_texte(texte):
+    """'AAAA-MM-JJ HH:MM' → datetime."""
+    return datetime.strptime(texte, '%Y-%m-%d %H:%M')
+
+
+def debut_historique_statuts(ctx):
+    """Premier jour des pannes dont l'historique des statuts est au journal : 3 mois avant la date de
+    référence, moins une semaine de marge."""
+    return ajouter_mois(ctx.ref, -3) - timedelta(days=MARGE_HISTORIQUE_JOURS)
+
+
+def est_panne(ot):
+    """Panne (§15.3) : OT correctif, arrêt de production, non annulé."""
+    return ot['type'] in TYPES_CORRECTIFS and ot['arret_production'] == '1' and ot['statut'] != 'Annulé'
+
+
+def date_de_panne(ot, demandes, demandes_par_ot):
+    """§15.3 : date_heure de la DI de l'OT (di_id, sinon une DI dont ot_id est l'OT), sinon date_creation."""
+    if ot['di_id'] in demandes:
+        return jour_depuis_texte(demandes[ot['di_id']]['date_heure'][:10])
+    liees = sorted(d['date_heure'] for d in demandes_par_ot.get(ot['id'], []))
+    return jour_depuis_texte((liees[0] if liees else ot['date_creation'])[:10])
+
+
+def profil_demandeur(ctx, nom):
+    """Profil inscrit au journal pour l'auteur d'une DI : un technicien est connu par son identifiant."""
+    for technicien in ctx.techniciens:
+        if nom_complet(technicien) == nom:
+            return 'Technicien ' + technicien['id']
+    return 'Demandeur ' + nom
+
+
+def moments_de_preparation(ctx, creation, debut):
+    """Heures des passages « Préparé » puis « Planifié » d'un correctif différé, entre sa création et son
+    démarrage (quelques minutes de travail du responsable, en heures ouvrées)."""
+    prepare = apres_minutes_ouvrees(creation, ctx.rng.randint(5, 30))
+    planifie = apres_minutes_ouvrees(prepare, ctx.rng.randint(5, 20))
+    if not creation < prepare < planifie < debut:
+        ecart = (debut - creation) / 3
+        prepare, planifie = arrondir_minute(creation + ecart), arrondir_minute(creation + 2 * ecart)
+    return prepare, planifie
+
+
+def entrees_de_l_ot(ctx, ot, attentes):
+    """Entrées du journal d'un OT, dans l'ordre où Prévo les écrit : [(instant, profil, action)].
+
+    Création : « création — acceptation de DI-… » (demandes-ecritures.js) ou « création — création de
+    l'OT (urgence) » (ordres-ecritures.js). Puis un passage de statut par changement (RG3 : un correctif
+    différé passe par Préparé et Planifié ; un correctif immédiat démarre directement), avec la liste des
+    champs modifiés que Donnees.modifier écrit avant « — ».
+    """
+    technicien = 'Technicien ' + ot['technicien_id']
+    creation = instant_depuis_texte(ot['date_creation'])
+    if ot['origine'] == 'DI':
+        entrees = [(creation, 'Responsable', 'création — acceptation de ' + ot['di_id'])]
+    else:
+        auteur = technicien if ot['origine'] == 'urgence' else 'Responsable'
+        entrees = [(creation, auteur, "création — création de l'OT (%s)" % ot['origine'])]
+    statut = 'Créé'
+
+    def passer(moment, profil, cible, champs, motif=''):
+        nonlocal statut
+        action = 'modification : %s — statut %s → %s' % (champs, statut, cible) + (' : ' + motif if motif else '')
+        entrees.append((moment, profil, action))
+        statut = cible
+
+    if not ot['date_debut']:
+        raise ErreurCoherence('%s : panne sans date de début, historique impossible' % ot['id'])
+    debut = instant_depuis_texte(ot['date_debut'])
+    if ot['type'] == 'correctif différé' and ot['origine'] != 'urgence':
+        prepare, planifie = moments_de_preparation(ctx, creation, debut)
+        passer(prepare, 'Responsable', 'Préparé', 'statut')
+        passer(planifie, 'Responsable', 'Planifié', 'statut')
+    passer(debut, technicien, 'En cours', 'statut, date_debut')
+    for attente in sorted(attentes, key=lambda a: a['debut']):
+        passer(attente['debut'], technicien, 'En attente', 'statut, motif_attente', attente['motif'])
+        passer(attente['fin'], technicien, 'En cours', 'statut')
+    if ot['date_cloture_tech']:
+        passer(instant_depuis_texte(ot['date_cloture_tech']), technicien, 'Clôturé techniquement',
+               'statut, date_cloture_tech')
+    if ot['date_cloture_admin']:
+        passer(instant_depuis_texte(ot['date_cloture_admin']), 'Responsable', 'Clôturé administrativement',
+               'statut, date_cloture_admin')
+    return entrees
+
+
+def entrees_des_demandes(ctx, ot, demandes):
+    """Entrées du journal des DI d'un OT : signalement, puis acceptation (ou regroupement) par le responsable."""
+    entrees = []
+    for demande in demandes:
+        signalee = 'création — demande signalée' + (' pendant ' + demande['ot_origine_id'] if demande['ot_origine_id'] else '')
+        entrees.append((instant_depuis_texte(demande['date_heure']), demande['id'],
+                        profil_demandeur(ctx, demande['demandeur']), signalee))
+        if demande['statut'] == 'Acceptée':
+            decision = 'modification : statut, date_decision, ot_id — acceptée → ' + ot['id']
+        else:
+            decision = 'modification : statut, motif_decision, date_decision, ot_id — regroupée avec ' + ot['id']
+        entrees.append((instant_depuis_texte(demande['date_decision']), demande['id'], 'Responsable', decision))
+    return entrees
+
+
+def identifiant_journal(ctx, moment, seconde, pris):
+    """J-AAAAMMJJHHMMSS-XXXX (§4) : la minute de l'entrée, une seconde, 4 caractères tirés au hasard."""
+    while True:
+        identifiant = 'J-%s%02d-%s' % (moment.strftime('%Y%m%d%H%M'), seconde,
+                                       ''.join(ctx.rng.choice(CARACTERES_JOURNAL) for _ in range(4)))
+        if identifiant not in pris:
+            pris.add(identifiant)
+            return identifiant
+
+
+def generer_journal(ctx):
+    """Journal de la démo : historique des statuts des pannes récentes et de leurs DI (voir la docstring).
+
+    Les entrées d'une même minute reçoivent des secondes croissantes dans l'ordre où Prévo les écrit :
+    trier le fichier par date_heure puis identifiant redonne cet ordre (§15.3).
+    """
+    base = ctx.base
+    demandes = {d['id']: d for d in base['demandes']}
+    demandes_par_ot = {}
+    for demande in base['demandes']:
+        if demande['ot_id']:
+            demandes_par_ot.setdefault(demande['ot_id'], []).append(demande)
+    attentes = {}
+    for attente in ctx.attentes:
+        attentes.setdefault(attente['ot']['id'], []).append(attente)
+    debut = debut_historique_statuts(ctx)
+    entrees = []                      # (instant, table, id_ligne, profil, action), dans l'ordre d'écriture
+    for ot in base['ordres_travail']:
+        if not (est_panne(ot) and date_de_panne(ot, demandes, demandes_par_ot) >= debut):
+            continue
+        entrees += [(moment, 'ordres_travail', ot['id'], profil, action)
+                    for moment, profil, action in entrees_de_l_ot(ctx, ot, attentes.get(ot['id'], []))]
+        liees = sorted(demandes_par_ot.get(ot['id'], []), key=lambda d: (d['date_heure'], d['id']))
+        entrees += [(moment, 'demandes', identifiant, profil, action)
+                    for moment, identifiant, profil, action in entrees_des_demandes(ctx, ot, liees)]
+    # Ordre du temps ; à la même minute, l'ordre d'écriture (rang dans la liste).
+    ordonnees = [entree for _rang, entree in sorted(enumerate(entrees), key=lambda e: (e[1][0], e[0]))]
+    pris = set()
+    for minute, groupe in groupby(ordonnees, key=lambda entree: entree[0]):
+        groupe = list(groupe)
+        secondes = sorted(ctx.rng.sample(range(60), len(groupe)))
+        for (_moment, table, id_ligne, profil, action), seconde in zip(groupe, secondes):
+            ligne = creer_ligne(ctx, 'journal', id=identifiant_journal(ctx, minute, seconde, pris),
+                                date_heure=texte_dh(minute), poste=POSTE_DEMO, profil=profil, id_ligne=id_ligne,
+                                action=action)
+            renseigner(ligne, table=table)     # « table » est aussi le nom d'un paramètre de creer_ligne
+
+
+# =============================================================================
 # 6. STOCK, ACHATS ET MOUVEMENTS
 # =============================================================================
 
@@ -3098,6 +3543,226 @@ def verifier_jeu(ctx):
 
 
 # ---------------------------------------------------------------------------
+# Auto-vérification du lot 3 : contrôles, planning, journal, pannes (ARCHITECTURE.md §15.12)
+# ---------------------------------------------------------------------------
+
+MOTIF_ACTION_STATUT = re.compile(r'statut (.+?) → (.+?)(?: : (.+))?')
+MOTIF_ID_JOURNAL = re.compile(r'J-(\d{12})\d{2}-[A-Z0-9]{4}')
+
+
+def statut_controle(controle, aujourdhui):
+    """Statut d'un contrôle réglementaire à une date (§15.7, comme Controles.etat) : le premier vrai parmi
+    « en retard », « observations à lever », « à planifier » (30 jours ou moins, ou date inconnue), « à jour »."""
+    if controle['prochaine_date']:
+        prochaine = jour_depuis_texte(controle['prochaine_date'])
+    elif controle['derniere_date'] and controle['periodicite_mois']:
+        prochaine = ajouter_mois(jour_depuis_texte(controle['derniere_date']), int(controle['periodicite_mois']))
+    else:
+        prochaine = None
+    if prochaine is not None and prochaine < aujourdhui:
+        return 'en retard'
+    if controle['observations'].strip() and controle['observations_levees'] != '1':
+        return 'observations à lever'
+    if prochaine is None or prochaine <= aujourdhui + timedelta(days=30):
+        return 'à planifier'
+    return 'à jour'
+
+
+def lundis_du_planning(ctx):
+    """Les lundis des 4 semaines du planning de démo (la date de référence est un lundi)."""
+    return [ctx.ref + timedelta(weeks=rang) for rang in range(4)]
+
+
+def semaine_du_planning(ctx, date_prevue):
+    """Lundi de la semaine du planning qui contient cette date prévue, ou None (hors des 4 semaines)."""
+    if not date_prevue:
+        return None
+    for lundi in lundis_du_planning(ctx):
+        if lundi <= jour_depuis_texte(date_prevue) < lundi + timedelta(days=7):
+            return lundi
+    return None
+
+
+def charges_du_planning(ctx):
+    """{(technicien, lundi AAAA-MM-JJ): heures prévues} : même règle que Planning.chargeSemaine (§15.5),
+    somme des temps prévus des OT ni clôturés ni annulés, avec technicien et date prévue dans la semaine."""
+    charges = {}
+    for ot in ctx.base['ordres_travail']:
+        lundi = semaine_du_planning(ctx, ot['date_prevue'])
+        if ot['statut'] not in STATUTS_FERMES and ot['technicien_id'] and lundi:
+            cle = (ot['technicien_id'], texte_date(lundi))
+            charges[cle] = charges.get(cle, 0.0) + float(ot['temps_prevu_h'] or 0)
+    return charges
+
+
+def surcharges_du_planning(ctx):
+    """Couples (technicien, lundi) dont la charge dépasse la capacité hebdomadaire du technicien."""
+    capacites = {t['id']: float(t['capacite_h_semaine']) for t in ctx.base['techniciens']}
+    return sorted(cle for cle, heures in charges_du_planning(ctx).items() if heures > capacites[cle[0]])
+
+
+def historiques_du_journal(base):
+    """{OT: [entrées du journal de la table ordres_travail]}, triées par date_heure puis identifiant."""
+    historiques = {}
+    for ligne in sorted(base['journal'], key=lambda l: (l['date_heure'], l['id'])):
+        if ligne['table'] == 'ordres_travail':
+            historiques.setdefault(ligne['id_ligne'], []).append(ligne)
+    return historiques
+
+
+def attente_pieces(entrees, ot):
+    """Heures passées « En attente » pour une pièce (§15.3), lues au journal, sans plafond."""
+    total, debut = 0.0, None
+    for entree in entrees:
+        correspondance = MOTIF_ACTION_STATUT.fullmatch(entree['action'].partition(' — ')[2])
+        if not correspondance:
+            continue
+        depart, arrivee, motif = correspondance.groups()
+        if arrivee == 'En attente' and (motif or '').lower().startswith('pièce'):
+            debut = instant_depuis_texte(entree['date_heure'])
+        elif depart == 'En attente' and debut is not None:
+            total += (instant_depuis_texte(entree['date_heure']) - debut).total_seconds() / 3600.0
+            debut = None
+    if debut is not None and ot['date_fin']:
+        total += (instant_depuis_texte(ot['date_fin']) - debut).total_seconds() / 3600.0
+    return total
+
+
+def verifier_historique_ot(ot, entrees, erreur):
+    """Un historique au journal : création à date_creation, puis chaque passage part du statut précédent,
+    à des heures croissantes égales aux dates de l'OT (démarrage, clôtures), et finit sur son statut."""
+    if ot['origine'] == 'DI':
+        attendue = 'création — acceptation de ' + ot['di_id']
+    else:
+        attendue = "création — création de l'OT (%s)" % ot['origine']
+    if entrees[0]['action'] != attendue or entrees[0]['date_heure'] != ot['date_creation']:
+        erreur('%s : le journal ne commence pas par sa création (%r)' % (ot['id'], entrees[0]['action']))
+    statut, precedent, demarre = 'Créé', entrees[0]['date_heure'], False
+    dates_attendues = {'Clôturé techniquement': ot['date_cloture_tech'],
+                       'Clôturé administrativement': ot['date_cloture_admin']}
+    for entree in entrees[1:]:
+        correspondance = MOTIF_ACTION_STATUT.fullmatch(entree['action'].partition(' — ')[2])
+        if not correspondance or correspondance.group(1) != statut or entree['date_heure'] <= precedent:
+            erreur('%s : passage incohérent après « %s » : %r' % (ot['id'], statut, entree['action']))
+            return
+        statut = correspondance.group(2)
+        if statut == 'En cours' and not demarre:
+            dates_attendues['En cours'], demarre = ot['date_debut'], True
+        if statut in dates_attendues and entree['date_heure'] != dates_attendues.pop(statut):
+            erreur('%s : « %s » le %s, différent de la date de l\'OT' % (ot['id'], statut, entree['date_heure']))
+        precedent = entree['date_heure']
+    if statut != ot['statut']:
+        erreur('%s : le journal finit sur « %s », l\'OT est « %s »' % (ot['id'], statut, ot['statut']))
+
+
+def verifier_demo_lot3(ctx):
+    """Auto-vérification des ajouts du lot 3 (jeu de démo seulement). Lève ErreurCoherence."""
+    base = ctx.base
+    erreurs = []
+    erreur = erreurs.append
+    # --- 1. Contrôles : prochaine date = dernière + périodicité ; les quatre statuts à la date de référence
+    statuts = set()
+    for controle in base['controles_reglementaires']:
+        attendue = ajouter_mois(jour_depuis_texte(controle['derniere_date']), int(controle['periodicite_mois']))
+        if controle['prochaine_date'] != texte_date(attendue):
+            erreur('%s : prochaine date différente de dernière + périodicité' % controle['id'])
+        statuts.add(statut_controle(controle, ctx.ref))
+    if statuts != set(STATUTS_CONTROLE):
+        erreur('Contrôles : statuts %s au lieu des quatre' % sorted(statuts))
+    # --- 2. Planning des 4 semaines
+    ordres = {ot['id']: ot for ot in base['ordres_travail']}
+    equipements = {e['id']: e for e in base['equipements']}
+    grille = [ot for ot in base['ordres_travail'] if ot['statut'] not in STATUTS_FERMES and ot['technicien_id']
+              and semaine_du_planning(ctx, ot['date_prevue'])]
+    planifies = [ot for ot in grille if ot['statut'] == 'Planifié']
+    if {ot['technicien_id'] for ot in planifies} != {t['id'] for t in base['techniciens']}:
+        erreur('Planning : un technicien sans OT planifié')
+    if {semaine_du_planning(ctx, ot['date_prevue']) for ot in planifies} != set(lundis_du_planning(ctx)):
+        erreur('Planning : une semaine sans OT planifié')
+    for ot in grille:
+        if float(ot['temps_prevu_h'] or 0) <= 0:
+            erreur('%s : dans le planning sans temps prévu' % ot['id'])
+        exigees = [h.strip() for h in re.split(r'[,/]', equipements[ot['equipement_id']]['habilitation_requise']) if h.strip()]
+        if not all(habilitation_valide(ctx, ot['technicien_id'], h, jour_depuis_texte(ot['date_prevue'])) for h in exigees):
+            erreur('%s : technicien non habilité (RG8) dans le planning de démo' % ot['id'])
+    if len(surcharges_du_planning(ctx)) != 1:
+        erreur('Planning : %r en surcharge au lieu d\'une seule semaine' % surcharges_du_planning(ctx))
+    a_planifier = [ot for ot in base['ordres_travail'] if ot['statut'] == 'Préparé'
+                   and not (ot['technicien_id'] and semaine_du_planning(ctx, ot['date_prevue']))]
+    if not 3 <= len(a_planifier) <= 5:
+        erreur('Planning : %d OT « Préparé » à planifier au lieu de 3 à 5' % len(a_planifier))
+    stocks = {a['id']: float(a['stock']) for a in base['articles']}
+    manques = {}
+    for piece in base['ot_pieces']:
+        if float(piece['quantite_prevue']) > stocks[piece['article_id']]:
+            manques.setdefault(piece['ot_id'], []).append(piece['article_id'])
+    roles = {role: ligne['id'] for role, ligne in ctx.marques.items()}
+    for role, manque_attendu in (('ot_a_planifier', False), ('ot_a_planifier_br', False),
+                                 ('ot_a_planifier_piece_manquante', True)):
+        if role in roles and (roles[role] not in [ot['id'] for ot in a_planifier] or bool(manques.get(roles[role])) != manque_attendu):
+            erreur('%s : pas un OT « Préparé » à planifier avec ses pièces %s' % (role, 'manquantes' if manque_attendu else 'en stock'))
+    # --- 3. Journal : historique de chaque panne récente, cohérent avec les dates de l'OT
+    demandes = {d['id']: d for d in base['demandes']}
+    demandes_par_ot = {}
+    for demande in base['demandes']:
+        demandes_par_ot.setdefault(demande['ot_id'], []).append(demande)
+    historiques = historiques_du_journal(base)
+    for ot in base['ordres_travail']:
+        if est_panne(ot) and date_de_panne(ot, demandes, demandes_par_ot) >= debut_historique_statuts(ctx) \
+                and ot['id'] not in historiques:
+            erreur('%s : panne récente sans historique au journal' % ot['id'])
+    for ot_id, entrees in historiques.items():
+        verifier_historique_ot(ordres[ot_id], entrees, erreur)
+    vus = set()
+    for ligne in base['journal']:
+        forme = MOTIF_ID_JOURNAL.fullmatch(ligne['id'])
+        if not forme or forme.group(1) != re.sub(r'\D', '', ligne['date_heure']) or ligne['id'] in vus:
+            erreur('%s : identifiant de journal invalide ou en double' % ligne['id'])
+        vus.add(ligne['id'])
+        if ligne['date_heure'] > texte_dh(ctx.maintenant):
+            erreur('%s : entrée de journal dans le futur' % ligne['id'])
+    # --- 4. Pannes remarquables
+    if 'panne_attente_pieces' in roles:
+        ot = ordres[roles['panne_attente_pieces']]
+        attente = attente_pieces(historiques.get(ot['id'], []), ot)
+        if not (2 <= attente <= 7 * 24 and attente < float(ot['duree_arret_h'] or 0)):
+            erreur('%s : attente de pièce de %.1f h (durée d\'arrêt %s h)' % (ot['id'], attente, ot['duree_arret_h']))
+    if 'panne_sans_duree' in roles:
+        ot = ordres[roles['panne_sans_duree']]
+        if not (est_panne(ot) and ot['statut'].startswith('Clôturé') and ot['duree_arret_h'] == ''):
+            erreur('%s : pas une panne clôturée sans durée d\'arrêt' % ot['id'])
+    if erreurs:
+        raise ErreurCoherence('\n'.join(erreurs[:30]))
+
+
+def verifier_calcul_main(ctx, scenarios):
+    """Rôle equipements_calcul_main (jeu livré, 13 mois) : un équipement de criticité A, heures de
+    fonctionnement connues, au moins deux pannes sur les 12 derniers mois chacun ; ensemble, ils portent
+    les cas limites (panne non clôturée, sans durée d'arrêt, attente de pièce). Renvoie les erreurs."""
+    base = ctx.base
+    erreurs = []
+    demandes = {d['id']: d for d in base['demandes']}
+    demandes_par_ot = {}
+    for demande in base['demandes']:
+        demandes_par_ot.setdefault(demande['ot_id'], []).append(demande)
+    equipements = {e['id']: e for e in base['equipements']}
+    debut_12_mois = ajouter_mois(ctx.ref, -12) + timedelta(days=1)
+    vues = set()
+    for identifiant in scenarios['equipements_calcul_main']:
+        pannes = [ot['id'] for ot in base['ordres_travail'] if ot['equipement_id'] == identifiant and est_panne(ot)
+                  and debut_12_mois <= date_de_panne(ot, demandes, demandes_par_ot) <= ctx.ref]
+        vues.update(pannes)
+        if float(equipements[identifiant]['heures_fonct_jour'] or 0) <= 0 or len(pannes) < 2:
+            erreurs.append('%s : calcul à la main impossible (%d pannes sur 12 mois)' % (identifiant, len(pannes)))
+    if 'A' not in [equipements[identifiant]['criticite'] for identifiant in scenarios['equipements_calcul_main']]:
+        erreurs.append('equipements_calcul_main : aucun équipement de criticité A')
+    for role in ('ot_p1_ouvert', 'panne_sans_duree', 'panne_attente_pieces'):
+        if scenarios.get(role) not in vues:
+            erreurs.append('equipements_calcul_main : %s absent de leurs pannes' % role)
+    return erreurs
+
+
+# ---------------------------------------------------------------------------
 # Identifiants de scénario (tests/fixtures/demo-scenarios.json, ARCHITECTURE.md §14.8)
 # ---------------------------------------------------------------------------
 
@@ -3162,6 +3827,14 @@ def scenarios_du_jeu(ctx):
     for role, (repere, symptome) in CAUSES_DEMO.items():
         scenarios[role] = ctx.equipement[repere]['id']
         scenarios[role + '_symptome'] = symptome
+    # Lot 3 : un contrôle par statut à la date de référence (le premier dans l'ordre du fichier), la
+    # seule surcharge du planning, les équipements du calcul à la main (liste triée).
+    for statut, role in zip(STATUTS_CONTROLE, ('controle_en_retard', 'controle_observations',
+                                               'controle_a_planifier', 'controle_a_jour')):
+        scenarios[role] = [c['id'] for c in base['controles_reglementaires'] if statut_controle(c, ctx.ref) == statut][0]
+    surcharge = surcharges_du_planning(ctx)[0]          # la seule (vérifié par verifier_demo_lot3)
+    scenarios['technicien_surcharge'], scenarios['semaine_surcharge'] = surcharge
+    scenarios['equipements_calcul_main'] = sorted(ctx.equipement[repere]['id'] for repere in EQUIPEMENTS_CALCUL_MAIN)
     return scenarios
 
 
@@ -3201,6 +3874,7 @@ def verifier_scenarios(ctx, scenarios):
     avec_code = [d for d in base['demandes'] if d['symptome_code']]
     if not 0.7 <= len(avec_code) / float(len(base['demandes'])) <= 0.9:
         erreurs.append('%d DI sur %d avec un code symptôme (environ 80 %% attendus)' % (len(avec_code), len(base['demandes'])))
+    erreurs += verifier_calcul_main(ctx, scenarios)
     if erreurs:
         raise ErreurCoherence('\n'.join(erreurs))
 
@@ -3231,12 +3905,19 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
         etat_courant_demo(ctx)
         taux_total = sum(e['taux'] for e in ctx.equipements if e['famille'] in SCENARIOS)
         generer_pannes_de_fond(ctx, nombre=int(round(taux_total * FACTEUR_TAUX_DEMO * mois)))
+        with hasard_du_lot3(ctx):
+            completer_demo_lot3(ctx)
     attribuer_identifiants_historique(ctx)
     construire_stock(ctx)
     generer_liens_article_equipement(ctx)
     generer_parametres(ctx)
     resoudre_references(ctx)
+    if not volume:                    # le jeu de charge garde un journal vide
+        with hasard_du_lot3(ctx):
+            generer_journal(ctx)
     verifier_jeu(ctx)
+    if not volume:
+        verifier_demo_lot3(ctx)
     return ctx
 
 

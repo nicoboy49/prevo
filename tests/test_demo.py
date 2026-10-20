@@ -8,6 +8,10 @@ Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brie
   - champs du format v2 renseignés (valeur de remplacement, code symptôme, anomalies de préventif) ;
   - causes fréquentes (§14.5) : équipements à 5 cas et plus, portée « modèle », cas insuffisants ;
   - identifiants de scénario : fichier identique à celui du générateur, chaque clé a sa propriété ;
+  - lot 3 (§15.12, D49) : contrôles réglementaires dans les 4 statuts (§15.7), planning des 4 semaines
+    avec une surcharge, OT « Préparé » à planifier, panne clôturée sans durée d'arrêt, historique des
+    statuts des pannes récentes au journal (dont une attente de pièce, §15.3), journal décalé par
+    StockageDemo comme les autres dates ;
   - champs protégés par une apostrophe (§3.2) ;
   - js/demo-donnees.js chargé dans Chromium : 22 tables, texte identique aux CSV ; démo en file://
     chargée vite et sans erreur au « Contrôle de la base » ;
@@ -17,6 +21,7 @@ Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brie
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_demo.py" -v
 """
+import calendar
 import csv
 import importlib.util
 import io
@@ -26,8 +31,9 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from commun import (FICHIER_SCENARIOS, RACINE, CasNavigateur, attendre_pret, charger_scripts, scenarios_demo,
@@ -43,6 +49,17 @@ DEBUT_AU_PLUS_TOT = date(2025, 9, 19) - timedelta(days=15)     # référence - 1
 DEBUT_AU_PLUS_TARD = date(2025, 10, 19) - timedelta(days=15)   # référence - 12 mois - 15 jours
 STATUTS_FERMES = ('Clôturé techniquement', 'Clôturé administrativement', 'Annulé')
 MINIMUM_CAUSES = 5                                             # ARCHITECTURE.md §14.5
+MAINTENANT = DATE_REFERENCE + ' 09:00'                         # il est 9 h à la date de référence
+# Lot 3 (ARCHITECTURE.md §15.12) : rôles de scénario ajoutés, fenêtres de temps des indicateurs.
+ROLES_LOT3 = ('controle_en_retard', 'controle_a_planifier', 'controle_observations', 'controle_a_jour',
+              'technicien_surcharge', 'semaine_surcharge', 'ot_a_planifier', 'ot_a_planifier_br',
+              'ot_a_planifier_piece_manquante', 'panne_attente_pieces', 'panne_sans_duree',
+              'equipements_calcul_main')
+LUNDIS_PLANNING = [JOUR_REFERENCE + timedelta(weeks=rang) for rang in range(4)]   # 4 semaines du planning
+DEBUT_3_MOIS = date(2026, 7, 19)          # pannes dont l'historique des statuts est au journal
+DEBUT_12_MOIS = date(2025, 10, 20)        # période « 12-mois » (§15.3) : même jour 12 mois plus tôt + 1 jour
+TYPES_CORRECTIFS = ('correctif immédiat', 'correctif différé')
+MOTIF_STATUT = re.compile(r'statut (.+?) → (.+?)(?: : (.+))?')
 
 TABLES = [
     'localisations', 'equipements', 'demandes', 'ordres_travail', 'ot_operations', 'ot_pieces',
@@ -118,6 +135,111 @@ def equipements_du_modele(t, equipement_id):
 
 
 # ---------------------------------------------------------------------------
+# Règles du lot 3 recalculées en Python (ARCHITECTURE.md §15.3, §15.5, §15.7), indépendamment du générateur
+# ---------------------------------------------------------------------------
+
+def ajouter_mois(jour_, nombre):
+    """§15.7 : même jour, `nombre` mois plus tard, ramené au dernier jour du mois (31/01 + 1 → 28 ou 29/02)."""
+    annee, mois = divmod(jour_.year * 12 + jour_.month - 1 + nombre, 12)
+    return date(annee, mois + 1, min(jour_.day, calendar.monthrange(annee, mois + 1)[1]))
+
+
+def statut_controle(controle, aujourdhui):
+    """Statut d'un contrôle réglementaire à une date (§15.7) : le premier vrai parmi « en retard »,
+    « observations à lever », « à planifier » (30 jours ou moins, ou date inconnue) et « à jour »."""
+    if controle['prochaine_date']:
+        prochaine = jour(controle['prochaine_date'])
+    elif controle['derniere_date'] and controle['periodicite_mois']:
+        prochaine = ajouter_mois(jour(controle['derniere_date']), int(controle['periodicite_mois']))
+    else:
+        prochaine = None
+    if prochaine is not None and prochaine < aujourdhui:
+        return 'en retard'
+    if controle['observations'].strip() and controle['observations_levees'] != '1':
+        return 'observations à lever'
+    if prochaine is None or prochaine <= aujourdhui + timedelta(days=30):
+        return 'à planifier'
+    return 'à jour'
+
+
+def lundi_du_planning(date_prevue):
+    """Lundi de la semaine du planning (les 4 semaines qui commencent à la date de référence) qui
+    contient cette date prévue, ou None."""
+    if not date_prevue:
+        return None
+    for lundi in LUNDIS_PLANNING:
+        if lundi <= jour(date_prevue) < lundi + timedelta(days=7):
+            return lundi
+    return None
+
+
+def charges_du_planning(t):
+    """Charge de chaque technicien par semaine du planning : {(technicien, lundi ISO): heures}. Même règle
+    que Planning.chargeSemaine (§15.5) : somme des temps prévus (vide = 0) des OT ni clôturés ni annulés
+    qui ont un technicien et une date prévue dans la semaine."""
+    charges = {}
+    for ot in t['ordres_travail']:
+        lundi = lundi_du_planning(ot['date_prevue'])
+        if est_ouvert(ot) and ot['technicien_id'] and lundi:
+            cle = (ot['technicien_id'], lundi.isoformat())
+            charges[cle] = charges.get(cle, 0.0) + float(ot['temps_prevu_h'] or 0)
+    return charges
+
+
+def est_panne(ot):
+    """§15.3 : OT correctif, arrêt de production, non annulé."""
+    return ot['type'] in TYPES_CORRECTIFS and ot['arret_production'] == '1' and ot['statut'] != 'Annulé'
+
+
+def date_de_panne(t, ot):
+    """§15.3 : date_heure de la DI de l'OT (di_id, sinon une DI dont ot_id est cet OT), sinon date_creation."""
+    for demande in t['demandes']:
+        if demande['id'] == ot['di_id']:
+            return jour(demande['date_heure'])
+    liees = sorted(d['date_heure'] for d in t['demandes'] if d['ot_id'] == ot['id'])
+    return jour(liees[0] if liees else ot['date_creation'])
+
+
+def action_metier(action):
+    """Ce qui suit « — » dans une action du journal (« création — acceptation de DI-… » → « acceptation de DI-… »)."""
+    return action.split(' — ', 1)[1] if ' — ' in action else action
+
+
+def sans_accents(texte):
+    return unicodedata.normalize('NFD', texte).encode('ascii', 'ignore').decode('ascii').lower()
+
+
+def instant_texte(texte):
+    return datetime.strptime(texte, '%Y-%m-%d %H:%M')
+
+
+def historique_ot(t, ot_id):
+    """Entrées du journal d'un OT (table ordres_travail), triées par date_heure puis identifiant (§15.3)."""
+    return sorted((l for l in t['journal'] if l['table'] == 'ordres_travail' and l['id_ligne'] == ot_id),
+                  key=lambda l: (l['date_heure'], l['id']))
+
+
+def attente_pieces_brute(t, ot):
+    """Heures d'attente de pièces d'un OT lues au journal (§15.3), SANS le plafond duree_arret_h : somme des
+    intervalles entre « statut X → En attente : m » (m commence par « pièce », casse et accents ignorés)
+    et l'action « statut En attente → Y » suivante ; sans sortie, jusqu'à date_fin."""
+    total, debut = 0.0, None
+    for entree in historique_ot(t, ot['id']):
+        correspondance = MOTIF_STATUT.fullmatch(action_metier(entree['action']))
+        if not correspondance:
+            continue
+        depart, arrivee, motif = correspondance.groups()
+        if arrivee == 'En attente' and sans_accents(motif or '').startswith('piece'):
+            debut = instant_texte(entree['date_heure'])
+        elif depart == 'En attente' and debut is not None:
+            total += (instant_texte(entree['date_heure']) - debut).total_seconds() / 3600.0
+            debut = None
+    if debut is not None and ot['date_fin']:
+        total += (instant_texte(ot['date_fin']) - debut).total_seconds() / 3600.0
+    return total
+
+
+# ---------------------------------------------------------------------------
 # Tests sans navigateur : format, contenu, scénarios, reproductibilité
 # ---------------------------------------------------------------------------
 
@@ -145,9 +267,29 @@ class TestFichiersCsv(unittest.TestCase):
                     self.assertEqual(texte[position + 1], '\n', '%s : CR isolé à la position %d' % (table, position))
             self.assertFalse(entre_guillemets, table + ' : guillemet jamais refermé')
 
-    def test_journal_en_tete_seul(self):
+    def test_journal_bien_forme_et_trie(self):
+        """Lot 3 (D49) : le journal n'est plus vide, il porte l'historique des pannes récentes. Chaque
+        entrée a le format de l'application (§4, §5.3) : identifiant J-AAAAMMJJHHMMSS-XXXX qui reprend
+        la minute de date_heure, poste « Poste démo », profil d'un vrai profil ; fichier trié par
+        date_heure puis identifiant, rien après « maintenant » (date de référence, 9 h)."""
         _, lignes = lire_table(DOSSIER_DEMO, 'journal')
-        self.assertEqual(lignes, [])
+        self.assertGreater(len(lignes), 20)
+        identifiants = [l['id'] for l in lignes]
+        self.assertEqual(len(set(identifiants)), len(identifiants), 'identifiants en double')
+        self.assertEqual([(l['date_heure'], l['id']) for l in lignes], sorted((l['date_heure'], l['id']) for l in lignes))
+        techniciens = {l['id'] for l in lire_table(DOSSIER_DEMO, 'techniciens')[1]}
+        for ligne in lignes:
+            morceaux = re.fullmatch(r'J-(\d{12})(\d{2})-[A-Z0-9]{4}', ligne['id'])
+            self.assertIsNotNone(morceaux, ligne['id'])
+            self.assertEqual(morceaux.group(1), re.sub(r'\D', '', ligne['date_heure']), ligne['id'])
+            self.assertLessEqual(ligne['date_heure'], DATE_REFERENCE + ' 09:00', ligne['id'])
+            self.assertEqual(ligne['poste'], 'Poste démo', ligne['id'])
+            profil = ligne['profil']
+            self.assertTrue(profil == 'Responsable' or profil.startswith('Demandeur ')
+                            or (profil.startswith('Technicien ') and profil[len('Technicien '):] in techniciens),
+                            '%s : profil %r' % (ligne['id'], profil))
+            self.assertIn(ligne['table'], ('ordres_travail', 'demandes'), ligne['id'])
+            self.assertIn(' — ', ligne['action'], ligne['id'])
 
     def test_en_tetes_egaux_au_schema_python(self):
         generateur = charger_generateur()
@@ -812,6 +954,9 @@ class TestScenariosDemo(unittest.TestCase):
             self.assertIn('ot_statut_' + statut, self.s)
         for statut in ('nouvelle', 'acceptee', 'regroupee', 'differee', 'refusee'):
             self.assertIn('di_statut_' + statut, self.s)
+        # Rôles ajoutés par le lot 3 (ARCHITECTURE.md §15.12)
+        for cle in ROLES_LOT3:
+            self.assertIn(cle, self.s)
 
     # -- OT
 
@@ -1023,6 +1168,221 @@ class TestScenariosDemo(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Lot 3 : contrôles, planning, pannes et journal (ARCHITECTURE.md §15.12, D49)
+# ---------------------------------------------------------------------------
+
+# Champs modifiés que Donnees.modifier inscrit avant « — » pour chaque statut atteint (ordre du schéma,
+# ordres-ecritures.js : date_debut posée au premier démarrage, motif d'attente, dates de clôture).
+CHAMPS_DU_PASSAGE = {'Préparé': 'statut', 'Planifié': 'statut', 'En attente': 'statut, motif_attente',
+                     'Clôturé techniquement': 'statut, date_cloture_tech',
+                     'Clôturé administrativement': 'statut, date_cloture_admin'}
+
+
+class TestDemoLot3(unittest.TestCase):
+    """Le jeu de démo complété pour le lot 3 : chaque rôle a la propriété annoncée, recalculée ici en
+    Python avec les règles du contrat (§15.3, §15.5, §15.7), sans passer par le générateur."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.s = scenarios_demo()
+        cls.t = {table: lignes_propres(DOSSIER_DEMO, table) for table in TABLES}
+        cls.ot_par_id = {o['id']: o for o in cls.t['ordres_travail']}
+        cls.di_par_id = {d['id']: d for d in cls.t['demandes']}
+        cls.equipement_par_id = {e['id']: e for e in cls.t['equipements']}
+        cls.stock = {a['id']: float(a['stock']) for a in cls.t['articles']}
+
+    def ot(self, role):
+        self.assertIn(self.s[role], self.ot_par_id, role)
+        return self.ot_par_id[self.s[role]]
+
+    def pieces_manquantes(self, ot):
+        """Pièces prévues dont le stock ne suffit pas (RG3 ; aucune sortie n'a encore eu lieu pour l'OT)."""
+        return [p for p in self.t['ot_pieces']
+                if p['ot_id'] == ot['id'] and float(p['quantite_prevue']) > self.stock[p['article_id']]]
+
+    def pannes_recentes(self):
+        return [o for o in self.t['ordres_travail'] if est_panne(o) and date_de_panne(self.t, o) >= DEBUT_3_MOIS]
+
+    # -- contrôles réglementaires (§15.7)
+
+    def test_controles_dans_les_quatre_statuts_a_la_date_de_reference(self):
+        controles = {c['id']: c for c in self.t['controles_reglementaires']}
+        statuts = {identifiant: statut_controle(c, JOUR_REFERENCE) for identifiant, c in controles.items()}
+        attendus = {'controle_en_retard': 'en retard', 'controle_observations': 'observations à lever',
+                    'controle_a_planifier': 'à planifier', 'controle_a_jour': 'à jour'}
+        for role, statut in attendus.items():
+            self.assertIn(self.s[role], controles, role)
+            self.assertEqual(statuts[self.s[role]], statut, role)
+        self.assertEqual(set(statuts.values()), set(attendus.values()))
+        # « à planifier » par sa date (connue, dans les 30 jours), pas faute de date
+        prochaine = jour(controles[self.s['controle_a_planifier']]['prochaine_date'])
+        self.assertTrue(0 <= (prochaine - JOUR_REFERENCE).days <= 30, prochaine)
+        for controle in controles.values():          # prochaine date = dernière + périodicité (mois)
+            attendue = ajouter_mois(jour(controle['derniere_date']), int(controle['periodicite_mois']))
+            self.assertEqual(controle['prochaine_date'], attendue.isoformat(), controle['id'])
+
+    def test_controles_textes_et_periodicites_reglementaires(self):
+        controles = self.t['controles_reglementaires']
+
+        def seul(mot):
+            trouves = [c for c in controles if mot in c['nature'].lower()]
+            self.assertEqual(len(trouves), 1, mot)
+            return trouves[0]
+
+        chariot = seul('chariot')                    # VGP des chariots élévateurs : 6 mois (art. 23 a)
+        self.assertEqual((chariot['periodicite_mois'], chariot['texte_reference']),
+                         ('6', 'Arrêté du 1er mars 2004 (VGP), art. 23'))
+        self.assertEqual(chariot['id'], self.s['controle_en_retard'])
+        self.assertEqual(seul('électrique')['texte_reference'],
+                         'Code du travail, art. R4226-16 ; arrêté du 26 décembre 2011')
+        self.assertEqual(seul('pont roulant')['periodicite_mois'], '12')
+        self.assertEqual(seul('réservoir')['periodicite_mois'], '36')
+
+    # -- planning des 4 semaines (§15.5)
+
+    def test_planning_des_quatre_semaines_avec_une_surcharge(self):
+        grille = [o for o in self.t['ordres_travail']
+                  if est_ouvert(o) and o['technicien_id'] and lundi_du_planning(o['date_prevue'])]
+        planifies = [o for o in grille if o['statut'] == 'Planifié']
+        self.assertEqual({o['technicien_id'] for o in planifies}, {t['id'] for t in self.t['techniciens']})
+        self.assertEqual({lundi_du_planning(o['date_prevue']) for o in planifies}, set(LUNDIS_PLANNING))
+        self.assertTrue(1 <= len([o for o in grille if o['statut'] == 'En cours']) <= 2)
+        for ot in grille:
+            self.assertGreater(float(ot['temps_prevu_h'] or 0), 0, ot['id'])
+        for ot in planifies:                          # RG3 : un OT planifié a ses pièces en stock
+            self.assertEqual(self.pieces_manquantes(ot), [], ot['id'])
+        capacites = {t['id']: float(t['capacite_h_semaine']) for t in self.t['techniciens']}
+        surcharges = sorted(cle for cle, heures in charges_du_planning(self.t).items() if heures > capacites[cle[0]])
+        self.assertEqual(surcharges, [(self.s['technicien_surcharge'], self.s['semaine_surcharge'])])
+        self.assertIn(self.s['semaine_surcharge'], [lundi.isoformat() for lundi in LUNDIS_PLANNING])
+
+    def test_ot_prepares_a_planifier(self):
+        a_planifier = [o['id'] for o in self.t['ordres_travail']
+                       if o['statut'] == 'Préparé' and not (o['technicien_id'] and lundi_du_planning(o['date_prevue']))]
+        self.assertTrue(3 <= len(a_planifier) <= 5, a_planifier)
+        roles = ('ot_a_planifier', 'ot_a_planifier_br', 'ot_a_planifier_piece_manquante')
+        self.assertEqual(len({self.s[role] for role in roles}), 3)
+        for role in roles:
+            ot = self.ot(role)
+            self.assertIn(ot['id'], a_planifier, role)
+            self.assertEqual(ot['technicien_id'], '', role)
+            self.assertGreaterEqual(ot['date_prevue'], DATE_REFERENCE, role)      # pas en retard
+            self.assertGreater(float(ot['temps_prevu_h'] or 0), 0, role)
+        simple = self.ot('ot_a_planifier')          # se planifie sans refus ni avertissement
+        self.assertEqual(self.equipement_par_id[simple['equipement_id']]['habilitation_requise'], '')
+        self.assertEqual(self.pieces_manquantes(simple), [])
+        br = self.ot('ot_a_planifier_br')            # scénario habilitation (RG8) : pièces en stock
+        self.assertEqual(br['equipement_id'], self.s['equipement_br'])
+        self.assertEqual(self.pieces_manquantes(br), [])
+        manque = self.ot('ot_a_planifier_piece_manquante')     # refus RG3 au planning
+        self.assertTrue(self.pieces_manquantes(manque))
+        self.assertEqual(self.equipement_par_id[manque['equipement_id']]['habilitation_requise'], '')
+
+    # -- pannes et historique des statuts (§15.3)
+
+    def test_panne_cloturee_sans_duree_d_arret(self):
+        ot = self.ot('panne_sans_duree')
+        self.assertTrue(est_panne(ot), ot['id'])
+        self.assertTrue(ot['statut'].startswith('Clôturé'), ot['statut'])
+        self.assertEqual(ot['duree_arret_h'], '')
+
+    def test_panne_qui_a_attendu_une_piece(self):
+        ot = self.ot('panne_attente_pieces')
+        self.assertTrue(est_panne(ot) and ot['statut'].startswith('Clôturé') and ot['duree_arret_h'], ot['id'])
+        self.assertGreaterEqual(date_de_panne(self.t, ot), DEBUT_3_MOIS)
+        self.assertTrue(sans_accents(ot['motif_attente']).startswith('piece'), ot['motif_attente'])
+        actions = [action_metier(e['action']) for e in historique_ot(self.t, ot['id'])]
+        self.assertIn('statut En cours → En attente : ' + ot['motif_attente'], actions)
+        self.assertIn('statut En attente → En cours', actions)
+        attente = attente_pieces_brute(self.t, ot)            # de quelques heures à quelques jours
+        self.assertTrue(2 <= attente <= 7 * 24, attente)
+        self.assertLess(attente, float(ot['duree_arret_h']))
+
+    def test_historique_des_statuts_des_pannes_des_trois_derniers_mois(self):
+        pannes = self.pannes_recentes()
+        self.assertGreaterEqual(len(pannes), 6)
+        identifiants = {o['id'] for o in pannes}
+        for role in ('panne_attente_pieces', 'panne_sans_duree', 'ot_p1_ouvert'):
+            self.assertIn(self.s[role], identifiants, role)
+        for ot in pannes:
+            with self.subTest(ot=ot['id']):
+                self.verifier_historique(ot)
+
+    def verifier_historique(self, ot):
+        """Création (acceptation de la DI ou création de l'OT d'urgence) puis passages de statut, chacun
+        depuis le statut précédent, horodatés comme les dates de l'OT ; fin sur le statut de l'OT."""
+        entrees = historique_ot(self.t, ot['id'])
+        self.assertTrue(entrees)
+        creation = entrees[0]
+        if ot['origine'] == 'DI':
+            self.assertEqual((creation['action'], creation['profil']), ('création — acceptation de ' + ot['di_id'], 'Responsable'))
+        else:
+            self.assertEqual(creation['action'], "création — création de l'OT (%s)" % ot['origine'])
+        self.assertEqual(creation['date_heure'], ot['date_creation'])
+        statut, precedent, demarre = 'Créé', creation['date_heure'], False
+        for entree in entrees[1:]:
+            champs, _, metier = entree['action'].partition(' — ')
+            correspondance = MOTIF_STATUT.fullmatch(metier)
+            self.assertIsNotNone(correspondance, entree['action'])
+            depart, arrivee, motif = correspondance.groups()
+            self.assertEqual(depart, statut, entree['action'])
+            self.assertGreater(entree['date_heure'], precedent, entree['id'])
+            if arrivee == 'En cours':
+                attendus = 'statut' if demarre else 'statut, date_debut'
+            else:
+                attendus = CHAMPS_DU_PASSAGE[arrivee]
+            self.assertEqual(champs, 'modification : ' + attendus, entree['action'])
+            technicien = arrivee in ('En cours', 'En attente', 'Clôturé techniquement')
+            self.assertEqual(entree['profil'], 'Technicien ' + ot['technicien_id'] if technicien else 'Responsable',
+                             entree['action'])
+            if arrivee == 'En cours' and not demarre:
+                self.assertEqual(entree['date_heure'], ot['date_debut'])
+                demarre = True
+            elif arrivee == 'En attente':
+                self.assertEqual(motif, ot['motif_attente'])
+            elif arrivee == 'Clôturé techniquement':
+                self.assertEqual(entree['date_heure'], ot['date_cloture_tech'])
+            elif arrivee == 'Clôturé administrativement':
+                self.assertEqual(entree['date_heure'], ot['date_cloture_admin'])
+            if arrivee not in ('Clôturé techniquement', 'Clôturé administrativement') and ot['date_fin']:
+                self.assertLessEqual(entree['date_heure'], ot['date_fin'], entree['action'])
+            statut, precedent = arrivee, entree['date_heure']
+        self.assertEqual(statut, ot['statut'])
+        self.assertLessEqual(precedent, MAINTENANT)
+        # Côté DI : signalement à sa date, puis décision (acceptée ou regroupée) à sa date de décision.
+        for demande in self.t['demandes']:
+            if demande['ot_id'] != ot['id']:
+                continue
+            propres = sorted((l for l in self.t['journal'] if l['table'] == 'demandes' and l['id_ligne'] == demande['id']),
+                             key=lambda l: (l['date_heure'], l['id']))
+            signalee = 'création — demande signalée' + (' pendant ' + demande['ot_origine_id'] if demande['ot_origine_id'] else '')
+            if demande['statut'] == 'Acceptée':
+                decision = 'modification : statut, date_decision, ot_id — acceptée → ' + ot['id']
+            else:
+                decision = 'modification : statut, motif_decision, date_decision, ot_id — regroupée avec ' + ot['id']
+            self.assertEqual([(l['date_heure'], l['action']) for l in propres],
+                             [(demande['date_heure'], signalee), (demande['date_decision'], decision)], demande['id'])
+            self.assertEqual(propres[1]['profil'], 'Responsable', demande['id'])
+
+    def test_equipements_pour_le_calcul_a_la_main(self):
+        identifiants = self.s['equipements_calcul_main']
+        self.assertEqual(len(identifiants), 3)
+        equipements = [self.equipement_par_id[identifiant] for identifiant in identifiants]
+        self.assertIn('A', [e['criticite'] for e in equipements])
+        pannes_vues = set()
+        for equipement in equipements:
+            self.assertGreater(float(equipement['heures_fonct_jour'] or 0), 0, equipement['repere'])
+            self.assertEqual((equipement['statut'] != 'rebut', equipement['actif']), (True, '1'), equipement['repere'])
+            pannes = [o['id'] for o in self.t['ordres_travail'] if o['equipement_id'] == equipement['id']
+                      and est_panne(o) and DEBUT_12_MOIS <= date_de_panne(self.t, o) <= JOUR_REFERENCE]
+            self.assertGreaterEqual(len(pannes), 2, equipement['repere'])
+            pannes_vues.update(pannes)
+        # Ensemble, ils couvrent les cas limites des indicateurs : panne non clôturée, sans durée, attente de pièce.
+        for role in ('ot_p1_ouvert', 'panne_sans_duree', 'panne_attente_pieces'):
+            self.assertIn(self.s[role], pannes_vues, role)
+
+
+# ---------------------------------------------------------------------------
 # Tests avec Chromium : schéma JS, références, js/demo-donnees.js
 # ---------------------------------------------------------------------------
 
@@ -1090,6 +1450,24 @@ class TestAvecNavigateur(CasNavigateur):
                         self.assertIn(valeur, valides, '%s %s.%s = %r' % (ligne.get('id'), table, champ['nom'], valeur))
                         verifiees += 1
         self.assertGreater(verifiees, 1000)
+
+    def test_stockage_demo_decale_aussi_le_journal(self):
+        """§11 : StockageDemo décale toutes les dates du nombre de semaines entières écoulées, celles du
+        journal comprises (date_heure) ; l'identifiant J-… garde son horodatage d'origine."""
+        charger_scripts(self.page, ['js/lib/papaparse.min.js', 'js/schema.js', 'js/donnees.js', 'js/stockage-demo.js',
+                                    'js/demo-donnees.js'])
+        decale = self.page.evaluate("""() => {
+            const decalees = StockageDemo.decalerDates({ journal: DEMO_DONNEES.tables.journal },
+              DEMO_DONNEES.dateReference, '2026-11-03');
+            return Donnees.csv.analyser('journal', decalees.journal).lignes.map((l) => [l.id, l.date_heure, l.action]);
+        }""")
+        origine = lignes_propres(DOSSIER_DEMO, 'journal')
+        self.assertGreater(len(origine), 0)
+        self.assertEqual(len(decale), len(origine))
+        for (identifiant, date_heure, action), ligne in zip(decale, origine):
+            self.assertEqual((identifiant, action), (ligne['id'], ligne['action']))
+            attendue = (instant_texte(ligne['date_heure']) + timedelta(days=14)).strftime('%Y-%m-%d %H:%M')
+            self.assertEqual(date_heure, attendue, identifiant)
 
     def test_champs_proteges_selon_le_schema_js(self):
         schema_js = self.schema_js()

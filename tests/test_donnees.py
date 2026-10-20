@@ -43,6 +43,12 @@ def ligne_demo(table, identifiant):
     return next(ligne for ligne in lignes_demo(table) if ligne["id"] == identifiant)
 
 
+# Identifiants du journal livré avec la démo (lot 3, ARCHITECTURE.md §15.12 : historique des statuts des
+# pannes récentes). Les tests du journal vérifient que leurs entrées s'ajoutent APRÈS celles-ci, sans en
+# perdre aucune.
+JOURNAL_DEMO = [ligne["id"] for ligne in lignes_demo("journal")]
+
+
 def numero_annuel_suivant(table, prefixe, annee, rang=1):
     """Identifiant annuel de la rang-ième ligne créée dans le jeu de démo pour cette année."""
     debut = "%s-%d-" % (prefixe, annee)
@@ -360,9 +366,12 @@ class TestModifier(CasDonnees):
             evenements: evenementsRecus,
           };
         }""", ot_id)
-        journal = resultat["journal"]
+        # Le journal livré avec la démo est conservé tel quel ; nos entrées viennent après.
+        self.assertGreater(len(JOURNAL_DEMO), 0)
+        self.assertEqual([e["id"] for e in resultat["journal"][:len(JOURNAL_DEMO)]], JOURNAL_DEMO)
+        journal = resultat["journal"][len(JOURNAL_DEMO):]
         # Nos propres entrées sont ajoutées au cache (la table reste périmée pour modifier).
-        self.assertEqual(resultat["avantRelecture"], 3)
+        self.assertEqual(resultat["avantRelecture"], len(JOURNAL_DEMO) + 3)
         self.assertEqual(len(journal), 3)
         # Une entrée par ligne, dans l'ordre des lignes de la table (EQ-0001 avant la ligne ajoutée).
         modification, creation, avertissement = journal
@@ -443,9 +452,9 @@ class TestAjouter(CasDonnees):
         self.assertTrue(resultat["texte"].startswith("﻿id;date_heure;poste;profil;table;id_ligne;action\r\n"))
         self.assertEqual(resultat["texte"].count("﻿"), 1)
         self.assertIn("J-20261019100000-AAAA;2026-10-19 10:00;P1;Test;equipements;EQ-0001;essai\r\n", resultat["texte"])
-        self.assertEqual(resultat["avant"], 2, "nos propres lignes sont dans le cache")
+        self.assertEqual(resultat["avant"], len(JOURNAL_DEMO) + 2, "nos propres lignes sont dans le cache")
         self.assertEqual(resultat["relues"], ["journal"], "rafraichir() explicite relit la table périmée")
-        self.assertEqual(resultat["apres"], ["J-20261019100000-AAAA", "J-20261019100000-BBBB"])
+        self.assertEqual(resultat["apres"], JOURNAL_DEMO + ["J-20261019100000-AAAA", "J-20261019100000-BBBB"])
         self.assertEqual(resultat["evenements"], 0, "un changement du seul journal n'est pas signalé")
 
     def test_ajouter_avec_repli(self):
@@ -528,8 +537,8 @@ class TestAjouter(CasDonnees):
         self.tours_de_surveillance(3)
         self.assertEqual(self.js("() => compteurs.lecturesJournal"), 0,
                          "journal relu en entier alors que seul notre ajout l'a changé")
-        # Nos propres lignes sont visibles sans relecture.
-        self.assertEqual(self.js("() => Donnees.lignes('journal').map((l) => l.id)"), [identifiant])
+        # Nos propres lignes sont visibles sans relecture (après celles du journal de la démo).
+        self.assertEqual(self.js("() => Donnees.lignes('journal').map((l) => l.id)"), JOURNAL_DEMO + [identifiant])
         # Un rafraîchissement demandé explicitement (ex. avant l'export) relit tout.
         self.assertEqual(self.js("() => Donnees.rafraichir()"), ["journal"])
         self.assertEqual(self.js("() => compteurs.lecturesJournal"), 1)
@@ -542,7 +551,8 @@ class TestAjouter(CasDonnees):
         self.js("() => { compteurs.lecturesJournal = 0; }")
         self.tours_de_surveillance(3)
         self.assertEqual(self.js("() => compteurs.lecturesJournal"), 1)
-        self.assertEqual(self.js("() => Donnees.lignes('journal').map((l) => l.id)"), [identifiant, "J-AUTRE"])
+        self.assertEqual(self.js("() => Donnees.lignes('journal').map((l) => l.id)"),
+                         JOURNAL_DEMO + [identifiant, "J-AUTRE"])
 
     def test_modifier_journal_apres_ajout_ne_perd_pas_la_ligne_d_un_autre_poste(self):
         """(c) L'autre poste ajoute juste AVANT notre ajout (même version ensuite) : la surveillance
@@ -554,9 +564,9 @@ class TestAjouter(CasDonnees):
         self.js("""() => Donnees.modifier('journal', (lignes) => {
           lignes.push(Object.assign({}, lignes[lignes.length - 1], { id: 'J-MANUEL' }));
         }, { journal: false })""")
-        self.assertEqual(self.ids_journal_stockage(), ["J-AUTRE", identifiant, "J-MANUEL"])
+        self.assertEqual(self.ids_journal_stockage(), JOURNAL_DEMO + ["J-AUTRE", identifiant, "J-MANUEL"])
         self.assertEqual(self.js("() => Donnees.lignes('journal').map((l) => l.id)"),
-                         ["J-AUTRE", identifiant, "J-MANUEL"])
+                         JOURNAL_DEMO + ["J-AUTRE", identifiant, "J-MANUEL"])
 
 
 # ---------------------------------------------------------------------------
