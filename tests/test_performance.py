@@ -220,6 +220,9 @@ class TestPerformance(CasNavigateur):
         print("\n  [performance] chargement complet, préventif compris (500 équipements, 5000 OT) :"
               " premier (génère %d OT) %.0f ms ; suivants %s ms -> médiane des 3 %.0f ms (budget %d)"
               % (crees[0], mesures[0], ", ".join("%.0f" % m for m in mesures[1:]), mediane, BUDGET_CHARGEMENT_MS))
+        # CS34 : « chargement complet < 2 s génération du préventif comprise ». Seul le premier
+        # chargement génère des OT : la médiane seule ne le garderait pas (relecture de la vague 5).
+        self.assertLess(mesures[0], BUDGET_CHARGEMENT_MS, "premier chargement (avec génération du préventif)")
         self.assertLess(mediane, BUDGET_CHARGEMENT_MS)
 
     def test_creation_di_mediane_sous_1_seconde(self):
