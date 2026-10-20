@@ -1,4 +1,100 @@
 /* Prévo — mise en page propre au module Magasin (js/modules/magasin-*.js, ARCHITECTURE.md §14.4) :
-   articles, mouvements, inventaire, articles à commander, achats, fournisseurs, fiche article.
+   onglets articles, mouvements, inventaire, à commander, achats, fournisseurs ; fiche article.
    Uniquement des variables de la charte (css/style.css) : aucune couleur codée en dur.
-   FICHIER D'ATTENTE (tâche T24), vide : la tâche T27 le remplace. */
+   Sommaire : 1 listes et filtres · 2 fiche article · 3 inventaire · 4 achats, fournisseurs,
+   fenêtres · 5 téléphone. */
+
+/* =========================================================================================
+   1. Listes et filtres (tableau sur grand écran, cartes sur téléphone)
+   ========================================================================================= */
+
+.magasin-consultation { margin: -6px 0 14px; }
+.magasin-compteur { margin: 0 0 .6rem; }
+.magasin-intro { margin: 0 0 .8rem; }
+.magasin-liste { padding: 8px 10px; }
+.magasin-liste .table th, .magasin-liste .table td { padding-left: .5rem; padding-right: .5rem; }
+.magasin-liste .table td .btn { min-height: 38px; padding: .35rem .8rem; }
+.magasin-col-designation { min-width: 12rem; }
+.magasin-col-commentaire { min-width: 12rem; color: var(--texte-2); }
+.magasin-liste .table td .muted { margin: 0; font-size: .9375rem; }
+.magasin-badge-commander { margin-left: .2rem; }
+/* Petite ligne sous une valeur de cellule (catégorie, désignation, date, prix unitaire) */
+.magasin-categorie, .magasin-sous-ligne { display: block; font-size: .875rem; color: var(--muted); margin-top: .1rem; }
+.magasin-vide { margin: .4rem 0; }
+
+/* Barre d'un onglet : filtre à gauche, bouton d'action à droite */
+.magasin-barre { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; margin-bottom: .8rem; }
+.magasin-barre .filtres { flex: 1 1 260px; margin-bottom: 0; }
+
+/* =========================================================================================
+   2. Fiche article (#/magasin/article/<id>)
+   ========================================================================================= */
+
+.magasin-fiche h1 { overflow-wrap: anywhere; }
+.magasin-badges { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.magasin-badges:empty { display: none; }
+.magasin-instruments .chiffre { overflow-wrap: anywhere; }
+.magasin-suggestion { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin: 4px 0; }
+.magasin-suggestion p { flex: 1 1 280px; margin: 0; }
+.magasin-detail { color: var(--texte-2); }
+.magasin-liens { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+.magasin-liens li { display: flex; flex-wrap: wrap; gap: .2rem .6rem; align-items: center; overflow-wrap: anywhere; }
+.magasin-liens li .muted { margin: 0; font-size: .9375rem; }
+.magasin-liens a { font-weight: 600; }
+.magasin-liens a b { color: var(--fort); margin-right: .2rem; }
+
+/* =========================================================================================
+   3. Inventaire : saisie du stock compté, écart
+   ========================================================================================= */
+
+.magasin-inventaire { padding: 8px 10px; }
+.magasin-table-inventaire td.num input { width: 7.5rem; min-width: 0; text-align: right; }
+.magasin-ecart { min-width: 2.6em; text-align: center; }
+.magasin-inventaire-validation .form-ligne > .champ { flex: 3 1 260px; }
+.magasin-inventaire-validation .form-ligne > .btn { flex: 0 0 auto; }
+.magasin-inventaire-validation .note { margin-top: .6rem; }
+
+/* =========================================================================================
+   4. Achats, fournisseurs, fenêtres de saisie
+   ========================================================================================= */
+
+.magasin-achats .entete-carte { flex-wrap: wrap; }
+.magasin-achats .entete-carte .muted { margin: 0; }
+.magasin-achats .magasin-zone { margin: 0 -10px; }
+.magasin-achat-en-cours { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin: 0 .5rem .3rem 0; }
+.magasin-achat-en-cours .muted { margin: 0; }
+.magasin-coupable { overflow-wrap: anywhere; min-width: 0; }
+.magasin-fenetre p { margin: 0; }
+.magasin-fenetre .note { margin-top: .4rem; }
+
+/* =========================================================================================
+   5. Téléphone (≤ 640 px) : cartes sans cadre englobant, inventaire empilé, zones de 48 px
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  .magasin-filtres select { flex: 1 1 140px; min-width: 0; }
+  .magasin-liste, .magasin-inventaire { padding: 0; background: none; border: 0; }
+  .magasin-achats .magasin-zone { margin: 0; }
+  .magasin-barre .btn, .magasin-inventaire-validation .form-ligne > .btn { flex: 1 1 100%; }
+  .magasin-liens li { min-height: 48px; }
+  .liste-cartes .carte-ligne .actions { margin-top: .4rem; }
+  .liste-cartes .carte-ligne a { min-height: 48px; display: inline-flex; align-items: center; }
+  .magasin-suggestion .btn { flex: 1 1 100%; }
+
+  /* Inventaire : une carte par article, chaque cellule précédée du libellé de sa colonne */
+  .magasin-table-inventaire thead { display: none; }
+  .magasin-table-inventaire, .magasin-table-inventaire tbody, .magasin-table-inventaire tr, .magasin-table-inventaire td { display: block; width: 100%; }
+  .magasin-table-inventaire tr {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .1rem .8rem;
+    padding: .7rem 14px; margin-bottom: 10px; border: 1px solid var(--trait); border-radius: 16px; background: var(--carte);
+  }
+  .magasin-table-inventaire td, .magasin-table-inventaire td.num, .magasin-table-inventaire td:first-child {
+    border: 0; padding: .2rem 0; text-align: left; white-space: normal; overflow-wrap: anywhere;
+  }
+  .magasin-table-inventaire td.vide-table { grid-column: 1 / -1; }
+  .magasin-table-inventaire td[data-libelle]::before {
+    content: attr(data-libelle); display: block; font-size: .8125rem; font-weight: 700; color: var(--muted);
+  }
+  .magasin-table-inventaire td.num input { width: 100%; min-height: 48px; text-align: left; }
+  .magasin-inventaire .table-defile { overflow: visible; }
+}

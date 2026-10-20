@@ -76,6 +76,83 @@ const Magasin = (() => {
     return texte(a.id).localeCompare(texte(b.id), 'fr', { numeric: true });
   }
 
+  /** Nombre écrit dans un fichier : '2.5' (6 décimales au plus, jamais 0.30000000000000004). */
+  function valeurFichier(valeur) {
+    return String(arrondi(valeur, 6));
+  }
+
+  /** Nombre dans un message : '2,5' (virgule décimale, sans espace de milliers). */
+  function nombreTexte(valeur) {
+    return valeurFichier(valeur).replace('.', ',');
+  }
+
+  /** Texte comparable : minuscules, sans accents, espaces simplifiés (« Écrou  M8 » → « ecrou m8 »). */
+  function normaliser(valeur) {
+    return texte(valeur).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  // Catégorie d'un article = préfixe de sa référence (« ROU-001 » → ROU). Les préfixes connus ont
+  // un libellé ; un autre préfixe est affiché tel quel ; sans préfixe : « Sans catégorie ».
+  const LIBELLES_CATEGORIES = {
+    ROU: 'Roulements', TRA: 'Transmission', ETA: 'Étanchéité', FIL: 'Filtration', LUB: 'Lubrification',
+    ELE: 'Électricité', HYD: 'Hydraulique', PNE: 'Pneumatique', OUT: 'Outillage', DIV: 'Divers',
+  };
+
+  /** { code, libelle } de la catégorie d'un article (code '' : sans catégorie). */
+  function categorieArticle(article) {
+    const morceaux = /^([A-Za-z]{2,6})[-_ .]/.exec(texte(article && article.reference));
+    if (!morceaux) return { code: '', libelle: 'Sans catégorie' };
+    const code = morceaux[1].toUpperCase();
+    return { code, libelle: LIBELLES_CATEGORIES[code] || code };
+  }
+
+  /** Vrai si l'article est actif (champ actif différent de '0'). */
+  function estActif(article) {
+    return Boolean(article) && texte(article.actif) !== '0';
+  }
+
+  /** Vrai si l'article est « à commander » (RG6) : actif, point de commande renseigné, stock ≤ point. */
+  function estACommander(article, stock) {
+    const pointCommande = Donnees.nombre(article && article.point_commande);
+    if (!estActif(article) || pointCommande === null) return false;
+    return (stock === undefined ? Donnees.stockArticle(article.id) : stock) <= pointCommande;
+  }
+
+  // Ordre chronologique d'un mouvement : date puis identifiant (même règle que Donnees.stockArticle).
+  function ordreChronologique(a, b) {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+    return 0;
+  }
+
+  /**
+   * Stock d'un article calculé sur une liste de mouvements DONNÉE (même règle que
+   * Donnees.stockArticle : un inventaire fixe la valeur, une entrée ou un retour ajoute, une sortie
+   * retire). Sert dans les fonctions de mutation, sur les lignes fraîches de mouvements_stock.
+   */
+  function stockDepuisLignes(lignesMouvements, articleId) {
+    let stock = 0;
+    lignesMouvements.filter((mouvement) => mouvement.article_id === articleId).sort(ordreChronologique)
+      .forEach((mouvement) => {
+        const quantite = nombre(mouvement.quantite);
+        if (mouvement.type === 'inventaire') stock = quantite;
+        else if (mouvement.type === 'entrée' || mouvement.type === 'retour') stock += quantite;
+        else if (mouvement.type === 'sortie') stock -= quantite;
+      });
+    return arrondi(stock, 6);
+  }
+
+  /** Quantité nette sortie (sorties − retours) d'un article pour un OT, sur une liste de mouvements donnée. */
+  function netSortiDepuisLignes(lignesMouvements, otId, articleId) {
+    let net = 0;
+    lignesMouvements.forEach((mouvement) => {
+      if (mouvement.ot_id !== otId || mouvement.article_id !== articleId) return;
+      if (mouvement.type === 'sortie') net += nombre(mouvement.quantite);
+      else if (mouvement.type === 'retour') net -= nombre(mouvement.quantite);
+    });
+    return arrondi(net, 6);
+  }
+
   // ===========================================================================================
   // 2. Règles PURES (ARCHITECTURE.md §14.4)
   // ===========================================================================================
@@ -176,6 +253,8 @@ const Magasin = (() => {
     interne: {
       FENETRE_CONSOMMATION_JOURS,
       texte, nombre, arrondi, ajouterJours, dateDuJour, libelleArticle, consommationEntre,
+      valeurFichier, nombreTexte, normaliser, categorieArticle, estActif, estACommander,
+      stockDepuisLignes, netSortiDepuisLignes,
     },
   };
 })();
