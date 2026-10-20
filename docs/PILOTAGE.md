@@ -146,11 +146,9 @@ des pièces déjà sorties avant de refuser la planification d'un ordre de trava
 - **18 tâches** (T20 à T37) réparties en **6 vagues** ; une étiquette git par vague validée.
 - **5 relectures de vague** à la date de rédaction (vagues 1 à 5), qui ont trouvé **3 défauts
   critiques** (détail ci-dessous), tous corrigés.
-- **579 tests** dans la suite (décompte fait par `unittest` à la rédaction, sans les exécuter ; 411
-  à la fin du lot 1). La dernière exécution complète consignée au journal, après les corrections de
-  la vague 4, donnait 558 tests verts et 2 sautés (Excel réel, non demandé) ; les tests de la
-  vague 5 ont été vérifiés fichier par fichier. Le résultat de l'exécution complète finale du lot 2
-  n'est pas consigné ici.
+- **581 tests** dans la suite (411 à la fin du lot 1). L'exécution complète finale du lot 2, lancée
+  par l'outil de vérification à la clôture de la dernière vague, est verte (code retour 0) ; les
+  tests du vrai Excel y sont sautés, car ils ne tournent qu'à la demande, et ont passé à part (4 sur 4).
 - **Performance** mesurée sur un jeu de charge de 500 équipements et 5 000 ordres de travail :
   premier chargement, qui génère 20 ordres de travail préventifs, d'environ 1,1 s ; chargements
   suivants d'environ 0,5 s ; création d'une demande d'environ 0,07 s ; sortie d'une pièce depuis
