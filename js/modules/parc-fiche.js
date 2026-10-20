@@ -1,7 +1,8 @@
 'use strict';
-// Parc (4/4) — fiche d'un équipement (#/equipement/<id>) : consignation, fiche technique, QR code,
-// compteurs, sous-équipements, pièces liées, historiques OT et DI, désactivation et réactivation ;
-// puis l'enregistrement des écrans du module auprès d'App (ARCHITECTURE.md §8 et §14.2).
+// Parc (4/4) — fiche d'un équipement (#/equipement/<id>) : consignation, fiche technique (dont la
+// valeur de remplacement), QR code, compteurs et leurs relevés, gammes préventives et leur état,
+// sous-équipements, pièces liées, historiques OT et DI, désactivation et réactivation ; puis
+// l'enregistrement des écrans du module auprès d'App (ARCHITECTURE.md §8, §14.2 et §14.6).
 // Dernier fichier du module : les écrans des fichiers précédents existent déjà.
 
 Object.assign(Parc, (() => {
@@ -9,10 +10,13 @@ Object.assign(Parc, (() => {
   // Règles, outils et écrans des fichiers précédents (parc-regles.js à parc-formulaires.js).
   const { cheminLocalisation, libelleEquipement, afficherListe, afficherFormulaire } = Parc;
   const { estActif, comparerTextes, parRepere, abreger, badgeCriticite, badgesEquipement,
-    listeAdaptative } = Parc.interne;
+    listeAdaptative, dernierReleveDe, ouvrirFenetreReleve } = Parc.interne;
 
   const LIMITE_HISTORIQUE = 20;                       // lignes montrées avant « Voir les autres »
   const STATUTS_OT_FERMES = ['Clôturé techniquement', 'Clôturé administrativement', 'Annulé'];
+  // Couleur du badge d'état d'une gamme (mêmes tons que la liste du préventif) ; le libellé vient
+  // de Preventif.STATUTS_GAMME, dont l'ordre va du plus urgent au moins urgent.
+  const TONS_ETAT_GAMME = { echue: 'ko', ot_ouvert: 'cyan', bientot: 'attention', a_jour: 'ok', incomplete: 'violet', inactive: 'neutre' };
 
   // ===========================================================================================
   // 5. Écran #/equipement/<id> : fiche
@@ -47,6 +51,12 @@ Object.assign(Parc, (() => {
       </section>`;
   }
 
+  /** « 12 500,00 € HT » ; vide si la valeur n'est pas renseignée (ou illisible). */
+  function valeurRemplacement(equipement) {
+    const montant = UI.enNombre(equipement.valeur_remplacement);
+    return montant === null ? '' : UI.euro(montant) + ' HT';
+  }
+
   function carteCaracteristiques(equipement, lienDocument) {
     const parent = equipement.parent_id ? Donnees.trouver('equipements', equipement.parent_id) : null;
     const heures = UI.enNombre(equipement.heures_fonct_jour);
@@ -72,6 +82,7 @@ Object.assign(Parc, (() => {
           <dt>Criticité</dt><dd>${equipement.criticite ? badgeCriticite(equipement.criticite) : ''}</dd>
           <dt>Statut</dt><dd>${equipement.statut ? UI.badgeStatut(equipement.statut) : ''}</dd>
           <dt>Heures par jour</dt><dd>${heures === null ? '' : UI.heures(heures)}</dd>
+          <dt>Valeur de remplacement</dt><dd class="parc-valeur-remplacement">${valeurRemplacement(equipement)}</dd>
           <dt>Habilitation requise</dt><dd>${equipement.habilitation_requise}</dd>
           <dt>Document</dt><dd>${documentHtml}</dd>
           <dt>Actif</dt><dd>${estActif(equipement) ? 'Oui' : 'Non — équipement désactivé'}</dd>
@@ -99,24 +110,68 @@ Object.assign(Parc, (() => {
       </article>`;
   }
 
-  function carteCompteurs(equipement) {
+  // Carte « Compteurs » : dernier relevé de chaque compteur (valeur, unité, date, auteur) et, pour
+  // le technicien et le responsable, un bouton « Saisir un relevé » (fenêtre de parc-formulaires.js).
+  function carteCompteurs(equipement, peutSaisir) {
     const compteurs = Donnees.lignes('compteurs').filter((c) => c.equipement_id === equipement.id);
+    const releves = Donnees.lignes('releves');
     const lignes = compteurs.map((compteur) => {
-      const releves = Donnees.lignes('releves').filter((r) => r.compteur_id === compteur.id)
-        .sort((a, b) => comparerTextes(b.date, a.date) || comparerTextes(b.id, a.id));
-      const dernier = releves[0];
-      return UI.html`<li>
-        <b>${compteur.libelle || compteur.id}</b>
-        ${dernier
-          ? UI.html`<span>Dernier relevé : <b class="fort">${UI.nombreFr(dernier.valeur)}${compteur.unite ? ' ' + compteur.unite : ''}</b>
-              le ${UI.dateFr(dernier.date)}${dernier.utilisateur ? ' (' + dernier.utilisateur + ')' : ''}</span>`
-          : UI.html`<span class="muted">Aucun relevé.</span>`}
+      const dernier = dernierReleveDe(releves, compteur.id);
+      const libelle = compteur.libelle || compteur.id;
+      return UI.html`<li data-compteur="${compteur.id}">
+        <div class="parc-compteur-texte">
+          <b>${libelle}</b>
+          ${dernier
+            ? UI.html`<span class="parc-dernier-releve">Dernier relevé : <b class="fort">${UI.nombreFr(dernier.valeur)}${compteur.unite ? ' ' + compteur.unite : ''}</b>
+                le ${UI.dateFr(dernier.date)}${dernier.utilisateur ? ' (' + dernier.utilisateur + ')' : ''}</span>`
+            : UI.html`<span class="muted">Aucun relevé.</span>`}
+        </div>
+        ${peutSaisir ? UI.html`<button type="button" class="btn btn-secondaire parc-saisir-releve" data-compteur="${compteur.id}"
+            aria-label="Saisir un relevé : ${libelle}">${UI.icone('ajouter')}Saisir un relevé</button>` : ''}
       </li>`;
     });
     return UI.html`
-      <article class="carte">
+      <article class="carte parc-carte-compteurs">
         <h2>Compteurs</h2>
         ${lignes.length ? UI.html`<ul class="parc-compteurs">${lignes}</ul>` : UI.html`<p class="muted">Aucun compteur sur cet équipement.</p>`}
+      </article>`;
+  }
+
+  // Raison de l'état d'une gamme ; quand un OT est ouvert, son numéro (en tête de la raison)
+  // devient un lien vers l'OT — sauf pour le demandeur, qui n'a pas accès aux OT.
+  function raisonGamme(etat, avecLiens) {
+    const id = etat.otOuvertId;
+    if (!avecLiens || !id || !etat.raison.startsWith(id)) return UI.html`<span class="parc-gamme-raison">${etat.raison}</span>`;
+    return UI.html`<span class="parc-gamme-raison"><a class="parc-lien-ot" href="#/ot/${encodeURIComponent(id)}">${id}</a>${etat.raison.slice(id.length)}</span>`;
+  }
+
+  // Carte « Préventif » : gammes de l'équipement, de la plus urgente à la moins urgente, avec leur
+  // état RG5 (Preventif.etatGamme) : badge, raison, échéance, liens vers la gamme et l'OT ouvert.
+  function cartePreventif(equipement, avecLiens) {
+    const jour = Donnees.aujourdhui();
+    const rangs = Object.keys(Preventif.STATUTS_GAMME);
+    const gammes = Donnees.lignes('gammes').filter((g) => g.equipement_id === equipement.id)
+      .map((gamme) => ({ gamme, etat: Preventif.etatGamme(gamme, jour) }))
+      .sort((a, b) => rangs.indexOf(a.etat.statut) - rangs.indexOf(b.etat.statut)
+        || comparerTextes(a.gamme.libelle, b.gamme.libelle));
+    const lignes = gammes.map(({ gamme, etat }) => {
+      const libelle = gamme.libelle || gamme.id;
+      const estimee = gamme.declencheur === 'compteur';
+      // L'échéance n'est ajoutée que si la raison ne la dit pas déjà (gamme « date » : « échéance le … »).
+      const echeance = etat.echeance && !etat.raison.includes(UI.dateFr(etat.echeance)) ? etat.echeance : '';
+      return UI.html`<li data-gamme="${gamme.id}" data-statut="${etat.statut}">
+        <div class="parc-gamme-tete">
+          ${avecLiens ? UI.html`<a class="parc-lien-gamme" href="#/preventif/gamme/${encodeURIComponent(gamme.id)}">${libelle}</a>` : UI.html`<b>${libelle}</b>`}
+          ${UI.badgeStatut(Preventif.STATUTS_GAMME[etat.statut] || etat.statut, TONS_ETAT_GAMME[etat.statut])}
+        </div>
+        <div class="parc-gamme-detail">${raisonGamme(etat, avecLiens)}
+          ${echeance ? UI.html`<span>Échéance : <span class="sans-coupure">${UI.dateFr(echeance)}</span>${estimee ? ' (estimée)' : ''}</span>` : ''}</div>
+      </li>`;
+    });
+    return UI.html`
+      <article class="carte parc-preventif">
+        <h2>Préventif <span class="badge">${lignes.length}</span></h2>
+        ${lignes.length ? UI.html`<ul class="parc-gammes">${lignes}</ul>` : UI.html`<p class="muted">Aucune gamme préventive sur cet équipement.</p>`}
       </article>`;
   }
 
@@ -291,6 +346,9 @@ Object.assign(Parc, (() => {
     }
     App.definirTitre(equipement.repere || equipement.id);
     const responsable = App.estResponsable();
+    // Le demandeur consulte : pas de saisie de relevé, ni de lien vers les gammes et les OT
+    // (écrans qui lui sont fermés).
+    const intervenant = App.estTechnicien() || responsable;
     const adresse = await adresseDocument(equipement.document);
     const idUrl = encodeURIComponent(equipement.id);
     const actif = estActif(equipement);
@@ -327,9 +385,10 @@ Object.assign(Parc, (() => {
           <div class="c4">${carteQr(equipement)}</div>
         </div>
         <div class="grille">
-          <div class="${sousEquipements ? 'c6' : 'c12'}">${carteCompteurs(equipement)}</div>
-          ${sousEquipements ? UI.html`<div class="c6">${sousEquipements}</div>` : ''}
+          <div class="c6">${carteCompteurs(equipement, intervenant)}</div>
+          <div class="c6">${cartePreventif(equipement, intervenant)}</div>
         </div>
+        ${sousEquipements}
         <div class="parc-complements"></div>
       </div>`);
 
@@ -340,6 +399,11 @@ Object.assign(Parc, (() => {
 
     const boutonActivite = UI.$('#parc-activite', conteneur);
     if (boutonActivite) boutonActivite.addEventListener('click', () => changerActivite(equipement, !actif));
+    UI.$$('.parc-saisir-releve', conteneur).forEach((bouton) => {
+      bouton.addEventListener('click', async () => {
+        if (await ouvrirFenetreReleve(bouton.dataset.compteur)) await App.reafficher();
+      });
+    });
   }
 
   // ===========================================================================================
@@ -373,7 +437,7 @@ Object.assign(Parc, (() => {
       id: 'equipement', route: /^#\/equipement\/(?!nouveau$)(?<id>[^/?]+)$/, titre: 'Équipement', parent: 'parc',
       profils: tous,
       tables: ['equipements', 'localisations', 'ordres_travail', 'demandes', 'compteurs', 'releves',
-        'articles', 'article_equipement', 'mouvements_stock'],
+        'gammes', 'articles', 'article_equipement', 'mouvements_stock'],
       afficher: afficherFiche,
     });
   });

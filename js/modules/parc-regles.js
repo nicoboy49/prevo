@@ -1,7 +1,8 @@
 'use strict';
 // Parc : arborescence des localisations et des équipements, fiche équipement (consignation,
-// historique, QR code), création et modification (brief §6 « equipements » et « localisations »,
-// §9 E7, ARCHITECTURE.md §8 et §10).
+// historique, QR code, valeur de remplacement, relevés de compteur, gammes préventives),
+// création et modification (brief §6 « equipements » et « localisations », §9 E7,
+// ARCHITECTURE.md §8, §10 et §14.6).
 //
 // Écrans :
 //   #/parc                       arborescence site › atelier › ligne, recherche, inactifs (tous les profils)
@@ -24,6 +25,7 @@
 //   parc-arbre.js          3. Écran #/parc : arborescence
 //   parc-formulaires.js    4. Localisation : fenêtre de création et de modification
 //                          6. Écrans #/equipement/nouveau et #/equipement/<id>/modifier : formulaire
+//                          8. Relevé de compteur : fenêtre de saisie et écriture
 //   parc-fiche.js          5. Écran #/equipement/<id> : fiche   7. Enregistrement des écrans
 // Les fichiers suivants complètent l'objet : Object.assign(Parc, (() => { … return { … }; })()).
 // Une fonction dont un autre fichier du module a besoin est rangée dans Parc.interne (usage
@@ -193,6 +195,12 @@ const Parc = (() => {
         erreurs.push({ nom: 'heures_fonct_jour', message: 'Saisissez un nombre d\'heures entre 0 et 24 (ex. 16).' });
       }
     }
+    if (valeurs.valeur_remplacement) {
+      const montant = UI.enNombre(valeurs.valeur_remplacement);
+      if (montant === null || montant < 0) {
+        erreurs.push({ nom: 'valeur_remplacement', message: 'Saisissez un montant en euros, positif ou nul (ex. 12 500).' });
+      }
+    }
     return erreurs;
   }
 
@@ -239,6 +247,53 @@ const Parc = (() => {
     return erreurs;
   }
 
+  // --- Relevés de compteur (lot 2, ARCHITECTURE.md §14.6) -------------------------------------
+
+  /**
+   * Dernier relevé d'un compteur parmi `lignesReleves` (le cache, ou les lignes fraîches d'une
+   * fonction de mutation) : la ligne du relevé, ou null. Même ordre que Preventif.dernierReleve :
+   * la date, puis l'identifiant ; un relevé dont la valeur est illisible est ignoré.
+   */
+  function dernierReleveDe(lignesReleves, compteurId) {
+    let dernier = null;
+    lignesReleves.forEach((releve) => {
+      if (releve.compteur_id !== compteurId || Donnees.nombre(releve.valeur) === null) return;
+      const date = String(releve.date || '').slice(0, 10);
+      const dateDernier = dernier ? String(dernier.date || '').slice(0, 10) : '';
+      if (!dernier || date > dateDernier || (date === dateDernier && String(releve.id) > String(dernier.id))) {
+        dernier = releve;
+      }
+    });
+    return dernier;
+  }
+
+  /**
+   * Contrôle un relevé saisi : { date: 'AAAA-MM-JJ', valeur: '1234.5' }. Renvoie [{ nom, message }].
+   * La date est obligatoire et ne peut pas être après `aujourdhui` ; la valeur est un nombre.
+   */
+  function verifierReleve(valeurs, aujourdhui) {
+    const erreurs = [];
+    const date = String(valeurs.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      erreurs.push({ nom: 'date', message: 'Indiquez la date du relevé.' });
+    } else if (date > aujourdhui) {
+      erreurs.push({ nom: 'date', message: 'La date du relevé ne peut pas être dans le futur.' });
+    }
+    if (String(valeurs.valeur || '').trim() === '') {
+      erreurs.push({ nom: 'valeur', message: 'Indiquez la valeur lue sur le compteur.' });
+    } else if (Donnees.nombre(valeurs.valeur) === null) {
+      erreurs.push({ nom: 'valeur', message: 'Saisissez un nombre (ex. 1 250 ou 0,85).' });
+    }
+    return erreurs;
+  }
+
+  /** Vrai si la valeur saisie est plus basse que le dernier relevé (ligne de releves, ou null). */
+  function estEnBaisse(valeur, dernier) {
+    const nouvelle = Donnees.nombre(valeur);
+    const precedente = dernier ? Donnees.nombre(dernier.valeur) : null;
+    return nouvelle !== null && precedente !== null && nouvelle < precedente;
+  }
+
   return {
     cheminLocalisation,
     libelleEquipement,
@@ -250,6 +305,7 @@ const Parc = (() => {
     interne: {
       estActif, comparerTextes, parRepere, identifiantsDescendants, remonteSurSoi, abreger,
       badgeCriticite, badgesEquipement, listeAdaptative,
+      dernierReleveDe, verifierReleve, estEnBaisse,
     },
   };
 })();

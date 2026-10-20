@@ -1,13 +1,15 @@
 'use strict';
 // Parc (3/4) — formulaires : fenêtre de création et de modification d'une localisation (ouverte
-// depuis le parc), écrans #/equipement/nouveau et #/equipement/<id>/modifier (responsable)
-// (ARCHITECTURE.md §8, §10 et §14.2). Complète l'objet Parc.
+// depuis le parc), écrans #/equipement/nouveau et #/equipement/<id>/modifier (responsable),
+// fenêtre « Saisir un relevé » d'un compteur (technicien et responsable, ouverte depuis la fiche)
+// (ARCHITECTURE.md §8, §10, §14.2 et §14.6). Complète l'objet Parc.
 
 Object.assign(Parc, (() => {
 
   // Règles et outils de parc-regles.js.
   const { cheminLocalisation, libelleEquipement, verifierEquipement, verifierLocalisation } = Parc;
-  const { comparerTextes, parRepere, identifiantsDescendants } = Parc.interne;
+  const { comparerTextes, parRepere, identifiantsDescendants, dernierReleveDe, verifierReleve,
+    estEnBaisse } = Parc.interne;
 
   const TAILLE_MAX_DOCUMENT = 9 * 1024 * 1024;        // le serveur refuse plus de 10 Mo
   const EXTENSIONS_DOCUMENT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'odt', 'ods'];
@@ -181,6 +183,9 @@ Object.assign(Parc, (() => {
     }));
     ajouter(UI.champ(definition('statut'), valeur('statut')));
     ajouter(UI.champ(definition('heures_fonct_jour'), valeur('heures_fonct_jour'), { aide: 'Utilisé pour estimer l\'usage entre deux relevés (0 à 24).' }));
+    ajouter(UI.champ(definition('valeur_remplacement'), valeur('valeur_remplacement'), {
+      aide: 'Prix d\'un équipement neuf équivalent, en euros hors taxes (ex. 12 500).',
+    }));
     ajouter(UI.champ(definition('habilitation_requise'), valeur('habilitation_requise'), {
       aide: 'Ex. BR. Plusieurs habilitations : séparées par une virgule.',
     }));
@@ -259,8 +264,176 @@ Object.assign(Parc, (() => {
     });
   }
 
-  // Fenêtre ouverte par l'arborescence (parc-arbre.js) : usage interne au module.
-  Object.assign(Parc.interne, { ouvrirFenetreLocalisation });
+  // ===========================================================================================
+  // 8. Relevé de compteur : fenêtre de saisie et écriture (technicien et responsable)
+  // ===========================================================================================
+
+  /** « 15 855 h », « 0,58 bar » : nombre à la française suivi de l'unité du compteur. */
+  function valeurAvecUnite(valeur, unite) {
+    return UI.nombreFr(valeur) + (unite ? ' ' + unite : '');
+  }
+
+  /** Nom inscrit dans le relevé : celui du technicien (ou du demandeur), sinon « Responsable ». */
+  function utilisateurCourant() {
+    const profil = App.profil;
+    if (!profil) return '';
+    if (profil.type === 'responsable') return 'Responsable';
+    return String(profil.nom || profil.technicienId || '').trim();
+  }
+
+  /**
+   * Écrit un relevé dans releves.csv et renvoie son identifiant.
+   *   valeurs : { date: 'AAAA-MM-JJ', valeur: '1234.5' } (point décimal) ;
+   *   baisseConfirmee : vrai si l'utilisateur a confirmé une valeur plus basse que le dernier
+   *   relevé (compteur remplacé ou remis à zéro).
+   * Les contrôles sont refaits sur les lignes fraîches : un relevé plus élevé saisi entre-temps
+   * sur un autre poste est vu, et la baisse non confirmée est alors refusée.
+   */
+  async function enregistrerReleve(compteurId, valeurs, baisseConfirmee) {
+    return Donnees.modifier('releves', (lignes, outils) => {
+      const compteur = Donnees.trouver('compteurs', compteurId);
+      if (!compteur) throw new Donnees.ErreurValidation('Ce compteur n\'existe plus.');
+      const problemes = verifierReleve(valeurs, outils.aujourdhui());
+      if (problemes.length) throw new Donnees.ErreurValidation(problemes.map((p) => p.message).join(' '));
+      const dernier = dernierReleveDe(lignes, compteurId);
+      if (!baisseConfirmee && estEnBaisse(valeurs.valeur, dernier)) {
+        throw new Donnees.ErreurValidation('La valeur saisie est plus basse que le dernier relevé ('
+          + valeurAvecUnite(dernier.valeur, compteur.unite) + ' le ' + UI.dateFr(dernier.date)
+          + '). Confirmez que le compteur a été remplacé ou remis à zéro, ou corrigez la valeur.');
+      }
+      const id = outils.nouvelId(lignes);
+      lignes.push({ id, compteur_id: compteurId, date: valeurs.date, valeur: String(Donnees.nombre(valeurs.valeur)),
+        utilisateur: utilisateurCourant() });
+      return id;
+    }, { action: 'relevé de compteur' });
+  }
+
+  // Après un relevé, une gamme au compteur ou au seuil peut être devenue échue (RG5) : la
+  // génération est idempotente et sûre à plusieurs postes. Le toast dit ce qui a été créé.
+  async function genererApresReleve() {
+    let crees;
+    try {
+      crees = await Preventif.genererOTEchus();
+    } catch (erreur) {
+      App.signalerErreur({ message: 'Relevé enregistré, mais les OT préventifs n\'ont pas pu être générés : '
+        + ((erreur && erreur.message) || String(erreur)) }, 'génération du préventif après un relevé');
+      return;
+    }
+    UI.toast(crees.length ? 'Relevé enregistré. ' + Preventif.texteGeneration(crees.length) + '.' : 'Relevé enregistré.', 'succes');
+  }
+
+  // Contenu de la fenêtre : rappel du dernier relevé, date, valeur, avertissement de baisse.
+  function contenuFenetreReleve(compteur, dernier, jour) {
+    const unite = String(compteur.unite || '').trim();
+    const champsSchema = Schema.table('releves').champs;
+    const definition = (nom) => champsSchema.find((c) => c.nom === nom);
+    const contenu = UI.element(UI.html`<div class="form-colonne parc-formulaire-releve">
+      <p class="parc-releve-precedent">${dernier
+        ? UI.html`Dernier relevé : <b class="fort">${valeurAvecUnite(dernier.valeur, unite)}</b> le ${UI.dateFr(dernier.date)}.`
+        : 'Aucun relevé pour ce compteur.'}</p>
+    </div>`);
+    contenu.appendChild(UI.champ(definition('date'), jour, { libelle: 'Date du relevé', obligatoire: true, attributs: { max: jour } }));
+    contenu.appendChild(UI.champ(definition('valeur'), '', {
+      libelle: 'Valeur lue' + (unite ? ' (' + unite + ')' : ''), obligatoire: true,
+      aide: 'Le nombre affiché par le compteur, sans calcul (ex. 1 250 ou 0,85).',
+    }));
+    contenu.appendChild(UI.element(UI.html`<div class="alerte attention parc-releve-baisse" role="alert" hidden>
+      ${UI.icone('alerte')}<div class="alerte-texte">
+        <p><b>Valeur plus basse que le dernier relevé${dernier ? ' (' + valeurAvecUnite(dernier.valeur, unite) + ')' : ''}.</b>
+          Compteur remplacé ou remis à zéro ? Sinon, corrigez la valeur.</p>
+        <label class="case"><input type="checkbox" name="baisse_confirmee" value="1">
+          <span>Oui, le compteur a été remplacé ou remis à zéro</span></label>
+        <p class="erreur-champ parc-releve-erreur-baisse" hidden></p>
+      </div></div>`));
+    return contenu;
+  }
+
+  /**
+   * Fenêtre « Saisir un relevé » d'un compteur : date (aujourd'hui par défaut) et valeur. Une valeur
+   * plus basse que le dernier relevé affiche un avertissement et demande une confirmation explicite
+   * (case à cocher) ; « Annuler » ne change rien. Après l'écriture : génération des OT préventifs
+   * échus. Renvoie vrai si un relevé a été enregistré (la fiche se réaffiche alors).
+   */
+  async function ouvrirFenetreReleve(compteurId) {
+    const compteur = Donnees.trouver('compteurs', compteurId);
+    if (!compteur) { UI.toast('Ce compteur n\'existe plus.', 'attention'); return false; }
+    const jour = Donnees.aujourdhui();
+    const dernier = dernierReleveDe(Donnees.lignes('releves'), compteurId);
+    const contenu = contenuFenetreReleve(compteur, dernier, jour);
+    const champValeur = UI.$('[name=valeur]', contenu);
+    const avertissement = UI.$('.parc-releve-baisse', contenu);
+    const caseBaisse = UI.$('[name=baisse_confirmee]', contenu);
+    const erreurBaisse = UI.$('.parc-releve-erreur-baisse', contenu);
+
+    // Valeurs saisies au format du fichier (point décimal, sans espaces).
+    const lireReleve = () => {
+      const valeurs = lireChamps(contenu);
+      return { date: valeurs.date, valeur: valeurs.valeur.replace(/[\s  ]/g, '').replace(',', '.') };
+    };
+    const enBaisse = () => estEnBaisse(lireReleve().valeur, dernier);
+    const montrerBaisse = (visible) => {
+      avertissement.hidden = !visible;
+      if (!visible) erreurBaisse.hidden = true;
+    };
+    // L'avertissement apparaît au clic sur « Enregistrer » (pas pendant la frappe, ni à la sortie du
+    // champ : la fenêtre grandirait sous le doigt et le bouton visé se déplacerait) ; il disparaît
+    // dès que la valeur n'est plus en baisse.
+    champValeur.addEventListener('input', () => { if (!enBaisse()) montrerBaisse(false); });
+    caseBaisse.addEventListener('change', () => { if (caseBaisse.checked) erreurBaisse.hidden = true; });
+
+    let fermerFenetre = null;
+    let enregistre = false;
+    let enCours = false;
+
+    async function enregistrer() {
+      if (enCours) return;
+      const valeurs = lireReleve();
+      const erreursSaisie = UI.verifierFormulaire(contenu);
+      const erreurs = erreursSaisie.concat(verifierReleve(valeurs, Donnees.aujourdhui())
+        .filter((e) => !erreursSaisie.some((s) => s.nom === e.nom)));
+      afficherErreurs(contenu, erreurs);
+      if (erreurs.length) return;
+      if (enBaisse() && !caseBaisse.checked) {
+        montrerBaisse(true);
+        erreurBaisse.textContent = 'Cochez la case pour confirmer cette valeur, ou corrigez-la.';
+        erreurBaisse.hidden = false;
+        caseBaisse.focus();
+        return;
+      }
+      enCours = true;
+      try {
+        await enregistrerReleve(compteurId, valeurs, caseBaisse.checked);
+        enregistre = true;
+        fermerFenetre('ok');
+      } catch (erreur) {
+        App.signalerErreur(erreur, 'enregistrement du relevé');
+      } finally {
+        enCours = false;
+      }
+    }
+
+    const choix = await UI.fenetre({
+      titre: 'Saisir un relevé — ' + (compteur.libelle || compteur.id),
+      contenu,
+      boutons: [
+        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
+        { libelle: 'Enregistrer le relevé', valeur: 'ok', classe: 'btn-primaire', defaut: true },
+      ],
+      surOuverture(dialogue, fermer) { fermerFenetre = fermer; },
+      avantFermeture(valeur) {
+        if (valeur !== 'ok' || enregistre) return true;
+        enregistrer();                                  // la fenêtre se ferme toute seule si tout va bien
+        return false;
+      },
+    });
+    if (choix !== 'ok') return false;
+    await genererApresReleve();
+    return true;
+  }
+
+  // Fenêtres ouvertes par l'arborescence (parc-arbre.js) et la fiche (parc-fiche.js) : usage
+  // interne au module.
+  Object.assign(Parc.interne, { ouvrirFenetreLocalisation, ouvrirFenetreReleve });
 
   return {
     afficherFormulaire,

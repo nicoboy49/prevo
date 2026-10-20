@@ -1,5 +1,6 @@
 /* Prévo — mise en page propre au module Parc (js/modules/parc.js).
-   Arborescence, fiche équipement (consignation, QR, historiques), formulaires.
+   Arborescence, fiche équipement (consignation, QR, compteurs et relevés, préventif, historiques),
+   formulaires.
    Les composants communs (.arbre, .carte, .valeurs, .qr, .badge…) viennent de css/style.css :
    ici seulement ce qui est propre au parc, avec les variables de la charte (aucune couleur en dur). */
 
@@ -56,9 +57,29 @@
 .parc-qr-carte .qr svg { width: 200px; max-width: 100%; }
 .parc-qr-carte .note { margin-top: .6rem; }
 
-.parc-compteurs { list-style: none; margin: 0; padding: 0; display: grid; gap: .8rem; }
-.parc-compteurs li { display: flex; flex-direction: column; gap: .15rem; }
-.parc-compteurs li > b { color: var(--fort); }
+/* Compteurs : nom et dernier relevé à gauche, bouton « Saisir un relevé » à droite (dessous si étroit) */
+.parc-compteurs { list-style: none; margin: 0; padding: 0; display: grid; gap: .9rem; }
+.parc-compteurs li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; }
+.parc-compteur-texte { display: flex; flex-direction: column; gap: .15rem; flex: 1 1 14rem; min-width: 0; overflow-wrap: anywhere; }
+.parc-compteur-texte > b { color: var(--fort); }
+.parc-saisir-releve { flex: none; }
+
+/* Fenêtre « Saisir un relevé » : rappel du dernier relevé, avertissement si la valeur baisse */
+.parc-formulaire-releve { min-width: 0; }
+.parc-releve-precedent { margin: 0; color: var(--texte-2); }
+.parc-releve-baisse { margin: 0; }
+.parc-releve-baisse p { margin: 0 0 .4rem; }
+.parc-releve-baisse .erreur-champ { margin: .3rem 0 0; }
+
+/* Préventif : gammes de l'équipement, de la plus urgente à la moins urgente */
+.parc-gammes { list-style: none; margin: 0; padding: 0; display: grid; gap: .9rem; }
+.parc-gammes li { display: flex; flex-direction: column; gap: .3rem; padding-bottom: .9rem; border-bottom: 1px solid var(--trait); }
+.parc-gammes li:last-child { padding-bottom: 0; border-bottom: 0; }
+.parc-gamme-tete { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; }
+.parc-gamme-tete > a, .parc-gamme-tete > b { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.parc-gamme-tete > b { color: var(--fort); }
+.parc-gamme-detail { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem 1rem; color: var(--texte-2); font-size: .9375rem; }
+.parc-gamme-raison { min-width: 0; overflow-wrap: anywhere; }
 
 .parc-liste .liste-cartes .carte-ligne { min-height: 0; }
 .parc-liste .table td { vertical-align: top; }
@@ -106,11 +127,15 @@
   .parc-qr-carte { text-align: center; }
   .parc-consignation { border-left-width: 5px; }
   .parc-procedure { font-size: 1rem; }
+  /* compteurs : le bouton passe sous le relevé, sur toute la largeur ; liens des gammes et des OT
+     en zones tactiles de 48 px (gants) */
+  .parc-saisir-releve { flex: 1 1 100%; }
+  .parc-lien-gamme, .parc-lien-ot { display: inline-flex; align-items: center; min-height: 48px; }
 }
 
 /* --- impression : la fiche sort sur papier, QR et consignation compris ------------------------ */
 
 @media print {
-  .parc-actions, .parc-voir-tout { display: none !important; }
+  .parc-actions, .parc-voir-tout, .parc-saisir-releve { display: none !important; }
   .parc-consignation { border-left: 6px solid var(--encre); }
 }
