@@ -1,4 +1,5 @@
-/* Prévo — mise en page propre au module Parc (js/modules/parc.js).
+/* Prévo — mise en page propre au module Parc (js/modules/parc-*.js : un module = un préfixe de
+   fichiers, ARCHITECTURE.md §14.2).
    Arborescence, fiche équipement (consignation, QR, compteurs et relevés, préventif, historiques),
    formulaires.
    Les composants communs (.arbre, .carte, .valeurs, .qr, .badge…) viennent de css/style.css :

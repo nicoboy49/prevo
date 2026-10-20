@@ -1,4 +1,5 @@
-/* Prévo — mise en page propre au module Ordres de travail (js/modules/ordres.js).
+/* Prévo — mise en page propre au module Ordres de travail (js/modules/ordres-*.js : un module =
+   un préfixe de fichiers, ARCHITECTURE.md §14.2).
    Uniquement des variables de la charte (css/style.css) : aucune couleur codée en dur.
    Sommaire : 1 liste des OT · 2 fiche OT (en-tête, consignation, anomalie d'un préventif,
    actions, messages) · 3 onglets (formulaires, tableaux de saisie, temps, pièces sorties, coût,

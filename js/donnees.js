@@ -1392,11 +1392,11 @@ const Donnees = (() => {
     return fichiers;
   }
 
-  // --- 4.11 Passage au format courant : version_schema (ARCHITECTURE.md §14.1) ---------------
+  // --- 4.11 Passage au format courant : version_schema (ARCHITECTURE.md §5.6 et §14.1) --------
   // Décision de Nicolas (2026-10-20) : JUSTE AVANT que parametres.version_schema passe de 1 à 2
   // sur une base existante, Prévo fait une sauvegarde automatique (« AAAA-MM-JJ_HHMMSS_avant-format-v2 »),
   // restaurable depuis Paramètres comme les autres. À appeler au démarrage, après chargerTout()
-  // et avant toute autre écriture (câblage dans js/app.js : tâche ultérieure).
+  // et avant toute autre écriture (appelée par passerAuFormatCourant dans js/app.js).
 
   const CLE_VERSION_SCHEMA = 'version_schema';
   const VERSION_SCHEMA_PAR_DEFAUT = 1;       // clé absente ou illisible : fichiers du lot 1 (format 1)

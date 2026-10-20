@@ -14,7 +14,8 @@ favicon.svg                logo (engrenage dans un carré dégradé)
 serveur.py                 serveur local (Python 3.8+, bibliothèque standard seulement)
 Lancer_GMAO.bat            lanceur Windows      lancer.sh   lanceur Mac/Linux
 css/style.css              charte « Cockpit » adaptée (écran sombre + impression noir sur blanc)
-css/modules/*.css          mise en page propre à chaque module (un fichier par module, chargé par index.html)
+css/modules/*.css          mise en page propre à chaque module (une feuille par module : app, accueil,
+                           parc, demandes, ordres, preventif, magasin, parametres ; chargées par index.html)
 css/polices/               police Sora (OFL)
 js/lib/                    bibliothèques tierces + LICENCES.txt (jamais modifiées)
 js/schema.js               Schema    : description des 22 tables (champs, types, identifiants)
@@ -24,24 +25,33 @@ js/stockage-dossier.js     StockageDossier : adaptateur « dossier » (File Syst
 js/stockage-demo.js        StockageDemo    : adaptateur « démo » (mémoire)
 js/demo-donnees.js         DEMO_DONNEES : jeu de démo généré (chargé à la demande)
 js/interface.js            UI        : helpers d'écran (html, tableaux, fenêtres, QR, photos…)
-js/modules/*.js            un fichier par module métier (parc, demandes, ordres, accueil…)
+js/modules/*.js            modules métier : un module = un préfixe de fichiers (§14.2), ex.
+                           ordres-regles.js … ordres-impression.js pour l'objet Ordres ; petits
+                           modules en un seul fichier (accueil.js, apropos.js, parametres.js,
+                           causes-frequentes.js)
 js/app.js                  App       : démarrage, choix du mode, profils, navigation
 donnees/                   les CSV réels (hors dépôt git) + documents/ + sauvegardes/
 donnees/demo/              le jeu de démo en CSV (versionné)
-outils/generer_demo.py     génère donnees/demo/*.csv et js/demo-donnees.js
-tests/                     tests automatisés (unittest + Playwright)
+outils/generer_demo.py     génère donnees/demo/*.csv, js/demo-donnees.js et tests/fixtures/demo-scenarios.json
+tests/                     tests automatisés (unittest + Playwright) ; tests/fixtures/ : pages et
+                           fichiers d'essai (servis seulement avec serveur.py --servir-tests, §7)
 ```
 
 **Ordre de chargement dans `index.html`** (scripts classiques, jamais `type="module"`) :
 `js/lib/papaparse.min.js`, `js/lib/qrcode.js`, `js/lib/jsQR.js`, `js/lib/jszip.min.js`,
 `js/schema.js`, `js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
-`js/stockage-demo.js`, `js/interface.js`, `js/modules/*.js`, `js/app.js` (en dernier).
+`js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
+§14.2, `js/app.js` (en dernier).
 `js/demo-donnees.js` n'est **pas** chargé au démarrage : `App` l'injecte (balise `<script>`
 créée dynamiquement, compatible `file://`) quand on choisit la démo ou la copie du jeu de démo.
-ECharts n'est chargé qu'à partir du lot 3.
+ECharts (présent dans `js/lib/`) n'est chargé qu'à partir du lot 3.
 
-**Un fichier = un objet global** (`const Schema = …`, `const Donnees = …`). Rien d'autre n'est
-global. Chaque fichier commence par `'use strict';` et un commentaire qui dit son rôle.
+**Un objet global par fichier du socle, un objet global par module** (`const Schema = …`,
+`const Donnees = …`, `const Ordres = …`). Rien d'autre n'est global. Un module découpé en
+plusieurs fichiers partage **un seul** objet : le premier fichier du préfixe le crée, les suivants
+le complètent par `Object.assign` (règles détaillées au §14.2). Chaque fichier commence par
+`'use strict';` et un commentaire qui dit son rôle ; dans un module découpé, le premier fichier
+liste les fichiers du préfixe et chacun des suivants indique sa place (« Ordres (4/7) »).
 
 ## 2. Règles de code (tous les fichiers)
 
@@ -118,7 +128,7 @@ Propriété garantie (testée) : `relire(champ, écrire(champ, v)) === v` pour t
 
 ```js
 const Schema = {
-  version: 1,
+  version: 2,                          // version du format des fichiers (§14.1) ; 1 au lot 1
   tables: {
     equipements: {
       fichier: 'equipements.csv', libelle: 'Équipements',
@@ -134,15 +144,27 @@ const Schema = {
         // …
       ],
     },
-    // … 22 tables, champs exactement ceux du §6 du brief, dans le même ordre
+    // … 22 tables : d'abord exactement les champs du §6 du brief, dans le même ordre,
+    // puis, en fin de table, les champs ajoutés par le format v2 (depuisVersion: 2, §14.1)
   },
 };
 ```
 Types : `id`, `texte`, `texte_long`, `entier`, `decimal`, `date`, `date_heure`, `booleen`,
 `choix` (avec `valeurs`), `ref` (avec `table`, et `champCible` si ce n'est pas la clé — ex. les
-`*_code` des OT visent `codes_defaillance.code` filtré par `famille`), `document` (nom de
-fichier dans `donnees/documents/`). Champs facultatifs : `libelle` (toujours renseigné, en
-français), `obligatoire`, `defaut`, `protege`, `synonymes` (pour l'assistant d'import futur).
+`*_code` des OT visent `codes_defaillance.code` filtré par `famille`, attribut `filtre`), `document`
+(nom de fichier dans `donnees/documents/`). Champs facultatifs : `libelle` (toujours renseigné, en
+français), `obligatoire`, `defaut`, `protege`, `synonymes` (pour l'assistant d'import futur),
+`depuisVersion` (version du format qui a ajouté le champ : `2` pour les quatre champs du §14.1 ;
+absent pour les champs du brief).
+
+**Format v2 (lot 2).** Quatre champs sont ajoutés **en fin de table**, après ceux du brief :
+`equipements.valeur_remplacement`, `demandes.symptome_code`, `demandes.ot_origine_id`,
+`ordres_travail.anomalie_constatee` (détail au §14.1). Un fichier écrit au format 1 n'a pas ces
+colonnes : à la lecture, chaque colonne absente marquée `depuisVersion` donne un problème de gravité
+**`info`** (« colonne … ajoutée par la version 2 du format, écrite au prochain enregistrement »),
+jamais `attention`, et la valeur par défaut du champ est appliquée ; la colonne est écrite à la
+prochaine modification de la table. Une colonne **du brief** absente reste un problème `attention`
+(§3.3). Le passage de `parametres.version_schema` à 2 est décrit au §5.6.
 
 Identifiants (calculés **dans** la fonction de mutation, §5.3) :
 
@@ -176,7 +198,12 @@ Valeurs canoniques des listes (accents compris) :
 
 Clés de `parametres.csv` utilisées au lot 1 : `entreprise_nom`, `delai_p1_h` (0),
 `delai_p2_h` (24), `delai_p3_h` (168), `delai_p4` (`prochain arrêt`), `heures_fonct_defaut`,
-`tolerance_preventif_pct`, `rafraichissement_s` (20), `version_schema` (1).
+`tolerance_preventif_pct`, `rafraichissement_s` (20), `version_schema` (1 au lot 1, 2 depuis le
+lot 2). Ajoutées au lot 2 : `priorite_preventif` (`P3` : priorité des OT préventifs générés ; valeur
+hors P1–P4 → P3) et `horizon_calendrier_semaines` (`12` : nombre de semaines du calendrier du
+préventif). Ces deux clés ne sont pas modifiables dans l'écran Paramètres : elles se changent dans
+`parametres.csv` ; absentes, leur valeur par défaut s'applique. Une absence de `version_schema`
+(ou une valeur illisible) vaut 1.
 
 ## 5. `Donnees` (`js/donnees.js`)
 
@@ -205,6 +232,7 @@ Donnees.stockArticle(articleId)      // recalculé depuis mouvements_stock (un i
 await Donnees.journaliser(table, idLigne, action)   // entrée de journal sans modification (ex. avertissement RG8)
 Donnees.instantane()                 // { table: Uint8Array } des 22 tables sérialisées (export ZIP, copie de la démo)
 Donnees.baseVide()                   // vrai si aucun des 22 fichiers n'existe
+await Donnees.mettreAJourVersionSchema()   // passage au format courant, sauvegarde d'abord (§5.6)
 Donnees.demarrerSurveillance() / Donnees.arreterSurveillance()   // §5.5
 Donnees.csv.analyser(table, entree)  // → { lignes, colonnesInconnues, problemes, encodage }
 Donnees.csv.serialiser(table, lignes, colonnesInconnues) // → Uint8Array
@@ -214,7 +242,9 @@ Donnees.statistiques                 // { conflits, essais } — lu par les test
 ```
 Types de problèmes : `reference` (clé étrangère cassée), `valeur` (illisible), `excel`
 (abîmée par Excel), `colonne`, `encodage`, `doublon` (identifiant en double), `identifiant`
-(ligne sans identifiant), `incoherence` (ex. DI acceptée sans OT, voir D18).
+(ligne sans identifiant), `incoherence` (ex. DI acceptée sans OT, voir D18). Un problème `colonne`
+est `info` pour une colonne du format v2 absente (§4) et `attention` pour une colonne du brief
+absente.
 
 ### 5.3 Écriture : `modifier`
 ```
@@ -226,6 +256,10 @@ const resultat = await Donnees.modifier(table, (lignes, outils) => {
   return valeur; // renvoyée par modifier (ex. l'id créé)
 }, { action: 'texte libre pour le journal (facultatif)' });
 ```
+La fonction peut être `async` (elle est attendue) : `Magasin.mettreAJourStocks` y relit
+`mouvements_stock` pour calculer le stock sur des mouvements frais. Option `journal: false` : rien
+n'est écrit au journal par `modifier` (l'appelant journalise lui-même, ex. l'ajustement des gammes
+après la remise à zéro d'un compteur, §14.6, ou le repli de `ajouter`, §5.4).
 Algorithme : copie des lignes en cache → application de la fonction → sérialisation →
 `adaptateur.enregistrer(table, octets, versionConnue)`. Sur `ErreurConflit` : recharger la
 table, réappliquer **la même fonction** sur les lignes fraîches, réessayer ; **3 essais au
@@ -256,6 +290,26 @@ appelé explicitement (ex. avant l'export ZIP) relit tout.
 chaque retour sur l'onglet (`visibilitychange`), `adaptateur.listerVersions()` ; chaque table
 dont la version diffère est relue ; événement `changement` (`origine: 'distant'`).
 
+### 5.6 Passage au format courant : `mettreAJourVersionSchema` (lot 2)
+`await Donnees.mettreAJourVersionSchema()` → `{ misAJour, sauvegarde }`. Appelée par `App` au
+démarrage, après `chargerTout()`, **pour tous les profils et avant toute autre écriture** (§8).
+- Rien à faire (renvoie `{ misAJour: false, sauvegarde: null }`) si la base est vide ou si
+  `parametres.version_schema` vaut déjà `Schema.version` (ou plus).
+- Sinon, **décision de Nicolas** : d'abord une sauvegarde automatique complète
+  `adaptateur.sauvegarder('avant-format-v2')`, nommée `AAAA-MM-JJ_HHMMSS_avant-format-v2`
+  (restaurable depuis Paramètres, où elle apparaît avec le type « Avant format 2 ») ; **puis
+  seulement** `version_schema` passe à 2, par un `modifier('parametres')` décidé sur les lignes
+  fraîches (si un autre poste l'a déjà fait, rien n'est écrit). Journal : « passage au format 2 du
+  fichier ; sauvegarde … faite juste avant ».
+- Si la sauvegarde échoue, ou si le stockage ne sait pas sauvegarder (pas de méthode `sauvegarder`,
+  ou aucun nom renvoyé) : `ErreurStockage` (« Sauvegarde avant le passage au format 2 impossible :
+  … ; la mise à jour sera retentée à la prochaine ouverture. »), et `version_schema` **n'est pas
+  changé**. Seule exception : la démo (rien n'y est enregistré, aucune sauvegarde n'est exigée).
+- Deux postes ouverts ensemble sur une base au format 1 peuvent faire chacun leur sauvegarde (deux
+  copies identiques, sans gravité) ; un seul écrit la version.
+- « Créer une base vide » écrit directement `version_schema` = 2 dans `parametres.csv` : pas de
+  sauvegarde inutile au premier démarrage. Le jeu de démo porte déjà `version_schema` = 2.
+
 ## 6. Adaptateurs de stockage (contrat commun)
 
 Chaque fichier `js/stockage-*.js` expose une fabrique : `await StockageServeur.creer()`,
@@ -272,7 +326,9 @@ await listerVersions()                → { nomTable: version|null, … }
 await ecrireDocument(nom, blob)       → nom   (refuse d'écraser un document existant)
 await lireDocument(nom)               → Blob|null
 await urlDocument(nom)                → URL affichable (serveur : /api/documents/nom ; sinon URL d'objet)
-await sauvegarder()                   → nom de la sauvegarde manuelle (AAAA-MM-JJ_HHMMSS)
+await sauvegarder(motif?)             → nom de la sauvegarde : manuelle sans motif (AAAA-MM-JJ_HHMMSS) ;
+                                      avec motif 'avant-format-v2' (liste fermée, le seul motif accepté)
+                                      → AAAA-MM-JJ_HHMMSS_avant-format-v2 ; autre motif → ErreurStockage
 await listerSauvegardes()             → [{ nom, tables: [...] }]  (plus récente d'abord)
 await restaurer(nom, tables?)         → { restaurees: [...], copieSecurite: nom }
 await info()                          → { adressesReseau: [...] } (serveur) ou {}
@@ -280,7 +336,11 @@ await info()                          → { adressesReseau: [...] } (serveur) ou
 Version d'un fichier = empreinte SHA-256 du contenu, 16 premiers caractères hexadécimaux
 (décision D7). Sauvegarde quotidienne : avant la **première écriture de la journée**, copie de
 tous les CSV dans `sauvegardes/AAAA-MM-JJ/` (si ce dossier n'existe pas). Une restauration copie
-d'abord l'état courant dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-restauration/`. Le mode dossier
+d'abord l'état courant dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-restauration/`. Le passage au
+format 2 (§5.6) copie tous les CSV dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-format-v2/`. Noms de
+sauvegarde acceptés (serveur et dossier, mêmes règles) :
+`AAAA-MM-JJ`, `AAAA-MM-JJ_HHMMSS`, `AAAA-MM-JJ_HHMMSS_avant-restauration`,
+`AAAA-MM-JJ_HHMMSS_avant-format-vN`. Le mode dossier
 pose une marque `.en-cours` dans une sauvegarde pendant qu'il la copie et l'enlève à la fin : une
 sauvegarde qui porte encore la marque est incomplète (ni listée, ni restaurable ; celle du jour est
 refaite) — le serveur applique la même règle.
@@ -319,24 +379,38 @@ par `--hote` — sinon 403 (un suffixe quelconque permettrait le « DNS rebindin
 | `POST /api/csv/<table>/ajout` | corps = en-tête + lignes (UTF-8 sans BOM) ; ajoute en fin de fichier (crée le fichier avec BOM s'il n'existe pas) ; 409 si l'en-tête ou l'encodage du fichier existant diffère |
 | `GET /api/documents/<nom>` | octets, type MIME deviné ; 404 |
 | `PUT /api/documents/<nom>` | 201 `{"nom"}` · 409 si le document existe déjà |
-| `POST /api/sauvegarde` | `{"sauvegarde": "AAAA-MM-JJ_HHMMSS"}` |
+| `POST /api/sauvegarde` | corps vide → sauvegarde manuelle `{"sauvegarde": "AAAA-MM-JJ_HHMMSS"}` ; corps JSON facultatif `{"motif": "avant-format-v2"}` → `{"sauvegarde": "AAAA-MM-JJ_HHMMSS_avant-format-v2"}` ; motif hors de la liste fermée `MOTIFS_SAUVEGARDE`, corps qui n'est pas un objet JSON, JSON invalide ou trop imbriqué → 400 (contrôlé avant toute écriture) |
 | `GET /api/sauvegardes` | `{"sauvegardes": [{"nom", "tables": [...]}]}` |
 | `POST /api/restauration` | corps `{"sauvegarde": "…", "tables": [...] (facultatif)}` → `{"restaurees", "copie_securite"}` |
 
 Règles : noms de tables limités aux 22 du schéma (liste recopiée dans `serveur.py`, avec un
 commentaire de renvoi vers `js/schema.js`, cohérence vérifiée par un test) ; nom de document
 `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` sans `..` ; nom de sauvegarde
-`^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration)?)?$` ; tout chemin résolu doit rester sous
-`donnees/` (vérification sur le chemin brut **et** décodé, `\` compris) ; écriture atomique
-(fichier temporaire dans le même dossier, `fsync`, `os.replace`) ; un verrou global sérialise
-les écritures ; sauvegarde quotidienne faite par le serveur avant la première écriture du jour.
-Fichiers statiques : le dossier de l'application, **sauf** `donnees/` et tout chemin dont un
-segment commence par `.` ; `/` → `index.html`. Pas d'en-têtes CORS.
+`^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+)?)?$` ; tout chemin résolu doit
+rester sous `donnees/` (vérification sur le chemin brut **et** décodé, `\` compris) ; écriture
+atomique (fichier temporaire dans le même dossier, `fsync`, `os.replace`) ; un verrou global
+sérialise les écritures ; sauvegarde quotidienne faite par le serveur avant la première écriture
+du jour. Les corps JSON (`/api/sauvegarde`, `/api/restauration`) sont lus par `lire_objet_json` :
+UTF-8 invalide, JSON invalide, JSON qui n'est pas un objet ou trop imbriqué (`[[[[…`) → 400, jamais
+500.
+
+**Fichiers statiques : liste blanche (lot 2, D29).** Seuls sont servis `/` (→ `index.html`),
+`index.html`, `favicon.svg`, `GUIDE.html` s'il existe, et tout ce qui est sous `css/` et `js/`
+(constantes `FICHIERS_PUBLICS`, `DOSSIERS_PUBLICS` de `serveur.py` ; comparaison sans casse, car
+Windows ne distingue pas `Index.html` de `index.html`). **Tout le reste répond 404**, comme un
+fichier absent : `brief-gmao.md`, `README.md`, `docs/`, `tests/`, `outils/`, `reference-design/`,
+`serveur.py`, les lanceurs… La liste blanche est contrôlée sur le chemin demandé **et** sur le chemin
+résolu (un lien ou une jonction rangé dans `js/` ne permet pas de lire un fichier situé ailleurs).
+Les contrôles du lot 1 restent en place avant elle : chemin dont un segment commence par `.`
+(fichier caché, `..`), contient `:` ou finit par `.` ou une espace, `\` ou `%5C`, double encodage →
+400 ; `donnees/` → 403. L'option `--servir-tests` (passée par `tests/commun.py`) sert en plus
+`tests/fixtures/` (pages et fichiers d'essai des tests). Pas d'en-têtes CORS.
 Le serveur parle HTTP/1.1 avec connexions persistantes (`protocol_version = 'HTTP/1.1'` : un
 navigateur réutilise ses connexions au lieu d'en ouvrir une par requête), avec une file d'attente
 d'écoute de 128 connexions (`request_queue_size = 128`) et un fil par connexion.
-Lancement : `py serveur.py [--port 8080] [--donnees CHEMIN] [--sans-navigateur] [--hote NOM]` ; port suivant
-si occupé (jusqu'à +20) ; affiche l'adresse locale et les adresses réseau ; ouvre le navigateur.
+Lancement : `py serveur.py [--port 8080] [--donnees CHEMIN] [--sans-navigateur] [--hote NOM]
+[--servir-tests]` ; port suivant si occupé (jusqu'à +20) ; affiche l'adresse locale et les adresses
+réseau ; ouvre le navigateur. `--servir-tests` n'est utile qu'aux tests automatiques.
 Adresses réseau : interface de sortie trouvée par un `connect()` UDP vers une adresse privée
 (aucun paquet envoyé) + `gethostbyname_ex`, adresses de bouclage exclues.
 
@@ -348,6 +422,20 @@ serveur. Sinon écran de démarrage : « Choisir le dossier de données » (si
 « Essayer avec les données de démo », zone de dépôt de CSV (démo à partir de fichiers déposés).
 Base vide (aucun CSV) → choix « Créer une base vide » ou « Partir des données de démo ».
 Navigateur sans File System Access → message « utilisez Chrome ou Edge » + démo.
+
+Suite du démarrage (lot 2), dans cet ordre, **avant le premier écran** :
+1. tables chargées → `Donnees.mettreAJourVersionSchema()` (§5.6), pour tous les profils et avant
+   toute autre écriture ; en cas d'échec (sauvegarde impossible), l'erreur est signalée, un bandeau
+   « Les fichiers n'ont pas pu passer au format 2 » s'affiche dans la coque, et l'application reste
+   utilisable ;
+2. profil (mémorisé ou demandé) ;
+3. technicien ou responsable : `Preventif.genererOTEchus()` (RG5, §14.3) ; toast « n OT préventifs
+   générés » si n > 0 ; erreur → `App.signalerErreur`, l'application reste utilisable. **Pas de
+   génération automatique si l'étape 1 a échoué** (elle écrirait des fichiers au format 2 sans
+   sauvegarde confirmée) : la prochaine ouverture retente tout. Puis
+   `performance.mark('prevo:preventif')`, posée une seule fois, aussi pour le demandeur (rien à
+   générer) ;
+4. surveillance, coque, premier écran, état « prêt » (`prevo:preventif` précède donc `prevo:pret`).
 
 **Profils** (localStorage `prevo.profil` = JSON `{type: 'demandeur'|'technicien'|'responsable',
 nom, technicienId}` ; `prevo.poste` = nom du poste). Si aucun profil n'est mémorisé, l'écran de
@@ -374,6 +462,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 ```
 Contrat tel qu'implémenté :
+- un module a **un seul** écouteur `DOMContentLoaded`, qui enregistre tous ses écrans : dans le
+  dernier fichier du préfixe (`parc-fiche.js`, `demandes-fiche.js`, `ordres-impression.js`,
+  `magasin-achats.js`), sauf Préventif où c'est `preventif-ecrans.js` (§14.2) ;
 - `conteneur` est `<main id="contenu">`, vidé avant chaque affichage ;
 - `parametres` : les **groupes nommés** de la route (`(?<id>[^/?]+)` → `parametres.id`),
   `parametres.groupes` (tous les groupes, dans l'ordre), `parametres.requete` (`URLSearchParams` de
@@ -387,14 +478,29 @@ Contrat tel qu'implémenté :
 Routes du lot 1 : `#/accueil`, `#/di/nouvelle`, `#/di`, `#/di/<id>`, `#/ot`, `#/ot/nouveau`,
 `#/ot/<id>`, `#/parc`, `#/equipement/nouveau`, `#/equipement/<id>`,
 `#/equipement/<id>/modifier`, `#/parametres`, `#/controle`, `#/apropos`.
+Routes ajoutées au lot 2 : `#/preventif`, `#/preventif/gamme/nouvelle`, `#/preventif/gamme/<id>`,
+`#/magasin`, `#/magasin/article/nouveau`, `#/magasin/article/<id>`. Les routes « fiche » excluent
+explicitement `nouveau`/`nouvelle` (`(?!nouveau$)`), en plus d'être déclarées après la route de
+création.
 Profils : l'accueil, les DI, le parc et À propos sont ouverts aux trois profils ; les OT
-(`#/ot`, `#/ot/<id>`) au technicien et au responsable ; `#/ot/nouveau`, la création et la
-modification d'équipement, `#/parametres` et `#/controle` au responsable seul.
+(`#/ot`, `#/ot/<id>`), le préventif (`#/preventif`, `#/preventif/gamme/<id>`) et le magasin
+(`#/magasin`, `#/magasin/article/<id>`) au technicien et au responsable (le technicien y est en
+consultation, D27) ; `#/ot/nouveau`, la création et la modification d'équipement,
+`#/preventif/gamme/nouvelle`, `#/magasin/article/nouveau`, `#/parametres` et `#/controle` au
+responsable seul. Le demandeur ne voit ni Préventif ni Magasin.
 Paramètres d'adresse lus :
 - `#/di` : `?statut=` (ex. `Nouvelle`), `?portee=` (`mes` ou `toutes`), `?q=` (recherche), `?equipement=` ;
 - `#/ot` : `?filtre=retard` (OT en retard) ou `?filtre=p1` (P1 ouverts), liens de l'accueil ; aussi
-  `?etat=`, `?statut=`, `?priorite=`, `?technicien=`, `?type=`, `?recherche=`, `?equipement=` ;
-- `#/di/nouvelle` : `?equipement=` ; `#/ot/nouveau` : `?equipement=`, `?urgence=1`.
+  `?etat=` (`ouverts`, `retard`, `clotures`, `annules`, `tous`), `?statut=`, `?priorite=`,
+  `?technicien=`, `?type=`, `?recherche=`, `?equipement=` ;
+- `#/di/nouvelle` : `?equipement=`, `?ot=` (OT préventif d'origine : DI liée, §14.6) ;
+  `#/ot/nouveau` : `?equipement=`, `?urgence=1` ;
+- `#/preventif` : `?onglet=gammes|calendrier`, `?statut=` (un statut de gamme, ex. `echue`),
+  `?equipement=` ; `#/preventif/gamme/nouvelle` : `?equipement=` ;
+- `#/magasin` : `?onglet=articles|mouvements|inventaire|a-commander|achats|fournisseurs` (l'onglet
+  « Inventaire » est réservé au responsable) ; filtres d'un lien, appliqués une fois : articles
+  `?recherche=`, `?categorie=`, `?etat=` ; mouvements `?type=`, `?article=`, `?ot=` ; achats
+  `?recherche=`.
 
 Un écran dont un formulaire a été modifié et non enregistré n'est pas
 réaffiché par un changement distant : un bandeau « Des données ont changé sur un autre poste —
@@ -408,7 +514,10 @@ Actualiser » s'affiche à la place.
 
 **Menu** : latéral sur grand écran (≥ 1100 px), repliable en icônes (mémorisé
 `prevo.menuReplie`), icônes seules de 641 à 1099 px, barre du bas sur téléphone (≤ 640 px :
-4 entrées + « Plus »). Badge de signature en bas du menu : « Développé par Claude (Anthropic) à
+4 entrées + « Plus »). En tête du menu latéral : « Prévo », « GMAO », puis le nom de l'entreprise
+(`entreprise_nom`) sur deux lignes au plus, nom complet en infobulle (D32). Entrées ajoutées au
+lot 2 : « Préventif » (ordre 35, icône `preventif`) et « Magasin » (ordre 45, icône `magasin`).
+Badge de signature en bas du menu : « Développé par Claude (Anthropic) à
 la demande de Nicolas Briand — SELECTIS » → `#/apropos`.
 `#impression` doit être un enfant direct de `<body>` (la feuille d'impression masque tous les autres
 enfants de `body`) ; `#toast` (vide, `role="status"`) est présent dans `index.html` dès le chargement.
@@ -438,12 +547,18 @@ boutons masqués, mise en page A4 du bon de travail (`#impression`) ; classe `.s
 pour masquer un élément à l'impression (réutilisée par le futur rapport mensuel).
 
 `css/style.css` porte la charte et **tous les composants communs** ; un module n'y touche pas :
-sa mise en page propre va dans `css/modules/<module>.css` (déjà référencé par `index.html`), en
-réutilisant les variables de la charte (jamais de couleur codée en dur).
+sa mise en page propre va dans `css/modules/<module>.css` (une feuille par module, même découpé en
+plusieurs fichiers JS ; toutes référencées par `index.html`, dont `preventif.css` et `magasin.css`
+au lot 2), en réutilisant les variables de la charte (jamais de couleur codée en dur).
+`UI.icone(nom)` connaît depuis le lot 2 les icônes `preventif` (calendrier coché) et `magasin`
+(carton) ; `UI.estTelephone()` sert à masquer la carte « Connecter un téléphone » de l'accueil (D31).
 Les champs `texte_long` des formulaires portent l'attribut `data-dictee` (crochet pour le bouton
 micro du lot 4 ; en attendant, la dictée du clavier du téléphone fonctionne sans code).
 
-## 10. Règles métier du lot 1
+## 10. Règles métier (lots 1 et 2)
+
+RG1 à RG4, RG7 et RG8 viennent du lot 1 (RG3 révisée au lot 2, voir ci-dessous) ; RG5 (préventif)
+et RG6 (magasin) sont détaillées aux §14.3 et §14.4.
 
 - **RG1** DI : `Nouvelle` → `Acceptée` (crée un OT, `ot_id` renseigné) · `Regroupée`
   (rattachée à un OT ouvert du même équipement) · `Différée` · `Refusée` (motif obligatoire,
@@ -471,9 +586,16 @@ micro du lot 4 ; en attendant, la dictée du clavier du téléphone fonctionne s
   | Clôturé administrativement, Annulé | aucun (verrouillé ; reprise par un nouvel OT lié `ot_lie_id`) |
 
   `En attente` exige `motif_attente`, `Annulé` exige `motif_annulation`. `Planifié` exige un
-  technicien et une date prévue, et est **refusé si une pièce prévue manque en stock**
-  (`Donnees.stockArticle` < quantité prévue cumulée) : message + bouton « Mettre en attente
-  (motif : pièce) ».
+  technicien et une date prévue, et est **refusé si une pièce prévue manque en stock** : message +
+  bouton « Mettre en attente (motif : pièce) ».
+  **Révision du lot 2 (décision de l'orchestrateur)** : depuis que des pièces peuvent être sorties
+  du magasin pour l'OT avant sa planification, le lot 1 refusait à tort un OT dont les pièces
+  étaient déjà sorties. Désormais, pour chaque article prévu : besoin restant = max(0, quantité
+  prévue cumulée − net déjà sorti pour **cet** OT (sorties − retours)) ; la pièce manque si
+  `Donnees.stockArticle` < besoin restant. Le message cite ce qui est déjà sorti : « Stock
+  insuffisant pour « … » : 3 prévu(s), 1 déjà sorti(s) pour cet OT, 1 en stock. » (sans sortie :
+  « 3 prévu(s), 1 en stock », comme au lot 1). Le même calcul sert au bandeau de l'onglet
+  Préparation (`Ordres.piecesManquantes`).
 - **RG4** clôture technique bloquée sans : `date_fin`, au moins un temps passé (`ot_temps`),
   `cause_code`, `remede_code`, `compte_rendu` d'au moins 10 caractères (et sur un correctif,
   « RAS » / « rien à signaler » refusé), `remise_service` = 1. Le message liste **tous** les
@@ -481,7 +603,10 @@ micro du lot 4 ; en attendant, la dictée du clavier du téléphone fonctionne s
   « Cocher une case ne consigne rien : appliquez la procédure. » Clôture administrative
   (responsable) : `date_cloture_admin`, OT en lecture seule.
 - **RG7** coût = Σ (heures × `taux_horaire` du technicien) + Σ (sorties de stock imputées à
-  l'OT − retours) × `prix_unitaire` + `cout_soustraitance`.
+  l'OT − retours) × `prix_unitaire` + `cout_soustraitance`. Depuis le lot 2, les sorties et
+  retours se font depuis l'OT (bloc « Pièces sorties », §14.6). Le prix pris est le prix **actuel**
+  de l'article (aucun prix n'est stocké dans `mouvements_stock`) : le coût d'un OT passé suit donc
+  un changement de prix (limite connue de D24).
 - **RG8** (lot 1 : à l'affectation) : si l'équipement a une `habilitation_requise` (une ou
   plusieurs, séparées par `,` ou `/`), le technicien doit avoir pour chacune une habilitation
   d'intitulé identique (casse ignorée) avec `date_obtention` ≤ date prévue (ou aujourd'hui) ≤
@@ -496,29 +621,68 @@ Les fonctions de règles sont **pures** et exposées pour les tests :
 `Ordres.verifierCloture(ot)` → liste des manques, `Ordres.cout(ot)`,
 `Ordres.verifierHabilitation(equipement, technicienId, dateIso)` → message ou `null`.
 
-### API effective des modules du lot 1 (`js/modules/`)
+### API effective des modules (`js/modules/`, état du lot 2)
 
-Un module = un objet global ; ses écrans s'enregistrent dans `DOMContentLoaded` (§8). Les fonctions
-d'écriture sont `async`, passent par `Donnees.modifier` et lèvent `Donnees.ErreurValidation` pour un refus.
+Un module = un objet global, réparti sur un préfixe de fichiers (§14.2) ; ses écrans s'enregistrent
+dans un seul écouteur `DOMContentLoaded` (§8). Les fonctions d'écriture sont `async`, passent par
+`Donnees.modifier` (contrôles refaits **dans** la fonction de mutation, sur les lignes fraîches) et
+lèvent `Donnees.ErreurValidation` pour un refus. Chaque module découpé a aussi un objet
+`Objet.interne` (`Ordres.interne`, `Preventif.interne`…) : outils partagés entre ses fichiers,
+**pas une API** (ni les autres modules ni les tests ne s'en servent ; son contenu peut changer).
+La liste ci-dessous est celle des clés réellement exposées (relevée dans le code).
 
 - **`Parc`** : `cheminLocalisation(id)`, `libelleEquipement(id)`, `verifierEquipement`,
   `verifierLocalisation` (règles : repère unique parmi les équipements actifs, aucun équipement
-  ancêtre de lui-même), `afficherListe`, `afficherFiche`, `afficherFormulaire`.
+  ancêtre de lui-même), `afficherListe`, `afficherFiche`, `afficherFormulaire`. Lot 2 (par l'écran,
+  sans fonction publique nouvelle) : valeur de remplacement, « Saisir un relevé », carte Préventif
+  (§14.6).
 - **`Demandes`** : constantes `STATUTS`, `IMPACTS`, `MATRICE_PRIORITE` ; règles pures
   `prioriteCalculee(criticite, impact)`, `normaliserImpact`, `typePropose(priorite)`,
-  `datePrevue(priorite, aujourdhuiIso)`, `libelleEquipement` ; écritures `creer(valeurs)`,
-  `accepter(diId, options)`, `regrouper(diId, otId)`, `differer(diId, motif)`, `refuser(diId, motif)`.
+  `datePrevue(priorite, aujourdhuiIso)`, `libelleEquipement`, **`codeSymptome(texte)`** (lot 2 :
+  code de la famille « symptôme » dont le libellé est exactement ce texte, casse et espaces ignorés,
+  sinon `''` ; ex. `'  FUITE '` → `'S01'`, `'Fuite d'eau'` → `''`) ; écritures `creer(valeurs)` (lot 2 :
+  `symptome_code`, `ot_origine_id`), `accepter(diId, options)` (lot 2 : recopie `symptome_code` dans
+  l'OT), `regrouper(diId, otId)`, `differer(diId, motif)`, `refuser(diId, motif)`.
 - **`Ordres`** : constantes `STATUTS`, `TYPES`, `PRIORITES`, `RAPPEL_CONSIGNATION` ; règles pures
-  `transitionsPossibles`, `verifierPassage`, `verifierCloture`, `cout`, `verifierHabilitation`,
-  `estOuvert`, `enRetard`, `estVerrouille`, `estCorrectif`, `estRienASignaler`, `piecesManquantes(otId)`,
-  `filtrer(ordres, filtres)`, `datePrevueParDefaut` ; écritures `creer(valeurs)`,
-  `changerStatut(otId, statutAttendu, cible, complement)`, `changerPriorite(otId, nouvelle, motif)`,
-  `creerOtLie(otId)` ; affichage et export `libelleEquipement`, `nomTechnicien`, `csvListe`,
-  `bonDeTravailHtml(ot)`, `imprimerBon(otId)`.
-- **`Accueil`** : `afficher`, `calculerCompteurs()` → `{ diATraiter, otEnRetard, p1Ouverts }`
-  (trois listes de lignes), `otEnRetard(ot, aujourdhui)`, `p1Ouvert(ot)`.
+  `transitionsPossibles`, `verifierPassage` (→ `{ ok, erreurs, avertissements, piecesManquantes }`),
+  `verifierCloture`, `cout`, `verifierHabilitation`, `estOuvert`, `enRetard`, `estVerrouille`,
+  `estCorrectif`, `estRienASignaler`, `piecesManquantes(otId)` (lot 2 : `[{ article_id, libelle,
+  prevu, sorti, stock, reste }]`, RG3 révisée), `filtrer(ordres, filtres)`, `datePrevueParDefaut` ;
+  écritures `creer(valeurs)`, `changerStatut(otId, statutAttendu, cible, complement)` (lot 2 : après
+  une clôture technique réussie d'un OT qui a un `gamme_id`, appelle `Preventif.apresCloture` ; un
+  échec ne défait pas la clôture, il est signalé par un toast et un message sur la fiche),
+  `changerPriorite(otId,
+  nouvelle, motif)`, `creerOtLie(otId)` ; affichage et export `libelleEquipement`, `nomTechnicien`,
+  `csvListe`, `bonDeTravailHtml(ot)`, `imprimerBon(otId)`. Lot 2, par l'écran : bloc « Pièces
+  sorties » (`ordres-pieces.js`), carte préventif, encart des causes fréquentes (§14.6).
+- **`Preventif`** (lot 2, §14.3) : constantes `DECLENCHEURS`, `STATUTS_GAMME` ; règles pures
+  `dernierReleve(compteurId)`, `etatGamme(gamme, aujourdhui)`, `calendrier(aujourdhui, semaines)` ;
+  écritures `genererOTEchus({ aujourdhui })` (→ identifiants des OT créés), `texteGeneration(n)`
+  (« Aucune gamme échue », « 1 OT préventif généré », « n OT préventifs générés »),
+  `apresCloture(otId)` (→ vrai si la gamme a changé), `verifierGamme(valeurs)` (→ `[{ nom, message
+  }]`), `creerGamme(valeurs)`, `modifierGamme(gammeId, valeurs)`, `ajouterOperation(gammeId,
+  valeurs)`, `modifierOperation(operationId, valeurs)`, `deplacerOperation(operationId, sens)`,
+  `supprimerOperation(operationId)` (D26 : seule suppression de ligne de Prévo, journalisée).
+- **`Magasin`** (lot 2, §14.4) : constantes `TYPES_MOUVEMENT`, `STATUTS_ACHAT` (lues dans le
+  schéma) ; règles pures `suggestionPointCommande(articleId, aujourdhui)`, `aCommander()`,
+  `sortiesDeLOt(otId)` ; écritures `sortir(otId, articleId, quantite, commentaire)`,
+  `retourner(otId, articleId, quantite, commentaire)`, `entrer(articleId, quantite, commentaire)`,
+  `inventorier([{ articleId, quantite }], commentaire)`, `demanderAchat(articleId, quantite,
+  fournisseurId)`, `commander(achatId)`, `recevoir(achatId, quantiteRecue)`, `creerArticle(valeurs)`,
+  `modifierArticle(articleId, valeurs)`, `creerFournisseur(valeurs)`,
+  `modifierFournisseur(fournisseurId, valeurs)`, `mettreAJourStocks(ids)`.
+- **`CausesFrequentes`** (lot 2, §14.5, un seul fichier) : `MINIMUM_PAR_DEFAUT` (5), `MENTION`
+  (« Statistique de l'historique, pas un diagnostic »), `calculer(equipementId, symptomeCode,
+  { minimum })`, `encart(equipementId, symptomeCode)`.
+- **`Accueil`** : `afficher`, `calculerCompteurs()` → `{ diATraiter, otEnRetard, p1Ouverts,
+  preventifsSemaine, articlesACommander }` (les quatre premières : listes de lignes de demandes ou
+  d'OT ; `articlesACommander` : éléments de `Magasin.aCommander()`), `otEnRetard(ot, aujourdhui)`,
+  `p1Ouvert(ot)`, et depuis le lot 2 `dimancheDe(dateIso)` (dimanche de la semaine du lundi au
+  dimanche, calculé en UTC) et `preventifDeLaSemaine(ot, dimanche)` (OT d'origine `préventif`,
+  ouvert, date prévue ≤ ce dimanche, retards compris).
 - **`Parametres`** : écrans `#/parametres` et `#/controle` ; n'expose que `decrireSauvegarde(nom)`
-  et `numeroLigneFichier(probleme)` (utilitaires testés).
+  (lot 2 : type « Avant format 2 » pour `…_avant-format-v2`) et `numeroLigneFichier(probleme)`
+  (utilitaires testés).
 - **`Apropos`** : `CREDIT`, `afficher`.
 
 ## 11. Données de démo
@@ -529,18 +693,57 @@ d'écriture sont `async`, passent par `Donnees.modifier` et lèvent `Donnees.Err
 const DEMO_DONNEES = { dateReference: 'AAAA-MM-JJ', tables: { equipements: '<texte CSV>', … } };
 ```
 `StockageDemo` (et la copie du jeu de démo vers un vrai dossier) décale toutes les dates du
-nombre de **semaines entières** écoulées depuis `dateReference`, pour que l'historique de 6 mois
-se termine toujours aujourd'hui (les identifiants gardent leur année d'origine).
-Option `--volume EQUIPEMENTS,OT --sortie DOSSIER` : jeu de charge (test de performance CS20).
+nombre de **semaines entières** écoulées depuis `dateReference`, pour que l'historique se termine
+toujours aujourd'hui (les identifiants gardent leur année d'origine).
+
+Depuis le lot 2 (D30), l'historique couvre **13 mois** : `DATE_REFERENCE` = `2026-10-19` (un
+lundi), premières lignes en septembre 2025. Le jeu par défaut contient notamment 31 équipements,
+150 DI, 232 OT, 10 gammes, 56 relevés, 52 articles, 302 mouvements de stock et 36 achats, avec les
+champs du format v2 renseignés (valeur de remplacement de chaque équipement, code symptôme sur 127
+DI, deux OT préventifs avec anomalie et leur DI liée) et au moins deux équipements qui ont 5 OT
+correctifs clôturés d'un même symptôme (encart des causes fréquentes). Le générateur
+s'auto-vérifie (clés étrangères, listes de valeurs, règles RG1 à RG6, aucun stock négatif à aucun
+moment, colonne `stock` = stock recalculé, scénarios) et s'arrête au moindre défaut ; deux
+exécutions donnent des fichiers identiques à l'octet.
+
+Options : `--mois N` (13 par défaut, 24 avec `--volume`), `--sans-js` (pas de
+`js/demo-donnees.js`), `--fichier-js CHEMIN`, `--fichier-scenarios CHEMIN`, et
+`--volume EQUIPEMENTS,OT --sortie DOSSIER` : jeu de charge (tests de performance CS20 et CS34), qui
+produit aussi gammes, relevés, mouvements et achats en proportion.
+
+**Identifiants de scénario** : le jeu par défaut écrit aussi `tests/fixtures/demo-scenarios.json`
+(ni avec `--sortie`, ni avec `--volume` ; `--fichier-scenarios` l'écrit ailleurs) : pour chaque rôle
+de scénario (OT par statut, P1 ouvert, OT en retard, DI par statut, gamme mensuelle échue, kit
+garniture, articles sous le point de commande, techniciens BR valide ou échue, préventif avec
+anomalie…), l'identifiant de la ligne qui le joue. Les rôles sont décrits dans la docstring de
+`outils/generer_demo.py`. Les tests lisent ce fichier par `commun.scenarios_demo()` au lieu
+d'écrire des numéros en dur. `.gitattributes` déclare `js/demo-donnees.js` et `tests/fixtures/*.json`
+en `-text` (jamais de conversion de fins de ligne : la démo régénérée reste identique à l'octet).
 
 ## 12. Tests
 
 `py -m unittest discover -s tests -v` lance tout. Outils communs dans `tests/commun.py` :
-serveur de test (copie du jeu de démo dans un dossier temporaire, `--sans-navigateur`, port
-libre), serveur statique (pour le dossier simulé), lancement de Chromium headless, collecte des
-erreurs console (**toute erreur JavaScript fait échouer le test**), dossier simulé (OPFS
-substitué à `showDirectoryPicker`), profil préréglé (`prevo.profil` dans localStorage),
-attente de `dataset.etat === 'pret'`. Les tests ne touchent jamais `donnees/` réel.
+serveur de test (copie du jeu de démo dans un dossier temporaire, `--sans-navigateur`
+`--servir-tests`, port libre ; `--servir-tests` rend accessibles les pages de `tests/fixtures/`,
+hors liste blanche sinon), serveur statique (pour le dossier simulé), lancement de Chromium
+headless, collecte des erreurs console (**toute erreur JavaScript fait échouer le test**), dossier
+simulé (OPFS substitué à `showDirectoryPicker`), profil préréglé (`prevo.profil` dans
+localStorage), attente de `dataset.etat === 'pret'`, et `scenarios_demo()` (lot 2) : les
+identifiants des objets de scénario lus dans `tests/fixtures/demo-scenarios.json` (§11 ; copie
+neuve à chaque appel). Les tests ne touchent jamais `donnees/` réel.
+
+Toasts : un toast disparaît au bout de 4 s (7 s pour une erreur). Un test qui doit lire un toast
+l'enregistre au moment où il s'affiche, par un `MutationObserver` posé sur la page
+(`window.__toasts`), au lieu de lire `#toast` après coup : un test lu trop tard sur un poste chargé
+échouait au hasard. Même principe pour les états traversés de `data-etat`.
+
+Fichiers ajoutés au lot 2 (un par sujet) : `test_format_v2.py`, `test_version_schema.py`,
+`test_regles_lot2.py`, `test_preventif.py`, `test_magasin.py`, `test_demandes_lot2.py`,
+`test_ordres_lot2.py`, `test_parc_lot2.py`, `test_accueil_lot2.py`, `test_recette_lot2.py` (recette du
+lot 2 de bout en bout, en modes serveur et démo) ; `test_excel_reel.py` couvre aussi le format v2
+et une base du lot 1 passée par Excel ; `test_performance.py` mesure le chargement génération du
+préventif comprise, la création de DI et la sortie de pièce sur le jeu de charge ; `test_depot.py`
+vérifie le découpage (700 lignes au plus par fichier de `js/modules/`, ordre exact du §14.2).
 
 Playwright et Chromium ne sont nécessaires que pour les tests, jamais pour utiliser Prévo.
 Le test d'aller-retour par le **vrai Excel** (`tests/test_excel_reel.py`, `tests/test_csv.py`) ne
@@ -554,18 +757,35 @@ serveur (§7) en réduisent la fréquence sans l'annuler.
 
 ## 13. Points d'extension (lots suivants)
 
-- Lot 2 : voir §14 (contrat du lot 2).
-- Lot 3 : `js/modules/indicateurs.js` (ECharts), `planning.js`, `controles.js`, étiquettes QR.
-- Compteurs de l'accueil (brief E1) : le lot 1 n'affiche que DI à traiter, OT en retard et P1
-  ouverts. Les autres compteurs prévus par le brief viendront avec les lots suivants : préventifs
-  de la semaine et articles à commander (lot 2), contrôles réglementaires sous 30 jours et
-  habilitations échues ou à moins de 60 jours (lot 3). `Accueil.calculerCompteurs()` est le point
-  d'extension.
-- Lot 4 : `js/modules/ia.js`, `js/modules/ia-prompts.js`, `js/modules/dictee.js` ; les champs
-  `texte_long` des formulaires portent `data-dictee` pour recevoir un bouton micro ; les
-  `synonymes` du schéma servent à l'assistant d'import.
+Le lot 2 est réalisé (§14). Restent, dans l'ordre prévu :
+- **Lot 3** : indicateurs (E11, ECharts déjà présent dans `js/lib/`), planning (E6), étiquettes QR
+  par lot, contrôles réglementaires (E10, RG9), écran des habilitations, rapport mensuel (réutilise
+  `.sans-impression`). Nouveaux modules en préfixes de fichiers (`indicateurs-*.js`…), 700 lignes au
+  plus par fichier, ajoutés à l'ordre du §14.2 **et** à `ORDRE_MODULES` de `tests/test_depot.py`.
+  Compteurs de l'accueil (brief E1) restant à ajouter : contrôles réglementaires sous 30 jours,
+  habilitations échues ou à moins de 60 jours ; `Accueil.calculerCompteurs()` est le point
+  d'extension (il renvoie déjà `preventifsSemaine` et `articlesACommander`).
+- **Lot 3 bis** : préventif **suggéré**. Le champ `ordres_travail.anomalie_constatee` et le lien
+  `demandes.ot_origine_id` (DI signalée pendant un préventif) sont posés et remplis depuis le lot 2
+  pour être exploités là (ex. raccourcir une périodicité quand les anomalies se répètent) ;
+  l'encart des causes fréquentes pourra recevoir un indicateur de fiabilité statistique (D25).
+- **Lot 4** : `js/modules/ia.js`, `js/modules/ia-prompts.js`, `js/modules/dictee.js` ; les champs
+  `texte_long` des formulaires portent `data-dictee` pour recevoir un bouton micro ; `GUIDE.html`
+  (déjà dans la liste blanche du serveur, §7), `FICHE_TECHNIQUE_CSV.md`, https local en option.
+- **Lot « Import »** : assistant d'import (les `synonymes` du schéma servent à reconnaître les
+  colonnes), lecture des fichiers `.xls` (SheetJS).
+- Piste notée par Nicolas : stocker le prix unitaire dans `mouvements_stock` au moment de la sortie
+  pour figer le coût des OT passés (changement de format, lève la limite de D24 ; à décider).
+- Nouveau format : ajouter les champs en fin de table avec `depuisVersion: N`, porter
+  `Schema.version` à N, ajouter `avant-format-vN` aux listes fermées de motifs de sauvegarde
+  (`MOTIFS_SAUVEGARDE` de `serveur.py` et de `js/stockage-dossier.js`) : `mettreAJourVersionSchema`
+  fera la sauvegarde puis le passage.
 
 ## 14. Contrat du lot 2 (CDC validé le 2026-10-20 : D19–D32)
+
+Ce contrat a été écrit avant le code du lot 2, puis **relu et corrigé après coup** pour décrire le
+code réel. Là où le code s'écarte du texte d'origine, une mention « écart retenu : … » dit ce qui
+a été fait et pourquoi.
 
 ### 14.1 Format CSV v2
 - `Schema.version` = 2 ; `parametres.version_schema` = `2`. Quatre champs ajoutés **en fin de
@@ -586,21 +806,44 @@ serveur (§7) en réduisent la fréquence sans l'annuler.
   (`12`).
 - `tests/test_schema.py` vérifie : champs du brief §6 = début exact de chaque table, puis exactement
   les champs de ce tableau.
+- Ajout (décision de Nicolas, tâche T37) : le passage de `version_schema` de 1 à 2 se fait au
+  démarrage par `Donnees.mettreAJourVersionSchema()`, **juste après** une sauvegarde automatique
+  `AAAA-MM-JJ_HHMMSS_avant-format-v2` ; sans sauvegarde confirmée, pas de passage (nouvel essai à
+  la prochaine ouverture). Détail au §5.6 ; motif de sauvegarde au §6 et au §7.
 
 ### 14.2 Découpage des modules (D28) et ordre de chargement
-Un module = un préfixe de fichiers, chacun ≤ 700 lignes. Le **premier** fichier d'un module crée
-l'objet (`const Ordres = (() => { … return { … }; })();`), les suivants le complètent
-(`Object.assign(Ordres, (() => { … return { … }; })());`). Ordre exact dans `index.html` (après
-`js/interface.js`) :
+Un module = un préfixe de fichiers, chacun ≤ 700 lignes (dérogation assumée au « un fichier JS par
+module » du brief §2). Règles :
+- le **premier** fichier d'un module crée l'objet (`const Ordres = (() => { … return { … }; })();`),
+  les suivants le complètent (`Object.assign(Ordres, (() => { … return { … }; })());`) ;
+- une fonction dont un autre fichier du **même** module a besoin est rangée dans `Objet.interne`
+  (ex. `Ordres.interne.afficherPreparation`), que les fichiers suivants complètent par
+  `Object.assign(Objet.interne, …)` ; ce n'est **pas une API** : ni les autres modules ni les
+  tests ne s'en servent, et son contenu peut changer ;
+- un fichier qui appelle une fonction d'un fichier **chargé plus tard** passe par une petite
+  fonction relais qui la cherche au moment de l'appel, pas au chargement
+  (`const afficherPreparation = (panneau, ot) => Ordres.interne.afficherPreparation(panneau, ot);`
+  dans `ordres-fiche.js`) ;
+- un seul écouteur `DOMContentLoaded` par module, qui enregistre tous ses écrans (§8).
+
+Ordre exact dans `index.html` (après `js/interface.js`), recopié dans `ORDRE_MODULES` de
+`tests/test_depot.py` (le contrat et ce test changent ensemble) :
 ```
 apropos.js  accueil.js  causes-frequentes.js
 parc-regles.js  parc-arbre.js  parc-formulaires.js  parc-fiche.js
 demandes-regles.js  demandes-ecritures.js  demandes-signaler.js  demandes-liste.js  demandes-fiche.js
-ordres-regles.js  ordres-ecritures.js  ordres-liste.js  ordres-fiche.js  ordres-onglets.js  ordres-impression.js
+ordres-regles.js  ordres-ecritures.js  ordres-liste.js  ordres-fiche.js  ordres-onglets.js  ordres-pieces.js  ordres-impression.js
 preventif-regles.js  preventif-ecritures.js  preventif-ecrans.js  preventif-calendrier.js
 magasin-regles.js  magasin-ecritures.js  magasin-articles.js  magasin-mouvements.js  magasin-achats.js
 parametres.js  (puis js/app.js)
 ```
+Écart retenu : `ordres-pieces.js` (bloc « Pièces sorties » de l'onglet Exécution) a été ajouté
+après `ordres-onglets.js` par la tâche des OT du lot 2 (prévu par son énoncé ; dans
+`ordres-onglets.js`, qui compte déjà plus de 500 lignes, le bloc aurait dépassé 700 lignes) ;
+le module Ordres compte donc sept fichiers. Écart retenu : l'écouteur `DOMContentLoaded` du
+préventif est dans `preventif-ecrans.js` (3/4) et non dans le dernier fichier, `preventif-calendrier.js`
+n'ayant pas d'écran propre (il dessine un onglet).
+
 Feuilles `css/modules/` ajoutées : `preventif.css`, `magasin.css`. Les routes sont enregistrées
 dans l'ordre de chargement et la première qui correspond gagne : les routes « fiche »
 (`#/equipement/<id>`, `#/di/<id>`, `#/ot/<id>`, `#/preventif/gamme/<id>`, `#/magasin/article/<id>`)
@@ -623,8 +866,23 @@ Fonctions **pures** (`preventif-regles.js`) :
     l'équipement quand l'unité du compteur est l'heure, sinon vide.
   - `seuil` : échue si dernier relevé ≥ `seuil` **et** ce relevé est postérieur à
     `derniere_realisation` (sinon une gamme juste réalisée se redéclencherait aussitôt).
-- `Preventif.calendrier(aujourdhui, semaines = 12)` → `[{ lundi, dimanche, elements: [{ gammeId,
-  equipementId, date, estimee, otId }] }]` (échéances des gammes et OT préventifs ouverts).
+  - Écart retenu (choix de règles non écrits au contrat, testés) : une gamme `date` sans
+    `periodicite_jours` (ou ≤ 0), une gamme `compteur` sans `periodicite_unites`, une gamme
+    `compteur` ou `seuil` sans compteur, avec un compteur introuvable ou **sans aucun relevé**, une
+    gamme `seuil` sans seuil → `incomplete` (la `raison` dit ce qui manque). Une gamme `compteur`
+    n'utilise **pas** `avance_jours` (`declenchement` = `echeance` estimée : c'est le compteur qui
+    déclenche) ; elle est `bientot` si son échéance estimée tombe dans les 14 jours. Une gamme
+    `seuil` n'a pas d'échéance datée, n'est jamais `bientot`, et le relevé doit être
+    **strictement** postérieur à la dernière réalisation : un relevé daté du jour même de
+    l'intervention ne la redéclenche pas. `reste` vaut : jours avant l'échéance (`date`), unités
+    avant l'échéance (`compteur`), écart au seuil (`seuil`) ; négatif ou nul quand c'est dépassé.
+    Les dates sont calculées en UTC (un changement d'heure ne décale jamais un jour).
+- `Preventif.calendrier(aujourdhui, semaines)` → `[{ lundi, dimanche, elements: [{ gammeId,
+  equipementId, date, estimee, otId }] }]` (échéances des gammes actives sans OT ouvert, estimées
+  pour un compteur, et OT préventifs ouverts à leur date prévue). Écart retenu : sans `semaines`,
+  le nombre de semaines est le paramètre `horizon_calendrier_semaines`, sinon 12 ; un élément en
+  retard (avant le premier lundi) est placé dans la première semaine avec sa vraie date ; un
+  élément au-delà du dernier dimanche n'est pas placé.
 
 Écritures (`preventif-ecritures.js`) :
 - `await Preventif.genererOTEchus({ aujourdhui })` → identifiants des OT créés. Une seule
@@ -635,19 +893,50 @@ Fonctions **pures** (`preventif-regles.js`) :
   libellé de la gamme, `consignes` et `temps_prevu_h` de la gamme, date prévue = échéance si elle
   est future, sinon aujourd'hui. Puis `modifier('ot_operations', …)` copie les opérations de la gamme
   (`ordre`, `operation`, `valeur_attendue`, `fait` = 0) pour chaque OT créé **qui n'en a pas encore**
-  (idempotent). Deux postes qui génèrent en même temps ne créent qu'un OT par gamme.
-- `await Preventif.apresCloture(otId)` (appelé par les OT à la **clôture technique** d'un OT qui a un
-  `gamme_id`) : `derniere_realisation` = date de `date_fin`, `releve_derniere_realisation` = dernier
-  relevé du compteur, `prochaine_echeance` recalculée (date : + `periodicite_jours` ; compteur :
-  estimée ou vide). Idempotent.
+  (idempotent). Deux postes qui génèrent en même temps ne créent qu'un OT par gamme. Rien d'échu :
+  aucune écriture (cas le plus courant à l'ouverture). L'OT reçoit aussi un `travail_a_faire`
+  (« Réaliser les n opérations de la check-list de la gamme GAM-… Déclenchement : … »).
+  Écart retenu : la copie de check-list complète aussi un OT préventif **encore « Créé »** d'une
+  gamme resté sans aucune opération (copie interrompue lors d'une génération précédente) ; sans
+  risque, les conditions étant vérifiées sur les lignes fraîches.
+  `Preventif.texteGeneration(n)` donne le message (« Aucune gamme échue », « 1 OT préventif
+  généré », « n OT préventifs générés »).
+- `await Preventif.apresCloture(otId)` (appelé par `Ordres.changerStatut` après la **clôture
+  technique** d'un OT qui a un `gamme_id`) : relit `ordres_travail` ; refuse
+  (`ErreurValidation`) un OT qui n'est pas clôturé ; date de réalisation = `date_fin` de l'OT
+  (sinon sa date de clôture). `derniere_realisation` = cette date ; `prochaine_echeance` recalculée
+  (date : + `periodicite_jours` ; compteur : estimée pour un compteur en heures, sinon vide ;
+  seuil : vide). Idempotent ; renvoie vrai si la gamme a changé. Un échec ne défait pas la clôture
+  (toast et message d'avertissement sur la fiche OT).
+  - Écart retenu (correction de relecture, D22) : la décision se prend sur les OT clôturés
+    (techniquement ou administrativement) **de la gamme**. Si l'OT clôturé est celui dont la date
+    de réalisation est la plus récente, sa date fait foi, **même si la gamme portait une date plus
+    récente** (date de fin saisie par erreur, corrigée après réouverture puis nouvelle clôture :
+    sans cette règle, la gamme restait bloquée sur la date erronée et ne générait plus rien). Un OT
+    plus ancien clôturé après coup ne change rien à la gamme.
+  - Écart retenu : `releve_derniere_realisation` = le relevé du compteur **à la date de
+    réalisation** (le dernier relevé daté au plus tard ce jour-là, à défaut le dernier relevé), et
+    non le dernier relevé tout court : un relevé saisi après l'intervention ne fausse pas la base,
+    et l'appel reste idempotent.
 - CRUD des gammes (`modifier('gammes')`) et de leur check-list (`gamme_operations`, ajout,
-  modification, ordre, **suppression autorisée et journalisée** — D26, seule exception).
+  modification, ordre, **suppression autorisée et journalisée** — D26, seule exception) :
+  `verifierGamme`, `creerGamme`, `modifierGamme`, `ajouterOperation`, `modifierOperation`,
+  `deplacerOperation` (renumérote 1, 2, 3…), `supprimerOperation` (renumérote les suivantes ;
+  journal « suppression (D26) de l'opération « … » de la check-list de la gamme GAM-… ») ; les OT
+  déjà créés gardent leur copie dans `ot_operations`.
 - Écrans (`preventif-ecrans.js`, `preventif-calendrier.js`) : `#/preventif` (liste des gammes avec
-  statut, onglet « Calendrier 12 semaines », bouton « Générer les OT échus » pour le responsable),
-  `#/preventif/gamme/nouvelle`, `#/preventif/gamme/<id>` (fiche, éditeur, OT de la gamme). Menu
-  « Préventif » (ordre 35, icône `preventif`, technicien en lecture, responsable).
+  statut, filtres statut et équipement, onglet « Calendrier 12 semaines », boutons « Nouvelle
+  gamme » et « Générer les OT échus » pour le responsable), `#/preventif/gamme/nouvelle`,
+  `#/preventif/gamme/<id>` (fiche, éditeur, OT de la gamme). Menu « Préventif » (ordre 35, icône
+  `preventif`, technicien en lecture, responsable).
 - `App` appelle `Preventif.genererOTEchus()` une fois après le chargement pour un technicien ou un
   responsable (toast « n OT préventifs générés » si n > 0 ; erreur → `App.signalerErreur`).
+  Écart retenu : cette génération a lieu **avant** le premier écran et l'état « prêt » (marque
+  `prevo:preventif`, puis `prevo:pret`), pour que l'accueil montre déjà les OT du jour et qu'aucune
+  écriture ne coure pendant la première action de l'utilisateur ; et **elle n'a pas lieu** si le
+  passage au format 2 a échoué faute de sauvegarde (§5.6, choix prudent de l'orchestrateur ; le
+  bouton reste disponible). La génération est aussi lancée juste après un relevé de compteur saisi
+  depuis la fiche équipement (§14.6).
 
 ### 14.4 Magasin (M5, RG6) — objet `Magasin`
 Fonctions pures (`magasin-regles.js`) :
@@ -658,26 +947,46 @@ Fonctions pures (`magasin-regles.js`) :
   suggestion).
 - `Magasin.aCommander()` → articles actifs dont `point_commande` est renseigné et stock ≤
   `point_commande`, avec quantité proposée = `qte_commande` si renseignée, sinon
-  `point_commande` − stock + `stock_securite` (au moins 1).
-- `Magasin.sortiesDeLOt(otId)` → `[{ articleId, sorti, retourne, net }]`.
+  `point_commande` − stock + `stock_securite` (au moins 1). Forme réelle : `[{ article (ligne),
+  stock, pointCommande, quantiteProposee }]`, articles critiques d'abord, puis par référence.
+- `Magasin.sortiesDeLOt(otId)` → `[{ articleId, sorti, retourne, net }]` (dans l'ordre de la
+  première sortie).
+- Catégorie d'un article (affichage et filtre `?categorie=`) : **déduite du préfixe de sa
+  référence** (`ROU-001` → ROU, « Roulements » ; préfixes connus ROU, TRA, ETA, FIL, LUB, ELE, HYD,
+  PNE, OUT, DIV ; autre préfixe affiché tel quel ; sans préfixe : « Sans catégorie ») — aucun champ
+  n'est ajouté au schéma.
 Écritures (`magasin-ecritures.js`), toutes par `Donnees.modifier` avec contrôle **sur les lignes
 fraîches**, puis réécriture de `articles.stock` pour les articles touchés
-(`Magasin.mettreAJourStocks(ids)` : `modifier('articles')`, idempotent) :
-- `Magasin.sortir(otId, articleId, quantite, commentaire)` : OT existant, ni clôturé ni annulé ;
-  quantité > 0 ; **refus si le stock deviendrait négatif** (`ErreurValidation` « Stock insuffisant :
-  X en stock, Y demandé ») ; mouvement `sortie`, `ot_id`, `utilisateur` = libellé du profil.
-- `Magasin.retourner(otId, articleId, quantite, commentaire)` : pas plus que le net sorti pour cet OT.
+(`Magasin.mettreAJourStocks(ids)` : `modifier('articles')`, idempotent). Écart retenu (correction
+de relecture) : `mettreAJourStocks` **relit `mouvements_stock` dans la fonction de mutation** (à
+chaque essai) au lieu de calculer sur le cache, sinon la colonne `stock` pouvait être fausse après
+un conflit. Un échec de cette copie n'annule pas le mouvement (avertissement en console ; le
+prochain mouvement de l'article la corrige) :
+- `Magasin.sortir(otId, articleId, quantite, commentaire)` : OT obligatoire, existant, ni clôturé ni
+  annulé ; quantité > 0 ; **refus si le stock deviendrait négatif** (`ErreurValidation` « Stock
+  insuffisant : X en stock, Y demandé ») ; mouvement `sortie`, `ot_id`. `utilisateur` du mouvement
+  = nom du technicien du profil, ou « Responsable » pour le responsable.
+- `Magasin.retourner(otId, articleId, quantite, commentaire)` : OT ouvert ; pas plus que le net
+  sorti pour cet OT.
 - `Magasin.entrer(articleId, quantite, commentaire)` ; `Magasin.inventorier([{ articleId, quantite }],
-  commentaire)` (mouvements `inventaire`, valeur absolue).
+  commentaire)` (mouvements `inventaire`, valeur absolue ; un article compté deux fois → refus).
 - Achats : `Magasin.demanderAchat(articleId, quantite, fournisseurId)` (statut `demandée`, prix =
-  prix de l'article), `Magasin.commander(achatId)`, `Magasin.recevoir(achatId, quantiteRecue)`
-  (statut `reçue`, `date_reception`, puis entrée en stock « Réception ACH-… ») ; une réception ne
-  change **pas** `prix_unitaire` (D24). Fournisseurs : création et modification simples.
+  prix de l'article, date du jour), `Magasin.commander(achatId)` (depuis `demandée` seulement),
+  `Magasin.recevoir(achatId, quantiteRecue)` (statut `reçue`, `date_reception`, puis entrée en stock
+  « Réception ACH-… ») ; une réception ne change **pas** `prix_unitaire` (D24). Écart retenu
+  (précisions) : **une seule demande « demandée » par article** (une seconde est refusée tant que la
+  première n'est pas commandée) ; la réception se fait **depuis « commandée »** seulement ; une
+  réception partielle passe quand même l'achat à « reçue » et l'écart est noté dans le commentaire
+  du mouvement (« Réception ACH-0036 (3 reçu sur 5 commandé) ») ; une réception interrompue entre
+  ses deux écritures est complétée au nouvel essai, jamais doublée. Articles et fournisseurs :
+  `creerArticle`, `modifierArticle` (référence unique parmi les articles actifs, nombres ≥ 0, délai
+  entier, fournisseur existant), `creerFournisseur`, `modifierFournisseur` ; jamais de suppression
+  (`actif` = 0).
 - Écrans : `#/magasin?onglet=articles|mouvements|inventaire|a-commander|achats|fournisseurs`,
   `#/magasin/article/nouveau`, `#/magasin/article/<id>` (fiche : stock, mouvements, équipements
   liés, OT consommateurs, point de commande saisi + suggestion avec « Reprendre la suggestion »).
   Menu « Magasin » (ordre 45, icône `magasin`) : technicien en consultation (ses sorties et retours
-  passent par l'OT), responsable : tout.
+  passent par l'OT ; pas d'onglet Inventaire), responsable : tout.
 
 ### 14.5 Causes fréquentes (D25) — objet `CausesFrequentes` (`causes-frequentes.js`)
 - `CausesFrequentes.calculer(equipementId, symptomeCode, { minimum = 5 })` → `{ suffisant, portee
@@ -692,29 +1001,80 @@ fraîches**, puis réécriture de `articles.stock` pour les articles touchés
   plus utilisé : remplacement pièce · dernier cas : 30/09/2026 · voir les OT ») et la mention
   « Statistique de l'historique, pas un diagnostic » ; en dessous du minimum : « Pas encore assez
   de cas pour ce symptôme (n sur 5) ». Rien si pas de code symptôme. Visible de tous les profils.
+- Écart retenu (précisions et corrections de relecture) : sous le minimum, l'encart ne montre
+  **que** le message d'attente, aucune cause ; sans code symptôme, `encart` renvoie `null`. Date
+  d'un cas = `date_fin`, sinon date de clôture technique, sinon date de création. « voir les OT » :
+  **5 liens au plus par cause** (les cas les plus récents), puis « et n autres » — un lien vers la
+  liste des OT clôturés de l'équipement (`#/ot?equipement=…&etat=clotures`) quand la portée est
+  l'équipement, du texte simple pour la portée « même marque et modèle » (aucune liste ne filtre
+  ces OT ensemble). Pour le **demandeur**, qui n'a pas accès aux écrans des OT, les identifiants
+  d'OT sont en **texte simple** (un lien le renverrait à l'accueil). Marque et modèle sont comparés
+  sans casse ni espaces (« CR 10 » = « cr10 »). Égalité de remède : le plus récent l'emporte.
 
 ### 14.6 Demandes, OT, Parc, Accueil (lot 2)
 - **DI** : choisir une suggestion de symptôme renseigne `symptome_code` (le texte reste libre) ; à
   l'acceptation, `symptome_code` est recopié dans l'OT ; la fiche DI montre l'encart et, si
   `ot_origine_id`, le lien vers l'OT préventif. `#/di/nouvelle?equipement=…&ot=OT-…` crée une DI liée
   (`ot_origine_id`) ; après création, l'OT d'origine passe `anomalie_constatee` = 1.
+  - Précisions du code : le code suit le texte (`Demandes.codeSymptome` : libellé exact, casse et
+    espaces ignorés ; un texte modifié à la main perd le code) ; un code inconnu est refusé. Sur un
+    OT déjà existant pour la DI (essai précédent interrompu), le code n'est recopié que si celui de
+    l'OT est vide. `?ot=` doit désigner un OT **préventif** (origine `préventif` ou type
+    `préventif …`) : sinon un avertissement s'affiche et la DI est créée sans lien. Le marquage de
+    l'OT est une seconde écriture, idempotente ; s'il échoue, la DI reste créée et un toast le dit.
+  - Écart retenu (correction de relecture, RG3) : un OT d'origine **verrouillé** (Clôturé
+    administrativement, Annulé) n'est **jamais modifié** : la DI garde le lien, mais l'OT n'est pas
+    marqué ; le formulaire et l'écran de confirmation le disent. Le verrou est contrôlé sur la
+    ligne fraîche.
 - **OT** : onglet Exécution, bloc « Pièces sorties » (`Magasin.sortiesDeLOt`, boutons Sortir /
   Retourner, refus RG6 affiché) ; OT préventif : case « Anomalie constatée » et bouton « Signaler une
   anomalie (DI liée) » ; encart des causes fréquentes dans Préparation et Compte rendu ; à la clôture
   technique d'un OT avec `gamme_id` : `Preventif.apresCloture`.
+  - Précisions du code : le bloc « Pièces sorties » est dans `ordres-pieces.js` ; « Sortir une
+    pièce » propose d'abord les pièces prévues de l'OT, puis les articles actifs avec leur stock ;
+    le coût RG7 compte ces mouvements. La carte préventif de la fiche montre aussi les **DI liées**
+    (`demandes.ot_origine_id`) ; sur un OT verrouillé, la case est désactivée et le bouton absent.
+    La case n'est acceptée que sur un OT d'origine `préventif`. Badge « anomalie constatée » sur la
+    fiche et dans la liste. Le refus RG3 de « Planifié » tient compte des pièces déjà sorties
+    (RG3 révisée, §10).
 - **Parc** : `valeur_remplacement` (affichée, modifiable), « Saisir un relevé » par compteur
   (`releves`, avertissement si la valeur baisse), gammes de l'équipement avec leur état.
+  - Précisions du code : la valeur de remplacement est visible des trois profils et modifiable par
+    le responsable ; « Saisir un relevé » est proposé au technicien et au responsable ; une valeur
+    plus basse que le dernier relevé demande une **confirmation** (case à cocher), contrôlée aussi
+    sur les relevés frais (un relevé saisi entre-temps sur un autre poste est vu). Après
+    l'enregistrement d'un relevé, `Preventif.genererOTEchus()` est lancé aussitôt (une gamme
+    compteur ou seuil peut être devenue échue) et le toast dit les OT créés.
+  - Écart retenu (correction de relecture, sécurité maintenance) : à une **remise à zéro
+    confirmée** (compteur remplacé ou remis à zéro : baisse confirmée qui devient le dernier
+    relevé), chaque gamme active `compteur` de ce compteur **garde son avancement** : nouvelle base
+    `releve_derniere_realisation` = nouvelle valeur − (dernier relevé avant la baisse − ancienne
+    base, vide = 0). Sans cela, la gamme aurait calculé un usage négatif et sauté un entretien
+    pendant des années. Une entrée de journal par gamme ajustée (« remise à zéro du compteur CPT-… :
+    base de GAM-… ajustée de A à B »). Les gammes `seuil` ne changent pas (leur seuil porte sur la
+    valeur absolue).
+  - Écart retenu (D27) : la carte « Préventif » de la fiche équipement est **masquée au
+    demandeur**, qui ne voit pas le préventif.
 - **Accueil** : « Préventifs de la semaine » = OT d'origine `préventif`, ouverts, date prévue ≤
   dimanche de la semaine en cours (retards compris) ; « Articles à commander » =
   `Magasin.aCommander().length` ; la carte « Connecter un téléphone » n'est pas affichée si
   `UI.estTelephone()`. Menu latéral : « GMAO » puis le nom de l'entreprise sur deux lignes au plus
   (nom complet en infobulle).
+  - Précisions du code : `Accueil.calculerCompteurs()` renvoie les **listes** (`preventifsSemaine`,
+    `articlesACommander`) et l'écran en affiche la longueur ; les indicateurs mènent à
+    `#/preventif?onglet=calendrier` et `#/magasin?onglet=a-commander`. Le technicien voit d'abord
+    ses préventifs de la semaine, puis ses autres OT. Règles exposées : `Accueil.dimancheDe`,
+    `Accueil.preventifDeLaSemaine` (§10).
 
 ### 14.7 Serveur : liste blanche (D29)
 Sont servis : `/` (→ `index.html`), `index.html`, `favicon.svg`, `GUIDE.html` s'il existe,
 `css/**`, `js/**` ; **tout le reste répond 404** (dont `brief-gmao.md`, `README.md`, `docs/`,
 `tests/`, `outils/`, `reference-design/`, `serveur.py`). L'option `--servir-tests` (passée par
 `tests/commun.py`) sert en plus `tests/fixtures/**`. Les autres règles (§7) sont inchangées.
+Précisions du code : la liste blanche est contrôlée **deux fois**, sur le chemin demandé puis sur
+le chemin résolu (lien ou jonction Windows rangé dans `js/`) ; la comparaison ignore la casse ;
+une réponse hors liste est la même qu'un fichier absent (404, sans dire que le fichier existe).
+Les refus du lot 1 passent avant : segments cachés et traversées → 400, `donnees/` → 403.
 
 ### 14.8 Démo 13 mois et identifiants de scénario (D30)
 `outils/generer_demo.py` : `--mois 13` par défaut ; nouveaux champs renseignés ; au moins deux
@@ -725,3 +1085,9 @@ avec anomalie et sa DI liée ; gammes, mouvements et achats sur 13 mois ; le jeu
 ouvert, OT en retard, DI par statut, gamme mensuelle échue, kit garniture, articles sous le point de
 commande, techniciens BR valide/échue, équipement BR, préventif avec anomalie…) ; les tests lisent
 ce fichier (`commun.scenarios_demo()`) au lieu de numéros figés.
+Précisions du code : date de référence `2026-10-19` (historique de septembre 2025 au 19/10/2026) ;
+le fichier de scénarios n'est écrit que pour le jeu par défaut (option `--fichier-scenarios
+CHEMIN` pour l'écrire ailleurs) ; avec `--volume`, l'historique est de 24 mois par défaut, et le
+jeu contient aussi des achats ; il crée déjà l'OT de chaque gamme échue à sa date de référence (le
+test de performance « vieillit » donc 20 gammes pour mesurer une vraie génération). Chiffres et
+options au §11.

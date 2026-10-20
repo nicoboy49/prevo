@@ -1,13 +1,13 @@
 # Prévo
 
 Prévo est une GMAO (gestion de maintenance assistée par ordinateur) pour un atelier ou une petite
-industrie : parc d'équipements, demandes d'intervention, ordres de travail. Elle tourne sans
-installation lourde ni abonnement : les données sont des fichiers CSV lisibles dans Excel, stockés
-dans un dossier de votre choix. Le code est écrit en français, avec des bibliothèques embarquées et
-aucun appel vers Internet.
+industrie : parc d'équipements, demandes d'intervention, ordres de travail, maintenance préventive
+et magasin de pièces. Elle tourne sans installation lourde ni abonnement : les données sont des
+fichiers CSV lisibles dans Excel, stockés dans un dossier de votre choix. Le code est écrit en
+français, avec des bibliothèques embarquées et aucun appel vers Internet.
 
-Cette version est le **lot 1** ; les lots suivants sont listés plus bas. Une présentation avec
-capture d'écran viendra au lot 4.
+Cette version contient les **lots 1 et 2** ; les lots suivants sont listés plus bas. Une
+présentation avec capture d'écran viendra au lot 4.
 
 ## Essayer en 30 secondes
 
@@ -59,25 +59,55 @@ quotidiennes (`donnees/sauvegardes/`) et les documents joints.
   l'affectation, bon de travail imprimable (règles RG1 à RG4, RG7, RG8).
 - Accueil par profil, Paramètres (sauvegardes, restauration, contrôle de la base, export ZIP),
   À propos.
-- Un jeu de démo fictif de six mois d'historique.
+
+## Ce que contient le lot 2
+
+- **Préventif** : gammes de maintenance déclenchées par une date, un compteur (heures,
+  kilomètres…) ou un seuil de mesure ; état de chaque gamme (échue, bientôt, à jour…) ; éditeur de
+  check-list ; calendrier des 12 prochaines semaines. À l'ouverture par un technicien ou un
+  responsable, Prévo crée l'ordre de travail de chaque gamme échue (un seul par gamme, même si
+  deux postes s'ouvrent en même temps) avec sa check-list ; la clôture de l'OT met la gamme à jour.
+  Les relevés de compteur se saisissent depuis la fiche équipement.
+- **Magasin** : articles, mouvements (entrée, sortie, retour, inventaire), stock recalculé depuis
+  les mouvements, point de commande saisi avec une valeur suggérée, liste « À commander », demandes
+  d'achat suivies de « demandée » à « reçue » (la réception fait entrer le stock), fournisseurs.
+  Une sortie qui rendrait le stock négatif est refusée.
+- **Pièces sorties depuis l'OT** : sortie et retour de pièces dans l'onglet Exécution ; le coût de
+  l'OT compte les pièces réellement sorties.
+- **Causes fréquentes** : sur les fiches DI et OT, un encart montre les causes les plus fréquentes
+  d'un même symptôme sur cet équipement (ou sur ceux de même marque et modèle), dès 5 cas. C'est
+  une statistique de l'historique, pas un diagnostic.
+- **Anomalie pendant un préventif** : depuis l'OT préventif, un clic ouvre une DI liée, et l'OT est
+  marqué « anomalie constatée ».
+- **Accueil** : compteurs « préventifs de la semaine » et « articles à commander ».
+- **Format des fichiers v2** : quatre colonnes ajoutées en fin de table (valeur de remplacement
+  d'un équipement, code symptôme et OT d'origine d'une DI, anomalie constatée d'un OT). Une base du
+  lot 1 se relit sans erreur. À sa première ouverture, Prévo fait **d'abord une sauvegarde
+  complète** (« Avant format 2 », restaurable depuis Paramètres), puis seulement passe la base au
+  format 2 ; si la sauvegarde échoue, rien n'est changé, les OT préventifs ne sont pas générés
+  automatiquement, et le tout est retenté à l'ouverture suivante.
+- Un jeu de démo fictif de treize mois d'historique.
 
 ## Ce qui vient ensuite
 
-- **Lot 2** : maintenance préventive et magasin (dont la sortie de pièces depuis l'OT).
-- **Lot 3** : indicateurs, planning, étiquettes QR, contrôles réglementaires, habilitations.
+- **Lot 3** : indicateurs, planning, étiquettes QR, contrôles réglementaires, habilitations,
+  rapport mensuel.
+- **Lot 3 bis** : préventif suggéré, à partir des anomalies constatées pendant les préventifs.
 - **Lot 4** : assistant IA, dictée vocale, `GUIDE.html`, `FICHE_TECHNIQUE_CSV.md`, présentation
   du projet avec capture d'écran.
+- **Lot « Import »** : assistant d'import de fichiers existants (dont `.xls`).
 
-Ces éléments ne sont pas encore réalisés. Les compteurs d'accueil correspondants (préventifs de la
-semaine, articles à commander, contrôles réglementaires, habilitations) arriveront avec eux.
+Ces éléments ne sont pas encore réalisés. Les compteurs d'accueil correspondants (contrôles
+réglementaires, habilitations) arriveront avec le lot 3.
 
 ## Format des données
 
-Les données sont 22 fichiers CSV : séparateur `;`, UTF-8 avec BOM, fins de ligne CRLF. Ils
-s'ouvrent et se modifient dans Excel. Comme Excel abîme certaines valeurs (zéros de tête, formules,
-fractions prises pour des dates), Prévo les protège par une apostrophe en tête de cellule et la
-retire à la lecture. À la lecture, il accepte aussi les dates écrites `JJ/MM/AAAA` par Excel.
-Les détails sont dans `docs/ARCHITECTURE.md` (§3), en attendant `FICHE_TECHNIQUE_CSV.md`.
+Les données sont 22 fichiers CSV (format v2 depuis le lot 2) : séparateur `;`, UTF-8 avec BOM,
+fins de ligne CRLF. Ils s'ouvrent et se modifient dans Excel. Comme Excel abîme certaines valeurs
+(zéros de tête, formules, fractions prises pour des dates), Prévo les protège par une apostrophe
+en tête de cellule et la retire à la lecture. À la lecture, il accepte aussi les dates écrites
+`JJ/MM/AAAA` par Excel. Les détails sont dans `docs/ARCHITECTURE.md` (§3 ; format v2 : §4 et
+§14.1), en attendant `FICHE_TECHNIQUE_CSV.md`.
 
 Ne modifiez pas un fichier dans Excel pendant que quelqu'un enregistre dans Prévo : le serveur
 signale un fichier verrouillé, et le mode dossier détecte le conflit.
@@ -100,7 +130,15 @@ minutes.
   sécurité. Toute personne qui atteint le serveur peut lire et écrire les données.
 - **Réseau local uniquement.** Le serveur n'est pas conçu pour être exposé sur Internet ; il n'a
   ni HTTPS ni gestion de comptes.
+- **Le serveur ne sert que l'application.** Il répond seulement pour `index.html`, `favicon.svg`,
+  `GUIDE.html` (quand il existera) et les dossiers `css/` et `js/` (liste blanche). Tout autre
+  fichier du dossier (`README.md`, `docs/`, `tests/`, `outils/`, `serveur.py`…) répond « introuvable »
+  (404), et le dossier `donnees/` n'est accessible que par l'API de l'application. Ce n'est pas une
+  protection des données : sans authentification, l'API reste ouverte à qui atteint le serveur.
 - **Chrome ou Edge requis pour le mode dossier** (API d'accès aux fichiers).
+- **Coût des pièces au prix actuel.** Le coût d'un OT utilise le prix actuel de l'article ; une
+  réception d'achat ne change pas ce prix (le responsable le modifie à la main), mais un changement
+  de prix modifie aussi le coût des OT passés.
 - Sur téléphone en mode serveur, la page est servie en HTTP : le scan par caméra intégrée à la
   page n'est pas proposé ; la photo passe par l'appareil photo du téléphone.
 
@@ -109,7 +147,7 @@ minutes.
 Le cahier des charges a été rédigé par Nicolas Briand avec Claude ; le code a ensuite été produit
 par des sous-agents Claude Code, sous la coordination d'un orchestrateur qui n'accepte une tâche
 que si sa vérification passe, avec relecture indépendante à chaque étape. La méthode et les
-preuves sont détaillées dans [docs/PILOTAGE.md](docs/PILOTAGE.md).
+preuves, lot 1 puis lot 2, sont détaillées dans [docs/PILOTAGE.md](docs/PILOTAGE.md).
 
 ## Licence et crédits
 

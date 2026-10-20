@@ -1,5 +1,5 @@
-"""Tests du module Ordres de travail (js/modules/ordres.js) : écrans E4 et E5, règles RG3, RG4,
-RG7 et RG8 (ARCHITECTURE.md §10), bon de travail.
+"""Tests du module Ordres de travail (js/modules/ordres-*.js, objet Ordres) : écrans E4 et E5,
+règles RG3, RG4, RG7 et RG8 (ARCHITECTURE.md §10), bon de travail.
 
 Familles (le nom du test le dit) :
     regles      : fonctions pures Ordres.* évaluées dans la page (jeu de démo en mode serveur) ;

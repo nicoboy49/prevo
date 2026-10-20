@@ -1,4 +1,4 @@
-"""Tests du module Demandes d'intervention (js/modules/demandes.js, tâche T13).
+"""Tests du module Demandes d'intervention (js/modules/demandes-*.js, objet Demandes ; tâche T13).
 
 Couvre (ARCHITECTURE.md §10 RG1 et RG2 ; brief §9 E2 et E3) :
     - la matrice de priorité RG2 (12 cas + sécurité + criticité absente), fonction pure ;

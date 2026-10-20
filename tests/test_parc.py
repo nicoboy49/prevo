@@ -1,4 +1,4 @@
-"""Tests du module Parc : js/modules/parc.js et css/modules/parc.css (tâche T12).
+"""Tests du module Parc : js/modules/parc-*.js (objet Parc) et css/modules/parc.css (tâche T12).
 
 Deux familles (le nom du test le dit) :
     demo    : index.html ouvert en file:// avec les données de démo (rien n'est écrit) ;

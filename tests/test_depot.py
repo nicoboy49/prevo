@@ -44,9 +44,20 @@ ORDRE_MODULES = [
 ]
 LIGNES_MAX_MODULE = 700   # décision D28 : aucun fichier de js/modules/ au-delà
 
+# Lecture des <script src="…"> d'une page : les commentaires HTML sont retirés d'abord (une balise
+# mise en commentaire n'est pas chargée), puis d'autres attributs sont acceptés avant src
+# (<script defer src="…">). Guillemets doubles ou simples.
+MOTIF_COMMENTAIRE_HTML = re.compile(r"<!--.*?-->", re.DOTALL)
+MOTIF_SCRIPT_SRC = re.compile(r"""<script\b[^>]*?\ssrc\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+
 
 def lire(chemin):
     return (RACINE / chemin).read_text(encoding="utf-8")
+
+
+def scripts_de_la_page(texte_html):
+    """Valeurs des <script src="…"> réellement chargés par une page HTML, dans l'ordre."""
+    return MOTIF_SCRIPT_SRC.findall(MOTIF_COMMENTAIRE_HTML.sub("", texte_html))
 
 
 class TestBibliotheques(unittest.TestCase):
@@ -109,8 +120,20 @@ class TestModules(unittest.TestCase):
 
     @staticmethod
     def scripts_index():
-        """Valeurs des <script src="…"> de index.html, dans l'ordre."""
-        return re.findall(r'<script\s+src="([^"]+)"', lire("index.html"))
+        """Valeurs des <script src="…"> réellement chargés par index.html, dans l'ordre."""
+        return scripts_de_la_page(lire("index.html"))
+
+    def test_lecture_des_scripts_ignore_les_commentaires_et_accepte_les_attributs(self):
+        page = (
+            '<script src="js/a.js"></script>\n'
+            '<!-- <script src="js/en-commentaire.js"></script> -->\n'
+            '<!--\n  <script src="js/commentaire-multiligne.js"></script>\n-->\n'
+            '<script defer src="js/b.js"></script>\n'
+            "<script type=\"text/javascript\" src='js/c.js'></script>\n"
+            '<script>\n  // script en ligne, sans src\n</script>\n'
+            '<script data-src="js/pas-un-src.js"></script>\n'
+        )
+        self.assertEqual(scripts_de_la_page(page), ["js/a.js", "js/b.js", "js/c.js"])
 
     @staticmethod
     def fichiers_modules():
@@ -141,6 +164,35 @@ class TestModules(unittest.TestCase):
             with self.subTest(fichier=fichier.name):
                 self.assertIn("js/modules/" + fichier.name, charges,
                               "fichier orphelin : js/modules/%s n'est pas chargé par index.html" % fichier.name)
+
+
+# Documents publics du dépôt : aucun chemin ni outil personnel du poste de développement
+# (lettre de lecteur Windows, dossier synchronisé, chemin Git Bash).
+DOCUMENTS_PUBLICS = ["README.md", "docs/PILOTAGE.md"]
+MOTIF_CHEMIN_PERSONNEL = re.compile(r"\b[A-Za-z]:\\|pcloud|sync[\\/]nicolas|/c/sync", re.IGNORECASE)
+
+
+def chemins_personnels(texte):
+    """Extraits du texte qui ressemblent à un chemin ou un outil personnel (liste vide sinon)."""
+    return [m.group(0) for m in MOTIF_CHEMIN_PERSONNEL.finditer(texte)]
+
+
+class TestDocumentsPublics(unittest.TestCase):
+
+    def test_pilotage_et_readme_sans_chemin_personnel(self):
+        for nom in DOCUMENTS_PUBLICS:
+            with self.subTest(document=nom):
+                texte = (RACINE / nom).read_text(encoding="utf-8")
+                self.assertEqual(chemins_personnels(texte), [], nom)
+
+    def test_pilotage_le_motif_reconnait_les_chemins_personnels(self):
+        # Le contrôle doit pouvoir échouer (un ancien contrôle par grep ne voyait pas « C:\ »).
+        for sonde in ("voir C:\\temp\\x", "dossier pCloud", "sync\\nicolas\\sites", "sync/nicolas/x", "cd /c/sync/x"):
+            with self.subTest(sonde=sonde):
+                self.assertTrue(chemins_personnels(sonde), sonde)
+        for propre in ("Remarque : lot C et D.", "https://exemple.org/a:b", "C : la criticité"):
+            with self.subTest(propre=propre):
+                self.assertEqual(chemins_personnels(propre), [], propre)
 
 
 if __name__ == "__main__":
