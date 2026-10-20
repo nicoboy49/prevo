@@ -1,2 +1,64 @@
-/* Prévo — indicateurs et onglet « Rapports mensuels » (ARCHITECTURE.md §15). Variables de la charte seulement (css/style.css).
-   Feuille d'attente (tâche T41) : la tâche du module la remplit. */
+/* Prévo — écran Indicateurs (#/indicateurs) et onglet « Rapports mensuels » (ARCHITECTURE.md §15.4).
+   Mise en page seulement : les composants (instruments, cartes, .graph, .legende, « Voir les valeurs »,
+   tables) et toutes les couleurs viennent de la charte (css/style.css, variables). */
+
+/* Filtres : période, dates, criticité, atelier */
+.indicateurs-filtres { align-items: flex-end; gap: .6rem 1rem; }
+.indicateurs-filtres .champ { flex: 1 1 180px; min-width: 0; }
+.indicateurs-filtres .champ[hidden] { display: none; }
+/* La charte donne aux listes de .filtres une base flexible ; dans un champ en colonne, elle
+   deviendrait une hauteur : on la retire. */
+.indicateurs-filtres .champ select, .indicateurs-filtres .champ input { flex: none; width: 100%; }
+.indicateurs-resume { color: var(--texte-2); margin: 0 0 12px; }
+
+/* Bandeau d'instruments : 3 × 3 sur grand écran */
+.indicateurs-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.indicateurs-instruments .chiffre { overflow-wrap: anywhere; }
+.indicateurs-instruments .comp { overflow-wrap: anywhere; }
+.indicateurs-instruments .comp + .comp { margin-top: 2px; }
+.indicateurs-attente { color: var(--texte-2); }
+
+/* Encadré « Comprendre » (replié par défaut) */
+.indicateurs-comprendre summary {
+  cursor: pointer; font-weight: 600; color: var(--texte); min-height: var(--tactile);
+  display: flex; align-items: center;
+}
+.indicateurs-comprendre ul { margin-top: .4rem; }
+.indicateurs-comprendre li + li { margin-top: .3rem; }
+.indicateurs-comprendre h3 { margin-top: .9rem; }
+
+/* Cartes des graphiques */
+.indicateurs-graphique .entete-carte { align-items: flex-start; }
+.indicateurs-exports { display: flex; gap: .4rem; flex-wrap: wrap; }
+.indicateurs-exports .btn { min-height: 38px; padding: .35rem .8rem; }
+.indicateurs-sous-titre { margin: 0 0 4px; }
+.indicateurs-note { margin-top: .4rem; }
+.indicateurs-graphique .lg-trait { width: 18px; }
+.indicateurs-graph-vide, .indicateurs-graph-erreur { padding: 12px 0; }
+.indicateurs-graph-vide .muted { margin: 0; }
+.indicateurs-valeurs { margin-top: .4rem; }
+
+/* Valeurs non calculables : la raison, en texte discret */
+.indicateurs-raison, .table td.indicateurs-raison { color: var(--muted); font-size: .875rem; white-space: normal; text-align: left; }
+.indicateurs-designation { display: block; color: var(--muted); font-size: .875rem; white-space: normal; }
+
+/* Tablette : instruments sur 2 colonnes (comme la charte) */
+@media (max-width: 1099.98px) {
+  .indicateurs-instruments { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Téléphone : zones tactiles de 48 px, filtres en colonne */
+@media (max-width: 640px) {
+  .indicateurs-filtres .champ { flex-basis: 100%; }
+  .indicateurs-exports .btn { min-height: 48px; }
+  .indicateurs-instruments .chiffre { font-size: 1.35rem; }
+  .indicateurs-graphique .entete-carte { flex-direction: column; }
+  /* Tableau par équipement : le repère suffit (lignes courtes) ; la désignation reste sur la fiche */
+  .indicateurs-designation { display: none; }
+}
+
+/* Impression : ni boutons d'export ni filtres */
+@media print {
+  .indicateurs-exports, .indicateurs-filtres { display: none !important; }
+  .indicateurs-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
