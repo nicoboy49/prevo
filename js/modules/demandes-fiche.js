@@ -79,7 +79,7 @@ Object.assign(Demandes, (() => {
             <dl class="valeurs">
               ${demande.date_decision ? UI.html`<dt>Décision le</dt><dd>${UI.dateHeureFr(demande.date_decision)}</dd>` : ''}
               ${demande.motif_decision ? UI.html`<dt>Motif</dt><dd class="di-motif-fiche">${demande.motif_decision}</dd>` : ''}
-              ${demande.ot_id ? UI.html`<dt>Ordre de travail</dt><dd><a href="#/ot/${encodeURIComponent(demande.ot_id)}">${demande.ot_id}</a>
+              ${demande.ot_id ? UI.html`<dt>Ordre de travail</dt><dd>${lienOt(demande.ot_id)}
                 ${ot ? UI.html` ${UI.badgeStatut(ot.statut)}` : ''}</dd>` : ''}
             </dl>
           </article>
@@ -109,6 +109,13 @@ Object.assign(Demandes, (() => {
     const texteLien = 'Signalée pendant l\'OT préventif ' + otId;
     return App.estDemandeur() ? UI.html`${texteLien}`
       : UI.html`<a class="di-lien-origine" href="#/ot/${encodeURIComponent(otId)}">${texteLien}</a>`;
+  }
+
+  /** OT de la demande (bloc « Suivi ») : lien, sauf pour le demandeur (pas d'accès aux OT : un clic
+   *  le renverrait à l'accueil) qui voit le même identifiant en texte simple. */
+  function lienOt(otId) {
+    return App.estDemandeur() ? UI.html`${otId}`
+      : UI.html`<a href="#/ot/${encodeURIComponent(otId)}">${otId}</a>`;
   }
 
   // La photo est lue de façon asynchrone (URL du serveur ou URL d'objet en dossier / démo).

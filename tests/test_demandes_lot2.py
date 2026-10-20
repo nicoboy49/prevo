@@ -15,6 +15,8 @@ Couvre, en mode serveur sur une copie du jeu de démo (identifiants lus dans sce
       garde son lien, l'OT n'est jamais modifié (octets de sa ligne, journal), bandeau et
       confirmation le disent ; OT annulé sur un autre poste après l'ouverture du formulaire → pas
       marqué non plus (contrôle sur la ligne fraîche, après le conflit d'écriture) ;
+    - suivi : bloc « Suivi » d'une DI acceptée : l'OT est un lien pour le technicien et le
+      responsable, son identifiant en texte simple pour le demandeur (aucun lien #/ot) ;
     - téléphone 375 px sans défilement horizontal.
 
 Lancer depuis la racine du projet :
@@ -40,6 +42,8 @@ DI_INSUFFISANTE = SCENARIOS["di_causes_insuffisantes"]
 DI_SANS_CODE = SCENARIOS["di_sans_symptome_code"]
 OT_PREVENTIF_OUVERT = SCENARIOS["ot_preventif_ouvert"]
 OT_PREVENTIF_VERROUILLE = SCENARIOS["ot_preventif_cloture"]      # préventif « Clôturé administrativement »
+DI_ACCEPTEE = SCENARIOS["di_statut_acceptee"]                   # DI « Acceptée », avec son OT
+OT_DE_DI_ACCEPTEE = SCENARIOS["ot_de_di_acceptee"]
 
 STATUTS_CLOTURES = ("Clôturé techniquement", "Clôturé administrativement")
 STATUTS_VERROUILLES = ("Clôturé administrativement", "Annulé")    # RG3 : OT jamais modifié
@@ -545,6 +549,52 @@ class TestVerrou(CasDemandesLot2):
             self.assertEqual(journal_de_la_ligne(dossier, "ordres_travail", OT_PREVENTIF_OUVERT), journal_annule)
             self.assertIn("L'OT %s est verrouillé : il n'a pas été marqué « anomalie constatée »" % OT_PREVENTIF_OUVERT,
                           self.texte(".di-confirmation"))
+
+
+# ---------------------------------------------------------------------------
+# suivi : bloc « Suivi » de la fiche, OT de la demande (T38)
+# ---------------------------------------------------------------------------
+
+class TestSuivi(CasDemandesLot2):
+
+    def lire_suivi(self):
+        return self.page.evaluate("""() => {
+            const bloc = document.querySelector('.di-suivi');
+            return {
+              texte: bloc ? bloc.textContent.replace(/\\s+/g, ' ').trim() : null,
+              liens_suivi: bloc ? Array.from(bloc.querySelectorAll('a')).map((a) => a.getAttribute('href')) : [],
+              // Tout lien vers les écrans des OT, n'importe où dans la page (fiche, encart, origine)
+              liens_ot: Array.from(document.querySelectorAll('#contenu a[href^="#/ot"]')).map((a) => a.getAttribute('href')),
+            };
+        }""")
+
+    def test_suivi_ot_de_la_di_acceptee_en_texte_pour_le_demandeur_lien_pour_les_autres(self):
+        """Le demandeur n'a pas accès aux OT : l'identifiant de l'OT de sa demande est affiché en
+        texte simple (un lien le renverrait à l'accueil) ; technicien et responsable gardent le lien."""
+        preregler_profil(self.contexte, "demandeur", "Lucie Martin")
+        with ServeurPrevo() as serveur:
+            demande = ligne_par_id(serveur.dossier / "demandes.csv", DI_ACCEPTEE)
+            self.assertEqual((demande["statut"], demande["ot_id"]), ("Acceptée", OT_DE_DI_ACCEPTEE))
+            self.assertIsNotNone(ligne_par_id(serveur.dossier / "ordres_travail.csv", OT_DE_DI_ACCEPTEE))
+
+            self.ouvrir(serveur, "#/accueil")
+            for type_profil, nom, technicien in (("demandeur", "Lucie Martin", ""), ("technicien", "", TECHNICIEN),
+                                                 ("responsable", "", "")):
+                with self.subTest(profil=type_profil):
+                    if type_profil != "demandeur":
+                        self.changer_profil(type_profil, nom, technicien)
+                    self.assertEqual(self.page.evaluate("App.profil.type"), type_profil)
+                    self.ouvrir_fiche(DI_ACCEPTEE)
+                    suivi = self.lire_suivi()
+                    self.assertIsNotNone(suivi["texte"])
+                    # Même contenu pour tous : la rubrique et l'identifiant de l'OT
+                    self.assertIn("Ordre de travail", suivi["texte"])
+                    self.assertIn(OT_DE_DI_ACCEPTEE, suivi["texte"])
+                    if type_profil == "demandeur":
+                        self.assertEqual(suivi["liens_ot"], [], "lien vers un OT montré au demandeur")
+                        self.assertEqual(suivi["liens_suivi"], [], "lien dans le bloc « Suivi » du demandeur")
+                    else:
+                        self.assertIn("#/ot/" + OT_DE_DI_ACCEPTEE, suivi["liens_suivi"])
 
 
 # ---------------------------------------------------------------------------
