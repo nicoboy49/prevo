@@ -1173,9 +1173,9 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
 - **Panne** : OT `correctif immédiat` / `correctif différé`, `arret_production` = 1, statut ≠ `Annulé`.
   Date de panne = `date_heure` de la DI d'origine, sinon `date_creation` de l'OT ; la panne compte
   dans la période qui contient cette date. Écart retenu (correction de relecture) : la DI d'origine
-  est celle que l'OT désigne (`di_id`) ; à défaut, parmi les DI dont `ot_id` est l'OT, celle au statut
-  `Acceptée`, sinon la plus ancienne — jamais une DI `Regroupée` après coup (elle daterait la panne
-  et les délais de prise en charge trop tard).
+  est celle que l'OT désigne (`di_id`) ; à défaut, parmi les DI dont `ot_id` est l'OT, la plus ancienne
+  au statut `Acceptée` ; jamais une DI `Regroupée` après coup (elle daterait la panne et les délais de
+  prise en charge trop tard) : sans DI d'origine, c'est la création de l'OT qui date la panne.
   `Indicateurs.pannes(periode, { equipementId })` → `[{ ot, date, duree (nombre | null), attente }]`.
 - **Temps requis** (`tempsRequis(equipement, periode)`) = `heures_fonct_jour` × jours calendaires de
   la période comptés à partir de `date_mes` si elle est postérieure au début ; équipement `rebut` ou
@@ -1245,6 +1245,8 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   historique complet) » quand calculable), durée d'arrêt, part et respect du préventif, OT en retard,
   coût, valeur du stock ; chaque valeur `null` affiche sa raison ; effectifs visibles ; jamais
   `NaN`, `Infinity`, `undefined`. Encadré « Comprendre » : les définitions du §15.3 en français simple.
+  Écart retenu (D35, correction de relecture) : sous chaque chiffre qui a des OT sources, une liste
+  repliée « n OT sources · n OT exclus » donne un lien par OT (40 au plus) et la raison des exclus.
 - Tableau par équipement (repère, criticité, pannes, arrêt, MTBF, MTTR, disponibilité, coût), tri
   par clic, lien vers la fiche.
 - `Indicateurs.graphique(conteneur, { titre, option, colonnes, lignes, nomFichier })` :

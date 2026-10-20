@@ -217,14 +217,15 @@ const Indicateurs = (() => {
     const ordres = Donnees.lignes('ordres_travail');
     const demandes = Donnees.lignes('demandes');
     // DI d'origine d'un OT (D35) : celle que l'OT désigne (di_id) ; à défaut, parmi les DI qui
-    // pointent vers lui (ot_id), celle qui a été acceptée, sinon la plus ancienne. Jamais une DI
-    // regroupée plus tard sur l'OT : elle daterait la panne trop tard (correction de relecture).
+    // pointent vers lui (ot_id), la plus ancienne qui a été acceptée. Une DI regroupée plus tard sur
+    // l'OT n'est jamais l'origine (elle daterait la panne trop tard) : sans DI d'origine, la panne
+    // est datée par la création de l'OT (corrections de relecture).
     const demandesParId = new Map(demandes.map((di) => [di.id, di]));
     const versOt = grouper(demandes.filter((di) => texte(di.ot_id)), 'ot_id');
     const diParOt = new Map();
     ordres.forEach((ot) => {
       const candidates = (versOt.get(ot.id) || []).slice().sort((a, b) => texte(a.date_heure).localeCompare(texte(b.date_heure)));
-      const origine = demandesParId.get(texte(ot.di_id)) || candidates.find((di) => texte(di.statut) === 'Acceptée') || candidates[0];
+      const origine = demandesParId.get(texte(ot.di_id)) || candidates.find((di) => texte(di.statut) === 'Acceptée');
       if (origine) diParOt.set(ot.id, origine);
     });
     const journal = Donnees.lignes('journal').filter((entree) => texte(entree.table) === 'ordres_travail');

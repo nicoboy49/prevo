@@ -59,7 +59,8 @@ DEMANDES = csv("id;date_heure;equipement_id;statut;ot_id", [
     "DI-2026-0001;2026-03-01 08:00;EQ-0001;Acceptée;OT-2026-0001",
     "DI-2026-0002;2026-03-01 18:00;EQ-0001;Regroupée;OT-2026-0001",   # regroupée après coup : ne date pas la panne
     "DI-2026-0003;2026-03-10 07:00;EQ-0001;Acceptée;OT-2026-0002",    # OT-0002 sans di_id : la DI acceptée compte
-    "DI-2026-0004;2026-03-10 11:00;EQ-0001;Regroupée;OT-2026-0002"])
+    "DI-2026-0004;2026-03-10 11:00;EQ-0001;Regroupée;OT-2026-0002",
+    "DI-2026-0005;2026-03-21 08:00;EQ-0001;Regroupée;OT-2026-0003"])  # seule DI de OT-0003 : regroupée, ne date pas
 CODES = csv("id;famille;code;libelle", ["CD-0001;cause;C01;Roulement usé", "CD-0002;cause;C02;Joint fuyard"])
 GAMMES = csv("id;equipement_id;libelle;declencheur;periodicite_jours;compteur_id;periodicite_unites;actif", [
     "GAM-0001;EQ-0001;Graissage;date;30;;;1",
@@ -191,6 +192,7 @@ class TestFiabilite(CasIndicateurs):
 
     def test_pannes_datees_par_la_di_et_filtrees(self):
         pannes = self.js("(p) => Indicateurs.pannes(periodeDe(...p), { equipementId: 'EQ-0001' }).map((x) => [x.ot.id, x.date, x.duree])", MARS)
+        # OT-0003 n'a qu'une DI regroupée (21/03) : datée par sa création (20/03), relecture
         self.assertEqual(pannes, [["OT-2026-0001", "2026-03-01 08:00", 20], ["OT-2026-0002", "2026-03-10 07:00", 6],
                                   ["OT-2026-0003", "2026-03-20 08:00", None]])
 
@@ -396,8 +398,7 @@ class CalculPython:
                 vers_ot.setdefault(brut(di["ot_id"]), []).append(di)
         for ot in self.ordres:
             candidates = sorted(vers_ot.get(ot["id"], []), key=lambda di: brut(di["date_heure"]))
-            origine = par_id.get(brut(ot["di_id"])) or next((di for di in candidates if di["statut"] == "Acceptée"), None) \
-                or (candidates[0] if candidates else None)
+            origine = par_id.get(brut(ot["di_id"])) or next((di for di in candidates if di["statut"] == "Acceptée"), None)
             if origine:
                 self.di_par_ot[ot["id"]] = origine
         self.journal = {}
