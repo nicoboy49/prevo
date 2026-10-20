@@ -1,6 +1,232 @@
 'use strict';
-// Rapport (2/2) — figer, onglet « Rapports mensuels », proposition de l'accueil (ARCHITECTURE.md §15).
-//
-// FICHIER D'ATTENTE (tâche T41) : il n'ajoute rien à l'objet Rapport. La tâche T51 le remplace.
+// Rapport (2/2) — figer un rapport mensuel (document HTML daté, jamais écrasé : « Recalculer » crée
+// une révision), onglet « Rapports mensuels » de l'écran Indicateurs, bandeau de l'accueil qui
+// propose de figer le mois écoulé (ARCHITECTURE.md §15.10 ; CDC du lot 3, D43 à D45).
+//   4. Figer : écriture du document, liste rapports_mensuels (parametres.csv), journal
+//   5. Onglet « Rapports mensuels » : figer un mois, ouvrir, imprimer, recalculer, télécharger (démo)
+//   6. Bandeau de l'accueil (responsable) : « Figer » ou « Plus tard » ; rien n'est écrit sans clic
+// Complète l'objet Rapport créé par rapport-contenu.js.
 
-Object.assign(Rapport, (() => ({}))());
+Object.assign(Rapport, (() => {
+
+  const { texte, libelleMois, decalerMois, lienCourriel, estCouvert } = Rapport.interne;
+  const ESSAIS_DE_NOM = 50;
+  const CLE_PLUS_TARD = 'prevo.rapport.plusTard';     // sessionStorage : mois reporté à plus tard
+  const MOTIF_NOM = /^rapport-mensuel-(\d{4}-\d{2})(?:-r(\d+))?\.html$/;
+
+  // ===========================================================================================
+  // 4. Figer
+  // ===========================================================================================
+
+  /** 'rapport-mensuel-2026-09.html', puis '…-r2.html', '…-r3.html'… */
+  function nomFichier(mois, revision) {
+    return Rapport.PREFIXE_FICHIER + mois + (revision > 1 ? '-r' + revision : '') + '.html';
+  }
+
+  /** Le stockage refuse le nom parce qu'un document le porte déjà (jamais d'écrasement). */
+  function estNomPris(erreur) {
+    return erreur instanceof Donnees.ErreurStockage && /existe déjà|porte déjà ce nom/.test(erreur.message);
+  }
+
+  /**
+   * Fige le rapport d'un mois 'AAAA-MM' → { nom, rapport }. Le document est écrit par l'adaptateur
+   * de stockage (donnees/documents/ en modes serveur et dossier, mémoire en démo) sous un nom libre :
+   * le premier de la série qui n'est ni dans rapports_mensuels ni déjà sur le disque. Puis le nom
+   * est ajouté à rapports_mensuels (une écriture de parametres.csv, journalisée).
+   */
+  async function figer(mois, options) {
+    if (!/^\d{4}-\d{2}$/.test(texte(mois))) throw new Donnees.ErreurValidation('Mois invalide : « ' + mois + ' ».');
+    const reglages = options || {};
+    const rapport = Rapport.donnees(mois, reglages.aujourdhui, reglages.maintenant);
+    const page = await Rapport.html(mois, { donnees: rapport });
+    const dejaFiges = Rapport.rapportsFiges();
+    let revision = 1;
+    while (dejaFiges.includes(nomFichier(mois, revision))) revision += 1;
+    let nom = null;
+    for (let essai = 0; essai < ESSAIS_DE_NOM && !nom; essai += 1) {
+      try {
+        nom = await App.adaptateur.ecrireDocument(nomFichier(mois, revision + essai), new Blob([page], { type: 'text/html;charset=utf-8' }));
+      } catch (erreur) {
+        if (!estNomPris(erreur)) throw erreur;
+      }
+    }
+    if (!nom) throw new Donnees.ErreurStockage('Aucun nom libre pour le rapport de ' + libelleMois(mois) + '.');
+    await Donnees.modifier('parametres', (lignes) => {
+      let ligne = lignes.find((candidate) => candidate.cle === 'rapports_mensuels');
+      if (!ligne) { ligne = { cle: 'rapports_mensuels', valeur: '' }; lignes.push(ligne); }
+      const liste = texte(ligne.valeur).split(',').map(texte).filter(Boolean);
+      if (!liste.includes(nom)) liste.push(nom);
+      ligne.valeur = liste.join(',');
+    }, { action: 'rapport mensuel figé : ' + nom });
+    return { nom, rapport };
+  }
+
+  // ===========================================================================================
+  // 5. Onglet « Rapports mensuels »
+  // ===========================================================================================
+
+  /** Mois que l'on peut figer : les 24 derniers mois couverts par l'historique, du plus récent. */
+  function moisProposables() {
+    const courant = Donnees.aujourdhui().slice(0, 7);
+    const liste = [];
+    for (let rang = 1; rang <= 24; rang += 1) {
+      const mois = decalerMois(courant, -rang);
+      if (estCouvert(mois)) liste.push(mois);
+    }
+    return liste;
+  }
+
+  function lignesDesRapports() {
+    return Rapport.rapportsFiges().map((nom) => Object.assign({ nom }, (() => {
+      const morceaux = MOTIF_NOM.exec(nom);
+      return morceaux ? { mois: morceaux[1], revision: Number(morceaux[2] || 1) } : { mois: '', revision: 1 };
+    })())).reverse();
+  }
+
+  /** Ouvre le document dans un nouvel onglet (rouvrable sans Prévo). */
+  async function ouvrir(nom) {
+    const adresse = await App.adaptateur.urlDocument(nom);
+    if (!adresse) throw new Donnees.ErreurStockage('Le rapport ' + nom + ' est introuvable dans les documents.');
+    window.open(adresse, '_blank', 'noopener');
+  }
+
+  /** Imprime le document : il est affiché dans un cadre isolé (aucun script n'y tourne), puis imprimé. */
+  async function imprimer(nom) {
+    const blob = await App.adaptateur.lireDocument(nom);
+    if (!blob) throw new Donnees.ErreurStockage('Le rapport ' + nom + ' est introuvable dans les documents.');
+    const cadre = document.createElement('iframe');
+    cadre.setAttribute('sandbox', 'allow-same-origin allow-modals');
+    cadre.className = 'rapport-cadre-impression';
+    cadre.title = 'Impression du rapport ' + nom;
+    cadre.srcdoc = await blob.text();
+    cadre.addEventListener('load', () => {
+      cadre.contentWindow.print();
+      setTimeout(() => cadre.remove(), 1000);
+    }, { once: true });
+    document.body.appendChild(cadre);
+  }
+
+  async function telecharger(nom) {
+    const blob = await App.adaptateur.lireDocument(nom);
+    if (!blob) throw new Donnees.ErreurStockage('Le rapport ' + nom + ' est introuvable.');
+    UI.telecharger(nom, blob);
+  }
+
+  function messageFige(resultat) {
+    return UI.html`<b>Rapport de ${resultat.rapport.libelleMois} figé :</b> ${resultat.nom}.
+      <a href="${lienCourriel(resultat.rapport)}">Préparer un courriel</a> (votre messagerie s'ouvre avec le résumé ; rien n'est envoyé par Prévo).`;
+  }
+
+  function afficherOnglet(conteneur) {
+    const proposables = moisProposables();
+    const rapports = lignesDesRapports();
+    const demo = App.mode === 'demo';
+    UI.remplir(conteneur, UI.html`<div class="rapports">
+      <div id="rapports-message"></div>
+      <article class="carte rapports-figer">
+        <div class="entete-carte"><h2>Figer un rapport mensuel</h2></div>
+        <p class="note">Une page A4 pour la direction : disponibilité, coût, part du préventif (comparés au mois précédent
+          et à l'année précédente), faits marquants, décisions proposées. Le rapport est enregistré dans les documents
+          (fichier HTML rouvrable sans Prévo, imprimable en PDF) et n'est jamais écrasé : « Recalculer » crée une révision.</p>
+        ${proposables.length ? UI.html`<form class="rapports-formulaire" data-hors-saisie>
+          <div class="champ"><label class="libelle" for="rapports-mois">Mois</label>
+            <select id="rapports-mois">${proposables.map((mois) => UI.html`<option value="${mois}">${libelleMois(mois)}</option>`)}</select></div>
+          <button type="submit" class="btn btn-primaire">Figer le rapport</button>
+        </form>` : UI.html`<p>Aucun mois complet dans l'historique pour l'instant.</p>`}
+      </article>
+      <article class="carte rapports-liste">
+        <div class="entete-carte"><h2>Rapports figés</h2><span class="badge ${rapports.length ? 'info' : 'neutre'}">${rapports.length}</span></div>
+        ${rapports.length ? UI.html`<div class="cadre-tableau"><table class="table">
+          <thead><tr><th scope="col">Mois</th><th scope="col">Fichier</th><th scope="col">Actions</th></tr></thead>
+          <tbody>${rapports.map((ligne) => UI.html`<tr data-nom="${ligne.nom}">
+            <td>${ligne.mois ? libelleMois(ligne.mois) : '—'}${ligne.revision > 1 ? UI.html` <span class="badge neutre">révision ${ligne.revision}</span>` : ''}</td>
+            <td><code>${ligne.nom}</code></td>
+            <td class="actions">
+              <button type="button" class="btn btn-secondaire" data-action="ouvrir" data-nom="${ligne.nom}">Ouvrir</button>
+              <button type="button" class="btn btn-secondaire" data-action="imprimer" data-nom="${ligne.nom}">Imprimer</button>
+              ${ligne.mois ? UI.html`<button type="button" class="btn btn-fantome" data-action="recalculer" data-mois="${ligne.mois}">Recalculer</button>` : ''}
+              ${demo ? UI.html`<button type="button" class="btn btn-fantome" data-action="telecharger" data-nom="${ligne.nom}">Télécharger</button>` : ''}
+            </td></tr>`)}</tbody></table></div>`
+          : UI.vide('Aucun rapport figé', 'Figez le mois écoulé pour garder sa photographie.', 'indicateurs')}
+      </article></div>`);
+    const racine = conteneur.querySelector('.rapports');
+    const message = (type, contenu) => UI.remplir(racine.querySelector('#rapports-message'), UI.bandeau(type, contenu));
+    const formulaire = racine.querySelector('.rapports-formulaire');
+    if (formulaire) {
+      formulaire.addEventListener('submit', async (evenement) => {
+        evenement.preventDefault();
+        await executer(formulaire.querySelector('button'), () => figer(formulaire.querySelector('#rapports-mois').value), conteneur, message);
+      });
+    }
+    racine.addEventListener('click', async (evenement) => {
+      const bouton = evenement.target.closest && evenement.target.closest('button[data-action]');
+      if (!bouton || bouton.closest('form')) return;
+      const actions = {
+        ouvrir: () => ouvrir(bouton.dataset.nom), imprimer: () => imprimer(bouton.dataset.nom),
+        telecharger: () => telecharger(bouton.dataset.nom),
+      };
+      if (bouton.dataset.action === 'recalculer') {
+        await executer(bouton, () => figer(bouton.dataset.mois), conteneur, message);
+      } else if (actions[bouton.dataset.action]) {
+        try { await actions[bouton.dataset.action](); } catch (erreur) { App.signalerErreur(erreur, 'rapport ' + bouton.dataset.nom); }
+      }
+    });
+  }
+
+  /** Fige (ou recalcule) puis réaffiche l'onglet avec le message de réussite. */
+  async function executer(bouton, action, conteneur, message) {
+    bouton.disabled = true;
+    try {
+      const resultat = await action();
+      UI.toast('Rapport figé : ' + resultat.nom, 'succes');
+      afficherOnglet(conteneur);
+      UI.remplir(conteneur.querySelector('#rapports-message'), UI.bandeau('succes', messageFige(resultat)));
+    } catch (erreur) {
+      if (erreur instanceof Donnees.ErreurValidation) message('important', erreur.message);
+      else App.signalerErreur(erreur, 'rapport mensuel');
+    } finally {
+      if (document.contains(bouton)) bouton.disabled = false;
+    }
+  }
+
+  // ===========================================================================================
+  // 6. Bandeau de l'accueil (responsable)
+  // ===========================================================================================
+
+  function moisReporte() {
+    try { return sessionStorage.getItem(CLE_PLUS_TARD) || ''; } catch (erreur) { return ''; }
+  }
+
+  /**
+   * Bandeau « Le rapport de <mois> n'est pas encore figé » (élément DOM) ou null : responsable
+   * seulement, mois proposé par Rapport.moisAProposer, sauf s'il a été reporté (« Plus tard ») pendant
+   * cette ouverture de Prévo. Rien n'est écrit sans clic sur « Figer ».
+   */
+  function bandeauAccueil() {
+    if (!App.estResponsable()) return null;
+    const mois = Rapport.moisAProposer(Donnees.aujourdhui());
+    if (!mois || moisReporte() === mois) return null;
+    const bloc = UI.bandeau('info', UI.html`<b>Le rapport de ${libelleMois(mois)} n'est pas encore figé.</b>
+      Figez-le pour garder une photographie du mois (une page A4, rouvrable sans Prévo).
+      <div class="actions"><button type="button" class="btn btn-primaire" data-action="figer-rapport">Figer le rapport de ${libelleMois(mois)}</button>
+      <button type="button" class="btn btn-fantome" data-action="rapport-plus-tard">Plus tard</button></div>`);
+    bloc.id = 'bandeau-rapport';
+    bloc.querySelector('[data-action="figer-rapport"]').addEventListener('click', async (evenement) => {
+      evenement.currentTarget.disabled = true;
+      try {
+        const resultat = await figer(mois);
+        UI.toast('Rapport figé : ' + resultat.nom, 'succes');
+        await App.reafficher();
+      } catch (erreur) {
+        App.signalerErreur(erreur, 'rapport mensuel');
+      }
+    });
+    bloc.querySelector('[data-action="rapport-plus-tard"]').addEventListener('click', () => {
+      try { sessionStorage.setItem(CLE_PLUS_TARD, mois); } catch (erreur) { /* stockage refusé : le bandeau disparaît quand même */ }
+      bloc.remove();
+    });
+    return bloc;
+  }
+
+  return { figer, afficherOnglet, bandeauAccueil };
+})());

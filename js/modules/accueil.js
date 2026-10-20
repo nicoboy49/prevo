@@ -360,6 +360,12 @@ const Accueil = (() => {
     else if (App.estTechnicien()) contenu = accueilTechnicien();
     else contenu = accueilDemandeur();
     UI.remplir(conteneur, UI.html`${contenu}${adresses === null ? '' : carteConnexion(adresses)}`);
+    // Lot 3 (§15.9) : le responsable se voit proposer de figer le rapport du mois écoulé (rien n'est
+    // écrit sans son clic). Rapport est chargé après ce fichier : appelé au moment de l'affichage.
+    const bandeauRapport = App.estResponsable() && typeof Rapport !== 'undefined' && typeof Rapport.bandeauAccueil === 'function'
+      ? Rapport.bandeauAccueil() : null;
+    const entete = conteneur.querySelector('.entete-page');
+    if (bandeauRapport && entete) entete.after(bandeauRapport);
   }
 
   // App est chargé après les modules : l'écran est enregistré une fois la page lue.
