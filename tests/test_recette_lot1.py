@@ -35,8 +35,11 @@ import unittest
 from pathlib import Path
 
 from commun import (CasNavigateur, RACINE, ServeurPrevo, attendre_pret, preregler_profil,
-                    url_fichier)
+                    scenarios_demo, url_fichier)
 from test_demandes import dimensions_jpeg, fichier_png
+
+# Identifiants des objets de scénario du jeu de démo (outils/generer_demo.py, ARCHITECTURE.md §14.8).
+SCENARIOS = scenarios_demo()
 
 # Chromium écrit « Failed to load resource » (console.error) pour toute réponse HTTP >= 400.
 # Seul le scénario « conflit » provoque un 409, et seulement sur demandes.csv :
@@ -350,7 +353,7 @@ class TestRecettePompe(CasRecette):
 
 class TestRecetteRas(CasRecette):
 
-    OT = "OT-2026-0108"      # En cours, P1, CP-01
+    OT = SCENARIOS["ot_p1_ouvert"]      # En cours, P1, CP-01
 
     def jouer(self):
         page = self.page
@@ -660,9 +663,9 @@ class TestRecetteDesign(CasRecette):
         ("#/accueil", "#contenu .instruments"),
         ("#/di/nouvelle", ".di-formulaire"),
         ("#/equipement/EQ-0005", ".parc-qr-carte"),
-        ("#/ot/OT-2026-0108", ".ot-fiche .ot-numero"),
-        ("#/ot/OT-2026-0097", ".ot-fiche .ot-numero"),
-        ("#/di/DI-2026-0071", ".di-details"),
+        ("#/ot/" + SCENARIOS["ot_p1_ouvert"], ".ot-fiche .ot-numero"),
+        ("#/ot/" + SCENARIOS["ot_statut_prepare"], ".ot-fiche .ot-numero"),
+        ("#/di/" + SCENARIOS["di_nouvelle_degradee"], ".di-details"),
         ("#/ot", ".ot-liste-cartes .liste-cartes"),
     )
 

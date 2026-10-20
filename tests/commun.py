@@ -11,6 +11,7 @@ Contenu :
     attendre_pret(page)         attend document.documentElement.dataset.etat === 'pret'
     installer_dossier_simule()  remplace showDirectoryPicker par un sous-dossier OPFS
     charger_scripts(...)        ouvre page-vide.html (file://) et y ajoute des scripts du projet
+    scenarios_demo()            identifiants des objets de scénario du jeu de démo (rôle -> identifiant)
 
 Bibliothèque standard + Playwright (Python) ; Playwright n'est importé que s'il est installé :
 les tests qui n'ont pas besoin du navigateur (serveur, dépôt) marchent sans lui.
@@ -42,9 +43,29 @@ except ImportError:  # pragma: no cover
 RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
 PAGE_VIDE = RACINE / "tests" / "fixtures" / "page-vide.html"
+FICHIER_SCENARIOS = RACINE / "tests" / "fixtures" / "demo-scenarios.json"
 
 # Valeur par défaut de ServeurPrevo(source=...) : « le jeu de démo s'il existe, sinon vide ».
 SOURCE_AUTO = "auto"
+
+
+# ---------------------------------------------------------------------------
+# Identifiants de scénario du jeu de démo (ARCHITECTURE.md §14.8)
+# ---------------------------------------------------------------------------
+
+@functools.lru_cache(maxsize=1)
+def _texte_scenarios():
+    return FICHIER_SCENARIOS.read_text(encoding="utf-8")
+
+
+def scenarios_demo():
+    """Identifiants des objets de scénario du jeu de démo : { rôle: identifiant | [identifiants] }.
+
+    Écrit par outils/generer_demo.py (tests/fixtures/demo-scenarios.json, rôles décrits dans sa
+    docstring), lu une seule fois. Chaque appel rend une copie neuve : un test peut la modifier sans
+    gêner les autres. Exemple : scenarios_demo()["ot_p1_ouvert"] -> identifiant du seul OT P1 ouvert.
+    """
+    return json.loads(_texte_scenarios())
 
 
 # ---------------------------------------------------------------------------

@@ -3,22 +3,97 @@
 """Générateur du jeu de démo de Prévo (docs/ARCHITECTURE.md §11, brief §13).
 
 Ce script fabrique, de façon REPRODUCTIBLE (graine fixe, date de référence fixe), un atelier
-fictif complet : équipements, techniciens, articles, gammes, six mois d'historique de pannes et de
-préventif... Aucune personne ni entreprise réelle : tous les noms sont inventés.
+fictif complet : équipements, techniciens, articles, gammes, treize mois d'historique de pannes, de
+préventif, de mouvements de stock et d'achats... Aucune personne ni entreprise réelle : tous les
+noms sont inventés.
 
 Sorties par défaut :
-    donnees/demo/<table>.csv    les 22 fichiers CSV (format ARCHITECTURE.md §3.1)
-    js/demo-donnees.js          les mêmes textes, prêts à être chargés par la page (mode démo)
+    donnees/demo/<table>.csv          les 22 fichiers CSV (format ARCHITECTURE.md §3.1)
+    js/demo-donnees.js                les mêmes textes, prêts à être chargés par la page (mode démo)
+    tests/fixtures/demo-scenarios.json  identifiants des objets de scénario (voir plus bas)
 
 Utilisation (depuis la racine du projet) :
-    py outils/generer_demo.py                          jeu de démo, 6 mois d'historique
-    py outils/generer_demo.py --mois 13                historique plus long (13 mois)
-    py outils/generer_demo.py --sans-js                CSV seulement
+    py outils/generer_demo.py                          jeu de démo, 13 mois d'historique
+    py outils/generer_demo.py --mois 6                 historique plus court (6 mois)
+    py outils/generer_demo.py --sans-js                CSV (et identifiants de scénario) seulement
     py outils/generer_demo.py --volume 500,5000 --sortie C:\\temp\\charge
                                                        jeu de charge (500 équipements, 5 000 OT, 24 mois)
 
-Le script s'auto-vérifie (clés étrangères, listes de valeurs, règles RG1 à RG4, stock) et
+Le script s'auto-vérifie (clés étrangères, listes de valeurs, règles RG1 à RG6, stock, scénarios) et
 s'arrête avec un message clair au moindre défaut.
+
+Identifiants de scénario (tests/fixtures/demo-scenarios.json, ARCHITECTURE.md §14.8)
+-----------------------------------------------------------------------------------
+Écrit seulement pour le jeu de démo par défaut (ni avec --sortie, ni avec --volume ; l'option
+--fichier-scenarios l'écrit ailleurs). Les tests lisent ce fichier (tests/commun.py,
+scenarios_demo()) au lieu d'écrire des numéros d'OT ou de DI en dur. Chaque clé désigne une ligne
+du jeu (ou une liste triée de lignes, ou un code) qui a la propriété annoncée :
+
+  OT par statut et OT remarquables (table ordres_travail)
+    ot_statut_cree                   OT « Créé » : le préventif de la gamme compteur échue de CH-01
+    ot_statut_prepare                OT correctif « Préparé », en retard (VE-02, P4)
+    ot_statut_planifie               OT correctif « Planifié », pas en retard (CU-01)
+    ot_statut_en_cours               OT correctif « En cours », P2, qui porte une DI regroupée (EM-01)
+    ot_statut_en_attente             OT « En attente » (motif pièce), en retard (AE-02)
+    ot_statut_cloture_technique      OT « Clôturé techniquement » le plus récent
+    ot_statut_cloture_administratif  OT « Clôturé administrativement » le plus récent
+    ot_statut_annule                 OT « Annulé » (doublon, motif d'annulation renseigné)
+    ot_p1_ouvert                     le seul OT P1 ouvert : CP-01 en cours de dépannage
+    ot_en_retard                     liste : OT ouverts dont la date prévue est passée (date de référence)
+    ot_en_cours_regroupe             le seul OT ouvert de son équipement, « En cours », avec une DI regroupée
+    ot_preventif_ouvert              OT préventif ouvert « Planifié » et en retard (CN-01, TEC-0004)
+    ot_preventif_cloture             le plus ancien OT préventif clôturé
+    ot_fuite_garniture_po02          dernière fuite de garniture de PO-02 : correctif clôturé, 1 kit prévu
+    ot_de_di_acceptee                OT créé par la DI di_statut_acceptee
+    preventif_anomalie               OT préventif clôturé avec anomalie constatée, DI liée acceptée (PR-01)
+    preventif_anomalie_nouvelle      OT préventif clôturé avec anomalie constatée, DI liée « Nouvelle » (GF-01)
+    ot_correctif_anomalie            correctif clôturé, issu de la DI liée de preventif_anomalie
+  DI (table demandes)
+    di_statut_nouvelle               une DI « Nouvelle » (ET-01)
+    di_statut_acceptee               la plus ancienne DI « Acceptée » (avec son OT)
+    di_acceptee_autre                la deuxième DI « Acceptée » (avec son OT)
+    di_statut_regroupee              DI « Regroupée » sur ot_en_cours_regroupe
+    di_statut_differee               DI « Différée » (motif renseigné, CV-01)
+    di_statut_refusee                la seule DI « Refusée » (motif renseigné, CU-01)
+    di_nouvelles                     liste : toutes les DI « Nouvelle »
+    di_securite                      DI « Nouvelle » d'impact sécurité (AE-04, donc P1)
+    di_nouvelle_p4                   DI « Nouvelle », criticité C × gêne = P4 (PO-03)
+    di_nouvelle_sans_ot_ouvert       DI « Nouvelle » d'un équipement sans OT ouvert, P4 (ET-01)
+    di_nouvelle_degradee             DI « Nouvelle » d'impact dégradé (PR-01, demandeur Sarah Colin)
+    di_plus_ancienne                 DI de plus petit numéro (première ligne du fichier), acceptée
+    di_anomalie_acceptee             DI liée (ot_origine_id) à preventif_anomalie, acceptée
+    di_anomalie_nouvelle             DI liée (ot_origine_id) à preventif_anomalie_nouvelle, « Nouvelle »
+    di_causes_equipement             dernière DI de PO-02 avec le code symptôme S01 (fuite)
+    di_causes_insuffisantes          DI « Nouvelle » de PO-03 avec le code symptôme S02 (bruit)
+    di_sans_symptome_code            DI sans code symptôme (la DI différée)
+  Préventif, compteurs
+    gamme_mensuelle_echue            gamme date de 30 jours échue SANS OT ouvert (CV-01)
+    gamme_compteur_echue             gamme compteur échue avec un OT ouvert (CH-01)
+    gamme_compteur_sans_ot           gamme compteur non échue, sans OT ouvert (CP-01, 2000 h)
+    gamme_seuil                      gamme seuil, dernier relevé SOUS le seuil (séparateur de CP-01)
+    gamme_sans_constat               gamme mensuelle de VE-01 : préventifs successifs sans constat
+    compteur_horaire                 compteur horaire de marche de CP-01
+    compteur_seuil                   point de mesure de la gamme seuil (perte de charge, bar)
+  Magasin
+    kit_garniture                    article « Kit garniture mécanique PO-02 » (stock >= 2)
+    articles_sous_point_commande     liste : les 3 articles dont le stock est sous le point de commande
+    achat_statut_demandee            premier achat « demandée »
+    achat_statut_commandee           achat « commandée »
+    achat_statut_recue               dernier achat « reçue » (entrée de stock correspondante)
+  Parc, techniciens
+    equipement_br                    AE-03 : habilitation BR requise
+    equipement_panne_unique          BA-01 : une seule panne dans tout l'historique
+    technicien_br_valide             TEC-0001 : BR valide à la date de référence
+    technicien_br_echue              TEC-0004 : BR échue à la date de référence
+  Causes fréquentes (ARCHITECTURE.md §14.5, minimum 5 cas)
+    causes_equipement                PO-02 : au moins 5 correctifs clôturés de ce symptôme sur l'équipement
+    causes_equipement_symptome       S01 (fuite) ; au moins 2 causes, la plus fréquente C01 (garniture usée)
+    causes_equipement_2              CP-01 : un autre équipement à au moins 5 cas d'un même symptôme
+    causes_equipement_2_symptome     S04 (échauffement)
+    causes_modele                    CV-03 : moins de 5 cas propres, au moins 5 avec sa marque et son modèle
+    causes_modele_symptome           S05 (arrêt intempestif)
+    causes_insuffisantes             PO-03 : de 1 à 4 cas en tout (aucun autre équipement du même modèle)
+    causes_insuffisantes_symptome    S02 (bruit anormal)
 
 Organisation du fichier :
     1. Schéma et écriture CSV (règles §3.1 et §3.2)
@@ -27,11 +102,12 @@ Organisation du fichier :
     4. Génération table par table
     5. Génération de l'historique (DI, OT, préventif)
     6. Stock, achats, mouvements
-    7. Identifiants, auto-vérification, écriture, ligne de commande
+    7. Identifiants, auto-vérification, identifiants de scénario, écriture, ligne de commande
 """
 import argparse
 import calendar
 import json
+import math
 import random
 import re
 import sys
@@ -42,10 +118,12 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_DEMO = RACINE / 'donnees' / 'demo'
 FICHIER_JS = RACINE / 'js' / 'demo-donnees.js'
+FICHIER_SCENARIOS = RACINE / 'tests' / 'fixtures' / 'demo-scenarios.json'
 
 GRAINE = 42                      # graine fixe : deux exécutions donnent des fichiers identiques
 DATE_REFERENCE = '2026-10-19'    # « aujourd'hui » du jeu de démo (un lundi)
-MOIS_PAR_DEFAUT = 6              # durée de l'historique
+MOIS_PAR_DEFAUT = 13             # durée de l'historique (ARCHITECTURE.md §14.8)
+PART_DI_AVEC_CODE = 0.8          # proportion des DI dont le demandeur a choisi un code symptôme
 HEURE_COURANTE = 9.0             # il est 9 h 00 à la date de référence
 FACTEUR_TAUX_DEMO = 1.3          # règle le nombre de pannes « de fond » du jeu de démo
 
@@ -61,7 +139,8 @@ NOM_ENTREPRISE = 'Atelier des Trois Vallées (démo)'
 # modification de js/schema.js, mettre à jour ce tableau (le test échoue sinon).
 # Les derniers champs d'equipements (valeur_remplacement), de demandes (symptome_code,
 # ot_origine_id) et d'ordres_travail (anomalie_constatee) sont ceux de la version 2 du format
-# (ARCHITECTURE.md §14.1) : ils restent vides (anomalie_constatee = 0) dans ce jeu.
+# (ARCHITECTURE.md §14.1) : valeur de remplacement de chaque équipement, code symptôme de la plupart
+# des DI, DI liée à un OT préventif qui a constaté une anomalie (anomalie_constatee = 1).
 # Syntaxe d'un champ :  nom:type    nom:type!    (« ! » = champ protégé, §3.2)
 #   ref>table            clé étrangère vers table.clé
 #   ref>table.champ=fam  clé étrangère vers table.champ, filtrée sur famille = fam
@@ -255,6 +334,17 @@ def ecrire_csv(dossier, textes):
     dossier.mkdir(parents=True, exist_ok=True)
     for table, texte in textes.items():
         (dossier / (table + '.csv')).write_bytes(b'\xef\xbb\xbf' + texte.encode('utf-8'))
+
+
+def texte_scenarios(scenarios):
+    """Texte JSON des identifiants de scénario : UTF-8, clés triées, indenté, fin de ligne LF (déterministe)."""
+    return json.dumps(scenarios, ensure_ascii=False, indent=2, sort_keys=True) + '\n'
+
+
+def ecrire_scenarios(chemin, scenarios):
+    """Écrit tests/fixtures/demo-scenarios.json (octets identiques d'une exécution à l'autre)."""
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    chemin.write_bytes(texte_scenarios(scenarios).encode('utf-8'))
 
 
 def ecrire_js(chemin, textes):
@@ -615,8 +705,10 @@ EQUIPEMENTS_DEMO = [
     definir_equipement('CV-02.M', 'Motoréducteur du convoyeur CV-02', 'ligne_cond', 'CV-02', 'Motorvel',
                        'MR-0.75', 'MO-075-17-5521', '2017-06-12', 'B', 8, '', 'elec,meca', '', 'moteur',
                        0.1),
-    definir_equipement('CV-03', 'Convoyeur de sortie de ligne', 'ligne_cond', None, 'Convexa', 'CB-400',
-                       'CX-400-19-0411', '2019-10-07', 'C', 8, '', 'elec,meca', '', 'convoyeur', 0.25),
+    # CV-03 est du même modèle que CV-02 : l'encart « causes fréquentes » de CV-03 passe à la portée
+    # « modèle » (ARCHITECTURE.md §14.5).
+    definir_equipement('CV-03', 'Convoyeur de sortie de ligne', 'ligne_cond', None, 'Convexa', 'CR-450',
+                       'CX-450-19-0411', '2019-10-07', 'C', 8, '', 'elec,meca', '', 'convoyeur', 0.25),
     definir_equipement('EM-01', 'Fardeleuse sous film rétractable', 'ligne_cond', None, 'Emballor', 'FX-90',
                        'EX-90-18-0140', '2018-04-16', 'B', 8, '', 'elec,pneu,meca,therm', '', 'emballage',
                        0.5),
@@ -634,6 +726,26 @@ EQUIPEMENTS_DEMO = [
                        'PC-32', 'FT-32-09-0710', '2009-02-02', 'C', 8, '', '', '', 'usinage', 0,
                        statut='rebut'),
 ]
+
+# Valeur de remplacement à neuf (€ HT) de chaque équipement de la démo : ordres de grandeur réalistes
+# (compresseur à vis 25-40 k€, pompe 3-9 k€, convoyeur 8-20 k€, presse 60-120 k€, tour CN 80-150 k€,
+# armoire 5-15 k€, chariot 20-35 k€, groupe froid 15-30 k€).
+VALEURS_REMPLACEMENT_DEMO = {
+    'CP-01': 32400, 'CP-01.SEC': 6800, 'RA-01': 4200, 'PO-01': 7400, 'PO-02': 5650, 'PO-03': 3300,
+    'GF-01': 27500, 'VE-01': 18500, 'VE-02': 6900, 'AE-01': 14800, 'AE-02': 9600, 'AE-03': 12400,
+    'AE-04': 7850, 'CN-01': 118000, 'CN-01.BR': 16500, 'CU-01': 135000, 'CU-01.CH': 14200,
+    'PT-01': 42000, 'SC-01': 8900, 'PR-01': 96000, 'PR-01.GH': 18000, 'CV-01': 14500, 'CV-02': 11800,
+    'CV-02.M': 1450, 'CV-03': 10900, 'EM-01': 68000, 'ET-01': 24000, 'RB-01': 145000, 'BA-01': 12500,
+    'CH-01': 28500, 'PE-01': 2400,
+}
+
+# Fourchettes de valeur de remplacement (€ HT) par famille, pour le jeu de charge.
+FOURCHETTES_VALEUR = {
+    'pompe': (3000, 9000), 'convoyeur': (8000, 20000), 'compresseur': (25000, 40000),
+    'presse': (60000, 120000), 'usinage': (80000, 150000), 'electrique': (5000, 15000),
+    'ventilation': (6000, 20000), 'froid': (15000, 30000), 'levage': (20000, 45000),
+    'emballage': (20000, 70000),
+}
 
 # Familles du jeu de charge : (famille, préfixe, désignation, marque, modèle, énergies, heures/jour,
 # taux de pannes par mois, poids dans le parc, habilitation)
@@ -686,6 +798,14 @@ SCENARIOS = {
                  ["Garniture mécanique usée (faces rayées). Remplacée par un kit neuf, alignement contrôlé, aucune fuite à la remise en service.",
                   "Fuite à l'arbre : garniture HS remplacée, joints toriques changés, essai sous pression sans fuite.",
                   "Garniture mécanique remplacée après dépose du moteur ; accouplement recentré, étanchéité vérifiée 15 minutes en marche."]),
+        scenario('S01', 'C06', 'R04', 1, [MECA, POLY], (0.75, 1.5),
+                 (('gêne', 4), ('dégradé', 3)), (('joints_tor', 1, 1, 0.3),),
+                 'Fuite au raccord de refoulement',
+                 "Consigner la pompe, resserrer la bride de refoulement au couple, changer le joint s'il est abîmé.",
+                 ["De l'eau suinte à la bride de refoulement de {rep}.",
+                  'Petite fuite sur la tuyauterie de sortie de la pompe {rep}.'],
+                 ["Bride de refoulement desserrée par les vibrations : boulons resserrés au couple en croix, aucune fuite à la remise en pression.",
+                  "Raccord de refoulement desserré, joint en bon état : resserrage au couple et marquage au vernis témoin, étanchéité contrôlée."]),
         scenario('S02', 'C02', 'R01', 3, [MECA, POLY], (2.0, 4.5),
                  (('dégradé', 4), ('gêne', 3), ('arrêt', 1)), (('roul_6305', 2, 2, 1.0),),
                  'Bruit anormal, roulement à remplacer',
@@ -1076,6 +1196,10 @@ PIECES_SPECIFIQUES = {('PO-02', 'kit_gar_u'): 'kit_gar_po02', ('PO-01', 'kit_gar
 ACHATS_EN_COURS = [('filtre_huile_cp', 'demandée', 3), ('contacteur_25', 'demandée', 11),
                    ('capteur_m18', 'commandée', 7)]
 
+# Inventaire annuel (début janvier) : écart entre le stock compté et le stock théorique, par article
+# (cartouches de graisse entamées, aérosol perdu, raccord retrouvé). Les autres articles : aucun écart.
+ECARTS_INVENTAIRE = {'graisse': -2, 'nettoyant': -1, 'raccord': 1}
+
 # ---------------------------------------------------------------------------
 # Gammes de préventif : opérations (texte, valeur attendue, mesure simulée)
 # mesure : None = rien à mesurer, 'ok' = simple constat,
@@ -1100,6 +1224,14 @@ OPS_COMPRESSEUR_2000H = [
     ('Contrôler le pressostat et la soupape de sécurité', 'Déclenchement à 8,5 bar', (8.3, 8.6, 1, ' bar', 'tarage de la soupape')),
     ('Relever la température de refoulement en charge', '< 95 °C', (80, 91, 0, ' °C', 'température en charge')),
     ('Remettre à zéro le compteur de maintenance', 'Compteur remis à zéro', 'ok'),
+]
+OPS_SEPARATEUR = [
+    ('Relever la perte de charge du séparateur avant intervention', '>= 0,8 bar (seuil atteint)',
+     (0.80, 0.86, 2, ' bar', 'perte de charge avant')),
+    ("Consigner le compresseur et purger le circuit d'air jusqu'à 0 bar", 'Circuit à 0 bar', 'ok'),
+    ('Remplacer le séparateur air/huile et ses joints', 'Séparateur neuf posé', 'ok'),
+    ("Contrôler le niveau d'huile après remise en route", 'Entre mini et maxi', 'ok'),
+    ('Relever la perte de charge après remplacement', '< 0,3 bar', (0.18, 0.27, 2, ' bar', 'perte de charge après')),
 ]
 OPS_POMPE = [
     ("Relever l'intensité absorbée", '< 12 A', (8.5, 11.2, 1, ' A', 'intensité absorbée')),
@@ -1171,9 +1303,28 @@ GAMME_PAR_FAMILLE = {
 
 CONSIGNE_STANDARD = "Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement)."
 
-# Les 10 gammes de la démo. `derniere` = date de la dernière réalisation.
+# Anomalies constatées pendant un préventif (ARCHITECTURE.md §14.6) : le technicien coche « anomalie
+# constatée » et crée une DI liée (ot_origine_id). `suite` : 'acceptee' (la DI devient un correctif
+# clôturé) ou 'nouvelle' (DI encore à traiter). Rattachées à une gamme par sa clé `anomalies`
+# {rang de l'occurrence en partant de la plus récente : anomalie}.
+ANOMALIE_PR01 = {
+    'suite': 'acceptee', 'impact': 'gêne', 'symptome': 'S01', 'famille': 'presse', 'cause': 'C10',
+    'roles': ('preventif_anomalie', 'di_anomalie_acceptee', 'ot_correctif_anomalie'),
+    'texte': "Suintement d'huile sur le flexible du vérin gauche, vu pendant le contrôle préventif.",
+    'constat': "Anomalie constatée : suintement d'huile sur le flexible du vérin gauche ; "
+               "demande d'intervention créée pour son remplacement."}
+ANOMALIE_GF01 = {
+    'suite': 'nouvelle', 'impact': 'gêne', 'symptome': 'S02',
+    'roles': ('preventif_anomalie_nouvelle', 'di_anomalie_nouvelle'),
+    'texte': 'Ventilateur du condenseur de GF-01 bruyant (roulement probable), vu pendant le préventif.',
+    'constat': "Anomalie constatée : ventilateur du condenseur bruyant, roulement probablement usé ; "
+               "demande d'intervention créée."}
+
+# Les 10 gammes de la démo (les trois déclencheurs). `derniere` = date de la dernière réalisation.
 # `ouvert` : statut de l'OT préventif ouvert à la date de référence (None = aucun OT ouvert).
 # `sans_ot` : la gamme est échue mais RIEN n'a encore généré d'OT (scénario de recette « gamme échue »).
+# Gamme seuil : sa dernière réalisation se déduit des relevés de son point de mesure (§5).
+# `role` / `role_ot` : rôle de scénario de la gamme / de son OT ouvert (tests/fixtures/demo-scenarios.json).
 GAMMES_DEMO = [
     {'repere': 'CP-01', 'libelle': 'Entretien mensuel du compresseur CP-01', 'periode': 30, 'avance': 3,
      'derniere': '2026-09-29', 'temps': 1.5, 'ops': OPS_COMPRESSEUR_MENSUEL, 'metiers': [MECA],
@@ -1181,44 +1332,52 @@ GAMMES_DEMO = [
     {'repere': 'CP-01', 'libelle': 'Entretien des 2000 heures du compresseur CP-01', 'compteur': 'cp01',
      'unites': 2000, 'avance': 5, 'ecart': 0.5, 'temps': 4.0, 'ops': OPS_COMPRESSEUR_2000H,
      'metiers': [MECA], 'pieces': [('filtre_air_cp', 1), ('filtre_huile_cp', 1), ('huile_cp', 1)],
-     'remede': 'R01', 'consignes': CONSIGNE_STANDARD},
+     'remede': 'R01', 'consignes': CONSIGNE_STANDARD, 'role': 'gamme_compteur_sans_ot'},
     {'repere': 'PO-02', 'libelle': 'Contrôle trimestriel de la pompe PO-02', 'periode': 90, 'avance': 7,
      'derniere': '2026-08-04', 'temps': 2.0, 'ops': OPS_POMPE, 'metiers': [MECA, POLY],
      'pieces': [('graisse', 1)], 'remede': 'R05', 'consignes': CONSIGNE_STANDARD},
     {'repere': 'CV-01', 'libelle': 'Contrôle mensuel du convoyeur CV-01', 'periode': 30, 'avance': 3,
      'derniere': '2026-09-14', 'temps': 1.0, 'ops': OPS_CONVOYEUR, 'metiers': [POLY, MECA],
      'pieces': [('graisse', 1)], 'remede': 'R05', 'consignes': CONSIGNE_STANDARD, 'sans_ot': True,
-     'sans_decalage': True},
+     'sans_decalage': True, 'role': 'gamme_mensuelle_echue'},
     {'repere': 'VE-01', 'libelle': 'Contrôle mensuel de la ventilation VE-01', 'periode': 30, 'avance': 3,
      'derniere': '2026-10-06', 'temps': 1.0, 'ops': OPS_VENTILATION, 'metiers': [POLY],
-     'pieces': [], 'remede': 'R03', 'consignes': CONSIGNE_STANDARD, 'toujours_ras': True},
+     'pieces': [], 'remede': 'R03', 'consignes': CONSIGNE_STANDARD, 'toujours_ras': True,
+     'role': 'gamme_sans_constat'},
     {'repere': 'PR-01', 'libelle': 'Contrôle hydraulique et graissage de la presse PR-01', 'periode': 60,
      'avance': 5, 'derniere': '2026-09-02', 'temps': 2.5, 'ops': OPS_PRESSE, 'metiers': [MECA],
-     'pieces': [('graisse', 1)], 'remede': 'R05', 'consignes': CONSIGNE_STANDARD},
-    {'repere': 'AE-01', 'libelle': 'Thermographie et serrage des armoires électriques', 'periode': 180,
-     'avance': 14, 'derniere': '2026-06-10', 'temps': 3.0, 'ops': OPS_ARMOIRES, 'metiers': [ELEC, AUTO],
-     'pieces': [], 'remede': 'R04',
-     'consignes': "Intervention hors tension uniquement : consigner l'armoire. Habilitation BR requise."},
+     'pieces': [('graisse', 1)], 'remede': 'R05', 'consignes': CONSIGNE_STANDARD,
+     'anomalies': {3: ANOMALIE_PR01}},
+    {'repere': 'CP-01', 'libelle': 'Remplacement du séparateur air/huile de CP-01 (perte de charge)',
+     'compteur': 'cp01_sep', 'declencheur': 'seuil', 'avance': 0, 'temps': 2.0, 'ops': OPS_SEPARATEUR,
+     'metiers': [MECA], 'pieces': [('separ_cp', 1)], 'remede': 'R01', 'consignes': CONSIGNE_STANDARD,
+     'role': 'gamme_seuil'},
     {'repere': 'GF-01', 'libelle': 'Entretien trimestriel du groupe froid GF-01', 'periode': 90, 'avance': 7,
-     'derniere': '2026-08-24', 'temps': 3.0, 'ops': OPS_FROID, 'metiers': [MECA, ELEC],
-     'pieces': [('filtre_eau', 1)], 'remede': 'R03', 'consignes': CONSIGNE_STANDARD},
+     'derniere': '2026-10-13', 'temps': 3.0, 'ops': OPS_FROID, 'metiers': [MECA, ELEC],
+     'pieces': [('filtre_eau', 1)], 'remede': 'R03', 'consignes': CONSIGNE_STANDARD,
+     'anomalies': {1: ANOMALIE_GF01}},
     {'repere': 'CH-01', 'libelle': 'Vérification du chariot CH-01 toutes les 200 heures', 'compteur': 'ch01',
      'unites': 200, 'avance': 5, 'ecart': 'echue', 'temps': 1.5, 'ops': OPS_CHARIOT, 'metiers': [MECA, POLY],
      'pieces': [('graisse', 1)], 'remede': 'R05', 'consignes': 'Débrancher la batterie avant toute intervention.',
-     'ouvert': 'Créé'},
+     'ouvert': 'Créé', 'role': 'gamme_compteur_echue', 'role_ot': 'ot_statut_cree'},
     {'repere': 'CN-01', 'libelle': 'Graissage et contrôle mensuel du tour CN-01', 'periode': 30, 'avance': 3,
      'derniere': '2026-09-17', 'temps': 1.5, 'ops': OPS_TOUR, 'metiers': [POLY, AUTO],
      'pieces': [('graisse', 1), ('liq_coupe', 1)], 'remede': 'R05', 'consignes': CONSIGNE_STANDARD,
-     'ouvert': 'Planifié', 'tech_ouvert': 4},
+     'ouvert': 'Planifié', 'tech_ouvert': 4, 'role_ot': 'ot_preventif_ouvert'},
 ]
 
 COMPTEURS_DEMO = [      # clé, repère, libellé, unité, valeur au premier relevé, rythme par jour calendaire
     {'cle': 'cp01', 'repere': 'CP-01', 'libelle': 'Compteur horaire de marche', 'unite': 'h',
-     'depart': 11480, 'par_jour': 11.4},
+     'depart': 11480, 'par_jour': 11.4, 'role': 'compteur_horaire'},
     {'cle': 'pr01', 'repere': 'PR-01', 'libelle': 'Compteur de cycles de la presse', 'unite': 'cycles',
      'depart': 1482000, 'par_jour': 1100},
     {'cle': 'ch01', 'repere': 'CH-01', 'libelle': 'Compteur horaire du chariot', 'unite': 'h',
      'depart': 3120, 'par_jour': 4.6},
+    # Point de MESURE (gamme seuil) : la valeur monte avec l'encrassement, retombe à `apres` quand
+    # l'intervention est faite. `seuil` = valeur qui déclenche la gamme.
+    {'cle': 'cp01_sep', 'repere': 'CP-01', 'libelle': 'Perte de charge du séparateur air/huile', 'unite': 'bar',
+     'mesure': True, 'depart': 0.40, 'par_jour': 0.0021, 'seuil': 0.8, 'apres': 0.22, 'decimales': 2,
+     'role': 'compteur_seuil'},
 ]
 
 # Contrôles réglementaires : (repère, nature, texte de référence, périodicité en mois, organisme,
@@ -1288,6 +1447,16 @@ class Contexte:
         self.controles = []                           # contrôles réglementaires (équipement + champs)
         self.sorties = []                             # sorties de stock prévues (voir §6)
         self.retours = []
+        self.specifications_gammes = []               # gammes à créer (démo ou jeu de charge)
+        self.definitions_compteurs = []               # compteurs à créer (démo ou jeu de charge)
+        self.marques = {}                             # rôle de scénario -> ligne (voir §7, scénarios)
+
+    def marquer(self, role, ligne):
+        """Retient la ligne qui joue un rôle de scénario (son identifiant n'est connu qu'à la fin)."""
+        if role in self.marques:
+            raise ErreurCoherence('Rôle de scénario attribué deux fois : ' + role)
+        self.marques[role] = ligne
+        return ligne
 
     @property
     def fin_historique(self):
@@ -1438,6 +1607,8 @@ def equipements_du_jeu_de_charge(ctx, nombre):
                 marque, modele, serie, '%d-%02d-%02d' % (rng.randint(2008, 2025), rng.randint(1, 12), rng.randint(1, 28)),
                 rng.choices(['A', 'B', 'C'], weights=[2, 5, 3])[0], heures, habilitation, energies, '',
                 famille, round(taux * rng.uniform(0.5, 1.5), 3)))
+            minimum, maximum = FOURCHETTES_VALEUR[famille]
+            catalogue[-1]['valeur'] = rng.randrange(minimum, maximum + 1, 100)     # arrondi à la centaine
     return catalogue
 
 
@@ -1453,7 +1624,8 @@ def generer_equipements(ctx):
             heures_fonct_jour=entree['heures'] if entree['heures'] is not None else '',
             habilitation_requise=entree['hab'],
             consignation=texte_consignation(entree['energies'], entree['precision']),
-            actif=0 if entree['statut'] == 'rebut' else 1)
+            actif=0 if entree['statut'] == 'rebut' else 1,
+            valeur_remplacement=entree.get('valeur') or VALEURS_REMPLACEMENT_DEMO[entree['repere']])
         meta = dict(entree, id=ligne['id'], ligne=ligne)
         ctx.equipements.append(meta)
         ctx.equipement[entree['repere']] = meta
@@ -1511,9 +1683,8 @@ def generer_liens_article_equipement(ctx):
 # ---------------------------------------------------------------------------
 
 def dates_de_releve(ctx):
-    """Un relevé par mois (vers le 12), à partir du mois qui précède le début de l'historique."""
-    premier = ajouter_mois(ctx.debut, -1)
-    jour = date(premier.year, premier.month, 12)
+    """Un relevé par mois (vers le 12), à partir du mois où commence l'historique."""
+    jour = date(ctx.debut.year, ctx.debut.month, 12)
     dates = []
     while jour <= ctx.fin_historique:
         dates.append(jour_ouvre_avant(jour))
@@ -1521,31 +1692,67 @@ def dates_de_releve(ctx):
     return dates
 
 
-def compteurs_du_jeu_de_charge(ctx):
-    """Dix compteurs horaires sur des compresseurs, presses et appareils de levage."""
-    retenus = [e for e in ctx.equipements if e['famille'] in ('compresseur', 'presse', 'levage')][:10]
-    return [{'cle': 'c%d' % numero, 'repere': e['repere'], 'libelle': 'Compteur horaire', 'unite': 'h',
-             'depart': 2000 + numero * 137, 'par_jour': 5.0 + numero} for numero, e in enumerate(retenus, 1)]
+def simuler_compteur(ctx, definition, dates):
+    """Relevés d'un compteur qui ne fait que monter (heures, cycles) : [(jour, valeur entière)]."""
+    valeur = float(definition['depart'])
+    precedent = None
+    releves = []
+    for jour in dates:
+        if precedent is not None:
+            valeur += definition['par_jour'] * (jour - precedent).days * ctx.rng.uniform(0.9, 1.1)
+        precedent = jour
+        releves.append((jour, int(round(valeur))))
+    return releves
+
+
+def simuler_mesure(ctx, definition, dates):
+    """Relevés d'un point de MESURE (gamme seuil) : la valeur monte avec l'usure ou l'encrassement ;
+    quand un relevé atteint le seuil, l'intervention est faite quelques jours plus tard et la valeur
+    retombe à `apres`.
+
+    Retourne (relevés [(jour, valeur)], déclenchements [(jour du relevé, valeur, jour d'exécution)]).
+    Le jour d'exécution vaut None si l'intervention n'est pas encore faite à la date de référence
+    (la gamme est alors échue).
+    """
+    rng = ctx.rng
+    valeur = float(definition['depart'])
+    precedent = None
+    releves, declenchements = [], []
+    for jour in dates:
+        if precedent is not None:
+            valeur += definition['par_jour'] * (jour - precedent).days * rng.uniform(0.85, 1.15)
+        precedent = jour
+        mesure = round(valeur, definition['decimales'])
+        releves.append((jour, mesure))
+        if mesure >= definition['seuil']:
+            execution = jour_ouvre_apres(jour + timedelta(days=rng.randint(2, 5)))
+            if execution <= ctx.ref - timedelta(days=2):
+                declenchements.append((jour, mesure, execution))
+                valeur, precedent = float(definition['apres']), execution     # remise à niveau
+            else:
+                declenchements.append((jour, mesure, None))
+    return releves, declenchements
 
 
 def generer_compteurs_et_releves(ctx):
+    """Compteurs (heures, cycles) et points de mesure, avec un relevé par mois."""
     rng = ctx.rng
     noms = ['%s %s' % (t['prenom'], t['nom']) for t in ctx.techniciens]
-    definitions = compteurs_du_jeu_de_charge(ctx) if ctx.volume else COMPTEURS_DEMO
-    for definition in definitions:
+    dates = dates_de_releve(ctx)
+    for definition in ctx.definitions_compteurs:
         equipement = ctx.equipement[definition['repere']]
         ligne = creer_ligne(ctx, 'compteurs', equipement_id=equipement['id'],
                             libelle=definition['libelle'], unite=definition['unite'])
-        compteur = dict(definition, id=ligne['id'], releves=[])
-        valeur = float(definition['depart'])
-        precedent = None
-        for jour in dates_de_releve(ctx):
-            if precedent is not None:
-                valeur += definition['par_jour'] * (jour - precedent).days * rng.uniform(0.9, 1.1)
-            precedent = jour
-            compteur['releves'].append((jour, int(round(valeur))))
-            creer_ligne(ctx, 'releves', compteur_id=ligne['id'], date=texte_date(jour),
-                        valeur=int(round(valeur)), utilisateur=rng.choice(noms))
+        compteur = dict(definition, id=ligne['id'], releves=[], declenchements=[])
+        if definition.get('mesure'):
+            compteur['releves'], compteur['declenchements'] = simuler_mesure(ctx, definition, dates)
+        else:
+            compteur['releves'] = simuler_compteur(ctx, definition, dates)
+        for jour, valeur in compteur['releves']:
+            creer_ligne(ctx, 'releves', compteur_id=ligne['id'], date=texte_date(jour), valeur=valeur,
+                        utilisateur=rng.choice(noms))
+        if definition.get('role'):
+            ctx.marquer(definition['role'], ligne)
         ctx.compteurs[definition['cle']] = compteur
 
 
@@ -1564,28 +1771,59 @@ def date_pour_valeur(compteur, valeur):
 # Gammes de préventif
 # ---------------------------------------------------------------------------
 
+def preparer_gammes_et_compteurs(ctx):
+    """Choisit les gammes à créer et les compteurs dont elles ont besoin (avant les relevés)."""
+    if ctx.volume:
+        ctx.specifications_gammes = gammes_du_jeu_de_charge(ctx)
+    else:
+        ctx.specifications_gammes = GAMMES_DEMO
+        ctx.definitions_compteurs = list(COMPTEURS_DEMO)
+
+
 def gammes_du_jeu_de_charge(ctx):
-    """Une gamme pour environ 22 % des équipements, périodicité 30 à 180 jours."""
+    """Jeu de charge : une gamme pour environ un équipement sur trois, avec les trois déclencheurs
+    (70 % à date, 20 % au compteur horaire, 10 % sur seuil d'un point de mesure). Les compteurs
+    nécessaires sont ajoutés à ctx.definitions_compteurs."""
     rng = ctx.rng
     eligibles = [e for e in ctx.equipements if e['famille'] in GAMME_PAR_FAMILLE and e['statut'] == 'en service']
-    nombre = max(10, int(len(ctx.equipements) * 0.22))
+    nombre = max(10, len(ctx.equipements) // 3)
     gammes = []
-    for equipement in rng.sample(eligibles, min(nombre, len(eligibles))):
+    for numero, equipement in enumerate(rng.sample(eligibles, min(nombre, len(eligibles))), 1):
         ops, temps, remede = GAMME_PAR_FAMILLE[equipement['famille']]
-        periode = rng.choice([30, 30, 60, 90, 180])
-        avance = rng.choice([3, 5, 7])
-        if rng.random() < 0.15:     # gamme échue : un OT préventif est ouvert
-            derniere = ctx.ref - timedelta(days=periode - avance + rng.randint(0, 10))
-            ouvert = rng.choice(['Créé', 'Créé', 'Préparé', 'Planifié'])
-        else:
-            derniere = ctx.ref - timedelta(days=rng.randint(3, max(3, periode - avance - 3)))
-            ouvert = None
-        gammes.append({'repere': equipement['repere'],
-                       'libelle': 'Contrôle périodique de %s' % equipement['designation'].lower(),
-                       'periode': periode, 'avance': avance, 'derniere': texte_date(jour_ouvre_avant(derniere)),
-                       'temps': temps, 'ops': ops, 'metiers': [MECA, POLY, ELEC],
-                       'pieces': [('graisse', 1)], 'remede': remede, 'consignes': CONSIGNE_STANDARD,
-                       'ouvert': ouvert})
+        commun = {'repere': equipement['repere'], 'temps': temps, 'ops': ops, 'metiers': [MECA, POLY, ELEC],
+                  'pieces': [('graisse', 1)], 'remede': remede, 'consignes': CONSIGNE_STANDARD, 'ouvert': None}
+        designation = equipement['designation'].lower()
+        tirage = rng.random()
+        if tirage < 0.2:            # compteur horaire : une visite toutes les N heures de marche
+            cle = 'h%d' % numero
+            ctx.definitions_compteurs.append({
+                'cle': cle, 'repere': equipement['repere'], 'libelle': 'Compteur horaire', 'unite': 'h',
+                'depart': rng.randint(2000, 30000),
+                'par_jour': round((equipement['heures'] or 8) * 5 / 7.0 * rng.uniform(0.8, 1.1), 2)})
+            unites = rng.choice([250, 500, 1000])
+            ecart = 'echue' if rng.random() < 0.15 else round(rng.uniform(0.1, 0.85), 2)
+            gammes.append(dict(commun, libelle='Entretien toutes les %d heures de %s' % (unites, designation),
+                               declencheur='compteur', compteur=cle, unites=unites, avance=5, ecart=ecart))
+        elif tirage < 0.3:          # seuil : température de palier mesurée chaque mois
+            cle = 'm%d' % numero
+            ctx.definitions_compteurs.append({
+                'cle': cle, 'repere': equipement['repere'], 'libelle': 'Température du palier principal',
+                'unite': '°C', 'mesure': True, 'depart': round(rng.uniform(45, 70), 1),
+                'par_jour': round(rng.uniform(0.05, 0.12), 3), 'seuil': 75, 'apres': 42, 'decimales': 1})
+            gammes.append(dict(commun, libelle='Graissage et contrôle du palier de %s (température)' % designation,
+                               declencheur='seuil', compteur=cle, avance=0))
+        else:                       # date : période de 30 à 180 jours
+            periode = rng.choice([30, 30, 60, 90, 180])
+            avance = rng.choice([3, 5, 7])
+            if rng.random() < 0.15:     # gamme échue : un OT préventif est ouvert
+                derniere = ctx.ref - timedelta(days=periode - avance + rng.randint(0, 10))
+                ouvert = rng.choice(['Créé', 'Créé', 'Préparé', 'Planifié'])
+            else:
+                derniere = ctx.ref - timedelta(days=rng.randint(3, max(3, periode - avance - 3)))
+                ouvert = None
+            gammes.append(dict(commun, libelle='Contrôle périodique de %s' % designation, declencheur='date',
+                               periode=periode, avance=avance, derniere=texte_date(jour_ouvre_avant(derniere)),
+                               ouvert=ouvert))
     return gammes
 
 
@@ -1604,34 +1842,48 @@ def choisir_derniere_realisation_compteur(compteur, unites, ecart):
     return releves[0]
 
 
+def creer_ligne_gamme(ctx, gamme, equipement, specification):
+    """Ligne de gammes.csv selon le déclencheur (date, compteur ou seuil)."""
+    communs = dict(equipement_id=equipement['id'], libelle=specification['libelle'],
+                   declencheur=gamme['declencheur'], avance_jours=specification['avance'],
+                   temps_prevu_h=specification['temps'], consignes=specification['consignes'])
+    if gamme['declencheur'] == 'seuil':
+        return creer_ligne(
+            ctx, 'gammes', compteur_id=gamme['compteur']['id'], seuil=gamme['seuil'],
+            derniere_realisation=texte_date(gamme['derniere']) if gamme['derniere'] else '',
+            releve_derniere_realisation=gamme['releve'] if gamme['releve'] is not None else '', **communs)
+    if gamme['declencheur'] == 'compteur':
+        return creer_ligne(
+            ctx, 'gammes', compteur_id=gamme['compteur']['id'], periodicite_unites=specification['unites'],
+            derniere_realisation=texte_date(gamme['derniere']), releve_derniere_realisation=gamme['releve'],
+            prochaine_echeance=texte_date(gamme['prochaine']), **communs)
+    return creer_ligne(
+        ctx, 'gammes', periodicite_jours=specification['periode'], derniere_realisation=texte_date(gamme['derniere']),
+        prochaine_echeance=texte_date(gamme['prochaine']), **communs)
+
+
 def generer_gammes(ctx):
     """Crée les gammes (lignes + opérations) et prépare leurs métadonnées de planification."""
-    specifications = gammes_du_jeu_de_charge(ctx) if ctx.volume else GAMMES_DEMO
-    for specification in specifications:
+    for specification in ctx.specifications_gammes:
         equipement = ctx.equipement[specification['repere']]
-        gamme = dict(specification, eq=equipement, occurrences=[], ouvert=specification.get('ouvert'))
         compteur = ctx.compteurs.get(specification.get('compteur'))
-        if compteur:
+        declencheur = specification.get('declencheur') or ('compteur' if compteur else 'date')
+        gamme = dict(specification, eq=equipement, occurrences=[], ouvert=specification.get('ouvert'),
+                     declencheur=declencheur, compteur=compteur, seuil=None)
+        if declencheur == 'seuil':
+            # Dernière réalisation = dernière intervention faite après un relevé au-dessus du seuil.
+            faites = [d for d in compteur['declenchements'] if d[2] is not None]
+            _jour, releve, derniere = faites[-1] if faites else (None, None, None)
+            gamme.update(derniere=derniere, releve=releve, prochaine=None, seuil=compteur['seuil'])
+        elif declencheur == 'compteur':
             derniere, releve = choisir_derniere_realisation_compteur(
                 compteur, specification['unites'], specification['ecart'])
             prochaine = date_pour_valeur(compteur, releve + specification['unites'])
-            gamme.update(compteur=compteur, derniere=derniere, releve=releve, prochaine=prochaine)
-            ligne = creer_ligne(
-                ctx, 'gammes', equipement_id=equipement['id'], libelle=specification['libelle'],
-                declencheur='compteur', compteur_id=compteur['id'], periodicite_unites=specification['unites'],
-                avance_jours=specification['avance'], derniere_realisation=texte_date(derniere),
-                releve_derniere_realisation=releve, prochaine_echeance=texte_date(prochaine),
-                temps_prevu_h=specification['temps'], consignes=specification['consignes'])
+            gamme.update(derniere=derniere, releve=releve, prochaine=prochaine)
         else:
             derniere = jour_depuis_texte(specification['derniere'])
-            prochaine = derniere + timedelta(days=specification['periode'])
-            gamme.update(compteur=None, derniere=derniere, releve=None, prochaine=prochaine)
-            ligne = creer_ligne(
-                ctx, 'gammes', equipement_id=equipement['id'], libelle=specification['libelle'],
-                declencheur='date', periodicite_jours=specification['periode'],
-                avance_jours=specification['avance'], derniere_realisation=texte_date(derniere),
-                prochaine_echeance=texte_date(prochaine), temps_prevu_h=specification['temps'],
-                consignes=specification['consignes'])
+            gamme.update(derniere=derniere, releve=None, prochaine=derniere + timedelta(days=specification['periode']))
+        ligne = creer_ligne_gamme(ctx, gamme, equipement, specification)
         gamme['ligne'] = ligne
         gamme['id'] = ligne['id']
         for ordre, (operation, attendue, _mesure) in enumerate(specification['ops'], 1):
@@ -1640,12 +1892,20 @@ def generer_gammes(ctx):
         gamme['echue'] = est_gamme_echue(ctx, gamme)
         if ctx.volume and gamme['echue'] and not gamme['ouvert']:
             gamme['ouvert'] = 'Créé'          # une gamme échue a toujours son OT (RG5)
+        if specification.get('role'):
+            ctx.marquer(specification['role'], ligne)
         ctx.gammes.append(gamme)
 
 
 def est_gamme_echue(ctx, gamme):
-    """RG5 : échue si (échéance - avance) est atteinte, ou si le compteur a dépassé l'intervalle."""
-    if gamme['compteur']:
+    """RG5, même règle que Preventif.etatGamme (ARCHITECTURE.md §14.3) :
+    date     : échue si aujourd'hui >= échéance - avance ;
+    compteur : échue si dernier relevé - relevé de la dernière réalisation >= périodicité ;
+    seuil    : échue si dernier relevé >= seuil ET ce relevé est postérieur à la dernière réalisation."""
+    if gamme['declencheur'] == 'seuil':
+        dernier_jour, derniere_valeur = gamme['compteur']['releves'][-1]
+        return derniere_valeur >= gamme['seuil'] and (gamme['derniere'] is None or dernier_jour > gamme['derniere'])
+    if gamme['declencheur'] == 'compteur':
         courant = gamme['compteur']['releves'][-1][1]
         return courant - gamme['releve'] >= gamme['unites']
     return gamme['prochaine'] - timedelta(days=gamme['avance']) <= ctx.ref
@@ -1845,7 +2105,9 @@ def creer_correctif(ctx, equipement, scenario_, quand, impact, etat='clos', **op
     OT ouvert ('Créé', 'Préparé', 'Planifié', 'En cours', 'En attente').
     Options : texte_di, demandeur, description, delai_decision, motif, date_prevue, temps_prevu, debut,
     technicien, pieces, motif_attente, heures, compte_rendu, ot_lie, urgence (OT sans DI),
-    regroupees (liste de (quand, texte, demandeur) : DI regroupées sur cet OT).
+    regroupees (liste de (quand, texte, demandeur) : DI regroupées sur cet OT),
+    symptome_code (code choisi par le demandeur ; sinon tiré : celui du scénario, ou vide une fois sur 5),
+    ot_origine (OT préventif pendant lequel l'anomalie a été vue : DI liée, ARCHITECTURE.md §14.6).
     """
     rng = ctx.rng
     texte_di = options.get('texte_di') or rng.choice(scenario_['di']).format(rep=equipement['repere'])
@@ -1858,7 +2120,8 @@ def creer_correctif(ctx, equipement, scenario_, quand, impact, etat='clos', **op
             ctx, 'demandes', date_heure=texte_dh(quand), demandeur=options.get('demandeur') or rng.choice(DEMANDEURS),
             equipement_id=equipement['id'], symptome=texte_di, impact=impact,
             description=options['description'] if 'description' in options else rng.choice(DESCRIPTIONS_DI),
-            statut='Nouvelle')
+            statut='Nouvelle', symptome_code=code_symptome_di(ctx, scenario_, options),
+            ot_origine_id=options.get('ot_origine') or '')
         if etat == 'Nouvelle':
             return demande, None
     decision = apres_minutes_ouvrees(quand, options.get('delai_decision', rng.randint(15, 150)))
@@ -1881,7 +2144,7 @@ def creer_correctif(ctx, equipement, scenario_, quand, impact, etat='clos', **op
     if demande is not None:
         renseigner(demande, statut='Acceptée', date_decision=texte_dh(decision), ot_id=ot)
     for quand_regroupee, texte, demandeur in options.get('regroupees', []):
-        ajouter_demande_regroupee(ctx, equipement, ot, quand_regroupee, texte, demandeur, impact)
+        ajouter_demande_regroupee(ctx, equipement, ot, quand_regroupee, texte, demandeur, impact, scenario_)
 
     if etat == 'clos':
         derouler_correctif(ctx, equipement, scenario_, ot, decision, immediat, date_prevue, impact, options)
@@ -1890,12 +2153,25 @@ def creer_correctif(ctx, equipement, scenario_, quand, impact, etat='clos', **op
     return demande, ot
 
 
-def ajouter_demande_regroupee(ctx, equipement, ot, quand, texte, demandeur, impact):
+def code_symptome_di(ctx, scenario_, options):
+    """Code symptôme d'une DI (ARCHITECTURE.md §14.6) : celui que le demandeur a choisi dans les
+    suggestions. Il est COHÉRENT avec l'OT : c'est le symptôme du scénario, que l'OT reprend.
+    Environ une DI sur cinq n'en a pas (texte libre, sans choisir de suggestion)."""
+    if 'symptome_code' in options:
+        return options['symptome_code']
+    if scenario_ is None or ctx.rng.random() >= PART_DI_AVEC_CODE:
+        return ''
+    return scenario_['symptome']
+
+
+def ajouter_demande_regroupee(ctx, equipement, ot, quand, texte, demandeur, impact, scenario_):
     """Une seconde DI sur le même équipement, rattachée à l'OT déjà ouvert (RG1 : Regroupée)."""
-    creer_ligne(ctx, 'demandes', date_heure=texte_dh(quand), demandeur=demandeur, equipement_id=equipement['id'],
-                symptome=texte, impact=impact, description='Même problème que la demande précédente.',
-                statut='Regroupée', motif_decision="Regroupée avec l'OT déjà ouvert pour cet équipement.",
-                date_decision=texte_dh(apres_minutes_ouvrees(quand, 20)), ot_id=ot)
+    return creer_ligne(
+        ctx, 'demandes', date_heure=texte_dh(quand), demandeur=demandeur, equipement_id=equipement['id'],
+        symptome=texte, impact=impact, description='Même problème que la demande précédente.',
+        statut='Regroupée', motif_decision="Regroupée avec l'OT déjà ouvert pour cet équipement.",
+        date_decision=texte_dh(apres_minutes_ouvrees(quand, 20)), ot_id=ot,
+        symptome_code=code_symptome_di(ctx, scenario_, {}))
 
 
 def derouler_correctif(ctx, equipement, scenario_, ot, decision, immediat, date_prevue, impact, options):
@@ -1932,7 +2208,7 @@ def derouler_correctif(ctx, equipement, scenario_, ot, decision, immediat, date_
         if not decision + timedelta(minutes=30) < quand < debut - timedelta(minutes=30):
             quand = apres_minutes_ouvrees(decision, 45)
         ajouter_demande_regroupee(ctx, equipement, ot, quand, rng.choice(scenario_['di']).format(rep=equipement['repere']),
-                                  rng.choice(DEMANDEURS), 'gêne')
+                                  rng.choice(DEMANDEURS), 'gêne', scenario_)
 
 
 def preparer_ot_ouvert(ctx, equipement, scenario_, ot, etat, decision, date_prevue, impact, options):
@@ -2087,9 +2363,20 @@ def occurrences_par_compteur(ctx, gamme):
     return occurrences
 
 
+def occurrences_par_seuil(ctx, gamme):
+    """Interventions passées d'une gamme seuil : une par relevé qui a atteint le seuil (l'OT est créé
+    le jour ouvré suivant le relevé, puis réalisé à la date calculée par simuler_mesure)."""
+    occurrences = []
+    for jour_releve, valeur, execution in gamme['compteur']['declenchements']:
+        if execution is not None and execution >= ctx.debut:
+            creation = jour_ouvre_apres(jour_releve + timedelta(days=1))
+            occurrences.append({'creation': creation, 'prevue': execution, 'exec': execution, 'releve': valeur})
+    return occurrences
+
+
 def occurrence_ouverte(ctx, gamme):
     """Échéance en cours d'une gamme échue (l'OT n'est pas terminé)."""
-    if gamme['compteur']:
+    if gamme['declencheur'] in ('compteur', 'seuil'):
         creation = jour_ouvre_apres(gamme['compteur']['releves'][-1][0] + timedelta(days=1))
         prevue = jour_ouvre_apres(creation + timedelta(days=10))
     else:
@@ -2098,14 +2385,17 @@ def occurrence_ouverte(ctx, gamme):
     return {'creation': min(creation, ctx.ref), 'prevue': prevue, 'exec': None, 'releve': None}
 
 
-def creer_preventif(ctx, gamme, occurrence, etat):
-    """OT préventif issu d'une gamme (RG5) : opérations copiées dans ot_operations."""
+def creer_preventif(ctx, gamme, occurrence, etat, anomalie=None):
+    """OT préventif issu d'une gamme (RG5) : opérations copiées dans ot_operations.
+
+    Type (ARCHITECTURE.md §14.3) : « préventif conditionnel » pour une gamme seuil, « préventif
+    systématique » pour une gamme à date ou au compteur. `anomalie` : voir ANOMALIE_PR01 (§3)."""
     rng = ctx.rng
     equipement = gamme['eq']
     creation = instant(occurrence['creation'], 7.0) + timedelta(minutes=rng.randint(10, 40))
     ot = creer_ligne(
         ctx, 'ordres_travail', origine='préventif', gamme_id=gamme['id'], equipement_id=equipement['id'],
-        type='préventif conditionnel' if gamme['compteur'] else 'préventif systématique',
+        type='préventif conditionnel' if gamme['declencheur'] == 'seuil' else 'préventif systématique',
         priorite='P4' if equipement['crit'] == 'C' else 'P3', statut='Créé' if etat == 'clos' else etat,
         titre=gamme['libelle'], travail_a_faire='Réaliser les %d opérations de la gamme.' % len(gamme['ops']),
         consignes=gamme['consignes'], date_creation=texte_dh(creation), date_prevue=texte_date(occurrence['prevue']),
@@ -2125,7 +2415,12 @@ def creer_preventif(ctx, gamme, occurrence, etat):
         ajouter_pieces_ot(ctx, ot, equipement, gamme['pieces'], apres_minutes_ouvrees(debut, 20), technicien)
         renseigner(ot, technicien_id=technicien['id'], date_debut=texte_dh(debut))
         fin = enregistrer_temps(ctx, ot, [(technicien, 1.0)], debut, quart_heure(gamme['temps'] * rng.uniform(0.8, 1.3)))
-        cloturer_ot(ctx, ot, fin, None, 'C99', gamme['remede'], compte_rendu_preventif(ctx, gamme, mesures))
+        compte_rendu = compte_rendu_preventif(ctx, gamme, mesures)
+        if anomalie:
+            compte_rendu = 'Gamme réalisée en totalité. ' + anomalie['constat']
+        cloturer_ot(ctx, ot, fin, None, 'C99', gamme['remede'], compte_rendu)
+        if anomalie:
+            signaler_anomalie(ctx, gamme, ot, technicien, debut, anomalie)
         return ot
     if etat != 'Créé':
         ajouter_pieces_ot(ctx, ot, equipement, gamme['pieces'])
@@ -2137,14 +2432,42 @@ def creer_preventif(ctx, gamme, occurrence, etat):
     return ot
 
 
+def signaler_anomalie(ctx, gamme, ot, technicien, debut, anomalie):
+    """Anomalie vue pendant un préventif (RG5, ARCHITECTURE.md §14.6) : case « anomalie constatée »
+    cochée sur l'OT et DI liée (ot_origine_id) créée par le technicien pendant l'intervention."""
+    renseigner(ot, anomalie_constatee=1)
+    quand = debut + timedelta(minutes=50)
+    options = dict(texte_di=anomalie['texte'], demandeur=nom_complet(technicien), symptome_code=anomalie['symptome'],
+                   description="Signalée pendant l'OT préventif de la gamme « %s »." % gamme['libelle'],
+                   ot_origine=ot)
+    if anomalie['suite'] == 'acceptee':
+        scenario_ = trouver_scenario(anomalie['famille'], anomalie['cause'], anomalie['symptome'])
+        demande, correctif = creer_correctif(ctx, gamme['eq'], scenario_, quand, anomalie['impact'], 'clos', **options)
+        lignes = (ot, demande, correctif)
+    else:
+        demande, _ = creer_correctif(ctx, gamme['eq'], None, quand, anomalie['impact'], 'Nouvelle', **options)
+        lignes = (ot, demande)
+    for role, ligne in zip(anomalie['roles'], lignes):
+        ctx.marquer(role, ligne)
+
+
 def generer_preventifs(ctx):
+    """OT préventifs de l'historique (clôturés) et OT ouverts des gammes échues."""
     for gamme in ctx.gammes:
-        gamme['occurrences'] = (occurrences_par_compteur(ctx, gamme) if gamme['compteur']
-                                else occurrences_par_date(ctx, gamme))
-        for occurrence in gamme['occurrences']:
-            creer_preventif(ctx, gamme, occurrence, 'clos')
+        if gamme['declencheur'] == 'seuil':
+            gamme['occurrences'] = occurrences_par_seuil(ctx, gamme)
+        elif gamme['declencheur'] == 'compteur':
+            gamme['occurrences'] = occurrences_par_compteur(ctx, gamme)
+        else:
+            gamme['occurrences'] = occurrences_par_date(ctx, gamme)
+        anomalies = gamme.get('anomalies', {})
+        nombre = len(gamme['occurrences'])
+        for rang, occurrence in enumerate(gamme['occurrences']):
+            creer_preventif(ctx, gamme, occurrence, 'clos', anomalies.get(nombre - rang))
         if gamme['echue'] and gamme['ouvert'] and not gamme.get('sans_ot'):
-            creer_preventif(ctx, gamme, occurrence_ouverte(ctx, gamme), gamme['ouvert'])
+            ot = creer_preventif(ctx, gamme, occurrence_ouverte(ctx, gamme), gamme['ouvert'])
+            if gamme.get('role_ot'):
+                ctx.marquer(gamme['role_ot'], ot)
 
 
 # ---------------------------------------------------------------------------
@@ -2201,11 +2524,14 @@ def generer_pannes_de_fond(ctx, nombre=None, cible_ot=None):
 # ---------------------------------------------------------------------------
 
 def evenements_fixes_demo(ctx):
-    """Les cas démontrables : PO-02 (fuites de garniture à 58 jours), CV-02 (capteur encrassé), CP-01
-    (échauffements), une panne unique (BA-01), une panne entre deux préventifs (PR-01)."""
+    """Les cas démontrables : PO-02 (fuites de garniture à 58 jours, plus deux fuites de raccord),
+    CV-02 (capteur encrassé), CP-01 (échauffements), une panne unique (BA-01), une panne entre deux
+    préventifs (PR-01), un arrêt intempestif sur CV-03 (même modèle que CV-02 : causes fréquentes à la
+    portée « modèle ») et un bruit sur PO-03 (pas encore assez de cas)."""
     rng = ctx.rng
     equipement = ctx.equipement
     # PO-02 : fuite de garniture tous les 58 jours environ, depuis la plus récente (il y a 19 jours).
+    # Le demandeur choisit toujours la suggestion « Fuite » (code S01).
     scenario_ = trouver_scenario('pompe', 'C01', 'S01')
     dates = []
     jour = ctx.ref - timedelta(days=19)
@@ -2218,9 +2544,19 @@ def evenements_fixes_demo(ctx):
         if rang > 1:
             compte_rendu += (" Cette garniture avait déjà été remplacée il y a %d jours : analyse de cause à "
                              "prévoir (alignement, vibrations, qualité de l'eau)." % (jour - dates[rang - 2]).days)
-        creer_correctif(ctx, equipement['PO-02'], scenario_, heure_aleatoire(rng, jour, 7.0, 14.0),
-                        'dégradé', 'clos', compte_rendu=compte_rendu, pieces=[('kit_gar_u', 1)],
-                        heures=quart_heure(rng.uniform(2.5, 4.0)))
+        demande, ot = creer_correctif(ctx, equipement['PO-02'], scenario_, heure_aleatoire(rng, jour, 7.0, 14.0),
+                                      'dégradé', 'clos', compte_rendu=compte_rendu, pieces=[('kit_gar_u', 1)],
+                                      heures=quart_heure(rng.uniform(2.5, 4.0)), symptome_code='S01')
+    if dates:
+        ctx.marquer('ot_fuite_garniture_po02', ot)
+        ctx.marquer('di_causes_equipement', demande)
+    # PO-02 : deux fuites d'une autre cause (bride de refoulement desserrée) : l'encart « causes
+    # fréquentes » de PO-02 montre au moins deux causes, la garniture usée en tête.
+    for decalage in (160, 330):
+        jour = jours_avant_reference(ctx, decalage)
+        if jour >= ctx.debut:
+            creer_correctif(ctx, equipement['PO-02'], trouver_scenario('pompe', 'C06', 'S01'),
+                            heure_aleatoire(rng, jour, 7.0, 14.0), 'gêne', 'clos', symptome_code='S01')
     # CV-02 : arrêts intempestifs répétés, capteur encrassé (environ un par mois).
     scenario_ = trouver_scenario('convoyeur', 'C04', 'S05')
     rang = 0
@@ -2232,12 +2568,14 @@ def evenements_fixes_demo(ctx):
         creer_correctif(ctx, equipement['CV-02'], scenario_, heure_aleatoire(rng, jour, 7.0, 15.0),
                         'arrêt' if rang % 3 == 1 else 'dégradé', 'clos', pieces=pieces)
         rang += 1
-    # CP-01 : échauffements récurrents (filtre colmaté ou manque de lubrification), un tous les 35 jours.
-    for rang, (decalage, cause) in enumerate([(35, 'C05'), (70, 'C07'), (105, 'C05'), (140, 'C05'), (175, 'C07')]):
-        jour = jour_ouvre_avant(ctx.ref - timedelta(days=decalage + rng.randint(-3, 3)))
+    # CP-01 : échauffements récurrents, un tous les 35 jours : filtre colmaté (C05) ou manque de
+    # lubrification (C07, une fois sur trois).
+    for rang in range(1, 12):
+        cause = 'C07' if rang % 3 == 2 else 'C05'
+        jour = jour_ouvre_avant(ctx.ref - timedelta(days=35 * rang + rng.randint(-3, 3)))
         if jour >= ctx.debut:
             creer_correctif(ctx, equipement['CP-01'], trouver_scenario('compresseur', cause, 'S04'),
-                            heure_aleatoire(rng, jour, 7.0, 14.0), 'arrêt' if rang % 2 == 0 else 'dégradé', 'clos')
+                            heure_aleatoire(rng, jour, 7.0, 14.0), 'arrêt' if rang % 2 == 1 else 'dégradé', 'clos')
     # BA-01 : une seule panne dans tout l'historique.
     jour = jours_avant_reference(ctx, 75)
     if jour >= ctx.debut:
@@ -2247,13 +2585,24 @@ def evenements_fixes_demo(ctx):
             compte_rendu='Dérive du zéro de la balance : retarage avec la masse étalon, 20 colis conformes pesés correctement.',
             pieces=[], heures=1.0)
     # PR-01 : une panne qui survient ENTRE deux visites préventives.
-    gamme_presse = [g for g in ctx.gammes if g['repere'] == 'PR-01' and not g['compteur']]
+    gamme_presse = [g for g in ctx.gammes if g['repere'] == 'PR-01' and g['declencheur'] == 'date']
     if gamme_presse and len(gamme_presse[0]['occurrences']) >= 2:
         avant, apres = gamme_presse[0]['occurrences'][-2]['exec'], gamme_presse[0]['occurrences'][-1]['exec']
         jour = jour_ouvre_apres(avant + (apres - avant) // 2)
         creer_correctif(ctx, equipement['PR-01'], trouver_scenario('presse', 'C10', 'S01'),
                         heure_aleatoire(rng, jour, 7.0, 13.0), 'dégradé', 'clos',
                         texte_di="Fuite d'huile sur un flexible de la presse, elle goutte sur le sol.")
+    # CV-03 : un arrêt intempestif (capteur encrassé), comme sur CV-02 qui est du même modèle.
+    jour = jours_avant_reference(ctx, 110)
+    if jour >= ctx.debut:
+        creer_correctif(ctx, equipement['CV-03'], trouver_scenario('convoyeur', 'C04', 'S05'),
+                        heure_aleatoire(rng, jour, 7.0, 14.0), 'dégradé', 'clos', symptome_code='S05',
+                        pieces=[('nettoyant', 1)])
+    # PO-03 : un bruit de roulement, seul cas de ce symptôme (encart « pas encore assez de cas »).
+    jour = jours_avant_reference(ctx, 150)
+    if jour >= ctx.debut:
+        creer_correctif(ctx, equipement['PO-03'], trouver_scenario('pompe', 'C02', 'S02'),
+                        heure_aleatoire(rng, jour, 7.0, 14.0), 'gêne', 'clos', symptome_code='S02')
 
 
 def etat_courant_demo(ctx):
@@ -2264,66 +2613,93 @@ def etat_courant_demo(ctx):
 
     # --- OT ouverts (le préventif CH-01 « Créé » et CN-01 « Planifié » viennent des gammes)
     # P1 ouvert : le compresseur, en cours de dépannage ce matin.
-    creer_correctif(
+    _demande, ot = creer_correctif(
         ctx, equipement['CP-01'], trouver_scenario('compresseur', 'C05', 'S04'), instant(jour, 7.6), 'arrêt', 'En cours',
         texte_di="Le compresseur CP-01 s'est arrêté en sécurité : alarme température haute, le carter est brûlant.",
         description='Arrêt constaté à la prise de poste.', demandeur='Paul Dubois', delai_decision=14,
         debut=instant(jour, 8.2), technicien=ctx.techniciens[1], temps_prevu=3.0, pieces=[('filtre_huile_cp', 1)],
-        heures_passees=0.5)
+        heures_passees=0.5, symptome_code='S04')
+    ctx.marquer('ot_p1_ouvert', ot)
     renseigner(equipement['CP-01']['ligne'], statut='arrêt')
     # P2 en cours avec une seconde DI regroupée.
-    creer_correctif(
+    _demande, ot = creer_correctif(
         ctx, equipement['EM-01'], trouver_scenario('emballage', 'C11', 'S07'), instant(jour - timedelta(days=3), 14.2),
         'dégradé', 'En cours', texte_di="Les films sont mal soudés sur la fardeleuse, des colis s'ouvrent à la sortie.",
         demandeur='Manon Duval', delai_decision=20, debut=instant(jour, 7.5), technicien=ctx.techniciens[2],
-        temps_prevu=2.0, pieces=[('res_soudure', 1)], heures_passees=1.25,
+        temps_prevu=2.0, pieces=[('res_soudure', 1)], heures_passees=1.25, symptome_code='S07',
         regroupees=[(instant(jour, 7.33), "La fardeleuse EM-01 refait des films mal soudés ce matin aussi.", 'Lucas Perrot')])
+    ctx.marquer('ot_statut_en_cours', ot)
+    ctx.marquer('ot_en_cours_regroupe', ot)
+    ctx.marquer('di_statut_regroupee', [d for d in ctx.base['demandes'] if d['ot_id'] is ot and d['statut'] == 'Regroupée'][0])
     # Planifié (pas en retard).
-    creer_correctif(
+    _demande, ot = creer_correctif(
         ctx, equipement['CU-01'], trouver_scenario('usinage', 'C11', 'S07'), instant(jour - timedelta(days=5), 10.25),
         'gêne', 'Planifié', texte_di="Les cotes des pièces dérivent légèrement sur le centre d'usinage.",
         demandeur='Camille Girard', delai_decision=50, date_prevue=jour + timedelta(days=2),
         technicien=ctx.techniciens[2], temps_prevu=2.0, pieces=[])
+    ctx.marquer('ot_statut_planifie', ot)
     # Préparé, pas en retard (priorité P4).
     creer_correctif(
         ctx, equipement['CV-03'], trouver_scenario('convoyeur', 'C03', 'S02'), instant(jour - timedelta(days=7), 8.7),
         'gêne', 'Préparé', texte_di='La courroie du convoyeur CV-03 patine, bruit de glissement au démarrage.',
         demandeur='Inès Marchand', pieces=[('cour_htd', 1)], temps_prevu=1.0)
     # Préparé et EN RETARD (priorité P4, échéance dépassée).
-    creer_correctif(
+    _demande, ot = creer_correctif(
         ctx, equipement['VE-02'], trouver_scenario('ventilation', 'C05', 'S08'), instant(jour - timedelta(days=21), 9.1),
         'gêne', 'Préparé', texte_di="Débit d'air faible sur l'extracteur VE-02, le filtre semble très encrassé.",
         demandeur='Hugo Lefèvre', pieces=[('filtre_g4', 2)], temps_prevu=1.0)
+    ctx.marquer('ot_statut_prepare', ot)
     # En attente d'une pièce, EN RETARD : le contacteur du départ est en rupture.
-    creer_correctif(
+    _demande, ot = creer_correctif(
         ctx, equipement['AE-02'], trouver_scenario('electrique', 'C09', 'S10'), instant(jour - timedelta(days=12), 13.3),
         'dégradé', 'En attente', texte_di="Légère odeur de chaud près du départ ventilation de l'armoire AE-02.",
         demandeur='Antoine Mercier', delai_decision=45, technicien=ctx.techniciens[0], temps_prevu=2.0,
         debut=instant(jour - timedelta(days=11), 8.0), heures_passees=1.0, pieces=[('contacteur_25', 2)],
         motif_attente='Pièce : contacteur tripolaire 25 A en rupture de stock, achat demandé au fournisseur.')
+    ctx.marquer('ot_statut_en_attente', ot)
+    # Annulé : OT saisi en double (jamais effacé, motif obligatoire).
+    sc01 = equipement['SC-01']
+    creation = jour_ouvre_avant(jour - timedelta(days=30))
+    ctx.marquer('ot_statut_annule', creer_ligne(
+        ctx, 'ordres_travail', origine='manuel', equipement_id=sc01['id'], type='correctif différé', priorite='P3',
+        statut='Annulé', titre='SC-01 — Remplacement de la lame de scie',
+        travail_a_faire='Remplacer la lame de la scie à ruban et régler sa tension.', consignes=consignes_ot(sc01),
+        date_creation=texte_dh(instant(creation, 9.0)), date_prevue=texte_date(jour_ouvre_apres(creation + timedelta(days=7))),
+        temps_prevu_h=1.0,
+        motif_annulation='Doublon : la lame a déjà été changée par le conducteur au changement de série, '
+                         'aucune intervention de maintenance nécessaire.'))
 
-    # --- DI encore à traiter, différée, refusée
+    # --- DI encore à traiter (le demandeur a choisi une suggestion de symptôme), différée, refusée
     nouvelles = [
-        (equipement['AE-04'], 'sécurité', instant(jour, 7.25), 'Paul Dubois',
+        (equipement['AE-04'], 'sécurité', instant(jour, 7.25), 'Paul Dubois', 'S10', ('di_securite',),
          "Odeur de brûlé près de l'armoire AE-04, un peu de fumée à l'ouverture de la porte."),
-        (equipement['PR-01'], 'dégradé', hier(3, 16.1), 'Sarah Colin',
+        (equipement['PR-01'], 'dégradé', hier(3, 16.1), 'Sarah Colin', 'S01', ('di_nouvelle_degradee',),
          "Fuite d'huile sous la presse PR-01, une petite flaque se forme depuis ce matin."),
-        (equipement['ET-01'], 'gêne', hier(3, 11.3), 'Léa Fontaine',
+        (equipement['ET-01'], 'gêne', hier(3, 11.3), 'Léa Fontaine', 'S07',
+         ('di_statut_nouvelle', 'di_nouvelle_sans_ot_ouvert'),
          "Les étiquettes sortent décalées de quelques millimètres sur l'étiqueteuse."),
-        (equipement['PO-03'], 'gêne', instant(jour, 6.97), 'Mathieu Roux',
+        (equipement['PO-03'], 'gêne', instant(jour, 6.97), 'Mathieu Roux', 'S02',
+         ('di_nouvelle_p4', 'di_causes_insuffisantes'),
          'La pompe de relevage est très bruyante au démarrage.'),
     ]
-    for equipement_nouvelle, impact, quand, demandeur, texte in nouvelles:
-        creer_correctif(ctx, equipement_nouvelle, None, quand, impact, 'Nouvelle', texte_di=texte,
-                        demandeur=demandeur, description='')
-    creer_correctif(
+    for equipement_nouvelle, impact, quand, demandeur, code, roles, texte in nouvelles:
+        demande, _ = creer_correctif(ctx, equipement_nouvelle, None, quand, impact, 'Nouvelle', texte_di=texte,
+                                     demandeur=demandeur, description='', symptome_code=code)
+        for role in roles:
+            ctx.marquer(role, demande)
+    demande, _ = creer_correctif(
         ctx, equipement['CV-01'], None, hier(6, 10.7), 'gêne', 'Différée', demandeur='Lucas Perrot', delai_decision=200,
         texte_di='Le garde-corps du convoyeur CV-01 est légèrement tordu, à redresser.', description='',
-        motif="Différée : à traiter lors de l'arrêt programmé de fin octobre, sans impact sur la production.")
-    creer_correctif(
+        motif="Différée : à traiter lors de l'arrêt programmé de fin octobre, sans impact sur la production.",
+        symptome_code='')
+    ctx.marquer('di_statut_differee', demande)
+    ctx.marquer('di_sans_symptome_code', demande)
+    demande, _ = creer_correctif(
         ctx, equipement['CU-01'], None, hier(10, 9.5), 'gêne', 'Refusée', demandeur='Hugo Lefèvre', delai_decision=120,
         texte_di='Demande de repeindre le carter du centre d\'usinage en bleu.', description='',
-        motif="Refusée : demande esthétique, hors périmètre de la maintenance. À adresser au service méthodes.")
+        motif="Refusée : demande esthétique, hors périmètre de la maintenance. À adresser au service méthodes.",
+        symptome_code='')
+    ctx.marquer('di_statut_refusee', demande)
 
 
 # =============================================================================
@@ -2335,17 +2711,25 @@ def rejouer_stock(ctx, article, evenements, stock_initial, reapprovisionner):
 
     Retourne (stock minimal atteint, stock final, commandes). Si `reapprovisionner`, une commande est
     passée dès que le stock tombe au point de commande ; elle arrive après le délai de l'article.
+    Un inventaire applique son écart (perte, casse, pièce retrouvée) et note le stock compté dans
+    evenement['valeur'] (valeur absolue écrite dans le mouvement d'inventaire).
     """
     limite = instant(ctx.fin_historique, 17.0)
     stock = minimum = stock_initial
     commandes = []
     en_attente = None
     for genre, evenement in evenements:
-        if en_attente and en_attente['arrivee'] <= evenement['quand']:
+        # Réception strictement AVANT le mouvement : à la même minute, la sortie est écrite avant
+        # l'entrée dans mouvements_stock.csv (même ordre que le recalcul du stock).
+        if en_attente and en_attente['arrivee'] < evenement['quand']:
             stock += en_attente['quantite']
             en_attente['recue'] = True
             en_attente = None
-        stock += evenement['quantite'] if genre == 'retour' else -evenement['quantite']
+        if genre == 'inventaire':
+            stock += evenement['ecart']
+            evenement['valeur'] = stock
+        else:
+            stock += evenement['quantite'] if genre == 'retour' else -evenement['quantite']
         minimum = min(minimum, stock)
         if reapprovisionner and genre == 'sortie' and en_attente is None and stock <= article['pc']:
             commande = jour_ouvre_apres(evenement['quand'].date() + timedelta(days=1))
@@ -2368,7 +2752,8 @@ def choisir_stock_initial(ctx, article, evenements):
     if article['cible'] is not None:
         sorti = sum(e['quantite'] for genre, e in evenements if genre == 'sortie')
         rendu = sum(e['quantite'] for genre, e in evenements if genre == 'retour')
-        return article['cible'] + sorti - rendu, False
+        ecarts = sum(e['ecart'] for genre, e in evenements if genre == 'inventaire')
+        return article['cible'] + sorti - rendu - ecarts, False
     stock_initial = article['pc'] + 1
     for _ in range(5000):
         minimum, final, commandes = rejouer_stock(ctx, article, evenements, stock_initial, True)
@@ -2379,34 +2764,79 @@ def choisir_stock_initial(ctx, article, evenements):
     raise ErreurCoherence('Stock impossible à équilibrer pour ' + article['designation'])
 
 
+def jours_inventaire(ctx):
+    """Inventaire annuel : le premier jour ouvré à partir du 5 janvier, à 6 h 45 (avant le travail)."""
+    instants = []
+    for annee in range(ctx.debut.year, ctx.ref.year + 1):
+        jour = jour_ouvre_apres(date(annee, 1, 5))
+        if ctx.debut < jour <= ctx.fin_historique:
+            instants.append(instant(jour, 6.75))
+    return instants
+
+
+def ajuster_reapprovisionnement(ctx, evenements_par_article):
+    """Jeu de charge : un grand parc consomme bien plus de pièces que l'atelier de démo. Le stock de
+    sécurité, le point de commande (RG6) et la quantité commandée suivent cette consommation : le
+    magasin commande souvent (une semaine de consommation à la fois, et au moins deux fois la
+    consommation pendant le délai, puisqu'une seule commande est en cours), les achats restent en
+    proportion des OT au lieu d'un énorme inventaire de départ."""
+    jours = float(max(1, (ctx.ref - ctx.debut).days))
+    for cle, article in ctx.articles.items():
+        sorti = sum(e['quantite'] for genre, e in evenements_par_article[cle] if genre == 'sortie')
+        if sorti == 0:
+            continue
+        par_jour = sorti / jours
+        pendant_le_delai = int(math.ceil(par_jour * article['delai']))
+        # Les sorties arrivent par à-coups : sécurité = une consommation moyenne pendant le délai, et
+        # point de commande = sécurité + deux fois cette consommation.
+        article['sec'] = max(article['sec'], pendant_le_delai)
+        article['pc'] = max(article['pc'], article['sec'] + 2 * pendant_le_delai)
+        article['qte'] = max(1, int(math.ceil(par_jour * 7)), 2 * pendant_le_delai)
+        renseigner(article['ligne'], stock_securite=article['sec'], point_commande=article['pc'],
+                   qte_commande=article['qte'])
+
+
 def construire_stock(ctx):
-    """Inventaire de départ, sorties imputées aux OT, retours, réceptions et achats d'un jeu cohérent."""
+    """Inventaire de départ, sorties imputées aux OT, retours, inventaires annuels, réceptions et achats
+    d'un jeu cohérent (aucun stock négatif à aucun moment ; colonne stock = stock recalculé)."""
     rng = ctx.rng
     evenements_par_article = {cle: [] for cle in ctx.articles}
     for sortie in ctx.sorties:
         evenements_par_article[sortie['article']['cle']].append(('sortie', sortie))
     for retour in ctx.retours:
         evenements_par_article[retour['article']['cle']].append(('retour', retour))
+    for quand in jours_inventaire(ctx):
+        for cle in ctx.articles:
+            evenements_par_article[cle].append(('inventaire', {'quand': quand, 'ecart': ECARTS_INVENTAIRE.get(cle, 0),
+                                                               'valeur': None}))
+    if ctx.volume:
+        ajuster_reapprovisionnement(ctx, evenements_par_article)
     mouvements = []            # (instant, numéro d'ordre, valeurs)
     achats = []
     debut = instant(jour_ouvre_apres(ctx.debut), 6.5)
     for cle, article in ctx.articles.items():
         evenements = sorted(evenements_par_article[cle], key=lambda element: element[1]['quand'])
         stock_initial, reapprovisionner = choisir_stock_initial(ctx, article, evenements)
+        # Dernier rejeu avec le stock initial retenu : il fixe aussi les quantités comptées aux inventaires.
+        _minimum, _final, commandes = rejouer_stock(ctx, article, evenements, stock_initial, reapprovisionner)
         mouvements.append((debut, len(mouvements), dict(
             article=article, type='inventaire', quantite=stock_initial, utilisateur='Magasin',
             commentaire='Inventaire de départ')))
         for genre, evenement in evenements:
+            if genre == 'inventaire':
+                ecart = evenement['ecart']
+                mouvements.append((evenement['quand'], len(mouvements), dict(
+                    article=article, type='inventaire', quantite=evenement['valeur'], utilisateur='Magasin',
+                    commentaire='Inventaire annuel' + (' (écart de %+d)' % ecart if ecart else ''))))
+                continue
             mouvements.append((evenement['quand'], len(mouvements), dict(
                 article=article, type=genre, quantite=evenement['quantite'], ot_id=evenement['ot'],
                 utilisateur=evenement['utilisateur'],
                 commentaire=('Utilisée sur %s' if genre == 'sortie' else 'Retour au magasin (non utilisée) de %s')
                 % evenement['repere'])))
-        if reapprovisionner:
-            _minimum, _final, commandes = rejouer_stock(ctx, article, evenements, stock_initial, True)
-            for commande in commandes:
-                achats.append({'article': article, 'date': commande['commande'], 'quantite': commande['quantite'],
-                               'statut': 'reçue', 'reception': commande['arrivee']})
+        for commande in commandes:
+            achats.append({'article': article, 'date': commande['commande'], 'quantite': commande['quantite'],
+                           'statut': 'reçue', 'reception': commande['arrivee']})
     for cle, statut, jours in ACHATS_EN_COURS:           # les achats qui expliquent les articles « à commander »
         if cle in ctx.articles:
             article = ctx.articles[cle]
@@ -2644,9 +3074,140 @@ def verifier_jeu(ctx):
             entrees[mouvement['article_id']] = entrees.get(mouvement['article_id'], 0) + float(mouvement['quantite'])
     if recu != entrees:
         erreur('Les achats reçus ne correspondent pas aux entrées de stock')
+
+    # --- 4. Champs du format v2 (ARCHITECTURE.md §14.1, §14.6)
+    ordres = {ot['id']: ot for ot in base['ordres_travail']}
+    for equipement in base['equipements']:
+        if not equipement['valeur_remplacement']:
+            erreur('%s sans valeur de remplacement' % equipement['id'])
+    origines = set()
+    for demande in base['demandes']:
+        ot = ordres.get(demande['ot_id'])
+        if demande['symptome_code'] and ot is not None and ot['symptome_code'] != demande['symptome_code']:
+            erreur('%s : code symptôme %s différent de celui de %s' % (demande['id'], demande['symptome_code'], ot['id']))
+        if demande['ot_origine_id']:
+            origine = ordres[demande['ot_origine_id']]
+            origines.add(origine['id'])
+            if origine['origine'] != 'préventif' or origine['anomalie_constatee'] != '1':
+                erreur('%s : OT d\'origine %s sans anomalie constatée' % (demande['id'], origine['id']))
+    for ot in base['ordres_travail']:
+        if ot['anomalie_constatee'] == '1' and ot['id'] not in origines:
+            erreur('%s : anomalie constatée sans DI liée' % ot['id'])
     if erreurs:
         raise ErreurCoherence('\n'.join(erreurs))
 
+
+# ---------------------------------------------------------------------------
+# Identifiants de scénario (tests/fixtures/demo-scenarios.json, ARCHITECTURE.md §14.8)
+# ---------------------------------------------------------------------------
+
+STATUTS_FERMES = ('Clôturé techniquement', 'Clôturé administrativement', 'Annulé')
+
+# Équipement et symptôme de chaque cas de « causes fréquentes » (ARCHITECTURE.md §14.5).
+CAUSES_DEMO = {'causes_equipement': ('PO-02', 'S01'), 'causes_equipement_2': ('CP-01', 'S04'),
+               'causes_modele': ('CV-03', 'S05'), 'causes_insuffisantes': ('PO-03', 'S02')}
+MINIMUM_CAUSES = 5
+
+
+def cles_documentees():
+    """Clés de scénario décrites dans la docstring du module (section « Identifiants de scénario »)."""
+    section = __doc__.split('Identifiants de scénario', 1)[1].split('Organisation du fichier', 1)[0]
+    return re.findall(r'^    ([a-z0-9_]+) {2,}\S', section, re.MULTILINE)
+
+
+def cas_causes(base, equipements, symptome):
+    """OT comptés par l'encart des causes fréquentes : correctifs clôturés de ce symptôme, cause renseignée."""
+    return [o for o in base['ordres_travail']
+            if o['equipement_id'] in equipements and o['type'].startswith('correctif')
+            and o['statut'].startswith('Clôturé') and o['symptome_code'] == symptome and o['cause_code']]
+
+
+def equipements_du_modele(base, equipement):
+    """Identifiants des équipements de même marque et même modèle (casse ignorée), lui compris."""
+    cle = (equipement['marque'].strip().lower(), equipement['modele'].strip().lower())
+    return {e['id'] for e in base['equipements'] if (e['marque'].strip().lower(), e['modele'].strip().lower()) == cle}
+
+
+def scenarios_du_jeu(ctx):
+    """Identifiants des objets de scénario (voir la docstring du module), après attribution des
+    identifiants. Les rôles marqués pendant la génération sont complétés par des recherches."""
+    base = ctx.base
+    scenarios = {role: ligne['id'] for role, ligne in ctx.marques.items()}
+    ordres = base['ordres_travail']
+    ouverts = [o for o in ordres if o['statut'] not in STATUTS_FERMES]
+    scenarios['ot_en_retard'] = sorted(o['id'] for o in ouverts if o['date_prevue'] and o['date_prevue'] < DATE_REFERENCE)
+    techniques = [o for o in ordres if o['statut'] == 'Clôturé techniquement']
+    scenarios['ot_statut_cloture_technique'] = max(techniques, key=lambda o: (o['date_cloture_tech'], o['id']))['id']
+    administratifs = [o for o in ordres if o['statut'] == 'Clôturé administrativement']
+    scenarios['ot_statut_cloture_administratif'] = max(
+        administratifs, key=lambda o: (o['date_cloture_admin'], o['id']))['id']
+    preventifs = [o for o in ordres if o['origine'] == 'préventif' and o['statut'].startswith('Clôturé')]
+    scenarios['ot_preventif_cloture'] = min(preventifs, key=lambda o: (o['date_creation'], o['id']))['id']
+    acceptees = [d for d in base['demandes'] if d['statut'] == 'Acceptée' and d['ot_id']]     # ordre chronologique
+    scenarios['di_statut_acceptee'] = acceptees[0]['id']
+    scenarios['ot_de_di_acceptee'] = acceptees[0]['ot_id']
+    scenarios['di_acceptee_autre'] = acceptees[1]['id']
+    scenarios['di_plus_ancienne'] = min(d['id'] for d in base['demandes'])
+    scenarios['di_nouvelles'] = sorted(d['id'] for d in base['demandes'] if d['statut'] == 'Nouvelle')
+    scenarios['kit_garniture'] = ctx.articles['kit_gar_po02']['id']
+    scenarios['articles_sous_point_commande'] = sorted(
+        a['id'] for a in base['articles'] if float(a['stock']) <= float(a['point_commande']))
+    for statut, role, position in (('demandée', 'achat_statut_demandee', 0), ('commandée', 'achat_statut_commandee', 0),
+                                   ('reçue', 'achat_statut_recue', -1)):
+        scenarios[role] = [a for a in base['achats'] if a['statut'] == statut][position]['id']
+    scenarios['equipement_br'] = ctx.equipement['AE-03']['id']
+    scenarios['equipement_panne_unique'] = ctx.equipement['BA-01']['id']
+    scenarios['technicien_br_valide'] = ctx.techniciens[0]['id']
+    scenarios['technicien_br_echue'] = ctx.techniciens[3]['id']
+    for role, (repere, symptome) in CAUSES_DEMO.items():
+        scenarios[role] = ctx.equipement[repere]['id']
+        scenarios[role + '_symptome'] = symptome
+    return scenarios
+
+
+def verifier_scenarios(ctx, scenarios):
+    """Auto-vérification des scénarios qui dépendent des tirages au hasard (causes fréquentes) et de la
+    liste des clés (exactement celles de la docstring). Lève ErreurCoherence."""
+    base = ctx.base
+    erreurs = []
+    documentees = cles_documentees()
+    if sorted(documentees) != sorted(scenarios):
+        erreurs.append('Clés de scénario non documentées ou absentes : %s'
+                       % sorted(set(documentees) ^ set(scenarios)))
+    equipements = {e['id']: e for e in base['equipements']}
+
+    def compter(role):
+        identifiant, symptome = scenarios[role], scenarios[role + '_symptome']
+        propres = cas_causes(base, {identifiant}, symptome)
+        modele = cas_causes(base, equipements_du_modele(base, equipements[identifiant]), symptome)
+        return propres, modele
+
+    for role in ('causes_equipement', 'causes_equipement_2'):
+        propres, _ = compter(role)
+        if len(propres) < MINIMUM_CAUSES:
+            erreurs.append('%s : %d cas seulement' % (role, len(propres)))
+    propres, _ = compter('causes_equipement')
+    causes = {}
+    for ot in propres:
+        causes[ot['cause_code']] = causes.get(ot['cause_code'], 0) + 1
+    if len(causes) < 2 or max(causes, key=lambda code: (causes[code], code == 'C01')) != 'C01':
+        erreurs.append('causes_equipement : causes %r (au moins deux, garniture usée en tête)' % causes)
+    propres, modele = compter('causes_modele')
+    if not 1 <= len(propres) < MINIMUM_CAUSES or len(modele) < MINIMUM_CAUSES:
+        erreurs.append('causes_modele : %d cas propres, %d avec le modèle' % (len(propres), len(modele)))
+    propres, modele = compter('causes_insuffisantes')
+    if not 1 <= len(modele) < MINIMUM_CAUSES or len(propres) != len(modele):
+        erreurs.append('causes_insuffisantes : %d cas propres, %d avec le modèle' % (len(propres), len(modele)))
+    avec_code = [d for d in base['demandes'] if d['symptome_code']]
+    if not 0.7 <= len(avec_code) / float(len(base['demandes'])) <= 0.9:
+        erreurs.append('%d DI sur %d avec un code symptôme (environ 80 %% attendus)' % (len(avec_code), len(base['demandes'])))
+    if erreurs:
+        raise ErreurCoherence('\n'.join(erreurs))
+
+
+# ---------------------------------------------------------------------------
+# Construction complète et ligne de commande
+# ---------------------------------------------------------------------------
 
 def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
     """Construit toutes les tables en mémoire (liste de dictionnaires) et vérifie leur cohérence."""
@@ -2657,6 +3218,7 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
     generer_techniciens(ctx)
     generer_equipements(ctx)
     generer_articles(ctx)
+    preparer_gammes_et_compteurs(ctx)
     generer_compteurs_et_releves(ctx)
     generer_gammes(ctx)
     generer_controles(ctx)
@@ -2680,16 +3242,20 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
 
 def lire_arguments(argv):
     analyseur = argparse.ArgumentParser(
-        description="Génère le jeu de démo de Prévo (donnees/demo/*.csv et js/demo-donnees.js).")
+        description="Génère le jeu de démo de Prévo (donnees/demo/*.csv, js/demo-donnees.js et "
+                    "tests/fixtures/demo-scenarios.json).")
     analyseur.add_argument('--mois', type=int, default=None,
                            help="durée de l'historique en mois (défaut : %d, ou 24 avec --volume)" % MOIS_PAR_DEFAUT)
     analyseur.add_argument('--volume', metavar='EQUIPEMENTS,OT', default=None,
                            help='jeu de charge, ex. 500,5000 (exige --sortie)')
     analyseur.add_argument('--sortie', metavar='DOSSIER', default=None,
-                           help='dossier des CSV (défaut : donnees/demo ; dans ce cas js/demo-donnees.js est aussi écrit)')
+                           help='dossier des CSV (défaut : donnees/demo ; dans ce cas js/demo-donnees.js et '
+                                'tests/fixtures/demo-scenarios.json sont aussi écrits)')
     analyseur.add_argument('--sans-js', action='store_true', help="n'écrit pas js/demo-donnees.js")
     analyseur.add_argument('--fichier-js', metavar='CHEMIN', default=None,
                            help="écrit le fichier JavaScript à cet emplacement (utile aux tests)")
+    analyseur.add_argument('--fichier-scenarios', metavar='CHEMIN', default=None,
+                           help="écrit les identifiants de scénario à cet emplacement (utile aux tests)")
     arguments = analyseur.parse_args(argv)
     if arguments.volume:
         try:
@@ -2700,6 +3266,8 @@ def lire_arguments(argv):
             analyseur.error('--volume : au moins 40 équipements et 200 OT')
         if not arguments.sortie:
             analyseur.error('--volume exige --sortie DOSSIER (pour ne pas écraser le jeu de démo)')
+        if arguments.fichier_scenarios:
+            analyseur.error("--fichier-scenarios : le jeu de charge n'a pas d'identifiants de scénario")
         arguments.volume = (nombre_equipements, nombre_ot)
     if arguments.mois is None:
         arguments.mois = 24 if arguments.volume else MOIS_PAR_DEFAUT
@@ -2721,6 +3289,13 @@ def principal(argv=None):
         ecrire_js(Path(arguments.fichier_js), textes)
     elif not arguments.sans_js and not arguments.sortie:
         ecrire_js(FICHIER_JS, textes)
+    # Les identifiants de scénario ne valent que pour le jeu de démo livré (donnees/demo) : ils sont
+    # calculés et vérifiés seulement quand on les écrit.
+    if arguments.fichier_scenarios or not arguments.sortie:
+        scenarios = scenarios_du_jeu(ctx)
+        verifier_scenarios(ctx, scenarios)
+        ecrire_scenarios(Path(arguments.fichier_scenarios) if arguments.fichier_scenarios else FICHIER_SCENARIOS,
+                         scenarios)
     print('Jeu généré en %.1f s (%d mois d\'historique, date de référence %s).'
           % (time.time() - depart, arguments.mois, DATE_REFERENCE))
     for table in NOMS_TABLES:

@@ -10,3 +10,7 @@
 *.jpg   binary
 # Bibliothèques tierces : copiées à l'octet près depuis les paquets vérifiés (empreintes dans tests/test_depot.py)
 js/lib/** -text
+# Fichiers produits par outils/generer_demo.py, comparés à l'octet près par tests/test_demo.py :
+# git ne doit pas convertir leurs fins de ligne (sinon un clone neuf sous Windows les passerait en CRLF).
+js/demo-donnees.js -text
+tests/fixtures/*.json -text

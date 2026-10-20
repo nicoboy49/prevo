@@ -19,11 +19,20 @@ import re
 import unittest
 from pathlib import Path
 
-from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
+from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo, url_fichier
 
 BOM = b"\xef\xbb\xbf"
 RAPPEL = "Cocher une case ne consigne rien : appliquez la procédure."
 STATUTS_FERMES = ("Clôturé techniquement", "Clôturé administrativement", "Annulé")
+
+# Identifiants des objets de scénario du jeu de démo (outils/generer_demo.py, ARCHITECTURE.md §14.8).
+SCENARIOS = scenarios_demo()
+OT_P1 = SCENARIOS["ot_p1_ouvert"]                   # En cours, P1, CP-01
+OT_CREE = SCENARIOS["ot_statut_cree"]               # préventif « Créé » (gamme compteur échue)
+OT_PREPARE = SCENARIOS["ot_statut_prepare"]         # correctif « Préparé », en retard
+OT_EN_COURS = SCENARIOS["ot_statut_en_cours"]       # correctif « En cours », P2
+OT_EN_ATTENTE = SCENARIOS["ot_statut_en_attente"]   # « En attente » d'une pièce, en retard
+OT_FUITE_PO02 = SCENARIOS["ot_fuite_garniture_po02"]  # correctif clôturé de PO-02 : 1 kit garniture prévu
 
 # window.print() ouvrirait une boîte de dialogue : en test, un espion note seulement l'appel.
 ESPION_IMPRESSION_JS = "window.print = function () { window.__impressions = (window.__impressions || 0) + 1; };"
@@ -162,10 +171,12 @@ class TestRegles(CasOrdres):
             self.assertIn("verrouillé", passage["erreurs"][0])
             passage = self.page.evaluate("Ordres.verifierPassage({ id: 'X', statut: 'Préparé', technicien_id: '', date_prevue: '' }, 'Planifié')")
             self.assertEqual(len(passage["erreurs"]), 2)
-            # Stock (RG3) : OT-2026-0029 prévoit 1 kit garniture (stock 3) → planifiable côté stock
+            # Stock (RG3) : la dernière fuite de PO-02 prévoit 1 kit garniture (2 au moins en stock)
+            # → planifiable côté stock
             passage = self.page.evaluate(
-                "Ordres.verifierPassage(Object.assign({}, Donnees.trouver('ordres_travail', 'OT-2026-0029'),"
-                " { statut: 'Préparé', technicien_id: 'TEC-0002', date_prevue: '2026-10-30' }), 'Planifié')")
+                "Ordres.verifierPassage(Object.assign({}, Donnees.trouver('ordres_travail', %r),"
+                " { statut: 'Préparé', technicien_id: 'TEC-0002', date_prevue: '2026-10-30' }), 'Planifié')"
+                % OT_FUITE_PO02)
             self.assertTrue(passage["ok"], passage)
             # Ouvert / en retard (§10)
             self.assertTrue(self.page.evaluate("Ordres.estOuvert({ statut: 'En attente' })"))
@@ -414,12 +425,13 @@ class TestParcours(CasOrdres):
 # Deux postes sur le même OT ; saisies de la fiche conservées (relecture des vagues 4-5)
 # ---------------------------------------------------------------------------
 
-# Prépare OT-2026-0108 (En cours) pour qu'il soit clôturable : date de fin, codes, compte rendu, temps.
-PREPARER_CLOTURE_0108_JS = """async () => {
-  await Donnees.modifier('ordres_travail', (l) => { Object.assign(l.find((x) => x.id === 'OT-2026-0108'), {
+# Prépare l'OT P1 en cours (argument : son identifiant) pour qu'il soit clôturable : date de fin,
+# codes, compte rendu, temps.
+PREPARER_CLOTURE_P1_JS = """async (otId) => {
+  await Donnees.modifier('ordres_travail', (l) => { Object.assign(l.find((x) => x.id === otId), {
     date_fin: Donnees.maintenant(), cause_code: 'C01', remede_code: 'R01',
     compte_rendu: 'Filtre à huile remplacé, radiateur nettoyé.', remise_service: '1' }); });
-  await Donnees.modifier('ot_temps', (l, o) => { l.push({ id: o.nouvelId(l), ot_id: 'OT-2026-0108',
+  await Donnees.modifier('ot_temps', (l, o) => { l.push({ id: o.nouvelId(l), ot_id: otId,
     technicien_id: 'TEC-0004', date: Donnees.aujourdhui(), heures: '2' }); });
 }"""
 
@@ -457,85 +469,85 @@ class TestDeuxPostes(CasOrdres):
         self.autoriser_erreur(re.compile(r"status of 409.*/api/csv/ordres_travail"))
         page = self.page
         with ServeurPrevo() as serveur:
-            poste_b = self.autre_poste(serveur, "#/ot/OT-2026-0108")
-            poste_b.evaluate(PREPARER_CLOTURE_0108_JS)
+            poste_b = self.autre_poste(serveur, "#/ot/" + OT_P1)
+            poste_b.evaluate(PREPARER_CLOTURE_P1_JS, OT_P1)
             # Poste A : compte rendu « RAS » sans code cause, pas encore enregistré
-            self.ouvrir(serveur, "#/ot/OT-2026-0108", profil="technicien", technicien_id="TEC-0004")
-            self.attendre_fiche("OT-2026-0108")
+            self.ouvrir(serveur, "#/ot/" + OT_P1, profil="technicien", technicien_id="TEC-0004")
+            self.attendre_fiche(OT_P1)
             self.onglet("compte-rendu")
             page.fill("#form-compte-rendu [name=compte_rendu]", "RAS")
             page.select_option("#form-compte-rendu [name=cause_code]", "")
             # Poste B clôture techniquement pendant ce temps
-            self.assertEqual(poste_b.evaluate("Ordres.changerStatut('OT-2026-0108', 'En cours', 'Clôturé techniquement')"),
+            self.assertEqual(poste_b.evaluate("Ordres.changerStatut(%r, 'En cours', 'Clôturé techniquement')" % OT_P1),
                              "Clôturé techniquement")
             page.click("#form-compte-rendu button[type=submit]")
             page.wait_for_function("document.getElementById('toast').textContent.includes('Clôturé techniquement')")
-            ligne = self.ligne(serveur, "ordres_travail.csv", "OT-2026-0108")
+            ligne = self.ligne(serveur, "ordres_travail.csv", OT_P1)
             self.assertEqual((ligne["compte_rendu"], ligne["cause_code"]), ("Filtre à huile remplacé, radiateur nettoyé.", "C01"))
             # La clôture administrative reste possible (l'OT est intact) et le compte rendu est le bon
             poste_b.evaluate("Donnees.rafraichir()")
             self.assertEqual(poste_b.evaluate(
-                "Ordres.changerStatut('OT-2026-0108', 'Clôturé techniquement', 'Clôturé administrativement')"),
+                "Ordres.changerStatut(%r, 'Clôturé techniquement', 'Clôturé administrativement')" % OT_P1),
                 "Clôturé administrativement")
-            ligne = self.ligne(serveur, "ordres_travail.csv", "OT-2026-0108")
+            ligne = self.ligne(serveur, "ordres_travail.csv", OT_P1)
             self.assertEqual((ligne["statut"], ligne["compte_rendu"], ligne["cause_code"]),
                              ("Clôturé administrativement", "Filtre à huile remplacé, radiateur nettoyé.", "C01"))
 
     def test_ot_verrouille_sur_un_autre_poste_temps_refuse(self):
         page = self.page
         with ServeurPrevo() as serveur:
-            poste_b = self.autre_poste(serveur, "#/ot/OT-2026-0108")
-            poste_b.evaluate(PREPARER_CLOTURE_0108_JS)
-            temps_avant = [t["heures"] for t in lire_csv(serveur.dossier, "ot_temps.csv") if t["ot_id"] == "OT-2026-0108"]
+            poste_b = self.autre_poste(serveur, "#/ot/" + OT_P1)
+            poste_b.evaluate(PREPARER_CLOTURE_P1_JS, OT_P1)
+            temps_avant = [t["heures"] for t in lire_csv(serveur.dossier, "ot_temps.csv") if t["ot_id"] == OT_P1]
             # Poste A : onglet Exécution ouvert, puis B clôture administrativement
-            self.ouvrir(serveur, "#/ot/OT-2026-0108", profil="technicien", technicien_id="TEC-0004")
-            self.attendre_fiche("OT-2026-0108")
+            self.ouvrir(serveur, "#/ot/" + OT_P1, profil="technicien", technicien_id="TEC-0004")
+            self.attendre_fiche(OT_P1)
             self.onglet("execution")
-            self.assertEqual(poste_b.evaluate("""async () => {
-                await Ordres.changerStatut('OT-2026-0108', 'En cours', 'Clôturé techniquement');
-                return Ordres.changerStatut('OT-2026-0108', 'Clôturé techniquement', 'Clôturé administrativement'); }"""),
+            self.assertEqual(poste_b.evaluate("""async (otId) => {
+                await Ordres.changerStatut(otId, 'En cours', 'Clôturé techniquement');
+                return Ordres.changerStatut(otId, 'Clôturé techniquement', 'Clôturé administrativement'); }""", OT_P1),
                 "Clôturé administrativement")
             page.fill("#ot-temps-heures", "5")
             page.click("#form-temps button[type=submit]")
             page.wait_for_function("document.getElementById('toast').textContent.includes('ne peut plus être modifié')")
-            temps_apres = [t["heures"] for t in lire_csv(serveur.dossier, "ot_temps.csv") if t["ot_id"] == "OT-2026-0108"]
+            temps_apres = [t["heures"] for t in lire_csv(serveur.dossier, "ot_temps.csv") if t["ot_id"] == OT_P1]
             self.assertEqual(temps_apres, temps_avant)
 
     def test_ot_annule_sur_un_autre_poste_pieces_refusees(self):
         with ServeurPrevo() as serveur:
-            poste_b = self.autre_poste(serveur, "#/ot/OT-2026-0104")
-            # Un responsable (poste C) prépare OT-2026-0104 pendant que B l'annule
-            poste_c = self.autre_poste(serveur, "#/ot/OT-2026-0104")
+            poste_b = self.autre_poste(serveur, "#/ot/" + OT_CREE)
+            # Un responsable (poste C) prépare l'OT « Créé » pendant que B l'annule
+            poste_c = self.autre_poste(serveur, "#/ot/" + OT_CREE)
             poste_c.wait_for_selector(".ot-fiche .ot-numero")
             poste_c.click(".onglet[data-onglet='preparation']")
             poste_c.wait_for_selector("#ot-nouvel-article")
             poste_b.evaluate("Donnees.rafraichir()")
             self.assertEqual(poste_b.evaluate(
-                "Ordres.changerStatut('OT-2026-0104', 'Créé', 'Annulé', { motif_annulation: 'doublon' })"), "Annulé")
+                "Ordres.changerStatut(%r, 'Créé', 'Annulé', { motif_annulation: 'doublon' })" % OT_CREE), "Annulé")
             poste_c.select_option("#ot-nouvel-article", "ART-0016")
             poste_c.click("#form-pieces button[type=submit]")
             poste_c.wait_for_function("document.getElementById('toast').textContent.includes('ne peut plus être modifié')")
-            self.assertEqual([p for p in lire_csv(serveur.dossier, "ot_pieces.csv") if p["ot_id"] == "OT-2026-0104"], [])
+            self.assertEqual([p for p in lire_csv(serveur.dossier, "ot_pieces.csv") if p["ot_id"] == OT_CREE], [])
 
     def test_saisies_des_autres_blocs_conservees_apres_un_enregistrement(self):
         page = self.page
         with ServeurPrevo() as serveur:
             # Préparation : « Travail à faire » tapé, puis « Enregistrer les pièces »
-            self.ouvrir(serveur, "#/ot/OT-2026-0097")
-            self.attendre_fiche("OT-2026-0097")
+            self.ouvrir(serveur, "#/ot/" + OT_PREPARE)
+            self.attendre_fiche(OT_PREPARE)
             self.onglet("preparation")
             page.fill("#form-preparation [name=travail_a_faire]", "Texte saisi avant d'ajouter une pièce")
             page.select_option("#ot-nouvel-article", "ART-0016")
             page.click("#form-pieces button[type=submit]")
-            self.attendre_js("Donnees.lignes('ot_pieces').some((p) => p.ot_id === 'OT-2026-0097' && p.article_id === 'ART-0016')")
+            self.attendre_js("Donnees.lignes('ot_pieces').some((p) => p.ot_id === %r && p.article_id === 'ART-0016')" % OT_PREPARE)
             page.wait_for_function("document.getElementById('toast').textContent.includes('Pièces prévues enregistrées')")
             self.assertEqual(page.input_value("#form-preparation [name=travail_a_faire]"), "Texte saisi avant d'ajouter une pièce")
-            self.assertEqual(self.ligne(serveur, "ordres_travail.csv", "OT-2026-0097")["travail_a_faire"],
+            self.assertEqual(self.ligne(serveur, "ordres_travail.csv", OT_PREPARE)["travail_a_faire"],
                              "Texte saisi avant d'ajouter une pièce")
 
             # Exécution : « Maintenant » pour la date de fin, puis « Ajouter le temps »
-            self.aller("#/ot/OT-2026-0107")
-            self.attendre_fiche("OT-2026-0107")
+            self.aller("#/ot/" + OT_EN_COURS)
+            self.attendre_fiche(OT_EN_COURS)
             self.onglet("execution")
             page.click("#form-execution .ot-maintenant")
             date_fin = page.input_value("#form-execution [name=date_fin]")
@@ -544,7 +556,7 @@ class TestDeuxPostes(CasOrdres):
             page.click("#form-temps button[type=submit]")
             page.wait_for_function("document.getElementById('toast').textContent.includes('Temps ajouté')")
             self.assertEqual(page.input_value("#form-execution [name=date_fin]"), date_fin)
-            self.assertEqual(self.ligne(serveur, "ordres_travail.csv", "OT-2026-0107")["date_fin"], date_fin.replace("T", " "))
+            self.assertEqual(self.ligne(serveur, "ordres_travail.csv", OT_EN_COURS)["date_fin"], date_fin.replace("T", " "))
 
 
 # ---------------------------------------------------------------------------
@@ -606,7 +618,7 @@ class TestListe(CasOrdres):
             self.assertIn("\r\n", texte)
             lignes = list(csv.DictReader(io.StringIO(texte), delimiter=";"))
             self.assertEqual(sorted(l["id"] for l in lignes), ouverts)
-            ligne = next(l for l in lignes if l["id"] == "OT-2026-0108")
+            ligne = next(l for l in lignes if l["id"] == OT_P1)
             self.assertEqual(ligne["equipement_repere"], "'CP-01")      # repère protégé (apostrophe, §3.2)
             self.assertEqual(ligne["priorite"], "P1")
 
@@ -615,11 +627,11 @@ class TestListe(CasOrdres):
             page.wait_for_function("document.getElementById('ot-filtre-etat') && document.getElementById('ot-filtre-etat').value === 'retard'")
             en_retard = sorted(o["id"] for o in ordres if ot_en_retard(o, aujourdhui))
             self.assertEqual(sorted(self.ids_affiches()), en_retard)
-            self.assertTrue({"OT-2026-0097", "OT-2026-0102", "OT-2026-0105"} <= set(en_retard))
+            self.assertTrue(set(SCENARIOS["ot_en_retard"]) <= set(en_retard))
             self.assertEqual(page.locator(".ot-liste-tableau .ot-retard").count(), len(en_retard))
             self.aller("#/ot?filtre=p1")
             page.wait_for_function("document.getElementById('ot-filtre-priorite') && document.getElementById('ot-filtre-priorite').value === 'P1'")
-            self.assertEqual(self.ids_affiches(), ["OT-2026-0108"])
+            self.assertEqual(self.ids_affiches(), [OT_P1])
             self.assertEqual(page.input_value("#ot-filtre-etat"), "ouverts")
             self.aller("#/ot?filtre=inconnu")
             page.wait_for_function("document.getElementById('ot-filtre-priorite') && document.getElementById('ot-filtre-priorite').value === ''")
@@ -633,12 +645,12 @@ class TestListe(CasOrdres):
         page = self.page
         page.add_init_script(ESPION_IMPRESSION_JS)
         with ServeurPrevo() as serveur:
-            self.ouvrir(serveur, "#/ot/OT-2026-0108")
-            self.attendre_fiche("OT-2026-0108")
+            self.ouvrir(serveur, "#/ot/" + OT_P1)
+            self.attendre_fiche(OT_P1)
             page.click("#ot-imprimer")
             self.assertEqual(page.evaluate("window.__impressions"), 1)
             bon = page.inner_text("#impression")
-            for attendu in ("Bon de travail", "OT-2026-0108", "P1", "CP-01", "Consignation", RAPPEL,
+            for attendu in ("Bon de travail", OT_P1, "P1", "CP-01", "Consignation", RAPPEL,
                             "Opérations", "Pièces", "Temps passés", "Compte rendu", "Responsable maintenance"):
                 self.assertIn(attendu, bon)
             self.assertEqual(page.locator("#impression .bon-travail .bt-qr svg").count(), 1)
@@ -667,8 +679,8 @@ class TestListe(CasOrdres):
             page.select_option("#ot-filtre-technicien", "")
             self.assertEqual(len(self.ids_affiches()), len([o for o in ordres if ot_ouvert(o)]))
             # Fiche d'un OT en cours : clôture technique et attente, pas d'annulation ni de préparation
-            self.aller("#/ot/OT-2026-0108")
-            self.attendre_fiche("OT-2026-0108")
+            self.aller("#/ot/" + OT_P1)
+            self.attendre_fiche(OT_P1)
             cibles = page.eval_on_selector_all(".ot-actions button[data-action='transition']", "b => b.map(x => x.dataset.cible)")
             self.assertEqual(sorted(cibles), ["Clôturé techniquement", "En attente"])
             self.assertEqual(page.locator("#ot-priorite").count(), 0)
@@ -697,12 +709,12 @@ class TestDemoEtTelephone(CasOrdres):
         attendre_pret(page)
         self.aller("#/ot")
         page.wait_for_selector(".ot-liste-tableau tbody tr")
-        self.assertIn("OT-2026-0104", self.ids_affiches())
-        self.aller("#/ot/OT-2026-0104")
-        self.attendre_fiche("OT-2026-0104")
+        self.assertIn(OT_CREE, self.ids_affiches())
+        self.aller("#/ot/" + OT_CREE)
+        self.attendre_fiche(OT_CREE)
         self.transition("Préparé")
         self.attendre_statut("Préparé")
-        self.assertEqual(page.evaluate("Donnees.trouver('ordres_travail', 'OT-2026-0104').statut"), "Préparé")
+        self.assertEqual(page.evaluate("Donnees.trouver('ordres_travail', %r).statut" % OT_CREE), "Préparé")
         # Annulation : motif obligatoire
         self.transition("Annulé")
         page.wait_for_selector("dialog textarea")
@@ -711,7 +723,7 @@ class TestDemoEtTelephone(CasOrdres):
         page.fill("dialog textarea", "Doublon de l'OT de la gamme")
         page.click("dialog .fenetre-actions .btn-primaire")
         self.attendre_statut("Annulé")
-        self.assertEqual(page.evaluate("Donnees.trouver('ordres_travail', 'OT-2026-0104').motif_annulation"),
+        self.assertEqual(page.evaluate("Donnees.trouver('ordres_travail', %r).motif_annulation" % OT_CREE),
                          "Doublon de l'OT de la gamme")
         self.assertEqual(page.locator(".ot-fiche button[data-action='transition']").count(), 0)
 
@@ -730,7 +742,7 @@ class TestDemoEtTelephone(CasOrdres):
             self.assertTrue(page.is_hidden(".ot-liste-tableau"))
             self.assertIn("P1", page.inner_text(".ot-liste-cartes .badge.prio-p1"))
             sans_defilement("liste")
-            for ot_id in ("OT-2026-0108", "OT-2026-0102"):
+            for ot_id in (OT_P1, OT_EN_ATTENTE):
                 self.aller("#/ot/" + ot_id)
                 self.attendre_fiche(ot_id)
                 for onglet in ("preparation", "execution", "compte-rendu", "historique"):

@@ -17,13 +17,42 @@ Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_donnees.py" -v
 """
 import base64
+import csv
+import io
 import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from commun import RACINE, CasNavigateur, charger_scripts
+from commun import DOSSIER_DEMO, RACINE, CasNavigateur, charger_scripts, scenarios_demo
+
+# Identifiants des objets de scénario du jeu de démo (outils/generer_demo.py, ARCHITECTURE.md §14.8).
+SCENARIOS = scenarios_demo()
+
+
+def lignes_demo(table):
+    """Lignes d'un CSV du jeu de démo (donnees/demo), apostrophe de protection retirée."""
+    texte = (DOSSIER_DEMO / (table + ".csv")).read_bytes().decode("utf-8-sig")
+    return [{cle: (valeur[1:] if valeur.startswith("'") else valeur) for cle, valeur in ligne.items()}
+            for ligne in csv.DictReader(io.StringIO(texte, newline=""), delimiter=";")]
+
+
+def ligne_demo(table, identifiant):
+    return next(ligne for ligne in lignes_demo(table) if ligne["id"] == identifiant)
+
+
+def numero_annuel_suivant(table, prefixe, annee, rang=1):
+    """Identifiant annuel de la rang-ième ligne créée dans le jeu de démo pour cette année."""
+    debut = "%s-%d-" % (prefixe, annee)
+    numeros = [int(ligne["id"][len(debut):]) for ligne in lignes_demo(table) if ligne["id"].startswith(debut)]
+    return "%s%04d" % (debut, max(numeros, default=0) + rang)
+
+
+def plus_14_jours(date_heure):
+    """Date-heure « AAAA-MM-JJ HH:MM » décalée de deux semaines (décalage de la démo)."""
+    return (datetime.strptime(date_heure, "%Y-%m-%d %H:%M") + timedelta(days=14)).strftime("%Y-%m-%d %H:%M")
 
 SCRIPTS = [
     "js/lib/papaparse.min.js",
@@ -77,7 +106,7 @@ class CasDonnees(CasNavigateur):
 class TestChargementDemo(CasDonnees):
 
     def test_chargement_demo_sans_erreur(self):
-        resultat = self.js("""async () => {
+        resultat = self.js("""async (ids) => {
           const adaptateur = StockageDemo.creer(DEMO_DONNEES.tables,
             { dateReference: DEMO_DONNEES.dateReference, aujourdhui: DEMO_DONNEES.dateReference });
           const charge = await demarrer(adaptateur);
@@ -90,7 +119,7 @@ class TestChargementDemo(CasDonnees):
             nombreEquipements: Donnees.lignes('equipements').length,
             po02: Donnees.trouver('equipements', 'EQ-0005').repere,
             ae03: Donnees.trouver('equipements', 'EQ-0012').habilitation_requise,
-            stockKit: Donnees.stockArticle('ART-0016'),
+            stockKit: Donnees.stockArticle(ids.kit),
             diNouvelles: Donnees.lignes('demandes').filter((d) => d.statut === 'Nouvelle').map((d) => d.id),
             otSuivant: Donnees.nouvelId('ordres_travail', undefined, '2026-10-19'),
             rafraichissement: Donnees.parametre('rafraichissement_s', 'aucun'),
@@ -98,7 +127,7 @@ class TestChargementDemo(CasDonnees):
             versionEquipements: Donnees.version('equipements'),
             inconnu: Donnees.trouver('equipements', 'EQ-9999') === undefined,
           };
-        }""")
+        }""", {"kit": SCENARIOS["kit_garniture"]})
         for message in resultat["attentions"]:
             print("  [attention] " + message)
         self.assertEqual(resultat["erreurs"], [], "le jeu de démo ne doit contenir aucune erreur")
@@ -107,10 +136,10 @@ class TestChargementDemo(CasDonnees):
         self.assertGreater(resultat["nombreEquipements"], 30)
         self.assertEqual(resultat["po02"], "PO-02")
         self.assertIn("BR", resultat["ae03"])
-        self.assertEqual(resultat["stockKit"], 3)
-        self.assertEqual(resultat["diNouvelles"],
-                         ["DI-2026-0069", "DI-2026-0071", "DI-2026-0072", "DI-2026-0073"])
-        self.assertEqual(resultat["otSuivant"], "OT-2026-0109")
+        self.assertEqual(resultat["stockKit"], float(ligne_demo("articles", SCENARIOS["kit_garniture"])["stock"]))
+        self.assertGreaterEqual(resultat["stockKit"], 2)
+        self.assertEqual(resultat["diNouvelles"], SCENARIOS["di_nouvelles"])
+        self.assertEqual(resultat["otSuivant"], numero_annuel_suivant("ordres_travail", "OT", 2026))
         self.assertEqual(resultat["rafraichissement"], "20")
         self.assertEqual(resultat["parametreAbsent"], "défaut")
         self.assertEqual(resultat["versionEquipements"], "v1")
@@ -125,29 +154,31 @@ class TestChargementDemo(CasDonnees):
         self.assertEqual(resultat, {"absentes": 22, "baseVide": True, "lignes": 0, "problemes": 0})
 
     def test_decalage_des_dates(self):
-        resultat = self.js("""async () => {
+        di = ligne_demo("demandes", SCENARIOS["di_plus_ancienne"])       # première ligne du fichier
+        resultat = self.js("""async (diId) => {
           const reference = DEMO_DONNEES.dateReference;           // 2026-10-19
           const decalees = StockageDemo.decalerDates(DEMO_DONNEES.tables, reference, '2026-11-03');
           const lire = (table) => Donnees.csv.analyser(table, decalees[table]).lignes;
           const sixJours = StockageDemo.decalerDates({ demandes: DEMO_DONNEES.tables.demandes }, reference, '2026-10-25');
           await demarrer(StockageDemo.creer(DEMO_DONNEES.tables, { dateReference: reference, aujourdhui: '2026-11-03' }));
           return {
-            di: lire('demandes').find((d) => d.id === 'DI-2026-0001'),
+            di: lire('demandes').find((d) => d.id === diId),
             eq: lire('equipements').find((e) => e.id === 'EQ-0001').date_mes,
             hab: lire('habilitations').find((h) => h.id === 'HAB-0001'),
             sixJours: Donnees.csv.analyser('demandes', sixJours.demandes).lignes[0].date_heure,
-            parCreer: Donnees.trouver('demandes', 'DI-2026-0001').date_heure,
+            parCreer: Donnees.trouver('demandes', diId).date_heure,
             erreurs: Donnees.problemes().filter((p) => p.gravite === 'erreur').length,
           };
-        }""")
-        self.assertEqual(resultat["di"]["date_heure"], "2026-05-07 09:45")   # 2026-04-23 + 14 j
-        self.assertEqual(resultat["di"]["date_decision"], "2026-05-07 12:07")
-        self.assertEqual(resultat["di"]["id"], "DI-2026-0001")                # l'identifiant garde son année
+        }""", di["id"])
+        self.assertTrue(di["date_decision"])
+        self.assertEqual(resultat["di"]["date_heure"], plus_14_jours(di["date_heure"]))
+        self.assertEqual(resultat["di"]["date_decision"], plus_14_jours(di["date_decision"]))
+        self.assertEqual(resultat["di"]["id"], di["id"])                       # l'identifiant garde son année
         self.assertEqual(resultat["eq"], "2019-03-26")                         # 2019-03-12 + 14 j
         self.assertEqual(resultat["hab"]["date_obtention"], "2025-03-24")
         self.assertEqual(resultat["hab"]["date_echeance"], "2028-03-24")
-        self.assertEqual(resultat["sixJours"], "2026-04-23 09:45")             # moins d'une semaine : rien
-        self.assertEqual(resultat["parCreer"], "2026-05-07 09:45")
+        self.assertEqual(resultat["sixJours"], di["date_heure"])                # moins d'une semaine : rien
+        self.assertEqual(resultat["parCreer"], plus_14_jours(di["date_heure"]))
         self.assertEqual(resultat["erreurs"], 0)
 
 
@@ -239,8 +270,8 @@ class TestModifier(CasDonnees):
         self.assertEqual(len(resultat["autre"]), 1)
         self.assertEqual(resultat["notre"], [resultat["idCree"]])
         self.assertNotEqual(resultat["autre"][0], resultat["idCree"])
-        self.assertEqual(resultat["autre"][0], "DI-2026-0076")
-        self.assertEqual(resultat["idCree"], "DI-2026-0077")
+        self.assertEqual(resultat["autre"][0], numero_annuel_suivant("demandes", "DI", 2026, 1))
+        self.assertEqual(resultat["idCree"], numero_annuel_suivant("demandes", "DI", 2026, 2))
         self.assertIsNotNone(resultat["enCache"])
         self.assertEqual(resultat["statutParDefaut"], "Nouvelle")           # défaut du schéma
         self.assertEqual(resultat["evenements"], [{"tables": ["demandes"], "origine": "local"}])
@@ -301,7 +332,8 @@ class TestModifier(CasDonnees):
         self.assertEqual(resultat["version"], "v1")
 
     def test_journal_apres_modifier(self):
-        resultat = self.js("""async () => {
+        ot_id = SCENARIOS["ot_de_di_acceptee"]
+        resultat = self.js("""async (otId) => {
           const adaptateur = StockageDemo.creer(DEMO_DONNEES.tables);
           await demarrer(adaptateur);
           const nouveau = await Donnees.modifier('equipements', (lignes, outils) => {
@@ -316,7 +348,7 @@ class TestModifier(CasDonnees):
           await Donnees.modifier('equipements', (lignes) => {
             lignes.find((l) => l.id === 'EQ-0002').marque = 'Sans journal';
           }, { journal: false });
-          const idAvertissement = await Donnees.journaliser('ordres_travail', 'OT-2026-0001',
+          const idAvertissement = await Donnees.journaliser('ordres_travail', otId,
             'avertissement habilitation : TEC-0004 sans BR valide au 2026-10-21');
           const avantRelecture = Donnees.lignes('journal').length;
           await Donnees.rechargerTable('journal');
@@ -327,7 +359,7 @@ class TestModifier(CasDonnees):
             versions: await adaptateur.listerVersions(),
             evenements: evenementsRecus,
           };
-        }""")
+        }""", ot_id)
         journal = resultat["journal"]
         # Nos propres entrées sont ajoutées au cache (la table reste périmée pour modifier).
         self.assertEqual(resultat["avantRelecture"], 3)
@@ -347,7 +379,7 @@ class TestModifier(CasDonnees):
         self.assertEqual(len({e["id"] for e in journal}), 3)
         self.assertEqual(avertissement["id"], resultat["idAvertissement"])
         self.assertEqual(avertissement["table"], "ordres_travail")
-        self.assertEqual(avertissement["id_ligne"], "OT-2026-0001")
+        self.assertEqual(avertissement["id_ligne"], ot_id)
         self.assertIn("avertissement habilitation", avertissement["action"])
         self.assertEqual(resultat["sansChangement"], "rien")
         self.assertEqual(resultat["versions"]["equipements"], "v3")   # la modification vide n'écrit rien
@@ -534,7 +566,10 @@ class TestAjouter(CasDonnees):
 class TestProblemes(CasDonnees):
 
     def test_problemes_detectes(self):
-        resultat = self.js("""async () => {
+        # di1 : DI acceptée dont l'OT est ot1 ; di2 : une autre DI acceptée ; ot2 : un OT préventif clôturé.
+        ids = {"di1": SCENARIOS["di_statut_acceptee"], "ot1": SCENARIOS["ot_de_di_acceptee"],
+               "di2": SCENARIOS["di_acceptee_autre"], "ot2": SCENARIOS["ot_preventif_cloture"]}
+        resultat = self.js("""async (ids) => {
           const tables = Object.assign({}, DEMO_DONNEES.tables);
           const retoucher = (table, transformer) => {
             const lu = Donnees.csv.analyser(table, tables[table]);
@@ -543,17 +578,17 @@ class TestProblemes(CasDonnees):
           };
           let diAcceptees;
           retoucher('demandes', (lignes) => {
-            const di1 = lignes.find((d) => d.id === 'DI-2026-0001');
-            di1.statut = 'Nouvelle'; di1.ot_id = '';                 // OT-2026-0001 vient d'une DI non acceptée
-            lignes.find((d) => d.id === 'DI-2026-0002').ot_id = '';  // acceptée sans OT
+            const di1 = lignes.find((d) => d.id === ids.di1);
+            di1.statut = 'Nouvelle'; di1.ot_id = '';                 // ot1 vient d'une DI non acceptée
+            lignes.find((d) => d.id === ids.di2).ot_id = '';         // acceptée sans OT
             diAcceptees = lignes.filter((d) => d.statut === 'Acceptée' && d.ot_id !== '');
             diAcceptees[0].ot_id = 'OT-2026-9999';                   // acceptée avec un OT inconnu
           });
           retoucher('ordres_travail', (lignes) => {
-            const ot1 = lignes.find((o) => o.id === 'OT-2026-0001');
+            const ot1 = lignes.find((o) => o.id === ids.ot1);
             ot1.equipement_id = 'EQ-9999';                           // référence cassée
             ot1.cause_code = 'S01';                                  // code d'une autre famille
-            const ot2 = lignes.find((o) => o.id === 'OT-2026-0002');
+            const ot2 = lignes.find((o) => o.id === ids.ot2);
             ot2.cause_code = 'C42';                                  // code inconnu
             lignes.push(Object.assign({}, ot2));                     // doublon
             lignes.push(Object.assign({}, ot2, { id: '' }));         // identifiant manquant
@@ -565,7 +600,7 @@ class TestProblemes(CasDonnees):
           const premiers = Donnees.problemes();
           const memeTableau = Donnees.problemes() === premiers;
           await Donnees.modifier('ordres_travail', (lignes) => {
-            lignes.find((o) => o.id === 'OT-2026-0001').equipement_id = 'EQ-0001';
+            lignes.find((o) => o.id === ids.ot1).equipement_id = 'EQ-0001';
           });
           const apres = Donnees.problemes();
           const resume = (p) => ({ gravite: p.gravite, type: p.type, table: p.table, id: p.id,
@@ -573,27 +608,27 @@ class TestProblemes(CasDonnees):
           return { premiers: premiers.map(resume), memeTableau: memeTableau,
                    recalcule: apres !== premiers, apres: apres.map(resume),
                    diInconnu: diAcceptees[0].id };
-        }""")
+        }""", ids)
         problemes = resultat["premiers"]
 
         def trouver(type_probleme, **criteres):
             return [p for p in problemes if p["type"] == type_probleme
                     and all(p[cle] == valeur for cle, valeur in criteres.items())]
 
-        reference = trouver("reference", table="ordres_travail", id="OT-2026-0001", champ="equipement_id")
+        reference = trouver("reference", table="ordres_travail", id=ids["ot1"], champ="equipement_id")
         self.assertEqual(len(reference), 1)
         self.assertEqual(reference[0]["gravite"], "erreur")
         self.assertEqual(reference[0]["valeur"], "EQ-9999")
 
-        mauvaise_famille = trouver("reference", id="OT-2026-0001", champ="cause_code")
+        mauvaise_famille = trouver("reference", id=ids["ot1"], champ="cause_code")
         self.assertEqual(len(mauvaise_famille), 1)
         self.assertIn("symptôme", mauvaise_famille[0]["message"])
         self.assertIn("cause", mauvaise_famille[0]["message"])
 
-        inconnu = trouver("reference", id="OT-2026-0002", champ="cause_code", valeur="C42")
+        inconnu = trouver("reference", id=ids["ot2"], champ="cause_code", valeur="C42")
         self.assertEqual(len(inconnu), 2, "la ligne et son doublon")
 
-        doublon = trouver("doublon", table="ordres_travail", id="OT-2026-0002")
+        doublon = trouver("doublon", table="ordres_travail", id=ids["ot2"])
         self.assertEqual(len(doublon), 1)
         self.assertEqual(doublon[0]["gravite"], "erreur")
 
@@ -605,13 +640,13 @@ class TestProblemes(CasDonnees):
         self.assertEqual(len(excel), 1)
         self.assertEqual(excel[0]["valeur"], "1,23457E+14")
 
-        sans_ot = trouver("incoherence", table="demandes", id="DI-2026-0002")
+        sans_ot = trouver("incoherence", table="demandes", id=ids["di2"])
         self.assertEqual(len(sans_ot), 1)
         self.assertEqual(sans_ot[0]["gravite"], "erreur")
         ot_inconnu = trouver("incoherence", table="demandes", id=resultat["diInconnu"])
         self.assertEqual(len(ot_inconnu), 1)
         self.assertIn("OT-2026-9999", ot_inconnu[0]["message"])
-        di_non_acceptee = trouver("incoherence", table="ordres_travail", id="OT-2026-0001")
+        di_non_acceptee = trouver("incoherence", table="ordres_travail", id=ids["ot1"])
         self.assertEqual(len(di_non_acceptee), 1)
         self.assertEqual(di_non_acceptee[0]["gravite"], "attention")
 

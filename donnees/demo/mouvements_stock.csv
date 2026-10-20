@@ -1,150 +1,303 @@
 ﻿id;date;article_id;type;quantite;ot_id;utilisateur;commentaire
-MVT-000001;2026-04-20 06:30;ART-0001;inventaire;9;;Magasin;Inventaire de départ
-MVT-000002;2026-04-20 06:30;ART-0002;inventaire;9;;Magasin;Inventaire de départ
-MVT-000003;2026-04-20 06:30;ART-0003;inventaire;9;;Magasin;Inventaire de départ
-MVT-000004;2026-04-20 06:30;ART-0004;inventaire;9;;Magasin;Inventaire de départ
-MVT-000005;2026-04-20 06:30;ART-0005;inventaire;5;;Magasin;Inventaire de départ
-MVT-000006;2026-04-20 06:30;ART-0006;inventaire;3;;Magasin;Inventaire de départ
-MVT-000007;2026-04-20 06:30;ART-0007;inventaire;5;;Magasin;Inventaire de départ
-MVT-000008;2026-04-20 06:30;ART-0008;inventaire;5;;Magasin;Inventaire de départ
-MVT-000009;2026-04-20 06:30;ART-0009;inventaire;4;;Magasin;Inventaire de départ
-MVT-000010;2026-04-20 06:30;ART-0010;inventaire;3;;Magasin;Inventaire de départ
-MVT-000011;2026-04-20 06:30;ART-0011;inventaire;11;;Magasin;Inventaire de départ
-MVT-000012;2026-04-20 06:30;ART-0012;inventaire;6;;Magasin;Inventaire de départ
-MVT-000013;2026-04-20 06:30;ART-0013;inventaire;5;;Magasin;Inventaire de départ
-MVT-000014;2026-04-20 06:30;ART-0014;inventaire;3;;Magasin;Inventaire de départ
-MVT-000015;2026-04-20 06:30;ART-0015;inventaire;9;;Magasin;Inventaire de départ
-MVT-000016;2026-04-20 06:30;ART-0016;inventaire;2;;Magasin;Inventaire de départ
-MVT-000017;2026-04-20 06:30;ART-0017;inventaire;2;;Magasin;Inventaire de départ
-MVT-000018;2026-04-20 06:30;ART-0018;inventaire;3;;Magasin;Inventaire de départ
-MVT-000019;2026-04-20 06:30;ART-0019;inventaire;3;;Magasin;Inventaire de départ
-MVT-000020;2026-04-20 06:30;ART-0020;inventaire;3;;Magasin;Inventaire de départ
-MVT-000021;2026-04-20 06:30;ART-0021;inventaire;6;;Magasin;Inventaire de départ
-MVT-000022;2026-04-20 06:30;ART-0022;inventaire;2;;Magasin;Inventaire de départ
-MVT-000023;2026-04-20 06:30;ART-0023;inventaire;3;;Magasin;Inventaire de départ
-MVT-000024;2026-04-20 06:30;ART-0024;inventaire;3;;Magasin;Inventaire de départ
-MVT-000025;2026-04-20 06:30;ART-0025;inventaire;3;;Magasin;Inventaire de départ
-MVT-000026;2026-04-20 06:30;ART-0026;inventaire;21;;Magasin;Inventaire de départ
-MVT-000027;2026-04-20 06:30;ART-0027;inventaire;3;;Magasin;Inventaire de départ
-MVT-000028;2026-04-20 06:30;ART-0028;inventaire;9;;Magasin;Inventaire de départ
-MVT-000029;2026-04-20 06:30;ART-0029;inventaire;5;;Magasin;Inventaire de départ
-MVT-000030;2026-04-20 06:30;ART-0030;inventaire;3;;Magasin;Inventaire de départ
-MVT-000031;2026-04-20 06:30;ART-0031;inventaire;9;;Magasin;Inventaire de départ
-MVT-000032;2026-04-20 06:30;ART-0032;inventaire;3;;Magasin;Inventaire de départ
-MVT-000033;2026-04-20 06:30;ART-0033;inventaire;3;;Magasin;Inventaire de départ
-MVT-000034;2026-04-20 06:30;ART-0034;inventaire;3;;Magasin;Inventaire de départ
-MVT-000035;2026-04-20 06:30;ART-0035;inventaire;3;;Magasin;Inventaire de départ
-MVT-000036;2026-04-20 06:30;ART-0036;inventaire;3;;Magasin;Inventaire de départ
-MVT-000037;2026-04-20 06:30;ART-0037;inventaire;6;;Magasin;Inventaire de départ
-MVT-000038;2026-04-20 06:30;ART-0038;inventaire;3;;Magasin;Inventaire de départ
-MVT-000039;2026-04-20 06:30;ART-0039;inventaire;3;;Magasin;Inventaire de départ
-MVT-000040;2026-04-20 06:30;ART-0040;inventaire;2;;Magasin;Inventaire de départ
-MVT-000041;2026-04-20 06:30;ART-0041;inventaire;2;;Magasin;Inventaire de départ
-MVT-000042;2026-04-20 06:30;ART-0042;inventaire;2;;Magasin;Inventaire de départ
-MVT-000043;2026-04-20 06:30;ART-0043;inventaire;3;;Magasin;Inventaire de départ
-MVT-000044;2026-04-20 06:30;ART-0044;inventaire;4;;Magasin;Inventaire de départ
-MVT-000045;2026-04-20 06:30;ART-0045;inventaire;11;;Magasin;Inventaire de départ
-MVT-000046;2026-04-20 06:30;ART-0046;inventaire;11;;Magasin;Inventaire de départ
-MVT-000047;2026-04-20 06:30;ART-0047;inventaire;3;;Magasin;Inventaire de départ
-MVT-000048;2026-04-20 06:30;ART-0048;inventaire;2;;Magasin;Inventaire de départ
-MVT-000049;2026-04-20 06:30;ART-0049;inventaire;5;;Magasin;Inventaire de départ
-MVT-000050;2026-04-20 06:30;ART-0050;inventaire;6;;Magasin;Inventaire de départ
-MVT-000051;2026-04-20 06:30;ART-0051;inventaire;3;;Magasin;Inventaire de départ
-MVT-000052;2026-04-20 06:30;ART-0052;inventaire;4;;Magasin;Inventaire de départ
-MVT-000053;2026-04-23 13:26;ART-0045;sortie;2;OT-2026-0001;Thomas Garnier;Utilisée sur EM-01
-MVT-000054;2026-04-23 13:26;ART-0046;sortie;1;OT-2026-0001;Thomas Garnier;Utilisée sur EM-01
-MVT-000055;2026-04-23 14:56;ART-0045;retour;1;OT-2026-0001;Thomas Garnier;Retour au magasin (non utilisée) de EM-01
-MVT-000056;2026-04-27 09:55;ART-0026;sortie;1;OT-2026-0002;Thomas Garnier;Utilisée sur CV-01
-MVT-000057;2026-04-27 10:00;ART-0026;sortie;1;OT-2026-0003;Thomas Garnier;Utilisée sur CH-01
-MVT-000058;2026-04-27 10:30;ART-0046;entrée;30;;Magasin;Réception de la commande ACH-0002
-MVT-000059;2026-04-28 08:22;ART-0023;sortie;1;OT-2026-0006;Thomas Garnier;Utilisée sur CP-01
-MVT-000060;2026-04-28 10:30;ART-0045;entrée;30;;Magasin;Réception de la commande ACH-0001
-MVT-000061;2026-04-29 08:12;ART-0031;sortie;1;OT-2026-0007;Sophie Lambert;Utilisée sur CV-01
-MVT-000062;2026-04-30 09:17;ART-0031;sortie;1;OT-2026-0008;Thomas Garnier;Utilisée sur RB-01
-MVT-000063;2026-05-01 10:30;ART-0026;entrée;48;;Magasin;Réception de la commande ACH-0003
-MVT-000064;2026-05-04 09:20;ART-0026;sortie;1;OT-2026-0004;Karim Benali;Utilisée sur PO-02
-MVT-000065;2026-05-04 10:30;ART-0023;entrée;3;;Magasin;Réception de la commande ACH-0004
-MVT-000066;2026-05-04 10:30;ART-0031;entrée;24;;Magasin;Réception de la commande ACH-0005
-MVT-000067;2026-05-06 09:20;ART-0026;sortie;1;OT-2026-0012;Karim Benali;Utilisée sur PR-01
-MVT-000068;2026-05-07 13:46;ART-0031;sortie;1;OT-2026-0013;Sophie Lambert;Utilisée sur CV-01
-MVT-000069;2026-05-14 09:22;ART-0045;sortie;2;OT-2026-0015;Karim Benali;Utilisée sur EM-01
-MVT-000070;2026-05-14 09:22;ART-0046;sortie;2;OT-2026-0015;Karim Benali;Utilisée sur EM-01
-MVT-000071;2026-05-14 10:52;ART-0046;retour;1;OT-2026-0015;Karim Benali;Retour au magasin (non utilisée) de EM-01
-MVT-000072;2026-05-18 08:55;ART-0026;sortie;1;OT-2026-0014;Thomas Garnier;Utilisée sur CN-01
-MVT-000073;2026-05-18 08:55;ART-0027;sortie;1;OT-2026-0014;Thomas Garnier;Utilisée sur CN-01
-MVT-000074;2026-05-18 09:35;ART-0031;sortie;1;OT-2026-0017;Sophie Lambert;Utilisée sur CV-02
-MVT-000075;2026-05-21 08:00;ART-0046;sortie;1;OT-2026-0016;Karim Benali;Utilisée sur CN-01
-MVT-000076;2026-05-25 09:10;ART-0026;sortie;1;OT-2026-0019;Thomas Garnier;Utilisée sur CH-01
-MVT-000077;2026-05-25 10:00;ART-0029;sortie;1;OT-2026-0018;Julien Moreau;Utilisée sur GF-01
-MVT-000078;2026-05-25 10:25;ART-0026;sortie;1;OT-2026-0021;Karim Benali;Utilisée sur CV-01
-MVT-000079;2026-05-25 10:30;ART-0027;entrée;3;;Magasin;Réception de la commande ACH-0006
-MVT-000080;2026-06-01 10:30;ART-0029;entrée;8;;Magasin;Réception de la commande ACH-0007
-MVT-000081;2026-06-01 11:03;ART-0021;sortie;1;OT-2026-0027;Thomas Garnier;Utilisée sur CP-01
-MVT-000082;2026-06-02 08:03;ART-0044;sortie;2;OT-2026-0028;Thomas Garnier;Utilisée sur PR-01.GH
-MVT-000083;2026-06-08 10:30;ART-0044;entrée;6;;Magasin;Réception de la commande ACH-0008
-MVT-000084;2026-06-08 11:31;ART-0016;sortie;1;OT-2026-0029;Karim Benali;Utilisée sur PO-02
-MVT-000085;2026-06-11 14:45;ART-0031;sortie;1;OT-2026-0033;Julien Moreau;Utilisée sur CV-02
-MVT-000086;2026-06-17 09:30;ART-0026;sortie;1;OT-2026-0034;Sophie Lambert;Utilisée sur CN-01
-MVT-000087;2026-06-17 09:30;ART-0027;sortie;1;OT-2026-0034;Sophie Lambert;Utilisée sur CN-01
-MVT-000088;2026-06-18 09:40;ART-0004;sortie;2;OT-2026-0032;Thomas Garnier;Utilisée sur PO-03
-MVT-000089;2026-06-19 10:30;ART-0016;entrée;2;;Magasin;Réception de la commande ACH-0009
-MVT-000090;2026-06-22 08:30;ART-0026;sortie;1;OT-2026-0038;Karim Benali;Utilisée sur CV-01
-MVT-000091;2026-06-22 10:30;ART-0004;entrée;16;;Magasin;Réception de la commande ACH-0010
-MVT-000092;2026-06-24 08:43;ART-0031;sortie;1;OT-2026-0036;Sophie Lambert;Utilisée sur CV-03
-MVT-000093;2026-06-24 08:43;ART-0037;sortie;1;OT-2026-0036;Sophie Lambert;Utilisée sur CV-03
-MVT-000094;2026-06-26 09:44;ART-0033;sortie;1;OT-2026-0040;Julien Moreau;Utilisée sur PT-01
-MVT-000095;2026-06-29 10:36;ART-0004;sortie;2;OT-2026-0035;Thomas Garnier;Utilisée sur PO-03
-MVT-000096;2026-07-03 08:10;ART-0026;sortie;1;OT-2026-0041;Karim Benali;Utilisée sur CH-01
-MVT-000097;2026-07-03 10:30;ART-0033;entrée;3;;Magasin;Réception de la commande ACH-0011
-MVT-000098;2026-07-06 08:16;ART-0044;sortie;1;OT-2026-0044;Thomas Garnier;Utilisée sur PR-01.GH
-MVT-000099;2026-07-06 08:55;ART-0026;sortie;1;OT-2026-0042;Karim Benali;Utilisée sur PR-01
-MVT-000100;2026-07-09 11:16;ART-0021;sortie;1;OT-2026-0048;Karim Benali;Utilisée sur CP-01
-MVT-000101;2026-07-10 09:25;ART-0020;sortie;1;OT-2026-0045;Karim Benali;Utilisée sur CP-01
-MVT-000102;2026-07-10 09:25;ART-0021;sortie;1;OT-2026-0045;Karim Benali;Utilisée sur CP-01
-MVT-000103;2026-07-10 09:25;ART-0023;sortie;1;OT-2026-0045;Karim Benali;Utilisée sur CP-01
-MVT-000104;2026-07-13 09:59;ART-0031;sortie;1;OT-2026-0051;Julien Moreau;Utilisée sur CV-02
-MVT-000105;2026-07-13 11:30;ART-0045;sortie;2;OT-2026-0046;Karim Benali;Utilisée sur ET-01
-MVT-000106;2026-07-20 08:20;ART-0026;sortie;1;OT-2026-0052;Thomas Garnier;Utilisée sur CN-01
-MVT-000107;2026-07-20 08:20;ART-0027;sortie;1;OT-2026-0052;Thomas Garnier;Utilisée sur CN-01
-MVT-000108;2026-07-20 10:30;ART-0026;sortie;1;OT-2026-0054;Thomas Garnier;Utilisée sur CV-01
-MVT-000109;2026-07-20 10:30;ART-0020;entrée;4;;Magasin;Réception de la commande ACH-0012
-MVT-000110;2026-07-24 08:54;ART-0032;sortie;1;OT-2026-0056;Sophie Lambert;Utilisée sur AE-03
-MVT-000111;2026-07-31 15:10;ART-0025;sortie;1;OT-2026-0062;Karim Benali;Utilisée sur PR-01.GH
-MVT-000112;2026-07-31 15:10;ART-0044;sortie;2;OT-2026-0062;Karim Benali;Utilisée sur PR-01.GH
-MVT-000113;2026-08-04 08:34;ART-0016;sortie;1;OT-2026-0063;Karim Benali;Utilisée sur PO-02
-MVT-000114;2026-08-04 10:45;ART-0026;sortie;1;OT-2026-0058;Karim Benali;Utilisée sur PO-02
-MVT-000115;2026-08-04 11:02;ART-0025;sortie;1;OT-2026-0064;Karim Benali;Utilisée sur PR-01
-MVT-000116;2026-08-04 11:02;ART-0044;sortie;2;OT-2026-0064;Karim Benali;Utilisée sur PR-01
-MVT-000117;2026-08-07 10:30;ART-0025;entrée;3;;Magasin;Réception de la commande ACH-0013
-MVT-000118;2026-08-07 15:47;ART-0023;sortie;1;OT-2026-0069;Karim Benali;Utilisée sur CP-01
-MVT-000119;2026-08-10 10:30;ART-0044;entrée;6;;Magasin;Réception de la commande ACH-0014
-MVT-000120;2026-08-10 12:12;ART-0031;sortie;1;OT-2026-0068;Sophie Lambert;Utilisée sur CV-02
-MVT-000121;2026-08-10 12:12;ART-0037;sortie;1;OT-2026-0068;Sophie Lambert;Utilisée sur CV-02
-MVT-000122;2026-08-12 08:35;ART-0026;sortie;1;OT-2026-0070;Karim Benali;Utilisée sur CH-01
-MVT-000123;2026-08-13 09:42;ART-0031;sortie;1;OT-2026-0072;Julien Moreau;Utilisée sur CV-03
-MVT-000124;2026-08-13 09:42;ART-0037;sortie;1;OT-2026-0072;Julien Moreau;Utilisée sur CV-03
-MVT-000125;2026-08-13 15:00;ART-0017;sortie;1;OT-2026-0073;Thomas Garnier;Utilisée sur PO-01
-MVT-000126;2026-08-17 09:45;ART-0026;sortie;1;OT-2026-0074;Karim Benali;Utilisée sur CV-01
-MVT-000127;2026-08-17 09:55;ART-0018;sortie;1;OT-2026-0071;Karim Benali;Utilisée sur PO-03
-MVT-000128;2026-08-18 10:05;ART-0032;sortie;1;OT-2026-0079;Julien Moreau;Utilisée sur EM-01
-MVT-000129;2026-08-18 10:40;ART-0026;sortie;1;OT-2026-0075;Sophie Lambert;Utilisée sur CN-01
-MVT-000130;2026-08-18 10:40;ART-0027;sortie;1;OT-2026-0075;Sophie Lambert;Utilisée sur CN-01
-MVT-000131;2026-08-20 10:12;ART-0044;sortie;1;OT-2026-0080;Thomas Garnier;Utilisée sur PR-01.GH
-MVT-000132;2026-08-24 08:45;ART-0029;sortie;1;OT-2026-0076;Julien Moreau;Utilisée sur GF-01
-MVT-000133;2026-08-24 10:30;ART-0017;entrée;2;;Magasin;Réception de la commande ACH-0015
-MVT-000134;2026-08-24 10:30;ART-0027;entrée;3;;Magasin;Réception de la commande ACH-0017
-MVT-000135;2026-08-26 10:30;ART-0018;entrée;2;;Magasin;Réception de la commande ACH-0016
-MVT-000136;2026-09-01 09:00;ART-0004;sortie;2;OT-2026-0084;Karim Benali;Utilisée sur PO-01
-MVT-000137;2026-09-02 09:50;ART-0026;sortie;1;OT-2026-0082;Karim Benali;Utilisée sur PR-01
-MVT-000138;2026-09-03 12:33;ART-0018;sortie;1;OT-2026-0083;Karim Benali;Utilisée sur PO-03
-MVT-000139;2026-09-08 11:41;ART-0031;sortie;1;OT-2026-0086;Thomas Garnier;Utilisée sur CV-02
-MVT-000140;2026-09-11 09:21;ART-0021;sortie;1;OT-2026-0090;Thomas Garnier;Utilisée sur CP-01
-MVT-000141;2026-09-14 10:10;ART-0026;sortie;1;OT-2026-0089;Karim Benali;Utilisée sur CV-01
-MVT-000142;2026-09-17 08:10;ART-0026;sortie;1;OT-2026-0091;Thomas Garnier;Utilisée sur CN-01
-MVT-000143;2026-09-17 08:10;ART-0027;sortie;1;OT-2026-0091;Thomas Garnier;Utilisée sur CN-01
-MVT-000144;2026-09-24 12:31;ART-0018;sortie;1;OT-2026-0092;Thomas Garnier;Utilisée sur PO-03
-MVT-000145;2026-09-25 12:42;ART-0029;sortie;1;OT-2026-0095;Julien Moreau;Utilisée sur GF-01
-MVT-000146;2026-09-30 14:38;ART-0016;sortie;1;OT-2026-0099;Thomas Garnier;Utilisée sur PO-02
-MVT-000147;2026-10-05 10:30;ART-0018;entrée;2;;Magasin;Réception de la commande ACH-0018
-MVT-000148;2026-10-05 15:21;ART-0031;sortie;1;OT-2026-0101;Julien Moreau;Utilisée sur CV-02
-MVT-000149;2026-10-12 10:30;ART-0016;entrée;2;;Magasin;Réception de la commande ACH-0019
+MVT-000001;2025-09-19 06:30;ART-0001;inventaire;9;;Magasin;Inventaire de départ
+MVT-000002;2025-09-19 06:30;ART-0002;inventaire;9;;Magasin;Inventaire de départ
+MVT-000003;2025-09-19 06:30;ART-0003;inventaire;9;;Magasin;Inventaire de départ
+MVT-000004;2025-09-19 06:30;ART-0004;inventaire;9;;Magasin;Inventaire de départ
+MVT-000005;2025-09-19 06:30;ART-0005;inventaire;5;;Magasin;Inventaire de départ
+MVT-000006;2025-09-19 06:30;ART-0006;inventaire;3;;Magasin;Inventaire de départ
+MVT-000007;2025-09-19 06:30;ART-0007;inventaire;5;;Magasin;Inventaire de départ
+MVT-000008;2025-09-19 06:30;ART-0008;inventaire;5;;Magasin;Inventaire de départ
+MVT-000009;2025-09-19 06:30;ART-0009;inventaire;4;;Magasin;Inventaire de départ
+MVT-000010;2025-09-19 06:30;ART-0010;inventaire;3;;Magasin;Inventaire de départ
+MVT-000011;2025-09-19 06:30;ART-0011;inventaire;11;;Magasin;Inventaire de départ
+MVT-000012;2025-09-19 06:30;ART-0012;inventaire;6;;Magasin;Inventaire de départ
+MVT-000013;2025-09-19 06:30;ART-0013;inventaire;5;;Magasin;Inventaire de départ
+MVT-000014;2025-09-19 06:30;ART-0014;inventaire;3;;Magasin;Inventaire de départ
+MVT-000015;2025-09-19 06:30;ART-0015;inventaire;9;;Magasin;Inventaire de départ
+MVT-000016;2025-09-19 06:30;ART-0016;inventaire;2;;Magasin;Inventaire de départ
+MVT-000017;2025-09-19 06:30;ART-0017;inventaire;2;;Magasin;Inventaire de départ
+MVT-000018;2025-09-19 06:30;ART-0018;inventaire;3;;Magasin;Inventaire de départ
+MVT-000019;2025-09-19 06:30;ART-0019;inventaire;3;;Magasin;Inventaire de départ
+MVT-000020;2025-09-19 06:30;ART-0020;inventaire;3;;Magasin;Inventaire de départ
+MVT-000021;2025-09-19 06:30;ART-0021;inventaire;11;;Magasin;Inventaire de départ
+MVT-000022;2025-09-19 06:30;ART-0022;inventaire;2;;Magasin;Inventaire de départ
+MVT-000023;2025-09-19 06:30;ART-0023;inventaire;3;;Magasin;Inventaire de départ
+MVT-000024;2025-09-19 06:30;ART-0024;inventaire;3;;Magasin;Inventaire de départ
+MVT-000025;2025-09-19 06:30;ART-0025;inventaire;3;;Magasin;Inventaire de départ
+MVT-000026;2025-09-19 06:30;ART-0026;inventaire;21;;Magasin;Inventaire de départ
+MVT-000027;2025-09-19 06:30;ART-0027;inventaire;3;;Magasin;Inventaire de départ
+MVT-000028;2025-09-19 06:30;ART-0028;inventaire;9;;Magasin;Inventaire de départ
+MVT-000029;2025-09-19 06:30;ART-0029;inventaire;5;;Magasin;Inventaire de départ
+MVT-000030;2025-09-19 06:30;ART-0030;inventaire;3;;Magasin;Inventaire de départ
+MVT-000031;2025-09-19 06:30;ART-0031;inventaire;9;;Magasin;Inventaire de départ
+MVT-000032;2025-09-19 06:30;ART-0032;inventaire;7;;Magasin;Inventaire de départ
+MVT-000033;2025-09-19 06:30;ART-0033;inventaire;3;;Magasin;Inventaire de départ
+MVT-000034;2025-09-19 06:30;ART-0034;inventaire;3;;Magasin;Inventaire de départ
+MVT-000035;2025-09-19 06:30;ART-0035;inventaire;3;;Magasin;Inventaire de départ
+MVT-000036;2025-09-19 06:30;ART-0036;inventaire;3;;Magasin;Inventaire de départ
+MVT-000037;2025-09-19 06:30;ART-0037;inventaire;4;;Magasin;Inventaire de départ
+MVT-000038;2025-09-19 06:30;ART-0038;inventaire;3;;Magasin;Inventaire de départ
+MVT-000039;2025-09-19 06:30;ART-0039;inventaire;3;;Magasin;Inventaire de départ
+MVT-000040;2025-09-19 06:30;ART-0040;inventaire;2;;Magasin;Inventaire de départ
+MVT-000041;2025-09-19 06:30;ART-0041;inventaire;2;;Magasin;Inventaire de départ
+MVT-000042;2025-09-19 06:30;ART-0042;inventaire;2;;Magasin;Inventaire de départ
+MVT-000043;2025-09-19 06:30;ART-0043;inventaire;3;;Magasin;Inventaire de départ
+MVT-000044;2025-09-19 06:30;ART-0044;inventaire;4;;Magasin;Inventaire de départ
+MVT-000045;2025-09-19 06:30;ART-0045;inventaire;11;;Magasin;Inventaire de départ
+MVT-000046;2025-09-19 06:30;ART-0046;inventaire;11;;Magasin;Inventaire de départ
+MVT-000047;2025-09-19 06:30;ART-0047;inventaire;3;;Magasin;Inventaire de départ
+MVT-000048;2025-09-19 06:30;ART-0048;inventaire;2;;Magasin;Inventaire de départ
+MVT-000049;2025-09-19 06:30;ART-0049;inventaire;5;;Magasin;Inventaire de départ
+MVT-000050;2025-09-19 06:30;ART-0050;inventaire;6;;Magasin;Inventaire de départ
+MVT-000051;2025-09-19 06:30;ART-0051;inventaire;3;;Magasin;Inventaire de départ
+MVT-000052;2025-09-19 06:30;ART-0052;inventaire;4;;Magasin;Inventaire de départ
+MVT-000053;2025-09-25 14:19;ART-0031;sortie;1;OT-2025-0002;Julien Moreau;Utilisée sur CV-02
+MVT-000054;2025-09-29 10:30;ART-0031;entrée;24;;Magasin;Réception de la commande ACH-0001
+MVT-000055;2025-10-01 08:10;ART-0023;sortie;1;OT-2025-0004;Thomas Garnier;Utilisée sur CP-01
+MVT-000056;2025-10-06 10:30;ART-0023;entrée;3;;Magasin;Réception de la commande ACH-0002
+MVT-000057;2025-10-13 09:40;ART-0026;sortie;1;OT-2025-0008;Karim Benali;Utilisée sur CV-01
+MVT-000058;2025-10-13 10:05;ART-0026;sortie;1;OT-2025-0007;Sophie Lambert;Utilisée sur CN-01
+MVT-000059;2025-10-13 10:05;ART-0027;sortie;1;OT-2025-0007;Sophie Lambert;Utilisée sur CN-01
+MVT-000060;2025-10-14 09:40;ART-0029;sortie;1;OT-2025-0005;Julien Moreau;Utilisée sur GF-01
+MVT-000061;2025-10-17 10:30;ART-0026;entrée;48;;Magasin;Réception de la commande ACH-0003
+MVT-000062;2025-10-20 08:55;ART-0026;sortie;1;OT-2025-0009;Karim Benali;Utilisée sur CH-01
+MVT-000063;2025-10-20 10:30;ART-0027;entrée;3;;Magasin;Réception de la commande ACH-0004
+MVT-000064;2025-10-20 10:30;ART-0029;entrée;8;;Magasin;Réception de la commande ACH-0005
+MVT-000065;2025-10-20 13:19;ART-0016;sortie;1;OT-2025-0010;Karim Benali;Utilisée sur PO-02
+MVT-000066;2025-10-22 14:48;ART-0031;sortie;1;OT-2025-0013;Thomas Garnier;Utilisée sur CV-02
+MVT-000067;2025-10-29 08:24;ART-0033;sortie;1;OT-2025-0018;Sophie Lambert;Utilisée sur CH-01
+MVT-000068;2025-10-29 09:40;ART-0017;sortie;1;OT-2025-0019;Karim Benali;Utilisée sur PO-01
+MVT-000069;2025-10-31 10:30;ART-0016;entrée;2;;Magasin;Réception de la commande ACH-0006
+MVT-000070;2025-11-03 09:15;ART-0026;sortie;1;OT-2025-0017;Thomas Garnier;Utilisée sur PO-02
+MVT-000071;2025-11-03 10:30;ART-0033;entrée;3;;Magasin;Réception de la commande ACH-0008
+MVT-000072;2025-11-03 10:34;ART-0029;sortie;1;OT-2025-0021;Julien Moreau;Utilisée sur GF-01
+MVT-000073;2025-11-05 08:25;ART-0026;sortie;1;OT-2025-0020;Karim Benali;Utilisée sur PR-01
+MVT-000074;2025-11-06 13:08;ART-0021;sortie;1;OT-2025-0023;Thomas Garnier;Utilisée sur CP-01
+MVT-000075;2025-11-10 08:15;ART-0026;sortie;1;OT-2025-0025;Thomas Garnier;Utilisée sur CN-01
+MVT-000076;2025-11-10 08:15;ART-0027;sortie;1;OT-2025-0025;Thomas Garnier;Utilisée sur CN-01
+MVT-000077;2025-11-10 08:55;ART-0026;sortie;1;OT-2025-0024;Thomas Garnier;Utilisée sur CV-01
+MVT-000078;2025-11-10 10:30;ART-0017;entrée;2;;Magasin;Réception de la commande ACH-0007
+MVT-000079;2025-11-19 12:55;ART-0004;sortie;2;OT-2025-0022;Thomas Garnier;Utilisée sur PO-03
+MVT-000080;2025-11-20 11:56;ART-0031;sortie;1;OT-2025-0029;Thomas Garnier;Utilisée sur CV-02
+MVT-000081;2025-11-24 10:30;ART-0004;entrée;16;;Magasin;Réception de la commande ACH-0009
+MVT-000082;2025-11-24 12:47;ART-0031;sortie;1;OT-2025-0032;Thomas Garnier;Utilisée sur EM-01
+MVT-000083;2025-11-26 12:58;ART-0018;sortie;1;OT-2025-0037;Thomas Garnier;Utilisée sur PO-03
+MVT-000084;2025-11-27 10:30;ART-0026;sortie;1;OT-2025-0033;Karim Benali;Utilisée sur CH-01
+MVT-000085;2025-11-27 12:28;ART-0028;sortie;3;OT-2025-0031;Karim Benali;Utilisée sur VE-02
+MVT-000086;2025-12-03 10:30;ART-0028;entrée;16;;Magasin;Réception de la commande ACH-0011
+MVT-000087;2025-12-04 15:53;ART-0031;sortie;1;OT-2025-0039;Karim Benali;Utilisée sur CP-01.SEC
+MVT-000088;2025-12-05 10:30;ART-0018;entrée;2;;Magasin;Réception de la commande ACH-0010
+MVT-000089;2025-12-08 09:20;ART-0026;sortie;1;OT-2025-0040;Karim Benali;Utilisée sur CV-01
+MVT-000090;2025-12-08 11:04;ART-0021;sortie;1;OT-2025-0043;Karim Benali;Utilisée sur CP-01
+MVT-000091;2025-12-10 08:30;ART-0026;sortie;1;OT-2025-0042;Thomas Garnier;Utilisée sur CN-01
+MVT-000092;2025-12-10 08:30;ART-0027;sortie;1;OT-2025-0042;Thomas Garnier;Utilisée sur CN-01
+MVT-000093;2025-12-15 08:21;ART-0046;sortie;2;OT-2025-0045;Thomas Garnier;Utilisée sur CU-01
+MVT-000094;2025-12-15 10:12;ART-0016;sortie;1;OT-2025-0044;Karim Benali;Utilisée sur PO-02
+MVT-000095;2025-12-19 10:30;ART-0046;entrée;30;;Magasin;Réception de la commande ACH-0012
+MVT-000096;2025-12-19 13:21;ART-0031;sortie;1;OT-2025-0047;Julien Moreau;Utilisée sur CV-02
+MVT-000097;2025-12-24 15:28;ART-0031;sortie;1;OT-2025-0049;Sophie Lambert;Utilisée sur CH-01
+MVT-000098;2026-01-05 06:45;ART-0001;inventaire;9;;Magasin;Inventaire annuel
+MVT-000099;2026-01-05 06:45;ART-0002;inventaire;9;;Magasin;Inventaire annuel
+MVT-000100;2026-01-05 06:45;ART-0003;inventaire;9;;Magasin;Inventaire annuel
+MVT-000101;2026-01-05 06:45;ART-0004;inventaire;23;;Magasin;Inventaire annuel
+MVT-000102;2026-01-05 06:45;ART-0005;inventaire;5;;Magasin;Inventaire annuel
+MVT-000103;2026-01-05 06:45;ART-0006;inventaire;3;;Magasin;Inventaire annuel
+MVT-000104;2026-01-05 06:45;ART-0007;inventaire;5;;Magasin;Inventaire annuel
+MVT-000105;2026-01-05 06:45;ART-0008;inventaire;5;;Magasin;Inventaire annuel
+MVT-000106;2026-01-05 06:45;ART-0009;inventaire;4;;Magasin;Inventaire annuel
+MVT-000107;2026-01-05 06:45;ART-0010;inventaire;3;;Magasin;Inventaire annuel
+MVT-000108;2026-01-05 06:45;ART-0011;inventaire;11;;Magasin;Inventaire annuel
+MVT-000109;2026-01-05 06:45;ART-0012;inventaire;6;;Magasin;Inventaire annuel
+MVT-000110;2026-01-05 06:45;ART-0013;inventaire;5;;Magasin;Inventaire annuel
+MVT-000111;2026-01-05 06:45;ART-0014;inventaire;3;;Magasin;Inventaire annuel
+MVT-000112;2026-01-05 06:45;ART-0015;inventaire;9;;Magasin;Inventaire annuel
+MVT-000113;2026-01-05 06:45;ART-0016;inventaire;2;;Magasin;Inventaire annuel
+MVT-000114;2026-01-05 06:45;ART-0017;inventaire;3;;Magasin;Inventaire annuel
+MVT-000115;2026-01-05 06:45;ART-0018;inventaire;4;;Magasin;Inventaire annuel
+MVT-000116;2026-01-05 06:45;ART-0019;inventaire;3;;Magasin;Inventaire annuel
+MVT-000117;2026-01-05 06:45;ART-0020;inventaire;3;;Magasin;Inventaire annuel
+MVT-000118;2026-01-05 06:45;ART-0021;inventaire;9;;Magasin;Inventaire annuel
+MVT-000119;2026-01-05 06:45;ART-0022;inventaire;2;;Magasin;Inventaire annuel
+MVT-000120;2026-01-05 06:45;ART-0023;inventaire;5;;Magasin;Inventaire annuel
+MVT-000121;2026-01-05 06:45;ART-0024;inventaire;3;;Magasin;Inventaire annuel
+MVT-000122;2026-01-05 06:45;ART-0025;inventaire;3;;Magasin;Inventaire annuel
+MVT-000123;2026-01-05 06:45;ART-0026;inventaire;57;;Magasin;Inventaire annuel (écart de -2)
+MVT-000124;2026-01-05 06:45;ART-0027;inventaire;3;;Magasin;Inventaire annuel
+MVT-000125;2026-01-05 06:45;ART-0028;inventaire;22;;Magasin;Inventaire annuel
+MVT-000126;2026-01-05 06:45;ART-0029;inventaire;11;;Magasin;Inventaire annuel
+MVT-000127;2026-01-05 06:45;ART-0030;inventaire;3;;Magasin;Inventaire annuel
+MVT-000128;2026-01-05 06:45;ART-0031;inventaire;25;;Magasin;Inventaire annuel (écart de -1)
+MVT-000129;2026-01-05 06:45;ART-0032;inventaire;7;;Magasin;Inventaire annuel
+MVT-000130;2026-01-05 06:45;ART-0033;inventaire;5;;Magasin;Inventaire annuel
+MVT-000131;2026-01-05 06:45;ART-0034;inventaire;3;;Magasin;Inventaire annuel
+MVT-000132;2026-01-05 06:45;ART-0035;inventaire;3;;Magasin;Inventaire annuel
+MVT-000133;2026-01-05 06:45;ART-0036;inventaire;3;;Magasin;Inventaire annuel
+MVT-000134;2026-01-05 06:45;ART-0037;inventaire;4;;Magasin;Inventaire annuel
+MVT-000135;2026-01-05 06:45;ART-0038;inventaire;3;;Magasin;Inventaire annuel
+MVT-000136;2026-01-05 06:45;ART-0039;inventaire;3;;Magasin;Inventaire annuel
+MVT-000137;2026-01-05 06:45;ART-0040;inventaire;2;;Magasin;Inventaire annuel
+MVT-000138;2026-01-05 06:45;ART-0041;inventaire;2;;Magasin;Inventaire annuel
+MVT-000139;2026-01-05 06:45;ART-0042;inventaire;2;;Magasin;Inventaire annuel
+MVT-000140;2026-01-05 06:45;ART-0043;inventaire;3;;Magasin;Inventaire annuel
+MVT-000141;2026-01-05 06:45;ART-0044;inventaire;4;;Magasin;Inventaire annuel
+MVT-000142;2026-01-05 06:45;ART-0045;inventaire;11;;Magasin;Inventaire annuel
+MVT-000143;2026-01-05 06:45;ART-0046;inventaire;40;;Magasin;Inventaire annuel (écart de +1)
+MVT-000144;2026-01-05 06:45;ART-0047;inventaire;3;;Magasin;Inventaire annuel
+MVT-000145;2026-01-05 06:45;ART-0048;inventaire;2;;Magasin;Inventaire annuel
+MVT-000146;2026-01-05 06:45;ART-0049;inventaire;5;;Magasin;Inventaire annuel
+MVT-000147;2026-01-05 06:45;ART-0050;inventaire;6;;Magasin;Inventaire annuel
+MVT-000148;2026-01-05 06:45;ART-0051;inventaire;3;;Magasin;Inventaire annuel
+MVT-000149;2026-01-05 06:45;ART-0052;inventaire;4;;Magasin;Inventaire annuel
+MVT-000150;2026-01-05 08:05;ART-0026;sortie;1;OT-2026-0001;Karim Benali;Utilisée sur CV-01
+MVT-000151;2026-01-05 09:40;ART-0026;sortie;1;OT-2025-0053;Karim Benali;Utilisée sur PR-01
+MVT-000152;2026-01-05 10:17;ART-0033;sortie;1;OT-2026-0004;Julien Moreau;Utilisée sur CH-01
+MVT-000153;2026-01-09 09:19;ART-0031;sortie;1;OT-2026-0011;Sophie Lambert;Utilisée sur CH-01
+MVT-000154;2026-01-12 09:15;ART-0026;sortie;1;OT-2026-0005;Sophie Lambert;Utilisée sur CN-01
+MVT-000155;2026-01-12 09:15;ART-0027;sortie;1;OT-2026-0005;Sophie Lambert;Utilisée sur CN-01
+MVT-000156;2026-01-12 10:05;ART-0026;sortie;1;OT-2026-0006;Karim Benali;Utilisée sur CH-01
+MVT-000157;2026-01-12 10:05;ART-0029;sortie;1;OT-2026-0003;Julien Moreau;Utilisée sur GF-01
+MVT-000158;2026-01-12 14:14;ART-0023;sortie;1;OT-2026-0012;Karim Benali;Utilisée sur CP-01
+MVT-000159;2026-01-19 10:30;ART-0027;entrée;3;;Magasin;Réception de la commande ACH-0013
+MVT-000160;2026-01-19 13:16;ART-0031;sortie;1;OT-2026-0014;Sophie Lambert;Utilisée sur CV-02
+MVT-000161;2026-01-21 10:20;ART-0020;sortie;1;OT-2026-0013;Karim Benali;Utilisée sur CP-01
+MVT-000162;2026-01-21 10:20;ART-0021;sortie;1;OT-2026-0013;Karim Benali;Utilisée sur CP-01
+MVT-000163;2026-01-21 10:20;ART-0023;sortie;1;OT-2026-0013;Karim Benali;Utilisée sur CP-01
+MVT-000164;2026-01-21 13:26;ART-0031;sortie;1;OT-2026-0016;Thomas Garnier;Utilisée sur RB-01
+MVT-000165;2026-01-27 10:30;ART-0020;entrée;4;;Magasin;Réception de la commande ACH-0014
+MVT-000166;2026-01-28 08:02;ART-0031;sortie;1;OT-2026-0019;Sophie Lambert;Utilisée sur ET-01
+MVT-000167;2026-01-29 08:40;ART-0044;sortie;2;OT-2026-0021;Karim Benali;Utilisée sur PR-01.GH
+MVT-000168;2026-02-02 10:30;ART-0026;sortie;1;OT-2026-0022;Karim Benali;Utilisée sur CV-01
+MVT-000169;2026-02-04 08:40;ART-0026;sortie;1;OT-2026-0017;Karim Benali;Utilisée sur PO-02
+MVT-000170;2026-02-04 10:30;ART-0044;entrée;6;;Magasin;Réception de la commande ACH-0015
+MVT-000171;2026-02-10 12:27;ART-0016;sortie;1;OT-2026-0026;Karim Benali;Utilisée sur PO-02
+MVT-000172;2026-02-11 09:20;ART-0026;sortie;1;OT-2026-0025;Thomas Garnier;Utilisée sur CN-01
+MVT-000173;2026-02-11 09:20;ART-0027;sortie;1;OT-2026-0025;Thomas Garnier;Utilisée sur CN-01
+MVT-000174;2026-02-19 10:06;ART-0031;sortie;1;OT-2026-0029;Julien Moreau;Utilisée sur CV-02
+MVT-000175;2026-02-19 12:23;ART-0021;sortie;1;OT-2026-0030;Thomas Garnier;Utilisée sur CP-01
+MVT-000176;2026-02-23 09:31;ART-0032;sortie;1;OT-2026-0033;Sophie Lambert;Utilisée sur CV-03
+MVT-000177;2026-02-23 10:30;ART-0016;entrée;2;;Magasin;Réception de la commande ACH-0016
+MVT-000178;2026-02-23 10:40;ART-0026;sortie;1;OT-2026-0031;Karim Benali;Utilisée sur CH-01
+MVT-000179;2026-02-26 14:52;ART-0017;sortie;1;OT-2026-0035;Thomas Garnier;Utilisée sur PO-01
+MVT-000180;2026-02-27 12:03;ART-0025;sortie;1;OT-2026-0037;Thomas Garnier;Utilisée sur PR-01
+MVT-000181;2026-02-27 12:03;ART-0044;sortie;1;OT-2026-0037;Thomas Garnier;Utilisée sur PR-01
+MVT-000182;2026-03-02 09:25;ART-0026;sortie;1;OT-2026-0036;Thomas Garnier;Utilisée sur CV-01
+MVT-000183;2026-03-02 13:13;ART-0026;sortie;1;OT-2026-0040;Karim Benali;Utilisée sur CH-01
+MVT-000184;2026-03-05 10:20;ART-0026;sortie;1;OT-2026-0038;Karim Benali;Utilisée sur PR-01
+MVT-000185;2026-03-05 12:36;ART-0010;sortie;1;OT-2026-0034;Karim Benali;Utilisée sur EM-01
+MVT-000186;2026-03-06 10:30;ART-0025;entrée;3;;Magasin;Réception de la commande ACH-0017
+MVT-000187;2026-03-11 10:30;ART-0010;entrée;4;;Magasin;Réception de la commande ACH-0018
+MVT-000188;2026-03-12 11:41;ART-0044;sortie;1;OT-2026-0043;Thomas Garnier;Utilisée sur PR-01
+MVT-000189;2026-03-16 10:25;ART-0026;sortie;1;OT-2026-0041;Sophie Lambert;Utilisée sur CN-01
+MVT-000190;2026-03-16 10:25;ART-0027;sortie;1;OT-2026-0041;Sophie Lambert;Utilisée sur CN-01
+MVT-000191;2026-03-16 13:37;ART-0031;sortie;1;OT-2026-0045;Sophie Lambert;Utilisée sur CV-02
+MVT-000192;2026-03-20 13:49;ART-0021;sortie;1;OT-2026-0047;Thomas Garnier;Utilisée sur CP-01
+MVT-000193;2026-03-24 11:53;ART-0025;sortie;1;OT-2026-0049;Karim Benali;Utilisée sur PR-01
+MVT-000194;2026-03-24 11:53;ART-0044;sortie;1;OT-2026-0049;Karim Benali;Utilisée sur PR-01
+MVT-000195;2026-03-25 08:22;ART-0003;sortie;2;OT-2026-0044;Karim Benali;Utilisée sur VE-02
+MVT-000196;2026-03-26 14:12;ART-0032;sortie;1;OT-2026-0050;Sophie Lambert;Utilisée sur AE-03
+MVT-000197;2026-03-30 09:45;ART-0026;sortie;1;OT-2026-0051;Thomas Garnier;Utilisée sur CV-01
+MVT-000198;2026-03-30 10:30;ART-0003;entrée;16;;Magasin;Réception de la commande ACH-0019
+MVT-000199;2026-04-08 08:35;ART-0026;sortie;1;OT-2026-0054;Karim Benali;Utilisée sur CH-01
+MVT-000200;2026-04-08 15:38;ART-0052;sortie;1;OT-2026-0056;Thomas Garnier;Utilisée sur CH-01
+MVT-000201;2026-04-09 15:25;ART-0016;sortie;1;OT-2026-0057;Karim Benali;Utilisée sur PO-02
+MVT-000202;2026-04-13 08:17;ART-0024;sortie;1;OT-2026-0058;Karim Benali;Utilisée sur PR-01.GH
+MVT-000203;2026-04-13 08:35;ART-0029;sortie;1;OT-2026-0053;Julien Moreau;Utilisée sur GF-01
+MVT-000204;2026-04-14 10:15;ART-0022;sortie;1;OT-2026-0060;Karim Benali;Utilisée sur CP-01
+MVT-000205;2026-04-14 13:28;ART-0031;sortie;1;OT-2026-0061;Julien Moreau;Utilisée sur CV-02
+MVT-000206;2026-04-15 08:25;ART-0026;sortie;1;OT-2026-0059;Thomas Garnier;Utilisée sur CN-01
+MVT-000207;2026-04-15 08:25;ART-0027;sortie;1;OT-2026-0059;Thomas Garnier;Utilisée sur CN-01
+MVT-000208;2026-04-20 10:30;ART-0052;entrée;4;;Magasin;Réception de la commande ACH-0020
+MVT-000209;2026-04-20 10:30;ART-0024;entrée;3;;Magasin;Réception de la commande ACH-0021
+MVT-000210;2026-04-21 10:30;ART-0027;entrée;3;;Magasin;Réception de la commande ACH-0023
+MVT-000211;2026-04-21 11:04;ART-0032;sortie;1;OT-2026-0066;Sophie Lambert;Utilisée sur AE-03
+MVT-000212;2026-04-22 13:18;ART-0046;sortie;1;OT-2026-0063;Thomas Garnier;Utilisée sur CN-01
+MVT-000213;2026-04-23 10:30;ART-0022;entrée;2;;Magasin;Réception de la commande ACH-0022
+MVT-000214;2026-04-27 08:20;ART-0026;sortie;1;OT-2026-0068;Thomas Garnier;Utilisée sur CV-01
+MVT-000215;2026-04-27 14:57;ART-0032;sortie;1;OT-2026-0070;Julien Moreau;Utilisée sur AE-02
+MVT-000216;2026-04-29 08:19;ART-0025;sortie;1;OT-2026-0072;Karim Benali;Utilisée sur PR-01
+MVT-000217;2026-04-29 08:19;ART-0044;sortie;2;OT-2026-0072;Karim Benali;Utilisée sur PR-01
+MVT-000218;2026-04-30 14:45;ART-0023;sortie;1;OT-2026-0075;Karim Benali;Utilisée sur CP-01
+MVT-000219;2026-05-04 09:30;ART-0026;sortie;1;OT-2026-0073;Karim Benali;Utilisée sur PR-01
+MVT-000220;2026-05-05 09:05;ART-0026;sortie;1;OT-2026-0071;Thomas Garnier;Utilisée sur PO-02
+MVT-000221;2026-05-05 10:30;ART-0044;entrée;6;;Magasin;Réception de la commande ACH-0024
+MVT-000222;2026-05-05 10:30;ART-0023;entrée;3;;Magasin;Réception de la commande ACH-0025
+MVT-000223;2026-05-05 12:42;ART-0044;sortie;2;OT-2026-0077;Thomas Garnier;Utilisée sur PR-01
+MVT-000224;2026-05-05 14:12;ART-0044;retour;1;OT-2026-0077;Thomas Garnier;Retour au magasin (non utilisée) de PR-01
+MVT-000225;2026-05-11 08:57;ART-0026;sortie;2;OT-2026-0079;Thomas Garnier;Utilisée sur CV-01
+MVT-000226;2026-05-14 08:20;ART-0044;sortie;2;OT-2026-0082;Thomas Garnier;Utilisée sur PR-01.GH
+MVT-000227;2026-05-15 11:06;ART-0031;sortie;1;OT-2026-0083;Thomas Garnier;Utilisée sur CV-02
+MVT-000228;2026-05-18 08:35;ART-0026;sortie;1;OT-2026-0080;Thomas Garnier;Utilisée sur CN-01
+MVT-000229;2026-05-18 08:35;ART-0027;sortie;1;OT-2026-0080;Thomas Garnier;Utilisée sur CN-01
+MVT-000230;2026-05-19 09:50;ART-0019;sortie;1;OT-2026-0081;Thomas Garnier;Utilisée sur PO-02
+MVT-000231;2026-05-25 10:00;ART-0026;sortie;1;OT-2026-0084;Karim Benali;Utilisée sur CH-01
+MVT-000232;2026-05-25 10:30;ART-0019;entrée;3;;Magasin;Réception de la commande ACH-0026
+MVT-000233;2026-05-25 10:40;ART-0026;sortie;1;OT-2026-0086;Karim Benali;Utilisée sur CV-01
+MVT-000234;2026-05-27 08:38;ART-0046;sortie;1;OT-2026-0085;Thomas Garnier;Utilisée sur SC-01
+MVT-000235;2026-05-28 15:43;ART-0045;sortie;1;OT-2026-0091;Karim Benali;Utilisée sur ET-01
+MVT-000236;2026-05-28 15:43;ART-0046;sortie;2;OT-2026-0091;Karim Benali;Utilisée sur ET-01
+MVT-000237;2026-05-28 17:13;ART-0046;retour;1;OT-2026-0091;Karim Benali;Retour au magasin (non utilisée) de ET-01
+MVT-000238;2026-05-29 14:46;ART-0021;sortie;1;OT-2026-0093;Thomas Garnier;Utilisée sur CP-01
+MVT-000239;2026-06-02 10:30;ART-0045;entrée;30;;Magasin;Réception de la commande ACH-0027
+MVT-000240;2026-06-03 11:39;ART-0004;sortie;2;OT-2026-0087;Thomas Garnier;Utilisée sur PO-03
+MVT-000241;2026-06-03 13:09;ART-0004;retour;1;OT-2026-0087;Thomas Garnier;Retour au magasin (non utilisée) de PO-03
+MVT-000242;2026-06-04 09:30;ART-0032;sortie;1;OT-2026-0095;Sophie Lambert;Utilisée sur EM-01
+MVT-000243;2026-06-05 15:46;ART-0024;sortie;1;OT-2026-0098;Karim Benali;Utilisée sur PR-01
+MVT-000244;2026-06-08 10:35;ART-0016;sortie;1;OT-2026-0097;Karim Benali;Utilisée sur PO-02
+MVT-000245;2026-06-11 09:08;ART-0031;sortie;1;OT-2026-0100;Julien Moreau;Utilisée sur EM-01
+MVT-000246;2026-06-12 11:48;ART-0031;sortie;1;OT-2026-0101;Thomas Garnier;Utilisée sur CV-02
+MVT-000247;2026-06-17 09:45;ART-0026;sortie;1;OT-2026-0102;Sophie Lambert;Utilisée sur CN-01
+MVT-000248;2026-06-17 09:45;ART-0027;sortie;1;OT-2026-0102;Sophie Lambert;Utilisée sur CN-01
+MVT-000249;2026-06-19 10:30;ART-0016;entrée;2;;Magasin;Réception de la commande ACH-0028
+MVT-000250;2026-06-22 10:10;ART-0026;sortie;1;OT-2026-0105;Karim Benali;Utilisée sur CV-01
+MVT-000251;2026-06-23 11:43;ART-0031;sortie;1;OT-2026-0106;Thomas Garnier;Utilisée sur EM-01
+MVT-000252;2026-06-23 11:43;ART-0038;sortie;1;OT-2026-0106;Thomas Garnier;Utilisée sur EM-01
+MVT-000253;2026-06-25 13:32;ART-0031;sortie;1;OT-2026-0109;Sophie Lambert;Utilisée sur CV-01
+MVT-000254;2026-06-29 10:30;ART-0038;entrée;4;;Magasin;Réception de la commande ACH-0029
+MVT-000255;2026-06-29 13:32;ART-0046;sortie;1;OT-2026-0103;Karim Benali;Utilisée sur SC-01
+MVT-000256;2026-06-29 14:08;ART-0045;sortie;1;OT-2026-0111;Karim Benali;Utilisée sur RB-01
+MVT-000257;2026-07-02 10:40;ART-0026;sortie;1;OT-2026-0110;Karim Benali;Utilisée sur PR-01
+MVT-000258;2026-07-06 10:10;ART-0026;sortie;1;OT-2026-0114;Karim Benali;Utilisée sur CH-01
+MVT-000259;2026-07-07 08:15;ART-0021;sortie;1;OT-2026-0117;Thomas Garnier;Utilisée sur CP-01
+MVT-000260;2026-07-07 11:18;ART-0031;sortie;1;OT-2026-0112;Julien Moreau;Utilisée sur CV-03
+MVT-000261;2026-07-10 08:10;ART-0020;sortie;1;OT-2026-0116;Karim Benali;Utilisée sur CP-01
+MVT-000262;2026-07-10 08:10;ART-0021;sortie;1;OT-2026-0116;Karim Benali;Utilisée sur CP-01
+MVT-000263;2026-07-10 08:10;ART-0023;sortie;1;OT-2026-0116;Karim Benali;Utilisée sur CP-01
+MVT-000264;2026-07-10 08:16;ART-0026;sortie;2;OT-2026-0118;Thomas Garnier;Utilisée sur CH-01
+MVT-000265;2026-07-13 10:10;ART-0029;sortie;1;OT-2026-0115;Julien Moreau;Utilisée sur GF-01
+MVT-000266;2026-07-15 08:36;ART-0031;sortie;1;OT-2026-0121;Julien Moreau;Utilisée sur CV-02
+MVT-000267;2026-07-20 08:20;ART-0026;sortie;1;OT-2026-0120;Sophie Lambert;Utilisée sur CN-01
+MVT-000268;2026-07-20 08:20;ART-0027;sortie;1;OT-2026-0120;Sophie Lambert;Utilisée sur CN-01
+MVT-000269;2026-07-20 09:45;ART-0026;sortie;1;OT-2026-0123;Thomas Garnier;Utilisée sur CV-01
+MVT-000270;2026-07-27 08:43;ART-0038;sortie;1;OT-2026-0124;Julien Moreau;Utilisée sur RB-01
+MVT-000271;2026-07-27 10:30;ART-0027;entrée;3;;Magasin;Réception de la commande ACH-0030
+MVT-000272;2026-08-03 13:05;ART-0044;sortie;2;OT-2026-0130;Thomas Garnier;Utilisée sur PR-01
+MVT-000273;2026-08-04 08:35;ART-0016;sortie;1;OT-2026-0131;Karim Benali;Utilisée sur PO-02
+MVT-000274;2026-08-04 09:40;ART-0026;sortie;1;OT-2026-0125;Karim Benali;Utilisée sur PO-02
+MVT-000275;2026-08-05 08:51;ART-0028;sortie;4;OT-2026-0128;Thomas Garnier;Utilisée sur VE-02
+MVT-000276;2026-08-07 12:37;ART-0023;sortie;1;OT-2026-0136;Karim Benali;Utilisée sur CP-01
+MVT-000277;2026-08-10 11:01;ART-0031;sortie;1;OT-2026-0135;Julien Moreau;Utilisée sur CV-02
+MVT-000278;2026-08-10 11:01;ART-0037;sortie;1;OT-2026-0135;Julien Moreau;Utilisée sur CV-02
+MVT-000279;2026-08-12 10:05;ART-0026;sortie;1;OT-2026-0133;Thomas Garnier;Utilisée sur CH-01
+MVT-000280;2026-08-14 11:28;ART-0026;sortie;1;OT-2026-0134;Karim Benali;Utilisée sur CH-01
+MVT-000281;2026-08-17 08:15;ART-0026;sortie;1;OT-2026-0137;Karim Benali;Utilisée sur CV-01
+MVT-000282;2026-08-17 10:45;ART-0026;sortie;1;OT-2026-0138;Sophie Lambert;Utilisée sur CN-01
+MVT-000283;2026-08-17 10:45;ART-0027;sortie;1;OT-2026-0138;Sophie Lambert;Utilisée sur CN-01
+MVT-000284;2026-08-24 09:22;ART-0032;sortie;1;OT-2026-0141;Sophie Lambert;Utilisée sur CV-01
+MVT-000285;2026-08-26 12:08;ART-0045;sortie;1;OT-2026-0144;Thomas Garnier;Utilisée sur RB-01
+MVT-000286;2026-09-01 10:48;ART-0031;sortie;1;OT-2026-0149;Julien Moreau;Utilisée sur CH-01
+MVT-000287;2026-09-02 09:40;ART-0026;sortie;1;OT-2026-0142;Karim Benali;Utilisée sur PR-01
+MVT-000288;2026-09-02 11:46;ART-0026;sortie;2;OT-2026-0150;Thomas Garnier;Utilisée sur CH-01
+MVT-000289;2026-09-07 10:20;ART-0031;sortie;1;OT-2026-0152;Thomas Garnier;Utilisée sur CV-02
+MVT-000290;2026-09-07 10:30;ART-0026;entrée;48;;Magasin;Réception de la commande ACH-0031
+MVT-000291;2026-09-11 10:30;ART-0031;entrée;24;;Magasin;Réception de la commande ACH-0032
+MVT-000292;2026-09-11 10:39;ART-0021;sortie;1;OT-2026-0154;Thomas Garnier;Utilisée sur CP-01
+MVT-000293;2026-09-14 10:00;ART-0026;sortie;1;OT-2026-0153;Thomas Garnier;Utilisée sur CV-01
+MVT-000294;2026-09-17 09:30;ART-0026;sortie;1;OT-2026-0155;Sophie Lambert;Utilisée sur CN-01
+MVT-000295;2026-09-17 09:30;ART-0027;sortie;1;OT-2026-0155;Sophie Lambert;Utilisée sur CN-01
+MVT-000296;2026-09-21 10:33;ART-0033;sortie;1;OT-2026-0158;Julien Moreau;Utilisée sur CH-01
+MVT-000297;2026-10-01 09:26;ART-0016;sortie;1;OT-2026-0162;Thomas Garnier;Utilisée sur PO-02
+MVT-000298;2026-10-06 08:47;ART-0046;sortie;2;OT-2026-0167;Karim Benali;Utilisée sur CN-01
+MVT-000299;2026-10-06 12:28;ART-0031;sortie;1;OT-2026-0168;Thomas Garnier;Utilisée sur CV-02
+MVT-000300;2026-10-07 11:05;ART-0031;sortie;1;OT-2026-0165;Julien Moreau;Utilisée sur ET-01
+MVT-000301;2026-10-12 10:30;ART-0016;entrée;2;;Magasin;Réception de la commande ACH-0033
+MVT-000302;2026-10-13 08:30;ART-0029;sortie;1;OT-2026-0166;Julien Moreau;Utilisée sur GF-01

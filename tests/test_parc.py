@@ -19,11 +19,17 @@ import io
 import re
 import tempfile
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 
-from commun import (CasNavigateur, RACINE, ServeurPrevo, attendre_pret, preregler_profil, url_fichier)
+from commun import (CasNavigateur, RACINE, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo,
+                    url_fichier)
 
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
+# Identifiants des objets de scénario du jeu de démo (outils/generer_demo.py, ARCHITECTURE.md §14.8).
+SCENARIOS = scenarios_demo()
+# La démo décale ses dates du nombre de semaines entières écoulées depuis sa date de référence (§11).
+JOUR_REFERENCE_DEMO = date(2026, 10, 19)
 BOM = b"\xef\xbb\xbf"
 LIBELLE_PO02 = "PO-02 — Pompe centrifuge eau de refroidissement"
 RAPPEL_CONSIGNATION = "Cocher une case ne consigne rien : appliquez la procédure."
@@ -198,19 +204,29 @@ class TestParcDemo(CasParc):
         for attendu in ("Identifiant", "EQ-0005", "Hydronel", "HC 50-160", "HY-50-17-2987", "18/09/2017",
                         "Site des Trois Vallées › Atelier Utilités"):
             self.assertIn(attendu, fiche)
-        # Historique : les 5 OT de PO-02 et ses 3 DI, avec des liens
+        # Historique : tous les OT et toutes les DI de PO-02 (moins de 20 chacun : tout est affiché), avec des liens
+        ordres_po02 = [o for o in lire_csv(DOSSIER_DEMO, "ordres_travail.csv")[0] if o["equipement_id"] == "EQ-0005"]
+        demandes_po02 = [d for d in lire_csv(DOSSIER_DEMO, "demandes.csv")[0] if d["equipement_id"] == "EQ-0005"]
+        self.assertTrue(5 <= len(ordres_po02) <= 20, len(ordres_po02))
+        self.assertTrue(3 <= len(demandes_po02) <= 20, len(demandes_po02))
         liens_ot = page.locator("#contenu a[href^='#/ot/OT-']").all_inner_texts()
-        self.assertEqual(sorted(set(liens_ot)), ["OT-2026-0004", "OT-2026-0029", "OT-2026-0058", "OT-2026-0063", "OT-2026-0099"])
+        self.assertEqual(sorted(set(liens_ot)), sorted(o["id"] for o in ordres_po02))
         liens_di = page.locator("#contenu a[href^='#/di/DI-']").all_inner_texts()
-        self.assertEqual(sorted(set(liens_di)), ["DI-2026-0015", "DI-2026-0037", "DI-2026-0062"])
-        ordres = page.locator("#contenu table tr", has_text="OT-2026-0099").first.inner_text()
-        for attendu in ("30/09/2026", "correctif différé", "P2", "Clôturé administrativement", "Fuite à la garniture"):
+        self.assertEqual(sorted(set(liens_di)), sorted(d["id"] for d in demandes_po02))
+        # La dernière fuite de garniture : date de création (décalée comme la démo), type, priorité, statut
+        fuite = ligne_par_id(ordres_po02, SCENARIOS["ot_fuite_garniture_po02"])
+        self.assertEqual((fuite["type"], fuite["priorite"]), ("correctif différé", "P2"))
+        decalage = timedelta(weeks=(date.today() - JOUR_REFERENCE_DEMO).days // 7)
+        creation = date.fromisoformat(fuite["date_creation"][:10]) + decalage
+        ordres = page.locator("#contenu table tr", has_text=fuite["id"]).first.inner_text()
+        for attendu in (creation.strftime("%d/%m/%Y"), "correctif différé", "P2", fuite["statut"], "Fuite à la garniture"):
             self.assertIn(attendu, ordres)
         # Le plus récent d'abord
-        self.assertEqual(liens_ot[0], "OT-2026-0099")
-        # Articles liés : le kit garniture (ART-0016) a 3 en stock
+        self.assertEqual(liens_ot[0], fuite["id"])
+        # Articles liés : le kit garniture et son stock (colonne stock de articles.csv)
+        stock_kit = ligne_par_id(lire_csv(DOSSIER_DEMO, "articles.csv")[0], SCENARIOS["kit_garniture"])["stock"]
         ligne_kit = espaces_simples(page.locator("#contenu table tr", has_text="Kit garniture mécanique PO-02").first.inner_text())
-        self.assertRegex(ligne_kit, r"3 kit")
+        self.assertRegex(ligne_kit, r"\b%s kit" % re.escape(stock_kit))
         # Gros bouton « Signaler un problème » vers la demande préremplie
         signaler = page.locator("a.parc-signaler")
         self.assertEqual(signaler.get_attribute("href"), "#/di/nouvelle?equipement=EQ-0005")

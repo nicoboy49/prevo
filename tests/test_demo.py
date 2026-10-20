@@ -1,13 +1,18 @@
-"""Tests du jeu de démo : outils/generer_demo.py, donnees/demo/*.csv et js/demo-donnees.js.
+"""Tests du jeu de démo : outils/generer_demo.py, donnees/demo/*.csv, js/demo-donnees.js et
+tests/fixtures/demo-scenarios.json.
 
-Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11 ; brief §13) :
+Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brief §13) :
   - 22 fichiers CSV : BOM, séparateur « ; », fins de ligne CRLF, en-têtes identiques à js/schema.js ;
   - références (clés étrangères) valides, valeurs des listes valides ;
-  - volumes du brief §13 et présence des objets des scénarios de recette (PO-02, AE-03, TEC-0001...) ;
+  - volumes du brief §13, historique de 13 mois et présence des objets des scénarios de recette ;
+  - champs du format v2 renseignés (valeur de remplacement, code symptôme, anomalies de préventif) ;
+  - causes fréquentes (§14.5) : équipements à 5 cas et plus, portée « modèle », cas insuffisants ;
+  - identifiants de scénario : fichier identique à celui du générateur, chaque clé a sa propriété ;
   - champs protégés par une apostrophe (§3.2) ;
-  - js/demo-donnees.js chargé dans Chromium : 22 tables, texte identique aux CSV ;
+  - js/demo-donnees.js chargé dans Chromium : 22 tables, texte identique aux CSV ; démo en file://
+    chargée vite et sans erreur au « Contrôle de la base » ;
   - reproductibilité (deux exécutions = fichiers identiques, et fichiers livrés à jour) ;
-  - options --volume 500,5000 (moins de 60 s) et --mois 13.
+  - options --volume 500,5000 (moins de 60 s, gammes, compteurs, mouvements, achats) et --mois 6.
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_demo.py" -v
@@ -25,13 +30,19 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
-from commun import RACINE, CasNavigateur, charger_scripts
+from commun import (FICHIER_SCENARIOS, RACINE, CasNavigateur, attendre_pret, charger_scripts, scenarios_demo,
+                    url_fichier)
 
 SCRIPT_GENERATEUR = RACINE / 'outils' / 'generer_demo.py'
 DOSSIER_DEMO = RACINE / 'donnees' / 'demo'
 FICHIER_JS = RACINE / 'js' / 'demo-donnees.js'
 DATE_REFERENCE = '2026-10-19'
 JOUR_REFERENCE = date(2026, 10, 19)
+# L'historique commence entre 13,5 et 12,5 mois avant la date de référence (ARCHITECTURE.md §14.8).
+DEBUT_AU_PLUS_TOT = date(2025, 9, 19) - timedelta(days=15)     # référence - 13 mois - 15 jours
+DEBUT_AU_PLUS_TARD = date(2025, 10, 19) - timedelta(days=15)   # référence - 12 mois - 15 jours
+STATUTS_FERMES = ('Clôturé techniquement', 'Clôturé administrativement', 'Annulé')
+MINIMUM_CAUSES = 5                                             # ARCHITECTURE.md §14.5
 
 TABLES = [
     'localisations', 'equipements', 'demandes', 'ordres_travail', 'ot_operations', 'ot_pieces',
@@ -85,6 +96,25 @@ def executer_generateur(*arguments, delai=120):
 
 def jour(texte):
     return date.fromisoformat(texte[:10])
+
+
+def est_ouvert(ot):
+    return ot['statut'] not in STATUTS_FERMES
+
+
+def cas_causes_frequentes(t, equipements, symptome):
+    """OT comptés par l'encart des causes fréquentes (§14.5) : correctifs clôturés de ce symptôme,
+    cause renseignée, sur les équipements donnés."""
+    return [o for o in t['ordres_travail']
+            if o['equipement_id'] in equipements and o['type'].startswith('correctif')
+            and o['statut'].startswith('Clôturé') and o['symptome_code'] == symptome and o['cause_code']]
+
+
+def equipements_du_modele(t, equipement_id):
+    """Équipements de même marque et même modèle (casse ignorée), lui compris (portée « modèle »)."""
+    equipement = [e for e in t['equipements'] if e['id'] == equipement_id][0]
+    cle = (equipement['marque'].strip().lower(), equipement['modele'].strip().lower())
+    return {e['id'] for e in t['equipements'] if (e['marque'].strip().lower(), e['modele'].strip().lower()) == cle}
 
 
 # ---------------------------------------------------------------------------
@@ -225,10 +255,12 @@ class TestContenuDemo(unittest.TestCase):
         self.assertEqual(len(t['gammes']), 10)
         self.assertTrue(4 <= len(t['fournisseurs']) <= 5)
         self.assertGreaterEqual(len(t['controles_reglementaires']), 5)
-        self.assertEqual(len(t['compteurs']), 3)
-        self.assertGreaterEqual(len(t['releves']), 3 * 6)
-        self.assertGreaterEqual(len(t['ordres_travail']), 80)
-        self.assertGreaterEqual(len(t['demandes']), 50)
+        # 3 compteurs (heures, cycles) + 1 point de mesure pour la gamme seuil, un relevé par mois
+        self.assertEqual(len(t['compteurs']), 4)
+        self.assertGreaterEqual(len(t['releves']), 4 * 13)
+        self.assertGreaterEqual(len(t['ordres_travail']), 200)
+        self.assertGreaterEqual(len(t['demandes']), 120)
+        self.assertEqual(sorted({g['declencheur'] for g in t['gammes']}), ['compteur', 'date', 'seuil'])
         for gamme in t['gammes']:
             operations = [o for o in t['gamme_operations'] if o['gamme_id'] == gamme['id']]
             self.assertTrue(3 <= len(operations) <= 8, '%s : %d opérations' % (gamme['id'], len(operations)))
@@ -244,14 +276,28 @@ class TestContenuDemo(unittest.TestCase):
         for cle in ('heures_fonct_defaut', 'tolerance_preventif_pct'):
             self.assertIn(cle, parametres)
 
-    def test_historique_de_6_mois_se_terminant_a_la_date_de_reference(self):
+    def test_historique_de_13_mois_se_terminant_a_la_date_de_reference(self):
         dates = sorted(o['date_creation'][:10] for o in self.t['ordres_travail'])
-        self.assertGreaterEqual(jour(dates[0]), date(2026, 4, 19))
-        self.assertLessEqual(jour(dates[0]), date(2026, 5, 3))
         self.assertEqual(dates[-1], DATE_REFERENCE)
+        # Chaque partie de l'historique commence entre 13,5 et 12,5 mois avant la date de référence.
+        preventifs = [o for o in self.t['ordres_travail'] if o['origine'] == 'préventif']
+        for nom, lignes, champ in (('OT', self.t['ordres_travail'], 'date_creation'),
+                                   ('DI', self.t['demandes'], 'date_heure'),
+                                   ('préventifs', preventifs, 'date_creation'),
+                                   ('relevés', self.t['releves'], 'date'),
+                                   ('mouvements', self.t['mouvements_stock'], 'date'),
+                                   ('achats', self.t['achats'], 'date')):
+            premiere = jour(min(ligne[champ] for ligne in lignes))
+            self.assertTrue(DEBUT_AU_PLUS_TOT <= premiere <= DEBUT_AU_PLUS_TARD, '%s : %s' % (nom, premiere))
+        # Les identifiants gardent leur année : des OT et des DI de 2025 et de 2026.
+        for table, prefixe in (('ordres_travail', 'OT-'), ('demandes', 'DI-')):
+            for ligne in self.t[table]:
+                champ = 'date_creation' if table == 'ordres_travail' else 'date_heure'
+                self.assertTrue(ligne['id'].startswith(prefixe + ligne[champ][:4] + '-'), ligne['id'])
+            self.assertEqual({ligne['id'][len(prefixe):len(prefixe) + 4] for ligne in self.t[table]}, {'2025', '2026'})
         for table, champ in (('ordres_travail', 'date_debut'), ('ordres_travail', 'date_fin'),
                              ('ordres_travail', 'date_cloture_tech'), ('ot_temps', 'date'),
-                             ('mouvements_stock', 'date')):
+                             ('mouvements_stock', 'date'), ('releves', 'date'), ('achats', 'date')):
             for ligne in self.t[table]:
                 if ligne[champ]:
                     self.assertLessEqual(ligne[champ][:10], DATE_REFERENCE, '%s.%s' % (table, champ))
@@ -278,6 +324,56 @@ class TestContenuDemo(unittest.TestCase):
         for repere in ('CP-01', 'PR-01', 'AE-01', 'PT-01', 'CH-01'):
             self.assertTrue(self.equipement[repere]['consignation'], 'consignation de ' + repere)
         self.assertEqual(len(set(e['repere'] for e in self.t['equipements'])), len(self.t['equipements']))
+
+    def test_valeur_de_remplacement_realiste_sur_chaque_equipement(self):
+        """§14.1 : décimal en € HT, renseigné partout, dans les ordres de grandeur de chaque famille."""
+        for equipement in self.t['equipements']:
+            self.assertRegex(equipement['valeur_remplacement'], r'^\d+(\.\d+)?$', equipement['repere'])
+            self.assertGreater(float(equipement['valeur_remplacement']), 0, equipement['repere'])
+        fourchettes = {'CP-01': (25000, 40000), 'PO-01': (3000, 9000), 'PO-02': (3000, 9000), 'PO-03': (3000, 9000),
+                       'CV-01': (8000, 20000), 'CV-02': (8000, 20000), 'CV-03': (8000, 20000),
+                       'PR-01': (60000, 120000), 'CN-01': (80000, 150000), 'AE-01': (5000, 15000),
+                       'AE-02': (5000, 15000), 'AE-03': (5000, 15000), 'AE-04': (5000, 15000),
+                       'CH-01': (20000, 35000), 'GF-01': (15000, 30000)}
+        for repere, (minimum, maximum) in fourchettes.items():
+            valeur = float(self.equipement[repere]['valeur_remplacement'])
+            self.assertTrue(minimum <= valeur <= maximum, '%s : %s €' % (repere, valeur))
+
+    def test_codes_symptome_des_di_coherents_avec_leur_ot(self):
+        """§14.6 : environ 80 % des DI ont un code symptôme, toujours celui de l'OT qu'elles ont produit
+        (ou rejoint) ; les codes sont de la famille « symptôme »."""
+        symptomes = {c['code'] for c in self.t['codes_defaillance'] if c['famille'] == 'symptôme'}
+        avec_code = [d for d in self.t['demandes'] if d['symptome_code']]
+        self.assertTrue(0.7 <= len(avec_code) / len(self.t['demandes']) <= 0.9,
+                        '%d DI sur %d avec un code' % (len(avec_code), len(self.t['demandes'])))
+        compares = 0
+        for demande in avec_code:
+            self.assertIn(demande['symptome_code'], symptomes, demande['id'])
+            if demande['ot_id']:
+                self.assertEqual(demande['symptome_code'], self.ot_par_id[demande['ot_id']]['symptome_code'], demande['id'])
+                compares += 1
+        self.assertGreater(compares, 80)
+
+    def test_anomalies_de_preventif_avec_leur_di_liee(self):
+        """§14.6 : deux OT préventifs avec anomalie constatée ; chacun a sa DI liée (ot_origine_id),
+        l'une acceptée (correctif clôturé), l'autre « Nouvelle »."""
+        anomalies = [o for o in self.t['ordres_travail'] if o['anomalie_constatee'] == '1']
+        self.assertTrue(2 <= len(anomalies) <= 3, [o['id'] for o in anomalies])
+        statuts = []
+        for ot in anomalies:
+            self.assertEqual(ot['origine'], 'préventif', ot['id'])
+            liees = [d for d in self.t['demandes'] if d['ot_origine_id'] == ot['id']]
+            self.assertEqual(len(liees), 1, ot['id'])
+            statuts.append(liees[0]['statut'])
+            if liees[0]['statut'] == 'Acceptée':
+                correctif = self.ot_par_id[liees[0]['ot_id']]
+                self.assertTrue(correctif['type'].startswith('correctif'))
+                self.assertTrue(correctif['statut'].startswith('Clôturé'))
+        self.assertIn('Acceptée', statuts)
+        self.assertIn('Nouvelle', statuts)
+        for demande in self.t['demandes']:
+            if demande['ot_origine_id']:
+                self.assertEqual(self.ot_par_id[demande['ot_origine_id']]['anomalie_constatee'], '1', demande['id'])
 
     # -- techniciens
 
@@ -309,6 +405,8 @@ class TestContenuDemo(unittest.TestCase):
     # -- articles et stock
 
     def test_articles_sous_le_point_de_commande(self):
+        for article in self.t['articles']:          # point de commande SAISI sur les articles gérés (D23)
+            self.assertRegex(article['point_commande'], r'^\d+(\.\d+)?$', article['id'])
         sous_le_seuil = [a for a in self.t['articles'] if float(a['stock']) <= float(a['point_commande'])]
         self.assertEqual(len(sous_le_seuil), 3, [a['designation'] for a in sous_le_seuil])
         strictement = [a for a in self.t['articles'] if float(a['stock']) < float(a['point_commande'])]
@@ -338,9 +436,20 @@ class TestContenuDemo(unittest.TestCase):
         for article in self.t['articles']:
             self.assertEqual(float(article['stock']), stock.get(article['id'], 0), article['id'])
 
+    def test_mouvements_de_tous_les_types_sur_13_mois(self):
+        mouvements = self.t['mouvements_stock']
+        self.assertEqual({m['type'] for m in mouvements}, {'entrée', 'sortie', 'retour', 'inventaire'})
+        ecarts = [m for m in mouvements if m['type'] == 'inventaire' and m['commentaire'].startswith('Inventaire annuel')]
+        self.assertGreaterEqual(len(ecarts), len(self.t['articles']))
+        for genre in ('sortie', 'entrée'):
+            dates = sorted(jour(m['date']) for m in mouvements if m['type'] == genre)
+            self.assertGreaterEqual((dates[-1] - dates[0]).days, 330, genre)
+        recues = sorted(jour(a['date_reception']) for a in self.t['achats'] if a['statut'] == 'reçue')
+        self.assertGreaterEqual((recues[-1] - recues[0]).days, 300)
+
     def test_achats_coherents_avec_les_entrees(self):
         statuts = [a['statut'] for a in self.t['achats']]
-        self.assertGreaterEqual(statuts.count('reçue'), 3)
+        self.assertGreaterEqual(statuts.count('reçue'), 10)
         self.assertTrue(1 <= statuts.count('demandée') <= 2)
         self.assertGreaterEqual(statuts.count('commandée'), 1)
         recu, entre = {}, {}
@@ -367,9 +476,10 @@ class TestContenuDemo(unittest.TestCase):
 
     # -- historique : cas démontrables
 
-    def test_po02_trois_fuites_de_garniture_a_58_jours(self):
+    def test_po02_sept_fuites_de_garniture_a_58_jours(self):
+        # 13 mois d'historique : fuites il y a 19, 77, 135, 193, 251, 309 et 367 jours.
         fuites = [o for o in self.ot_de('PO-02') if o['type'].startswith('correctif') and o['cause_code'] == 'C01']
-        self.assertEqual(len(fuites), 3)
+        self.assertEqual(len(fuites), 7)
         dates = sorted(jour(self.di_par_id[o['di_id']]['date_heure']) for o in fuites)
         for avant, apres in zip(dates, dates[1:]):
             self.assertTrue(55 <= (apres - avant).days <= 61, (avant, apres))
@@ -412,6 +522,42 @@ class TestContenuDemo(unittest.TestCase):
                     if o['type'].startswith('correctif') and o['date_debut'] and avant['date_fin'] < o['date_debut'] < apres['date_debut']:
                         trouve = True
         self.assertTrue(trouve)
+
+    def test_causes_frequentes_equipements_a_5_cas_et_plus(self):
+        """§14.5 : PO-02 a au moins 5 fuites (S01) clôturées avec cause, au moins deux causes, la garniture
+        usée (C01) en tête ; un autre équipement (CP-01, échauffements S04) atteint aussi 5 cas."""
+        fuites = cas_causes_frequentes(self.t, {self.equipement['PO-02']['id']}, 'S01')
+        self.assertGreaterEqual(len(fuites), MINIMUM_CAUSES)
+        causes = {}
+        for ot in fuites:
+            causes[ot['cause_code']] = causes.get(ot['cause_code'], 0) + 1
+        self.assertGreaterEqual(len(causes), 2, causes)
+        self.assertEqual(max(causes, key=causes.get), 'C01', causes)
+        self.assertGreater(causes['C01'], max(n for code, n in causes.items() if code != 'C01'))
+        libelles = {c['code']: c['libelle'] for c in self.t['codes_defaillance']}
+        self.assertEqual(libelles['C01'], 'Garniture usée')
+        echauffements = cas_causes_frequentes(self.t, {self.equipement['CP-01']['id']}, 'S04')
+        self.assertGreaterEqual(len(echauffements), MINIMUM_CAUSES)
+        a_5_cas = set()
+        for equipement in self.t['equipements']:
+            for symptome in {o['symptome_code'] for o in self.ot_de(equipement['repere']) if o['symptome_code']}:
+                if len(cas_causes_frequentes(self.t, {equipement['id']}, symptome)) >= MINIMUM_CAUSES:
+                    a_5_cas.add(equipement['repere'])
+        self.assertGreaterEqual(len(a_5_cas), 2, a_5_cas)
+
+    def test_causes_frequentes_portee_modele_et_cas_insuffisants(self):
+        """§14.5 : CV-03 a moins de 5 arrêts intempestifs (S05) à lui seul, mais au moins 5 avec CV-02,
+        même marque et même modèle ; PO-03 (modèle unique) a de 1 à 4 cas de bruit (S02)."""
+        cv03 = self.equipement['CV-03']
+        self.assertEqual((cv03['marque'], cv03['modele']), (self.equipement['CV-02']['marque'], self.equipement['CV-02']['modele']))
+        propres = cas_causes_frequentes(self.t, {cv03['id']}, 'S05')
+        self.assertTrue(1 <= len(propres) < MINIMUM_CAUSES, len(propres))
+        modele = cas_causes_frequentes(self.t, equipements_du_modele(self.t, cv03['id']), 'S05')
+        self.assertGreaterEqual(len(modele), MINIMUM_CAUSES)
+        po03 = self.equipement['PO-03']
+        self.assertEqual(equipements_du_modele(self.t, po03['id']), {po03['id']})
+        bruits = cas_causes_frequentes(self.t, {po03['id']}, 'S02')
+        self.assertTrue(1 <= len(bruits) < MINIMUM_CAUSES, len(bruits))
 
     def test_chaines_symptome_cause_remede_coherentes(self):
         """Une même cause mène toujours aux mêmes familles de remèdes plausibles (pas de fuite -> réarmement)."""
@@ -475,7 +621,12 @@ class TestContenuDemo(unittest.TestCase):
         for operation in self.t['gamme_operations']:
             operations_par_gamme.setdefault(operation['gamme_id'], []).append(operation)
         preventifs = [o for o in self.t['ordres_travail'] if o['origine'] == 'préventif']
-        self.assertGreaterEqual(len(preventifs), 25)
+        self.assertGreaterEqual(len(preventifs), 60)
+        # Type selon le déclencheur (§14.3) : conditionnel pour une gamme seuil, systématique sinon.
+        declencheurs = {g['id']: g['declencheur'] for g in self.t['gammes']}
+        for o in preventifs:
+            attendu = 'préventif conditionnel' if declencheurs[o['gamme_id']] == 'seuil' else 'préventif systématique'
+            self.assertEqual(o['type'], attendu, o['id'])
         for o in preventifs:
             copiees = sorted(operations_par_ot[o['id']], key=lambda x: int(x['ordre']))
             modele = sorted(operations_par_gamme[o['gamme_id']], key=lambda x: int(x['ordre']))
@@ -487,7 +638,8 @@ class TestContenuDemo(unittest.TestCase):
 
     def test_demandes_a_la_date_de_reference(self):
         statuts = [d['statut'] for d in self.t['demandes']]
-        self.assertTrue(3 <= statuts.count('Nouvelle') <= 4, statuts.count('Nouvelle'))
+        # 4 DI d'opérateurs + la DI liée à l'anomalie d'un préventif récent
+        self.assertTrue(4 <= statuts.count('Nouvelle') <= 5, statuts.count('Nouvelle'))
         self.assertEqual(statuts.count('Différée'), 1)
         self.assertEqual(statuts.count('Refusée'), 1)
         for demande in self.t['demandes']:
@@ -524,6 +676,44 @@ class TestContenuDemo(unittest.TestCase):
         self.assertEqual(echues_sans_ot[0]['periodicite_jours'], '30')
         self.assertGreater(len([o for o in self.t['ordres_travail'] if o['gamme_id'] == echues_sans_ot[0]['id']]), 3)
 
+    def test_gammes_coherentes_avec_les_preventifs_realises(self):
+        """Dernière réalisation = date de fin du dernier préventif clôturé de la gamme ; échéance d'une
+        gamme date = dernière réalisation + périodicité ; préventifs réalisés sur les 13 mois."""
+        for gamme in self.t['gammes']:
+            clotures = sorted((o for o in self.t['ordres_travail']
+                               if o['gamme_id'] == gamme['id'] and o['statut'].startswith('Clôturé')),
+                              key=lambda o: o['date_fin'])
+            self.assertTrue(clotures, gamme['id'])
+            self.assertEqual(clotures[-1]['date_fin'][:10], gamme['derniere_realisation'], gamme['id'])
+            if gamme['declencheur'] == 'date':
+                attendue = jour(gamme['derniere_realisation']) + timedelta(days=int(gamme['periodicite_jours']))
+                self.assertEqual(gamme['prochaine_echeance'], attendue.isoformat(), gamme['id'])
+                if int(gamme['periodicite_jours']) <= 90:
+                    self.assertGreaterEqual((jour(clotures[-1]['date_fin']) - jour(clotures[0]['date_fin'])).days, 270,
+                                            gamme['id'])
+
+    def test_gamme_seuil_sur_un_point_de_mesure_sous_le_seuil(self):
+        """§14.3 : gamme seuil avec son compteur de mesure ; dernier relevé SOUS le seuil (pas échue) ;
+        réalisée dans l'historique après un relevé au-dessus du seuil (OT préventif conditionnel)."""
+        seuils = [g for g in self.t['gammes'] if g['declencheur'] == 'seuil']
+        self.assertEqual(len(seuils), 1)
+        gamme = seuils[0]
+        compteur = [c for c in self.t['compteurs'] if c['id'] == gamme['compteur_id']][0]
+        self.assertEqual(compteur['equipement_id'], gamme['equipement_id'])
+        self.assertNotIn(compteur['id'], {g['compteur_id'] for g in self.t['gammes'] if g is not gamme})
+        releves = sorted((r for r in self.t['releves'] if r['compteur_id'] == compteur['id']), key=lambda r: (r['date'], r['id']))
+        self.assertGreaterEqual(len(releves), 13)
+        self.assertLess(float(releves[-1]['valeur']), float(gamme['seuil']))
+        declencheurs = [r for r in releves if float(r['valeur']) >= float(gamme['seuil'])]
+        self.assertTrue(declencheurs)
+        self.assertLess(declencheurs[-1]['date'], gamme['derniere_realisation'])
+        self.assertEqual(gamme['releve_derniere_realisation'], declencheurs[-1]['valeur'])
+        ordres = [o for o in self.t['ordres_travail'] if o['gamme_id'] == gamme['id']]
+        self.assertTrue(ordres)
+        for o in ordres:
+            self.assertEqual(o['type'], 'préventif conditionnel')
+            self.assertTrue(o['statut'].startswith('Clôturé'))
+
     def test_gammes_echues_ont_un_seul_ot_ouvert(self):
         ouverts = {}
         for o in self.t['ordres_travail']:
@@ -553,6 +743,283 @@ class TestContenuDemo(unittest.TestCase):
                        if h['technicien_id'] == o['technicien_id'] and h['intitule'] == 'BR'
                        and h['date_obtention'] <= o['date_debut'][:10] <= h['date_echeance']]
             self.assertTrue(valides, o['id'])
+
+
+# ---------------------------------------------------------------------------
+# Identifiants de scénario (tests/fixtures/demo-scenarios.json, §14.8)
+# ---------------------------------------------------------------------------
+
+class TestScenariosDemo(unittest.TestCase):
+    """Le fichier écrit est celui du générateur, et chaque clé désigne une ligne qui a la propriété
+    annoncée par la docstring de outils/generer_demo.py."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.s = scenarios_demo()
+        cls.t = {table: lignes_propres(DOSSIER_DEMO, table) for table in TABLES}
+        cls.par_id = {table: {ligne['cle' if table == 'parametres' else 'id']: ligne for ligne in cls.t[table]}
+                      for table in TABLES}
+        cls.repere = {e['id']: e['repere'] for e in cls.t['equipements']}
+
+    def ligne(self, table, cle):
+        self.assertIn(cle, self.s)
+        self.assertIn(self.s[cle], self.par_id[table], cle)
+        return self.par_id[table][self.s[cle]]
+
+    def ot(self, cle):
+        return self.ligne('ordres_travail', cle)
+
+    def di(self, cle):
+        return self.ligne('demandes', cle)
+
+    def gamme(self, cle):
+        return self.ligne('gammes', cle)
+
+    def ot_ouverts(self, equipement_id=None):
+        return [o for o in self.t['ordres_travail'] if est_ouvert(o)
+                and (equipement_id is None or o['equipement_id'] == equipement_id)]
+
+    def releves(self, compteur_id):
+        return sorted((r for r in self.t['releves'] if r['compteur_id'] == compteur_id), key=lambda r: (r['date'], r['id']))
+
+    # -- le fichier
+
+    def test_fichier_identique_a_celui_du_generateur(self):
+        generateur = charger_generateur()
+        ctx = generateur.construire_jeu()
+        scenarios = generateur.scenarios_du_jeu(ctx)
+        generateur.verifier_scenarios(ctx, scenarios)            # lève ErreurCoherence en cas de défaut
+        self.assertEqual(FICHIER_SCENARIOS.read_bytes(), generateur.texte_scenarios(scenarios).encode('utf-8'),
+                         'tests/fixtures/demo-scenarios.json : relancer py outils/generer_demo.py')
+        texte = FICHIER_SCENARIOS.read_bytes().decode('utf-8')
+        self.assertFalse(texte.startswith('﻿'))
+        self.assertTrue(texte.startswith('{\n  "'), 'JSON indenté')
+        self.assertEqual(list(json.loads(texte)), sorted(json.loads(texte)), 'clés triées')
+        # Chaque clé est documentée dans la docstring du générateur, et réciproquement.
+        self.assertEqual(sorted(generateur.cles_documentees()), sorted(self.s))
+        for cle, valeur in self.s.items():
+            self.assertTrue(isinstance(valeur, str) or (isinstance(valeur, list) and valeur == sorted(valeur)), cle)
+
+    def test_cles_minimales_demandees(self):
+        for cle in ('gamme_mensuelle_echue', 'gamme_compteur_echue', 'gamme_seuil', 'kit_garniture',
+                    'articles_sous_point_commande', 'preventif_anomalie', 'di_anomalie_nouvelle', 'causes_equipement',
+                    'causes_equipement_symptome', 'causes_modele', 'causes_modele_symptome', 'causes_insuffisantes',
+                    'causes_insuffisantes_symptome', 'ot_p1_ouvert', 'ot_en_retard', 'technicien_br_valide',
+                    'technicien_br_echue', 'equipement_br'):
+            self.assertIn(cle, self.s)
+        for statut in ('cree', 'prepare', 'planifie', 'en_cours', 'en_attente', 'cloture_technique',
+                       'cloture_administratif', 'annule'):
+            self.assertIn('ot_statut_' + statut, self.s)
+        for statut in ('nouvelle', 'acceptee', 'regroupee', 'differee', 'refusee'):
+            self.assertIn('di_statut_' + statut, self.s)
+
+    # -- OT
+
+    def test_ot_par_statut(self):
+        attendus = {'ot_statut_cree': 'Créé', 'ot_statut_prepare': 'Préparé', 'ot_statut_planifie': 'Planifié',
+                    'ot_statut_en_cours': 'En cours', 'ot_statut_en_attente': 'En attente',
+                    'ot_statut_cloture_technique': 'Clôturé techniquement',
+                    'ot_statut_cloture_administratif': 'Clôturé administrativement', 'ot_statut_annule': 'Annulé'}
+        for cle, statut in attendus.items():
+            self.assertEqual(self.ot(cle)['statut'], statut, cle)
+        self.assertEqual(self.ot('ot_statut_cree')['gamme_id'], self.s['gamme_compteur_echue'])
+        prepare = self.ot('ot_statut_prepare')
+        self.assertTrue(prepare['type'].startswith('correctif'))
+        self.assertLess(prepare['date_prevue'], DATE_REFERENCE)
+        planifie = self.ot('ot_statut_planifie')
+        self.assertTrue(planifie['type'].startswith('correctif') and planifie['technicien_id'])
+        self.assertGreaterEqual(planifie['date_prevue'], DATE_REFERENCE)
+        en_cours = self.ot('ot_statut_en_cours')
+        self.assertEqual((en_cours['priorite'], en_cours['origine']), ('P2', 'DI'))
+        attente = self.ot('ot_statut_en_attente')
+        self.assertRegex(attente['motif_attente'], r'(?i)pièce')
+        self.assertLess(attente['date_prevue'], DATE_REFERENCE)
+        self.assertGreaterEqual(len(self.ot('ot_statut_annule')['motif_annulation']), 10)
+        techniques = [o for o in self.t['ordres_travail'] if o['statut'] == 'Clôturé techniquement']
+        self.assertEqual(self.s['ot_statut_cloture_technique'],
+                         max(techniques, key=lambda o: (o['date_cloture_tech'], o['id']))['id'])
+        administratifs = [o for o in self.t['ordres_travail'] if o['statut'] == 'Clôturé administrativement']
+        self.assertEqual(self.s['ot_statut_cloture_administratif'],
+                         max(administratifs, key=lambda o: (o['date_cloture_admin'], o['id']))['id'])
+
+    def test_ot_p1_ouvert_et_ot_en_retard(self):
+        p1 = self.ot('ot_p1_ouvert')
+        self.assertEqual((p1['priorite'], p1['statut'], self.repere[p1['equipement_id']]), ('P1', 'En cours', 'CP-01'))
+        self.assertEqual([o['id'] for o in self.ot_ouverts() if o['priorite'] == 'P1'], [p1['id']])
+        retard = sorted(o['id'] for o in self.ot_ouverts() if o['date_prevue'] and o['date_prevue'] < DATE_REFERENCE)
+        self.assertEqual(self.s['ot_en_retard'], retard)
+        self.assertTrue({self.s['ot_statut_prepare'], self.s['ot_statut_en_attente'], self.s['ot_preventif_ouvert']}
+                        <= set(retard))
+        for identifiant in retard:
+            self.assertNotEqual(self.par_id['ordres_travail'][identifiant]['statut'], 'Annulé')
+
+    def test_ot_remarquables(self):
+        regroupe = self.ot('ot_en_cours_regroupe')
+        self.assertEqual(regroupe['statut'], 'En cours')
+        self.assertEqual([o['id'] for o in self.ot_ouverts(regroupe['equipement_id'])], [regroupe['id']])
+        regroupee = self.di('di_statut_regroupee')
+        self.assertEqual((regroupee['ot_id'], regroupee['equipement_id']), (regroupe['id'], regroupe['equipement_id']))
+        ouvert = self.ot('ot_preventif_ouvert')
+        self.assertEqual((ouvert['origine'], ouvert['statut'], ouvert['technicien_id']), ('préventif', 'Planifié', 'TEC-0004'))
+        self.assertLess(ouvert['date_prevue'], DATE_REFERENCE)
+        preventifs = [o for o in self.t['ordres_travail'] if o['origine'] == 'préventif' and o['statut'].startswith('Clôturé')]
+        self.assertEqual(self.s['ot_preventif_cloture'], min(preventifs, key=lambda o: (o['date_creation'], o['id']))['id'])
+        fuite = self.ot('ot_fuite_garniture_po02')
+        self.assertEqual((self.repere[fuite['equipement_id']], fuite['symptome_code'], fuite['cause_code']),
+                         ('PO-02', 'S01', 'C01'))
+        self.assertTrue(fuite['type'].startswith('correctif') and fuite['statut'].startswith('Clôturé'))
+        pieces = [(p['article_id'], p['quantite_prevue']) for p in self.t['ot_pieces'] if p['ot_id'] == fuite['id']]
+        self.assertEqual(pieces, [(self.s['kit_garniture'], '1')])
+        po02 = [o for o in self.t['ordres_travail'] if o['equipement_id'] == fuite['equipement_id']]
+        self.assertEqual(max(po02, key=lambda o: (o['date_creation'], o['id']))['id'], fuite['id'])
+        acceptee = self.di('di_statut_acceptee')
+        self.assertEqual(self.s['ot_de_di_acceptee'], acceptee['ot_id'])
+        self.assertEqual(self.ot('ot_de_di_acceptee')['di_id'], acceptee['id'])
+
+    def test_preventifs_avec_anomalie_et_leur_di(self):
+        preventif = self.ot('preventif_anomalie')
+        demande = self.di('di_anomalie_acceptee')
+        correctif = self.ot('ot_correctif_anomalie')
+        self.assertEqual((preventif['origine'], preventif['anomalie_constatee']), ('préventif', '1'))
+        self.assertTrue(preventif['statut'].startswith('Clôturé'))
+        self.assertEqual((demande['ot_origine_id'], demande['statut'], demande['ot_id']),
+                         (preventif['id'], 'Acceptée', correctif['id']))
+        self.assertTrue(correctif['type'].startswith('correctif') and correctif['statut'].startswith('Clôturé'))
+        self.assertEqual(correctif['symptome_code'], demande['symptome_code'])
+        nouvelle = self.ot('preventif_anomalie_nouvelle')
+        demande = self.di('di_anomalie_nouvelle')
+        self.assertEqual((nouvelle['origine'], nouvelle['anomalie_constatee']), ('préventif', '1'))
+        self.assertEqual((demande['ot_origine_id'], demande['statut'], demande['ot_id']), (nouvelle['id'], 'Nouvelle', ''))
+        self.assertEqual(sorted(o['id'] for o in self.t['ordres_travail'] if o['anomalie_constatee'] == '1'),
+                         sorted([preventif['id'], nouvelle['id']]))
+
+    # -- DI
+
+    def test_di_par_statut_et_remarquables(self):
+        for cle, statut in (('di_statut_nouvelle', 'Nouvelle'), ('di_statut_acceptee', 'Acceptée'),
+                            ('di_statut_regroupee', 'Regroupée'), ('di_statut_differee', 'Différée'),
+                            ('di_statut_refusee', 'Refusée')):
+            self.assertEqual(self.di(cle)['statut'], statut, cle)
+        self.assertGreaterEqual(len(self.di('di_statut_differee')['motif_decision']), 10)
+        self.assertGreaterEqual(len(self.di('di_statut_refusee')['motif_decision']), 10)
+        self.assertEqual([d['id'] for d in self.t['demandes'] if d['statut'] == 'Refusée'], [self.s['di_statut_refusee']])
+        self.assertEqual(self.s['di_nouvelles'], sorted(d['id'] for d in self.t['demandes'] if d['statut'] == 'Nouvelle'))
+        criticite = {e['id']: e['criticite'] for e in self.t['equipements']}
+        securite = self.di('di_securite')
+        self.assertEqual((securite['statut'], securite['impact']), ('Nouvelle', 'sécurité'))
+        p4 = self.di('di_nouvelle_p4')
+        self.assertEqual((p4['statut'], criticite[p4['equipement_id']], p4['impact']), ('Nouvelle', 'C', 'gêne'))
+        sans_ot = self.di('di_nouvelle_sans_ot_ouvert')
+        self.assertEqual((sans_ot['statut'], criticite[sans_ot['equipement_id']], sans_ot['impact']), ('Nouvelle', 'C', 'gêne'))
+        self.assertEqual(self.ot_ouverts(sans_ot['equipement_id']), [])
+        degradee = self.di('di_nouvelle_degradee')
+        self.assertEqual((degradee['statut'], degradee['impact'], degradee['demandeur']), ('Nouvelle', 'dégradé', 'Sarah Colin'))
+        for cle in ('di_securite', 'di_nouvelle_p4', 'di_nouvelle_sans_ot_ouvert', 'di_nouvelle_degradee',
+                    'di_anomalie_nouvelle'):
+            self.assertIn(self.s[cle], self.s['di_nouvelles'], cle)
+
+    def test_di_historiques(self):
+        premiere = self.di('di_plus_ancienne')
+        self.assertEqual(premiere['id'], min(d['id'] for d in self.t['demandes']))
+        self.assertEqual(premiere['id'], self.t['demandes'][0]['id'])
+        self.assertEqual(premiere['statut'], 'Acceptée')
+        self.assertTrue(premiere['date_decision'])
+        acceptees = [d for d in self.t['demandes'] if d['statut'] == 'Acceptée' and d['ot_id']]
+        self.assertEqual([self.s['di_statut_acceptee'], self.s['di_acceptee_autre']], [d['id'] for d in acceptees[:2]])
+        causes = self.di('di_causes_equipement')
+        self.assertEqual((causes['equipement_id'], causes['symptome_code']),
+                         (self.s['causes_equipement'], self.s['causes_equipement_symptome']))
+        self.assertTrue(self.par_id['ordres_travail'][causes['ot_id']]['statut'].startswith('Clôturé'))
+        insuffisantes = self.di('di_causes_insuffisantes')
+        self.assertEqual((insuffisantes['equipement_id'], insuffisantes['symptome_code']),
+                         (self.s['causes_insuffisantes'], self.s['causes_insuffisantes_symptome']))
+        self.assertEqual(self.di('di_sans_symptome_code')['symptome_code'], '')
+
+    # -- préventif, compteurs
+
+    def test_gammes_et_compteurs(self):
+        mensuelle = self.gamme('gamme_mensuelle_echue')
+        self.assertEqual((mensuelle['declencheur'], mensuelle['periodicite_jours']), ('date', '30'))
+        self.assertLessEqual(jour(mensuelle['prochaine_echeance']) - timedelta(days=int(mensuelle['avance_jours'])),
+                             JOUR_REFERENCE)
+        ouvertes = {o['gamme_id'] for o in self.ot_ouverts() if o['gamme_id']}
+        self.assertNotIn(mensuelle['id'], ouvertes)
+        for cle, echue in (('gamme_compteur_echue', True), ('gamme_compteur_sans_ot', False)):
+            gamme = self.gamme(cle)
+            self.assertEqual(gamme['declencheur'], 'compteur')
+            dernier = float(self.releves(gamme['compteur_id'])[-1]['valeur'])
+            ecart = dernier - float(gamme['releve_derniere_realisation'] or 0)
+            self.assertEqual(ecart >= float(gamme['periodicite_unites']), echue, cle)
+            self.assertEqual(gamme['id'] in ouvertes, echue, cle)
+        seuil = self.gamme('gamme_seuil')
+        self.assertEqual((seuil['declencheur'], seuil['compteur_id']), ('seuil', self.s['compteur_seuil']))
+        self.assertLess(float(self.releves(seuil['compteur_id'])[-1]['valeur']), float(seuil['seuil']))
+        self.assertNotIn(seuil['id'], ouvertes)
+        sans_constat = self.gamme('gamme_sans_constat')
+        self.assertEqual(self.repere[sans_constat['equipement_id']], 'VE-01')
+        clotures = [o for o in self.t['ordres_travail'] if o['gamme_id'] == sans_constat['id'] and o['statut'].startswith('Clôturé')]
+        self.assertGreaterEqual(len(clotures), 5)
+        for o in clotures:
+            self.assertRegex(o['compte_rendu'], r'(?i)ras|rien à signaler')
+        horaire = self.ligne('compteurs', 'compteur_horaire')
+        self.assertEqual((horaire['unite'], self.repere[horaire['equipement_id']]), ('h', 'CP-01'))
+        self.assertEqual(self.ligne('compteurs', 'compteur_seuil')['equipement_id'], seuil['equipement_id'])
+
+    # -- magasin
+
+    def test_articles_et_achats(self):
+        kit = self.ligne('articles', 'kit_garniture')
+        self.assertEqual(kit['designation'], 'Kit garniture mécanique PO-02')
+        self.assertGreaterEqual(float(kit['stock']), 2)
+        sous = sorted(a['id'] for a in self.t['articles'] if float(a['stock']) <= float(a['point_commande']))
+        self.assertEqual(self.s['articles_sous_point_commande'], sous)
+        self.assertEqual(len(sous), 3)
+        for cle, statut in (('achat_statut_demandee', 'demandée'), ('achat_statut_commandee', 'commandée'),
+                            ('achat_statut_recue', 'reçue')):
+            self.assertEqual(self.ligne('achats', cle)['statut'], statut, cle)
+        recu = self.ligne('achats', 'achat_statut_recue')
+        entrees = [m for m in self.t['mouvements_stock']
+                   if m['type'] == 'entrée' and m['commentaire'] == 'Réception de la commande ' + recu['id']]
+        self.assertEqual(len(entrees), 1)
+        self.assertEqual((entrees[0]['article_id'], entrees[0]['quantite']), (recu['article_id'], recu['quantite']))
+
+    # -- parc, techniciens
+
+    def test_parc_et_habilitations(self):
+        self.assertEqual(self.ligne('equipements', 'equipement_br')['habilitation_requise'], 'BR')
+        unique = self.ligne('equipements', 'equipement_panne_unique')
+        correctifs = [o for o in self.t['ordres_travail'] if o['equipement_id'] == unique['id'] and o['type'].startswith('correctif')]
+        self.assertEqual(len(correctifs), 1)
+
+        def br(technicien):
+            return [h for h in self.t['habilitations'] if h['technicien_id'] == technicien and h['intitule'] == 'BR']
+
+        valide = br(self.ligne('techniciens', 'technicien_br_valide')['id'])
+        self.assertTrue(any(h['date_obtention'] <= DATE_REFERENCE <= h['date_echeance'] for h in valide))
+        echue = br(self.ligne('techniciens', 'technicien_br_echue')['id'])
+        self.assertTrue(echue)
+        self.assertTrue(all(h['date_echeance'] < DATE_REFERENCE for h in echue))
+
+    # -- causes fréquentes
+
+    def test_causes_frequentes(self):
+        t = self.t
+        for cle in ('causes_equipement', 'causes_equipement_2'):
+            cas = cas_causes_frequentes(t, {self.s[cle]}, self.s[cle + '_symptome'])
+            self.assertGreaterEqual(len(cas), MINIMUM_CAUSES, cle)
+        self.assertEqual(self.repere[self.s['causes_equipement']], 'PO-02')
+        self.assertEqual(self.s['causes_equipement_symptome'], 'S01')
+        modele = self.s['causes_modele']
+        propres = cas_causes_frequentes(t, {modele}, self.s['causes_modele_symptome'])
+        tous = cas_causes_frequentes(t, equipements_du_modele(t, modele), self.s['causes_modele_symptome'])
+        self.assertTrue(len(propres) < MINIMUM_CAUSES <= len(tous), (len(propres), len(tous)))
+        insuffisant = self.s['causes_insuffisantes']
+        tous = cas_causes_frequentes(t, equipements_du_modele(t, insuffisant), self.s['causes_insuffisantes_symptome'])
+        self.assertTrue(1 <= len(tous) < MINIMUM_CAUSES, len(tous))
+        symptomes = {c['code'] for c in t['codes_defaillance'] if c['famille'] == 'symptôme'}
+        for cle in ('causes_equipement', 'causes_equipement_2', 'causes_modele', 'causes_insuffisantes'):
+            self.assertIn(self.s[cle], self.par_id['equipements'], cle)
+            self.assertIn(self.s[cle + '_symptome'], symptomes, cle)
 
 
 # ---------------------------------------------------------------------------
@@ -646,6 +1113,27 @@ class TestAvecNavigateur(CasNavigateur):
             self.assertEqual(texte, octets[3:].decode('utf-8'), table)
             self.assertNotIn('﻿', texte)
 
+    def test_demo_en_file_chargee_vite_et_controle_de_la_base_sans_probleme(self):
+        """13 mois d'historique restent légers en file:// : fichier de moins de 1 Mo, démo prête en
+        quelques secondes, aucun problème signalé par « Contrôle de la base »."""
+        self.assertLess(FICHIER_JS.stat().st_size, 1024 * 1024)
+        page = self.page
+        page.goto(url_fichier('index.html'))
+        page.wait_for_function("document.documentElement.dataset.etat === 'demarrage'")
+        debut = time.monotonic()
+        page.click('#btn-demo')
+        page.wait_for_function("document.documentElement.dataset.etat === 'profil'")
+        page.click('#profil-responsable')
+        attendre_pret(page)
+        duree = time.monotonic() - debut
+        self.assertLess(duree, 5, 'démo prête en %.1f s' % duree)
+        self.assertEqual(page.evaluate("App.mode"), 'demo')
+        self.assertEqual(page.evaluate("Donnees.problemes().map((p) => p.gravite + ' : ' + p.message)"), [])
+        page.evaluate("location.hash = '#/controle'")
+        page.wait_for_selector('[data-compteur="erreur"] .chiffre')
+        self.assertEqual(page.inner_text('[data-compteur="erreur"] .chiffre'), '0')
+        self.assertIn('Aucun problème détecté', page.inner_text('#contenu'))
+
     def test_aller_retour_par_donnees_csv_sans_probleme(self):
         """Chaque CSV lu puis réécrit par Donnees.csv (js/donnees.js) est identique octet pour octet, sans problème signalé
         (ignoré tant que js/donnees.js n'existe pas)."""
@@ -702,12 +1190,14 @@ class TestGenerateur(unittest.TestCase):
             racine = Path(temporaire)
             for numero in (1, 2):
                 processus, _ = executer_generateur('--sortie', racine / ('csv%d' % numero),
-                                                   '--fichier-js', racine / ('demo%d.js' % numero))
+                                                   '--fichier-js', racine / ('demo%d.js' % numero),
+                                                   '--fichier-scenarios', racine / ('scenarios%d.json' % numero))
                 self.assertEqual(processus.returncode, 0, processus.stderr.decode('utf-8', 'replace'))
             for table in TABLES:
                 self.assertEqual((racine / 'csv1' / (table + '.csv')).read_bytes(),
                                  (racine / 'csv2' / (table + '.csv')).read_bytes(), table)
             self.assertEqual((racine / 'demo1.js').read_bytes(), (racine / 'demo2.js').read_bytes())
+            self.assertEqual((racine / 'scenarios1.json').read_bytes(), (racine / 'scenarios2.json').read_bytes())
             # Les fichiers livrés sont ceux que produit le générateur (aucun oubli de régénération).
             for table in TABLES:
                 self.assertEqual((racine / 'csv1' / (table + '.csv')).read_bytes(),
@@ -715,6 +1205,17 @@ class TestGenerateur(unittest.TestCase):
                                  table + ' : relancer py outils/generer_demo.py')
             self.assertEqual((racine / 'demo1.js').read_bytes(), FICHIER_JS.read_bytes(),
                              'js/demo-donnees.js : relancer py outils/generer_demo.py')
+            self.assertEqual((racine / 'scenarios1.json').read_bytes(), FICHIER_SCENARIOS.read_bytes(),
+                             'tests/fixtures/demo-scenarios.json : relancer py outils/generer_demo.py')
+
+    def test_sortie_ou_volume_n_ecrivent_pas_les_identifiants_de_scenario(self):
+        """Le fichier des scénarios ne vaut que pour le jeu livré : --sortie ne le réécrit pas."""
+        avant = FICHIER_SCENARIOS.stat().st_mtime_ns
+        with tempfile.TemporaryDirectory() as temporaire:
+            processus, _ = executer_generateur('--sortie', Path(temporaire) / 'csv', '--sans-js')
+            self.assertEqual(processus.returncode, 0, processus.stderr.decode('utf-8', 'replace'))
+            self.assertEqual(sorted(p.name for p in Path(temporaire).iterdir()), ['csv'])
+        self.assertEqual(FICHIER_SCENARIOS.stat().st_mtime_ns, avant)
 
     def test_le_fichier_js_est_bien_forme(self):
         texte = FICHIER_JS.read_text(encoding='utf-8')
@@ -737,17 +1238,38 @@ class TestGenerateur(unittest.TestCase):
             self.assertEqual(sorted(p.name for p in sortie.glob('*.csv')), sorted(t + '.csv' for t in TABLES))
             self.assertGreater(len(lire_table(sortie, 'ot_operations')[1]), 5000)
             self.assertGreater(len(lire_table(sortie, 'ot_temps')[1]), 5000)
+            # Gammes : environ une pour trois équipements, les trois déclencheurs, quelques-unes échues
+            # (donc avec un OT préventif ouvert) ; compteurs, relevés, mouvements et achats en proportion
+            # du jeu de démo.
+            gammes = lire_table(sortie, 'gammes')[1]
+            self.assertTrue(500 * 0.28 <= len(gammes) <= 500 * 0.36, len(gammes))
+            self.assertEqual(sorted({g['declencheur'] for g in gammes}), ['compteur', 'date', 'seuil'])
+            ordres = lire_table(sortie, 'ordres_travail')[1]
+            ouvertes = {o['gamme_id'] for o in ordres if o['gamme_id'] and est_ouvert(o)}
+            self.assertGreaterEqual(len(ouvertes), 10)
+            compteurs = lire_table(sortie, 'compteurs')[1]
+            self.assertEqual({g['compteur_id'] for g in gammes if g['declencheur'] != 'date'},
+                             {c['id'] for c in compteurs})
+            self.assertGreaterEqual(len(lire_table(sortie, 'releves')[1]), 20 * len(compteurs))
+            demo_ot = len(lire_table(DOSSIER_DEMO, 'ordres_travail')[1])
+            for table in ('mouvements_stock', 'achats'):
+                proportion_demo = len(lire_table(DOSSIER_DEMO, table)[1]) / demo_ot
+                proportion = len(lire_table(sortie, table)[1]) / len(ordres)
+                self.assertTrue(0.3 * proportion_demo <= proportion <= 3 * proportion_demo,
+                                '%s : %.3f par OT (démo : %.3f)' % (table, proportion, proportion_demo))
+            self.assertTrue(all(e['valeur_remplacement'] for e in lire_table(sortie, 'equipements')[1]))
 
-    def test_option_mois_etend_l_historique(self):
+    def test_option_mois_change_la_duree_de_l_historique(self):
         with tempfile.TemporaryDirectory() as temporaire:
-            sortie = Path(temporaire) / 'long'
-            processus, _ = executer_generateur('--mois', '13', '--sortie', sortie)
+            sortie = Path(temporaire) / 'court'
+            processus, _ = executer_generateur('--mois', '6', '--sortie', sortie)
             self.assertEqual(processus.returncode, 0, processus.stderr.decode('utf-8', 'replace'))
-            ot_long = lire_table(sortie, 'ordres_travail')[1]
-            ot_court = lire_table(DOSSIER_DEMO, 'ordres_travail')[1]
+            ot_court = lire_table(sortie, 'ordres_travail')[1]
+            ot_long = lire_table(DOSSIER_DEMO, 'ordres_travail')[1]
             self.assertGreater(len(ot_long), 1.5 * len(ot_court))
-            premiere = min(o['date_creation'][:10] for o in ot_long)
-            self.assertLessEqual(premiere, '2025-10-31')
+            premiere = min(o['date_creation'][:10] for o in ot_court)
+            self.assertGreaterEqual(premiere, '2026-04-01')
+            self.assertFalse(any(o['id'].startswith('OT-2025-') for o in ot_court))
             self.assertTrue(any(o['id'].startswith('OT-2025-') for o in ot_long))
             self.assertEqual(len(lire_table(sortie, 'equipements')[1]), 31)
 

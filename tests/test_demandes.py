@@ -25,7 +25,7 @@ import zlib
 from pathlib import Path
 
 from commun import (CasNavigateur, ServeurPrevo, attendre_pret, charger_scripts, preregler_profil,
-                    url_fichier)
+                    scenarios_demo, url_fichier)
 
 # Chromium écrit « Failed to load resource » (console.error) pour toute réponse HTTP >= 400.
 # Seul le test de la course exacte provoque des 409, sur ces deux fichiers uniquement :
@@ -33,6 +33,15 @@ CONFLIT_ORDRES = re.compile(r"status of 409.*/api/csv/ordres_travail")
 CONFLIT_DEMANDES = re.compile(r"status of 409.*/api/csv/demandes")
 
 MESSAGE_DEJA_TRAITEE = "Cette demande a déjà été traitée sur un autre poste"
+
+# Identifiants des objets de scénario du jeu de démo (outils/generer_demo.py, ARCHITECTURE.md §14.8).
+SCENARIOS = scenarios_demo()
+DI_NOUVELLES = SCENARIOS["di_nouvelles"]                  # toutes les DI « Nouvelle »
+DI_SECURITE = SCENARIOS["di_securite"]                    # Nouvelle, sécurité (AE-04, criticité C) → P1
+DI_P4 = SCENARIOS["di_nouvelle_p4"]                       # Nouvelle, PO-03 (criticité C) × gêne → P4
+DI_SANS_OT = SCENARIOS["di_nouvelle_sans_ot_ouvert"]      # Nouvelle, ET-01 (C) × gêne → P4, aucun OT ouvert
+DI_DEGRADEE = SCENARIOS["di_nouvelle_degradee"]           # Nouvelle, PR-01, demandeur Sarah Colin
+OT_REGROUPE = SCENARIOS["ot_en_cours_regroupe"]           # seul OT ouvert de son équipement (EM-01), En cours
 MOTIF_PHOTO = re.compile(r"^photo-\d{8}-\d{6}-[A-Z0-9]{4}\.jpg$")
 
 
@@ -47,6 +56,13 @@ def lire_csv(chemin):
     for ligne in csv.DictReader(io.StringIO(texte), delimiter=";"):
         lignes.append({cle: (valeur[1:] if valeur.startswith("'") else valeur) for cle, valeur in ligne.items()})
     return lignes
+
+
+def prochain_identifiant(chemin, prefixe):
+    """Identifiant que recevra la prochaine ligne créée aujourd'hui (numérotation annuelle, §4)."""
+    debut = "%s-%d-" % (prefixe, datetime.date.today().year)
+    numeros = [int(ligne["id"][len(debut):]) for ligne in lire_csv(chemin) if ligne["id"].startswith(debut)]
+    return "%s%04d" % (debut, max(numeros, default=0) + 1)
 
 
 def ligne_par_id(chemin, identifiant):
@@ -181,6 +197,7 @@ class TestServeurSignaler(CasDemandes):
         preregler_profil(self.contexte, "demandeur", "Lucie Martin")
         page = self.page
         with ServeurPrevo() as serveur:
+            attendu = prochain_identifiant(serveur.dossier / "demandes.csv", "DI")
             self.ouvrir(serveur, "#/di/nouvelle?equipement=EQ-0005")
             # Équipement prérempli par ?equipement=
             self.assertTrue(page.is_visible(".selecteur-choisi"))
@@ -205,7 +222,7 @@ class TestServeurSignaler(CasDemandes):
             page.click(".di-envoyer")
             page.wait_for_selector(".di-numero")
             numero = page.inner_text(".di-numero")
-            self.assertEqual(numero, "DI-%d-0076" % 2026)   # identifiant annuel : 75 DI 2026 dans la démo
+            self.assertEqual(numero, attendu)   # identifiant annuel : numéro suivant de l'année en cours
             self.assertIn("Demande envoyée", page.inner_text("#contenu"))
 
             # Sur le disque : la DI et la photo (JPEG, plus grand côté = 1280 px)
@@ -234,6 +251,7 @@ class TestServeurSignaler(CasDemandes):
         preregler_profil(self.contexte, "demandeur", "Paul Dubois")
         page = self.page
         with ServeurPrevo() as serveur:
+            nombre_de_di = len(lire_csv(serveur.dossier / "demandes.csv"))
             self.ouvrir(serveur, "#/di/nouvelle?equipement=EQ-0006")     # PO-03, criticité C
             page.click("label.tuile:has(input[value='gêne'])")
             self.assertEqual(page.inner_text(".di-priorite .badge"), "P4")
@@ -252,7 +270,7 @@ class TestServeurSignaler(CasDemandes):
             page.click("label.tuile:has(input[value='sécurité'])")
             page.click(".di-envoyer")
             self.assertIn("Décrivez", page.inner_text("[data-champ=symptome] .erreur-champ"))
-            self.assertEqual(len(lire_csv(serveur.dossier / "demandes.csv")), 75)
+            self.assertEqual(len(lire_csv(serveur.dossier / "demandes.csv")), nombre_de_di)
             page.fill("input[name=symptome]", "Fumée qui sort du coffret moteur")
             page.click(".di-envoyer")
             page.wait_for_selector(".di-numero")
@@ -293,20 +311,20 @@ class TestServeurListe(CasDemandes):
             # Tri par clic sur l'en-tête (n° croissant)
             page.fill("input[name=recherche]", "")
             page.click(".di-zone-tableau th .tri[data-cle='id']")
-            self.assertEqual(self.lignes_tableau().first.locator("td").first.inner_text(), "DI-2026-0001")
+            self.assertEqual(self.lignes_tableau().first.locator("td").first.inner_text(), SCENARIOS["di_plus_ancienne"])
 
     def test_serveur_responsable_voit_les_demandes_a_traiter_par_defaut(self):
         preregler_profil(self.contexte, "responsable")
         page = self.page
         with ServeurPrevo() as serveur:
             nouvelles = [l["id"] for l in lire_csv(serveur.dossier / "demandes.csv") if l["statut"] == "Nouvelle"]
-            self.assertEqual(sorted(nouvelles), ["DI-2026-0069", "DI-2026-0071", "DI-2026-0072", "DI-2026-0073"])
+            self.assertEqual(sorted(nouvelles), DI_NOUVELLES)
             self.ouvrir(serveur, "#/di")
             self.assertEqual(page.input_value("select[name=statut]"), "Nouvelle")
             self.assertEqual(page.locator("select[name=portee]").count(), 0)      # le responsable n'a pas de nom
-            self.assertEqual(self.lignes_tableau().count(), 4)
+            self.assertEqual(self.lignes_tableau().count(), len(DI_NOUVELLES))
             # La DI sécurité (AE-04, criticité C) est en P1
-            ligne_securite = self.lignes_tableau().filter(has_text="DI-2026-0073")
+            ligne_securite = self.lignes_tableau().filter(has_text=DI_SECURITE)
             self.assertEqual(ligne_securite.locator(".badge.prio-p1").inner_text(), "P1")
             # Lien de l'accueil vers une liste filtrée : ?statut=
             self.aller("#/di?statut=Refusée", ".di-zone-tableau")
@@ -316,7 +334,7 @@ class TestServeurListe(CasDemandes):
             # Clic sur une ligne → fiche
             self.lignes_tableau().first.locator("td").nth(3).click()
             page.wait_for_selector(".di-details")
-            self.assertEqual(page.evaluate("location.hash"), "#/di/DI-2026-0065")
+            self.assertEqual(page.evaluate("location.hash"), "#/di/" + SCENARIOS["di_statut_refusee"])
             self.assertEqual(page.locator(".di-panneau-decision").count(), 0)   # déjà décidée
 
 
@@ -332,7 +350,7 @@ class TestServeurListe(CasDemandes):
             self.assertEqual(page.input_value("select[name=statut]"), "Nouvelle")
             numeros = sorted(page.eval_on_selector_all(
                 ".di-zone-tableau tbody tr.cliquable td:first-child", "(cellules) => cellules.map((c) => c.textContent.trim())"))
-            self.assertEqual(numeros, ["DI-2026-0069", "DI-2026-0071", "DI-2026-0072", "DI-2026-0073"])
+            self.assertEqual(numeros, DI_NOUVELLES)
 
 
 class TestServeurDecisions(CasDemandes):
@@ -341,6 +359,7 @@ class TestServeurDecisions(CasDemandes):
         preregler_profil(self.contexte, "responsable")
         page = self.page
         with ServeurPrevo() as serveur:
+            ot_attendu = prochain_identifiant(serveur.dossier / "ordres_travail.csv", "OT")
             self.ouvrir(serveur, "#/accueil")
             di = page.evaluate("""Demandes.creer({ equipement_id: 'EQ-0005', symptome: 'Fuite à la garniture',
                 impact: 'dégradé', description: 'Flaque sous la pompe.', demandeur: 'Lucie Martin' })""")
@@ -355,7 +374,7 @@ class TestServeurDecisions(CasDemandes):
             page.click("dialog button:has-text(\"Créer l'ordre de travail\")")
             page.wait_for_function("location.hash.startsWith('#/ot/')")
             ot_id = page.evaluate("decodeURIComponent(location.hash.slice(5))")
-            self.assertEqual(ot_id, "OT-2026-0109")
+            self.assertEqual(ot_id, ot_attendu)
 
             ot = ligne_par_id(serveur.dossier / "ordres_travail.csv", ot_id)
             self.assertEqual(ot["origine"], "DI")
@@ -382,8 +401,8 @@ class TestServeurDecisions(CasDemandes):
         preregler_profil(self.contexte, "responsable")
         page = self.page
         with ServeurPrevo() as serveur:
-            # DI-2026-0072 : PO-03 (criticité C) × gêne → P4
-            self.ouvrir(serveur, "#/di/DI-2026-0072")
+            # DI_P4 : PO-03 (criticité C) × gêne → P4
+            self.ouvrir(serveur, "#/di/" + DI_P4)
             page.click("[data-decision=accepter]")
             page.wait_for_selector("dialog .di-fenetre-accepter")
             self.assertEqual(page.input_value("dialog select[name=priorite]"), "P4")
@@ -396,7 +415,7 @@ class TestServeurDecisions(CasDemandes):
             # Sans motif : refusé, la fenêtre reste ouverte
             page.click("dialog button:has-text(\"Créer l'ordre de travail\")")
             self.assertTrue(page.is_visible("dialog .di-champ-motif .erreur-champ"))
-            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", "DI-2026-0072")["statut"], "Nouvelle")
+            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", DI_P4)["statut"], "Nouvelle")
             page.fill("dialog textarea[name=motif]", "pompe de secours en panne")
             page.click("dialog button:has-text(\"Créer l'ordre de travail\")")
             page.wait_for_function("location.hash.startsWith('#/ot/')")
@@ -411,12 +430,12 @@ class TestServeurDecisions(CasDemandes):
             self.assertIn("priorité P4 → P3 : pompe de secours en panne", journal)
             # API : un changement de priorité sans motif est refusé
             message = page.evaluate("""async () => {
-                try { await Demandes.accepter('DI-2026-0069', { priorite: 'P1' }); return 'accepté'; }
-                catch (e) { return e.constructor.name + ' : ' + e.message; } }""")
+                try { await Demandes.accepter(%r, { priorite: 'P1' }); return 'accepté'; }
+                catch (e) { return e.constructor.name + ' : ' + e.message; } }""" % DI_SANS_OT)
             self.assertIn("ErreurValidation", message)
             self.assertIn("motif", message)
             # API : P4 → pas de date prévue
-            ot_p4 = page.evaluate("Demandes.accepter('DI-2026-0069')")     # ET-01 (C) × gêne → P4
+            ot_p4 = page.evaluate("Demandes.accepter(%r)" % DI_SANS_OT)     # ET-01 (C) × gêne → P4
             self.assertEqual(ligne_par_id(serveur.dossier / "ordres_travail.csv", ot_p4)["priorite"], "P4")
             self.assertEqual(ligne_par_id(serveur.dossier / "ordres_travail.csv", ot_p4)["date_prevue"], "")
 
@@ -424,30 +443,30 @@ class TestServeurDecisions(CasDemandes):
         preregler_profil(self.contexte, "responsable")
         page = self.page
         with ServeurPrevo() as serveur:
-            self.ouvrir(serveur, "#/di/DI-2026-0071")          # demandeur : Sarah Colin
+            self.ouvrir(serveur, "#/di/" + DI_DEGRADEE)          # demandeur : Sarah Colin
             page.click("[data-decision=refuser]")
             page.wait_for_selector("dialog textarea[name=motif]")
             page.click("dialog button:has-text('Refuser la demande')")
             self.assertTrue(page.is_visible("dialog .erreur-champ"))
             self.assertIn("obligatoire", page.inner_text("dialog .erreur-champ"))
-            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", "DI-2026-0071")["statut"], "Nouvelle")
+            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", DI_DEGRADEE)["statut"], "Nouvelle")
             # API : motif vide refusé aussi
             message = page.evaluate("""async () => {
-                try { await Demandes.refuser('DI-2026-0071', '   '); return 'refusée'; }
-                catch (e) { return e.constructor.name + ' : ' + e.message; } }""")
+                try { await Demandes.refuser(%r, '   '); return 'refusée'; }
+                catch (e) { return e.constructor.name + ' : ' + e.message; } }""" % DI_DEGRADEE)
             self.assertIn("ErreurValidation", message)
             page.fill("dialog textarea[name=motif]", "Fuite déjà connue : la presse est remplacée en novembre.")
             page.click("dialog button:has-text('Refuser la demande')")
             self.attendre_toast("refusée")
             page.wait_for_selector(".di-suivi:has-text('Refusée par le responsable')")
-            ligne = ligne_par_id(serveur.dossier / "demandes.csv", "DI-2026-0071")
+            ligne = ligne_par_id(serveur.dossier / "demandes.csv", DI_DEGRADEE)
             self.assertEqual(ligne["statut"], "Refusée")
             self.assertEqual(ligne["motif_decision"], "Fuite déjà connue : la presse est remplacée en novembre.")
 
             # Le demandeur voit le motif dans sa liste
             self.changer_profil("demandeur", "Sarah Colin")
             self.aller("#/di", ".di-zone-tableau")
-            ligne_tableau = self.lignes_tableau().filter(has_text="DI-2026-0071")
+            ligne_tableau = self.lignes_tableau().filter(has_text=DI_DEGRADEE)
             self.assertIn("la presse est remplacée en novembre", ligne_tableau.inner_text())
             self.assertIn("Refusée", ligne_tableau.inner_text())
 
@@ -456,39 +475,40 @@ class TestServeurDecisions(CasDemandes):
         page = self.page
         with ServeurPrevo() as serveur:
             self.ouvrir(serveur, "#/accueil")
-            # EM-01 (EQ-0026) a un OT ouvert : OT-2026-0107 (En cours)
-            di = page.evaluate("""Demandes.creer({ equipement_id: 'EQ-0026', symptome: 'Films encore mal soudés',
-                impact: 'dégradé', demandeur: 'Manon Duval' })""")
+            # EM-01 a un seul OT ouvert : OT_REGROUPE (En cours)
+            equipement = ligne_par_id(serveur.dossier / "ordres_travail.csv", OT_REGROUPE)["equipement_id"]
+            di = page.evaluate("""(equipement) => Demandes.creer({ equipement_id: equipement,
+                symptome: 'Films encore mal soudés', impact: 'dégradé', demandeur: 'Manon Duval' })""", equipement)
             self.aller("#/di/" + di, ".di-panneau-decision")
             self.assertTrue(page.is_enabled("[data-decision=regrouper]"))
             page.click("[data-decision=regrouper]")
             page.wait_for_selector("dialog .di-choix-ot")
             options = page.locator("dialog .di-choix-ot input[type=radio]")
             self.assertEqual(options.count(), 1)
-            self.assertEqual(options.first.get_attribute("value"), "OT-2026-0107")
+            self.assertEqual(options.first.get_attribute("value"), OT_REGROUPE)
             page.click("dialog button:has-text('Regrouper')")
-            page.wait_for_selector(".di-suivi a[href='#/ot/OT-2026-0107']")
+            page.wait_for_selector(".di-suivi a[href='#/ot/%s']" % OT_REGROUPE)
             ligne = ligne_par_id(serveur.dossier / "demandes.csv", di)
             self.assertEqual(ligne["statut"], "Regroupée")
-            self.assertEqual(ligne["ot_id"], "OT-2026-0107")
+            self.assertEqual(ligne["ot_id"], OT_REGROUPE)
             # Aucun OT créé
             self.assertFalse(any(o["di_id"] == di for o in lire_csv(serveur.dossier / "ordres_travail.csv")))
             # Sans OT ouvert sur l'équipement (ET-01), « Regrouper » est grisé
-            self.aller("#/di/DI-2026-0069", ".di-panneau-decision")
+            self.aller("#/di/" + DI_SANS_OT, ".di-panneau-decision")
             self.assertTrue(page.is_disabled("[data-decision=regrouper]"))
 
     def test_serveur_report_puis_decision_toujours_possible(self):
         preregler_profil(self.contexte, "responsable")
         page = self.page
         with ServeurPrevo() as serveur:
-            self.ouvrir(serveur, "#/di/DI-2026-0072")
+            self.ouvrir(serveur, "#/di/" + DI_P4)
             page.click("[data-decision=differer]")
             page.wait_for_selector("dialog textarea[name=motif]")
             page.fill("dialog textarea[name=motif]", "À voir au prochain arrêt de la station")
             page.click("dialog button:has-text('Différer')")
             self.attendre_toast("différée")
             page.wait_for_selector(".di-suivi:has-text('Différée')")
-            ligne = ligne_par_id(serveur.dossier / "demandes.csv", "DI-2026-0072")
+            ligne = ligne_par_id(serveur.dossier / "demandes.csv", DI_P4)
             self.assertEqual(ligne["statut"], "Différée")
             self.assertEqual(ligne["motif_decision"], "À voir au prochain arrêt de la station")
             self.assertRegex(ligne["date_decision"], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
@@ -496,8 +516,8 @@ class TestServeurDecisions(CasDemandes):
             self.assertTrue(page.is_visible("[data-decision=accepter]"))
             self.assertTrue(page.is_visible("[data-decision=refuser]"))
             self.assertEqual(page.locator("[data-decision=differer]").count(), 0)
-            ot_id = page.evaluate("Demandes.accepter('DI-2026-0072')")
-            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", "DI-2026-0072")["ot_id"], ot_id)
+            ot_id = page.evaluate("Demandes.accepter(%r)" % DI_P4)
+            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", DI_P4)["ot_id"], ot_id)
 
 
 class TestServeurDeuxPostes(CasDemandes):
@@ -508,8 +528,8 @@ class TestServeurDeuxPostes(CasDemandes):
         page_b = self.contexte.new_page()
         self.surveiller(page_b)
         with ServeurPrevo() as serveur:
-            self.ouvrir(serveur, "#/di/DI-2026-0069", page_a)
-            self.ouvrir(serveur, "#/di/DI-2026-0069", page_b)
+            self.ouvrir(serveur, "#/di/" + DI_SANS_OT, page_a)
+            self.ouvrir(serveur, "#/di/" + DI_SANS_OT, page_b)
             page_b.wait_for_selector(".di-panneau-decision")
             # Poste A accepte
             page_a.click("[data-decision=accepter]")
@@ -522,10 +542,10 @@ class TestServeurDeuxPostes(CasDemandes):
             # B montre l'état réel : acceptée, plus de décision possible
             page_b.wait_for_selector(".di-suivi:has-text('Acceptée')")
             self.assertEqual(page_b.locator(".di-panneau-decision").count(), 0)
-            self.assertEqual(page_b.evaluate("location.hash"), "#/di/DI-2026-0069")
-            ordres = [o for o in lire_csv(serveur.dossier / "ordres_travail.csv") if o["di_id"] == "DI-2026-0069"]
+            self.assertEqual(page_b.evaluate("location.hash"), "#/di/" + DI_SANS_OT)
+            ordres = [o for o in lire_csv(serveur.dossier / "ordres_travail.csv") if o["di_id"] == DI_SANS_OT]
             self.assertEqual(len(ordres), 1)
-            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", "DI-2026-0069")["ot_id"], ordres[0]["id"])
+            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", DI_SANS_OT)["ot_id"], ordres[0]["id"])
 
     def test_serveur_acceptation_pendant_un_refus_ailleurs_l_ot_cree_est_annule(self):
         """Le poste A a créé l'OT (étape 1) ; le poste B refuse la DI avant l'étape 2 de A :
@@ -539,25 +559,25 @@ class TestServeurDeuxPostes(CasDemandes):
             self.ouvrir(serveur, "#/accueil", page_a)
             self.ouvrir(serveur, "#/accueil", page_b)
             # A : l'écriture de demandes.csv attend le signal window.__go (latence entre les deux étapes)
-            page_a.evaluate("""() => {
+            page_a.evaluate("""(diId) => {
               const origine = Donnees.modifier;
               window.__attente = new Promise((r) => { window.__go = r; });
               Donnees.modifier = async function (table, ...reste) {
                 if (table === 'demandes') await window.__attente;
                 return origine.call(this, table, ...reste);
               };
-              window.__resultat = Demandes.accepter('DI-2026-0072').then((x) => 'accepté ' + x, (e) => e.constructor.name + ' : ' + e.message);
-            }""")
+              window.__resultat = Demandes.accepter(diId).then((x) => 'accepté ' + x, (e) => e.constructor.name + ' : ' + e.message);
+            }""", DI_P4)
             # L'OT de A est écrit (étape 1) avant le refus de B
-            page_a.wait_for_function("Donnees.lignes('ordres_travail').some((o) => o.di_id === 'DI-2026-0072')")
-            self.assertEqual(page_b.evaluate("Demandes.refuser('DI-2026-0072', 'doublon').then(() => 'refusée')"), "refusée")
+            page_a.wait_for_function("Donnees.lignes('ordres_travail').some((o) => o.di_id === %r)" % DI_P4)
+            self.assertEqual(page_b.evaluate("Demandes.refuser(%r, 'doublon').then(() => 'refusée')" % DI_P4), "refusée")
             page_a.evaluate("window.__go()")
             resultat = page_a.evaluate("window.__resultat")
             self.assertIn("ErreurValidation", resultat)
             self.assertIn(MESSAGE_DEJA_TRAITEE, resultat)
-            ordres = [o for o in lire_csv(serveur.dossier / "ordres_travail.csv") if o["di_id"] == "DI-2026-0072"]
+            ordres = [o for o in lire_csv(serveur.dossier / "ordres_travail.csv") if o["di_id"] == DI_P4]
             self.assertEqual([(o["statut"], o["motif_annulation"]) for o in ordres], [("Annulé", "DI traitée sur un autre poste")])
-            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", "DI-2026-0072")["statut"], "Refusée")
+            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", DI_P4)["statut"], "Refusée")
 
     def test_serveur_course_exacte_deux_acceptations_simultanees_un_seul_ot(self):
         """Les deux postes lisent la DI « Nouvelle » au même instant : la vérification préalable
@@ -569,20 +589,20 @@ class TestServeurDeuxPostes(CasDemandes):
         page_b = self.contexte.new_page()
         self.surveiller(page_b)
         with ServeurPrevo() as serveur:
-            self.ouvrir(serveur, "#/di/DI-2026-0071", page_a)
-            self.ouvrir(serveur, "#/di/DI-2026-0071", page_b)
+            self.ouvrir(serveur, "#/di/" + DI_DEGRADEE, page_a)
+            self.ouvrir(serveur, "#/di/" + DI_DEGRADEE, page_b)
             # Poste B : sa relecture préalable rend la copie qu'il avait (lecture « au même instant »)
             page_b.evaluate("() => { Donnees.rechargerTable = async (table) => Donnees.lignes(table); }")
-            ot_a = page_a.evaluate("Demandes.accepter('DI-2026-0071')")
+            ot_a = page_a.evaluate("Demandes.accepter(%r)" % DI_DEGRADEE)
             resultat_b = page_b.evaluate("""async () => {
-                try { return 'accepté : ' + await Demandes.accepter('DI-2026-0071'); }
-                catch (e) { return e.constructor.name + ' : ' + e.message; } }""")
+                try { return 'accepté : ' + await Demandes.accepter(%r); }
+                catch (e) { return e.constructor.name + ' : ' + e.message; } }""" % DI_DEGRADEE)
             self.assertIn("ErreurValidation", resultat_b)
             self.assertIn(MESSAGE_DEJA_TRAITEE, resultat_b)
             self.assertGreaterEqual(page_b.evaluate("Donnees.statistiques.conflits"), 2)
-            ordres = [o for o in lire_csv(serveur.dossier / "ordres_travail.csv") if o["di_id"] == "DI-2026-0071"]
+            ordres = [o for o in lire_csv(serveur.dossier / "ordres_travail.csv") if o["di_id"] == DI_DEGRADEE]
             self.assertEqual([o["id"] for o in ordres], [ot_a])
-            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", "DI-2026-0071")["ot_id"], ot_a)
+            self.assertEqual(ligne_par_id(serveur.dossier / "demandes.csv", DI_DEGRADEE)["ot_id"], ot_a)
 
 
 # ---------------------------------------------------------------------------
@@ -664,11 +684,11 @@ class TestTelephone(CasDemandes):
             self.aller("#/di", ".di-cartes")
             self.assertTrue(page.is_visible(".di-cartes"))
             self.assertTrue(page.is_hidden(".di-zone-tableau"))
-            self.assertIn("DI-2026-0073", page.inner_text(".di-cartes"))
+            self.assertIn(DI_SECURITE, page.inner_text(".di-cartes"))
             self.sans_defilement_horizontal()
             # Fiche avec le panneau de décision (responsable)
             self.changer_profil("responsable")
-            self.aller("#/di/DI-2026-0073", ".di-panneau-decision")
+            self.aller("#/di/" + DI_SECURITE, ".di-panneau-decision")
             self.assertTrue(page.is_visible(".bandeau-securite"))
             self.assertEqual(self.hauteurs_trop_petites(".di-panneau-decision .btn"), [])
             self.sans_defilement_horizontal()

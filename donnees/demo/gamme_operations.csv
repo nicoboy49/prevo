@@ -34,11 +34,11 @@ GOP-000032;GAM-0006;3;Rechercher les fuites sur les flexibles et les vérins;Auc
 GOP-000033;GAM-0006;4;Graisser les colonnes de guidage;Graissage effectué
 GOP-000034;GAM-0006;5;Tester le rideau lumineux de sécurité;Arrêt immédiat à la coupure
 GOP-000035;GAM-0006;6;Relever la température de l'huile;< 55 °C
-GOP-000036;GAM-0007;1;Faire une thermographie des jonctions et des départs;Écart < 10 K
-GOP-000037;GAM-0007;2;Resserrer les bornes de puissance;Bornes serrées au couple
-GOP-000038;GAM-0007;3;Dépoussiérer l'armoire et nettoyer les filtres de ventilation;Armoire propre
-GOP-000039;GAM-0007;4;Tester les disjoncteurs différentiels;Déclenchement < 30 ms
-GOP-000040;GAM-0007;5;Contrôler la ventilation de l'armoire;Ventilateur en marche
+GOP-000036;GAM-0007;1;Relever la perte de charge du séparateur avant intervention;>= 0,8 bar (seuil atteint)
+GOP-000037;GAM-0007;2;Consigner le compresseur et purger le circuit d'air jusqu'à 0 bar;Circuit à 0 bar
+GOP-000038;GAM-0007;3;Remplacer le séparateur air/huile et ses joints;Séparateur neuf posé
+GOP-000039;GAM-0007;4;Contrôler le niveau d'huile après remise en route;Entre mini et maxi
+GOP-000040;GAM-0007;5;Relever la perte de charge après remplacement;< 0,3 bar
 GOP-000041;GAM-0008;1;Relever la pression haute (HP);< 18 bar
 GOP-000042;GAM-0008;2;Nettoyer le condenseur;Condenseur propre
 GOP-000043;GAM-0008;3;Rechercher les fuites de fluide au détecteur;Aucune fuite

@@ -24,9 +24,12 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from commun import (CasNavigateur, RACINE, ServeurPrevo, attendre_pret, preregler_profil, url_fichier)
+from commun import (CasNavigateur, RACINE, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo,
+                    url_fichier)
 
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
+# Une DI « Nouvelle » du jeu de démo (outils/generer_demo.py, tests/fixtures/demo-scenarios.json).
+DI_NOUVELLE = scenarios_demo()["di_statut_nouvelle"]
 BOM = "﻿"
 STATUTS_OT_FERMES = ("Clôturé techniquement", "Clôturé administrativement", "Annulé")
 
@@ -600,19 +603,19 @@ class TestControle(CasParametres):
         with ServeurPrevo() as serveur:
             chemin = serveur.dossier / "demandes.csv"
             entete, demandes = lire_csv(chemin)
-            demande = [d for d in demandes if d["id"] == "DI-2026-0069"][0]
+            demande = [d for d in demandes if d["id"] == DI_NOUVELLE][0]
             self.assertEqual(demande["statut"], "Nouvelle")
             demande["statut"] = "Acceptée"                       # acceptée mais sans ordre de travail
             ecrire_csv(chemin, entete, demandes)
             page = self.ouvrir(serveur, route="#/controle")
             self.attendre_ecran("Contrôle de la base")
-            ligne = self.ligne_du_tableau("DI-2026-0069", table="demandes.csv", champ="ot_id")
+            ligne = self.ligne_du_tableau(DI_NOUVELLE, table="demandes.csv", champ="ot_id")
             cellules = [c.strip() for c in ligne.locator("td").all_inner_texts()]
             self.assertEqual(cellules[0], "Incohérence")
-            self.assertEqual(cellules[2], str(numero_ligne_physique(chemin, "DI-2026-0069;")))
+            self.assertEqual(cellules[2], str(numero_ligne_physique(chemin, DI_NOUVELLE + ";")))
             self.assertIn("aucun ordre de travail", cellules[6])
             lien = ligne.locator("a").first
-            self.assertEqual(lien.get_attribute("href"), "#/di/DI-2026-0069")
+            self.assertEqual(lien.get_attribute("href"), "#/di/" + DI_NOUVELLE)
             # Les compteurs par gravité et par type sont affichés.
             self.assertEqual(page.inner_text('[data-compteur="erreur"] .chiffre'), "1")
             self.assertIn("Incohérence : 1", self.texte('.carte-gravite[data-gravite="erreur"]'))
