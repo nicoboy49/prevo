@@ -17,6 +17,20 @@ Scénario (serveur.py sur une copie du jeu de démo) :
 Variante : enregistrement en « CSV » simple (Windows-1252) → relu sans perte d'accents, problème
 « encodage » d'information seulement.
 
+Format v2 (lot 2, tâche T34 ; ARCHITECTURE.md §14.1) :
+    v2   le vrai Excel ouvre equipements.csv (nouvel équipement, valeur_remplacement saisie
+         « 12500,5 »), demandes.csv (description d'une DI) et ordres_travail.csv (titre d'un OT),
+         chacun enregistré en « CSV UTF-8 » ; l'application relit sans erreur : 12 500,50 € HT
+         affichés, symptome_code, ot_origine_id et anomalie_constatee de toutes les lignes identiques
+         à l'avant-Excel ; une DI acceptée et un équipement modifié dans l'application réécrivent les
+         trois fichiers au format D5 en conservant toutes les lignes ;
+    lot1 base complète du lot 1 (tag git lot-1, dont les quatre fichiers de tests/fixtures/v1/) ; ces
+         quatre fichiers passent par Excel (ouvrir, enregistrer) ; ouverture (demandeur) : sauvegarde
+         « avant format 2 » puis version_schema = 2, aucun problème « attention » ni « erreur », les
+         colonnes v2 absentes en « info », données identiques au fichier d'origine ; une DI créée, un
+         équipement modifié, la DI acceptée ajoutent chacune des colonnes v2 en fin de table, toutes
+         les autres cellules restant celles du lot 1.
+
 Seuls les Excel lancés par tests/excel.py sont pilotés (et arrêtés en cas de blocage) : un Excel
 déjà ouvert par l'utilisateur n'est jamais touché (vérifié ici : ses processus sont toujours là).
 
@@ -27,18 +41,29 @@ import csv
 import io
 import re
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 import excel
-from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil
+import test_format_v2 as format_v2      # import du module (pas de ses classes) : ses tests ne sont pas relancés ici
+from commun import CasNavigateur, DOSSIER_DEMO, RACINE, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo
 
 BOM = b"\xef\xbb\xbf"
 DESIGNATION = "Tour à commande numérique « Ébène »"
 REPERE = "TR-09"
 LOCALISATION = "LOC-0002"
 CHAMPS_DATE = ("date_mes", "date_fin_garantie")
+
+# Format v2 : nouvel équipement saisi dans Excel, cellules modifiées dans demandes et ordres_travail.
+REPERE_V2 = "BE-02"
+DESIGNATION_V2 = "Banc d'essai hydraulique « Écluse »"
+VALEUR_SAISIE = "12500,5"                       # saisie au clavier dans Excel (fr-FR)
+DESCRIPTION_EXCEL = "Revue dans Excel : bande à surveiller à la prochaine visite."
+TITRE_EXCEL = "Remplacement du capteur (titre revu dans Excel)"
+CHAMPS_V2 = {"demandes": ("symptome_code", "ot_origine_id"), "ordres_travail": ("anomalie_constatee",)}
+TABLES_V1 = tuple(format_v2.COLONNES_V2)        # equipements, demandes, ordres_travail, parametres
 
 
 def lire_csv_brut(octets, encodage="utf-8-sig"):
@@ -216,6 +241,266 @@ class TestExcelReel(CasNavigateur):
             self.assertEqual([(p[0], p[2]) for p in encodage], [("info", "equipements")])
             print("\n  [excel ansi] problèmes signalés : %r" % (self.problemes(),))
 
+    # =========================================================================================
+    # Format v2 (lot 2) : aller-retour Excel des tables qui ont des colonnes v2
+    # =========================================================================================
+
+    def passer_par_excel(self, chemin, modifications=None):
+        """Ouvre `chemin` dans le vrai Excel, applique les saisies (ligne, colonne, valeur), enregistre
+        en « CSV UTF-8 » à sa place (comme « Enregistrer ») ; renvoie les octets écrits par Excel."""
+        dossier = Path(tempfile.mkdtemp(prefix="prevo-excel-v2-"))
+        try:
+            sortie = dossier / chemin.name
+            excel.aller_retour_excel(chemin, sortie, format="utf8", modifications=modifications)
+            octets = sortie.read_bytes()
+        finally:
+            shutil.rmtree(dossier, ignore_errors=True)
+        chemin.write_bytes(octets)
+        return octets
+
+    def valeurs_v2(self):
+        """Valeurs lues par l'application : {demandes: {id: [symptome_code, ot_origine_id]}, ordres: {id: anomalie_constatee}}."""
+        return self.page.evaluate("""() => ({
+            demandes: Object.fromEntries(Donnees.lignes('demandes').map((d) => [d.id, [d.symptome_code, d.ot_origine_id]])),
+            ordres: Object.fromEntries(Donnees.lignes('ordres_travail').map((o) => [o.id, o.anomalie_constatee])) })""")
+
+    def colonnes_brutes(self, octets, colonnes):
+        """{id: (valeurs brutes des colonnes)} d'un fichier CSV."""
+        return {ligne["id"]: tuple(ligne[nom] for nom in colonnes) for ligne in lire_csv_brut(octets)[1]}
+
+    def cellules_changees(self, octets_avant, octets_apres):
+        """Cellules qui diffèrent entre deux versions d'un fichier (mêmes en-têtes) : {(id, colonne)},
+        plus la liste des identifiants des lignes ajoutées, dans l'ordre."""
+        entete_avant, avant = lire_csv_brut(octets_avant)
+        entete_apres, apres = lire_csv_brut(octets_apres)
+        self.assertEqual(entete_apres, entete_avant)
+        self.assertEqual([l["id"] for l in apres[:len(avant)]], [l["id"] for l in avant], "ordre des lignes")
+        changees = {(a["id"], nom) for a, b in zip(avant, apres) for nom in entete_avant if a[nom] != b[nom]}
+        return changees, [l["id"] for l in apres[len(avant):]]
+
+    def verifier_format_d5(self, octets, nom):
+        """Écriture au format D5 (§3.1) : BOM, CRLF, dates ISO (aucune date JJ/MM/AAAA d'Excel)."""
+        format_v2.verifier_format_ecriture(self, octets, nom)
+        self.assertNotRegex(octets.decode("utf-8-sig"), r"(?m)(^|;)\d{2}/\d{2}/\d{4}", nom + " : date d'Excel restée")
+
+    def accepter_par_l_interface(self, di):
+        """Fiche de la DI → « Accepter » → « Créer l'ordre de travail » ; renvoie l'OT créé."""
+        page = self.page
+        page.evaluate("(id) => { location.hash = '#/di/' + id; }", di)
+        page.wait_for_selector("[data-decision=accepter]")
+        page.click("[data-decision=accepter]")
+        page.wait_for_selector("dialog .di-fenetre-accepter")
+        page.click("dialog button:has-text(\"Créer l'ordre de travail\")")
+        page.wait_for_function("location.hash.startsWith('#/ot/')")
+        page.wait_for_selector(".ot-fiche .ot-numero")
+        return page.evaluate("decodeURIComponent(location.hash.slice(5))")
+
+    def modifier_par_le_formulaire(self, equipement_id, champ, valeur):
+        """Fiche équipement → « Modifier » : un champ changé, enregistré."""
+        page = self.page
+        page.evaluate("(id) => { location.hash = '#/equipement/' + id + '/modifier'; }", equipement_id)
+        page.wait_for_selector("#parc-formulaire [name=%s]" % champ)
+        page.fill("#parc-formulaire [name=%s]" % champ, valeur)
+        page.click("#parc-formulaire button[type=submit]")
+        page.wait_for_function("(id) => location.hash === '#/equipement/' + id", arg=equipement_id)
+        page.wait_for_function("([id, champ, v]) => Donnees.trouver('equipements', id)[champ] === v", arg=[equipement_id, champ, valeur])
+
+    def test_excel_v2_valeur_remplacement_et_champs_v2_intacts_puis_reecriture_d5(self):
+        page = self.page
+        scenarios = scenarios_demo()
+        di_modifiee, di_acceptee = scenarios["di_statut_differee"], scenarios["di_statut_nouvelle"]
+        ot_modifie = scenarios["ot_statut_planifie"]
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            self.ouvrir(serveur)                                  # responsable : OT préventifs générés à l'ouverture
+            page.wait_for_load_state("networkidle")
+            originaux = {t: (dossier / (t + ".csv")).read_bytes() for t in ("equipements", "demandes", "ordres_travail")}
+            avant = self.valeurs_v2()
+            # Le jeu de démo a de quoi le prouver : codes symptôme, DI liées, OT « anomalie constatée »
+            self.assertTrue(any(v[0] for v in avant["demandes"].values()))
+            self.assertTrue(any(v[1] for v in avant["demandes"].values()))
+            self.assertIn("1", avant["ordres"].values())
+            bruts_avant = {t: self.colonnes_brutes(originaux[t], c) for t, c in CHAMPS_V2.items()}
+
+            # 1. equipements.csv : nouvel équipement, valeur de remplacement saisie « 12500,5 »
+            entete, lignes = lire_csv_brut(originaux["equipements"])
+            self.assertEqual(entete[-1], "valeur_remplacement")
+            numeros = [int(l["id"][3:]) for l in lignes if re.fullmatch(r"EQ-\d{4}", l["id"])]
+            identifiant = "EQ-%04d" % (max(numeros) + 1)
+            localisation = lire_csv_brut((dossier / "localisations.csv").read_bytes())[1][0]["id"]
+            colonne = {nom: position + 1 for position, nom in enumerate(entete)}
+            rang = len(lignes) + 2
+            octets = self.passer_par_excel(dossier / "equipements.csv", [
+                (rang, colonne["id"], identifiant), (rang, colonne["repere"], REPERE_V2),
+                (rang, colonne["designation"], DESIGNATION_V2), (rang, colonne["localisation_id"], localisation),
+                (rang, colonne["criticite"], "b"), (rang, colonne["valeur_remplacement"], VALEUR_SAISIE)])
+            ajoutee = next(l for l in lire_csv_brut(octets)[1] if l["id"] == identifiant)
+            self.assertEqual(ajoutee["valeur_remplacement"], VALEUR_SAISIE)      # virgule française d'Excel
+            print("\n  [excel v2] ligne ajoutée par Excel : %s" % ";".join(ajoutee[nom] for nom in entete))
+
+            # 2. demandes.csv et 3. ordres_travail.csv : une cellule sans rapport avec les champs v2
+            for table, ident, champ, valeur in (("demandes", di_modifiee, "description", DESCRIPTION_EXCEL),
+                                                ("ordres_travail", ot_modifie, "titre", TITRE_EXCEL)):
+                entete_table, lignes_table = lire_csv_brut(originaux[table])
+                rang_ligne = next(i for i, l in enumerate(lignes_table) if l["id"] == ident) + 2
+                octets = self.passer_par_excel(dossier / (table + ".csv"), [(rang_ligne, entete_table.index(champ) + 1, valeur)])
+                # Excel a réécrit le fichier à sa façon (dates JJ/MM/AAAA) sans toucher aux champs v2
+                self.assertRegex(octets.decode("utf-8-sig"), r";\d{2}/\d{2}/\d{4} \d{2}:\d{2};", table)
+                self.assertEqual(self.colonnes_brutes(octets, CHAMPS_V2[table]), bruts_avant[table], table)
+
+            # Relecture par l'application : aucune erreur, champs v2 identiques, valeur affichée
+            page.reload()
+            attendre_pret(page)
+            page.wait_for_load_state("networkidle")
+            problemes = self.problemes()
+            print("  [excel v2] problèmes signalés : %r" % (problemes,))
+            self.assertEqual([p for p in problemes if p[0] in ("erreur", "attention")], [])
+            self.assertEqual(self.valeurs_v2(), avant)
+            self.assertEqual(page.evaluate("(id) => Donnees.trouver('demandes', id).description", di_modifiee), DESCRIPTION_EXCEL)
+            self.assertEqual(page.evaluate("(id) => Donnees.trouver('ordres_travail', id).titre", ot_modifie), TITRE_EXCEL)
+            ligne = page.evaluate("(id) => Donnees.trouver('equipements', id)", identifiant)
+            self.assertEqual((ligne["repere"], ligne["designation"], ligne["criticite"], ligne["valeur_remplacement"]),
+                             (REPERE_V2, DESIGNATION_V2, "B", "12500.5"))
+            page.evaluate("(id) => { location.hash = '#/equipement/' + id; }", identifiant)
+            page.wait_for_function("""() => { const v = document.querySelector('.parc-valeur-remplacement');
+                return v && v.textContent.replace(/[\\s\\u00a0\\u202f]+/g, ' ').trim() === '12 500,50 € HT'; }""")
+            self.verifier_controle_sans_erreur()
+
+            # Modifications dans l'application : DI acceptée (demandes + ordres_travail), équipement modifié
+            avant_ecriture = {t: (dossier / (t + ".csv")).read_bytes() for t in originaux}
+            ot_cree = self.accepter_par_l_interface(di_acceptee)
+            self.modifier_par_le_formulaire(identifiant, "marque", "Hydrauval")
+            apres = {t: (dossier / (t + ".csv")).read_bytes() for t in originaux}
+            for table in originaux:
+                with self.subTest(table=table):
+                    self.verifier_format_d5(apres[table], table)
+                    self.assertNotEqual(apres[table], avant_ecriture[table], table + " n'a pas été réécrit")
+            # Toutes les lignes d'avant Excel sont conservées ; seules changent les cellules voulues
+            changees, ajoutees = self.cellules_changees(originaux["equipements"], apres["equipements"])
+            self.assertEqual((changees, ajoutees), (set(), [identifiant]))
+            self.assertTrue(apres["equipements"].startswith(originaux["equipements"]))
+            nouvelle = lire_csv_brut(apres["equipements"])[1][-1]
+            self.assertEqual((nouvelle["repere"], nouvelle["designation"], nouvelle["criticite"], nouvelle["marque"],
+                              nouvelle["valeur_remplacement"]), ("'" + REPERE_V2, DESIGNATION_V2, "B", "Hydrauval", "12500.5"))
+            changees, ajoutees = self.cellules_changees(originaux["demandes"], apres["demandes"])
+            self.assertEqual(ajoutees, [])
+            self.assertIn((di_modifiee, "description"), changees)
+            self.assertTrue({ident for ident, _ in changees} <= {di_modifiee, di_acceptee}, changees)
+            self.assertTrue({nom for ident, nom in changees if ident == di_acceptee} <= {"statut", "ot_id", "date_decision", "motif_decision"})
+            changees, ajoutees = self.cellules_changees(originaux["ordres_travail"], apres["ordres_travail"])
+            self.assertEqual((changees, ajoutees), ({(ot_modifie, "titre")}, [ot_cree]))
+            self.assertEqual(self.colonnes_brutes(apres["demandes"], CHAMPS_V2["demandes"]),
+                             dict(bruts_avant["demandes"]))
+            ordres = self.colonnes_brutes(apres["ordres_travail"], CHAMPS_V2["ordres_travail"])
+            self.assertEqual(ordres.pop(ot_cree), ("0",))
+            self.assertEqual(ordres, bruts_avant["ordres_travail"])
+
+    # =========================================================================================
+    # Base du lot 1 (format v1) passée par Excel, puis ouverte par le lot 2
+    # =========================================================================================
+
+    def base_du_lot_1(self):
+        """Dossier temporaire : les 22 tables du jeu de démo du lot 1 (tag git lot-1), dont les quatre
+        fichiers de tests/fixtures/v1/ (copies octet pour octet du tag, vérifiées par test_format_v2)."""
+        temporaire = tempfile.TemporaryDirectory(prefix="prevo-excel-lot1-")
+        self.addCleanup(temporaire.cleanup)
+        source = Path(temporaire.name) / "donnees"
+        source.mkdir()
+        for chemin in sorted(DOSSIER_DEMO.glob("*.csv")):
+            table = chemin.stem
+            if table in TABLES_V1:
+                (source / chemin.name).write_bytes(format_v2.octets_v1(table))
+                continue
+            try:
+                sortie = subprocess.run(["git", "cat-file", "blob", "lot-1:donnees/demo/%s" % chemin.name],
+                                        cwd=str(RACINE), capture_output=True, timeout=30)
+            except (OSError, subprocess.SubprocessError) as erreur:
+                self.skipTest("git indisponible : %s" % erreur)
+            if sortie.returncode != 0:
+                self.skipTest("tag lot-1 introuvable : " + sortie.stderr.decode("utf-8", "replace"))
+            (source / chemin.name).write_bytes(sortie.stdout)
+        return source
+
+    def changer_profil_par_l_interface(self, type_profil):
+        page = self.page
+        page.click("#etat-poste")
+        page.wait_for_function("document.documentElement.dataset.etat === 'profil'")
+        page.click("#profil-" + type_profil)
+        attendre_pret(page)
+        self.assertEqual(page.evaluate("App.profil.type"), type_profil)
+
+    def test_excel_lot1_base_v1_passee_par_excel_colonnes_v2_en_info_puis_ajoutees_en_fin(self):
+        page = self.page
+        source = self.base_du_lot_1()
+        # Les quatre fichiers v1 passent par Excel (ouvrir, enregistrer en « CSV UTF-8 »)
+        for table in TABLES_V1:
+            octets = self.passer_par_excel(source / (table + ".csv"))
+            self.assertTrue(octets.startswith(BOM), table)
+        self.assertRegex(lire_csv_brut((source / "demandes.csv").read_bytes())[1][0]["date_heure"], r"^\d{2}/\d{2}/\d{4} ")
+        parametres_excel = (source / "parametres.csv").read_bytes()
+        self.assertIn(b"version_schema;'1", parametres_excel)            # apostrophe gardée par Excel
+        lignes_v1 = {table: format_v2.lire_lignes_csv(format_v2.octets_v1(table)) for table in TABLES_V1}
+
+        preregler_profil(self.contexte, "demandeur", nom="Lucie Martin")
+        with ServeurPrevo(source=source) as serveur:
+            dossier = serveur.dossier
+            page.goto(serveur.url + "/#/accueil")
+            attendre_pret(page)
+            page.wait_for_load_state("networkidle")
+
+            # Passage au format 2 à l'ouverture : sauvegarde « avant format 2 » (fichier d'Excel), puis version 2
+            sauvegardes = sorted((dossier / "sauvegardes").glob("*_avant-format-v2"))
+            self.assertEqual(len(sauvegardes), 1, sauvegardes)
+            self.assertEqual((sauvegardes[0] / "parametres.csv").read_bytes(), parametres_excel)
+            self.assertIn(["version_schema", "'2"], format_v2.lire_lignes_csv((dossier / "parametres.csv").read_bytes()))
+
+            # Relecture : aucun « attention » ni « erreur » ; les colonnes v2 absentes en « info »
+            problemes = self.problemes()
+            print("\n  [excel lot1] problèmes signalés : %r" % (problemes,))
+            self.assertEqual([p for p in problemes if p[0] in ("erreur", "attention")], [])
+            colonnes = sorted((p[2], p[3]) for p in problemes if p[1] == "colonne")
+            self.assertEqual(colonnes, sorted((table, nom) for table, noms in format_v2.COLONNES_V2.items() for nom in noms))
+            self.assertEqual({p[0] for p in problemes if p[1] == "colonne"}, {"info"})
+            # Données identiques à celles des fichiers du lot 1 avant Excel (dates comprises)
+            # (parametres a changé depuis : version_schema vient de passer à 2)
+            for table in ("equipements", "demandes", "ordres_travail"):
+                with self.subTest(lecture=table):
+                    identiques = page.evaluate("""([table, octets]) => JSON.stringify(Donnees.csv.analyser(table, new Uint8Array(octets)).lignes)
+                        === JSON.stringify(Donnees.lignes(table))""", [table, list(format_v2.octets_v1(table))])
+                    self.assertTrue(identiques, table + " : lu après Excel, différent du fichier du lot 1")
+
+            # Modifications dans l'application : chacune ajoute les colonnes v2 en fin de table
+            equipement = lignes_v1["equipements"][1]
+            page.click("#menu a[data-ecran='nouvelle-di']")
+            page.wait_for_selector(".di-formulaire")
+            page.fill(".selecteur-recherche input[type=search]", equipement[1].lstrip("'"))
+            page.click(".selecteur-option[data-id='%s']" % equipement[0])
+            page.fill("input[name=symptome]", "Fuite d'huile sous le carter")
+            page.click("label.tuile:has(input[value='gêne'])")
+            page.click(".di-envoyer")
+            page.wait_for_selector(".di-numero")
+            di = page.inner_text(".di-numero")
+            self.changer_profil_par_l_interface("responsable")
+            designation = "Désignation revue après Excel ; format v2"
+            self.modifier_par_le_formulaire(equipement[0], "designation", designation)
+            ot_cree = self.accepter_par_l_interface(di)
+
+            ecrits = {table: format_v2.lire_lignes_csv((dossier / (table + ".csv")).read_bytes()) for table in TABLES_V1}
+            for table in ("equipements", "demandes", "ordres_travail"):
+                with self.subTest(ecriture=table):
+                    octets = (dossier / (table + ".csv")).read_bytes()
+                    self.verifier_format_d5(octets, table)
+                    v1 = lignes_v1[table]
+                    changees = {(1, "designation"): designation} if table == "equipements" else {}
+                    format_v2.verifier_v1_plus_colonnes(self, v1, ecrits[table][:len(v1)], table, changees)
+            self.assertEqual(len(ecrits["equipements"]), len(lignes_v1["equipements"]))
+            nouvelle_di = dict(zip(ecrits["demandes"][0], ecrits["demandes"][-1]))
+            self.assertEqual((nouvelle_di["id"], nouvelle_di["statut"], nouvelle_di["ot_id"], nouvelle_di["symptome_code"],
+                              nouvelle_di["ot_origine_id"]), (di, "Acceptée", ot_cree, "", ""))
+            nouvel_ot = dict(zip(ecrits["ordres_travail"][0], ecrits["ordres_travail"][-1]))
+            self.assertEqual((nouvel_ot["id"], nouvel_ot["di_id"], nouvel_ot["anomalie_constatee"]), (ot_cree, di, "0"))
+            self.assertEqual(len(ecrits["ordres_travail"]), len(lignes_v1["ordres_travail"]) + 1)
+            self.assertEqual([p for p in self.problemes() if p[1] == "colonne"], [])     # plus rien à signaler
 
 if __name__ == "__main__":
     unittest.main()
