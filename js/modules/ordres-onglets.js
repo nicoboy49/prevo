@@ -1,8 +1,9 @@
 'use strict';
-// Ordres (5/6) — contenu des onglets de la fiche OT (ARCHITECTURE.md §14.2) : Préparation (travail,
-// technicien et RG8, opérations, pièces prévues et stock RG3), Exécution (check-list, déroulement,
-// temps passés), Compte rendu (codes, compte rendu, clôture technique RG4, coût RG7) et Historique
-// de l'équipement. Complète l'objet Ordres ; la fiche (ordres-fiche.js) appelle ces onglets par
+// Ordres (5/7) — contenu des onglets de la fiche OT (ARCHITECTURE.md §14.2 et §14.6) : Préparation
+// (causes fréquentes, travail, technicien et RG8, opérations, pièces prévues et stock RG3),
+// Exécution (check-list, déroulement, temps passés, pièces sorties de ordres-pieces.js), Compte
+// rendu (causes fréquentes, codes, compte rendu, clôture technique RG4, coût RG7) et Historique de
+// l'équipement. Complète l'objet Ordres ; la fiche (ordres-fiche.js) appelle ces onglets par
 // Ordres.interne.
 
 Object.assign(Ordres, (() => {
@@ -11,9 +12,22 @@ Object.assign(Ordres, (() => {
   const { RAPPEL_CONSIGNATION, estVerrouille, verifierHabilitation, piecesManquantes, cout, nomTechnicien } = Ordres;
   const { texte, nombre, arrondi, aujourdhui, estResponsable, estTechnicien, monTechnicienId, equipementDe,
     listeTechniciens, libelleArticle, listeCodes, lignesDeLOt, operationsDe, placerChamp, champOt,
-    quantitesPrevues, modifierOt, modifierLieeAOt, journaliserHabilitation, optionsHtml, boutonsTransitions,
+    modifierOt, modifierLieeAOt, journaliserHabilitation, optionsHtml, boutonsTransitions,
     declarerFormulaire, apresEnregistrement, pendant, listeErreursHtml, bandeauHabilitation, enteteOnglet,
     lienOt } = Ordres.interne;
+
+  // Fonction du fichier chargé APRÈS celui-ci (ordres-pieces.js) : cherchée au moment de l'appel.
+  const afficherPiecesSorties = (bloc, ot) => Ordres.interne.afficherPiecesSorties(bloc, ot);
+
+  /**
+   * Encart « Causes fréquentes ici » (D25, ARCHITECTURE.md §14.5) pour l'équipement et le code
+   * symptôme enregistré de l'OT, placé dans `zone` ; la zone est retirée s'il n'y a rien à montrer.
+   */
+  function placerCausesFrequentes(zone, ot) {
+    const encart = typeof CausesFrequentes === 'undefined' ? null : CausesFrequentes.encart(ot.equipement_id, ot.symptome_code);
+    if (encart) zone.appendChild(encart);
+    else zone.remove();
+  }
 
   // ===========================================================================================
   // 7. Onglet Préparation (responsable) : travail, technicien (RG8), opérations, pièces (RG3)
@@ -27,6 +41,7 @@ Object.assign(Ordres, (() => {
     const modifiable = peutPreparer(ot);
     const boutonsPreparation = boutonsTransitions(ot, ['Préparé', 'Planifié']);
     UI.remplir(panneau, UI.html`
+      <div class="ot-causes"></div>
       <form class="carte" id="form-preparation" novalidate>
         ${enteteOnglet('Préparation', modifiable ? '' : 'Lecture seule')}
         <fieldset class="ot-fieldset form-grille"${modifiable ? '' : UI.brut(' disabled')}>
@@ -74,6 +89,7 @@ Object.assign(Ordres, (() => {
         else UI.toast('Préparation enregistrée.', 'succes');
       });
     }
+    placerCausesFrequentes(UI.$('.ot-causes', panneau), ot);
     afficherOperationsPreparation(UI.$('#ot-bloc-operations', panneau), ot, modifiable);
     afficherPieces(UI.$('#ot-bloc-pieces', panneau), ot, modifiable);
   }
@@ -179,8 +195,10 @@ Object.assign(Ordres, (() => {
 
   function afficherPieces(bloc, ot, modifiable) {
     const pieces = lignesDeLOt('ot_pieces', ot.id);
-    const cumul = quantitesPrevues(ot.id);
+    // Même règle que « Planifié » (RG3) : une pièce manque si le stock est inférieur à son besoin
+    // restant (prévu − déjà sorti pour cet OT).
     const manquantes = piecesManquantes(ot.id);
+    const enManque = new Set(manquantes.map((p) => p.article_id));
     UI.remplir(bloc, UI.html`
       ${enteteOnglet('Pièces prévues', 'Quantité 0 = pièce retirée (jamais supprimée).')}
       <form id="form-pieces" novalidate>
@@ -192,7 +210,7 @@ Object.assign(Ordres, (() => {
                 const article = Donnees.trouver('articles', piece.article_id);
                 const stock = Donnees.stockArticle(piece.article_id);
                 const retiree = nombre(piece.quantite_prevue) === 0;
-                const insuffisant = !retiree && stock < (cumul.get(piece.article_id) || 0);
+                const insuffisant = !retiree && enManque.has(piece.article_id);
                 return UI.html`<tr data-piece="${piece.id}"${retiree ? UI.brut(' class="attenue"') : ''}>
                   <td data-libelle="Article">${libelleArticle(article) || piece.article_id}</td><td data-libelle="Emplacement">${article ? article.emplacement : ''}</td>
                   <td class="num" data-libelle="Prévu"><input type="text" inputmode="decimal" class="ot-quantite" value="${quantiteSaisie(piece.quantite_prevue)}" aria-label="Quantité prévue de ${libelleArticle(article)}"></td>
@@ -281,7 +299,8 @@ Object.assign(Ordres, (() => {
         </fieldset>
         ${modifiable ? UI.html`<div class="actions"><span class="espace"></span><button type="submit" class="btn btn-secondaire">${UI.icone('valider')}Enregistrer l'exécution</button></div>` : ''}
       </form>
-      <div class="carte" id="ot-bloc-temps"></div>`);
+      <div class="carte" id="ot-bloc-temps"></div>
+      <div class="carte" id="ot-bloc-sorties"></div>`);
     const formulaire = UI.$('#form-execution', panneau);
     const placer = (nom, element) => placerChamp(formulaire, nom, element);
     placer('date_fin', champOt('date_fin', ot.date_fin));
@@ -305,6 +324,7 @@ Object.assign(Ordres, (() => {
       });
     }
     afficherTemps(UI.$('#ot-bloc-temps', panneau), ot, modifiable);
+    afficherPiecesSorties(UI.$('#ot-bloc-sorties', panneau), ot);
   }
 
   async function enregistrerExecution(ot, formulaire) {
@@ -383,6 +403,7 @@ Object.assign(Ordres, (() => {
     const modifiable = peutExecuter(ot);
     const equipement = equipementDe(ot);
     UI.remplir(panneau, UI.html`
+      <div class="ot-causes"></div>
       <form class="carte" id="form-compte-rendu" novalidate>
         ${enteteOnglet('Compte rendu', modifiable ? '' : 'Lecture seule')}
         <fieldset class="ot-fieldset form-grille"${modifiable ? '' : UI.brut(' disabled')}>
@@ -416,6 +437,7 @@ Object.assign(Ordres, (() => {
         if (await enregistrer()) { formulaire.dataset.modifie = '0'; await apresEnregistrement(); UI.toast('Compte rendu enregistré.', 'succes'); }
       });
     }
+    placerCausesFrequentes(UI.$('.ot-causes', panneau), ot);
     afficherCout(UI.$('#ot-cout', panneau), ot);
   }
 
@@ -448,7 +470,7 @@ Object.assign(Ordres, (() => {
             ${resultat.soustraitance ? UI.html`<tr><td>Sous-traitance</td><td></td><td class="num">${UI.euro(resultat.soustraitance)}</td></tr>` : ''}
             ${!detail.temps.length && !detail.pieces.length && !resultat.soustraitance ? UI.html`<tr><td colspan="3" class="vide-table">Aucun coût pour l'instant.</td></tr>` : ''}
           </tbody></table></div>
-        <p class="note">Les sorties de pièces imputées à l'OT se saisissent au magasin (lot 2) ; les quantités prévues ne sont pas comptées.</p>
+        <p class="note">Les pièces sorties et retournées pour l'OT se saisissent dans l'onglet Exécution (« Pièces sorties ») ; les quantités prévues ne sont pas comptées.</p>
       </details>`);
   }
 

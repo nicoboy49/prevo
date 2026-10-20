@@ -1,11 +1,11 @@
 'use strict';
-// Ordres (6/6) — bon de travail A4 (rempli dans #impression, puis window.print()) et
+// Ordres (7/7) — bon de travail A4 (rempli dans #impression, puis window.print()) et
 // enregistrement des écrans du module auprès d'App (ARCHITECTURE.md §8, §10 et §14.2). Dernier
 // fichier du module : les fonctions d'affichage des fichiers précédents existent déjà.
 
 Object.assign(Ordres, (() => {
 
-  // Constantes, outils et écrans des fichiers précédents (ordres-regles.js à ordres-onglets.js).
+  // Constantes, outils et écrans des fichiers précédents (ordres-regles.js à ordres-pieces.js).
   const { RAPPEL_CONSIGNATION, nomTechnicien } = Ordres;
   const { texte, nombre, equipementDe, cheminLocalisation, lignesDeLOt, operationsDe,
     afficherListe, afficherNouveau, afficherFiche } = Ordres.interne;

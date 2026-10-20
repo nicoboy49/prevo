@@ -3,7 +3,7 @@
 // création manuelle ou d'urgence, règles RG3 (statuts), RG4 (clôture), RG7 (coût), RG8
 // (habilitations) et impression du bon de travail A4 (ARCHITECTURE.md §10, brief §7 et §9).
 //
-// Le module est découpé en six fichiers, chargés dans cet ordre par index.html (ARCHITECTURE.md
+// Le module est découpé en sept fichiers, chargés dans cet ordre par index.html (ARCHITECTURE.md
 // §14.2, décision D28 : 700 lignes au plus par fichier). Une section = un sujet ; chaque fonction
 // fait une seule chose :
 //   ordres-regles.js      CE FICHIER, qui crée l'objet Ordres :
@@ -12,9 +12,11 @@
 //   ordres-ecritures.js    3. Écritures : toujours par Donnees.modifier (contrôles DANS la fonction)
 //   ordres-liste.js        4. Liste des OT (#/ot) : filtres, tableau triable, cartes, export CSV
 //   ordres-fiche.js        5. Nouvel OT (#/ot/nouveau, ?equipement=…, ?urgence=1)
-//                          6. Fiche OT (#/ot/<id>) : en-tête, étapes, consignation, actions, messages
+//                          6. Fiche OT (#/ot/<id>) : en-tête, étapes, consignation, anomalie d'un
+//                             OT préventif et demandes liées, actions, messages
 //   ordres-onglets.js      7. Onglet Préparation   8. Onglet Exécution   9. Onglet Compte rendu
-//                         10. Onglet Historique équipement
+//                         10. Onglet Historique équipement ; encart des causes fréquentes (7 et 9)
+//   ordres-pieces.js      13. Pièces sorties et retours de l'onglet Exécution (RG6, magasin)
 //   ordres-impression.js  11. Bon de travail (impression)   12. Enregistrement des écrans
 //
 // Les fichiers suivants complètent l'objet : Object.assign(Ordres, (() => { … return { … }; })()).
@@ -243,13 +245,36 @@ const Ordres = (() => {
     return cumul;
   }
 
-  /** Pièces prévues dont le stock est insuffisant : [{ article_id, libelle, prevu, stock }]. */
+  /**
+   * Quantité nette déjà sortie du magasin pour un OT (sorties − retours), par article :
+   * Map article → quantité. Calculée sur les mouvements de stock lus (comme le coût RG7), sans
+   * passer par le module Magasin, chargé après celui-ci.
+   */
+  function netSortiParArticle(otId) {
+    const net = new Map();
+    Donnees.lignes('mouvements_stock').forEach((mouvement) => {
+      if (mouvement.ot_id !== otId) return;
+      const signe = mouvement.type === 'sortie' ? 1 : (mouvement.type === 'retour' ? -1 : 0);
+      if (signe) net.set(mouvement.article_id, (net.get(mouvement.article_id) || 0) + signe * nombre(mouvement.quantite));
+    });
+    return net;
+  }
+
+  /**
+   * Pièces prévues qui MANQUENT (RG3) : [{ article_id, libelle, prevu, stock, reste }].
+   * Besoin restant d'un article = quantité prévue cumulée − net déjà sorti pour CET OT (au moins
+   * 0) : une pièce déjà sortie pour l'OT n'a plus à être en stock. Elle manque si le stock est
+   * inférieur à ce besoin restant. `prevu` reste la quantité prévue cumulée (messages inchangés).
+   */
   function piecesManquantes(otId) {
     const manquantes = [];
+    const dejaSorti = netSortiParArticle(otId);
     quantitesPrevues(otId).forEach((prevu, articleId) => {
+      const reste = Math.max(0, arrondi(prevu - (dejaSorti.get(articleId) || 0), 6));
       const stock = Donnees.stockArticle(articleId);
-      if (stock < prevu) {
-        manquantes.push({ article_id: articleId, libelle: libelleArticle(Donnees.trouver('articles', articleId)) || articleId, prevu: arrondi(prevu, 3), stock });
+      if (stock < reste) {
+        manquantes.push({ article_id: articleId, libelle: libelleArticle(Donnees.trouver('articles', articleId)) || articleId,
+          prevu: arrondi(prevu, 3), stock, reste: arrondi(reste, 3) });
       }
     });
     return manquantes;

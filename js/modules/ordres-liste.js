@@ -1,7 +1,8 @@
 'use strict';
-// Ordres (3/6) — écran E4, liste des ordres de travail (#/ot) : filtres (dont les liens de
-// l'accueil ?filtre=retard / ?filtre=p1), tableau triable, cartes sur téléphone et export CSV de
-// la liste filtrée (ARCHITECTURE.md §8, §10 et §14.2). Complète l'objet Ordres.
+// Ordres (3/7) — écran E4, liste des ordres de travail (#/ot) : filtres (dont les liens de
+// l'accueil ?filtre=retard / ?filtre=p1), tableau triable, cartes sur téléphone (mention
+// « anomalie constatée » des préventifs, §14.6) et export CSV de la liste filtrée
+// (ARCHITECTURE.md §8, §10 et §14.2). Complète l'objet Ordres.
 
 Object.assign(Ordres, (() => {
 
@@ -83,6 +84,11 @@ Object.assign(Ordres, (() => {
     return enRetard(ot) ? UI.html` <span class="badge ko ot-retard">en retard</span>` : '';
   }
 
+  /** Mention « anomalie constatée » (OT préventif pendant lequel une anomalie a été vue, §14.6). */
+  function badgeAnomalie(ot) {
+    return ot.anomalie_constatee === '1' ? UI.html` <span class="badge attention ot-badge-anomalie">anomalie constatée</span>` : '';
+  }
+
   function origineHtml(ot) {
     if (ot.origine === 'DI' && ot.di_id) return UI.html`DI <a href="#/di/${encodeURIComponent(ot.di_id)}">${ot.di_id}</a>`;
     return ot.origine || '';
@@ -101,7 +107,7 @@ Object.assign(Ordres, (() => {
       { cle: 'statut', libelle: 'Statut', valeurTri: (ot) => String(STATUTS.indexOf(ot.statut)), rendu: (ot) => UI.badgeStatut(ot.statut) },
       { cle: 'equipement', libelle: 'Équipement', valeurTri: (ot) => repereEquipement(ot.equipement_id),
         rendu: (ot) => UI.html`<b class="sans-coupure">${repereEquipement(ot.equipement_id)}</b>` },
-      { cle: 'titre', libelle: 'Titre', classe: 'ot-col-titre' },
+      { cle: 'titre', libelle: 'Titre', classe: 'ot-col-titre', rendu: (ot) => UI.html`${ot.titre}${badgeAnomalie(ot)}` },
       { cle: 'type', libelle: 'Type' },
       { cle: 'technicien', libelle: 'Technicien', valeurTri: (ot) => nomTechnicien(ot.technicien_id), rendu: (ot) => nomTechnicien(ot.technicien_id) },
       { cle: 'date_prevue', libelle: 'Prévu le', classe: 'ot-col-date', rendu: (ot) => UI.html`<span class="sans-coupure">${UI.dateFr(ot.date_prevue)}</span>${badgeRetard(ot)}` },
@@ -113,7 +119,7 @@ Object.assign(Ordres, (() => {
     if (!ordres.length) return UI.vide('Aucun ordre de travail', 'Aucun OT ne correspond à ces filtres.', 'ordres');
     return UI.html`<ul class="liste-cartes">${ordres.map((ot) => UI.html`
       <li><a href="#/ot/${encodeURIComponent(ot.id)}" class="${ot.priorite === 'P1' || ot.priorite === 'P2' ? 'accent-' + ot.priorite.toLowerCase() : ''}">
-        <div class="carte-tete"><b>${ot.id}</b>${UI.badgePriorite(ot.priorite)}${UI.badgeStatut(ot.statut)}${badgeRetard(ot)}</div>
+        <div class="carte-tete"><b>${ot.id}</b>${UI.badgePriorite(ot.priorite)}${UI.badgeStatut(ot.statut)}${badgeRetard(ot)}${badgeAnomalie(ot)}</div>
         <div class="carte-titre">${ot.titre}</div>
         <div class="carte-meta"><span>${repereEquipement(ot.equipement_id)}</span>
           ${ot.date_prevue ? UI.html`<span>Prévu le ${UI.dateFr(ot.date_prevue)}</span>` : ''}
@@ -220,7 +226,7 @@ Object.assign(Ordres, (() => {
   }
 
   // Outils prêtés aux fichiers suivants du module (usage interne).
-  Object.assign(Ordres.interne, { afficherListe, optionsHtml, badgeRetard, origineHtml });
+  Object.assign(Ordres.interne, { afficherListe, optionsHtml, badgeRetard, badgeAnomalie, origineHtml });
 
   return {
     // export (ARCHITECTURE.md §10)

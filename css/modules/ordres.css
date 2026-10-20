@@ -1,7 +1,8 @@
 /* Prévo — mise en page propre au module Ordres de travail (js/modules/ordres.js).
    Uniquement des variables de la charte (css/style.css) : aucune couleur codée en dur.
-   Sommaire : 1 liste des OT · 2 fiche OT (en-tête, consignation, actions, messages)
-   · 3 onglets (formulaires, tableaux de saisie, temps, coût) · 4 téléphone · 5 impression. */
+   Sommaire : 1 liste des OT · 2 fiche OT (en-tête, consignation, anomalie d'un préventif,
+   actions, messages) · 3 onglets (formulaires, tableaux de saisie, temps, pièces sorties, coût,
+   causes fréquentes) · 4 téléphone · 5 impression. */
 
 /* =========================================================================================
    1. Liste des OT (#/ot) : tableau sur grand écran, cartes sur téléphone
@@ -17,8 +18,9 @@
 .ot-liste-tableau .ot-col-titre { min-width: 11rem; }
 .ot-liste-tableau .ot-col-origine { white-space: nowrap; font-size: .9375rem; }
 .ot-liste-tableau .ot-col-date .ot-retard { display: table; margin: .25rem 0 0; }
+.ot-liste-tableau .ot-col-titre .ot-badge-anomalie { display: table; margin: .25rem 0 0; }
 .ot-liste-cartes { display: none; }
-.ot-retard { margin-left: .35rem; }
+.ot-retard, .ot-badge-anomalie { margin-left: .35rem; }
 
 /* =========================================================================================
    2. Fiche OT (#/ot/<id>)
@@ -36,6 +38,15 @@
 .ot-procedure { white-space: pre-line; color: var(--texte); }
 .ot-rappel { margin: .8rem 0 0; color: var(--texte-ambre); }
 .ot-rappel b { color: var(--texte-ambre); }
+
+/* OT préventif : case « Anomalie constatée », « Signaler une anomalie (DI liée) », demandes liées */
+.ot-anomalie .case { font-weight: 600; }
+.ot-anomalie .actions { margin-top: .4rem; }
+.ot-di-liees { list-style: none; margin: 0; padding: 0; }
+.ot-di-liees li { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; padding: .35rem 0; border-bottom: 1px solid var(--trait-2); }
+.ot-di-liees li:last-child { border-bottom: 0; }
+.ot-di-liees a { font-weight: 600; }
+.ot-di-liees span:last-child { color: var(--texte-2); overflow-wrap: anywhere; }
 
 /* Messages (refus de passage, manques de clôture) au-dessus des onglets */
 .ot-message:empty { display: none; }
@@ -75,6 +86,19 @@
 .ot-lignes-cout { max-width: 34rem; }
 .ot-detail-cout { margin-top: .8rem; }
 
+/* Pièces sorties (ordres-pieces.js) : tableau, message de refus RG6, formulaire « Sortir une pièce » */
+.ot-sorties-message:empty { display: none; }
+.ot-sorties-message { margin-bottom: .8rem; }
+.ot-table-sorties .ot-action-ligne { text-align: right; white-space: nowrap; }
+.ot-sorties-total { margin: .6rem 0 0; text-align: right; color: var(--texte-2); }
+.ot-sorties-total b { color: var(--texte); }
+.ot-sortie > .ot-champ-article { flex: 3 1 280px; }
+.ot-sortie > .ot-champ-commentaire { flex: 2 1 200px; }
+.ot-sortie > .btn { flex: 0 0 auto; }
+
+/* Encart « Causes fréquentes ici » en tête des onglets Préparation et Compte rendu */
+.ot-causes .encadre { margin: 0 0 18px; }
+
 /* =========================================================================================
    4. Téléphone (≤ 640 px) : cartes à la place du tableau, champs en pleine largeur
    ========================================================================================= */
@@ -106,6 +130,14 @@
   }
   .ot-table-saisie input, .ot-table-saisie td.num input { min-width: 0; width: 100%; text-align: left; }
   .form-ligne > .ot-champ-quantite, .ot-ajout-temps > .champ, .ot-ajout-temps > .btn { flex: 1 1 100%; }
+  /* Pièces sorties : l'article et le bouton « Retourner » sur toute la largeur de la carte */
+  .ot-table-sorties td:first-child, .ot-table-empilee td.ot-action-ligne { grid-column: 1 / -1; }
+  .ot-table-sorties .ot-action-ligne { text-align: left; }
+  .ot-table-sorties .ot-action-ligne .btn { width: 100%; }
+  .ot-sortie > .champ, .ot-sortie > .btn { flex: 1 1 100%; }
+  .ot-sorties-total { text-align: left; }
+  /* Liens des demandes liées d'un OT préventif : zone tactile de 48 px */
+  .ot-di-liees a { min-height: 48px; display: inline-flex; align-items: center; }
 }
 
 /* =========================================================================================

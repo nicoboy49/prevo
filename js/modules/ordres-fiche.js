@@ -1,8 +1,9 @@
 'use strict';
-// Ordres (4/6) — écran E5, fiche d'un OT (#/ot/<id>) : en-tête, étapes, consignation, barre
-// d'actions (transitions RG3 avec leurs contrôles), messages et structure des onglets ; et l'écran
-// de création #/ot/nouveau (manuel, ou d'urgence avec ?urgence=1). Le contenu des onglets est dans
-// ordres-onglets.js (ARCHITECTURE.md §14.2). Complète l'objet Ordres.
+// Ordres (4/7) — écran E5, fiche d'un OT (#/ot/<id>) : en-tête, étapes, consignation, anomalie
+// d'un OT préventif et ses demandes liées (§14.6), barre d'actions (transitions RG3 avec leurs
+// contrôles), messages et structure des onglets ; et l'écran de création #/ot/nouveau (manuel, ou
+// d'urgence avec ?urgence=1). Le contenu des onglets est dans ordres-onglets.js et ordres-pieces.js
+// (ARCHITECTURE.md §14.2). Complète l'objet Ordres.
 
 Object.assign(Ordres, (() => {
 
@@ -13,7 +14,7 @@ Object.assign(Ordres, (() => {
   const { ETAPES, STATUTS_CLOTURES, memoire, texte, aujourdhui, estResponsable, estTechnicien,
     equipementDe, repereEquipement, cheminLocalisation, listeTechniciens, placerChamp, champOt,
     statutDeReprise, habilitationsManquantes, journaliserHabilitation, optionsHtml, badgeRetard,
-    origineHtml } = Ordres.interne;
+    badgeAnomalie, origineHtml, changerAnomalie, lireAvertissementGamme } = Ordres.interne;
 
   // Fonctions des fichiers chargés APRÈS celui-ci (ordres-onglets.js, ordres-impression.js) :
   // elles sont cherchées au moment de l'appel, pas au chargement de ce fichier.
@@ -178,7 +179,7 @@ Object.assign(Ordres, (() => {
         <div>
           <div class="fil"><a href="#/ot">Ordres de travail</a> › <span>${ot.id}</span></div>
           <h1><span class="ot-numero">${ot.id}</span> ${ot.titre}</h1>
-          <div class="ot-badges">${UI.badgePriorite(ot.priorite)} ${UI.badgeStatut(ot.statut)}${badgeRetard(ot)}
+          <div class="ot-badges">${UI.badgePriorite(ot.priorite)} ${UI.badgeStatut(ot.statut)}${badgeRetard(ot)}${badgeAnomalie(ot)}
             <span class="badge neutre">${ot.type}</span>
             ${equipement ? UI.html`<a class="ot-lien-equipement" href="#/equipement/${encodeURIComponent(equipement.id)}">${libelleEquipement(equipement.id)}</a>` : ''}
           </div>
@@ -231,6 +232,48 @@ Object.assign(Ordres, (() => {
         : UI.html`<p class="muted">Aucune procédure de consignation n'est renseignée pour cet équipement : voyez votre responsable avant d'intervenir.</p>`}
       <p class="ot-rappel"><b>${RAPPEL_CONSIGNATION}</b></p>
     </section>`;
+  }
+
+  // --- OT préventif : anomalie constatée et demandes liées (ARCHITECTURE.md §14.6) ----------
+
+  /** Demandes signalées pendant cet OT (demandes.ot_origine_id), les plus récentes d'abord. */
+  function demandesLiees(ot) {
+    return Donnees.lignes('demandes').filter((di) => di.ot_origine_id === ot.id)
+      .sort((a, b) => texte(b.date_heure).localeCompare(texte(a.date_heure)) || b.id.localeCompare(a.id));
+  }
+
+  /**
+   * Carte d'un OT préventif : case « Anomalie constatée » (désactivée si l'OT est verrouillé),
+   * bouton « Signaler une anomalie (DI liée) » (absent si verrouillé) et demandes liées.
+   * data-hors-saisie : la case s'enregistre aussitôt, ce n'est pas une saisie en cours.
+   */
+  function anomalieHtml(ot) {
+    if (ot.origine !== 'préventif') return '';
+    const verrouille = estVerrouille(ot);
+    const liees = demandesLiees(ot);
+    const adresse = '#/di/nouvelle?equipement=' + encodeURIComponent(ot.equipement_id) + '&ot=' + encodeURIComponent(ot.id);
+    return UI.html`<section class="carte ot-anomalie sans-impression" data-hors-saisie aria-labelledby="ot-titre-anomalie">
+      <div class="entete-carte"><h2 id="ot-titre-anomalie">Anomalie pendant le préventif</h2>
+        ${verrouille ? UI.html`<span class="aide">OT verrouillé : lecture seule</span>` : ''}</div>
+      <label class="case"><input type="checkbox" id="ot-anomalie-constatee"${ot.anomalie_constatee === '1' ? UI.brut(' checked') : ''}${verrouille ? UI.brut(' disabled') : ''}>
+        <span>Anomalie constatée</span></label>
+      ${verrouille ? '' : UI.html`<p class="aide">Une anomalie à traiter se signale par une demande d'intervention liée à cet OT :
+        l'OT est alors marqué « anomalie constatée » et le responsable décide de la demande.</p>
+        <div class="actions"><a class="btn btn-secondaire" id="ot-signaler-anomalie" href="${adresse}">${UI.icone('alerte')}Signaler une anomalie (DI liée)</a></div>`}
+      <h3 class="ot-sous-titre">Demandes liées (${liees.length})</h3>
+      ${liees.length ? UI.html`<ul class="ot-di-liees">${liees.map((di) => UI.html`<li>
+          <a href="#/di/${encodeURIComponent(di.id)}">${di.id}</a> ${UI.badgeStatut(di.statut)} <span>${di.symptome}</span></li>`)}</ul>`
+        : UI.html`<p class="muted">Aucune demande liée à cet OT.</p>`}
+    </section>`;
+  }
+
+  /** Case « Anomalie constatée » : enregistrée aussitôt ; remise comme avant si l'écriture est refusée. */
+  async function basculerAnomalie(ot, caseAnomalie) {
+    const coche = caseAnomalie.checked;
+    const reussi = await pendant(caseAnomalie, () => changerAnomalie(ot.id, coche), 'anomalie constatée');
+    if (reussi === undefined) { caseAnomalie.checked = !coche; return; }
+    await apresEnregistrement();
+    UI.toast(ot.id + (coche ? ' : anomalie constatée.' : ' : mention « anomalie constatée » retirée.'), 'succes');
   }
 
   function bandeauEtat(ot) {
@@ -296,6 +339,7 @@ Object.assign(Ordres, (() => {
         <section class="carte c6"><h2>Repères</h2>${reperesHtml(ot)}</section>
       </div>
       ${consignationHtml(equipement)}
+      ${anomalieHtml(ot)}
       ${actionsHtml(ot)}
       <div id="ot-message" class="ot-message" aria-live="polite"></div>
       <div class="ot-onglets"></div>`);
@@ -323,6 +367,8 @@ Object.assign(Ordres, (() => {
       const attentePiece = evenement.target.closest('button[data-action="attente-piece"]');
       if (attentePiece) mettreEnAttentePiece(ot);
     });
+    const caseAnomalie = UI.$('#ot-anomalie-constatee', racine);
+    if (caseAnomalie) caseAnomalie.addEventListener('change', () => basculerAnomalie(ot, caseAnomalie));
   }
 
   // --- Formulaires de la fiche : enregistrés avant une transition s'ils ont été modifiés ------
@@ -398,8 +444,12 @@ Object.assign(Ordres, (() => {
     const reussi = await pendant(bouton, () => changerStatut(actuel.id, actuel.statut, cible, complement), 'changement de statut');
     if (reussi === undefined) return;
     await apresEnregistrement();
-    UI.toast(actuel.id + ' : ' + cible + '.', 'succes');
-    if (verification.avertissements.length) afficherMessage('attention', verification.avertissements.join(' '));
+    // Clôture d'un préventif dont la gamme n'a pas pu être mise à jour (RG5) : l'avertissement
+    // reste affiché au-dessus des onglets, et le toast le redit au lieu du succès.
+    const avertissementGamme = lireAvertissementGamme(actuel.id);
+    UI.toast(avertissementGamme || actuel.id + ' : ' + cible + '.', avertissementGamme ? 'attention' : 'succes');
+    const avertissements = verification.avertissements.concat(avertissementGamme ? [avertissementGamme] : []);
+    if (avertissements.length) afficherMessage('attention', avertissements.join(' '));
   }
 
   // Motif demandé pour En attente et Annulé : { motif_… } ; null si l'utilisateur renonce.
