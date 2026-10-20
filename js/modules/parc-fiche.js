@@ -347,7 +347,7 @@ Object.assign(Parc, (() => {
     App.definirTitre(equipement.repere || equipement.id);
     const responsable = App.estResponsable();
     // Le demandeur consulte : pas de saisie de relevé, ni de lien vers les gammes et les OT
-    // (écrans qui lui sont fermés).
+    // (écrans qui lui sont fermés), ni de carte Préventif (D27 : il ne voit pas le préventif).
     const intervenant = App.estTechnicien() || responsable;
     const adresse = await adresseDocument(equipement.document);
     const idUrl = encodeURIComponent(equipement.id);
@@ -385,8 +385,10 @@ Object.assign(Parc, (() => {
           <div class="c4">${carteQr(equipement)}</div>
         </div>
         <div class="grille">
-          <div class="c6">${carteCompteurs(equipement, intervenant)}</div>
-          <div class="c6">${cartePreventif(equipement, intervenant)}</div>
+          ${App.estDemandeur()
+            ? UI.html`<div class="c12">${carteCompteurs(equipement, intervenant)}</div>`
+            : UI.html`<div class="c6">${carteCompteurs(equipement, intervenant)}</div>
+          <div class="c6">${cartePreventif(equipement, intervenant)}</div>`}
         </div>
         ${sousEquipements}
         <div class="parc-complements"></div>

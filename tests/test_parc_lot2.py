@@ -7,10 +7,14 @@ Familles (le nom du test le dit) :
               formulaire → colonne valeur_remplacement de equipements.csv ; montant négatif refusé ;
     releve  : relevé saisi sur le compteur horaire (technicien) → ligne dans releves.csv ; valeur plus
               basse que le dernier relevé → avertissement, « Annuler » n'écrit rien, puis confirmation
-              explicite → écrit ; relevé au-dessus du seuil de la gamme seuil → OT « préventif
-              conditionnel » sur le disque, toast, OT visible dans la carte Préventif ;
+              explicite → écrit ; refus sur les lignes fraîches (relevé plus haut d'un autre poste) →
+              dernier relevé relu, avertissement et case affichés sans rouvrir la fenêtre ; remise à
+              zéro confirmée → les gammes « compteur » gardent leur avancement (base ajustée, journal),
+              la gamme « seuil » ne bouge pas ; ajustement impossible → relevé gardé, toast ; relevé
+              au-dessus du seuil de la gamme seuil → OT « préventif conditionnel » sur le disque,
+              toast, OT visible dans la carte Préventif ;
     gammes  : la carte Préventif liste les gammes de CP-01 avec leur statut (Preventif.etatGamme) ;
-              demandeur : ni bouton « Saisir un relevé » ni lien vers les gammes et les OT ;
+              demandeur : ni bouton « Saisir un relevé », ni carte Préventif (D27) ; technicien : la carte ;
               téléphone 375 px : aucun défilement horizontal, zones tactiles d'au moins 48 px.
 
 Les identifiants viennent de tests/fixtures/demo-scenarios.json (commun.scenarios_demo()) ; aucun
@@ -123,12 +127,14 @@ class CasParcLot2(CasNavigateur):
         page.goto(serveur.url + "/#/equipement/" + equipement_id)
         attendre_pret(page)
         page.wait_for_load_state("networkidle")      # écritures du démarrage (format, préventif) finies
-        self.attendre_fiche()
+        self.attendre_fiche(preventif=profil != "demandeur")
         return page
 
-    def attendre_fiche(self):
+    def attendre_fiche(self, preventif=True):
+        """Fiche affichée ; carte Préventif attendue sauf pour le demandeur (D27)."""
         self.page.wait_for_selector("#contenu .parc-carte-compteurs")
-        self.page.wait_for_selector("#contenu .parc-preventif")
+        if preventif:
+            self.page.wait_for_selector("#contenu .parc-preventif")
 
     def noter_les_toasts(self):
         """À appeler AVANT d'ouvrir la page : chaque toast affiché est noté dans window.__toasts."""
@@ -299,8 +305,20 @@ class TestReleve(CasParcLot2):
             self.assertTrue(page.is_visible("dialog.dialogue"))                  # rien d'enregistré
             valeurs = [nombre(r["valeur"]) for r in releves_du_compteur(serveur.dossier, COMPTEUR_HORAIRE)]
             self.assertNotIn(dernier + 10, valeurs)
-            page.click("dialog.dialogue button:has-text('Annuler')")
+            # Le dernier relevé est relu : rappel à jour, avertissement de baisse et case de
+            # confirmation affichés sans fermer ni rouvrir la fenêtre.
+            page.wait_for_selector("dialog.dialogue .parc-releve-baisse", state="visible")
+            self.assertTrue(page.is_visible("dialog.dialogue [name=baisse_confirmee]"))
+            haut = "{:,}".format(dernier + 1000).replace(",", " ")
+            self.assertIn(haut, self.texte("dialog.dialogue .parc-releve-precedent"))
+            self.assertIn(haut, self.texte("dialog.dialogue .parc-releve-baisse"))
+            # Confirmation explicite (compteur remplacé) : le relevé est écrit.
+            page.check("dialog.dialogue [name=baisse_confirmee]")
+            self.enregistrer_releve()
             self.attendre_fenetre_fermee()
+            valeurs = [nombre(r["valeur"]) for r in releves_du_compteur(serveur.dossier, COMPTEUR_HORAIRE)]
+            self.assertIn(dernier + 10, valeurs)
+            self.attendre_fiche()
             page.wait_for_load_state("networkidle")
 
     def test_releve_au_dessus_du_seuil_cree_un_ot_conditionnel_visible_dans_la_carte_preventif(self):
@@ -332,6 +350,83 @@ class TestReleve(CasParcLot2):
             lien = page.wait_for_selector("%s[data-statut='ot_ouvert'] a.parc-lien-ot[href='#/ot/%s']" % (ligne_gamme, ot["id"]))
             self.assertEqual(lien.inner_text().strip(), ot["id"])
             self.assertEqual(self.texte(ligne_gamme + " .badge"), "OT ouvert")
+            page.wait_for_load_state("networkidle")
+
+
+class TestReleveRemiseAZero(CasParcLot2):
+    """Compteur remplacé ou remis à zéro (baisse confirmée) : chaque gamme active « compteur » de ce
+    compteur garde son avancement ; nouvelle base = nouvelle valeur − (dernier relevé − ancienne base)."""
+
+    def gammes_au_compteur(self, dossier):
+        return [g for g in lire_csv(dossier, "gammes.csv") if g["compteur_id"] == COMPTEUR_HORAIRE
+                and g["declencheur"] == "compteur" and g["actif"] != "0"]
+
+    def remettre_a_zero(self, valeur):
+        """Fenêtre « Saisir un relevé » : valeur plus basse, avertissement, case cochée, enregistrée."""
+        page = self.page
+        self.ouvrir_fenetre_releve(COMPTEUR_HORAIRE)
+        page.fill("dialog.dialogue [name=valeur]", str(valeur))
+        self.enregistrer_releve()
+        page.wait_for_selector("dialog.dialogue .parc-releve-baisse", state="visible")
+        page.check("dialog.dialogue [name=baisse_confirmee]")
+        self.enregistrer_releve()
+        self.attendre_fenetre_fermee()
+
+    def test_releve_remise_a_zero_confirmee_les_gammes_compteur_gardent_leur_avancement(self):
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            equipement = equipement_du_compteur(dossier, COMPTEUR_HORAIRE)
+            self.noter_les_toasts()
+            page = self.ouvrir(serveur, equipement)
+            # Gamme « seuil » sur le même compteur (la démo n'en a pas) : elle ne doit pas bouger.
+            gamme_seuil = page.evaluate("""([equipement, compteur]) => Preventif.creerGamme({ equipement_id: equipement,
+                libelle: 'Contrôle à 99 999 h (essai)', declencheur: 'seuil', compteur_id: compteur, seuil: '99999',
+                releve_derniere_realisation: '1234' })""", [equipement, COMPTEUR_HORAIRE])
+            gammes = self.gammes_au_compteur(dossier)
+            self.assertGreaterEqual(len(gammes), 1)
+            seuil_avant = par_id(dossier, "gammes.csv")[gamme_seuil]
+            dernier = nombre(releves_du_compteur(dossier, COMPTEUR_HORAIRE)[-1]["valeur"])
+            reste = "(id) => Preventif.etatGamme(id).reste"
+            restes_avant = {g["id"]: page.evaluate(reste, g["id"]) for g in gammes}
+
+            self.remettre_a_zero(10)
+            self.attendre_toast_note(r"^Relevé enregistré\.")
+            self.assertEqual(nombre(releves_du_compteur(dossier, COMPTEUR_HORAIRE)[-1]["valeur"]), 10)
+
+            apres = par_id(dossier, "gammes.csv")
+            journal = [j["action"] for j in lire_csv(dossier, "journal.csv") if j["table"] == "gammes"]
+            for gamme in gammes:
+                with self.subTest(gamme=gamme["id"]):
+                    ancienne = nombre(gamme["releve_derniere_realisation"]) if gamme["releve_derniere_realisation"] else 0.0
+                    base = nombre(apres[gamme["id"]]["releve_derniere_realisation"])
+                    self.assertAlmostEqual(base, 10 - (dernier - ancienne), places=6)
+                    self.assertAlmostEqual(page.evaluate(reste, gamme["id"]), restes_avant[gamme["id"]], delta=1)
+                    texte = "remise à zéro du compteur %s : base de %s ajustée de %s à " % (
+                        COMPTEUR_HORAIRE, gamme["id"], gamme["releve_derniere_realisation"] or "vide")
+                    self.assertTrue(any(texte in action for action in journal), journal)
+            self.assertEqual(apres[gamme_seuil], seuil_avant)
+            toasts = page.evaluate("window.__toasts")
+            self.assertFalse(any("n'a pas pu" in toast for toast in toasts), toasts)
+            page.wait_for_load_state("networkidle")
+
+    def test_releve_remise_a_zero_ajustement_impossible_le_releve_reste_et_un_toast_le_dit(self):
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            equipement = equipement_du_compteur(dossier, COMPTEUR_HORAIRE)
+            self.noter_les_toasts()
+            page = self.ouvrir(serveur, equipement)
+            gammes_avant = (Path(dossier) / "gammes.csv").read_bytes()
+            nombre_avant = len(lire_csv(dossier, "releves.csv"))
+            page.evaluate("""() => { const modifier = Donnees.modifier;
+                Donnees.modifier = (table, ...suite) => (table === 'gammes'
+                  ? Promise.reject(new Donnees.ErreurValidation('panne simulée')) : modifier(table, ...suite)); }""")
+            self.remettre_a_zero(10)
+            toast = self.attendre_toast_note("n'a pas pu être ajustée")
+            self.assertTrue(toast.startswith("Relevé enregistré, mais"), toast)
+            self.assertIn("panne simulée", toast)
+            self.assertEqual(len(lire_csv(dossier, "releves.csv")), nombre_avant + 1)
+            self.assertEqual(nombre(releves_du_compteur(dossier, COMPTEUR_HORAIRE)[-1]["valeur"]), 10)
+            self.assertEqual((Path(dossier) / "gammes.csv").read_bytes(), gammes_avant)
             page.wait_for_load_state("networkidle")
 
 
@@ -374,24 +469,29 @@ class TestGammes(CasParcLot2):
             page.wait_for_selector("#pv-formulaire-gamme")
             page.wait_for_load_state("networkidle")
 
-    def test_gammes_demandeur_sans_saisie_de_releve_ni_lien_vers_gammes_et_ot(self):
+    def test_gammes_demandeur_sans_saisie_de_releve_ni_carte_preventif(self):
+        """D27 : le demandeur ne voit pas le préventif (fiche de CP-01)."""
         with ServeurPrevo() as serveur:
             equipement = equipement_du_compteur(serveur.dossier, COMPTEUR_HORAIRE)
-            nombre_gammes = sum(1 for g in lire_csv(serveur.dossier, "gammes.csv") if g["equipement_id"] == equipement)
+            self.assertTrue(any(g["equipement_id"] == equipement for g in lire_csv(serveur.dossier, "gammes.csv")))
             page = self.ouvrir(serveur, equipement, profil="demandeur", nom="Lucie Martin")
             self.assertEqual(page.locator(".parc-saisir-releve").count(), 0)
             self.assertEqual(page.get_by_role("button", name="Saisir un relevé").count(), 0)
             self.assertIn("Dernier relevé", self.texte(".parc-carte-compteurs"))
-            self.assertEqual(page.locator(".parc-preventif li[data-gamme]").count(), nombre_gammes)
-            self.assertEqual(page.locator(".parc-preventif a").count(), 0)
+            self.assertEqual(page.locator(".parc-preventif").count(), 0)
+            self.assertEqual(page.locator("[data-gamme], a.parc-lien-gamme, a.parc-lien-ot").count(), 0)
+            self.sans_defilement_horizontal("fiche du demandeur")
 
-    def test_gammes_technicien_voit_le_bouton_saisir_un_releve_pour_chaque_compteur(self):
+    def test_gammes_technicien_voit_le_bouton_saisir_un_releve_pour_chaque_compteur_et_la_carte_preventif(self):
         with ServeurPrevo() as serveur:
             equipement = equipement_du_compteur(serveur.dossier, COMPTEUR_HORAIRE)
             compteurs = sorted(c["id"] for c in lire_csv(serveur.dossier, "compteurs.csv") if c["equipement_id"] == equipement)
+            nombre_gammes = sum(1 for g in lire_csv(serveur.dossier, "gammes.csv") if g["equipement_id"] == equipement)
             page = self.ouvrir(serveur, equipement, profil="technicien", technicien_id=TECHNICIEN)
             boutons = page.eval_on_selector_all(".parc-saisir-releve", "els => els.map((e) => e.dataset.compteur)")
             self.assertEqual(sorted(boutons), compteurs)
+            self.assertEqual(page.locator(".parc-preventif").count(), 1)
+            self.assertEqual(page.locator(".parc-preventif li[data-gamme]").count(), nombre_gammes)
             self.assertGreater(page.locator(".parc-preventif a.parc-lien-gamme").count(), 0)
 
     def test_gammes_telephone_375_px_sans_defilement_horizontal_et_zones_de_48_px(self):

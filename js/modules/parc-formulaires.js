@@ -281,8 +281,17 @@ Object.assign(Parc, (() => {
     return String(profil.nom || profil.technicienId || '').trim();
   }
 
+  /** Valeur d'un champ d'une ligne, en texte sans espaces de bord ('' si absente). */
+  function champ(ligne, nom) {
+    const valeur = ligne[nom];
+    return valeur === undefined || valeur === null ? '' : String(valeur).trim();
+  }
+
   /**
-   * Écrit un relevé dans releves.csv et renvoie son identifiant.
+   * Écrit un relevé dans releves.csv. Renvoie { id, remiseAZero } : remiseAZero vaut
+   * { precedent, valeur } (nombres : dernier relevé avant la baisse, valeur saisie) si le relevé
+   * est une baisse confirmée qui devient le dernier relevé du compteur (compteur remplacé ou remis
+   * à zéro), null sinon (relevé ordinaire, ou relevé plus bas antidaté).
    *   valeurs : { date: 'AAAA-MM-JJ', valeur: '1234.5' } (point décimal) ;
    *   baisseConfirmee : vrai si l'utilisateur a confirmé une valeur plus basse que le dernier
    *   relevé (compteur remplacé ou remis à zéro).
@@ -296,30 +305,97 @@ Object.assign(Parc, (() => {
       const problemes = verifierReleve(valeurs, outils.aujourdhui());
       if (problemes.length) throw new Donnees.ErreurValidation(problemes.map((p) => p.message).join(' '));
       const dernier = dernierReleveDe(lignes, compteurId);
-      if (!baisseConfirmee && estEnBaisse(valeurs.valeur, dernier)) {
+      const baisse = estEnBaisse(valeurs.valeur, dernier);
+      if (!baisseConfirmee && baisse) {
         throw new Donnees.ErreurValidation('La valeur saisie est plus basse que le dernier relevé ('
           + valeurAvecUnite(dernier.valeur, compteur.unite) + ' le ' + UI.dateFr(dernier.date)
           + '). Confirmez que le compteur a été remplacé ou remis à zéro, ou corrigez la valeur.');
       }
       const id = outils.nouvelId(lignes);
-      lignes.push({ id, compteur_id: compteurId, date: valeurs.date, valeur: String(Donnees.nombre(valeurs.valeur)),
+      const valeur = Donnees.nombre(valeurs.valeur);
+      lignes.push({ id, compteur_id: compteurId, date: valeurs.date, valeur: String(valeur),
         utilisateur: utilisateurCourant() });
-      return id;
+      // Même ordre que Preventif (date, puis identifiant) : le relevé saisi est-il devenu le dernier ?
+      const devientDernier = (dernierReleveDe(lignes, compteurId) || {}).id === id;
+      return { id, remiseAZero: baisse && devientDernier ? { precedent: Donnees.nombre(dernier.valeur), valeur } : null };
     }, { action: 'relevé de compteur' });
   }
 
+  /**
+   * Compteur remplacé ou remis à zéro (baisse confirmée) : chaque gamme active « compteur » de ce
+   * compteur garde son avancement. Nouvelle base (releve_derniere_realisation) = nouvelle valeur −
+   * (dernier relevé avant la baisse − ancienne base, une base vide valant 0). Les gammes « seuil »
+   * ne changent pas : leur seuil porte sur la valeur absolue du compteur. Décidé sur les lignes
+   * fraîches de gammes (fonction rejouée en cas de conflit) ; une entrée de journal par gamme
+   * ajustée (« remise à zéro du compteur CPT-… : base de GAM-… ajustée de A à B »).
+   * remiseAZero : { precedent, valeur } (voir enregistrerReleve). Renvoie les gammes ajustées.
+   */
+  async function ajusterGammesApresRemiseAZero(compteurId, remiseAZero) {
+    const ajustees = [];
+    await Donnees.modifier('gammes', (lignes) => {
+      ajustees.length = 0;
+      lignes.forEach((gamme) => {
+        if (champ(gamme, 'compteur_id') !== compteurId || champ(gamme, 'declencheur') !== 'compteur'
+          || champ(gamme, 'actif') === '0') return;
+        const avant = champ(gamme, 'releve_derniere_realisation');
+        const avancement = remiseAZero.precedent - (Donnees.nombre(avant) || 0);
+        const apres = String(Math.round((remiseAZero.valeur - avancement) * 1e6) / 1e6);
+        if (apres === avant) return;
+        gamme.releve_derniere_realisation = apres;
+        ajustees.push({ id: gamme.id, avant, apres });
+      });
+    }, { journal: false });                    // journalisé ci-dessous, avec l'ancienne et la nouvelle base
+    for (const { id, avant, apres } of ajustees) {
+      await Donnees.journaliser('gammes', id, 'modification : releve_derniere_realisation — remise à zéro du compteur '
+        + compteurId + ' : base de ' + id + ' ajustée de ' + (avant || 'vide') + ' à ' + apres);
+    }
+    return ajustees.map((gamme) => gamme.id);
+  }
+
+  /**
+   * Après un relevé de remise à zéro : ajuste les gammes au compteur. Le relevé est déjà
+   * enregistré : un échec ne l'annule pas ; il est rendu sous forme d'avertissement (texte du
+   * toast, '' si tout va bien) et tracé en console (console.warn).
+   */
+  async function apresRemiseAZero(compteurId, remiseAZero) {
+    try {
+      await ajusterGammesApresRemiseAZero(compteurId, remiseAZero);
+      return '';
+    } catch (erreur) {
+      const message = 'Relevé enregistré, mais la base des gammes au compteur ' + compteurId
+        + ' n\'a pas pu être ajustée après la remise à zéro (' + ((erreur && erreur.message) || String(erreur))
+        + ') : vérifiez le relevé de dernière réalisation de chacune de ces gammes.';
+      console.warn('Prévo (parc) : ' + message, erreur);
+      return message;
+    }
+  }
+
   // Après un relevé, une gamme au compteur ou au seuil peut être devenue échue (RG5) : la
-  // génération est idempotente et sûre à plusieurs postes. Le toast dit ce qui a été créé.
-  async function genererApresReleve() {
+  // génération est idempotente et sûre à plusieurs postes. Le toast dit ce qui a été créé ;
+  // `avertissement` (ajustement des gammes impossible) remplace alors le message de succès.
+  async function genererApresReleve(avertissement) {
     let crees;
     try {
       crees = await Preventif.genererOTEchus();
     } catch (erreur) {
-      App.signalerErreur({ message: 'Relevé enregistré, mais les OT préventifs n\'ont pas pu être générés : '
-        + ((erreur && erreur.message) || String(erreur)) }, 'génération du préventif après un relevé');
+      App.signalerErreur({ message: (avertissement ? avertissement + ' De plus, les' : 'Relevé enregistré, mais les')
+        + ' OT préventifs n\'ont pas pu être générés : ' + ((erreur && erreur.message) || String(erreur)) },
+      'génération du préventif après un relevé');
       return;
     }
-    UI.toast(crees.length ? 'Relevé enregistré. ' + Preventif.texteGeneration(crees.length) + '.' : 'Relevé enregistré.', 'succes');
+    const generation = crees.length ? ' ' + Preventif.texteGeneration(crees.length) + '.' : '';
+    if (avertissement) UI.toast(avertissement + generation, 'attention');
+    else UI.toast('Relevé enregistré.' + generation, 'succes');
+  }
+
+  // Rappel du dernier relevé (ligne de releves, ou null) : en tête de la fenêtre et dans
+  // l'avertissement de baisse.
+  function afficherDernierReleve(contenu, dernier, unite) {
+    UI.remplir(UI.$('.parc-releve-precedent', contenu), dernier
+      ? UI.html`Dernier relevé : <b class="fort">${valeurAvecUnite(dernier.valeur, unite)}</b> le ${UI.dateFr(dernier.date)}.`
+      : UI.html`Aucun relevé pour ce compteur.`);
+    UI.remplir(UI.$('.parc-releve-baisse-valeur', contenu),
+      dernier ? UI.html` (${valeurAvecUnite(dernier.valeur, unite)})` : '');
   }
 
   // Contenu de la fenêtre : rappel du dernier relevé, date, valeur, avertissement de baisse.
@@ -328,9 +404,7 @@ Object.assign(Parc, (() => {
     const champsSchema = Schema.table('releves').champs;
     const definition = (nom) => champsSchema.find((c) => c.nom === nom);
     const contenu = UI.element(UI.html`<div class="form-colonne parc-formulaire-releve">
-      <p class="parc-releve-precedent">${dernier
-        ? UI.html`Dernier relevé : <b class="fort">${valeurAvecUnite(dernier.valeur, unite)}</b> le ${UI.dateFr(dernier.date)}.`
-        : 'Aucun relevé pour ce compteur.'}</p>
+      <p class="parc-releve-precedent"></p>
     </div>`);
     contenu.appendChild(UI.champ(definition('date'), jour, { libelle: 'Date du relevé', obligatoire: true, attributs: { max: jour } }));
     contenu.appendChild(UI.champ(definition('valeur'), '', {
@@ -339,26 +413,31 @@ Object.assign(Parc, (() => {
     }));
     contenu.appendChild(UI.element(UI.html`<div class="alerte attention parc-releve-baisse" role="alert" hidden>
       ${UI.icone('alerte')}<div class="alerte-texte">
-        <p><b>Valeur plus basse que le dernier relevé${dernier ? ' (' + valeurAvecUnite(dernier.valeur, unite) + ')' : ''}.</b>
+        <p><b>Valeur plus basse que le dernier relevé<span class="parc-releve-baisse-valeur"></span>.</b>
           Compteur remplacé ou remis à zéro ? Sinon, corrigez la valeur.</p>
         <label class="case"><input type="checkbox" name="baisse_confirmee" value="1">
           <span>Oui, le compteur a été remplacé ou remis à zéro</span></label>
         <p class="erreur-champ parc-releve-erreur-baisse" hidden></p>
       </div></div>`));
+    afficherDernierReleve(contenu, dernier, unite);
     return contenu;
   }
 
   /**
    * Fenêtre « Saisir un relevé » d'un compteur : date (aujourd'hui par défaut) et valeur. Une valeur
    * plus basse que le dernier relevé affiche un avertissement et demande une confirmation explicite
-   * (case à cocher) ; « Annuler » ne change rien. Après l'écriture : génération des OT préventifs
-   * échus. Renvoie vrai si un relevé a été enregistré (la fiche se réaffiche alors).
+   * (case à cocher) ; « Annuler » ne change rien. Un refus venu des lignes fraîches (relevé plus
+   * élevé saisi sur un autre poste) relit le dernier relevé et affiche l'avertissement sans fermer
+   * la fenêtre. Après l'écriture : ajustement des gammes au compteur si le compteur a été remis à
+   * zéro, puis génération des OT préventifs échus. Renvoie vrai si un relevé a été enregistré (la
+   * fiche se réaffiche alors).
    */
   async function ouvrirFenetreReleve(compteurId) {
     const compteur = Donnees.trouver('compteurs', compteurId);
     if (!compteur) { UI.toast('Ce compteur n\'existe plus.', 'attention'); return false; }
     const jour = Donnees.aujourdhui();
-    const dernier = dernierReleveDe(Donnees.lignes('releves'), compteurId);
+    const unite = String(compteur.unite || '').trim();
+    let dernier = dernierReleveDe(Donnees.lignes('releves'), compteurId);
     const contenu = contenuFenetreReleve(compteur, dernier, jour);
     const champValeur = UI.$('[name=valeur]', contenu);
     const avertissement = UI.$('.parc-releve-baisse', contenu);
@@ -375,14 +454,34 @@ Object.assign(Parc, (() => {
       avertissement.hidden = !visible;
       if (!visible) erreurBaisse.hidden = true;
     };
+    const demanderConfirmation = () => {
+      montrerBaisse(true);
+      erreurBaisse.textContent = 'Cochez la case pour confirmer cette valeur, ou corrigez-la.';
+      erreurBaisse.hidden = false;
+      caseBaisse.focus();
+    };
     // L'avertissement apparaît au clic sur « Enregistrer » (pas pendant la frappe, ni à la sortie du
     // champ : la fenêtre grandirait sous le doigt et le bouton visé se déplacerait) ; il disparaît
     // dès que la valeur n'est plus en baisse.
     champValeur.addEventListener('input', () => { if (!enBaisse()) montrerBaisse(false); });
     caseBaisse.addEventListener('change', () => { if (caseBaisse.checked) erreurBaisse.hidden = true; });
 
+    // Refus sur les lignes fraîches : le dernier relevé est relu (un autre poste a pu en saisir un
+    // plus élevé) ; si la valeur est maintenant en baisse, l'avertissement et la case s'affichent.
+    async function relireDernierReleve() {
+      try {
+        await Donnees.rechargerTable('releves');
+      } catch (erreur) {
+        console.warn('Prévo (parc) : relevés non relus après un refus.', erreur);
+        return;
+      }
+      dernier = dernierReleveDe(Donnees.lignes('releves'), compteurId);
+      afficherDernierReleve(contenu, dernier, unite);
+      if (enBaisse() && !caseBaisse.checked) demanderConfirmation();
+    }
+
     let fermerFenetre = null;
-    let enregistre = false;
+    let releve = null;
     let enCours = false;
 
     async function enregistrer() {
@@ -394,19 +493,16 @@ Object.assign(Parc, (() => {
       afficherErreurs(contenu, erreurs);
       if (erreurs.length) return;
       if (enBaisse() && !caseBaisse.checked) {
-        montrerBaisse(true);
-        erreurBaisse.textContent = 'Cochez la case pour confirmer cette valeur, ou corrigez-la.';
-        erreurBaisse.hidden = false;
-        caseBaisse.focus();
+        demanderConfirmation();
         return;
       }
       enCours = true;
       try {
-        await enregistrerReleve(compteurId, valeurs, caseBaisse.checked);
-        enregistre = true;
+        releve = await enregistrerReleve(compteurId, valeurs, caseBaisse.checked);
         fermerFenetre('ok');
       } catch (erreur) {
         App.signalerErreur(erreur, 'enregistrement du relevé');
+        if (erreur instanceof Donnees.ErreurValidation) await relireDernierReleve();
       } finally {
         enCours = false;
       }
@@ -421,13 +517,14 @@ Object.assign(Parc, (() => {
       ],
       surOuverture(dialogue, fermer) { fermerFenetre = fermer; },
       avantFermeture(valeur) {
-        if (valeur !== 'ok' || enregistre) return true;
+        if (valeur !== 'ok' || releve) return true;
         enregistrer();                                  // la fenêtre se ferme toute seule si tout va bien
         return false;
       },
     });
     if (choix !== 'ok') return false;
-    await genererApresReleve();
+    const avertissementGammes = releve && releve.remiseAZero ? await apresRemiseAZero(compteurId, releve.remiseAZero) : '';
+    await genererApresReleve(avertissementGammes);
     return true;
   }
 
