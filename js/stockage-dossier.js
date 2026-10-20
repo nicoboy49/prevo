@@ -48,8 +48,9 @@ const StockageDossier = (() => {
   const MOTIF_NOM_SAUVEGARDE = /^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+)?)?$/;
   // Motifs acceptés par sauvegarder(motif) : liste FERMÉE, la même que MOTIFS_SAUVEGARDE de serveur.py.
   const MOTIFS_SAUVEGARDE = ['avant-format-v2'];
+  // 'html' : rapport mensuel figé (lot 3, ARCHITECTURE.md §15.1).
   const EXTENSIONS_DOCUMENTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'doc', 'docx',
-    'xls', 'xlsx', 'odt', 'ods'];
+    'xls', 'xlsx', 'odt', 'ods', 'html'];
   const NOMS_RESERVES_WINDOWS = ['con', 'prn', 'aux', 'nul']
     .concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return 'com' + n; }))
     .concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return 'lpt' + n; }));

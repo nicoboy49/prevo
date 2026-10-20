@@ -282,6 +282,12 @@ const UI = (function () {
     // Lot 2 (ARCHITECTURE.md §14.2) : calendrier coché (Préventif) et carton fermé (Magasin)
     preventif: '<path d="M4 6h16v14H4zM4 10h16M8 3v5M16 3v5"/><path d="m8.5 15 2.5 2.5 4.5-4.5"/>',
     magasin: '<path d="M3.5 8 12 4l8.5 4v9L12 21l-8.5-4z"/><path d="M3.5 8 12 12l8.5-4M12 12v9"/><path d="m7.75 6 8.5 4v3"/>',
+    // Lot 3 (ARCHITECTURE.md §15.1) : planning (calendrier à créneaux), contrôles réglementaires
+    // (rosette cochée), indicateurs (histogramme), équipe (deux personnes)
+    planning: '<path d="M4 6h16v14H4zM4 10h16M8 3v5M16 3v5"/><path d="M7.5 13.5h4M13 13.5h3.5M7.5 16.5h3"/>',
+    controles: '<circle cx="12" cy="9" r="5.5"/><path d="m9.6 9 1.7 1.7 3.1-3.1"/><path d="M8.4 13.4 7 21l5-2.6 5 2.6-1.4-7.6"/>',
+    indicateurs: '<path d="M4 20h16"/><path d="M6 20v-6h3v6M10.5 20V9h3v11M15 20v-9h3v9"/>',
+    equipe: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.8 3.4-5.7 6.5-5.7s5.7 1.9 6.5 5.7"/><path d="M15 4.7a3.5 3.5 0 0 1 0 6.6M17.5 14.6c2 .6 3.4 2.4 4 5.4"/>',
     replier: '<path d="m14 6-6 6 6 6M19 6v12"/>',
     chevron: '<path d="m9 6 6 6-6 6"/>',
   };

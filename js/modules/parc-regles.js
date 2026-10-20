@@ -18,7 +18,7 @@
 // Règles de gestion : un équipement n'est jamais supprimé (champ `actif`), le repère est unique
 // parmi les équipements actifs, un équipement ne peut pas être son propre ancêtre.
 //
-// Le module est découpé en quatre fichiers, chargés dans cet ordre par index.html (ARCHITECTURE.md
+// Le module est découpé en cinq fichiers, chargés dans cet ordre par index.html (ARCHITECTURE.md
 // §14.2, décision D28 : 700 lignes au plus par fichier) :
 //   parc-regles.js         CE FICHIER, qui crée l'objet Parc :
 //                            1. Petits outils (aussi offerts aux autres modules)   2. Contrôles de saisie (purs)
@@ -26,6 +26,7 @@
 //   parc-formulaires.js    4. Localisation : fenêtre de création et de modification
 //                          6. Écrans #/equipement/nouveau et #/equipement/<id>/modifier : formulaire
 //                          8. Relevé de compteur : fenêtre de saisie et écriture
+//   parc-etiquettes.js     9. Étiquettes QR par lot : sélection, planches A4 (lot 3, §15.6)
 //   parc-fiche.js          5. Écran #/equipement/<id> : fiche   7. Enregistrement des écrans
 // Les fichiers suivants complètent l'objet : Object.assign(Parc, (() => { … return { … }; })()).
 // Une fonction dont un autre fichier du module a besoin est rangée dans Parc.interne (usage

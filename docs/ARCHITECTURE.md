@@ -1385,8 +1385,9 @@ sans heures de fonctionnement, habilitation échue et à renouveler…). Nouveau
 (3 équipements dont un A, avec pannes, heures connues).
 
 ### 15.13 Tests du lot 3
-Un fichier par sujet : `test_socle_lot3.py`, `test_regles_lot3.py` (règles pures, dont les
-indicateurs de 3 équipements comparés à un calcul Python indépendant sur les CSV),
+Un fichier par sujet : `test_socle_lot3.py`, `test_regles_indicateurs.py` (règles des indicateurs,
+dont 3 équipements comparés à un calcul Python indépendant sur les CSV), `test_regles_lot3.py`
+(règles des contrôles, de l'équipe et du planning),
 `test_equipe.py`, `test_controles.py`, `test_planning.py`, `test_etiquettes.py`,
 `test_indicateurs.py`, `test_rapport.py`, `test_accueil_lot3.py`, `test_recette_lot3.py` (recette de
 bout en bout en modes serveur et démo, profils, design 1440 et 375 px) ; `test_performance.py`

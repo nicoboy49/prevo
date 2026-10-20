@@ -385,6 +385,18 @@ class TestStockageDossier(CasNavigateur):
                 self.assertEqual(erreur["nom"], "ErreurStockage")
         self.assertIsNone(self.lister_opfs("documents"))                    # rien n'a été créé
 
+    def test_documents_html_acceptes_lot3(self):
+        # Lot 3 (ARCHITECTURE.md §15.1) : le rapport mensuel figé est un document « .html » ;
+        # « .htm » reste refusé, et un rapport n'est jamais écrasé.
+        self.choisir_dossier()
+        page_html = "<!doctype html><title>Rapport</title>".encode("utf-8")
+        self.assertEqual(self.reussir("ecrireDocument", "rapport-mensuel-2026-09.html", {"__blob": list(page_html)}),
+                         "rapport-mensuel-2026-09.html")
+        self.assertEqual(self.lire_opfs("documents/rapport-mensuel-2026-09.html"), page_html)
+        erreur = self.echouer("ecrireDocument", "rapport-mensuel-2026-09.html", {"__blob": [1]})
+        self.assertIn("existe déjà", erreur["message"])
+        self.assertEqual(self.echouer("ecrireDocument", "page.htm", {"__blob": [1]})["nom"], "ErreurStockage")
+
     # -- sauvegardes -----------------------------------------------------------------------
 
     def test_sauvegarde_quotidienne_a_la_premiere_ecriture_du_jour(self):

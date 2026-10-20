@@ -1,5 +1,5 @@
 'use strict';
-// Parc (4/4) — fiche d'un équipement (#/equipement/<id>) : consignation, fiche technique (dont la
+// Parc (5/5) — fiche d'un équipement (#/equipement/<id>) : consignation, fiche technique (dont la
 // valeur de remplacement), QR code, compteurs et leurs relevés, gammes préventives et leur état,
 // sous-équipements, pièces liées, historiques OT et DI, désactivation et réactivation ; puis
 // l'enregistrement des écrans du module auprès d'App (ARCHITECTURE.md §8, §14.2 et §14.6).

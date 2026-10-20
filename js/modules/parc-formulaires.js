@@ -1,5 +1,5 @@
 'use strict';
-// Parc (3/4) — formulaires : fenêtre de création et de modification d'une localisation (ouverte
+// Parc (3/5) — formulaires : fenêtre de création et de modification d'une localisation (ouverte
 // depuis le parc), écrans #/equipement/nouveau et #/equipement/<id>/modifier (responsable),
 // fenêtre « Saisir un relevé » d'un compteur (technicien et responsable, ouverte depuis la fiche)
 // (ARCHITECTURE.md §8, §10, §14.2 et §14.6). Complète l'objet Parc.

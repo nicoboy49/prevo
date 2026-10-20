@@ -30,17 +30,22 @@ IGNORES = [
 ]
 NON_IGNORES = ["donnees/demo/equipements.csv", "donnees/.gitkeep", "brief-gmao.md"]
 
-# Ordre exact des scripts js/modules/ dans index.html : RECOPIE de docs/ARCHITECTURE.md §14.2
-# (« Découpage des modules (D28) et ordre de chargement »). Le contrat et ce test changent ensemble.
+# Ordre exact des scripts js/modules/ dans index.html : RECOPIE de docs/ARCHITECTURE.md §15.1
+# (ordre du lot 3, qui complète celui du §14.2). Le contrat et ce test changent ensemble.
 ORDRE_MODULES = [
     "apropos.js", "accueil.js", "causes-frequentes.js",
-    "parc-regles.js", "parc-arbre.js", "parc-formulaires.js", "parc-fiche.js",
+    "parc-regles.js", "parc-arbre.js", "parc-formulaires.js", "parc-etiquettes.js", "parc-fiche.js",
     "demandes-regles.js", "demandes-ecritures.js", "demandes-signaler.js", "demandes-liste.js", "demandes-fiche.js",
     "ordres-regles.js", "ordres-ecritures.js", "ordres-liste.js", "ordres-fiche.js", "ordres-onglets.js",
     "ordres-pieces.js", "ordres-impression.js",
     "preventif-regles.js", "preventif-ecritures.js", "preventif-ecrans.js", "preventif-calendrier.js",
     "magasin-regles.js", "magasin-ecritures.js", "magasin-articles.js", "magasin-mouvements.js", "magasin-achats.js",
-    "parametres.js",
+    "equipe-regles.js", "equipe-ecritures.js", "equipe-ecrans.js",
+    "controles-regles.js", "controles-ecritures.js", "controles-ecrans.js",
+    "planning-regles.js", "planning-ecritures.js", "planning-ecrans.js",
+    "indicateurs-regles.js", "indicateurs-graphiques.js", "indicateurs-ecrans.js",
+    "rapport-contenu.js", "rapport-ecrans.js",
+    "parametres.js", "parametres-codes.js",
 ]
 LIGNES_MAX_MODULE = 700   # décision D28 : aucun fichier de js/modules/ au-delà
 
@@ -75,7 +80,7 @@ class TestLicences(unittest.TestCase):
         texte = lire("js/lib/LICENCES.txt")
         attendus = [
             "PapaParse 5.7.0", "qrcode-generator 2.0.4", "jsQR 1.4.0", "JSZip 3.10.2",
-            "Apache ECharts 5.6.0", "Sora", "MIT License", "Apache License",
+            "Apache ECharts 5.5.1", "Sora", "MIT License", "Apache License",
             "Version 2.0", "The Apache Software Foundation", "SIL OPEN FONT LICENSE", "pako",
         ]
         for attendu in attendus:

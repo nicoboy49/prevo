@@ -62,6 +62,7 @@ const App = (() => {
   let pretDejaMarque = false;
   let preventifDejaMarque = false; // performance.mark('prevo:preventif') posée une seule fois
   let promesseScriptDemo = null;
+  let promesseEcharts = null;        // chargement à la demande d'ECharts (lot 3)
   let resoudreProfil = null;       // fonction qui termine l'écran de profil en cours
   let resoudreBaseVide = null;     // fonction qui termine l'écran « base vide » en cours
   const alertesCoque = [];         // bandeaux à montrer dans la coque (ex. verrou du dossier)
@@ -240,6 +241,27 @@ const App = (() => {
       });
     }
     return promesseScriptDemo;
+  }
+
+  // ECharts (js/lib/echarts.min.js, ≈ 1 Mo) n'est jamais chargé au démarrage : il est injecté à la
+  // première ouverture des Indicateurs ou d'un rapport (lot 3, ARCHITECTURE.md §15.1). Même mécanisme
+  // que le jeu de démo : une balise <script>, compatible file://. Un échec permet un nouvel essai.
+  function chargerEcharts() {
+    if (typeof echarts !== 'undefined') return Promise.resolve(echarts);
+    if (!promesseEcharts) {
+      promesseEcharts = new Promise((resoudre, rejeter) => {
+        const script = document.createElement('script');
+        script.src = 'js/lib/echarts.min.js';
+        script.onload = () => resoudre(echarts);
+        script.onerror = () => {
+          promesseEcharts = null;
+          script.remove();
+          rejeter(new Error('La bibliothèque des graphiques (js/lib/echarts.min.js) n\'a pas pu être chargée.'));
+        };
+        document.head.appendChild(script);
+      });
+    }
+    return promesseEcharts;
   }
 
   // ===========================================================================================
@@ -837,10 +859,19 @@ const App = (() => {
   }
 
   /** Texte du QR d'une fiche équipement : URL réseau en mode serveur, sinon « GMAO:<id> ». */
+  // Lot 3 (§15.1) : l'adresse choisie pour les étiquettes (paramètre adresse_qr) passe avant la
+  // première adresse détectée ; une valeur qui n'est pas une adresse http(s) est ignorée.
   function urlFicheEquipement(id) {
     if (mode !== 'serveur') return 'GMAO:' + id;
-    const base = adressesReseau[0] || (location.protocol + '//' + location.host + '/');
+    const choisie = String(Donnees.parametre('adresse_qr', '') || '').trim();
+    const base = (/^https?:\/\/\S+$/i.test(choisie) ? choisie : '')
+      || adressesReseau[0] || (location.protocol + '//' + location.host + '/');
     return base.replace(/\/+$/, '') + '/#/equipement/' + encodeURIComponent(id);
+  }
+
+  /** Adresses réseau du PC (mode serveur ; liste vide sinon) : une copie, pour le choix de l'adresse des QR. */
+  function adressesDuReseau() {
+    return mode === 'serveur' ? adressesReseau.slice() : [];
   }
 
   // ===========================================================================================
@@ -943,7 +974,9 @@ const App = (() => {
     estDemandeur,
     libelleProfil: () => libelleAffiche(profil),
     urlFicheEquipement,
+    adressesReseau: adressesDuReseau,
     chargerScriptDemo,
+    chargerEcharts,
     changerProfil,
     exporterZip,
     signalerErreur,

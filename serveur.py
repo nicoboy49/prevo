@@ -114,6 +114,7 @@ TYPES_DOCUMENTS = {
     'pdf': 'application/pdf',
     'txt': 'text/plain; charset=utf-8',
     'csv': 'text/csv; charset=utf-8',
+    'html': 'text/html; charset=utf-8',     # rapport mensuel figé (lot 3, ARCHITECTURE.md §15.1), servi en bac à sable
     'doc': 'application/msword',
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'xls': 'application/vnd.ms-excel',

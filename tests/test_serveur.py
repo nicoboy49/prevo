@@ -458,11 +458,12 @@ class TestApiServeur(CasAvecServeur):
         self.assertEqual(self.lire_fichier(self.chemin_donnee('documents', 'rapport.pdf')), b'v1')
 
     def test_document_extension_ou_nom_interdit_400(self):
-        for nom in ('page.html', 'image.svg', 'script.js', 'sans-extension', 'CON.txt',
+        # « page.html » est accepté depuis le lot 3 (rapport mensuel figé, §15.1) : « .htm » reste refusé.
+        for nom in ('page.htm', 'image.svg', 'script.js', 'sans-extension', 'CON.txt',
                     '-tiret.jpg', 'a%20b.jpg', 'a..b.jpg', 'x' * 130 + '.jpg', '%C3%A9t%C3%A9.jpg'):
             with self.subTest(nom=nom):
                 self.assertEqual(self.requete('PUT', '/api/documents/' + nom, b'<b>x</b>').statut, 400)
-        self.assertEqual(os.listdir(self.chemin_donnee('documents')).count('page.html'), 0)
+        self.assertEqual(os.listdir(self.chemin_donnee('documents')).count('page.htm'), 0)
 
     def test_document_absent_404(self):
         self.assertEqual(self.requete('GET', '/api/documents/absent.png').statut, 404)

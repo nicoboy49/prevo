@@ -1,5 +1,5 @@
 'use strict';
-// Parc (2/4) — écran #/parc : arborescence site › atelier › ligne › équipement, recherche, case
+// Parc (2/5) — écran #/parc : arborescence site › atelier › ligne › équipement, recherche, case
 // « inactifs », boutons de localisation pour le responsable (ARCHITECTURE.md §8 et §14.2).
 // Complète l'objet Parc.
 
