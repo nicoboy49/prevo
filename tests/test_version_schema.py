@@ -81,10 +81,16 @@ class CasServeurV1(CasNavigateur):
     """Serveur de test sur le jeu de démo, dont parametres.csv est celui du lot 1 (version_schema = 1)."""
 
     def ouvrir_application_v1(self, serveur, route="#/accueil"):
-        shutil.copyfile(str(PARAMETRES_V1), str(serveur.dossier / "parametres.csv"))
+        # Depuis T28, le DÉMARRAGE de l'application fait lui-même le passage au format 2 (js/app.js ;
+        # testé dans tests/test_preventif.py, famille « demarrage »). Pour tester ici l'appel
+        # explicite sur une base au format 1, l'application est ouverte (jeu de démo, déjà au format 2 :
+        # rien n'est fait), puis le parametres.csv du lot 1 est installé et relu par la page.
         preregler_profil(self.contexte, "responsable")
         self.page.goto(serveur.url + "/" + route)
         attendre_pret(self.page)
+        self.assertEqual(self.sauvegardes(serveur, "*_avant-format-v2"), [])
+        shutil.copyfile(str(PARAMETRES_V1), str(serveur.dossier / "parametres.csv"))
+        self.page.evaluate("Donnees.rechargerTable('parametres')")
         self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "1")
         return self.page
 

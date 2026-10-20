@@ -157,10 +157,13 @@ const Preventif = (() => {
     return ot.origine === 'préventif' || texte(ot.gamme_id) !== '' || /^préventif/.test(texte(ot.type));
   }
 
-  /** Premier OT ouvert (plus petit identifiant) de chaque gamme : Map gamme_id → OT. */
-  function otsOuvertsParGamme() {
+  /**
+   * Premier OT ouvert (plus petit identifiant) de chaque gamme : Map gamme_id → OT.
+   * lignesOt : lignes d'OT à lire (ex. les lignes fraîches d'une fonction de mutation), sinon le cache.
+   */
+  function otsOuvertsParGamme(lignesOt) {
     const parGamme = new Map();
-    Donnees.lignes('ordres_travail').forEach((ot) => {
+    (lignesOt || Donnees.lignes('ordres_travail')).forEach((ot) => {
       if (!texte(ot.gamme_id) || !estOuvert(ot)) return;
       const actuel = parGamme.get(ot.gamme_id);
       if (!actuel || ot.id < actuel.id) parGamme.set(ot.gamme_id, ot);
@@ -430,6 +433,7 @@ const Preventif = (() => {
       HORIZON_BIENTOT_JOURS,
       texte, nombre, arrondi, estDateIso, ajouterJours, joursEntre, lundiDe, dateDuJour,
       estOuvert, estOtPreventif, contexteCalcul, evaluerGamme, estUniteHeure, heuresParJour, echeanceEstimee,
+      otsOuvertsParGamme, nombreDeSemaines,
     },
   };
 })();

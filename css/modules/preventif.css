@@ -1,4 +1,113 @@
 /* Prévo — mise en page propre au module Préventif (js/modules/preventif-*.js, ARCHITECTURE.md §14.3) :
    liste des gammes, fiche et éditeur de check-list, calendrier sur 12 semaines.
    Uniquement des variables de la charte (css/style.css) : aucune couleur codée en dur.
-   FICHIER D'ATTENTE (tâche T24), vide : la tâche T28 le remplace. */
+   Sommaire : 1 liste des gammes · 2 fiche et formulaire · 3 check-list · 4 calendrier · 5 téléphone. */
+
+/* =========================================================================================
+   1. Liste des gammes (#/preventif) : tableau sur grand écran, cartes sur téléphone
+   ========================================================================================= */
+
+.pv-onglets .barre-onglets { margin-bottom: 1rem; }
+.pv-compteur { margin: 0 0 .6rem; }
+.pv-liste-tableau { padding: 8px 10px; }
+.pv-liste-tableau .table th, .pv-liste-tableau .table td { padding-left: .45rem; padding-right: .45rem; vertical-align: top; }
+/* Six colonnes dans la largeur de la carte : les en-têtes peuvent passer à la ligne. */
+.pv-liste-tableau .table th { white-space: normal; }
+.pv-liste-tableau .table th .tri { text-align: left; }
+.pv-liste-tableau .pv-col-gamme { min-width: 10rem; }
+.pv-liste-tableau .pv-col-statut { min-width: 9rem; }
+.pv-liste-cartes { display: none; }
+.pv-id { color: var(--muted); font-size: .875rem; white-space: nowrap; }
+.pv-sous { display: block; font-size: .875rem; color: var(--texte-2); }
+.pv-raison { display: block; margin-top: .25rem; font-size: .875rem; color: var(--texte-2); }
+.pv-estimee { color: var(--muted); font-size: .875rem; }
+.pv-liste-cartes .carte-titre a { display: inline-flex; align-items: center; min-height: var(--tactile); }
+
+/* =========================================================================================
+   2. Fiche d'une gamme et formulaire
+   ========================================================================================= */
+
+.pv-fiche h1 { overflow-wrap: anywhere; }
+.pv-numero { color: var(--texte-2); font-weight: 800; margin-right: .35rem; white-space: nowrap; }
+.pv-badges { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; margin-top: .6rem; color: var(--texte-2); }
+.pv-badges .pv-raison { display: inline; margin: 0; font-size: .9375rem; }
+.pv-fiche-grille { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 18px; align-items: start; }
+.pv-fiche-grille > .pv-ots { grid-column: 1 / -1; }
+.pv-fiche-grille > .carte { margin: 0; }
+.pv-texte { white-space: pre-line; }
+.pv-formulaire .actions { margin-top: .4rem; }
+
+/* =========================================================================================
+   3. Check-list d'une gamme : liste numérotée, boutons ↑ ↓ Modifier Supprimer, ajout
+   ========================================================================================= */
+
+.pv-operations { list-style: none; margin: 0; padding: 0; }
+/* Numéro et texte sur une ligne, boutons dessous : la carte est étroite (colonne de droite de la fiche). */
+.pv-operation {
+  display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: .4rem .8rem; align-items: center;
+  padding: .55rem 0; border-bottom: 1px solid var(--trait);
+}
+.pv-operation:last-child { border-bottom: 0; }
+.pv-rang {
+  width: 2rem; height: 2rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--teinte-bleu); color: var(--texte-bleu); font-weight: 800; font-size: .875rem;
+}
+.pv-operation-texte { min-width: 0; overflow-wrap: anywhere; }
+.pv-operation-texte .operation { display: block; color: var(--texte); }
+.pv-operation-texte .attendu { display: block; font-size: .875rem; color: var(--muted); }
+.pv-operation-actions { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: .3rem; }
+.pv-operation-actions .btn-icone { font-size: 1.25rem; font-weight: 800; }
+.pv-ajout-operation { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--trait-2); }
+.pv-ajout-operation > .champ:first-child { flex: 3 1 260px; }
+.pv-ajout-operation > .btn { flex: 0 0 auto; }
+.pv-ajout-operation > .erreur-champ { flex: 1 1 100%; margin: 0; }
+
+/* =========================================================================================
+   4. Calendrier : une ligne par semaine (lundi → dimanche)
+   ========================================================================================= */
+
+.pv-legende { margin: 0 0 .8rem; }
+.pv-calendrier { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.pv-semaine {
+  display: grid; grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr); gap: .4rem 1rem;
+  padding: 12px 16px; border-radius: 16px; background: var(--carte); border: 1px solid var(--trait);
+}
+.pv-semaine-courante { border-color: var(--bord-bleu-fort); box-shadow: inset 4px 0 0 var(--bleu); }
+.pv-semaine-tete { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; align-self: start; }
+.pv-semaine-tete b { color: var(--fort); }
+.pv-semaine-dates { color: var(--texte-2); font-size: .9375rem; }
+.pv-rien { margin: 0; color: var(--muted); align-self: center; }
+.pv-elements { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.pv-element {
+  display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) auto; gap: .2rem .8rem; align-items: center;
+  padding: .35rem 0; border-bottom: 1px solid var(--trait);
+}
+.pv-element:last-child { border-bottom: 0; }
+.pv-date { color: var(--texte-2); font-variant-numeric: tabular-nums; }
+.pv-quoi { min-width: 0; overflow-wrap: anywhere; }
+.pv-quoi b { color: var(--fort); margin-right: .3rem; }
+.pv-marques { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .3rem .4rem; }
+.pv-lien-ot { font-weight: 700; white-space: nowrap; }
+.pv-en-retard .pv-date { color: var(--texte-rouge); font-weight: 700; }
+
+/* =========================================================================================
+   5. Téléphone et tablette : une colonne, cartes à la place du tableau, zones tactiles de 48 px
+   ========================================================================================= */
+
+@media (max-width: 1099px) {
+  .pv-fiche-grille { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .pv-liste-tableau { display: none; }
+  .pv-liste-cartes { display: flex; }
+  .pv-liste-cartes .carte-titre a { min-height: 48px; }
+  .pv-filtres select { flex: 1 1 140px; min-width: 0; }
+  .pv-operation-actions { grid-column: 1 / -1; }
+  .pv-operation-actions .btn:not(.btn-icone) { flex: 1 1 0; padding-left: .6rem; padding-right: .6rem; }
+  .pv-ajout-operation > .champ:first-child, .pv-ajout-operation > .champ, .pv-ajout-operation > .btn { flex: 1 1 100%; }
+  .pv-semaine { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; }
+  .pv-element { grid-template-columns: minmax(0, 1fr); gap: .15rem; }
+  .pv-marques { justify-content: flex-start; }
+  .pv-lien-ot, .pv-quoi a { display: inline-flex; align-items: center; min-height: 48px; }
+}

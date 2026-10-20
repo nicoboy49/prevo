@@ -568,9 +568,10 @@ class TestListe(CasOrdres):
     def test_liste_filtres_liens_accueil_tri_et_export_csv(self):
         page = self.page
         with ServeurPrevo() as serveur:
-            ordres = lire_csv(serveur.dossier, "ordres_travail.csv")
             aujourdhui = datetime.date.today().isoformat()
             self.ouvrir(serveur, "#/ot")
+            # Lu APRÈS l'ouverture : celle d'un responsable génère d'abord les OT préventifs échus (RG5, T28).
+            ordres = lire_csv(serveur.dossier, "ordres_travail.csv")
             # Par défaut : les OT ouverts
             ouverts = sorted(o["id"] for o in ordres if ot_ouvert(o))
             self.assertEqual(sorted(self.ids_affiches()), ouverts)
@@ -667,8 +668,9 @@ class TestListe(CasOrdres):
     def test_technicien_mes_ot_par_defaut_et_actions_limitees(self):
         page = self.page
         with ServeurPrevo() as serveur:
-            ordres = lire_csv(serveur.dossier, "ordres_travail.csv")
             self.ouvrir(serveur, "#/ot", profil="technicien", technicien_id="TEC-0002")
+            # Lu APRÈS l'ouverture : celle d'un technicien génère d'abord les OT préventifs échus (RG5, T28).
+            ordres = lire_csv(serveur.dossier, "ordres_travail.csv")
             self.assertEqual(page.input_value("#ot-filtre-technicien"), "TEC-0002")
             self.assertIn("Mes OT", page.inner_text("#ot-filtre-technicien option[value='TEC-0002']"))
             attendus = sorted(o["id"] for o in ordres if ot_ouvert(o) and o["technicien_id"] == "TEC-0002")

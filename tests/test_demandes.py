@@ -359,8 +359,9 @@ class TestServeurDecisions(CasDemandes):
         preregler_profil(self.contexte, "responsable")
         page = self.page
         with ServeurPrevo() as serveur:
-            ot_attendu = prochain_identifiant(serveur.dossier / "ordres_travail.csv", "OT")
             self.ouvrir(serveur, "#/accueil")
+            # Lu APRÈS l'ouverture : celle d'un responsable génère d'abord les OT préventifs échus (RG5, T28).
+            ot_attendu = prochain_identifiant(serveur.dossier / "ordres_travail.csv", "OT")
             di = page.evaluate("""Demandes.creer({ equipement_id: 'EQ-0005', symptome: 'Fuite à la garniture',
                 impact: 'dégradé', description: 'Flaque sous la pompe.', demandeur: 'Lucie Martin' })""")
             self.aller("#/di/" + di, ".di-panneau-decision")

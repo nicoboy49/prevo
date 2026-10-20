@@ -5,9 +5,11 @@
 //   1. page servie en http(s) et serveur Prévo qui répond → mode serveur ;
 //      sinon écran de démarrage : dossier (File System Access), dossier précédent, démo, CSV déposés ;
 //   2. chargement des 22 tables ; base vide (serveur ou dossier) → « Partir des données de démo »
-//      ou « Créer une base vide » ;
+//      ou « Créer une base vide » ; puis passage des fichiers au format courant (version_schema,
+//      sauvegarde « avant-format-v2 » d'abord), avant toute autre écriture ;
 //   3. profil (mémorisé sur le poste) ; la route demandée avant (QR scanné) est gardée ;
-//   4. coque (menu, barre du bas, bandeaux) et premier écran → <html data-etat="pret">.
+//   4. technicien ou responsable : génération des OT préventifs échus (RG5) → marque prevo:preventif ;
+//   5. coque (menu, barre du bas, bandeaux) et premier écran → <html data-etat="pret">.
 // États lus par les tests : data-etat = 'chargement' | 'demarrage' | 'profil' | 'pret'.
 //
 // Contrat des écrans (les modules de js/modules/ appellent App.ecran) :
@@ -58,6 +60,7 @@ const App = (() => {
   let saisieEnCours = false;
   let numeroAffichage = 0;         // pour ignorer un affichage dépassé par un autre
   let pretDejaMarque = false;
+  let preventifDejaMarque = false; // performance.mark('prevo:preventif') posée une seule fois
   let promesseScriptDemo = null;
   let resoudreProfil = null;       // fonction qui termine l'écran de profil en cours
   let resoudreBaseVide = null;     // fonction qui termine l'écran « base vide » en cours
@@ -256,6 +259,7 @@ const App = (() => {
       await remplirBaseVide(choix);
       await Donnees.chargerTout();
     }
+    await passerAuFormatCourant();               // avant TOUTE autre écriture, pour tous les profils
 
     if (mode === 'serveur') {
       try {
@@ -270,8 +274,54 @@ const App = (() => {
     let profilChoisi = lireProfilMemorise();
     if (!profilValable(profilChoisi)) profilChoisi = await demanderProfil(false);
     appliquerProfil(profilChoisi);
+    const otPreventifs = await genererPreventifAOuverture();
     Donnees.demarrerSurveillance();
     await ouvrirCoque();
+    if (otPreventifs.length) UI.toast(Preventif.texteGeneration(otPreventifs.length) + '.', 'succes');
+  }
+
+  // Format des fichiers (ARCHITECTURE.md §14.1) : une fois les tables chargées, pour tous les profils
+  // et AVANT toute autre écriture, parametres.version_schema passe au format courant, juste après une
+  // sauvegarde « avant-format-v2 » (Donnees.mettreAJourVersionSchema, sans effet si c'est déjà fait).
+  // Sauvegarde impossible : erreur signalée et bandeau dans la coque, la version reste inchangée,
+  // l'application reste utilisable et le passage sera retenté à la prochaine ouverture.
+  async function passerAuFormatCourant() {
+    try {
+      await Donnees.mettreAJourVersionSchema();
+    } catch (erreur) {
+      signalerErreur(erreur, 'passage au format ' + Schema.version + ' des fichiers');
+      alertesCoque.push(UI.bandeau('attention', UI.html`<b>Les fichiers n'ont pas pu passer au format ${Schema.version}.</b>
+        ${(erreur && erreur.message) || ''}`));
+    }
+  }
+
+  // RG5 (ARCHITECTURE.md §14.3) : à l'ouverture, un technicien ou un responsable (jamais un demandeur)
+  // génère les OT des gammes échues. Renvoie les identifiants des OT créés ; une erreur est signalée et
+  // l'application reste utilisable (le bouton « Générer les OT échus » et la prochaine ouverture
+  // réessaieront). La marque performance « prevo:preventif » est posée quand l'étape est finie
+  // (aussi pour un demandeur, pour qui il n'y a rien à faire : la mesure a toujours son repère).
+  //
+  // Choix : la génération se fait AVANT le premier écran et l'état « pret » (la marque
+  // prevo:preventif précède donc prevo:pret). Ainsi le premier écran (accueil : préventifs de la
+  // semaine) montre déjà les OT du jour, aucune écriture ne court sous les doigts de l'utilisateur
+  // (pas de réaffichage surprise, pas de conflit avec sa première action), et un autre poste ouvert
+  // juste après lit des fichiers déjà à jour. Le coût est faible : sans gamme échue (presque toutes
+  // les ouvertures), le contrôle se fait en mémoire, sans aucune écriture ; sinon deux écritures
+  // (ordres_travail puis ot_operations) et le journal, une fois par jour et par gamme.
+  async function genererPreventifAOuverture() {
+    let crees = [];
+    if ((estTechnicien() || estResponsable()) && typeof Preventif !== 'undefined') {
+      try {
+        crees = await Preventif.genererOTEchus();
+      } catch (erreur) {
+        signalerErreur(erreur, 'génération des OT préventifs à l\'ouverture');
+      }
+    }
+    if (!preventifDejaMarque && window.performance && typeof performance.mark === 'function') {
+      preventifDejaMarque = true;
+      performance.mark('prevo:preventif');
+    }
+    return crees;
   }
 
   function demanderBaseVide() {
@@ -289,6 +339,9 @@ const App = (() => {
       Object.assign(contenus, StockageDemo.decalerDates(DEMO_DONNEES.tables, DEMO_DONNEES.dateReference));
     } else {
       Schema.nomsTables().forEach((nomTable) => { contenus[nomTable] = Donnees.csv.serialiser(nomTable, []); });
+      // Une base neuve est écrite au format courant : pas de sauvegarde « avant-format-v2 » inutile
+      // au premier démarrage (ARCHITECTURE.md §14.1).
+      contenus.parametres = Donnees.csv.serialiser('parametres', [{ cle: 'version_schema', valeur: String(Schema.version) }]);
     }
     for (const nomTable of Schema.nomsTables()) {
       if (contenus[nomTable]) await adaptateur.enregistrer(nomTable, contenus[nomTable], null);
