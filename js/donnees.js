@@ -98,6 +98,20 @@ const Donnees = (() => {
     return valeur === null || valeur === undefined ? '' : String(valeur);
   }
 
+  // Document à afficher (lot 3, correction de relecture). Un document « .html » (rapport mensuel figé)
+  // n'est jamais ouvert tel quel hors du serveur (qui le sert avec « Content-Security-Policy:
+  // sandbox ») : il est placé dans une page enveloppe, à l'intérieur d'un cadre isolé SANS scripts
+  // (iframe sandbox), pour qu'aucun script qu'il contiendrait ne s'exécute. Les autres types sont
+  // rendus tels quels.
+  async function documentAffichable(nom, blob) {
+    if (!blob || !/\.html$/i.test(enTexte(nom))) return blob;
+    const echapper = (texte) => texte.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const page = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + echapper(nom) + '</title>'
+      + '<style>html,body{margin:0;height:100%;background:#fff}iframe{border:0;display:block;width:100%;height:100%}</style>'
+      + '</head><body><iframe sandbox="allow-modals" title="' + echapper(nom) + '" srcdoc="' + echapper(await blob.text()) + '"></iframe></body></html>';
+    return new Blob([page], { type: 'text/html;charset=utf-8' });
+  }
+
   // Vérifie qu'un jour existe vraiment (pas de 31/02) et renvoie 'AAAA-MM-JJ', sinon null.
   function dateIsoSiValide(annee, mois, jour) {
     const a = Number(annee);
@@ -1486,6 +1500,7 @@ const Donnees = (() => {
     aujourdhui: aujourdhui,
     maintenant: maintenant,
     normaliser: normaliser,
+    documentAffichable: documentAffichable,
     // 3. CSV
     csv: csv,
     // 4. Chargement, mutation, journal, rafraîchissement

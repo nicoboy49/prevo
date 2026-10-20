@@ -208,6 +208,32 @@ class TestSocleDemo(CasNavigateur):
         self.assertEqual(self.page.evaluate("App.adressesReseau()"), [])
         self.assertEqual(self.page.evaluate("App.urlFicheEquipement('EQ-0005')"), "GMAO:EQ-0005")
 
+    def test_document_html_isole_en_demo_aucun_script_execute(self):
+        # Correction de relecture : hors serveur, un document .html ouvert par Prévo ne doit
+        # exécuter aucun script (page enveloppe + cadre isolé sans scripts).
+        # Le navigateur dit qu'il a bloqué le script du cadre isolé : c'est la preuve attendue.
+        self.autoriser_erreur("Blocked script execution")
+        preregler_profil(self.contexte, "responsable", "Responsable")
+        self.page.goto(url_fichier("index.html"))
+        self.page.click("#btn-demo")
+        attendre_pret(self.page)
+        resultat = self.page.evaluate("""async () => {
+            const piege = '<p id="texte">Rapport</p><script>window.top.__piege = 1; document.title = "PIEGE";</' + 'script>';
+            await App.adaptateur.ecrireDocument('rapport-piege.html', new Blob([piege], { type: 'text/html' }));
+            const adresse = await App.adaptateur.urlDocument('rapport-piege.html');
+            const page = new DOMParser().parseFromString(await (await fetch(adresse)).text(), 'text/html');
+            const cadre = document.createElement('iframe');
+            cadre.src = adresse;
+            await new Promise((resoudre) => { cadre.onload = resoudre; document.body.appendChild(cadre); });
+            await new Promise((resoudre) => setTimeout(resoudre, 300));
+            return { scripts: page.scripts.length, sandbox: page.querySelector('iframe').getAttribute('sandbox'),
+                     piege: window.__piege === undefined ? null : window.__piege,
+                     titre: page.title, srcdoc: page.querySelector('iframe').getAttribute('srcdoc').includes('Rapport') };
+        }""")
+        self.assertEqual(resultat, {"scripts": 0, "sandbox": "allow-modals", "piege": None,
+                                    "titre": "rapport-piege.html", "srcdoc": True})
+        self.assertTrue(any("Blocked script execution" in erreur for erreur in self.erreurs_console), self.erreurs_console)
+
 
 if __name__ == "__main__":
     unittest.main()

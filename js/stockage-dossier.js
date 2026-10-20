@@ -765,7 +765,8 @@ const StockageDossier = (() => {
       if (urlsDocuments.has(nom)) { return urlsDocuments.get(nom); }
       const blob = await lireDocument(nom);
       if (!blob) { return null; }
-      const url = URL.createObjectURL(blob);
+      // Un document .html est isolé (aucun script ne s'y exécute) : Donnees.documentAffichable.
+      const url = URL.createObjectURL(await Donnees.documentAffichable(nom, blob));
       urlsDocuments.set(nom, url);
       return url;
     }

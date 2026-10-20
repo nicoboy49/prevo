@@ -397,6 +397,29 @@ class TestStockageDossier(CasNavigateur):
         self.assertIn("existe déjà", erreur["message"])
         self.assertEqual(self.echouer("ecrireDocument", "page.htm", {"__blob": [1]})["nom"], "ErreurStockage")
 
+    def test_documents_html_ouverts_sans_executer_leurs_scripts(self):
+        # Correction de relecture (lot 3) : l'URL d'un document .html est une page enveloppe qui
+        # l'affiche dans un cadre isolé SANS scripts ; les autres documents restent tels quels.
+        self.autoriser_erreur("Blocked script execution")      # le navigateur dit qu'il a bloqué le script
+        self.choisir_dossier()
+        piege = b'<p>Rapport</p><script>window.top.__piege = 1;</script>'
+        self.reussir("ecrireDocument", "rapport-piege.html", {"__blob": list(piege)})
+        url = self.reussir("urlDocument", "rapport-piege.html")
+        resultat = self.page.evaluate("""async (adresse) => {
+            const page = new DOMParser().parseFromString(await (await fetch(adresse)).text(), 'text/html');
+            const cadre = document.createElement('iframe');
+            cadre.src = adresse;
+            await new Promise((resoudre) => { cadre.onload = resoudre; document.body.appendChild(cadre); });
+            await new Promise((resoudre) => setTimeout(resoudre, 300));
+            return { scripts: page.scripts.length, sandbox: page.querySelector('iframe').getAttribute('sandbox'),
+                     piege: window.__piege === undefined ? null : window.__piege }; }""", url)
+        self.assertEqual(resultat, {"scripts": 0, "sandbox": "allow-modals", "piege": None})
+        self.assertTrue(any("Blocked script execution" in erreur for erreur in self.erreurs_console), self.erreurs_console)
+        png = b"\x89PNG\r\n\x1a\n" + bytes(range(20))
+        self.reussir("ecrireDocument", "photo-x.png", {"__blob": list(png)})
+        url_png = self.reussir("urlDocument", "photo-x.png")
+        self.assertEqual(self.page.evaluate("async (a) => Array.from(new Uint8Array(await (await fetch(a)).arrayBuffer()))", url_png), list(png))
+
     # -- sauvegardes -----------------------------------------------------------------------
 
     def test_sauvegarde_quotidienne_a_la_premiere_ecriture_du_jour(self):

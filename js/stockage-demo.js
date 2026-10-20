@@ -226,7 +226,8 @@ const StockageDemo = (() => {
       verifierNomDocument(nom);
       if (urlsDocuments.has(nom)) { return urlsDocuments.get(nom); }
       if (!documents.has(nom)) { return null; }
-      const url = URL.createObjectURL(documents.get(nom));
+      // Un document .html est isolé (aucun script ne s'y exécute) : Donnees.documentAffichable.
+      const url = URL.createObjectURL(await Donnees.documentAffichable(nom, documents.get(nom)));
       urlsDocuments.set(nom, url);
       return url;
     }
