@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Tests de serveur.py (API du §7 de docs/ARCHITECTURE.md).
+"""Tests de serveur.py (API du §7 et liste blanche des fichiers servis du §14.7 de
+docs/ARCHITECTURE.md ; les tests de la liste blanche ont « liste_blanche » dans leur nom).
 
 Chaque classe lance le vrai serveur dans un sous-processus, sur un port libre et avec un
 dossier de données TEMPORAIRE (jamais donnees/ réel), puis l'arrête et efface le dossier.
@@ -81,16 +82,17 @@ class Reponse:
 class ServeurLance:
     """serveur.py lancé dans un sous-processus, avec lecture continue de sa console."""
 
-    def __init__(self, dossier_donnees=None, port=None, script=SCRIPT_SERVEUR):
+    def __init__(self, dossier_donnees=None, port=None, script=SCRIPT_SERVEUR, options=()):
         self.dossier_donnees = dossier_donnees
         self.port_demande = port or port_libre()
         self.script = script
+        self.options = list(options)        # options en plus, ex. ['--servir-tests']
         self.lignes = []
         self.port = None
 
     def demarrer(self):
         commande = [sys.executable, self.script, '--sans-navigateur',
-                    '--port', str(self.port_demande)]
+                    '--port', str(self.port_demande)] + self.options
         if self.dossier_donnees:
             commande += ['--donnees', self.dossier_donnees]
         environnement = dict(os.environ, PYTHONIOENCODING='utf-8')
@@ -167,6 +169,8 @@ class ServeurLance:
 class CasAvecServeur(unittest.TestCase):
     """Classe de base : un serveur et un dossier temporaire par classe de tests."""
 
+    OPTIONS_SERVEUR = ()                # à redéfinir : options en plus, ex. ('--servir-tests',)
+
     def preparer_donnees(self_ou_classe, dossier_donnees):
         """À redéfinir : fichiers à créer AVANT le lancement du serveur."""
 
@@ -176,7 +180,7 @@ class CasAvecServeur(unittest.TestCase):
         cls.donnees = os.path.join(cls.dossier_temporaire, 'donnees')
         cls.preparer_donnees(cls, cls.donnees)
         cls.empreinte_serveur_py = empreinte_fichier(SCRIPT_SERVEUR)
-        cls.serveur = ServeurLance(cls.donnees).demarrer()
+        cls.serveur = ServeurLance(cls.donnees, options=cls.OPTIONS_SERVEUR).demarrer()
 
     @classmethod
     def tearDownClass(cls):
@@ -200,6 +204,27 @@ class CasAvecServeur(unittest.TestCase):
     def lire_fichier(self, chemin):
         with open(chemin, 'rb') as fichier:
             return fichier.read()
+
+    # Liste blanche (§14.7) : vérifications communes aux classes qui lancent le vrai projet.
+
+    def verifier_non_servi(self, chemin):
+        """GET chemin → 404 « Fichier introuvable. », sans aucun octet du fichier du projet."""
+        reponse = self.requete('GET', chemin)
+        self.assertEqual(reponse.statut, 404, 'GET %s → %d' % (chemin, reponse.statut))
+        self.assertEqual(reponse.json(), {'erreur': 'Fichier introuvable.'})
+        fichier = os.path.join(DOSSIER_PROJET, *chemin.lstrip('/').split('/'))
+        if os.path.isfile(fichier):
+            debut = self.lire_fichier(fichier)[:64]
+            if debut:
+                self.assertNotIn(debut, reponse.corps)
+
+    def verifier_servi(self, chemin, fichier, type_attendu):
+        """GET chemin → 200, le bon type MIME et exactement les octets du fichier du projet."""
+        reponse = self.requete('GET', chemin)
+        self.assertEqual(reponse.statut, 200, 'GET %s → %d' % (chemin, reponse.statut))
+        self.assertEqual(reponse.entetes['content-type'], type_attendu)
+        self.assertEqual(reponse.entetes['cache-control'], 'no-cache')
+        self.assertEqual(reponse.corps, self.lire_fichier(os.path.join(DOSSIER_PROJET, fichier)))
 
     def fichiers_temporaires_restants(self):
         restants = []
@@ -289,7 +314,7 @@ class TestApiServeur(CasAvecServeur):
             connexion.close()
 
     def test_aucune_entete_cors(self):
-        for chemin in ('/api/ping', '/api/versions', '/serveur.py'):
+        for chemin in ('/api/ping', '/api/versions', '/index.html', '/serveur.py'):
             reponse = self.requete('GET', chemin, entetes={'Origin': 'http://evil.example'})
             self.assertFalse([nom for nom in reponse.entetes if nom.startswith('access-control')])
 
@@ -612,12 +637,67 @@ class TestApiServeur(CasAvecServeur):
 
     # --- Fichiers statiques et journal console ------------------------------
 
-    def test_statique_serveur_py_public(self):
+    def test_liste_blanche_serveur_py_non_servi(self):
+        """Lot 2 (§14.7) : serveur.py n'est plus public (il l'était au lot 1)."""
         reponse = self.requete('GET', '/serveur.py')
-        self.assertEqual(reponse.statut, 200)
-        self.assertEqual(reponse.corps, self.lire_fichier(SCRIPT_SERVEUR))
-        self.assertEqual(reponse.entetes['cache-control'], 'no-cache')
-        self.assertEqual(reponse.entetes['content-type'], 'text/plain; charset=utf-8')
+        self.assertEqual(reponse.statut, 404)
+        self.assertEqual(reponse.json(), {'erreur': 'Fichier introuvable.'})
+        self.assertNotIn(self.lire_fichier(SCRIPT_SERVEUR)[:64], reponse.corps)
+        self.assertNotIn(b'VERROU_ECRITURE', reponse.corps)
+        self.assertEqual(reponse.entetes['content-type'], 'application/json; charset=utf-8')
+
+    # Fichiers du projet qui ne sont jamais servis (présents ou non sur ce poste).
+    CHEMINS_HORS_LISTE_BLANCHE = (
+        '/brief-gmao.md', '/README.md', '/LISEZMOI.md', '/docs/ARCHITECTURE.md',
+        '/tests/commun.py', '/tests/fixtures/page-vide.html', '/outils/generer_demo.py',
+        '/reference-design/style.css', '/reference-design/absent.txt',
+        '/serveur.py', '/Serveur.py', '/SERVEUR.PY', '/LICENSE', '/Lancer_GMAO.bat', '/lancer.sh',
+        '/css', '/js', '/tests', '/index.html/x', '/favicon.svg/x',
+    )
+
+    def test_liste_blanche_fichiers_du_projet_non_servis(self):
+        for chemin in self.CHEMINS_HORS_LISTE_BLANCHE:
+            with self.subTest(chemin=chemin):
+                self.verifier_non_servi(chemin)
+        # GUIDE.html est servi seulement s'il existe (lot 4) : absent → 404.
+        if not os.path.exists(os.path.join(DOSSIER_PROJET, 'GUIDE.html')):
+            self.verifier_non_servi('/GUIDE.html')
+
+    def test_liste_blanche_fichier_cache_refuse(self):
+        # « .gitattributes » commence par « . » : refusé avant même la liste blanche (400, §7).
+        reponse = self.requete('GET', '/.gitattributes')
+        self.assertTrue(400 <= reponse.statut < 500, reponse.statut)
+        self.assertEqual(set(reponse.json()), {'erreur'})
+        chemin = os.path.join(DOSSIER_PROJET, '.gitattributes')
+        if os.path.isfile(chemin):
+            self.assertNotIn(self.lire_fichier(chemin)[:64], reponse.corps)
+
+    FICHIERS_LISTE_BLANCHE = (
+        ('/', 'index.html', 'text/html; charset=utf-8'),
+        ('/index.html', 'index.html', 'text/html; charset=utf-8'),
+        ('/favicon.svg', 'favicon.svg', 'image/svg+xml; charset=utf-8'),
+        ('/css/style.css', 'css/style.css', 'text/css; charset=utf-8'),
+        ('/js/app.js', 'js/app.js', 'text/javascript; charset=utf-8'),
+        ('/js/lib/LICENCES.txt', 'js/lib/LICENCES.txt', 'text/plain; charset=utf-8'),
+        ('/css/polices/sora-latin-wght-normal.woff2', 'css/polices/sora-latin-wght-normal.woff2',
+         'font/woff2'),
+    )
+
+    def test_liste_blanche_fichiers_de_l_application_servis(self):
+        for chemin, fichier, type_attendu in self.FICHIERS_LISTE_BLANCHE:
+            with self.subTest(chemin=chemin):
+                self.verifier_servi(chemin, fichier, type_attendu)
+        self.assertEqual(self.requete('GET', '/index.html?v=2').statut, 200)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows (NTFS) ne distingue pas les majuscules')
+    def test_liste_blanche_casse_ignoree(self):
+        for chemin, fichier, type_attendu in (
+                ('/Index.html', 'index.html', 'text/html; charset=utf-8'),
+                ('/FAVICON.SVG', 'favicon.svg', 'image/svg+xml; charset=utf-8'),
+                ('/CSS/style.css', 'css/style.css', 'text/css; charset=utf-8'),
+                ('/Js/app.js', 'js/app.js', 'text/javascript; charset=utf-8')):
+            with self.subTest(chemin=chemin):
+                self.verifier_servi(chemin, fichier, type_attendu)
 
     def test_statique_absent_404_et_methode_405(self):
         self.assertEqual(self.requete('GET', '/inexistant-xyz.js').statut, 404)
@@ -695,6 +775,37 @@ class TestSauvegardeQuotidienne(CasAvecServeur):
         finally:
             # Le dossier de données est partagé par la classe : ne rien laisser derrière soi.
             shutil.rmtree(dossier, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Option --servir-tests : tests/fixtures/ servi en plus, et rien d'autre de tests/
+# ---------------------------------------------------------------------------
+
+class TestListeBlancheServirTests(CasAvecServeur):
+
+    OPTIONS_SERVEUR = ('--servir-tests',)
+
+    def test_liste_blanche_servir_tests_sert_les_fixtures(self):
+        self.verifier_servi('/tests/fixtures/page-vide.html', 'tests/fixtures/page-vide.html',
+                            'text/html; charset=utf-8')
+        self.verifier_servi('/tests/fixtures/excel/source.csv', 'tests/fixtures/excel/source.csv',
+                            'text/csv; charset=utf-8')
+        # L'application reste servie normalement.
+        self.verifier_servi('/', 'index.html', 'text/html; charset=utf-8')
+
+    def test_liste_blanche_servir_tests_rien_d_autre_de_tests(self):
+        for chemin in ('/tests/commun.py', '/tests/test_serveur.py', '/tests/fixtures',
+                       '/tests/fixturesx/page-vide.html', '/tests', '/serveur.py',
+                       '/brief-gmao.md', '/outils/generer_demo.py', '/docs/ARCHITECTURE.md'):
+            with self.subTest(chemin=chemin):
+                self.verifier_non_servi(chemin)
+        # Remonter de tests/fixtures/ vers tests/ : refusé (traversée, §7).
+        for chemin in ('/tests/fixtures/../commun.py', '/tests/fixtures/%2e%2e/commun.py',
+                       '/tests/fixtures/..%2Fcommun.py'):
+            with self.subTest(chemin=chemin):
+                reponse = self.requete('GET', chemin)
+                self.assertTrue(400 <= reponse.statut < 500, '%s → %d' % (chemin, reponse.statut))
+                self.assertNotIn(b'import', reponse.corps)
 
 
 # ---------------------------------------------------------------------------
@@ -781,6 +892,11 @@ class TestCopieApplication(unittest.TestCase):
         'donnees/x.csv': b'secret',
         '.git/config': b'[core]',
         '.cache': b'cache',
+        # Liste blanche (§14.7) : GUIDE.html servi s'il existe ; le reste jamais.
+        'GUIDE.html': b'<!doctype html><title>Guide</title>',
+        'brief-gmao.md': b'# BRIEF-PRIVE',
+        'outils/outil.py': b'OUTIL_PRIVE = 1',
+        'tests/fixtures/page.html': b'<!doctype html><title>FIXTURE-PRIVEE</title>',
     }
     TYPES = {
         '/': 'text/html; charset=utf-8',
@@ -828,6 +944,41 @@ class TestCopieApplication(unittest.TestCase):
                 self.assertTrue(400 <= reponse.statut < 500, '%s → %d' % (chemin, reponse.statut))
                 self.assertNotIn(b'secret', reponse.corps)
                 self.assertNotIn(b'[core]', reponse.corps)
+
+    def test_liste_blanche_guide_html_servi_s_il_existe(self):
+        reponse = self.serveur.requete('GET', '/GUIDE.html')
+        self.assertEqual(reponse.statut, 200)
+        self.assertEqual(reponse.corps, self.FICHIERS['GUIDE.html'])
+        self.assertEqual(reponse.entetes['content-type'], 'text/html; charset=utf-8')
+
+    def test_liste_blanche_copie_hors_liste_non_servie(self):
+        # Sans --servir-tests : tests/fixtures/ n'est pas servi non plus.
+        for chemin, marque in (('/brief-gmao.md', b'BRIEF-PRIVE'), ('/outils/outil.py', b'OUTIL_PRIVE'),
+                               ('/tests/fixtures/page.html', b'FIXTURE-PRIVEE'),
+                               ('/serveur.py', b'VERROU_ECRITURE')):
+            with self.subTest(chemin=chemin):
+                reponse = self.serveur.requete('GET', chemin)
+                self.assertEqual(reponse.statut, 404)
+                self.assertNotIn(marque, reponse.corps)
+
+    @unittest.skipUnless(os.name == 'nt', 'jonction de dossiers : propre à Windows')
+    def test_liste_blanche_jonction_vers_un_dossier_non_public(self):
+        """Une jonction rangée dans js/ et qui mène à outils/ ne donne pas accès à outils/ :
+        la liste blanche est recontrôlée sur le chemin résolu."""
+        try:
+            import _winapi
+            creer_jonction = _winapi.CreateJunction
+        except (ImportError, AttributeError):
+            self.skipTest('_winapi.CreateJunction indisponible')
+        jonction = os.path.join(self.dossier_application, 'js', 'raccourci')
+        creer_jonction(os.path.join(self.dossier_application, 'outils'), jonction)
+        try:
+            self.assertTrue(os.path.isfile(os.path.join(jonction, 'outil.py')))
+            reponse = self.serveur.requete('GET', '/js/raccourci/outil.py')
+            self.assertEqual(reponse.statut, 404)
+            self.assertNotIn(b'OUTIL_PRIVE', reponse.corps)
+        finally:
+            os.rmdir(jonction)          # supprime la jonction, jamais le dossier visé
 
     def test_dossier_donnees_par_defaut(self):
         donnees = os.path.join(self.dossier_application, 'donnees')

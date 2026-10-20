@@ -139,7 +139,9 @@ class ServeurPrevo:
         self._fichier_journal = open(self._chemin_journal, "wb")
 
         environnement = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
-        commande = [sys.executable, str(script), "--sans-navigateur",
+        # --servir-tests : les pages de tests/fixtures/ (ex. page-stockage-serveur.html) sont
+        # servies par serveur.py, qui sinon ne sert que l'application (liste blanche, §14.7).
+        commande = [sys.executable, str(script), "--sans-navigateur", "--servir-tests",
                     "--port", str(self.port), "--donnees", str(self.dossier)]
         self._processus = subprocess.Popen(
             commande, cwd=str(RACINE), env=environnement,

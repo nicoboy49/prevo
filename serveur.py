@@ -6,11 +6,17 @@ serveur.py — serveur local de la GMAO « Prévo ».
 Rôle : servir l'application (fichiers HTML/CSS/JS) et une petite API HTTP qui lit et écrit
 les fichiers CSV du dossier de données, les documents (photos, PDF…) et les sauvegardes.
 
-Contrat complet : docs/ARCHITECTURE.md, section 7.
+Fichiers servis (liste blanche) : « / » (= index.html), index.html, favicon.svg, GUIDE.html
+s'il existe, et tout ce qui est sous css/ et js/. Tout le reste du dossier (brief, README,
+docs/, tests/, outils/, serveur.py, lanceurs…) répond 404. L'option --servir-tests sert en
+plus tests/fixtures/ (pages utilisées par les tests automatiques).
+
+Contrat complet : docs/ARCHITECTURE.md, sections 7 et 14.7.
 Contraintes : Python 3.8 minimum, bibliothèque standard seulement, un seul fichier.
 
 Lancement :
     py serveur.py [--port 8080] [--donnees CHEMIN] [--sans-navigateur] [--hote NOM]...
+                  [--servir-tests]
 
 ATTENTION : aucune authentification. Usage sur un réseau local de confiance uniquement.
 """
@@ -121,12 +127,15 @@ TYPES_STATIQUES = {
     'png': 'image/png',
     'pdf': 'application/pdf',
     'txt': 'text/plain; charset=utf-8',
-    'md': 'text/plain; charset=utf-8',
-    'py': 'text/plain; charset=utf-8',
-    'bat': 'text/plain; charset=utf-8',
-    'sh': 'text/plain; charset=utf-8',
 }
 TYPE_PAR_DEFAUT = 'application/octet-stream'
+
+# Liste blanche des fichiers statiques (ARCHITECTURE.md §14.7). Tout le reste répond 404.
+# Les noms sont en minuscules : la comparaison ignore la casse, car Windows (NTFS) ne
+# distingue pas « Index.html » de « index.html » ni « CSS/ » de « css/ ».
+FICHIERS_PUBLICS = ('index.html', 'favicon.svg', 'guide.html')     # à la racine seulement
+DOSSIERS_PUBLICS = (('css',), ('js',))                               # avec tout leur contenu
+DOSSIER_FIXTURES = ('tests', 'fixtures')                             # seulement avec --servir-tests
 
 # Noms réservés de Windows : « CON.txt » ou « nul.pdf » désignent un périphérique, pas un fichier.
 NOMS_RESERVES_WINDOWS = (
@@ -190,12 +199,13 @@ def afficher(texte):
 class Configuration:
     """Réglages du serveur, calculés une fois au démarrage."""
 
-    def __init__(self, dossier_donnees, hotes_supplementaires):
+    def __init__(self, dossier_donnees, hotes_supplementaires, servir_tests=False):
         self.dossier_donnees = os.path.abspath(dossier_donnees)
         self.dossier_documents = os.path.join(self.dossier_donnees, 'documents')
         self.dossier_sauvegardes = os.path.join(self.dossier_donnees, 'sauvegardes')
         self.nom_pc = socket.gethostname().lower()
         self.hotes_supplementaires = [hote.lower().strip() for hote in hotes_supplementaires]
+        self.servir_tests = servir_tests    # --servir-tests : tests/fixtures/ servi en plus
         self.port = None            # renseigné quand le port est trouvé
         # Dossiers jamais servis en statique : le dossier de données choisi et donnees/
         # à côté de serveur.py (même si --donnees pointe ailleurs).
@@ -374,6 +384,35 @@ def chemin_sous(dossier, *morceaux):
         if morceau.startswith('.'):
             raise ErreurHttp(400, 'Chemin refusé.')
     return chemin
+
+
+def commence_par(morceaux, dossier):
+    """Vrai si « morceaux » désigne un fichier SOUS « dossier » (tuple de noms en minuscules).
+
+    (['js', 'lib', 'x.js'], ('js',)) → vrai ; (['js'], ('js',)) → faux (le dossier lui-même).
+    """
+    return len(morceaux) > len(dossier) and tuple(morceaux[:len(dossier)]) == dossier
+
+
+def chemin_public(morceaux, servir_tests):
+    """Vrai si le chemin (morceaux déjà contrôlés par analyser_chemin) est dans la liste blanche.
+
+    servir_tests : vrai avec l'option --servir-tests (tests/fixtures/ servi en plus).
+    """
+    minuscules = [morceau.lower() for morceau in morceaux]
+    if len(minuscules) == 1:
+        return minuscules[0] in FICHIERS_PUBLICS
+    dossiers = DOSSIERS_PUBLICS + ((DOSSIER_FIXTURES,) if servir_tests else ())
+    return any(commence_par(minuscules, dossier) for dossier in dossiers)
+
+
+def morceaux_resolus(chemin, dossier):
+    """Morceaux de « chemin » (déjà résolu par chemin_sous) relatifs à « dossier ».
+
+    Sert à recontrôler la liste blanche APRÈS résolution : un raccourci Windows (jonction,
+    lien) rangé dans js/ ne doit pas permettre de lire un fichier situé ailleurs.
+    """
+    return os.path.relpath(chemin, os.path.realpath(dossier)).split(os.sep)
 
 
 def chemin_table(config, table):
@@ -898,12 +937,19 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     # --- Fichiers statiques ------------------------------------------------
 
     def servir_statique(self, morceaux):
-        """Sert un fichier du dossier de l'application (jamais donnees/ ni les fichiers cachés)."""
+        """Sert un fichier de la liste blanche (index.html, favicon.svg, GUIDE.html, css/, js/ ;
+        tests/fixtures/ avec --servir-tests). Jamais donnees/ ni les fichiers cachés."""
         if morceaux == ['']:
             morceaux = ['index.html']
         if morceaux[0].lower() == 'donnees':
             raise ErreurHttp(403, 'Accès refusé.')
+        servir_tests = self.config.servir_tests
+        # Hors liste blanche : même réponse qu'un fichier absent (on ne dit pas qu'il existe).
+        if not chemin_public(morceaux, servir_tests):
+            raise ErreurHttp(404, 'Fichier introuvable.')
         chemin = chemin_sous(DOSSIER_APPLICATION, *morceaux)
+        if not chemin_public(morceaux_resolus(chemin, DOSSIER_APPLICATION), servir_tests):
+            raise ErreurHttp(404, 'Fichier introuvable.')
         for dossier_interdit in self.config.dossiers_interdits_statique:
             if est_sous_dossier(chemin, dossier_interdit):
                 raise ErreurHttp(403, 'Accès refusé.')
@@ -1005,7 +1051,9 @@ def afficher_accueil(config, port_demande):
 
 
 def lire_arguments(arguments=None):
-    analyseur = argparse.ArgumentParser(description='Serveur local de la GMAO Prévo.')
+    analyseur = argparse.ArgumentParser(
+        description='Serveur local de la GMAO Prévo. Sert index.html, favicon.svg, '
+                    'GUIDE.html, css/ et js/ ; tout autre fichier répond 404.')
     analyseur.add_argument('--port', type=int, default=PORT_PAR_DEFAUT,
                            help='port d\'écoute (défaut 8080 ; le suivant si occupé)')
     analyseur.add_argument('--donnees', default=os.path.join(DOSSIER_APPLICATION, 'donnees'),
@@ -1014,6 +1062,9 @@ def lire_arguments(arguments=None):
                            help='ne pas ouvrir le navigateur au démarrage')
     analyseur.add_argument('--hote', action='append', default=[],
                            help='nom d\'hôte supplémentaire accepté (répétable)')
+    analyseur.add_argument('--servir-tests', action='store_true',
+                           help='servir aussi tests/fixtures/ (pages des tests automatiques ; '
+                                'inutile en usage normal)')
     options = analyseur.parse_args(arguments)
     if not 1 <= options.port <= 65535:
         analyseur.error('le port doit être compris entre 1 et 65535')
@@ -1023,7 +1074,7 @@ def lire_arguments(arguments=None):
 def main(arguments=None):
     preparer_console()
     options = lire_arguments(arguments)
-    config = Configuration(options.donnees, options.hote)
+    config = Configuration(options.donnees, options.hote, options.servir_tests)
     creer_dossiers(config)
     serveur, config.port = demarrer_serveur(options.port, config)
     afficher_accueil(config, options.port)
