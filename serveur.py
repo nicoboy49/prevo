@@ -92,8 +92,17 @@ TABLES = (
 
 # Noms autorisés (re.ASCII : \d et \w ne reconnaissent que les caractères ASCII).
 MOTIF_NOM_DOCUMENT = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', re.ASCII)
+# Nom d'une sauvegarde (mêmes règles que js/stockage-dossier.js) :
+#   AAAA-MM-JJ                               quotidienne
+#   AAAA-MM-JJ_HHMMSS                        manuelle
+#   AAAA-MM-JJ_HHMMSS_avant-restauration     copie de sécurité faite avant une restauration
+#   AAAA-MM-JJ_HHMMSS_avant-format-v<N>      faite juste avant le passage au format N des fichiers
 MOTIF_NOM_SAUVEGARDE = re.compile(
-    r'[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{6}(_avant-restauration)?)?', re.ASCII)
+    r'[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{6}(_avant-restauration|_avant-format-v[0-9]+)?)?', re.ASCII)
+# Motifs acceptés par POST /api/sauvegarde {"motif": "…"} : liste FERMÉE (tout autre motif → 400).
+# Le motif devient la fin du nom de la sauvegarde (« _avant-format-v2 »). Règle générale :
+# « avant-format-v<N> » ; on n'ajoute ici que les versions que Prévo sait vraiment produire.
+MOTIFS_SAUVEGARDE = ('avant-format-v2',)
 
 # Types MIME des documents acceptés (l'extension décide du type, jamais le contenu).
 TYPES_DOCUMENTS = {
@@ -440,6 +449,30 @@ def verifier_nom_document(nom):
 def verifier_nom_sauvegarde(nom):
     if not isinstance(nom, str) or not MOTIF_NOM_SAUVEGARDE.fullmatch(nom):
         raise ErreurHttp(400, 'Nom de sauvegarde invalide.')
+
+
+def lire_motif_sauvegarde(corps):
+    """Motif demandé dans le corps de POST /api/sauvegarde, ou None (sauvegarde manuelle).
+
+    Corps vide (ou seulement des blancs) : None, comme avant. Sinon le corps doit être un objet
+    JSON ; sa clé « motif », si elle est présente, doit être un des MOTIFS_SAUVEGARDE (400 sinon :
+    jamais un texte libre, qui pourrait contenir « ../ » ou un nom réservé).
+    """
+    if not corps.strip():
+        return None
+    try:
+        demande = json.loads(corps.decode('utf-8'))
+    except (UnicodeDecodeError, ValueError):
+        raise ErreurHttp(400, 'Corps JSON invalide.')
+    if not isinstance(demande, dict):
+        raise ErreurHttp(400, 'Corps JSON invalide.')
+    motif = demande.get('motif')
+    if motif is None:
+        return None
+    if not isinstance(motif, str) or motif not in MOTIFS_SAUVEGARDE:
+        raise ErreurHttp(400, 'Motif de sauvegarde refusé. Motifs acceptés : %s.'
+                         % ', '.join(MOTIFS_SAUVEGARDE))
+    return motif
 
 
 # ---------------------------------------------------------------------------
@@ -814,7 +847,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                 ('GET', 'info'): self.api_info,
                 ('GET', 'versions'): self.api_versions,
                 ('GET', 'sauvegardes'): self.api_sauvegardes,
-                ('POST', 'sauvegarde'): self.api_sauvegarde,
+                ('POST', 'sauvegarde'): lambda: self.api_sauvegarde(corps),
                 ('POST', 'restauration'): lambda: self.api_restauration(corps),
             }
             fonction = routes_simples.get((methode, morceaux[0]))
@@ -914,9 +947,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         else:
             raise ErreurHttp(405, 'Méthode non autorisée.')
 
-    def api_sauvegarde(self):
+    def api_sauvegarde(self, corps):
+        """Sauvegarde manuelle (corps vide) ou automatique avec un motif de la liste fermée
+        (corps {"motif": "avant-format-v2"} → nom « AAAA-MM-JJ_HHMMSS_avant-format-v2 »)."""
+        motif = lire_motif_sauvegarde(corps)            # 400 si motif refusé, avant toute écriture
+        suffixe = '_' + motif if motif else ''
         with VERROU_ECRITURE:
-            nom = nouveau_nom_horodate(self.config)
+            nom = nouveau_nom_horodate(self.config, suffixe)
+            verifier_nom_sauvegarde(nom)                # sécurité : le nom reste dans les règles
             copier_tables_dans_sauvegarde(self.config, nom)
         self.envoyer_json(200, {'sauvegarde': nom})
 

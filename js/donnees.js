@@ -1392,6 +1392,78 @@ const Donnees = (() => {
     return fichiers;
   }
 
+  // --- 4.11 Passage au format courant : version_schema (ARCHITECTURE.md §14.1) ---------------
+  // Décision de Nicolas (2026-10-20) : JUSTE AVANT que parametres.version_schema passe de 1 à 2
+  // sur une base existante, Prévo fait une sauvegarde automatique (« AAAA-MM-JJ_HHMMSS_avant-format-v2 »),
+  // restaurable depuis Paramètres comme les autres. À appeler au démarrage, après chargerTout()
+  // et avant toute autre écriture (câblage dans js/app.js : tâche ultérieure).
+
+  const CLE_VERSION_SCHEMA = 'version_schema';
+  const VERSION_SCHEMA_PAR_DEFAUT = 1;       // clé absente ou illisible : fichiers du lot 1 (format 1)
+
+  // Version du format lue dans une valeur de parametres.csv (absente ou illisible → 1).
+  function versionSchemaDe(valeur) {
+    const lue = nombre(valeur);
+    return lue === null ? VERSION_SCHEMA_PAR_DEFAUT : lue;
+  }
+
+  // Vrai si le stockage sait faire une sauvegarde (serveur, dossier). La démo n'en a pas :
+  // son sauvegarder() lève toujours « indisponible » (rien n'est enregistré).
+  function stockageSaitSauvegarder() {
+    return adaptateurActif.mode !== 'demo' && typeof adaptateurActif.sauvegarder === 'function';
+  }
+
+  // Message d'une erreur sans point final (pour l'insérer au milieu d'une phrase).
+  function messageSansPointFinal(erreur) {
+    return String((erreur && erreur.message) || 'erreur inconnue').replace(/[\s.]+$/, '');
+  }
+
+  // Met parametres.version_schema à Schema.version, après une sauvegarde automatique.
+  // Idempotente : si la version est déjà à jour (ou plus récente), rien n'est fait.
+  // Renvoie { misAJour, sauvegarde } :
+  //   - misAJour   : vrai si CET appel a écrit la nouvelle version dans parametres.csv ;
+  //   - sauvegarde : nom de la sauvegarde faite juste avant, ou null (aucune, ou démo).
+  // Sauvegarde impossible → ErreurStockage, et la version n'est PAS changée : la mise à jour
+  // (sauvegarde comprise) sera retentée à la prochaine ouverture.
+  // Deux postes ouverts en même temps sur une base en format 1 peuvent faire chacun leur
+  // sauvegarde : sans gravité (deux copies identiques). Un seul écrit la version : l'autre, en
+  // conflit, relit parametres.csv (lignes fraîches) et n'écrit rien car la version y est déjà.
+  async function mettreAJourVersionSchema() {
+    verifierInitialise();
+    const versionCible = Schema.version;
+    if (!cache.has('parametres')) { await rechargerTable('parametres'); }
+    if (baseVide() || versionSchemaDe(parametre(CLE_VERSION_SCHEMA, '')) >= versionCible) {
+      return { misAJour: false, sauvegarde: null };      // base pas encore créée, ou déjà à jour
+    }
+
+    // 1. La sauvegarde d'abord : sans elle, on ne touche à rien.
+    let sauvegarde = null;
+    if (stockageSaitSauvegarder()) {
+      try {
+        sauvegarde = await adaptateurActif.sauvegarder('avant-format-v' + versionCible);
+      } catch (erreur) {
+        throw new ErreurStockage('Sauvegarde avant le passage au format ' + versionCible + ' impossible : '
+          + messageSansPointFinal(erreur) + ' ; la mise à jour sera retentée à la prochaine ouverture.', erreur);
+      }
+    }
+
+    // 2. Puis la version, décidée sur les lignes FRAÎCHES (modifier relit la table en cas de
+    // conflit et réapplique la fonction) : rien n'est écrit si un autre poste l'a déjà fait.
+    const action = 'passage au format ' + versionCible + ' du fichier ; '
+      + (sauvegarde ? 'sauvegarde ' + sauvegarde + ' faite juste avant' : 'sans sauvegarde (démo)');
+    const misAJour = await modifier('parametres', (lignesParametres) => {
+      const ligne = lignesParametres.find((l) => l.cle === CLE_VERSION_SCHEMA);
+      if (ligne && versionSchemaDe(ligne.valeur) >= versionCible) { return false; }
+      if (ligne) {
+        ligne.valeur = String(versionCible);
+      } else {
+        lignesParametres.push({ cle: CLE_VERSION_SCHEMA, valeur: String(versionCible) });
+      }
+      return true;
+    }, { action: action });
+    return { misAJour: misAJour, sauvegarde: sauvegarde };
+  }
+
   return {
     // 1. Erreurs
     ErreurConflit: ErreurConflit,
@@ -1424,6 +1496,7 @@ const Donnees = (() => {
     demarrerSurveillance: demarrerSurveillance,
     arreterSurveillance: arreterSurveillance,
     instantane: instantane,
+    mettreAJourVersionSchema: mettreAJourVersionSchema,
     evenements: evenements,
     statistiques: statistiques,
   };

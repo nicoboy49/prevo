@@ -111,12 +111,14 @@ const Parametres = (() => {
   // ===========================================================================================
 
   // Nom d'une sauvegarde → texte lisible. « 2026-10-19 » : quotidienne ; « 2026-10-19_153012 » :
-  // manuelle ; « …_avant-restauration » : copie de sécurité faite avant une restauration.
+  // manuelle ; « …_avant-restauration » : copie de sécurité faite avant une restauration ;
+  // « …_avant-format-v2 » : sauvegarde automatique faite juste avant le passage au format 2.
   function decrireSauvegarde(nom) {
-    const lu = /^(\d{4}-\d{2}-\d{2})(?:_(\d{2})(\d{2})(\d{2}))?(_avant-restauration)?$/.exec(nom);
+    const lu = /^(\d{4}-\d{2}-\d{2})(?:_(\d{2})(\d{2})(\d{2}))?(?:(_avant-restauration)|_avant-format-v(\d+))?$/.exec(nom);
     if (!lu) return { date: nom, type: 'Sauvegarde', ton: 'neutre' };
     const date = UI.dateFr(lu[1]) + (lu[2] ? ' à ' + lu[2] + ':' + lu[3] + ':' + lu[4] : '');
     if (lu[5]) return { date: date, type: 'Copie de sécurité', ton: 'attention' };
+    if (lu[6]) return { date: date, type: 'Avant format ' + Number(lu[6]), ton: 'info' };
     return lu[2] ? { date: date, type: 'Manuelle', ton: 'info' } : { date: date, type: 'Quotidienne', ton: 'neutre' };
   }
 
@@ -272,7 +274,8 @@ const Parametres = (() => {
         ${sauvegardes.indisponible ? '' : UI.html`<button type="button" class="btn btn-primaire" id="btn-sauvegarder">${UI.icone('sauvegarde')}Sauvegarder maintenant</button>`}
       </div>
       <p class="note sauvegardes-explication">Prévo copie tous les fichiers une fois par jour, avant la première modification de la journée.
-        Vous pouvez aussi sauvegarder à la demande, par exemple avant un gros changement.</p>
+        Vous pouvez aussi sauvegarder à la demande, par exemple avant un gros changement.
+        Avant de passer les fichiers à un nouveau format, Prévo fait aussi une sauvegarde (« Avant format … »).</p>
       ${sauvegardes.indisponible
         ? bandeauHtml('info', sauvegardes.indisponible)
         : UI.html`<div id="zone-sauvegardes"></div>`}

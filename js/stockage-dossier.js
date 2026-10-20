@@ -42,7 +42,12 @@ const StockageDossier = (() => {
 
   // Mêmes règles que serveur.py (MOTIF_NOM_DOCUMENT, TYPES_DOCUMENTS, NOMS_RESERVES_WINDOWS…).
   const MOTIF_NOM_DOCUMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-  const MOTIF_NOM_SAUVEGARDE = /^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration)?)?$/;
+  // Nom de sauvegarde : AAAA-MM-JJ (quotidienne), AAAA-MM-JJ_HHMMSS (manuelle), suivi au besoin de
+  // « _avant-restauration » (copie de sécurité) ou « _avant-format-v<N> » (juste avant le passage
+  // au format N). En JavaScript, \d ne reconnaît que 0-9, comme [0-9] côté serveur.
+  const MOTIF_NOM_SAUVEGARDE = /^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+)?)?$/;
+  // Motifs acceptés par sauvegarder(motif) : liste FERMÉE, la même que MOTIFS_SAUVEGARDE de serveur.py.
+  const MOTIFS_SAUVEGARDE = ['avant-format-v2'];
   const EXTENSIONS_DOCUMENTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'doc', 'docx',
     'xls', 'xlsx', 'odt', 'ods'];
   const NOMS_RESERVES_WINDOWS = ['con', 'prn', 'aux', 'nul']
@@ -337,6 +342,16 @@ const StockageDossier = (() => {
     }
   }
 
+  // Motif facultatif de sauvegarder(motif) → suffixe du nom ('' sans motif). Tout motif hors de la
+  // liste fermée est refusé (comme le serveur répond 400) : jamais un texte libre dans un nom de dossier.
+  function suffixeDuMotif(motif) {
+    if (motif === undefined || motif === null || motif === '') { return ''; }
+    if (typeof motif !== 'string' || MOTIFS_SAUVEGARDE.indexOf(motif) === -1) {
+      throw erreurStockage('Motif de sauvegarde refusé. Motifs acceptés : ' + MOTIFS_SAUVEGARDE.join(', ') + '.');
+    }
+    return '_' + motif;
+  }
+
   // ===========================================================================
   // 2. Mémorisation du dossier choisi (IndexedDB)
   // ===========================================================================
@@ -553,9 +568,13 @@ const StockageDossier = (() => {
       await creerSauvegarde(nom, tables);
     }
 
-    async function sauvegarder() {
+    // motif (facultatif) : 'avant-format-v2' → « AAAA-MM-JJ_HHMMSS_avant-format-v2 » ; sans motif,
+    // sauvegarde manuelle « AAAA-MM-JJ_HHMMSS ». Motif hors liste → ErreurStockage, rien n'est écrit.
+    async function sauvegarder(motif) {
+      const suffixe = suffixeDuMotif(motif);
       return enSerie(async function () {
-        const nom = await nouveauNomHorodate('');
+        const nom = await nouveauNomHorodate(suffixe);
+        verifierNomSauvegarde(nom);                     // sécurité : le nom reste dans les règles
         await creerSauvegarde(nom, await tablesPresentes(racine));
         return nom;
       });

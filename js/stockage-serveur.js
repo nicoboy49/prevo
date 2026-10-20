@@ -226,11 +226,17 @@ const StockageServeur = (() => {
       return urlDocument(nom);
     }
 
-    async function sauvegarder() {
+    // motif (facultatif) : mot de la liste fermée du serveur (ex. 'avant-format-v2'), ajouté à la fin
+    // du nom (« AAAA-MM-JJ_HHMMSS_avant-format-v2 ») ; motif refusé → ErreurStockage (400).
+    // Sans motif : corps vide, sauvegarde manuelle « AAAA-MM-JJ_HHMMSS » comme avant.
+    async function sauvegarder(motif) {
+      const avecMotif = motif !== undefined && motif !== null && motif !== '';
       const reponse = await appelerOuErreur(base + '/api/sauvegarde', {
         method: 'POST',
-        headers: entetesEcriture,
-        body: '',
+        headers: avecMotif
+          ? Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, entetesEcriture)
+          : entetesEcriture,
+        body: avecMotif ? JSON.stringify({ motif: motif }) : '',
       });
       const donnees = await lireJson(reponse);
       return donnees.sauvegarde;
