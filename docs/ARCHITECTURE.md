@@ -757,8 +757,8 @@ serveur (§7) en réduisent la fréquence sans l'annuler.
 
 ## 13. Points d'extension (lots suivants)
 
-Le lot 2 est réalisé (§14). Restent, dans l'ordre prévu :
-- **Lot 3** : indicateurs (E11, ECharts déjà présent dans `js/lib/`), planning (E6), étiquettes QR
+Le lot 2 est réalisé (§14) ; le contrat du lot 3 est au §15. Restent, dans l'ordre prévu :
+- **Lot 3** (contrat au §15) : indicateurs (E11, ECharts déjà présent dans `js/lib/`), planning (E6), étiquettes QR
   par lot, contrôles réglementaires (E10, RG9), écran des habilitations, rapport mensuel (réutilise
   `.sans-impression`). Nouveaux modules en préfixes de fichiers (`indicateurs-*.js`…), 700 lignes au
   plus par fichier, ajoutés à l'ordre du §14.2 **et** à `ORDRE_MODULES` de `tests/test_depot.py`.
@@ -1091,3 +1091,303 @@ CHEMIN` pour l'écrire ailleurs) ; avec `--volume`, l'historique est de 24 mois 
 jeu contient aussi des achats ; il crée déjà l'OT de chaque gamme échue à sa date de référence (le
 test de performance « vieillit » donc 20 gammes pour mesurer une vraie génération). Chiffres et
 options au §11.
+
+## 15. Contrat du lot 3 (CDC validé le 2026-10-20 : D33–D49)
+
+Écrit avant le code du lot 3 ; il sera relu et aligné sur le code à la fin du lot (mentions « écart
+retenu : … », comme au §14). Les définitions métier du CDC sont recopiées ici : ce contrat se suffit.
+
+### 15.1 Socle
+- **Format CSV inchangé** : `Schema.version` reste 2, aucun champ ajouté. Nouvelles clés de
+  `parametres.csv` (lues par `Donnees.parametre(cle, defaut)`, absentes → défaut) :
+  `seuil_remplacement_pct` (`50`), `adresse_qr` (`''` : première adresse réseau détectée),
+  `rapports_mensuels` (`''` : noms des rapports figés, séparés par des virgules, du plus ancien au
+  plus récent).
+- **Documents** : l'extension `html` s'ajoute aux types acceptés (`TYPES_DOCUMENTS` de `serveur.py`,
+  `text/html; charset=utf-8` ; `EXTENSIONS_DOCUMENTS` de `js/stockage-dossier.js`). Comme tout
+  document, il est servi avec `Content-Security-Policy: sandbox` (aucun script ne s'y exécute).
+- **ECharts à la demande** : `App.chargerEcharts()` → promesse de l'objet `echarts` ; injecte
+  `js/lib/echarts.min.js` une seule fois par une balise `<script>` (même mécanisme que
+  `App.chargerScriptDemo`, compatible `file://`) ; échec → promesse rejetée avec un message clair, et
+  nouvel essai possible. `index.html` ne référence **pas** ECharts : `typeof echarts === 'undefined'`
+  à l'état « prêt ».
+- `App.adressesReseau()` → copie de la liste des adresses réseau (mode serveur, sinon `[]`).
+  `App.urlFicheEquipement(id)` prend `adresse_qr` quand elle est renseignée (base `http(s)://…/`),
+  sinon la première adresse détectée (comportement du lot 1).
+- Icônes ajoutées à `UI.icone` (trait, même style) : `planning`, `controles`, `indicateurs`, `equipe`.
+- Menu : « Planning » (ordre 33, icône `planning`), « Contrôles » (ordre 37, `controles`),
+  « Indicateurs » (ordre 50, `indicateurs`), « Équipe » (ordre 85, `equipe`, groupe
+  « Administration », avant Paramètres).
+- **Ordre de chargement** (remplace celui du §14.2 ; `ORDRE_MODULES` de `tests/test_depot.py` change
+  avec lui) :
+  ```
+  apropos.js  accueil.js  causes-frequentes.js
+  parc-regles.js  parc-arbre.js  parc-formulaires.js  parc-etiquettes.js  parc-fiche.js
+  demandes-regles.js  demandes-ecritures.js  demandes-signaler.js  demandes-liste.js  demandes-fiche.js
+  ordres-regles.js  ordres-ecritures.js  ordres-liste.js  ordres-fiche.js  ordres-onglets.js  ordres-pieces.js  ordres-impression.js
+  preventif-regles.js  preventif-ecritures.js  preventif-ecrans.js  preventif-calendrier.js
+  magasin-regles.js  magasin-ecritures.js  magasin-articles.js  magasin-mouvements.js  magasin-achats.js
+  equipe-regles.js  equipe-ecritures.js  equipe-ecrans.js
+  controles-regles.js  controles-ecritures.js  controles-ecrans.js
+  planning-regles.js  planning-ecritures.js  planning-ecrans.js
+  indicateurs-regles.js  indicateurs-graphiques.js  indicateurs-ecrans.js
+  rapport-contenu.js  rapport-ecrans.js
+  parametres.js  parametres-codes.js  (puis js/app.js)
+  ```
+  Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
+  fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
+  `Parametres`. Un seul écouteur `DOMContentLoaded` par module, dans son dernier fichier
+  (`parc-fiche.js` enregistre aussi l'écran des étiquettes ; `parametres.js` garde le sien et appelle
+  `parametres-codes.js` par une fonction relais). Feuilles ajoutées : `css/modules/equipe.css`,
+  `controles.css`, `planning.css`, `indicateurs.css` (onglet Rapports compris), `etiquettes.css`.
+  Toujours 700 lignes au plus par fichier de `js/modules/`.
+- Routes ajoutées (déclarées avant les routes à identifiant, qui excluent `nouveau`) : `#/planning`,
+  `#/controles`, `#/controles/nouveau`, `#/controles/<id>`, `#/indicateurs`, `#/equipe`,
+  `#/equipe/nouveau`, `#/equipe/<id>`, `#/parc/etiquettes`.
+
+### 15.2 Profils (D41, D47)
+
+| Écran | Demandeur | Technicien | Responsable |
+| --- | --- | --- | --- |
+| Indicateurs (+ onglet Rapports), étiquettes | — | — | tout |
+| Planning | — | lecture (sa ligne en tête) | tout |
+| Contrôles | — | lecture | tout |
+| Équipe | — | lecture, **aucun taux horaire** (ni à l'écran ni dans le DOM) | tout |
+| Paramètres (codes, réglages) | — | — | tout |
+
+Route interdite → accueil avec message (§8). Compteurs d'accueil du lot 3 : technicien et responsable.
+
+### 15.3 Indicateurs — règles pures (`indicateurs-regles.js`, objet `Indicateurs`)
+Période = `{ debut, fin }` (dates ISO incluses). Chaque indicateur rend un **résultat** :
+`{ valeur: nombre | null, raison: texte | null, effectif: entier, ots: [id…], exclus: [{ id, raison }] }`
+— `valeur` null ⇒ `raison` non vide (« non calculable : … », « aucune panne sur la période »).
+Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, € 2 décimales).
+- `Indicateurs.periode(code, aujourdhui, du, au)` : `mois`, `mois-precedent`, `3-mois` (3 mois
+  calendaires se terminant aujourd'hui), `12-mois` (défaut : du même jour 12 mois plus tôt + 1 jour à
+  aujourd'hui), `du-au` → `{ debut, fin, libelle }`.
+- **Panne** : OT `correctif immédiat` / `correctif différé`, `arret_production` = 1, statut ≠ `Annulé`.
+  Date de panne = `date_heure` de la DI dont `ot_id` est cet OT (ou `di_id` de l'OT), sinon
+  `date_creation` de l'OT ; la panne compte dans la période qui contient cette date.
+  `Indicateurs.pannes(periode, { equipementId })` → `[{ ot, date, duree (nombre | null), attente }]`.
+- **Temps requis** (`tempsRequis(equipement, periode)`) = `heures_fonct_jour` × jours calendaires de
+  la période comptés à partir de `date_mes` si elle est postérieure au début ; équipement `rebut` ou
+  inactif → exclu ; `heures_fonct_jour` vide ou ≤ 0 → `null`, raison « heures de fonctionnement par
+  jour non renseignées » (**jamais** `heures_fonct_defaut` ici).
+- **Durée d'arrêt** = Σ `duree_arret_h` des pannes (une panne sans durée est listée dans `exclus`).
+- **MTBF** = (temps requis − durée d'arrêt) / nombre de pannes ; 0 panne → `null`, « aucune panne
+  sur la période ».
+- **MTTR** (D36 a) = Σ `duree_arret_h` / nombre de pannes mesurables ; mesurable = clôturée
+  (techniquement ou administrativement) **et** `duree_arret_h` renseignée ; les autres dans `exclus`
+  (« non clôturée », « sans durée d'arrêt ») ; aucune mesurable → `null`.
+- **Disponibilité** = MTBF / (MTBF + MTTR) ; `null` si l'un des deux l'est.
+- **Attente de pièces** (`attentePieces(otId)` → `{ heures, complet }`) : lecture de `journal.csv`
+  (table `ordres_travail`, `id_ligne` = l'OT, triées par `date_heure` puis `id`). Historique complet
+  ⇔ une entrée de création de l'OT existe (action commençant par « création de l'OT » ou
+  « acceptation de DI- »). Attente = Σ des intervalles entre une action « statut X → En attente : m »
+  où `m` commence par « pièce » (casse et accents ignorés) et l'action « statut En attente → Y »
+  suivante (sans sortie : jusqu'à `date_fin`, sinon jusqu'à maintenant) ; plafonnée à `duree_arret_h`.
+  Pour un ensemble de pannes : moyenne sur les pannes mesurables **à historique complet**, avec leur
+  nombre ; aucune → `null` (raison « historique des statuts absent du journal »).
+- **Part du préventif** = heures `ot_temps` datées dans la période des OT `préventif systématique` et
+  `préventif conditionnel` / heures de tous les OT non annulés.
+- **Respect du préventif** : OT `préventif systématique` non annulés avec `gamme_id`, dont la date
+  limite = `date_prevue` + tolérance tombe dans la période ; respecté si clôturé (tech. ou admin.)
+  avec `date_fin` ≤ date limite. Tolérance (jours, arrondie au supérieur, ≥ 1) =
+  `tolerance_preventif_pct` / 100 × période de la gamme : `periodicite_jours` (déclencheur `date`) ou
+  `periodicite_unites` / `heures_fonct_jour` de l'équipement (déclencheur `compteur`, compteur en
+  heures) ; période inconnue → OT exclu (`exclus`). Résultat = respectés / comptés.
+- **OT en retard** : `Accueil.otEnRetard` (lot 1) à la date donnée.
+- **Délai de prise en charge** (`delaisPriseEnCharge(periode)`) : OT dont `date_debut` tombe dans la
+  période ; délai (h) = `date_debut` − (`date_heure` de la DI, sinon `date_creation`) ; par priorité :
+  `{ mediane, partDansLeDelai, effectif }` (délai cible `delai_pN_h` ; P4 : médiane seule).
+- **Coût** : `Ordres.cout(ot)` (RG7, prix actuel des pièces) des OT clôturés, rangé au mois de
+  `date_fin` ; `coutParEquipement(periode)`, `coutsParMois(debutMois, nbMois)`.
+- **Valeur du stock** = Σ `Donnees.stockArticle(id)` × `prix_unitaire` des articles actifs.
+- Agrégats : `parEquipement(equipementId, periode)` → `{ tempsRequis, pannes, dureeArret, mtbf, mttr,
+  disponibilite, attentePieces, cout }` (chacun un résultat) ; `global(periode, { criticite,
+  atelier })` → mêmes clés sur les équipements dont le temps requis est connu (les autres listés dans
+  `exclus`), plus `partPreventif`, `respectPreventif`, `otEnRetard`, `valeurStock`, `delais`.
+  Graphiques : `paretoPannes(periode, 10)`, `paretoArrets(periode, 10)` → `[{ equipementId, valeur,
+  cumulPct }]` ; `heuresParMois(dernierMois, 12)` → `[{ mois, correctif, preventif, autres }]` ;
+  `mtbfMttrCriticiteA(periode)` ; `causes(periode)` → `[{ code, libelle, nombre }]` (codes cause des
+  pannes ; « sans code » à part) ; `chargeCapacite(lundi, 4)` (délègue à `Planning.chargeSemaine`).
+- Performance : un index par équipement / par OT construit une fois par calcul (pas de recherche
+  linéaire dans une boucle) ; budget CS49.
+
+### 15.4 Indicateurs — écran (`indicateurs-graphiques.js`, `indicateurs-ecrans.js`)
+- `#/indicateurs` : `?periode=mois|mois-precedent|3-mois|12-mois|du-au&du=&au=`, `?criticite=`,
+  `?atelier=`, `?onglet=tableau|rapports`. Responsable seul.
+- Bandeau `.instruments` : disponibilité, MTBF, MTTR (« dont attente de pièces : y h (sur n pannes à
+  historique complet) » quand calculable), durée d'arrêt, part et respect du préventif, OT en retard,
+  coût, valeur du stock ; chaque valeur `null` affiche sa raison ; effectifs visibles ; jamais
+  `NaN`, `Infinity`, `undefined`. Encadré « Comprendre » : les définitions du §15.3 en français simple.
+- Tableau par équipement (repère, criticité, pannes, arrêt, MTBF, MTTR, disponibilité, coût), tri
+  par clic, lien vers la fiche.
+- `Indicateurs.graphique(conteneur, { titre, option, colonnes, lignes, nomFichier })` :
+  `await App.chargerEcharts()`, `echarts.init(el, null, { renderer: 'svg' })`, thème `T` de la charte
+  (police Sora, couleurs de séries `#4C7DFF`, `#C4841F`, `#1498B6`, `#8E6CF0`, « autres »
+  `#3A4670` ; couleurs de statut interdites aux séries), légende dès 2 séries, **jamais deux axes
+  de valeurs**, tableau « Voir les valeurs » (`<details>`) sous le graphique, boutons « CSV »
+  (format §3.1 : BOM, `;`, CRLF, point décimal) et « Image » (PNG fond blanc, ×2, obtenu en dessinant le
+  SVG du graphique sur un `<canvas>`). Redimensionnement suivi (`resize`).
+- Graphiques : Pareto du nombre de pannes et Pareto de la durée d'arrêt (top 10, barres, cumul en %
+  en étiquette) ; heures correctif / préventif / autres par mois (12 mois) ; MTBF puis MTTR des
+  équipements A (deux graphiques) ; causes des pannes (barres horizontales) ; charge et capacité par
+  technicien sur 4 semaines (barres de charge, capacité en marque horizontale, même axe en heures).
+- La palette est vérifiée lisible en deutéranopie et protanopie (test : écart de couleur simulé
+  suffisant entre séries d'un même graphique).
+
+### 15.5 Planning (`planning-*.js`, objet `Planning`)
+- Règles : `Planning.lundiDe(dateIso)`, `Planning.joursDeLaSemaine(lundi)` (7 dates ISO, UTC) ;
+  `Planning.ordresDeLaSemaine(lundi)` → OT ni clôturés ni annulés, avec `technicien_id` et
+  `date_prevue` dans la semaine ; `Planning.chargeSemaine(technicienId, lundi)` = Σ `temps_prevu_h`
+  de ces OT pour ce technicien (vide = 0) ; `Planning.semaine(lundi)` → `{ lundi, jours, lignes:
+  [{ technicien, cases: { date: [ot] }, charge, capacite, surcharge }], aPlanifier: [ot] }` (lignes :
+  techniciens actifs par nom ; `aPlanifier` : OT `Préparé` absents de la grille de cette semaine, triés
+  par priorité puis date prévue) ; `surcharge` = charge > `capacite_h_semaine`.
+- Écriture `await Planning.planifier(otId, statutAttendu, technicienId, dateIso)` → `{ statut,
+  avertissements }` : une `Donnees.modifier('ordres_travail')` qui, sur la ligne fraîche, refuse si
+  le statut a changé (« l'OT a changé sur un autre poste »), si le statut n'est ni `Préparé` ni
+  `Planifié` (« préparez d'abord l'OT » pour `Créé`), si le technicien est inactif ; pose
+  `technicien_id` et `date_prevue` ; depuis `Préparé`, contrôle `Ordres.verifierPassage(ligne,
+  'Planifié')` (RG3, pièces) → refus `ErreurValidation` (message de RG3, `piecesManquantes` joint)
+  sinon statut `Planifié`. Journal : « planification : TEC-… le AAAA-MM-JJ (Préparé → Planifié) » ou
+  « replanification : … ». Puis RG8 : `Ordres.verifierHabilitation(equipement, technicienId, date)`
+  → message affiché et `Donnees.journaliser('ordres_travail', otId, 'avertissement habilitation : '
+  + message)` (même texte qu'au lot 1).
+- Écran `#/planning` (`?semaine=AAAA-MM-JJ`, un lundi ; `?technicien=`) : grille lundi → dimanche
+  (samedi et dimanche grisés), une ligne par technicien (« 38 h / 35 h », badge « surcharge » en
+  texte), colonne « À planifier ». Glisser (API HTML5 drag and drop) une carte `Préparé` ou
+  `Planifié` sur une case → `Planning.planifier` ; `En cours` et `En attente` non déplaçables. Refus
+  RG3 → bandeau + bouton « Mettre en attente (motif : pièce) » (même comportement que la fiche OT).
+  **Bouton « Planifier… »** sur chaque carte déplaçable (fenêtre : technicien, date) : même résultat
+  sans glisser (WCAG 2.2, 2.5.7). Technicien : lecture, sa ligne en tête, aucun glisser ni bouton.
+  Téléphone : une liste par jour (pas de grille).
+
+### 15.6 Étiquettes QR (`parc-etiquettes.js`, complète `Parc`)
+- `Parc.FORMATS_ETIQUETTES` = `{ '24': { colonnes: 3, lignes: 8, largeurMm: 70, hauteurMm: 37 },
+  '8': { colonnes: 2, lignes: 4, largeurMm: 105, hauteurMm: 74 } }`.
+- `Parc.equipementsPourEtiquettes({ localisationId, criticite, ids })` → équipements actifs (hors
+  rebut) de la localisation **et de ses sous-localisations**, filtrés, triés par repère.
+- `Parc.planchesEtiquettes(equipements, format, decalage)` → HTML des pages A4 : par étiquette, QR
+  (`UI.qrSvg(App.urlFicheEquipement(id), …)`), **repère en clair** en gros, désignation, nom de
+  l'entreprise ; positions en mm (`@page { size: A4; margin: 0 }`), décalage haut/gauche en mm.
+- Écran `#/parc/etiquettes` (`?localisation=`, `?criticite=`, `?ids=EQ-…,EQ-…`), bouton
+  « Imprimer des étiquettes » dans le Parc : sélection, cases à cocher, format, décalage (mémorisé
+  sur le poste : localStorage `prevo.etiquettes`), aperçu, « Imprimer » (remplit `#impression`, puis
+  `window.print()`). Mode serveur : adresse encodée affichée, avertissement « si l'adresse IP ou le
+  port du PC change, les étiquettes ne mènent plus à la fiche : demandez une adresse fixe pour ce PC
+  (réservation dans la box) », choix parmi `App.adressesReseau()` quand il y en a plusieurs → écrit
+  `adresse_qr` (`Donnees.modifier('parametres')`). Modes dossier et démo : « Le QR contient
+  GMAO:<id>, lisible par la caméra de ce poste ». Responsable seul.
+
+### 15.7 Contrôles réglementaires (`controles-*.js`, objet `Controles`)
+- Règles : `Controles.STATUTS` = `['en retard', 'observations à lever', 'à planifier', 'à jour']` ;
+  `Controles.ajouterMois(dateIso, n)` (même jour, ramené au dernier jour du mois : 31/01 + 1 →
+  28 ou 29/02) ; `Controles.prochaineDate(controle)` = `prochaine_date`, sinon `derniere_date` +
+  `periodicite_mois`, sinon `''` ; `Controles.etat(controle, aujourdhui)` → `{ statut, secondaires,
+  prochaine, joursRestants, raison }` : statut = le premier vrai parmi `en retard` (prochaine <
+  aujourd'hui), `observations à lever` (`observations` non vide et `observations_levees` ≠ 1),
+  `à planifier` (prochaine ≤ aujourd'hui + 30 j, ou prochaine inconnue : raison « date inconnue »),
+  `à jour` ; `secondaires` = les autres états vrais. `Controles.sous30Jours(aujourdhui)` → contrôles
+  d'équipements actifs (hors rebut) dont la prochaine date est inconnue ou ≤ aujourd'hui + 30 j.
+- Écritures (`Donnees.modifier('controles_reglementaires')`, contrôles sur la ligne fraîche) :
+  `verifierControle(valeurs)`, `creerControle(valeurs)`, `modifierControle(id, valeurs)`,
+  `enregistrerRealisation(id, { date, organisme, rapport, observations })` (`derniere_date` = date,
+  `prochaine_date` = `ajouterMois(date, periodicite_mois)`, `observations_levees` = `0` si
+  observations sinon `1` ; date future refusée ; le rapport est un nom de document déjà écrit par
+  `App.adaptateur.ecrireDocument`), `leverObservations(id, { date, commentaire })` (journal
+  « observations levées le … : … »). Jamais de suppression ; aucun OT généré.
+- Écrans : `#/controles` (`?statut=`, `?filtre=30j`, `?equipement=`), `#/controles/nouveau`
+  (`?equipement=`), `#/controles/<id>` (fiche, historique au journal, rapport ouvert par
+  `urlDocument`, OT réglementaires de l'équipement, « Créer un OT » → `#/ot/nouveau?equipement=…&
+  type=réglementaire&titre=…` pré-rempli : `#/ot/nouveau` lit désormais `?type=` et `?titre=`).
+  Carte « Contrôles réglementaires » sur la fiche équipement (technicien et responsable).
+
+### 15.8 Équipe et habilitations (`equipe-*.js`, objet `Equipe`)
+- Règles : `Equipe.etatHabilitation(hab, aujourdhui)` → `{ statut, joursRestants }`, statut ∈
+  `pas encore valable` (obtention future), `échue` (échéance < aujourd'hui), `à renouveler`
+  (échéance ≤ aujourd'hui + 60 j), `valide` (échéance plus lointaine, ou vide : « sans échéance ») ;
+  `Equipe.habilitationsQuiComptent(technicienId)` → pour chaque intitulé (casse et espaces ignorés),
+  la ligne à l'échéance la plus lointaine (vide = la plus lointaine) ; `Equipe.aRenouveler(aujourdhui)`
+  → `[{ technicien, habilitation, etat }]` des techniciens actifs dont une habilitation qui compte est
+  `échue` ou `à renouveler`.
+- Écritures : `verifierTechnicien`, `creerTechnicien`, `modifierTechnicien` (désactivation par
+  `actif` = 0 ; nom obligatoire, taux ≥ 0, capacité 0–80 h), `ajouterHabilitation(technicienId,
+  valeurs)`, `modifierHabilitation(id, valeurs)` (correction), `renouvelerHabilitation(id, {
+  date_obtention, date_echeance })` = **nouvelle ligne** de même intitulé (l'ancienne reste) ;
+  échéance ≥ obtention.
+- Écrans : `#/equipe` (`?filtre=a-renouveler`), `#/equipe/nouveau`, `#/equipe/<id>` (habilitations
+  avec statut, historique). Pour le technicien : lecture, **sans `taux_horaire`** (absent du DOM).
+
+### 15.9 Accueil (lot 3)
+`Accueil.calculerCompteurs()` renvoie en plus `controlesSous30j` (`Controles.sous30Jours`) et
+`habilitationsARenouveler` (`Equipe.aRenouveler`) ; cartes « Contrôles sous 30 j » →
+`#/controles?filtre=30j`, « Habilitations à renouveler » → `#/equipe?filtre=a-renouveler`
+(technicien et responsable). Pour le responsable, bandeau « Figer le rapport de <mois> ? » quand
+`Rapport.moisAProposer(aujourdhui)` renvoie un mois (§15.10), boutons « Figer » et « Plus tard »
+(masqué jusqu'à la prochaine ouverture : sessionStorage).
+
+### 15.10 Rapport mensuel (`rapport-*.js`, objet `Rapport`)
+- `Rapport.donnees(mois 'AAAA-MM', aujourdhui)` (pur) → `{ mois, libelleMois, genereLe, tuiles:
+  [{ cle, libelle, valeur, precedent, anneePrecedente, tendance }], faits, decisions, pareto,
+  heures12Mois, nonCalculables, comprendre }` ; tuiles : disponibilité, coût du mois, part du
+  préventif (mêmes fonctions que §15.3, période = le mois) ; comparaison « non comparable » si le mois
+  comparé commence avant la plus ancienne date de l'historique (première `date_creation` d'OT) ;
+  faits : règles fixes (plus longue panne du mois, équipement le plus souvent en panne, contrôle ou
+  préventif en retard) ; décisions (3 au plus) : équipements dont coût des 12 derniers mois /
+  `valeur_remplacement` ≥ `seuil_remplacement_pct` (« à examiner », jamais « à remplacer » ; sans
+  valeur : « valeur de remplacement non renseignée »), contrôles en retard, articles à commander.
+- `await Rapport.html(mois)` → texte HTML **autonome** : une page A4 (`@page`), styles en ligne, pile
+  de polices du système (pas de police à télécharger), graphiques en **SVG intégré** obtenus par
+  `echarts.init(null, null, { renderer: 'svg', ssr: true, width, height })` puis
+  `renderToSVGString()` ; aucune balise `<script>`, aucun attribut `src`/`href` vers un fichier ou une
+  URL (liens `mailto:` exceptés) ; feux = forme + texte ; encadré « Comprendre » ; « données au
+  JJ/MM/AAAA HH:MM ».
+- `await Rapport.figer(mois)` → nom écrit : `rapport-mensuel-AAAA-MM.html`, ou `…-r2.html`, `-r3`…
+  si le nom figure déjà dans `rapports_mensuels` (jamais d'écrasement : `ecrireDocument` refuse un
+  nom existant) ; puis `rapports_mensuels` complété (`Donnees.modifier('parametres')`) et journal
+  (« rapport mensuel figé : … »).
+- `Rapport.moisAProposer(aujourdhui)` → mois précédent si aucun rapport de ce mois n'est dans
+  `rapports_mensuels` et que l'historique couvre ce mois, sinon `null`.
+- `Rapport.texteCourriel(donnees)` → objet et corps (résumé en texte) ; bouton « Préparer un
+  courriel » = lien `mailto:?subject=…&body=…` (`encodeURIComponent`, corps < 1 800 caractères) ;
+  rien n'est envoyé par Prévo.
+- Onglet « Rapports mensuels » de `#/indicateurs` : liste des rapports figés (ouvrir par
+  `App.adaptateur.urlDocument`, imprimer), « Figer le mois de … » (choix du mois), « Recalculer »
+  (nouvelle révision). Mode démo : le document reste en mémoire, « Télécharger » (`UI.telecharger`)
+  et export ZIP (documents en mémoire, déjà pris par `App.exporterZip`).
+
+### 15.11 Paramètres (`parametres.js`, `parametres-codes.js`)
+- Réglages ajoutés au formulaire : `tolerance_preventif_pct` (0–100), `seuil_remplacement_pct`
+  (1–1000), `priorite_preventif` (P1–P4), `horizon_calendrier_semaines` (1–52),
+  `heures_fonct_defaut` (0–24, gammes compteur seulement). Les deux clés du lot 2 deviennent donc
+  modifiables à l'écran.
+- Carte « Codes de défaillance » : liste par famille ; `Parametres.ajouterCode({ famille, libelle,
+  code })` (code proposé = lettre de la famille S / C / R + numéro suivant sur 2 chiffres,
+  modifiable ; code unique, libellé non vide et unique dans la famille) ;
+  `Parametres.modifierLibelleCode(id, libelle)`. Ni désactivation ni suppression (la table n'a pas
+  de champ `actif`).
+
+### 15.12 Démo (D49)
+Le générateur ajoute ou corrige : contrôles couvrant les 4 statuts à la date de référence (chariot
+élévateur : VGP **6 mois**, « Arrêté du 1er mars 2004 (VGP), art. 23 » ; installations électriques :
+« Code du travail, art. R4226-16 ; arrêté du 26 décembre 2011 ») ; OT planifiés sur les 4 semaines qui
+commencent à la date de référence pour les 4 techniciens, dont une semaine en surcharge ; des OT
+`Préparé` à planifier, dont un sur l'équipement qui exige BR ; une panne clôturée sans
+`duree_arret_h` ; un historique de statuts au journal (création ou acceptation, transitions,
+horodatés de façon cohérente avec les dates de l'OT) pour les pannes des 3 derniers mois, dont une
+panne clôturée qui a attendu une pièce ; les cas du lot 1 et du lot 2 sont conservés (2 équipements
+sans heures de fonctionnement, habilitation échue et à renouveler…). Nouveaux rôles dans
+`demo-scenarios.json` : `controle_en_retard`, `controle_a_planifier`, `controle_observations`,
+`controle_a_jour`, `technicien_surcharge` (+ `semaine_surcharge`), `ot_a_planifier`,
+`ot_a_planifier_br`, `panne_attente_pieces`, `panne_sans_duree`, `equipements_calcul_main`
+(3 équipements dont un A, avec pannes, heures connues).
+
+### 15.13 Tests du lot 3
+Un fichier par sujet : `test_socle_lot3.py`, `test_regles_lot3.py` (règles pures, dont les
+indicateurs de 3 équipements comparés à un calcul Python indépendant sur les CSV),
+`test_equipe.py`, `test_controles.py`, `test_planning.py`, `test_etiquettes.py`,
+`test_indicateurs.py`, `test_rapport.py`, `test_accueil_lot3.py`, `test_recette_lot3.py` (recette de
+bout en bout en modes serveur et démo, profils, design 1440 et 375 px) ; `test_performance.py`
+complété (CS49) ; `test_depot.py` (ordre §15.1, 700 lignes).
