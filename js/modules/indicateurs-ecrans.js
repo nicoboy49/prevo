@@ -191,10 +191,31 @@ Object.assign(Indicateurs, (() => {
     return contenu ? contenu.charAt(0).toUpperCase() + contenu.slice(1) : '';
   }
 
+  const SOURCES_MAX = 40;
+
+  /**
+   * OT sources d'un résultat (D35 : chaque chiffre avec ses OT) : liste repliée « n OT sources », un
+   * lien par OT (40 au plus, puis « et n autres »), et les OT exclus avec leur raison.
+   */
+  function sources(resultat) {
+    const ots = resultat.ots || [];
+    const exclus = (resultat.exclus || []).filter((element) => /^OT-/.test(texte(element.id)));
+    if (!ots.length && !exclus.length) return '';
+    const lien = (id) => UI.html`<a href="#/ot/${encodeURIComponent(id)}">${id}</a>`;
+    const resume = (ots.length ? pluriel(ots.length, 'OT source', 'OT sources') : '')
+      + (ots.length && exclus.length ? ' · ' : '') + (exclus.length ? pluriel(exclus.length, 'OT exclu', 'OT exclus') : '');
+    return UI.html`<details class="indicateurs-sources"><summary>${resume}</summary>
+      ${ots.length ? UI.html`<p>${ots.slice(0, SOURCES_MAX).map((id, rang) => UI.html`${rang ? ', ' : ''}${lien(id)}`)}${ots.length > SOURCES_MAX
+        ? ' et ' + (ots.length - SOURCES_MAX) + ' autres' : ''}</p>` : ''}
+      ${exclus.length ? UI.html`<ul>${exclus.slice(0, SOURCES_MAX).map((element) => UI.html`<li>${lien(element.id)} : ${element.raison}</li>`)}</ul>` : ''}
+    </details>`;
+  }
+
   /** Un instrument : libellé, chiffre (ou tiret et raison), compléments (effectifs). */
   function instrument({ cle, libelle, resultat, format, valeurAffichee, complements, lien }) {
     const calcule = resultat.valeur !== null;
-    const lignes = calcule ? complements.filter(Boolean) : [phrase(resultat.raison)];
+    // Les OT sources (D35) sous chaque chiffre, sauf dans un instrument qui est lui-même un lien.
+    const lignes = (calcule ? complements.filter(Boolean) : [phrase(resultat.raison)]).concat(lien ? [] : [sources(resultat)]).filter(Boolean);
     const contenu = UI.html`<div class="lib">${libelle}</div>
       <div class="chiffre">${calcule ? format(resultat.valeur) : '–'}</div>
       ${lignes.map((ligne) => (UI.estSur(ligne) ? ligne : UI.html`<div class="comp">${ligne}</div>`))}`;
@@ -235,7 +256,7 @@ Object.assign(Indicateurs, (() => {
           + (global.dureeArret.exclus.length ? ' · ' + global.dureeArret.exclus.length + ' sans durée d\'arrêt' : '')] }),
       instrument({ cle: 'part-preventif', libelle: 'Part du préventif', resultat: global.partPreventif, format: formats.pourcentage,
         valeurAffichee: enPourcentage,
-        complements: ['des ' + formats.heures(global.partPreventif.effectif) + ' passées sur la période'] }),
+        complements: [global.partPreventif.note ? global.partPreventif.note + ' sur la période' : ''] }),
       instrument({ cle: 'respect-preventif', libelle: 'Respect du préventif', resultat: preventif, format: formats.pourcentage,
         valeurAffichee: enPourcentage,
         complements: [preventif.note, preventif.exclus.length ? pluriel(preventif.exclus.length, 'OT exclu', 'OT exclus') + ' (date prévue ou périodicité inconnue)' : ''] }),

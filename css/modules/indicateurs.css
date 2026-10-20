@@ -62,3 +62,13 @@
   .indicateurs-exports, .indicateurs-filtres { display: none !important; }
   .indicateurs-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* OT sources d'un instrument (D35) : liste repliée, liens vers les OT, exclus avec leur raison */
+.indicateurs-sources { margin-top: 6px; font-size: .875rem; color: var(--texte-2); }
+.indicateurs-sources summary { cursor: pointer; color: var(--texte-bleu); display: inline-flex; align-items: center; min-height: 32px; }
+.indicateurs-sources p, .indicateurs-sources ul { margin: 4px 0 0; overflow-wrap: anywhere; }
+.indicateurs-sources ul { padding-left: 1.1rem; }
+@media (max-width: 640px) {
+  .indicateurs-sources summary { min-height: var(--tactile); }
+  .indicateurs-sources a { display: inline-flex; align-items: center; min-height: var(--tactile); }
+}

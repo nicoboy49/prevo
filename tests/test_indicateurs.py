@@ -676,5 +676,22 @@ class TestIndicateursDemo(CasIndicateurs):
         self.verifier_png(self.page, "pareto-pannes")
 
 
+class TestSourcesDesIndicateurs(CasNavigateur):
+    """Correction de relecture (D35) : chaque chiffre avec ses OT ; part du préventif en heures."""
+
+    def test_liens_vers_les_ot_sources_et_heures_du_preventif(self):
+        with ServeurPrevo() as serveur:
+            preregler_profil(self.contexte, "responsable", "Responsable")
+            self.page.goto(serveur.url + "/#/indicateurs?periode=12-mois")
+            attendre_pret(self.page)
+            self.page.wait_for_selector("[data-indicateur='mttr'] details.indicateurs-sources")
+            attendu = self.page.evaluate("""() => { const g = Indicateurs.global(Indicateurs.periode('12-mois', Donnees.aujourdhui()), {}, Donnees.aujourdhui());
+                return { mttr: g.mttr.ots.length, exclus: g.mttr.exclus.filter((e) => /^OT-/.test(e.id)).length, note: g.partPreventif.note }; }""")
+            liens = self.page.evaluate("Array.from(document.querySelectorAll(\"[data-indicateur='mttr'] details.indicateurs-sources a[href^='#/ot/']\")).length")
+            self.assertEqual(liens, min(attendu["mttr"], 40) + min(attendu["exclus"], 40))
+            self.assertIn(attendu["note"], self.page.inner_text("[data-indicateur='part-preventif']"))
+            self.assertIn(" h de préventif sur ", attendu["note"])
+
+
 if __name__ == "__main__":
     unittest.main()
