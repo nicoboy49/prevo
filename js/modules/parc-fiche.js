@@ -1,7 +1,7 @@
 'use strict';
 // Parc (5/5) — fiche d'un équipement (#/equipement/<id>) : consignation, fiche technique (dont la
 // valeur de remplacement), QR code, compteurs et leurs relevés, gammes préventives et leur état,
-// sous-équipements, pièces liées, historiques OT et DI, désactivation et réactivation ; puis
+// contrôles réglementaires et leur statut (§15.7), sous-équipements, pièces liées, historiques OT et DI, désactivation et réactivation ; puis
 // l'enregistrement des écrans du module auprès d'App (ARCHITECTURE.md §8, §14.2 et §14.6).
 // Dernier fichier du module : les écrans des fichiers précédents existent déjà.
 
@@ -172,6 +172,31 @@ Object.assign(Parc, (() => {
       <article class="carte parc-preventif">
         <h2>Préventif <span class="badge">${lignes.length}</span></h2>
         ${lignes.length ? UI.html`<ul class="parc-gammes">${lignes}</ul>` : UI.html`<p class="muted">Aucune gamme préventive sur cet équipement.</p>`}
+      </article>`;
+  }
+
+  // Carte « Contrôles réglementaires » (ARCHITECTURE.md §15.7) : technicien et responsable. Chaque
+  // contrôle de l'équipement avec son statut RG9 (Controles.etat : statut puis statuts secondaires),
+  // la raison, un lien vers sa fiche ; « Ajouter un contrôle » pour le responsable.
+  function carteControles(equipement, responsable) {
+    const jour = Donnees.aujourdhui();
+    const controles = Donnees.lignes('controles_reglementaires').filter((c) => c.equipement_id === equipement.id)
+      .map((controle) => ({ controle, etat: Controles.etat(controle, jour) }))
+      .sort((a, b) => Controles.STATUTS.indexOf(a.etat.statut) - Controles.STATUTS.indexOf(b.etat.statut)
+        || comparerTextes(a.etat.prochaine, b.etat.prochaine));
+    const lignes = controles.map(({ controle, etat }) => UI.html`<li>
+        <div class="parc-gamme-tete">
+          <a href="#/controles/${encodeURIComponent(controle.id)}">${controle.nature || controle.id}</a>
+          <span class="controles-statuts" data-controle="${controle.id}">${UI.badgeStatut(etat.statut)}${etat.secondaires.map((statut) => UI.html` ${UI.badgeStatut(statut)}`)}</span>
+        </div>
+        <div class="parc-gamme-detail"><span class="parc-gamme-raison">${etat.raison}</span>${controle.organisme ? UI.html`<span>${controle.organisme}</span>` : ''}</div>
+      </li>`);
+    return UI.html`
+      <article class="carte parc-controles">
+        <div class="entete-carte"><h2>Contrôles réglementaires <span class="badge">${lignes.length}</span></h2>
+          ${responsable ? UI.html`<a class="btn btn-secondaire" id="parc-ajouter-controle"
+            href="#/controles/nouveau?equipement=${encodeURIComponent(equipement.id)}">${UI.icone('ajouter')}Ajouter un contrôle</a>` : ''}</div>
+        ${lignes.length ? UI.html`<ul class="parc-gammes">${lignes}</ul>` : UI.html`<p class="muted">Aucun contrôle réglementaire sur cet équipement.</p>`}
       </article>`;
   }
 
@@ -390,6 +415,7 @@ Object.assign(Parc, (() => {
             : UI.html`<div class="c6">${carteCompteurs(equipement, intervenant)}</div>
           <div class="c6">${cartePreventif(equipement, intervenant)}</div>`}
         </div>
+        ${intervenant ? carteControles(equipement, responsable) : ''}
         ${sousEquipements}
         <div class="parc-complements"></div>
       </div>`);
@@ -447,7 +473,7 @@ Object.assign(Parc, (() => {
       id: 'equipement', route: /^#\/equipement\/(?!nouveau$)(?<id>[^/?]+)$/, titre: 'Équipement', parent: 'parc',
       profils: tous,
       tables: ['equipements', 'localisations', 'ordres_travail', 'demandes', 'compteurs', 'releves',
-        'gammes', 'articles', 'article_equipement', 'mouvements_stock'],
+        'gammes', 'articles', 'article_equipement', 'mouvements_stock', 'controles_reglementaires'],
       afficher: afficherFiche,
     });
   });

@@ -2,8 +2,9 @@
 // Ordres (4/7) — écran E5, fiche d'un OT (#/ot/<id>) : en-tête, étapes, consignation, anomalie
 // d'un OT préventif et ses demandes liées (§14.6), barre d'actions (transitions RG3 avec leurs
 // contrôles), messages et structure des onglets ; et l'écran de création #/ot/nouveau (manuel, ou
-// d'urgence avec ?urgence=1). Le contenu des onglets est dans ordres-onglets.js et ordres-pieces.js
-// (ARCHITECTURE.md §14.2). Complète l'objet Ordres.
+// d'urgence avec ?urgence=1 ; ?type= et ?titre= pré-remplissent le formulaire, §15.7). Le contenu
+// des onglets est dans ordres-onglets.js et ordres-pieces.js (ARCHITECTURE.md §14.2). Complète
+// l'objet Ordres.
 
 Object.assign(Ordres, (() => {
 
@@ -28,13 +29,24 @@ Object.assign(Ordres, (() => {
   let formulairesFiche = [];
 
   // ===========================================================================================
-  // 5. Nouvel OT (#/ot/nouveau, ?equipement=EQ-0005, ?urgence=1)
+  // 5. Nouvel OT (#/ot/nouveau, ?equipement=EQ-0005, ?urgence=1, ?type=, ?titre=)
   // ===========================================================================================
+
+  /**
+   * Type proposé par l'adresse (?type=réglementaire, lien « Créer un OT » d'un contrôle
+   * réglementaire, §15.7) s'il fait partie de la liste des types d'OT, sinon « correctif différé ».
+   */
+  function typeDemande(requete) {
+    const demande = (requete.get('type') || '').trim();
+    return Schema.champ('ordres_travail', 'type').valeurs.includes(demande) ? demande : 'correctif différé';
+  }
 
   function afficherNouveau(conteneur, parametres) {
     const requete = parametres.requete || new URLSearchParams('');
     const urgence = requete.get('urgence') === '1';
     const priorite = urgence ? 'P1' : 'P3';
+    // Titre pré-rempli par l'adresse (?titre=…), toujours modifiable avant la création.
+    const titre = (requete.get('titre') || '').trim();
     App.definirTitre(urgence ? 'OT d\'urgence' : 'Nouvel OT');
     UI.remplir(conteneur, UI.html`
       <div class="entete-page"><div>
@@ -60,8 +72,8 @@ Object.assign(Ordres, (() => {
     }
     const formulaire = UI.$('#form-nouvel-ot', conteneur);
     const placer = (nom, element) => placerChamp(formulaire, nom, element);
-    placer('titre', champOt('titre', '', { placeholder: 'Ex. PO-02 — fuite à la garniture' }));
-    placer('type', champOt('type', urgence ? 'correctif immédiat' : 'correctif différé', { lectureSeule: urgence }));
+    placer('titre', champOt('titre', titre, { placeholder: 'Ex. PO-02 — fuite à la garniture' }));
+    placer('type', champOt('type', urgence ? 'correctif immédiat' : typeDemande(requete), { lectureSeule: urgence }));
     placer('priorite', champOt('priorite', priorite, { lectureSeule: urgence }));
     placer('travail_a_faire', champOt('travail_a_faire', ''));
     placer('technicien_id', champOt('technicien_id', '', { liste: listeTechniciens('') }));

@@ -1,2 +1,70 @@
-/* Prévo — contrôles réglementaires (ARCHITECTURE.md §15). Variables de la charte seulement (css/style.css).
-   Feuille d'attente (tâche T41) : la tâche du module la remplit. */
+/* Prévo — contrôles réglementaires (js/modules/controles-*.js, ARCHITECTURE.md §15.7) : liste,
+   fiche d'un contrôle, fenêtres « contrôle réalisé » et « lever les observations », carte de la fiche
+   équipement. Uniquement des variables de la charte (css/style.css) : aucune couleur codée en dur.
+   Sommaire : 1 liste et filtres · 2 statuts · 3 fiche · 4 téléphone. */
+
+/* =========================================================================================
+   1. Liste et filtres (tableau sur grand écran, cartes sur téléphone)
+   ========================================================================================= */
+
+.controles-consultation { margin: -6px 0 14px; }
+.controles-instruments > a .comp { text-decoration: underline; text-underline-offset: 2px; }
+.controles-filtres .controles-case { flex: 0 1 auto; margin: 0; }
+.controles-compteur { margin: 0 0 .6rem; }
+.controles-liste { padding: 8px 10px; }
+.controles-liste .table th, .controles-liste .table td { padding-left: .5rem; padding-right: .5rem; vertical-align: top; }
+.controles-col-nature { min-width: 16rem; }
+.controles-col-statut { min-width: 11rem; }
+.controles-col-organisme { min-width: 9rem; color: var(--texte-2); }
+.controles-lien { font-weight: 600; }
+/* Petite ligne sous une valeur de cellule (texte de référence, raison du statut) */
+.controles-sous-ligne { display: block; font-size: .875rem; color: var(--muted); margin-top: .15rem; overflow-wrap: anywhere; }
+
+/* =========================================================================================
+   2. Statuts : principal puis secondaires (le texte du badge dit toujours le statut)
+   ========================================================================================= */
+
+.controles-statuts { display: inline-flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.controles-secondaire .badge { background: transparent; border: 1px dashed currentColor; }
+.carte-tete .controles-statuts { margin-left: auto; }
+.carte-tete .controles-statuts .badge:first-of-type { margin-left: 0; }
+
+/* =========================================================================================
+   3. Fiche d'un contrôle, fenêtres, carte de la fiche équipement
+   ========================================================================================= */
+
+.controles-fiche h1 { overflow-wrap: anywhere; }
+.controles-badges { display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: center; margin: .2rem 0 0; }
+.controles-raison { color: var(--texte-2); }
+.controles-observations { white-space: pre-line; margin-right: .4rem; }
+.controles-liens { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+.controles-liens li { display: flex; flex-wrap: wrap; gap: .2rem .6rem; align-items: center; overflow-wrap: anywhere; }
+.controles-liens li .muted { margin: 0; font-size: .9375rem; }
+.controles-liens a { font-weight: 700; }
+.controles-titre-ot { min-width: 0; }
+.controles-journal { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.controles-journal li { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: .1rem 1rem; padding: .55rem 0; border-bottom: 1px solid var(--trait); }
+.controles-journal li:last-child { border-bottom: 0; }
+.controles-journal .muted { grid-column: 2; margin: 0; font-size: .875rem; }
+.controles-quand { color: var(--texte-2); font-size: .9375rem; }
+.controles-action { overflow-wrap: anywhere; }
+.controles-fenetre p { margin: 0; }
+.controles-fenetre .encadre { margin: 0; }
+.controles-fenetre input[type=file] { max-width: 100%; }
+.parc-controles .entete-carte .btn { flex: 0 0 auto; }
+
+/* =========================================================================================
+   4. Téléphone (≤ 640 px) : cartes sans cadre englobant, zones tactiles de 48 px
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  .controles-liste { padding: 0; background: none; border: 0; }
+  .controles-filtres select { flex: 1 1 140px; min-width: 0; }
+  .controles-filtres .controles-case { min-height: 48px; display: inline-flex; align-items: center; }
+  .controles-liens li { min-height: 48px; }
+  .controles-liens a { min-height: 48px; display: inline-flex; align-items: center; }
+  .controles-journal li { grid-template-columns: minmax(0, 1fr); }
+  .controles-journal .muted { grid-column: 1; }
+  .controles-fiche .actions .btn, .parc-controles .entete-carte .btn { flex: 1 1 100%; }
+  .parc-controles .parc-gamme-tete > a { min-height: 48px; display: inline-flex; align-items: center; }
+}
