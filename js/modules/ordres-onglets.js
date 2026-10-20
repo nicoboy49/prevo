@@ -14,7 +14,7 @@ Object.assign(Ordres, (() => {
     listeTechniciens, libelleArticle, listeCodes, lignesDeLOt, operationsDe, placerChamp, champOt,
     modifierOt, modifierLieeAOt, journaliserHabilitation, optionsHtml, boutonsTransitions,
     declarerFormulaire, apresEnregistrement, pendant, listeErreursHtml, bandeauHabilitation, enteteOnglet,
-    lienOt } = Ordres.interne;
+    lienOt, detailManque } = Ordres.interne;
 
   // Fonction du fichier chargé APRÈS celui-ci (ordres-pieces.js) : cherchée au moment de l'appel.
   const afficherPiecesSorties = (bloc, ot) => Ordres.interne.afficherPiecesSorties(bloc, ot);
@@ -228,7 +228,7 @@ Object.assign(Ordres, (() => {
       </form>`);
     if (manquantes.length) {
       bloc.insertBefore(UI.bandeau('important', listeErreursHtml('Stock insuffisant : l\'OT ne pourra pas être planifié.',
-        manquantes.map((p) => p.libelle + ' : ' + UI.nombreFr(p.prevu) + ' prévu(s), ' + UI.nombreFr(p.stock) + ' en stock'))), UI.$('#form-pieces', bloc));
+        manquantes.map((p) => p.libelle + ' : ' + detailManque(p)))), UI.$('#form-pieces', bloc));
     }
     if (!modifiable) return;
     const formulaire = UI.$('#form-pieces', bloc);

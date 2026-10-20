@@ -197,26 +197,39 @@ Object.assign(Preventif, (() => {
     return valeurs;
   }
 
+  /** Date de réalisation d'un OT clôturé (« AAAA-MM-JJ HH:MM ») : sa date de fin, sinon celle de sa clôture. */
+  function dateRealisation(ot) {
+    return (texte(ot.date_fin) || texte(ot.date_cloture_tech) || texte(ot.date_cloture_admin)).slice(0, 16);
+  }
+
   /**
    * À appeler après la clôture technique d'un OT qui a un gamme_id : la gamme prend la date de fin
-   * de l'OT comme dernière réalisation, et son échéance est recalculée depuis cette date (RG5).
-   * Idempotent : un second appel ne change rien. Une réalisation plus récente déjà enregistrée
-   * n'est pas remplacée (OT plus ancien clôturé après coup). Renvoie vrai si la gamme a changé.
+   * de l'OT comme dernière réalisation, et son échéance est recalculée depuis cette date (RG5, D22).
+   * La décision se prend sur les OT relus (ordres_travail frais) : si l'OT est celui dont la date
+   * de fin est la plus récente parmi les OT clôturés (techniquement ou administrativement) de la
+   * gamme, sa date fait foi, même si la gamme porte une date plus récente (date de fin erronée,
+   * corrigée après réouverture puis nouvelle clôture). Sinon (OT plus ancien clôturé après coup),
+   * la gamme ne change pas. Idempotent : un second appel ne change rien. Renvoie vrai si la gamme
+   * a changé.
    */
   async function apresCloture(otId) {
-    const ot = Donnees.trouver('ordres_travail', otId);
+    const ordres = await Donnees.rechargerTable('ordres_travail');
+    const ot = ordres.find((ligne) => ligne.id === otId);
     if (!ot) throw ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
     const gammeId = texte(ot.gamme_id);
     if (!gammeId) return false;
     if (!STATUTS_CLOTURES.includes(ot.statut)) {
       throw ErreurValidation('L\'OT ' + otId + ' n\'est pas clôturé : la gamme ' + gammeId + ' n\'est pas mise à jour.');
     }
-    const date = (texte(ot.date_fin) || texte(ot.date_cloture_tech) || Donnees.aujourdhui()).slice(0, 10);
+    const fin = dateRealisation(ot) || Donnees.aujourdhui();
+    // Un autre OT clôturé de la gamme, réalisé plus tard : c'est sa date qui fait foi.
+    const plusRecent = ordres.some((autre) => autre.id !== otId && texte(autre.gamme_id) === gammeId
+      && STATUTS_CLOTURES.includes(autre.statut) && dateRealisation(autre) > fin);
+    if (plusRecent) return false;
+    const date = fin.slice(0, 10);
     return Donnees.modifier('gammes', (lignes) => {
       const gamme = lignes.find((ligne) => ligne.id === gammeId);
       if (!gamme) throw ErreurValidation('La gamme ' + gammeId + ' de l\'OT ' + otId + ' est introuvable.');
-      const derniere = texte(gamme.derniere_realisation).slice(0, 10);
-      if (estDateIso(derniere) && derniere > date) return false;
       const valeurs = valeursApresRealisation(gamme, date);
       const changes = Object.keys(valeurs).filter((nom) => texte(gamme[nom]) !== texte(valeurs[nom]));
       changes.forEach((nom) => { gamme[nom] = valeurs[nom]; });

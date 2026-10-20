@@ -261,23 +261,36 @@ const Ordres = (() => {
   }
 
   /**
-   * Pièces prévues qui MANQUENT (RG3) : [{ article_id, libelle, prevu, stock, reste }].
+   * Pièces prévues qui MANQUENT (RG3) : [{ article_id, libelle, prevu, sorti, stock, reste }].
    * Besoin restant d'un article = quantité prévue cumulée − net déjà sorti pour CET OT (au moins
    * 0) : une pièce déjà sortie pour l'OT n'a plus à être en stock. Elle manque si le stock est
-   * inférieur à ce besoin restant. `prevu` reste la quantité prévue cumulée (messages inchangés).
+   * inférieur à ce besoin restant. `prevu` reste la quantité prévue cumulée, `sorti` le net déjà
+   * sorti pour l'OT (0 si rien, ou si tout a été retourné).
    */
   function piecesManquantes(otId) {
     const manquantes = [];
     const dejaSorti = netSortiParArticle(otId);
     quantitesPrevues(otId).forEach((prevu, articleId) => {
-      const reste = Math.max(0, arrondi(prevu - (dejaSorti.get(articleId) || 0), 6));
+      const sorti = Math.max(0, arrondi(dejaSorti.get(articleId) || 0, 6));
+      const reste = Math.max(0, arrondi(prevu - sorti, 6));
       const stock = Donnees.stockArticle(articleId);
       if (stock < reste) {
         manquantes.push({ article_id: articleId, libelle: libelleArticle(Donnees.trouver('articles', articleId)) || articleId,
-          prevu: arrondi(prevu, 3), stock, reste: arrondi(reste, 3) });
+          prevu: arrondi(prevu, 3), sorti: arrondi(sorti, 3), stock, reste: arrondi(reste, 3) });
       }
     });
     return manquantes;
+  }
+
+  /**
+   * Détail d'une pièce manquante pour les messages RG3 (refus de « Planifié », bandeau de l'onglet
+   * Préparation, motif de mise en attente proposé) : « 3 prévu(s), 1 en stock » (texte du lot 1),
+   * ou, si du stock a déjà été sorti pour l'OT, « 3 prévu(s), 1 déjà sorti(s) pour cet OT, 1 en stock ».
+   */
+  function detailManque(piece) {
+    return UI.nombreFr(piece.prevu) + ' prévu(s), '
+      + (piece.sorti > 0 ? UI.nombreFr(piece.sorti) + ' déjà sorti(s) pour cet OT, ' : '')
+      + UI.nombreFr(piece.stock) + ' en stock';
   }
 
   /**
@@ -353,7 +366,7 @@ const Ordres = (() => {
       if (!texte(ot.date_prevue)) erreurs.push('Indiquez la date prévue (onglet Préparation).');
       manquantes = piecesManquantes(ot.id);
       manquantes.forEach((piece) => erreurs.push('Stock insuffisant pour « ' + piece.libelle + ' » : '
-        + UI.nombreFr(piece.prevu) + ' prévu(s), ' + UI.nombreFr(piece.stock) + ' en stock.'));
+        + detailManque(piece) + '.'));
       const habilitation = verifierHabilitation(equipementDe(ot), ot.technicien_id, ot.date_prevue);
       if (habilitation) avertissements.push('Avertissement habilitation : ' + habilitation + '.');
     } else if (cible === 'Clôturé techniquement') {
@@ -447,7 +460,7 @@ const Ordres = (() => {
       texte, nombre, arrondi, aujourdhui, estResponsable, estTechnicien, monTechnicienId,
       equipementDe, repereEquipement, cheminLocalisation, listeTechniciens, libelleArticle, listeCodes,
       lignesDeLOt, operationsDe, placerChamp, champOt, statutDeReprise, quantitesPrevues,
-      habilitationsManquantes,
+      habilitationsManquantes, detailManque,
     },
   };
 })();

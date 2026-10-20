@@ -9,6 +9,9 @@ Familles (le nom du test le dit) :
                  liens dans les deux sens, mention dans la liste, OT verrouillé en lecture seule ;
     gamme      : OT préventif mené jusqu'à la clôture technique par l'interface → gammes.csv
                  (échec de la mise à jour : clôture gardée, avertissement ; réouverture, reclôture) ;
+                 date de fin erronée corrigée après réouverture : la date corrigée fait foi ; OT plus
+                 ancien de la même gamme clôturé après coup : gamme inchangée ; second appel sans effet ;
+    rg3        : refus « Planifié » : le message dit ce qui est déjà sorti pour l'OT (sinon, celui du lot 1) ;
     encart     : causes fréquentes de la fuite de PO-02 dans Préparation et Compte rendu ;
     technicien : sortie sur son OT ; telephone : 375 px sans défilement horizontal, zones ≥ 48 px.
 
@@ -360,14 +363,42 @@ class TestRg3(CasOrdresLot2):
             libelle = page.evaluate("(a) => { const x = Donnees.trouver('articles', a); return x.reference + ' — ' + x.designation; }", KIT)
             self.onglet("preparation")
             page.wait_for_selector("#ot-bloc-pieces .badge.ko")
+            # Le message dit ce qui est déjà sorti pour l'OT : il ne manque qu'une pièce, pas `prevu`.
+            detail = "%d prévu(s), 1 déjà sorti(s) pour cet OT, %d en stock" % (prevu, stock - 1)
+            self.assertIn("%s : %s" % (libelle, detail), page.inner_text("#ot-bloc-pieces"))      # bandeau Préparation
             self.transition("Planifié", ".ot-actions-preparation")
             page.wait_for_selector("#ot-message .alerte")
             message = page.inner_text("#ot-message")
-            # Message inchangé : quantité prévue cumulée et stock actuel
-            self.assertIn("Stock insuffisant pour « %s » : %d prévu(s), %d en stock." % (libelle, prevu, stock - 1), message)
+            self.assertIn("Stock insuffisant pour « %s » : %s." % (libelle, detail), message)
             self.assertEqual(page.locator("#ot-message button[data-action='attente-piece']").count(), 1)
             self.assertEqual(self.page.inner_text(".ot-badges .badge.statut"), "Préparé")
             self.assertEqual(ligne_par_id(dossier, "ordres_travail.csv", ot_id)["statut"], "Préparé")
+            # Motif de mise en attente proposé : même détail
+            page.click("#ot-message button[data-action='attente-piece']")
+            page.wait_for_selector("dialog textarea")
+            self.assertEqual(page.input_value("dialog textarea"), "Pièce : %s (%s)." % (libelle, detail))
+            page.click("dialog .fenetre-actions .btn-fantome")
+
+    def test_rg3_planifier_refuse_sans_sortie_message_du_lot_1_inchange(self):
+        page = self.page
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            self.ouvrir(serveur, "#/ot")
+            stock = int(stock_csv(dossier, KIT))
+            prevu = stock + 1
+            self.preparer_ot_avec_kit(prevu)                      # rien sorti pour l'OT
+            libelle = page.evaluate("(a) => { const x = Donnees.trouver('articles', a); return x.reference + ' — ' + x.designation; }", KIT)
+            self.assertIn("%s : %d prévu(s), %d en stock" % (libelle, prevu, stock), page.inner_text("#ot-bloc-pieces"))
+            self.transition("Planifié", ".ot-actions-preparation")
+            page.wait_for_selector("#ot-message .alerte")
+            message = page.inner_text("#ot-message")
+            # Message du lot 1, exactement : quantité prévue cumulée et stock actuel
+            self.assertIn("Stock insuffisant pour « %s » : %d prévu(s), %d en stock." % (libelle, prevu, stock), message)
+            self.assertNotIn("déjà sorti", message)
+            page.click("#ot-message button[data-action='attente-piece']")
+            page.wait_for_selector("dialog textarea")
+            self.assertEqual(page.input_value("dialog textarea"), "Pièce : %s (%d prévu(s), %d en stock)." % (libelle, prevu, stock))
+            page.click("dialog .fenetre-actions .btn-fantome")
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +503,61 @@ class TestGamme(CasOrdresLot2):
     def premier_code(self, dossier, famille):
         return sorted(c["code"] for c in lire_csv(dossier, "codes_defaillance.csv") if c["famille"] == famille)[0]
 
+    def avec_toast(self, texte, action):
+        """Lance action() puis attend un NOUVEAU toast `texte` : il s'affiche après l'écriture et le
+        réaffichage de la fiche (App.reafficher), donc la saisie suivante n'est pas effacée."""
+        compte = "(t) => (window.__toasts || []).filter((x) => x === t).length"
+        avant = self.page.evaluate(compte, texte)
+        action()
+        self.page.wait_for_function("([t, n]) => (window.__toasts || []).filter((x) => x === t).length > n",
+                                    arg=[texte, avant])
+
+    def mener_jusqu_a_en_cours(self, ot_id):
+        """Préparation (technicien habilité, date prévue gardée) → Préparé → Planifié → Démarrer,
+        puis 1 h de temps passé (onglet Exécution)."""
+        page = self.page
+        self.onglet("preparation")
+        page.select_option("#form-preparation [name=technicien_id]", TECHNICIEN_BR)
+        self.transition("Préparé", ".ot-actions-preparation")
+        self.attendre_statut("Préparé")
+        self.transition("Planifié", ".ot-actions-preparation")
+        self.attendre_statut("Planifié")
+        self.onglet("execution")
+        self.avec_toast(ot_id + " : En cours.", lambda: self.transition("En cours", ".ot-demarrer"))
+        self.onglet("execution")
+        page.fill("#ot-temps-heures", "1")
+        self.avec_toast("Temps ajouté.", lambda: page.click("#form-temps button[type=submit]"))
+        self.assertTrue(page.evaluate("(id) => Donnees.lignes('ot_temps').some(t => t.ot_id === id)", ot_id))
+
+    def remplir_compte_rendu(self, dossier):
+        """Onglet Compte rendu complet (enregistré par la transition de clôture)."""
+        page = self.page
+        self.onglet("compte-rendu")
+        page.select_option("#form-compte-rendu [name=cause_code]", self.premier_code(dossier, "cause"))
+        page.select_option("#form-compte-rendu [name=remede_code]", self.premier_code(dossier, "remède"))
+        page.fill("#form-compte-rendu [name=compte_rendu]", "Contrôle mensuel réalisé, tension de bande réglée.")
+        page.check("#form-compte-rendu [name=remise_service]")
+
+    def saisir_date_de_fin(self, ot_id, valeur=None):
+        """Onglet Exécution : date de fin `valeur` (« AAAA-MM-JJTHH:MM »), sinon bouton « Maintenant »."""
+        page = self.page
+        self.onglet("execution")
+        if valeur:
+            page.fill("#form-execution [name=date_fin]", valeur)
+        else:
+            page.click("#form-execution .ot-maintenant")
+        attendue = page.input_value("#form-execution [name=date_fin]").replace("T", " ")[:16]
+        self.avec_toast("Exécution enregistrée.", lambda: page.click("#form-execution button[type=submit]"))
+        self.assertEqual(page.evaluate("(id) => Donnees.trouver('ordres_travail', id).date_fin.slice(0, 16)", ot_id), attendue)
+
+    def cloturer_par_l_interface(self, ot_id):
+        """« Clôturer techniquement » (onglet Compte rendu) ; attend le toast de succès, affiché APRÈS
+        la mise à jour de la gamme (Ordres.changerStatut l'attend)."""
+        self.onglet("compte-rendu")
+        self.avec_toast(ot_id + " : Clôturé techniquement.",
+                        lambda: self.transition("Clôturé techniquement", "#form-compte-rendu"))
+        self.attendre_statut("Clôturé techniquement")
+
     def test_gamme_mise_a_jour_a_la_cloture_technique_par_l_interface(self):
         page = self.page
         with ServeurPrevo() as serveur:
@@ -482,31 +568,10 @@ class TestGamme(CasOrdresLot2):
             ot_id = ot_genere_de_la_gamme(dossier, GAMME_MENSUELLE)
             self.ouvrir_fiche(ot_id)
 
-            # Préparation (technicien habilité, date prévue gardée) → Préparé → Planifié → Démarrer
-            self.onglet("preparation")
-            page.select_option("#form-preparation [name=technicien_id]", TECHNICIEN_BR)
-            self.transition("Préparé", ".ot-actions-preparation")
-            self.attendre_statut("Préparé")
-            self.transition("Planifié", ".ot-actions-preparation")
-            self.attendre_statut("Planifié")
-            self.onglet("execution")
-            self.transition("En cours", ".ot-demarrer")
-            self.attendre_statut("En cours")
-
-            # Exécution : temps passé, date de fin ; compte rendu complet
-            self.onglet("execution")
-            page.fill("#ot-temps-heures", "1")
-            page.click("#form-temps button[type=submit]")
-            self.attendre_js("(id) => Donnees.lignes('ot_temps').some(t => t.ot_id === id)", ot_id)
-            self.onglet("execution")
-            page.click("#form-execution .ot-maintenant")
-            page.click("#form-execution button[type=submit]")
-            self.attendre_js("(id) => Donnees.trouver('ordres_travail', id).date_fin !== ''", ot_id)
-            self.onglet("compte-rendu")
-            page.select_option("#form-compte-rendu [name=cause_code]", self.premier_code(dossier, "cause"))
-            page.select_option("#form-compte-rendu [name=remede_code]", self.premier_code(dossier, "remède"))
-            page.fill("#form-compte-rendu [name=compte_rendu]", "Contrôle mensuel réalisé, tension de bande réglée.")
-            page.check("#form-compte-rendu [name=remise_service]")
+            # Préparation → Préparé → Planifié → Démarrer ; temps passé, date de fin ; compte rendu complet
+            self.mener_jusqu_a_en_cours(ot_id)
+            self.saisir_date_de_fin(ot_id)
+            self.remplir_compte_rendu(dossier)
 
             # 1) Mise à jour de la gamme en échec : la clôture reste, avertissement affiché
             page.evaluate("""() => { window.__apresCloture = Preventif.apresCloture;
@@ -538,6 +603,90 @@ class TestGamme(CasOrdresLot2):
             self.assertGreater(gamme["prochaine_echeance"], gamme_avant["prochaine_echeance"])
             journal = [j["action"] for j in lire_csv(dossier, "journal.csv") if j["id_ligne"] == GAMME_MENSUELLE]
             self.assertTrue(any("réalisation de la gamme par l'OT " + ot_id in action for action in journal), journal)
+
+    def test_gamme_date_de_fin_erronee_corrigee_apres_reouverture_la_date_corrigee_fait_foi(self):
+        """Relecture de la vague 4 : date de fin saisie un an trop tard, clôture (la gamme la prend),
+        réouverture, date corrigée, nouvelle clôture → la gamme prend la date corrigée (D22), même
+        si la date enregistrée dans la gamme est plus récente : l'OT est le plus récent des OT
+        clôturés de la gamme, sa date fait foi."""
+        page = self.page
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            self.ouvrir(serveur, "#/ot")
+            periodicite = int(ligne_par_id(dossier, "gammes.csv", GAMME_MENSUELLE)["periodicite_jours"])
+            ot_id = ot_genere_de_la_gamme(dossier, GAMME_MENSUELLE)
+            self.ouvrir_fiche(ot_id)
+            self.mener_jusqu_a_en_cours(ot_id)
+            jour = datetime.date.fromisoformat(page.evaluate("Donnees.aujourdhui()"))
+
+            # 1) Date de fin erronée (un an trop tard), clôture : la gamme prend cette date
+            erronee = jour + datetime.timedelta(days=365)
+            self.saisir_date_de_fin(ot_id, erronee.isoformat() + "T10:00")
+            self.remplir_compte_rendu(dossier)
+            self.cloturer_par_l_interface(ot_id)
+            gamme = ligne_par_id(dossier, "gammes.csv", GAMME_MENSUELLE)
+            self.assertEqual((gamme["derniere_realisation"], gamme["prochaine_echeance"]),
+                             (erronee.isoformat(), (erronee + datetime.timedelta(days=periodicite)).isoformat()))
+
+            # 2) Réouverture (responsable), date de fin corrigée (« Maintenant »), nouvelle clôture
+            self.avec_toast(ot_id + " : En cours.", lambda: self.transition("En cours"))
+            self.attendre_statut("En cours")
+            self.saisir_date_de_fin(ot_id)
+            self.cloturer_par_l_interface(ot_id)
+            self.assertEqual(page.locator("#ot-message .alerte").count(), 0)
+
+            ot = ligne_par_id(dossier, "ordres_travail.csv", ot_id)
+            self.assertEqual(ot["statut"], "Clôturé techniquement")
+            fin = datetime.date.fromisoformat(ot["date_fin"][:10])
+            self.assertLess(fin, erronee)
+            gamme = ligne_par_id(dossier, "gammes.csv", GAMME_MENSUELLE)
+            self.assertEqual(gamme["derniere_realisation"], fin.isoformat())
+            self.assertEqual(gamme["prochaine_echeance"], (fin + datetime.timedelta(days=periodicite)).isoformat())
+            self.assertEqual(page.evaluate("(g) => Preventif.etatGamme(g).echeance", GAMME_MENSUELLE),
+                             (fin + datetime.timedelta(days=periodicite)).isoformat())
+
+    def test_gamme_ot_plus_ancien_cloture_apres_coup_gamme_inchangee_second_appel_sans_effet(self):
+        """Deux OT de la même gamme : le plus récent (date de fin aujourd'hui) est clôturé d'abord ;
+        un OT plus ancien (date de fin 3 jours plus tôt) clôturé après coup ne change pas la gamme.
+        Un second appel de Preventif.apresCloture ne change rien non plus."""
+        page = self.page
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier
+            self.ouvrir(serveur, "#/ot")
+            recent = ot_genere_de_la_gamme(dossier, GAMME_MENSUELLE)
+            cause = self.premier_code(dossier, "cause")
+            remede = self.premier_code(dossier, "remède")
+            jour = datetime.date.fromisoformat(page.evaluate("Donnees.aujourdhui()"))
+            avant = jour - datetime.timedelta(days=3)
+            # Second OT de la gamme, créé comme le premier, puis les deux mis « En cours » prêts à clôturer.
+            ancien = page.evaluate("""async (id) => { const o = Donnees.trouver('ordres_travail', id);
+                return Ordres.creer({ equipement_id: o.equipement_id, titre: o.titre + ' (rattrapage)', type: o.type,
+                  priorite: o.priorite, origine: o.origine, gamme_id: o.gamme_id }); }""", recent)
+            pret_a_cloturer = """async ([id, jour, technicien, cause, remede]) => {
+                await Donnees.modifier('ordres_travail', (lignes) => { Object.assign(lignes.find((o) => o.id === id), {
+                  statut: 'En cours', technicien_id: technicien, date_debut: jour + ' 08:00', date_fin: jour + ' 10:00',
+                  cause_code: cause, remede_code: remede, compte_rendu: 'Gamme réalisée, tension de bande réglée.',
+                  remise_service: '1' }); });
+                await Donnees.modifier('ot_temps', (lignes, outils) => { lignes.push({ id: outils.nouvelId(lignes),
+                  ot_id: id, technicien_id: technicien, date: jour, heures: '1' }); }); }"""
+            page.evaluate(pret_a_cloturer, [recent, jour.isoformat(), TECHNICIEN_BR, cause, remede])
+            page.evaluate(pret_a_cloturer, [ancien, avant.isoformat(), TECHNICIEN_BR, cause, remede])
+            cloturer = "(id) => Ordres.changerStatut(id, 'En cours', 'Clôturé techniquement')"
+
+            # L'OT le plus récent d'abord : la gamme prend sa date.
+            self.assertEqual(page.evaluate(cloturer, recent), "Clôturé techniquement")
+            self.assertEqual(ligne_par_id(dossier, "gammes.csv", GAMME_MENSUELLE)["derniere_realisation"], jour.isoformat())
+            octets = (Path(dossier) / "gammes.csv").read_bytes()
+
+            # L'OT plus ancien clôturé après coup : gamme inchangée (fichier identique à l'octet).
+            self.assertEqual(page.evaluate(cloturer, ancien), "Clôturé techniquement")
+            self.assertEqual(ligne_par_id(dossier, "ordres_travail.csv", ancien)["statut"], "Clôturé techniquement")
+            self.assertEqual((Path(dossier) / "gammes.csv").read_bytes(), octets)
+
+            # Second appel (les deux OT) : rien ne change.
+            self.assertFalse(page.evaluate("(id) => Preventif.apresCloture(id)", ancien))
+            self.assertFalse(page.evaluate("(id) => Preventif.apresCloture(id)", recent))
+            self.assertEqual((Path(dossier) / "gammes.csv").read_bytes(), octets)
 
 
 # ---------------------------------------------------------------------------

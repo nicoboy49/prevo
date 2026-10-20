@@ -14,7 +14,7 @@ Object.assign(Ordres, (() => {
   const { ETAPES, STATUTS_CLOTURES, memoire, texte, aujourdhui, estResponsable, estTechnicien,
     equipementDe, repereEquipement, cheminLocalisation, listeTechniciens, placerChamp, champOt,
     statutDeReprise, habilitationsManquantes, journaliserHabilitation, optionsHtml, badgeRetard,
-    badgeAnomalie, origineHtml, changerAnomalie, lireAvertissementGamme } = Ordres.interne;
+    badgeAnomalie, origineHtml, changerAnomalie, lireAvertissementGamme, detailManque } = Ordres.interne;
 
   // Fonctions des fichiers chargés APRÈS celui-ci (ordres-onglets.js, ordres-impression.js) :
   // elles sont cherchées au moment de l'appel, pas au chargement de ce fichier.
@@ -481,7 +481,7 @@ Object.assign(Ordres, (() => {
     const actuel = Donnees.trouver('ordres_travail', ot.id) || ot;
     const manquantes = piecesManquantes(actuel.id);
     const proposition = 'Pièce : ' + (manquantes.length
-      ? manquantes.map((p) => p.libelle + ' (' + UI.nombreFr(p.prevu) + ' prévu(s), ' + UI.nombreFr(p.stock) + ' en stock)').join(' ; ')
+      ? manquantes.map((p) => p.libelle + ' (' + detailManque(p) + ')').join(' ; ')
       : 'stock insuffisant') + '.';
     const motif = await UI.demanderMotif('Mettre en attente ' + actuel.id, 'Motif de mise en attente', { valeur: proposition });
     if (motif === null) return;
