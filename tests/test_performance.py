@@ -15,6 +15,13 @@ passée à hier). Trois budgets, médiane de trois mesures, toutes affichées :
     sortie de pièce    : du clic sur « Sortir du stock » (bloc « Pièces sorties » de l'onglet
                          Exécution d'un OT) à l'affichage du bloc mis à jour (net de l'article + 1) ;
                          budget 1 000 ms.
+    indicateurs (lot 3) : du changement d'adresse vers #/indicateurs (12 mois) à l'affichage du bandeau
+                         et des 7 graphiques (aucune carte « en chargement ») ; la 1re mesure charge
+                         ECharts (contexte neuf) ; budget 2 000 ms, chacune des mesures ;
+    planning (lot 3)   : du changement d'adresse vers #/planning?semaine=… à l'affichage de la grille
+                         (.pl-grille) ; budget 1 000 ms ;
+    rapport figé (lot 3) : Rapport.figer(mois) — calcul des indicateurs du mois, de M-1 et de N-1,
+                         page HTML avec ses graphiques SVG, écriture du document ; budget 5 000 ms.
 Les chronomètres des actions sont posés dans la page (performance.now()).
 
 Lancer depuis la racine du projet :
@@ -36,6 +43,9 @@ from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler
 BUDGET_CHARGEMENT_MS = 2000
 BUDGET_CREATION_DI_MS = 1000
 BUDGET_SORTIE_MS = 1000
+BUDGET_INDICATEURS_MS = 2000        # lot 3 (CS49) : écran Indicateurs sur 12 mois, ECharts compris
+BUDGET_PLANNING_MS = 1000           # lot 3 (CS49) : planning de la semaine affiché
+BUDGET_RAPPORT_MS = 5000            # lot 3 (CS49) : rapport figé (calcul, page HTML, écriture)
 MESURES = 3
 GAMMES_VIEILLIES = 20
 STATUTS_FERMES = ("Clôturé techniquement", "Clôturé administrativement", "Annulé")
@@ -274,6 +284,72 @@ class TestPerformance(CasNavigateur):
         print("\n  [performance] sortie de pièce depuis l'OT (clic -> bloc « Pièces sorties » à jour) : %s ms"
               " -> médiane %.0f ms (budget %d)" % (", ".join("%.0f" % m for m in mesures), mediane, BUDGET_SORTIE_MS))
         self.assertLess(mediane, BUDGET_SORTIE_MS)
+
+    # -- Lot 3 (CS49) ------------------------------------------------------------------------------
+
+    def test_planning_de_la_semaine_mediane_sous_1_seconde(self):
+        page = self.ouvrir()
+        lundi = page.evaluate("Planning.lundiDe(Donnees.aujourdhui())")
+        mesures = []
+        for numero in range(MESURES):
+            semaine = (datetime.date.fromisoformat(lundi) + datetime.timedelta(days=7 * (numero % 2))).isoformat()
+            page.evaluate("location.hash = '#/accueil'")
+            page.wait_for_selector("#contenu .accueil-instruments")
+            duree = page.evaluate("""(semaine) => new Promise((resoudre) => {
+                const t0 = performance.now();
+                const observateur = new MutationObserver(() => {
+                  const grille = document.querySelector('#contenu .pl-ecran[data-lundi="' + semaine + '"] .pl-grille');
+                  if (grille) { observateur.disconnect(); resoudre(performance.now() - t0); }
+                });
+                observateur.observe(document.getElementById('contenu'), { childList: true, subtree: true });
+                location.hash = '#/planning?semaine=' + semaine;
+            })""", semaine)
+            mesures.append(duree)
+        lignes = page.evaluate("document.querySelectorAll('#contenu .pl-grille tbody tr').length")
+        cartes = page.evaluate("document.querySelectorAll('#contenu .pl-ot').length")
+        mediane = statistics.median(mesures)
+        print("\n  [performance] planning de la semaine (%d lignes, %d cartes) : %s ms -> médiane %.0f ms (budget %d)"
+              % (lignes, cartes, ", ".join("%.0f" % m for m in mesures), mediane, BUDGET_PLANNING_MS))
+        self.assertGreater(lignes, 0)
+        self.assertLess(mediane, BUDGET_PLANNING_MS)
+
+    def test_ecran_indicateurs_douze_mois_echarts_compris_sous_2_secondes(self):
+        # Contexte neuf : ECharts n'est pas encore chargé, la première mesure le charge (cache vide).
+        page = self.ouvrir()
+        self.assertEqual(page.evaluate("typeof echarts"), "undefined")
+        mesures = []
+        for _ in range(MESURES):
+            page.evaluate("location.hash = '#/accueil'")
+            page.wait_for_selector("#contenu .accueil-instruments")
+            duree = page.evaluate("""() => new Promise((resoudre) => {
+                const t0 = performance.now();
+                const fini = () => {
+                  const cartes = document.querySelectorAll('#contenu .indicateurs-graphique[data-etat]');
+                  return document.querySelector('#contenu .instruments') && cartes.length >= 7
+                    && Array.from(cartes).every((carte) => carte.dataset.etat !== 'chargement');
+                };
+                const observateur = new MutationObserver(() => {
+                  if (fini()) { observateur.disconnect(); resoudre(performance.now() - t0); }
+                });
+                observateur.observe(document.getElementById('contenu'), { childList: true, subtree: true, attributes: true });
+                location.hash = '#/indicateurs?periode=12-mois';
+            })""")
+            mesures.append(duree)
+        etats = page.evaluate("Array.from(document.querySelectorAll('#contenu .indicateurs-graphique')).map((c) => c.dataset.etat)")
+        print("\n  [performance] écran Indicateurs, 12 mois (%d graphiques : %s) : %s ms (1re : chargement d'ECharts) -> pire %.0f ms (budget %d)"
+              % (len(etats), ", ".join(sorted(set(etats))), ", ".join("%.0f" % m for m in mesures), max(mesures), BUDGET_INDICATEURS_MS))
+        self.assertNotIn("erreur", etats)
+        self.assertLess(mesures[0], BUDGET_INDICATEURS_MS, "premier affichage, chargement d'ECharts compris")
+        self.assertLess(statistics.median(mesures), BUDGET_INDICATEURS_MS)
+
+    def test_rapport_fige_sous_5_secondes(self):
+        page = self.ouvrir()
+        mois = page.evaluate("Rapport.interne.decalerMois(Donnees.aujourdhui().slice(0, 7), -1)")
+        duree, nom = page.evaluate("""async (mois) => { const t0 = performance.now();
+            const resultat = await Rapport.figer(mois); return [performance.now() - t0, resultat.nom]; }""", mois)
+        print("\n  [performance] rapport figé de %s (%s) : %.0f ms (budget %d)" % (mois, nom, duree, BUDGET_RAPPORT_MS))
+        self.assertTrue((Path(self.serveur.dossier) / "documents" / nom).is_file())
+        self.assertLess(duree, BUDGET_RAPPORT_MS)
 
 
 if __name__ == "__main__":
