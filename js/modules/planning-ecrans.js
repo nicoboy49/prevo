@@ -141,6 +141,9 @@ Object.assign(Planning, (() => {
 
   function afficher(conteneur, parametres) {
     const grille = Planning.semaine(lundiDemande(parametres));
+    // ?technicien=TEC-… (§15.5) : la grille ne montre que ce technicien.
+    const technicienDemande = texte(parametres && parametres.requete && parametres.requete.get('technicien'));
+    if (technicienDemande) grille.lignes = grille.lignes.filter((ligne) => ligne.technicien.id === technicienDemande);
     const telephone = UI.estTelephone();
     // Une racine propre à cet affichage : ses écouteurs disparaissent avec elle au réaffichage
     // (#contenu, lui, reste le même d'un écran à l'autre).
@@ -219,7 +222,8 @@ Object.assign(Planning, (() => {
     if (!ot) return;
     const manquantes = Ordres.piecesManquantes(otId);
     const proposition = 'Pièce : ' + (manquantes.length
-      ? manquantes.map((piece) => piece.libelle + ' (' + UI.nombreFr(piece.prevu) + ' prévu(s), ' + UI.nombreFr(piece.stock) + ' en stock)').join(' ; ')
+      ? manquantes.map((piece) => piece.libelle + ' (' + UI.nombreFr(piece.prevu) + ' prévu(s), '
+        + (piece.sorti > 0 ? UI.nombreFr(piece.sorti) + ' déjà sorti(s) pour cet OT, ' : '') + UI.nombreFr(piece.stock) + ' en stock)').join(' ; ')
       : 'stock insuffisant') + '.';
     const motif = await UI.demanderMotif('Mettre en attente ' + otId, 'Motif de mise en attente', { valeur: proposition });
     if (motif === null) return;
