@@ -6,7 +6,7 @@ Couvre :
     (c) lecture tolérante (dates, nombres, booléens, choix, colonnes, séparateur, encodage…) ;
     (d) fichiers réellement réenregistrés par Excel (tests/fixtures/excel/) ;
     (e) aller-retour Excel à la volée si Excel est installé (sinon test ignoré) ;
-    (f) performance : 5 000 lignes × 30 colonnes analysées en moins de 300 ms.
+    (f) performance : 5 000 lignes × 31 colonnes (ordres_travail, format v2) analysées en moins de 300 ms.
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_csv.py" -v
@@ -42,14 +42,19 @@ window.versBase64 = (octets) => {
 """
 
 # ---------------------------------------------------------------------------
-# Jeu d'exemple : table equipements (16 champs, dans l'ordre du schéma)
+# Jeu d'exemple : table equipements (17 champs, dans l'ordre du schéma : les 16 du brief, puis
+# valeur_remplacement, ajouté par la version 2 du format, ARCHITECTURE.md §14.1)
 # ---------------------------------------------------------------------------
 
 CHAMPS_EQUIPEMENTS = [
     "id", "repere", "designation", "localisation_id", "parent_id", "marque", "modele",
     "num_serie", "date_mes", "criticite", "statut", "heures_fonct_jour",
     "habilitation_requise", "consignation", "document", "actif",
+    "valeur_remplacement",
 ]
+# Colonnes de la version 2 du format : absentes des fichiers écrits avant elle (dont les fichiers
+# de tests/fixtures/excel/, produits au lot 1 par le vrai Excel) ; leur absence est une « info ».
+COLONNES_V2_EQUIPEMENTS = ["valeur_remplacement"]
 
 
 def equipement(**valeurs):
@@ -133,6 +138,14 @@ class CasCsv(CasNavigateur):
 
     def problemes_de_type(self, resultat, type_probleme):
         return [p for p in resultat["problemes"] if p["type"] == type_probleme]
+
+    def problemes_hors_colonnes_v2(self, resultat):
+        """Problèmes d'une lecture d'equipements écrit avant la version 2 du format : vérifie que
+        chaque colonne v2 absente donne exactement une « info » de type colonne (ARCHITECTURE.md
+        §14.1), puis renvoie tous les AUTRES problèmes."""
+        v2 = [p for p in resultat["problemes"] if p["type"] == "colonne" and p["champ"] in COLONNES_V2_EQUIPEMENTS]
+        self.assertEqual([(p["gravite"], p["champ"]) for p in v2], [("info", nom) for nom in COLONNES_V2_EQUIPEMENTS])
+        return [p for p in resultat["problemes"] if p not in v2]
 
 
 # ---------------------------------------------------------------------------
@@ -311,12 +324,13 @@ class TestSerialiser(CasCsv):
     def test_octets_exacts(self):
         octets = self.serialiser("equipements", LIGNES_EXEMPLE[:2])
         entete = ";".join(CHAMPS_EQUIPEMENTS)
+        # (dernière cellule vide : valeur_remplacement, colonne de la version 2 du format)
         ligne1 = ("EQ-0001;'TR-01;Tour parallèle « Tournelle » HB 575;LOC-0002;;Tournelle;"
                   "\"HB 575 ; version \"\"longue\"\"\";'00123;2019-03-15;A;en service;7.5;B1V;"
-                  "\"Couper le sectionneur Q1\nCadenasser\nVérifier l'absence de tension\";tour-tr01.pdf;1")
+                  "\"Couper le sectionneur Q1\nCadenasser\nVérifier l'absence de tension\";tour-tr01.pdf;1;")
         ligne2 = ("EQ-0002;'1-2;'- Presse hydraulique (à contrôler);LOC-0002;;Würth;'1/2;'123456789012345;"
                   "2021-11-02;B;en service;12.25;'8:30;"
-                  "\"Purger l'accumulateur \"\"avant\"\" toute intervention\";;1")
+                  "\"Purger l'accumulateur \"\"avant\"\" toute intervention\";;1;")
         attendu = BOM + (entete + "\r\n" + ligne1 + "\r\n" + ligne2 + "\r\n").encode("utf-8")
         self.assertEqual(octets, attendu)
 
@@ -339,7 +353,8 @@ class TestSerialiser(CasCsv):
         self.assertEqual(cellules[2], '" espace devant"')
         self.assertEqual(cellules[5], '"fin "')
         self.assertEqual(cellules[15], "1")
-        self.assertEqual(cellules[16:], ['"dit ""urgent"""', '" 42 "'])
+        self.assertEqual(cellules[16], "")       # valeur_remplacement (version 2 du format), vide
+        self.assertEqual(cellules[17:], ['"dit ""urgent"""', '" 42 "'])
         self.assertEqual(lignes_texte[2], "")   # le fichier se termine par CRLF
 
     def test_sans_bom_et_champs_manquants(self):
@@ -445,9 +460,13 @@ class TestLectureTolerante(CasCsv):
         ligne = resultat["lignes"][0]
         self.assertEqual((ligne["criticite"], ligne["statut"], ligne["actif"], ligne["heures_fonct_jour"]),
                          ("B", "en service", "1", ""))
-        problemes = self.problemes_de_type(resultat, "colonne")
+        # Les 14 colonnes du brief absentes sont « attention » ; la colonne de la version 2 du
+        # format (valeur_remplacement) n'est qu'une « info » (ARCHITECTURE.md §14.1).
+        problemes = [p for p in self.problemes_de_type(resultat, "colonne")
+                     if p["champ"] not in COLONNES_V2_EQUIPEMENTS]
         self.assertEqual(len(problemes), 14)
         self.assertTrue(all(p["gravite"] == "attention" and p["ligne"] == 1 for p in problemes))
+        self.assertEqual(self.problemes_hors_colonnes_v2(resultat), problemes)
         criticite = [p for p in problemes if p["champ"] == "criticite"][0]
         self.assertIn("« B »", criticite["message"])
         self.assertIn("Criticité", criticite["message"])
@@ -461,12 +480,13 @@ class TestLectureTolerante(CasCsv):
         self.assertEqual(resultat["lignes"][0]["Commentaire atelier"], "À revoir")
         self.assertEqual(resultat["lignes"][0]["Code SAP"], "SAP-9")
         self.assertEqual(resultat["lignes"][1]["Commentaire atelier"], "")
-        infos = [p for p in self.problemes_de_type(resultat, "colonne") if p["gravite"] == "info"]
+        infos = [p for p in self.problemes_hors_colonnes_v2(resultat)
+                 if p["type"] == "colonne" and p["gravite"] == "info"]
         self.assertEqual([p["champ"] for p in infos], ["Commentaire atelier", "Code SAP"])
 
         octets = self.serialiser("equipements", resultat["lignes"], resultat["colonnesInconnues"])
         lignes_texte = octets[3:].decode("utf-8").split("\r\n")
-        self.assertTrue(lignes_texte[0].endswith(";actif;Commentaire atelier;Code SAP"))
+        self.assertTrue(lignes_texte[0].endswith(";actif;valeur_remplacement;Commentaire atelier;Code SAP"))
         self.assertTrue(lignes_texte[1].startswith("EQ-0001;'TR-01;"))
         self.assertTrue(lignes_texte[1].endswith(";À revoir;SAP-9"))
         relu = self.analyser("equipements", octets)
@@ -568,13 +588,29 @@ def lire_fixture(nom):
     return (DOSSIER_FIXTURES / nom).read_bytes()
 
 
+def avec_colonnes_v2_vides(octets_v1):
+    """Octets d'un CSV equipements écrit avant la version 2 du format → octets attendus de
+    serialiser aujourd'hui : mêmes cellules, colonnes v2 ajoutées en fin (vides). Valable quand
+    CRLF ne sert qu'à terminer les enregistrements (les sauts de ligne internes sont des LF)."""
+    lignes = octets_v1[len(BOM):].split(b"\r\n")
+    assert lignes[-1] == b"", "le fichier doit finir par CRLF"
+    entete = lignes[0] + "".join(";" + nom for nom in COLONNES_V2_EQUIPEMENTS).encode("utf-8")
+    enregistrements = [ligne + b";" * len(COLONNES_V2_EQUIPEMENTS) for ligne in lignes[1:-1]]
+    return BOM + b"\r\n".join([entete] + enregistrements) + b"\r\n"
+
+
 class TestFixturesExcel(CasCsv):
+    """Les fichiers de tests/fixtures/excel/ ont été produits au lot 1 (format v1, sans la colonne
+    valeur_remplacement) par le vrai Excel : ils ne peuvent pas être régénérés sans lui. Leur
+    lecture ne doit signaler, en plus du lot 1, que l'« info » de la colonne v2 absente."""
 
     def test_source_ecrite_par_serialiser(self):
-        self.assertEqual(lire_fixture("source.csv"), self.serialiser("equipements", LIGNES_EXEMPLE))
-        resultat = self.analyser("equipements", lire_fixture("source.csv"))
+        source = lire_fixture("source.csv")
+        self.assertEqual(source.count(b"\r\n"), 1 + len(LIGNES_EXEMPLE))   # CRLF = fin d'enregistrement seulement
+        self.assertEqual(avec_colonnes_v2_vides(source), self.serialiser("equipements", LIGNES_EXEMPLE))
+        resultat = self.analyser("equipements", source)
         self.assertEqual(resultat["lignes"], LIGNES_EXEMPLE)
-        self.assertEqual(resultat["problemes"], [])
+        self.assertEqual(self.problemes_hors_colonnes_v2(resultat), [])
 
     def test_excel_utf8(self):
         octets = lire_fixture("excel-utf8.csv")
@@ -583,7 +619,7 @@ class TestFixturesExcel(CasCsv):
         resultat = self.analyser("equipements", octets)
         self.assertEqual(resultat["encodage"], "utf-8")
         self.assertEqual(resultat["lignes"], self.analyser("equipements", lire_fixture("source.csv"))["lignes"])
-        self.assertEqual(resultat["problemes"], [])
+        self.assertEqual(self.problemes_hors_colonnes_v2(resultat), [])
 
     def test_excel_ansi(self):
         octets = lire_fixture("excel-ansi.csv")
@@ -592,13 +628,13 @@ class TestFixturesExcel(CasCsv):
         resultat = self.analyser("equipements", octets)
         self.assertEqual(resultat["encodage"], "windows-1252")
         self.assertEqual(resultat["lignes"], self.analyser("equipements", lire_fixture("source.csv"))["lignes"])
-        self.assertEqual([p["type"] for p in resultat["problemes"]], ["encodage"])
+        self.assertEqual([p["type"] for p in self.problemes_hors_colonnes_v2(resultat)], ["encodage"])
 
     def test_excel_ligne_ajoutee_a_la_main(self):
         resultat = self.analyser("equipements", lire_fixture("excel-ajout.csv"))
         self.assertEqual(resultat["lignes"][:4], LIGNES_EXEMPLE)
         self.assertEqual(resultat["lignes"][4], LIGNE_AJOUTEE_ATTENDUE)
-        self.assertEqual(resultat["problemes"], [])
+        self.assertEqual(self.problemes_hors_colonnes_v2(resultat), [])
 
 
 # ---------------------------------------------------------------------------
@@ -679,11 +715,12 @@ class TestPerformance(CasCsv):
                    problemes: resultat.problemes.length, mediane: durees[1], durees: durees,
                    octets: octets.length };
         }""")
-        self.assertEqual(mesure["colonnes"], 30)
+        # 30 colonnes du brief + anomalie_constatee (version 2 du format) : seuil inchangé.
+        self.assertEqual(mesure["colonnes"], 31)
         self.assertEqual(mesure["lignes"], 5000)
         self.assertEqual(mesure["problemes"], 0)
-        print("\n    analyse de 5 000 lignes × 30 colonnes (%d Ko) : médiane %.0f ms (essais : %s)"
-              % (mesure["octets"] // 1024, mesure["mediane"],
+        print("\n    analyse de 5 000 lignes × %d colonnes (%d Ko) : médiane %.0f ms (essais : %s)"
+              % (mesure["colonnes"], mesure["octets"] // 1024, mesure["mediane"],
                  ", ".join("%.0f" % d for d in mesure["durees"])), file=sys.stderr)
         self.assertLess(mesure["mediane"], 300)
 

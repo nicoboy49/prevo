@@ -1,76 +1,76 @@
-﻿id;date_heure;demandeur;equipement_id;symptome;impact;description;photo;statut;motif_decision;date_decision;ot_id
-DI-2026-0001;2026-04-23 09:45;Lucas Perrot;EQ-0026;On entend de l'air qui fuit derrière la machine.;arrêt;;;Acceptée;;2026-04-23 12:07;OT-2026-0001
-DI-2026-0002;2026-04-24 10:55;Lucas Perrot;EQ-0030;Grincement au déplacement de CH-01.;dégradé;;;Acceptée;;2026-04-24 13:25;OT-2026-0003
-DI-2026-0003;2026-04-27 12:30;Inès Marchand;EQ-0001;Défaut température haute, il est tombé en sécurité.;arrêt;;;Acceptée;;2026-04-27 14:36;OT-2026-0006
-DI-2026-0004;2026-04-28 14:15;Manon Duval;EQ-0022;Le convoyeur s'arrête tout seul plusieurs fois par heure.;dégradé;;;Acceptée;;2026-04-28 16:14;OT-2026-0007
-DI-2026-0005;2026-04-29 08:40;Paul Dubois;EQ-0028;La machine RB-01 s'arrête sans arrêt de cause visible.;dégradé;Rien de spécial avant.;;Acceptée;;2026-04-29 10:07;OT-2026-0008
-DI-2026-0006;2026-05-07 12:15;Inès Marchand;EQ-0022;Le problème est revenu après la dernière intervention. Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;dégradé;;;Acceptée;;2026-05-07 12:32;OT-2026-0013
-DI-2026-0007;2026-05-13 08:25;Antoine Mercier;EQ-0026;On entend de l'air qui fuit derrière la machine.;dégradé;;;Acceptée;;2026-05-13 09:00;OT-2026-0015
-DI-2026-0008;2026-05-13 14:35;Inès Marchand;EQ-0026;Manque d'air sur EM-01, les vérins sont mous.;gêne;Même problème que la demande précédente.;;Regroupée;Regroupée avec l'OT déjà ouvert pour cet équipement.;2026-05-13 14:55;OT-2026-0015
-DI-2026-0009;2026-05-14 08:30;Camille Girard;EQ-0014;Le sol est mouillé autour de la machine, ça vient de l'arrosage.;gêne;;;Acceptée;;2026-05-14 08:51;OT-2026-0016
-DI-2026-0010;2026-05-15 14:25;Antoine Mercier;EQ-0023;Le convoyeur s'arrête tout seul plusieurs fois par heure.;dégradé;;;Acceptée;;2026-05-15 14:43;OT-2026-0017
-DI-2026-0011;2026-05-19 11:00;Léa Fontaine;EQ-0020;Les pièces sortent hors cote de la presse.;gêne;;;Acceptée;;2026-05-19 12:03;OT-2026-0020
-DI-2026-0012;2026-05-29 12:00;Paul Dubois;EQ-0026;La machine EM-01 s'arrête sans arrêt de cause visible.;arrêt;Merci de passer dès que possible.;;Acceptée;;2026-05-29 14:13;OT-2026-0025
-DI-2026-0013;2026-06-01 08:15;Inès Marchand;EQ-0001;Température haute sur CP-01, il s'arrête puis redémarre.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-06-01 09:39;OT-2026-0027
-DI-2026-0014;2026-06-01 12:35;Manon Duval;EQ-0021;Fuite d'huile sous la presse, une flaque se forme.;arrêt;Rien de spécial avant.;;Acceptée;;2026-06-01 14:59;OT-2026-0028
-DI-2026-0015;2026-06-05 09:05;Camille Girard;EQ-0005;Fuite importante côté accouplement de PO-02.;dégradé;;;Acceptée;;2026-06-05 09:52;OT-2026-0029
-DI-2026-0016;2026-06-08 15:10;Lucas Perrot;EQ-0007;Le groupe froid démarre et s'arrête toutes les dix minutes.;gêne;Constaté en début de poste.;;Acceptée;;2026-06-08 15:32;OT-2026-0030
-DI-2026-0017;2026-06-10 14:00;Lucas Perrot;EQ-0015;La broche de CN-01.BR fait un bruit de roulement.;dégradé;;;Acceptée;;2026-06-11 07:52;OT-2026-0031
-DI-2026-0018;2026-06-10 15:20;Manon Duval;EQ-0006;La pompe PO-03 fait un bruit de ferraille depuis ce matin.;dégradé;Rien de spécial avant.;;Acceptée;;2026-06-11 08:24;OT-2026-0032
-DI-2026-0019;2026-06-11 12:35;Inès Marchand;EQ-0023;Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;arrêt;;;Acceptée;;2026-06-11 13:39;OT-2026-0033
-DI-2026-0020;2026-06-15 11:25;Léa Fontaine;EQ-0006;La pompe PO-03 fait un bruit de ferraille depuis ce matin.;gêne;Ça dure depuis hier.;;Acceptée;;2026-06-15 12:23;OT-2026-0035
-DI-2026-0021;2026-06-17 13:50;Antoine Mercier;EQ-0025;Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-06-17 14:51;OT-2026-0036
-DI-2026-0022;2026-06-17 14:50;Sarah Colin;EQ-0022;La courroie du convoyeur CV-01 patine, ça couine au démarrage.;dégradé;Rien de spécial avant.;;Acceptée;;2026-06-18 08:02;OT-2026-0037
-DI-2026-0023;2026-06-25 10:35;Lucas Perrot;EQ-0018;Le palan ne monte plus, on entend juste un claquement.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-06-25 11:39;OT-2026-0040
-DI-2026-0024;2026-07-03 14:45;Lucas Perrot;EQ-0021;De l'huile coule le long du vérin de PR-01.GH.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-07-03 16:10;OT-2026-0044
-DI-2026-0025;2026-07-07 08:30;Mathieu Roux;EQ-0027;Manque d'air sur ET-01, les vérins sont mous.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-07-07 09:52;OT-2026-0046
-DI-2026-0026;2026-07-08 15:20;Antoine Mercier;EQ-0020;Défaut de profondeur sur les pièces pressées.;dégradé;;;Acceptée;;2026-07-08 15:50;OT-2026-0047
-DI-2026-0027;2026-07-09 09:25;Inès Marchand;EQ-0001;Température haute sur CP-01, il s'arrête puis redémarre.;arrêt;Merci de passer dès que possible.;;Acceptée;;2026-07-09 09:58;OT-2026-0048
-DI-2026-0028;2026-07-09 09:30;Sarah Colin;EQ-0020;Les pièces sortent hors cote de la presse.;gêne;;;Acceptée;;2026-07-09 11:06;OT-2026-0049
-DI-2026-0029;2026-07-10 14:55;Paul Dubois;EQ-0023;Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-07-13 08:26;OT-2026-0051
-DI-2026-0030;2026-07-16 12:20;Hugo Lefèvre;EQ-0027;Comportement bizarre de ET-01, difficile à décrire.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-07-16 12:47;OT-2026-0053
-DI-2026-0031;2026-07-23 09:45;Mathieu Roux;EQ-0002;Alarme température sur CP-01.SEC, la température de départ monte.;dégradé;;;Acceptée;;2026-07-23 12:00;OT-2026-0055
-DI-2026-0032;2026-07-23 14:55;Lucas Perrot;EQ-0012;Ça sent le chaud dans l'armoire, le contacteur est très chaud.;arrêt;;;Acceptée;;2026-07-24 08:16;OT-2026-0056
-DI-2026-0033;2026-07-24 10:35;Lucas Perrot;EQ-0019;SC-01 est en défaut, plus rien ne bouge.;arrêt;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-07-24 11:29;OT-2026-0057
-DI-2026-0034;2026-07-29 11:05;Lucas Perrot;EQ-0016;Pièces hors tolérance depuis le changement de lot.;gêne;;;Acceptée;;2026-07-29 11:52;OT-2026-0060
-DI-2026-0035;2026-07-29 14:35;Antoine Mercier;EQ-0016;Pièces hors tolérance depuis le changement de lot.;gêne;Même problème que la demande précédente.;;Regroupée;Regroupée avec l'OT déjà ouvert pour cet équipement.;2026-07-29 14:55;OT-2026-0060
-DI-2026-0036;2026-07-31 12:35;Mathieu Roux;EQ-0021;De l'huile coule le long du vérin de PR-01.GH.;arrêt;;;Acceptée;;2026-07-31 13:45;OT-2026-0062
-DI-2026-0037;2026-08-03 08:05;Lucas Perrot;EQ-0005;Gouttes d'eau régulières sous la pompe PO-02, le sol est mouillé.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-08-03 10:01;OT-2026-0063
-DI-2026-0038;2026-08-04 07:30;Hugo Lefèvre;EQ-0020;Fuite d'huile sur un flexible de la presse, elle goutte sur le sol.;dégradé;Rien de spécial avant.;;Acceptée;;2026-08-04 09:17;OT-2026-0064
-DI-2026-0039;2026-08-04 09:55;Paul Dubois;EQ-0010;Le courant saute de temps en temps sans raison apparente.;arrêt;Rien de spécial avant.;;Acceptée;;2026-08-04 11:18;OT-2026-0065
-DI-2026-0040;2026-08-04 15:10;Inès Marchand;EQ-0011;Disjoncteur tombé, plus de courant sur la machine.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-08-04 15:55;OT-2026-0066
-DI-2026-0041;2026-08-05 07:20;Antoine Mercier;EQ-0029;La balance de contrôle rejette des colis conformes : le poids affiché dérive.;dégradé;;;Acceptée;;2026-08-05 08:55;OT-2026-0067
-DI-2026-0042;2026-08-07 12:10;Hugo Lefèvre;EQ-0023;Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-08-07 14:30;OT-2026-0068
-DI-2026-0043;2026-08-07 13:35;Lucas Perrot;EQ-0001;Le compresseur CP-01 chauffe plus que d'habitude.;dégradé;;;Acceptée;;2026-08-07 14:43;OT-2026-0069
-DI-2026-0044;2026-08-11 10:10;Paul Dubois;EQ-0006;La pompe fuit au niveau de l'arbre, il y a une flaque sous le groupe.;dégradé;;;Acceptée;;2026-08-11 11:40;OT-2026-0071
-DI-2026-0045;2026-08-12 15:25;Hugo Lefèvre;EQ-0025;Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;arrêt;;;Acceptée;;2026-08-13 08:13;OT-2026-0072
-DI-2026-0046;2026-08-13 11:15;Paul Dubois;EQ-0004;Gouttes d'eau régulières sous la pompe PO-01, le sol est mouillé.;dégradé;;;Acceptée;;2026-08-13 13:37;OT-2026-0073
-DI-2026-0047;2026-08-17 10:00;Mathieu Roux;EQ-0017;Comportement bizarre de CU-01.CH, difficile à décrire.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-08-17 11:43;OT-2026-0078
-DI-2026-0048;2026-08-18 07:40;Inès Marchand;EQ-0026;Plus de mouvement sur la machine, elle est pourtant sous tension.;arrêt;Constaté en début de poste.;;Acceptée;;2026-08-18 08:33;OT-2026-0079
-DI-2026-0049;2026-08-20 07:45;Mathieu Roux;EQ-0021;De l'huile coule le long du vérin de PR-01.GH.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-08-20 09:28;OT-2026-0080
-DI-2026-0050;2026-08-28 12:55;Mathieu Roux;EQ-0006;Fuite importante côté accouplement de PO-03.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-08-28 14:40;OT-2026-0083
-DI-2026-0051;2026-08-31 08:40;Paul Dubois;EQ-0004;Roulement qui siffle, le bruit augmente.;dégradé;;;Acceptée;;2026-08-31 09:08;OT-2026-0084
-DI-2026-0052;2026-09-08 08:55;Hugo Lefèvre;EQ-0023;Arrêts intempestifs sur CV-02, il faut réarmer à chaque fois.;arrêt;Ça dure depuis hier.;;Acceptée;;2026-09-08 10:16;OT-2026-0086
-DI-2026-0053;2026-09-08 10:15;Léa Fontaine;EQ-0022;Le convoyeur s'arrête tout seul plusieurs fois par heure.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-09-08 11:43;OT-2026-0087
-DI-2026-0054;2026-09-09 07:40;Manon Duval;EQ-0015;Bruit sourd à haute vitesse de broche.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-09-09 09:39;OT-2026-0088
-DI-2026-0055;2026-09-11 07:30;Camille Girard;EQ-0001;Le compresseur chauffe et se met en défaut température.;arrêt;Constaté en début de poste.;;Acceptée;;2026-09-11 08:06;OT-2026-0090
-DI-2026-0056;2026-09-17 08:40;Camille Girard;EQ-0006;Fuite importante côté accouplement de PO-03.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-09-17 09:18;OT-2026-0092
-DI-2026-0057;2026-09-21 12:25;Hugo Lefèvre;EQ-0014;Bruit sourd à haute vitesse de broche.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-09-21 13:11;OT-2026-0093
-DI-2026-0058;2026-09-25 08:30;Mathieu Roux;EQ-0020;Défaut de profondeur sur les pièces pressées.;gêne;Ça dure depuis hier.;;Acceptée;;2026-09-25 10:38;OT-2026-0094
-DI-2026-0059;2026-09-25 08:40;Lucas Perrot;EQ-0007;Alarme température sur GF-01, la température de départ monte.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-09-25 11:04;OT-2026-0095
-DI-2026-0060;2026-09-28 09:06;Hugo Lefèvre;EQ-0009;Débit d'air faible sur l'extracteur VE-02, le filtre semble très encrassé.;gêne;Merci de passer dès que possible.;;Acceptée;;2026-09-28 11:21;OT-2026-0097
-DI-2026-0061;2026-09-28 13:50;Mathieu Roux;EQ-0019;Les cotes des pièces dérivent sur SC-01.;dégradé;;;Acceptée;;2026-09-28 15:10;OT-2026-0098
-DI-2026-0062;2026-09-30 12:20;Sarah Colin;EQ-0005;La pompe fuit au niveau de l'arbre, il y a une flaque sous le groupe.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-09-30 13:02;OT-2026-0099
-DI-2026-0063;2026-10-05 12:40;Antoine Mercier;EQ-0023;Arrêts intempestifs sur CV-02, il faut réarmer à chaque fois.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-10-05 14:03;OT-2026-0101
-DI-2026-0064;2026-10-07 13:18;Antoine Mercier;EQ-0011;Légère odeur de chaud près du départ ventilation de l'armoire AE-02.;dégradé;;;Acceptée;;2026-10-07 14:03;OT-2026-0102
-DI-2026-0065;2026-10-09 09:30;Hugo Lefèvre;EQ-0016;Demande de repeindre le carter du centre d'usinage en bleu.;gêne;;;Refusée;Refusée : demande esthétique, hors périmètre de la maintenance. À adresser au service méthodes.;2026-10-09 11:30;
-DI-2026-0066;2026-10-12 08:42;Inès Marchand;EQ-0025;La courroie du convoyeur CV-03 patine, bruit de glissement au démarrage.;gêne;Constaté en début de poste.;;Acceptée;;2026-10-12 10:43;OT-2026-0103
-DI-2026-0067;2026-10-13 10:42;Lucas Perrot;EQ-0022;Le garde-corps du convoyeur CV-01 est légèrement tordu, à redresser.;gêne;;;Différée;Différée : à traiter lors de l'arrêt programmé de fin octobre, sans impact sur la production.;2026-10-13 14:02;
-DI-2026-0068;2026-10-14 10:15;Camille Girard;EQ-0016;Les cotes des pièces dérivent légèrement sur le centre d'usinage.;gêne;Constaté en début de poste.;;Acceptée;;2026-10-14 11:05;OT-2026-0106
-DI-2026-0069;2026-10-16 11:18;Léa Fontaine;EQ-0027;Les étiquettes sortent décalées de quelques millimètres sur l'étiqueteuse.;gêne;;;Nouvelle;;;
-DI-2026-0070;2026-10-16 14:12;Manon Duval;EQ-0026;Les films sont mal soudés sur la fardeleuse, des colis s'ouvrent à la sortie.;dégradé;;;Acceptée;;2026-10-16 14:32;OT-2026-0107
-DI-2026-0071;2026-10-16 16:06;Sarah Colin;EQ-0020;Fuite d'huile sous la presse PR-01, une petite flaque se forme depuis ce matin.;dégradé;;;Nouvelle;;;
-DI-2026-0072;2026-10-19 06:58;Mathieu Roux;EQ-0006;La pompe de relevage est très bruyante au démarrage.;gêne;;;Nouvelle;;;
-DI-2026-0073;2026-10-19 07:15;Paul Dubois;EQ-0013;Odeur de brûlé près de l'armoire AE-04, un peu de fumée à l'ouverture de la porte.;sécurité;;;Nouvelle;;;
-DI-2026-0074;2026-10-19 07:20;Lucas Perrot;EQ-0026;La fardeleuse EM-01 refait des films mal soudés ce matin aussi.;dégradé;Même problème que la demande précédente.;;Regroupée;Regroupée avec l'OT déjà ouvert pour cet équipement.;2026-10-19 07:40;OT-2026-0107
-DI-2026-0075;2026-10-19 07:36;Paul Dubois;EQ-0001;Le compresseur CP-01 s'est arrêté en sécurité : alarme température haute, le carter est brûlant.;arrêt;Arrêt constaté à la prise de poste.;;Acceptée;;2026-10-19 07:50;OT-2026-0108
+﻿id;date_heure;demandeur;equipement_id;symptome;impact;description;photo;statut;motif_decision;date_decision;ot_id;symptome_code;ot_origine_id
+DI-2026-0001;2026-04-23 09:45;Lucas Perrot;EQ-0026;On entend de l'air qui fuit derrière la machine.;arrêt;;;Acceptée;;2026-04-23 12:07;OT-2026-0001;;
+DI-2026-0002;2026-04-24 10:55;Lucas Perrot;EQ-0030;Grincement au déplacement de CH-01.;dégradé;;;Acceptée;;2026-04-24 13:25;OT-2026-0003;;
+DI-2026-0003;2026-04-27 12:30;Inès Marchand;EQ-0001;Défaut température haute, il est tombé en sécurité.;arrêt;;;Acceptée;;2026-04-27 14:36;OT-2026-0006;;
+DI-2026-0004;2026-04-28 14:15;Manon Duval;EQ-0022;Le convoyeur s'arrête tout seul plusieurs fois par heure.;dégradé;;;Acceptée;;2026-04-28 16:14;OT-2026-0007;;
+DI-2026-0005;2026-04-29 08:40;Paul Dubois;EQ-0028;La machine RB-01 s'arrête sans arrêt de cause visible.;dégradé;Rien de spécial avant.;;Acceptée;;2026-04-29 10:07;OT-2026-0008;;
+DI-2026-0006;2026-05-07 12:15;Inès Marchand;EQ-0022;Le problème est revenu après la dernière intervention. Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;dégradé;;;Acceptée;;2026-05-07 12:32;OT-2026-0013;;
+DI-2026-0007;2026-05-13 08:25;Antoine Mercier;EQ-0026;On entend de l'air qui fuit derrière la machine.;dégradé;;;Acceptée;;2026-05-13 09:00;OT-2026-0015;;
+DI-2026-0008;2026-05-13 14:35;Inès Marchand;EQ-0026;Manque d'air sur EM-01, les vérins sont mous.;gêne;Même problème que la demande précédente.;;Regroupée;Regroupée avec l'OT déjà ouvert pour cet équipement.;2026-05-13 14:55;OT-2026-0015;;
+DI-2026-0009;2026-05-14 08:30;Camille Girard;EQ-0014;Le sol est mouillé autour de la machine, ça vient de l'arrosage.;gêne;;;Acceptée;;2026-05-14 08:51;OT-2026-0016;;
+DI-2026-0010;2026-05-15 14:25;Antoine Mercier;EQ-0023;Le convoyeur s'arrête tout seul plusieurs fois par heure.;dégradé;;;Acceptée;;2026-05-15 14:43;OT-2026-0017;;
+DI-2026-0011;2026-05-19 11:00;Léa Fontaine;EQ-0020;Les pièces sortent hors cote de la presse.;gêne;;;Acceptée;;2026-05-19 12:03;OT-2026-0020;;
+DI-2026-0012;2026-05-29 12:00;Paul Dubois;EQ-0026;La machine EM-01 s'arrête sans arrêt de cause visible.;arrêt;Merci de passer dès que possible.;;Acceptée;;2026-05-29 14:13;OT-2026-0025;;
+DI-2026-0013;2026-06-01 08:15;Inès Marchand;EQ-0001;Température haute sur CP-01, il s'arrête puis redémarre.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-06-01 09:39;OT-2026-0027;;
+DI-2026-0014;2026-06-01 12:35;Manon Duval;EQ-0021;Fuite d'huile sous la presse, une flaque se forme.;arrêt;Rien de spécial avant.;;Acceptée;;2026-06-01 14:59;OT-2026-0028;;
+DI-2026-0015;2026-06-05 09:05;Camille Girard;EQ-0005;Fuite importante côté accouplement de PO-02.;dégradé;;;Acceptée;;2026-06-05 09:52;OT-2026-0029;;
+DI-2026-0016;2026-06-08 15:10;Lucas Perrot;EQ-0007;Le groupe froid démarre et s'arrête toutes les dix minutes.;gêne;Constaté en début de poste.;;Acceptée;;2026-06-08 15:32;OT-2026-0030;;
+DI-2026-0017;2026-06-10 14:00;Lucas Perrot;EQ-0015;La broche de CN-01.BR fait un bruit de roulement.;dégradé;;;Acceptée;;2026-06-11 07:52;OT-2026-0031;;
+DI-2026-0018;2026-06-10 15:20;Manon Duval;EQ-0006;La pompe PO-03 fait un bruit de ferraille depuis ce matin.;dégradé;Rien de spécial avant.;;Acceptée;;2026-06-11 08:24;OT-2026-0032;;
+DI-2026-0019;2026-06-11 12:35;Inès Marchand;EQ-0023;Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;arrêt;;;Acceptée;;2026-06-11 13:39;OT-2026-0033;;
+DI-2026-0020;2026-06-15 11:25;Léa Fontaine;EQ-0006;La pompe PO-03 fait un bruit de ferraille depuis ce matin.;gêne;Ça dure depuis hier.;;Acceptée;;2026-06-15 12:23;OT-2026-0035;;
+DI-2026-0021;2026-06-17 13:50;Antoine Mercier;EQ-0025;Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-06-17 14:51;OT-2026-0036;;
+DI-2026-0022;2026-06-17 14:50;Sarah Colin;EQ-0022;La courroie du convoyeur CV-01 patine, ça couine au démarrage.;dégradé;Rien de spécial avant.;;Acceptée;;2026-06-18 08:02;OT-2026-0037;;
+DI-2026-0023;2026-06-25 10:35;Lucas Perrot;EQ-0018;Le palan ne monte plus, on entend juste un claquement.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-06-25 11:39;OT-2026-0040;;
+DI-2026-0024;2026-07-03 14:45;Lucas Perrot;EQ-0021;De l'huile coule le long du vérin de PR-01.GH.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-07-03 16:10;OT-2026-0044;;
+DI-2026-0025;2026-07-07 08:30;Mathieu Roux;EQ-0027;Manque d'air sur ET-01, les vérins sont mous.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-07-07 09:52;OT-2026-0046;;
+DI-2026-0026;2026-07-08 15:20;Antoine Mercier;EQ-0020;Défaut de profondeur sur les pièces pressées.;dégradé;;;Acceptée;;2026-07-08 15:50;OT-2026-0047;;
+DI-2026-0027;2026-07-09 09:25;Inès Marchand;EQ-0001;Température haute sur CP-01, il s'arrête puis redémarre.;arrêt;Merci de passer dès que possible.;;Acceptée;;2026-07-09 09:58;OT-2026-0048;;
+DI-2026-0028;2026-07-09 09:30;Sarah Colin;EQ-0020;Les pièces sortent hors cote de la presse.;gêne;;;Acceptée;;2026-07-09 11:06;OT-2026-0049;;
+DI-2026-0029;2026-07-10 14:55;Paul Dubois;EQ-0023;Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-07-13 08:26;OT-2026-0051;;
+DI-2026-0030;2026-07-16 12:20;Hugo Lefèvre;EQ-0027;Comportement bizarre de ET-01, difficile à décrire.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-07-16 12:47;OT-2026-0053;;
+DI-2026-0031;2026-07-23 09:45;Mathieu Roux;EQ-0002;Alarme température sur CP-01.SEC, la température de départ monte.;dégradé;;;Acceptée;;2026-07-23 12:00;OT-2026-0055;;
+DI-2026-0032;2026-07-23 14:55;Lucas Perrot;EQ-0012;Ça sent le chaud dans l'armoire, le contacteur est très chaud.;arrêt;;;Acceptée;;2026-07-24 08:16;OT-2026-0056;;
+DI-2026-0033;2026-07-24 10:35;Lucas Perrot;EQ-0019;SC-01 est en défaut, plus rien ne bouge.;arrêt;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-07-24 11:29;OT-2026-0057;;
+DI-2026-0034;2026-07-29 11:05;Lucas Perrot;EQ-0016;Pièces hors tolérance depuis le changement de lot.;gêne;;;Acceptée;;2026-07-29 11:52;OT-2026-0060;;
+DI-2026-0035;2026-07-29 14:35;Antoine Mercier;EQ-0016;Pièces hors tolérance depuis le changement de lot.;gêne;Même problème que la demande précédente.;;Regroupée;Regroupée avec l'OT déjà ouvert pour cet équipement.;2026-07-29 14:55;OT-2026-0060;;
+DI-2026-0036;2026-07-31 12:35;Mathieu Roux;EQ-0021;De l'huile coule le long du vérin de PR-01.GH.;arrêt;;;Acceptée;;2026-07-31 13:45;OT-2026-0062;;
+DI-2026-0037;2026-08-03 08:05;Lucas Perrot;EQ-0005;Gouttes d'eau régulières sous la pompe PO-02, le sol est mouillé.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-08-03 10:01;OT-2026-0063;;
+DI-2026-0038;2026-08-04 07:30;Hugo Lefèvre;EQ-0020;Fuite d'huile sur un flexible de la presse, elle goutte sur le sol.;dégradé;Rien de spécial avant.;;Acceptée;;2026-08-04 09:17;OT-2026-0064;;
+DI-2026-0039;2026-08-04 09:55;Paul Dubois;EQ-0010;Le courant saute de temps en temps sans raison apparente.;arrêt;Rien de spécial avant.;;Acceptée;;2026-08-04 11:18;OT-2026-0065;;
+DI-2026-0040;2026-08-04 15:10;Inès Marchand;EQ-0011;Disjoncteur tombé, plus de courant sur la machine.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-08-04 15:55;OT-2026-0066;;
+DI-2026-0041;2026-08-05 07:20;Antoine Mercier;EQ-0029;La balance de contrôle rejette des colis conformes : le poids affiché dérive.;dégradé;;;Acceptée;;2026-08-05 08:55;OT-2026-0067;;
+DI-2026-0042;2026-08-07 12:10;Hugo Lefèvre;EQ-0023;Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-08-07 14:30;OT-2026-0068;;
+DI-2026-0043;2026-08-07 13:35;Lucas Perrot;EQ-0001;Le compresseur CP-01 chauffe plus que d'habitude.;dégradé;;;Acceptée;;2026-08-07 14:43;OT-2026-0069;;
+DI-2026-0044;2026-08-11 10:10;Paul Dubois;EQ-0006;La pompe fuit au niveau de l'arbre, il y a une flaque sous le groupe.;dégradé;;;Acceptée;;2026-08-11 11:40;OT-2026-0071;;
+DI-2026-0045;2026-08-12 15:25;Hugo Lefèvre;EQ-0025;Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;arrêt;;;Acceptée;;2026-08-13 08:13;OT-2026-0072;;
+DI-2026-0046;2026-08-13 11:15;Paul Dubois;EQ-0004;Gouttes d'eau régulières sous la pompe PO-01, le sol est mouillé.;dégradé;;;Acceptée;;2026-08-13 13:37;OT-2026-0073;;
+DI-2026-0047;2026-08-17 10:00;Mathieu Roux;EQ-0017;Comportement bizarre de CU-01.CH, difficile à décrire.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-08-17 11:43;OT-2026-0078;;
+DI-2026-0048;2026-08-18 07:40;Inès Marchand;EQ-0026;Plus de mouvement sur la machine, elle est pourtant sous tension.;arrêt;Constaté en début de poste.;;Acceptée;;2026-08-18 08:33;OT-2026-0079;;
+DI-2026-0049;2026-08-20 07:45;Mathieu Roux;EQ-0021;De l'huile coule le long du vérin de PR-01.GH.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-08-20 09:28;OT-2026-0080;;
+DI-2026-0050;2026-08-28 12:55;Mathieu Roux;EQ-0006;Fuite importante côté accouplement de PO-03.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-08-28 14:40;OT-2026-0083;;
+DI-2026-0051;2026-08-31 08:40;Paul Dubois;EQ-0004;Roulement qui siffle, le bruit augmente.;dégradé;;;Acceptée;;2026-08-31 09:08;OT-2026-0084;;
+DI-2026-0052;2026-09-08 08:55;Hugo Lefèvre;EQ-0023;Arrêts intempestifs sur CV-02, il faut réarmer à chaque fois.;arrêt;Ça dure depuis hier.;;Acceptée;;2026-09-08 10:16;OT-2026-0086;;
+DI-2026-0053;2026-09-08 10:15;Léa Fontaine;EQ-0022;Le convoyeur s'arrête tout seul plusieurs fois par heure.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-09-08 11:43;OT-2026-0087;;
+DI-2026-0054;2026-09-09 07:40;Manon Duval;EQ-0015;Bruit sourd à haute vitesse de broche.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-09-09 09:39;OT-2026-0088;;
+DI-2026-0055;2026-09-11 07:30;Camille Girard;EQ-0001;Le compresseur chauffe et se met en défaut température.;arrêt;Constaté en début de poste.;;Acceptée;;2026-09-11 08:06;OT-2026-0090;;
+DI-2026-0056;2026-09-17 08:40;Camille Girard;EQ-0006;Fuite importante côté accouplement de PO-03.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-09-17 09:18;OT-2026-0092;;
+DI-2026-0057;2026-09-21 12:25;Hugo Lefèvre;EQ-0014;Bruit sourd à haute vitesse de broche.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-09-21 13:11;OT-2026-0093;;
+DI-2026-0058;2026-09-25 08:30;Mathieu Roux;EQ-0020;Défaut de profondeur sur les pièces pressées.;gêne;Ça dure depuis hier.;;Acceptée;;2026-09-25 10:38;OT-2026-0094;;
+DI-2026-0059;2026-09-25 08:40;Lucas Perrot;EQ-0007;Alarme température sur GF-01, la température de départ monte.;dégradé;Ça dure depuis hier.;;Acceptée;;2026-09-25 11:04;OT-2026-0095;;
+DI-2026-0060;2026-09-28 09:06;Hugo Lefèvre;EQ-0009;Débit d'air faible sur l'extracteur VE-02, le filtre semble très encrassé.;gêne;Merci de passer dès que possible.;;Acceptée;;2026-09-28 11:21;OT-2026-0097;;
+DI-2026-0061;2026-09-28 13:50;Mathieu Roux;EQ-0019;Les cotes des pièces dérivent sur SC-01.;dégradé;;;Acceptée;;2026-09-28 15:10;OT-2026-0098;;
+DI-2026-0062;2026-09-30 12:20;Sarah Colin;EQ-0005;La pompe fuit au niveau de l'arbre, il y a une flaque sous le groupe.;dégradé;Merci de passer dès que possible.;;Acceptée;;2026-09-30 13:02;OT-2026-0099;;
+DI-2026-0063;2026-10-05 12:40;Antoine Mercier;EQ-0023;Arrêts intempestifs sur CV-02, il faut réarmer à chaque fois.;dégradé;Le problème apparaît surtout quand la machine est chaude.;;Acceptée;;2026-10-05 14:03;OT-2026-0101;;
+DI-2026-0064;2026-10-07 13:18;Antoine Mercier;EQ-0011;Légère odeur de chaud près du départ ventilation de l'armoire AE-02.;dégradé;;;Acceptée;;2026-10-07 14:03;OT-2026-0102;;
+DI-2026-0065;2026-10-09 09:30;Hugo Lefèvre;EQ-0016;Demande de repeindre le carter du centre d'usinage en bleu.;gêne;;;Refusée;Refusée : demande esthétique, hors périmètre de la maintenance. À adresser au service méthodes.;2026-10-09 11:30;;;
+DI-2026-0066;2026-10-12 08:42;Inès Marchand;EQ-0025;La courroie du convoyeur CV-03 patine, bruit de glissement au démarrage.;gêne;Constaté en début de poste.;;Acceptée;;2026-10-12 10:43;OT-2026-0103;;
+DI-2026-0067;2026-10-13 10:42;Lucas Perrot;EQ-0022;Le garde-corps du convoyeur CV-01 est légèrement tordu, à redresser.;gêne;;;Différée;Différée : à traiter lors de l'arrêt programmé de fin octobre, sans impact sur la production.;2026-10-13 14:02;;;
+DI-2026-0068;2026-10-14 10:15;Camille Girard;EQ-0016;Les cotes des pièces dérivent légèrement sur le centre d'usinage.;gêne;Constaté en début de poste.;;Acceptée;;2026-10-14 11:05;OT-2026-0106;;
+DI-2026-0069;2026-10-16 11:18;Léa Fontaine;EQ-0027;Les étiquettes sortent décalées de quelques millimètres sur l'étiqueteuse.;gêne;;;Nouvelle;;;;;
+DI-2026-0070;2026-10-16 14:12;Manon Duval;EQ-0026;Les films sont mal soudés sur la fardeleuse, des colis s'ouvrent à la sortie.;dégradé;;;Acceptée;;2026-10-16 14:32;OT-2026-0107;;
+DI-2026-0071;2026-10-16 16:06;Sarah Colin;EQ-0020;Fuite d'huile sous la presse PR-01, une petite flaque se forme depuis ce matin.;dégradé;;;Nouvelle;;;;;
+DI-2026-0072;2026-10-19 06:58;Mathieu Roux;EQ-0006;La pompe de relevage est très bruyante au démarrage.;gêne;;;Nouvelle;;;;;
+DI-2026-0073;2026-10-19 07:15;Paul Dubois;EQ-0013;Odeur de brûlé près de l'armoire AE-04, un peu de fumée à l'ouverture de la porte.;sécurité;;;Nouvelle;;;;;
+DI-2026-0074;2026-10-19 07:20;Lucas Perrot;EQ-0026;La fardeleuse EM-01 refait des films mal soudés ce matin aussi.;dégradé;Même problème que la demande précédente.;;Regroupée;Regroupée avec l'OT déjà ouvert pour cet équipement.;2026-10-19 07:40;OT-2026-0107;;
+DI-2026-0075;2026-10-19 07:36;Paul Dubois;EQ-0001;Le compresseur CP-01 s'est arrêté en sécurité : alarme température haute, le carter est brûlant.;arrêt;Arrêt constaté à la prise de poste.;;Acceptée;;2026-10-19 07:50;OT-2026-0108;;

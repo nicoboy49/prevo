@@ -357,7 +357,7 @@ class TestParametres(CasParametres):
             self.assertEqual(valeurs["delai_p4"], "prochain arrêt programmé")
             self.assertEqual(valeurs["delai_p1_h"], "0")            # les autres clés n'ont pas bougé
             self.assertEqual(valeurs["delai_p3_h"], "168")
-            self.assertEqual(valeurs["version_schema"], "1")
+            self.assertEqual(valeurs["version_schema"], "2")         # format v2 (ARCHITECTURE.md §14.1)
             # (le menu écrit le nom en capitales par la feuille de style : on lit le texte brut)
             self.assertIn("Atelier Test T15", page.evaluate("document.getElementById('nom-entreprise').textContent"))
             self.assertIn("parametres;entreprise_nom;modification : valeur",

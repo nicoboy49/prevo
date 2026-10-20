@@ -326,7 +326,9 @@ const Donnees = (() => {
   }
 
   // Lignes (objets) → octets du fichier : BOM UTF-8, « ; », CRLF, en-têtes dans l'ordre du schéma
-  // puis les colonnes inconnues conservées (dans leur ordre d'origine).
+  // puis les colonnes inconnues conservées (dans leur ordre d'origine). Toutes les colonnes du
+  // schéma sont toujours écrites : un fichier de la version 1 du format reçoit ainsi les colonnes
+  // de la version 2 (en fin de champs du schéma) à son prochain enregistrement (§14.1).
   // options.bom = false : sans BOM (écriture par ajout au journal, ARCHITECTURE.md §5.4).
   function serialiser(nomTable, lignes, colonnesInconnues, options) {
     const champs = descriptionTable(nomTable).champs;
@@ -529,15 +531,29 @@ const Donnees = (() => {
 
     const absents = description.champs.filter((champ) => !champsVus.has(champ.nom));
     for (const champ of absents) {
-      const valeurParDefaut = champ.defaut === undefined ? '' : champ.defaut;
-      const suite = valeurParDefaut === ''
-        ? 'la valeur est laissée vide'
-        : 'la valeur par défaut « ' + valeurParDefaut + ' » est utilisée';
-      problemes.push(probleme('attention', 'colonne', nomTable, 1, null, champ.nom, null,
-        description.libelle + ' : la colonne « ' + champ.nom + ' » (' + champ.libelle + ') est absente de '
-        + description.fichier + ' ; ' + suite + '. Elle sera ajoutée à la prochaine modification de la table.'));
+      problemes.push(problemeColonneAbsente(description, nomTable, champ));
     }
     return { colonnes: colonnes, inconnues: inconnues, absents: absents };
+  }
+
+  // Problème signalé pour une colonne du schéma absente du fichier (sa valeur par défaut est
+  // appliquée aux lignes lues, voir analyser) :
+  //   - champ ajouté par une version du format (depuisVersion) : simple information, le fichier a
+  //     été écrit avant cette version et recevra la colonne au prochain enregistrement (§14.1) ;
+  //   - champ du brief : « attention », la colonne a sans doute été supprimée à la main (§3.3).
+  function problemeColonneAbsente(description, nomTable, champ) {
+    if (champ.depuisVersion !== undefined) {
+      return probleme('info', 'colonne', nomTable, 1, null, champ.nom, null,
+        description.libelle + ' : colonne « ' + champ.nom + ' » ajoutée par la version ' + champ.depuisVersion
+        + ' du format, écrite au prochain enregistrement.');
+    }
+    const valeurParDefaut = champ.defaut === undefined ? '' : champ.defaut;
+    const suite = valeurParDefaut === ''
+      ? 'la valeur est laissée vide'
+      : 'la valeur par défaut « ' + valeurParDefaut + ' » est utilisée';
+    return probleme('attention', 'colonne', nomTable, 1, null, champ.nom, null,
+      description.libelle + ' : la colonne « ' + champ.nom + ' » (' + champ.libelle + ') est absente de '
+      + description.fichier + ' ; ' + suite + '. Elle sera ajoutée à la prochaine modification de la table.');
   }
 
   // Octets (ou texte) d'un fichier CSV → { lignes, colonnesInconnues, problemes, encodage, separateur }.

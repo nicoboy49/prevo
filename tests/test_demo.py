@@ -237,7 +237,9 @@ class TestContenuDemo(unittest.TestCase):
         parametres = {p['cle']: p['valeur'] for p in self.t['parametres']}
         self.assertEqual(parametres['entreprise_nom'], 'Atelier des Trois Vallées (démo)')
         for cle, valeur in [('delai_p1_h', '0'), ('delai_p2_h', '24'), ('delai_p3_h', '168'),
-                            ('delai_p4', 'prochain arrêt'), ('rafraichissement_s', '20'), ('version_schema', '1')]:
+                            ('delai_p4', 'prochain arrêt'), ('rafraichissement_s', '20'), ('version_schema', '2'),
+                            # clés ajoutées par le lot 2 (ARCHITECTURE.md §14.1)
+                            ('priorite_preventif', 'P3'), ('horizon_calendrier_semaines', '12')]:
             self.assertEqual(parametres[cle], valeur, cle)
         for cle in ('heures_fonct_defaut', 'tolerance_preventif_pct'):
             self.assertIn(cle, parametres)

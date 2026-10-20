@@ -59,6 +59,9 @@ NOM_ENTREPRISE = 'Atelier des Trois Vallées (démo)'
 # Copie en Python de js/schema.js (champs et ordre EXACTS de chaque table). Le test
 # tests/test_demo.py compare cette description au vrai Schema lu dans Chromium : en cas de
 # modification de js/schema.js, mettre à jour ce tableau (le test échoue sinon).
+# Les derniers champs d'equipements (valeur_remplacement), de demandes (symptome_code,
+# ot_origine_id) et d'ordres_travail (anomalie_constatee) sont ceux de la version 2 du format
+# (ARCHITECTURE.md §14.1) : ils restent vides (anomalie_constatee = 0) dans ce jeu.
 # Syntaxe d'un champ :  nom:type    nom:type!    (« ! » = champ protégé, §3.2)
 #   ref>table            clé étrangère vers table.clé
 #   ref>table.champ=fam  clé étrangère vers table.champ, filtrée sur famille = fam
@@ -69,12 +72,14 @@ DEFINITION_SCHEMA = {
         'id:id repere:texte! designation:texte localisation_id:ref>localisations '
         'parent_id:ref>equipements marque:texte modele:texte num_serie:texte! date_mes:date '
         'criticite:choix[A|B|C] statut:choix[en service|arrêt|rebut] heures_fonct_jour:decimal '
-        'habilitation_requise:texte consignation:texte_long document:document actif:booleen'),
+        'habilitation_requise:texte consignation:texte_long document:document actif:booleen '
+        'valeur_remplacement:decimal'),
     'demandes': (
         'id:id date_heure:date_heure demandeur:texte equipement_id:ref>equipements '
         'symptome:texte_long impact:choix[sécurité|arrêt|dégradé|gêne] description:texte_long '
         'photo:document statut:choix[Nouvelle|Acceptée|Regroupée|Différée|Refusée] '
-        'motif_decision:texte_long date_decision:date_heure ot_id:ref>ordres_travail'),
+        'motif_decision:texte_long date_decision:date_heure ot_id:ref>ordres_travail '
+        'symptome_code:ref>codes_defaillance.code=symptôme ot_origine_id:ref>ordres_travail'),
     'ordres_travail': (
         'id:id origine:choix[DI|préventif|urgence|manuel] di_id:ref>demandes gamme_id:ref>gammes '
         'equipement_id:ref>equipements '
@@ -89,7 +94,7 @@ DEFINITION_SCHEMA = {
         'cause_code:ref>codes_defaillance.code=cause remede_code:ref>codes_defaillance.code=remède '
         'compte_rendu:texte_long remise_service:booleen cout_soustraitance:decimal '
         'date_cloture_tech:date_heure date_cloture_admin:date_heure motif_annulation:texte_long '
-        'ot_lie_id:ref>ordres_travail'),
+        'ot_lie_id:ref>ordres_travail anomalie_constatee:booleen'),
     'ot_operations': (
         'id:id ot_id:ref>ordres_travail ordre:entier operation:texte valeur_attendue:texte '
         'fait:booleen valeur_mesuree:texte'),
@@ -1673,9 +1678,13 @@ def generer_controles(ctx):
 
 
 def generer_parametres(ctx):
+    # version_schema = Schema.version (js/schema.js) ; priorite_preventif et
+    # horizon_calendrier_semaines sont les clés ajoutées par le lot 2 (ARCHITECTURE.md §14.1).
     for cle, valeur in [('entreprise_nom', NOM_ENTREPRISE), ('delai_p1_h', 0), ('delai_p2_h', 24),
                         ('delai_p3_h', 168), ('delai_p4', 'prochain arrêt'), ('heures_fonct_defaut', 8),
-                        ('tolerance_preventif_pct', 10), ('rafraichissement_s', 20), ('version_schema', 1)]:
+                        ('tolerance_preventif_pct', 10), ('rafraichissement_s', 20),
+                        ('priorite_preventif', 'P3'), ('horizon_calendrier_semaines', 12),
+                        ('version_schema', 2)]:
         creer_ligne(ctx, 'parametres', cle=cle, valeur=valeur)
 
 

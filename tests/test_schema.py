@@ -1,6 +1,8 @@
-"""Tests de js/schema.js : conformité au brief §6 et à ARCHITECTURE.md §4.
+"""Tests de js/schema.js : conformité au brief §6 et à ARCHITECTURE.md §4 et §14.1 (format v2).
 
 Le schéma est chargé dans Chromium (page-vide.html en file://) puis lu avec JSON.stringify(Schema).
+Chaque table commence exactement par les champs du brief §6, suivis exactement des champs du
+tableau d'ARCHITECTURE.md §14.1 (version 2 du format, attribut depuisVersion: 2).
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_schema.py" -v
 """
@@ -57,6 +59,25 @@ def lire_tableau_brief():
             if interieur:
                 parentheses[nom_champ] = interieur.group(1)
         tables[nom_table] = {"champs": champs, "parentheses": parentheses}
+    return tables
+
+
+def lire_tableau_version_2():
+    """Retourne {nom_de_table: [(champ, type, libellé)…]} d'après le tableau d'ARCHITECTURE.md §14.1.
+
+    Chaque ligne du tableau est `| `table` | `champ` | `type` (précisions) | Libellé |` ; l'ordre des
+    lignes d'une même table est l'ordre attendu des champs en fin de table.
+    """
+    texte = (RACINE / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    debut = texte.index("### 14.1")
+    fin = texte.index("### 14.2", debut)
+    tables = {}
+    for ligne in texte[debut:fin].splitlines():
+        correspondance = re.match(
+            r"^\s*\|\s*`([a-z_]+)`\s*\|\s*`([a-z_]+)`\s*\|\s*`([a-z_]+)`[^|]*\|\s*(.+?)\s*\|\s*$", ligne)
+        if correspondance:
+            nom_table, nom_champ, type_champ, libelle = correspondance.groups()
+            tables.setdefault(nom_table, []).append((nom_champ, type_champ, libelle))
     return tables
 
 
@@ -123,13 +144,13 @@ TYPES_PAR_NOM = {
     "date_heure": ["date_decision", "date_creation", "date_debut", "date_fin",
                    "date_cloture_tech", "date_cloture_admin"],
     "booleen": ["actif", "arret_production", "remise_service", "fait", "critique",
-                "observations_levees"],
+                "observations_levees", "anomalie_constatee"],
     "entier": ["ordre", "delai_jours", "periodicite_jours", "avance_jours", "periodicite_mois"],
     "decimal": ["heures_fonct_jour", "temps_prevu_h", "duree_arret_h", "cout_soustraitance",
                 "quantite", "quantite_prevue", "heures", "stock", "stock_securite",
                 "point_commande", "qte_commande", "prix_unitaire", "taux_horaire",
                 "capacite_h_semaine", "periodicite_unites", "seuil",
-                "releve_derniere_realisation", "valeur"],
+                "releve_derniere_realisation", "valeur", "valeur_remplacement"],
     "texte_long": ["description", "travail_a_faire", "consignes", "compte_rendu", "consignation",
                    "observations", "commentaire", "motif_decision", "motif_attente",
                    "motif_annulation"],
@@ -156,6 +177,8 @@ REFERENCES_ATTENDUES = {
     ("equipements", "localisation_id"): ("localisations", None, None),
     ("demandes", "equipement_id"): ("equipements", None, None),
     ("demandes", "ot_id"): ("ordres_travail", None, None),
+    ("demandes", "symptome_code"): ("codes_defaillance", "code", {"famille": "symptôme"}),   # v2
+    ("demandes", "ot_origine_id"): ("ordres_travail", None, None),                            # v2
     ("ordres_travail", "di_id"): ("demandes", None, None),
     ("ordres_travail", "gamme_id"): ("gammes", None, None),
     ("ordres_travail", "equipement_id"): ("equipements", None, None),
@@ -195,6 +218,7 @@ class TestSchema(CasNavigateur):
         self.schema = json.loads(self.page.evaluate("JSON.stringify(Schema)"))
         self.tables = self.schema["tables"]
         self.brief = lire_tableau_brief()
+        self.version_2 = lire_tableau_version_2()
 
     def champs_de(self, nom_table):
         return {c["nom"]: c for c in self.tables[nom_table]["champs"]}
@@ -215,11 +239,45 @@ class TestSchema(CasNavigateur):
         self.assertEqual(len(self.tables), 22)
         self.assertEqual(self.page.evaluate("Schema.nomsTables()"), list(self.brief.keys()))
 
-    def test_champs_identiques_au_brief_et_dans_le_meme_ordre(self):
+    def test_le_tableau_du_format_v2_decrit_4_champs_dans_3_tables(self):
+        """Garde-fou de la lecture d'ARCHITECTURE.md §14.1 (sinon les tests ci-dessous ne prouvent rien)."""
+        self.assertEqual(self.version_2, {
+            "equipements": [("valeur_remplacement", "decimal", "Valeur de remplacement (€ HT)")],
+            "demandes": [("symptome_code", "ref", "Code symptôme"),
+                         ("ot_origine_id", "ref", "OT d'origine (préventif)")],
+            "ordres_travail": [("anomalie_constatee", "booleen", "Anomalie constatée")],
+        })
+
+    def test_version_du_format(self):
+        self.assertEqual(self.schema["version"], 2)
+
+    def test_champs_du_brief_en_tete_puis_exactement_les_champs_v2(self):
+        """Chaque table : les champs du brief §6, dans le même ordre, sont le début exact de la liste ;
+        viennent ensuite exactement les champs du tableau §14.1 (aucun dans les autres tables)."""
         for nom_table, attendu in self.brief.items():
             with self.subTest(table=nom_table):
                 noms = [c["nom"] for c in self.tables[nom_table]["champs"]]
-                self.assertEqual(noms, attendu["champs"])
+                champs_brief = attendu["champs"]
+                self.assertEqual(noms[:len(champs_brief)], champs_brief)
+                champs_v2 = [nom for nom, _, _ in self.version_2.get(nom_table, [])]
+                self.assertEqual(noms[len(champs_brief):], champs_v2)
+
+    def test_champs_v2_types_libelles_et_depuis_version(self):
+        for nom_table, champs_v2 in self.version_2.items():
+            for nom_champ, type_attendu, libelle in champs_v2:
+                with self.subTest(table=nom_table, champ=nom_champ):
+                    champ = self.champs_de(nom_table)[nom_champ]
+                    self.assertEqual(champ["type"], type_attendu)
+                    self.assertEqual(champ["libelle"], libelle)
+                    self.assertIs(champ.get("depuisVersion"), 2)
+                    self.assertFalse(champ.get("obligatoire", False))   # un fichier v1 n'a pas la colonne
+        self.assertEqual(self.champs_de("ordres_travail")["anomalie_constatee"]["defaut"], "0")
+        self.assertNotIn("defaut", self.champs_de("equipements")["valeur_remplacement"])
+
+    def test_seuls_les_champs_v2_portent_depuis_version(self):
+        attendus = {(t, nom) for t, champs in self.version_2.items() for nom, _, _ in champs}
+        trouves = {(t, c["nom"]) for t, c in self.tous_les_champs() if "depuisVersion" in c}
+        self.assertEqual(trouves, attendus)
 
     def test_chaque_table_a_fichier_libelle_et_cle(self):
         for nom_table, table in self.tables.items():

@@ -1,7 +1,10 @@
 'use strict';
 // Schema : description des 22 tables de Prévo (champs, types, identifiants).
-// Contrat : docs/ARCHITECTURE.md §4. Les champs de chaque table sont exactement ceux du
-// tableau du brief §6, dans le même ordre (l'ordre des champs = l'ordre des colonnes CSV).
+// Contrat : docs/ARCHITECTURE.md §4 et §14.1. Les champs de chaque table sont d'abord exactement
+// ceux du tableau du brief §6, dans le même ordre (l'ordre des champs = l'ordre des colonnes CSV),
+// puis, en fin de table, les champs ajoutés par la version 2 du format (attribut depuisVersion: 2).
+// Un fichier écrit avant la version 2 n'a pas ces colonnes : la lecture les complète avec la
+// valeur par défaut (simple information) et l'écriture suivante les ajoute en dernière position.
 // Toutes les valeurs en mémoire sont des chaînes : les valeurs par défaut le sont aussi.
 
 const Schema = (function () {
@@ -11,7 +14,7 @@ const Schema = (function () {
   // ---------------------------------------------------------------------------
 
   // Champ générique : nom, type, libellé, puis options facultatives
-  // (obligatoire, defaut, protege, synonymes, valeurs, table, champCible, filtre).
+  // (obligatoire, defaut, protege, synonymes, valeurs, table, champCible, filtre, depuisVersion).
   function champ(nom, type, libelle, options) {
     return Object.assign({ nom: nom, type: type, libelle: libelle }, options || {});
   }
@@ -46,6 +49,13 @@ const Schema = (function () {
   // Champ booléen (0/1), faux par défaut.
   function booleen(nom, libelle) {
     return champ(nom, 'booleen', libelle, { defaut: '0' });
+  }
+
+  // Marque un champ ajouté par une version du format après la première (ARCHITECTURE.md §14.1).
+  // Ces champs sont toujours placés en fin de table, après les champs du brief.
+  function depuisVersion(version, champDefini) {
+    champDefini.depuisVersion = version;
+    return champDefini;
   }
 
   // ---------------------------------------------------------------------------
@@ -120,6 +130,10 @@ const Schema = (function () {
         }),
         champ('document', 'document', 'Document'),
         champActif(),
+        // Version 2 du format (ARCHITECTURE.md §14.1)
+        depuisVersion(2, champ('valeur_remplacement', 'decimal', 'Valeur de remplacement (€ HT)', {
+          synonymes: ['valeur de remplacement', 'valeur à neuf', 'prix de remplacement'],
+        })),
       ],
     },
 
@@ -143,6 +157,9 @@ const Schema = (function () {
         champ('motif_decision', 'texte_long', 'Motif de la décision'),
         champ('date_decision', 'date_heure', 'Date de la décision'),
         reference('ot_id', 'Ordre de travail lié', 'ordres_travail'),
+        // Version 2 du format (ARCHITECTURE.md §14.1)
+        depuisVersion(2, codeDefaillance('symptome_code', 'Code symptôme', 'symptôme')),
+        depuisVersion(2, reference('ot_origine_id', 'OT d\'origine (préventif)', 'ordres_travail')),
       ],
     },
 
@@ -188,6 +205,8 @@ const Schema = (function () {
         champ('date_cloture_admin', 'date_heure', 'Date de clôture administrative'),
         champ('motif_annulation', 'texte_long', 'Motif d\'annulation'),
         reference('ot_lie_id', 'Ordre de travail lié', 'ordres_travail'),
+        // Version 2 du format (ARCHITECTURE.md §14.1)
+        depuisVersion(2, booleen('anomalie_constatee', 'Anomalie constatée')),
       ],
     },
 
@@ -511,7 +530,7 @@ const Schema = (function () {
   }
 
   return {
-    version: 1,
+    version: 2,                        // version du format des fichiers (ARCHITECTURE.md §14.1)
     tables: tables,
     table: table,
     champ: champDeTable,
