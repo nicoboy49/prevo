@@ -20,6 +20,7 @@ Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_rapport.py" -v
 """
 import csv
+import datetime
 import io
 import re
 import shutil
@@ -31,7 +32,22 @@ from pathlib import Path
 
 from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
 
-MOIS = "2026-09"                      # mois écoulé à la date du jour des tests (octobre 2026)
+NOMS_MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+             "novembre", "décembre"]
+
+
+def decaler_mois(mois, n):
+    total = int(mois[:4]) * 12 + int(mois[5:7]) - 1 + n
+    return "%04d-%02d" % (total // 12, total % 12 + 1)
+
+
+def libelle_mois(mois):
+    return NOMS_MOIS[int(mois[5:7]) - 1] + " " + mois[:4]
+
+
+# Mois écoulé à la date du jour réelle (l'application lit la vraie date) : jamais écrit en dur.
+MOIS = decaler_mois(datetime.date.today().isoformat()[:7], -1)
+LIBELLE = libelle_mois(MOIS)
 NOM = "rapport-mensuel-%s.html" % MOIS
 
 
@@ -94,12 +110,12 @@ class TestFiger(CasRapport):
 
     def test_figer_depuis_l_accueil_ecrit_le_document_la_liste_et_le_journal(self):
         self.ouvrir()
-        self.assertIn("septembre 2026", self.page.inner_text("#bandeau-rapport"))
+        self.assertIn(LIBELLE, self.page.inner_text("#bandeau-rapport"))
         # Rien n'est écrit sans clic
         self.assertFalse((self.documents / NOM).exists())
         self.assertFalse(parametre(self.serveur.dossier, "rapports_mensuels"))
         contenu = self.figer_depuis_l_accueil()
-        self.assertIn("Rapport mensuel de maintenance — septembre 2026", contenu)
+        self.assertIn("Rapport mensuel de maintenance — " + LIBELLE, contenu)
         self.assertTrue(self.attendre(lambda: any("rapport mensuel figé : " + NOM in entree["action"]
                                                   for entree in lire_csv(self.serveur.dossier, "journal.csv"))))
         # Le bandeau ne revient pas : le mois est figé
@@ -152,7 +168,8 @@ class TestContenu(CasRapport):
             const pct = (v) => v === null ? 'non calculable' : UI.nombreFr(v * 100, 1) + ' %';
             return { disponibilite: pct(g.disponibilite.valeur), partPreventif: pct(g.partPreventif.valeur),
                      cout: g.cout.valeur === null ? 'non calculable' : UI.euro(g.cout.valeur, 0),
-                     n1Couvert: Rapport.interne.estCouvert('2025-09'), m1Couvert: Rapport.interne.estCouvert('2026-08') }; }""", MOIS)
+                     n1Couvert: Rapport.interne.estCouvert(Rapport.interne.decalerMois(mois, -12)),
+                     m1Couvert: Rapport.interne.estCouvert(Rapport.interne.decalerMois(mois, -1)) }; }""", MOIS)
         for cle in ("disponibilite", "partPreventif", "cout"):
             with self.subTest(tuile=cle):
                 bloc = re.search(r'<div class="tuile" data-cle="%s">(.*?)</div>\s*(?:<div class="tuile"|</section>)' % cle, contenu, re.S)
@@ -160,9 +177,9 @@ class TestContenu(CasRapport):
                 self.assertIn(attendu[cle], bloc.group(1).replace("&nbsp;", "\u00A0"))
         self.assertTrue(attendu["m1Couvert"])
         if not attendu["n1Couvert"]:
-            self.assertIn("non comparable avec septembre 2025", contenu)
+            self.assertIn("non comparable avec " + libelle_mois(decaler_mois(MOIS, -12)), contenu)
         else:
-            self.assertIn("par rapport à septembre 2025", contenu)
+            self.assertIn("par rapport à " + libelle_mois(decaler_mois(MOIS, -12)), contenu)
         for interdit in ("NaN", "Infinity", "undefined"):
             self.assertNotIn(interdit, contenu)
 
@@ -183,7 +200,9 @@ class TestContenu(CasRapport):
         self.assertTrue(lien.startswith("mailto:?subject="))
         parametres = urllib.parse.parse_qs(lien[len("mailto:?"):])
         self.assertEqual(set(parametres), {"subject", "body"})
-        self.assertIn("septembre 2026", parametres["subject"][0])
+        self.assertIn(LIBELLE, parametres["subject"][0])
+        self.assertIn("\r\n", parametres["body"][0])                       # RFC 6068 : CRLF
+        self.assertNotIn("joint", parametres["body"][0])
         self.assertIn("Faits marquants", parametres["body"][0])
         self.assertLess(len(parametres["body"][0]), 1800)
 
@@ -203,6 +222,11 @@ class TestRevisions(CasRapport):
         self.page.wait_for_selector('.rapports-liste tr[data-nom="%s"]' % revision)
         self.assertIn("figé", self.page.inner_text("#rapports-message"))
         self.assertEqual(parametre(self.serveur.dossier, "rapports_mensuels"), NOM + "," + revision)
+        # À 375 px, la liste des rapports défile dans son cadre, jamais la page (correction de relecture)
+        self.page.set_viewport_size({"width": 375, "height": 812})
+        self.page.evaluate("Rapport.afficherOnglet(document.querySelector('#contenu'))")
+        largeur, visible = self.page.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
+        self.assertLessEqual(largeur, visible + 1)
 
     def test_un_fichier_du_meme_nom_deja_sur_le_disque_n_est_jamais_ecrase(self):
         self.autoriser_erreur("409")

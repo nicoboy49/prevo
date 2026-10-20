@@ -14,6 +14,12 @@ Object.assign(Rapport, (() => {
   const CLE_PLUS_TARD = 'prevo.rapport.plusTard';     // sessionStorage : mois reporté à plus tard
   const MOTIF_NOM = /^rapport-mensuel-(\d{4}-\d{2})(?:-r(\d+))?\.html$/;
 
+  /** « de septembre 2026 », « d'octobre 2026 », « d'août 2026 » (élision devant une voyelle). */
+  function deMois(mois) {
+    const libelle = libelleMois(mois);
+    return (/^[aeiouyàâéèêîôû]/i.test(libelle) ? 'd\'' : 'de ') + libelle;
+  }
+
   // ===========================================================================================
   // 4. Figer
   // ===========================================================================================
@@ -50,7 +56,7 @@ Object.assign(Rapport, (() => {
         if (!estNomPris(erreur)) throw erreur;
       }
     }
-    if (!nom) throw new Donnees.ErreurStockage('Aucun nom libre pour le rapport de ' + libelleMois(mois) + '.');
+    if (!nom) throw new Donnees.ErreurStockage('Aucun nom libre pour le rapport ' + deMois(mois) + '.');
     await Donnees.modifier('parametres', (lignes) => {
       let ligne = lignes.find((candidate) => candidate.cle === 'rapports_mensuels');
       if (!ligne) { ligne = { cle: 'rapports_mensuels', valeur: '' }; lignes.push(ligne); }
@@ -113,7 +119,7 @@ Object.assign(Rapport, (() => {
   }
 
   function messageFige(resultat) {
-    return UI.html`<b>Rapport de ${resultat.rapport.libelleMois} figé :</b> ${resultat.nom}.
+    return UI.html`<b>Rapport ${deMois(resultat.rapport.mois)} figé :</b> ${resultat.nom}.
       <a href="${lienCourriel(resultat.rapport)}">Préparer un courriel</a> (votre messagerie s'ouvre avec le résumé ; rien n'est envoyé par Prévo).`;
   }
 
@@ -136,7 +142,7 @@ Object.assign(Rapport, (() => {
       </article>
       <article class="carte rapports-liste">
         <div class="entete-carte"><h2>Rapports figés</h2><span class="badge ${rapports.length ? 'info' : 'neutre'}">${rapports.length}</span></div>
-        ${rapports.length ? UI.html`<div class="cadre-tableau"><table class="table">
+        ${rapports.length ? UI.html`<div class="table-defile"><table class="table">
           <thead><tr><th scope="col">Mois</th><th scope="col">Fichier</th><th scope="col">Actions</th></tr></thead>
           <tbody>${rapports.map((ligne) => UI.html`<tr data-nom="${ligne.nom}">
             <td>${ligne.mois ? libelleMois(ligne.mois) : '—'}${ligne.revision > 1 ? UI.html` <span class="badge neutre">révision ${ligne.revision}</span>` : ''}</td>
@@ -206,9 +212,9 @@ Object.assign(Rapport, (() => {
     if (!App.estResponsable()) return null;
     const mois = Rapport.moisAProposer(Donnees.aujourdhui());
     if (!mois || moisReporte() === mois) return null;
-    const bloc = UI.bandeau('info', UI.html`<b>Le rapport de ${libelleMois(mois)} n'est pas encore figé.</b>
+    const bloc = UI.bandeau('info', UI.html`<b>Le rapport ${deMois(mois)} n'est pas encore figé.</b>
       Figez-le pour garder une photographie du mois (une page A4, rouvrable sans Prévo).
-      <div class="actions"><button type="button" class="btn btn-primaire" data-action="figer-rapport">Figer le rapport de ${libelleMois(mois)}</button>
+      <div class="actions"><button type="button" class="btn btn-primaire" data-action="figer-rapport">Figer le rapport ${deMois(mois)}</button>
       <button type="button" class="btn btn-fantome" data-action="rapport-plus-tard">Plus tard</button></div>`);
     bloc.id = 'bandeau-rapport';
     bloc.querySelector('[data-action="figer-rapport"]').addEventListener('click', async (evenement) => {

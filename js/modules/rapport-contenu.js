@@ -114,7 +114,7 @@ const Rapport = (() => {
     if (plusSouvent && plusSouvent.valeur >= 2) {
       faits.push(repere(plusSouvent.equipementId) + ' : ' + plusSouvent.valeur + ' pannes dans le mois.');
     }
-    const enRetard = Donnees.lignes('controles_reglementaires').filter((controle) => Controles.etat(controle, aujourdhui).statut === 'en retard');
+    const enRetard = Donnees.lignes('controles_reglementaires').filter((controle) => Controles.interne.equipementSuivi(controle) && Controles.etat(controle, aujourdhui).statut === 'en retard');
     if (enRetard.length) faits.push(enRetard.length + ' contrôle(s) réglementaire(s) en retard au ' + UI.dateFr(aujourdhui) + '.');
     else if (global.otEnRetard.valeur) faits.push(global.otEnRetard.valeur + ' OT en retard au ' + UI.dateFr(aujourdhui) + '.');
     if (!faits.length) faits.push('Aucune panne avec arrêt de production ce mois-ci.');
@@ -132,7 +132,9 @@ const Rapport = (() => {
     const sansValeur = [];
     Indicateurs.coutParEquipement(periode12).forEach((element) => {
       const equipement = Donnees.trouver('equipements', element.equipementId);
-      const valeur = equipement ? Donnees.nombre(equipement.valeur_remplacement) : null;
+      // Un équipement déjà au rebut ou désactivé n'est pas à « réparer ou remplacer ».
+      if (!equipement || equipement.actif === '0' || equipement.statut === 'rebut') return;
+      const valeur = Donnees.nombre(equipement.valeur_remplacement);
       if (valeur === null || valeur <= 0) { if (element.valeur > 0) sansValeur.push(element.equipementId); return; }
       const ratio = element.valeur / valeur * 100;
       if (ratio >= seuil && (!meilleur || ratio > meilleur.ratio)) meilleur = { equipementId: element.equipementId, cout: element.valeur, valeur, ratio };
@@ -145,7 +147,7 @@ const Rapport = (() => {
   function decisions(mois, aujourdhui, remplacement) {
     const liste = [];
     if (remplacement.decision) liste.push(remplacement.decision);
-    const enRetard = Donnees.lignes('controles_reglementaires').filter((controle) => Controles.etat(controle, aujourdhui).statut === 'en retard');
+    const enRetard = Donnees.lignes('controles_reglementaires').filter((controle) => Controles.interne.equipementSuivi(controle) && Controles.etat(controle, aujourdhui).statut === 'en retard');
     if (enRetard.length) {
       liste.push('Planifier ' + (enRetard.length > 1 ? 'les ' + enRetard.length + ' contrôles réglementaires en retard' : 'le contrôle réglementaire en retard')
         + ' : ' + enRetard.slice(0, 3).map((controle) => texte(controle.nature) + ' (' + repere(controle.equipement_id) + ')').join(' ; ') + '.');
@@ -239,8 +241,8 @@ const Rapport = (() => {
       lignes.push('', 'Décisions proposées :');
       rapport.decisions.forEach((decision) => lignes.push('• ' + decision));
     }
-    lignes.push('', 'Le rapport complet (une page) est joint ou disponible dans Prévo, rubrique Indicateurs.');
-    let corps = lignes.join('\n');
+    lignes.push('', 'Le rapport complet (une page) est dans Prévo : Indicateurs, onglet « Rapports mensuels ».');
+    let corps = lignes.join('\r\n');      // RFC 6068 : fins de ligne CRLF (%0D%0A)
     if (corps.length > 1800) corps = corps.slice(0, 1790) + '…';
     return { objet: 'Rapport de maintenance — ' + rapport.libelleMois, corps };
   }
@@ -271,19 +273,20 @@ const Rapport = (() => {
   function graphiques(lib, rapport) {
     const pareto = rapport.pareto.length ? svg(lib, 340, 200, {
       grid: { left: 70, right: 30, top: 10, bottom: 30 },
-      xAxis: { type: 'value', name: 'h', axisLabel: { color: '#333' } },
+      xAxis: { type: 'value', name: 'h', axisLabel: { color: '#333', formatter: (valeur) => UI.nombreFr(valeur) } },
       yAxis: { type: 'category', inverse: true, data: rapport.pareto.map((ligne) => etiquette(ligne.repere)), axisLabel: { color: '#333' } },
       series: [{ type: 'bar', data: rapport.pareto.map((ligne) => Math.round(ligne.heures * 10) / 10), itemStyle: { color: COULEURS_SERIES[0] },
-        label: { show: true, position: 'right', color: '#222' } }],
+        label: { show: true, position: 'right', color: '#222', formatter: (point) => UI.nombreFr(point.value, 1) } }],
     }) : '';
     const heures = svg(lib, 340, 200, {
       grid: { left: 40, right: 10, top: 30, bottom: 30 },
       legend: { top: 0, textStyle: { color: '#222' } },
       xAxis: { type: 'category', data: rapport.heures12Mois.map((element) => element.mois.slice(5, 7) + '/' + element.mois.slice(2, 4)), axisLabel: { color: '#333' } },
-      yAxis: { type: 'value', name: 'h', axisLabel: { color: '#333' } },
+      yAxis: { type: 'value', name: 'h', axisLabel: { color: '#333', formatter: (valeur) => UI.nombreFr(valeur) } },
       series: [
-        { name: 'Correctif', type: 'bar', data: rapport.heures12Mois.map((element) => element.correctif), itemStyle: { color: COULEURS_SERIES[1] } },
-        { name: 'Préventif', type: 'bar', data: rapport.heures12Mois.map((element) => element.preventif), itemStyle: { color: COULEURS_SERIES[0] } },
+        // Mêmes couleurs que l'écran Indicateurs : correctif bleu, préventif ocre.
+        { name: 'Correctif', type: 'bar', data: rapport.heures12Mois.map((element) => element.correctif), itemStyle: { color: COULEURS_SERIES[0] } },
+        { name: 'Préventif', type: 'bar', data: rapport.heures12Mois.map((element) => element.preventif), itemStyle: { color: COULEURS_SERIES[1] } },
       ],
     });
     return { pareto, heures };
