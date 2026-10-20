@@ -1130,10 +1130,12 @@ retenu : … », comme au §14). Les définitions métier du CDC sont recopiées
   equipe-regles.js  equipe-ecritures.js  equipe-ecrans.js
   controles-regles.js  controles-ecritures.js  controles-ecrans.js
   planning-regles.js  planning-ecritures.js  planning-ecrans.js
-  indicateurs-regles.js  indicateurs-graphiques.js  indicateurs-ecrans.js
+  indicateurs-regles.js  indicateurs-series.js  indicateurs-graphiques.js  indicateurs-ecrans.js
   rapport-contenu.js  rapport-ecrans.js
   parametres.js  parametres-codes.js  (puis js/app.js)
   ```
+  Écart retenu (T43) : `indicateurs-series.js` (séries des graphiques) s'insère après
+  `indicateurs-regles.js`, qui aurait dépassé 700 lignes.
   Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
   fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
   `Parametres`. Un seul écouteur `DOMContentLoaded` par module, dans son dernier fichier
@@ -1181,11 +1183,14 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   (« non clôturée », « sans durée d'arrêt ») ; aucune mesurable → `null`.
 - **Disponibilité** = MTBF / (MTBF + MTTR) ; `null` si l'un des deux l'est.
 - **Attente de pièces** (`attentePieces(otId)` → `{ heures, complet }`) : lecture de `journal.csv`
-  (table `ordres_travail`, `id_ligne` = l'OT, triées par `date_heure` puis `id`). Historique complet
-  ⇔ une entrée de création de l'OT existe (action commençant par « création de l'OT » ou
-  « acceptation de DI- »). Attente = Σ des intervalles entre une action « statut X → En attente : m »
-  où `m` commence par « pièce » (casse et accents ignorés) et l'action « statut En attente → Y »
-  suivante (sans sortie : jusqu'à `date_fin`, sinon jusqu'à maintenant) ; plafonnée à `duree_arret_h`.
+  (table `ordres_travail`, `id_ligne` = l'OT, triées par `date_heure` puis `id`). Écart retenu
+  (constaté en écrivant T43) : `Donnees.modifier` écrit « <description> — <action> » (ex.
+  « modification : statut, motif_attente — statut En cours → En attente : Pièce : … », « création —
+  création de l'OT (urgence) ») : on lit l'action après « — » (un texte sans « — » est lu tel quel).
+  Historique complet ⇔ la création de la ligne de l'OT est au journal (« création — … »). Attente =
+  Σ des intervalles entre une action « statut X → En attente : m » où `m` commence par « pièce »
+  (casse et accents ignorés) et l'action « statut En attente → Y » suivante (sans sortie : jusqu'à
+  `date_fin` ; sans date de fin, non mesurable) ; plafonnée à `duree_arret_h`.
   Pour un ensemble de pannes : moyenne sur les pannes mesurables **à historique complet**, avec leur
   nombre ; aucune → `null` (raison « historique des statuts absent du journal »).
 - **Part du préventif** = heures `ot_temps` datées dans la période des OT `préventif systématique` et

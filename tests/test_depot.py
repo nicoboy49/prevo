@@ -43,7 +43,7 @@ ORDRE_MODULES = [
     "equipe-regles.js", "equipe-ecritures.js", "equipe-ecrans.js",
     "controles-regles.js", "controles-ecritures.js", "controles-ecrans.js",
     "planning-regles.js", "planning-ecritures.js", "planning-ecrans.js",
-    "indicateurs-regles.js", "indicateurs-graphiques.js", "indicateurs-ecrans.js",
+    "indicateurs-regles.js", "indicateurs-series.js", "indicateurs-graphiques.js", "indicateurs-ecrans.js",
     "rapport-contenu.js", "rapport-ecrans.js",
     "parametres.js", "parametres-codes.js",
 ]
