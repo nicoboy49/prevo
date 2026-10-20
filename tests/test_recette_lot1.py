@@ -8,18 +8,22 @@ test_ordres, test_parametres). Chaque scénario applicable est joué :
               rechargement : le profil est changé par l'interface (bouton du poste), sans recharger.
 
 Scénarios :
-    pompe         DI sur PO-02 → acceptée P2 → OT préparé (kit garniture) → planifié → exécuté →
-                  clôturé techniquement puis administrativement → visible dans l'historique de PO-02
-                  (« stock du kit −1 » relève du lot 2 : non vérifié ici) ;
+    pompe         DI sur PO-02 → acceptée P2 → OT préparé (kit garniture) → planifié → exécuté, le kit
+                  sorti du magasin depuis l'OT (stock du kit −1) → clôturé techniquement puis
+                  administrativement → visible dans l'historique de PO-02 ;
     ras           clôture refusée avec « RAS » et sans code cause, message clair, statut inchangé ;
     conflit       deux navigateurs valident une DI au même instant → deux DI distinctes, aucune perte ;
     telephone     QR de la fiche relu par jsQR → téléphone 375 px → profil → DI avec photo →
                   visible sur le PC, sans rechargement, en moins de 30 s ;
-    habilitation  OT sur AE-03 (BR) affecté à TEC-0004 (BR échue) → avertissement affiché et tracé ;
+    habilitation  OT sur AE-03 (BR) affecté au technicien dont la BR est échue → avertissement affiché et tracé ;
     sauvegarde    sauvegarde, ligne supprimée sur le disque, restauration par les Paramètres ;
     traversee     PUT /api/documents/../serveur.py refusé ;
     design        360 px sans défilement horizontal, zones tactiles >= 48 px, barre du bas ;
                   1440 px menu latéral ; badges de priorité avec leur texte.
+
+Aucun identifiant du jeu de démo n'est écrit en dur : ils viennent de scenarios_demo()
+(tests/fixtures/demo-scenarios.json) ou sont cherchés par leurs propriétés dans donnees/demo
+(repère d'un équipement, technicien mécanicien, codes cause et remède par leur libellé).
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_recette_lot1.py" -v
@@ -34,12 +38,54 @@ import time
 import unittest
 from pathlib import Path
 
-from commun import (CasNavigateur, RACINE, ServeurPrevo, attendre_pret, preregler_profil,
+from commun import (CasNavigateur, DOSSIER_DEMO, RACINE, ServeurPrevo, attendre_pret, preregler_profil,
                     scenarios_demo, url_fichier)
 from test_demandes import dimensions_jpeg, fichier_png
 
 # Identifiants des objets de scénario du jeu de démo (outils/generer_demo.py, ARCHITECTURE.md §14.8).
 SCENARIOS = scenarios_demo()
+
+
+def brut(valeur):
+    """Valeur sans l'apostrophe de protection des CSV (ARCHITECTURE.md §3.2)."""
+    return valeur[1:] if valeur.startswith("'") else valeur
+
+
+def lignes_demo(table):
+    """Lignes d'une table du jeu de démo (donnees/demo), valeurs sans apostrophe de protection."""
+    with open(DOSSIER_DEMO / (table + ".csv"), encoding="utf-8-sig", newline="") as fichier:
+        return [{cle: brut(valeur) for cle, valeur in ligne.items()} for ligne in csv.DictReader(fichier, delimiter=";")]
+
+
+def ligne_demo(table, identifiant):
+    return next(ligne for ligne in lignes_demo(table) if ligne["id"] == identifiant)
+
+
+def repere_demo(equipement_id):
+    return ligne_demo("equipements", equipement_id)["repere"]
+
+
+def code_demo(famille, libelle):
+    """Code de défaillance du jeu de démo d'après sa famille et son libellé."""
+    return next(c["code"] for c in lignes_demo("codes_defaillance") if c["famille"] == famille and c["libelle"] == libelle)
+
+
+# Objets du scénario « pompe » : la pompe aux fuites de garniture (PO-02), son kit, un mécanicien,
+# les codes symptôme (fuite), cause (garniture usée) et remède (remplacement de pièce).
+POMPE = SCENARIOS["causes_equipement"]
+REPERE_POMPE = repere_demo(POMPE)
+KIT = SCENARIOS["kit_garniture"]
+DESIGNATION_KIT = ligne_demo("articles", KIT)["designation"]
+MECANICIEN = next(t["id"] for t in lignes_demo("techniciens") if t["metier"] == "Mécanicien" and t["actif"] != "0")
+SYMPTOME_FUITE = SCENARIOS["causes_equipement_symptome"]
+CAUSE_GARNITURE = code_demo("cause", "Garniture usée")
+REMEDE_REMPLACEMENT = code_demo("remède", "Remplacement de pièce")
+# Scénario « habilitation » : équipement qui exige la BR (AE-03), technicien dont la BR est échue.
+EQUIPEMENT_BR = SCENARIOS["equipement_br"]
+REPERE_BR = repere_demo(EQUIPEMENT_BR)
+TECHNICIEN_BR_ECHUE = SCENARIOS["technicien_br_echue"]
+# Scénario « conflit » : un second équipement (le convoyeur de la gamme mensuelle, CV-01).
+REPERE_CONVOYEUR = repere_demo(ligne_demo("gammes", SCENARIOS["gamme_mensuelle_echue"])["equipement_id"])
 
 # Chromium écrit « Failed to load resource » (console.error) pour toute réponse HTTP >= 400.
 # Seul le scénario « conflit » provoque un 409, et seulement sur demandes.csv :
@@ -145,13 +191,13 @@ class CasRecette(CasNavigateur):
         attendre_pret(page)
         self.assertEqual(page.evaluate("App.profil.type"), type_profil)
 
-    def changer_profil(self, type_profil, nom="", page=None):
+    def changer_profil(self, type_profil, nom="", technicien_id="", page=None):
         """Change de profil par le bouton du poste, sans recharger la page."""
         page = page or self.page
         page.evaluate("window.__memePage = true")
         page.click("#etat-poste")
         self.attendre_etat("profil", page)
-        self.choisir_profil(type_profil, nom, page=page)
+        self.choisir_profil(type_profil, nom, technicien_id, page=page)
         self.assertTrue(page.evaluate("window.__memePage === true"), "la page a été rechargée")
 
     # -- navigation -------------------------------------------------------------
@@ -211,9 +257,9 @@ class TestRecettePompe(CasRecette):
         self.choisir_profil("demandeur", "Lucie Martin")
         self.menu("nouvelle-di")
         page.wait_for_selector(".di-formulaire")
-        page.fill(".selecteur-recherche input[type=search]", "PO-02")
-        page.click(".selecteur-option[data-id='EQ-0005']")
-        self.assertIn("PO-02", page.inner_text(".selecteur-choisi"))
+        page.fill(".selecteur-recherche input[type=search]", REPERE_POMPE)
+        page.click(".selecteur-option[data-id='%s']" % POMPE)
+        self.assertIn(REPERE_POMPE, page.inner_text(".selecteur-choisi"))
         page.fill("input[name=symptome]", SYMPTOME_POMPE)
         page.click("label.tuile:has(input[value='dégradé'])")
         self.assertEqual(page.inner_text(".di-priorite .badge"), "P2")        # B × dégradé
@@ -253,17 +299,17 @@ class TestRecettePompe(CasRecette):
 
         # --- Préparation : technicien mécanicien, date prévue, kit garniture × 1 ---
         self.onglet("preparation")
-        page.select_option("#form-preparation [name=technicien_id]", "TEC-0002")
+        page.select_option("#form-preparation [name=technicien_id]", MECANICIEN)
         page.fill("#form-preparation [name=date_prevue]", dans_deux_jours())
         page.click("#form-preparation button[type=submit]")
         self.attendre_toast("Préparation enregistrée")
         self.onglet("preparation")
-        option_kit = page.locator("#ot-nouvel-article option[value='ART-0016']").inner_text()
-        self.assertIn("Kit garniture mécanique PO-02", option_kit)
-        page.select_option("#ot-nouvel-article", "ART-0016")
+        option_kit = page.locator("#ot-nouvel-article option[value='%s']" % KIT).inner_text()
+        self.assertIn(DESIGNATION_KIT, option_kit)
+        page.select_option("#ot-nouvel-article", KIT)
         page.fill("#ot-nouvelle-quantite", "1")
         page.click("#form-pieces button[type=submit]")
-        page.wait_for_selector("#ot-bloc-pieces tr[data-piece]:has-text('Kit garniture mécanique PO-02')")
+        page.wait_for_selector("#ot-bloc-pieces tr[data-piece]:has-text(%r)" % DESIGNATION_KIT)
         page.click(".ot-actions-preparation button:has-text('Marquer préparé')")
         self.attendre_statut("Préparé")
 
@@ -276,8 +322,21 @@ class TestRecettePompe(CasRecette):
         self.onglet("execution")
         page.click(".ot-demarrer button:has-text('Démarrer')")
         self.attendre_statut("En cours")
+        # --- Sortie du kit depuis l'OT (bloc « Pièces sorties ») : stock du kit −1 ---
         self.onglet("execution")
-        self.assertEqual(page.input_value("#ot-temps-technicien"), "TEC-0002")
+        page.wait_for_selector("#ot-bloc-sorties #form-sortie")
+        self.assertIn("Aucune pièce sortie", page.inner_text("#ot-bloc-sorties"))
+        self.assertEqual(page.input_value("#ot-sortie-article"), KIT)          # pièce prévue proposée en tête
+        stock_kit_avant = page.evaluate("(a) => Donnees.stockArticle(a)", KIT)
+        self.assertIn("stock %d" % stock_kit_avant, page.inner_text("#ot-sortie-article option[value='%s']" % KIT))
+        page.fill("#ot-sortie-quantite", "1")
+        page.click("#form-sortie button[type=submit]")
+        page.wait_for_selector("#ot-bloc-sorties tr[data-article='%s'] button.ot-retourner" % KIT)
+        self.attendre_toast("Sortie enregistrée")
+        self.assertEqual(page.evaluate("(a) => Donnees.stockArticle(a)", KIT), stock_kit_avant - 1)
+        self.stock_kit = (stock_kit_avant, stock_kit_avant - 1)
+        self.onglet("execution")
+        self.assertEqual(page.input_value("#ot-temps-technicien"), MECANICIEN)
         page.fill("#ot-temps-heures", "1,5")
         page.click("#form-temps button[type=submit]")
         page.wait_for_function("document.querySelector('#ot-bloc-temps tbody') && !document.querySelector('#ot-bloc-temps .vide-table')")
@@ -289,8 +348,8 @@ class TestRecettePompe(CasRecette):
 
         # --- Compte rendu : codes, texte, remise en service → clôture technique ---
         self.onglet("compte-rendu")
-        for champ, code, libelle in (("symptome_code", "S01", "fuite"), ("cause_code", "C01", "garniture usée"),
-                                     ("remede_code", "R01", "remplacement")):
+        for champ, code, libelle in (("symptome_code", SYMPTOME_FUITE, "fuite"), ("cause_code", CAUSE_GARNITURE, "garniture usée"),
+                                     ("remede_code", REMEDE_REMPLACEMENT, "remplacement")):
             option = page.locator("#form-compte-rendu [name=%s] option[value='%s']" % (champ, code)).inner_text()
             self.assertIn(libelle, option.lower())
             page.select_option("#form-compte-rendu [name=%s]" % champ, code)
@@ -307,8 +366,9 @@ class TestRecettePompe(CasRecette):
         self.assertIn("lecture seule", page.inner_text(".ot-bandeau-etat"))
 
         # --- La fiche de PO-02 montre l'OT dans son historique ---
-        page.locator(".ot-fiche a[href='#/equipement/EQ-0005']").first.click()
-        page.wait_for_function("document.querySelector('#contenu h1') && document.querySelector('#contenu h1').textContent.includes('PO-02')")
+        page.locator(".ot-fiche a[href='#/equipement/%s']" % POMPE).first.click()
+        page.wait_for_function("(r) => document.querySelector('#contenu h1') && document.querySelector('#contenu h1').textContent.includes(r)",
+                               arg=REPERE_POMPE)
         page.wait_for_selector("#contenu a[href='#/ot/%s']" % ot_id)
         ligne_historique = page.locator("#contenu tr", has_text=ot_id).first.inner_text()
         self.assertIn("Clôturé administrativement", ligne_historique)
@@ -317,8 +377,15 @@ class TestRecettePompe(CasRecette):
 
     def test_pompe_serveur(self):
         with ServeurPrevo() as serveur:
+            stock_kit_disque = float(ligne_par_id(serveur.dossier / "articles.csv", KIT)["stock"])
             numero, ot_id = self.jouer(serveur)
             dossier = serveur.dossier
+            # Stock du kit −1 : colonne stock de articles.csv et mouvement « sortie » imputé à l'OT
+            self.assertEqual(self.stock_kit[0], stock_kit_disque)
+            self.assertEqual(float(ligne_par_id(dossier / "articles.csv", KIT)["stock"]), stock_kit_disque - 1)
+            sorties = [(m["type"], m["article_id"], m["quantite"]) for m in lire_csv(dossier / "mouvements_stock.csv")[1]
+                       if m["ot_id"] == ot_id]
+            self.assertEqual(sorties, [("sortie", KIT, "1")])
             demande = ligne_par_id(dossier / "demandes.csv", numero)
             self.assertEqual((demande["statut"], demande["ot_id"], demande["impact"], demande["demandeur"]),
                              ("Acceptée", ot_id, "dégradé", "Lucie Martin"))
@@ -326,25 +393,28 @@ class TestRecettePompe(CasRecette):
             self.assertTrue((dossier / "documents" / demande["photo"]).is_file())
             ot = ligne_par_id(dossier / "ordres_travail.csv", ot_id)
             self.assertEqual((ot["statut"], ot["priorite"], ot["origine"], ot["di_id"], ot["equipement_id"]),
-                             ("Clôturé administrativement", "P2", "DI", numero, "EQ-0005"))
+                             ("Clôturé administrativement", "P2", "DI", numero, POMPE))
             self.assertEqual((ot["technicien_id"], ot["date_prevue"], ot["symptome_code"], ot["cause_code"],
                               ot["remede_code"], ot["remise_service"]),
-                             ("TEC-0002", dans_deux_jours(), "S01", "C01", "R01", "1"))
+                             (MECANICIEN, dans_deux_jours(), SYMPTOME_FUITE, CAUSE_GARNITURE, REMEDE_REMPLACEMENT, "1"))
             self.assertEqual(ot["compte_rendu"], COMPTE_RENDU_POMPE)
             for champ in ("date_debut", "date_fin", "date_cloture_tech", "date_cloture_admin"):
                 self.assertRegex(ot[champ], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$", champ)
             pieces = [(p["article_id"], p["quantite_prevue"]) for p in lire_csv(dossier / "ot_pieces.csv")[1] if p["ot_id"] == ot_id]
-            self.assertEqual(pieces, [("ART-0016", "1")])
+            self.assertEqual(pieces, [(KIT, "1")])
             temps = [(t["technicien_id"], t["heures"]) for t in lire_csv(dossier / "ot_temps.csv")[1] if t["ot_id"] == ot_id]
-            self.assertEqual(temps, [("TEC-0002", "1.5")])
+            self.assertEqual(temps, [(MECANICIEN, "1.5")])
 
     def test_pompe_demo(self):
         numero, ot_id = self.jouer()
         self.assertEqual(self.page.evaluate("App.mode"), "demo")
         ot = self.page.evaluate("(id) => Donnees.trouver('ordres_travail', id)", ot_id)
         self.assertEqual((ot["statut"], ot["priorite"], ot["di_id"], ot["cause_code"]),
-                         ("Clôturé administrativement", "P2", numero, "C01"))
+                         ("Clôturé administrativement", "P2", numero, CAUSE_GARNITURE))
         self.assertEqual(self.page.evaluate("(id) => Donnees.trouver('demandes', id).statut", numero), "Acceptée")
+        # Stock du kit −1 (stock recalculé et colonne stock de la ligne de l'article)
+        self.assertEqual(self.page.evaluate("(a) => Donnees.stockArticle(a)", KIT), self.stock_kit[1])
+        self.assertEqual(float(self.page.evaluate("(a) => Donnees.trouver('articles', a).stock", KIT)), self.stock_kit[1])
 
 
 # ---------------------------------------------------------------------------
@@ -417,8 +487,8 @@ class TestRecetteConflit(CasRecette):
             avant = len(lire_csv(serveur.dossier / "demandes.csv")[1])
             contexte_a, page_a = self.nouveau_poste("Lucie Martin", "Poste A")
             contexte_b, page_b = self.nouveau_poste("Paul Dubois", "Poste B")
-            self.remplir(page_a, serveur, "PO-02", "Bruit de roulement côté accouplement")
-            self.remplir(page_b, serveur, "CV-01", "Bande qui patine au démarrage")
+            self.remplir(page_a, serveur, REPERE_POMPE, "Bruit de roulement côté accouplement")
+            self.remplir(page_b, serveur, REPERE_CONVOYEUR, "Bande qui patine au démarrage")
 
             # Barrière : les écritures de demandes.csv sont retenues jusqu'à ce que les DEUX postes
             # aient envoyé la leur (les deux clics ont eu lieu avant toute réponse du serveur).
@@ -451,7 +521,7 @@ class TestRecetteConflit(CasRecette):
             demandes = {l["id"]: l for l in lire_csv(serveur.dossier / "demandes.csv")[1]}
             self.assertEqual(len(demandes), avant + 2)
             self.assertEqual(demandes[numero_a]["demandeur"], "Lucie Martin")
-            self.assertEqual(demandes[numero_a]["equipement_id"], "EQ-0005")
+            self.assertEqual(demandes[numero_a]["equipement_id"], POMPE)
             self.assertEqual(demandes[numero_b]["demandeur"], "Paul Dubois")
             self.assertEqual(demandes[numero_b]["symptome"], "Bande qui patine au démarrage")
             # Le conflit a réellement eu lieu (409 puis rejeu) dans au moins un des deux postes.
@@ -471,12 +541,12 @@ class TestRecetteTelephone(CasRecette):
         preregler_profil(self.contexte, "responsable")
         with ServeurPrevo() as serveur:
             # PC : lit le QR de la fiche de PO-02 (comme l'appareil photo le ferait)
-            pc.goto(serveur.url + "/#/equipement/EQ-0005")
+            pc.goto(serveur.url + "/#/equipement/" + POMPE)
             attendre_pret(pc)
             pc.wait_for_selector(".parc-qr-carte svg.qr-svg")
             url_qr = pc.evaluate(LIRE_QR_FICHE_JS)
-            self.assertRegex(url_qr or "", r"^http://[^/]+/#/equipement/EQ-0005$")
-            print("\n  [telephone] QR de PO-02 relu par jsQR : %s" % url_qr)
+            self.assertRegex(url_qr or "", r"^http://[^/]+/#/equipement/%s$" % re.escape(POMPE))
+            print("\n  [telephone] QR de %s relu par jsQR : %s" % (REPERE_POMPE, url_qr))
             # PC : la liste des demandes reste affichée, sans rechargement
             self.menu("liste-di", pc)
             pc.wait_for_selector(".di-zone-tableau tbody tr.cliquable")
@@ -493,12 +563,13 @@ class TestRecetteTelephone(CasRecette):
             self.attendre_etat("profil", tel)
             self.sans_defilement_horizontal("écran de profil", tel)
             self.choisir_profil("demandeur", "Karim Benali", page=tel)
-            self.assertEqual(tel.evaluate("location.hash"), "#/equipement/EQ-0005")
-            tel.wait_for_function("document.querySelector('#contenu h1') && document.querySelector('#contenu h1').textContent.includes('PO-02')")
-            self.sans_defilement_horizontal("fiche PO-02", tel)
+            self.assertEqual(tel.evaluate("location.hash"), "#/equipement/" + POMPE)
+            tel.wait_for_function("(r) => document.querySelector('#contenu h1') && document.querySelector('#contenu h1').textContent.includes(r)",
+                                  arg=REPERE_POMPE)
+            self.sans_defilement_horizontal("fiche " + REPERE_POMPE, tel)
             tel.click("a.parc-signaler")
             tel.wait_for_selector(".di-formulaire")
-            self.assertIn("PO-02", tel.inner_text(".selecteur-choisi"))
+            self.assertIn(REPERE_POMPE, tel.inner_text(".selecteur-choisi"))
             tel.fill("input[name=symptome]", "Vibrations anormales du moteur")
             tel.click("label.tuile:has(input[value='dégradé'])")
             tel.locator(".di-fichier-photo").set_input_files(fichier_png(3000, 2000))
@@ -521,14 +592,14 @@ class TestRecetteTelephone(CasRecette):
 
             # Disque : la DI et sa photo JPEG réduite à 1280 px
             demande = ligne_par_id(serveur.dossier / "demandes.csv", numero)
-            self.assertEqual((demande["demandeur"], demande["equipement_id"]), ("Karim Benali", "EQ-0005"))
+            self.assertEqual((demande["demandeur"], demande["equipement_id"]), ("Karim Benali", POMPE))
             self.assertRegex(demande["photo"], MOTIF_PHOTO)
             largeur, hauteur = dimensions_jpeg((serveur.dossier / "documents" / demande["photo"]).read_bytes())
             self.assertLessEqual(max(largeur, hauteur), 1280)
 
 
 # ---------------------------------------------------------------------------
-# 5. Habilitation : OT sur AE-03 (BR) affecté à TEC-0004 (BR échue) (serveur, démo)
+# 5. Habilitation : OT sur AE-03 (BR) affecté au technicien dont la BR est échue (serveur, démo)
 # ---------------------------------------------------------------------------
 
 class TestRecetteHabilitation(CasRecette):
@@ -539,22 +610,22 @@ class TestRecetteHabilitation(CasRecette):
         self.menu("liste-ot")
         page.click("#ot-nouveau")
         page.wait_for_selector("#form-nouvel-ot")
-        page.fill("#ot-nouveau-equipement input[type=search]", "AE-03")
-        page.click("#ot-nouveau-equipement .selecteur-option[data-id='EQ-0012']")
-        page.fill("#form-nouvel-ot [name=titre]", "AE-03 — resserrage des borniers")
+        page.fill("#ot-nouveau-equipement input[type=search]", REPERE_BR)
+        page.click("#ot-nouveau-equipement .selecteur-option[data-id='%s']" % EQUIPEMENT_BR)
+        page.fill("#form-nouvel-ot [name=titre]", REPERE_BR + " — resserrage des borniers")
         page.click("#form-nouvel-ot button[type=submit]")
         page.wait_for_selector(".ot-fiche .ot-numero")
         ot_id = page.inner_text(".ot-fiche .ot-numero")
         date_prevue = dans_deux_jours()
         self.onglet("preparation")
-        page.select_option("#form-preparation [name=technicien_id]", "TEC-0004")
+        page.select_option("#form-preparation [name=technicien_id]", TECHNICIEN_BR_ECHUE)
         page.fill("#form-preparation [name=date_prevue]", date_prevue)
         page.dispatch_event("#form-preparation [name=date_prevue]", "change")
         page.wait_for_selector("#form-preparation .ot-zone-habilitation .alerte")
         self.assertIn("BR", page.inner_text("#form-preparation .ot-zone-habilitation"))
         page.click("#form-preparation button[type=submit]")
         self.attendre_toast("tracé au journal")
-        return ot_id, "avertissement habilitation : TEC-0004 sans BR valide au " + date_prevue
+        return ot_id, "avertissement habilitation : %s sans BR valide au %s" % (TECHNICIEN_BR_ECHUE, date_prevue)
 
     def test_habilitation_serveur(self):
         with ServeurPrevo() as serveur:
@@ -579,7 +650,7 @@ class TestRecetteHabilitation(CasRecette):
 
 class TestRecetteSauvegarde(CasRecette):
 
-    PERDU = "EQ-0029"      # BA-01
+    PERDU = SCENARIOS["equipement_panne_unique"]      # BA-01
 
     def test_sauvegarde_serveur_ligne_supprimee_puis_restauree(self):
         page = self.page
@@ -662,7 +733,7 @@ class TestRecetteDesign(CasRecette):
     ECRANS = (
         ("#/accueil", "#contenu .instruments"),
         ("#/di/nouvelle", ".di-formulaire"),
-        ("#/equipement/EQ-0005", ".parc-qr-carte"),
+        ("#/equipement/" + POMPE, ".parc-qr-carte"),
         ("#/ot/" + SCENARIOS["ot_p1_ouvert"], ".ot-fiche .ot-numero"),
         ("#/ot/" + SCENARIOS["ot_statut_prepare"], ".ot-fiche .ot-numero"),
         ("#/di/" + SCENARIOS["di_nouvelle_degradee"], ".di-details"),

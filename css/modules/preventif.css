@@ -110,4 +110,6 @@
   .pv-element { grid-template-columns: minmax(0, 1fr); gap: .15rem; }
   .pv-marques { justify-content: flex-start; }
   .pv-lien-ot, .pv-quoi a { display: inline-flex; align-items: center; min-height: 48px; }
+  /* Lien de l'OT ouvert dans la raison du statut (fiche d'une gamme ; recette du lot 2 : 19 px de haut) */
+  .pv-raison a { display: inline-flex; align-items: center; min-height: 48px; }
 }

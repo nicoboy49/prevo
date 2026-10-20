@@ -77,6 +77,8 @@
   .magasin-achats .magasin-zone { margin: 0; }
   .magasin-barre .btn, .magasin-inventaire-validation .form-ligne > .btn { flex: 1 1 100%; }
   .magasin-liens li { min-height: 48px; }
+  /* Fiche article : liens des listes « OT consommateurs » (24 px de haut à la recette du lot 2) et « Équipements liés » */
+  .magasin-liens a { display: inline-flex; align-items: center; min-height: 48px; }
   .liste-cartes .carte-ligne .actions { margin-top: .4rem; }
   .liste-cartes .carte-ligne a { min-height: 48px; display: inline-flex; align-items: center; }
   .magasin-suggestion .btn { flex: 1 1 100%; }
