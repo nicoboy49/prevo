@@ -33,6 +33,10 @@ Trois documents précèdent tout code.
   lui-même**. Le compte rendu du sous-agent ne suffit pas : il peut se tromper ou conclure trop vite.
 - À la fin de chaque vague, un **relecteur indépendant**, qui n'a pas écrit le code, le lit en
   cherchant des défauts. Il y a eu 4 relectures pour le lot 1.
+- Un lot n'est terminé que si **tous ses scénarios de recette** (ceux du cahier des charges :
+  panne sur pompe, clôture refusée, conflit entre deux postes, téléphone, habilitation,
+  sauvegarde, attaque du serveur, aller-retour Excel) passent, rejoués automatiquement dans un
+  navigateur.
 - Chaque tâche donne lieu à un commit identifié par son numéro (une correction après relecture
   porte le numéro de la tâche corrigée), chaque vague validée à une étiquette git, et le lot
   terminé à l'étiquette `lot-1`. Une étiquette fige aussi le cahier des charges validé.
