@@ -4,7 +4,9 @@
 
 /* Cinq indicateurs du responsable : une seule ligne sur grand écran, trois colonnes sur tablette,
    deux sur téléphone (règles plus bas). */
-.accueil-instruments { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+/* Lot 3 : sept indicateurs pour le responsable (deux lignes de quatre au plus, lisibles), deux pour le technicien */
+.accueil-instruments { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.accueil-instruments-technicien { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 640px; }
 .accueil-instruments .lib { overflow-wrap: anywhere; }
 
 /* Technicien : ses préventifs de la semaine, puis ses autres OT, dans la même carte */
@@ -40,6 +42,7 @@
 
 @media (max-width: 1099.98px) {
   .accueil-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .accueil-instruments-technicien { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {

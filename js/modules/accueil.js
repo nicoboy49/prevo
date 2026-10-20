@@ -1,11 +1,13 @@
 'use strict';
 // Accueil : écran d'arrivée (#/accueil), adapté au profil (brief §9 E1, ARCHITECTURE.md §10 et §14.6).
 //
-//   Responsable : cinq indicateurs (DI à traiter, OT en retard, P1 ouverts, préventifs de la
-//                 semaine, articles à commander) qui mènent à la liste filtrée, une alerte si
+//   Responsable : sept indicateurs (DI à traiter, OT en retard, P1 ouverts, préventifs de la
+//                 semaine, articles à commander ; depuis le lot 3 : contrôles réglementaires sous
+//                 30 jours, habilitations à renouveler) qui mènent à la liste filtrée, une alerte si
 //                 « Contrôle de la base » signale des erreurs, les 5 DI à traiter et les 5 OT en
 //                 retard les plus anciens.
-//   Technicien  : gros bouton « Signaler » et la liste de ses OT ouverts : d'abord ses préventifs
+//   Technicien  : gros bouton « Signaler », les deux indicateurs du lot 3 (contrôles sous 30 jours,
+//                 habilitations à renouveler) et la liste de ses OT ouverts : d'abord ses préventifs
 //                 de la semaine (ou la mention qu'il n'en a pas), puis ses autres OT.
 //   Demandeur   : gros bouton « Signaler un problème » et ses 5 dernières demandes (statut,
 //                 motif de refus).
@@ -18,7 +20,11 @@
 //   P1 ouvert                = priorité P1 ET statut ni clôturé ni annulé ;
 //   Préventif de la semaine  = OT d'origine « préventif », ni clôturé ni annulé, date prévue au
 //                              plus tard le dimanche de la semaine en cours (retards compris) ;
-//   Article à commander      = Magasin.aCommander() (article actif, stock ≤ point de commande).
+//   Article à commander      = Magasin.aCommander() (article actif, stock ≤ point de commande) ;
+//   Contrôle sous 30 jours   = Controles.sous30Jours() (équipement suivi, prochaine date inconnue
+//                              ou dans les 30 jours, retards compris ; lot 3, §15.9) ;
+//   Habilitation à renouveler = Equipe.aRenouveler() (technicien actif, habilitation qui compte
+//                              échue ou à échéance dans les 60 jours ; lot 3, §15.9).
 
 const Accueil = (() => {
 
@@ -76,6 +82,10 @@ const Accueil = (() => {
       p1Ouverts: ordres.filter(p1Ouvert),
       preventifsSemaine: ordres.filter((ot) => preventifDeLaSemaine(ot, dimanche)),
       articlesACommander: Magasin.aCommander(),
+      // Lot 3 (§15.9) : les règles des contrôles et de l'équipe, appelées au moment du calcul
+      // (leurs fichiers sont chargés après celui-ci).
+      controlesSous30j: Controles.sous30Jours(aujourdhui),
+      habilitationsARenouveler: Equipe.aRenouveler(aujourdhui),
     };
   }
 
@@ -146,6 +156,21 @@ const Accueil = (() => {
     return UI.html`<a href="${lien}" class="${classe}">
       <div class="lib">${libelle}</div><div class="chiffre">${chiffre}</div><div class="comp">${complement}</div>
     </a>`;
+  }
+
+  // Lot 3 (§15.9) : contrôles réglementaires sous 30 jours et habilitations à renouveler. La couleur
+  // du trait suit l'état (rouge : un contrôle en retard ; ambre : une habilitation échue), toujours
+  // avec le texte qui le dit.
+  function indicateursConformite(compteurs, aujourdhui) {
+    const controlesEnRetard = compteurs.controlesSous30j
+      .filter((controle) => Controles.etat(controle, aujourdhui).statut === 'en retard').length;
+    const habilitationsEchues = compteurs.habilitationsARenouveler
+      .filter((element) => element.etat.statut === 'échue').length;
+    return UI.html`${indicateur('#/controles?filtre=30j', controlesEnRetard ? 'rouge' : '', 'Contrôles sous 30 j',
+      compteurs.controlesSous30j.length, controlesEnRetard ? 'dont ' + controlesEnRetard + ' en retard' : 'contrôles réglementaires')}
+      ${indicateur('#/equipe?filtre=a-renouveler', habilitationsEchues ? 'ambre' : '', 'Habilitations à renouveler',
+      compteurs.habilitationsARenouveler.length,
+      habilitationsEchues ? 'dont ' + pluriel(habilitationsEchues, 'échue') : 'dans les 60 jours')}`;
   }
 
   // Alerte du responsable : « Contrôle de la base » a trouvé des erreurs.
@@ -239,6 +264,7 @@ const Accueil = (() => {
           preventifsEnRetard ? 'dont ' + preventifsEnRetard + ' en retard' : 'd\'ici dimanche ' + UI.dateFr(dimancheDe(aujourdhui)))}
         ${indicateur('#/magasin?onglet=a-commander', '', 'Articles à commander', compteurs.articlesACommander.length,
           articlesCritiques ? 'dont ' + pluriel(articlesCritiques, 'critique') : 'stock au point de commande')}
+        ${indicateursConformite(compteurs, aujourdhui)}
       </div>
       <div class="grille">
         <div class="c6">${carteListe('Demandes à traiter', compteurs.diATraiter.length,
@@ -284,6 +310,7 @@ const Accueil = (() => {
     // Ses préventifs de la semaine : même définition que le compteur du responsable.
     const dimanche = dimancheDe(aujourdhui);
     const idsPreventifs = new Set(mesOrdres.filter((ot) => preventifDeLaSemaine(ot, dimanche)).map((ot) => ot.id));
+    const compteurs = calculerCompteurs();
     return UI.html`
       <div class="entete-page"><div>
         <h1>Accueil</h1>
@@ -292,6 +319,7 @@ const Accueil = (() => {
       <div class="pile-gros accueil-signaler">
         <a href="#/di/nouvelle" class="btn btn-primaire btn-gros">${UI.icone('ajouter')}<span>Signaler un problème<small>Créer une demande d'intervention</small></span></a>
       </div>
+      <div class="instruments accueil-instruments accueil-instruments-technicien">${indicateursConformite(compteurs, aujourdhui)}</div>
       ${carteOrdresTechnicien(mesOrdres, idsPreventifs, aujourdhui)}`;
   }
 

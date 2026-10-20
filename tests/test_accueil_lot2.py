@@ -179,8 +179,10 @@ class TestCompteurs(CasAccueil):
             self.assertEqual(sorted(calcul["preventifs"]), sorted(ot["id"] for ot in preventifs))
             self.assertEqual(sorted(calcul["articles"]), sorted(articles))
             self.assertEqual(page.evaluate("Accueil.dimancheDe(%r)" % jour.isoformat()), dimanche_de(jour).isoformat())
-            # Cinq indicateurs en tout, les trois du lot 1 compris.
-            self.assertEqual(page.locator("#contenu .instruments > a").count(), 5)
+            # Les cinq indicateurs des lots 1 et 2 (les deux du lot 3 s'y ajoutent : test_accueil_lot3).
+            for lien in ("#/di?statut=Nouvelle", "#/ot?filtre=retard", "#/ot?filtre=p1", LIEN_PREVENTIFS, LIEN_ARTICLES):
+                self.assertEqual(page.locator('#contenu .instruments > a[href="%s"]' % lien).count(), 1, lien)
+            self.assertEqual(page.locator("#contenu .instruments > a").count(), 7)
             self.assertIn("Préventifs de la semaine", page.inner_text('#contenu .instruments a[href="%s"]' % LIEN_PREVENTIFS))
             self.assertIn("Articles à commander", page.inner_text('#contenu .instruments a[href="%s"]' % LIEN_ARTICLES))
 
