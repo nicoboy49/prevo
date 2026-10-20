@@ -36,6 +36,20 @@ DI_SANS_CODE = SCENARIOS["di_sans_symptome_code"]
 OT_PREVENTIF_OUVERT = SCENARIOS["ot_preventif_ouvert"]
 
 STATUTS_CLOTURES = ("Clôturé techniquement", "Clôturé administrativement")
+
+# Zones tactiles de #contenu de moins de 48 px de haut (même règle que tests/test_recette_lot1.py :
+# case à cocher ou bouton radio : son libellé compte).
+PETITES_ZONES_JS = """() => {
+  const petites = [];
+  for (const el of document.querySelectorAll('#contenu a, #contenu button, #contenu input, #contenu select, #contenu textarea, #contenu summary')) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || el.closest('[hidden]') || el.type === 'hidden') continue;
+    const cible = (el.type === 'checkbox' || el.type === 'radio') ? (el.closest('label') || el) : el;
+    const hauteur = cible.getBoundingClientRect().height;
+    if (hauteur < 47.5) petites.push(el.tagName + ' « ' + (el.textContent || el.value || '').trim().slice(0, 30) + ' » ' + Math.round(hauteur) + ' px');
+  }
+  return petites;
+}"""
 MINIMUM = 5
 TECHNICIEN = "TEC-0001"
 
@@ -435,6 +449,41 @@ class TestTelephone(CasDemandesLot2):
             # Liste en cartes avec la mention de l'OT d'origine
             self.aller("#/di", ".di-cartes li")
             self.assertIn("pendant l'OT préventif " + OT_PREVENTIF_OUVERT, page.inner_text(".di-cartes"))
+            self.sans_defilement_horizontal()
+
+    def test_telephone_360_zones_tactiles_de_48_px(self):
+        """Liens de l'encart (« voir les OT », « et n autres »), du bandeau d'anomalie et de la
+        confirmation : zone tactile d'au moins 48 px de haut à 360 px, sans défilement horizontal."""
+        page = self.page
+        page.set_viewport_size({"width": 360, "height": 740})
+        preregler_profil(self.contexte, "technicien", "", TECHNICIEN)
+        with ServeurPrevo() as serveur:
+            portee, cas = cas_causes(serveur.dossier, EQ_CAUSES, SYMPTOME_CAUSES)
+            self.assertEqual(portee, "equipement")
+            equipement = ligne_par_id(serveur.dossier / "ordres_travail.csv", OT_PREVENTIF_OUVERT)["equipement_id"]
+
+            # Fiche de la DI de l'équipement « causes » : le plus de liens dans l'encart
+            self.ouvrir(serveur, "#/accueil")
+            self.ouvrir_fiche(DI_CAUSES)
+            liens = page.eval_on_selector_all(".di-details .causes-frequentes li a", "(liens) => liens.map((a) => a.textContent)")
+            self.assertGreaterEqual(len(liens), min(5, len(cas)))
+            if max(collections.Counter(ot["cause_code"] for ot in cas).values()) > 5:
+                self.assertTrue(any(re.match(r"^et \d+ autres?$", texte) for texte in liens), liens)
+            self.assertEqual(page.evaluate(PETITES_ZONES_JS), [], "zones tactiles < 48 px sur la fiche " + DI_CAUSES)
+            self.sans_defilement_horizontal()
+
+            # Formulaire lié à un OT préventif (lien dans le bandeau), puis confirmation
+            self.aller("#/di/nouvelle?equipement=%s&ot=%s" % (equipement, OT_PREVENTIF_OUVERT), ".di-origine a")
+            self.assertEqual(page.evaluate(PETITES_ZONES_JS), [], "zones tactiles < 48 px sur le formulaire lié")
+            self.sans_defilement_horizontal()
+            page.click(".di-puce[data-symptome='Fuite']")
+            page.click("label.tuile:has(input[value='gêne'])")
+            di = self.envoyer()
+            self.assertEqual(page.evaluate(PETITES_ZONES_JS), [], "zones tactiles < 48 px sur la confirmation")
+            self.sans_defilement_horizontal()
+            # Fiche de la DI liée (lien « Signalée pendant l'OT préventif … » et encart)
+            self.ouvrir_fiche(di)
+            self.assertEqual(page.evaluate(PETITES_ZONES_JS), [], "zones tactiles < 48 px sur la fiche " + di)
             self.sans_defilement_horizontal()
 
 

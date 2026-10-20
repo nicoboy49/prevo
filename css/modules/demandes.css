@@ -1,4 +1,5 @@
-/* Prévo — mise en page propre au module Demandes d'intervention (js/modules/demandes.js).
+/* Prévo — mise en page propre au module Demandes d'intervention (js/modules/demandes-*.js), et
+   encart des causes fréquentes (js/modules/causes-frequentes.js, section 5).
    « Signaler » est pensé téléphone d'abord : une colonne, gros boutons (≥ 48 px, utilisables avec
    des gants). Composants communs (tuiles, bandeau sécurité, cartes, tableau) : css/style.css.
    Uniquement des variables de la charte : aucune couleur écrite en dur. */
@@ -154,6 +155,24 @@
   .di-fiche .c8, .di-fiche .c4 { grid-column: span 12; }
   /* sur téléphone, la décision passe avant le détail */
   .di-fiche { display: flex; flex-direction: column-reverse; }
+  /* liens vers l'OT préventif d'origine (bandeau du formulaire, confirmation) : zone de 48 px */
+  .di-origine a, .di-confirmation-origine a { display: inline-flex; align-items: center; min-height: 48px; vertical-align: middle; }
+}
+
+/* =========================================================================================
+   5. Encart « Causes fréquentes ici » (CausesFrequentes.encart) : fiches DI et OT
+   Règles portées par la classe de l'encart, pas par la fiche : toutes les feuilles de
+   css/modules/ sont chargées partout, et l'encart sert aussi sur la fiche d'un OT.
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  /* liens « voir les OT » et « et n autres » : pastilles de 48 px de haut, qui passent à la ligne */
+  .causes-frequentes li a {
+    display: inline-flex; align-items: center; vertical-align: middle; min-height: 48px; max-width: 100%;
+    padding: 0 .8rem; margin: 4px 0; border-radius: 999px; border: 1px solid var(--trait-2);
+    background: var(--champ); font-weight: 600; text-decoration: none; overflow-wrap: anywhere;
+  }
+  .causes-frequentes li a:hover, .causes-frequentes li a:focus-visible { border-color: var(--bleu); background: var(--teinte-bleu-faible); }
 }
 
 @media print {
