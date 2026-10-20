@@ -1106,6 +1106,9 @@ retenu : … », comme au §14). Les définitions métier du CDC sont recopiées
 - **Documents** : l'extension `html` s'ajoute aux types acceptés (`TYPES_DOCUMENTS` de `serveur.py`,
   `text/html; charset=utf-8` ; `EXTENSIONS_DOCUMENTS` de `js/stockage-dossier.js`). Comme tout
   document, il est servi avec `Content-Security-Policy: sandbox` (aucun script ne s'y exécute).
+  Écart retenu (correction de relecture) : hors serveur, l'URL d'un document `.html` (modes dossier et
+  démo, `urlDocument`) est celle d'une page enveloppe qui l'affiche dans un `iframe sandbox` sans
+  `allow-scripts` (`Donnees.documentAffichable(nom, blob)`) : là non plus, aucun script ne s'exécute.
 - **ECharts à la demande** : `App.chargerEcharts()` → promesse de l'objet `echarts` ; injecte
   `js/lib/echarts.min.js` une seule fois par une balise `<script>` (même mécanisme que
   `App.chargerScriptDemo`, compatible `file://`) ; échec → promesse rejetée avec un message clair, et
@@ -1168,8 +1171,11 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   calendaires se terminant aujourd'hui), `12-mois` (défaut : du même jour 12 mois plus tôt + 1 jour à
   aujourd'hui), `du-au` → `{ debut, fin, libelle }`.
 - **Panne** : OT `correctif immédiat` / `correctif différé`, `arret_production` = 1, statut ≠ `Annulé`.
-  Date de panne = `date_heure` de la DI dont `ot_id` est cet OT (ou `di_id` de l'OT), sinon
-  `date_creation` de l'OT ; la panne compte dans la période qui contient cette date.
+  Date de panne = `date_heure` de la DI d'origine, sinon `date_creation` de l'OT ; la panne compte
+  dans la période qui contient cette date. Écart retenu (correction de relecture) : la DI d'origine
+  est celle que l'OT désigne (`di_id`) ; à défaut, parmi les DI dont `ot_id` est l'OT, celle au statut
+  `Acceptée`, sinon la plus ancienne — jamais une DI `Regroupée` après coup (elle daterait la panne
+  et les délais de prise en charge trop tard).
   `Indicateurs.pannes(periode, { equipementId })` → `[{ ot, date, duree (nombre | null), attente }]`.
 - **Temps requis** (`tempsRequis(equipement, periode)`) = `heures_fonct_jour` × jours calendaires de
   la période comptés à partir de `date_mes` si elle est postérieure au début ; équipement `rebut` ou
@@ -1181,7 +1187,11 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
 - **MTTR** (D36 a) = Σ `duree_arret_h` / nombre de pannes mesurables ; mesurable = clôturée
   (techniquement ou administrativement) **et** `duree_arret_h` renseignée ; les autres dans `exclus`
   (« non clôturée », « sans durée d'arrêt ») ; aucune mesurable → `null`.
-- **Disponibilité** = MTBF / (MTBF + MTTR) ; `null` si l'un des deux l'est.
+- **Disponibilité** = MTBF / (MTBF + MTTR) ; `null` si l'un des deux l'est. Écarts retenus : aucune
+  panne sur la période → disponibilité 1 (100 %, note « aucune panne sur la période » : sous D36 a,
+  fonctionnement / requis = 1) ; durée d'arrêt supérieure au temps requis (panne à cheval sur une
+  période courte, ou heures par jour sous-estimées) → MTBF et disponibilité `null`, raison « la durée
+  d'arrêt dépasse le temps requis de la période » (jamais un chiffre négatif).
 - **Attente de pièces** (`attentePieces(otId)` → `{ heures, complet }`) : lecture de `journal.csv`
   (table `ordres_travail`, `id_ligne` = l'OT, triées par `date_heure` puis `id`). Écart retenu
   (constaté en écrivant T43) : `Donnees.modifier` écrit « <description> — <action> » (ex.
@@ -1203,15 +1213,24 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   heures) ; période inconnue → OT exclu (`exclus`). Résultat = respectés / comptés.
 - **OT en retard** : `Accueil.otEnRetard` (lot 1) à la date donnée.
 - **Délai de prise en charge** (`delaisPriseEnCharge(periode)`) : OT dont `date_debut` tombe dans la
-  période ; délai (h) = `date_debut` − (`date_heure` de la DI, sinon `date_creation`) ; par priorité :
-  `{ mediane, partDansLeDelai, effectif }` (délai cible `delai_pN_h` ; P4 : médiane seule).
+  période ; délai (h) = `date_debut` − (`date_heure` de la DI d'origine, sinon `date_creation`) ; par
+  priorité : `{ mediane, partDansLeDelai, effectif, cible, ots, exclus }` (délai cible `delai_pN_h` ;
+  P4 : médiane seule). Écarts retenus : une cible de 0 h (« immédiat ») donne aussi la médiane seule
+  (`partDansLeDelai` null : un 0 % serait trompeur) ; un délai négatif (début saisi avant la demande)
+  ou illisible est écarté et listé dans `exclus`.
 - **Coût** : `Ordres.cout(ot)` (RG7, prix actuel des pièces) des OT clôturés, rangé au mois de
   `date_fin` ; `coutParEquipement(periode)`, `coutsParMois(debutMois, nbMois)`.
 - **Valeur du stock** = Σ `Donnees.stockArticle(id)` × `prix_unitaire` des articles actifs.
-- Agrégats : `parEquipement(equipementId, periode)` → `{ tempsRequis, pannes, dureeArret, mtbf, mttr,
-  disponibilite, attentePieces, cout }` (chacun un résultat) ; `global(periode, { criticite,
-  atelier })` → mêmes clés sur les équipements dont le temps requis est connu (les autres listés dans
-  `exclus`), plus `partPreventif`, `respectPreventif`, `otEnRetard`, `valeurStock`, `delais`.
+- Agrégats : `parEquipement(equipementId, periode, ctx)` → `{ tempsRequis, pannes, dureeArret, mtbf,
+  mttr, disponibilite, attentePieces, cout }` (chacun un résultat ; `ctx` = `Indicateurs.interne.contexte()`
+  à passer quand on l'appelle pour beaucoup d'équipements : sans lui, les index sont reconstruits à
+  chaque appel) ; `global(periode, { criticite, atelier }, aujourdhui)` → fiabilité (pannes, arrêt,
+  MTBF, MTTR, disponibilité, attente) sur les équipements suivis dont le temps requis est connu (les
+  autres listés dans `tempsRequis.exclus`), plus `cout`, `partPreventif`, `respectPreventif`,
+  `otEnRetard`, `delais` sur TOUS les OT des équipements filtrés (au rebut et désactivés compris :
+  même périmètre que `coutParEquipement` — correction de relecture) et `valeurStock`. Le Pareto des
+  pannes compte toutes les pannes (équipements sans heures compris) : son total peut dépasser le
+  nombre de pannes du bandeau, qui dit son périmètre.
   Graphiques : `paretoPannes(periode, 10)`, `paretoArrets(periode, 10)` → `[{ equipementId, valeur,
   cumulPct }]` ; `heuresParMois(dernierMois, 12)` → `[{ mois, correctif, preventif, autres }]` ;
   `mtbfMttrCriticiteA(periode)` ; `causes(periode)` → `[{ code, libelle, nombre }]` (codes cause des
@@ -1249,7 +1268,10 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   de ces OT pour ce technicien (vide = 0) ; `Planning.semaine(lundi)` → `{ lundi, jours, lignes:
   [{ technicien, cases: { date: [ot] }, charge, capacite, surcharge }], aPlanifier: [ot] }` (lignes :
   techniciens actifs par nom ; `aPlanifier` : OT `Préparé` absents de la grille de cette semaine, triés
-  par priorité puis date prévue) ; `surcharge` = charge > `capacite_h_semaine`.
+  par priorité puis date prévue) ; `surcharge` = charge > `capacite_h_semaine`. Écarts retenus : un
+  technicien inactif ou inconnu qui a encore des OT dans la semaine a sa ligne, marquée `inactif`,
+  après les actifs (sinon ses OT disparaîtraient) ; seules les sept dates réelles de la semaine
+  comptent (une date impossible comme « 2026-02-30 » n'est jamais rangée dans la grille).
 - Écriture `await Planning.planifier(otId, statutAttendu, technicienId, dateIso)` → `{ statut,
   avertissements }` : une `Donnees.modifier('ordres_travail')` qui, sur la ligne fraîche, refuse si
   le statut a changé (« l'OT a changé sur un autre poste »), si le statut n'est ni `Préparé` ni
@@ -1294,7 +1316,8 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   prochaine, joursRestants, raison }` : statut = le premier vrai parmi `en retard` (prochaine <
   aujourd'hui), `observations à lever` (`observations` non vide et `observations_levees` ≠ 1),
   `à planifier` (prochaine ≤ aujourd'hui + 30 j, ou prochaine inconnue : raison « date inconnue »),
-  `à jour` ; `secondaires` = les autres états vrais. `Controles.sous30Jours(aujourdhui)` → contrôles
+  `à jour` ; `secondaires` = les autres états vrais (une date impossible, ex. « 2026-13-05 », compte
+  comme inconnue). `Controles.sous30Jours(aujourdhui)` → contrôles
   d'équipements actifs (hors rebut) dont la prochaine date est inconnue ou ≤ aujourd'hui + 30 j.
 - Écritures (`Donnees.modifier('controles_reglementaires')`, contrôles sur la ligne fraîche) :
   `verifierControle(valeurs)`, `creerControle(valeurs)`, `modifierControle(id, valeurs)`,
@@ -1314,7 +1337,9 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   `pas encore valable` (obtention future), `échue` (échéance < aujourd'hui), `à renouveler`
   (échéance ≤ aujourd'hui + 60 j), `valide` (échéance plus lointaine, ou vide : « sans échéance ») ;
   `Equipe.habilitationsQuiComptent(technicienId)` → pour chaque intitulé (casse et espaces ignorés),
-  la ligne à l'échéance la plus lointaine (vide = la plus lointaine) ; `Equipe.aRenouveler(aujourdhui)`
+  la ligne à l'échéance la plus lointaine (vide = la plus lointaine) ; une échéance saisie mais
+  illisible rend l'habilitation `échue` (prudence : elle apparaît « à renouveler », jamais « valide ») ;
+  `Equipe.aRenouveler(aujourdhui)`
   → `[{ technicien, habilitation, etat }]` des techniciens actifs dont une habilitation qui compte est
   `échue` ou `à renouveler`.
 - Écritures : `verifierTechnicien`, `creerTechnicien`, `modifierTechnicien` (désactivation par

@@ -73,7 +73,7 @@ const Indicateurs = (() => {
 
   /** Texte sans accents ni majuscules : « Pièce » → « piece ». */
   function simplifier(valeur) {
-    return texte(valeur).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    return texte(valeur).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
   function numeroJour(dateIso) {
@@ -216,11 +216,16 @@ const Indicateurs = (() => {
   function contexte() {
     const ordres = Donnees.lignes('ordres_travail');
     const demandes = Donnees.lignes('demandes');
-    const diParOt = new Map();
-    demandes.forEach((di) => { if (texte(di.ot_id)) diParOt.set(texte(di.ot_id), di); });
+    // DI d'origine d'un OT (D35) : celle que l'OT désigne (di_id) ; à défaut, parmi les DI qui
+    // pointent vers lui (ot_id), celle qui a été acceptée, sinon la plus ancienne. Jamais une DI
+    // regroupée plus tard sur l'OT : elle daterait la panne trop tard (correction de relecture).
     const demandesParId = new Map(demandes.map((di) => [di.id, di]));
+    const versOt = grouper(demandes.filter((di) => texte(di.ot_id)), 'ot_id');
+    const diParOt = new Map();
     ordres.forEach((ot) => {
-      if (!diParOt.has(ot.id) && demandesParId.has(texte(ot.di_id))) diParOt.set(ot.id, demandesParId.get(texte(ot.di_id)));
+      const candidates = (versOt.get(ot.id) || []).slice().sort((a, b) => texte(a.date_heure).localeCompare(texte(b.date_heure)));
+      const origine = demandesParId.get(texte(ot.di_id)) || candidates.find((di) => texte(di.statut) === 'Acceptée') || candidates[0];
+      if (origine) diParOt.set(ot.id, origine);
     });
     const journal = Donnees.lignes('journal').filter((entree) => texte(entree.table) === 'ordres_travail');
     return {
@@ -374,21 +379,29 @@ const Indicateurs = (() => {
     const dureeArret = resultat(sommeArret, null, { effectif: avecDuree.length, ots, exclus: sansDuree });
 
     const mesurables = avecDuree.filter((panne) => estCloture(panne.ot));
-    const exclusMttr = liste.filter((panne) => !mesurables.includes(panne))
+    const idsMesurables = new Set(mesurables.map((panne) => panne.ot.id));
+    const exclusMttr = liste.filter((panne) => !idsMesurables.has(panne.ot.id))
       .map((panne) => ({ id: panne.ot.id, raison: estCloture(panne.ot) ? 'sans durée d\'arrêt' : 'non clôturée' }));
     const mttr = liste.length === 0 ? resultat(null, 'aucune panne sur la période')
       : resultat(mesurables.length ? mesurables.reduce((somme, panne) => somme + panne.duree, 0) / mesurables.length : null,
         'non calculable : aucune panne clôturée avec une durée d\'arrêt',
         { effectif: mesurables.length, ots: mesurables.map((panne) => panne.ot.id), exclus: exclusMttr });
 
+    // Durée d'arrêt plus longue que le temps requis (panne à cheval sur une période courte, ou heures
+    // par jour sous-estimées) : MTBF et disponibilité seraient négatifs → non calculables.
+    const depasse = requis.valeur !== null && sommeArret > requis.valeur;
+    const raisonDepasse = 'non calculable : la durée d\'arrêt (' + UI.nombreFr(sommeArret, 1) + ' h) dépasse le temps requis de la période ('
+      + UI.nombreFr(requis.valeur, 1) + ' h) — période trop courte pour une panne à cheval, ou heures de fonctionnement par jour sous-estimées';
     let mtbf;
     if (requis.valeur === null) mtbf = resultat(null, requis.raison, { ots });
     else if (liste.length === 0) mtbf = resultat(null, 'aucune panne sur la période');
+    else if (depasse) mtbf = resultat(null, raisonDepasse, { effectif: liste.length, ots });
     else mtbf = resultat((requis.valeur - sommeArret) / liste.length, null, { effectif: liste.length, ots, exclus: sansDuree });
 
     let disponibilite;
     if (requis.valeur === null) disponibilite = resultat(null, requis.raison);
     else if (liste.length === 0) disponibilite = resultat(1, null, { note: 'aucune panne sur la période' });
+    else if (depasse) disponibilite = resultat(null, raisonDepasse);
     else if (mtbf.valeur === null || mttr.valeur === null) disponibilite = resultat(null, mttr.raison || mtbf.raison);
     else disponibilite = resultat(mtbf.valeur / (mtbf.valeur + mttr.valeur), null, { effectif: liste.length, ots });
 
@@ -437,10 +450,10 @@ const Indicateurs = (() => {
     const liste = pannes(periodeChoisie, {}, ctx).filter((panne) => ids.has(texte(panne.ot.equipement_id)));
     const requisGlobal = retenus.length ? resultat(sommeRequis, null, { effectif: retenus.length, exclus })
       : resultat(null, 'non calculable : aucun équipement n\'a ses heures de fonctionnement par jour', { exclus });
-    const idsFiltres = new Set(equipementsFiltres.map((equipement) => equipement.id));
-    const ordresFiltres = ctx.ordres.filter((ot) => idsFiltres.has(texte(ot.equipement_id)));
     return Object.assign({ tempsRequis: requisGlobal }, fiabilite(liste, requisGlobal), {
-      cout: coutDesOrdres(ordresFiltres, periodeChoisie, ctx),
+      // Coût : tous les OT des équipements filtrés, au rebut ou désactivés compris (l'argent a été
+      // dépensé ; même périmètre que coutParEquipement — correction de relecture).
+      cout: coutDesOrdres(ordresFiltres(filtres, ctx), periodeChoisie, ctx),
       partPreventif: partPreventif(periodeChoisie, filtres, ctx),
       respectPreventif: respectPreventif(periodeChoisie, filtres, ctx),
       otEnRetard: otEnRetard(aujourdhui, filtres, ctx),
@@ -467,14 +480,16 @@ const Indicateurs = (() => {
     const ctx = ctxDonne || contexte();
     let total = 0;
     let preventif = 0;
+    let saisies = 0;
     ordresFiltres(filtres, ctx).filter((ot) => texte(ot.statut) !== 'Annulé').forEach((ot) => {
-      const heures = (ctx.tempsParOt.get(ot.id) || []).filter((ligne) => dansPeriode(ligne.date, periodeChoisie))
-        .reduce((somme, ligne) => somme + nombreOuZero(ligne.heures), 0);
+      const lignes = (ctx.tempsParOt.get(ot.id) || []).filter((ligne) => dansPeriode(ligne.date, periodeChoisie));
+      const heures = lignes.reduce((somme, ligne) => somme + nombreOuZero(ligne.heures), 0);
+      saisies += lignes.length;
       total += heures;
       if (TYPES_PREVENTIFS.includes(texte(ot.type))) preventif += heures;
     });
     return resultat(total > 0 ? preventif / total : null, 'non calculable : aucune heure passée sur la période',
-      { effectif: arrondi(total, 2), note: arrondi(preventif, 2) + ' h de préventif sur ' + arrondi(total, 2) + ' h' });
+      { effectif: saisies, note: UI.nombreFr(preventif, 1) + ' h de préventif sur ' + UI.nombreFr(total, 1) + ' h' });
   }
 
   function estUniteHeure(unite) {
@@ -512,7 +527,8 @@ const Indicateurs = (() => {
       const gamme = ctx.gammes.get(texte(ot.gamme_id));
       const jours = gamme ? periodeGammeJours(gamme, ctx) : null;
       if (jours === null || !jourDe(ot.date_prevue)) {
-        exclus.push({ id: ot.id, raison: !jourDe(ot.date_prevue) ? 'sans date prévue' : 'période de la gamme inconnue' });
+        // Exclus listés seulement s'ils concernent la période (date prévue dedans, ou inconnue).
+        if (!jourDe(ot.date_prevue) || dansPeriode(ot.date_prevue, periodeChoisie)) exclus.push({ id: ot.id, raison: !jourDe(ot.date_prevue) ? 'sans date prévue' : 'période de la gamme inconnue' });
         return;
       }
       const limite = ajouterJours(jourDe(ot.date_prevue), Math.max(1, Math.ceil(tolerancePct * jours / 100)));
@@ -538,21 +554,26 @@ const Indicateurs = (() => {
   function delaisPriseEnCharge(periodeChoisie, filtres, ctxDonne) {
     const ctx = ctxDonne || contexte();
     const parPriorite = {};
-    PRIORITES.forEach((priorite) => { parPriorite[priorite] = []; });
+    const exclusParPriorite = {};
+    PRIORITES.forEach((priorite) => { parPriorite[priorite] = []; exclusParPriorite[priorite] = []; });
     ordresFiltres(filtres, ctx).forEach((ot) => {
       if (texte(ot.statut) === 'Annulé' || !dansPeriode(ot.date_debut, periodeChoisie) || !parPriorite[texte(ot.priorite)]) return;
       const di = ctx.diParOt.get(ot.id);
       const delai = heuresEntre(texte(di && di.date_heure) || ot.date_creation, ot.date_debut);
       if (delai !== null && delai >= 0) parPriorite[texte(ot.priorite)].push({ id: ot.id, delai });
+      else exclusParPriorite[texte(ot.priorite)].push({ id: ot.id, raison: delai === null ? 'date illisible' : 'début avant la demande' });
     });
     const resultatParPriorite = {};
     PRIORITES.forEach((priorite) => {
       const liste = parPriorite[priorite];
       const cible = priorite === 'P4' ? null : nombre(Donnees.parametre('delai_' + priorite.toLowerCase() + '_h', ''));
+      // Cible de 0 h (« immédiat ») : aucune prise en charge ne peut être « dans le délai » ; on
+      // donne la médiane seule, comme pour P4 (un 0 % serait un chiffre trompeur).
+      const mesurable = cible !== null && cible > 0;
       resultatParPriorite[priorite] = {
         mediane: mediane(liste.map((element) => element.delai)),
-        partDansLeDelai: cible === null || !liste.length ? null : liste.filter((element) => element.delai <= cible).length / liste.length,
-        effectif: liste.length, cible, ots: liste.map((element) => element.id),
+        partDansLeDelai: !mesurable || !liste.length ? null : liste.filter((element) => element.delai <= cible).length / liste.length,
+        effectif: liste.length, cible, ots: liste.map((element) => element.id), exclus: exclusParPriorite[priorite],
       };
     });
     return resultatParPriorite;

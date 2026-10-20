@@ -157,7 +157,7 @@ class TestContenu(CasRapport):
             with self.subTest(tuile=cle):
                 bloc = re.search(r'<div class="tuile" data-cle="%s">(.*?)</div>\s*(?:<div class="tuile"|</section>)' % cle, contenu, re.S)
                 self.assertIsNotNone(bloc, cle)
-                self.assertIn(attendu[cle], bloc.group(1).replace("&nbsp;", " "))
+                self.assertIn(attendu[cle], bloc.group(1).replace("&nbsp;", "\u00A0"))
         self.assertTrue(attendu["m1Couvert"])
         if not attendu["n1Couvert"]:
             self.assertIn("non comparable avec septembre 2025", contenu)

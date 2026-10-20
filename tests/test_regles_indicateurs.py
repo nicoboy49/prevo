@@ -55,7 +55,11 @@ EQUIPEMENTS = csv("id;repere;criticite;statut;heures_fonct_jour;date_mes;localis
     "EQ-0004;PO-04;C;rebut;8;2020-01-01;LOC-0004;1"])
 TECHNICIENS = csv("id;nom;prenom;taux_horaire;capacite_h_semaine;actif", [
     "TEC-0001;Moreau;Julien;40;35;1", "TEC-0002;Benali;Karim;35.5;35;1"])
-DEMANDES = csv("id;date_heure;equipement_id;statut;ot_id", ["DI-2026-0001;2026-03-01 08:00;EQ-0001;Acceptée;OT-2026-0001"])
+DEMANDES = csv("id;date_heure;equipement_id;statut;ot_id", [
+    "DI-2026-0001;2026-03-01 08:00;EQ-0001;Acceptée;OT-2026-0001",
+    "DI-2026-0002;2026-03-01 18:00;EQ-0001;Regroupée;OT-2026-0001",   # regroupée après coup : ne date pas la panne
+    "DI-2026-0003;2026-03-10 07:00;EQ-0001;Acceptée;OT-2026-0002",    # OT-0002 sans di_id : la DI acceptée compte
+    "DI-2026-0004;2026-03-10 11:00;EQ-0001;Regroupée;OT-2026-0002"])
 CODES = csv("id;famille;code;libelle", ["CD-0001;cause;C01;Roulement usé", "CD-0002;cause;C02;Joint fuyard"])
 GAMMES = csv("id;equipement_id;libelle;declencheur;periodicite_jours;compteur_id;periodicite_unites;actif", [
     "GAM-0001;EQ-0001;Graissage;date;30;;;1",
@@ -86,11 +90,16 @@ ORDRES = csv(ENTETE_OT, [
     "OT-2026-0015;;GAM-0003;EQ-0001;préventif systématique;P3;Clôturé techniquement;2026-03-02 08:00;2026-03-10;;2026-03-10 10:00;0;;;",
     "OT-2026-0016;;;EQ-0001;préventif conditionnel;P3;Clôturé techniquement;2026-03-02 08:00;2026-03-12;;2026-03-12 10:00;0;;;",
     "OT-2026-0017;;GAM-0001;EQ-0001;préventif systématique;P3;Annulé;2026-03-02 08:00;2026-03-12;;;0;;;",
+    # Équipement au rebut : son coût compte quand même dans le coût global (relecture)
+    "OT-2026-0018;;;EQ-0004;amélioration;P3;Clôturé techniquement;2026-03-18 08:00;2026-03-20;;2026-03-20 10:00;0;;;",
+    # Début saisi avant la création : délai négatif, exclu des délais de prise en charge
+    "OT-2026-0019;;;EQ-0001;correctif différé;P2;Clôturé techniquement;2026-03-21 10:00;2026-03-21;2026-03-21 09:00;2026-03-21 11:00;0;;;",
 ])
 OT_TEMPS = csv("id;ot_id;technicien_id;date;heures", [
     "OTT-000001;OT-2026-0001;TEC-0001;2026-03-01;4", "OTT-000002;OT-2026-0001;TEC-0001;2026-02-27;1",
     "OTT-000003;OT-2026-0002;TEC-0002;2026-03-10;3", "OTT-000004;OT-2026-0010;TEC-0001;2026-03-05;2",
-    "OTT-000005;OT-2026-0011;TEC-0001;2026-03-06;1", "OTT-000006;OT-2026-0005;TEC-0001;2026-03-16;5"])
+    "OTT-000005;OT-2026-0011;TEC-0001;2026-03-06;1", "OTT-000006;OT-2026-0005;TEC-0001;2026-03-16;5",
+    "OTT-000007;OT-2026-0018;TEC-0001;2026-03-20;1"])
 ARTICLES = csv("id;reference;designation;prix_unitaire;actif", [
     "ART-0001;ROU-001;Roulement;15.5;1", "ART-0002;DIV-001;Sans prix;;1", "ART-0003;DIV-002;Inactif;10;0"])
 MOUVEMENTS = csv("id;date;article_id;type;quantite;ot_id", [
@@ -182,7 +191,7 @@ class TestFiabilite(CasIndicateurs):
 
     def test_pannes_datees_par_la_di_et_filtrees(self):
         pannes = self.js("(p) => Indicateurs.pannes(periodeDe(...p), { equipementId: 'EQ-0001' }).map((x) => [x.ot.id, x.date, x.duree])", MARS)
-        self.assertEqual(pannes, [["OT-2026-0001", "2026-03-01 08:00", 20], ["OT-2026-0002", "2026-03-10 08:00", 6],
+        self.assertEqual(pannes, [["OT-2026-0001", "2026-03-01 08:00", 20], ["OT-2026-0002", "2026-03-10 07:00", 6],
                                   ["OT-2026-0003", "2026-03-20 08:00", None]])
 
     def test_mtbf_mttr_disponibilite_duree_d_arret_d_un_equipement(self):
@@ -213,6 +222,12 @@ class TestFiabilite(CasIndicateurs):
         self.assertEqual(sans_panne["disponibilite"]["valeur"], 1)
         self.assertEqual(sans_panne["disponibilite"]["note"], "aucune panne sur la période")
         # Mise en service dans la période (12 mois) : 8 h × 10 jours ; une panne sans durée d'arrêt
+        # Période d'un jour : 20 h d'arrêt pour 10 h requises → non calculable, jamais négatif (relecture)
+        un_jour = self.equipement("EQ-0001", ["du-au", AUJOURDHUI, "2026-03-01", "2026-03-01"])
+        self.assertEqual(un_jour["tempsRequis"]["valeur"], 10)
+        self.assertIsNone(un_jour["mtbf"]["valeur"])
+        self.assertIn("dépasse le temps requis", un_jour["mtbf"]["raison"])
+        self.assertIsNone(un_jour["disponibilite"]["valeur"])
         recente = self.equipement("EQ-0003", ["12-mois", AUJOURDHUI])
         self.assertEqual(recente["tempsRequis"]["valeur"], 80)
         self.assertIsNone(recente["mttr"]["valeur"])
@@ -235,6 +250,10 @@ class TestFiabilite(CasIndicateurs):
         self.assertEqual(g["pannes"]["valeur"], 3)                          # la panne de PO-02 n'est pas comptée
         atelier_b = self.js("(p) => Indicateurs.global(periodeDe(...p), { atelier: 'LOC-0004' }, '2026-10-20')", MARS)
         self.assertIsNone(atelier_b["mtbf"]["valeur"])
+        # Coût global : tous les OT, équipement au rebut compris = Σ coût par équipement (relecture)
+        self.assertEqual(g["cout"]["valeur"], 582)                          # 542 (PO-01) + 0 (PO-02) + 40 (PO-04, au rebut)
+        somme = self.js("(p) => Indicateurs.coutParEquipement(periodeDe(...p)).reduce((s, l) => s + l.valeur, 0)", MARS)
+        self.assertEqual(somme, 582)
         criticite_b = self.js("(p) => Indicateurs.global(periodeDe(...p), { criticite: 'B' }, '2026-10-20').cout.valeur", MARS)
         self.assertEqual(criticite_b, 0)                                    # PO-02 : OT clôturé sans temps ni pièce
         texte = json.dumps(g)
@@ -250,7 +269,8 @@ class TestPreventifDelaisCouts(CasIndicateurs):
 
     def test_part_du_preventif(self):
         part = self.js("(p) => Indicateurs.partPreventif(periodeDe(...p))", MARS)
-        self.assertAlmostEqual(part["valeur"], 0.2, places=9)              # 2 h sur 10 h (4 + 3 + 2 + 1)
+        self.assertAlmostEqual(part["valeur"], 2 / 11, places=9)           # 2 h sur 11 h (4 + 3 + 2 + 1 + 1)
+        self.assertEqual(part["effectif"], 5)                              # cinq saisies de temps
 
     def test_respect_du_preventif_date_et_compteur(self):
         r = self.js("(p) => Indicateurs.respectPreventif(periodeDe(...p))", MARS)
@@ -260,10 +280,17 @@ class TestPreventifDelaisCouts(CasIndicateurs):
 
     def test_delais_de_prise_en_charge_par_priorite(self):
         d = self.js("(p) => Indicateurs.delaisPriseEnCharge(periodeDe(...p))", MARS)
-        self.assertEqual((d["P1"]["mediane"], d["P1"]["partDansLeDelai"], d["P1"]["effectif"]), (0.75, 1, 2))
+        # P1 : OT-0002 datée par sa DI acceptée (07:00 → 09:00 = 2 h, pas la DI regroupée), OT-0003 0,5 h
+        self.assertEqual((d["P1"]["mediane"], d["P1"]["partDansLeDelai"], d["P1"]["effectif"]), (1.25, 0.5, 2))
         self.assertEqual((d["P2"]["mediane"], d["P2"]["partDansLeDelai"]), (4, 1))    # DI 08:00 → début 12:00
+        self.assertEqual(d["P2"]["exclus"], [{"id": "OT-2026-0019", "raison": "début avant la demande"}])
         self.assertEqual((d["P3"]["mediane"], d["P3"]["partDansLeDelai"]), (180, 0.5))      # 144 h et 216 h, cible 168 h
         self.assertEqual((d["P4"]["effectif"], d["P4"]["mediane"], d["P4"]["partDansLeDelai"]), (0, None, None))
+        # Cible P1 « immédiat » (0 h) : médiane seule, jamais un 0 % trompeur
+        self.js("""async () => Donnees.modifier('parametres', (lignes) => {
+            lignes.find((ligne) => ligne.cle === 'delai_p1_h').valeur = '0'; })""")
+        d0 = self.js("(p) => Indicateurs.delaisPriseEnCharge(periodeDe(...p))", MARS)
+        self.assertEqual((d0["P1"]["mediane"], d0["P1"]["partDansLeDelai"]), (1.25, None))
 
     def test_couts_egaux_a_ordres_cout_et_par_equipement(self):
         ecarts = self.js("""() => Donnees.lignes('ordres_travail').map((ot) =>
@@ -291,7 +318,7 @@ class TestPreventifDelaisCouts(CasIndicateurs):
         self.assertEqual(causes, [["C01", "Roulement usé", 2], ["C02", "Joint fuyard", 1], ["", "sans code", 1]])
         heures = self.js("Indicateurs.heuresParMois('2026-03', 2)")
         self.assertEqual(heures, [{"mois": "2026-02", "correctif": 1, "preventif": 0, "autres": 0},
-                                  {"mois": "2026-03", "correctif": 7, "preventif": 2, "autres": 1}])
+                                  {"mois": "2026-03", "correctif": 7, "preventif": 2, "autres": 2}])
         a = self.js("(p) => Indicateurs.mtbfMttrCriticiteA(periodeDe(...p)).map((l) => l.equipementId)", MARS)
         self.assertEqual(a, ["EQ-0001"])
         retard = self.js("Indicateurs.otEnRetard('2026-10-20')")
@@ -315,7 +342,7 @@ def brut(valeur):
 
 
 def nombre(valeur):
-    texte = brut(valeur).replace(",", ".").replace(" ", "").replace(" ", "")
+    texte = brut(valeur).replace(",", ".").replace(" ", "").replace("\u00A0", "")
     try:
         return float(texte) if texte else None
     except ValueError:
@@ -358,15 +385,21 @@ class CalculPython:
         self.debut = moins_un_an + datetime.timedelta(days=1)
         self.equipements = {e["id"]: e for e in lire_demo("equipements")}
         self.ordres = lire_demo("ordres_travail")
+        # DI d'origine (D35) : celle que l'OT désigne (di_id) ; sinon, parmi les DI qui pointent vers
+        # l'OT, l'acceptée, sinon la plus ancienne (jamais une DI regroupée après coup).
         self.di_par_ot = {}
         demandes = lire_demo("demandes")
         par_id = {d["id"]: d for d in demandes}
+        vers_ot = {}
         for di in demandes:
             if brut(di["ot_id"]):
-                self.di_par_ot[brut(di["ot_id"])] = di
+                vers_ot.setdefault(brut(di["ot_id"]), []).append(di)
         for ot in self.ordres:
-            if ot["id"] not in self.di_par_ot and brut(ot["di_id"]) in par_id:
-                self.di_par_ot[ot["id"]] = par_id[brut(ot["di_id"])]
+            candidates = sorted(vers_ot.get(ot["id"], []), key=lambda di: brut(di["date_heure"]))
+            origine = par_id.get(brut(ot["di_id"])) or next((di for di in candidates if di["statut"] == "Acceptée"), None) \
+                or (candidates[0] if candidates else None)
+            if origine:
+                self.di_par_ot[ot["id"]] = origine
         self.journal = {}
         for entree in lire_demo("journal"):
             if entree["table"] == "ordres_travail":
@@ -429,7 +462,7 @@ class CalculPython:
         durees = [nombre(ot["duree_arret_h"]) for ot in pannes if nombre(ot["duree_arret_h"]) is not None]
         arret = sum(durees)
         mesurables = [ot for ot in pannes if ot["statut"] in clos and nombre(ot["duree_arret_h"]) is not None]
-        mtbf = (requis - arret) / len(pannes) if pannes else None
+        mtbf = (requis - arret) / len(pannes) if pannes and arret <= requis else None
         mttr = sum(nombre(ot["duree_arret_h"]) for ot in mesurables) / len(mesurables) if mesurables else None
         dispo = mtbf / (mtbf + mttr) if mtbf is not None and mttr is not None else None
         attentes = [a for a, complet in (self.attente(ot) for ot in mesurables) if complet]

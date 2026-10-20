@@ -12,6 +12,11 @@ Object.assign(Indicateurs, (() => {
   } = Indicateurs.interne;
   const { pannes, parEquipement } = Indicateurs;
 
+  /** Un filtre criticité ou atelier est-il actif ? (une panne d'équipement introuvable est alors écartée) */
+  function aDesFiltres(filtres) {
+    return Boolean(filtres && (filtres.criticite || filtres.atelier));
+  }
+
   // ===========================================================================================
   // 7. Séries des graphiques
   // ===========================================================================================
@@ -23,7 +28,7 @@ Object.assign(Indicateurs, (() => {
     const lignes = [];
     parEquipementId.forEach((liste, equipementId) => {
       const equipement = ctx.equipements.get(equipementId);
-      if (equipement && !passeFiltres(equipement, filtres, ctx)) return;
+      if (equipement ? !passeFiltres(equipement, filtres, ctx) : aDesFiltres(filtres)) return;
       lignes.push({ equipementId, valeur: mesure(liste), ots: liste.map((panne) => panne.ot.id) });
     });
     const triees = lignes.filter((ligne) => ligne.valeur > 0).sort((a, b) => b.valeur - a.valeur || a.equipementId.localeCompare(b.equipementId));
@@ -85,7 +90,7 @@ Object.assign(Indicateurs, (() => {
     const compte = new Map();
     pannes(periodeChoisie, {}, ctx).forEach((panne) => {
       const equipement = ctx.equipements.get(texte(panne.ot.equipement_id));
-      if (equipement && !passeFiltres(equipement, filtres, ctx)) return;
+      if (equipement ? !passeFiltres(equipement, filtres, ctx) : aDesFiltres(filtres)) return;
       const code = texte(panne.ot.cause_code);
       compte.set(code, (compte.get(code) || 0) + 1);
     });
