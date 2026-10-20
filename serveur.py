@@ -451,6 +451,21 @@ def verifier_nom_sauvegarde(nom):
         raise ErreurHttp(400, 'Nom de sauvegarde invalide.')
 
 
+def lire_objet_json(corps):
+    """Corps d'une requête → objet JSON (dict), ou ErreurHttp 400.
+
+    Refuse proprement (400, jamais 500) : UTF-8 invalide, JSON invalide, JSON qui n'est pas un
+    objet, et JSON trop imbriqué (« [[[[… » : json.loads lève alors RecursionError).
+    """
+    try:
+        demande = json.loads(corps.decode('utf-8'))
+    except (UnicodeDecodeError, ValueError, RecursionError):
+        raise ErreurHttp(400, 'Corps JSON invalide.')
+    if not isinstance(demande, dict):
+        raise ErreurHttp(400, 'Corps JSON invalide.')
+    return demande
+
+
 def lire_motif_sauvegarde(corps):
     """Motif demandé dans le corps de POST /api/sauvegarde, ou None (sauvegarde manuelle).
 
@@ -460,12 +475,7 @@ def lire_motif_sauvegarde(corps):
     """
     if not corps.strip():
         return None
-    try:
-        demande = json.loads(corps.decode('utf-8'))
-    except (UnicodeDecodeError, ValueError):
-        raise ErreurHttp(400, 'Corps JSON invalide.')
-    if not isinstance(demande, dict):
-        raise ErreurHttp(400, 'Corps JSON invalide.')
+    demande = lire_objet_json(corps)
     motif = demande.get('motif')
     if motif is None:
         return None
@@ -962,12 +972,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.envoyer_json(200, {'sauvegardes': lister_sauvegardes(self.config)})
 
     def api_restauration(self, corps):
-        try:
-            demande = json.loads(corps.decode('utf-8'))
-        except (UnicodeDecodeError, ValueError):
-            raise ErreurHttp(400, 'Corps JSON invalide.')
-        if not isinstance(demande, dict):
-            raise ErreurHttp(400, 'Corps JSON invalide.')
+        demande = lire_objet_json(corps)
         with VERROU_ECRITURE:
             resultat = restaurer(self.config, demande.get('sauvegarde'), demande.get('tables'))
         self.envoyer_json(200, resultat)

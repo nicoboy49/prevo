@@ -1407,10 +1407,22 @@ const Donnees = (() => {
     return lue === null ? VERSION_SCHEMA_PAR_DEFAUT : lue;
   }
 
-  // Vrai si le stockage sait faire une sauvegarde (serveur, dossier). La démo n'en a pas :
-  // son sauvegarder() lève toujours « indisponible » (rien n'est enregistré).
-  function stockageSaitSauvegarder() {
-    return adaptateurActif.mode !== 'demo' && typeof adaptateurActif.sauvegarder === 'function';
+  // Vrai si une sauvegarde est exigée avant le passage : tous les modes sauf la démo, où rien
+  // n'est enregistré (son sauvegarder() lève toujours « indisponible »). Un stockage qui ne sait
+  // pas sauvegarder n'est donc PAS dispensé : le passage est refusé (décision de Nicolas).
+  function sauvegardeExigee() {
+    return adaptateurActif.mode !== 'demo';
+  }
+
+  // Fait la sauvegarde « avant-format-vN » et renvoie son nom ; lève une erreur si le stockage
+  // ne sait pas sauvegarder ou ne confirme pas la sauvegarde (aucun nom renvoyé).
+  async function sauvegarderAvantFormat(versionCible) {
+    if (typeof adaptateurActif.sauvegarder !== 'function') {
+      throw new Error('ce mode de stockage ne sait pas faire de sauvegarde');
+    }
+    const nom = await adaptateurActif.sauvegarder('avant-format-v' + versionCible);
+    if (!nom) { throw new Error("le stockage n'a pas confirmé la sauvegarde (aucun nom renvoyé)"); }
+    return nom;
   }
 
   // Message d'une erreur sans point final (pour l'insérer au milieu d'une phrase).
@@ -1438,9 +1450,9 @@ const Donnees = (() => {
 
     // 1. La sauvegarde d'abord : sans elle, on ne touche à rien.
     let sauvegarde = null;
-    if (stockageSaitSauvegarder()) {
+    if (sauvegardeExigee()) {
       try {
-        sauvegarde = await adaptateurActif.sauvegarder('avant-format-v' + versionCible);
+        sauvegarde = await sauvegarderAvantFormat(versionCible);
       } catch (erreur) {
         throw new ErreurStockage('Sauvegarde avant le passage au format ' + versionCible + ' impossible : '
           + messageSansPointFinal(erreur) + ' ; la mise à jour sera retentée à la prochaine ouverture.', erreur);

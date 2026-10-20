@@ -211,6 +211,18 @@ class TestServeur(CasServeurV1):
             self.assertEqual(resultat["message"], DEBUT_ERREUR_SAUVEGARDE + "panne" + FIN_ERREUR_SAUVEGARDE)
             self.assertEqual(version_schema(self.octets(serveur, "parametres.csv")), "1")
 
+            # Relecture de la vague 2 : un stockage (hors démo) qui ne sait pas sauvegarder, ou qui ne
+            # renvoie aucun nom, n'est pas dispensé de la sauvegarde → refus, version inchangée.
+            for remplacement, cause in (
+                    ("undefined", "ce mode de stockage ne sait pas faire de sauvegarde"),
+                    ("async () => undefined", "le stockage n'a pas confirmé la sauvegarde (aucun nom renvoyé)")):
+                self.page.evaluate("() => { App.adaptateur.sauvegarder = %s; }" % remplacement)
+                resultat = self.mettre_a_jour()
+                self.assertEqual((resultat["ok"], resultat["nom"]), (False, "ErreurStockage"), remplacement)
+                self.assertEqual(resultat["message"], DEBUT_ERREUR_SAUVEGARDE + cause + FIN_ERREUR_SAUVEGARDE)
+                self.assertEqual(version_schema(self.octets(serveur, "parametres.csv")), "1")
+                self.assertEqual(self.octets(serveur, "journal.csv"), journal_avant)
+
             # La fois suivante (sauvegarde rétablie), le passage se fait.
             self.page.evaluate("() => { App.adaptateur.sauvegarder = window.vraieSauvegarde; }")
             resultat = self.mettre_a_jour()
@@ -305,6 +317,23 @@ class TestApiMotif(unittest.TestCase):
             statut, reponse = demander_restauration(serveur, nom, ["parametres"])
             self.assertEqual(statut, 200, reponse)
             self.assertEqual(reponse["restaurees"], ["parametres"])
+
+    def test_json_trop_imbrique_400_et_non_500(self):
+        # Relecture de la vague 2 : « [[[[… » faisait lever RecursionError à json.loads → 500.
+        imbrique = b"[" * 200000 + b"]" * 200000
+        with ServeurPrevo() as serveur:
+            dossier = serveur.dossier / "sauvegardes"
+            avant = sorted(p.name for p in dossier.iterdir())
+            for chemin in ("/api/sauvegarde", "/api/restauration"):
+                with self.subTest(chemin=chemin):
+                    statut, reponse = requete(serveur, "POST", chemin, imbrique,
+                                              {"Content-Type": "application/json"})
+                    self.assertEqual(statut, 400, reponse)
+                    self.assertEqual(reponse["erreur"], "Corps JSON invalide.")
+            self.assertEqual(sorted(p.name for p in dossier.iterdir()), avant)    # rien n'a été créé
+            self.assertNotIn("RecursionError", serveur.sortie_console())
+            statut, _ = requete(serveur, "GET", "/api/ping")
+            self.assertEqual(statut, 200)                                        # toujours en service
 
     def test_regles_de_noms_pour_la_restauration(self):
         with ServeurPrevo() as serveur:
