@@ -484,7 +484,10 @@ class TestEtiquettesServeur(CasEtiquettes):
                     page.evaluate("location.hash = '#/parc/etiquettes'")
                     page.wait_for_function("location.hash === '#/accueil'")
                     self.assertEqual(page.locator("#etiquettes-apercu").count(), 0)
-                    self.assertIn("pas disponible", page.inner_text("#toast"))
+                    # Le toast peut s'écrire juste après le changement d'adresse : on l'attend
+                    # (lu aussitôt, il était parfois encore vide — test instable relevé par verify).
+                    page.wait_for_function(
+                        "() => (document.querySelector('#toast') || {}).textContent.includes('pas disponible')")
                 finally:
                     contexte.close()
 
