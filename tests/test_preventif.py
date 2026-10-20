@@ -12,8 +12,9 @@ Familles (le nom du test le dit) :
                   de sa check-list, modification, ordre, suppression journalisée ; calendrier de
                   12 semaines ; technicien en lecture seule ; demandeur sans accès ; téléphone 375 px ;
     demarrage   : base vide écrite au format courant (sans sauvegarde) ; base au format 1 →
-                  sauvegarde puis format 2 (tous profils) ; sauvegarde impossible → application
-                  utilisable, nouvel essai à l'ouverture suivante ; démo : génération et toast ; marques.
+                  sauvegarde puis format 2 (tous profils) ; sauvegarde impossible → aucun OT généré
+                  à cette ouverture, application utilisable, nouvel essai à l'ouverture suivante ;
+                  démo : génération et toast (chaque toast affiché est noté dès son apparition) ; marques.
 
 Les identifiants viennent de tests/fixtures/demo-scenarios.json (commun.scenarios_demo()) ; aucun
 numéro d'OT n'est écrit en dur. Lancer depuis la racine du projet :
@@ -122,9 +123,36 @@ class CasPreventif(CasNavigateur):
         })""", [table, identifiant, changements])
 
     def attendre_toast(self, motif):
-        self.page.wait_for_function(
-            "motif => new RegExp(motif).test(document.getElementById('toast').textContent.trim())", arg=motif)
-        return self.page.inner_text("#toast").strip()
+        """Attend que le texte du toast corresponde à `motif` et renvoie le texte lu à ce moment-là
+        (le relire ensuite par inner_text rendrait '' si le toast a été masqué entre-temps)."""
+        return self.page.wait_for_function(
+            """motif => { const texte = document.getElementById('toast').textContent.trim();
+                return new RegExp(motif).test(texte) ? texte : null; }""", arg=motif).json_value()
+
+    # Un toast reste affiché 4 s, puis il est masqué (visibility: hidden : inner_text rend alors '')
+    # ou remplacé par le suivant. Sur un poste chargé, le lire APRÈS coup échoue au hasard. Ce script,
+    # installé avant tout chargement de page, note le texte de chaque toast au moment où il s'affiche.
+    NOTER_TOASTS_JS = """(() => {
+      window.__toasts = [];
+      let dernier = '';
+      new MutationObserver(() => {
+        const zone = document.getElementById('toast');
+        const texte = zone && zone.classList.contains('visible') ? zone.textContent.trim() : '';
+        if (texte && texte !== dernier) window.__toasts.push(texte);
+        dernier = texte;
+      }).observe(document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
+    })();"""
+
+    def noter_les_toasts(self):
+        """À appeler AVANT d'ouvrir la page : chaque toast affiché est noté dans window.__toasts."""
+        self.contexte.add_init_script(self.NOTER_TOASTS_JS)
+
+    def attendre_toast_note(self, motif):
+        """Attend qu'un toast affiché depuis le chargement de la page corresponde à `motif` (expression
+        régulière) et renvoie son texte (tel qu'affiché, même s'il a disparu depuis)."""
+        return self.page.wait_for_function(
+            "motif => (window.__toasts || []).find((texte) => new RegExp(motif).test(texte)) || null",
+            arg=motif).json_value()
 
     def sans_defilement_horizontal(self):
         return self.page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
@@ -619,33 +647,52 @@ class TestDemarrage(CasPreventif):
             attendre_pret(self.page)
             self.assertEqual(sauvegardes_avant_format(serveur.dossier), sauvegardes)   # pas de seconde sauvegarde
 
-    def test_demarrage_sauvegarde_impossible_application_utilisable_puis_nouvel_essai(self):
+    def test_demarrage_sauvegarde_impossible_aucun_ot_genere_application_utilisable_puis_nouvel_essai(self):
+        """Pas de passage au format 2 sans sauvegarde confirmée (décision de Nicolas) : sauvegarde
+        impossible → version inchangée, AUCUNE génération automatique à cette ouverture (elle
+        écrirait ordres_travail et ot_operations au format 2), application utilisable ; l'ouverture
+        suivante retente tout (sauvegarde, format, génération)."""
         self.autoriser_erreur(re.compile(r"status of 500.*/api/sauvegarde"))
         with ServeurPrevo() as serveur:
             shutil.copyfile(str(PARAMETRES_V1), str(serveur.dossier / "parametres.csv"))
+            self.assertEqual(ots_ouverts_de(serveur.dossier, GAMME_ECHUE), [])     # gamme échue sans OT ouvert
+            ordres_avant = (serveur.dossier / "ordres_travail.csv").read_bytes()
+            operations_avant = (serveur.dossier / "ot_operations.csv").read_bytes()
             corps = json.dumps({"erreur": "Disque plein (simulé)."})
             self.page.route("**/api/sauvegarde", lambda route: route.fulfill(
                 status=500, content_type="application/json; charset=utf-8", body=corps))
             self.ouvrir(serveur)
+            self.page.wait_for_load_state("networkidle")
             self.assertEqual(version_schema(serveur.dossier), "1")
             self.assertEqual(sauvegardes_avant_format(serveur.dossier), [])
-            self.assertIn("Disque plein (simulé)", self.page.inner_text("#alertes-app"))
-            self.assertEqual(len(ots_ouverts_de(serveur.dossier, GAMME_ECHUE)), 1)     # la suite du démarrage a eu lieu
+            # Aucun OT généré : les deux fichiers sont inchangés sur le disque
+            self.assertEqual(ots_ouverts_de(serveur.dossier, GAMME_ECHUE), [])
+            self.assertEqual((serveur.dossier / "ordres_travail.csv").read_bytes(), ordres_avant)
+            self.assertEqual((serveur.dossier / "ot_operations.csv").read_bytes(), operations_avant)
+            alertes = self.page.inner_text("#alertes-app")
+            self.assertIn("Disque plein (simulé)", alertes)
+            self.assertIn("les OT préventifs échus ne sont pas générés automatiquement", alertes)
+            self.assertEqual(self.page.evaluate("performance.getEntriesByName('prevo:preventif').length"), 1)
+            # Application utilisable : écran Préventif, bouton « Générer les OT échus » du responsable
             self.page.click("#menu a[href='#/preventif']")
             self.page.wait_for_selector(".pv-liste-tableau tbody tr")
+            self.assertTrue(self.page.is_visible("#pv-generer"))
 
             self.page.unroute("**/api/sauvegarde")
             self.page.reload()
             attendre_pret(self.page)
             self.assertEqual(version_schema(serveur.dossier), "2")
             self.assertEqual(len(sauvegardes_avant_format(serveur.dossier)), 1)
+            self.assertEqual(len(ots_ouverts_de(serveur.dossier, GAMME_ECHUE)), 1)     # génération à cette ouverture
 
     def test_demarrage_demo_generation_a_l_ouverture_toast_et_marques(self):
+        self.noter_les_toasts()
         preregler_profil(self.contexte, "responsable")
         self.page.goto(url_fichier("index.html"))
         self.page.click("#btn-demo")
         attendre_pret(self.page)
-        self.assertRegex(self.attendre_toast(TOAST_GENERATION.pattern), TOAST_GENERATION)
+        # Le toast de génération a été affiché (noté à son apparition : il a pu disparaître depuis)
+        self.assertRegex(self.attendre_toast_note(TOAST_GENERATION.pattern), TOAST_GENERATION)
         ot_id = self.etat(GAMME_ECHUE)["otOuvertId"]
         self.assertTrue(ot_id)
         ot = self.page.evaluate("id => Donnees.trouver('ordres_travail', id)", ot_id)

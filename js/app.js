@@ -259,7 +259,7 @@ const App = (() => {
       await remplirBaseVide(choix);
       await Donnees.chargerTout();
     }
-    await passerAuFormatCourant();               // avant TOUTE autre écriture, pour tous les profils
+    const formatAJour = await passerAuFormatCourant();   // avant TOUTE autre écriture, pour tous les profils
 
     if (mode === 'serveur') {
       try {
@@ -274,7 +274,7 @@ const App = (() => {
     let profilChoisi = lireProfilMemorise();
     if (!profilValable(profilChoisi)) profilChoisi = await demanderProfil(false);
     appliquerProfil(profilChoisi);
-    const otPreventifs = await genererPreventifAOuverture();
+    const otPreventifs = await genererPreventifAOuverture(formatAJour);
     Donnees.demarrerSurveillance();
     await ouvrirCoque();
     if (otPreventifs.length) UI.toast(Preventif.texteGeneration(otPreventifs.length) + '.', 'succes');
@@ -285,13 +285,16 @@ const App = (() => {
   // sauvegarde « avant-format-v2 » (Donnees.mettreAJourVersionSchema, sans effet si c'est déjà fait).
   // Sauvegarde impossible : erreur signalée et bandeau dans la coque, la version reste inchangée,
   // l'application reste utilisable et le passage sera retenté à la prochaine ouverture.
+  // Renvoie true si les fichiers sont au format courant (passage fait, ou rien à faire), false sinon.
   async function passerAuFormatCourant() {
     try {
       await Donnees.mettreAJourVersionSchema();
+      return true;
     } catch (erreur) {
       signalerErreur(erreur, 'passage au format ' + Schema.version + ' des fichiers');
       alertesCoque.push(UI.bandeau('attention', UI.html`<b>Les fichiers n'ont pas pu passer au format ${Schema.version}.</b>
-        ${(erreur && erreur.message) || ''}`));
+        ${(erreur && erreur.message) || ''} D'ici là, les OT préventifs échus ne sont pas générés automatiquement.`));
+      return false;
     }
   }
 
@@ -308,9 +311,14 @@ const App = (() => {
   // juste après lit des fichiers déjà à jour. Le coût est faible : sans gamme échue (presque toutes
   // les ouvertures), le contrôle se fait en mémoire, sans aucune écriture ; sinon deux écritures
   // (ordres_travail puis ot_operations) et le journal, une fois par jour et par gamme.
-  async function genererPreventifAOuverture() {
+  //
+  // formatAJour faux (passage au format courant impossible, faute de sauvegarde confirmée) : pas de
+  // génération automatique à cette ouverture, car elle écrirait ordres_travail et ot_operations au
+  // nouveau format (décision : pas de format 2 sans sauvegarde confirmée). L'erreur est déjà
+  // signalée ; la prochaine ouverture retentera tout (sauvegarde, format, génération).
+  async function genererPreventifAOuverture(formatAJour) {
     let crees = [];
-    if ((estTechnicien() || estResponsable()) && typeof Preventif !== 'undefined') {
+    if (formatAJour && (estTechnicien() || estResponsable()) && typeof Preventif !== 'undefined') {
       try {
         crees = await Preventif.genererOTEchus();
       } catch (erreur) {
