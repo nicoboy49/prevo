@@ -82,7 +82,7 @@ Object.assign(Demandes, (() => {
         if (filtre.equipement && demande.equipement_id !== filtre.equipement) return false;
         if (!mots.length) return true;
         const texteRecherche = UI.normaliserRecherche([demande.id, demande.demandeur, demande.symptome,
-          demande.description, demande.impact, demande.statut, demande.motif_decision,
+          demande.description, demande.impact, demande.statut, demande.motif_decision, demande.ot_origine_id,
           libelleEquipement(demande.equipement_id)].join(' '));
         return mots.every((mot) => texteRecherche.includes(mot));
       });
@@ -94,7 +94,7 @@ Object.assign(Demandes, (() => {
         { cle: 'id', libelle: 'N°', rendu: (l) => UI.html`<a href="#/di/${encodeURIComponent(l.id)}">${l.id}</a>` },
         { cle: 'date_heure', libelle: 'Date', rendu: celluleDate },
         { cle: 'equipement_id', libelle: 'Équipement', valeurTri: (l) => libelleEquipement(l.equipement_id), rendu: celluleEquipement },
-        { cle: 'symptome', libelle: 'Symptôme', classe: 'di-col-symptome', rendu: (l) => celluleTexte(l.symptome) },
+        { cle: 'symptome', libelle: 'Symptôme', classe: 'di-col-symptome', rendu: celluleSymptome },
         { cle: 'impact', libelle: 'Impact', rendu: (l) => badgeImpact(l.impact) },
         { cle: 'priorite', libelle: 'Priorité calculée', valeurTri: (l) => prioriteDeLaDemande(l), rendu: (l) => UI.badgePriorite(prioriteDeLaDemande(l)) },
         { cle: 'statut', libelle: 'Statut', rendu: (l) => UI.badgeStatut(l.statut) },
@@ -121,13 +121,21 @@ Object.assign(Demandes, (() => {
     function celluleTexte(valeur) {
       return UI.html`<span class="di-coupe" title="${valeur}">${valeur}</span>`;
     }
+    // Symptôme, et en petit l'OT préventif pendant lequel l'anomalie a été constatée (lot 2).
+    function celluleSymptome(l) {
+      return UI.html`${celluleTexte(l.symptome)}${mentionOrigine(l)}`;
+    }
+    function mentionOrigine(demande) {
+      return demande.ot_origine_id
+        ? UI.html`<small class="di-origine-liste">pendant l'OT préventif ${demande.ot_origine_id}</small>` : '';
+    }
 
     function carte(demande) {
       const priorite = prioriteDeLaDemande(demande);
       const motifVisible = ['Refusée', 'Différée'].includes(demande.statut) && demande.motif_decision;
       return UI.html`<li><a href="#/di/${encodeURIComponent(demande.id)}" class="${priorite === 'P1' || priorite === 'P2' ? 'accent-' + priorite.toLowerCase() : ''}">
         <div class="carte-tete"><b>${demande.id}</b>${UI.badgePriorite(priorite)}${UI.badgeStatut(demande.statut)}</div>
-        <div class="carte-titre">${demande.symptome}</div>
+        <div class="carte-titre">${demande.symptome}${mentionOrigine(demande)}</div>
         <div class="carte-meta"><span>${libelleEquipement(demande.equipement_id)}</span><span>${UI.dateHeureFr(demande.date_heure)}</span><span>${demande.impact}</span></div>
         ${motifVisible ? UI.html`<div class="di-motif"><b>Motif :</b> ${demande.motif_decision}</div>` : ''}
       </a></li>`;

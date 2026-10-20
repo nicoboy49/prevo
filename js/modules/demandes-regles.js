@@ -9,7 +9,9 @@
 //
 // Fonctions exposées (utilisées par les tests et les autres modules) :
 //   Demandes.prioriteCalculee(criticite, impact)   règle RG2, fonction pure
-//   Demandes.creer(valeurs)                        → identifiant de la DI créée
+//   Demandes.codeSymptome(texte)                   code symptôme dont le libellé est ce texte, ou '' (lot 2)
+//   Demandes.creer(valeurs)                        → identifiant de la DI créée (lot 2 : symptome_code,
+//                                                    ot_origine_id ; l'OT d'origine passe « anomalie constatée »)
 //   Demandes.accepter(diId, { priorite, motifPriorite, type })  → identifiant de l'OT
 //   Demandes.regrouper(diId, otId), Demandes.differer(diId, motif), Demandes.refuser(diId, motif)
 //
@@ -132,6 +134,40 @@ const Demandes = (() => {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
   }
 
+  // --- Code symptôme (lot 2, ARCHITECTURE.md §14.6) ------------------------------------------
+  // Le symptôme reste un texte libre ; il reçoit en plus un code (codes_defaillance, famille
+  // « symptôme ») quand le texte est EXACTEMENT le libellé d'un code, casse et espaces ignorés.
+  // C'est ce qui se passe quand on choisit une suggestion ; retoucher ensuite le texte efface le
+  // code s'il ne correspond plus à aucun libellé.
+
+  /** Libellé comparable : sans aucun espace, en minuscules (« Bruit  ANORMAL » → « bruitanormal »). */
+  function cleSymptome(valeur) {
+    return texte(valeur).replace(/\s+/g, '').toLowerCase();
+  }
+
+  /** Codes de la famille « symptôme » qui ont un code et un libellé : [{ code, libelle }]. */
+  function codesSymptome() {
+    return Donnees.lignes('codes_defaillance')
+      .filter((ligne) => sansAccents(ligne.famille) === 'symptome' && texte(ligne.code) && texte(ligne.libelle))
+      .map((ligne) => ({ code: texte(ligne.code), libelle: texte(ligne.libelle) }));
+  }
+
+  /**
+   * Code symptôme correspondant à un texte saisi, ou '' :
+   *   codeSymptome('Fuite') → 'S01' ; codeSymptome('  FUITE ') → 'S01' ; codeSymptome('Fuite d\'eau') → ''.
+   */
+  function codeSymptome(saisie) {
+    const cle = cleSymptome(saisie);
+    if (!cle) return '';
+    const trouve = codesSymptome().find((entree) => cleSymptome(entree.libelle) === cle);
+    return trouve ? trouve.code : '';
+  }
+
+  /** OT préventif : généré par une gamme (origine « préventif ») ou de type « préventif … ». */
+  function estOtPreventif(ot) {
+    return Boolean(ot) && (sansAccents(ot.origine) === 'preventif' || /^preventif/.test(sansAccents(ot.type)));
+  }
+
   // ===========================================================================================
   // 2. Libellés partagés
   // ===========================================================================================
@@ -166,14 +202,14 @@ const Demandes = (() => {
 
   return {
     STATUTS, IMPACTS, MATRICE_PRIORITE,
-    prioriteCalculee, normaliserImpact, typePropose, datePrevue, libelleEquipement,
+    prioriteCalculee, normaliserImpact, typePropose, datePrevue, libelleEquipement, codeSymptome,
     // (les écritures creer, accepter, regrouper, differer, refuser : demandes-ecritures.js)
     // Usage interne au module : outils prêtés aux fichiers demandes-*.js, qui y ajoutent les leurs
     // par Object.assign(Demandes.interne, …). Pas une API : son contenu peut changer à tout moment.
     interne: {
       STATUTS_A_TRAITER, PRIORITES, TYPE_IMMEDIAT, TYPE_DIFFERE, MESSAGE_DEJA_TRAITEE,
       sansAccents, texte, deuxChiffres, prioriteDeLaDemande, estOuvert, otOuvertsDeLEquipement,
-      nomDuProfil, badgeImpact,
+      nomDuProfil, badgeImpact, codesSymptome, estOtPreventif,
     },
   };
 })();

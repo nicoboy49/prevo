@@ -7,7 +7,8 @@ avec des dates fixes passées en argument (aujourd'hui = mardi 20/10/2026) :
     - Preventif.calendrier : semaines du lundi au dimanche, placement des échéances et des OT ;
     - Magasin.suggestionPointCommande (D23), Magasin.aCommander, Magasin.sortiesDeLOt ;
     - CausesFrequentes.calculer (portées équipement et modèle, cas ignorés, tri, limite à 3)
-      et CausesFrequentes.encart (textes exacts, échappement d'un libellé piégé).
+      et CausesFrequentes.encart (textes exacts, échappement d'un libellé piégé, 5 liens au plus
+      par cause puis « et n autres »).
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_regles_lot2.py" -v
@@ -545,6 +546,62 @@ class TestCausesFrequentes(CasRegles):
         self.assertEqual(encart["images"], 0)
         self.assertIsNone(encart["piege"])
         self.assertNotIn("certaine", encart["texte"])
+        # 3 cas au plus par cause ici : aucune suite « et n autres »
+        self.assertNotIn("autre", encart["texte"])
+
+    def test_encart_cinq_liens_par_cause_puis_et_n_autres(self):
+        """Relecture de la vague 2 : au plus 5 liens par cause (les plus récents), puis « et n autres »
+        (lien vers la liste des OT clôturés de l'équipement pour la portée équipement, texte simple
+        pour la portée modèle). Jeu du test complété par un symptôme CHA, rechargé pour ce test seul."""
+        en_plus = (
+            # EQ-0003 (modèle unique) : 8 cas GAR (5 du mois) et 5 cas JOI (20 du mois) → portée équipement
+            [ot_correctif(400 + mois, "EQ-0003", CLOS, "2026-%02d-05" % mois, "CHA", "GAR", "REM") for mois in range(1, 9)]
+            + [ot_correctif(410 + mois, "EQ-0003", CLOS, "2026-%02d-20" % mois, "CHA", "JOI", "RES") for mois in range(1, 6)]
+            # EQ-0001 : 2 cas ; EQ-0002 (même marque et modèle) : 4 cas → portée modèle, 6 cas ROU
+            + [ot_correctif(420 + jour, "EQ-0001" if jour <= 2 else "EQ-0002", CLOS, "2026-03-%02d" % jour,
+                            "CHA", "ROU", "REM") for jour in range(1, 7)]
+        )
+        tables = jeu_de_test()
+        tables["ordres_travail"] = ORDRES + "\r\n".join(en_plus) + "\r\n"
+        lu = self.js("""async (tables) => {
+          Donnees.initialiser(StockageDemo.creer(tables), { poste: 'Poste test', profil: 'Responsable test' });
+          await Donnees.chargerTout();
+          const lire = (element) => ({
+            titre: element.querySelector('h3').textContent,
+            lignes: Array.from(element.querySelectorAll('li')).map((li) => li.textContent),
+            liens: Array.from(element.querySelectorAll('li')).map((li) =>
+              Array.from(li.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')])),
+          });
+          return { equipement: lire(CausesFrequentes.encart('EQ-0003', 'CHA')),
+                   modele: lire(CausesFrequentes.encart('EQ-0001', 'CHA')) };
+        }""", tables)
+
+        equipement = lu["equipement"]
+        self.assertEqual(equipement["titre"], "Causes fréquentes ici — 13 cas")
+        self.assertEqual(equipement["lignes"], [
+            "garniture usée — 8 cas sur 13 · remède le plus utilisé : remplacement pièce · dernier cas : 05/08/2026"
+            " · voir les OT : OT-2026-0408, OT-2026-0407, OT-2026-0406, OT-2026-0405, OT-2026-0404 et 3 autres",
+            # exactement 5 cas : 5 liens, pas de suite
+            "joint détérioré — 5 cas sur 13 · remède le plus utilisé : resserrage · dernier cas : 20/05/2026"
+            " · voir les OT : OT-2026-0415, OT-2026-0414, OT-2026-0413, OT-2026-0412, OT-2026-0411",
+        ])
+        self.assertEqual(equipement["liens"][0], [
+            ["OT-2026-0408", "#/ot/OT-2026-0408"], ["OT-2026-0407", "#/ot/OT-2026-0407"],
+            ["OT-2026-0406", "#/ot/OT-2026-0406"], ["OT-2026-0405", "#/ot/OT-2026-0405"],
+            ["OT-2026-0404", "#/ot/OT-2026-0404"],
+            ["et 3 autres", "#/ot?equipement=EQ-0003&etat=clotures"],      # liste des OT clôturés de l'équipement
+        ])
+        self.assertEqual(len(equipement["liens"][1]), 5)
+
+        modele = lu["modele"]
+        self.assertEqual(modele["titre"], "Causes fréquentes ici — 6 cas")
+        self.assertEqual(modele["lignes"], [
+            "roulement HS — 6 cas sur 6 · remède le plus utilisé : remplacement pièce · dernier cas : 06/03/2026"
+            " · voir les OT : OT-2026-0426, OT-2026-0425, OT-2026-0424, OT-2026-0423, OT-2026-0422 et 1 autre",
+        ])
+        # portée modèle : les OT sont sur plusieurs équipements, « et 1 autre » reste un texte simple
+        self.assertEqual([href for _, href in modele["liens"][0]],
+                         ["#/ot/OT-2026-04%d" % numero for numero in (26, 25, 24, 23, 22)])
 
     def test_encart_au_seuil_en_dessous_et_sans_symptome(self):
         resultat = self.js("""() => {

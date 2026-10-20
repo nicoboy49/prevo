@@ -12,6 +12,7 @@ const CausesFrequentes = (() => {
 
   const MINIMUM_PAR_DEFAUT = 5;       // nombre de cas à partir duquel l'encart montre les causes
   const NOMBRE_CAUSES = 3;            // au plus 3 causes affichées
+  const LIENS_PAR_CAUSE = 5;          // au plus 5 liens « voir les OT » par cause (les plus récents)
   const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
   const MENTION = 'Statistique de l\'historique, pas un diagnostic';
 
@@ -138,12 +139,29 @@ const CausesFrequentes = (() => {
     return Object.assign(insuffisant, { total: casModele.length });
   }
 
-  /** Une ligne de l'encart : « garniture usée — 7 cas sur 12 · remède … · dernier cas … · voir les OT : … ». */
-  function ligneCause(cause, total) {
-    const liens = cause.ots.map((id, position) => UI.html`${position ? ', ' : ''}<a href="#/ot/${id}">${id}</a>`);
+  /**
+   * « et 4 autres » après les liens montrés : lien vers la liste des OT clôturés de l'équipement
+   * quand la portée est cet équipement ; texte simple pour la portée « même marque et modèle »
+   * (les OT sont alors sur plusieurs équipements : aucune liste ne les filtre ensemble).
+   */
+  function suiteDesLiens(reste, portee, equipementId) {
+    if (reste <= 0) return '';
+    const texteSuite = 'et ' + reste + (reste > 1 ? ' autres' : ' autre');
+    if (portee !== 'equipement') return UI.html` ${texteSuite}`;
+    return UI.html` <a class="causes-autres" href="#/ot?equipement=${encodeURIComponent(equipementId)}&amp;etat=clotures">${texteSuite}</a>`;
+  }
+
+  /**
+   * Une ligne de l'encart : « garniture usée — 7 cas sur 12 · remède … · dernier cas … · voir les
+   * OT : … » ; au plus LIENS_PAR_CAUSE liens (les cas les plus récents), puis « et n autres ».
+   */
+  function ligneCause(cause, resultat, equipementId) {
+    const montres = cause.ots.slice(0, LIENS_PAR_CAUSE);         // ots : du plus récent au plus ancien
+    const liens = montres.map((id, position) => UI.html`${position ? ', ' : ''}<a href="#/ot/${id}">${id}</a>`);
+    const suite = suiteDesLiens(cause.ots.length - montres.length, resultat.portee, equipementId);
     const remede = cause.remede ? UI.html` · remède le plus utilisé : ${cause.remede.libelle}` : '';
     const dernier = cause.dernierCas ? UI.html` · dernier cas : ${UI.dateFr(cause.dernierCas)}` : '';
-    return UI.html`<li><b>${cause.libelle}</b> — ${cause.nombre} cas sur ${total}${remede}${dernier} · voir les OT : ${liens}</li>`;
+    return UI.html`<li><b>${cause.libelle}</b> — ${cause.nombre} cas sur ${resultat.total}${remede}${dernier} · voir les OT : ${liens}${suite}</li>`;
   }
 
   /**
@@ -162,7 +180,7 @@ const CausesFrequentes = (() => {
     return UI.element(UI.html`<div class="encadre causes-frequentes">
       <h3>Causes fréquentes ici — ${resultat.total} cas</h3>
       <p class="aide">Portée : ${resultat.libellePortee}</p>
-      <ul>${resultat.causes.map((cause) => ligneCause(cause, resultat.total))}</ul>
+      <ul>${resultat.causes.map((cause) => ligneCause(cause, resultat, equipementId))}</ul>
       <p class="note">${MENTION}</p>
     </div>`);
   }

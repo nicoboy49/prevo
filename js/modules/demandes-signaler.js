@@ -1,24 +1,35 @@
 'use strict';
-// Demandes (3/5) — écran « Signaler un problème » (#/di/nouvelle, ?equipement=…) : cinq questions
-// pensées téléphone d'abord (équipement, symptôme, impact, précisions, photo), puis l'écran de
-// confirmation avec le numéro de la demande (ARCHITECTURE.md §8 et §14.2 ; brief §9 E2).
+// Demandes (3/5) — écran « Signaler un problème » (#/di/nouvelle, ?equipement=…, ?ot=…) : cinq
+// questions pensées téléphone d'abord (équipement, symptôme, impact, précisions, photo), puis
+// l'écran de confirmation avec le numéro de la demande (ARCHITECTURE.md §8, §14.2 et §14.6 ;
+// brief §9 E2). Lot 2 : le symptôme choisi parmi les suggestions donne son code symptôme ; avec
+// ?ot=OT-…, la demande est liée à l'OT préventif pendant lequel l'anomalie a été constatée.
 // Complète l'objet Demandes.
 
 Object.assign(Demandes, (() => {
 
   // Constantes, outils, règles et écritures des fichiers précédents (demandes-regles.js, demandes-ecritures.js).
-  const { IMPACTS, prioriteCalculee, libelleEquipement, creer } = Demandes;
-  const { texte, sansAccents, nomDuProfil, prioriteDeLaDemande, nomPhoto } = Demandes.interne;
+  const { IMPACTS, prioriteCalculee, libelleEquipement, codeSymptome, creer } = Demandes;
+  const { texte, nomDuProfil, prioriteDeLaDemande, nomPhoto, codesSymptome, estOtPreventif } = Demandes.interne;
 
   // ===========================================================================================
   // 5. Écran « Signaler un problème » (#/di/nouvelle)
   // ===========================================================================================
 
+  /** Lien vers un OT (texte simple pour le demandeur, qui n'a pas accès aux écrans des OT). */
+  function lienOt(otId) {
+    return App.estDemandeur() ? UI.html`${otId}` : UI.html`<a href="#/ot/${encodeURIComponent(otId)}">${otId}</a>`;
+  }
+
   function afficherNouvelle(conteneur, parametres) {
-    const equipementDemande = parametres.requete ? texte(parametres.requete.get('equipement')) : '';
-    const libellesSymptomes = Donnees.lignes('codes_defaillance')
-      .filter((code) => sansAccents(code.famille) === 'symptome' && code.libelle)
-      .map((code) => code.libelle);
+    const requete = parametres.requete || new URLSearchParams();
+    // ?ot=OT-… : OT préventif d'origine (bouton « Signaler une anomalie » d'un OT préventif).
+    const otDemande = texte(requete.get('ot'));
+    const otOrigine = otDemande ? Donnees.trouver('ordres_travail', otDemande) : null;
+    const origineValable = estOtPreventif(otOrigine);
+    // Équipement : ?equipement=…, sinon celui de l'OT d'origine.
+    const equipementDemande = texte(requete.get('equipement')) || (origineValable ? texte(otOrigine.equipement_id) : '');
+    const libellesSymptomes = codesSymptome().map((entree) => entree.libelle);
     const idSymptome = UI.identifiantUnique('di-symptome');
     const idDescription = UI.identifiantUnique('di-description');
     const idListe = UI.identifiantUnique('di-suggestions');
@@ -30,6 +41,7 @@ Object.assign(Demandes, (() => {
           <h1>Signaler un problème</h1>
           <p>Cinq questions, une minute. Le responsable maintenance reçoit votre demande aussitôt.</p>
         </div></div>
+        <div class="di-origine"></div>
         <div class="di-alerte-equipement"></div>
         <form class="form-colonne di-formulaire" novalidate>
           <section class="carte di-etape">
@@ -48,7 +60,7 @@ Object.assign(Demandes, (() => {
                 placeholder="Ex. fuite d'huile sous la pompe">
               <datalist id="${idListe}">${libellesSymptomes.map((libelle) => UI.html`<option value="${libelle}"></option>`)}</datalist>
               ${libellesSymptomes.length ? UI.html`<div class="di-suggestions" role="group" aria-label="Suggestions de symptômes">
-                ${libellesSymptomes.map((libelle) => UI.html`<button type="button" class="di-puce" data-symptome="${libelle}">${libelle}</button>`)}
+                ${libellesSymptomes.map((libelle) => UI.html`<button type="button" class="di-puce" data-symptome="${libelle}" aria-pressed="false">${libelle}</button>`)}
               </div>` : ''}
               <p class="erreur-champ" hidden></p>
             </div>
@@ -130,7 +142,25 @@ Object.assign(Demandes, (() => {
         UI.html`L'équipement <b>${equipementDemande}</b> est inconnu ou n'est plus actif : choisissez-le dans la liste.`));
     }
 
-    // --- 2. symptôme : les puces remplissent le champ ---------------------------------------
+    // --- OT préventif d'origine (?ot=) : bandeau, ou avertissement si l'OT ne convient pas -----
+    if (otDemande) {
+      UI.$('.di-origine', conteneur).appendChild(origineValable
+        ? UI.bandeau('info', UI.html`<b>Anomalie constatée pendant l'OT préventif ${lienOt(otDemande)}</b><br>
+            La demande sera liée à cet OT, qui sera marqué « anomalie constatée ».`)
+        : UI.bandeau('attention', UI.html`L'ordre de travail <b>${otDemande}</b> est introuvable ou n'est pas
+            un OT préventif : la demande sera créée sans lien avec lui.`));
+    }
+
+    // --- 2. symptôme : les puces remplissent le champ ; le code suit le texte -----------------
+    // Le code symptôme est celui dont le libellé est exactement le texte (casse et espaces
+    // ignorés) : choisir une puce le donne, retoucher le texte l'efface s'il ne correspond plus.
+    // La puce du code retenu est marquée (aria-pressed) : on voit qu'un code est enregistré.
+    function marquerSuggestion() {
+      const code = codeSymptome(champSymptome.value);
+      UI.$$('.di-puce', formulaire).forEach((puce) => {
+        puce.setAttribute('aria-pressed', String(code !== '' && codeSymptome(puce.dataset.symptome) === code));
+      });
+    }
     formulaire.addEventListener('click', (evenement) => {
       const puce = evenement.target.closest('.di-puce');
       if (!puce) return;
@@ -138,7 +168,10 @@ Object.assign(Demandes, (() => {
       champSymptome.dispatchEvent(new Event('input', { bubbles: true }));
       effacerErreur('symptome');
     });
-    champSymptome.addEventListener('input', () => { if (champSymptome.value.trim()) effacerErreur('symptome'); });
+    champSymptome.addEventListener('input', () => {
+      if (champSymptome.value.trim()) effacerErreur('symptome');
+      marquerSuggestion();
+    });
 
     // --- 3. impact : bandeau rouge si « sécurité », priorité calculée -------------------------
     function impactChoisi() {
@@ -269,9 +302,11 @@ Object.assign(Demandes, (() => {
         const id = await creer({
           equipement_id: selecteur.valeur(),
           symptome: champSymptome.value,
+          symptome_code: codeSymptome(champSymptome.value),
           impact,
           description: UI.$('textarea[name=description]', formulaire).value,
           photo: nomDeLaPhoto,
+          ot_origine_id: origineValable ? otDemande : '',
         });
         App.marquerSaisie(false);
         libererApercu();
@@ -298,6 +333,8 @@ Object.assign(Demandes, (() => {
           <p class="di-numero" data-numero="${id}">${id}</p>
           <p class="di-confirmation-texte">Notez ce numéro : il permet de suivre votre demande.<br>
             ${libelleEquipement(demande.equipement_id)} · priorité ${UI.badgePriorite(priorite)}</p>
+          ${demande.ot_origine_id ? UI.html`<p class="di-confirmation-texte di-confirmation-origine">Anomalie signalée
+            pendant l'OT préventif ${lienOt(demande.ot_origine_id)}.</p>` : ''}
         </div>
         <div class="di-zone-securite"></div>
         <div class="pile-gros">

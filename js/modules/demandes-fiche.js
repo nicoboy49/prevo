@@ -9,7 +9,7 @@ Object.assign(Demandes, (() => {
   // Constantes, outils, règles, écritures et écrans des fichiers précédents (demandes-regles.js à demandes-liste.js).
   const { typePropose, datePrevue, libelleEquipement, accepter, regrouper, differer, refuser } = Demandes;
   const { STATUTS_A_TRAITER, PRIORITES, TYPE_IMMEDIAT, TYPE_DIFFERE, prioriteDeLaDemande, badgeImpact,
-    otOuvertsDeLEquipement, afficherNouvelle, afficherListe } = Demandes.interne;
+    otOuvertsDeLEquipement, codesSymptome, afficherNouvelle, afficherListe } = Demandes.interne;
 
   // ===========================================================================================
   // 7. Fiche d'une demande (#/di/<id>) et décisions du responsable
@@ -58,6 +58,8 @@ Object.assign(Demandes, (() => {
             <dt>Équipement</dt>
             <dd>${equipement ? UI.html`<a href="#/equipement/${encodeURIComponent(equipement.id)}">${libelleEquipement(equipement.id)}</a>` : demande.equipement_id}</dd>
             <dt>Symptôme</dt><dd>${demande.symptome}</dd>
+            ${demande.symptome_code ? UI.html`<dt>Code symptôme</dt><dd class="di-code-symptome">${libelleSymptome(demande.symptome_code)}</dd>` : ''}
+            ${demande.ot_origine_id ? UI.html`<dt>Origine</dt><dd class="di-origine-fiche">${lienOrigine(demande.ot_origine_id)}</dd>` : ''}
             <dt>Impact</dt><dd>${badgeImpact(demande.impact)}</dd>
             <dt>Priorité calculée</dt><dd>${UI.badgePriorite(priorite)}
               <span class="aide">criticité ${(equipement && equipement.criticite) || 'B'} × impact ${demande.impact || '—'}</span></dd>
@@ -65,6 +67,7 @@ Object.assign(Demandes, (() => {
             <dt>Demandeur</dt><dd>${demande.demandeur}</dd>
             <dt>Signalée le</dt><dd>${UI.dateHeureFr(demande.date_heure)}</dd>
           </dl>
+          <div class="di-causes"></div>
           ${demande.photo ? UI.html`<div class="di-photo"><h3>Photo</h3>
             <a class="di-lien-photo" target="_blank" rel="noopener"><img class="di-photo-image" alt="Photo jointe à ${demande.id}"></a>
             <p class="aide di-photo-etat">Chargement de la photo…</p></div>` : ''}
@@ -88,8 +91,24 @@ Object.assign(Demandes, (() => {
       UI.$('.di-zone-securite', conteneur).appendChild(UI.bandeau('securite',
         UI.html`<b>Danger signalé :</b> la zone doit être mise en sécurité. Priorité P1 : à traiter immédiatement.`));
     }
+    // Causes fréquentes de ce symptôme sur cet équipement (D25) : tous les profils ; rien sans code.
+    const encart = CausesFrequentes.encart(demande.equipement_id, demande.symptome_code);
+    if (encart) UI.$('.di-causes', conteneur).appendChild(encart);
     if (demande.photo) chargerPhoto(conteneur, demande.photo);
     if (decisionPossible) afficherPanneauDecision(UI.$('.di-decision', conteneur), demande, priorite);
+  }
+
+  /** « Fuite (S01) » : libellé du code symptôme, sinon le code seul. */
+  function libelleSymptome(code) {
+    const trouve = codesSymptome().find((entree) => entree.code === code);
+    return trouve ? trouve.libelle + ' (' + code + ')' : code;
+  }
+
+  /** « Signalée pendant l'OT préventif OT-… » : lien, sauf pour le demandeur (pas d'accès aux OT). */
+  function lienOrigine(otId) {
+    const texteLien = 'Signalée pendant l\'OT préventif ' + otId;
+    return App.estDemandeur() ? UI.html`${texteLien}`
+      : UI.html`<a class="di-lien-origine" href="#/ot/${encodeURIComponent(otId)}">${texteLien}</a>`;
   }
 
   // La photo est lue de façon asynchrone (URL du serveur ou URL d'objet en dossier / démo).
@@ -310,7 +329,7 @@ Object.assign(Demandes, (() => {
     });
     App.ecran({
       id: 'fiche-di', route: /^#\/di\/(?!nouvelle$)(?<id>[^/?]+)$/, titre: 'Demande', parent: 'liste-di',
-      profils: tousProfils, tables: ['demandes', 'ordres_travail', 'equipements'],
+      profils: tousProfils, tables: ['demandes', 'ordres_travail', 'equipements', 'codes_defaillance'],
       afficher: afficherFiche,
     });
   });

@@ -1,15 +1,17 @@
 'use strict';
 // Demandes (2/5) — écritures du module « Demandes d'intervention » (ARCHITECTURE.md §10 RG1 et
-// §14.2) : créer une DI, l'accepter (OT créé, puis annulé s'il devient orphelin), la regrouper,
-// la différer, la refuser ; et le nom de fichier d'une photo. Toujours par Donnees.modifier, le
-// contrôle étant refait DANS la fonction de mutation. Complète l'objet Demandes.
+// §14.2, §14.6) : créer une DI (avec son code symptôme et, si elle est signalée pendant un OT
+// préventif, l'OT d'origine marqué « anomalie constatée »), l'accepter (OT créé avec le code
+// symptôme, puis annulé s'il devient orphelin), la regrouper, la différer, la refuser ; et le nom
+// de fichier d'une photo. Toujours par Donnees.modifier, le contrôle étant refait DANS la fonction
+// de mutation. Complète l'objet Demandes.
 
 Object.assign(Demandes, (() => {
 
   // Constantes, outils et règles de demandes-regles.js.
   const { normaliserImpact, typePropose, datePrevue } = Demandes;
   const { STATUTS_A_TRAITER, PRIORITES, TYPE_IMMEDIAT, TYPE_DIFFERE, MESSAGE_DEJA_TRAITEE, texte,
-    deuxChiffres, prioriteDeLaDemande, estOuvert, nomDuProfil } = Demandes.interne;
+    deuxChiffres, prioriteDeLaDemande, estOuvert, nomDuProfil, codesSymptome, estOtPreventif } = Demandes.interne;
 
   // ===========================================================================================
   // 3. Écritures (toutes par Donnees.modifier)
@@ -30,34 +32,88 @@ Object.assign(Demandes, (() => {
     verifierATraiter(lignes.find((ligne) => ligne.id === diId), diId);
   }
 
+  /** Vérifie un code symptôme saisi : vide, ou un code connu de la famille « symptôme ». */
+  function verifierCodeSymptome(code) {
+    if (code && !codesSymptome().some((entree) => entree.code === code)) {
+      throw new Donnees.ErreurValidation('Le code symptôme ' + code + ' est inconnu.');
+    }
+  }
+
   /**
-   * Crée une demande. valeurs : { equipement_id, symptome, impact, description, photo, demandeur }.
+   * Vérifie l'OT d'origine d'une DI signalée pendant un préventif : il doit exister (relu sur le
+   * disque s'il n'est pas encore connu de ce poste, un OT n'est jamais supprimé) et être préventif.
+   */
+  async function verifierOtOrigine(otId) {
+    let ot = Donnees.trouver('ordres_travail', otId);
+    if (!ot) ot = (await Donnees.rechargerTable('ordres_travail')).find((ligne) => ligne.id === otId);
+    if (!ot) throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+    if (!estOtPreventif(ot)) {
+      throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' n\'est pas un OT préventif : la demande ne peut pas lui être liée.');
+    }
+  }
+
+  /**
+   * Crée une demande. valeurs : { equipement_id, symptome, impact, description, photo, demandeur,
+   * symptome_code (facultatif : code connu de la famille « symptôme »), ot_origine_id (facultatif :
+   * OT préventif pendant lequel l'anomalie a été constatée) }.
    * Renvoie l'identifiant (DI-AAAA-NNNN, calculé dans la fonction de mutation).
+   * Avec ot_origine_id, l'OT d'origine passe ensuite « anomalie constatée » (seconde écriture,
+   * idempotente) ; si elle échoue, la DI reste créée et un toast d'avertissement le dit.
    */
   async function creer(valeurs) {
     const v = valeurs || {};
     const equipementId = texte(v.equipement_id);
     const symptome = texte(v.symptome).replace(/[\r\n]+/g, ' ');
     const impact = normaliserImpact(v.impact);
+    const symptomeCode = texte(v.symptome_code);
+    const otOrigineId = texte(v.ot_origine_id);
     if (!equipementId) throw new Donnees.ErreurValidation('Choisissez l\'équipement concerné.');
     if (!Donnees.trouver('equipements', equipementId)) {
       throw new Donnees.ErreurValidation('L\'équipement ' + equipementId + ' est inconnu.');
     }
     if (!symptome) throw new Donnees.ErreurValidation('Décrivez en quelques mots ce que vous constatez.');
     if (!impact) throw new Donnees.ErreurValidation('Choisissez l\'impact : sécurité, arrêt, dégradé ou gêne.');
+    verifierCodeSymptome(symptomeCode);
+    if (otOrigineId) await verifierOtOrigine(otOrigineId);
     const demandeur = texte(v.demandeur) || nomDuProfil();
     const description = texte(v.description);
     const photo = texte(v.photo);
 
-    return Donnees.modifier('demandes', (lignes, outils) => {
+    // (1) La DI.
+    const id = await Donnees.modifier('demandes', (lignes, outils) => {
       const maintenant = outils.maintenant();
-      const id = outils.nouvelId(lignes, maintenant);       // DI-AAAA-NNNN, recalculé à chaque essai
+      const nouvelId = outils.nouvelId(lignes, maintenant);     // DI-AAAA-NNNN, recalculé à chaque essai
       lignes.push({
-        id, date_heure: maintenant, demandeur, equipement_id: equipementId, symptome, impact,
+        id: nouvelId, date_heure: maintenant, demandeur, equipement_id: equipementId, symptome, impact,
         description, photo, statut: 'Nouvelle', motif_decision: '', date_decision: '', ot_id: '',
+        symptome_code: symptomeCode, ot_origine_id: otOrigineId,
       });
-      return id;
-    }, { action: 'demande signalée' });
+      return nouvelId;
+    }, { action: otOrigineId ? 'demande signalée pendant ' + otOrigineId : 'demande signalée' });
+
+    // (2) L'OT d'origine : « anomalie constatée ». La DI existe déjà : un échec ne l'annule pas.
+    if (otOrigineId) {
+      try {
+        await marquerAnomalie(otOrigineId, id);
+      } catch (erreur) {
+        UI.toast('La demande ' + id + ' est bien créée, mais l\'OT ' + otOrigineId
+          + ' n\'a pas pu être marqué « anomalie constatée » : ' + ((erreur && erreur.message) || erreur), 'attention');
+        console.warn('Prévo (demandes) : anomalie non marquée sur ' + otOrigineId + ' après ' + id + '.', erreur);
+      }
+    }
+    return id;
+  }
+
+  /**
+   * Coche « anomalie constatée » sur un OT (D18 : idempotent ; une ligne déjà cochée n'est pas
+   * réécrite, Donnees.modifier n'écrit rien quand rien ne change).
+   */
+  async function marquerAnomalie(otId, diId) {
+    await Donnees.modifier('ordres_travail', (lignes) => {
+      const ot = lignes.find((ligne) => ligne.id === otId);
+      if (!ot) throw new Donnees.ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+      ot.anomalie_constatee = '1';
+    }, { action: 'anomalie constatée (' + diId + ')' });
   }
 
   /**
@@ -85,17 +141,22 @@ Object.assign(Demandes, (() => {
       ? 'priorité ' + calculee + ' → ' + priorite + ' : ' + motifPriorite : '';
 
     // (1) L'OT : réutilisé s'il existe déjà pour cette DI (essai précédent interrompu, autre poste),
-    //     sinon créé. Idempotent : rejoué sans risque sur conflit.
+    //     sinon créé. Idempotent : rejoué sans risque sur conflit. Le code symptôme de la DI est
+    //     recopié dans l'OT (lot 2) ; sur un OT réutilisé, seulement si le sien est vide.
+    const symptomeCode = texte(demande.symptome_code);
     const otId = await Donnees.modifier('ordres_travail', (lignes, outils) => {
       const existant = lignes.find((ot) => ot.di_id === diId);
-      if (existant) return existant.id;
+      if (existant) {
+        if (symptomeCode && !texte(existant.symptome_code)) existant.symptome_code = symptomeCode;
+        return existant.id;
+      }
       const maintenant = outils.maintenant();
       const id = outils.nouvelId(lignes, maintenant);
       lignes.push({
         id, origine: 'DI', di_id: diId, equipement_id: demande.equipement_id, type, priorite,
         statut: 'Créé', titre: texte(demande.symptome).replace(/[\r\n]+/g, ' '),
         travail_a_faire: demande.description || '', date_creation: maintenant,
-        date_prevue: datePrevue(priorite, outils.aujourdhui()),
+        date_prevue: datePrevue(priorite, outils.aujourdhui()), symptome_code: symptomeCode,
       });
       return id;
     }, { action: 'acceptation de ' + diId + (changementPriorite ? ' ; ' + changementPriorite : '') });

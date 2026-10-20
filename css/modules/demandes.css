@@ -24,6 +24,13 @@
   background: var(--champ); border: 1px solid var(--trait-2);
 }
 .di-puce:hover, .di-puce:focus-visible { border-color: var(--bleu); color: var(--texte); background: var(--teinte-bleu-faible); }
+/* suggestion retenue : le texte du champ est exactement son libellé, le code symptôme sera enregistré */
+.di-puce[aria-pressed="true"] { border-color: var(--bleu); color: var(--texte); background: var(--teinte-bleu); box-shadow: inset 0 0 0 1px var(--bleu); }
+
+/* Demande signalée pendant un OT préventif (?ot=) : bandeau au-dessus du formulaire */
+.di-origine:empty { display: none; }
+.di-origine { margin-bottom: 14px; }
+.di-confirmation-origine { margin-top: .5rem; }
 
 /* Impact : 4 gros boutons (.tuiles de la charte) ; bandeau rouge juste dessous si « sécurité » */
 .di-impacts .tuile > span { min-height: 76px; font-size: 1.0625rem; }
@@ -88,6 +95,8 @@
 .di-zone-tableau .table th .tri { white-space: normal; text-align: left; }
 .di-motif { font-size: .9375rem; color: var(--texte-2); margin-top: .2rem; overflow-wrap: anywhere; }
 .di-motif b { color: var(--texte); }
+/* mention discrète de l'OT préventif d'origine, sous le symptôme */
+.di-origine-liste { display: block; margin-top: .15rem; font-size: .8125rem; font-weight: 500; color: var(--muted); white-space: nowrap; }
 
 /* =========================================================================================
    3. Fiche d'une demande (#/di/<id>) et panneau de décision
@@ -97,6 +106,12 @@
 .di-entete-badges { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin-top: .6rem !important; }
 .di-entete-badges b { color: var(--fort); font-weight: 800; }
 .di-texte-long { white-space: pre-wrap; }
+/* encart des causes fréquentes (CausesFrequentes.encart) sous le détail de la demande */
+.di-causes:empty { display: none; }
+.di-causes .encadre { margin: 1rem 0 0; overflow-wrap: anywhere; }
+.di-causes .encadre ul { margin: 0 0 .5rem; padding-left: 1.1rem; }
+.di-causes .encadre li + li { margin-top: .35rem; }
+.di-lien-origine { font-weight: 600; }
 .di-photo { margin-top: 1.1rem; }
 .di-photo h3 { margin-bottom: .5rem; }
 .di-lien-photo { display: inline-block; max-width: 100%; cursor: zoom-in; }
