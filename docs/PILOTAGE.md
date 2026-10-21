@@ -248,7 +248,10 @@ délai » de 0 % serait trompeuse ; une habilitation dont l'échéance est illis
 
 ### Les chiffres
 
-- **14 tâches** (T41 à T54) réparties en **6 vagues** ; une étiquette git par vague validée.
+- **14 tâches** (T41 à T54) réparties en **6 vagues** ; une étiquette git par vague validée, pour
+  les vagues 1 à 5. La vérification outillée de la 6e, qui relance la suite complète d'un seul
+  tenant, a été coupée deux fois par Claude Code faute de mémoire sur le poste. La suite complète a
+  donc été passée en quatre lots, tous verts, et Nicolas a décidé de clore le lot sur cette preuve.
 - **3 relectures** : vagues 1 et 2, vagues 3 à 5, puis une relecture finale des dernières tâches et
   de toutes les corrections. Elles ont trouvé **8 défauts critiques** (7, puis 1 à la relecture
   finale ; détail ci-dessous), tous corrigés : chaque fois, un test qui échouait d'abord.
@@ -286,6 +289,10 @@ Parmi les autres défauts relevés et corrigés :
 
 - un test du rapport mensuel avait le mois **écrit en dur** : il aurait échoué à partir du 1er novembre ;
   il calcule maintenant le mois écoulé depuis la date du jour ;
+- un test du lot 2 **échouait chaque nuit avant 10 h** : il fixait une date de fin d'OT à 10 h le jour
+  même, refusée comme « dans le futur » depuis la dernière vague du lot 2. Personne ne l'avait vu, car
+  la suite tournait toujours en journée ; c'est le passage complet de la fin du lot 3, à 3 h du matin,
+  qui l'a révélé ;
 - une ancienne habilitation à l'échéance illisible **l'emportait sur un renouvellement** valide ;
 - une date impossible (« 2026-02-30 ») était rangée dans le planning, et un contrôle à la date
   illisible passait pour « à jour » ;
