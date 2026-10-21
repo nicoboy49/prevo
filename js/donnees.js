@@ -1316,15 +1316,24 @@ const Donnees = (() => {
       if (entree.perime) { return complet || !connue || !changeeSeulementParNosAjouts(entree, versionStockage); }
       return connue && versionStockage !== entree.version;
     };
+    // Journal relu parce qu'un autre poste y a écrit (et non seulement à cause de nos ajouts).
+    let journalChangeAilleurs = false;
     const aRelire = Schema.nomsTables().filter(aRelireMaintenant);
     const relues = await Promise.all(aRelire.map((nomTable) => enSerie(nomTable, async () => {
       // Une écriture de ce poste (modifier) a pu relire la table entre-temps : rien à faire alors.
       if (!aRelireMaintenant(nomTable)) { return null; }
+      if (nomTable === 'journal') {
+        const versionStockage = versions.journal === undefined ? null : versions.journal;
+        journalChangeAilleurs = !changeeSeulementParNosAjouts(cache.get('journal'), versionStockage);
+      }
       await rechargerSansAttente(nomTable);
       return nomTable;
     })));
     const changees = relues.filter((nomTable) => nomTable !== null);
-    if (changees.some((nomTable) => nomTable !== 'journal')) { signaler(changees, 'distant'); }
+    // Le journal changé par un autre poste est signalé (onglets Suggestions et Décisions, lot 4) ;
+    // le journal changé seulement par nos propres ajouts ne l'est pas.
+    const signalees = changees.filter((nomTable) => nomTable !== 'journal' || journalChangeAilleurs);
+    if (signalees.length) { signaler(signalees, 'distant'); }
     return changees;
   }
 
@@ -1344,8 +1353,8 @@ const Donnees = (() => {
 
   // Relit les tables modifiées ailleurs (version différente) ou périmées (toutes, y compris le
   // journal après nos propres ajouts : à appeler avant instantane(), ex. pour l'export).
-  // Événement « changement » (origine « distant ») si au moins une table autre que le journal a
-  // changé. Renvoie leurs noms.
+  // Événement « changement » (origine « distant ») si au moins une table a changé ailleurs (le
+  // journal changé seulement par nos propres ajouts n'est pas signalé). Renvoie leurs noms.
   function rafraichir() {
     return lancerRafraichissement(true);
   }

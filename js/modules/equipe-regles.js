@@ -66,8 +66,15 @@ const Equipe = (() => {
   }
 
   /** « Moreau Julien » : nom puis prénom (ordre des listes). */
+  /** Nom affiché d'un technicien : « Prénom Nom » (lot 4, D78). */
   function nomComplet(technicien) {
-    return [texte(technicien.nom), texte(technicien.prenom)].filter(Boolean).join(' ') || texte(technicien.id);
+    return [texte(technicien.prenom), texte(technicien.nom)].filter(Boolean).join(' ') || texte(technicien.id);
+  }
+
+  /** Ordre des techniciens : par nom, puis prénom (l'affichage reste « Prénom Nom »). */
+  function ordreDesNoms(a, b) {
+    return (texte(a.nom) + ' ' + texte(a.prenom)).localeCompare(texte(b.nom) + ' ' + texte(b.prenom), 'fr')
+      || texte(a.id).localeCompare(texte(b.id), 'fr', { numeric: true });
   }
 
   // ===========================================================================================
@@ -146,7 +153,7 @@ const Equipe = (() => {
       });
     });
     return resultat.sort((a, b) => (a.etat.joursRestants - b.etat.joursRestants)
-      || nomComplet(a.technicien).localeCompare(nomComplet(b.technicien), 'fr')
+      || ordreDesNoms(a.technicien, b.technicien)
       || texte(a.habilitation.intitule).localeCompare(texte(b.habilitation.intitule), 'fr'));
   }
 

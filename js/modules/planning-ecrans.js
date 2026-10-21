@@ -10,7 +10,7 @@
 
 Object.assign(Planning, (() => {
 
-  const { texte, nomComplet } = Planning.interne;
+  const { texte, nomComplet, ordreDesNoms } = Planning.interne;
   const NOMS_JOURS = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
   const STATUTS_DEPLACABLES = ['Préparé', 'Planifié'];
   const CLASSES_PRIORITE = { P1: 'accent-p1', P2: 'accent-p2' };
@@ -252,7 +252,7 @@ Object.assign(Planning, (() => {
     const ot = Donnees.trouver('ordres_travail', otId);
     if (!ot) return;
     const actifs = Donnees.lignes('techniciens').filter((technicien) => texte(technicien.actif) !== '0')
-      .sort((a, b) => nomComplet(a).localeCompare(nomComplet(b), 'fr'));
+      .sort(ordreDesNoms);
     // Date proposée : la date prévue de l'OT, sinon le lundi de la semaine affichée.
     const datePrevue = texte(ot.date_prevue).slice(0, 10);
     const dateProposee = /^\d{4}-\d{2}-\d{2}$/.test(datePrevue) ? datePrevue : (texte(conteneur.dataset.lundi) || Donnees.aujourdhui());

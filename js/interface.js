@@ -151,7 +151,7 @@ const UI = (function () {
   function enNombre(valeur) {
     if (typeof valeur === 'number') return Number.isFinite(valeur) ? valeur : null;
     if (valeur === null || valeur === undefined) return null;
-    const texte = String(valeur).replace(/[\s  ]/g, '').replace(',', '.');
+    const texte = String(valeur).replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
     if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(texte)) return null;
     return Number(texte);
   }
@@ -206,7 +206,7 @@ const UI = (function () {
   function heures(valeur) {
     const nombre = enNombre(valeur);
     if (nombre === null) return TIRET_VALEUR_ABSENTE;
-    return formateurNombre(0, 2).format(nombre) + ' h';
+    return formateurNombre(0, 2).format(nombre) + '\u00a0h';
   }
 
   // ===========================================================================================
@@ -479,6 +479,81 @@ const UI = (function () {
       (premierChamp || boutonParDefaut || zoneBoutons.lastElementChild || dialogue).focus();
       if (typeof reglages.surOuverture === 'function') reglages.surOuverture(dialogue, terminer);
     });
+  }
+
+  /**
+   * Fenêtre de saisie commune (lot 4, mise en commun des écrans Contrôles et Équipe) :
+   *   UI.fenetreAction({ titre, introduction, champs, libelleValider, verifier, action, classe })
+   * `champs` : blocs .champ (UI.champ) ; `verifier(valeurs, contenu)` → erreurs [{ nom, message }]
+   * affichées sous les champs (la fenêtre reste ouverte) ; puis `action(valeurs, contenu)` (async). Un
+   * refus (Donnees.ErreurValidation) s'affiche dans la fenêtre ; une autre erreur est signalée. Les
+   * champs « fichier » ne sont pas lus dans `valeurs` (l'écran les lit dans `contenu`). Renvoie true si
+   * l'action a réussi (fenêtre fermée), false si l'utilisateur a annulé.
+   */
+  async function fenetreAction({ titre, introduction, champs, libelleValider, verifier, action, classe }) {
+    const contenu = element(html`<div class="form-colonne ${classe || ''}">${introduction || ''}</div>`);
+    champs.forEach((bloc) => contenu.appendChild(bloc));
+    const zoneErreur = element(html`<p class="erreur-champ" role="alert" hidden></p>`);
+    contenu.appendChild(zoneErreur);
+    let fermer = null;
+    let fait = false;
+    let enCours = false;
+
+    function lireChamps() {
+      const valeurs = {};
+      $$('[name]', contenu).forEach((controle) => {
+        if (controle.type === 'file') return;
+        valeurs[controle.name] = controle.type === 'checkbox' ? (controle.checked ? '1' : '0') : String(controle.value || '').trim();
+      });
+      return valeurs;
+    }
+
+    function afficherErreurs(erreurs) {
+      $$('.champ', contenu).forEach((champ) => erreurChamp(contenu, champ.dataset.champ, ''));
+      erreurs.forEach((erreur) => erreurChamp(contenu, erreur.nom, erreur.message));
+      const premier = $('[aria-invalid="true"]', contenu);
+      if (premier) premier.focus();
+    }
+
+    async function valider() {
+      if (enCours) return;
+      zoneErreur.hidden = true;
+      const erreurs = verifierFormulaire(contenu);
+      const valeurs = lireChamps();
+      if (!erreurs.length) erreurs.push(...verifier(valeurs, contenu));
+      afficherErreurs(erreurs);
+      if (erreurs.length) return;
+      enCours = true;
+      try {
+        await action(valeurs, contenu);
+        fait = true;
+        fermer('ok');
+      } catch (erreur) {
+        if (erreur instanceof Donnees.ErreurValidation) {
+          zoneErreur.textContent = erreur.message;
+          zoneErreur.hidden = false;
+        } else {
+          App.signalerErreur(erreur, titre);
+        }
+      } finally {
+        enCours = false;
+      }
+    }
+
+    const choix = await fenetre({
+      titre, contenu,
+      boutons: [
+        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
+        { libelle: libelleValider, valeur: 'ok', classe: 'btn-primaire', defaut: true },
+      ],
+      surOuverture(dialogue, fermerFenetre) { fermer = fermerFenetre; },
+      avantFermeture(valeur) {
+        if (valeur !== 'ok' || fait) return true;
+        valider();                                     // la fenêtre se ferme toute seule si tout va bien
+        return false;
+      },
+    });
+    return choix === 'ok';
   }
 
   /**
@@ -868,7 +943,7 @@ const UI = (function () {
       }
       let valeur = String(controle.value || '').replace(/\r\n/g, '\n').trim();
       const type = controle.dataset.type || '';
-      if (type === 'decimal' || type === 'entier') valeur = valeur.replace(/[\s  ]/g, '').replace(',', '.');
+      if (type === 'decimal' || type === 'entier') valeur = valeur.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
       if (type === 'date_heure' || controle.type === 'datetime-local') valeur = valeur.replace('T', ' ').slice(0, 16);
       valeurs[nom] = valeur;
     });
@@ -908,7 +983,7 @@ const UI = (function () {
       let message = '';
       if (controle.required && valeur === '') {
         message = controle.type === 'checkbox' ? 'Cette case doit être cochée.' : 'Ce champ est obligatoire.';
-      } else if (valeur !== '' && type === 'entier' && !/^[-+]?\d+$/.test(valeur.replace(/[\s  ]/g, ''))) {
+      } else if (valeur !== '' && type === 'entier' && !/^[-+]?\d+$/.test(valeur.replace(/[\s\u00a0\u202f]/g, ''))) {
         message = 'Saisissez un nombre entier (ex. 12).';
       } else if (valeur !== '' && type === 'decimal' && enNombre(valeur) === null) {
         message = 'Saisissez un nombre (ex. 12,5).';
@@ -1378,7 +1453,7 @@ const UI = (function () {
     // notifications
     toast, bandeau, vide, chargement,
     // fenêtres
-    fenetre, confirmer, demanderMotif,
+    fenetre, fenetreAction, confirmer, demanderMotif,
     // tableaux et formulaires
     tableau, champ, lireFormulaire, erreurChamp, verifierFormulaire,
     // équipements et QR

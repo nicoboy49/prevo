@@ -229,6 +229,21 @@ class TestPlanning(CasPlanning):
                 self.assertEqual("surcharge" in texte, charge > capacite)
         self.assertIn("surcharge", page.inner_text('.pl-grille tr[data-technicien="%s"] th' % self.scenarios["technicien_surcharge"]))
 
+    def test_noms_prenom_nom_lignes_par_nom_et_fenetre_planifier(self):
+        """Lot 4 (§17.9) : « Prénom Nom » comme ailleurs ; les lignes restent rangées par nom."""
+        actifs = sorted((t for t in lire_csv(self.serveur.dossier, "techniciens.csv") if t["actif"].strip() != "0"),
+                        key=lambda t: (t["nom"].lower(), t["prenom"].lower()))
+        page = self.ouvrir("#/planning?semaine=" + self.scenarios["semaine_surcharge"])
+        ids = {t["id"] for t in actifs}
+        noms = page.locator(".pl-grille tbody tr[data-technicien]").evaluate_all(
+            "(lignes, ids) => lignes.filter((l) => ids.includes(l.dataset.technicien)).map((l) => l.querySelector('th b').textContent)",
+            sorted(ids))
+        self.assertEqual(noms, ["%s %s" % (t["prenom"], t["nom"]) for t in actifs])
+        page.click('[data-action="planifier"]')
+        options = page.locator("dialog[open] select option").all_inner_texts()
+        self.assertEqual([o.split(" — ")[0] for o in options if " — " in o],
+                         ["%s %s" % (t["prenom"], t["nom"]) for t in actifs])
+
     def test_filtre_technicien_annonce_et_garde_d_une_semaine_a_l_autre(self):
         """?technicien= (§15.5) : une seule ligne, filtre annoncé, gardé par « Semaine suivante » (relecture)."""
         lundi = self.scenarios["semaine_surcharge"]

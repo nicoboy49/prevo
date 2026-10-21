@@ -328,7 +328,7 @@ const Ia = (() => {
   }
 
   function messageDelai(delaiS) {
-    return new IaDelai('L\'IA n\'a pas répondu en ' + delaiS + ' s (délai du poste). Un PC sans carte '
+    return new IaDelai('L\'IA n\'a pas répondu en ' + delaiS + '\u00a0s (délai du poste). Un PC sans carte '
       + 'graphique peut être lent : réessayez, ou allongez le délai dans « Ce poste ».');
   }
 
@@ -642,7 +642,7 @@ const Ia = (() => {
     const source = typeof texteIa === 'string' ? texteIa.trim() : '';
     const valeurs = jetons && typeof jetons === 'object' ? jetons : {};
     if (!source) return refusCommentaire('le commentaire est vide');
-    if (source.length > TEXTE_MAX) return refusCommentaire('le commentaire dépasse 4 000 caractères');
+    if (source.length > TEXTE_MAX) return refusCommentaire('le commentaire dépasse 4\u00a0000 caractères');
     const inconnus = [];
     const sansJetons = source.replace(MOTIF_JETON, (jeton, nom) => {
       if (!Object.prototype.hasOwnProperty.call(valeurs, nom.trim())) inconnus.push(jeton);
@@ -655,7 +655,7 @@ const Ia = (() => {
       return refusCommentaire('chiffre écrit en clair (« ' + chiffre[0].trim() + ' ») : seuls les jetons {…} portent les chiffres');
     }
     const final = source.replace(MOTIF_JETON, (jeton, nom) => texte(valeurs[nom.trim()]));
-    if (final.length > TEXTE_MAX) return refusCommentaire('le commentaire dépasse 4 000 caractères');
+    if (final.length > TEXTE_MAX) return refusCommentaire('le commentaire dépasse 4\u00a0000 caractères');
     return { ok: true, texte: final, raison: '' };
   }
 

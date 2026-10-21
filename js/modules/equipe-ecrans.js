@@ -94,60 +94,7 @@ Object.assign(Equipe, (() => {
     if (premier) premier.focus();
   }
 
-  /**
-   * Fenêtre de saisie : `verifier(valeurs)` → erreurs [{ nom, message }] sous les champs (la
-   * fenêtre reste ouverte), puis `action(valeurs)` (async). Un refus (ErreurValidation) s'affiche
-   * DANS la fenêtre ; une autre erreur est signalée. Renvoie vrai si l'action est faite.
-   */
-  async function fenetreAction({ titre, introduction, champs, libelleValider, verifier, action }) {
-    const contenu = UI.element(UI.html`<div class="form-colonne equipe-fenetre">${introduction || ''}</div>`);
-    champs.forEach((bloc) => contenu.appendChild(bloc));
-    const zoneErreur = UI.element(UI.html`<p class="erreur-champ" role="alert" hidden></p>`);
-    contenu.appendChild(zoneErreur);
-    let fermer = null;
-    let fait = false;
-    let enCours = false;
-
-    async function valider() {
-      if (enCours) return;
-      zoneErreur.hidden = true;
-      const erreurs = UI.verifierFormulaire(contenu);
-      const valeurs = lireChamps(contenu);
-      if (!erreurs.length) erreurs.push(...verifier(valeurs));
-      afficherErreurs(contenu, erreurs);
-      if (erreurs.length) return;
-      enCours = true;
-      try {
-        await action(valeurs);
-        fait = true;
-        fermer('ok');
-      } catch (erreur) {
-        if (erreur instanceof Donnees.ErreurValidation) {
-          zoneErreur.textContent = erreur.message;
-          zoneErreur.hidden = false;
-        } else {
-          App.signalerErreur(erreur, titre);
-        }
-      } finally {
-        enCours = false;
-      }
-    }
-
-    const choix = await UI.fenetre({
-      titre, contenu,
-      boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
-        { libelle: libelleValider, valeur: 'ok', classe: 'btn-primaire', defaut: true },
-      ],
-      surOuverture(dialogue, fermerFenetre) { fermer = fermerFenetre; },
-      avantFermeture(valeur) {
-        if (valeur !== 'ok' || fait) return true;
-        valider();                                     // la fenêtre se ferme toute seule si tout va bien
-        return false;
-      },
-    });
-    return choix === 'ok';
-  }
+  // Fenêtre de saisie : UI.fenetreAction (interface.js), commune aux écrans Contrôles et Équipe (lot 4).
 
   async function apresEcriture(message) {
     App.marquerSaisie(false);
@@ -383,7 +330,7 @@ Object.assign(Equipe, (() => {
   }
 
   async function ouvrirAjout(technicien) {
-    const fait = await fenetreAction({
+    const fait = await UI.fenetreAction({ classe: 'equipe-fenetre',
       titre: 'Ajouter une habilitation', libelleValider: 'Ajouter',
       introduction: UI.html`<p>Habilitation de <b>${nomAffiche(technicien)}</b>. Pour une habilitation qu'il a déjà, utilisez « Renouveler ».</p>`,
       champs: champsHabilitation(null, true),
@@ -394,7 +341,7 @@ Object.assign(Equipe, (() => {
   }
 
   async function ouvrirRenouvellement(habilitation) {
-    const fait = await fenetreAction({
+    const fait = await UI.fenetreAction({ classe: 'equipe-fenetre',
       titre: 'Renouveler l\'habilitation', libelleValider: 'Renouveler',
       introduction: UI.html`<p><b>${habilitation.intitule}</b> — échéance actuelle : ${dateIso(habilitation.date_echeance) ? UI.dateFr(habilitation.date_echeance) : 'aucune'}.
         Une nouvelle ligne est ajoutée ; l'ancienne reste dans l'historique.</p>`,
@@ -406,7 +353,7 @@ Object.assign(Equipe, (() => {
   }
 
   async function ouvrirCorrection(habilitation) {
-    const fait = await fenetreAction({
+    const fait = await UI.fenetreAction({ classe: 'equipe-fenetre',
       titre: 'Corriger l\'habilitation', libelleValider: 'Enregistrer',
       introduction: UI.html`<p>Pour une erreur de saisie seulement : un renouvellement garde l'ancienne ligne (« Renouveler »).</p>`,
       champs: champsHabilitation(habilitation, true),

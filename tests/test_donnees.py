@@ -537,6 +537,7 @@ class TestAjouter(CasDonnees):
         self.tours_de_surveillance(3)
         self.assertEqual(self.js("() => compteurs.lecturesJournal"), 0,
                          "journal relu en entier alors que seul notre ajout l'a changé")
+        self.assertEqual(self.js("() => evenementsRecus"), [], "notre propre ajout au journal n'est pas signalé")
         # Nos propres lignes sont visibles sans relecture (après celles du journal de la démo).
         self.assertEqual(self.js("() => Donnees.lignes('journal').map((l) => l.id)"), JOURNAL_DEMO + [identifiant])
         # Un rafraîchissement demandé explicitement (ex. avant l'export) relit tout.
@@ -553,6 +554,8 @@ class TestAjouter(CasDonnees):
         self.assertEqual(self.js("() => compteurs.lecturesJournal"), 1)
         self.assertEqual(self.js("() => Donnees.lignes('journal').map((l) => l.id)"),
                          JOURNAL_DEMO + [identifiant, "J-AUTRE"])
+        # Lot 4 (§17.9) : le journal changé sur un autre poste est signalé (une seule fois).
+        self.assertEqual(self.js("() => evenementsRecus"), [{"tables": ["journal"], "origine": "distant"}])
 
     def test_modifier_journal_apres_ajout_ne_perd_pas_la_ligne_d_un_autre_poste(self):
         """(c) L'autre poste ajoute juste AVANT notre ajout (même version ensuite) : la surveillance

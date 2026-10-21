@@ -87,60 +87,7 @@ Object.assign(Controles, (() => {
     if (premier) premier.focus();
   }
 
-  /**
-   * Fenêtre de saisie : `verifier(valeurs, contenu)` → erreurs [{ nom, message }] affichées sous les
-   * champs (la fenêtre reste ouverte), puis `action(valeurs, contenu)` (async). Un refus
-   * (ErreurValidation) s'affiche DANS la fenêtre ; une autre erreur est signalée. Vrai si fait.
-   */
-  async function fenetreAction({ titre, introduction, champs, libelleValider, verifier, action }) {
-    const contenu = UI.element(UI.html`<div class="form-colonne controles-fenetre">${introduction || ''}</div>`);
-    champs.forEach((bloc) => contenu.appendChild(bloc));
-    const zoneErreur = UI.element(UI.html`<p class="erreur-champ" role="alert" hidden></p>`);
-    contenu.appendChild(zoneErreur);
-    let fermer = null;
-    let fait = false;
-    let enCours = false;
-
-    async function valider() {
-      if (enCours) return;
-      zoneErreur.hidden = true;
-      const erreurs = UI.verifierFormulaire(contenu);
-      const valeurs = lireChamps(contenu);
-      if (!erreurs.length) erreurs.push(...verifier(valeurs, contenu));
-      afficherErreurs(contenu, erreurs);
-      if (erreurs.length) return;
-      enCours = true;
-      try {
-        await action(valeurs, contenu);
-        fait = true;
-        fermer('ok');
-      } catch (erreur) {
-        if (erreur instanceof Donnees.ErreurValidation) {
-          zoneErreur.textContent = erreur.message;
-          zoneErreur.hidden = false;
-        } else {
-          App.signalerErreur(erreur, titre);
-        }
-      } finally {
-        enCours = false;
-      }
-    }
-
-    const choix = await UI.fenetre({
-      titre, contenu,
-      boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
-        { libelle: libelleValider, valeur: 'ok', classe: 'btn-primaire', defaut: true },
-      ],
-      surOuverture(dialogue, fermerFenetre) { fermer = fermerFenetre; },
-      avantFermeture(valeur) {
-        if (valeur !== 'ok' || fait) return true;
-        valider();                                     // la fenêtre se ferme toute seule si tout va bien
-        return false;
-      },
-    });
-    return choix === 'ok';
-  }
+  // Fenêtre de saisie : UI.fenetreAction (interface.js), commune aux écrans Contrôles et Équipe (lot 4).
 
   // ===========================================================================================
   // 9. Liste #/controles : instruments, filtres, tableau (cartes sur téléphone)
@@ -389,7 +336,7 @@ Object.assign(Controles, (() => {
     const jour = Donnees.aujourdhui();
     const champDate = UI.champ({ nom: 'date', type: 'date', libelle: 'Date du contrôle' }, jour, { obligatoire: true, attributs: { max: jour } });
     const fichier = champFichierRapport();
-    const fait = await fenetreAction({
+    const fait = await UI.fenetreAction({ classe: 'controles-fenetre',
       titre: 'Enregistrer le contrôle réalisé',
       introduction: UI.html`<p>${controle.nature} — ${libelleEquipement(controle)}. La prochaine date sera calculée : date du contrôle + ${controle.periodicite_mois || '?'} mois.</p>`,
       champs: [champDate, UI.champ(definitionChamp('organisme'), controle.organisme), fichier,
@@ -412,7 +359,7 @@ Object.assign(Controles, (() => {
 
   async function ouvrirLevee(controle) {
     const jour = Donnees.aujourdhui();
-    const fait = await fenetreAction({
+    const fait = await UI.fenetreAction({ classe: 'controles-fenetre',
       titre: 'Lever les observations',
       introduction: UI.html`<div class="encadre attention"><b>Observations du contrôle du ${UI.dateFr(controle.derniere_date)} :</b> ${controle.observations}</div>`,
       champs: [UI.champ({ nom: 'date', type: 'date', libelle: 'Levées le' }, jour, { obligatoire: true, attributs: { max: jour } }),

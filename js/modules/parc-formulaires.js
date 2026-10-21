@@ -447,7 +447,7 @@ Object.assign(Parc, (() => {
     // Valeurs saisies au format du fichier (point décimal, sans espaces).
     const lireReleve = () => {
       const valeurs = lireChamps(contenu);
-      return { date: valeurs.date, valeur: valeurs.valeur.replace(/[\s  ]/g, '').replace(',', '.') };
+      return { date: valeurs.date, valeur: valeurs.valeur.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.') };
     };
     const enBaisse = () => estEnBaisse(lireReleve().valeur, dernier);
     const montrerBaisse = (visible) => {

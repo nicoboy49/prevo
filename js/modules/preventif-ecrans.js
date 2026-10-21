@@ -25,6 +25,9 @@ Object.assign(Preventif, (() => {
   const RANGS_ETAT = Object.keys(STATUTS_GAMME);            // du plus urgent au moins urgent
   const LIBELLES_COURTS = { date: 'Date', compteur: 'Compteur', seuil: 'Seuil' };
   const TABLES_ECRANS = ['gammes', 'gamme_operations', 'ordres_travail', 'releves', 'compteurs', 'equipements'];
+  // Onglets « Suggestions » et « Décisions » du responsable : ils dépendent en plus du journal (décisions
+  // prises sur un autre poste), des DI et des codes de défaillance (lot 4, §17.9).
+  const TABLES_SUGGESTIONS = ['journal', 'demandes', 'codes_defaillance'];
 
   // Filtres de la liste, gardés pendant la session (comme ceux de la liste des OT).
   const memoire = { statut: '', equipement: '' };
@@ -54,7 +57,7 @@ Object.assign(Preventif, (() => {
 
   /** « 2 000 h » : nombre à la française et unité, jamais coupés l'un de l'autre (espace insécable). */
   function avecUnite(valeur, unite) {
-    return UI.nombreFr(valeur) + (unite ? ' ' + unite : '');
+    return UI.nombreFr(valeur) + (unite ? '\u00a0' + unite : '');
   }
 
   /** « tous les 30 j », « toutes les 2 000 h », « seuil 0,8 bar » (vide si non renseignée). */
@@ -648,7 +651,8 @@ Object.assign(Preventif, (() => {
     App.ecran({
       id: 'preventif', route: /^#\/preventif$/, titre: 'Préventif',
       menu: { libelle: 'Préventif', icone: 'preventif', ordre: 35 },
-      profils: ['technicien', 'responsable'], tables: TABLES_ECRANS,
+      profils: ['technicien', 'responsable'],
+      get tables() { return App.estResponsable() ? TABLES_ECRANS.concat(TABLES_SUGGESTIONS) : TABLES_ECRANS; },
       afficher: afficherListe,
     });
     App.ecran({

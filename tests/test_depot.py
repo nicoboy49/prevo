@@ -172,6 +172,20 @@ class TestModules(unittest.TestCase):
                 self.assertIn("js/modules/" + fichier.name, charges,
                               "fichier orphelin : js/modules/%s n'est pas chargé par index.html" % fichier.name)
 
+    def test_aucun_caractere_invisible_en_clair_dans_les_sources(self):
+        # Lot 4 (§17.9) : espaces insécables, fines ou de largeur nulle écrits par leur échappement
+        # ( …), jamais en clair (invisibles à la relecture). Bibliothèques tierces exclues.
+        invisibles = {" ": "U+00A0", " ": "U+202F", " ": "U+2009", "​": "U+200B"}
+        sources = [f for f in sorted((RACINE / "js").rglob("*.js")) if "lib" not in f.relative_to(RACINE).parts]
+        sources += sorted((RACINE / "css").rglob("*.css")) + sorted(RACINE.glob("*.html"))
+        self.assertGreater(len(sources), 40)
+        for fichier in sources:
+            with self.subTest(fichier=fichier.relative_to(RACINE).as_posix()):
+                texte = fichier.read_text(encoding="utf-8")
+                trouves = ["%s ligne %d" % (code, texte.count("\n", 0, texte.index(car)) + 1)
+                           for car, code in invisibles.items() if car in texte]
+                self.assertEqual(trouves, [])
+
 
 # Documents publics du dépôt : aucun chemin ni outil personnel du poste de développement
 # (lettre de lecteur Windows, dossier synchronisé, chemin Git Bash).

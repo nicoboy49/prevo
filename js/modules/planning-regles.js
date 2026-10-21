@@ -72,8 +72,15 @@ const Planning = (() => {
       || texte(a.id).localeCompare(texte(b.id), 'fr', { numeric: true });
   }
 
+  /** Nom affiché d'un technicien : « Prénom Nom » (lot 4, D78). */
   function nomComplet(technicien) {
-    return [texte(technicien.nom), texte(technicien.prenom)].filter(Boolean).join(' ') || texte(technicien.id);
+    return [texte(technicien.prenom), texte(technicien.nom)].filter(Boolean).join(' ') || texte(technicien.id);
+  }
+
+  /** Ordre des techniciens : par nom, puis prénom (l'affichage reste « Prénom Nom »). */
+  function ordreDesNoms(a, b) {
+    return (texte(a.nom) + ' ' + texte(a.prenom)).localeCompare(texte(b.nom) + ' ' + texte(b.prenom), 'fr')
+      || texte(a.id).localeCompare(texte(b.id), 'fr', { numeric: true });
   }
 
   // ===========================================================================================
@@ -127,7 +134,7 @@ const Planning = (() => {
     const ordres = ordresDeLaSemaine(jours[0]);
     const techniciens = Donnees.lignes('techniciens');
     const actifs = techniciens.filter((technicien) => texte(technicien.actif) !== '0')
-      .sort((a, b) => nomComplet(a).localeCompare(nomComplet(b), 'fr'));
+      .sort(ordreDesNoms);
     const idsActifs = new Set(actifs.map((technicien) => texte(technicien.id)));
     const lignes = actifs.map((technicien) => ligneDuTechnicien(technicien, ordres, jours));
     const autres = Array.from(new Set(ordres.map((ot) => texte(ot.technicien_id)).filter((id) => !idsActifs.has(id)))).sort();
@@ -146,6 +153,6 @@ const Planning = (() => {
     // règles pures (ARCHITECTURE.md §15.5)
     lundiDe, joursDeLaSemaine, ordresDeLaSemaine, chargeSemaine, semaine,
     // Usage interne au module (pas une API).
-    interne: { texte, estOuvert, heures, comparerOt, nomComplet, numeroJour, dateDepuisNumero },
+    interne: { texte, estOuvert, heures, comparerOt, nomComplet, ordreDesNoms, numeroJour, dateDepuisNumero },
   };
 })();

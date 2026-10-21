@@ -349,9 +349,9 @@ const Suggestions = (() => {
       const compteur = Donnees.trouver('compteurs', gamme.compteur_id);
       const unite = compteur ? texte(compteur.unite) : '';
       return texte(gamme.periodicite_unites)
-        ? 'toutes les ' + UI.nombreFr(gamme.periodicite_unites) + (unite ? ' ' + unite : '') : 'périodicité non renseignée';
+        ? 'toutes les ' + UI.nombreFr(gamme.periodicite_unites) + (unite ? '\u00a0' + unite : '') : 'périodicité non renseignée';
     }
-    return texte(gamme.periodicite_jours) ? 'tous les ' + UI.nombreFr(gamme.periodicite_jours) + ' j' : 'périodicité non renseignée';
+    return texte(gamme.periodicite_jours) ? 'tous les ' + UI.nombreFr(gamme.periodicite_jours) + '\u00a0j' : 'périodicité non renseignée';
   }
 
   function gammeEnClair(gammeId) {

@@ -447,6 +447,30 @@ class TestIgnorer(CasEcrans):
         self.assertEqual(page.locator(".sg-decisions-tableau .sg-revenue").count(),
                          sum(1 for d in page.evaluate(CALCUL_JS)["decisions"] if d["revenue"]))
 
+    def test_ignoree_sur_un_autre_poste_onglets_reaffiches_sans_recharger(self):
+        """Lot 4 (§17.9) : une décision prise sur un autre poste (seul le journal change) réaffiche les
+        onglets « Suggestions » et « Décisions » du responsable, sans recharger la page."""
+        serveur = self.serveur()
+        cle = SCENARIOS["suggestion_allonger"]
+        page = self.ouvrir(serveur, "#/preventif?onglet=suggestions")
+        page.wait_for_selector(CARTE % cle)
+        page.evaluate("() => { window.__memePage = true; }")
+        contexte, autre = self.nouveau_contexte()
+        self.ouvrir(serveur, "#/preventif?onglet=suggestions", contexte=contexte, page=autre)
+        autre.wait_for_selector(CARTE % cle)
+        motif = "Décidé sur le PC de l'atelier (test)"
+        autre.click(CARTE % cle + " .sg-actions button")
+        autre.fill("dialog[open] textarea[name=motif]", motif)
+        autre.click("dialog[open] .fenetre-actions .btn-primaire")
+        self.assertTrue(attendre(lambda: decisions_au_journal(serveur.dossier, cle)))
+        # Surveillance du premier poste : le retour sur l'onglet lance le même rafraîchissement que
+        # celui des 20 s (rafraichissement_s).
+        page.evaluate("() => document.dispatchEvent(new Event('visibilitychange'))")
+        page.wait_for_function("sel => !document.querySelector(sel)", arg=CARTE % cle)
+        self.assertTrue(page.evaluate("() => window.__memePage === true"), "la page a été rechargée")
+        self.onglet_decisions(page)
+        self.assertIn(motif, espaces(page.locator(LIGNE_DECISION % cle).first.inner_text()))
+
 
 # ---------------------------------------------------------------------------
 # cs54 : rien n'est écrit par l'affichage ; profils

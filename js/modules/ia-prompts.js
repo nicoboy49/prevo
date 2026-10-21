@@ -99,7 +99,7 @@ Object.assign(Ia, (() => {
     const proposition = texte(valeur);
     if (!proposition) throw new Ia.IaReponseInvalide('L\'IA n\'a rien proposé.');
     if (proposition.length > Ia.TEXTE_MAX) {
-      throw new Ia.IaReponseInvalide('La proposition de l\'IA dépasse 4 000 caractères : elle est ignorée.');
+      throw new Ia.IaReponseInvalide('La proposition de l\'IA dépasse 4\u00a0000 caractères : elle est ignorée.');
     }
     return proposition;
   }

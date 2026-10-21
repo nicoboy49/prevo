@@ -94,7 +94,7 @@ Object.assign(Magasin, (() => {
     UI.$$('[name]', bloc).forEach((controle) => {
       if (controle.type === 'checkbox') { valeurs[controle.name] = controle.checked ? '1' : '0'; return; }
       let valeur = String(controle.value || '').trim();
-      if (controle.dataset.type === 'decimal' || controle.dataset.type === 'entier') valeur = valeur.replace(/[\s  ]/g, '').replace(',', '.');
+      if (controle.dataset.type === 'decimal' || controle.dataset.type === 'entier') valeur = valeur.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
       valeurs[controle.name] = valeur;
     });
     return valeurs;

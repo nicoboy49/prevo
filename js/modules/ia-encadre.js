@@ -114,7 +114,7 @@ Object.assign(Ia, (() => {
     minuteur = setInterval(() => {
       if (!encadre.isConnected) { retirer({ choix: 'ferme' }); return; }   // écran réaffiché entre-temps
       const zone = UI.$('.ia-duree', encadre);
-      if (zone) zone.textContent = Math.round((Date.now() - debut) / 1000) + ' s';
+      if (zone) zone.textContent = Math.round((Date.now() - debut) / 1000) + '\u00a0s';
     }, 1000);
 
     // Erreur (de l'IA ou du rendu) : message dans l'encadré, issue « erreur » rendue tout de suite.
