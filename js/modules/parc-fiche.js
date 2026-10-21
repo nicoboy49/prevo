@@ -1,7 +1,8 @@
 'use strict';
 // Parc (5/5) — fiche d'un équipement (#/equipement/<id>) : consignation, fiche technique (dont la
 // valeur de remplacement), QR code, compteurs et leurs relevés, gammes préventives et leur état,
-// contrôles réglementaires et leur statut (§15.7), sous-équipements, pièces liées, historiques OT et DI, désactivation et réactivation ; puis
+// encart des suggestions de préventif (responsable, §16.6), contrôles réglementaires et leur statut
+// (§15.7), sous-équipements, pièces liées, historiques OT et DI, désactivation et réactivation ; puis
 // l'enregistrement des écrans du module auprès d'App (ARCHITECTURE.md §8, §14.2 et §14.6).
 // Dernier fichier du module : les écrans des fichiers précédents existent déjà.
 
@@ -419,6 +420,11 @@ Object.assign(Parc, (() => {
         ${sousEquipements}
         <div class="parc-complements"></div>
       </div>`);
+
+    // Encart « Suggestions de préventif » (responsable, suggestions ouvertes seulement ; §16.6), sous la
+    // carte Préventif. Suggestions est chargé après ce fichier : appelé au moment de l'affichage.
+    const encartSuggestions = Suggestions.encartEquipement(equipement.id);
+    if (encartSuggestions) UI.$('.parc-preventif', conteneur).closest('.grille').after(encartSuggestions);
 
     const zone = UI.$('.parc-complements', conteneur);
     zone.appendChild(carteArticles(equipement));

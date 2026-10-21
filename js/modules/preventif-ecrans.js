@@ -9,7 +9,10 @@
 //   14. Enregistrement des écrans
 // Profils : le technicien consulte (lecture seule), le responsable crée et modifie, le demandeur
 // n'a pas accès. L'onglet « Calendrier » est dessiné par preventif-calendrier.js (chargé après ce
-// fichier : appelé par une fonction relais). Complète l'objet Preventif.
+// fichier : appelé par une fonction relais). Lot 3 bis (§16.6) : onglets « Suggestions » et
+// « Décisions », rappel ?suggestion=, encart de la fiche et marquage « traitée » viennent de
+// suggestions-ecrans.js (chargé après : appels Suggestions.* au moment de l'affichage). Complète
+// l'objet Preventif.
 
 Object.assign(Preventif, (() => {
 
@@ -122,7 +125,8 @@ Object.assign(Preventif, (() => {
   // 10. Liste des gammes (#/preventif)
   // ===========================================================================================
 
-  // Paramètres d'adresse : ?onglet=gammes|calendrier, ?statut=echue…, ?equipement=EQ-0001.
+  // Paramètres d'adresse : ?onglet=gammes|calendrier (responsable : aussi suggestions|decisions,
+  // lot 3 bis), ?statut=echue…, ?equipement=EQ-0001.
   function lireFiltresAdresse(requete) {
     if (requete.has('statut')) memoire.statut = RANGS_ETAT.includes(requete.get('statut')) ? requete.get('statut') : '';
     if (requete.has('equipement')) memoire.equipement = requete.get('equipement');
@@ -137,8 +141,12 @@ Object.assign(Preventif, (() => {
 
   function afficherListe(conteneur, parametres) {
     const requete = parametres.requete;
+    if (Suggestions.ongletRefuse(requete)) return;          // suggestions demandées par un autre profil : accueil
     lireFiltresAdresse(requete);
-    const onglet = ONGLETS.includes(requete.get('onglet')) ? requete.get('onglet') : 'gammes';
+    // Onglets « Suggestions » et « Décisions » du responsable (suggestions-ecrans.js, §16.6) ; [] sinon.
+    const ongletsSuggestions = Suggestions.ongletsPreventif();
+    const ids = ONGLETS.concat(ongletsSuggestions.map((o) => o.id));
+    const onglet = ids.includes(requete.get('onglet')) ? requete.get('onglet') : 'gammes';
     const toutes = gammesAvecEtat();
     const semaines = nombreDeSemaines();
     UI.remplir(conteneur, UI.html`
@@ -157,7 +165,7 @@ Object.assign(Preventif, (() => {
     UI.onglets(UI.$('.pv-onglets', conteneur), [
       { id: 'gammes', libelle: 'Gammes', compteur: toutes.length, afficher: (panneau) => afficherGammes(panneau, toutes) },
       { id: 'calendrier', libelle: 'Calendrier ' + semaines + ' semaines', afficher: (panneau) => afficherCalendrier(panneau) },
-    ], { actif: onglet, libelle: 'Vues du préventif', surChangement: memoriserOnglet });
+    ].concat(ongletsSuggestions), { actif: onglet, libelle: 'Vues du préventif', surChangement: memoriserOnglet });
   }
 
   // Relais vers preventif-calendrier.js (chargé après ce fichier).
@@ -356,11 +364,13 @@ Object.assign(Preventif, (() => {
           const changes = await Preventif.modifierGamme(gamme.id, valeurs);
           App.marquerSaisie(false);
           UI.toast(changes.length ? 'Gamme enregistrée.' : 'Aucune modification à enregistrer.', changes.length ? 'succes' : 'info');
+          await Suggestions.apresModificationGamme(gamme.id, changes);     // suggestion suivie : traitée (§16.6)
           await App.reafficher();
         } else {
           const id = await Preventif.creerGamme(valeurs);
           App.marquerSaisie(false);
           UI.toast('Gamme ' + id + ' créée : ajoutez maintenant sa check-list.', 'succes');
+          await Suggestions.apresCreationGamme(id);                         // S1 suivie : traitée (§16.6)
           App.naviguer('#/preventif/gamme/' + encodeURIComponent(id));
         }
       } catch (erreur) {
@@ -383,8 +393,11 @@ Object.assign(Preventif, (() => {
         </div></div>
         <article class="carte pv-carte-formulaire"></article>
       </div>`);
-    const equipement = parametres.requete.get('equipement') || '';
-    UI.$('.pv-carte-formulaire', conteneur).appendChild(formulaireGamme(null, { equipement_id: equipement, declencheur: 'date' }));
+    // ?equipement= ; ?suggestion=<clé S1> pré-remplit le libellé et rappelle la suggestion (§16.6).
+    const creation = Suggestions.preparerCreation(parametres.requete);
+    const carte = UI.$('.pv-carte-formulaire', conteneur);
+    if (creation.rappel) carte.before(creation.rappel);
+    carte.appendChild(formulaireGamme(null, creation.valeurs));
   }
 
   // ===========================================================================================
@@ -453,6 +466,10 @@ Object.assign(Preventif, (() => {
           <section class="carte pv-ots" aria-labelledby="pv-titre-ots"></section>
         </div>
       </div>`);
+    // Responsable (§16.6) : rappel de ?suggestion=<clé> (suivie jusqu'à son marquage), puis encart des
+    // autres suggestions ouvertes de la gamme. suiviFiche d'abord : il dit à encartGamme ce qui est rappelé.
+    [Suggestions.suiviFiche(gamme.id, parametres.requete), Suggestions.encartGamme(gamme.id)]
+      .forEach((bloc) => { if (bloc) UI.$('.pv-fiche-grille', conteneur).before(bloc); });
     if (responsable) UI.$('.pv-parametres', conteneur).appendChild(formulaireGamme(gamme));
     const checkListe = UI.$('.pv-check-liste', conteneur);
     afficherCheckListe(checkListe, gamme.id);
@@ -556,6 +573,7 @@ Object.assign(Preventif, (() => {
       afficherCheckListe(section, gammeId);
       const bouton = operationId ? UI.$('[data-operation="' + operationId + '"] [data-action="' + action + '"]', section) : null;
       if (bouton && !bouton.disabled) bouton.focus();
+      Suggestions.apresCheckListe(gammeId);                  // check-list changée : suggestion suivie traitée (§16.6)
     };
     section.addEventListener('submit', async (evenement) => {
       evenement.preventDefault();

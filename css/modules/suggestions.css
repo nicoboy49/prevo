@@ -1,7 +1,90 @@
 /* Suggestions de préventif (lot 3 bis, ARCHITECTURE.md §16.6) : onglets « Suggestions » et
    « Décisions » du Préventif, cartes de suggestion, encarts des fiches gamme et équipement.
-   Variables de la charte seulement (css/style.css). */
+   Variables de la charte seulement (css/style.css) : aucune couleur codée en dur.
+   Sommaire : 1 onglet Suggestions · 2 cartes · 3 rappel, encarts, fenêtre · 4 Décisions · 5 téléphone. */
+
+/* =========================================================================================
+   1. Onglet « Suggestions » : introduction, encadré « Comprendre », compteur
+   ========================================================================================= */
 
 .suggestions {
   min-width: 0;
+}
+.sg-intro { margin: 0 0 .6rem; }
+.sg-comprendre { margin: 0 0 1rem; overflow-wrap: anywhere; }
+.sg-comprendre > summary {
+  display: flex; align-items: center; min-height: var(--tactile); cursor: pointer; font-weight: 700; color: var(--texte);
+}
+.sg-comprendre[open] > summary { margin-bottom: .3rem; }
+.sg-comprendre p { margin: 0 0 .5rem; }
+.sg-comprendre ul { margin: 0 0 .7rem; }
+.sg-comprendre li { margin-bottom: .25rem; }
+.sg-compteur { font-size: 1.125rem; margin: 0 0 .8rem; }
+
+/* =========================================================================================
+   2. Cartes : badge du type (texte), équipement, faits, question, liens, actions
+   ========================================================================================= */
+
+.sg-cartes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); gap: 14px; }
+.sg-carte {
+  display: flex; flex-direction: column; gap: .5rem; min-width: 0; padding: 16px 18px; border-radius: 16px;
+  background: var(--carte); border: 1px solid var(--trait); border-left: 5px solid var(--trait-2); overflow-wrap: anywhere;
+}
+/* Trait de couleur selon la règle : le badge dit toujours le type en toutes lettres. */
+.sg-carte[data-regle="S1"] { border-left-color: var(--bleu); }
+.sg-carte[data-regle="S2"] { border-left-color: var(--ambre); }
+.sg-carte[data-regle="S3"] { border-left-color: var(--violet); }
+.sg-carte[data-regle="S4"] { border-left-color: var(--vert); }
+.sg-carte-tete { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .5rem; }
+.sg-type, .sg-criticite { white-space: normal; }
+.sg-titre { margin: 0; font-size: 1.0625rem; line-height: 1.35; }
+.sg-texte, .sg-question, .sg-liens, .sg-precedente { margin: 0; }
+.sg-question { color: var(--texte-2); }
+.sg-liens { font-size: .9375rem; color: var(--texte-2); }
+.sg-libelle { color: var(--muted); }
+.sg-liens a { font-weight: 600; white-space: nowrap; }
+.sg-precedente {
+  font-size: .9375rem; color: var(--texte-ambre); background: var(--teinte-ambre-faible);
+  border: 1px solid var(--bord-ambre); border-radius: 10px; padding: .4rem .65rem;
+}
+.sg-actions { margin-top: auto; padding-top: .2rem; display: flex; flex-wrap: wrap; gap: .5rem; }
+
+/* =========================================================================================
+   3. Rappel en tête d'un formulaire ou d'une fiche, encarts des fiches, fenêtre « Ignorer »
+   ========================================================================================= */
+
+.sg-rappel { overflow-wrap: anywhere; }
+.sg-rappel p { margin: 0 0 .35rem; }
+.sg-rappel-tete { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; }
+.sg-rappel-tete b { color: var(--fort); }
+.sg-encart .entete-carte h2 { margin: 0; }
+.sg-encart > .note { margin: 0 0 .8rem; }
+.sg-encart .sg-carte { background: var(--carte-2); }
+.sg-tout { font-weight: 600; }
+.sg-fenetre p { margin: 0; overflow-wrap: anywhere; }
+
+/* =========================================================================================
+   4. Onglet « Décisions » : tableau sur grand écran, cartes sur téléphone
+   ========================================================================================= */
+
+.sg-decisions-tableau { padding: 8px 10px; }
+.sg-decisions-tableau .table td { vertical-align: top; }
+.sg-col-texte { min-width: 14rem; overflow-wrap: anywhere; }
+.sg-cle { font-weight: 700; white-space: nowrap; }
+.sg-sous { display: block; font-size: .875rem; color: var(--muted); }
+.sg-decisions-cartes { display: none; }
+.sg-decision .carte-tete .sg-sous { flex-basis: 100%; }
+.sg-decision-texte { overflow-wrap: anywhere; color: var(--texte-2); }
+
+/* =========================================================================================
+   5. Téléphone (≤ 640 px) : une colonne, cartes à la place du tableau, zones tactiles de 48 px
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  .sg-cartes { grid-template-columns: minmax(0, 1fr); }
+  .sg-carte { padding: 14px; }
+  .sg-titre a, .sg-liens a, .sg-tout, .sg-decision a { display: inline-flex; align-items: center; min-height: 48px; }
+  .sg-actions .btn { flex: 1 1 100%; }
+  .sg-decisions-tableau { display: none; }
+  .sg-decisions-cartes { display: flex; }
 }
