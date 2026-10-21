@@ -124,7 +124,7 @@ const Import = (() => {
       V('cause_code', 'Code cause', 'texte', 'C01', 'cause', { table: 'ordres_travail', champ: 'cause_code', ref: 'codes_defaillance', famille: 'cause' }),
       V('remede_code', 'Code remède', 'texte', 'R01', 'remède|action corrective', { table: 'ordres_travail', champ: 'remede_code', ref: 'codes_defaillance', famille: 'remède' }),
       V('technicien', 'Technicien', 'texte', 'Julien Moreau', 'intervenant|réalisé par|nom du technicien', reference('ordres_travail', 'techniciens', 'technicien_id')),
-      V('temps_passe_h', 'Temps passé (heures)', 'decimal', '2,5', "temps passé|heures|durée intervention|temps|main d'oeuvre", { table: 'ot_temps' }),
+      V('temps_passe_h', 'Temps passé (heures)', 'decimal', '2,5', "temps passé|heures|durée intervention|temps|temps (h)|temps passé (h)|main d'oeuvre", { table: 'ot_temps' }),
       S('ordres_travail', { cout_soustraitance: ['0', 'sous-traitance|coût sous-traitance|coût externe'] })]),
   };
   const [CLE_REPERE, CLE_NOM] = [(ligne) => cleTexte(ligne.repere), (ligne) => cleTexte(ligne.nom)];
