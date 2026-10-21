@@ -1519,6 +1519,7 @@ class Contexte:
         self.marques = {}                             # rôle de scénario -> ligne (voir §7, scénarios)
         self.attentes = []                            # périodes « En attente » passées des OT (§5 bis, journal)
         self.anomalies_sans_di = []                   # préventifs à case cochée, réglés sur place (§5 ter)
+        self.di_apres_verrou = []                     # DI liées à une visite déjà verrouillée (§5 ter)
         self.gammes_lot3bis = {}                      # 'anomalies' / 'refus' -> ligne de gammes.csv (§5 ter)
 
     def marquer(self, role, ligne):
@@ -3353,6 +3354,7 @@ def signaler_anomalie_apres_verrou(ctx, gamme, visite, technicien, envoi, anomal
         symptome=anomalie['texte_di'], impact=anomalie['impact'],
         description="Signalée pendant l'OT préventif de la gamme « %s »." % gamme['libelle'], statut='Acceptée',
         symptome_code=anomalie['symptome'], ot_origine_id=visite)
+    ctx.di_apres_verrou.append(demande)
     decision = apres_minutes_ouvrees(envoi, ctx.rng.randint(20, 60))
     priorite = priorite_calculee(equipement['crit'], anomalie['impact'])
     immediat = priorite == 'P1' or anomalie['impact'] in ('arrêt', 'sécurité')
@@ -3783,6 +3785,7 @@ def verifier_jeu(ctx):
         if not equipement['valeur_remplacement']:
             erreur('%s sans valeur de remplacement' % equipement['id'])
     origines = set()
+    apres_verrou = {di['id'] for di in ctx.di_apres_verrou}           # seules DI admises sans case cochée (§5 ter)
     for demande in base['demandes']:
         ot = ordres.get(demande['ot_id'])
         if demande['symptome_code'] and ot is not None and ot['symptome_code'] != demande['symptome_code']:
@@ -3792,7 +3795,7 @@ def verifier_jeu(ctx):
             origines.add(origine['id'])
             # Une DI envoyée quand l'OT d'origine est déjà verrouillé (Clôturé administrativement) ne le
             # marque pas : l'application ne modifie jamais un OT verrouillé (§14.6, écart retenu).
-            verrouille = (origine['statut'] == 'Clôturé administrativement'
+            verrouille = (demande['id'] in apres_verrou and origine['statut'] == 'Clôturé administrativement'
                           and origine['date_cloture_admin'] <= demande['date_heure'])
             if origine['origine'] != 'préventif' or (origine['anomalie_constatee'] != '1' and not verrouille):
                 erreur('%s : OT d\'origine %s sans anomalie constatée' % (demande['id'], origine['id']))

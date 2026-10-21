@@ -1061,9 +1061,10 @@ class TestScenariosDemo(unittest.TestCase):
         self.assertEqual(list(json.loads(texte)), sorted(json.loads(texte)), 'clés triées')
         # Chaque clé est documentée dans la docstring du générateur, et réciproquement.
         self.assertEqual(sorted(generateur.cles_documentees()), sorted(self.s))
-        for cle, valeur in self.s.items():          # texte, liste triée, ou (lot 3 bis) petit objet de textes
+        for cle, valeur in self.s.items():          # texte, liste triée, ou (lot 3 bis, ce seul rôle) petit objet de textes
             self.assertTrue(isinstance(valeur, str) or (isinstance(valeur, list) and valeur == sorted(valeur))
-                            or (isinstance(valeur, dict) and all(isinstance(v, str) for v in valeur.values())), cle)
+                            or (cle == 'suggestion_sous_seuil' and isinstance(valeur, dict)
+                                and all(isinstance(v, str) for v in valeur.values())), cle)
 
     def test_cles_minimales_demandees(self):
         for cle in ('gamme_mensuelle_echue', 'gamme_compteur_echue', 'gamme_seuil', 'kit_garniture',
