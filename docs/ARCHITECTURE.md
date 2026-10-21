@@ -1714,9 +1714,13 @@ en a une. Sous les seuils, rien n'est suggéré.
   seulement** ; pour un autre profil, `?onglet=suggestions|decisions` → accueil avec le message des
   écrans interdits (§8 : « L'écran « Suggestions de préventif » n'est pas disponible pour le profil
   … »). `preventif-ecrans.js` dessine ces onglets par une fonction relais (module chargé après).
+  Écart retenu (relecture finale) : le demandeur, à qui tout le Préventif est fermé, reçoit le message
+  de l'écran « Préventif » (§8), avant même que l'onglet soit regardé.
 - **Carte** d'une suggestion : badge texte du type (« S2 · Revoir le préventif » : jamais la couleur
-  seule), équipement (lien) et criticité, texte, question, OT liés (5 au plus, les plus récents, puis
-  « et n autres »), DI liées (S3), décision précédente s'il y en a une, actions :
+  seule), équipement (lien) et criticité, texte, question, **dates des faits** (« Dates : du 03/11/2025
+  au 11/09/2026 », ou « le … » ; écart retenu à la relecture finale : le contrat d'origine les avait
+  oubliées, alors que CS53 les exige), OT liés (5 au plus, les plus récents, chacun suivi de sa date,
+  puis « et n autres »), DI liées (S3), décision précédente s'il y en a une, actions :
   - S1 **« Créer la gamme »** → `#/preventif/gamme/nouvelle?equipement=<id>&suggestion=<clé>` :
     formulaire pré-rempli (équipement, libellé « Prévenir : capteur encrassé » — libellé de la cause,
     première lettre en minuscule —, déclencheur `date`) et rappel de la suggestion ; **rien n'est écrit
@@ -1725,8 +1729,11 @@ en a une. Sous les seuils, rien n'est suggéré.
     `#/preventif/gamme/<id>?suggestion=<clé>` : rappel de la suggestion en tête de fiche ; un
     enregistrement de la gamme **avec au moins un changement**, ou une modification de sa check-list,
     marque la suggestion traitée (`gamme modifiée : <champs>` ou `check-list modifiée`) ;
-  - **« Ignorer… »** → fenêtre avec motif obligatoire → `Suggestions.ignorer` → la carte disparaît,
-    message « Suggestion ignorée (inscrite au journal). ».
+  - **« Ignorer… »** (nom accessible « Ignorer la suggestion <clé> ») → fenêtre avec motif
+    obligatoire → `Suggestions.ignorer` → la carte disparaît, message « Suggestion ignorée (inscrite au
+    journal). ». Fermée par Échap pendant l'écriture, la fenêtre laisse l'écriture finir : son issue
+    décide du message et du réaffichage. Tout blanc du motif (saut de ligne, U+2028, U+2029) devient
+    une espace, et la lecture du journal accepte un motif sur plusieurs lignes.
 - Onglet **Décisions** : tableau (cartes sur téléphone) des décisions, de la plus récente à la plus
   ancienne : date, clé et type, équipement / gamme (liens), décision, motif, profil, « revenue » le cas
   échéant.
@@ -1738,9 +1745,10 @@ en a une. Sous les seuils, rien n'est suggéré.
   rien) ; une création n'est marquée que si la gamme est sur l'équipement de la S1 ; l'encart de la
   fiche gamme omet la suggestion déjà rappelée en tête de fiche ; la décision précédente rappelée sur
   une carte perd sa ponctuation finale (« … gammes ; revenue sur de nouveaux faits »).
-- Limites gardées : l'écran `#/preventif` n'est pas réaffiché quand le journal change sur un autre poste
-  (une décision prise ailleurs apparaît au prochain affichage) ; sur téléphone, l'onglet actif peut être
-  hors de la partie visible de la barre d'onglets (défilante, `UI.onglets`).
+- Limite gardée : l'écran `#/preventif` n'est pas réaffiché quand le journal change sur un autre poste
+  (une décision prise ailleurs apparaît au prochain affichage).
+- `UI.onglets` (relecture finale) : l'onglet choisi est ramené dans la partie visible de la barre
+  d'onglets quand elle défile (téléphone) ; seule la barre défile, jamais la page.
 - **Encarts** « Suggestions de préventif » : sur la fiche équipement (`parc-fiche.js`, près de la carte
   Préventif) et sur la fiche gamme (`preventif-ecrans.js`), responsable seulement, uniquement s'il y a
   des suggestions ouvertes : mêmes cartes et mêmes actions.
