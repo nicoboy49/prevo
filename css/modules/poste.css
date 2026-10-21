@@ -1,0 +1,6 @@
+/* Écran « Ce poste » (lot 4, ARCHITECTURE.md §17.7) : identité, assistant IA, dictée, affichage.
+   Variables de la charte seulement : le thème clair les redéfinit. */
+
+.poste {
+  min-width: 0;
+}

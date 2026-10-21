@@ -1,0 +1,7 @@
+/* Assistant IA et dictée (lot 4, ARCHITECTURE.md §17.4 et §17.6) : boutons « avec l'IA », encadré
+   de proposition, mention de portée, bouton micro. Variables de la charte seulement : le thème clair
+   les redéfinit. */
+
+.ia-encadre {
+  min-width: 0;
+}

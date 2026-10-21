@@ -42,6 +42,10 @@ const Parametres = (() => {
       aide: 'Visites de suite sans anomalie ni panne (criticité B ou C seulement).' },
     { cle: 'suggestion_fenetre_mois', type: 'entier', libelle: 'Période observée (mois)', defaut: '12', min: 3, max: 24,
       aide: 'Les pannes comptées sont celles de ces derniers mois.' },
+    // Lot 4 (ARCHITECTURE.md §17.1, D67) : le responsable autorise ou non les fournisseurs d'IA en ligne.
+    { cle: 'ia_distant_autorise', type: 'booleen', valeurs: ['0', '1'], defaut: '0', large: true, section: 'Assistant IA',
+      libelle: 'Autoriser les fournisseurs d\'IA en ligne (OpenAI, Mistral, Groq…)',
+      aide: 'Les textes envoyés (descriptions, comptes rendus, désignations) quittent alors l\'atelier. L\'IA locale (Ollama) reste toujours possible.' },
     { cle: 'rafraichissement_s', type: 'entier', libelle: 'Rafraîchissement (secondes)', defaut: '20', min: 2, max: 3600,
       section: 'Échanges entre postes', aide: 'Fréquence de lecture des changements faits sur les autres postes.' },
   ];

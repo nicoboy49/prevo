@@ -747,6 +747,32 @@ class TestReglagesEtCodes(CasParametres):
             self.assertEqual(page.input_value(formulaire + "[name=suggestion_visites_sans_constat]"), "8")
             self.assertEqual(page.evaluate("Donnees.parametre('suggestion_fenetre_mois', '')"), "24")
 
+    def test_reglage_fournisseurs_ia_distant_non_par_defaut_puis_enregistre(self):
+        """Lot 4 (ARCHITECTURE.md §17.1, D67) : le responsable autorise ou non les IA en ligne (défaut : non)."""
+        with ServeurPrevo() as serveur:
+            chemin = serveur.dossier / "parametres.csv"
+            page = self.ouvrir(serveur, route="#/parametres")
+            self.attendre_ecran("Paramètres")
+            case = "#form-parametres [name=ia_distant_autorise]"
+            self.assertIn("Assistant IA", page.inner_text("#form-parametres"))
+            self.assertFalse(page.is_checked(case))                     # clé absente de la démo : « non »
+            self.assertEqual(page.evaluate("Donnees.parametre('ia_distant_autorise', '0')"), "0")
+            page.check(case)
+            page.click("#form-parametres button[type=submit]")
+            self.attendre_toast("Paramètres enregistrés")
+            _, lignes = lire_csv(chemin)
+            valeurs = {ligne["cle"]: sans_apostrophe(ligne["valeur"]) for ligne in lignes}
+            self.assertEqual(valeurs["ia_distant_autorise"], "1")
+            page.reload()
+            attendre_pret(page)
+            self.attendre_ecran("Paramètres")
+            self.assertTrue(page.is_checked(case))
+            page.uncheck(case)
+            page.click("#form-parametres button[type=submit]")
+            self.attendre_toast("Paramètres enregistrés")
+            _, lignes = lire_csv(chemin)
+            self.assertEqual({l["cle"]: sans_apostrophe(l["valeur"]) for l in lignes}["ia_distant_autorise"], "0")
+
     def test_codes_ajout_visible_dans_la_fiche_ot_libelle_modifie_et_doublons_refuses(self):
         with ServeurPrevo() as serveur:
             chemin = serveur.dossier / "codes_defaillance.csv"
