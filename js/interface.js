@@ -272,6 +272,7 @@ const UI = (function () {
     fermer: '<path d="M6 6l12 12M18 6 6 18"/>',
     export: '<path d="M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5"/><path d="M4.5 15v5h15v-5"/>',
     utilisateur: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.4 4.4-6.5 8-6.5s7 2.1 8 6.5"/>',
+    micro: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>',
     engrenage: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2L14.2 3h-4.4l-.4 2.6a7 7 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2l.4 2.6h4.4l.4-2.6a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/>',
     cle: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/>',
     horloge: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
@@ -450,6 +451,8 @@ const UI = (function () {
           return; // la fenêtre reste ouverte (ex. motif vide)
         }
         termine = true;
+        // Lot 4 (§17.6) : une dictée en cours dans la fenêtre s'arrête avec elle.
+        if (typeof Dictee !== 'undefined') Dictee.arreterDans(dialogue);
         if (dialogue.open) dialogue.close();
         dialogue.remove();
         if (elementAvant && typeof elementAvant.focus === 'function' && document.contains(elementAvant)) {
@@ -470,6 +473,8 @@ const UI = (function () {
 
       document.body.appendChild(dialogue);
       dialogue.showModal();
+      // Lot 4 (§17.6) : bouton micro sur les champs dictés de la fenêtre (Dictee est chargé après ce fichier).
+      if (typeof Dictee !== 'undefined') Dictee.equiper(dialogue);
       const premierChamp = formulaire.querySelector('.fenetre-corps input:not([type=hidden]), .fenetre-corps textarea, .fenetre-corps select');
       (premierChamp || boutonParDefaut || zoneBoutons.lastElementChild || dialogue).focus();
       if (typeof reglages.surOuverture === 'function') reglages.surOuverture(dialogue, terminer);

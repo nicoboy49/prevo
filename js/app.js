@@ -301,6 +301,8 @@ const App = (() => {
     // Assistant IA (lot 4, §17.3) : un seul test du fournisseur s'il est activé sur le poste, aucun
     // appel sinon ; sans attendre la réponse (l'état « prêt » n'en dépend pas).
     if (typeof Ia !== 'undefined') Ia.verifierAuDemarrage();
+    // Dictée (lot 4, §17.6) : bouton micro sur chaque champ dicté, où qu'il apparaisse ensuite.
+    if (typeof Dictee !== 'undefined') Dictee.surveiller(document.body);
     await ouvrirCoque();
     if (otPreventifs.length) UI.toast(Preventif.texteGeneration(otPreventifs.length) + '.', 'succes');
   }

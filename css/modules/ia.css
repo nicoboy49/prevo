@@ -63,3 +63,14 @@
 @media print {
   .ia-mention-coque, .ia-bouton, .ia-encadre { display: none !important; }
 }
+
+/* --- dictée (lot 4, §17.6) : bouton micro après chaque champ dicté, aide « micro du clavier » --- */
+.dictee-bouton { margin-top: .35rem; gap: .35rem; align-self: flex-start; min-height: var(--tactile); }
+.dictee-bouton .icone { width: 18px; height: 18px; }
+.dictee-bouton.dictee-active { color: var(--texte-rouge); border-color: var(--bord-rouge); background: var(--teinte-rouge-faible); }
+.dictee-bouton.dictee-active .icone { color: var(--rouge); }
+.dictee-aide { margin: .35rem 0 0; }
+.dictee-avertissement p { margin: 0 0 .5rem; }
+@media print {
+  .dictee-bouton, .dictee-aide { display: none !important; }
+}
