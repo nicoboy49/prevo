@@ -1,6 +1,6 @@
 'use strict';
 // Apropos : écran « À propos » (#/apropos, tous profils ; brief §9 E13 et « Signature »).
-// Version, mode de stockage, limites de sécurité, bibliothèques et licences, crédit.
+// Version, mode de stockage, aide (guide), limites de sécurité, bibliothèques et licences, crédit.
 
 const Apropos = (() => {
 
@@ -12,7 +12,7 @@ const Apropos = (() => {
     { nom: 'qrcode-generator', version: '2.0.4', licence: 'MIT', role: 'dessin des QR codes' },
     { nom: 'jsQR', version: '1.4.0', licence: 'Apache-2.0', role: 'lecture des QR codes par la caméra' },
     { nom: 'JSZip', version: '3.10.2', licence: 'MIT', role: 'export ZIP' },
-    { nom: 'ECharts', version: '5.5.1', licence: 'Apache-2.0', role: 'graphiques (à partir du lot 3)' },
+    { nom: 'ECharts', version: '5.5.1', licence: 'Apache-2.0', role: 'graphiques des indicateurs' },
     { nom: 'Police Sora', version: '', licence: 'OFL 1.1', role: 'police de caractères' },
   ];
 
@@ -29,7 +29,7 @@ const Apropos = (() => {
       <div class="entete-page">
         <div>
           <h1>À propos de Prévo</h1>
-          <p>GMAO libre pour l'atelier : demandes d'intervention, ordres de travail, parc d'équipements.</p>
+          <p>GMAO libre pour l'atelier : parc, demandes d'intervention, ordres de travail, préventif, magasin, planning, contrôles, indicateurs.</p>
         </div>
       </div>
       <div class="grille">
@@ -39,7 +39,7 @@ const Apropos = (() => {
             <dt>Application</dt><dd>Prévo — GMAO</dd>
             <dt>Version</dt><dd>${App.version}</dd>
             <dt>Date</dt><dd>${UI.dateFr(App.dateVersion)}</dd>
-            <dt>Contenu</dt><dd>Lot 1 : socle, parc, demandes, ordres de travail</dd>
+            <dt>Contenu</dt><dd>Lots 1 à 4 : parc, demandes, ordres de travail, préventif et préventif suggéré, magasin, planning, contrôles réglementaires, équipe, indicateurs et rapport mensuel, assistant IA, dictée</dd>
             <dt>Stockage actuel</dt><dd>${libelleStockage || MODES[mode] || '—'}</dd>
           </dl>
         </article>
@@ -60,8 +60,13 @@ const Apropos = (() => {
           <ul class="apropos-liste">
             <li>Les profils adaptent les écrans, ce n'est pas une sécurité : n'importe qui peut choisir le profil Responsable.</li>
             <li>Usage sur réseau local uniquement, sans authentification : ne jamais exposer le serveur sur Internet.</li>
-            <li>Assistant IA et dictée vocale : pas encore disponibles (prévus au lot 4).</li>
+            <li>Assistant IA (facultatif, réglé dans « Ce poste ») : l'IA propose, vous validez ; rien n'est enregistré sans vous. Un fournisseur en ligne reçoit les textes envoyés : il faut l'autorisation du responsable.</li>
+            <li>Dictée : dans Chrome et Edge, la voix est en général transcrite par les serveurs de Google ou de Microsoft.</li>
           </ul>
+        </article>
+        <article class="carte c6">
+          <h2>Aide</h2>
+          <p><a href="GUIDE.html" target="_blank" rel="noopener">Ouvrir le guide d'utilisation</a> : démarrer, chaque module, assistant IA, dictée, https, sauvegardes. Il s'imprime.</p>
         </article>
         <article class="carte c6">
           <h2>Bibliothèques et licences</h2>

@@ -351,7 +351,11 @@ class TestServeur(CasApp):
             self.assertIn("0.1.0", contenu)
             self.assertIn("Les profils adaptent les écrans, ce n'est pas une sécurité", contenu)
             self.assertIn("Usage sur réseau local uniquement, sans authentification", contenu)
-            self.assertIn("pas encore disponibles", contenu)
+            # Lot 4 : assistant IA et dictée décrits, lien vers le guide (servi par serveur.py)
+            self.assertIn("l'IA propose, vous validez", contenu)
+            self.assertIn("Google ou de Microsoft", contenu)
+            self.assertNotIn("pas encore disponibles", contenu)
+            self.assertEqual(page.get_attribute("#contenu a[href='GUIDE.html']", "href"), "GUIDE.html")
             for bibliotheque in ("PapaParse 5.7.0", "qrcode-generator 2.0.4", "jsQR 1.4.0", "JSZip 3.10.2",
                                  "ECharts 5.5.1", "Sora", "MIT", "Apache-2.0", "OFL"):
                 self.assertIn(bibliotheque, contenu)
