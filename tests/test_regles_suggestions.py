@@ -297,6 +297,33 @@ class TestRegles(CasSuggestions):
                           resultat["reglages"]["fenetreMois"]), (3, 5, 12))
 
 
+class TestTextes(CasSuggestions):
+
+    def test_frequence_en_clair_selon_l_intervalle_median(self):
+        j = jeu_de_base()
+        for jour in ("2026-08-10", "2026-08-10", "2026-08-10"):          # médiane 0 : pannes groupées
+            j.panne("EQ-0001", jour, "C01")
+        for jour in ("2026-08-01", "2026-08-02", "2026-08-03"):          # médiane 1 jour
+            j.panne("EQ-0001", jour, "C02")
+        for jour in ("2026-08-01", "2026-08-06", "2026-08-11"):          # médiane 5 jours
+            j.panne("EQ-0001", jour, "C03")
+        self.charger(j.tables())
+        par_cle = {s["cle"]: s for s in self.calculer()["ouvertes"]}
+        self.assertEqual(par_cle["S1-EQ-0001-C01"]["intervalleMedianJours"], 0)
+        self.assertEqual(par_cle["S1-EQ-0001-C01"]["texte"], "CV-02 : 3 pannes « Garniture usée » en 12 mois, aucune gamme active.")
+        self.assertEqual(par_cle["S1-EQ-0001-C02"]["texte"],
+                         "CV-02 : 3 pannes « Roulement hors service » en 12 mois (environ une par jour), aucune gamme active.")
+        self.assertEqual(par_cle["S1-EQ-0001-C03"]["texte"],
+                         "CV-02 : 3 pannes « Courroie détendue » en 12 mois (environ une tous les 5 jours), aucune gamme active.")
+
+    def test_calculer_sans_jour_prend_aujourd_hui(self):
+        self.charger(jeu_de_base().tables())
+        resultat = self.page.evaluate("() => Suggestions.calculer()")
+        self.assertIsInstance(resultat["ouvertes"], list)
+        self.assertEqual(resultat["reglages"]["debutFenetre"], self.page.evaluate(
+            "() => Suggestions.calculer(Donnees.aujourdhui()).reglages.debutFenetre"))
+
+
 class TestDecisionsEtFormat2(CasSuggestions):
 
     def test_suggestion_revenue_apres_de_nouveaux_faits(self):
@@ -339,6 +366,31 @@ class TestDecisionsEtFormat2(CasSuggestions):
         self.assertEqual(resultat["reglages"]["passageFormat2"], "2026-08-01 09:00")
         self.assertNotIn("S4-GAM-0003", self.cles(resultat))        # 2 visites comptées (15/08, 15/09)
         self.assertIn("S3-GAM-0002", self.cles(resultat))           # S3 n'est pas concernée
+
+    def test_decisions_sur_s3_et_s4(self):
+        j = jeu_de_base()
+        j.decision("2026-07-01 12:00", "gammes", "GAM-0003", "suggestion S4-GAM-0003 ignorée : périodicité imposée par le constructeur")
+        j.decision("2026-08-01 12:00", "gammes", "GAM-0002", "suggestion S3-GAM-0002 traitée : check-list modifiée")
+        self.charger(j.tables())
+        resultat = self.calculer()
+        self.assertNotIn("S4-GAM-0003", self.cles(resultat))    # 3 visites depuis le 01/07 : sous le seuil de 5
+        self.assertNotIn("S3-GAM-0002", self.cles(resultat))    # 1 visite depuis le 01/08 : 1 anomalie sur 1
+        self.assertEqual([(d["cle"], d["table"], d["idLigne"]) for d in resultat["decisions"][:2]],
+                         [("S3-GAM-0002", "gammes", "GAM-0002"), ("S4-GAM-0003", "gammes", "GAM-0003")])
+        # De nouvelles visites sans anomalie font revenir S4 (5 visites postérieures à la décision)
+        j.visite("GAM-0003", "EQ-0006", "2026-10-01")
+        j.visite("GAM-0003", "EQ-0006", "2026-10-15")
+        self.charger(j.tables())
+        s = next(s for s in self.calculer()["ouvertes"] if s["cle"] == "S4-GAM-0003")
+        self.assertEqual((s["nombre"], s["depuis"], s["decisionPrecedente"]["decision"]), (5, "2026-07-01 12:00", "ignorée"))
+
+    def test_meme_minute_l_identifiant_departage(self):
+        j = jeu_de_base()
+        j.decision("2026-06-15 09:00", "equipements", "EQ-0001", "suggestion S1-EQ-0001-C04 ignorée : a")
+        j.decision("2026-06-15 09:00", "equipements", "EQ-0001", "suggestion S1-EQ-0001-C04 traitée : b")   # identifiant plus grand
+        self.charger(j.tables())
+        s = next(s for s in self.calculer()["ouvertes"] if s["cle"] == "S1-EQ-0001-C04")   # 3 pannes après le 15/06
+        self.assertEqual((s["decisionPrecedente"]["decision"], s["decisionPrecedente"]["texte"]), ("traitée", "b"))
 
     def test_s2_avant_la_premiere_visite_ne_compte_pas(self):
         j = jeu_de_base()
@@ -456,11 +508,14 @@ def calcul_python(reference, seuil=3, sans_constat=5, fenetre=12, dossier=DOSSIE
     for di in lire_demo("demandes", dossier):
         if di["ot_origine_id"]:
             dis_par_ot.setdefault(di["ot_origine_id"], []).append(di["id"])
-    derniere = {}
+    codes = {c["code"]: c["libelle"] for c in lire_demo("codes_defaillance", dossier) if c["famille"] == "cause"}
+    derniere, decisions = {}, {}
     for ligne in sorted(journal, key=lambda l: (l["date_heure"].replace("T", " ")[:16], l["id"]), reverse=True):
         trouve = DECISION.match(ligne["action"])
         if trouve and trouve.group(1) not in derniere:
             derniere[trouve.group(1)] = ligne["date_heure"].replace("T", " ")[:16]
+            decisions[trouve.group(1)] = {"decision": trouve.group(2), "dateHeure": derniere[trouve.group(1)],
+                                          "texte": trouve.group(3), "profil": ligne["profil"]}
     passage = max([l["date_heure"].replace("T", " ")[:16] for l in journal if l["table"] == "parametres"
                    and l["id_ligne"] == "version_schema" and "passage au format 2 du fichier" in l["action"]], default="")
     suivi = {i for i, e in equipements.items() if e["actif"] != "0" and e["statut"] != "rebut"}
@@ -483,7 +538,12 @@ def calcul_python(reference, seuil=3, sans_constat=5, fenetre=12, dossier=DOSSIE
     resultat = {}
 
     def ajouter(cle, regle, equipement, faits, **autres):
+        if "causeCode" in autres:
+            autres["causeLibelle"] = codes.get(autres["causeCode"], autres["causeCode"])
         resultat[cle] = dict({"regle": regle, "equipementId": equipement, "nombre": len(faits),
+                              "repere": equipements[equipement]["repere"] or equipement,
+                              "criticite": equipements[equipement]["criticite"],
+                              "depuis": derniere.get(cle), "decisionPrecedente": decisions.get(cle),
                               "ots": [f[1] for f in reversed(faits)], "dates": [f[0][:10] for f in faits]}, **autres)
 
     for eq in sorted(suivi):
@@ -531,6 +591,27 @@ def calcul_python(reference, seuil=3, sans_constat=5, fenetre=12, dossier=DOSSIE
     return resultat
 
 
+def ordre_python(suggestions):
+    """Ordre du §16.3 : S2, S3, S1, S4 ; criticité A, B, C, puis le reste ; nombre décroissant ; clé."""
+    regles = {"S2": 0, "S3": 1, "S1": 2, "S4": 3}
+    criticites = {"A": 0, "B": 1, "C": 2}
+    return [cle for cle, s in sorted(suggestions.items(), key=lambda e: (
+        regles[e[1]["regle"]], criticites.get(e[1]["criticite"], 3), -e[1]["nombre"], e[0]))]
+
+
+def tables_avec_criticite(tables, equipement_id, criticite):
+    """Copie des CSV de la démo où un équipement change de criticité (le reste à l'identique)."""
+    lecteur = module_csv.DictReader(io.StringIO(tables["equipements"]), delimiter=";")
+    sortie = io.StringIO()
+    ecrivain = module_csv.DictWriter(sortie, fieldnames=lecteur.fieldnames, delimiter=";", lineterminator="\r\n")
+    ecrivain.writeheader()
+    for ligne in lecteur:
+        if ligne["id"].lstrip("'") == equipement_id:
+            ligne["criticite"] = criticite
+        ecrivain.writerow(ligne)
+    return dict(tables, equipements=sortie.getvalue())
+
+
 class TestDemo(CasSuggestions):
 
     @classmethod
@@ -546,8 +627,10 @@ class TestDemo(CasSuggestions):
 
     def test_suggestions_egales_au_calcul_python(self):
         attendu = calcul_python(self.reference)
-        obtenu = {s["cle"]: s for s in self.calculer(self.reference)["ouvertes"]}
+        liste = self.calculer(self.reference)["ouvertes"]
+        obtenu = {s["cle"]: s for s in liste}
         self.assertEqual(sorted(obtenu), sorted(attendu))
+        self.assertEqual([s["cle"] for s in liste], ordre_python(attendu))
         for cle, valeurs in attendu.items():
             for champ, valeur in valeurs.items():
                 with self.subTest(cle=cle, champ=champ):
@@ -581,14 +664,9 @@ class TestDemo(CasSuggestions):
         # Refus en criticité A : la même gamme passe dès que la criticité n'est plus A
         gamme_a = self.scenarios["suggestion_refus_criticite_a"]
         self.assertNotIn("S4-" + gamme_a, ouvertes)
-        passe = self.page.evaluate("""([gamme, jour]) => {
-          const g = Donnees.trouver('gammes', gamme);
-          const e = Donnees.trouver('equipements', g.equipement_id);
-          const avant = e.criticite;
-          e.criticite = 'B';
-          try { return Suggestions.calculer(jour).ouvertes.some((s) => s.cle === 'S4-' + gamme); } finally { e.criticite = avant; }
-        }""", [gamme_a, self.reference])
-        self.assertTrue(passe)
+        equipement_a = next(g["equipement_id"] for g in lire_demo("gammes") if g["id"] == gamme_a)
+        self.charger(tables_avec_criticite(self.tables, equipement_a, "B"))      # copie : la même gamme en criticité B
+        self.assertIn("S4-" + gamme_a, self.cles(self.calculer(self.reference)))
         # Sous le seuil : équipement et cause à seuil − 1 pannes, rien de suggéré
         sous = self.scenarios["suggestion_sous_seuil"]
         self.assertFalse([c for c in ouvertes if c.startswith("S1-%s-%s" % (sous["equipement"], sous["cause"]))

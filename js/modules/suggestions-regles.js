@@ -336,7 +336,7 @@ const Suggestions = (() => {
   function comparerSuggestions(a, b) {
     const criticite = (s) => (s.criticite in ORDRE_CRITICITES ? ORDRE_CRITICITES[s.criticite] : 3);
     return ORDRE_REGLES[a.regle] - ORDRE_REGLES[b.regle] || criticite(a) - criticite(b)
-      || b.nombre - a.nombre || a.cle.localeCompare(b.cle);
+      || b.nombre - a.nombre || (a.cle < b.cle ? -1 : a.cle > b.cle ? 1 : 0);   // clé : ordre des caractères, stable
   }
 
   // ===========================================================================================
@@ -367,10 +367,15 @@ const Suggestions = (() => {
     return s.depuis ? 'depuis le ' + UI.dateFr(s.depuis.slice(0, 10)) : 'en ' + contexte.reglages.fenetreMois + ' mois';
   }
 
+  /**
+   * Fréquence en clair d'après l'intervalle médian : « environ une toutes les 4 semaines » (14 jours et
+   * plus), « environ une tous les 5 jours », « environ une par jour » (1 jour). Médiane de 0 jour
+   * (pannes groupées le même jour) ou inconnue : rien, plutôt qu'une fréquence fausse.
+   */
   function frequence(intervalle) {
-    if (intervalle === null) return '';
+    if (intervalle === null || intervalle < 1) return '';
     if (intervalle >= 14) return ' (environ une toutes les ' + arrondi(intervalle / 7) + ' semaines)';
-    return intervalle <= 1 ? ' (environ une par jour)' : ' (environ une tous les ' + intervalle + ' jours)';
+    return intervalle === 1 ? ' (environ une par jour)' : ' (environ une tous les ' + intervalle + ' jours)';
   }
 
   function rediger(s, contexte) {
@@ -404,12 +409,13 @@ const Suggestions = (() => {
   // ===========================================================================================
 
   /**
-   * Suggestions ouvertes au `jour` donné et décisions du journal (§16.5). Lecture seule.
+   * Suggestions ouvertes au `jour` donné (aujourd'hui s'il est omis) et décisions du journal (§16.5).
+   * Lecture seule.
    * `remplacements` (facultatif) : { seuilPannes, visitesSansConstat, fenetreMois } à la place des
    * paramètres (tests).
    */
   function calculer(jour, remplacements) {
-    const contexte = construireContexte(jour, remplacements);
+    const contexte = construireContexte(jour || Donnees.aujourdhui(), remplacements);
     const resultats = [];
     contexte.equipements.forEach((equipement, equipementId) => {
       if (!equipementSuivi(contexte, equipementId)) return;
