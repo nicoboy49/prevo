@@ -32,13 +32,16 @@ import re
 import shutil
 import socket
 import socketserver
+import ssl
 import sys
 import tempfile
 import threading
 import time
 import traceback
+import urllib.error
+import urllib.request
 import webbrowser
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +57,12 @@ NOMBRE_PORTS_SUPPLEMENTAIRES = 20          # 8080 occupé → 8081, … jusqu'à
 TAILLE_MAX_CORPS = 10 * 1024 * 1024        # 10 Mo
 ESSAIS_SI_VERROUILLE = 3                   # fichier ouvert dans Excel : 3 essais…
 PAUSE_ENTRE_ESSAIS_S = 0.1                 # … espacés de 100 ms
+# Relais vers le fournisseur d'IA (lot 4, ARCHITECTURE.md §17.2) : liste fermée des chemins (Ollama :
+# api/chat, api/tags ; API compatible OpenAI : chat/completions, models), délai et taille plafonnés.
+CHEMINS_IA = ('api/chat', 'api/tags', 'chat/completions', 'models')
+DELAI_IA_PAR_DEFAUT_S = 120
+DELAI_IA_MAX_S = 300
+TAILLE_MAX_REPONSE_IA = 2 * 1024 * 1024    # 2 Mo
 
 # Dossier où se trouve serveur.py : c'est la racine des fichiers statiques.
 DOSSIER_APPLICATION = os.path.dirname(os.path.abspath(__file__))
@@ -217,16 +226,106 @@ class Configuration:
         self.hotes_supplementaires = [hote.lower().strip() for hote in hotes_supplementaires]
         self.servir_tests = servir_tests    # --servir-tests : tests/fixtures/ servi en plus
         self.port = None            # renseigné quand le port est trouvé
+        self.contexte_ssl = None    # lot 4 : https en option (--certificat, --cle)
         # Dossiers jamais servis en statique : le dossier de données choisi et donnees/
         # à côté de serveur.py (même si --donnees pointe ailleurs).
         self.dossiers_interdits_statique = [
             self.dossier_donnees, os.path.join(DOSSIER_APPLICATION, 'donnees')]
 
+    @property
+    def schema(self):
+        return 'https' if self.contexte_ssl is not None else 'http'
+
     def adresse_locale(self):
-        return 'http://localhost:%d/' % self.port
+        return '%s://localhost:%d/' % (self.schema, self.port)
 
     def adresses_reseau(self):
-        return ['http://%s:%d/' % (ip, self.port) for ip in adresses_ip_reseau()]
+        return ['%s://%s:%d/' % (self.schema, ip, self.port) for ip in adresses_ip_reseau()]
+
+
+# ---------------------------------------------------------------------------
+# Relais vers le fournisseur d'IA (lot 4)
+# ---------------------------------------------------------------------------
+
+class _SansRedirection(urllib.request.HTTPRedirectHandler):
+    """Le relais ne suit jamais une redirection : il rend la réponse 3xx telle quelle."""
+
+    def redirect_request(self, *arguments, **options):
+        return None
+
+
+OUVREUR_SANS_REDIRECTION = urllib.request.build_opener(_SansRedirection)
+
+
+def adresse_fournisseur(url):
+    """Adresse de base du fournisseur, contrôlée : http ou https, un hôte, ni identifiant, ni
+    paramètres, ni fragment. ErreurHttp(400) sinon (le message ne reprend jamais l'adresse)."""
+    if not isinstance(url, str) or not url.strip():
+        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA manquante.')
+    texte = url.strip()
+    try:
+        morceaux = urlsplit(texte)
+        morceaux.port                               # lève ValueError si le port est illisible
+    except ValueError:
+        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide.')
+    if morceaux.scheme not in ('http', 'https') or not morceaux.hostname:
+        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide (http:// ou https:// attendu).')
+    if '@' in morceaux.netloc or morceaux.query or morceaux.fragment or '?' in texte or '#' in texte:
+        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide (ni identifiant, ni paramètres).')
+    return texte.rstrip('/')
+
+
+def lire_demande_ia(corps):
+    """Demande de relais vérifiée : { cible, methode, octets, entetes, delai }. ErreurHttp(400) sinon."""
+    try:
+        demande = json.loads(corps.decode('utf-8'))
+    except (UnicodeDecodeError, ValueError):
+        raise ErreurHttp(400, 'Demande illisible (JSON attendu).')
+    if not isinstance(demande, dict):
+        raise ErreurHttp(400, 'Demande illisible (objet JSON attendu).')
+    chemin = demande.get('chemin')
+    if chemin not in CHEMINS_IA:
+        raise ErreurHttp(400, 'Chemin non autorisé pour l\'IA (' + ', '.join(CHEMINS_IA) + ').')
+    methode = demande.get('methode', 'POST')
+    if methode not in ('GET', 'POST'):
+        raise ErreurHttp(400, 'Méthode non autorisée pour l\'IA (GET ou POST).')
+    entetes = {'Accept': 'application/json'}
+    octets = None
+    if methode == 'POST':
+        octets = json.dumps(demande.get('corps') or {}, ensure_ascii=False).encode('utf-8')
+        entetes['Content-Type'] = 'application/json'
+    cle = demande.get('cle')
+    if cle:
+        if not isinstance(cle, str) or any(caractere in cle for caractere in '\r\n'):
+            raise ErreurHttp(400, 'Clé du fournisseur d\'IA illisible.')
+        entetes['Authorization'] = 'Bearer ' + cle
+    try:
+        delai = int(demande.get('delai', DELAI_IA_PAR_DEFAUT_S))
+    except (TypeError, ValueError):
+        delai = DELAI_IA_PAR_DEFAUT_S
+    return {'cible': adresse_fournisseur(demande.get('url')) + '/' + chemin, 'methode': methode, 'octets': octets,
+            'entetes': entetes, 'delai': min(max(delai, 1), DELAI_IA_MAX_S)}
+
+
+def corps_lisible(octets):
+    """Corps rendu par le fournisseur : objet JSON si possible, sinon texte."""
+    texte = octets.decode('utf-8', 'replace')
+    try:
+        return json.loads(texte)
+    except ValueError:
+        return texte
+
+
+def creer_contexte_ssl(certificat, cle):
+    """Contexte TLS du serveur (https en option, lot 4) ; SystemExit avec un message clair sinon."""
+    contexte = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    contexte.minimum_version = ssl.TLSVersion.TLSv1_2
+    try:
+        contexte.load_cert_chain(certfile=certificat, keyfile=cle)
+    except (OSError, ssl.SSLError, ValueError) as erreur:
+        raise SystemExit('Certificat ou clé illisible (%s) : vérifiez les deux fichiers PEM '
+                         'passés à --certificat et --cle.' % erreur)
+    return contexte
 
 
 def creer_dossiers(config):
@@ -799,6 +898,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         self.traiter('POST')
 
+    def setup(self):
+        # https (lot 4) : la poignée de main TLS se fait ici, dans le fil de la requête, jamais dans
+        # la boucle qui accepte les connexions (un client lent ne bloque pas les autres).
+        if isinstance(self.request, ssl.SSLSocket):
+            self.request.settimeout(30)
+            self.request.do_handshake()
+        super().setup()
+
     # --- Journal console ---------------------------------------------------
 
     def log_message(self, format, *args):
@@ -860,6 +967,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                 ('GET', 'sauvegardes'): self.api_sauvegardes,
                 ('POST', 'sauvegarde'): lambda: self.api_sauvegarde(corps),
                 ('POST', 'restauration'): lambda: self.api_restauration(corps),
+                ('POST', 'ia'): lambda: self.api_ia(corps),
             }
             fonction = routes_simples.get((methode, morceaux[0]))
             if fonction is not None:
@@ -912,6 +1020,32 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.envoyer_json(200, {'port': self.config.port,
                                 'adresse_locale': self.config.adresse_locale(),
                                 'adresses_reseau': self.config.adresses_reseau()})
+
+    def api_ia(self, corps):
+        """Relais vers le fournisseur d'IA choisi sur le poste (lot 4, ARCHITECTURE.md §17.2).
+
+        Rend { statut, corps } : le statut et le corps (JSON, sinon texte) du fournisseur. La clé
+        éventuelle est transmise au fournisseur et oubliée : jamais écrite, affichée ni renvoyée.
+        """
+        demande = lire_demande_ia(corps)
+        requete = urllib.request.Request(demande['cible'], data=demande['octets'], method=demande['methode'],
+                                         headers=demande['entetes'])
+        try:
+            with OUVREUR_SANS_REDIRECTION.open(requete, timeout=demande['delai']) as reponse:
+                statut, octets = reponse.status, reponse.read(TAILLE_MAX_REPONSE_IA + 1)
+        except urllib.error.HTTPError as erreur:       # le fournisseur répond 3xx, 4xx ou 5xx : on le rend tel quel
+            statut, octets = erreur.code, erreur.read(TAILLE_MAX_REPONSE_IA + 1)
+        except urllib.error.URLError as erreur:
+            if isinstance(erreur.reason, (socket.timeout, TimeoutError)):
+                raise ErreurHttp(504, 'Le fournisseur d\'IA n\'a pas répondu dans le délai.')
+            raise ErreurHttp(502, 'Fournisseur d\'IA injoignable.')
+        except (socket.timeout, TimeoutError):
+            raise ErreurHttp(504, 'Le fournisseur d\'IA n\'a pas répondu dans le délai.')
+        except OSError:
+            raise ErreurHttp(502, 'Fournisseur d\'IA injoignable.')
+        if len(octets) > TAILLE_MAX_REPONSE_IA:
+            raise ErreurHttp(502, 'Réponse du fournisseur d\'IA trop grande (2 Mo au maximum).')
+        self.envoyer_json(200, {'statut': statut, 'corps': corps_lisible(octets)})
 
     def api_versions(self):
         with VERROU_ECRITURE:
@@ -1056,6 +1190,20 @@ class ServeurPrevo(http.server.ThreadingHTTPServer):
         self.config = config
         super().__init__(adresse, GestionnaireRequetes)
 
+    def get_request(self):
+        """https (lot 4) : la connexion acceptée est enveloppée en TLS ; la poignée de main est faite
+        plus tard, dans le fil de la requête (GestionnaireRequetes.setup)."""
+        connexion, adresse = self.socket.accept()
+        if self.config.contexte_ssl is not None:
+            connexion = self.config.contexte_ssl.wrap_socket(connexion, server_side=True, do_handshake_on_connect=False)
+        return connexion, adresse
+
+    def handle_error(self, request, client_address):
+        # Client parti, ou http simple envoyé au serveur https : rien à signaler sur la console.
+        if isinstance(sys.exc_info()[1], (ssl.SSLError, ConnectionError, socket.timeout)):
+            return
+        super().handle_error(request, client_address)
+
     def server_bind(self):
         if os.name == 'nt' and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
@@ -1106,12 +1254,19 @@ def lire_arguments(arguments=None):
                            help='ne pas ouvrir le navigateur au démarrage')
     analyseur.add_argument('--hote', action='append', default=[],
                            help='nom d\'hôte supplémentaire accepté (répétable)')
+    analyseur.add_argument('--certificat', metavar='FICHIER',
+                           help='https en option : certificat du serveur (PEM), avec --cle')
+    analyseur.add_argument('--cle', metavar='FICHIER',
+                           help='https en option : clé privée du certificat (PEM), avec --certificat')
     analyseur.add_argument('--servir-tests', action='store_true',
                            help='servir aussi tests/fixtures/ (pages des tests automatiques ; '
                                 'inutile en usage normal)')
     options = analyseur.parse_args(arguments)
     if not 1 <= options.port <= 65535:
         analyseur.error('le port doit être compris entre 1 et 65535')
+    if bool(options.certificat) != bool(options.cle):
+        analyseur.error('--certificat et --cle vont ensemble : donnez les deux fichiers PEM '
+                        '(certificat et clé privée) pour passer en https')
     return options
 
 
@@ -1119,6 +1274,8 @@ def main(arguments=None):
     preparer_console()
     options = lire_arguments(arguments)
     config = Configuration(options.donnees, options.hote, options.servir_tests)
+    if options.certificat:
+        config.contexte_ssl = creer_contexte_ssl(options.certificat, options.cle)
     creer_dossiers(config)
     serveur, config.port = demarrer_serveur(options.port, config)
     afficher_accueil(config, options.port)

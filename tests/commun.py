@@ -25,6 +25,7 @@ import json
 import os
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -114,12 +115,16 @@ class ServeurPrevo:
 
     source : SOURCE_AUTO (défaut) = copie de donnees/demo s'il existe, sinon dossier vide ;
              None = dossier vide ; un chemin = copie de ce dossier.
+    arguments : options ajoutées à la ligne de commande de serveur.py (lot 4 : --certificat, --cle) ;
+             avec --certificat, l'adresse est en https (certificat de test non vérifié pour le ping).
     Ne touche jamais au dossier donnees/ réel : seul le dossier temporaire est passé à --donnees.
     """
 
     DELAI_DEMARRAGE_S = 15
 
-    def __init__(self, source=SOURCE_AUTO):
+    def __init__(self, source=SOURCE_AUTO, arguments=None):
+        self.arguments = list(arguments or [])
+        self.https = "--certificat" in self.arguments
         if source == SOURCE_AUTO:
             source = DOSSIER_DEMO if DOSSIER_DEMO.is_dir() else None
         self.source = Path(source) if source is not None else None
@@ -155,7 +160,7 @@ class ServeurPrevo:
             self.dossier.mkdir()
 
         self.port = port_libre()
-        self.url = "http://127.0.0.1:%d" % self.port
+        self.url = "%s://127.0.0.1:%d" % ("https" if self.https else "http", self.port)
         self._chemin_journal = self._racine_temporaire / "serveur.log"
         self._fichier_journal = open(self._chemin_journal, "wb")
 
@@ -163,7 +168,7 @@ class ServeurPrevo:
         # --servir-tests : les pages de tests/fixtures/ (ex. page-stockage-serveur.html) sont
         # servies par serveur.py, qui sinon ne sert que l'application (liste blanche, §14.7).
         commande = [sys.executable, str(script), "--sans-navigateur", "--servir-tests",
-                    "--port", str(self.port), "--donnees", str(self.dossier)]
+                    "--port", str(self.port), "--donnees", str(self.dossier)] + self.arguments
         self._processus = subprocess.Popen(
             commande, cwd=str(RACINE), env=environnement,
             stdin=subprocess.DEVNULL, stdout=self._fichier_journal, stderr=subprocess.STDOUT)
@@ -181,7 +186,9 @@ class ServeurPrevo:
                 raise RuntimeError("serveur.py s'est arrêté (code %s). Sortie :\n%s"
                                    % (self._processus.returncode, self.sortie_console()))
             try:
-                with urllib.request.urlopen(self.url + "/api/ping", timeout=1) as reponse:
+                # https : certificat de test auto-signé, non vérifié pour ce seul ping de démarrage
+                contexte = ssl._create_unverified_context() if self.https else None
+                with urllib.request.urlopen(self.url + "/api/ping", timeout=1, context=contexte) as reponse:
                     if reponse.status == 200:
                         return
             except (urllib.error.URLError, OSError):
