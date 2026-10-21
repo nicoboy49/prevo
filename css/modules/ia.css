@@ -77,4 +77,5 @@
 
 /* Emplacement d'un bouton IA (Ia.emplacement) : la carte « Résumé de l'historique (IA) » de la fiche
    équipement n'apparaît qu'avec son bouton (IA utilisable sur ce poste). */
-.parc-resume-ia:has(> .ia-emplacement[hidden]) { display: none; }
+/* (sauf si un encadré, par exemple un message d'erreur, est encore ouvert) */
+.parc-resume-ia:has(> .ia-emplacement[hidden]):not(:has(> .ia-encadre)) { display: none; }

@@ -17,6 +17,7 @@ Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_ia_fonctions_2.py" -v
 """
 import csv
+import html
 import io
 import json
 import re
@@ -123,6 +124,29 @@ class TestCheckListe(CasFonctions):
         for nom in noms_de_la_demo():
             self.assertNotIn(nom, envoye)
 
+    def test_echec_partiel_puis_nouvel_essai_sans_doublon(self):
+        """Relecture du lot 4 : le 2e ajout échoue ; un nouvel essai n'ajoute que ce qui manque."""
+        gamme = self.gamme()
+        page = self.ouvrir("#/preventif/gamme/" + gamme)
+        page.wait_for_selector(".pv-check-liste .ia-bouton")
+        nombre_avant = len([o for o in lire_csv(self.serveur.dossier, "gamme_operations.csv") if o["gamme_id"] == gamme])
+        page.click(".pv-check-liste .ia-bouton")
+        page.wait_for_selector(".ia-encadre .pv-ia-operations input[type=checkbox]")
+        self.autoriser_erreur("échec simulé")
+        page.evaluate("""() => { const vrai = Preventif.ajouterOperation; let appels = 0;
+          Preventif.ajouterOperation = (...a) => { appels += 1; if (appels === 2) return Promise.reject(new Error('échec simulé')); return vrai(...a); }; }""")
+        page.click(".ia-encadre button:has-text('Ajouter les opérations cochées')")
+        page.wait_for_selector(".ia-encadre .ia-erreur-action:not([hidden])")
+        self.assertTrue(attendre(lambda: len([o for o in lire_csv(self.serveur.dossier, "gamme_operations.csv")
+                                              if o["gamme_id"] == gamme]) == nombre_avant + 1))
+        self.assertEqual(page.locator(".ia-encadre .pv-ia-operations input:checked").count(), 2)
+        page.click(".ia-encadre button:has-text('Ajouter les opérations cochées')")
+        self.attendre_toast("opération(s) ajoutée(s)")
+        self.assertTrue(attendre(lambda: len([o for o in lire_csv(self.serveur.dossier, "gamme_operations.csv")
+                                              if o["gamme_id"] == gamme]) == nombre_avant + 3))
+        ajoutees = [o["operation"] for o in lire_csv(self.serveur.dossier, "gamme_operations.csv") if o["gamme_id"] == gamme][-3:]
+        self.assertEqual(len(set(ajoutees)), 3, ajoutees)
+
     def test_ignorer_n_ecrit_rien_et_technicien_sans_bouton(self):
         gamme = self.gamme()
         page = self.ouvrir("#/preventif/gamme/" + gamme)
@@ -199,6 +223,20 @@ class TestResume(CasFonctions):
         page.wait_for_selector(".parc-resume-ia .ia-bouton", state="visible")
         self.assertEqual(page.evaluate("document.querySelector('.parc-complements').dataset.temoin"), "1")
 
+    def test_erreur_reseau_message_visible_dans_la_carte(self):
+        """Relecture du lot 4 : relais injoignable au clic → l'IA passe « injoignable », le bouton s'en va,
+        mais le message d'erreur reste affiché dans la carte."""
+        equipement = scenarios_demo()["causes_equipement"]
+        page = self.ouvrir("#/equipement/" + equipement)
+        page.wait_for_selector(".parc-resume-ia .ia-bouton")
+        self.autoriser_erreur("net::ERR_FAILED")
+        self.contexte.route(self.serveur.url + "/api/ia", lambda route: route.abort("failed"))
+        page.click(".parc-resume-ia .ia-bouton")
+        page.wait_for_selector(".parc-resume-ia .ia-encadre .ia-erreur", state="visible")
+        self.assertEqual(page.evaluate("Ia.etat()"), "injoignable")
+        self.assertEqual(page.locator(".parc-resume-ia .ia-bouton").count(), 0)
+        self.assertIn("ne répond pas", page.inner_text(".parc-resume-ia .ia-encadre"))
+
 
 class TestCommentaireRapport(CasFonctions):
 
@@ -239,6 +277,12 @@ class TestCommentaireRapport(CasFonctions):
         self.assertIn("<h2>Commentaire</h2>", document)
         self.assertIn("rédigé avec l'aide de l'IA", document)
         self.assertIn("La disponibilité du mois", document)
+        # Les jetons valent les tuiles du document figé (référence indépendante de Rapport.jetonsCommentaire)
+        tuiles = {cle: html.unescape(re.sub(r"\s|&nbsp;", " ", valeur)).strip() for cle, valeur in re.findall(
+            r'<div class="tuile" data-cle="([^"]+)">\s*<div class="lib">[^<]*</div><div class="val">([^<]*)</div>', document)}
+        commentaire = html.unescape(re.sub(r"\s|&nbsp;", " ", document))
+        self.assertIn("s'établit à %s ;" % tuiles["disponibilite"], commentaire)
+        self.assertIn("coût du mois est de %s." % tuiles["cout"], commentaire)
         self.assertTrue(attendre(lambda: any(l["action"].startswith("proposition IA utilisée (faux) : commentaire du rapport")
                                              for l in lire_csv(self.serveur.dossier, "journal.csv"))))
 
@@ -254,6 +298,39 @@ class TestCommentaireRapport(CasFonctions):
         document = nouveau.read_text(encoding="utf-8")
         self.assertIn("Mois calme : rien à signaler.", document)
         self.assertNotIn("aide de l'IA", document)
+
+    def test_commentaire_propose_pour_un_autre_mois_refuse_au_moment_de_figer(self):
+        """Relecture du lot 4 (D71) : proposé pour le mois A puis mois B choisi → avertissement, rien de figé."""
+        page = self.ouvrir_rapports()
+        options = page.eval_on_selector_all("#rapports-mois option", "o => o.map((e) => e.value)")
+        self.assertGreaterEqual(len(options), 2)
+        page.click(".rapports-figer .ia-bouton")
+        page.wait_for_selector(".rapports-figer .ia-encadre .ia-texte")
+        page.click(".rapports-figer .ia-encadre button:has-text('Utiliser')")
+        documents_avant = sorted(p.name for p in (self.serveur.dossier / "documents").iterdir())
+        page.select_option("#rapports-mois", options[1])
+        page.wait_for_selector(".rapports-ecart-mois:not([hidden])")
+        self.assertIn("ne valent pas pour", page.inner_text(".rapports-ecart-mois"))
+        page.click(".rapports-figer button[type=submit]")
+        page.wait_for_selector("#rapports-message .alerte.important")
+        self.assertIn("Proposez-le de nouveau", page.inner_text("#rapports-message"))
+        page.wait_for_load_state("networkidle")
+        self.assertEqual(sorted(p.name for p in (self.serveur.dossier / "documents").iterdir()), documents_avant)
+        # Retour au mois de la proposition : plus d'avertissement, le rapport se fige
+        page.select_option("#rapports-mois", options[0])
+        page.wait_for_selector(".rapports-ecart-mois", state="hidden")
+        page.click(".rapports-figer button[type=submit]")
+        self.attendre_toast("Rapport figé")
+
+    def test_points_envoyes_a_l_ia_sans_chiffres(self):
+        """Relecture du lot 4 : les points à examiner partent sans chiffre ni montant (l'IA n'en écrit aucun)."""
+        page = self.ouvrir_rapports()
+        page.click(".rapports-figer .ia-bouton")
+        page.wait_for_selector(".rapports-figer .ia-encadre .ia-texte")
+        message = self.faux.requetes_vers("/api/chat")[-1]["corps"]["messages"][-1]["content"]
+        points = message.split("Points à examiner :", 1)[1]
+        self.assertTrue(points.strip() and points.strip() != "(aucun)", "le mois de démo a des points à examiner")
+        self.assertIsNone(re.search(r"\d", points), points)
 
 
 if __name__ == "__main__":

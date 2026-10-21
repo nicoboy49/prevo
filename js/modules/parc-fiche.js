@@ -149,11 +149,11 @@ Object.assign(Parc, (() => {
   function carteResumeIa(equipement) {
     const carte = UI.element(UI.html`<article class="carte parc-resume-ia"><div class="entete-carte"><h2>Résumé de l'historique (IA)</h2></div>
       <p class="note">L'IA résume les interventions de l'équipement : relisez avant de vous en servir.</p></article>`);
-    const zone = Ia.emplacement('Résumer l\'historique', (evenement, bouton) => {
+    const zone = Ia.emplacement('Résumer l\'historique', () => {
       const ots = Donnees.lignes('ordres_travail').filter((ot) => ot.equipement_id === equipement.id && ot.statut !== 'Annulé')
         .map((ot) => ({ date: (ot.date_fin || ot.date_creation || '').slice(0, 10), type: ot.type, titre: ot.titre, compteRendu: ot.compte_rendu,
           codes: [libelleCode('symptôme', ot.symptome_code), libelleCode('cause', ot.cause_code), libelleCode('remède', ot.remede_code)].filter(Boolean) }));
-      Ia.ouvrirEncadre({ apres: bouton, fonction: 'resumeHistorique', donnees: { ot: ots }, boutons: [{
+      Ia.ouvrirEncadre({ apres: zone, fonction: 'resumeHistorique', donnees: { ot: ots }, boutons: [{
         libelle: 'Copier', valeur: 'copier', classe: 'btn-secondaire', action: async (resultat) => {
           try { await navigator.clipboard.writeText(resultat.texte); } catch (erreur) { UI.toast('Copie impossible ici : sélectionnez le texte.', 'attention'); return false; }
           UI.toast('Résumé copié.', 'succes');

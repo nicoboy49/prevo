@@ -525,8 +525,9 @@ Object.assign(Preventif, (() => {
     // Lot 4 (§17.5) : check-list de départ proposée par l'IA (responsable ; bouton absent sans IA, posé
     // ou retiré au fil de l'état de l'IA).
     if (responsable) {
-      UI.$('.pv-ajout-operation', section).insertAdjacentElement('afterend',
-        Ia.emplacement('Proposer une check-list', (evenement, bouton) => proposerCheckListe(section, gammeId, bouton)));
+      // Encadré placé après l'emplacement (pas dedans) : un message d'erreur reste visible quand le bouton s'en va.
+      const zoneIa = Ia.emplacement('Proposer une check-list', () => proposerCheckListe(section, gammeId, zoneIa));
+      UI.$('.pv-ajout-operation', section).insertAdjacentElement('afterend', zoneIa);
     }
   }
 
@@ -537,20 +538,28 @@ Object.assign(Preventif, (() => {
   }
 
   /** Proposition de l'IA : opérations cochables ; seules les cochées sont ajoutées, sur le clic (journal habituel). */
-  async function proposerCheckListe(section, gammeId, bouton) {
+  async function proposerCheckListe(section, gammeId, zoneIa) {
     const gamme = Donnees.trouver('gammes', gammeId) || { id: gammeId };
     const equipement = Donnees.trouver('equipements', gamme.equipement_id) || {};
     const issue = await Ia.ouvrirEncadre({
-      apres: bouton, fonction: 'checkList',
+      apres: zoneIa, fonction: 'checkList',
       donnees: { designation: equipement.designation, marque: equipement.marque, modele: equipement.modele, libelle: gamme.libelle,
         declencheur: DECLENCHEURS[gamme.declencheur] || gamme.declencheur, periodicite: periodicite(gamme), causeVisee: causeVisee(gamme) },
       rendu: (resultat) => UI.html`<ul class="pv-ia-operations">${resultat.operations.map((op, rang) => UI.html`<li><label class="case">
         <input type="checkbox" checked data-rang="${rang}"><span>${op.operation}${op.valeur_attendue ? UI.html` — <i>${op.valeur_attendue}</i>` : ''}</span></label></li>`)}</ul>`,
       boutons: [{ libelle: 'Ajouter les opérations cochées', valeur: 'ajouter', classe: 'btn-primaire', action: async (resultat, reponse) => {
-        const cochees = UI.$$('.pv-ia-operations input:checked', section).map((caseACocher) => resultat.operations[Number(caseACocher.dataset.rang)]);
+        const cochees = UI.$$('.pv-ia-operations input:checked', section);
         if (!cochees.length) { UI.toast('Cochez au moins une opération.', 'attention'); return false; }
-        for (const operation of cochees) await Preventif.ajouterOperation(gammeId, operation);
-        await Ia.tracerUtilisation('gammes', gammeId, 'check-list', reponse.modele);
+        for (const caseACocher of cochees) {
+          await Preventif.ajouterOperation(gammeId, resultat.operations[Number(caseACocher.dataset.rang)]);
+          caseACocher.checked = false;                     // ajoutée : après un échec, un nouvel essai ne la rajoute pas
+          caseACocher.disabled = true;
+        }
+        try {
+          await Ia.tracerUtilisation('gammes', gammeId, 'check-list', reponse.modele);
+        } catch (erreur) {
+          console.warn('Prévo (préventif) : trace de la proposition IA non écrite (' + (erreur && erreur.message) + ').', erreur);
+        }
         UI.toast(cochees.length + ' opération(s) ajoutée(s) à la check-list.', 'succes');
         return true;
       } }],

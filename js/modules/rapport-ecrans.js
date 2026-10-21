@@ -166,10 +166,17 @@ Object.assign(Rapport, (() => {
       formulaire.addEventListener('submit', async (evenement) => {
         evenement.preventDefault();
         const commentaire = { texte: zoneCommentaire.value.trim(), aideIa: Boolean(zoneCommentaire.dataset.iaModele) };
+        const mois = formulaire.querySelector('#rapports-mois').value;
+        const ecart = commentaire.texte ? ecartDeMois(zoneCommentaire, mois) : '';
+        if (ecart) { message('important', ecart); return; }            // rien n'est figé
         await executer(formulaire.querySelector('button[type=submit]'), async () => {
-          const resultat = await figer(formulaire.querySelector('#rapports-mois').value, { commentaire });
+          const resultat = await figer(mois, { commentaire });
           if (commentaire.texte && commentaire.aideIa) {
-            await Ia.tracerUtilisation('parametres', 'rapports_mensuels', 'commentaire du rapport ' + resultat.nom, zoneCommentaire.dataset.iaModele);
+            try {
+              await Ia.tracerUtilisation('parametres', 'rapports_mensuels', 'commentaire du rapport ' + resultat.nom, zoneCommentaire.dataset.iaModele);
+            } catch (erreur) {                                            // le rapport est figé : on le dit quand même
+              console.warn('Prévo (rapport) : trace de la proposition IA non écrite (' + (erreur && erreur.message) + ').', erreur);
+            }
           }
           return resultat;
         }, conteneur, message);
@@ -196,20 +203,48 @@ Object.assign(Rapport, (() => {
    * commentaire reste modifiable ; rien n'est figé sans « Figer le rapport ».
    */
   function brancherCommentaireIa(formulaire, zoneCommentaire) {
-    zoneCommentaire.addEventListener('input', () => { if (!zoneCommentaire.value.trim()) delete zoneCommentaire.dataset.iaModele; });
-    const zone = Ia.emplacement('Proposer un commentaire', (evenement, bouton) => {
+    const choixMois = formulaire.querySelector('#rapports-mois');
+    const note = UI.element(UI.html`<p class="erreur-champ rapports-ecart-mois" role="alert" hidden></p>`);
+    zoneCommentaire.closest('.champ').appendChild(note);
+    // Commentaire proposé pour un autre mois que celui choisi : ses chiffres sont faux pour ce mois (D71).
+    const avertirMois = () => {
+      const ecart = ecartDeMois(zoneCommentaire, choixMois.value);
+      note.hidden = !ecart;
+      note.textContent = ecart || '';
+    };
+    choixMois.addEventListener('change', avertirMois);
+    zoneCommentaire.addEventListener('input', () => {
+      if (!zoneCommentaire.value.trim()) { delete zoneCommentaire.dataset.iaModele; delete zoneCommentaire.dataset.iaMois; }
+      avertirMois();
+    });
+    const zone = Ia.emplacement('Proposer un commentaire', () => {
       const mois = formulaire.querySelector('#rapports-mois').value;
       const rapport = Rapport.donnees(mois);
       const remplir = (resultat, reponse, retoucher) => {
         zoneCommentaire.value = resultat.texte;
         zoneCommentaire.dataset.iaModele = reponse.modele;
+        zoneCommentaire.dataset.iaMois = mois;           // ses chiffres sont ceux de ce mois-là
+        avertirMois();
         if (retoucher) zoneCommentaire.focus();
       };
-      Ia.ouvrirEncadre({ apres: bouton, fonction: 'commentaireRapport',
-        donnees: { mois: libelleMois(mois), jetons: Rapport.jetonsCommentaire(rapport), points: rapport.faits.concat(rapport.decisions) },
+      Ia.ouvrirEncadre({ apres: zone, fonction: 'commentaireRapport',
+        donnees: { mois: libelleMois(mois), jetons: Rapport.jetonsCommentaire(rapport), points: rapport.faits.concat(rapport.decisions).map(sansChiffres) },
         utiliser: (resultat, reponse) => remplir(resultat, reponse, false), modifier: (resultat, reponse) => remplir(resultat, reponse, true) });
     });
     zoneCommentaire.closest('.champ').insertAdjacentElement('afterend', zone);
+  }
+
+  /** Message si le commentaire vient de l'IA pour un autre mois que `mois` ; '' sinon. */
+  function ecartDeMois(zoneCommentaire, mois) {
+    const iaMois = zoneCommentaire.dataset.iaModele ? zoneCommentaire.dataset.iaMois : '';
+    if (!iaMois || iaMois === mois) return '';
+    return 'Ce commentaire a été proposé par l\'IA pour ' + libelleMois(iaMois) + ' : ses chiffres ne valent pas pour '
+      + libelleMois(mois) + '. Proposez-le de nouveau pour ce mois, ou effacez-le.';
+  }
+
+  /** Point du rapport envoyé à l'IA sans chiffre ni montant (§17.3 : aucun coût ; D71 : l'IA n'écrit aucun chiffre). */
+  function sansChiffres(point) {
+    return texte(point).replace(/\d[\d\s  .,]*(?:\s?(?:€|%|h\b|j\b))?/g, '… ').replace(/\s+/g, ' ').trim();
   }
 
   /** Fige (ou recalcule) puis réaffiche l'onglet avec le message de réussite. */
