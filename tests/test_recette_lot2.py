@@ -856,7 +856,7 @@ class TestRecette2Anomalie(CasRecette2):
 
 class TestRecette2ListeBlanche(CasRecette2):
 
-    INTERDITS = ("/brief-gmao.md", "/README.md", "/LICENSE", "/tests/commun.py", "/tests/test_recette_lot2.py",
+    INTERDITS = ("/docs/brief-gmao.md", "/README.md", "/LICENSE", "/tests/commun.py", "/tests/test_recette_lot2.py",
                  "/outils/generer_demo.py", "/reference-design/index.html", "/reference-design/style.css",
                  "/docs/ARCHITECTURE.md", "/serveur.py", "/Lancer_GMAO.bat", "/lancer.sh",
                  "/DOCS/ARCHITECTURE.md", "/Serveur.py", "/donnees.csv")

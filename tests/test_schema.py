@@ -24,7 +24,7 @@ def lire_tableau_brief():
     exemples) sont retirées avant de découper sur les virgules ; ce qui suit « — » est un
     commentaire. Le tableau commence après le titre « 6. Modèle de données ».
     """
-    texte = (RACINE / "brief-gmao.md").read_text(encoding="utf-8")
+    texte = (RACINE / "docs" / "brief-gmao.md").read_text(encoding="utf-8")
     debut = texte.index("## 6. Modèle de données")
     fin = texte.index("## 7.", debut)
     tables = {}

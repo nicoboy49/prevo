@@ -30,7 +30,7 @@ IGNORES = [
     "verrou.txt", ".chantier/x", "reference-design/x", "LISEZMOI.md",
     "tests/resultats/x", "__pycache__/x.pyc",
 ]
-NON_IGNORES = ["donnees/demo/equipements.csv", "donnees/.gitkeep", "brief-gmao.md"]
+NON_IGNORES = ["donnees/demo/equipements.csv", "donnees/.gitkeep", "docs/brief-gmao.md"]
 
 # Ordre exact des scripts js/modules/ dans index.html : RECOPIE de docs/ARCHITECTURE.md §15.1
 # (ordre du lot 3, qui complète celui du §14.2). Le contrat et ce test changent ensemble.

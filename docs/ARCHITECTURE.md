@@ -2,7 +2,7 @@
 
 Ce document est le **contrat interne** du code : tout fichier JavaScript ou Python le respecte.
 Il est écrit pour être lu par un stagiaire comme par une IA qui code un lot suivant. En cas de
-doute, `brief-gmao.md` fait foi, puis ce document.
+doute, [`brief-gmao.md`](brief-gmao.md) fait foi, puis ce document.
 
 ---
 
@@ -411,7 +411,7 @@ UTF-8 invalide, JSON invalide, JSON qui n'est pas un objet ou trop imbriqué (`[
 `index.html`, `favicon.svg`, `GUIDE.html` s'il existe, et tout ce qui est sous `css/` et `js/`
 (constantes `FICHIERS_PUBLICS`, `DOSSIERS_PUBLICS` de `serveur.py` ; comparaison sans casse, car
 Windows ne distingue pas `Index.html` de `index.html`). **Tout le reste répond 404**, comme un
-fichier absent : `brief-gmao.md`, `README.md`, `docs/`, `tests/`, `outils/`, `reference-design/`,
+fichier absent : `docs/brief-gmao.md`, `README.md`, `docs/`, `tests/`, `outils/`, `reference-design/`,
 `serveur.py`, les lanceurs… La liste blanche est contrôlée sur le chemin demandé **et** sur le chemin
 résolu (un lien ou une jonction rangé dans `js/` ne permet pas de lire un fichier situé ailleurs).
 Les contrôles du lot 1 restent en place avant elle : chemin dont un segment commence par `.`
@@ -1182,7 +1182,7 @@ prochain mouvement de l'article la corrige) :
 
 ### 14.7 Serveur : liste blanche (D29)
 Sont servis : `/` (→ `index.html`), `index.html`, `favicon.svg`, `GUIDE.html` s'il existe,
-`css/**`, `js/**` ; **tout le reste répond 404** (dont `brief-gmao.md`, `README.md`, `docs/`,
+`css/**`, `js/**` ; **tout le reste répond 404** (dont `docs/brief-gmao.md`, `README.md`, `docs/`,
 `tests/`, `outils/`, `reference-design/`, `serveur.py`). L'option `--servir-tests` (passée par
 `tests/commun.py`) sert en plus `tests/fixtures/**`. Les autres règles (§7) sont inchangées.
 Précisions du code : la liste blanche est contrôlée **deux fois**, sur le chemin demandé puis sur

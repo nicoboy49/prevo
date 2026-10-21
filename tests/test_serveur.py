@@ -649,7 +649,7 @@ class TestApiServeur(CasAvecServeur):
 
     # Fichiers du projet qui ne sont jamais servis (présents ou non sur ce poste).
     CHEMINS_HORS_LISTE_BLANCHE = (
-        '/brief-gmao.md', '/README.md', '/LISEZMOI.md', '/docs/ARCHITECTURE.md',
+        '/docs/brief-gmao.md', '/README.md', '/LISEZMOI.md', '/docs/ARCHITECTURE.md',
         '/tests/commun.py', '/tests/fixtures/page-vide.html', '/outils/generer_demo.py',
         '/reference-design/style.css', '/reference-design/absent.txt',
         '/serveur.py', '/Serveur.py', '/SERVEUR.PY', '/LICENSE', '/Lancer_GMAO.bat', '/lancer.sh',
@@ -797,7 +797,7 @@ class TestListeBlancheServirTests(CasAvecServeur):
     def test_liste_blanche_servir_tests_rien_d_autre_de_tests(self):
         for chemin in ('/tests/commun.py', '/tests/test_serveur.py', '/tests/fixtures',
                        '/tests/fixturesx/page-vide.html', '/tests', '/serveur.py',
-                       '/brief-gmao.md', '/outils/generer_demo.py', '/docs/ARCHITECTURE.md'):
+                       '/docs/brief-gmao.md', '/outils/generer_demo.py', '/docs/ARCHITECTURE.md'):
             with self.subTest(chemin=chemin):
                 self.verifier_non_servi(chemin)
         # Remonter de tests/fixtures/ vers tests/ : refusé (traversée, §7).
