@@ -1,3 +1,174 @@
-/* Import (lot 5, ARCHITECTURE.md §18.9) : assistant « Importer des données ». Variables de la charte
-   seulement (thème clair compris). */
-.import-etapes { display: flex; flex-direction: column; gap: 18px; }
+/* Prévo — assistant « Importer des données » (#/import ; js/modules/import-ecrans.js et import-apercu.js,
+   lot 5, ARCHITECTURE.md §18.9). Les composants communs sont dans css/style.css ; ici, la mise en page des
+   cinq étapes. Variables de la charte seulement (le thème clair les redéfinit). La page ne défile jamais
+   horizontalement : un tableau large défile dans son cadre. Zones cliquables : var(--tactile) (48 px au
+   téléphone).
+   Sommaire : 1 cadre et fil des étapes · 2 Quoi · 3 D'où · 4 Colonnes · 5 Aperçu · 6 Importer · 7 téléphone. */
+
+/* =========================================================================================
+   1. Cadre et fil des étapes
+   ========================================================================================= */
+
+.import-fil { margin-bottom: 14px; }
+.import-etape-courte { display: none; margin: 0 0 10px; font-weight: 700; color: var(--texte-2); }
+.import-etapes { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.import-etape { margin-bottom: 0; min-width: 0; }
+.import-etape > h2 { margin-bottom: .4rem; }
+.import-etape > h2:focus { outline: none; }
+.import-etape > h2:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.import-intro { color: var(--texte-2); max-width: 80ch; }
+.import-navigation { border-top: 1px solid var(--trait); padding-top: 1rem; margin-top: 1.2rem; }
+.import-navigation .btn-primaire .icone { order: 2; }
+
+/* =========================================================================================
+   2. Étape 1 — Quoi : types de données (tuiles à bouton radio), modèles
+   ========================================================================================= */
+
+.import-types {
+  border: 0; padding: 0; margin: .4rem 0 1rem; min-width: 0;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+.import-type {
+  flex-direction: row; align-items: flex-start; gap: .75rem; min-height: var(--tactile);
+  padding: .75rem .9rem; border: 1px solid var(--bord-champ); border-radius: 14px; background: var(--champ);
+  color: var(--texte); font-weight: 500; cursor: pointer; min-width: 0;
+}
+.import-type:hover { border-color: var(--bord-bleu-fort); }
+.import-type:has(input:checked) { border-color: var(--bleu); background: var(--teinte-bleu-faible); box-shadow: inset 0 0 0 1px var(--bleu); }
+.import-type:has(input:focus-visible) { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.import-type input { margin-top: 2px; }
+.import-type > span { min-width: 0; }
+.import-type b { display: block; color: var(--texte); font-weight: 700; }
+.import-type-aide { display: block; margin-top: .15rem; color: var(--texte-2); font-size: .875rem; line-height: 1.45; }
+.import-modeles .note { margin-top: 0; }
+.import-modeles .actions { margin-top: .5rem; }
+
+/* =========================================================================================
+   3. Étape 2 — D'où : dépôt, collage, réglages de lecture, extrait du fichier
+   ========================================================================================= */
+
+.import-sources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: stretch; margin-top: .4rem; }
+.import-depot { margin-bottom: 0; justify-content: center; gap: .5rem; min-width: 0; }
+.import-depot b { color: var(--texte); }
+.import-depot small { color: var(--texte-2); font-size: .875rem; max-width: 36ch; }
+.import-depot:focus-within { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.import-collage textarea { min-height: 8.5rem; font-size: .9375rem; }
+.import-collage .actions { margin-top: .2rem; }
+.import-erreur { margin: 1rem 0 0; }
+.import-lu { margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid var(--trait); min-width: 0; }
+.import-lu > h3 { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .8rem; overflow-wrap: anywhere; }
+.import-lu > h3 .icone { color: var(--cyan); }
+.import-lu > h3 small { font-weight: 500; color: var(--texte-2); font-size: .9375rem; }
+.import-reglages { align-items: flex-start; margin-bottom: .6rem; }
+.import-reglages > .champ { flex: 1 1 220px; max-width: 22rem; }
+.import-reglages > .case { flex: 1 1 240px; align-self: center; }
+.import-titres { margin: .4rem 0 0; color: var(--texte-2); overflow-wrap: anywhere; }
+.import-titres b { color: var(--texte); }
+.import-extrait { margin-top: .8rem; border: 1px solid var(--trait); border-radius: 12px; }
+.import-extrait .table { font-size: .875rem; }
+.import-extrait .table th, .import-extrait .table td { padding: .4rem .6rem; white-space: nowrap; }
+.import-extrait tr.import-ligne-entete td { background: var(--teinte-bleu); color: var(--texte); font-weight: 700; }
+.import-extrait tr.import-ligne-ignoree td { color: var(--muted); }
+
+/* =========================================================================================
+   4. Étape 3 — Colonnes : correspondance (tableau ; cartes au téléphone)
+   ========================================================================================= */
+
+.import-zone-ia { margin: .2rem 0 .8rem; }
+.import-zone-ia:empty { display: none; }
+.import-zone-ia + .ia-encadre { margin-top: 0; }
+.import-cadre-colonnes { overflow-x: auto; max-width: 100%; }
+.import-colonnes td { vertical-align: top; }
+.import-colonnes td:first-child { white-space: normal; min-width: 9rem; }
+.import-colonnes .import-entete { display: block; color: var(--texte); overflow-wrap: anywhere; }
+.import-lettre, .import-raison { display: block; font-size: .875rem; color: var(--texte-2); margin-top: .15rem; }
+.import-exemples { list-style: none; margin: 0; padding: 0; font-size: .9375rem; color: var(--texte-2); }
+.import-exemples li { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.import-sans-exemple { font-size: .9375rem; color: var(--muted); }
+.import-colonnes select.import-champ { min-width: 13rem; min-height: var(--tactile); }
+.import-colonnes tr.import-a_confirmer td:first-child { box-shadow: inset 4px 0 0 var(--ambre); }
+.import-colonnes tr.import-non_utilisee .import-entete { color: var(--texte-2); }
+
+/* =========================================================================================
+   5. Étape 4 — Aperçu : option, résumé, références, filtres, tableau dans son cadre
+   ========================================================================================= */
+
+.import-option { margin: .2rem 0 .6rem; }
+.import-option .aide { margin-left: calc(22px + .65rem); }
+.import-resume { font-weight: 600; color: var(--texte); margin: .4rem 0 .6rem; }
+#import-references { margin: .6rem 0; }
+#import-references ul { margin-top: .3rem; }
+.import-cible { color: var(--texte-2); font-size: .875rem; margin-left: .3rem; white-space: nowrap; }
+.import-barre { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; justify-content: space-between; margin: .6rem 0 .8rem; }
+.import-filtres { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.import-filtre { padding: .45rem .85rem; }
+.import-filtre[aria-pressed="true"] { background: var(--bleu-bouton); color: var(--sur-couleur); }
+.import-filtre[aria-pressed="true"]:hover { background: var(--bleu-survol); }
+.import-cadre {
+  overflow: auto; max-height: 70vh; max-width: 100%; border: 1px solid var(--trait); border-radius: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+.import-lignes { min-width: 46rem; }
+.import-lignes th { position: sticky; top: 0; z-index: 1; background: var(--carte); }
+.import-lignes td { vertical-align: top; }
+.import-lignes td.import-fiche { min-width: 11rem; max-width: 20rem; overflow-wrap: anywhere; }
+.import-lignes td.import-fiche b { display: block; color: var(--texte); }
+.import-fiche-suite { display: block; font-size: .9375rem; color: var(--texte-2); }
+.import-lignes td.import-fiche .import-cible { display: block; margin: .15rem 0 0; }
+.import-lignes td.import-detail { min-width: 20rem; overflow-wrap: anywhere; }
+.import-changements, .import-raisons { margin: 0; padding-left: 1.1rem; }
+.import-changements li + li, .import-raisons li + li { margin-top: .2rem; }
+.import-raisons { font-size: .9375rem; color: var(--texte-2); }
+.import-raisons.import-refus { color: var(--texte-rouge); }
+.import-changements + .import-raisons, .import-doublon + .import-raisons { margin-top: .35rem; }
+.import-champ-nom { color: var(--texte-2); }
+.import-avant { color: var(--texte-2); text-decoration: line-through; }
+.import-apres { color: var(--fort); }
+.import-doublon { margin: 0; color: var(--texte); }
+.import-rien { color: var(--texte-2); }
+.import-case-quand-meme { margin-top: .4rem; font-weight: 600; }
+.import-lignes tr.import-doublon_suppose td:first-child { box-shadow: inset 4px 0 0 var(--ambre); }
+.import-lignes tr.import-refusee td:first-child { box-shadow: inset 4px 0 0 var(--rouge); }
+
+/* =========================================================================================
+   6. Étape 5 — Importer : bilan, progression, résultat
+   ========================================================================================= */
+
+.import-tables { margin: .3rem 0 .6rem; padding-left: 1.2rem; }
+.import-tables li + li { margin-top: .2rem; }
+.import-progression { margin: .8rem 0; }
+.import-etat-progression { margin: 0 0 .4rem; font-weight: 600; color: var(--texte-2); }
+.import-progression progress { width: 100%; height: 12px; accent-color: var(--bleu); }
+.import-resultat:empty { display: none; }
+.import-resultat .alerte { margin-bottom: .8rem; }
+.import-tableau-resultat { max-width: 36rem; }
+#import-sauvegarde { overflow-wrap: anywhere; }
+
+/* =========================================================================================
+   7. Téléphone (≤ 640 px) : une colonne, correspondance en cartes, cadre de l'aperçu
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  .import-fil { display: none; }
+  .import-etape-courte { display: block; }
+  .import-types, .import-sources { grid-template-columns: minmax(0, 1fr); }
+  .import-reglages > .champ { max-width: none; }
+  .import-option .aide { margin-left: 0; }
+  .import-filtre { flex: 1 1 calc(50% - 8px); padding: .45rem .6rem; }
+  .import-barre > .btn { width: 100%; }
+  .import-cadre { max-height: 65vh; }
+
+  /* Correspondance : une carte par colonne du fichier (titre de chaque cellule repris au-dessus) */
+  .import-colonnes, .import-colonnes tbody, .import-colonnes tr, .import-colonnes td { display: block; width: 100%; }
+  .import-colonnes thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .import-colonnes tr { border: 1px solid var(--trait-2); border-radius: 14px; padding: .5rem .8rem; margin-bottom: 10px; }
+  .import-colonnes td, .import-colonnes td:first-child { border: 0; padding: .3rem 0; white-space: normal; min-width: 0; }
+  .import-colonnes td::before { content: attr(data-titre); display: block; font-size: .8125rem; font-weight: 700; color: var(--texte-2); }
+  .import-colonnes td:first-child::before { display: none; }
+  .import-colonnes tr.import-a_confirmer { border-left: 4px solid var(--ambre); }
+  .import-colonnes tr.import-a_confirmer td:first-child { box-shadow: none; }
+  .import-colonnes select.import-champ { min-width: 0; width: 100%; }
+  .import-exemples li { max-width: 100%; }
+}

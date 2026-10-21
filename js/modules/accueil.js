@@ -194,6 +194,18 @@ const Accueil = (() => {
       <a href="#/controle">Voir le contrôle de la base</a>`).outerHTML);
   }
 
+  // Base sans équipement (responsable) : invitation à reprendre les listes existantes (lot 5, §18.9).
+  function carteBaseVide() {
+    if (Donnees.lignes('equipements').length) return '';
+    return UI.html`<article class="carte" id="carte-import-accueil">
+      <div class="entete-carte"><h2>Votre parc est vide</h2></div>
+      <p>Reprenez vos listes existantes (équipements, articles, fournisseurs, techniciens, historique des
+        interventions) depuis Excel, OpenDocument ou CSV : Prévo montre tout avant d'écrire, et l'import peut
+        être annulé.</p>
+      <div class="actions"><a class="btn btn-primaire" id="lien-import-accueil" href="#/import">${UI.icone('document')}Importer des données</a></div>
+    </article>`;
+  }
+
   // ===========================================================================================
   // 3. Connexion d'un téléphone (mode serveur)
   // ===========================================================================================
@@ -265,6 +277,7 @@ const Accueil = (() => {
         <p>Vue d'ensemble de l'atelier au ${UI.dateFr(aujourdhui)}.</p>
       </div></div>
       ${alerteControle()}
+      ${carteBaseVide()}
       <div class="instruments accueil-instruments">
         ${indicateur('#/di?statut=Nouvelle', 'cyan', 'DI à traiter', compteurs.diATraiter.length,
           nombreSecurite ? 'dont ' + nombreSecurite + ' sécurité' : 'demandes nouvelles')}

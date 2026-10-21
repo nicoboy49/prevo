@@ -5,8 +5,9 @@
 //   Paramètres : entreprise, délais par priorité, préventif et indicateurs (lot 3, §15.11),
 //                rafraîchissement (écrits dans parametres.csv par Donnees.modifier), ce poste (nom,
 //                profil, lien vers l'écran « Ce poste » #/poste du lot 4), sauvegardes (créer,
-//                restaurer), lien vers le contrôle de la base, export ZIP ; carte « Codes de
-//                défaillance » (parametres-codes.js, appelée par un relais).
+//                restaurer), lien vers le contrôle de la base, lien « Importer des données »
+//                (#/import, lot 5), export ZIP ; carte « Codes de défaillance » (parametres-codes.js,
+//                appelée par un relais).
 //   Contrôle   : problèmes de Donnees.problemes() groupés par gravité, attribution des identifiants
 //                manquants, relecture des fichiers, liens vers les DI / OT concernés.
 
@@ -366,6 +367,12 @@ const Parametres = (() => {
             <div class="entete-carte"><h2>Contrôle de la base</h2>${resumeControle}</div>
             <p>Prévo vérifie à chaque lecture que les références (équipement, technicien…), les identifiants et les valeurs des fichiers sont cohérents.</p>
             <div class="actions"><a class="btn btn-secondaire" id="lien-controle" href="#/controle">${UI.icone('controle')}Contrôle de la base</a></div>
+          </article>
+          <article class="carte" id="carte-import">
+            <div class="entete-carte"><h2>Importer des données</h2></div>
+            <p>Reprenez vos listes existantes (équipements, articles, fournisseurs, historique des interventions…) depuis
+              Excel, OpenDocument ou CSV : Prévo montre tout avant d'écrire, et l'import peut être annulé.</p>
+            <div class="actions"><a class="btn btn-secondaire" id="lien-import" href="#/import">${UI.icone('document')}Importer des données</a></div>
           </article>
           <article class="carte">
             <div class="entete-carte"><h2>Exporter les données</h2></div>
