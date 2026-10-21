@@ -1792,3 +1792,177 @@ profils, `gammes.csv` identique à l'octet), `test_accueil_lot3bis.py`, `test_re
 (bout en bout, modes serveur et démo, design 1440 et 375 px) ; `test_performance.py` complété (liste
 des suggestions < 1 s sur le jeu de charge) ; `test_depot.py` (ordre §16.1, 700 lignes) ;
 `test_parametres.py` complété (trois réglages des suggestions).
+
+## 17. Contrat du lot 4 — assistant IA, dictée, guide, fiche technique, finitions (CDC validé le 2026-10-21 : D64–D79)
+
+Écrit avant le code du lot 4 ; il sera relu et aligné sur le code à la fin du lot (mentions « écart
+retenu : … »). Décisions de Nicolas : **D67 (a)** (le responsable autorise ou non les fournisseurs
+en ligne, défaut non), **D72 (a)** (`qwen2.5:7b` conseillé, mesuré sur le PC), **D76 (a)** (thème clair
+à l'écran), **D79** (dépôt privé `nicoboy49/prevo`, poussé en fin de lot seulement). Règle de fond
+(brief §10) : **l'IA propose, l'humain valide** ; sans IA, Prévo est identique et n'appelle rien.
+
+### 17.1 Socle
+- **Format CSV inchangé** (`Schema.version` = 2). Clé ajoutée à `parametres.csv` : `ia_distant_autorise`
+  (`0` ou `1`, défaut `0`), réglage du responsable dans Paramètres (section « Assistant IA »).
+- **Réglages propres au poste** (navigateur du poste seulement, `localStorage`, lecture protégée comme
+  au §8) : `prevo.ia` = `{ actif, fournisseur: 'ollama' | 'openai', url, modele, cle, delaiS }`
+  (défauts : inactif, `ollama`, `http://localhost:11434`, `qwen2.5:7b`, clé vide, 120 s) ;
+  `prevo.dictee` = `{ active, avertie }` (défaut : active, non avertie) ; `prevo.theme` = `sombre` |
+  `clair` (défaut sombre). **La clé n'est écrite nulle part ailleurs** (ni CSV, ni journal, ni
+  `sessionStorage`, ni réponse ou console du serveur).
+- **Fichiers** : `ia.js` (crée `Ia` : réglages, portée, appel du fournisseur direct ou par relais,
+  délai et annulation, validations), `ia-prompts.js` (complète `Ia` : `Ia.PROMPTS`, textes en français,
+  un par fonction, faciles à modifier), `ia-encadre.js` (complète `Ia` : boutons « avec l'IA »,
+  encadré Utiliser / Modifier / Ignorer, mention de portée), `dictee.js` (objet `Dictee`), `poste.js`
+  (objet `Poste` : écran « Ce poste », thème), chargés **juste après `causes-frequentes.js`** ; feuilles
+  `css/modules/ia.css` et `css/modules/poste.css` (après `accueil.css`). `ORDRE_MODULES` suit.
+  700 lignes au plus par fichier ; aucune nouvelle bibliothèque.
+- **Route** `#/poste` « Ce poste » : **tous les profils**, menu (ordre 92, icône `utilisateur`, groupe
+  « Administration », visible du demandeur et du technicien). La carte « Ce poste » de Paramètres y
+  renvoie (le bouton « Changer de profil » passe dans « Ce poste »).
+
+### 17.2 Serveur (`serveur.py`)
+- **`POST /api/ia`** (en-tête Prévo des écritures, §7) — corps JSON `{ url, chemin, methode, corps,
+  cle }` : `url` = adresse de base du fournisseur (`http://localhost:11434`, `https://api.mistral.ai/v1`…),
+  `http` ou `https`, sans identifiant, requête ni fragment ; `chemin` ∈ **liste fermée** `api/chat`,
+  `api/tags` (Ollama), `chat/completions`, `models` (API compatible OpenAI) ; `methode` `GET` ou `POST` ;
+  `cle` facultative, envoyée au fournisseur en `Authorization: Bearer …` seulement. Le serveur relaie,
+  **sans suivre de redirection**, avec un délai (≤ 300 s, celui demandé) et une réponse plafonnée
+  (2 Mo) ; il rend `{ statut, corps }` (corps JSON du fournisseur, ou texte s'il n'est pas du JSON).
+  Refus : chemin hors liste ou adresse invalide → 400 ; fournisseur injoignable → 502 ; délai → 504.
+  Jamais la clé dans un message, une erreur ou la console (la ligne de journal d'une écriture ne montre
+  que `POST /api/ia`). `localhost` désigne le PC qui fait tourner le serveur (le PC atelier).
+- **https en option** : `serveur.py --certificat FICHIER --cle FICHIER` (PEM, les deux ensemble, sinon
+  message clair et arrêt) → serveur en https (`ssl` de la bibliothèque standard) ; adresses affichées,
+  `GET /api/info` et QR en `https://` ; sans ces options, http comme avant. Certificat de test :
+  `tests/fixtures/https/` (auto-signé, réservé aux tests).
+
+### 17.3 Règles de l'IA (`ia.js`, objet `Ia`)
+- `Ia.reglages()` / `Ia.enregistrerReglages(r)` ; `Ia.distantAutorise()` (`parametres.csv`) ;
+  `Ia.portee(url)` → `poste` (boucle locale appelée directement : modes dossier et démo),
+  `pc-atelier` (boucle locale par le relais : mode serveur), `atelier` (adresse privée : 10/8,
+  172.16/12, 192.168/16, `.local`), `distant` (toute autre adresse) ; `Ia.mention(portee, url)` →
+  « reste sur ce PC », « reste sur le PC atelier », « reste dans l'atelier », « données envoyées à
+  <hôte> ». **Un fournisseur `distant` n'est utilisable que si `ia_distant_autorise` = 1** (D67) ;
+  sinon l'activation est refusée avec « Le responsable n'a pas autorisé les fournisseurs en ligne ».
+- `Ia.active()` : activé sur le poste, réglages valides, portée autorisée. `Ia.etat()` → `inconnu` |
+  `ok` | `injoignable` : **un seul test** (`api/tags` ou `models`) à l'ouverture si l'IA est active,
+  aucun appel sinon ; `Ia.tester()` (bouton de « Ce poste ») → `{ ok, modeles, message }`. Les boutons
+  IA n'existent que si `Ia.active()` et `Ia.etat()` = `ok`.
+- `Ia.demander(fonction, donnees, { signal })` → `{ resultat, modele, fournisseur }` : messages construits
+  par `Ia.PROMPTS[fonction]` (le premier message système commence par `Fonction : <nom>`), sortie JSON
+  contrainte quand la fonction l'exige (Ollama : `format` = schéma JSON ; API compatible OpenAI :
+  `response_format` `json_schema`, puis `json_object` si le fournisseur refuse — 400), `temperature` 0,2,
+  délai `delaiS` (`AbortController`), « Annuler ». Mode serveur : toujours par `/api/ia` ; modes dossier
+  et démo : appel direct (`fetch`). Erreurs nommées : `IaIndisponible`, `IaDelai`, `IaAnnulee`,
+  `IaReponseInvalide` (JSON illisible ou hors schéma), `IaRefusee` (portée non autorisée), avec un
+  message en français.
+- **Validations pures** (`Ia.valider`) : `codes(objet, lignesCodes)` → codes gardés seulement s'ils
+  existent dans `codes_defaillance` **et** dans la bonne famille, `rejetes` listés (D70) ; `impact(v)` ∈
+  `gêne`, `dégradé`, `arrêt`, `sécurité` ; `checkList(objet)` → 1 à 20 opérations (texte non vide,
+  200 caractères au plus, valeur attendue 120 au plus) ; `commentaire(texte, jetons)` → **refus si un
+  chiffre apparaît hors d'un jeton** connu (D71), sinon texte avec les jetons remplacés ; un jeton inconnu
+  → refus. Tout texte proposé : 4 000 caractères au plus.
+- **Données envoyées (D69)** — rien d'autre ne part :
+
+  | Fonction | Envoyé | Attendu |
+  | --- | --- | --- |
+  | `reformulerDI` | symptôme et description saisis ; repère, désignation de l'équipement ; liste des impacts | `{ symptome, impact }` |
+  | `compteRendu` | texte du champ compte rendu (les notes) ; titre et type de l'OT ; repère, désignation ; pièces sorties (désignation, quantité) | `{ texte }` (Constat / Cause / Action / Pièces / Reste à faire) |
+  | `codes` | compte rendu ; titre de l'OT ; symptôme de la DI d'origine ; les trois listes (code, libellé) | `{ symptome, cause, remede }` |
+  | `checkList` | désignation, marque, modèle de l'équipement ; libellé, déclencheur et périodicité de la gamme ; cause visée si la gamme vient d'une suggestion | `{ operations: [{ operation, valeur_attendue }] }` |
+  | `resumeHistorique` | les 20 derniers OT de l'équipement : date, type, titre, libellés des codes, compte rendu (300 caractères) | `{ texte }` |
+  | `commentaireRapport` | mois ; jetons et valeurs des chiffres du rapport ; points à examiner (textes) | `{ texte }` à jetons |
+
+  Jamais : noms des techniciens ou des demandeurs, taux horaires, coûts d'OT, documents, photos.
+- **Trace (D65)** : `Ia.tracerUtilisation(table, id, champ, modele)` → `Donnees.journaliser(table, id,
+  'proposition IA utilisée (<modèle>) : <champ>')`, appelée par l'écran **après** l'enregistrement
+  réussi d'un champ rempli par « Utiliser » ou « Modifier ».
+
+### 17.4 Encadré et boutons (`ia-encadre.js`)
+- `Ia.bouton(libelle, surClic)` → bouton `.ia-bouton` (« Proposer avec l'IA », « Rédiger le compte
+  rendu »…) ou `null` si l'IA n'est pas utilisable ; ≥ 48 px sur téléphone.
+- `Ia.ouvrirEncadre({ apres, fonction, donnees, rendu, utiliser, modifier })` : encadré `.ia-encadre`
+  placé après l'élément `apres`, progression (« L'IA rédige… » + « Annuler »), puis la proposition,
+  la mention **« Proposition de l'IA — <fournisseur>, <modèle> »** et **Utiliser** / **Modifier** /
+  **Ignorer** (ou les boutons propres à la fonction : « Ajouter les opérations cochées », « Copier »).
+  Erreur → message dans l'encadré, aucune proposition. **Rien n'est écrit par l'encadré** (sauf la
+  check-list, §17.5, sur le clic explicite).
+- Mention permanente dans la coque quand l'IA est active : « IA : reste sur ce PC » … « IA : données
+  envoyées à <hôte> » (texte, pas seulement une icône).
+
+### 17.5 Fonctions dans les écrans
+1. **DI** (`demandes-signaler.js`) : « Proposer avec l'IA » près de la description → `{ symptome,
+   impact }` ; Utiliser remplit le symptôme et coche l'impact (modifiables avant « Envoyer »).
+2. **Compte rendu** (`ordres-onglets.js`, onglet Compte rendu, OT non verrouillé) : « Rédiger le compte
+   rendu » à partir du texte déjà saisi → Utiliser remplace le champ (le texte d'origine reste
+   récupérable par « Annuler la proposition » tant que rien n'est enregistré).
+3. **Codes** (même onglet) : « Proposer les codes » → les trois listes déroulantes remplies par
+   Utiliser ; codes rejetés annoncés (« code inconnu proposé par l'IA, ignoré : … »).
+4. **Check-list** (fiche gamme, responsable) : « Proposer une check-list » → opérations cochables ;
+   « Ajouter les opérations cochées » les ajoute par `Preventif.ajouterOperation` (journal habituel).
+5. **Résumé de l'historique** (fiche équipement, technicien et responsable) : carte « Résumé (IA) »,
+   « Copier » / « Ignorer » ; rien n'est écrit.
+6. **Commentaire du rapport** (onglet Rapports, responsable) : avant « Figer », « Proposer un
+   commentaire » ; Utiliser joint le commentaire (jetons remplacés) au rapport figé, dans une section
+   « Commentaire », avec « rédigé avec l'aide de l'IA ». `Rapport.figer(mois, { commentaire })`.
+
+### 17.6 Dictée (`dictee.js`, objet `Dictee`)
+- Disponible si `SpeechRecognition` (ou `webkitSpeechRecognition`) existe, que la page est sécurisée
+  (`isSecureContext`) et que la dictée est active sur le poste. `Dictee.equiper(racine)` pose un bouton
+  micro (≥ 48 px sur téléphone, `aria-pressed`) après chaque champ `[data-dictee]` ; appelé après chaque
+  affichage d'écran et à l'ouverture d'une fenêtre (`UI.fenetre`).
+- **Première utilisation** sur le poste : fenêtre « Dans Chrome et Edge, la voix est envoyée aux serveurs
+  de Google ou Microsoft pour être transcrite. » (ou « La voix est transcrite sur ce PC. » si
+  `SpeechRecognition.available({ langs: ['fr-FR'], processLocally: true })` rend `available`, auquel cas
+  `processLocally` = vrai), boutons « Continuer » / « Désactiver la dictée » ; `avertie` mémorisé.
+- `lang` = `fr-FR`, `interimResults` ; le texte reconnu **s'ajoute** à la fin du champ (une espace
+  avant), jamais d'écrasement ; un second clic arrête ; erreur → message (« micro refusé », « pas de
+  réseau »…).
+- Page non sécurisée sur un appareil tactile (téléphone en `http://192.168…`) : pas de bouton, une aide
+  discrète « Dictée : utilisez le micro du clavier de votre téléphone. » sous le premier champ dicté.
+
+### 17.7 « Ce poste » (`poste.js`) et thème clair
+- Cartes : **Identité** (nom du poste, profil, stockage, « Changer de profil ou de nom de poste… ») ;
+  **Assistant IA** (activer, fournisseur, adresse, modèle — liste après « Tester la connexion » —, clé
+  pour l'API compatible OpenAI, délai, portée et mention ; avertissement explicite à l'activation d'un
+  fournisseur `distant` : « Les textes envoyés — descriptions, comptes rendus, désignations — partent
+  chez <hôte> ; ils peuvent contenir des noms. ») ; **Dictée** (activer, état détecté) ; **Affichage**
+  (sombre / clair).
+- **Thème** : `<html data-theme="clair">` posé dès le démarrage (avant le premier écran) d'après
+  `prevo.theme` ; variables déjà définies par la charte (`css/style.css`) ; aucune couleur codée en
+  dur dans `css/modules/` qui casserait le thème clair ; contrastes AA (4,5:1 texte, 3:1 grands
+  textes et traits) vérifiés sur les couples de la charte ; impression inchangée.
+
+### 17.8 Guide, fiche technique, vitrine
+- `GUIDE.html` (racine) : page autonome (styles intégrés, **aucune ressource externe**, aucun script
+  nécessaire), imprimable (`@media print`), en français simple : démarrer (démo, dossier, serveur,
+  pare-feu en réseau privé), profils, chaque module, préventif suggéré, indicateurs, rapport, IA
+  (Ollama, `OLLAMA_ORIGINS` pour les modes dossier et démo, fournisseurs en ligne et autorisation du
+  responsable, mentions), dictée (et dictée du clavier sur téléphone), https (mkcert, Android, iPhone),
+  sauvegardes et restauration, Excel, limites. Captures intégrées (`<img data-capture="…"
+  src="data:image/jpeg;base64,…">`, 1,5 Mo au plus en tout), mises à jour par
+  `outils/generer_captures.py` (Playwright, outil de développement) qui écrit aussi
+  `docs/captures/*.png` pour le README.
+- `FICHE_TECHNIQUE_CSV.md` (racine) : écrit par `outils/generer_fiche_csv.py` d'après `Schema` (22
+  tables : rôle, fichier, identifiant, champs avec type, obligatoire, valeurs permises, référence,
+  depuis la version ; règles §3 : séparateur, encodage, CRLF, apostrophe de protection, dates).
+  `test_fiche_csv.py` vérifie que le fichier est à jour.
+- README vitrine (brief §14 bis) : capture du tableau de bord (`docs/captures/accueil.png`), « Essayer en
+  30 secondes », fonctions par module à jour (lot 4 compris), renvois au guide et à la fiche.
+
+### 17.9 Finitions (D78)
+Caractères invisibles encore en clair dans les fichiers des lots 1-2 → échappements ; fenêtre « action
+avec motif » mise en commun (`UI`) pour Contrôles et Équipe ; noms des techniciens « Prénom Nom »
+partout (planning compris) ; l'onglet Suggestions et l'onglet Décisions se réaffichent quand le journal
+change sur un autre poste. Tag `v1.0.0` quand toute la suite passe ; puis envoi sur GitHub (D79).
+
+### 17.10 Tests du lot 4
+Faux fournisseur `tests/faux_fournisseur_ia.py` (serveur de test : `api/tags`, `api/chat`, `models`,
+`chat/completions`, CORS ouvert ; comportement choisi par le modèle demandé : `faux`, `faux-lent`,
+`faux-invente`, `faux-illisible`, `faux-chiffres` ; il garde les requêtes reçues pour vérifier les
+données envoyées et la clé transmise). Fichiers : `test_socle_lot4.py`, `test_serveur_ia.py`,
+`test_https.py`, `test_ia_regles.py`, `test_poste.py`, `test_dictee.py` (reconnaissance simulée),
+`test_ia_fonctions.py`, `test_guide.py`, `test_fiche_csv.py`, `test_recette_lot4.py`,
+`test_performance.py` complété (aucun appel réseau à l'ouverture sans IA), `test_ia_reel.py`
+(`PREVO_TEST_IA=1` : vrai Ollama et `qwen2.5:7b`, jeu d'essai en français, mesures affichées).
