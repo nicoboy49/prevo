@@ -44,7 +44,7 @@ Object.assign(Rapport, (() => {
     if (!/^\d{4}-\d{2}$/.test(texte(mois))) throw new Donnees.ErreurValidation('Mois invalide : « ' + mois + ' ».');
     const reglages = options || {};
     const rapport = Rapport.donnees(mois, reglages.aujourdhui, reglages.maintenant);
-    const page = await Rapport.html(mois, { donnees: rapport });
+    const page = await Rapport.html(mois, { donnees: rapport, commentaire: reglages.commentaire });
     const dejaFiges = Rapport.rapportsFiges();
     let revision = 1;
     while (dejaFiges.includes(nomFichier(mois, revision))) revision += 1;
@@ -137,6 +137,8 @@ Object.assign(Rapport, (() => {
         ${proposables.length ? UI.html`<form class="rapports-formulaire" data-hors-saisie>
           <div class="champ"><label class="libelle" for="rapports-mois">Mois</label>
             <select id="rapports-mois">${proposables.map((mois) => UI.html`<option value="${mois}">${libelleMois(mois)}</option>`)}</select></div>
+          <div class="champ large"><label class="libelle" for="rapports-commentaire">Commentaire du mois (facultatif)</label>
+            <textarea id="rapports-commentaire" rows="4" maxlength="4000" data-dictee></textarea></div>
           <button type="submit" class="btn btn-primaire">Figer le rapport</button>
         </form>` : UI.html`<p>Aucun mois complet dans l'historique pour l'instant.</p>`}
       </article>
@@ -159,9 +161,18 @@ Object.assign(Rapport, (() => {
     const message = (type, contenu) => UI.remplir(racine.querySelector('#rapports-message'), UI.bandeau(type, contenu));
     const formulaire = racine.querySelector('.rapports-formulaire');
     if (formulaire) {
+      const zoneCommentaire = formulaire.querySelector('#rapports-commentaire');
+      brancherCommentaireIa(formulaire, zoneCommentaire);
       formulaire.addEventListener('submit', async (evenement) => {
         evenement.preventDefault();
-        await executer(formulaire.querySelector('button'), () => figer(formulaire.querySelector('#rapports-mois').value), conteneur, message);
+        const commentaire = { texte: zoneCommentaire.value.trim(), aideIa: Boolean(zoneCommentaire.dataset.iaModele) };
+        await executer(formulaire.querySelector('button[type=submit]'), async () => {
+          const resultat = await figer(formulaire.querySelector('#rapports-mois').value, { commentaire });
+          if (commentaire.texte && commentaire.aideIa) {
+            await Ia.tracerUtilisation('parametres', 'rapports_mensuels', 'commentaire du rapport ' + resultat.nom, zoneCommentaire.dataset.iaModele);
+          }
+          return resultat;
+        }, conteneur, message);
       });
     }
     racine.addEventListener('click', async (evenement) => {
@@ -177,6 +188,28 @@ Object.assign(Rapport, (() => {
         try { await actions[bouton.dataset.action](); } catch (erreur) { App.signalerErreur(erreur, 'rapport ' + bouton.dataset.nom); }
       }
     });
+  }
+
+  /**
+   * Lot 4 (§17.5, D71) : « Proposer un commentaire » (bouton absent sans IA). L'IA écrit avec des jetons
+   * remplacés par les chiffres du rapport ; un chiffre écrit en clair fait refuser la proposition. Le
+   * commentaire reste modifiable ; rien n'est figé sans « Figer le rapport ».
+   */
+  function brancherCommentaireIa(formulaire, zoneCommentaire) {
+    zoneCommentaire.addEventListener('input', () => { if (!zoneCommentaire.value.trim()) delete zoneCommentaire.dataset.iaModele; });
+    const bouton = Ia.bouton('Proposer un commentaire', () => {
+      const mois = formulaire.querySelector('#rapports-mois').value;
+      const rapport = Rapport.donnees(mois);
+      const remplir = (resultat, reponse, retoucher) => {
+        zoneCommentaire.value = resultat.texte;
+        zoneCommentaire.dataset.iaModele = reponse.modele;
+        if (retoucher) zoneCommentaire.focus();
+      };
+      Ia.ouvrirEncadre({ apres: bouton, fonction: 'commentaireRapport',
+        donnees: { mois: libelleMois(mois), jetons: Rapport.jetonsCommentaire(rapport), points: rapport.faits.concat(rapport.decisions) },
+        utiliser: (resultat, reponse) => remplir(resultat, reponse, false), modifier: (resultat, reponse) => remplir(resultat, reponse, true) });
+    });
+    if (bouton) zoneCommentaire.closest('.champ').insertAdjacentElement('afterend', bouton);
   }
 
   /** Fige (ou recalcule) puis réaffiche l'onglet avec le message de réussite. */

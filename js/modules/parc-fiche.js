@@ -138,6 +138,32 @@ Object.assign(Parc, (() => {
       </article>`;
   }
 
+  // Lot 4 (§17.5) : résumé de l'historique par l'IA (technicien et responsable). Rien n'est écrit :
+  // « Copier » met le texte dans le presse-papiers. Carte absente si l'IA n'est pas utilisable.
+  function libelleCode(famille, code) {
+    const ligne = code ? Donnees.lignes('codes_defaillance').find((c) => c.famille === famille && c.code === code) : null;
+    return ligne ? ligne.libelle : (code || '');
+  }
+
+  function carteResumeIa(equipement) {
+    const carte = UI.element(UI.html`<article class="carte parc-resume-ia"><div class="entete-carte"><h2>Résumé de l'historique (IA)</h2></div>
+      <p class="note">L'IA résume les interventions de l'équipement : relisez avant de vous en servir.</p></article>`);
+    const bouton = Ia.bouton('Résumer l\'historique', () => {
+      const ots = Donnees.lignes('ordres_travail').filter((ot) => ot.equipement_id === equipement.id && ot.statut !== 'Annulé')
+        .map((ot) => ({ date: (ot.date_fin || ot.date_creation || '').slice(0, 10), type: ot.type, titre: ot.titre, compteRendu: ot.compte_rendu,
+          codes: [libelleCode('symptôme', ot.symptome_code), libelleCode('cause', ot.cause_code), libelleCode('remède', ot.remede_code)].filter(Boolean) }));
+      Ia.ouvrirEncadre({ apres: bouton, fonction: 'resumeHistorique', donnees: { ot: ots }, boutons: [{
+        libelle: 'Copier', valeur: 'copier', classe: 'btn-secondaire', action: async (resultat) => {
+          try { await navigator.clipboard.writeText(resultat.texte); } catch (erreur) { UI.toast('Copie impossible ici : sélectionnez le texte.', 'attention'); return false; }
+          UI.toast('Résumé copié.', 'succes');
+          return true;
+        } }] });
+    });
+    if (!bouton) return null;
+    carte.appendChild(bouton);
+    return carte;
+  }
+
   // Raison de l'état d'une gamme ; quand un OT est ouvert, son numéro (en tête de la raison)
   // devient un lien vers l'OT — sauf pour le demandeur, qui n'a pas accès aux OT.
   function raisonGamme(etat, avecLiens) {
@@ -428,6 +454,8 @@ Object.assign(Parc, (() => {
 
     const zone = UI.$('.parc-complements', conteneur);
     zone.appendChild(carteArticles(equipement));
+    const resumeIa = intervenant ? carteResumeIa(equipement) : null;      // lot 4 (§17.5) : sans IA, rien
+    if (resumeIa) zone.appendChild(resumeIa);
     zone.appendChild(carteHistoriqueOt(equipement));
     zone.appendChild(carteHistoriqueDi(equipement));
 

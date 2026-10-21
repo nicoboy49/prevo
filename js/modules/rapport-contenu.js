@@ -320,6 +320,8 @@ figure { margin: 0; } figcaption { font-weight: 600; margin-bottom: 2px; }
 .comprendre { border: 1px solid #888; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 8.5pt; }
 .comprendre dt { font-weight: 600; display: inline; } .comprendre dd { display: inline; margin: 0; } .comprendre div { margin-bottom: 1px; }
 .non-calculable { font-size: 8.5pt; color: #333; }
+.commentaire { border-left: 3px solid #555; padding: 2px 0 2px 8px; margin-bottom: 8px; }
+.commentaire p { margin: 0 0 2px; white-space: pre-line; } .commentaire .mention-ia { font-size: 8pt; font-style: italic; color: #444; }
 .pied { font-size: 8pt; color: #444; margin-top: 4px; }
 @media print { .sans-impression { display: none; } }`;
 
@@ -331,6 +333,8 @@ figure { margin: 0; } figcaption { font-weight: 600; margin-bottom: 2px; }
   async function html(mois, options) {
     const reglages = options || {};
     const rapport = reglages.donnees || donnees(mois, reglages.aujourdhui, reglages.maintenant);
+    // Lot 4 (§17.5) : commentaire du responsable, éventuellement proposé par l'IA (mention alors imprimée).
+    const commentaire = reglages.commentaire && texte(reglages.commentaire.texte) ? reglages.commentaire : null;
     const lib = await App.chargerEcharts();
     const dessins = graphiques(lib, rapport);
     const titre = 'Rapport mensuel de maintenance — ' + rapport.libelleMois;
@@ -349,6 +353,8 @@ figure { margin: 0; } figcaption { font-weight: 600; margin-bottom: 2px; }
 <section class="colonnes"><div><h2>Faits marquants</h2><ul>${rapport.faits.map((fait) => UI.html`<li>${fait}</li>`)}</ul></div>
 <div><h2>Décisions à prendre</h2>${rapport.decisions.length ? UI.html`<ol>${rapport.decisions.map((decision) => UI.html`<li>${decision}</li>`)}</ol>`
     : UI.html`<p>Aucune décision urgente ce mois-ci.</p>`}</div></section>
+${commentaire ? UI.html`<section class="commentaire"><h2>Commentaire</h2><p>${texte(commentaire.texte)}</p>${commentaire.aideIa
+    ? UI.html`<p class="mention-ia">Commentaire rédigé avec l'aide de l'IA, relu et validé par le responsable.</p>` : ''}</section>` : ''}
 <section class="graphiques">
 <figure><figcaption>Durée d'arrêt du mois par équipement (heures)</figcaption>${dessins.pareto ? UI.brut(dessins.pareto) : UI.html`<p>Aucun arrêt ce mois-ci.</p>`}</figure>
 <figure><figcaption>Heures de correctif et de préventif sur 12 mois</figcaption>${UI.brut(dessins.heures)}</figure>
@@ -361,10 +367,25 @@ ${rapport.nonCalculables.length ? UI.html`<section class="non-calculable"><h2>No
     return String(page);
   }
 
+  /**
+   * Lot 4 (§17.3, D71) : jetons du commentaire proposé par l'IA — les chiffres du rapport, sous un
+   * nom ; l'IA écrit {disponibilite}, Prévo remplace par la valeur affichée (« 92,4 % »).
+   */
+  function jetonsCommentaire(rapport) {
+    const noms = { disponibilite: 'disponibilite', cout: 'cout_du_mois', partPreventif: 'part_preventif' };
+    const jetons = {};
+    rapport.tuiles.forEach((tuile) => {
+      if (tuile.valeur === null || !noms[tuile.cle]) return;
+      jetons[noms[tuile.cle]] = tuile.texteValeur;
+      jetons[noms[tuile.cle] + '_evolution'] = tuile.tendance.precedent.texte;
+    });
+    return jetons;
+  }
+
   return {
     PREFIXE_FICHIER,
     // pures (ARCHITECTURE.md §15.10)
-    donnees, moisAProposer, texteCourriel, rapportsFiges,
+    donnees, moisAProposer, texteCourriel, rapportsFiges, jetonsCommentaire,
     html,
     // Usage interne au module (pas une API).
     interne: { texte, decalerMois, libelleMois, lienCourriel, estCouvert, debutHistorique },

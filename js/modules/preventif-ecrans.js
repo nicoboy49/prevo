@@ -519,6 +519,39 @@ Object.assign(Preventif, (() => {
         : UI.html`<p class="muted">Aucune opération${responsable ? ' : ajoutez ci-dessous les opérations à réaliser, dans l\'ordre.' : '.'}</p>`}
       ${responsable ? formulaireAjoutHtml() : ''}
       <p class="note">Chaque OT généré reçoit une copie de cette check-list : la modifier ne change pas les OT déjà créés.</p>`);
+    // Lot 4 (§17.5) : check-list de départ proposée par l'IA (responsable ; bouton absent sans IA).
+    const boutonIa = responsable ? Ia.bouton('Proposer une check-list', () => proposerCheckListe(section, gammeId, boutonIa)) : null;
+    if (boutonIa) UI.$('.pv-ajout-operation', section).insertAdjacentElement('afterend', boutonIa);
+  }
+
+  /** Cause visée par la gamme : celle d'une suggestion ouverte qui la cite, ou « Prévenir : <cause> ». */
+  function causeVisee(gamme) {
+    const suggestion = Suggestions.pourGamme(gamme.id, Donnees.aujourdhui()).find((s) => s.causeLibelle);
+    return suggestion ? suggestion.causeLibelle : (/^Prévenir : (.+)$/.exec(texte(gamme.libelle)) || [])[1] || '';
+  }
+
+  /** Proposition de l'IA : opérations cochables ; seules les cochées sont ajoutées, sur le clic (journal habituel). */
+  async function proposerCheckListe(section, gammeId, bouton) {
+    const gamme = Donnees.trouver('gammes', gammeId) || { id: gammeId };
+    const equipement = Donnees.trouver('equipements', gamme.equipement_id) || {};
+    const issue = await Ia.ouvrirEncadre({
+      apres: bouton, fonction: 'checkList',
+      donnees: { designation: equipement.designation, marque: equipement.marque, modele: equipement.modele, libelle: gamme.libelle,
+        declencheur: DECLENCHEURS[gamme.declencheur] || gamme.declencheur, periodicite: periodicite(gamme), causeVisee: causeVisee(gamme) },
+      rendu: (resultat) => UI.html`<ul class="pv-ia-operations">${resultat.operations.map((op, rang) => UI.html`<li><label class="case">
+        <input type="checkbox" checked data-rang="${rang}"><span>${op.operation}${op.valeur_attendue ? UI.html` — <i>${op.valeur_attendue}</i>` : ''}</span></label></li>`)}</ul>`,
+      boutons: [{ libelle: 'Ajouter les opérations cochées', valeur: 'ajouter', classe: 'btn-primaire', action: async (resultat, reponse) => {
+        const cochees = UI.$$('.pv-ia-operations input:checked', section).map((caseACocher) => resultat.operations[Number(caseACocher.dataset.rang)]);
+        if (!cochees.length) { UI.toast('Cochez au moins une opération.', 'attention'); return false; }
+        for (const operation of cochees) await Preventif.ajouterOperation(gammeId, operation);
+        await Ia.tracerUtilisation('gammes', gammeId, 'check-list', reponse.modele);
+        UI.toast(cochees.length + ' opération(s) ajoutée(s) à la check-list.', 'succes');
+        return true;
+      } }],
+    });
+    if (issue.choix !== 'ajouter') return;
+    afficherCheckListe(section, gammeId);
+    Suggestions.apresCheckListe(gammeId);                     // check-list changée : suggestion suivie traitée (§16.6)
   }
 
   /** Fenêtre de modification d'une opération ; vrai si elle a été enregistrée. */
