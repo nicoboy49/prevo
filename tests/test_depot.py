@@ -189,7 +189,7 @@ class TestModules(unittest.TestCase):
 
 # Documents publics du dépôt : aucun chemin ni outil personnel du poste de développement
 # (lettre de lecteur Windows, dossier synchronisé, chemin Git Bash).
-DOCUMENTS_PUBLICS = ["README.md", "docs/PILOTAGE.md"]
+DOCUMENTS_PUBLICS = ["README.md", "docs/PILOTAGE.md", "GUIDE.html", "FICHE_TECHNIQUE_CSV.md"]
 MOTIF_CHEMIN_PERSONNEL = re.compile(r"\b[A-Za-z]:\\|pcloud|sync[\\/]nicolas|/c/sync", re.IGNORECASE)
 
 

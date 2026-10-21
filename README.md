@@ -1,21 +1,28 @@
 # Prévo
 
 Prévo est une GMAO (gestion de maintenance assistée par ordinateur) pour un atelier ou une petite
-industrie : parc d'équipements, demandes d'intervention, ordres de travail, maintenance préventive,
-magasin de pièces, planning, contrôles réglementaires, indicateurs et préventif suggéré. Elle tourne sans installation lourde ni abonnement : les données sont des
-fichiers CSV lisibles dans Excel, stockés dans un dossier de votre choix. Le code est écrit en
-français, avec des bibliothèques embarquées et aucun appel vers Internet.
+industrie : parc d'équipements, demandes d'intervention, ordres de travail, maintenance préventive et
+préventif suggéré, magasin de pièces, planning, contrôles réglementaires, indicateurs et rapport mensuel.
+Elle tourne sans installation lourde ni abonnement : les données sont des fichiers CSV lisibles dans
+Excel, stockés dans un dossier de votre choix. Le code est écrit en français, avec des bibliothèques
+embarquées et aucun appel vers Internet (sauf l'assistant IA en ligne, s'il est autorisé et choisi).
 
-Cette version contient les **lots 1 à 3 bis** ; les lots suivants sont listés plus bas. Une
-présentation avec capture d'écran viendra au lot 4.
+![Accueil du responsable sur le jeu de démo : compteurs, demandes à traiter et ordres de travail en retard](docs/captures/accueil.png)
+
+- **Guide d'utilisation** : [GUIDE.html](GUIDE.html), à ouvrir dans le navigateur (imprimable).
+- **Format des fichiers** : [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md).
+
+Cette version contient les **lots 1 à 4** du cahier des charges ; un lot « Import » est prévu ensuite.
 
 ## Essayer en 30 secondes
 
 1. Ouvrez `index.html` dans Chrome ou Edge (double-clic ou glisser-déposer dans le navigateur).
-2. Cliquez sur **Essayer avec les données de démo**, puis choisissez un profil.
+2. Cliquez sur **Essayer avec les données de démo**, puis choisissez un profil (**Responsable** voit
+   tout).
 
-Le jeu de démo est entièrement fictif et vit en mémoire : rien n'est enregistré, et un bouton
-permet de l'exporter en ZIP.
+Le jeu de démo est un atelier entièrement fictif, avec treize mois d'historique dont les dates sont
+recalées sur aujourd'hui. Il vit en mémoire : rien n'est enregistré, et un bouton permet de l'exporter
+en ZIP.
 
 ## Installation
 
@@ -24,9 +31,9 @@ permet de l'exporter en ZIP.
 Ouvrez `index.html` dans **Chrome ou Edge**, cliquez sur « Choisir le dossier de données » et
 désignez un dossier de votre PC. Ce mode est fait pour **un seul poste à la fois** (un
 avertissement s'affiche si une autre session semble ouverte) ; pour plusieurs postes ou des
-téléphones, utilisez le mode serveur. Prévo lit et écrit les fichiers CSV dans ce dossier. Au lancement suivant, « Reprendre le dossier précédent »
-évite de le choisir à nouveau. Ce mode utilise l'API d'accès aux fichiers de Chrome et d'Edge ;
-Firefox et Safari ne la proposent pas.
+téléphones, utilisez le mode serveur. Prévo lit et écrit les fichiers CSV dans ce dossier. Au
+lancement suivant, « Reprendre le dossier précédent » évite de le choisir à nouveau. Ce mode utilise
+l'API d'accès aux fichiers de Chrome et d'Edge ; Firefox et Safari ne la proposent pas.
 
 ### Mode serveur (plusieurs postes et téléphones)
 
@@ -36,7 +43,8 @@ Il faut Python 3.8 ou plus récent ; le serveur n'utilise que la bibliothèque s
   l'installer avec winget (avec votre accord).
 - Mac ou Linux : `./lancer.sh`.
 - Directement : `py serveur.py` (Windows) ou `python3 serveur.py`. Options : `--port`,
-  `--donnees CHEMIN`, `--sans-navigateur`.
+  `--donnees CHEMIN`, `--sans-navigateur`, `--hote NOM`, et `--certificat FICHIER --cle FICHIER`
+  pour le https (voir plus bas). Les lanceurs transmettent ces options.
 
 Au premier lancement sous Windows, le pare-feu demande d'autoriser Python : **cochez uniquement
 « Réseau privé »**, jamais « Réseau public ».
@@ -47,112 +55,70 @@ affiche un QR code de l'adresse du PC : scannez-le avec l'appareil photo du tél
 Les données du mode serveur sont dans le dossier `donnees/` (hors dépôt git), avec les sauvegardes
 quotidiennes (`donnees/sauvegardes/`) et les documents joints.
 
-## Ce que contient le lot 1
+## Fonctions par module
 
-- Trois modes de stockage : dossier, serveur Python local, démo en mémoire.
-- Écritures concurrentes gérées : en cas de conflit, la modification est rejouée sur la version la
-  plus récente du fichier (trois essais).
-- Profils Demandeur, Technicien et Responsable (menus et écrans adaptés).
-- Parc : arborescence site, atelier, ligne ; fiche équipement avec historique et QR code.
-- Demandes d'intervention : saisie en cinq champs, priorité calculée, décisions du responsable.
-- Ordres de travail : cycle de vie complet, règles de clôture, coûts, habilitation vérifiée à
-  l'affectation, bon de travail imprimable (règles RG1 à RG4, RG7, RG8).
-- Accueil par profil, Paramètres (sauvegardes, restauration, contrôle de la base, export ZIP),
-  À propos.
-
-## Ce que contient le lot 2
-
-- **Préventif** : gammes de maintenance déclenchées par une date, un compteur (heures,
-  kilomètres…) ou un seuil de mesure ; état de chaque gamme (échue, bientôt, à jour…) ; éditeur de
-  check-list ; calendrier des 12 prochaines semaines. À l'ouverture par un technicien ou un
-  responsable, Prévo crée l'ordre de travail de chaque gamme échue (un seul par gamme, même si
-  deux postes s'ouvrent en même temps) avec sa check-list ; la clôture de l'OT met la gamme à jour.
-  Les relevés de compteur se saisissent depuis la fiche équipement.
-- **Magasin** : articles, mouvements (entrée, sortie, retour, inventaire), stock recalculé depuis
-  les mouvements, point de commande saisi avec une valeur suggérée, liste « À commander », demandes
-  d'achat suivies de « demandée » à « reçue » (la réception fait entrer le stock), fournisseurs.
-  Une sortie qui rendrait le stock négatif est refusée.
-- **Pièces sorties depuis l'OT** : sortie et retour de pièces dans l'onglet Exécution ; le coût de
-  l'OT compte les pièces réellement sorties.
-- **Causes fréquentes** : sur les fiches DI et OT, un encart montre les causes les plus fréquentes
-  d'un même symptôme sur cet équipement (ou sur ceux de même marque et modèle), dès 5 cas. C'est
-  une statistique de l'historique, pas un diagnostic.
-- **Anomalie pendant un préventif** : depuis l'OT préventif, un clic ouvre une DI liée, et l'OT est
-  marqué « anomalie constatée ».
-- **Accueil** : compteurs « préventifs de la semaine » et « articles à commander ».
-- **Format des fichiers v2** : quatre colonnes ajoutées en fin de table (valeur de remplacement
-  d'un équipement, code symptôme et OT d'origine d'une DI, anomalie constatée d'un OT). Une base du
-  lot 1 se relit sans erreur. À sa première ouverture, Prévo fait **d'abord une sauvegarde
-  complète** (« Avant format 2 », restaurable depuis Paramètres), puis seulement passe la base au
-  format 2 ; si la sauvegarde échoue, rien n'est changé, les OT préventifs ne sont pas générés
-  automatiquement, et le tout est retenté à l'ouverture suivante.
-- Un jeu de démo fictif de treize mois d'historique.
-
-## Ce que contient le lot 3
-
-- **Indicateurs** (responsable) : disponibilité, MTBF, MTTR (avec « dont attente de pièces » quand
-  l'historique le permet), durée d'arrêt, part et respect du préventif, OT en retard, délais de prise
-  en charge, coût et valeur du stock, sur une période au choix (12 mois glissants par défaut), par
-  criticité ou par atelier. Chaque chiffre dit sur combien d'OT il porte et donne la liste de ses OT
-  sources ; un chiffre qui ne peut pas être calculé dit pourquoi au lieu d'afficher zéro. Un encadré
-  « Comprendre » donne les définitions. Graphiques : Pareto des pannes et des arrêts, heures par mois,
-  MTBF et MTTR des équipements critiques, causes des pannes, charge et capacité des techniciens ;
-  chacun avec ses valeurs en tableau et des exports CSV et image.
-- **Planning de la semaine** (lundi à dimanche) : une ligne par technicien avec sa charge et sa
-  capacité, et la liste des OT préparés à planifier. On glisse une carte sur un jour, ou on passe par
-  le bouton « Planifier… » (sans souris). Les règles des OT s'appliquent : pièce manquante → mise en
-  attente proposée, habilitation manquante → avertissement inscrit au journal. Le technicien consulte ;
-  sur téléphone, le planning est une liste par jour.
-- **Étiquettes QR par lot** : un atelier ou une ligne (avec tout ce qu'il contient), planches A4 de
-  24 ou de 8 étiquettes, décalage d'impression réglable ; le repère de l'équipement est écrit en clair.
-- **Contrôles réglementaires** : échéancier par équipement (en retard, observations à lever, à
-  planifier, à jour), enregistrement d'un contrôle réalisé avec son rapport (PDF ou photo), levée des
-  observations, création d'un OT réglementaire pré-rempli. Prévo calcule la date suivante à partir
-  de la périodicité que vous saisissez ; il ne fait pas de veille réglementaire.
-- **Équipe et habilitations** : techniciens (capacité, taux horaire visible du seul responsable),
-  habilitations avec leur échéance ; un renouvellement ajoute une ligne et garde l'historique.
-- **Accueil** : compteurs « contrôles sous 30 jours » et « habilitations à renouveler ».
-- **Rapport mensuel figé** : une page A4 par mois (chiffres clés comparés au mois précédent et à
-  l'année précédente, faits marquants, jusqu'à trois points à examiner, dont « réparer ou remplacer ? »
-  quand le coût de maintenance d'un équipement sur 12 mois dépasse un seuil réglable, 50 % de sa
-  valeur de remplacement par défaut). Il est enregistré avec les documents et se rouvre sans Prévo.
-  Au début de chaque mois, l'accueil propose de figer le mois écoulé ; « Préparer un courriel » ouvre
-  la messagerie du poste avec un résumé : Prévo n'envoie rien lui-même.
-- **Paramètres** : codes de défaillance (ajout, changement de libellé) et réglages (tolérance du
-  préventif, seuil « réparer ou remplacer ? »…).
-- Format des fichiers inchangé (version 2) : une base du lot 2 s'ouvre telle quelle. Le jeu de démo
-  est complété (contrôles, planning sur quatre semaines, historique des statuts des pannes).
-
-## Ce que contient le lot 3 bis
-
-- **Préventif suggéré** (responsable, onglet « Suggestions » du Préventif) : Prévo relit l'historique
-  et propose, avec sa règle, ses chiffres, ses dates et les OT concernés :
-  - **créer une gamme** sur un équipement sans gamme qui a au moins 3 pannes de même cause en 12 mois ;
-  - **revoir le préventif** d'un équipement qui a au moins 3 pannes de même cause malgré sa gamme (à
-    examiner : une gamme ne dit pas quelles pannes elle prévient) ;
-  - **revoir une gamme dont les visites trouvent souvent une anomalie** (2 des 4 dernières) ;
-  - **allonger une gamme** dont au moins 5 visites de suite n'ont rien trouvé, sans aucune panne
-    (jamais pour un équipement de criticité A ; vérifiez d'abord qu'aucune obligation ne l'impose).
-  Prévo ne propose pas de nouvelle périodicité et **ne modifie jamais une gamme tout seul** : « Créer
-  la gamme » ouvre le formulaire pré-rempli, « Ouvrir la gamme » mène à la gamme, « Ignorer… »
-  demande un motif. Chaque décision est inscrite au journal et listée dans l'onglet « Décisions » ;
-  une suggestion ignorée ne revient que si de nouveaux faits atteignent le seuil. Les seuils (pannes,
-  visites, période observée) se règlent dans Paramètres.
-- **Accueil** : compteur « Suggestions de préventif » ; encarts sur les fiches de la gamme et de
-  l'équipement concernés.
-- **Causes fréquentes** : l'encart dit la solidité de ses chiffres. Sous une vingtaine de cas, il
-  précise « Peu de cas : à prendre comme une piste », et un détail donne la fourchette réelle de
-  chaque cause (« entre 32 % et 81 % des cas »).
-- Format des fichiers inchangé (version 2). Le jeu de démo est complété (anomalies répétées, refus en
-  criticité A, suggestion ignorée puis revenue).
-
-## Ce qui vient ensuite
-
-- **Lot 4** : assistant IA, dictée vocale, `GUIDE.html`, `FICHE_TECHNIQUE_CSV.md`, présentation
-  du projet avec capture d'écran.
-- **Lot « Import »** : assistant d'import de fichiers existants (dont `.xls`).
-
-Ces éléments ne sont pas encore réalisés.
+- **Trois modes de stockage** : dossier, serveur Python local, démo en mémoire. Écritures concurrentes
+  gérées : en cas de conflit, la modification est rejouée sur la version la plus récente du fichier
+  (trois essais). Les tables modifiées sur un autre poste sont relues toutes seules.
+- **Profils** Demandeur, Technicien et Responsable : menus et écrans adaptés (ce n'est pas une sécurité).
+- **Accueil** par profil : compteurs du responsable (DI à traiter, OT en retard, P1 ouverts, préventifs
+  de la semaine, articles à commander, contrôles sous 30 jours, habilitations à renouveler, suggestions
+  de préventif), OT du technicien, demandes du demandeur ; QR code de connexion en mode serveur.
+- **Demandes d'intervention** : saisie en cinq questions (sur téléphone aussi, photo comprise),
+  priorité calculée à partir de la criticité et de l'impact (« sécurité » donne toujours P1),
+  décisions du responsable (accepter, regrouper, différer, refuser avec un motif visible du demandeur).
+  Un encart montre les causes fréquentes du même symptôme, avec la solidité de ses chiffres.
+- **Ordres de travail** : cycle de vie complet (préparé, planifié, en cours, clôtures technique et
+  administrative, attente et annulation avec motif), clôture technique contrôlée (codes cause et
+  remède, compte rendu, remise en service), habilitation vérifiée à l'affectation, procédure de
+  consignation affichée, pièces sorties depuis l'OT, coût calculé, bon de travail A4 imprimable,
+  export CSV de la liste.
+- **Planning de la semaine** : une ligne par technicien avec sa charge et sa capacité, OT à planifier
+  glissés sur un jour ou placés par « Planifier… » (sans souris) ; liste par jour sur téléphone.
+- **Préventif** : gammes déclenchées par une date, un compteur ou un seuil de mesure ; un seul OT par
+  gamme échue, créé à l'ouverture avec sa check-list ; la clôture met la gamme à jour ; calendrier des
+  12 prochaines semaines ; anomalie vue pendant un préventif → demande liée en un clic.
+- **Préventif suggéré** : Prévo relit l'historique et propose de créer une gamme, de revoir le
+  préventif, de revoir une gamme dont les visites trouvent souvent une anomalie, ou d'allonger une
+  gamme sans constat (jamais en criticité A). Chaque suggestion montre sa règle et ses faits ; Prévo
+  **ne modifie jamais une gamme tout seul**, et chaque décision est inscrite au journal.
+- **Magasin** : articles, mouvements, stock recalculé depuis les mouvements, sortie refusée si le stock
+  deviendrait négatif, point de commande suggéré, liste « À commander », demandes d'achat de
+  « demandée » à « reçue », fournisseurs, inventaire.
+- **Parc et étiquettes QR** : arborescence site, atelier, ligne ; fiche équipement (historique,
+  compteurs, gammes, contrôles, pièces) ; étiquettes QR par lot sur planches A4 de 24 ou 8, repère
+  écrit en clair.
+- **Contrôles réglementaires** : échéancier par équipement, contrôle réalisé avec son rapport, levée
+  des observations, OT réglementaire pré-rempli (sans veille réglementaire).
+- **Équipe et habilitations** : techniciens, capacité, habilitations et leurs échéances, historique des
+  renouvellements.
+- **Indicateurs** (responsable) : disponibilité, MTBF, MTTR (dont attente de pièces), durée d'arrêt,
+  part et respect du préventif, OT en retard, délais de prise en charge, coûts, valeur du stock ; chaque
+  chiffre dit sur combien d'OT il porte, et un chiffre non calculable dit pourquoi. Graphiques avec
+  leurs valeurs en tableau, exports CSV et image.
+- **Rapport mensuel figé** : une page A4 par mois (chiffres comparés, faits marquants, points à
+  examiner dont « réparer ou remplacer ? »), qui se rouvre sans Prévo ; « Préparer un courriel »
+  ouvre la messagerie du poste, Prévo n'envoie rien lui-même.
+- **Paramètres** : réglages partagés, codes de défaillance, sauvegardes et restauration, contrôle de la
+  base, export ZIP.
+- **Assistant IA** (facultatif, désactivé par défaut) : Ollama sur un PC de l'atelier (modèle conseillé
+  `qwen2.5:7b`) ou une API compatible OpenAI. Il propose un symptôme et un impact pour une demande, un
+  compte rendu structuré, des codes de défaillance pris **uniquement** dans la liste existante, une
+  check-list de gamme, un résumé de l'historique d'un équipement et un commentaire du rapport mensuel.
+  L'IA propose, l'humain valide (« Utiliser », « Modifier », « Ignorer ») : rien n'est écrit sans clic.
+  Une mention permanente dit où vont les textes (« reste sur ce PC »… « données envoyées à … ») ; les
+  fournisseurs en ligne ne sont utilisables que si le responsable les autorise ; la clé d'accès reste
+  dans le navigateur du poste. En mode serveur, les appels passent par le serveur de Prévo.
+- **Dictée vocale** : bouton micro sur les champs de texte longs, texte ajouté à la fin du champ,
+  avertissement à la première utilisation (la voix est transcrite par Google ou Microsoft), désactivable
+  par poste ; sur téléphone sans https, Prévo rappelle le micro du clavier.
+- **Ce poste** : écran ouvert à tous pour les réglages du navigateur (profil et nom du poste, assistant
+  IA, dictée, **thème clair** ou sombre).
+- **https en option** : `serveur.py --certificat … --cle …` avec un certificat que vous fournissez (le
+  guide explique mkcert et l'installation sur Android et iPhone), pour avoir le micro et la caméra dans
+  la page sur les téléphones. Les étiquettes QR imprimées en http sont alors à réimprimer.
+- **Guide et fiche technique** : [GUIDE.html](GUIDE.html) (autonome, imprimable, avec captures) et
+  [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md), générée depuis le schéma.
 
 ## Format des données
 
@@ -160,8 +126,8 @@ Les données sont 22 fichiers CSV (format v2 depuis le lot 2) : séparateur `;`,
 fins de ligne CRLF. Ils s'ouvrent et se modifient dans Excel. Comme Excel abîme certaines valeurs
 (zéros de tête, formules, fractions prises pour des dates), Prévo les protège par une apostrophe
 en tête de cellule et la retire à la lecture. À la lecture, il accepte aussi les dates écrites
-`JJ/MM/AAAA` par Excel. Les détails sont dans `docs/ARCHITECTURE.md` (§3 ; format v2 : §4 et
-§14.1), en attendant `FICHE_TECHNIQUE_CSV.md`.
+`JJ/MM/AAAA` par Excel. Chaque fichier et chaque colonne sont décrits dans
+[FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md).
 
 Ne modifiez pas un fichier dans Excel pendant que quelqu'un enregistre dans Prévo : le serveur
 signale un fichier verrouillé, et le mode dossier détecte le conflit.
@@ -175,20 +141,24 @@ py -m unittest discover -s tests -v
 Les tests de navigateur demandent Playwright et Chromium (`pip install playwright`, puis
 `playwright install chromium`) ; ils ne servent qu'aux tests, pas à l'utilisation de Prévo. Pour
 exécuter aussi l'aller-retour par le vrai Excel (Excel doit être installé sur le poste), définissez
-`PREVO_TEST_EXCEL=1` ; sans cette variable, ce test est sauté. La suite complète prend plusieurs
-minutes.
+`PREVO_TEST_EXCEL=1` ; pour l'essai avec un vrai Ollama et `qwen2.5:7b`, `PREVO_TEST_IA=1`. Sans
+ces variables, ces tests sont sautés. La suite complète prend plusieurs minutes.
+
+Outils de développement (Playwright aussi) : `py outils/generer_captures.py` refait les captures
+d'écran (`docs/captures/` et images du guide) sur le jeu de démo ; `py outils/generer_fiche_csv.py`
+refait la fiche technique d'après le schéma.
 
 ## Limites connues
 
 - **Pas d'authentification.** Les profils adaptent l'interface ; ils ne sont pas une mesure de
   sécurité. Toute personne qui atteint le serveur peut lire et écrire les données.
-- **Réseau local uniquement.** Le serveur n'est pas conçu pour être exposé sur Internet ; il n'a
-  ni HTTPS ni gestion de comptes.
+- **Réseau local uniquement.** Le serveur n'est pas conçu pour être exposé sur Internet ; il n'a pas de
+  gestion de comptes. Le https est une option, avec un certificat que vous fournissez.
 - **Le serveur ne sert que l'application.** Il répond seulement pour `index.html`, `favicon.svg`,
-  `GUIDE.html` (quand il existera) et les dossiers `css/` et `js/` (liste blanche). Tout autre
-  fichier du dossier (`README.md`, `docs/`, `tests/`, `outils/`, `serveur.py`…) répond « introuvable »
-  (404), et le dossier `donnees/` n'est accessible que par l'API de l'application. Ce n'est pas une
-  protection des données : sans authentification, l'API reste ouverte à qui atteint le serveur.
+  `GUIDE.html` et les dossiers `css/` et `js/` (liste blanche). Tout autre fichier du dossier
+  (`README.md`, `docs/`, `tests/`, `outils/`, `serveur.py`…) répond « introuvable » (404), et le dossier
+  `donnees/` n'est accessible que par l'API de l'application. Ce n'est pas une protection des données :
+  sans authentification, l'API reste ouverte à qui atteint le serveur.
 - **Chrome ou Edge requis pour le mode dossier** (API d'accès aux fichiers).
 - **Coût des pièces au prix actuel.** Le coût d'un OT utilise le prix actuel de l'article ; une
   réception d'achat ne change pas ce prix (le responsable le modifie à la main), mais un changement
@@ -208,8 +178,14 @@ minutes.
   comptent, même celles qu'une gamme ne vise pas : ignorez la suggestion avec un motif. Sur une base
   passée du format 1 au format 2, seules les visites faites après ce passage comptent pour « allonger
   une gamme » (avant, l'absence d'anomalie n'était pas saisie).
-- Sur téléphone en mode serveur, la page est servie en HTTP : le scan par caméra intégrée à la
-  page n'est pas proposé ; la photo passe par l'appareil photo du téléphone.
+- **Assistant IA.** Une proposition peut être fausse : elle est toujours relue avant d'être utilisée.
+  Un modèle local est lent sans carte graphique (plus d'une minute par réponse est possible). En modes
+  dossier et démo, Ollama doit autoriser les pages ouvertes depuis le disque (`OLLAMA_ORIGINS`, voir
+  le guide) ; un fournisseur en ligne reçoit les textes envoyés.
+- **Dictée.** Elle dépend du navigateur : Chrome et Edge envoient la voix à Google ou Microsoft, et
+  le micro n'est permis que sur une page sécurisée (sur le PC lui-même, ou en https).
+- Sur téléphone en mode serveur sans https, le scan par caméra intégrée à la page et la dictée ne sont
+  pas proposés : la photo passe par l'appareil photo du téléphone, la dictée par le micro du clavier.
 
 ## Comment ce projet a été fait
 
