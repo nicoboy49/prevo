@@ -56,3 +56,12 @@ GOP-000054;GAM-0010;3;Mesurer la concentration du liquide de coupe;7 à 9 %
 GOP-000055;GAM-0010;4;Nettoyer les filtres et le bac à copeaux;Filtres propres
 GOP-000056;GAM-0010;5;Contrôler l'état des soufflets et des protections;Pas de déchirure
 GOP-000057;GAM-0010;6;Tester la sécurité d'ouverture du capot;Arrêt de la broche à l'ouverture
+GOP-000058;GAM-0011;1;Purger manuellement le réservoir par la vanne basse;Peu d'eau (moins d'un verre)
+GOP-000059;GAM-0011;2;Tester le purgeur automatique (bouton test);Purge franche au test
+GOP-000060;GAM-0011;3;Relever la pression du réservoir au manomètre;6,5 à 7,5 bar
+GOP-000061;GAM-0011;4;Contrôler l'absence de fuite aux raccords et à la soupape;Aucune fuite
+GOP-000062;GAM-0012;1;Relever la pression haute (HP);< 18 bar
+GOP-000063;GAM-0012;2;Relever la pression basse (BP);3 à 5 bar
+GOP-000064;GAM-0012;3;Relever la température de départ d'eau glacée;6 à 8 °C
+GOP-000065;GAM-0012;4;Contrôler l'afficheur de la régulation;Aucune alarme active
+GOP-000066;GAM-0012;5;Rechercher les traces d'huile ou de givre sur les tuyauteries;Aucune trace

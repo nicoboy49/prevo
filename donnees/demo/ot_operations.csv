@@ -365,75 +365,125 @@ OTO-000363;OT-2026-0130;1;Mesurer la perte de charge des filtres;< 150 Pa;1;74 P
 OTO-000364;OT-2026-0130;2;Contrôler la tension de la courroie;Flèche conforme;1;OK
 OTO-000365;OT-2026-0130;3;Écouter les paliers (bruit, vibration);Pas de bruit anormal;1;OK
 OTO-000366;OT-2026-0130;4;Relever l'intensité du moteur;< 6,5 A;1;5.2 A
-OTO-000367;OT-2026-0134;1;Contrôler l'état des fourches et du tablier;Pas de fissure ni de déformation;1;OK
-OTO-000368;OT-2026-0134;2;Contrôler le niveau de la batterie;Niveau correct;1;OK
-OTO-000369;OT-2026-0134;3;Tester les freins et le frein de parking;Chariot immobilisé en pente;1;OK
-OTO-000370;OT-2026-0134;4;Rechercher les fuites hydrauliques du mât;Aucune fuite;1;Conforme
-OTO-000371;OT-2026-0134;5;Mesurer l'épaisseur des bandages de roues;> 20 mm;1;30 mm
-OTO-000372;OT-2026-0138;1;Contrôler la tension et le centrage de la bande;Bande centrée;1;Conforme
-OTO-000373;OT-2026-0138;2;Contrôler l'état des galets et des paliers;Aucun galet bloqué;1;Conforme
-OTO-000374;OT-2026-0138;3;Nettoyer les capteurs de présence;Capteurs propres;1;OK
-OTO-000375;OT-2026-0138;4;Graisser les paliers;Graissage effectué;1;OK
-OTO-000376;OT-2026-0138;5;Tester l'arrêt d'urgence;Arrêt immédiat;1;OK
-OTO-000377;OT-2026-0139;1;Contrôler le niveau de lubrifiant des glissières;Entre mini et maxi;1;Conforme
-OTO-000378;OT-2026-0139;2;Graisser la broche et la contre-pointe;Graissage effectué;1;OK
-OTO-000379;OT-2026-0139;3;Mesurer la concentration du liquide de coupe;7 à 9 %;1;'8.8 %
-OTO-000380;OT-2026-0139;4;Nettoyer les filtres et le bac à copeaux;Filtres propres;1;Conforme
-OTO-000381;OT-2026-0139;5;Contrôler l'état des soufflets et des protections;Pas de déchirure;1;OK
-OTO-000382;OT-2026-0139;6;Tester la sécurité d'ouverture du capot;Arrêt de la broche à l'ouverture;1;OK
-OTO-000383;OT-2026-0143;1;Contrôler le niveau d'huile hydraulique;Entre mini et maxi;1;Conforme
-OTO-000384;OT-2026-0143;2;Relever la pression de service;180 à 200 bar;1;190 bar
-OTO-000385;OT-2026-0143;3;Rechercher les fuites sur les flexibles et les vérins;Aucune fuite;1;OK
-OTO-000386;OT-2026-0143;4;Graisser les colonnes de guidage;Graissage effectué;1;Conforme
-OTO-000387;OT-2026-0143;5;Tester le rideau lumineux de sécurité;Arrêt immédiat à la coupure;1;Conforme
-OTO-000388;OT-2026-0143;6;Relever la température de l'huile;< 55 °C;1;50 °C
-OTO-000389;OT-2026-0146;1;Relever les heures de marche et la pression de service;6 à 7,5 bar;1;6.9 bar
-OTO-000390;OT-2026-0146;2;Contrôler le niveau d'huile;Entre mini et maxi;1;Conforme
-OTO-000391;OT-2026-0146;3;Purger les condensats du réservoir et du sécheur;Purge fonctionnelle;1;OK
-OTO-000392;OT-2026-0146;4;Nettoyer les ailettes du radiateur d'huile;Propres;1;Conforme
-OTO-000393;OT-2026-0146;5;Relever la température de refoulement;< 95 °C;1;79 °C
-OTO-000394;OT-2026-0146;6;Vérifier l'absence de fuite d'huile ou d'air;Aucune fuite;1;OK
-OTO-000395;OT-2026-0146;7;Contrôler le serrage des raccords et des protecteurs;Serrés;1;OK
-OTO-000396;OT-2026-0152;1;Mesurer la perte de charge des filtres;< 150 Pa;1;116 Pa
-OTO-000397;OT-2026-0152;2;Contrôler la tension de la courroie;Flèche conforme;1;Conforme
-OTO-000398;OT-2026-0152;3;Écouter les paliers (bruit, vibration);Pas de bruit anormal;1;Conforme
-OTO-000399;OT-2026-0152;4;Relever l'intensité du moteur;< 6,5 A;1;5.5 A
-OTO-000400;OT-2026-0155;1;Contrôler la tension et le centrage de la bande;Bande centrée;1;Conforme
-OTO-000401;OT-2026-0155;2;Contrôler l'état des galets et des paliers;Aucun galet bloqué;1;OK
-OTO-000402;OT-2026-0155;3;Nettoyer les capteurs de présence;Capteurs propres;1;Conforme
-OTO-000403;OT-2026-0155;4;Graisser les paliers;Graissage effectué;1;OK
-OTO-000404;OT-2026-0155;5;Tester l'arrêt d'urgence;Arrêt immédiat;1;OK
-OTO-000405;OT-2026-0157;1;Contrôler le niveau de lubrifiant des glissières;Entre mini et maxi;1;OK
-OTO-000406;OT-2026-0157;2;Graisser la broche et la contre-pointe;Graissage effectué;1;Conforme
-OTO-000407;OT-2026-0157;3;Mesurer la concentration du liquide de coupe;7 à 9 %;1;'7.7 %
-OTO-000408;OT-2026-0157;4;Nettoyer les filtres et le bac à copeaux;Filtres propres;1;OK
-OTO-000409;OT-2026-0157;5;Contrôler l'état des soufflets et des protections;Pas de déchirure;1;Conforme
-OTO-000410;OT-2026-0157;6;Tester la sécurité d'ouverture du capot;Arrêt de la broche à l'ouverture;1;Conforme
-OTO-000411;OT-2026-0163;1;Relever les heures de marche et la pression de service;6 à 7,5 bar;1;6.9 bar
-OTO-000412;OT-2026-0163;2;Contrôler le niveau d'huile;Entre mini et maxi;1;OK
-OTO-000413;OT-2026-0163;3;Purger les condensats du réservoir et du sécheur;Purge fonctionnelle;1;Conforme
-OTO-000414;OT-2026-0163;4;Nettoyer les ailettes du radiateur d'huile;Propres;1;OK
-OTO-000415;OT-2026-0163;5;Relever la température de refoulement;< 95 °C;1;82 °C
-OTO-000416;OT-2026-0163;6;Vérifier l'absence de fuite d'huile ou d'air;Aucune fuite;1;OK
-OTO-000417;OT-2026-0163;7;Contrôler le serrage des raccords et des protecteurs;Serrés;1;OK
-OTO-000418;OT-2026-0170;1;Mesurer la perte de charge des filtres;< 150 Pa;1;107 Pa
-OTO-000419;OT-2026-0170;2;Contrôler la tension de la courroie;Flèche conforme;1;Conforme
-OTO-000420;OT-2026-0170;3;Écouter les paliers (bruit, vibration);Pas de bruit anormal;1;Conforme
-OTO-000421;OT-2026-0170;4;Relever l'intensité du moteur;< 6,5 A;1;4.4 A
-OTO-000422;OT-2026-0179;1;Relever la pression haute (HP);< 18 bar;1;15.6 bar
-OTO-000423;OT-2026-0179;2;Nettoyer le condenseur;Condenseur propre;1;Conforme
-OTO-000424;OT-2026-0179;3;Rechercher les fuites de fluide au détecteur;Aucune fuite;1;OK
-OTO-000425;OT-2026-0179;4;Relever la température de départ d'eau glacée;6 à 8 °C;1;6.6 °C
-OTO-000426;OT-2026-0179;5;Relever l'intensité du compresseur;< 85 A;1;74 A
-OTO-000427;OT-2026-0179;6;Changer la cartouche du filtre à eau;Cartouche neuve posée;1;OK
-OTO-000428;OT-2026-0188;1;Contrôler l'état des fourches et du tablier;Pas de fissure ni de déformation;0;
-OTO-000429;OT-2026-0188;2;Contrôler le niveau de la batterie;Niveau correct;0;
-OTO-000430;OT-2026-0188;3;Tester les freins et le frein de parking;Chariot immobilisé en pente;0;
-OTO-000431;OT-2026-0188;4;Rechercher les fuites hydrauliques du mât;Aucune fuite;0;
-OTO-000432;OT-2026-0188;5;Mesurer l'épaisseur des bandages de roues;> 20 mm;0;
-OTO-000433;OT-2026-0191;1;Contrôler le niveau de lubrifiant des glissières;Entre mini et maxi;0;
-OTO-000434;OT-2026-0191;2;Graisser la broche et la contre-pointe;Graissage effectué;0;
-OTO-000435;OT-2026-0191;3;Mesurer la concentration du liquide de coupe;7 à 9 %;0;
-OTO-000436;OT-2026-0191;4;Nettoyer les filtres et le bac à copeaux;Filtres propres;0;
-OTO-000437;OT-2026-0191;5;Contrôler l'état des soufflets et des protections;Pas de déchirure;0;
-OTO-000438;OT-2026-0191;6;Tester la sécurité d'ouverture du capot;Arrêt de la broche à l'ouverture;0;
+OTO-000367;OT-2026-0131;1;Relever la pression haute (HP);< 18 bar;1;15.3 bar
+OTO-000368;OT-2026-0131;2;Relever la pression basse (BP);3 à 5 bar;1;3.8 bar
+OTO-000369;OT-2026-0131;3;Relever la température de départ d'eau glacée;6 à 8 °C;1;6.4 °C
+OTO-000370;OT-2026-0131;4;Contrôler l'afficheur de la régulation;Aucune alarme active;1;Conforme
+OTO-000371;OT-2026-0131;5;Rechercher les traces d'huile ou de givre sur les tuyauteries;Aucune trace;1;OK
+OTO-000372;OT-2026-0135;1;Contrôler l'état des fourches et du tablier;Pas de fissure ni de déformation;1;OK
+OTO-000373;OT-2026-0135;2;Contrôler le niveau de la batterie;Niveau correct;1;OK
+OTO-000374;OT-2026-0135;3;Tester les freins et le frein de parking;Chariot immobilisé en pente;1;OK
+OTO-000375;OT-2026-0135;4;Rechercher les fuites hydrauliques du mât;Aucune fuite;1;Conforme
+OTO-000376;OT-2026-0135;5;Mesurer l'épaisseur des bandages de roues;> 20 mm;1;30 mm
+OTO-000377;OT-2026-0139;1;Contrôler la tension et le centrage de la bande;Bande centrée;1;Conforme
+OTO-000378;OT-2026-0139;2;Contrôler l'état des galets et des paliers;Aucun galet bloqué;1;Conforme
+OTO-000379;OT-2026-0139;3;Nettoyer les capteurs de présence;Capteurs propres;1;OK
+OTO-000380;OT-2026-0139;4;Graisser les paliers;Graissage effectué;1;OK
+OTO-000381;OT-2026-0139;5;Tester l'arrêt d'urgence;Arrêt immédiat;1;OK
+OTO-000382;OT-2026-0140;1;Contrôler le niveau de lubrifiant des glissières;Entre mini et maxi;1;Conforme
+OTO-000383;OT-2026-0140;2;Graisser la broche et la contre-pointe;Graissage effectué;1;OK
+OTO-000384;OT-2026-0140;3;Mesurer la concentration du liquide de coupe;7 à 9 %;1;'8.8 %
+OTO-000385;OT-2026-0140;4;Nettoyer les filtres et le bac à copeaux;Filtres propres;1;Conforme
+OTO-000386;OT-2026-0140;5;Contrôler l'état des soufflets et des protections;Pas de déchirure;1;OK
+OTO-000387;OT-2026-0140;6;Tester la sécurité d'ouverture du capot;Arrêt de la broche à l'ouverture;1;OK
+OTO-000388;OT-2026-0142;1;Relever la pression haute (HP);< 18 bar;1;15.3 bar
+OTO-000389;OT-2026-0142;2;Relever la pression basse (BP);3 à 5 bar;1;4.0 bar
+OTO-000390;OT-2026-0142;3;Relever la température de départ d'eau glacée;6 à 8 °C;1;7.7 °C
+OTO-000391;OT-2026-0142;4;Contrôler l'afficheur de la régulation;Aucune alarme active;1;Conforme
+OTO-000392;OT-2026-0142;5;Rechercher les traces d'huile ou de givre sur les tuyauteries;Aucune trace;1;OK
+OTO-000393;OT-2026-0144;1;Purger manuellement le réservoir par la vanne basse;Peu d'eau (moins d'un verre);1;OK
+OTO-000394;OT-2026-0144;2;Tester le purgeur automatique (bouton test);Purge franche au test;1;OK
+OTO-000395;OT-2026-0144;3;Relever la pression du réservoir au manomètre;6,5 à 7,5 bar;1;6.8 bar
+OTO-000396;OT-2026-0144;4;Contrôler l'absence de fuite aux raccords et à la soupape;Aucune fuite;1;OK
+OTO-000397;OT-2026-0146;1;Contrôler le niveau d'huile hydraulique;Entre mini et maxi;1;Conforme
+OTO-000398;OT-2026-0146;2;Relever la pression de service;180 à 200 bar;1;190 bar
+OTO-000399;OT-2026-0146;3;Rechercher les fuites sur les flexibles et les vérins;Aucune fuite;1;OK
+OTO-000400;OT-2026-0146;4;Graisser les colonnes de guidage;Graissage effectué;1;Conforme
+OTO-000401;OT-2026-0146;5;Tester le rideau lumineux de sécurité;Arrêt immédiat à la coupure;1;Conforme
+OTO-000402;OT-2026-0146;6;Relever la température de l'huile;< 55 °C;1;50 °C
+OTO-000403;OT-2026-0149;1;Relever les heures de marche et la pression de service;6 à 7,5 bar;1;6.9 bar
+OTO-000404;OT-2026-0149;2;Contrôler le niveau d'huile;Entre mini et maxi;1;Conforme
+OTO-000405;OT-2026-0149;3;Purger les condensats du réservoir et du sécheur;Purge fonctionnelle;1;OK
+OTO-000406;OT-2026-0149;4;Nettoyer les ailettes du radiateur d'huile;Propres;1;Conforme
+OTO-000407;OT-2026-0149;5;Relever la température de refoulement;< 95 °C;1;79 °C
+OTO-000408;OT-2026-0149;6;Vérifier l'absence de fuite d'huile ou d'air;Aucune fuite;1;OK
+OTO-000409;OT-2026-0149;7;Contrôler le serrage des raccords et des protecteurs;Serrés;1;OK
+OTO-000410;OT-2026-0152;1;Relever la pression haute (HP);< 18 bar;1;15.1 bar
+OTO-000411;OT-2026-0152;2;Relever la pression basse (BP);3 à 5 bar;1;4.1 bar
+OTO-000412;OT-2026-0152;3;Relever la température de départ d'eau glacée;6 à 8 °C;1;7.2 °C
+OTO-000413;OT-2026-0152;4;Contrôler l'afficheur de la régulation;Aucune alarme active;1;OK
+OTO-000414;OT-2026-0152;5;Rechercher les traces d'huile ou de givre sur les tuyauteries;Aucune trace;1;Conforme
+OTO-000415;OT-2026-0154;1;Purger manuellement le réservoir par la vanne basse;Peu d'eau (moins d'un verre);1;Conforme
+OTO-000416;OT-2026-0154;2;Tester le purgeur automatique (bouton test);Purge franche au test;1;OK
+OTO-000417;OT-2026-0154;3;Relever la pression du réservoir au manomètre;6,5 à 7,5 bar;1;6.9 bar
+OTO-000418;OT-2026-0154;4;Contrôler l'absence de fuite aux raccords et à la soupape;Aucune fuite;1;Conforme
+OTO-000419;OT-2026-0157;1;Mesurer la perte de charge des filtres;< 150 Pa;1;116 Pa
+OTO-000420;OT-2026-0157;2;Contrôler la tension de la courroie;Flèche conforme;1;Conforme
+OTO-000421;OT-2026-0157;3;Écouter les paliers (bruit, vibration);Pas de bruit anormal;1;Conforme
+OTO-000422;OT-2026-0157;4;Relever l'intensité du moteur;< 6,5 A;1;5.5 A
+OTO-000423;OT-2026-0160;1;Contrôler la tension et le centrage de la bande;Bande centrée;1;Conforme
+OTO-000424;OT-2026-0160;2;Contrôler l'état des galets et des paliers;Aucun galet bloqué;1;OK
+OTO-000425;OT-2026-0160;3;Nettoyer les capteurs de présence;Capteurs propres;1;Conforme
+OTO-000426;OT-2026-0160;4;Graisser les paliers;Graissage effectué;1;OK
+OTO-000427;OT-2026-0160;5;Tester l'arrêt d'urgence;Arrêt immédiat;1;OK
+OTO-000428;OT-2026-0162;1;Contrôler le niveau de lubrifiant des glissières;Entre mini et maxi;1;OK
+OTO-000429;OT-2026-0162;2;Graisser la broche et la contre-pointe;Graissage effectué;1;Conforme
+OTO-000430;OT-2026-0162;3;Mesurer la concentration du liquide de coupe;7 à 9 %;1;'7.7 %
+OTO-000431;OT-2026-0162;4;Nettoyer les filtres et le bac à copeaux;Filtres propres;1;OK
+OTO-000432;OT-2026-0162;5;Contrôler l'état des soufflets et des protections;Pas de déchirure;1;Conforme
+OTO-000433;OT-2026-0162;6;Tester la sécurité d'ouverture du capot;Arrêt de la broche à l'ouverture;1;Conforme
+OTO-000434;OT-2026-0163;1;Relever la pression haute (HP);< 18 bar;1;14.1 bar
+OTO-000435;OT-2026-0163;2;Relever la pression basse (BP);3 à 5 bar;1;3.4 bar
+OTO-000436;OT-2026-0163;3;Relever la température de départ d'eau glacée;6 à 8 °C;1;7.1 °C
+OTO-000437;OT-2026-0163;4;Contrôler l'afficheur de la régulation;Aucune alarme active;1;Conforme
+OTO-000438;OT-2026-0163;5;Rechercher les traces d'huile ou de givre sur les tuyauteries;Aucune trace;1;OK
+OTO-000439;OT-2026-0164;1;Purger manuellement le réservoir par la vanne basse;Peu d'eau (moins d'un verre);1;OK
+OTO-000440;OT-2026-0164;2;Tester le purgeur automatique (bouton test);Purge franche au test;1;OK
+OTO-000441;OT-2026-0164;3;Relever la pression du réservoir au manomètre;6,5 à 7,5 bar;1;7.2 bar
+OTO-000442;OT-2026-0164;4;Contrôler l'absence de fuite aux raccords et à la soupape;Aucune fuite;1;OK
+OTO-000443;OT-2026-0171;1;Relever les heures de marche et la pression de service;6 à 7,5 bar;1;6.9 bar
+OTO-000444;OT-2026-0171;2;Contrôler le niveau d'huile;Entre mini et maxi;1;OK
+OTO-000445;OT-2026-0171;3;Purger les condensats du réservoir et du sécheur;Purge fonctionnelle;1;Conforme
+OTO-000446;OT-2026-0171;4;Nettoyer les ailettes du radiateur d'huile;Propres;1;OK
+OTO-000447;OT-2026-0171;5;Relever la température de refoulement;< 95 °C;1;82 °C
+OTO-000448;OT-2026-0171;6;Vérifier l'absence de fuite d'huile ou d'air;Aucune fuite;1;OK
+OTO-000449;OT-2026-0171;7;Contrôler le serrage des raccords et des protecteurs;Serrés;1;OK
+OTO-000450;OT-2026-0172;1;Relever la pression haute (HP);< 18 bar;1;14.2 bar
+OTO-000451;OT-2026-0172;2;Relever la pression basse (BP);3 à 5 bar;1;4.3 bar
+OTO-000452;OT-2026-0172;3;Relever la température de départ d'eau glacée;6 à 8 °C;1;7.2 °C
+OTO-000453;OT-2026-0172;4;Contrôler l'afficheur de la régulation;Aucune alarme active;1;Conforme
+OTO-000454;OT-2026-0172;5;Rechercher les traces d'huile ou de givre sur les tuyauteries;Aucune trace;1;OK
+OTO-000455;OT-2026-0174;1;Purger manuellement le réservoir par la vanne basse;Peu d'eau (moins d'un verre);1;OK
+OTO-000456;OT-2026-0174;2;Tester le purgeur automatique (bouton test);Purge franche au test;1;OK
+OTO-000457;OT-2026-0174;3;Relever la pression du réservoir au manomètre;6,5 à 7,5 bar;1;6.9 bar
+OTO-000458;OT-2026-0174;4;Contrôler l'absence de fuite aux raccords et à la soupape;Aucune fuite;1;OK
+OTO-000459;OT-2026-0180;1;Mesurer la perte de charge des filtres;< 150 Pa;1;107 Pa
+OTO-000460;OT-2026-0180;2;Contrôler la tension de la courroie;Flèche conforme;1;Conforme
+OTO-000461;OT-2026-0180;3;Écouter les paliers (bruit, vibration);Pas de bruit anormal;1;Conforme
+OTO-000462;OT-2026-0180;4;Relever l'intensité du moteur;< 6,5 A;1;4.4 A
+OTO-000463;OT-2026-0189;1;Relever la pression haute (HP);< 18 bar;1;15.6 bar
+OTO-000464;OT-2026-0189;2;Nettoyer le condenseur;Condenseur propre;1;Conforme
+OTO-000465;OT-2026-0189;3;Rechercher les fuites de fluide au détecteur;Aucune fuite;1;OK
+OTO-000466;OT-2026-0189;4;Relever la température de départ d'eau glacée;6 à 8 °C;1;6.6 °C
+OTO-000467;OT-2026-0189;5;Relever l'intensité du compresseur;< 85 A;1;74 A
+OTO-000468;OT-2026-0189;6;Changer la cartouche du filtre à eau;Cartouche neuve posée;1;OK
+OTO-000469;OT-2026-0196;1;Relever la pression haute (HP);< 18 bar;1;14.7 bar
+OTO-000470;OT-2026-0196;2;Relever la pression basse (BP);3 à 5 bar;1;3.6 bar
+OTO-000471;OT-2026-0196;3;Relever la température de départ d'eau glacée;6 à 8 °C;1;7.5 °C
+OTO-000472;OT-2026-0196;4;Contrôler l'afficheur de la régulation;Aucune alarme active;1;Conforme
+OTO-000473;OT-2026-0196;5;Rechercher les traces d'huile ou de givre sur les tuyauteries;Aucune trace;1;OK
+OTO-000474;OT-2026-0199;1;Contrôler l'état des fourches et du tablier;Pas de fissure ni de déformation;0;
+OTO-000475;OT-2026-0199;2;Contrôler le niveau de la batterie;Niveau correct;0;
+OTO-000476;OT-2026-0199;3;Tester les freins et le frein de parking;Chariot immobilisé en pente;0;
+OTO-000477;OT-2026-0199;4;Rechercher les fuites hydrauliques du mât;Aucune fuite;0;
+OTO-000478;OT-2026-0199;5;Mesurer l'épaisseur des bandages de roues;> 20 mm;0;
+OTO-000479;OT-2026-0200;1;Purger manuellement le réservoir par la vanne basse;Peu d'eau (moins d'un verre);1;OK
+OTO-000480;OT-2026-0200;2;Tester le purgeur automatique (bouton test);Purge franche au test;1;OK
+OTO-000481;OT-2026-0200;3;Relever la pression du réservoir au manomètre;6,5 à 7,5 bar;1;6.9 bar
+OTO-000482;OT-2026-0200;4;Contrôler l'absence de fuite aux raccords et à la soupape;Aucune fuite;1;OK
+OTO-000483;OT-2026-0203;1;Contrôler le niveau de lubrifiant des glissières;Entre mini et maxi;0;
+OTO-000484;OT-2026-0203;2;Graisser la broche et la contre-pointe;Graissage effectué;0;
+OTO-000485;OT-2026-0203;3;Mesurer la concentration du liquide de coupe;7 à 9 %;0;
+OTO-000486;OT-2026-0203;4;Nettoyer les filtres et le bac à copeaux;Filtres propres;0;
+OTO-000487;OT-2026-0203;5;Contrôler l'état des soufflets et des protections;Pas de déchirure;0;
+OTO-000488;OT-2026-0203;6;Tester la sécurité d'ouverture du capot;Arrêt de la broche à l'ouverture;0;

@@ -12,6 +12,9 @@ Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brie
     avec une surcharge, OT « Préparé » à planifier, panne clôturée sans durée d'arrêt, historique des
     statuts des pannes récentes au journal (dont une attente de pièce, §15.3), journal décalé par
     StockageDemo comme les autres dates ;
+  - lot 3 bis (§16.8, D62) : rôles des suggestions de préventif, prouvés par un calcul Python des règles du
+    §16.3 écrit ici (réglages par défaut, décisions du journal comprises) : S1, S2, S3 (case cochée et DI
+    liée), S4, refus pour la seule criticité A, cas sous le seuil, suggestion ignorée puis revenue ;
   - champs protégés par une apostrophe (§3.2) ;
   - js/demo-donnees.js chargé dans Chromium : 22 tables, texte identique aux CSV ; démo en file://
     chargée vite et sans erreur au « Contrôle de la base » ;
@@ -60,6 +63,12 @@ DEBUT_3_MOIS = date(2026, 7, 19)          # pannes dont l'historique des statuts
 DEBUT_12_MOIS = date(2025, 10, 20)        # période « 12-mois » (§15.3) : même jour 12 mois plus tôt + 1 jour
 TYPES_CORRECTIFS = ('correctif immédiat', 'correctif différé')
 MOTIF_STATUT = re.compile(r'statut (.+?) → (.+?)(?: : (.+))?')
+# Lot 3 bis (ARCHITECTURE.md §16.8) : rôles de scénario ajoutés, réglages par défaut des suggestions (§16.1).
+ROLES_LOT3BIS = ('suggestion_creer', 'suggestion_revoir', 'suggestion_anomalies', 'suggestion_allonger',
+                 'suggestion_refus_criticite_a', 'suggestion_sous_seuil', 'suggestion_ignoree_revenue')
+SEUIL_PANNES, VISITES_SANS_CONSTAT, FENETRE_MOIS = 3, 5, 12
+STATUTS_CLOTURES = ('Clôturé techniquement', 'Clôturé administrativement')
+MOTIF_DECISION = re.compile(r'suggestion (S[1-4]-\S+) (ignorée|traitée) : (.*)')     # action entière (§16.4)
 
 TABLES = [
     'localisations', 'equipements', 'demandes', 'ordres_travail', 'ot_operations', 'ot_pieces',
@@ -240,6 +249,92 @@ def attente_pieces_brute(t, ot):
 
 
 # ---------------------------------------------------------------------------
+# Règles du lot 3 bis recalculées en Python (ARCHITECTURE.md §16.2 à §16.4), indépendamment du générateur
+# ---------------------------------------------------------------------------
+
+def moment(ot):
+    """§16.2 : date_fin, sinon date_cloture_tech, sinon date_creation, ramené à « AAAA-MM-JJ HH:MM »."""
+    return (ot['date_fin'] or ot['date_cloture_tech'] or ot['date_creation']).replace('T', ' ')[:16]
+
+
+def decisions_par_cle(t, avant=None):
+    """§16.4 : dernière décision de chaque clé {clé: (ligne du journal, décision, texte)} ; la plus récente
+    par date_heure puis identifiant. avant : seules les décisions antérieures à ce moment comptent."""
+    resultat = {}
+    for ligne in sorted(t['journal'], key=lambda l: (l['date_heure'], l['id'])):
+        forme = MOTIF_DECISION.fullmatch(ligne['action'])
+        if forme and (avant is None or ligne['date_heure'] < avant):
+            resultat[forme.group(1)] = (ligne, forme.group(2), forme.group(3))
+    return resultat
+
+
+def avec_anomalie(t, visite, jusqu_a=None):
+    """§16.2 : case « anomalie constatée » cochée OU au moins une DI dont ot_origine_id est la visite."""
+    return visite['anomalie_constatee'] == '1' or any(
+        d['ot_origine_id'] == visite['id'] and (jusqu_a is None or d['date_heure'] <= jusqu_a) for d in t['demandes'])
+
+
+def suggestions_ouvertes(t, aujourdhui=JOUR_REFERENCE, seuil=SEUIL_PANNES, jusqu_a=None, criticites=None):
+    """Suggestions ouvertes selon le §16.3 : {clé: {regle, equipement, cause, faits: [OT], sur, depuis}}.
+    jusqu_a : moment ; seuls les OT, DI et décisions antérieurs comptent (état de la base à ce moment).
+    criticites : {équipement: criticité} qui remplace celle du fichier."""
+    debut = ajouter_mois(aujourdhui, -FENETRE_MOIS) + timedelta(days=1)
+    decisions = decisions_par_cle(t, jusqu_a)
+    criticite = dict({e['id']: e['criticite'] for e in t['equipements']}, **(criticites or {}))
+    suivis = [e['id'] for e in t['equipements'] if e['actif'] != '0' and e['statut'] != 'rebut']
+    ordres = [o for o in t['ordres_travail'] if jusqu_a is None or moment(o) <= jusqu_a]
+    actives = [g for g in t['gammes'] if g['actif'] != '0']
+    suivies = [g for g in actives if g['declencheur'] in ('date', 'compteur') and g['equipement_id'] in suivis]
+
+    def visites(gamme):
+        return sorted((o for o in ordres if o['gamme_id'] == gamme['id'] and o['statut'] in STATUTS_CLOTURES
+                       and jour(moment(o)) <= aujourdhui), key=lambda o: (moment(o), o['id']))
+
+    def apres_decision(cle, ot):
+        return cle not in decisions or moment(ot) > decisions[cle][0]['date_heure']
+
+    ouvertes = {}
+
+    def ouvrir(cle, faits, equipement, cause='', sur=None):
+        ouvertes[cle] = {'regle': cle[:2], 'equipement': equipement, 'cause': cause, 'faits': [o['id'] for o in faits],
+                         'sur': sur, 'depuis': decisions[cle][0]['date_heure'] if cle in decisions else None}
+
+    for equipement in suivis:
+        siennes = [g for g in suivies if g['equipement_id'] == equipement and visites(g)]
+        if not any(g['equipement_id'] == equipement for g in actives):
+            regle, depuis = 'S1', ''
+        elif siennes:
+            regle, depuis = 'S2', min(moment(visites(g)[0]) for g in siennes)
+        else:
+            continue
+        for cause in sorted({o['cause_code'] for o in ordres if o['cause_code']}):
+            cle = '%s-%s-%s' % (regle, equipement, cause)
+            faits = [o for o in ordres if o['equipement_id'] == equipement and o['type'] in TYPES_CORRECTIFS
+                     and o['statut'] in STATUTS_CLOTURES and o['cause_code'] == cause
+                     and debut <= jour(moment(o)) <= aujourdhui and moment(o) > depuis and apres_decision(cle, o)]
+            if len(faits) >= seuil:
+                ouvrir(cle, faits, equipement, cause)
+    for gamme in suivies:
+        cle = 'S3-' + gamme['id']
+        regardees = [o for o in visites(gamme) if apres_decision(cle, o)][-4:]
+        anomalies = [o for o in regardees if avec_anomalie(t, o, jusqu_a)]
+        if len(anomalies) >= 2:
+            ouvrir(cle, anomalies, gamme['equipement_id'], sur=len(regardees))
+        cle = 'S4-' + gamme['id']
+        serie = []
+        for visite in reversed([o for o in visites(gamme) if apres_decision(cle, o)]):    # pas de passage au format 2
+            if avec_anomalie(t, visite, jusqu_a):
+                break
+            serie.insert(0, visite)
+        pannes = [o for o in ordres if serie and o['equipement_id'] == gamme['equipement_id']
+                  and o['type'] in TYPES_CORRECTIFS and o['statut'] != 'Annulé'
+                  and jour(o['date_creation']) >= jour(moment(serie[0]))]
+        if criticite[gamme['equipement_id']] in ('B', 'C') and len(serie) >= VISITES_SANS_CONSTAT and not pannes:
+            ouvrir(cle, serie, gamme['equipement_id'])
+    return ouvertes
+
+
+# ---------------------------------------------------------------------------
 # Tests sans navigateur : format, contenu, scénarios, reproductibilité
 # ---------------------------------------------------------------------------
 
@@ -271,7 +366,10 @@ class TestFichiersCsv(unittest.TestCase):
         """Lot 3 (D49) : le journal n'est plus vide, il porte l'historique des pannes récentes. Chaque
         entrée a le format de l'application (§4, §5.3) : identifiant J-AAAAMMJJHHMMSS-XXXX qui reprend
         la minute de date_heure, poste « Poste démo », profil d'un vrai profil ; fichier trié par
-        date_heure puis identifiant, rien après « maintenant » (date de référence, 9 h)."""
+        date_heure puis identifiant, rien après « maintenant » (date de référence, 9 h).
+        Lot 3 bis (§16.4) : une décision sur une suggestion est l'action brute écrite par
+        Donnees.journaliser (« suggestion <clé> ignorée : <motif> »), sur la table equipements (S1, S2) ou
+        gammes (S3, S4), par le responsable ; les autres entrées restent l'historique des OT et des DI."""
         _, lignes = lire_table(DOSSIER_DEMO, 'journal')
         self.assertGreater(len(lignes), 20)
         identifiants = [l['id'] for l in lignes]
@@ -288,8 +386,15 @@ class TestFichiersCsv(unittest.TestCase):
             self.assertTrue(profil == 'Responsable' or profil.startswith('Demandeur ')
                             or (profil.startswith('Technicien ') and profil[len('Technicien '):] in techniciens),
                             '%s : profil %r' % (ligne['id'], profil))
-            self.assertIn(ligne['table'], ('ordres_travail', 'demandes'), ligne['id'])
-            self.assertIn(' — ', ligne['action'], ligne['id'])
+            decision = MOTIF_DECISION.fullmatch(ligne['action'])
+            if decision:
+                regle = decision.group(1)[:2]
+                self.assertEqual(ligne['table'], 'equipements' if regle in ('S1', 'S2') else 'gammes', ligne['id'])
+                self.assertEqual(profil, 'Responsable', ligne['id'])
+                self.assertIn(ligne['id_ligne'], decision.group(1), ligne['id'])
+            else:
+                self.assertIn(ligne['table'], ('ordres_travail', 'demandes'), ligne['id'])
+                self.assertIn(' — ', ligne['action'], ligne['id'])
 
     def test_en_tetes_egaux_au_schema_python(self):
         generateur = charger_generateur()
@@ -394,7 +499,7 @@ class TestContenuDemo(unittest.TestCase):
         self.assertTrue(28 <= len(t['equipements']) <= 34, len(t['equipements']))
         self.assertEqual(len(t['techniciens']), 4)
         self.assertTrue(45 <= len(t['articles']) <= 55, len(t['articles']))
-        self.assertEqual(len(t['gammes']), 10)
+        self.assertEqual(len(t['gammes']), 12)      # 10 des lots 1 à 3 + 2 gammes récentes du lot 3 bis (§16.8)
         self.assertTrue(4 <= len(t['fournisseurs']) <= 5)
         self.assertGreaterEqual(len(t['controles_reglementaires']), 5)
         # 3 compteurs (heures, cycles) + 1 point de mesure pour la gamme seuil, un relevé par mois
@@ -498,8 +603,13 @@ class TestContenuDemo(unittest.TestCase):
 
     def test_anomalies_de_preventif_avec_leur_di_liee(self):
         """§14.6 : deux OT préventifs avec anomalie constatée ; chacun a sa DI liée (ot_origine_id),
-        l'une acceptée (correctif clôturé), l'autre « Nouvelle »."""
-        anomalies = [o for o in self.t['ordres_travail'] if o['anomalie_constatee'] == '1']
+        l'une acceptée (correctif clôturé), l'autre « Nouvelle ».
+        Lot 3 bis (§16.2, §16.8) : la gamme de la suggestion S3 ajoute les deux autres formes possibles
+        dans l'application : une visite à case cochée sans DI (anomalie réglée sur place) et une DI liée à
+        une visite déjà verrouillée (Clôturé administrativement avant la DI), que l'application ne marque
+        donc pas (§14.6, écart retenu)."""
+        gamme_s3 = scenarios_demo()['suggestion_anomalies'][len('S3-'):]
+        anomalies = [o for o in self.t['ordres_travail'] if o['anomalie_constatee'] == '1' and o['gamme_id'] != gamme_s3]
         self.assertTrue(2 <= len(anomalies) <= 3, [o['id'] for o in anomalies])
         statuts = []
         for ot in anomalies:
@@ -515,7 +625,14 @@ class TestContenuDemo(unittest.TestCase):
         self.assertIn('Nouvelle', statuts)
         for demande in self.t['demandes']:
             if demande['ot_origine_id']:
-                self.assertEqual(self.ot_par_id[demande['ot_origine_id']]['anomalie_constatee'], '1', demande['id'])
+                origine = self.ot_par_id[demande['ot_origine_id']]
+                if origine['anomalie_constatee'] != '1':          # seulement la DI liée « après le verrou » du lot 3 bis
+                    self.assertEqual(origine['gamme_id'], gamme_s3, demande['id'])
+                    self.assertEqual(origine['statut'], 'Clôturé administrativement', demande['id'])
+                    self.assertLessEqual(origine['date_cloture_admin'], demande['date_heure'], demande['id'])
+        origines = {d['ot_origine_id'] for d in self.t['demandes']}
+        sans_di = [o for o in self.t['ordres_travail'] if o['anomalie_constatee'] == '1' and o['id'] not in origines]
+        self.assertEqual([(o['origine'], o['gamme_id']) for o in sans_di], [('préventif', gamme_s3)])
 
     # -- techniciens
 
@@ -820,7 +937,10 @@ class TestContenuDemo(unittest.TestCase):
 
     def test_gammes_coherentes_avec_les_preventifs_realises(self):
         """Dernière réalisation = date de fin du dernier préventif clôturé de la gamme ; échéance d'une
-        gamme date = dernière réalisation + périodicité ; préventifs réalisés sur les 13 mois."""
+        gamme date = dernière réalisation + périodicité ; préventifs réalisés sur les 13 mois, sauf pour les
+        deux gammes RÉCENTES du lot 3 bis (§16.8, mises en place cet été), qui ont au moins 5 visites."""
+        scenarios = scenarios_demo()
+        recentes = {scenarios['suggestion_anomalies'][len('S3-'):], scenarios['suggestion_refus_criticite_a']}
         for gamme in self.t['gammes']:
             clotures = sorted((o for o in self.t['ordres_travail']
                                if o['gamme_id'] == gamme['id'] and o['statut'].startswith('Clôturé')),
@@ -830,7 +950,9 @@ class TestContenuDemo(unittest.TestCase):
             if gamme['declencheur'] == 'date':
                 attendue = jour(gamme['derniere_realisation']) + timedelta(days=int(gamme['periodicite_jours']))
                 self.assertEqual(gamme['prochaine_echeance'], attendue.isoformat(), gamme['id'])
-                if int(gamme['periodicite_jours']) <= 90:
+                if gamme['id'] in recentes:
+                    self.assertGreaterEqual(len(clotures), 5, gamme['id'])
+                elif int(gamme['periodicite_jours']) <= 90:
                     self.assertGreaterEqual((jour(clotures[-1]['date_fin']) - jour(clotures[0]['date_fin'])).days, 270,
                                             gamme['id'])
 
@@ -939,8 +1061,9 @@ class TestScenariosDemo(unittest.TestCase):
         self.assertEqual(list(json.loads(texte)), sorted(json.loads(texte)), 'clés triées')
         # Chaque clé est documentée dans la docstring du générateur, et réciproquement.
         self.assertEqual(sorted(generateur.cles_documentees()), sorted(self.s))
-        for cle, valeur in self.s.items():
-            self.assertTrue(isinstance(valeur, str) or (isinstance(valeur, list) and valeur == sorted(valeur)), cle)
+        for cle, valeur in self.s.items():          # texte, liste triée, ou (lot 3 bis) petit objet de textes
+            self.assertTrue(isinstance(valeur, str) or (isinstance(valeur, list) and valeur == sorted(valeur))
+                            or (isinstance(valeur, dict) and all(isinstance(v, str) for v in valeur.values())), cle)
 
     def test_cles_minimales_demandees(self):
         for cle in ('gamme_mensuelle_echue', 'gamme_compteur_echue', 'gamme_seuil', 'kit_garniture',
@@ -954,8 +1077,8 @@ class TestScenariosDemo(unittest.TestCase):
             self.assertIn('ot_statut_' + statut, self.s)
         for statut in ('nouvelle', 'acceptee', 'regroupee', 'differee', 'refusee'):
             self.assertIn('di_statut_' + statut, self.s)
-        # Rôles ajoutés par le lot 3 (ARCHITECTURE.md §15.12)
-        for cle in ROLES_LOT3:
+        # Rôles ajoutés par le lot 3 (ARCHITECTURE.md §15.12) et le lot 3 bis (§16.8)
+        for cle in ROLES_LOT3 + ROLES_LOT3BIS:
             self.assertIn(cle, self.s)
 
     # -- OT
@@ -1035,7 +1158,10 @@ class TestScenariosDemo(unittest.TestCase):
         demande = self.di('di_anomalie_nouvelle')
         self.assertEqual((nouvelle['origine'], nouvelle['anomalie_constatee']), ('préventif', '1'))
         self.assertEqual((demande['ot_origine_id'], demande['statut'], demande['ot_id']), (nouvelle['id'], 'Nouvelle', ''))
-        self.assertEqual(sorted(o['id'] for o in self.t['ordres_travail'] if o['anomalie_constatee'] == '1'),
+        # Hors la gamme de la suggestion S3 du lot 3 bis (case cochée sans DI, voir TestDemoLot3bis).
+        gamme_s3 = self.s['suggestion_anomalies'][len('S3-'):]
+        self.assertEqual(sorted(o['id'] for o in self.t['ordres_travail']
+                                if o['anomalie_constatee'] == '1' and o['gamme_id'] != gamme_s3),
                          sorted([preventif['id'], nouvelle['id']]))
 
     # -- DI
@@ -1380,6 +1506,150 @@ class TestDemoLot3(unittest.TestCase):
         # Ensemble, ils couvrent les cas limites des indicateurs : panne non clôturée, sans durée, attente de pièce.
         for role in ('ot_p1_ouvert', 'panne_sans_duree', 'panne_attente_pieces'):
             self.assertIn(self.s[role], pannes_vues, role)
+
+
+# ---------------------------------------------------------------------------
+# Lot 3 bis : préventif suggéré (ARCHITECTURE.md §16.8, D62)
+# ---------------------------------------------------------------------------
+
+class TestDemoLot3bis(unittest.TestCase):
+    """Le jeu de démo complété pour le lot 3 bis : chaque rôle a la propriété annoncée, prouvée par le calcul
+    des règles du §16.3 écrit dans ce fichier (suggestions_ouvertes), à la date de référence, réglages par
+    défaut (3 pannes, 5 visites, 12 mois), décisions du journal comprises. Aucun identifiant n'est écrit en
+    dur : les clés viennent de demo-scenarios.json, les équipements sont reconnus par leur repère."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.s = scenarios_demo()
+        cls.t = {table: lignes_propres(DOSSIER_DEMO, table) for table in TABLES}
+        cls.ouvertes = suggestions_ouvertes(cls.t)
+        cls.ot_par_id = {o['id']: o for o in cls.t['ordres_travail']}
+        cls.equipement_par_id = {e['id']: e for e in cls.t['equipements']}
+        cls.gamme_par_id = {g['id']: g for g in cls.t['gammes']}
+        cls.repere = {e['id']: e['repere'] for e in cls.t['equipements']}
+
+    def suggestion(self, role, regle):
+        """La suggestion ouverte dont la clé joue ce rôle, après contrôle de sa règle."""
+        cle = self.s[role]
+        self.assertIn(cle, self.ouvertes, role)
+        self.assertEqual(self.ouvertes[cle]['regle'], regle, role)
+        return self.ouvertes[cle]
+
+    def gammes_actives(self, equipement_id):
+        return [g for g in self.t['gammes'] if g['equipement_id'] == equipement_id and g['actif'] != '0']
+
+    def test_roles_presents_au_format_des_cles(self):
+        for role in ROLES_LOT3BIS:
+            self.assertIn(role, self.s)
+        for role in ('suggestion_creer', 'suggestion_revoir', 'suggestion_ignoree_revenue'):
+            self.assertRegex(self.s[role], r'^S[12]-EQ-\d{4}-C\d{2}$', role)
+        for role in ('suggestion_anomalies', 'suggestion_allonger'):
+            self.assertRegex(self.s[role], r'^S[34]-GAM-\d{4}$', role)
+        self.assertIn(self.s['suggestion_refus_criticite_a'], self.gamme_par_id)
+        sous = self.s['suggestion_sous_seuil']
+        self.assertEqual(sorted(sous), ['cause', 'equipement'])
+        self.assertIn(sous['equipement'], self.equipement_par_id)
+        self.assertIn(sous['cause'], {c['code'] for c in self.t['codes_defaillance'] if c['famille'] == 'cause'})
+
+    def test_s1_creer_une_gamme_cv02(self):
+        suggestion = self.suggestion('suggestion_creer', 'S1')
+        self.assertEqual((self.repere[suggestion['equipement']], suggestion['cause']), ('CV-02', 'C04'))
+        self.assertGreaterEqual(len(suggestion['faits']), SEUIL_PANNES)
+        self.assertEqual(self.gammes_actives(suggestion['equipement']), [])
+
+    def test_s2_revoir_le_preventif_po02(self):
+        suggestion = self.suggestion('suggestion_revoir', 'S2')
+        self.assertEqual((self.repere[suggestion['equipement']], suggestion['cause']), ('PO-02', 'C01'))
+        self.assertGreaterEqual(len(suggestion['faits']), SEUIL_PANNES)
+        self.assertTrue(self.gammes_actives(suggestion['equipement']))
+
+    def test_s3_anomalies_par_la_case_et_par_une_di_liee(self):
+        suggestion = self.suggestion('suggestion_anomalies', 'S3')
+        gamme = self.gamme_par_id[self.s['suggestion_anomalies'][len('S3-'):]]
+        equipement = self.equipement_par_id[gamme['equipement_id']]
+        self.assertEqual((gamme['declencheur'], gamme['actif']), ('date', '1'))
+        self.assertIn(equipement['criticite'], ('B', 'C'))            # de préférence pas A (§16.8)
+        self.assertEqual((suggestion['sur'], len(suggestion['faits'])), (4, 2))
+        visites = [self.ot_par_id[identifiant] for identifiant in suggestion['faits']]
+        liees = {v['id']: [d for d in self.t['demandes'] if d['ot_origine_id'] == v['id']] for v in visites}
+        par_case = [v for v in visites if v['anomalie_constatee'] == '1' and not liees[v['id']]]
+        par_di = [v for v in visites if v['anomalie_constatee'] == '0' and liees[v['id']]]
+        self.assertEqual((len(par_case), len(par_di)), (1, 1))
+        self.assertIn('Anomalie constatée', par_case[0]['compte_rendu'])
+        visite = par_di[0]
+        demande = liees[visite['id']][0]
+        # DI envoyée après la clôture administrative de la visite : l'OT, verrouillé, n'a pas été marqué (§14.6).
+        self.assertEqual(visite['statut'], 'Clôturé administrativement')
+        self.assertLessEqual(visite['date_cloture_admin'], demande['date_heure'])
+        self.assertEqual(demande['date_heure'][:10], visite['date_fin'][:10])
+        self.assertEqual(demande['equipement_id'], visite['equipement_id'])
+        technicien = [t for t in self.t['techniciens'] if t['id'] == visite['technicien_id']][0]
+        self.assertEqual(demande['demandeur'], '%s %s' % (technicien['prenom'], technicien['nom']))
+        self.assertTrue(demande['symptome'] and demande['impact'] in ('sécurité', 'arrêt', 'dégradé', 'gêne'))
+        self.assertEqual(demande['statut'], 'Acceptée')
+        correctif = self.ot_par_id[demande['ot_id']]
+        self.assertEqual((correctif['di_id'], correctif['equipement_id'], correctif['symptome_code']),
+                         (demande['id'], demande['equipement_id'], demande['symptome_code']))
+        self.assertTrue(correctif['type'].startswith('correctif') and correctif['statut'] in STATUTS_CLOTURES)
+        self.assertGreater(correctif['date_creation'], demande['date_heure'])
+        # Aucune autre suggestion sur cet équipement ou cette gamme.
+        autres = [cle for cle, s in self.ouvertes.items()
+                  if cle != self.s['suggestion_anomalies'] and (s['equipement'] == equipement['id'] or gamme['id'] in cle)]
+        self.assertEqual(autres, [])
+
+    def test_s4_allonger_la_gamme_de_ve01(self):
+        suggestion = self.suggestion('suggestion_allonger', 'S4')
+        self.assertEqual(self.repere[suggestion['equipement']], 'VE-01')
+        self.assertGreaterEqual(len(suggestion['faits']), VISITES_SANS_CONSTAT)
+
+    def test_refus_de_s4_pour_la_seule_criticite_a(self):
+        gamme = self.gamme_par_id[self.s['suggestion_refus_criticite_a']]
+        equipement = self.equipement_par_id[gamme['equipement_id']]
+        self.assertEqual((gamme['declencheur'], gamme['actif'], equipement['criticite']), ('date', '1', 'A'))
+        self.assertTrue(equipement['actif'] != '0' and equipement['statut'] != 'rebut')
+        self.assertNotIn('S4-' + gamme['id'], self.ouvertes)
+        # La même base, l'équipement passé en criticité B : S4 s'ouvre, avec au moins 6 visites de suite.
+        sans_a = suggestions_ouvertes(self.t, criticites={equipement['id']: 'B'})
+        self.assertIn('S4-' + gamme['id'], sans_a)
+        serie = [self.ot_par_id[identifiant] for identifiant in sans_a['S4-' + gamme['id']]['faits']]
+        self.assertGreaterEqual(len(serie), 6)
+        self.assertFalse(any(avec_anomalie(self.t, visite) for visite in serie))
+        depuis = [o['id'] for o in self.t['ordres_travail'] if o['equipement_id'] == equipement['id']
+                  and o['type'] in TYPES_CORRECTIFS and o['statut'] != 'Annulé'
+                  and o['date_creation'][:10] >= serie[0]['date_fin'][:10]]
+        self.assertEqual(depuis, [])
+
+    def test_cas_sous_le_seuil(self):
+        cas = self.s['suggestion_sous_seuil']
+        cle = 'S1-%s-%s' % (cas['equipement'], cas['cause'])
+        self.assertEqual(self.gammes_actives(cas['equipement']), [])
+        correctifs = [o for o in self.t['ordres_travail'] if o['equipement_id'] == cas['equipement']
+                      and o['type'] in TYPES_CORRECTIFS and o['statut'] in STATUTS_CLOTURES
+                      and o['cause_code'] == cas['cause'] and DEBUT_12_MOIS <= jour(moment(o)) <= JOUR_REFERENCE]
+        self.assertEqual(len(correctifs), SEUIL_PANNES - 1)
+        self.assertFalse([c for c in self.ouvertes if c.endswith('-%s-%s' % (cas['equipement'], cas['cause']))])
+        self.assertIn(cle, suggestions_ouvertes(self.t, seuil=SEUIL_PANNES - 1))     # c'est bien le seuil qui manque
+
+    def test_suggestion_ignoree_puis_revenue(self):
+        cle = self.s['suggestion_ignoree_revenue']
+        suggestion = self.suggestion('suggestion_ignoree_revenue', cle[:2])
+        self.assertNotIn(self.repere[suggestion['equipement']], ('CV-02', 'PO-02', 'VE-01'))
+        ligne, decision, motif = decisions_par_cle(self.t)[cle]
+        # Écrite comme Donnees.journaliser l'écrit (§16.4) : action brute, motif d'une ligne, 300 caractères au plus.
+        self.assertEqual(decision, 'ignorée')
+        self.assertTrue(motif.strip() and len(motif) <= 300 and '\n' not in motif, motif)
+        self.assertEqual((ligne['table'], ligne['id_ligne'], ligne['profil'], ligne['poste']),
+                         ('equipements', suggestion['equipement'], 'Responsable', 'Poste démo'))
+        self.assertRegex(ligne['date_heure'], r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$')
+        self.assertEqual(ligne['id'][2:14], re.sub(r'\D', '', ligne['date_heure']))
+        # Revenue : au moins « seuil » faits postérieurs à la décision, dans la fenêtre de 12 mois.
+        self.assertEqual(suggestion['depuis'], ligne['date_heure'])
+        self.assertGreaterEqual(len(suggestion['faits']), SEUIL_PANNES)
+        for identifiant in suggestion['faits']:
+            self.assertGreater(moment(self.ot_par_id[identifiant]), ligne['date_heure'], identifiant)
+        # Et elle était ouverte quand le responsable l'a ignorée (état de la base à ce moment).
+        avant = suggestions_ouvertes(self.t, jour(ligne['date_heure']), jusqu_a=ligne['date_heure'])
+        self.assertIn(cle, avant)
 
 
 # ---------------------------------------------------------------------------

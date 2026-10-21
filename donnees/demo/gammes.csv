@@ -9,3 +9,5 @@ GAM-0007;EQ-0001;Remplacement du séparateur air/huile de CP-01 (perte de charge
 GAM-0008;EQ-0007;Entretien trimestriel du groupe froid GF-01;date;90;;;;7;2026-10-13;;2027-01-11;3;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
 GAM-0009;EQ-0030;Vérification du chariot CH-01 toutes les 200 heures;compteur;;CPT-0003;200;;5;2026-08-12;4659;2026-09-24;1.5;Débrancher la batterie avant toute intervention.;1
 GAM-0010;EQ-0014;Graissage et contrôle mensuel du tour CN-01;date;30;;;;3;2026-09-17;;2026-10-17;1.5;Consigner l'équipement avant d'ouvrir un capot (voir la fiche de l'équipement).;1
+GAM-0011;EQ-0003;Purge et contrôle du réservoir d'air RA-01;date;14;;;;1;2026-10-14;;2026-10-28;0.5;Le réservoir reste sous pression : ne jamais démonter le purgeur sans avoir isolé et purgé le réservoir.;1
+GAM-0012;EQ-0007;Contrôle de fonctionnement du groupe froid GF-01;date;14;;;;0;2026-10-12;;2026-10-26;0.5;Contrôle en marche, capots fermés : toute intervention sur le groupe exige l'habilitation BR.;1

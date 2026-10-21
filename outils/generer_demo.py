@@ -14,6 +14,13 @@ planifier, une panne clôturée sans durée d'arrêt et, au journal, l'historiqu
 des 3 derniers mois (dont une panne qui a attendu une pièce). Ces ajouts tirent leur hasard dans un
 générateur à part (GRAINE_LOT3) : le reste du jeu des lots 1 et 2 ne change pas.
 
+Depuis le lot 3 bis (ARCHITECTURE.md §16.8, D62), le jeu montre aussi le préventif suggéré (§16.3) : deux
+gammes récentes, l'une avec une anomalie à 2 de ses 4 dernières visites (S3), l'autre sur un équipement
+de criticité A qui remplirait S4 sans sa criticité ; et, au journal, une suggestion ignorée (avec son motif)
+revenue depuis avec assez de nouvelles pannes. Ces ajouts tirent leur hasard dans un troisième générateur
+(GRAINE_LOT3BIS) : le contenu des lignes des lots 1 à 3 ne change pas (seuls les numéros des OT et des DI
+postérieurs aux nouvelles lignes se décalent, puisqu'ils suivent l'ordre chronologique).
+
 Sorties par défaut :
     donnees/demo/<table>.csv          les 22 fichiers CSV (format ARCHITECTURE.md §3.1)
     js/demo-donnees.js                les mêmes textes, prêts à être chargés par la page (mode démo)
@@ -27,8 +34,9 @@ Utilisation (depuis la racine du projet) :
                                                        jeu de charge (500 équipements, 5 000 OT, 24 mois)
 
 Le script s'auto-vérifie (clés étrangères, listes de valeurs, règles RG1 à RG6, stock, scénarios ; au
-lot 3 : statuts des contrôles, surcharge du planning, cohérence du journal avec les OT) et s'arrête
-avec un message clair au moindre défaut.
+lot 3 : statuts des contrôles, surcharge du planning, cohérence du journal avec les OT ; au lot 3 bis :
+règles des suggestions recalculées en Python à la date de référence) et s'arrête avec un message clair
+au moindre défaut.
 
 Identifiants de scénario (tests/fixtures/demo-scenarios.json, ARCHITECTURE.md §14.8)
 -----------------------------------------------------------------------------------
@@ -117,11 +125,21 @@ du jeu (ou une liste triée de lignes, ou un code) qui a la propriété annoncé
     panne_attente_pieces             panne clôturée de PO-01 passée par « En attente : Pièce : … » (journal)
     panne_sans_duree                 panne clôturée de CV-02 sans durée d'arrêt (duree_arret_h vide)
     equipements_calcul_main          liste : CP-01 (A), PO-01, CV-02 : heures connues, pannes sur 12 mois
+  Lot 3 bis (§16.8) : préventif suggéré, règles du §16.3 à la date de référence, réglages par défaut
+    suggestion_creer                 clé S1 ouverte : CV-02, capteur encrassé (C04), aucune gamme active
+    suggestion_revoir                clé S2 ouverte : PO-02, garniture usée (C01) malgré sa gamme
+    suggestion_anomalies             clé S3 ouverte : gamme de RA-01, anomalie à 2 des 4 dernières visites
+    suggestion_allonger              clé S4 ouverte : gamme mensuelle de VE-01, visites de suite sans anomalie
+    suggestion_refus_criticite_a     gamme de GF-01 (criticité A) : remplirait S4, refusée pour sa seule criticité
+    suggestion_sous_seuil            {equipement, cause} : CP-01.SEC, C05, 2 correctifs (seuil - 1), sans gamme
+    suggestion_ignoree_revenue       clé S2 de CP-01 (C05) : ignorée au journal, revenue avec 3 pannes depuis
 
 Journal (lot 3) : pour chaque panne des 3 derniers mois (OT correctif avec arrêt de production, plus une
 semaine de marge pour le décalage de la démo), les entrées que Prévo aurait écrites, au format exact de
 Donnees.modifier (« création — acceptation de DI-… », « modification : statut, date_debut — statut
-Créé → En cours »…), horodatées par les dates de l'OT et de sa DI, poste « Poste démo ».
+Créé → En cours »…), horodatées par les dates de l'OT et de sa DI, poste « Poste démo ». Depuis le lot 3
+bis, il porte aussi une décision sur une suggestion, écrite comme Donnees.journaliser l'écrit (action
+brute « suggestion <clé> ignorée : <motif> », table equipements, §16.4).
 
 Organisation du fichier :
     1. Schéma et écriture CSV (règles §3.1 et §3.2)
@@ -130,8 +148,10 @@ Organisation du fichier :
     4. Génération table par table
     5. Génération de l'historique (DI, OT, préventif)
     5 bis. Lot 3 : planning, OT à planifier, pannes remarquables, journal des statuts
+    5 ter. Lot 3 bis : gammes récentes et leurs visites, suggestion ignorée au journal
     6. Stock, achats, mouvements
-    7. Identifiants, auto-vérification, identifiants de scénario, écriture, ligne de commande
+    7. Identifiants, auto-vérification (dont 7 bis : règles des suggestions en Python), identifiants de
+       scénario, écriture, ligne de commande
 """
 import argparse
 import calendar
@@ -153,6 +173,7 @@ FICHIER_SCENARIOS = RACINE / 'tests' / 'fixtures' / 'demo-scenarios.json'
 
 GRAINE = 42                      # graine fixe : deux exécutions donnent des fichiers identiques
 GRAINE_LOT3 = 4203               # graine des ajouts du lot 3 (générateur à part : le reste ne bouge pas)
+GRAINE_LOT3BIS = 4204            # graine des ajouts du lot 3 bis (même principe : les lots 1 à 3 ne bougent pas)
 DATE_REFERENCE = '2026-10-19'    # « aujourd'hui » du jeu de démo (un lundi)
 MOIS_PAR_DEFAUT = 13             # durée de l'historique (ARCHITECTURE.md §14.8)
 PART_DI_AVEC_CODE = 0.8          # proportion des DI dont le demandeur a choisi un code symptôme
@@ -1471,6 +1492,7 @@ class Contexte:
     def __init__(self, mois, volume=None):
         self.rng = random.Random(GRAINE)
         self.rng_lot3 = random.Random(GRAINE_LOT3)    # hasard des ajouts du lot 3 (voir hasard_du_lot3)
+        self.rng_lot3bis = random.Random(GRAINE_LOT3BIS)   # hasard des ajouts du lot 3 bis (hasard_du_lot3bis)
         self.mois = mois
         self.volume = volume                          # None ou (nombre d'équipements, nombre d'OT)
         self.ref = jour_depuis_texte(DATE_REFERENCE)
@@ -1496,6 +1518,8 @@ class Contexte:
         self.definitions_compteurs = []               # compteurs à créer (démo ou jeu de charge)
         self.marques = {}                             # rôle de scénario -> ligne (voir §7, scénarios)
         self.attentes = []                            # périodes « En attente » passées des OT (§5 bis, journal)
+        self.anomalies_sans_di = []                   # préventifs à case cochée, réglés sur place (§5 ter)
+        self.gammes_lot3bis = {}                      # 'anomalies' / 'refus' -> ligne de gammes.csv (§5 ter)
 
     def marquer(self, role, ligne):
         """Retient la ligne qui joue un rôle de scénario (son identifiant n'est connu qu'à la fin)."""
@@ -1519,6 +1543,21 @@ def hasard_du_lot3(ctx):
     """
     principal = ctx.rng
     ctx.rng = ctx.rng_lot3
+    try:
+        yield
+    finally:
+        ctx.rng = principal
+
+
+@contextmanager
+def hasard_du_lot3bis(ctx):
+    """Pendant le bloc, ctx.rng est le générateur du lot 3 bis (graine GRAINE_LOT3BIS).
+
+    Même principe que hasard_du_lot3 : les tirages des lots 1 à 3 restent les mêmes, donc le contenu de
+    leurs lignes aussi.
+    """
+    principal = ctx.rng
+    ctx.rng = ctx.rng_lot3bis
     try:
         yield
     finally:
@@ -3148,6 +3187,224 @@ def generer_journal(ctx):
 
 
 # =============================================================================
+# 5 ter. LOT 3 BIS : PRÉVENTIF SUGGÉRÉ (ARCHITECTURE.md §16.8, D62)
+# =============================================================================
+# Tout ce bloc est appelé sous hasard_du_lot3bis (voir construire_jeu) : ses tirages au hasard ne changent
+# pas ceux des lots 1 à 3. Les cas déjà présents restent : S1 de CV-02 (capteur encrassé), S2 de PO-02
+# (garniture usée), S4 de la gamme mensuelle de VE-01, et CP-01.SEC (2 filtres colmatés, sans gamme : sous
+# le seuil). On ajoute deux gammes RÉCENTES (mises en place cet été) et une décision au journal :
+#   - RA-01 (réservoir d'air, criticité B) : son purgeur automatique se bloque (c'est l'observation du
+#     dernier contrôle réglementaire). Anomalie à 2 des 4 dernières visites, l'une par la case « anomalie
+#     constatée », l'autre par une DI liée → S3. Son remplacement est déjà planifié (PLANNING_DEMO).
+#   - GF-01 (groupe froid, criticité A) : visites de suite sans anomalie et aucune panne depuis la
+#     première ; S4 la refuse pour sa seule criticité A (une obligation peut imposer la fréquence).
+#   - CP-01 : la suggestion S2 « filtre colmaté » a été ignorée au printemps (motif au journal) ; trois
+#     pannes de même cause sont arrivées depuis : elle est revenue.
+# Périodicité de 14 jours et dernière visite récente : aucune de ces gammes ne devient échue dans la
+# semaine qui suit la date de référence (la démo décale ses dates par semaines entières, §11).
+
+STATUTS_CLOTURES = ('Clôturé techniquement', 'Clôturé administrativement')
+
+OPS_RESERVOIR = [
+    ('Purger manuellement le réservoir par la vanne basse', "Peu d'eau (moins d'un verre)", 'ok'),
+    ('Tester le purgeur automatique (bouton test)', 'Purge franche au test', 'ok'),
+    ('Relever la pression du réservoir au manomètre', '6,5 à 7,5 bar', (6.7, 7.3, 1, ' bar', 'pression du réservoir')),
+    ("Contrôler l'absence de fuite aux raccords et à la soupape", 'Aucune fuite', 'ok'),
+]
+OPS_FROID_SUIVI = [
+    ('Relever la pression haute (HP)', '< 18 bar', (14.0, 17.0, 1, ' bar', 'pression haute')),
+    ('Relever la pression basse (BP)', '3 à 5 bar', (3.4, 4.6, 1, ' bar', 'pression basse')),
+    ("Relever la température de départ d'eau glacée", '6 à 8 °C', (6.2, 7.8, 1, ' °C', "température de départ d'eau glacée")),
+    ("Contrôler l'afficheur de la régulation", 'Aucune alarme active', 'ok'),
+    ("Rechercher les traces d'huile ou de givre sur les tuyauteries", 'Aucune trace', 'ok'),
+]
+
+# Anomalie vue à une visite, deux façons de la noter (§16.2 : case cochée OU DI liée).
+# Case cochée seule : le technicien a réglé sur place, il n'y a rien à demander.
+ANOMALIE_RA01_CASE = {
+    'constat': "Anomalie constatée : purgeur automatique de nouveau bloqué, beaucoup d'eau à la purge manuelle ; "
+               "réservoir purgé à la main. Son remplacement est déjà planifié."}
+# DI liée (ot_origine_id) envoyée juste APRÈS la clôture administrative de la visite (le responsable a clôturé
+# pendant que le technicien saisissait sa demande) : l'OT, déjà verrouillé, n'est pas marqué « anomalie
+# constatée » (ARCHITECTURE.md §14.6, écart retenu ; Demandes.marquerAnomalie). La DI est acceptée le jour
+# même ; le correctif, fait le lendemain, propose de remplacer le purgeur.
+ANOMALIE_RA01_DI = {
+    'di': True,
+    'constat': "Purgeur automatique bloqué : beaucoup d'eau à la purge manuelle, réservoir purgé à la main. "
+               "Demande d'intervention à envoyer pour le nettoyer.",
+    'texte_di': "Le purgeur automatique du réservoir RA-01 ne purge plus : beaucoup d'eau à la purge manuelle.",
+    'impact': 'gêne', 'symptome': 'S99', 'cause': 'C05', 'remede': 'R03', 'heures': 1.0, 'metiers': [MECA, POLY],
+    'titre': 'Purgeur automatique du réservoir bloqué',
+    'travail': "Isoler le réservoir et le purger jusqu'à 0 bar, démonter le purgeur automatique, nettoyer son filtre "
+               "et son clapet, contrôler la purge au bouton test.",
+    'compte_rendu': "Filtre du purgeur automatique colmaté par des boues : purgeur démonté, filtre et clapet nettoyés, "
+                    "purge de nouveau franche au bouton test. Purgeur en fin de vie : à remplacer (observation du "
+                    "dernier contrôle réglementaire)."}
+
+# Les deux gammes du lot 3 bis. `derniere` = dernière visite, en jours avant la date de référence ; `visites`
+# = nombre de visites, tous les `periode` jours en remontant (même jour de la semaine) ; `anomalies` = {rang
+# de la visite en partant de la plus récente : anomalie}. `suggestion` : nom du cas (ctx.gammes_lot3bis).
+GAMMES_LOT3BIS = [
+    {'suggestion': 'anomalies', 'repere': 'RA-01', 'libelle': "Purge et contrôle du réservoir d'air RA-01",
+     'periode': 14, 'avance': 1, 'derniere': 5, 'visites': 5, 'temps': 0.5, 'ops': OPS_RESERVOIR,
+     'metiers': [MECA, POLY], 'remede': 'R03',
+     'consignes': "Le réservoir reste sous pression : ne jamais démonter le purgeur sans avoir isolé et purgé "
+                  "le réservoir.",
+     'anomalies': {1: ANOMALIE_RA01_CASE, 3: ANOMALIE_RA01_DI}},
+    {'suggestion': 'refus', 'role': 'suggestion_refus_criticite_a', 'repere': 'GF-01',
+     'libelle': 'Contrôle de fonctionnement du groupe froid GF-01', 'periode': 14, 'avance': 0, 'derniere': 7,
+     'visites': 6, 'temps': 0.5, 'ops': OPS_FROID_SUIVI, 'metiers': [ELEC, MECA], 'remede': 'R03',
+     'consignes': "Contrôle en marche, capots fermés : toute intervention sur le groupe exige l'habilitation BR."},
+]
+
+# Suggestion ignorée puis revenue (§16.4) : (règle, repère, cause). CP-01 a des gammes suivies : S2.
+DECISION_IGNOREE_DEMO = ('S2', 'CP-01', 'C05')
+MOTIF_IGNOREE_DEMO = ("Cartouches de filtre à huile d'un lot défectueux, échangées par le fournisseur sous "
+                      "garantie. On surveille avant de modifier les gammes.")
+
+
+def creer_gamme_lot3bis(ctx, specification):
+    """Gamme récente (date) : sa ligne, ses opérations, puis ses visites (OT préventifs clôturés).
+    Dernière réalisation et prochaine échéance suivent la dernière visite (RG5)."""
+    equipement = ctx.equipement[specification['repere']]
+    jours = [ctx.ref - timedelta(days=specification['derniere'] + rang * specification['periode'])
+             for rang in reversed(range(specification['visites']))]
+    jours = [jour for jour in jours if jour >= ctx.debut]          # --mois : historique plus court
+    ligne = creer_ligne(ctx, 'gammes', equipement_id=equipement['id'], libelle=specification['libelle'],
+                        declencheur='date', periodicite_jours=specification['periode'],
+                        avance_jours=specification['avance'], temps_prevu_h=specification['temps'],
+                        consignes=specification['consignes'])
+    for ordre, (operation, attendue, _mesure) in enumerate(specification['ops'], 1):
+        creer_ligne(ctx, 'gamme_operations', gamme_id=ligne['id'], ordre=ordre, operation=operation,
+                    valeur_attendue=attendue)
+    gamme = dict(specification, eq=equipement, id=ligne['id'], ligne=ligne, declencheur='date', compteur=None,
+                 seuil=None, ouvert=None, occurrences=[])
+    anomalies = specification.get('anomalies', {})
+    derniere = None
+    for rang, jour in enumerate(jours):
+        derniere = creer_visite_lot3bis(ctx, gamme, jour, anomalies.get(len(jours) - rang)).date()
+    if derniere is None:
+        raise ErreurCoherence('%s : aucune visite dans l\'historique' % specification['libelle'])
+    gamme.update(derniere=derniere, prochaine=derniere + timedelta(days=specification['periode']))
+    renseigner(ligne, derniere_realisation=texte_date(derniere), prochaine_echeance=texte_date(gamme['prochaine']))
+    gamme['echue'] = est_gamme_echue(ctx, gamme)
+    ctx.gammes.append(gamme)
+    ctx.gammes_lot3bis[specification['suggestion']] = ligne
+    if specification.get('role'):
+        ctx.marquer(specification['role'], ligne)
+
+
+def creer_visite_lot3bis(ctx, gamme, jour, anomalie=None):
+    """Visite d'une gamme du lot 3 bis le jour `jour` : OT préventif clôturé ; retourne sa date-heure de fin.
+
+    Même déroulé que creer_preventif (opérations copiées, mesures, temps passés, aucune pièce), avec une
+    clôture maîtrisée : administrative le jour ouvré suivant, ou seulement technique pour la dernière
+    semaine (comme les OT récents) ; aussitôt pour la visite dont la DI arrive après le verrou."""
+    rng = ctx.rng
+    equipement = gamme['eq']
+    jour_creation = min(jour_ouvre_apres(jour - timedelta(days=gamme['avance'])), jour)
+    creation = instant(jour_creation, 7.0) + timedelta(minutes=rng.randint(10, 40))
+    ot = creer_ligne(
+        ctx, 'ordres_travail', origine='préventif', gamme_id=gamme['id'], equipement_id=equipement['id'],
+        type='préventif systématique', priorite='P4' if equipement['crit'] == 'C' else 'P3', statut='Créé',
+        titre=gamme['libelle'], travail_a_faire='Réaliser les %d opérations de la gamme.' % len(gamme['ops']),
+        consignes=gamme['consignes'], date_creation=texte_dh(creation), date_prevue=texte_date(jour),
+        temps_prevu_h=gamme['temps'])
+    mesures = []
+    for ordre, (operation, attendue, mesure) in enumerate(gamme['ops'], 1):
+        valeur = mesure_simulee(rng, mesure)
+        creer_ligne(ctx, 'ot_operations', ot_id=ot, ordre=ordre, operation=operation, valeur_attendue=attendue,
+                    fait=1, valeur_mesuree=valeur)
+        if isinstance(mesure, tuple):
+            mesures.append((mesure[4], valeur))
+    technicien = choisir_technicien(ctx, gamme['metiers'], equipement, jour)
+    debut = heure_aleatoire(rng, jour, 7.75, 10.5)
+    renseigner(ot, technicien_id=technicien['id'], date_debut=texte_dh(debut))
+    fin = enregistrer_temps(ctx, ot, [(technicien, 1.0)], debut, quart_heure(gamme['temps'] * rng.uniform(0.8, 1.3)))
+    compte_rendu = ('Gamme réalisée en totalité. ' + anomalie['constat'] if anomalie
+                    else compte_rendu_preventif(ctx, gamme, mesures))
+    cloture_technique = fin + timedelta(minutes=rng.randint(5, 20))
+    renseigner(ot, date_fin=texte_dh(fin), remise_service=1, cause_code='C99', remede_code=gamme['remede'],
+               compte_rendu=compte_rendu, date_cloture_tech=texte_dh(cloture_technique),
+               statut='Clôturé techniquement')
+    if anomalie and anomalie.get('di'):
+        cloture_admin = cloture_technique + timedelta(minutes=10)
+    elif (ctx.ref - fin.date()).days > 7:
+        cloture_admin = instant(jour_ouvre_apres(fin.date() + timedelta(days=1)), 8.5 + rng.randint(0, 4) / 4.0)
+    else:
+        cloture_admin = None
+    if cloture_admin:
+        renseigner(ot, statut='Clôturé administrativement', date_cloture_admin=texte_dh(cloture_admin))
+    if anomalie and anomalie.get('di'):
+        signaler_anomalie_apres_verrou(ctx, gamme, ot, technicien, cloture_admin + timedelta(minutes=5), anomalie)
+    elif anomalie:
+        renseigner(ot, anomalie_constatee=1)
+        ctx.anomalies_sans_di.append(ot)
+    return fin
+
+
+def signaler_anomalie_apres_verrou(ctx, gamme, visite, technicien, envoi, anomalie):
+    """DI liée à une visite déjà clôturée administrativement (voir ANOMALIE_RA01_DI) : la visite garde
+    anomalie_constatee = 0. La DI est acceptée (RG1, priorité de la matrice RG2) et son correctif, fait le
+    lendemain matin, est clôturé (RG4) ; sans arrêt de production (impact « gêne ») : ce n'est pas une panne."""
+    equipement = gamme['eq']
+    demande = creer_ligne(
+        ctx, 'demandes', date_heure=texte_dh(envoi), demandeur=nom_complet(technicien), equipement_id=equipement['id'],
+        symptome=anomalie['texte_di'], impact=anomalie['impact'],
+        description="Signalée pendant l'OT préventif de la gamme « %s »." % gamme['libelle'], statut='Acceptée',
+        symptome_code=anomalie['symptome'], ot_origine_id=visite)
+    decision = apres_minutes_ouvrees(envoi, ctx.rng.randint(20, 60))
+    priorite = priorite_calculee(equipement['crit'], anomalie['impact'])
+    immediat = priorite == 'P1' or anomalie['impact'] in ('arrêt', 'sécurité')
+    debut = instant(jour_ouvre_apres(decision.date() + timedelta(days=1)), 8.0)
+    reparateur = choisir_technicien(ctx, anomalie['metiers'], equipement, debut.date())
+    ot = creer_ligne(
+        ctx, 'ordres_travail', origine='DI', di_id=demande, equipement_id=equipement['id'],
+        type='correctif immédiat' if immediat else 'correctif différé', priorite=priorite,
+        statut='Clôturé administrativement', titre='%s — %s' % (equipement['repere'], anomalie['titre']),
+        travail_a_faire=anomalie['travail'], consignes=consignes_ot(equipement), date_creation=texte_dh(decision),
+        date_prevue=texte_date(date_prevue_par_defaut(decision.date(), priorite)), technicien_id=reparateur['id'],
+        temps_prevu_h=anomalie['heures'], date_debut=texte_dh(debut), symptome_code=anomalie['symptome'])
+    fin = enregistrer_temps(ctx, ot, [(reparateur, 1.0)], debut, anomalie['heures'])
+    renseigner(ot, date_fin=texte_dh(fin), cause_code=anomalie['cause'], remede_code=anomalie['remede'],
+               compte_rendu=anomalie['compte_rendu'], remise_service=1,
+               date_cloture_tech=texte_dh(fin + timedelta(minutes=15)),
+               date_cloture_admin=texte_dh(instant(jour_ouvre_apres(fin.date() + timedelta(days=1)), 9.0)))
+    renseigner(demande, date_decision=texte_dh(decision), ot_id=ot)
+
+
+def completer_demo_lot3bis(ctx):
+    """Ajouts du lot 3 bis au jeu de démo (§16.8) : les deux gammes récentes et leurs visites."""
+    for specification in GAMMES_LOT3BIS:
+        creer_gamme_lot3bis(ctx, specification)
+
+
+def ajouter_decision_ignoree(ctx):
+    """Décision au journal (§16.4), écrite comme Donnees.journaliser l'écrit : le responsable a ignoré la
+    suggestion DECISION_IGNOREE_DEMO quelques jours après une panne, à un moment où elle était ouverte, et
+    exactement SEUIL_PANNES pannes de même cause sont arrivées depuis : elle est revenue (§16.3).
+
+    Appelé après generer_journal (OT et identifiants définitifs) : la ligne est rangée à sa place (tri par
+    date_heure puis identifiant), sans toucher aux entrées du lot 3."""
+    regle, repere, cause = DECISION_IGNOREE_DEMO
+    equipement = ctx.equipement[repere]
+    pannes = sorted(instant_depuis_texte(o['date_fin']) for o in ctx.base['ordres_travail']
+                    if o['equipement_id'] == equipement['id'] and o['type'] in TYPES_CORRECTIFS
+                    and o['statut'] in STATUTS_CLOTURES and o['cause_code'] == cause)
+    if len(pannes) < 2 * SEUIL_PANNES:            # historique trop court (--mois) : pas de décision
+        return
+    apres_la_panne = pannes[-SEUIL_PANNES - 1].date() + timedelta(days=3)
+    moment = instant(jour_ouvre_apres(apres_la_panne), 10.0) + timedelta(minutes=ctx.rng.randrange(0, 60, 5))
+    pris = {ligne['id'] for ligne in ctx.base['journal']}
+    ligne = creer_ligne(
+        ctx, 'journal', id=identifiant_journal(ctx, moment, ctx.rng.randrange(60), pris), date_heure=texte_dh(moment),
+        poste=POSTE_DEMO, profil='Responsable', id_ligne=equipement['id'],
+        action='suggestion %s-%s-%s ignorée : %s' % (regle, equipement['id'], cause, MOTIF_IGNOREE_DEMO))
+    renseigner(ligne, table='equipements')        # « table » est aussi le nom d'un paramètre de creer_ligne
+    ctx.base['journal'].sort(key=lambda entree: (entree['date_heure'], entree['id']))
+
+
+# =============================================================================
 # 6. STOCK, ACHATS ET MOUVEMENTS
 # =============================================================================
 
@@ -3533,10 +3790,15 @@ def verifier_jeu(ctx):
         if demande['ot_origine_id']:
             origine = ordres[demande['ot_origine_id']]
             origines.add(origine['id'])
-            if origine['origine'] != 'préventif' or origine['anomalie_constatee'] != '1':
+            # Une DI envoyée quand l'OT d'origine est déjà verrouillé (Clôturé administrativement) ne le
+            # marque pas : l'application ne modifie jamais un OT verrouillé (§14.6, écart retenu).
+            verrouille = (origine['statut'] == 'Clôturé administrativement'
+                          and origine['date_cloture_admin'] <= demande['date_heure'])
+            if origine['origine'] != 'préventif' or (origine['anomalie_constatee'] != '1' and not verrouille):
                 erreur('%s : OT d\'origine %s sans anomalie constatée' % (demande['id'], origine['id']))
+    reglees_sur_place = {ot['id'] for ot in ctx.anomalies_sans_di}     # case cochée sans DI (§5 ter)
     for ot in base['ordres_travail']:
-        if ot['anomalie_constatee'] == '1' and ot['id'] not in origines:
+        if ot['anomalie_constatee'] == '1' and ot['id'] not in origines and ot['id'] not in reglees_sur_place:
             erreur('%s : anomalie constatée sans DI liée' % ot['id'])
     if erreurs:
         raise ErreurCoherence('\n'.join(erreurs))
@@ -3763,6 +4025,258 @@ def verifier_calcul_main(ctx, scenarios):
 
 
 # ---------------------------------------------------------------------------
+# 7 bis. Lot 3 bis : règles du préventif suggéré recalculées en Python (ARCHITECTURE.md §16.2 à §16.4)
+# ---------------------------------------------------------------------------
+# Copie lisible des règles du contrat, pour que le générateur prouve lui-même ses rôles de scénario. Les
+# moments sont des textes « AAAA-MM-JJ HH:MM » : « postérieur à » = texte strictement plus grand (§16.2).
+
+SEUIL_PANNES = 3                    # suggestion_seuil_pannes par défaut (§16.1) : S1, S2
+VISITES_SANS_CONSTAT = 5            # suggestion_visites_sans_constat par défaut : S4
+FENETRE_MOIS = 12                   # suggestion_fenetre_mois par défaut
+VISITES_REGARDEES_S3 = 4            # S3 (fixe) : parmi les 4 dernières visites…
+ANOMALIES_S3 = 2                    # … au moins 2 avec anomalie
+MINIMUM_REFUS_CRITICITE_A = 6       # rôle suggestion_refus_criticite_a : au moins 6 visites de suite sans anomalie
+MOTIF_DECISION = re.compile(r'suggestion (S[1-4]-\S+) (ignorée|traitée) : (.*)')     # action entière (§16.4)
+
+
+def moment_ot(ot):
+    """§16.2 : date_fin, sinon date_cloture_tech, sinon date_creation, ramené à « AAAA-MM-JJ HH:MM »."""
+    return (ot['date_fin'] or ot['date_cloture_tech'] or ot['date_creation']).replace('T', ' ')[:16]
+
+
+def jour_ot(ot):
+    """Jour du moment d'un OT, ou None si sa date est illisible (l'OT est alors ignoré, §16.2)."""
+    try:
+        return jour_depuis_texte(moment_ot(ot)[:10])
+    except ValueError:
+        return None
+
+
+def decisions_du_journal(base, limite=None):
+    """Dernière décision de chaque clé (§16.4) : {clé: ligne du journal + cle, decision, texte}.
+    La plus récente l'emporte (date_heure, puis identifiant). limite : décisions antérieures à ce moment."""
+    dernieres = {}
+    for ligne in sorted(base['journal'], key=lambda entree: (entree['date_heure'], entree['id'])):
+        forme = MOTIF_DECISION.fullmatch(ligne['action'])
+        if forme and (limite is None or ligne['date_heure'] < limite):
+            dernieres[forme.group(1)] = dict(ligne, cle=forme.group(1), decision=forme.group(2), texte=forme.group(3))
+    return dernieres
+
+
+def passage_au_format_2(base):
+    """Moment du passage au format 2 (§16.2), ou None : base créée au format 2, comme la démo."""
+    lignes = [l for l in base['journal'] if l['table'] == 'parametres' and l['id_ligne'] == 'version_schema'
+              and 'passage au format 2 du fichier' in l['action']]
+    return max((l['date_heure'], l['id']) for l in lignes)[0] if lignes else None
+
+
+def calculer_suggestions(base, jour, seuil=SEUIL_PANNES, sans_constat=VISITES_SANS_CONSTAT, fenetre=FENETRE_MOIS,
+                         limite=None, criticites=None):
+    """Suggestions ouvertes au jour `jour` (date) selon les règles du §16.3 : {clé: suggestion}.
+
+    Suggestion : {regle, equipement, gammes, cause, faits (identifiants d'OT, du plus ancien au plus récent),
+    sur (S3 : visites regardées), depuis (moment de la décision précédente ou None)}.
+    limite : moment « AAAA-MM-JJ HH:MM » ; seuls les OT, DI et décisions antérieurs comptent (état de la base
+    à ce moment). criticites : {équipement: criticité} qui remplace celle du fichier (preuve d'un refus S4)."""
+    debut = ajouter_mois(jour, -fenetre) + timedelta(days=1)
+    decisions = decisions_du_journal(base, limite)
+    format2 = passage_au_format_2(base)
+    criticite = {e['id']: (criticites or {}).get(e['id'], e['criticite']) for e in base['equipements']}
+    suivis = {e['id'] for e in base['equipements'] if e['actif'] != '0' and e['statut'] != 'rebut'}
+    ordres = [o for o in base['ordres_travail']
+              if jour_ot(o) is not None and (limite is None or moment_ot(o) <= limite)]
+    origines = {d['ot_origine_id'] for d in base['demandes']
+                if d['ot_origine_id'] and (limite is None or d['date_heure'] <= limite)}
+    actives = [g for g in base['gammes'] if g['actif'] != '0']
+    suivies = [g for g in actives if g['declencheur'] in ('date', 'compteur') and g['equipement_id'] in suivis]
+    visites = {g['id']: sorted((o for o in ordres if o['gamme_id'] == g['id'] and o['statut'] in STATUTS_CLOTURES
+                                and jour_ot(o) <= jour), key=lambda o: (moment_ot(o), o['id'])) for g in suivies}
+    correctifs = [o for o in ordres if o['type'] in TYPES_CORRECTIFS and o['statut'] in STATUTS_CLOTURES
+                  and o['cause_code'] and debut <= jour_ot(o) <= jour]
+    ouvertes = {}
+
+    def apres_decision(cle, ot):
+        return cle not in decisions or moment_ot(ot) > decisions[cle]['date_heure']
+
+    def proposer(cle, regle, faits, equipement, gammes, cause='', sur=None):
+        ouvertes[cle] = {'regle': regle, 'equipement': equipement, 'gammes': gammes, 'cause': cause,
+                         'faits': [o['id'] for o in faits], 'sur': sur,
+                         'depuis': decisions[cle]['date_heure'] if cle in decisions else None}
+
+    # S1 (aucune gamme active) et S2 (gammes suivies déjà visitées) : correctifs de même cause.
+    for equipement in sorted(suivis):
+        if any(g['equipement_id'] == equipement for g in actives):
+            regle = 'S2'
+            gammes = [g['id'] for g in suivies if g['equipement_id'] == equipement and visites[g['id']]]
+            if not gammes:
+                continue
+            premiere_visite = min(moment_ot(visites[g][0]) for g in gammes)
+        else:
+            regle, gammes, premiere_visite = 'S1', [], ''
+        par_cause = {}
+        for ot in correctifs:
+            if ot['equipement_id'] == equipement and moment_ot(ot) > premiere_visite:
+                par_cause.setdefault(ot['cause_code'], []).append(ot)
+        for cause, liste in par_cause.items():
+            cle = '%s-%s-%s' % (regle, equipement, cause)
+            faits = sorted((ot for ot in liste if apres_decision(cle, ot)), key=lambda o: (moment_ot(o), o['id']))
+            if len(faits) >= seuil:
+                proposer(cle, regle, faits, equipement, gammes, cause)
+    # S3 (anomalies répétées) et S4 (allonger) : visites d'une gamme suivie.
+    for gamme in suivies:
+        cle = 'S3-' + gamme['id']
+        regardees = [ot for ot in visites[gamme['id']] if apres_decision(cle, ot)][-VISITES_REGARDEES_S3:]
+        avec_anomalie = [ot for ot in regardees if ot['anomalie_constatee'] == '1' or ot['id'] in origines]
+        if len(avec_anomalie) >= ANOMALIES_S3:
+            proposer(cle, 'S3', avec_anomalie, gamme['equipement_id'], [gamme['id']], sur=len(regardees))
+        cle = 'S4-' + gamme['id']
+        comptees = [ot for ot in visites[gamme['id']]
+                    if (format2 is None or moment_ot(ot) > format2) and apres_decision(cle, ot)]
+        serie = serie_sans_anomalie(comptees, origines)
+        if criticite[gamme['equipement_id']] in ('B', 'C') and len(serie) >= sans_constat \
+                and not correctifs_depuis(ordres, gamme['equipement_id'], jour_ot(serie[0])):
+            proposer(cle, 'S4', serie, gamme['equipement_id'], [gamme['id']])
+    return ouvertes
+
+
+def serie_sans_anomalie(visites, origines):
+    """S4 : les dernières visites consécutives sans anomalie (ni case cochée, ni DI liée), dans l'ordre."""
+    serie = []
+    for ot in reversed(visites):
+        if ot['anomalie_constatee'] == '1' or ot['id'] in origines:
+            break
+        serie.insert(0, ot)
+    return serie
+
+
+def correctifs_depuis(ordres, equipement, premier_jour):
+    """S4 : correctifs de l'équipement (tout statut sauf Annulé, toute cause) créés à partir de premier_jour."""
+    return [o for o in ordres if o['equipement_id'] == equipement and o['type'] in TYPES_CORRECTIFS
+            and o['statut'] != 'Annulé' and o['date_creation'][:10] >= texte_date(premier_jour)]
+
+
+def verifier_suggestions(ctx, scenarios):
+    """Rôles du lot 3 bis prouvés par calculer_suggestions à la date de référence (réglages par défaut,
+    décisions du journal comprises). Renvoie la liste des erreurs."""
+    base = ctx.base
+    erreurs = []
+    ouvertes = calculer_suggestions(base, ctx.ref)
+    equipements = {e['id']: e for e in base['equipements']}
+    ordres = {o['id']: o for o in base['ordres_travail']}
+
+    def ouverte(role, regle, repere=None, cause=None):
+        suggestion = ouvertes.get(scenarios[role])
+        if suggestion is None or suggestion['regle'] != regle \
+                or (repere and equipements[suggestion['equipement']]['repere'] != repere) \
+                or (cause and suggestion['cause'] != cause):
+            erreurs.append('%s : %s n\'est pas une suggestion %s ouverte (%s %s)' % (role, scenarios[role], regle,
+                                                                                  repere or '', cause or ''))
+            return None
+        return suggestion
+
+    ouverte('suggestion_creer', 'S1', 'CV-02', 'C04')
+    ouverte('suggestion_revoir', 'S2', 'PO-02', 'C01')
+    ouverte('suggestion_allonger', 'S4', 'VE-01')
+    s3 = ouverte('suggestion_anomalies', 'S3')
+    if s3:
+        erreurs += verifier_cas_anomalies(base, ouvertes, scenarios['suggestion_anomalies'], s3)
+    erreurs += verifier_refus_criticite_a(ctx, ouvertes, scenarios['suggestion_refus_criticite_a'])
+    erreurs += verifier_sous_seuil(ctx, ouvertes, scenarios['suggestion_sous_seuil'])
+    revenue = ouverte('suggestion_ignoree_revenue', DECISION_IGNOREE_DEMO[0], DECISION_IGNOREE_DEMO[1],
+                      DECISION_IGNOREE_DEMO[2])
+    if revenue:
+        erreurs += verifier_ignoree_revenue(ctx, scenarios['suggestion_ignoree_revenue'], revenue)
+    for cle, suggestion in ouvertes.items():          # aucun fait ni décision dans le futur
+        if any(moment_ot(ordres[ot]) > texte_dh(ctx.maintenant) for ot in suggestion['faits']):
+            erreurs.append('%s : un fait est postérieur à la date de référence' % cle)
+    return erreurs
+
+
+def verifier_cas_anomalies(base, ouvertes, cle, suggestion):
+    """S3 : criticité B ou C ; 2 anomalies parmi les 4 dernières visites, l'une par la case seule (sans DI),
+    l'autre par une DI liée sur une visite verrouillée avant la DI (case à 0) ; aucune autre suggestion sur
+    l'équipement ou la gamme."""
+    erreurs = []
+    equipement = {e['id']: e for e in base['equipements']}[suggestion['equipement']]
+    ordres = {o['id']: o for o in base['ordres_travail']}
+    liees = {}
+    for demande in base['demandes']:
+        if demande['ot_origine_id']:
+            liees.setdefault(demande['ot_origine_id'], []).append(demande)
+    visites = [ordres[identifiant] for identifiant in suggestion['faits']]
+    par_case = [v for v in visites if v['anomalie_constatee'] == '1' and v['id'] not in liees]
+    par_di = [v for v in visites if v['anomalie_constatee'] == '0' and v['id'] in liees]
+    if equipement['criticite'] not in ('B', 'C') or (suggestion['sur'], len(visites)) != (VISITES_REGARDEES_S3, 2):
+        erreurs.append('%s : %d anomalies sur %s visites (criticité %s)' % (cle, len(visites), suggestion['sur'],
+                                                                         equipement['criticite']))
+    if len(par_case) != 1 or len(par_di) != 1:
+        erreurs.append('%s : il faut une anomalie par la case seule et une par une DI liée' % cle)
+    for visite in par_di:
+        for demande in liees[visite['id']]:
+            correctif = ordres.get(demande['ot_id'])
+            if not (visite['statut'] == 'Clôturé administrativement'
+                    and visite['date_cloture_admin'] <= demande['date_heure']
+                    and demande['equipement_id'] == visite['equipement_id'] and demande['statut'] == 'Acceptée'
+                    and correctif and correctif['statut'] in STATUTS_CLOTURES
+                    and correctif['symptome_code'] == demande['symptome_code']):
+                erreurs.append('%s : DI liée %s incohérente avec la visite %s' % (cle, demande['id'], visite['id']))
+    autres = [c for c, s in ouvertes.items() if c != cle and (s['equipement'] == suggestion['equipement']
+                                                             or set(s['gammes']) & set(suggestion['gammes']))]
+    if autres:
+        erreurs.append('%s : autres suggestions sur le même équipement : %s' % (cle, autres))
+    return erreurs
+
+
+def verifier_refus_criticite_a(ctx, ouvertes, gamme_id):
+    """Gamme suivie à date, équipement de criticité A, au moins 6 visites de suite sans anomalie et aucun
+    correctif depuis la première : S4 la refuse, et l'ouvrirait si l'équipement était de criticité B."""
+    gamme = {g['id']: g for g in ctx.base['gammes']}.get(gamme_id)
+    if gamme is None:
+        return ['suggestion_refus_criticite_a : gamme %s introuvable' % gamme_id]
+    equipement = {e['id']: e for e in ctx.base['equipements']}[gamme['equipement_id']]
+    cle = 'S4-' + gamme_id
+    sans_criticite = calculer_suggestions(ctx.base, ctx.ref, criticites={equipement['id']: 'B'})
+    if (gamme['declencheur'], gamme['actif'], equipement['criticite']) != ('date', '1', 'A') or cle in ouvertes \
+            or cle not in sans_criticite or len(sans_criticite[cle]['faits']) < MINIMUM_REFUS_CRITICITE_A:
+        return ['suggestion_refus_criticite_a : %s ne remplit pas S4 à la seule criticité A près' % gamme_id]
+    return []
+
+
+def verifier_sous_seuil(ctx, ouvertes, cas):
+    """Équipement sans gamme active, exactement seuil - 1 correctifs de la cause dans la fenêtre : S1 n'est
+    pas ouverte, et le serait avec un seuil abaissé d'un cran."""
+    cle = 'S1-%s-%s' % (cas['equipement'], cas['cause'])
+    debut = ajouter_mois(ctx.ref, -FENETRE_MOIS) + timedelta(days=1)
+    nombre = len([o for o in ctx.base['ordres_travail'] if o['equipement_id'] == cas['equipement']
+                  and o['type'] in TYPES_CORRECTIFS and o['statut'] in STATUTS_CLOTURES
+                  and o['cause_code'] == cas['cause'] and jour_ot(o) and debut <= jour_ot(o) <= ctx.ref])
+    actives = [g for g in ctx.base['gammes'] if g['equipement_id'] == cas['equipement'] and g['actif'] != '0']
+    if actives or nombre != SEUIL_PANNES - 1 or cle in ouvertes \
+            or cle not in calculer_suggestions(ctx.base, ctx.ref, seuil=SEUIL_PANNES - 1):
+        return ['suggestion_sous_seuil : %s (%d correctifs, %d gammes actives)' % (cle, nombre, len(actives))]
+    return []
+
+
+def verifier_ignoree_revenue(ctx, cle, suggestion):
+    """Dernière décision de la clé « ignorée » avec un motif, écrite comme Donnees.journaliser (§16.4) ; la
+    suggestion était ouverte au moment de la décision ; au moins seuil faits postérieurs l'ont rouverte."""
+    decision = decisions_du_journal(ctx.base).get(cle)
+    if decision is None or decision['decision'] != 'ignorée' or not decision['texte'].strip() \
+            or len(decision['texte']) > 300 or '\n' in decision['texte']:
+        return ['suggestion_ignoree_revenue : %s sans décision « ignorée » avec motif' % cle]
+    erreurs = []
+    if (decision['table'], decision['id_ligne'], decision['profil'], decision['poste']) \
+            != ('equipements', suggestion['equipement'], 'Responsable', POSTE_DEMO):
+        erreurs.append('suggestion_ignoree_revenue : ligne de journal %s mal formée' % decision['id'])
+    if suggestion['depuis'] != decision['date_heure'] or len(suggestion['faits']) < SEUIL_PANNES:
+        erreurs.append('suggestion_ignoree_revenue : %d faits depuis la décision' % len(suggestion['faits']))
+    avant = calculer_suggestions(ctx.base, jour_depuis_texte(decision['date_heure'][:10]), limite=decision['date_heure'])
+    if cle not in avant:
+        erreurs.append('suggestion_ignoree_revenue : %s n\'était pas ouverte quand elle a été ignorée' % cle)
+    return erreurs
+
+
+# ---------------------------------------------------------------------------
 # Identifiants de scénario (tests/fixtures/demo-scenarios.json, ARCHITECTURE.md §14.8)
 # ---------------------------------------------------------------------------
 
@@ -3772,6 +4286,10 @@ STATUTS_FERMES = ('Clôturé techniquement', 'Clôturé administrativement', 'An
 CAUSES_DEMO = {'causes_equipement': ('PO-02', 'S01'), 'causes_equipement_2': ('CP-01', 'S04'),
                'causes_modele': ('CV-03', 'S05'), 'causes_insuffisantes': ('PO-03', 'S02')}
 MINIMUM_CAUSES = 5
+# Lot 3 bis (§16.8) : suggestions S1 / S2 de la démo, (règle, repère, cause) ; cas « sous le seuil ».
+SUGGESTIONS_DEMO = {'suggestion_creer': ('S1', 'CV-02', 'C04'), 'suggestion_revoir': ('S2', 'PO-02', 'C01'),
+                    'suggestion_ignoree_revenue': DECISION_IGNOREE_DEMO}
+SOUS_SEUIL_DEMO = ('CP-01.SEC', 'C05')
 
 
 def cles_documentees():
@@ -3835,6 +4353,13 @@ def scenarios_du_jeu(ctx):
     surcharge = surcharges_du_planning(ctx)[0]          # la seule (vérifié par verifier_demo_lot3)
     scenarios['technicien_surcharge'], scenarios['semaine_surcharge'] = surcharge
     scenarios['equipements_calcul_main'] = sorted(ctx.equipement[repere]['id'] for repere in EQUIPEMENTS_CALCUL_MAIN)
+    # Lot 3 bis : clés des suggestions (§16.2) ; suggestion_refus_criticite_a est marqué à la création de sa gamme.
+    for role, (regle, repere, cause) in SUGGESTIONS_DEMO.items():
+        scenarios[role] = '%s-%s-%s' % (regle, ctx.equipement[repere]['id'], cause)
+    scenarios['suggestion_anomalies'] = 'S3-' + ctx.gammes_lot3bis['anomalies']['id']
+    scenarios['suggestion_allonger'] = 'S4-' + ctx.marques['gamme_sans_constat']['id']
+    repere, cause = SOUS_SEUIL_DEMO
+    scenarios['suggestion_sous_seuil'] = {'equipement': ctx.equipement[repere]['id'], 'cause': cause}
     return scenarios
 
 
@@ -3875,6 +4400,7 @@ def verifier_scenarios(ctx, scenarios):
     if not 0.7 <= len(avec_code) / float(len(base['demandes'])) <= 0.9:
         erreurs.append('%d DI sur %d avec un code symptôme (environ 80 %% attendus)' % (len(avec_code), len(base['demandes'])))
     erreurs += verifier_calcul_main(ctx, scenarios)
+    erreurs += verifier_suggestions(ctx, scenarios)
     if erreurs:
         raise ErreurCoherence('\n'.join(erreurs))
 
@@ -3907,6 +4433,8 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
         generer_pannes_de_fond(ctx, nombre=int(round(taux_total * FACTEUR_TAUX_DEMO * mois)))
         with hasard_du_lot3(ctx):
             completer_demo_lot3(ctx)
+        with hasard_du_lot3bis(ctx):
+            completer_demo_lot3bis(ctx)
     attribuer_identifiants_historique(ctx)
     construire_stock(ctx)
     generer_liens_article_equipement(ctx)
@@ -3915,6 +4443,8 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
     if not volume:                    # le jeu de charge garde un journal vide
         with hasard_du_lot3(ctx):
             generer_journal(ctx)
+        with hasard_du_lot3bis(ctx):
+            ajouter_decision_ignoree(ctx)
     verifier_jeu(ctx)
     if not volume:
         verifier_demo_lot3(ctx)
