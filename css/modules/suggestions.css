@@ -1,0 +1,7 @@
+/* Suggestions de préventif (lot 3 bis, ARCHITECTURE.md §16.6) : onglets « Suggestions » et
+   « Décisions » du Préventif, cartes de suggestion, encarts des fiches gamme et équipement.
+   Variables de la charte seulement (css/style.css). */
+
+.suggestions {
+  min-width: 0;
+}

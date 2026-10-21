@@ -35,6 +35,13 @@ const Parametres = (() => {
       aide: 'Coût des 12 derniers mois / valeur de remplacement à partir duquel le rapport mensuel propose d\'examiner un équipement.' },
     { cle: 'heures_fonct_defaut', type: 'decimal', libelle: 'Heures de fonctionnement par jour (défaut)', defaut: '8', min: 1, max: 24,
       aide: 'Gammes « compteur » seulement : estime l\'échéance d\'un équipement sans heures par jour. Jamais utilisé par les indicateurs.' },
+    // Lot 3 bis (ARCHITECTURE.md §16.1) : seuils des suggestions de préventif.
+    { cle: 'suggestion_seuil_pannes', type: 'entier', libelle: 'Pannes de même cause pour suggérer', defaut: '3', min: 2, max: 20,
+      section: 'Suggestions de préventif', aide: 'Créer une gamme ou revoir le préventif à partir de ce nombre de pannes de même cause sur la période.' },
+    { cle: 'suggestion_visites_sans_constat', type: 'entier', libelle: 'Visites sans anomalie pour suggérer d\'allonger', defaut: '5', min: 3, max: 20,
+      aide: 'Visites de suite sans anomalie ni panne (criticité B ou C seulement).' },
+    { cle: 'suggestion_fenetre_mois', type: 'entier', libelle: 'Période observée (mois)', defaut: '12', min: 3, max: 24,
+      aide: 'Les pannes comptées sont celles de ces derniers mois.' },
     { cle: 'rafraichissement_s', type: 'entier', libelle: 'Rafraîchissement (secondes)', defaut: '20', min: 2, max: 3600,
       section: 'Échanges entre postes', aide: 'Fréquence de lecture des changements faits sur les autres postes.' },
   ];

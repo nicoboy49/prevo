@@ -1735,8 +1735,9 @@ règles du §16.3.
 
 ### 16.9 Tests du lot 3 bis
 `test_regles_suggestions.py` (règles sur un jeu construit et sur la démo, égalité avec un calcul
-Python indépendant, décisions, passage au format 2, Wilson), `test_suggestions.py` (écrans, actions,
+Python indépendant, décisions, passage au format 2), `test_causes_frequentes.py` (fourchette de Wilson
+égale au calcul Python, mention, détail), `test_suggestions.py` (écrans, actions,
 profils, `gammes.csv` identique à l'octet), `test_accueil_lot3bis.py`, `test_recette_lot3bis.py`
 (bout en bout, modes serveur et démo, design 1440 et 375 px) ; `test_performance.py` complété (liste
-des suggestions < 1 s sur le jeu de charge) ; `test_depot.py` (ordre §16.1, 700 lignes) ; tests
-existants complétés pour Paramètres et l'encart des causes fréquentes.
+des suggestions < 1 s sur le jeu de charge) ; `test_depot.py` (ordre §16.1, 700 lignes) ;
+`test_parametres.py` complété (trois réglages des suggestions).

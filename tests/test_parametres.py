@@ -707,6 +707,46 @@ class TestReglagesEtCodes(CasParametres):
             self.assertEqual(page.input_value(formulaire + "[name=heures_fonct_defaut]"), "7,5")
             self.assertEqual(page.evaluate("Donnees.parametre('seuil_remplacement_pct', '')"), "80")
 
+    def test_reglages_des_suggestions_defauts_bornes_et_enregistrement(self):
+        """Lot 3 bis (ARCHITECTURE.md §16.1) : trois seuils des suggestions de préventif."""
+        defauts = {"suggestion_seuil_pannes": "3", "suggestion_visites_sans_constat": "5", "suggestion_fenetre_mois": "12"}
+        with ServeurPrevo() as serveur:
+            chemin = serveur.dossier / "parametres.csv"
+            page = self.ouvrir(serveur, route="#/parametres")
+            self.attendre_ecran("Paramètres")
+            formulaire = "#form-parametres "
+            # Clés absentes de la démo : le formulaire montre le défaut, dans une section à part
+            for nom, valeur in defauts.items():
+                with self.subTest(nom=nom):
+                    self.assertEqual(page.input_value(formulaire + "[name=%s]" % nom), valeur)
+            self.assertIn("Suggestions de préventif", page.inner_text("#form-parametres"))
+            # Bornes (2–20, 3–20, 3–24) : refus sous le champ, fichier inchangé
+            avant = chemin.read_bytes()
+            for nom, valeur in (("suggestion_seuil_pannes", "1"), ("suggestion_seuil_pannes", "21"),
+                                ("suggestion_visites_sans_constat", "2"), ("suggestion_visites_sans_constat", "21"),
+                                ("suggestion_fenetre_mois", "2"), ("suggestion_fenetre_mois", "25"),
+                                ("suggestion_fenetre_mois", "6,5")):
+                with self.subTest(nom=nom, valeur=valeur):
+                    page.fill(formulaire + "[name=%s]" % nom, valeur)
+                    page.click(formulaire + "button[type=submit]")
+                    page.wait_for_selector(formulaire + ".champ[data-champ='%s'].en-erreur" % nom)
+                    self.assertEqual(chemin.read_bytes(), avant)
+                    page.fill(formulaire + "[name=%s]" % nom, defauts[nom])
+            # Valeurs correctes : écrites, puis relues après rechargement
+            page.fill(formulaire + "[name=suggestion_seuil_pannes]", "4")
+            page.fill(formulaire + "[name=suggestion_visites_sans_constat]", "8")
+            page.fill(formulaire + "[name=suggestion_fenetre_mois]", "24")
+            page.click(formulaire + "button[type=submit]")
+            self.attendre_toast("Paramètres enregistrés")
+            _, lignes = lire_csv(chemin)
+            valeurs = {ligne["cle"]: sans_apostrophe(ligne["valeur"]) for ligne in lignes}
+            self.assertEqual([valeurs[c] for c in defauts], ["4", "8", "24"])
+            page.reload()
+            attendre_pret(page)
+            self.attendre_ecran("Paramètres")
+            self.assertEqual(page.input_value(formulaire + "[name=suggestion_visites_sans_constat]"), "8")
+            self.assertEqual(page.evaluate("Donnees.parametre('suggestion_fenetre_mois', '')"), "24")
+
     def test_codes_ajout_visible_dans_la_fiche_ot_libelle_modifie_et_doublons_refuses(self):
         with ServeurPrevo() as serveur:
             chemin = serveur.dossier / "codes_defaillance.csv"
