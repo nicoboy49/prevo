@@ -671,7 +671,10 @@ class TestGamme(CasOrdresLot2):
                   priorite: o.priorite, origine: o.origine, gamme_id: o.gamme_id }); }""", recent)
             pret_a_cloturer = """async ([id, jour, technicien, cause, remede]) => {
                 await Donnees.modifier('ordres_travail', (lignes) => { Object.assign(lignes.find((o) => o.id === id), {
-                  statut: 'En cours', technicien_id: technicien, date_debut: jour + ' 08:00', date_fin: jour + ' 10:00',
+                  // Aujourd'hui : fin = maintenant (une fin à 10:00 serait « dans le futur » avant 10 h, refusée
+                  // depuis T39 : le test échouait la nuit).
+                  statut: 'En cours', technicien_id: technicien, date_debut: jour + ' 00:00',
+                  date_fin: jour === Donnees.aujourdhui() ? Donnees.maintenant() : jour + ' 10:00',
                   cause_code: cause, remede_code: remede, compte_rendu: 'Gamme réalisée, tension de bande réglée.',
                   remise_service: '1' }); });
                 await Donnees.modifier('ot_temps', (lignes, outils) => { lignes.push({ id: outils.nouvelId(lignes),
