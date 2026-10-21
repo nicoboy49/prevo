@@ -501,6 +501,15 @@ Le dépôt privé `nicoboy49/prevo` a été créé par Nicolas ; l'historique a 
 envoi pour porter son adresse professionnelle (contenu identique, vérifié, sauvegarde gardée). Les
 étiquettes `lot-1` à `lot-3-bis` y sont ; `lot-4` et `v1.0.0` sont envoyées à la clôture.
 
+### Gel de l'interface avant le lancement (2026-10-22)
+
+Après la refonte « bento » de l'accueil du responsable (menu latéral allégé, barre du bas en verre dépoli,
+notification en bulle ; captures avant/après validées par Nicolas, PC 1440 et téléphone 390, clair et
+sombre), **l'interface est gelée** : les captures du guide et du README sont régénérées sur cet état
+(`outils/generer_captures.py`, horloge fixée à 9 h 30 du jour), et ce sont elles, puis les vidéos de
+lancement, qui la montreront. Jusqu'au lancement, plus de changement visuel sans décision de Nicolas ;
+les écrans Indicateurs et Rapport mensuel pourront reprendre ce style dans une passe suivante, sur demande.
+
 ## 11. À retenir pour piloter une IA
 
 1. Faire écrire et valider le cahier des charges et ses critères de succès avant le code.

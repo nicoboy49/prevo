@@ -24,6 +24,7 @@ Code de sortie : 0 si tout est fait, 1 si une capture a échoué (son ancienne i
 """
 import argparse
 import base64
+import datetime
 import json
 import re
 import sys
@@ -38,6 +39,8 @@ BUDGET_GUIDE = 1500000          # octets de texte base64, toutes images du guide
 QUALITES_JPEG = (0.82, 0.76, 0.70, 0.64, 0.58, 0.52, 0.46)
 REDUCTION_LARGEUR = 0.9         # si la qualité la plus basse ne suffit pas, les images rétrécissent
 DELAI_MS = 20000
+# Heure des captures (date du jour) : l'accueil du responsable dit « Ce matin dans l'atelier » (T91).
+HEURE_CAPTURES = "09:30:00"
 
 # Appareils : écran de bureau 1440 × 900, téléphone 375 × 812 (pixels doublés, comme un vrai téléphone).
 APPAREILS = {
@@ -131,6 +134,7 @@ def prendre_capture(navigateur, capture):
     appareil = APPAREILS[capture["appareil"]]
     contexte = navigateur.new_context(locale="fr-FR", **appareil["contexte"])
     contexte.set_default_timeout(DELAI_MS)
+    contexte.clock.set_fixed_time(datetime.date.today().isoformat() + "T" + HEURE_CAPTURES)
     try:
         profil = PROFILS[capture["profil"]]
         poste = "Téléphone" if capture["appareil"] == "telephone" else "PC atelier"
