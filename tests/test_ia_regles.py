@@ -682,6 +682,24 @@ class TestDemanderDirect(CasDemoIa):
         self.assertEqual(resultat["modeles"], [])
         self.assertIn("ne répond pas", resultat["message"])
 
+    def test_fournisseur_en_ligne_qui_refuse_le_navigateur_conseille_le_mode_serveur(self):
+        """D66 (ajout de l'orchestrateur) : modes dossier et démo, fournisseur en ligne autorisé mais qui
+        refuse les appels d'une page (pas d'en-têtes CORS) → message « passez par le mode serveur »."""
+        self.autoriser_erreur(re.compile(r"CORS|Access-Control|ERR_FAILED"))
+        # Refus CORS vu par fetch : une TypeError, comme une requête bloquée (une réponse interceptée par
+        # Playwright échappe au contrôle CORS) ; aucune requête ne quitte le poste.
+        self.contexte.route("https://api.mistral.ai/**", lambda route: route.abort("failed"))
+        regler_ia(self.contexte, fournisseur="openai", url="https://api.mistral.ai/v1", cle=CLE, modele="mistral-small-latest")
+        page = self.ouvrir_demo(attendre_etat=False)
+        page.evaluate("""() => Donnees.modifier('parametres', (lignes) => {
+          const ligne = lignes.find((l) => l.cle === 'ia_distant_autorise');
+          if (ligne) ligne.valeur = '1'; else lignes.push({ cle: 'ia_distant_autorise', valeur: '1' });
+        })""")
+        resultat = page.evaluate("Ia.tester()")
+        self.assertFalse(resultat["ok"])
+        self.assertIn("api.mistral.ai", resultat["message"])
+        self.assertIn("passez par le mode serveur", resultat["message"])
+
 
 # ---------------------------------------------------------------------------
 # Relais du serveur (mode serveur, /api/ia)

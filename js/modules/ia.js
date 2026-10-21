@@ -350,6 +350,8 @@ const Ia = (() => {
       return 'Ollama ne répond pas (' + hote + ') : vérifiez qu\'il est lancé et, pour une page ouverte sans '
         + 'serveur, que OLLAMA_ORIGINS l\'autorise (voir le guide).';
     }
+    // D66 : beaucoup de fournisseurs en ligne refusent les appels directs d'une page (CORS).
+    if (portee(r.url) === 'distant') return 'Le fournisseur d\'IA ne répond pas à ce navigateur (' + hote + ') : passez par le mode serveur (voir le guide).';
     return 'Le fournisseur d\'IA ne répond pas (' + hote + ').';
   }
 
