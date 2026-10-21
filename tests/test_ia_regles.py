@@ -187,6 +187,10 @@ class TestReglesPures(CasNavigateur):
             ("http://localhost:11434", "demo", "poste"),
             ("http://localhost:11434", "dossier", "poste"),
             ("http://localhost:11434", "serveur", "pc-atelier"),
+            # « *.localhost » : boucle locale pour le navigateur, mais pas sûre pour le relais Python (même
+            # règle que fournisseur_distant de serveur.py : refusé sans l'accord du responsable)
+            ("http://ia.localhost:11434", "demo", "poste"),
+            ("http://ia.localhost:11434", "serveur", "distant"),
             ("http://127.0.0.1:1234/v1", "demo", "poste"),
             ("http://127.0.0.1:1234/v1", "serveur", "pc-atelier"),
             ("http://127.8.9.10:11434", "dossier", "poste"),
@@ -365,6 +369,29 @@ class TestReglesPures(CasNavigateur):
         self.assertIn("92", resultat["chiffre"]["raison"])
         self.assertIn("{mtbf}", resultat["inconnu"]["raison"])
         self.assertEqual(resultat["sansJetons"], {"ok": True, "texte": "Mois calme, rien à signaler.", "raison": ""})
+
+    def test_commentaire_nombres_en_lettres_refuses(self):
+        """Relecture du lot 4 (D71 : « tout nombre écrit en clair ») : nombres en lettres refusés ; les mots
+        qui en contiennent (septembre, sixième…) et « neuf » (un moteur neuf) restent permis."""
+        resultat = self.page.evaluate("""() => {
+          const jetons = { disponibilite: '92,5 %' };
+          const essai = (texte) => Ia.valider.commentaire(texte, jetons);
+          return {
+            refuses: ['La disponibilité gagne trois points.', 'Vingt-cinq heures de correctif en plus.',
+                      'Le coût baisse de moitié.', 'Deux pannes sur la presse.', 'Plus de mille euros de pièces.']
+              .map((t) => [t, essai(t).ok, essai(t).raison]),
+            permis: ['En septembre, la disponibilité atteint {disponibilite}.', 'Pompe remplacée par un moteur neuf.',
+                     'Le sixième contrôle est fait ; centrale vérifiée.']
+              .map((t) => [t, essai(t).ok]),
+          };
+        }""")
+        for texte, ok, raison in resultat["refuses"]:
+            with self.subTest(refuse=texte):
+                self.assertFalse(ok)
+                self.assertIn("lettres", raison)
+        for texte, ok in resultat["permis"]:
+            with self.subTest(permis=texte):
+                self.assertTrue(ok)
 
     def test_consignes_des_six_fonctions(self):
         consignes = self.page.evaluate("""(fonctions) => fonctions.map((f) => {
@@ -681,6 +708,25 @@ class TestDemanderDirect(CasDemoIa):
         self.assertFalse(resultat["ok"])
         self.assertEqual(resultat["modeles"], [])
         self.assertIn("ne répond pas", resultat["message"])
+
+    def test_cle_jamais_envoyee_a_une_autre_origine(self):
+        """Relecture du lot 4 (D66) : la règle est dans ia.js, pas seulement dans « Ce poste » —
+        tester ou enregistrer une autre adresse sans clé n'emporte pas la clé enregistrée."""
+        self.autoriser_erreur("status of 401")       # sans clé, le faux fournisseur refuse : attendu
+        regler_ia(self.contexte, fournisseur="openai", url=self.faux.url + "/v1", cle=CLE, modele="faux")
+        page = self.ouvrir_demo()
+        self.assertEqual(page.evaluate("Ia.etat()"), "ok")
+        autre = self.faux.url.replace("127.0.0.1", "localhost") + "/v1"
+        self.faux.requetes.clear()
+        page.evaluate("(url) => Ia.tester({ url })", autre)
+        self.assertTrue(self.faux.requetes)
+        self.assertEqual([r["entetes"].get("authorization") for r in self.faux.requetes], [None] * len(self.faux.requetes))
+        page.evaluate("(url) => Ia.enregistrerReglages({ url })", autre)
+        self.assertEqual(page.evaluate("Ia.reglages().cle"), "")
+        # Même origine : la clé reste (rien n'oblige à la ressaisir)
+        page.evaluate("(url) => Ia.enregistrerReglages({ url, cle: 'cle-ressaisie' })", autre)
+        page.evaluate("(url) => Ia.enregistrerReglages({ url: url + '/' })", autre)
+        self.assertEqual(page.evaluate("Ia.reglages().cle"), "cle-ressaisie")
 
     def test_fournisseur_en_ligne_qui_refuse_le_navigateur_conseille_le_mode_serveur(self):
         """D66 (ajout de l'orchestrateur) : modes dossier et démo, fournisseur en ligne autorisé mais qui

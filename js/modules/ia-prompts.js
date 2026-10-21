@@ -293,8 +293,108 @@ Object.assign(Ia, (() => {
     },
   };
 
+  const OPERATIONS_MAX = 20;
+  const OPERATION_MAX = 200;
+  const VALEUR_ATTENDUE_MAX = 120;
+  const MOTIF_JETON = /\{([^{}]*)\}/g;
+  // Nombre écrit en lettres dans un commentaire (D71) ; « neuf » n'y est pas (« un moteur neuf »).
+  const MOTIF_NOMBRE_EN_LETTRES = new RegExp('(?<![\\p{L}])(deux|trois|quatre|cinq|six|sept|huit|dix|onze|douze|treize|'
+    + 'quatorze|quinze|seize|vingts?|trente|quarante|cinquante|soixante|cents?|mille|millions?|milliards?|moitié)'
+    + '(?![\\p{L}])', 'iu');
+
+  // Minuscules sans accents : « Dégradé » et « degrade » se comparent pareil.
+  function motComparable(valeur) {
+    return texte(valeur).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  // ===========================================================================================
+  // Validations pures (Ia.valider ; déplacées de ia.js, lot 4)
+  // ===========================================================================================
+
+  /**
+   * Codes proposés → { symptome, cause, remede, rejetes: [{ champ, code }] } : un code n'est gardé que
+   * s'il existe dans codes_defaillance ET dans la bonne famille (D70) ; sinon il est rejeté et listé.
+   */
+  function codesProposes(objet, lignesCodes) {
+    const resultat = { symptome: '', cause: '', remede: '', rejetes: [] };
+    const source = objet && typeof objet === 'object' ? objet : {};
+    const lignes = Array.isArray(lignesCodes) ? lignesCodes : [];
+    Object.keys(Ia.FAMILLES_CODES).forEach((champ) => {
+      const code = texte(source[champ]);
+      if (!code) return;
+      const connu = lignes.some((ligne) => ligne && ligne.code === code && ligne.famille === Ia.FAMILLES_CODES[champ]);
+      if (connu) resultat[champ] = code; else resultat.rejetes.push({ champ, code });
+    });
+    return resultat;
+  }
+
+  /** Impact proposé → 'gêne' | 'dégradé' | 'arrêt' | 'sécurité', ou null s'il n'est pas dans la liste. */
+  function impact(valeur) {
+    if (typeof valeur !== 'string') return null;
+    const cherche = motComparable(valeur);
+    return Ia.IMPACTS.find((possible) => motComparable(possible) === cherche) || null;
+  }
+
+  function refusCheckList(raison) {
+    return { ok: false, operations: [], raison: 'Check-list refusée : ' + raison + '.' };
+  }
+
+  /** Check-list proposée → { ok, operations: [{ operation, valeur_attendue }], raison } (1 à 20 opérations). */
+  function checkListe(objet) {
+    const liste = objet && typeof objet === 'object' && Array.isArray(objet.operations) ? objet.operations : null;
+    if (!liste) return refusCheckList('la réponse ne contient pas de liste d\'opérations');
+    if (!liste.length) return refusCheckList('aucune opération proposée');
+    if (liste.length > OPERATIONS_MAX) return refusCheckList('plus de ' + OPERATIONS_MAX + ' opérations proposées');
+    const operations = [];
+    for (const element of liste) {
+      const operation = texte(element && element.operation);
+      const valeurAttendue = texte(element && element.valeur_attendue);
+      if (!operation) return refusCheckList('une opération est vide');
+      if (operation.length > OPERATION_MAX) return refusCheckList('une opération dépasse ' + OPERATION_MAX + ' caractères');
+      if (valeurAttendue.length > VALEUR_ATTENDUE_MAX) {
+        return refusCheckList('une valeur attendue dépasse ' + VALEUR_ATTENDUE_MAX + ' caractères');
+      }
+      operations.push({ operation, valeur_attendue: valeurAttendue });
+    }
+    return { ok: true, operations, raison: '' };
+  }
+
+  function refusCommentaire(raison) {
+    return { ok: false, texte: '', raison: 'Commentaire refusé : ' + raison + '.' };
+  }
+
+  /**
+   * Commentaire à jetons (D71) → { ok, texte, raison } : refusé si un chiffre apparaît hors d'un jeton
+   * {nom} connu, ou si un jeton est inconnu ; sinon le texte avec chaque jeton remplacé par sa valeur.
+   */
+  function commentaire(texteIa, jetons) {
+    const source = typeof texteIa === 'string' ? texteIa.trim() : '';
+    const valeurs = jetons && typeof jetons === 'object' ? jetons : {};
+    if (!source) return refusCommentaire('le commentaire est vide');
+    if (source.length > Ia.TEXTE_MAX) return refusCommentaire('le commentaire dépasse 4\u00a0000 caractères');
+    const inconnus = [];
+    const sansJetons = source.replace(MOTIF_JETON, (jeton, nom) => {
+      if (!Object.prototype.hasOwnProperty.call(valeurs, nom.trim())) inconnus.push(jeton);
+      return ' ';
+    });
+    if (inconnus.length) return refusCommentaire('jeton inconnu ' + inconnus[0]);
+    if (/[{}]/.test(sansJetons)) return refusCommentaire('accolade sans jeton complet');
+    const chiffre = /\p{Nd}[\p{Nd}\s.,%]*/u.exec(sansJetons);
+    if (chiffre) {
+      return refusCommentaire('chiffre écrit en clair (« ' + chiffre[0].trim() + ' ») : seuls les jetons {…} portent les chiffres');
+    }
+    const nombre = MOTIF_NOMBRE_EN_LETTRES.exec(sansJetons);
+    if (nombre) {
+      return refusCommentaire('nombre écrit en lettres (« ' + nombre[0] + ' ») : seuls les jetons {…} portent les chiffres');
+    }
+    const final = source.replace(MOTIF_JETON, (jeton, nom) => texte(valeurs[nom.trim()]));
+    if (final.length > Ia.TEXTE_MAX) return refusCommentaire('le commentaire dépasse 4\u00a0000 caractères');
+    return { ok: true, texte: final, raison: '' };
+  }
+
   return {
     PROMPTS: Object.freeze({ reformulerDI, compteRendu, codes, checkList, resumeHistorique, commentaireRapport }),
+    valider: Object.freeze({ codes: codesProposes, impact, checkList: checkListe, commentaire }),
     codesConnus,
     jetonsRapport,
   };

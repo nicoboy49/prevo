@@ -16,7 +16,7 @@
 //   Ia.tester([reglagesEssai]) → { ok, modeles, message } ;
 //   Ia.demander(fonction, donnees, { signal }) → { resultat, modele, fournisseur } (consignes, schéma et
 //     contrôle de chaque fonction : Ia.PROMPTS, dans ia-prompts.js) ;
-//   Ia.valider.codes / impact / checkList / commentaire ; Ia.tracerUtilisation(table, id, champ, modele) ;
+//   Ia.valider.codes / impact / checkList / commentaire (ia-prompts.js) ; Ia.tracerUtilisation(table, id, champ, modele) ;
 //   Ia.evenements : événement 'changement' (detail : { raison, etat }) quand les réglages ou l'état changent.
 // Erreurs nommées (Ia.IaIndisponible, Ia.IaDelai, Ia.IaAnnulee, Ia.IaReponseInvalide, Ia.IaRefusee,
 // toutes filles de Ia.ErreurIa) : message en français, jamais la clé.
@@ -41,9 +41,6 @@ const Ia = (() => {
   const ADRESSE_RELAIS = '/api/ia';
   const TEMPERATURE = 0.2;
   const TEXTE_MAX = 4000;             // tout texte proposé par l'IA
-  const OPERATIONS_MAX = 20;
-  const OPERATION_MAX = 200;
-  const VALEUR_ATTENDUE_MAX = 120;
   const IMPACTS = Object.freeze(['gêne', 'dégradé', 'arrêt', 'sécurité']);
   const FAMILLES_CODES = Object.freeze({ symptome: 'symptôme', cause: 'cause', remede: 'remède' });
   // Chemins du fournisseur (liste fermée du relais) : liste des modèles et conversation.
@@ -54,7 +51,6 @@ const Ia = (() => {
   const MESSAGE_DISTANT_REFUSE = 'Le responsable n\'a pas autorisé les fournisseurs en ligne (Paramètres, '
     + '« Assistant IA »). L\'IA locale reste possible.';
   const MENTIONS = { poste: 'reste sur ce PC', 'pc-atelier': 'reste sur le PC atelier', atelier: 'reste dans l\'atelier' };
-  const MOTIF_JETON = /\{([^{}]*)\}/g;
 
   const evenements = new EventTarget();
   let etatCourant = 'inconnu';
@@ -109,11 +105,6 @@ const Ia = (() => {
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
-  }
-
-  // Minuscules sans accents : « Dégradé » et « degrade » se comparent pareil.
-  function motComparable(valeur) {
-    return texte(valeur).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
   function modeCourant() {
@@ -180,9 +171,22 @@ const Ia = (() => {
    * Changer de fournisseur, d'adresse ou de clé remet l'état à « inconnu » : « Ce poste » appelle
    * ensuite Ia.tester() (les boutons IA n'apparaissent qu'avec l'état « ok »).
    */
+  function origineDe(url) {
+    try { return new URL(texte(url)).origin; } catch (erreur) { return ''; }
+  }
+
+  // Clé enregistrée gardée seulement pour l'API compatible OpenAI à la même origine, sauf clé donnée
+  // explicitement : jamais envoyée à un autre service (D66 ; relecture du lot 4).
+  function avecCle(anciens, modifications) {
+    const nouveaux = Object.assign({}, anciens, modifications || {});
+    const cleDonnee = Boolean(modifications) && Object.prototype.hasOwnProperty.call(modifications, 'cle');
+    if (!cleDonnee && (nouveaux.fournisseur !== 'openai' || origineDe(nouveaux.url) !== origineDe(anciens.url))) nouveaux.cle = '';
+    return nouveaux;
+  }
+
   function enregistrerReglages(modifications) {
     const anciens = reglages();
-    const nouveaux = normaliser(Object.assign({}, anciens, modifications || {}));
+    const nouveaux = normaliser(avecCle(anciens, modifications));
     if (nouveaux.actif && !porteeAutorisee(nouveaux.url)) throw new IaRefusee();
     if (!ecrireMemoire(JSON.stringify(nouveaux))) {
       console.warn('Prévo : réglages de l\'assistant IA non mémorisés (stockage du navigateur refusé).');
@@ -272,7 +276,11 @@ const Ia = (() => {
   function portee(url, mode) {
     const hote = hoteNormalise(url);
     if (!hote) return 'distant';
-    if (estBoucleLocale(hote)) return (mode === undefined ? modeCourant() : mode) === 'serveur' ? 'pc-atelier' : 'poste';
+    if (estBoucleLocale(hote)) {
+      // Mode serveur : le relais (Python) ne résout pas « *.localhost » vers ce PC à coup sûr → distant (§17.2).
+      if ((mode === undefined ? modeCourant() : mode) === 'serveur') return hote.endsWith('.localhost') ? 'distant' : 'pc-atelier';
+      return 'poste';
+    }
     if (estAdressePrivee(hote)) return 'atelier';
     return 'distant';
   }
@@ -475,7 +483,7 @@ const Ia = (() => {
    */
   async function tester(reglagesEssai) {
     const pourLePoste = !reglagesEssai;
-    const r = pourLePoste ? reglages() : normaliser(Object.assign(reglages(), reglagesEssai));
+    const r = pourLePoste ? reglages() : normaliser(avecCle(reglages(), reglagesEssai));
     const resultat = await testerAvec(r);
     // Adresse invalide ou portée refusée : rien n'a été appelé, l'état reste ce qu'il était.
     if (pourLePoste && urlValide(r.url) && porteeAutorisee(r.url)) definirEtat(resultat.ok ? 'ok' : 'injoignable');
@@ -581,88 +589,7 @@ const Ia = (() => {
   }
 
   // ===========================================================================================
-  // 8. Validations pures (Ia.valider)
-  // ===========================================================================================
-
-  /**
-   * Codes proposés → { symptome, cause, remede, rejetes: [{ champ, code }] } : un code n'est gardé que
-   * s'il existe dans codes_defaillance ET dans la bonne famille (D70) ; sinon il est rejeté et listé.
-   */
-  function codes(objet, lignesCodes) {
-    const resultat = { symptome: '', cause: '', remede: '', rejetes: [] };
-    const source = objet && typeof objet === 'object' ? objet : {};
-    const lignes = Array.isArray(lignesCodes) ? lignesCodes : [];
-    Object.keys(FAMILLES_CODES).forEach((champ) => {
-      const code = texte(source[champ]);
-      if (!code) return;
-      const connu = lignes.some((ligne) => ligne && ligne.code === code && ligne.famille === FAMILLES_CODES[champ]);
-      if (connu) resultat[champ] = code; else resultat.rejetes.push({ champ, code });
-    });
-    return resultat;
-  }
-
-  /** Impact proposé → 'gêne' | 'dégradé' | 'arrêt' | 'sécurité', ou null s'il n'est pas dans la liste. */
-  function impact(valeur) {
-    if (typeof valeur !== 'string') return null;
-    const cherche = motComparable(valeur);
-    return IMPACTS.find((possible) => motComparable(possible) === cherche) || null;
-  }
-
-  function refusCheckList(raison) {
-    return { ok: false, operations: [], raison: 'Check-list refusée : ' + raison + '.' };
-  }
-
-  /** Check-list proposée → { ok, operations: [{ operation, valeur_attendue }], raison } (1 à 20 opérations). */
-  function checkList(objet) {
-    const liste = objet && typeof objet === 'object' && Array.isArray(objet.operations) ? objet.operations : null;
-    if (!liste) return refusCheckList('la réponse ne contient pas de liste d\'opérations');
-    if (!liste.length) return refusCheckList('aucune opération proposée');
-    if (liste.length > OPERATIONS_MAX) return refusCheckList('plus de ' + OPERATIONS_MAX + ' opérations proposées');
-    const operations = [];
-    for (const element of liste) {
-      const operation = texte(element && element.operation);
-      const valeurAttendue = texte(element && element.valeur_attendue);
-      if (!operation) return refusCheckList('une opération est vide');
-      if (operation.length > OPERATION_MAX) return refusCheckList('une opération dépasse ' + OPERATION_MAX + ' caractères');
-      if (valeurAttendue.length > VALEUR_ATTENDUE_MAX) {
-        return refusCheckList('une valeur attendue dépasse ' + VALEUR_ATTENDUE_MAX + ' caractères');
-      }
-      operations.push({ operation, valeur_attendue: valeurAttendue });
-    }
-    return { ok: true, operations, raison: '' };
-  }
-
-  function refusCommentaire(raison) {
-    return { ok: false, texte: '', raison: 'Commentaire refusé : ' + raison + '.' };
-  }
-
-  /**
-   * Commentaire à jetons (D71) → { ok, texte, raison } : refusé si un chiffre apparaît hors d'un jeton
-   * {nom} connu, ou si un jeton est inconnu ; sinon le texte avec chaque jeton remplacé par sa valeur.
-   */
-  function commentaire(texteIa, jetons) {
-    const source = typeof texteIa === 'string' ? texteIa.trim() : '';
-    const valeurs = jetons && typeof jetons === 'object' ? jetons : {};
-    if (!source) return refusCommentaire('le commentaire est vide');
-    if (source.length > TEXTE_MAX) return refusCommentaire('le commentaire dépasse 4\u00a0000 caractères');
-    const inconnus = [];
-    const sansJetons = source.replace(MOTIF_JETON, (jeton, nom) => {
-      if (!Object.prototype.hasOwnProperty.call(valeurs, nom.trim())) inconnus.push(jeton);
-      return ' ';
-    });
-    if (inconnus.length) return refusCommentaire('jeton inconnu ' + inconnus[0]);
-    if (/[{}]/.test(sansJetons)) return refusCommentaire('accolade sans jeton complet');
-    const chiffre = /\p{Nd}[\p{Nd}\s.,%]*/u.exec(sansJetons);
-    if (chiffre) {
-      return refusCommentaire('chiffre écrit en clair (« ' + chiffre[0].trim() + ' ») : seuls les jetons {…} portent les chiffres');
-    }
-    const final = source.replace(MOTIF_JETON, (jeton, nom) => texte(valeurs[nom.trim()]));
-    if (final.length > TEXTE_MAX) return refusCommentaire('le commentaire dépasse 4\u00a0000 caractères');
-    return { ok: true, texte: final, raison: '' };
-  }
-
-  // ===========================================================================================
-  // 9. Trace d'utilisation (D65)
+  // 8. Trace d'utilisation (D65)
   // ===========================================================================================
 
   /**
@@ -690,7 +617,6 @@ const Ia = (() => {
     evenements,
     reglages, enregistrerReglages, distantAutorise, urlValide, portee, mention, active, etat,
     verifierAuDemarrage, tester, demander,
-    valider: Object.freeze({ codes, impact, checkList, commentaire }),
     tracerUtilisation,
   };
 })();
