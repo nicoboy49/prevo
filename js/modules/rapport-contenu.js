@@ -133,7 +133,7 @@ const Rapport = (() => {
     Indicateurs.coutParEquipement(periode12).forEach((element) => {
       const equipement = Donnees.trouver('equipements', element.equipementId);
       // Un équipement déjà au rebut ou désactivé n'est pas à « réparer ou remplacer ».
-      if (!equipement || equipement.actif === '0' || equipement.statut === 'rebut') return;
+      if (!equipement || texte(equipement.actif) === '0' || texte(equipement.statut) === 'rebut') return;
       const valeur = Donnees.nombre(equipement.valeur_remplacement);
       if (valeur === null || valeur <= 0) { if (element.valeur > 0) sansValeur.push(element.equipementId); return; }
       const ratio = element.valeur / valeur * 100;
