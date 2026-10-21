@@ -29,6 +29,7 @@ import unittest
 from pathlib import Path
 
 from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo, url_fichier
+from test_controles import date_reference
 
 FERMES = ("Clôturé techniquement", "Clôturé administrativement", "Annulé")
 
@@ -334,9 +335,11 @@ class TestPlanningProfils(CasPlanning):
 
 
 class TestPlanningDemo(CasNavigateur):
-    """Mode démo (file://, dates décalées) : le glisser-déposer marche aussi sans serveur."""
+    """Mode démo (file://, dates décalées) : le glisser-déposer marche aussi sans serveur. Horloge fixée à
+    la date de référence de la démo : le test passe à toute date (il échouait le 2026-10-22)."""
 
     def test_glisser_en_mode_demo(self):
+        self.contexte.clock.set_fixed_time(date_reference().isoformat() + "T10:00:00")
         scenarios = scenarios_demo()
         ot_id = scenarios["ot_a_planifier"]
         preregler_profil(self.contexte, "responsable", "Responsable")
