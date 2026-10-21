@@ -9,7 +9,10 @@
 
 .pl-entete .pl-navigation { flex-wrap: wrap; }
 /* La grille a besoin de toute la largeur : « À planifier » est une bande au-dessus d'elle (on glisse
-   vers le bas) ; elle ne passe à droite qu'à partir de 1700 px (§ 5). */
+   vers le bas) ; elle ne passe à droite qu'à partir de 1700 px (§ 5). Le planning prend alors toute la
+   largeur de l'écran (sans le plafond de .contenu) : sinon la grille y serait plus étroite qu'à
+   1440 px (relecture). */
+.contenu:has(> .pl-ecran) { max-width: none; }
 .pl-disposition { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
 .pl-disposition > .pl-a-planifier { order: -1; }
 .pl-a-planifier .pl-liste { flex-direction: row; flex-wrap: wrap; }

@@ -47,9 +47,18 @@ Object.assign(Planning, (() => {
     return Planning.lundiDe(/^\d{4}-\d{2}-\d{2}$/.test(demande) ? demande : Donnees.aujourdhui());
   }
 
-  function lienSemaine(lundi, decalageSemaines) {
+  /** Lien vers une autre semaine ; le filtre ?technicien= suit (correction de relecture). */
+  function lienSemaine(lundi, decalageSemaines, technicienId) {
     const numero = Planning.interne.numeroJour(lundi) + 7 * decalageSemaines;
-    return '#/planning?semaine=' + Planning.interne.dateDepuisNumero(numero);
+    return '#/planning?semaine=' + Planning.interne.dateDepuisNumero(numero)
+      + (technicienId ? '&technicien=' + encodeURIComponent(technicienId) : '');
+  }
+
+  /** Filtre ?technicien= annoncé, avec le lien qui le retire (la grille ne montre qu'une ligne). */
+  function filtreHtml(grille, technicienId) {
+    if (!technicienId) return '';
+    return UI.html`<p class="note pl-filtre">Planning de ${nomTechnicien(technicienId)} seulement.
+      <a href="${'#/planning?semaine=' + grille.lundi}">Voir toute l'équipe</a></p>`;
   }
 
   /** « 38 h / 35 h » et le badge « surcharge » (texte, pas seulement une couleur). */
@@ -153,10 +162,11 @@ Object.assign(Planning, (() => {
         <p>Semaine du ${UI.dateFr(grille.jours[0])} au ${UI.dateFr(grille.jours[6])}.${App.estTechnicien() ? ' Consultation : le responsable planifie.' : ''}</p>
       </div>
       <nav class="actions pl-navigation" aria-label="Changer de semaine">
-        <a class="btn btn-secondaire" href="${lienSemaine(grille.lundi, -1)}">‹ Semaine précédente</a>
-        <a class="btn btn-fantome" href="#/planning">Cette semaine</a>
-        <a class="btn btn-secondaire" href="${lienSemaine(grille.lundi, 1)}">Semaine suivante ›</a>
+        <a class="btn btn-secondaire" href="${lienSemaine(grille.lundi, -1, technicienDemande)}">‹ Semaine précédente</a>
+        <a class="btn btn-fantome" href="${'#/planning' + (technicienDemande ? '?technicien=' + encodeURIComponent(technicienDemande) : '')}">Cette semaine</a>
+        <a class="btn btn-secondaire" href="${lienSemaine(grille.lundi, 1, technicienDemande)}">Semaine suivante ›</a>
       </nav></div>
+      ${filtreHtml(grille, technicienDemande)}
       <div id="pl-message"></div>
       <div class="pl-disposition">
         <div class="pl-principal">${telephone ? listeParJourHtml(grille) : grilleHtml(grille)}</div>

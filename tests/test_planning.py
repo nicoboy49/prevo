@@ -229,6 +229,40 @@ class TestPlanning(CasPlanning):
                 self.assertEqual("surcharge" in texte, charge > capacite)
         self.assertIn("surcharge", page.inner_text('.pl-grille tr[data-technicien="%s"] th' % self.scenarios["technicien_surcharge"]))
 
+    def test_filtre_technicien_annonce_et_garde_d_une_semaine_a_l_autre(self):
+        """?technicien= (§15.5) : une seule ligne, filtre annoncé, gardé par « Semaine suivante » (relecture)."""
+        lundi = self.scenarios["semaine_surcharge"]
+        technicien = self.scenarios["technicien_surcharge"]
+        page = self.ouvrir("#/planning?semaine=%s&technicien=%s" % (lundi, technicien))
+        lignes = ".pl-grille tr[data-technicien]"
+        self.assertEqual(page.eval_on_selector_all(lignes, "l => l.map(e => e.dataset.technicien)"), [technicien])
+        self.assertIn("Voir toute l'équipe", page.inner_text(".pl-filtre"))
+        page.click(".pl-navigation >> text=Semaine suivante")
+        page.wait_for_function("location.hash.indexOf('semaine=%s') < 0" % lundi)
+        attendre_pret(page)
+        self.assertIn("technicien=" + technicien, page.evaluate("location.hash"))
+        self.assertEqual(page.eval_on_selector_all(lignes, "l => l.map(e => e.dataset.technicien)"), [technicien])
+        page.click(".pl-filtre a")
+        page.wait_for_function("location.hash.indexOf('technicien=') < 0")
+        attendre_pret(page)
+        self.assertGreater(page.locator(lignes).count(), 1)
+
+    def test_grille_sans_defilement_et_pas_plus_etroite_sur_grand_ecran(self):
+        """Recette puis relecture : à 1 440 et 1 920 px, la grille tient dans son cadre, et la mise en
+        page « À planifier » à droite ne la rend pas plus étroite qu'à 1 440 px."""
+        page = self.ouvrir("#/planning?semaine=" + self.scenarios["semaine_surcharge"])
+        largeurs = {}
+        for largeur in (1440, 1920):
+            page.set_viewport_size({"width": largeur, "height": 1200})
+            page.reload()
+            attendre_pret(page)
+            defile, visible, grille = page.evaluate("""() => { const c = document.querySelector('.pl-cadre');
+                return [c.scrollWidth, c.clientWidth, document.querySelector('.pl-grille').getBoundingClientRect().width]; }""")
+            with self.subTest(largeur=largeur):
+                self.assertLessEqual(defile, visible + 1)
+            largeurs[largeur] = grille
+        self.assertGreaterEqual(largeurs[1920], largeurs[1440] - 1, largeurs)
+
     def test_conflit_statut_change_sur_un_autre_poste_refus_clair(self):
         self.autoriser_erreur("409")
         ot_id = self.scenarios["ot_a_planifier"]
