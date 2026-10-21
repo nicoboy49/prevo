@@ -7,7 +7,7 @@ vise un lecteur qui se demande si un projet confié à une IA peut être contrô
 Les chiffres cités viennent de commandes lancées au moment de la rédaction (suite de tests, historique
 git) ou du journal de chantier, qui consigne chaque vérification. Ce qui n'a pas été vérifié est
 présenté comme prévu. Les sections 1 à 6 décrivent la méthode et le lot 1 ; la section 7 décrit le
-lot 2 et la section 8 le lot 3, menés de la même façon.
+lot 2, la section 8 le lot 3 et la section 9 le lot 3 bis, menés de la même façon.
 
 ## 1. Principe : écrire ce qui est attendu avant de coder
 
@@ -106,7 +106,7 @@ suite rejoue **une seule fois** le test concerné en le signalant ; toute autre 
 - Les chiffres de performance sont ceux d'un poste et d'un jeu de données précis.
 - Prévo n'a pas d'authentification (voir les limites dans le `README.md`) : c'est un choix de
   périmètre assumé, pas une propriété que la méthode corrigerait.
-- Les lots 3 bis (préventif suggéré), 4 et « Import » ne sont pas réalisés.
+- Les lots 4 et « Import » ne sont pas réalisés.
 
 ## 7. Lot 2 : préventif, magasin, causes fréquentes
 
@@ -325,7 +325,72 @@ Limite connue : dans le graphique « charge et capacité », les semaines 1 et 4
 une personne atteinte de protanopie ; elles se distinguent par leur position, la légende et le
 tableau des valeurs.
 
-## 9. À retenir pour piloter une IA
+## 9. Lot 3 bis : préventif suggéré
+
+Le lot 3 bis fait relire l'historique par Prévo pour proposer au responsable des **suggestions de
+préventif** : créer une gamme là où les mêmes pannes se répètent, revoir le préventif d'un équipement
+qui tombe en panne malgré sa gamme, revoir une gamme dont les visites trouvent souvent une anomalie,
+allonger une gamme qui ne trouve jamais rien. Il rend aussi l'encart des « causes fréquentes » honnête
+sur la solidité de ses chiffres. Même méthode qu'au lot 3, allégée : l'orchestrateur a écrit le socle,
+les règles, l'encart, l'accueil, la recette et la documentation ; des sous-agents ont écrit le jeu de
+démo et les écrans.
+
+### Les décisions de Nicolas
+
+Le cahier des charges compte **14 décisions** (D50 à D63) et **13 critères de succès** (CS51 à CS63).
+Une règle de fond, posée avant tout le reste : **Prévo ne modifie jamais une gamme tout seul**. Une
+suggestion montre sa règle, ses chiffres, ses dates et ses OT ; le responsable décide, et sa décision
+(gamme créée ou modifiée, suggestion ignorée avec un motif) est inscrite au journal. Trois questions
+ont été tranchées par Nicolas, chacune sur l'option recommandée :
+
+- **Quelles pannes comptent pour « revoir le préventif »** (D53) : toutes les causes, sans changer le
+  format des fichiers. Une gamme ne dit pas quelles pannes elle prévient ; la suggestion dit donc
+  « à examiner », et le responsable ignore, avec un motif, celles qui sont sans objet. L'autre option
+  ajoutait un champ à chaque gamme et un nouveau format de fichiers.
+- **Aucune périodicité proposée** (D56) : Prévo montre les faits (périodicité actuelle, intervalle
+  médian entre les pannes, dates des visites) et le responsable saisit la nouvelle valeur. La règle
+  reconnue (inspecter à la moitié de l'intervalle entre le premier signe de dégradation et la panne)
+  demande une donnée que Prévo n'a pas ; un « −25 % » pré-rempli aurait eu l'air d'un calcul.
+- **Solidité des causes fréquentes** (D59) : sous une vingtaine de cas, la mention « Peu de cas : à
+  prendre comme une piste », et la fourchette réelle de chaque cause dans un détail que l'on déplie
+  (« 7 cas sur 12 », c'est « entre 32 % et 81 % des cas », intervalle de Wilson à 95 %).
+
+Deux choix de l'orchestrateur, consignés au contrat : pour « allonger une gamme », une base passée de
+l'ancien format au nouveau ne compte que les visites faites après ce passage (avant, l'absence
+d'anomalie n'était pas saisie) ; une suggestion ignorée ne revient que si les faits **postérieurs**
+à la décision atteignent de nouveau le seuil.
+
+### Les chiffres
+
+- **9 tâches** (T55 à T63) en **6 vagues** ; la suite complète finale est partagée entre les deux
+  dernières vagues, pour que chaque vérification outillée tienne au premier plan sans être coupée
+  faute de mémoire (leçon du lot 3).
+- Avant la clôture : **779 tests** dans la suite (718 à la fin du lot 3).
+- **Performance** sur le jeu de charge (500 équipements, 5 000 OT) : l'onglet des suggestions
+  s'affiche en une trentaine de millisecondes (budget 1 s ; 75 suggestions), le chargement complet
+  reste sous la seconde en médiane (budget 2 s). Le budget a été forcé à 1 ms pour prouver que le
+  test sait échouer.
+
+### Ce que les relectures ont trouvé
+
+La relecture des cinq premières tâches n'a trouvé **aucun défaut critique** et neuf défauts mineurs,
+tous corrigés. Le plus parlant : pour trois pannes survenues le même jour, la suggestion annonçait
+« environ une par jour », une fréquence fausse ; elle n'en annonce plus aucune. Le relecteur a aussi
+prouvé que le jeu de démo complété garde le contenu de toutes les lignes des lots précédents, alors
+que leurs numéros se sont décalés.
+
+### Les preuves propres au lot 3 bis
+
+- **Calcul indépendant** : sur le jeu de démo, toutes les suggestions (clés, ordre, nombres, dates,
+  OT, DI, décision précédente) sont égales à un calcul Python écrit à part, qui relit les CSV.
+- **Défauts injectés** : quatre défauts introduits volontairement dans les règles (suggérer
+  d'allonger une gamme d'un équipement critique, compter une panne de la minute même d'une décision,
+  décaler la période d'un jour, oublier le passage au nouveau format) ont tous été détectés par les
+  tests.
+- **Rien n'est écrit sans action** : le fichier des gammes reste identique à l'octet après
+  l'ouverture de Prévo, des onglets et des fiches par les trois profils.
+
+## 10. À retenir pour piloter une IA
 
 1. Faire écrire et valider le cahier des charges et ses critères de succès avant le code.
 2. Écrire le contrat entre les morceaux avant de distribuer le travail.

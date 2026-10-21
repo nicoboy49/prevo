@@ -2,11 +2,11 @@
 
 Prévo est une GMAO (gestion de maintenance assistée par ordinateur) pour un atelier ou une petite
 industrie : parc d'équipements, demandes d'intervention, ordres de travail, maintenance préventive,
-magasin de pièces, planning, contrôles réglementaires et indicateurs. Elle tourne sans installation lourde ni abonnement : les données sont des
+magasin de pièces, planning, contrôles réglementaires, indicateurs et préventif suggéré. Elle tourne sans installation lourde ni abonnement : les données sont des
 fichiers CSV lisibles dans Excel, stockés dans un dossier de votre choix. Le code est écrit en
 français, avec des bibliothèques embarquées et aucun appel vers Internet.
 
-Cette version contient les **lots 1 à 3** ; les lots suivants sont listés plus bas. Une
+Cette version contient les **lots 1 à 3 bis** ; les lots suivants sont listés plus bas. Une
 présentation avec capture d'écran viendra au lot 4.
 
 ## Essayer en 30 secondes
@@ -123,9 +123,31 @@ quotidiennes (`donnees/sauvegardes/`) et les documents joints.
 - Format des fichiers inchangé (version 2) : une base du lot 2 s'ouvre telle quelle. Le jeu de démo
   est complété (contrôles, planning sur quatre semaines, historique des statuts des pannes).
 
+## Ce que contient le lot 3 bis
+
+- **Préventif suggéré** (responsable, onglet « Suggestions » du Préventif) : Prévo relit l'historique
+  et propose, avec sa règle, ses chiffres, ses dates et les OT concernés :
+  - **créer une gamme** sur un équipement sans gamme qui a au moins 3 pannes de même cause en 12 mois ;
+  - **revoir le préventif** d'un équipement qui a au moins 3 pannes de même cause malgré sa gamme (à
+    examiner : une gamme ne dit pas quelles pannes elle prévient) ;
+  - **revoir une gamme dont les visites trouvent souvent une anomalie** (2 des 4 dernières) ;
+  - **allonger une gamme** dont au moins 5 visites de suite n'ont rien trouvé, sans aucune panne
+    (jamais pour un équipement de criticité A ; vérifiez d'abord qu'aucune obligation ne l'impose).
+  Prévo ne propose pas de nouvelle périodicité et **ne modifie jamais une gamme tout seul** : « Créer
+  la gamme » ouvre le formulaire pré-rempli, « Ouvrir la gamme » mène à la gamme, « Ignorer… »
+  demande un motif. Chaque décision est inscrite au journal et listée dans l'onglet « Décisions » ;
+  une suggestion ignorée ne revient que si de nouveaux faits atteignent le seuil. Les seuils (pannes,
+  visites, période observée) se règlent dans Paramètres.
+- **Accueil** : compteur « Suggestions de préventif » ; encarts sur les fiches de la gamme et de
+  l'équipement concernés.
+- **Causes fréquentes** : l'encart dit la solidité de ses chiffres. Sous une vingtaine de cas, il
+  précise « Peu de cas : à prendre comme une piste », et un détail donne la fourchette réelle de
+  chaque cause (« entre 32 % et 81 % des cas »).
+- Format des fichiers inchangé (version 2). Le jeu de démo est complété (anomalies répétées, refus en
+  criticité A, suggestion ignorée puis revenue).
+
 ## Ce qui vient ensuite
 
-- **Lot 3 bis** : préventif suggéré, à partir des anomalies constatées pendant les préventifs.
 - **Lot 4** : assistant IA, dictée vocale, `GUIDE.html`, `FICHE_TECHNIQUE_CSV.md`, présentation
   du projet avec capture d'écran.
 - **Lot « Import »** : assistant d'import de fichiers existants (dont `.xls`).
@@ -181,6 +203,11 @@ minutes.
   équipement sans ces heures est exclu, et la liste des exclus est affichée. « Dont attente de
   pièces » n'est calculé que pour les pannes dont tout l'historique est au journal de Prévo (pas pour
   un OT ajouté à la main dans Excel).
+- **Les suggestions sont des faits à examiner.** Elles comptent les pannes par cause codée à la
+  clôture : une cause mal codée fausse le compte. Pour « revoir le préventif », toutes les causes
+  comptent, même celles qu'une gamme ne vise pas : ignorez la suggestion avec un motif. Sur une base
+  passée du format 1 au format 2, seules les visites faites après ce passage comptent pour « allonger
+  une gamme » (avant, l'absence d'anomalie n'était pas saisie).
 - Sur téléphone en mode serveur, la page est servie en HTTP : le scan par caméra intégrée à la
   page n'est pas proposé ; la photo passe par l'appareil photo du téléphone.
 

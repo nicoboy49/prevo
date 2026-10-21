@@ -15,8 +15,9 @@ serveur.py                 serveur local (Python 3.8+, bibliothèque standard se
 Lancer_GMAO.bat            lanceur Windows      lancer.sh   lanceur Mac/Linux
 css/style.css              charte « Cockpit » adaptée (écran sombre + impression noir sur blanc)
 css/modules/*.css          mise en page propre à chaque module (une feuille par module : app, accueil,
-                           parc, demandes, ordres, preventif, magasin, parametres, et depuis le lot 3
-                           equipe, controles, planning, indicateurs, etiquettes ; chargées par index.html)
+                           parc, demandes, ordres, preventif, magasin, parametres, depuis le lot 3
+                           equipe, controles, planning, indicateurs, etiquettes, et depuis le lot 3 bis
+                           suggestions ; chargées par index.html)
 css/polices/               police Sora (OFL)
 js/lib/                    bibliothèques tierces + LICENCES.txt (jamais modifiées)
 js/schema.js               Schema    : description des 22 tables (champs, types, identifiants)
@@ -29,7 +30,7 @@ js/interface.js            UI        : helpers d'écran (html, tableaux, fenêtr
 js/modules/*.js            modules métier : un module = un préfixe de fichiers (§14.2), ex.
                            ordres-regles.js … ordres-impression.js pour l'objet Ordres ; petits
                            modules en un seul fichier (accueil.js, apropos.js, causes-frequentes.js) ;
-                           liste et ordre exacts au §15.1 (lot 3)
+                           liste et ordre exacts au §15.1 (lot 3), complétés au §16.1 (lot 3 bis)
 js/app.js                  App       : démarrage, choix du mode, profils, navigation
 donnees/                   les CSV réels (hors dépôt git) + documents/ + sauvegardes/
 donnees/demo/              le jeu de démo en CSV (versionné)
@@ -42,7 +43,8 @@ tests/                     tests automatisés (unittest + Playwright) ; tests/fi
 `js/lib/papaparse.min.js`, `js/lib/qrcode.js`, `js/lib/jsQR.js`, `js/lib/jszip.min.js`,
 `js/schema.js`, `js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
 `js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
-§15.1 (il remplace, depuis le lot 3, celui du §14.2), `js/app.js` (en dernier).
+§15.1 (il remplace, depuis le lot 3, celui du §14.2 ; le lot 3 bis y insère `suggestions-regles.js` et
+`suggestions-ecrans.js` juste après `preventif-calendrier.js`, §16.1), `js/app.js` (en dernier).
 `js/demo-donnees.js` n'est **pas** chargé au démarrage : `App` l'injecte (balise `<script>`
 créée dynamiquement, compatible `file://`) quand on choisit la démo ou la copie du jeu de démo.
 ECharts (`js/lib/echarts.min.js`, version 5.5.1) n'est pas non plus chargé au démarrage :
@@ -517,6 +519,9 @@ Paramètres d'adresse lus :
   `#/indicateurs` : `?periode=` (`mois`, `mois-precedent`, `3-mois`, `12-mois`, `du-au` avec `?du=` et
   `?au=`), `?criticite=`, `?atelier=`, `?onglet=tableau|rapports` ; `#/equipe` : `?filtre=a-renouveler` ;
   `#/parc/etiquettes` : `?localisation=`, `?criticite=`, `?ids=` (identifiants séparés par des virgules).
+- lot 3 bis (§16.6) : `#/preventif` : `?onglet=suggestions|decisions` (responsable ; un autre profil est
+  renvoyé à l'accueil avec le message des écrans interdits) ; `#/preventif/gamme/nouvelle` :
+  `?suggestion=<clé>` (avec `?equipement=`) ; `#/preventif/gamme/<id>` : `?suggestion=<clé>`.
 
 Un écran dont un formulaire a été modifié et non enregistré n'est pas
 réaffiché par un changement distant : un bandeau « Des données ont changé sur un autre poste —
@@ -577,7 +582,7 @@ lot 3), en réutilisant les variables de la charte (jamais de couleur codée en 
 Les champs `texte_long` des formulaires portent l'attribut `data-dictee` (crochet pour le bouton
 micro du lot 4 ; en attendant, la dictée du clavier du téléphone fonctionne sans code).
 
-## 10. Règles métier (lots 1 à 3)
+## 10. Règles métier (lots 1 à 3 bis)
 
 RG1 à RG4, RG7 et RG8 viennent du lot 1 (RG3 révisée au lot 2, voir ci-dessous) ; RG5 (préventif)
 et RG6 (magasin) sont détaillées aux §14.3 et §14.4 ; RG9 (contrôles réglementaires, lot 3) au
@@ -645,7 +650,7 @@ Les fonctions de règles sont **pures** et exposées pour les tests :
 `Ordres.verifierCloture(ot)` → liste des manques, `Ordres.cout(ot)`,
 `Ordres.verifierHabilitation(equipement, technicienId, dateIso)` → message ou `null`.
 
-### API effective des modules (`js/modules/`, état du lot 3)
+### API effective des modules (`js/modules/`, état du lot 3 bis)
 
 Un module = un objet global, réparti sur un préfixe de fichiers (§14.2) ; ses écrans s'enregistrent
 dans un seul écouteur `DOMContentLoaded` (§8). Les fonctions d'écriture sont `async`, passent par
@@ -700,14 +705,16 @@ La liste ci-dessous est celle des clés réellement exposées (relevée dans le 
   `modifierFournisseur(fournisseurId, valeurs)`, `mettreAJourStocks(ids)`.
 - **`CausesFrequentes`** (lot 2, §14.5, un seul fichier) : `MINIMUM_PAR_DEFAUT` (5), `MENTION`
   (« Statistique de l'historique, pas un diagnostic »), `calculer(equipementId, symptomeCode,
-  { minimum })`, `encart(equipementId, symptomeCode)`.
+  { minimum })`, `encart(equipementId, symptomeCode)` ; lot 3 bis (§16.7) : `MENTION_PISTE`,
+  `fourchette(k, n)` (Wilson à 95 % → `{ bas, haut }` ou `null`), `texteFourchette(k, n)`.
 - **`Accueil`** : `afficher`, `calculerCompteurs()` → `{ diATraiter, otEnRetard, p1Ouverts,
   preventifsSemaine, articlesACommander }` (les quatre premières : listes de lignes de demandes ou
   d'OT ; `articlesACommander` : éléments de `Magasin.aCommander()`), `otEnRetard(ot, aujourdhui)`,
   `p1Ouvert(ot)`, et depuis le lot 2 `dimancheDe(dateIso)` (dimanche de la semaine du lundi au
   dimanche, calculé en UTC) et `preventifDeLaSemaine(ot, dimanche)` (OT d'origine `préventif`,
   ouvert, date prévue ≤ ce dimanche, retards compris). Lot 3 : `calculerCompteurs()` renvoie aussi
-  `controlesSous30j` et `habilitationsARenouveler` (§15.9).
+  `controlesSous30j` et `habilitationsARenouveler` (§15.9). Lot 3 bis : instrument « Suggestions de
+  préventif » du responsable (`Suggestions.ouvertes`, §16.6).
 - **`Parametres`** (`parametres.js`, `parametres-codes.js`) : écrans `#/parametres` et `#/controle` ;
   `decrireSauvegarde(nom)` (lot 2 : type « Avant format 2 » pour `…_avant-format-v2`) et
   `numeroLigneFichier(probleme)` (utilitaires testés) ; lot 3 (§15.11) : `FAMILLES_CODES`,
@@ -742,6 +749,13 @@ La liste ci-dessous est celle des clés réellement exposées (relevée dans le 
   dans `rapports_mensuels`), `texteCourriel(donnees)` ; `html(mois, options)` (async, texte HTML
   autonome), `figer(mois, options)` (async, → `{ nom, rapport }`) ; écrans `afficherOnglet(conteneur)`
   (onglet de `#/indicateurs`) et `bandeauAccueil()` (élément ou `null`).
+- **`Suggestions`** (lot 3 bis, §16.5 et §16.6 ; `suggestions-regles.js`, `suggestions-ecrans.js`) :
+  `TITRES`, `REGLAGES` ; règles `calculer(jour?, remplacements?)` (→ `{ ouvertes, decisions,
+  reglages }`), `ouvertes(jour)`, `pourEquipement(id, jour)`, `pourGamme(id, jour)`, `trouver(cle,
+  jour)` ; décisions au journal `ignorer(cle, motif)`, `marquerTraitee(cle, texte)` ; écrans
+  `ONGLETS`, `ongletsPreventif()`, `ongletRefuse(requete)`, `encartEquipement(id)`, `encartGamme(id)`,
+  et les relais de `preventif-ecrans.js` : `preparerCreation(requete)`, `apresCreationGamme(id)`,
+  `suiviFiche(gammeId, requete)`, `apresModificationGamme(gammeId, champs)`, `apresCheckListe(gammeId)`.
 - **`Apropos`** : `CREDIT`, `afficher`.
 
 ## 11. Données de démo
@@ -756,12 +770,12 @@ nombre de **semaines entières** écoulées depuis `dateReference`, pour que l'h
 toujours aujourd'hui (les identifiants gardent leur année d'origine).
 
 Depuis le lot 2 (D30), l'historique couvre **13 mois** : `DATE_REFERENCE` = `2026-10-19` (un
-lundi), premières lignes en septembre 2025. Depuis le lot 3, le jeu par défaut contient notamment
-31 équipements, 155 DI, 256 OT, 10 gammes, 56 relevés, 52 articles, 302 mouvements de stock,
-36 achats, 6 contrôles réglementaires, 4 techniciens, 10 habilitations et 77 lignes de journal
-(historique des statuts des pannes récentes, §15.12), avec les champs du format v2 renseignés
-(valeur de remplacement de chaque équipement, code symptôme sur 132 DI, deux OT préventifs avec
-anomalie et leur DI liée) et au moins deux équipements qui ont 5 OT
+lundi), premières lignes en septembre 2025. Depuis le lot 3 bis, le jeu par défaut contient
+notamment 31 équipements, 156 DI, 268 OT, 12 gammes, 56 relevés, 52 articles, 302 mouvements de
+stock, 36 achats, 6 contrôles réglementaires, 4 techniciens, 10 habilitations et 78 lignes de
+journal (historique des statuts des pannes récentes, §15.12, et une décision sur une suggestion,
+§16.8), avec les champs du format v2 renseignés (valeur de remplacement de chaque équipement, code
+symptôme sur 133 DI, OT préventifs avec anomalie et leur DI liée) et au moins deux équipements qui ont 5 OT
 correctifs clôturés d'un même symptôme (encart des causes fréquentes). Le générateur
 s'auto-vérifie (clés étrangères, listes de valeurs, règles RG1 à RG6, aucun stock négatif à aucun
 moment, colonne `stock` = stock recalculé, scénarios) et s'arrête au moindre défaut ; deux
@@ -776,7 +790,7 @@ produit aussi gammes, relevés, mouvements et achats en proportion.
 (ni avec `--sortie`, ni avec `--volume` ; `--fichier-scenarios` l'écrit ailleurs) : pour chaque rôle
 de scénario (OT par statut, P1 ouvert, OT en retard, DI par statut, gamme mensuelle échue, kit
 garniture, articles sous le point de commande, techniciens BR valide ou échue, préventif avec
-anomalie… ; rôles du lot 3 au §15.12), l'identifiant de la ligne qui le joue. Les rôles sont décrits dans la docstring de
+anomalie… ; rôles du lot 3 au §15.12, du lot 3 bis au §16.8), l'identifiant de la ligne qui le joue. Les rôles sont décrits dans la docstring de
 `outils/generer_demo.py`. Les tests lisent ce fichier par `commun.scenarios_demo()` au lieu
 d'écrire des numéros en dur. `.gitattributes` déclare `js/demo-donnees.js` et `tests/fixtures/*.json`
 en `-text` (jamais de conversion de fins de ligne : la démo régénérée reste identique à l'octet).
@@ -817,6 +831,15 @@ le planning et le rapport figé. Les tests de glisser-déposer du planning ouvre
 calculent le mois écoulé depuis la vraie date du jour (l'application la lit aussi) : aucun mois
 écrit en dur.
 
+Fichiers ajoutés au lot 3 bis (§16.9) : `test_regles_suggestions.py` (dont `calcul_python`, calcul
+indépendant des règles du §16.3 sur des CSV, réutilisé par `test_accueil_lot3bis.py`),
+`test_causes_frequentes.py`, `test_suggestions.py`, `test_accueil_lot3bis.py`, `test_recette_lot3bis.py`
+(captures dans `tests/resultats/recette-lot3bis/`) ; `test_performance.py` mesure aussi l'onglet
+Suggestions. En mode serveur, `test_suggestions.py` et `test_recette_lot3bis.py` fixent l'horloge du
+navigateur à la date de référence de la démo, 10 h (`clock.set_fixed_time` de Playwright ; les
+minuteurs tournent) : `ServeurPrevo` copie la démo brute, non décalée, et les rôles du §16.8 ne
+valent qu'à cette date ; le mode démo tourne, lui, à la date réelle.
+
 Playwright et Chromium ne sont nécessaires que pour les tests, jamais pour utiliser Prévo.
 Le test d'aller-retour par le **vrai Excel** (`tests/test_excel_reel.py`, `tests/test_csv.py`) ne
 s'exécute que si la variable d'environnement `PREVO_TEST_EXCEL=1` est définie ; sinon il est
@@ -829,14 +852,9 @@ serveur (§7) en réduisent la fréquence sans l'annuler.
 
 ## 13. Points d'extension (lots suivants)
 
-Les lots 2 et 3 sont réalisés (contrats aux §14 et §15). Un module ajouté plus tard suit les mêmes
-règles : préfixe de fichiers, 700 lignes au plus par fichier, place dans l'ordre du §15.1 **et** dans
-`ORDRE_MODULES` de `tests/test_depot.py`. Restent, dans l'ordre prévu :
-- **Lot 3 bis** : préventif **suggéré**. Le champ `ordres_travail.anomalie_constatee` et le lien
-  `demandes.ot_origine_id` (DI signalée pendant un préventif) sont posés et remplis depuis le lot 2
-  pour être exploités là (ex. raccourcir une périodicité quand les anomalies se répètent) ;
-  l'encart des causes fréquentes pourra recevoir un indicateur de fiabilité statistique (D25) ; les
-  règles des indicateurs (§15.3 : pannes, causes, durées d'arrêt par équipement) sont réutilisables.
+Les lots 2, 3 et 3 bis sont réalisés (contrats aux §14, §15 et §16). Un module ajouté plus tard suit
+les mêmes règles : préfixe de fichiers, 700 lignes au plus par fichier, place dans l'ordre du §15.1
+complété au §16.1 **et** dans `ORDRE_MODULES` de `tests/test_depot.py`. Restent, dans l'ordre prévu :
 - **Lot 4** : `js/modules/ia.js`, `js/modules/ia-prompts.js`, `js/modules/dictee.js` ; les champs
   `texte_long` des formulaires portent `data-dictee` pour recevoir un bouton micro ; `GUIDE.html`
   (déjà dans la liste blanche du serveur, §7), `FICHE_TECHNIQUE_CSV.md`, https local en option.
@@ -1547,7 +1565,8 @@ sans heures de fonctionnement, habilitation échue et à renouveler…). Nouveau
 `controle_a_jour`, `technicien_surcharge` (+ `semaine_surcharge`), `ot_a_planifier`,
 `ot_a_planifier_br`, `panne_attente_pieces`, `panne_sans_duree`, `equipements_calcul_main`
 (3 équipements dont un A, avec pannes, heures connues). Écarts retenus (T42) : le journal de démo
-n'est plus vide (77 lignes, au format réel « <description> — <action> » de `Donnees.modifier`, §15.3) ;
+n'est plus vide (77 lignes au lot 3, au format réel « <description> — <action> » de `Donnees.modifier`,
+§15.3 ; le lot 3 bis y ajoute une décision brute « suggestion … ignorée : … », §16.4) ;
 le pont roulant cite aussi « art. 23 » ; la démo garde `delai_p1_h` = 0 (« immédiat ») : la cible P1
 n'affiche donc que la médiane (§15.3).
 
@@ -1562,8 +1581,8 @@ complété (CS49) ; `test_depot.py` (ordre §15.1, 700 lignes).
 
 ## 16. Contrat du lot 3 bis — préventif suggéré (CDC validé le 2026-10-21 : D50–D63)
 
-Écrit avant le code du lot 3 bis ; il sera relu et aligné sur le code à la fin du lot (mentions
-« écart retenu : … », comme aux §14 et §15). Décisions de Nicolas : **D53 (a)** (toutes les causes
+Écrit avant le code du lot 3 bis, puis **relu et aligné sur le code** à la fin du lot : là où le code
+s'écarte du texte d'origine, une mention « écart retenu : … » dit ce qui a été fait et pourquoi. Décisions de Nicolas : **D53 (a)** (toutes les causes
 comptent pour S2, format inchangé), **D56 (a)** (aucune périodicité proposée : les faits seulement),
 **D59 (a)** (mention « peu de cas » et fourchette dans un détail). Prévo **ne modifie jamais une gamme
 tout seul** : une suggestion n'écrit rien ; seules les actions du responsable écrivent (gamme créée ou
@@ -1599,7 +1618,8 @@ modifiée par les écrans du §14.3, décision inscrite au journal).
   `Clôturé techniquement` ou `Clôturé administrativement`, `cause_code` non vide (toutes les causes,
   « Autre cause » comprise : D53 a), jour dans la fenêtre.
 - **Gamme suivie** (S2, S3, S4) : `actif` ≠ `0`, déclencheur `date` ou `compteur` (jamais `seuil`),
-  équipement suivi.
+  équipement suivi. Écart retenu (relecture) : un déclencheur vide vaut `date`, comme dans le schéma
+  (valeur par défaut) et dans le préventif.
 - **Visite** d'une gamme : OT de cette gamme (`gamme_id`) clôturé (techniquement ou
   administrativement), jour ≤ `jour` ; triées par moment puis identifiant. **Visite avec anomalie** :
   `anomalie_constatee` = `1` **ou** au moins une DI dont `ot_origine_id` est cette visite.
@@ -1623,13 +1643,18 @@ en a une. Sous les seuils, rien n'est suggéré.
   correctifs. Toutes les causes comptent (D53 a) : la carte dit « À examiner : la gamme ne dit pas
   quelles pannes elle prévient ».
 - **S3 « Anomalies répétées »** : gamme suivie ; parmi ses **4 dernières visites** (ou toutes, s'il y
-  en a moins), au moins **2** avec anomalie. Faits : ces visites ; DI liées.
+  en a moins), au moins **2** avec anomalie. Faits : les visites **avec anomalie** (`nombre` = leur
+  nombre, `sur` = visites regardées) ; DI liées à ces visites.
 - **S4 « Allonger une gamme »** : gamme suivie dont l'équipement est de criticité `B` ou `C` (jamais
   `A`, jamais vide) ; visites comptées = visites postérieures au passage au format 2 (s'il existe) ;
   *série* = les dernières visites comptées, consécutives, sans anomalie ; au moins
   `suggestion_visites_sans_constat` visites dans la série ; **aucun correctif** de l'équipement (type
   correctif, tout statut sauf `Annulé`, toute cause) dont le jour de création est ≥ le jour de la
-  première visite de la série. Faits : les visites de la série.
+  première visite de la série. Faits : les visites de la série. Écart retenu (relecture) : le CDC
+  (D55) parle de visites « closes » après le passage au format 2 ; le code compare le **moment** de
+  la visite (fin des travaux d'abord, §16.2), plus strict : une visite finie avant le passage mais
+  close après ne compte pas (CS56 tenu).
+- Ordre des clés à égalité : ordre des caractères (pas l'ordre alphabétique de la langue), stable.
 - **Ordre** : S2, puis S3, puis S1, puis S4 ; dans chaque groupe, criticité A, B, C, puis vide ; puis
   nombre de faits décroissant ; puis clé.
 
@@ -1669,7 +1694,8 @@ en a une. Sous les seuils, rien n'est suggéré.
   - S1 « CV-02 : 14 pannes « Capteur encrassé » en 12 mois (environ une toutes les 4 semaines), aucune
     gamme active. » — question « Créer une gamme pour prévenir cette panne ? » (fréquence : intervalle
     médian ≥ 14 j → « environ une toutes les N semaines », N = arrondi de médiane / 7 ; sinon « environ
-    une tous les N jours ») ;
+    une tous les N jours » ; écart retenu (relecture) : 1 jour → « environ une par jour », 0 jour
+    (pannes le même jour) → aucune fréquence, plutôt qu'une fréquence fausse) ;
   - S2 « PO-02 : 6 pannes « Garniture usée » en 12 mois malgré la gamme GAM-0003 (tous les 90 j) ;
     intervalle médian entre ces pannes : 58 jours. » — question « Raccourcir la périodicité, ajouter une
     opération à la check-list ou créer une gamme dédiée ? À examiner : la gamme ne dit pas quelles
@@ -1706,6 +1732,15 @@ en a une. Sous les seuils, rien n'est suggéré.
   échéant.
 - **Comprendre** (`<details>`) : définitions du §16.2, les 4 règles avec les seuils en vigueur, « Prévo
   ne modifie jamais une gamme tout seul ».
+- Écarts retenus (T59) : une suggestion est marquée traitée **une seule fois** par session de page (une
+  modification de check-list puis un enregistrement de la gamme n'écrivent qu'une décision) ; la
+  check-list est comparée avant et après chaque action (une modification qui ne change rien ne marque
+  rien) ; une création n'est marquée que si la gamme est sur l'équipement de la S1 ; l'encart de la
+  fiche gamme omet la suggestion déjà rappelée en tête de fiche ; la décision précédente rappelée sur
+  une carte perd sa ponctuation finale (« … gammes ; revenue sur de nouveaux faits »).
+- Limites gardées : l'écran `#/preventif` n'est pas réaffiché quand le journal change sur un autre poste
+  (une décision prise ailleurs apparaît au prochain affichage) ; sur téléphone, l'onglet actif peut être
+  hors de la partie visible de la barre d'onglets (défilante, `UI.onglets`).
 - **Encarts** « Suggestions de préventif » : sur la fiche équipement (`parc-fiche.js`, près de la carte
   Préventif) et sur la fiche gamme (`preventif-ecrans.js`), responsable seulement, uniquement s'il y a
   des suggestions ouvertes : mêmes cartes et mêmes actions.
@@ -1731,7 +1766,15 @@ assez de nouvelles pannes pour qu'elle revienne. Rôles ajoutés à `demo-scenar
 (clé S3), `suggestion_allonger` (clé S4 de VE-01), `suggestion_refus_criticite_a` (gamme refusée),
 `suggestion_sous_seuil` (`{ equipement, cause }` à `seuil − 1` pannes, sans gamme active),
 `suggestion_ignoree_revenue` (clé). Le générateur vérifie lui-même ces rôles par un calcul Python des
-règles du §16.3.
+règles du §16.3. Écarts retenus (T56) : rôles réels `S1-EQ-0023-C04` (CV-02), `S2-EQ-0005-C01` (PO-02),
+`S3-GAM-0011` (RA-01, une visite tous les 14 jours : case cochée, puis DI envoyée après la clôture
+administrative de la visite, qui garde donc sa case à 0, §14.6), `S4-GAM-0005` (VE-01), refus A
+`GAM-0012` (GF-01), sous le seuil `{ EQ-0002, C05 }`, ignorée puis revenue `S2-EQ-0001-C05` (CP-01,
+décision du 23/03/2026 placée parmi des pannes existantes). Le contenu des lignes des lots 1 à 3 est
+inchangé, mais l'ajout de lignes datées a **renuméroté** la suite chronologique des identifiants
+(70 OT, 25 DI, opérations et temps d'OT ; références suivies) : les tests passent par les rôles,
+jamais par des numéros. Les trois clés `suggestion_*` ne sont pas dans `parametres.csv` de la démo
+(valeurs par défaut).
 
 ### 16.9 Tests du lot 3 bis
 `test_regles_suggestions.py` (règles sur un jeu construit et sur la démo, égalité avec un calcul
