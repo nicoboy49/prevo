@@ -325,8 +325,13 @@ const UI = (function () {
 
   let minuteurToast = null;
 
+  // Durée d'affichage d'un toast (T89 : courte ; une erreur reste plus longtemps, le temps de la lire).
+  const DUREES_TOAST = { erreur: 7000, attention: 4500 };
+  const DUREE_TOAST = 3000;
+
   /**
-   * Petit message temporaire en bas de l'écran (élément role="status", lu par les lecteurs d'écran).
+   * Petit message temporaire en bas de l'écran (élément role="status", lu par les lecteurs d'écran) :
+   * bulle en bas à droite, au-dessus de la barre du bas sur téléphone (css/style.css §10).
    * type : 'succes' | 'erreur' | 'attention' | 'info' (défaut). Un clic le ferme.
    */
   function toast(message, type) {
@@ -355,7 +360,7 @@ const UI = (function () {
     };
     if (tourSuivant) setTimeout(afficher, 0); else afficher();
     clearTimeout(minuteurToast);
-    minuteurToast = setTimeout(() => zone.classList.remove('visible'), type === 'erreur' ? 7000 : 4000);
+    minuteurToast = setTimeout(() => zone.classList.remove('visible'), DUREES_TOAST[type] || DUREE_TOAST);
     return zone;
   }
 

@@ -26,27 +26,30 @@
 /* Gros boutons des écrans de démarrage : le texte long passe à la ligne au lieu de déborder */
 .boite-demarrage .btn-gros > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 
-/* --- en-tête du menu latéral (D32) : « Prévo », « GMAO », puis le nom de l'entreprise, qui passe
-   à la ligne et tient sur deux lignes au plus (coupé au-delà, nom complet en infobulle) --- */
-.menu-tete .titre .nom-entreprise {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
-  margin-top: 3px; font-size: .8125rem; line-height: 1.35; font-weight: 600; color: var(--texte-2);
+/* --- en-tête du menu latéral (D32, T89) : logo, « Prévo » et « GMAO » sur la première ligne (« Prévo »
+   ne rétrécit jamais), puis le nom de l'entreprise sur sa propre ligne, de toute la largeur du menu, en
+   entier (jamais coupé) --- */
+.menu-tete { flex-wrap: wrap; }
+.menu-tete .titre { flex: 1 0 auto; }
+.menu-tete .titre b { white-space: nowrap; }
+.menu-tete .nom-entreprise {
+  flex: 1 0 100%; margin: -4px 0 0; font-size: .8125rem; line-height: 1.35; font-weight: 600; color: var(--texte-2);
   overflow-wrap: anywhere;
 }
+.coque.replie .menu-tete .nom-entreprise { display: none; }
+@media (max-width: 1099.98px) { .menu-tete .nom-entreprise { display: none; } }
 
 /* --- menu latéral plus haut que l'écran (lot 4 : entrée « Ce poste ») : ses blocs gardent leur
    hauteur et c'est le menu qui défile (overflow-y de style.css). Sinon l'en-tête rétrécit, et le logo
    et le bouton de repli passent sous les entrées du menu, qui les recouvrent. --- */
 .menu-lateral > * { flex-shrink: 0; }
 
-/* --- bouton de profil du menu latéral (.etat-poste, composant de style.css, ici en <button>) --- */
-button.etat-poste {
-  width: 100%; min-height: var(--tactile); background: none; border: 1px solid transparent; border-radius: 12px;
-  font-family: inherit; text-align: left; cursor: pointer;
-}
-button.etat-poste:hover { background: var(--survol); color: var(--texte-2); border-color: var(--trait); }
-.etat-poste .changer { color: var(--cyan); font-weight: 700; margin-left: .25rem; white-space: nowrap; }
-.etat-poste .libelle { min-width: 0; }
+/* --- bouton de profil du menu latéral (.etat-poste, petite carte de style.css, ici en <button>) --- */
+button.etat-poste { width: 100%; min-height: var(--tactile); font-family: inherit; text-align: left; cursor: pointer; }
+button.etat-poste:hover { background: var(--carte-2); color: var(--texte); border-color: var(--bord-bleu); }
+/* « Responsable · Poste atelier », puis « changer » sur sa ligne */
+.etat-poste .libelle { min-width: 0; display: flex; flex-direction: column; }
+.etat-poste .changer { color: var(--texte-bleu); font-weight: 700; white-space: nowrap; }
 
 /* --- alertes de la coque (ex. verrou du dossier), alignées sur le contenu --- */
 .alertes-app { width: 100%; max-width: 1320px; margin: 0 auto; padding: 16px 32px 0; }

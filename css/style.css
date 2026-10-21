@@ -69,6 +69,26 @@
   --qr-fond: #FFFFFF; --qr-encre: #000000;
   --papier: #FFFFFF; --encre: #000000; --encre-2: #333333; --encre-trait: #888888;
 
+  /* --- accueil du responsable « bento », menu, barre du bas, notification (T89, BRIEF_design_accueil.md).
+     Jetons du brief (redéfinis dans le thème clair), puis leurs nuances : la tuile de synthèse est la
+     même dans les deux thèmes (texte blanc sur le dégradé bleu). --- */
+  --fond-synthese: linear-gradient(135deg, #2F5BEA 0%, #3D6BF2 55%, #1FA9D6 130%);
+  --ombre-synthese: 0 24px 60px rgba(51,102,230,.35);
+  --ombre-tuile: none;
+  --fond-barre-verre: rgba(18,27,54,.72);
+  --rayon-tuile: 24px; --rayon-tuile-grande: 28px;     /* grande : synthèse et « À traiter en premier » */
+  --fond-synthese-uni: #3D6BF2;          /* couleur du milieu du dégradé (calculs de contraste sur la couleur de fond) */
+  --sur-synthese: #FFFFFF;               /* texte de la synthèse */
+  --synthese-pastille: rgba(8,20,66,.26);            /* pastille « Ce matin… » : voile sombre, texte blanc ≥ 4,5:1 */
+  --synthese-verre: rgba(255,255,255,.14); --synthese-verre-bord: rgba(255,255,255,.24);
+  --synthese-verre-survol: rgba(255,255,255,.22);
+  --synthese-voile: rgba(8,20,66,.30);   /* sous le verre et le petit texte du bas : le blanc reste ≥ 4,5:1 */
+  --synthese-bouton-fond: #FFFFFF; --synthese-bouton-survol: #E8EEFF; --synthese-bouton-texte: #1E3A9E;
+  --synthese-securite: #B4232B;          /* « S sécurité » : texte et point rouges sur la pastille blanche (6,4:1) */
+  --halo-synthese-blanc: rgba(255,255,255,.34); --halo-synthese-cyan: rgba(34,195,230,.50);
+  --pouls-vert: #3DD68C;                 /* point qui pulse dans « Ce matin… » */
+  --toast-coche: #137A4B; --toast-erreur: #C42F36; --toast-attention: #9A5C00;   /* sur le fond clair du toast */
+
   /* --- mesures --- */
   --largeur-menu: 264px;
   --largeur-menu-icones: 84px;
@@ -103,6 +123,13 @@
   --lueur-logo: rgba(47,91,234,.30);
   --voile: rgba(14,22,48,.45); --ombre: rgba(14,22,48,.18); --selection: rgba(47,91,234,.25);
   --reflet-carte: transparent;
+  /* accueil « bento », barre du bas, notification (T89) : jetons du brief, version claire */
+  --fond-synthese: linear-gradient(135deg, #2F5BEA 0%, #3D6BF2 55%, #1FA9D6 130%);
+  --ombre-synthese: 0 22px 50px rgba(47,91,234,.30);
+  --ombre-tuile: 0 1px 2px rgba(14,22,48,.04), 0 10px 28px rgba(14,22,48,.06);
+  --fond-barre-verre: rgba(255,255,255,.72);
+  --rayon-tuile: 24px; --rayon-tuile-grande: 28px;
+  --toast-coche: #3DD68C; --toast-erreur: #FF9A9E; --toast-attention: #F5B544;   /* sur le fond sombre du toast */
 }
 
 /* =========================================================================================
@@ -306,29 +333,35 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
 .menu-replier { color: var(--muted); }
 .menu { display: flex; flex-direction: column; gap: 2px; }
 .menu-groupe { font-size: .75rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: var(--muted); padding: 14px 14px 4px; }
+/* Entrées de 44 px (brief : 42 px, porté à la zone cliquable minimale) ; l'active en fond bleu doux,
+   texte bleu, graisse 700 (T89) */
 .menu a {
-  display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 14px; border-radius: 12px;
+  display: flex; align-items: center; gap: 12px; min-height: var(--tactile); padding: 0 14px; border-radius: 12px;
   color: var(--texte-2); text-decoration: none; font-weight: 600; font-size: 1rem; position: relative;
 }
 .menu a .icone { width: 22px; height: 22px; }
 .menu a:hover { background: var(--survol); color: var(--texte); }
-.menu a.actif, .menu a[aria-current="page"] { background: var(--carte-2); color: var(--texte); box-shadow: inset 0 0 0 1px var(--bord-bleu-fort); }
-.menu a.actif .icone, .menu a[aria-current="page"] .icone { color: var(--cyan); }
+.menu a.actif, .menu a[aria-current="page"] { background: var(--teinte-bleu); color: var(--texte-bleu); font-weight: 700; }
 /* Compteur sur une entrée de menu (ex. DI à traiter) */
 .pastille {
   margin-left: auto; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px; display: inline-grid; place-items: center;
   font-size: .8125rem; font-weight: 800; background: var(--teinte-rouge); color: var(--rouge);
 }
 .pastille.info { background: var(--teinte-bleu); color: var(--texte-info); }
-/* Badge de signature en bas du menu → #/apropos */
+/* Badge de signature en bas du menu (sous la carte du profil) → #/apropos */
 .signature {
-  margin-top: auto; display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px;
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px;
   border: 1px solid var(--trait); color: var(--muted); text-decoration: none; font-size: .8125rem; line-height: 1.4;
 }
 .signature .icone { width: 18px; height: 18px; margin-top: 1px; }
 .signature b { color: var(--texte-2); font-weight: 600; }
 .signature:hover { color: var(--texte-2); border-color: var(--trait-2); }
-.etat-poste { font-size: .8125rem; color: var(--muted); padding: 6px 12px; display: flex; gap: 8px; align-items: center; }
+/* Petite carte « Responsable · Poste atelier · changer », en bas du menu (T89) */
+.etat-poste {
+  margin-top: auto; font-size: .8125rem; color: var(--texte-2); padding: 8px 10px; display: flex; gap: 10px; align-items: center;
+  background: var(--carte); border: 1px solid var(--trait); border-radius: 14px; line-height: 1.35;
+}
+.etat-poste > .icone { width: 30px; height: 30px; padding: 6px; border-radius: 50%; background: var(--teinte-bleu); color: var(--texte-bleu); }
 
 /* Menu en icônes seules (replié sur grand écran, ou tablette) */
 .coque.replie .menu-lateral { padding: 16px 10px; align-items: stretch; }
@@ -359,22 +392,25 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
 }
 .entete-mobile .logo { width: 36px; height: 36px; border-radius: 10px; }
 .entete-mobile .titre { flex: 1; min-width: 0; font-weight: 700; font-size: 1.0625rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Titre sur deux lignes (App.definirTitreMobile : « Bonjour » et la date, accueil du responsable) */
+.entete-mobile .titre > span, .entete-mobile .titre > small { display: block; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.entete-mobile .titre > small { font-size: .8125rem; font-weight: 500; color: var(--texte-2); }
 
-/* --- barre du bas (téléphone seulement) --- */
+/* --- barre du bas (téléphone seulement) : flottante, arrondie, en verre dépoli (T89) --- */
 .barre-bas {
-  display: none; position: fixed; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 30;
-  grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; padding: 5px 4px;
-  background: var(--barre-fond); border: 1px solid var(--trait-2); border-radius: 18px; box-shadow: 0 10px 30px var(--ombre);
+  display: none; position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 30;
+  grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; padding: 6px;
+  background: var(--fond-barre-verre); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--trait-2); border-radius: 26px; box-shadow: 0 10px 30px var(--ombre);
 }
 .barre-bas a, .barre-bas button {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  min-height: 56px; padding: 4px 0; border: 0; border-radius: 12px; background: none; cursor: pointer;
-  color: var(--muted); text-decoration: none; font: 600 .75rem/1.1 Sora, sans-serif; letter-spacing: -.01em; position: relative; min-width: 0;
+  min-height: 56px; padding: 4px 0; border: 0; border-radius: 20px; background: none; cursor: pointer;
+  color: var(--texte-2); text-decoration: none; font: 600 .75rem/1.1 Sora, sans-serif; letter-spacing: -.01em; position: relative; min-width: 0;
 }
 .barre-bas .icone { width: 24px; height: 24px; }
 .barre-bas .libelle { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.barre-bas .actif, .barre-bas [aria-current="page"] { background: var(--carte-2); color: var(--texte); box-shadow: inset 0 0 0 1px var(--bord-bleu-fort); }
-.barre-bas .actif .icone, .barre-bas [aria-current="page"] .icone { color: var(--cyan); }
+.barre-bas .actif, .barre-bas [aria-current="page"] { background: var(--teinte-bleu); color: var(--texte-bleu); font-weight: 700; }
 .barre-bas .pastille { position: absolute; top: 2px; right: calc(50% - 26px); min-width: 20px; height: 20px; font-size: .75rem; padding: 0 5px; }
 /* Liste « Plus » (dans une fenêtre .dialogue.feuille) */
 .liste-plus { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
@@ -688,16 +724,20 @@ a.vignette img, button.vignette img { width: 100%; height: 100%; object-fit: cov
 .fenetre-tete .btn-icone { margin: -4px -6px 0 0; }
 .fenetre-corps > :last-child { margin-bottom: 0; }
 .fenetre-actions { justify-content: flex-end; margin-top: 1.2rem; }
+/* Toast (T89) : bulle arrondie en bas à droite (au-dessus de la barre du bas sur téléphone), fond couleur
+   du texte, texte couleur du fond ; la coche verte (ou le « ! ») est un dessin : le message reste le seul texte. */
 .toast {
-  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(150%); z-index: 50;
-  background: var(--texte); color: var(--fond); font-weight: 600; padding: .8rem 1.2rem; border-radius: 12px;
-  max-width: calc(100% - 32px); visibility: hidden; transition: transform .2s, visibility .2s; box-shadow: 0 10px 30px var(--ombre); cursor: pointer;
+  position: fixed; right: 24px; bottom: 24px; z-index: 50; display: flex; align-items: center; gap: .65rem;
+  max-width: min(460px, calc(100% - 48px)); padding: .75rem 1.15rem; border-radius: 18px;
+  background: var(--texte); color: var(--fond); font-weight: 600; line-height: 1.4;
+  transform: translateY(calc(100% + 40px)); visibility: hidden; transition: transform .25s ease, visibility .25s;
+  box-shadow: 0 12px 32px var(--ombre); cursor: pointer;
 }
-.toast.visible { transform: translateX(-50%) translateY(0); visibility: visible; }
-.toast.succes { background: var(--vert); color: var(--sur-clair); }
-.toast.erreur { background: var(--rouge); color: var(--sur-clair); }
-.toast.attention { background: var(--ambre); color: var(--sur-clair); }
-:root[data-theme="clair"] .toast.succes, :root[data-theme="clair"] .toast.erreur, :root[data-theme="clair"] .toast.attention { color: var(--sur-couleur); }
+.toast.visible { transform: none; visibility: visible; }
+.toast.succes::before, .toast.erreur::before, .toast.attention::before { flex: none; font-weight: 800; font-size: 1.125rem; line-height: 1; }
+.toast.succes::before { content: "\2713"; color: var(--toast-coche); }
+.toast.erreur::before { content: "!"; color: var(--toast-erreur); }
+.toast.attention::before { content: "!"; color: var(--toast-attention); }
 /* Thème clair : les badges (13 px gras = petit texte, 4,5:1 exigé) prennent la teinte foncée de leur
    couleur ; le sous-titre d'un gros bouton reste opaque (relecture du lot 4, CS74). */
 :root[data-theme="clair"] .badge.ok { color: var(--texte-vert); }
@@ -782,7 +822,7 @@ a.vignette img, button.vignette img { width: 100%; height: 100%; object-fit: cov
   .dialogue { width: calc(100% - 16px); padding: 18px 16px; }
   /* Fenêtre « feuille » : collée en bas de l'écran (liste « Plus » de la barre du bas) */
   .dialogue.feuille { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: var(--rayon) var(--rayon) 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
-  .toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .toast { left: 16px; right: 16px; max-width: none; bottom: calc(96px + env(safe-area-inset-bottom)); }
   .qr .adresse { max-width: 180px; }
 }
 
@@ -815,6 +855,9 @@ a.vignette img, button.vignette img { width: 100%; height: 100%; object-fit: cov
     --teinte-vert: transparent; --teinte-vert-faible: transparent; --teinte-cyan: transparent; --teinte-violet: transparent; --teinte-neutre: transparent;
     --bord-bleu: #000000; --bord-bleu-fort: #000000; --bord-rouge: #000000; --bord-ambre: #000000; --bord-vert: #000000;
     --survol: transparent; --halo-1: transparent; --halo-2: transparent; --reflet-carte: transparent;
+    --fond-synthese: none; --fond-synthese-uni: #FFFFFF; --sur-synthese: #000000; --synthese-pastille: transparent;
+    --synthese-voile: transparent; --halo-synthese-blanc: transparent; --halo-synthese-cyan: transparent;
+    --ombre-synthese: none; --ombre-tuile: none;
   }
   html, body { background: var(--fond); color: var(--texte); }
   body { font-size: 11pt; min-height: 0; }

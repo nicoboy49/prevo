@@ -363,7 +363,9 @@ const App = (() => {
     // Dictée (lot 4, §17.6) : bouton micro sur chaque champ dicté, où qu'il apparaisse ensuite.
     if (typeof Dictee !== 'undefined') Dictee.surveiller(document.body);
     await ouvrirCoque();
-    if (otPreventifs.length) UI.toast(Preventif.texteGeneration(otPreventifs.length) + '.', 'succes');
+    // En démo, les données repartent du jeu d'origine à chaque ouverture : la génération a lieu à chaque
+    // fois, et sa notification n'apprendrait rien (T89, brief : pas de toast à chaque ouverture de la démo).
+    if (otPreventifs.length && mode !== 'demo') UI.toast(Preventif.texteGeneration(otPreventifs.length) + '.', 'succes');
   }
 
   // Format des fichiers (ARCHITECTURE.md §14.1) : une fois les tables chargées, pour tous les profils
@@ -624,8 +626,8 @@ const App = (() => {
     zone.hidden = zone.children.length === 0;
   }
 
-  // En-tête du menu latéral (D32) : « Prévo », « GMAO », puis le nom de l'entreprise sur deux lignes
-  // au plus (au-delà, la feuille app.css le coupe) ; le nom complet reste lisible en infobulle.
+  // En-tête du menu latéral (D32, T89) : « Prévo », « GMAO », puis le nom de l'entreprise sur sa propre
+  // ligne, en entier (app.css) ; il reste aussi en infobulle.
   function mettreAJourEntreprise() {
     const nom = adaptateur ? String(Donnees.parametre('entreprise_nom', '')).trim() : '';
     const zone = UI.$('#nom-entreprise');
@@ -838,6 +840,14 @@ const App = (() => {
     UI.$('#titre-mobile').textContent = titre;
   }
 
+  /**
+   * En-tête mobile seul, sur deux lignes (T90 : « Bonjour » et la date sur l'accueil du responsable) ;
+   * le titre de l'onglet ne change pas, et l'écran suivant remet son titre (definirTitre).
+   */
+  function definirTitreMobile(titre, detail) {
+    UI.remplir(UI.$('#titre-mobile'), UI.html`<span>${titre}</span>${detail ? UI.html`<small>${detail}</small>` : ''}`);
+  }
+
   /** Réaffiche l'écran courant (défilement conservé). */
   function reafficher() {
     return afficherRoute(true);
@@ -1033,6 +1043,7 @@ const App = (() => {
     naviguer,
     reafficher,
     definirTitre,
+    definirTitreMobile,
     marquerSaisie,
     estResponsable,
     estTechnicien,

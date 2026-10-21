@@ -14,7 +14,8 @@ Familles (le nom du test le dit) :
     demarrage   : base vide écrite au format courant (sans sauvegarde) ; base au format 1 →
                   sauvegarde puis format 2 (tous profils) ; sauvegarde impossible → aucun OT généré
                   à cette ouverture, application utilisable, nouvel essai à l'ouverture suivante ;
-                  démo : génération et toast (chaque toast affiché est noté dès son apparition) ; marques.
+                  démo : génération sans toast (T89 : la démo génère à chaque ouverture ; chaque toast
+                  affiché est noté dès son apparition) ; marques.
 
 Les identifiants viennent de tests/fixtures/demo-scenarios.json (commun.scenarios_demo()) ; aucun
 numéro d'OT n'est écrit en dur. Lancer depuis la racine du projet :
@@ -129,7 +130,7 @@ class CasPreventif(CasNavigateur):
             """motif => { const texte = document.getElementById('toast').textContent.trim();
                 return new RegExp(motif).test(texte) ? texte : null; }""", arg=motif).json_value()
 
-    # Un toast reste affiché 4 s, puis il est masqué (visibility: hidden : inner_text rend alors '')
+    # Un toast reste affiché 3 s (4,5 s en alerte, 7 s en erreur), puis il est masqué (visibility: hidden : inner_text rend alors '')
     # ou remplacé par le suivant. Sur un poste chargé, le lire APRÈS coup échoue au hasard. Ce script,
     # installé avant tout chargement de page, note le texte de chaque toast au moment où il s'affiche.
     NOTER_TOASTS_JS = """(() => {
@@ -685,14 +686,16 @@ class TestDemarrage(CasPreventif):
             self.assertEqual(len(sauvegardes_avant_format(serveur.dossier)), 1)
             self.assertEqual(len(ots_ouverts_de(serveur.dossier, GAMME_ECHUE)), 1)     # génération à cette ouverture
 
-    def test_demarrage_demo_generation_a_l_ouverture_toast_et_marques(self):
+    def test_demarrage_demo_generation_a_l_ouverture_sans_toast_et_marques(self):
         self.noter_les_toasts()
         preregler_profil(self.contexte, "responsable")
         self.page.goto(url_fichier("index.html"))
         self.page.click("#btn-demo")
         attendre_pret(self.page)
-        # Le toast de génération a été affiché (noté à son apparition : il a pu disparaître depuis)
-        self.assertRegex(self.attendre_toast_note(TOAST_GENERATION.pattern), TOAST_GENERATION)
+        # T89 (brief de l'accueil) : la démo repart de ses données à chaque ouverture, donc génère à chaque
+        # fois ; sa notification n'est plus affichée en démo (elle l'est toujours ailleurs : TestUnique).
+        self.page.wait_for_timeout(500)
+        self.assertEqual([t for t in self.page.evaluate("window.__toasts || []") if TOAST_GENERATION.search(t)], [])
         ot_id = self.etat(GAMME_ECHUE)["otOuvertId"]
         self.assertTrue(ot_id)
         ot = self.page.evaluate("id => Donnees.trouver('ordres_travail', id)", ot_id)
