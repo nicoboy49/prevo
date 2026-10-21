@@ -82,6 +82,12 @@
         <span data-icone="engrenage"></span>
         <span>Essayer avec les données de démo<small>Atelier fictif, rien n'est enregistré</small></span>
       </button>
+      <!-- Version web seulement (App.versionWeb, démo en ligne) : remplace le mode dossier et le mode serveur -->
+      <a class="btn btn-secondaire btn-gros" id="btn-telecharger" href="https://github.com/nicoboy49/prevo/releases/latest"
+        target="_blank" rel="noopener" hidden>
+        <span data-icone="export"></span>
+        <span>Télécharger Prévo<small>Gratuit, pour travailler sur vos propres données</small></span>
+      </a>
     </div>
 
     <label class="depot" id="zone-depot">
@@ -91,7 +97,7 @@
       <input type="file" id="fichiers-csv" class="visuellement-cache" accept=".csv,text/csv" multiple>
     </label>
 
-    <p class="note">Plusieurs postes et des téléphones ? Lancez <b>Lancer_GMAO.bat</b> (Windows) ou
+    <p class="note" id="note-mode-serveur">Plusieurs postes et des téléphones ? Lancez <b>Lancer_GMAO.bat</b> (Windows) ou
       <b>lancer.sh</b> (Mac, Linux) : le mode serveur est reconnu tout seul.</p>
     <p class="demarrage-pied">Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS</p>
   </div>

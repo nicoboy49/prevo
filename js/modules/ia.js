@@ -18,6 +18,9 @@
 //     contrôle de chaque fonction : Ia.PROMPTS, dans ia-prompts.js) ;
 //   Ia.valider.codes / impact / checkList / commentaire (ia-prompts.js) ; Ia.tracerUtilisation(table, id, champ, modele) ;
 //   Ia.evenements : événement 'changement' (detail : { raison, etat }) quand les réglages ou l'état changent.
+//   Ia.versionWeb() → vrai dans la démo en ligne (App.versionWeb) : aucune requête, jamais ; demander()
+//     lève IaIndisponible, tester() rend { ok: false }, activer lève IaRefusee, tous avec le message
+//     Ia.MESSAGE_VERSION_WEB ; les boutons restent visibles (ia-encadre.js).
 // Erreurs nommées (Ia.IaIndisponible, Ia.IaDelai, Ia.IaAnnulee, Ia.IaReponseInvalide, Ia.IaRefusee,
 // toutes filles de Ia.ErreurIa) : message en français, jamais la clé.
 // La clé du fournisseur n'est écrite que dans localStorage (prevo.ia) : ni CSV, ni journal, ni console.
@@ -51,6 +54,13 @@ const Ia = (() => {
   const MESSAGE_DISTANT_REFUSE = 'Le responsable n\'a pas autorisé les fournisseurs en ligne (Paramètres, '
     + '« Assistant IA »). L\'IA locale reste possible.';
   const MENTIONS = { poste: 'reste sur ce PC', 'pc-atelier': 'reste sur le PC atelier', atelier: 'reste dans l\'atelier' };
+  // Version web (démo en ligne, App.versionWeb) : l'assistant reste visible mais n'appelle rien ; tout
+  // appel rend ce message (texte du brief de lancement, point 7, mot pour mot).
+  const MESSAGE_VERSION_WEB = 'L\'assistant IA n\'est pas proposé dans cette démo en ligne : Prévo fonctionne '
+    + 'entièrement sans lui. Sur votre installation, vous choisirez de l\'activer ou non, entre deux options : '
+    + 'un assistant local et gratuit (Ollama, sur un PC de l\'atelier ; vos textes ne quittent pas l\'entreprise), '
+    + 'ou un service en ligne via une clé d\'API (plus rapide, mais les textes envoyés partent chez le fournisseur '
+    + 'choisi). Tout est expliqué dans le guide, section « Assistant IA ».';
 
   const evenements = new EventTarget();
   let etatCourant = 'inconnu';
@@ -109,6 +119,11 @@ const Ia = (() => {
 
   function modeCourant() {
     return typeof App !== 'undefined' && App ? App.mode : null;
+  }
+
+  /** Version web (démo en ligne) : constante de js/app.js, vraie seulement dans dist/demo-web/. */
+  function versionWeb() {
+    return typeof App !== 'undefined' && Boolean(App) && App.versionWeb === true;
   }
 
   function signaler(raison) {
@@ -187,6 +202,7 @@ const Ia = (() => {
   function enregistrerReglages(modifications) {
     const anciens = reglages();
     const nouveaux = normaliser(avecCle(anciens, modifications));
+    if (nouveaux.actif && versionWeb()) throw new IaRefusee(MESSAGE_VERSION_WEB);
     if (nouveaux.actif && !porteeAutorisee(nouveaux.url)) throw new IaRefusee();
     if (!ecrireMemoire(JSON.stringify(nouveaux))) {
       console.warn('Prévo : réglages de l\'assistant IA non mémorisés (stockage du navigateur refusé).');
@@ -408,7 +424,9 @@ const Ia = (() => {
     return { statut: Number(donnees.statut) || 0, corps: donnees.corps };
   }
 
+  // Seul point de sortie vers le fournisseur (direct ou relais) : en version web, aucune requête.
   function envoyer(r, chemin, methode, corps, signal) {
+    if (versionWeb()) return Promise.reject(new IaIndisponible(MESSAGE_VERSION_WEB));
     return modeCourant() === 'serveur' ? appelRelais(r, chemin, methode, corps, signal)
       : appelDirect(r, chemin, methode, corps, signal);
   }
@@ -482,6 +500,8 @@ const Ia = (() => {
    * (« Ce poste »), sans toucher à l'état. Ne lève jamais : { ok, modeles, message }.
    */
   async function tester(reglagesEssai) {
+    // Version web : rien n'est appelé (ni liste des modèles, ni détection d'Ollama), l'état ne change pas.
+    if (versionWeb()) return { ok: false, modeles: [], message: MESSAGE_VERSION_WEB };
     const pourLePoste = !reglagesEssai;
     const r = pourLePoste ? reglages() : normaliser(avecCle(reglages(), reglagesEssai));
     const resultat = await testerAvec(r);
@@ -497,7 +517,7 @@ const Ia = (() => {
   function verifierAuDemarrage() {
     try {
       signaler('ouverture');                      // mention de la coque, avant même le test
-      if (!active()) return Promise.resolve(etat());
+      if (!active() || versionWeb()) return Promise.resolve(etat());
       if (!verificationOuverture) verificationOuverture = tester().then(() => etat(), () => etat());
       return verificationOuverture;
     } catch (erreur) {
@@ -569,6 +589,7 @@ const Ia = (() => {
   async function demander(fonction, donnees, options) {
     const consigne = Ia.PROMPTS && Object.prototype.hasOwnProperty.call(Ia.PROMPTS, fonction) ? Ia.PROMPTS[fonction] : null;
     if (!consigne) throw new Error('Ia.demander : fonction inconnue « ' + fonction + ' ».');
+    if (versionWeb()) throw new IaIndisponible(MESSAGE_VERSION_WEB);   // IA réglée ou non : rien n'est appelé
     const r = reglages();
     if (!r.actif) throw new IaIndisponible('L\'assistant IA n\'est pas activé sur ce poste (« Ce poste »).');
     if (!urlValide(r.url)) throw new IaIndisponible('Adresse du fournisseur d\'IA invalide (« Ce poste »).');
@@ -612,10 +633,10 @@ const Ia = (() => {
   }
 
   return {
-    FOURNISSEURS, DEFAUTS, IMPACTS, FAMILLES_CODES, TEXTE_MAX,
+    FOURNISSEURS, DEFAUTS, IMPACTS, FAMILLES_CODES, TEXTE_MAX, MESSAGE_VERSION_WEB,
     ErreurIa, IaIndisponible, IaDelai, IaAnnulee, IaReponseInvalide, IaRefusee,
     evenements,
-    reglages, enregistrerReglages, distantAutorise, urlValide, portee, mention, active, etat,
+    reglages, enregistrerReglages, distantAutorise, urlValide, portee, mention, active, etat, versionWeb,
     verifierAuDemarrage, tester, demander,
     tracerUtilisation,
   };

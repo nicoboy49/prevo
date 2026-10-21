@@ -4,6 +4,8 @@
 // Déroulé du démarrage :
 //   1. page servie en http(s) et serveur Prévo qui répond → mode serveur ;
 //      sinon écran de démarrage : dossier (File System Access), dossier précédent, démo, CSV déposés ;
+//      version web (VERSION_WEB, démo en ligne) : pas de serveur cherché, la démo seule et
+//      « Télécharger Prévo » ;
 //   2. chargement des 22 tables ; base vide (serveur ou dossier) → « Partir des données de démo »
 //      ou « Créer une base vide » ; puis passage des fichiers au format courant (version_schema,
 //      sauvegarde « avant-format-v2 » d'abord), avant toute autre écriture ;
@@ -38,6 +40,11 @@ const App = (() => {
 
   const VERSION = '1.0.0';
   const DATE_VERSION = '2026-10-21';
+  // Version web (démo en ligne, docs/DEPLOIEMENT_DEMO.md) : faux dans le dépôt et dans la release ;
+  // outils/construire_demo_web.py le passe à vrai dans sa copie (dist/demo-web/). Vrai : l'écran de
+  // démarrage ne propose que la démo et « Télécharger Prévo » (ni dossier, ni serveur), et l'assistant
+  // IA reste visible mais n'appelle rien (js/modules/ia.js). Jamais déduit de l'adresse de la page.
+  const VERSION_WEB = false;
   const CLE_PROFIL = 'prevo.profil';
   const CLE_POSTE = 'prevo.poste';
   const CLE_MENU_REPLIE = 'prevo.menuReplie';
@@ -156,8 +163,9 @@ const App = (() => {
     poste = lireMemoire(CLE_POSTE) || posteAleatoire();
     montrer('ecran-chargement', 'chargement');
 
+    // Version web : pas de serveur Prévo à chercher (le site est statique : /api/ping n'existe pas).
     const pageEnHttp = location.protocol === 'http:' || location.protocol === 'https:';
-    if (pageEnHttp && await StockageServeur.detecter()) {
+    if (!VERSION_WEB && pageEnHttp && await StockageServeur.detecter()) {
       try {
         await ouvrirAvec(StockageServeur.creer());
       } catch (erreur) {
@@ -170,7 +178,7 @@ const App = (() => {
   }
 
   async function afficherDemarrage() {
-    const dossierPossible = StockageDossier.disponible();
+    const dossierPossible = !VERSION_WEB && StockageDossier.disponible();
     UI.$('#btn-dossier').hidden = !dossierPossible;
     let memorise = null;
     if (dossierPossible) {
@@ -184,13 +192,25 @@ const App = (() => {
     UI.$('#nom-dossier-precedent').textContent = memorise ? '« ' + memorise.nom + ' »' : '';
     const zoneAlerte = UI.$('#alerte-navigateur');
     zoneAlerte.textContent = '';
-    zoneAlerte.hidden = dossierPossible;
-    if (!dossierPossible) {
+    zoneAlerte.hidden = dossierPossible || VERSION_WEB;
+    if (!dossierPossible && !VERSION_WEB) {
       zoneAlerte.appendChild(UI.bandeau('attention', UI.html`<b>Ce navigateur ne sait pas ouvrir un dossier.</b>
         Pour travailler sur vos fichiers, utilisez Chrome ou Edge sur un ordinateur. En attendant,
         la démo fonctionne ici.`));
     }
+    preparerVersionWeb();
     montrer('ecran-demarrage', 'demarrage');
+  }
+
+  // Version web : seule la démo est proposée ; « Télécharger Prévo » (dernière release, lien écrit
+  // dans index.html) remplace le mode dossier, le dépôt de CSV et le rappel du mode serveur.
+  function preparerVersionWeb() {
+    UI.$('#zone-depot').hidden = VERSION_WEB;
+    UI.$('#note-mode-serveur').hidden = VERSION_WEB;
+    UI.$('#btn-telecharger').hidden = !VERSION_WEB;
+    const demo = UI.$('#btn-demo');
+    demo.classList.toggle('btn-primaire', VERSION_WEB);
+    demo.classList.toggle('btn-secondaire', !VERSION_WEB);
   }
 
   async function choisirDossier() {
@@ -1000,6 +1020,7 @@ const App = (() => {
   return {
     version: VERSION,
     dateVersion: DATE_VERSION,
+    versionWeb: VERSION_WEB,
     get mode() { return mode; },
     get adaptateur() { return adaptateur; },
     get profil() { return profil ? Object.assign({}, profil) : null; },

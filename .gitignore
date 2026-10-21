@@ -26,3 +26,6 @@ tests/resultats/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Produits des outils de construction (démo en ligne, zip de la release)
+dist/

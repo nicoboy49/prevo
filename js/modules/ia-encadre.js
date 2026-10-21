@@ -7,7 +7,8 @@
 //
 // API :
 //   Ia.bouton(libelle, surClic) → <button class="ia-bouton"> ou null si l'IA n'est pas utilisable
-//     (Ia.active() et Ia.etat() === 'ok') ; surClic(evenement, bouton).
+//     (Ia.active() et Ia.etat() === 'ok') ; surClic(evenement, bouton). Version web (démo en ligne) :
+//     toujours posé, l'encadré affiche alors le message Ia.MESSAGE_VERSION_WEB (rien n'est appelé).
 //   Ia.emplacement(libelle, surClic) → <div class="ia-emplacement"> qui porte ce bouton quand l'IA est
 //     utilisable et le retire sinon, au fil des changements de l'IA (test d'ouverture fini, fournisseur
 //     injoignable, réglages du poste, autorisation du responsable), sans réafficher l'écran ; masqué
@@ -38,9 +39,15 @@ Object.assign(Ia, (() => {
     return UI.brut('<svg class="icone" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + DESSIN_ETINCELLE + '</svg>');
   }
 
+  // Boutons IA posés : IA utilisable sur ce poste, ou version web (boutons et emplacements à leur
+  // place ; le clic rend le message de la démo en ligne, sans requête).
+  function utilisable() {
+    return Ia.versionWeb() || (Ia.active() && Ia.etat() === 'ok');
+  }
+
   /** Bouton « avec l'IA » ; null si l'IA n'est pas utilisable sur ce poste (inactive ou injoignable). */
   function bouton(libelle, surClic) {
-    if (!Ia.active() || Ia.etat() !== 'ok') return null;
+    if (!utilisable()) return null;
     const element = UI.element(UI.html`<button type="button" class="btn btn-secondaire ia-bouton">${iconeIa()}<span>${libelle}</span></button>`);
     if (typeof surClic === 'function') element.addEventListener('click', (evenement) => surClic(evenement, element));
     return element;
@@ -203,7 +210,7 @@ Object.assign(Ia, (() => {
   // ===========================================================================================
 
   function texteMention() {
-    if (!Ia.active()) return '';
+    if (!Ia.active() || Ia.versionWeb()) return '';         // version web : aucun texte ne part
     const reglages = Ia.reglages();
     return 'IA : ' + Ia.mention(Ia.portee(reglages.url), reglages.url) + (Ia.etat() === 'injoignable' ? ' — ne répond pas' : '');
   }
@@ -242,7 +249,7 @@ Object.assign(Ia, (() => {
     const zone = UI.element(UI.html`<div class="ia-emplacement" hidden></div>`);
     let insere = false;
     const poser = () => {
-      const disponible = Ia.active() && Ia.etat() === 'ok';
+      const disponible = utilisable();
       if (Boolean(zone.firstElementChild) === disponible) return;     // inchangé : l'encadré ouvert reste
       zone.textContent = '';
       const element = disponible ? bouton(libelle, surClic) : null;
