@@ -14,7 +14,10 @@ et choisit sa réponse d'après la fonction (premier message système « Fonctio
     faux-chiffres   commentaire du rapport qui écrit un nombre en clair (« 92 % ») ;
     faux-schema     API compatible OpenAI : refuse `response_format` json_schema (400), accepte json_object ;
     faux-enorme     réponse de plus de 2 Mo ;
-    faux-redirige   répond par une redirection 302 (le relais ne doit pas la suivre).
+    faux-redirige   répond par une redirection 302 (le relais ne doit pas la suivre) ;
+    faux-tronque    réponse coupée : Content-Length annonce plus d'octets que le corps envoyé, puis la
+                    connexion est fermée ;
+    faux-tronque-morceaux  idem en « Transfer-Encoding: chunked » : le morceau annoncé n'arrive pas en entier.
 
     with FauxFournisseur() as faux:
         faux.url            # 'http://127.0.0.1:54321'  (Ollama) ; faux.url + '/v1' (OpenAI)
@@ -28,7 +31,7 @@ import threading
 import time
 
 MODELES = ["faux", "faux-lent", "faux-invente", "faux-illisible", "faux-chiffres", "faux-schema",
-           "faux-enorme", "faux-redirige"]
+           "faux-enorme", "faux-redirige", "faux-tronque", "faux-tronque-morceaux"]
 MOTIF_FONCTION = re.compile(r"^Fonction\s*:\s*(\w+)")
 
 # Réponses correctes par fonction (les codes sont pris dans le schéma quand il en donne la liste).
@@ -114,6 +117,23 @@ class _Gestionnaire(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(octets)
 
+    def _envoyer_tronque(self, modele):
+        """Le début de la réponse seulement, puis la connexion fermée (faux-tronque, faux-tronque-morceaux)."""
+        debut = b'{"model": "faux", "message": {"content": "Constat'      # 49 octets, JSON inachevé
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        if modele == "faux-tronque-morceaux":
+            self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+            self.wfile.write(b"%x\r\n" % 4096 + debut)          # morceau de 4 096 octets annoncé, 49 envoyés
+        else:
+            self.send_header("Content-Length", str(len(debut) + 1000))
+            self.end_headers()
+            self.wfile.write(debut)
+        self.wfile.flush()
+        self.close_connection = True
+
     def _noter(self, corps):
         self.faux.requetes.append({"methode": self.command, "chemin": self.path,
                                    "entetes": {k.lower(): v for k, v in self.headers.items()}, "corps": corps})
@@ -162,6 +182,8 @@ class _Gestionnaire(http.server.BaseHTTPRequestHandler):
         modele = str(corps.get("model", "faux"))
         if modele == "faux-redirige":
             return self._envoyer(302, {}, entetes={"Location": "/redirection-cible"})
+        if modele in ("faux-tronque", "faux-tronque-morceaux"):
+            return self._envoyer_tronque(modele)
         if modele == "faux-lent":
             time.sleep(self.faux.lenteur_s)
         if openai and modele == "faux-schema" and (corps.get("response_format") or {}).get("type") == "json_schema":

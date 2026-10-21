@@ -22,11 +22,15 @@ ATTENTION : aucune authentification. Usage sur un réseau local de confiance uni
 """
 
 import argparse
+import csv
 import datetime
 import hashlib
+import http.client
 import http.server
+import io
 import ipaddress
 import json
+import math
 import os
 import re
 import shutil
@@ -59,6 +63,8 @@ ESSAIS_SI_VERROUILLE = 3                   # fichier ouvert dans Excel : 3 essai
 PAUSE_ENTRE_ESSAIS_S = 0.1                 # … espacés de 100 ms
 # Relais vers le fournisseur d'IA (lot 4, ARCHITECTURE.md §17.2) : liste fermée des chemins (Ollama :
 # api/chat, api/tags ; API compatible OpenAI : chat/completions, models), délai et taille plafonnés.
+# Limite connue : le délai s'applique à CHAQUE opération réseau (connexion, envoi, chaque lecture), pas à
+# la durée totale de l'appel ; un fournisseur qui envoie sa réponse goutte à goutte peut donc le dépasser.
 CHEMINS_IA = ('api/chat', 'api/tags', 'chat/completions', 'models')
 DELAI_IA_PAR_DEFAUT_S = 120
 DELAI_IA_MAX_S = 300
@@ -256,13 +262,25 @@ class _SansRedirection(urllib.request.HTTPRedirectHandler):
 
 OUVREUR_SANS_REDIRECTION = urllib.request.build_opener(_SansRedirection)
 
+# Portée du fournisseur (D67, ARCHITECTURE.md §17.1 ; même règle que Ia.portee de js/modules/ia.js) :
+# boucle locale et adresses privées restent dans l'atelier ; toute autre adresse est « distante ».
+RESEAUX_ATELIER = tuple(ipaddress.ip_network(reseau) for reseau in (
+    '127.0.0.0/8', '::1/128',                                               # boucle locale
+    '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16',      # adresses privées IPv4
+    'fc00::/7', 'fe80::/10'))                                               # adresses privées IPv6
+MOTIF_NOM_LOCAL = re.compile(r'[a-z0-9_-]+(\.[a-z0-9_-]+)*\.local', re.ASCII)     # mDNS : pc-atelier.local
+MESSAGE_DISTANT_REFUSE = 'Le responsable n\'a pas autorisé les fournisseurs en ligne.'
+
 
 def adresse_fournisseur(url):
     """Adresse de base du fournisseur, contrôlée : http ou https, un hôte, ni identifiant, ni
-    paramètres, ni fragment. ErreurHttp(400) sinon (le message ne reprend jamais l'adresse)."""
+    paramètres, ni fragment, ni espace ou caractère de contrôle. ErreurHttp(400) sinon (le message
+    ne reprend jamais l'adresse)."""
     if not isinstance(url, str) or not url.strip():
         raise ErreurHttp(400, 'Adresse du fournisseur d\'IA manquante.')
     texte = url.strip()
+    if any(caractere.isspace() or ord(caractere) < 0x20 or ord(caractere) == 0x7f for caractere in texte):
+        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide (espace ou caractère de contrôle).')
     try:
         morceaux = urlsplit(texte)
         morceaux.port                               # lève ValueError si le port est illisible
@@ -296,15 +314,123 @@ def lire_demande_ia(corps):
         entetes['Content-Type'] = 'application/json'
     cle = demande.get('cle')
     if cle:
-        if not isinstance(cle, str) or any(caractere in cle for caractere in '\r\n'):
+        # Caractères ASCII visibles (et espace) seulement : l'en-tête HTTP ne sait pas en porter d'autres.
+        if not isinstance(cle, str) or not all(' ' <= caractere <= '~' for caractere in cle):
             raise ErreurHttp(400, 'Clé du fournisseur d\'IA illisible.')
         entetes['Authorization'] = 'Bearer ' + cle
+    delai = demande.get('delai', DELAI_IA_PAR_DEFAUT_S)
+    if isinstance(delai, float) and not math.isfinite(delai):      # 1e999, -Infinity, NaN
+        raise ErreurHttp(400, 'Délai de l\'IA invalide (un nombre de secondes est attendu).')
     try:
-        delai = int(demande.get('delai', DELAI_IA_PAR_DEFAUT_S))
+        delai = int(delai)
     except (TypeError, ValueError):
         delai = DELAI_IA_PAR_DEFAUT_S
     return {'cible': adresse_fournisseur(demande.get('url')) + '/' + chemin, 'methode': methode, 'octets': octets,
             'entetes': entetes, 'delai': min(max(delai, 1), DELAI_IA_MAX_S)}
+
+
+def fournisseur_distant(adresse):
+    """Vrai si l'adresse (déjà contrôlée par adresse_fournisseur) sort de l'atelier (D67).
+
+    Décidé SANS résolution DNS, qui pourrait faire désigner n'importe quelle machine à un nom : une
+    adresse IP écrite est classée par ipaddress (RESEAUX_ATELIER) ; parmi les noms, seuls « localhost »
+    et les noms en « .local » restent dans l'atelier. « *.localhost » est distant : Windows ne le
+    résout pas forcément vers ce PC.
+    """
+    hote = urlsplit(adresse).hostname or ''
+    try:
+        ip = ipaddress.ip_address(hote)
+    except ValueError:
+        return not (hote == 'localhost' or MOTIF_NOM_LOCAL.fullmatch(hote))
+    if getattr(ip, 'ipv4_mapped', None) is not None:                # ::ffff:192.168.1.20 = 192.168.1.20
+        ip = ip.ipv4_mapped
+    return not any(ip in reseau for reseau in RESEAUX_ATELIER)
+
+
+def valeur_parametre(octets, cle):
+    """Valeur de `cle` dans le contenu de parametres.csv, ou '' (fichier, colonne ou clé absents).
+
+    Première ligne qui porte la clé, comme Donnees.parametre. Lecture tolérante (§3.3) : BOM retiré,
+    UTF-8 sinon windows-1252, séparateur « ; » (« , » si l'en-tête n'a aucun « ; »), guillemets,
+    colonnes « cle » et « valeur » trouvées par leur nom, espaces de fin retirés, apostrophe de
+    protection retirée (§3.2 : « '1 » → « 1 » ; « ''1 » → « '1 »).
+    """
+    if octets.startswith(BOM_UTF8):
+        octets = octets[len(BOM_UTF8):]
+    try:
+        texte = octets.decode('utf-8')
+    except UnicodeDecodeError:
+        texte = octets.decode('cp1252', 'replace')
+    entete = texte.split('\n', 1)[0]
+    separateur = ',' if ';' not in entete and ',' in entete else ';'
+    try:
+        lignes = list(csv.reader(io.StringIO(texte, newline=''), delimiter=separateur))
+    except csv.Error:
+        return ''
+    noms = [nom.strip().lower() for nom in lignes[0]] if lignes else []
+    if 'cle' not in noms or 'valeur' not in noms:
+        return ''
+    colonne_cle, colonne_valeur = noms.index('cle'), noms.index('valeur')
+    for ligne in lignes[1:]:
+        if len(ligne) > colonne_cle and ligne[colonne_cle].strip() == cle:
+            valeur = ligne[colonne_valeur].rstrip() if len(ligne) > colonne_valeur else ''
+            return valeur[1:] if valeur.startswith("'") else valeur
+    return ''
+
+
+def distant_autorise(config):
+    """Réglage partagé du responsable (D67) : fournisseurs en ligne autorisés si ia_distant_autorise
+    vaut 1 dans parametres.csv. Défaut : non (fichier, clé ou valeur absents ou illisibles)."""
+    with VERROU_ECRITURE:
+        octets = lire_octets(chemin_table(config, 'parametres'))
+    return valeur_parametre(octets or b'', 'ia_distant_autorise') == '1'
+
+
+def lire_reponse_fournisseur(reponse):
+    """Corps rendu par le fournisseur, TAILLE_MAX_REPONSE_IA + 1 octets au plus (au-delà : refusé).
+
+    HTTPResponse.read(n) rend sans rien dire le début d'une réponse plus courte que son Content-Length
+    (connexion coupée) : ce cas lève ici http.client.IncompleteRead, comme une réponse « chunked » coupée.
+    """
+    octets = reponse.read(TAILLE_MAX_REPONSE_IA + 1)
+    manquants = getattr(reponse, 'length', None)
+    if manquants and len(octets) <= TAILLE_MAX_REPONSE_IA:
+        raise http.client.IncompleteRead(octets, manquants)
+    return octets
+
+
+def appeler_fournisseur(demande):
+    """Envoie la demande vérifiée (lire_demande_ia) sans suivre de redirection ; rend (statut, octets)
+    du fournisseur, même pour un statut 3xx, 4xx ou 5xx. ErreurHttp sinon : 400 si l'adresse ne peut
+    pas être écrite sur le réseau, 502 si le fournisseur est injoignable ou sa réponse coupée ou
+    illisible, 504 si le délai est dépassé. Aucun message ne reprend l'adresse ni la clé."""
+    requete = urllib.request.Request(demande['cible'], data=demande['octets'], method=demande['methode'],
+                                     headers=demande['entetes'])
+    try:
+        try:
+            reponse = OUVREUR_SANS_REDIRECTION.open(requete, timeout=demande['delai'])
+            statut = reponse.status
+        except urllib.error.HTTPError as erreur:       # le fournisseur répond 3xx, 4xx ou 5xx : on le rend tel quel
+            reponse, statut = erreur, erreur.code
+        try:
+            octets = lire_reponse_fournisseur(reponse)
+        finally:
+            reponse.close()
+    except urllib.error.URLError as erreur:
+        if isinstance(erreur.reason, (socket.timeout, TimeoutError)):
+            raise ErreurHttp(504, 'Le fournisseur d\'IA n\'a pas répondu dans le délai.')
+        raise ErreurHttp(502, 'Fournisseur d\'IA injoignable.')
+    except (socket.timeout, TimeoutError):
+        raise ErreurHttp(504, 'Le fournisseur d\'IA n\'a pas répondu dans le délai.')
+    except OSError:
+        raise ErreurHttp(502, 'Fournisseur d\'IA injoignable.')
+    except http.client.InvalidURL:
+        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide.')
+    except http.client.HTTPException:                   # IncompleteRead, BadStatusLine, LineTooLong…
+        raise ErreurHttp(502, 'Réponse du fournisseur d\'IA incomplète ou illisible.')
+    except ValueError:          # adresse que le réseau ne sait pas écrire (nom vide « a..b », non ASCII…)
+        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide.')
+    return statut, octets
 
 
 def corps_lisible(octets):
@@ -1026,23 +1152,13 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
 
         Rend { statut, corps } : le statut et le corps (JSON, sinon texte) du fournisseur. La clé
         éventuelle est transmise au fournisseur et oubliée : jamais écrite, affichée ni renvoyée.
+        Demande invalide → 400 ; fournisseur en ligne sans l'accord du responsable (D67) → 403, avant
+        tout appel sortant ; échec réseau ou réponse coupée → 502 ; délai dépassé → 504.
         """
         demande = lire_demande_ia(corps)
-        requete = urllib.request.Request(demande['cible'], data=demande['octets'], method=demande['methode'],
-                                         headers=demande['entetes'])
-        try:
-            with OUVREUR_SANS_REDIRECTION.open(requete, timeout=demande['delai']) as reponse:
-                statut, octets = reponse.status, reponse.read(TAILLE_MAX_REPONSE_IA + 1)
-        except urllib.error.HTTPError as erreur:       # le fournisseur répond 3xx, 4xx ou 5xx : on le rend tel quel
-            statut, octets = erreur.code, erreur.read(TAILLE_MAX_REPONSE_IA + 1)
-        except urllib.error.URLError as erreur:
-            if isinstance(erreur.reason, (socket.timeout, TimeoutError)):
-                raise ErreurHttp(504, 'Le fournisseur d\'IA n\'a pas répondu dans le délai.')
-            raise ErreurHttp(502, 'Fournisseur d\'IA injoignable.')
-        except (socket.timeout, TimeoutError):
-            raise ErreurHttp(504, 'Le fournisseur d\'IA n\'a pas répondu dans le délai.')
-        except OSError:
-            raise ErreurHttp(502, 'Fournisseur d\'IA injoignable.')
+        if fournisseur_distant(demande['cible']) and not distant_autorise(self.config):
+            raise ErreurHttp(403, MESSAGE_DISTANT_REFUSE)
+        statut, octets = appeler_fournisseur(demande)
         if len(octets) > TAILLE_MAX_REPONSE_IA:
             raise ErreurHttp(502, 'Réponse du fournisseur d\'IA trop grande (2 Mo au maximum).')
         self.envoyer_json(200, {'statut': statut, 'corps': corps_lisible(octets)})
