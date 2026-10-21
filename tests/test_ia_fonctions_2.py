@@ -213,13 +213,23 @@ class TestResume(CasFonctions):
         equipement = scenarios_demo()["causes_equipement"]
         regler_ia(self.contexte, url=self.faux.url, modele="faux")
         preregler_profil(self.contexte, "responsable", "Responsable")
-        self.contexte.route(self.serveur.url + "/api/ia", lambda route: (time.sleep(1.5), route.continue_()))
+        # Le test d'ouverture (relais /api/ia) est RETENU jusqu'à ce que la fiche soit vérifiée, puis libéré :
+        # aucun délai fixe (un time.sleep dans le gestionnaire faisait une course selon la charge du poste).
+        retenues = []
+        self.contexte.route(self.serveur.url + "/api/ia", lambda route: retenues.append(route))
         page = self.page
         page.goto(self.serveur.url + "/#/equipement/" + equipement)
         page.wait_for_selector(".parc-complements")
+        for _ in range(100):                                # laisse arriver la requête retenue (5 s au plus)
+            if retenues:
+                break
+            page.wait_for_timeout(50)
+        self.assertTrue(retenues, "le test d'ouverture du fournisseur n'est pas parti")
         self.assertEqual(page.evaluate("Ia.etat()"), "inconnu")
         self.assertEqual(page.locator(".parc-resume-ia:visible, .ia-bouton").count(), 0)
         page.evaluate("document.querySelector('.parc-complements').dataset.temoin = '1'")
+        for route in retenues:
+            route.continue_()
         page.wait_for_selector(".parc-resume-ia .ia-bouton", state="visible")
         self.assertEqual(page.evaluate("document.querySelector('.parc-complements').dataset.temoin"), "1")
 
