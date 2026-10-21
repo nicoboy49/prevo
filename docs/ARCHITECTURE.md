@@ -292,7 +292,9 @@ appelé explicitement (ex. avant l'export ZIP) relit tout.
 ### 5.5 Rafraîchissement
 `Donnees.demarrerSurveillance()` : toutes les `rafraichissement_s` secondes (20 par défaut) et à
 chaque retour sur l'onglet (`visibilitychange`), `adaptateur.listerVersions()` ; chaque table
-dont la version diffère est relue ; événement `changement` (`origine: 'distant'`).
+dont la version diffère est relue ; événement `changement` (`origine: 'distant'`). Le journal,
+écrit par ajout, n'est signalé que s'il a changé sur un autre poste (pas pour nos propres ajouts,
+qui ne le font pas relire) : depuis le lot 4, les onglets Suggestions et Décisions en dépendent.
 
 ### 5.6 Passage au format courant : `mettreAJourVersionSchema` (lot 2)
 `await Donnees.mettreAJourVersionSchema()` → `{ misAJour, sauvegarde }`. Appelée par `App` au
@@ -1956,6 +1958,13 @@ Caractères invisibles encore en clair dans les fichiers des lots 1-2 → échap
 avec motif » mise en commun (`UI`) pour Contrôles et Équipe ; noms des techniciens « Prénom Nom »
 partout (planning compris) ; l'onglet Suggestions et l'onglet Décisions se réaffichent quand le journal
 change sur un autre poste. Tag `v1.0.0` quand toute la suite passe ; puis envoi sur GitHub (D79).
+Réalisé (T71) : `UI.fenetreAction({ titre, introduction, champs, libelleValider, verifier, action,
+classe })` (`verifier` et `action` reçoivent `(valeurs, contenu)` ; champs « fichier » lus par
+l'écran dans `contenu`) ; `nomComplet` (Planning, Equipe) rend « Prénom Nom » et les listes restent
+rangées par nom puis prénom (`ordreDesNoms`) ; `Donnees` signale le journal changé ailleurs (§5.5)
+et l'écran `preventif` du responsable dépend aussi de `journal`, `demandes`, `codes_defaillance` ;
+`test_depot` refuse tout caractère invisible en clair (U+00A0, U+202F, U+2009, U+200B) dans `js/`
+(hors `js/lib/`), `css/` et les pages HTML.
 
 ### 17.10 Tests du lot 4
 Faux fournisseur `tests/faux_fournisseur_ia.py` (serveur de test : `api/tags`, `api/chat`, `models`,
