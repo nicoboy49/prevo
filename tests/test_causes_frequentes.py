@@ -170,7 +170,9 @@ class TestEncart(CasCauses):
         self.assertFalse(encart["ouvert"])                       # replié : on le déplie si l'on veut
         self.assertEqual(encart["fourchettes"], ["garniture usée : " + texte_fourchette(7, 12),
                                                  "joint détérioré : " + texte_fourchette(5, 12)])
-        self.assertIn("95", encart["explication"])
+        self.assertEqual(" ".join(encart["explication"].split()),
+                         "Calculée ainsi (méthode de Wilson), une fourchette contient la vraie part de la cause 95 fois sur 100 ;"
+                         " elle se resserre quand les cas s'accumulent.")
         self.assertNotIn("autre", encart["explication"])          # pas de « et n autres » parasite
 
     def test_beaucoup_de_cas_pas_de_mention_mais_le_detail(self):
