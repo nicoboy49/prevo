@@ -67,7 +67,7 @@ class TestAccueilLot3bis(CasNavigateur):
     def test_sans_suggestion_sur_criticite_a_le_complement_dit_a_examiner(self):
         # Serveur à part : ses équipements de criticité A passent en B (écriture dans sa copie seulement).
         with ServeurPrevo() as serveur:
-            self.ouvrir(self.page, self.contexte)
+            preregler_profil(self.contexte, "responsable", "Responsable")      # sans passer par le serveur partagé
             self.page.goto(serveur.url + "/#/accueil")
             attendre_pret(self.page)
             self.page.wait_for_load_state("networkidle")
