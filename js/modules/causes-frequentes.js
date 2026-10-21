@@ -89,8 +89,8 @@ const CausesFrequentes = (() => {
       <summary>Précision de ces chiffres</summary>
       <dl class="causes-fourchettes">${resultat.causes.map((cause) => UI.html`<div><dt>${cause.libelle} :</dt>
         <dd>${texteFourchette(cause.nombre, resultat.total)}</dd></div>`)}</dl>
-      <p class="causes-explication">La part réelle de chaque cause a 95 chances sur 100 d'être dans sa fourchette
-        (méthode de Wilson) ; la fourchette se resserre quand les cas s'accumulent.</p>
+      <p class="causes-explication">Calculée ainsi (méthode de Wilson), une fourchette contient la vraie part de la cause
+        95 fois sur 100 ; elle se resserre quand les cas s'accumulent.</p>
     </details>`;
   }
 
