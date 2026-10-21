@@ -1,7 +1,65 @@
 /* Assistant IA et dictée (lot 4, ARCHITECTURE.md §17.4 et §17.6) : boutons « avec l'IA », encadré
    de proposition, mention de portée, bouton micro. Variables de la charte seulement : le thème clair
-   les redéfinit. */
+   les redéfinit. Zones cliquables : var(--tactile), qui vaut 48 px sur téléphone. */
 
+/* --- bouton « avec l'IA » (Proposer avec l'IA, Rédiger le compte rendu…) --- */
+.ia-bouton { gap: .5rem; max-width: 100%; }
+.ia-bouton span { min-width: 0; overflow-wrap: anywhere; }
+
+/* --- encadré de proposition (.encadre de la charte, teinte bleue) --- */
 .ia-encadre {
   min-width: 0;
+  border-color: var(--bord-bleu);
+  background: var(--teinte-bleu-faible);
+  color: var(--texte);
+  overflow-wrap: anywhere;
+}
+.ia-encadre.ia-en-erreur { border-color: var(--bord-rouge); background: var(--teinte-rouge-faible); }
+
+/* progression : « L'IA rédige… 12 s » et « Annuler » */
+.ia-encadre .ia-progression { padding: 4px 0; flex-wrap: wrap; color: var(--texte-2); }
+.ia-encadre .ia-progression > span { flex: 1 1 auto; min-width: 0; }
+.ia-encadre .ia-duree { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ia-encadre .ia-annuler { margin-left: auto; }
+
+/* proposition et sa mention */
+.ia-mention-proposition {
+  display: flex; align-items: center; gap: .4rem; margin: 0 0 .5rem;
+  font-size: .875rem; font-weight: 600; color: var(--texte-bleu);
+}
+.ia-mention-proposition .icone, .ia-erreur .icone { width: 18px; height: 18px; }
+.ia-proposition { min-width: 0; }
+.ia-texte { margin: 0; white-space: pre-line; color: var(--texte); }
+.ia-liste { margin: 0; padding-left: 1.2rem; color: var(--texte); }
+.ia-liste li + li { margin-top: .25rem; }
+.ia-erreur, .ia-erreur-action { display: flex; align-items: flex-start; gap: .5rem; margin: 0; color: var(--texte-important); }
+.ia-erreur-action { margin-top: .6rem; }
+.ia-actions { margin-top: .8rem; }
+
+/* --- mention permanente dans la coque : « IA : reste sur ce PC »… --- */
+.ia-mention-coque {
+  display: flex; align-items: center; gap: .5rem; margin: 0; padding: 4px 32px;
+  font-size: .875rem; font-weight: 600; color: var(--texte-2);
+  background: var(--fond); border-bottom: 1px solid var(--trait);
+  overflow-wrap: anywhere;
+}
+.ia-mention-coque .icone { width: 18px; height: 18px; color: var(--cyan); }
+.ia-mention-coque .ia-mention-texte { min-width: 0; }
+/* données envoyées en ligne : en ambre, comme un avertissement permanent */
+.ia-mention-coque.distant {
+  color: var(--texte-ambre); border-color: var(--bord-ambre);
+  background: linear-gradient(var(--teinte-ambre-faible), var(--teinte-ambre-faible)), var(--fond);
+}
+.ia-mention-coque.distant .icone { color: var(--ambre); }
+
+/* --- téléphone : boutons pleine largeur faciles à toucher --- */
+@media (max-width: 640px) {
+  .ia-mention-coque { padding: 4px 16px; }
+  .ia-actions .btn { flex: 1 1 auto; }
+  .ia-encadre .ia-annuler { min-height: var(--tactile); }
+}
+
+/* --- impression : l'IA ne s'imprime pas --- */
+@media print {
+  .ia-mention-coque, .ia-bouton, .ia-encadre { display: none !important; }
 }
