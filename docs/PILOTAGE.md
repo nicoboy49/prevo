@@ -220,7 +220,7 @@ tâches courtes ou très liées au contrat (socle, règles des indicateurs, des 
 du planning, écran du planning, rapport mensuel, accueil, recette, performance, documentation) ; des
 sous-agents ont écrit les autres (jeu de démo, étiquettes, contrôles, équipe, paramètres, écran des
 indicateurs). Le code de l'orchestrateur a été relu comme celui des sous-agents, par des relecteurs
-qui ne l'avaient pas écrit. C'est utile : six des sept défauts critiques trouvés étaient dans son
+qui ne l'avaient pas écrit. C'est utile : six des huit défauts critiques trouvés étaient dans son
 code ou dans ses corrections.
 
 ### Les décisions de Nicolas
@@ -250,9 +250,9 @@ délai » de 0 % serait trompeuse ; une habilitation dont l'échéance est illis
 
 - **14 tâches** (T41 à T54) réparties en **6 vagues** ; une étiquette git par vague validée.
 - **3 relectures** : vagues 1 et 2, vagues 3 à 5, puis une relecture finale des dernières tâches et
-  de toutes les corrections. Les deux premières ont trouvé **7 défauts critiques** (détail
-  ci-dessous), tous corrigés test à l'appui.
-- **715 tests** dans la suite (581 à la fin du lot 2).
+  de toutes les corrections. Elles ont trouvé **8 défauts critiques** (7, puis 1 à la relecture
+  finale ; détail ci-dessous), tous corrigés : chaque fois, un test qui échouait d'abord.
+- **718 tests** dans la suite (581 à la fin du lot 2).
 - **Performance** mesurée sur le jeu de charge de 500 équipements et 5 000 ordres de travail :
   premier chargement d'environ 1,3 s (budget 2 s) ; écran Indicateurs sur 12 mois, ECharts compris,
   d'environ 0,6 s (budget 2 s) ; planning de la semaine en quelques millisecondes (budget 1 s) ;
@@ -261,7 +261,7 @@ délai » de 0 % serait trompeuse ; une habilitation dont l'échéance est illis
 
 ### Ce que les relectures et la recette ont trouvé
 
-Les sept défauts critiques :
+Les huit défauts critiques :
 
 - un document `.html` (un rapport mensuel, par exemple) ouvert **hors serveur** (modes dossier et
   démo) **exécutait ses scripts** : un fichier déposé dans les documents aurait pu agir dans Prévo ;
@@ -277,7 +277,10 @@ Les sept défauts critiques :
 - sur téléphone, l'onglet des rapports mensuels **faisait défiler toute la page** de côté (classe CSS
   inexistante). La recette ne l'avait pas vu, car la liste des rapports y était vide ;
 - les **liens vers les OT sources** de chaque chiffre, exigés par le cahier des charges (D35),
-  manquaient à l'écran des indicateurs.
+  manquaient à l'écran des indicateurs ;
+- l'OT créé depuis un contrôle réglementaire n'avait pas le **titre prévu** par le cahier des charges
+  (D40 : « Levée des observations — … » ou « Accompagnement du contrôle — … ») : le test vérifiait
+  seulement que le titre contenait la nature du contrôle.
 
 Parmi les autres défauts relevés et corrigés :
 
@@ -287,7 +290,9 @@ Parmi les autres défauts relevés et corrigés :
 - une date impossible (« 2026-02-30 ») était rangée dans le planning, et un contrôle à la date
   illisible passait pour « à jour » ;
 - le **planning était illisible** à 1 440 px de large : vu par l'orchestrateur en relisant les
-  captures de la recette, alors que les tests passaient ;
+  captures de la recette, alors que les tests passaient ; la relecture finale a ensuite montré qu'à
+  1 920 px la grille était plus étroite qu'à 1 440 px, et que le filtre sur un technicien se perdait
+  au changement de semaine ;
 - une modification de l'accueil a cassé un test du lot 1 (paramètres) que l'orchestrateur n'avait pas
   relancé : il n'avait lancé que les tests de l'accueil. Leçon notée : après une modification d'un
   écran partagé, relancer aussi les tests des écrans qui en dépendent.
@@ -302,7 +307,9 @@ Parmi les autres défauts relevés et corrigés :
 - **Recette en modes serveur et démo.** Planification avec avertissement d'habilitation, contrôle
   réalisé et habilitation renouvelée (le compteur de l'accueil baisse de un), étiquettes d'un atelier,
   rapport figé puis rouvert (et téléchargé en démo), 9 écrans × 3 profils, captures à 1 440 et 375 px
-  relues. Les recettes des lots 1 et 2 repassent.
+  relues. Les recettes des lots 1 et 2 repassent. Le relecteur final a injecté sept défauts dans une
+  copie du code (MTTR faussé, droits d'un profil, débordement à 375 px, compteur, avertissement
+  d'habilitation masqué, étiquette manquante…) : la recette les a tous détectés.
 - **Rien d'autre n'a bougé.** Les bibliothèques de `js/lib/` sont identiques à celles du lot 1 (seule
   leur notice de licence a été corrigée : ECharts est en version 5.5.1, et non 5.6.0 comme écrit
   depuis le lot 1) ; le format des fichiers reste en version 2.

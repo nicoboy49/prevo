@@ -1380,9 +1380,11 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   sans glisser (WCAG 2.2, 2.5.7). Technicien : lecture, sa ligne en tête, aucun glisser ni bouton.
   Téléphone : une liste par jour (pas de grille).
 - Écarts retenus (T48, recette et relecture) : sous 1 700 px de large, la colonne « À planifier » passe
-  au-dessus de la grille (à 1 440 px, la grille était illisible) ; samedi et dimanche sont plus étroits ;
-  le titre d'une carte tient sur trois lignes au plus ; `?technicien=` ne garde que la ligne de ce
-  technicien ; la mise en attente pour pièce écrit le motif « Pièce : … » avec ce qui est déjà sorti,
+  au-dessus de la grille (à 1 440 px, la grille était illisible) ; au-delà, l'écran du planning n'a
+  pas le plafond de largeur de `.contenu` (`.contenu:has(> .pl-ecran)`), sinon la grille y serait plus
+  étroite qu'à 1 440 px ; samedi et dimanche sont plus étroits ; le titre d'une carte tient sur trois
+  lignes au plus ; `?technicien=` ne garde que la ligne de ce technicien, le dit à l'écran (« Voir toute
+  l'équipe ») et suit les liens de changement de semaine ; la mise en attente pour pièce écrit le motif « Pièce : … » avec ce qui est déjà sorti,
   comme la fiche OT ; les écouteurs sont posés sur la racine de l'écran (`.pl-ecran`), jamais sur
   `#contenu`, qui survit aux changements d'écran. Gardé : la grille nomme les techniciens « Nom
   Prénom » (tri par nom), l'écran Équipe « Prénom Nom » ; un OT à date impossible n'apparaît pas dans
@@ -1431,14 +1433,20 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
 - Écrans : `#/controles` (`?statut=`, `?filtre=30j`, `?equipement=`), `#/controles/nouveau`
   (`?equipement=`), `#/controles/<id>` (fiche, historique au journal, rapport ouvert par
   `urlDocument`, OT réglementaires de l'équipement, « Créer un OT » → `#/ot/nouveau?equipement=…&
-  type=réglementaire&titre=…` pré-rempli : `#/ot/nouveau` lit désormais `?type=` et `?titre=`).
+  type=réglementaire&titre=…` pré-rempli : `#/ot/nouveau` lit désormais `?type=` et `?titre=` ;
+  titre « Levée des observations — <nature> » s'il reste des observations à lever, sinon
+  « Accompagnement du contrôle — <nature> », comme le dit D40 — correction de relecture).
   Carte « Contrôles réglementaires » sur la fiche équipement (technicien et responsable).
 - Écarts retenus (T47) : la liste ne montre par défaut que les contrôles des équipements suivis
   (actifs, hors rebut) — `?inactifs=1` montre les autres — et accepte `?recherche=` ; la périodicité
   est un nombre entier de 1 à 240 mois ; la dernière date et la date de réalisation ne sont jamais
   futures ; lever des observations exige un commentaire ; le rapport est écrit par
   `Controles.ecrireRapport(controleId, date, fichier)` sous le nom `controle-<id>-<date>.<ext>`
-  (« -2 », « -3 »… si le nom existe ; une photo est réduite en JPEG ; 9 Mo au plus).
+  (« -2 », « -3 »… si le nom existe ; 9 Mo au plus ; une photo est réduite en JPEG de 2 400 px de côté
+  au plus, et non 1 280 px comme les photos d'intervention du brief §4 : un rapport photographié doit
+  rester lisible). Limite connue : le document est écrit avant l'enregistrement du contrôle ; si un
+  autre poste a changé le contrôle entre-temps, l'enregistrement est refusé et le document reste dans
+  les documents sans être rattaché.
 
 ### 15.8 Équipe et habilitations (`equipe-*.js`, objet `Equipe`)
 - Règles : `Equipe.etatHabilitation(hab, aujourdhui)` → `{ statut, joursRestants }`, statut ∈
@@ -1513,7 +1521,8 @@ le rapport de <mois> » (avec élision : « d'octobre », « d'août ») ; rien 
 ### 15.11 Paramètres (`parametres.js`, `parametres-codes.js`)
 - Réglages ajoutés au formulaire : `tolerance_preventif_pct` (0–100), `seuil_remplacement_pct`
   (1–1000), `priorite_preventif` (P1–P4), `horizon_calendrier_semaines` (1–52),
-  `heures_fonct_defaut` (0–24, gammes compteur seulement). Les deux clés du lot 2 deviennent donc
+  `heures_fonct_defaut` (1–24, gammes compteur seulement ; écart retenu à la relecture : 0, que le
+  préventif remplaçait par 8 sans le dire, est refusé). Les deux clés du lot 2 deviennent donc
   modifiables à l'écran.
 - Carte « Codes de défaillance » : liste par famille ; `Parametres.ajouterCode({ famille, libelle,
   code })` (code proposé = lettre de la famille S / C / R + numéro suivant sur 2 chiffres,
