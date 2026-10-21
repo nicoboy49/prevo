@@ -399,12 +399,19 @@ const Indicateurs = (() => {
     else if (depasse) mtbf = resultat(null, raisonDepasse, { effectif: liste.length, ots });
     else mtbf = resultat((requis.valeur - sommeArret) / liste.length, null, { effectif: liste.length, ots, exclus: sansDuree });
 
+    // Disponibilité sur les seules pannes AVEC durée d'arrêt (ajustement 3 de Nicolas, lot 5, §18.6) : une
+    // panne sans durée n'y est jamais comptée comme 0 h d'arrêt ; elle reste dans le nombre de pannes et le MTBF.
     let disponibilite;
     if (requis.valeur === null) disponibilite = resultat(null, requis.raison);
     else if (liste.length === 0) disponibilite = resultat(1, null, { note: 'aucune panne sur la période' });
     else if (depasse) disponibilite = resultat(null, raisonDepasse);
-    else if (mtbf.valeur === null || mttr.valeur === null) disponibilite = resultat(null, mttr.raison || mtbf.raison);
-    else disponibilite = resultat(mtbf.valeur / (mtbf.valeur + mttr.valeur), null, { effectif: liste.length, ots });
+    else if (!avecDuree.length) disponibilite = resultat(null, 'non calculable : aucune panne avec une durée d\'arrêt', { exclus: sansDuree });
+    else if (mttr.valeur === null) disponibilite = resultat(null, mttr.raison, { exclus: sansDuree });
+    else {
+      const mtbfAvecDuree = (requis.valeur - sommeArret) / avecDuree.length;
+      disponibilite = resultat(mtbfAvecDuree / (mtbfAvecDuree + mttr.valeur), null,
+        { effectif: avecDuree.length, ots: avecDuree.map((panne) => panne.ot.id), exclus: sansDuree });
+    }
 
     const completes = mesurables.filter((panne) => panne.attente.complet && panne.attente.heures !== null);
     const attente = resultat(completes.length ? completes.reduce((somme, panne) => somme + panne.attente.heures, 0) / completes.length : null,

@@ -205,8 +205,12 @@ class TestFiabilite(CasIndicateurs):
         self.assertAlmostEqual(r["mtbf"]["valeur"], (310 - 26) / 3, places=9)
         self.assertAlmostEqual(r["mttr"]["valeur"], 13, places=9)        # (20 + 6) / 2
         self.assertEqual(r["mttr"]["effectif"], 2)
-        mtbf = (310 - 26) / 3
-        self.assertAlmostEqual(r["disponibilite"]["valeur"], mtbf / (mtbf + 13), places=9)
+        # Ajustement 3 de Nicolas (lot 5) : la disponibilité ne compte que les pannes AVEC durée d'arrêt ;
+        # la panne en cours sans durée (OT-0003) n'y est jamais comptée comme 0 h (elle reste dans le MTBF).
+        mtbf_avec_duree = (310 - 26) / 2
+        self.assertAlmostEqual(r["disponibilite"]["valeur"], mtbf_avec_duree / (mtbf_avec_duree + 13), places=9)
+        self.assertEqual(r["disponibilite"]["effectif"], 2)
+        self.assertEqual(r["disponibilite"]["exclus"], [{"id": "OT-2026-0003", "raison": "non clôturée"}])
         self.assertAlmostEqual(r["attentePieces"]["valeur"], 12, places=9)  # (18 + plafond 6) / 2
         self.assertEqual(r["attentePieces"]["effectif"], 2)
 
@@ -235,6 +239,10 @@ class TestFiabilite(CasIndicateurs):
         self.assertIsNone(recente["mttr"]["valeur"])
         self.assertIn("aucune panne clôturée avec une durée", recente["mttr"]["raison"])
         self.assertEqual(recente["mttr"]["exclus"], [{"id": "OT-2026-0008", "raison": "sans durée d'arrêt"}])
+        # Seule panne sans durée d'arrêt : disponibilité non calculable (jamais 100 % ni 0 h inventées)
+        self.assertIsNone(recente["disponibilite"]["valeur"])
+        self.assertIn("aucune panne avec une durée d'arrêt", recente["disponibilite"]["raison"])
+        self.assertEqual(recente["disponibilite"]["exclus"], [{"id": "OT-2026-0008", "raison": "sans durée d'arrêt"}])
 
     def test_attente_de_pieces_lue_dans_le_journal(self):
         attente = "(id) => Indicateurs.attentePieces(id)"
@@ -465,7 +473,9 @@ class CalculPython:
         mesurables = [ot for ot in pannes if ot["statut"] in clos and nombre(ot["duree_arret_h"]) is not None]
         mtbf = (requis - arret) / len(pannes) if pannes and arret <= requis else None
         mttr = sum(nombre(ot["duree_arret_h"]) for ot in mesurables) / len(mesurables) if mesurables else None
-        dispo = mtbf / (mtbf + mttr) if mtbf is not None and mttr is not None else None
+        # Disponibilité sur les seules pannes avec durée d'arrêt (ajustement 3 de Nicolas, lot 5)
+        mtbf_avec_duree = (requis - arret) / len(durees) if durees and arret <= requis else None
+        dispo = mtbf_avec_duree / (mtbf_avec_duree + mttr) if mtbf_avec_duree is not None and mttr is not None else None
         attentes = [a for a, complet in (self.attente(ot) for ot in mesurables) if complet]
         cout = arrondi(sum(self.cout(ot) for ot in self.ordres if ot["equipement_id"] == equipement_id and ot["statut"] in clos
                          and jour(ot["date_fin"]) and self.debut <= jour(ot["date_fin"]) <= self.fin))
