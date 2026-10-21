@@ -1,0 +1,28 @@
+name: "Proposer une amélioration"
+description: "Une idée pour que Prévo serve mieux sur le terrain."
+title: "[Amélioration] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: "**N'envoyez aucune donnée réelle de votre entreprise.**"
+  - type: textarea
+    id: besoin
+    attributes:
+      label: "Votre besoin sur le terrain"
+      description: "Ce que vous cherchez à faire, dans votre atelier."
+    validations:
+      required: true
+  - type: textarea
+    id: aujourdhui
+    attributes:
+      label: "Comment faites-vous aujourd'hui ?"
+      description: "Avec Prévo, un tableur, un cahier… et ce qui coince."
+    validations:
+      required: true
+  - type: textarea
+    id: aide
+    attributes:
+      label: "Ce qui vous aiderait"
+    validations:
+      required: true

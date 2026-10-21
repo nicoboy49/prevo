@@ -1,0 +1,53 @@
+name: "Signaler un problème"
+description: "Quelque chose ne fonctionne pas comme prévu dans Prévo."
+title: "[Problème] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "**N'envoyez aucune donnée réelle de votre entreprise.**"
+  - type: textarea
+    id: action
+    attributes:
+      label: "Qu'avez-vous fait ?"
+      description: "Les étapes, dans l'ordre : écran, profil, boutons cliqués, valeurs saisies (des exemples, pas vos vraies données)."
+      placeholder: "1. Profil Technicien, écran Ordres de travail\n2. Clic sur un OT, puis « Clôturer »\n3. …"
+    validations:
+      required: true
+  - type: textarea
+    id: attendu
+    attributes:
+      label: "Qu'attendiez-vous ?"
+    validations:
+      required: true
+  - type: textarea
+    id: constate
+    attributes:
+      label: "Que s'est-il passé ?"
+      description: "Le message affiché, mot pour mot s'il y en a un."
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: "Mode utilisé"
+      options:
+        - "Dossier (un seul poste, Chrome ou Edge)"
+        - "Serveur (plusieurs postes et téléphones)"
+        - "Démo (données de démo)"
+    validations:
+      required: true
+  - type: input
+    id: navigateur
+    attributes:
+      label: "Navigateur et appareil"
+      placeholder: "Exemple : Edge sur PC Windows 11, Chrome sur téléphone Android"
+    validations:
+      required: true
+  - type: textarea
+    id: capture
+    attributes:
+      label: "Capture d'écran (facultatif)"
+      description: "Glissez l'image dans ce champ. Masquez d'abord toute donnée réelle."
+    validations:
+      required: false
