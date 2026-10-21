@@ -2,9 +2,9 @@
 // Ordres (5/7) — contenu des onglets de la fiche OT (ARCHITECTURE.md §14.2 et §14.6) : Préparation
 // (causes fréquentes, travail, technicien et RG8, opérations, pièces prévues et stock RG3),
 // Exécution (check-list, déroulement, temps passés, pièces sorties de ordres-pieces.js), Compte
-// rendu (causes fréquentes, codes, compte rendu, clôture technique RG4, coût RG7) et Historique de
-// l'équipement. Complète l'objet Ordres ; la fiche (ordres-fiche.js) appelle ces onglets par
-// Ordres.interne.
+// rendu (causes fréquentes, codes, compte rendu, assistant IA du lot 4, clôture technique RG4,
+// coût RG7) et Historique de l'équipement. Complète l'objet Ordres ; la fiche (ordres-fiche.js)
+// appelle ces onglets par Ordres.interne.
 
 Object.assign(Ordres, (() => {
 
@@ -438,7 +438,8 @@ Object.assign(Ordres, (() => {
       UI.$('.ot-remise', formulaire).appendChild(UI.element(UI.html`<p class="aide">${RAPPEL_CONSIGNATION}</p>`));
     }
     if (modifiable) {
-      const enregistrer = () => enregistrerCompteRendu(ot, formulaire);
+      const ia = typeof Ia === 'undefined' ? null : brancherIa(formulaire, ot);   // assistant IA (§9 bis)
+      const enregistrer = () => enregistrerCompteRendu(ot, formulaire, ia);
       declarerFormulaire(formulaire, enregistrer);
       formulaire.addEventListener('submit', async (evenement) => {
         evenement.preventDefault();
@@ -449,13 +450,16 @@ Object.assign(Ordres, (() => {
     afficherCout(UI.$('#ot-cout', panneau), ot);
   }
 
-  async function enregistrerCompteRendu(ot, formulaire) {
+  // `ia` : propositions de l'IA reprises dans ce formulaire (tracées au journal après l'écriture).
+  async function enregistrerCompteRendu(ot, formulaire, ia) {
     const valeurs = UI.lireFormulaire(formulaire);
     const changes = await pendant(UI.$('button[type=submit]', formulaire), () => modifierOt(ot.id, {
       symptome_code: valeurs.symptome_code, cause_code: valeurs.cause_code, remede_code: valeurs.remede_code,
       compte_rendu: valeurs.compte_rendu, remise_service: valeurs.remise_service,
     }, 'compte rendu'), 'compte rendu');
-    return changes !== undefined;
+    if (changes === undefined) return false;
+    if (ia) await ia.apresEnregistrement(changes, valeurs);
+    return true;
   }
 
   function afficherCout(bloc, ot) {
@@ -480,6 +484,148 @@ Object.assign(Ordres, (() => {
           </tbody></table></div>
         <p class="note">Les pièces sorties et retournées pour l'OT se saisissent dans l'onglet Exécution (« Pièces sorties ») ; les quantités prévues ne sont pas comptées.</p>
       </details>`);
+  }
+
+  // ===========================================================================================
+  // 9 bis. Assistant IA du compte rendu (lot 4, ARCHITECTURE.md §17.5) : « Proposer les codes » et
+  // « Rédiger le compte rendu » à partir des notes du champ. L'IA propose, l'humain valide :
+  // « Utiliser » remplit le formulaire ; rien n'est écrit avant « Enregistrer le compte rendu » et
+  // aucun statut ne change. Seulement sur un OT modifiable (ni verrouillé, ni pour le demandeur).
+  // ===========================================================================================
+
+  // Familles de codes : clé de la réponse de l'IA, champ de l'OT, libellé affiché.
+  const CODES_IA = [['symptome', 'symptome_code', 'Symptôme'], ['cause', 'cause_code', 'Cause'], ['remede', 'remede_code', 'Remède']];
+
+  const zonesIa = new Set();                // { zone, remplir } de l'onglet affiché
+  let ecouteIa = false;
+
+  /**
+   * Zone de boutons IA pleine largeur placée contre `voisin` (insertAdjacentElement) ; `poser(zone)`
+   * la remplit maintenant, puis à chaque changement de l'IA : le test du fournisseur, fait à
+   * l'ouverture de Prévo, finit souvent après l'affichage, et un fournisseur devenu injoignable
+   * retire les boutons. Un seul écouteur ; une zone qui n'est plus affichée est oubliée.
+   * Renvoie la fonction qui la remplit de nouveau.
+   */
+  function zoneIa(voisin, position, poser) {
+    const zone = UI.element(UI.html`<div class="actions ot-ia sans-impression"></div>`);
+    voisin.insertAdjacentElement(position, zone);
+    const remplir = () => { zone.textContent = ''; poser(zone); zone.hidden = !zone.children.length; };
+    zonesIa.forEach((entree) => { if (!entree.zone.isConnected) zonesIa.delete(entree); });
+    zonesIa.add({ zone, remplir });
+    remplir();
+    if (!ecouteIa) {
+      ecouteIa = true;
+      Ia.evenements.addEventListener('changement', () => zonesIa.forEach((entree) => {
+        if (entree.zone.isConnected) entree.remplir(); else zonesIa.delete(entree);
+      }));
+    }
+    return remplir;
+  }
+
+  // Données envoyées à l'IA (liste blanche du §17.3) : jamais de nom de technicien, de taux ni de coût.
+  function donneesCompteRendu(ot, notes) {
+    const equipement = equipementDe(ot) || {};
+    // Pièces sorties nettes pour l'OT (sorties − retours, RG7) : seules la désignation et la quantité partent.
+    const pieces = cout(ot).detail.pieces.filter((piece) => piece.quantite > 0).map((piece) => ({
+      designation: (Donnees.trouver('articles', piece.article_id) || {}).designation || piece.libelle,
+      quantite: UI.nombreFr(piece.quantite),
+    }));
+    return { notes, titre: ot.titre, type: ot.type, repere: equipement.repere, designation: equipement.designation, pieces };
+  }
+
+  function donneesCodes(ot, compteRendu) {
+    const demande = ot.di_id ? Donnees.trouver('demandes', ot.di_id) : null;
+    return { compteRendu, titre: ot.titre, symptomeDI: demande ? demande.symptome : '' };
+  }
+
+  // Encadré des codes : code retenu et son libellé ; code inventé par l'IA annoncé et ignoré (D70).
+  function renduCodes(resultat) {
+    const rejetes = new Map(resultat.rejetes.map((rejet) => [rejet.champ, rejet.code]));
+    return UI.html`<ul class="ia-liste">${CODES_IA.map(([cle, , libelle]) => {
+      const code = resultat[cle];
+      const connu = code && listeCodes(Ia.FAMILLES_CODES[cle]).find((entree) => entree.valeur === code);
+      if (code) return UI.html`<li>${libelle} : <b>${connu ? connu.libelle : code}</b></li>`;
+      if (rejetes.has(cle)) return UI.html`<li class="ot-ia-rejet">${libelle} : code inconnu proposé par l'IA, ignoré : ${rejetes.get(cle)}</li>`;
+      return UI.html`<li>${libelle} : aucun code proposé</li>`;
+    })}</ul>`;
+  }
+
+  /**
+   * Boutons IA de l'onglet Compte rendu (OT modifiable). Renvoie { apresEnregistrement(changes,
+   * valeurs) }, appelé après l'écriture réussie : journal « proposition IA utilisée » pour chaque
+   * champ venu de l'IA et écrit (un code seulement s'il est resté celui proposé), une seule fois.
+   */
+  function brancherIa(formulaire, ot) {
+    const utilisees = new Map();            // champ → { valeur (null : texte retouchable), modele }
+    let origine = null;                     // notes d'avant la proposition (« Annuler la proposition »)
+    const blocTexte = UI.$('[data-champ="compte_rendu"]', formulaire);
+    const champTexte = UI.$('textarea', blocTexte);
+    const liste = (champ) => UI.$('[name="' + champ + '"]', formulaire);
+    // Valeur posée comme une saisie : formulaire « modifié », saisie en cours (pas de réaffichage).
+    const changer = (champ, valeur, type) => { champ.value = valeur; champ.dispatchEvent(new Event(type, { bubbles: true })); };
+
+    function prendreTexte(resultat, reponse) {
+      if (origine === null) origine = champTexte.value;
+      changer(champTexte, resultat.texte, 'input');
+      utilisees.set('compte_rendu', { valeur: null, modele: reponse.modele });
+      poserTexte();
+    }
+
+    function annulerProposition() {
+      changer(champTexte, origine, 'input');
+      origine = null;
+      utilisees.delete('compte_rendu');
+      poserTexte();
+      champTexte.focus();
+    }
+
+    function prendreCodes(resultat, reponse) {
+      CODES_IA.forEach(([cle, champ]) => {
+        if (!resultat[cle]) return;              // aucun code, ou code inventé : la liste ne change pas
+        changer(liste(champ), resultat[cle], 'change');
+        utilisees.set(champ, { valeur: resultat[cle], modele: reponse.modele });
+      });
+    }
+
+    function rediger(zone) {
+      if (!champTexte.value.trim()) {
+        UI.toast('Écrivez d\'abord vos notes dans le compte rendu (ou dictez-les) : l\'IA les met en forme.', 'attention');
+        return;
+      }
+      Ia.ouvrirEncadre({ apres: zone, fonction: 'compteRendu', donnees: donneesCompteRendu(ot, champTexte.value),
+        utiliser: prendreTexte, modifier: (resultat, reponse) => { prendreTexte(resultat, reponse); champTexte.focus(); } });
+    }
+
+    zoneIa(blocTexte, 'beforebegin', (zone) => {
+      const bouton = Ia.bouton('Proposer les codes', () => Ia.ouvrirEncadre({ apres: zone, fonction: 'codes',
+        donnees: donneesCodes(ot, champTexte.value), rendu: renduCodes, utiliser: prendreCodes,
+        modifier: (resultat, reponse) => { prendreCodes(resultat, reponse); liste('symptome_code').focus(); } }));
+      if (bouton) zone.appendChild(bouton);
+    });
+    const poserTexte = zoneIa(blocTexte, 'afterend', (zone) => {
+      const bouton = Ia.bouton('Rédiger le compte rendu', () => rediger(zone));
+      if (bouton) zone.appendChild(bouton);
+      if (origine === null) return;
+      const annuler = UI.element(UI.html`<button type="button" class="btn btn-fantome ot-ia-annuler">Annuler la proposition</button>`);
+      annuler.addEventListener('click', annulerProposition);
+      zone.appendChild(annuler);
+    });
+
+    async function apresEnregistrement(changes, valeurs) {
+      for (const [champ, proposition] of utilisees) {
+        const gardee = proposition.valeur === null || valeurs[champ] === proposition.valeur;
+        if (!gardee || !changes.includes(champ)) continue;
+        try {
+          await Ia.tracerUtilisation('ordres_travail', ot.id, champ, proposition.modele);
+        } catch (erreur) {
+          console.warn('Prévo (ordres) : trace de la proposition IA non écrite (' + (erreur && erreur.message) + ').', erreur);
+        }
+      }
+      utilisees.clear();
+      origine = null;                         // enregistré : la proposition n'est plus annulable
+      poserTexte();
+    }
+    return { apresEnregistrement };
   }
 
   // ===========================================================================================

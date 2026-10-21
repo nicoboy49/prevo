@@ -4,6 +4,7 @@
 // l'écran de confirmation avec le numéro de la demande (ARCHITECTURE.md §8, §14.2 et §14.6 ;
 // brief §9 E2). Lot 2 : le symptôme choisi parmi les suggestions donne son code symptôme ; avec
 // ?ot=OT-…, la demande est liée à l'OT préventif pendant lequel l'anomalie a été constatée.
+// Lot 4 (§17.5) : « Proposer avec l'IA » reformule le symptôme et propose l'impact (objet Ia).
 // Complète l'objet Demandes.
 
 Object.assign(Demandes, (() => {
@@ -88,6 +89,7 @@ Object.assign(Demandes, (() => {
               <textarea id="${idDescription}" name="description" rows="4" data-dictee
                 placeholder="Depuis quand ? Bruit, odeur, voyant allumé… Le clavier du téléphone permet de dicter."></textarea>
             </div>
+            <div class="actions di-ia sans-impression" hidden></div>
           </section>
 
           <section class="carte di-etape">
@@ -251,6 +253,9 @@ Object.assign(Demandes, (() => {
     });
     UI.$('.di-retirer-photo', formulaire).addEventListener('click', retirerPhoto);
 
+    // --- assistant IA (lot 4) : « Proposer avec l'IA » près des précisions ---------------------
+    const tracerIa = brancherIa(formulaire, selecteur);
+
     // --- erreurs de champ -----------------------------------------------------------------
     function blocChamp(nom) {
       return UI.$$('.champ', formulaire).find((bloc) => bloc.dataset.champ === nom);
@@ -313,6 +318,7 @@ Object.assign(Demandes, (() => {
           photo: nomDeLaPhoto,
           ot_origine_id: origineValable ? otDemande : '',
         });
+        await tracerIa(id, { impact });
         App.marquerSaisie(false);
         libererApercu();
         afficherConfirmation(conteneur, id);
@@ -323,6 +329,119 @@ Object.assign(Demandes, (() => {
         texteBouton.textContent = 'Envoyer la demande';
       }
     });
+  }
+
+  // ===========================================================================================
+  // 5 bis. Assistant IA du formulaire (lot 4, ARCHITECTURE.md §17.5) : « Proposer avec l'IA »
+  // ===========================================================================================
+
+  const zonesIa = new Set();                // { zone, poser } des formulaires affichés
+  let ecouteIa = false;
+
+  /**
+   * Pose les boutons IA de `zone` maintenant, puis à chaque changement de l'IA : le test du
+   * fournisseur, fait à l'ouverture de Prévo, se termine souvent après l'affichage de l'écran, et un
+   * fournisseur devenu injoignable retire les boutons. Un seul écouteur ; une zone qui n'est plus
+   * affichée (écran quitté ou réaffiché) est oubliée.
+   */
+  function suivreIa(zone, poser) {
+    zonesIa.forEach((entree) => { if (!entree.zone.isConnected) zonesIa.delete(entree); });
+    zonesIa.add({ zone, poser });
+    poser();
+    if (ecouteIa) return;
+    ecouteIa = true;
+    Ia.evenements.addEventListener('changement', () => zonesIa.forEach((entree) => {
+      if (entree.zone.isConnected) entree.poser(); else zonesIa.delete(entree);
+    }));
+  }
+
+  /**
+   * « Proposer avec l'IA » près des précisions : l'IA reformule le symptôme et propose l'impact dans
+   * un encadré. L'IA propose, l'humain valide : « Utiliser » remplit le symptôme et coche l'impact
+   * proposé (s'il est dans la liste), « Modifier » fait de même puis place le curseur dans le symptôme ;
+   * tout reste modifiable et rien n'est écrit avant « Envoyer ». Un impact « sécurité » déjà coché
+   * n'est jamais baissé par l'IA. Sans IA utilisable sur ce poste, aucun bouton.
+   * Renvoie tracer(id, envoyees) : après l'envoi réussi, une ligne de journal « proposition IA
+   * utilisée » par champ venu de l'IA (l'impact seulement s'il a été envoyé tel que proposé).
+   */
+  function brancherIa(formulaire, selecteur) {
+    const utilisees = new Map();            // champ → { valeur (null : texte retouchable), modele }
+
+    async function tracer(id, envoyees) {
+      for (const [champ, proposition] of utilisees) {
+        if (proposition.valeur !== null && proposition.valeur !== envoyees[champ]) continue;
+        try {
+          await Ia.tracerUtilisation('demandes', id, champ, proposition.modele);
+        } catch (erreur) {
+          console.warn('Prévo (demandes) : trace de la proposition IA non écrite (' + (erreur && erreur.message) + ').', erreur);
+        }
+      }
+      utilisees.clear();
+    }
+    if (typeof Ia === 'undefined') return tracer;
+
+    const zone = UI.$('.di-ia', formulaire);
+    const champSymptome = UI.$('input[name=symptome]', formulaire);
+    const champDescription = UI.$('textarea[name=description]', formulaire);
+    const impactCoche = () => { const coche = UI.$('input[name=impact]:checked', formulaire); return coche ? coche.value : ''; };
+    // L'impact proposé, sauf s'il baissait un impact « sécurité » déjà choisi.
+    const impactRetenu = (propose) => (propose && impactCoche() !== 'sécurité' ? propose : '');
+
+    // Données envoyées (liste blanche du §17.3) : jamais le nom du demandeur.
+    function donnees() {
+      const equipement = Donnees.trouver('equipements', selecteur.valeur()) || {};
+      return { symptome: champSymptome.value, description: champDescription.value,
+        repere: equipement.repere, designation: equipement.designation };
+    }
+
+    function rendu(resultat) {
+      const garde = resultat.impact && resultat.impact !== 'sécurité' && !impactRetenu(resultat.impact);
+      return UI.html`<ul class="ia-liste">
+        <li>Symptôme : <b>${resultat.symptome}</b></li>
+        <li>Impact : ${resultat.impact ? UI.html`<b>${resultat.impact}</b>` : 'aucun impact de la liste proposé'}${garde ? ' — « Sécurité » choisi : gardé' : ''}</li>
+      </ul>`;
+    }
+
+    // « Utiliser » et « Modifier » : remplissent le formulaire par les événements habituels (code
+    // symptôme, priorité calculée, saisie en cours) ; rien n'est écrit.
+    function reprendre(resultat, reponse) {
+      const longueurMax = champSymptome.maxLength > 0 ? champSymptome.maxLength : undefined;
+      champSymptome.value = resultat.symptome.slice(0, longueurMax);
+      champSymptome.dispatchEvent(new Event('input', { bubbles: true }));
+      utilisees.set('symptome', { valeur: null, modele: reponse.modele });
+      const impact = impactRetenu(resultat.impact);
+      const radio = UI.$$('input[name=impact]', formulaire).find((bouton) => impact && bouton.value === impact);
+      if (!radio) return;
+      radio.checked = true;
+      radio.dispatchEvent(new Event('change', { bubbles: true }));
+      utilisees.set('impact', { valeur: impact, modele: reponse.modele });
+    }
+
+    function proposer() {
+      if (!champSymptome.value.trim() && !champDescription.value.trim()) {
+        UI.toast('Écrivez d\'abord ce que vous constatez (question 2 ou 4) : l\'IA le reformule.', 'attention');
+        return;
+      }
+      Ia.ouvrirEncadre({ apres: zone, fonction: 'reformulerDI', donnees: donnees(), rendu,
+        utiliser: (resultat, reponse) => {
+          reprendre(resultat, reponse);
+          UI.toast('Proposition reprise dans le formulaire : relisez-la avant d\'envoyer.', 'info');
+        },
+        modifier: (resultat, reponse) => { reprendre(resultat, reponse); champSymptome.focus(); } });
+    }
+
+    function poser() {
+      zone.textContent = '';
+      const bouton = Ia.bouton('Proposer avec l\'IA', proposer);
+      if (bouton) zone.appendChild(bouton);
+      zone.hidden = !bouton;
+    }
+    // Un symptôme remplacé par une suggestion ne vient plus de l'IA.
+    formulaire.addEventListener('click', (evenement) => {
+      if (evenement.target.closest('.di-puce')) utilisees.delete('symptome');
+    });
+    suivreIa(zone, poser);
+    return tracer;
   }
 
   // Écran de confirmation : le numéro en grand, et la suite possible.

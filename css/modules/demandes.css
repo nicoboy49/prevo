@@ -41,6 +41,9 @@
 .di-priorite { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: .8rem 0 0; font-weight: 600; color: var(--texte); }
 .di-priorite .badge { font-size: 1rem; padding-top: 4px; padding-bottom: 4px; }
 
+/* Assistant IA (lot 4, §17.5) : « Proposer avec l'IA » sous les précisions, encadré juste dessous */
+.di-etape .ia-encadre { margin-bottom: 0; }
+
 /* Photo : le vrai <input type=file> est caché, son libellé sert de gros bouton */
 .di-fichier-photo { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 .champ:has(.di-fichier-photo:focus-visible) .di-bouton-photo { outline: 2px solid var(--cyan); outline-offset: 2px; }

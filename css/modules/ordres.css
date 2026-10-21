@@ -78,6 +78,10 @@
 .ot-ajout-piece > .champ:first-child { flex: 3 1 280px; }
 .ot-ajout-temps > .champ { flex: 1 1 160px; }
 .ot-ajout-temps > .btn { flex: 0 0 auto; }
+/* Assistant IA du compte rendu (lot 4, §17.5) : boutons et encadré sur toute la largeur de la grille */
+#form-compte-rendu .ot-ia { margin-top: 0; }
+#form-compte-rendu .form-grille > .ia-encadre { grid-column: 1 / -1; margin: 0; }
+.ot-ia-rejet { color: var(--texte-important); }
 .form-ligne > .ot-champ-quantite { flex: 0 1 8rem; }
 .ot-date-fin .libelle { justify-content: space-between; }
 .ot-date-fin .lien-bouton { font-size: .9375rem; padding: 0 .2rem; }
