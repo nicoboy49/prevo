@@ -34,7 +34,8 @@ const Suggestions = (() => {
   const ORDRE_REGLES = { S2: 0, S3: 1, S1: 2, S4: 3 };  // des pannes ou anomalies en cours d'abord
   const ORDRE_CRITICITES = { A: 0, B: 1, C: 2 };
   const MOTIF_MAX = 300;
-  const MOTIF_DECISION = /^suggestion (S[1-4]-\S+) (ignorée|traitée) : (.*)$/;
+  // [\s\S]* : le motif peut contenir n'importe quel caractère (un saut de ligne venu d'Excel compris).
+  const MOTIF_DECISION = /^suggestion (S[1-4]-\S+) (ignorée|traitée) : ([\s\S]*)$/;
   const MARQUE_FORMAT_2 = 'passage au format 2 du fichier';
 
   // Réglages de parametres.csv (§16.1) : absents, illisibles ou hors bornes → valeur par défaut.
@@ -476,7 +477,7 @@ const Suggestions = (() => {
   }
 
   function texteDecision(valeur) {
-    return texte(valeur).replace(/\s*[\r\n]+\s*/g, ' ');
+    return texte(valeur).replace(/\s+/g, ' ');      // tout blanc (saut de ligne, U+2028, U+2029…) → une espace
   }
 
   async function ecrireDecision(cle, decision, motif) {

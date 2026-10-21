@@ -431,6 +431,21 @@ class TestEcritureDesDecisions(CasSuggestions):
         # Plus ouverte : un second « Ignorer » est refusé
         self.assertIn("erreur", self.appeler("ignorer", "S1-EQ-0001-C04", "encore"))
 
+    def test_motif_avec_separateurs_de_ligne_unicode_relu(self):
+        # Relecture finale : U+2028 et U+2029 empêchaient la décision d'être relue (la suggestion restait ouverte)
+        self.assertIn("ok", self.appeler("ignorer", "S1-EQ-0001-C04", "garniture changée à chaque visite"))
+        self.assertEqual(self.journal()[-1][2], "suggestion S1-EQ-0001-C04 ignorée : garniture changée à chaque visite")
+        cles = self.page.evaluate("(j) => Suggestions.calculer(j).ouvertes.map((s) => s.cle)", AUJOURDHUI)
+        self.assertNotIn("S1-EQ-0001-C04", cles)
+        # Une ligne de journal écrite avec un saut de ligne (fichier retouché dans Excel) est relue aussi
+        j = jeu_de_base()
+        j.journal.append('J-202609300800-0099;2026-09-30 08:00;Poste test;Responsable;equipements;EQ-0001;'
+                         '"suggestion S1-EQ-0001-C04 ignorée : sur\r\ndeux lignes"')       # champ entre guillemets (§3.1)
+        self.charger(j.tables())
+        resultat = self.calculer()
+        self.assertNotIn("S1-EQ-0001-C04", self.cles(resultat))
+        self.assertEqual(next(d for d in resultat["decisions"] if d["cle"] == "S1-EQ-0001-C04")["texte"], "sur\r\ndeux lignes")
+
     def test_marquer_traitee_sur_la_gamme_ou_l_equipement(self):
         self.assertIn("ok", self.appeler("marquerTraitee", "S3-GAM-0002", "gamme modifiée : periodicite_jours"))
         self.assertEqual(self.journal()[-1][:3], ["gammes", "GAM-0002", "suggestion S3-GAM-0002 traitée : gamme modifiée : periodicite_jours"])
