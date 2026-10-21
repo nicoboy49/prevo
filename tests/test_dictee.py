@@ -142,6 +142,43 @@ class TestDictee(CasNavigateur):
         page.click("dialog[open] .fenetre-actions .btn-primaire")
         page.wait_for_function("window.__dictee.instances.length === 1")
         self.assertTrue(page.evaluate("window.__dictee.instances[0].processLocally"))
+        self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('prevo.dictee')).avertie"), "local")
+        # Le français local n'est plus proposé : la voix partirait chez Google ou Microsoft → nouvel
+        # avertissement (relecture du lot 4 : l'accord « sur ce PC » ne vaut pas pour le nuage)
+        page.click(BOUTON_DESCRIPTION)                                      # arrêt
+        page.wait_for_function("(s) => document.querySelector(s).getAttribute('aria-pressed') === 'false'", arg=BOUTON_DESCRIPTION)
+        page.evaluate("window.__dictee.local = false")
+        page.click(BOUTON_DESCRIPTION)
+        page.wait_for_selector("dialog[open] .dictee-avertissement")
+        self.assertIn("Google ou Microsoft", page.inner_text("dialog[open]"))
+        page.click("dialog[open] .fenetre-actions .btn-primaire")
+        page.wait_for_function("window.__dictee.instances.length === 2 && !window.__dictee.instances[1].processLocally")
+        self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('prevo.dictee')).avertie"), "nuage")
+
+    def test_texte_tape_pendant_la_dictee_jamais_efface(self):
+        """Relecture du lot 4 (D73, jamais d'écrasement) : ce qui est tapé au clavier (ou posé par
+        « Utiliser » de l'IA) pendant que la dictée écoute reste dans le champ."""
+        page = self.ouvrir()
+        page.evaluate("localStorage.setItem('prevo.dictee', JSON.stringify({ active: true, avertie: 'nuage' }))")
+        page.fill(CHAMP_DESCRIPTION, "Bruit au démarrage")
+        page.click(BOUTON_DESCRIPTION)
+        page.wait_for_function("window.__dictee.instances.length === 1 && window.__dictee.instances[0].demarree")
+        page.evaluate("window.__dictee.dire('côté moteur')")
+        self.assertEqual(page.input_value(CHAMP_DESCRIPTION), "Bruit au démarrage côté moteur")
+        page.focus(CHAMP_DESCRIPTION)
+        page.keyboard.press("End")
+        page.keyboard.type(" puis odeur")
+        page.evaluate("window.__dictee.dire('de brûlé', false)")          # provisoire
+        self.assertEqual(page.input_value(CHAMP_DESCRIPTION), "Bruit au démarrage côté moteur puis odeur de brûlé")
+        page.evaluate("window.__dictee.dire('de brûlé')")                  # définitif
+        # Texte posé par un autre moyen (ex. « Utiliser » de l'IA) pendant l'écoute : gardé, puis complété
+        page.evaluate("""(s) => { const c = document.querySelector(s); c.value = 'Texte proposé par l\\'IA.';
+          c.dispatchEvent(new Event('input', { bubbles: true })); }""", CHAMP_DESCRIPTION)
+        page.evaluate("window.__dictee.dire('et vibrations')")
+        self.assertEqual(page.input_value(CHAMP_DESCRIPTION), "Texte proposé par l'IA. et vibrations")
+        page.click(BOUTON_DESCRIPTION)                                      # arrêt : rien n'est retiré
+        page.wait_for_function("(s) => document.querySelector(s).getAttribute('aria-pressed') === 'false'", arg=BOUTON_DESCRIPTION)
+        self.assertEqual(page.input_value(CHAMP_DESCRIPTION), "Texte proposé par l'IA. et vibrations")
 
     def test_desactiver_la_dictee_retire_les_boutons(self):
         page = self.ouvrir()

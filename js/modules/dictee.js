@@ -31,11 +31,19 @@ const Dictee = (() => {
   // 1. Réglages du poste
   // ===========================================================================================
 
-  /** { active, avertie } ; lecture protégée (navigation privée, stockage refusé) : défauts. */
+  /** { active, avertie } ; avertie : '' (jamais), 'local' (transcription sur ce PC annoncée) ou 'nuage'
+   *  (Google ou Microsoft annoncés ; true des premières versions = 'nuage'). Lecture protégée : défauts. */
   function reglages() {
     let lus = {};
     try { lus = JSON.parse(window.localStorage.getItem(CLE_REGLAGES) || '{}') || {}; } catch (erreur) { lus = {}; }
-    return { active: lus.active !== false, avertie: lus.avertie === true };
+    const avertie = lus.avertie === true || lus.avertie === 'nuage' ? 'nuage' : (lus.avertie === 'local' ? 'local' : '');
+    return { active: lus.active !== false, avertie };
+  }
+
+  /** Vrai si l'avertissement du lieu de transcription a déjà été donné : « nuage » vaut aussi pour « local ». */
+  function dejaAverti(locale) {
+    const avertie = reglages().avertie;
+    return avertie === 'nuage' || (locale && avertie === 'local');
   }
 
   function enregistrerReglages(modifications) {
@@ -166,7 +174,7 @@ const Dictee = (() => {
       return false;
     }
     if (choix !== 'continuer') return false;
-    enregistrerReglages({ avertie: true });
+    enregistrerReglages({ avertie: locale ? 'local' : 'nuage' });
     return true;
   }
 
@@ -195,24 +203,28 @@ const Dictee = (() => {
     reconnaissance.interimResults = true;
     reconnaissance.continuous = true;
     if (locale) reconnaissance.processLocally = true;
-    const debut = champ.value;
+    let debut = champ.value;
     let definitif = '';
+    let ecrit = champ.value;                            // dernière valeur posée par la dictée
+    // Champ changé sans la dictée (frappe, « Utiliser » de l'IA) : on repart de son contenu, jamais effacé.
+    const rebaser = () => { if (champ.value !== ecrit) { debut = champ.value; definitif = ''; } };
+    const ecrire = (valeur) => { champ.value = valeur; ecrit = valeur; signalerSaisie(champ); };
     reconnaissance.onresult = (evenement) => {
+      rebaser();
       let provisoire = '';
       for (let rang = evenement.resultIndex; rang < evenement.results.length; rang += 1) {
         const morceau = evenement.results[rang][0].transcript;
         if (evenement.results[rang].isFinal) definitif += morceau;
         else provisoire += morceau;
       }
-      champ.value = joindre(debut, definitif + provisoire);
-      signalerSaisie(champ);
+      ecrire(joindre(debut, definitif + provisoire));
     };
     reconnaissance.onerror = (evenement) => {
       UI.toast(MESSAGES_ERREUR[evenement.error] || 'Dictée interrompue (' + evenement.error + ').', 'attention');
     };
     reconnaissance.onend = () => {
-      champ.value = joindre(debut, definitif);          // les mots encore provisoires sont abandonnés
-      signalerSaisie(champ);
+      rebaser();
+      ecrire(joindre(debut, definitif));                // les mots encore provisoires sont abandonnés
       marquer(bouton, false);
       if (ecoute && ecoute.reconnaissance === reconnaissance) ecoute = null;
     };
@@ -235,7 +247,7 @@ const Dictee = (() => {
     }
     arreter();
     const locale = await transcriptionLocale();
-    if (!reglages().avertie && !await avertir(locale)) return;
+    if (!dejaAverti(locale) && !await avertir(locale)) return;
     demarrer(champ, bouton, locale);
   }
 
