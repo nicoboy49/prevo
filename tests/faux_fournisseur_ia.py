@@ -7,9 +7,11 @@ Il ouvre CORS à toute origine (une page en file:// envoie l'origine « null »)
 reçue (chemin, en-têtes, corps) pour que les tests vérifient les données envoyées et la clé transmise,
 et choisit sa réponse d'après la fonction (premier message système « Fonction : <nom> ») et le modèle :
 
-    faux            réponse correcte (codes pris dans la liste fermée du schéma demandé) ;
+    faux            réponse correcte (codes pris dans la liste fermée du schéma demandé ; colonnes d'un
+                    import : le n-ième titre reçoit le n-ième champ de la liste) ;
     faux-lent       même réponse, après `lenteur_s` secondes (délai dépassé, « Annuler ») ;
-    faux-invente    codes : une cause inventée (C42) qui n'existe pas dans la liste ;
+    faux-invente    codes : une cause inventée (C42) qui n'existe pas dans la liste ; colonnes d'un import :
+                    un champ hors liste, un titre jamais envoyé, un champ donné à deux colonnes ;
     faux-illisible  du texte qui n'est pas du JSON ;
     faux-chiffres   commentaire du rapport qui écrit un nombre en clair (« 92 % ») ;
     faux-schema     API compatible OpenAI : refuse `response_format` json_schema (400), accepte json_object ;
@@ -85,6 +87,20 @@ def codes_du_schema(schema):
     return codes
 
 
+def colonnes_du_schema(schema, invente=False):
+    """colonnesImport : le n-ième titre de la liste fermée reçoit le n-ième champ (hors « »). « faux-invente » :
+    en plus, un champ hors liste, un titre jamais envoyé et un champ déjà pris pour une autre colonne."""
+    proprietes = (((schema.get("properties") or {}).get("colonnes") or {}).get("items") or {}).get("properties") or {}
+    entetes = (proprietes.get("entete") or {}).get("enum") or []
+    champs = [champ for champ in (proprietes.get("champ") or {}).get("enum") or [] if champ]
+    colonnes = [{"entete": entete, "champ": champ} for entete, champ in zip(entetes, champs)]
+    if invente and colonnes:
+        colonnes = colonnes[:1] + [{"entete": entetes[-1], "champ": "champ_invente"},
+                                   {"entete": "Colonne jamais envoyée", "champ": champs[-1]},
+                                   {"entete": entetes[-1], "champ": colonnes[0]["champ"]}]
+    return {"colonnes": colonnes}
+
+
 def reponse_piegee(fonction):
     """Réponse de « faux-html » : PIEGE dans chaque champ texte de la fonction."""
     if fonction == "reformulerDI":
@@ -104,6 +120,8 @@ def contenu_reponse(modele, fonction, schema):
         return json.dumps(reponse_piegee(fonction), ensure_ascii=False)
     if modele == "faux-enorme":
         return json.dumps({"texte": "x" * (3 * 1024 * 1024)})
+    if fonction == "colonnesImport":
+        return json.dumps(colonnes_du_schema(schema, modele == "faux-invente"), ensure_ascii=False)
     if fonction == "codes":
         codes = codes_du_schema(schema)
         if modele == "faux-invente":

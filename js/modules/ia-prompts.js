@@ -307,6 +307,55 @@ Object.assign(Ia, (() => {
     return texte(valeur).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
+  // Lot 5 (§18.4, D87 a) : correspondance des colonnes d'un fichier à importer. L'IA ne reçoit QUE les
+  // titres des colonnes non reconnues et la liste des champs du type de données ; aucune valeur de cellule.
+  const COLONNES_IMPORT_MAX = 60;
+
+  const colonnesImport = {
+    systeme: systeme('Fonction : colonnesImport',
+      'associe chaque colonne d\'un fichier à importer au champ de la GMAO qui lui correspond, d\'après son seul '
+        + 'titre. Choisis le champ UNIQUEMENT dans la liste donnée ; si aucun ne convient, ou en cas de doute, '
+        + 'réponds une chaîne vide. Un même champ ne peut servir qu\'à une seule colonne.',
+      '{"colonnes": [{"entete": "…", "champ": "…"}]}'),
+    utilisateur(d) {
+      const champs = liste(d.champs).map((c) => '- ' + texte(c.cle) + ' : ' + uneLigne(c.libelle, 80));
+      const colonnes = liste(d.colonnes).slice(0, COLONNES_IMPORT_MAX).map((c) => '- ' + uneLigne(c, 80));
+      return message([
+        ligne('Type de données', uneLigne(d.type, 60)),
+        'Champs possibles :\n' + (champs.length ? champs.join('\n') : '(aucun)'),
+        'Titres des colonnes à associer :\n' + (colonnes.length ? colonnes.join('\n') : '(aucune)'),
+      ]);
+    },
+    schema: (d) => objet({
+      colonnes: { type: 'array', items: objet({
+        entete: { type: 'string', enum: liste(d.colonnes).slice(0, COLONNES_IMPORT_MAX).map((c) => texte(c)) },
+        champ: { type: 'string', enum: liste(d.champs).map((c) => texte(c.cle)).concat(['']) },
+      }) },
+    }),
+    // Seuls les titres envoyés et les champs de la liste sont gardés, une colonne pour un champ et un champ
+    // pour une colonne ; le reste est listé dans « rejetes » (D70 appliqué à l'import). Champ vide : l'IA ne
+    // propose rien pour cette colonne.
+    verifier(o, d) {
+      const titres = new Set(liste(d.colonnes).map((c) => texte(c)));
+      const champs = new Set(liste(d.champs).map((c) => texte(c.cle)));
+      const [vues, pris, colonnes, rejetes] = [new Set(), new Set(), [], []];
+      if (!o || !Array.isArray(o.colonnes)) throw new Ia.IaReponseInvalide('La proposition de l\'IA ne contient pas de liste de colonnes.');
+      o.colonnes.forEach((entree) => {
+        const entete = texte(entree && entree.entete);
+        const champ = texte(entree && entree.champ);
+        if (!champ) return;
+        if (!titres.has(entete) || vues.has(entete) || !champs.has(champ) || pris.has(champ)) {
+          rejetes.push({ entete, champ });
+          return;
+        }
+        vues.add(entete);
+        pris.add(champ);
+        colonnes.push({ entete, champ });
+      });
+      return { colonnes, rejetes };
+    },
+  };
+
   // ===========================================================================================
   // Validations pures (Ia.valider ; déplacées de ia.js, lot 4)
   // ===========================================================================================
@@ -393,7 +442,7 @@ Object.assign(Ia, (() => {
   }
 
   return {
-    PROMPTS: Object.freeze({ reformulerDI, compteRendu, codes, checkList, resumeHistorique, commentaireRapport }),
+    PROMPTS: Object.freeze({ reformulerDI, compteRendu, codes, checkList, resumeHistorique, commentaireRapport, colonnesImport }),
     valider: Object.freeze({ codes: codesProposes, impact, checkList: checkListe, commentaire }),
     codesConnus,
     jetonsRapport,
