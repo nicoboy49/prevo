@@ -487,6 +487,14 @@ qu'une réponse piégée de l'IA (du code HTML) serait affichée comme du texte.
 - **La clé d'un service en ligne** n'apparaît dans aucun fichier, journal, console ni page.
 - **Le guide** s'ouvre sans aucune ressource externe, s'imprime, et ses liens sont vérifiés.
 
+### La clôture
+
+La suite complète (907 tests) est passée en deux moitiés, chacune au premier plan : `test_[a-o]` (469
+tests) le 21/10/2026 à 15 h 57, puis `test_[p-z]` (438 tests) en dernière vague, avant la pose des
+étiquettes `lot-4` et **`v1.0.0`** sur le même commit. Sont sautés, en le disant, les essais qui
+demandent le vrai Excel (`PREVO_TEST_EXCEL=1`) ou un vrai modèle d'IA (`PREVO_TEST_IA=1`, lancé à
+part une fois, mesures ci-dessus). Les bibliothèques de `js/lib/` sont celles du lot 3, inchangées.
+
 ### La publication
 
 Le dépôt privé `nicoboy49/prevo` a été créé par Nicolas ; l'historique a été réécrit avant le premier
