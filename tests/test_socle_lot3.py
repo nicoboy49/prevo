@@ -22,7 +22,7 @@ import re
 import unittest
 from pathlib import Path
 
-from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
+from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
 
 # Rendu SVG hors écran, comme le fera le rapport mensuel (§15.10).
 RENDU_SVG_JS = """async () => {
@@ -92,7 +92,7 @@ class TestSocleServeur(CasNavigateur):
         self.ouvrir()
         self.assertEqual(self.page.evaluate("typeof echarts"), "undefined")
         self.assertEqual(self.page.locator("script[src*='echarts']").count(), 0)
-        self.assertNotIn("echarts", Path("index.html").read_text(encoding="utf-8"))
+        self.assertNotIn("echarts", (RACINE / "index.html").read_text(encoding="utf-8"))
 
         # La bibliothèque embarquée est ECharts 5.5.1 (avec zrender 5.6.0 : js/lib/LICENCES.txt).
         version = self.page.evaluate("async () => (await App.chargerEcharts()).version")
