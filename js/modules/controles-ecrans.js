@@ -56,9 +56,12 @@ Object.assign(Controles, (() => {
     return UI.html`<span class="controles-statuts" data-controle="${controle.id}">${UI.badgeStatut(etatCalcule.statut)}${etatCalcule.secondaires.map((statut) => UI.html` <span class="controles-secondaire" title="Aussi : ${statut}">${UI.badgeStatut(statut)}</span>`)}</span>`;
   }
 
-  /** Lien « Créer un OT » : formulaire de l'OT pré-rempli (rien n'est créé sans validation). */
+  /** Lien « Créer un OT » : formulaire de l'OT pré-rempli (rien n'est créé sans validation). Titre
+   *  (D40) : « Levée des observations — <nature> » s'il en reste à lever, sinon « Accompagnement du
+   *  contrôle — <nature> » ; l'équipement est déjà dans son propre champ. */
   function adresseNouvelOt(controle) {
-    const titre = (repere(controle) ? repere(controle) + ' — ' : '') + (texte(controle.nature) || 'contrôle réglementaire');
+    const titre = (observationsALever(controle) ? 'Levée des observations — ' : 'Accompagnement du contrôle — ')
+      + (texte(controle.nature) || 'contrôle réglementaire');
     return '#/ot/nouveau?equipement=' + encodeURIComponent(controle.equipement_id)
       + '&type=' + encodeURIComponent('réglementaire') + '&titre=' + encodeURIComponent(titre);
   }

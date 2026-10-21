@@ -462,7 +462,8 @@ class TestOrdres(CasControles):
             self.assertTrue(page.evaluate("location.hash.startsWith('#/ot/nouveau?')"))
             self.assertEqual(page.input_value("#form-nouvel-ot [name=type]"), "réglementaire")
             titre = page.input_value("#form-nouvel-ot [name=titre]")
-            self.assertIn(ligne["nature"], titre)
+            # D40 : sans observation à lever, « Accompagnement du contrôle — … » (correction de relecture)
+            self.assertEqual(titre, "Accompagnement du contrôle — " + ligne["nature"])
             self.assertEqual(page.input_value("#form-nouvel-ot [name=equipement_id]"), ligne["equipement_id"])
             self.assertEqual(len(lire_csv(serveur.dossier, "ordres_travail.csv")), ordres_avant)   # rien sans clic
             page.fill("#form-nouvel-ot [name=titre]", titre + " (organisme prévenu)")      # modifiable
@@ -481,6 +482,17 @@ class TestOrdres(CasControles):
             self.aller("#/ot/nouveau?type=inconnu&titre=Essai%20de%20titre")
             page.wait_for_function("document.querySelector('#form-nouvel-ot [name=titre]') && document.querySelector('#form-nouvel-ot [name=titre]').value === 'Essai de titre'")
             self.assertEqual(page.input_value("#form-nouvel-ot [name=type]"), "correctif différé")
+
+    def test_titre_de_l_ot_pour_lever_des_observations(self):
+        """D40 : un contrôle aux observations à lever pré-remplit « Levée des observations — … »."""
+        page = self.page
+        with ServeurPrevo() as serveur:
+            self.ouvrir(serveur, "#/controles/" + OBSERVATIONS)
+            self.attendre_fiche(OBSERVATIONS)
+            ligne = controle(serveur.dossier, OBSERVATIONS)
+            page.click("#controle-creer-ot")
+            page.wait_for_selector("#form-nouvel-ot")
+            self.assertEqual(page.input_value("#form-nouvel-ot [name=titre]"), "Levée des observations — " + ligne["nature"])
 
     def test_aucun_ot_genere_par_le_module_sans_clic(self):
         page = self.page
