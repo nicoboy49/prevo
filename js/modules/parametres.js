@@ -143,11 +143,12 @@ const Parametres = (() => {
   // manuelle ; « …_avant-restauration » : copie de sécurité faite avant une restauration ;
   // « …_avant-format-v2 » : sauvegarde automatique faite juste avant le passage au format 2.
   function decrireSauvegarde(nom) {
-    const lu = /^(\d{4}-\d{2}-\d{2})(?:_(\d{2})(\d{2})(\d{2}))?(?:(_avant-restauration)|_avant-format-v(\d+))?$/.exec(nom);
+    const lu = /^(\d{4}-\d{2}-\d{2})(?:_(\d{2})(\d{2})(\d{2}))?(?:(_avant-restauration)|_avant-format-v(\d+)|(_avant-import))?$/.exec(nom);
     if (!lu) return { date: nom, type: 'Sauvegarde', ton: 'neutre' };
     const date = UI.dateFr(lu[1]) + (lu[2] ? ' à ' + lu[2] + ':' + lu[3] + ':' + lu[4] : '');
     if (lu[5]) return { date: date, type: 'Copie de sécurité', ton: 'attention' };
     if (lu[6]) return { date: date, type: 'Avant format ' + Number(lu[6]), ton: 'info' };
+    if (lu[7]) return { date: date, type: 'Avant import', ton: 'info' };
     return lu[2] ? { date: date, type: 'Manuelle', ton: 'info' } : { date: date, type: 'Quotidienne', ton: 'neutre' };
   }
 

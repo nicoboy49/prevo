@@ -43,11 +43,12 @@ const StockageDossier = (() => {
   // Mêmes règles que serveur.py (MOTIF_NOM_DOCUMENT, TYPES_DOCUMENTS, NOMS_RESERVES_WINDOWS…).
   const MOTIF_NOM_DOCUMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
   // Nom de sauvegarde : AAAA-MM-JJ (quotidienne), AAAA-MM-JJ_HHMMSS (manuelle), suivi au besoin de
-  // « _avant-restauration » (copie de sécurité) ou « _avant-format-v<N> » (juste avant le passage
-  // au format N). En JavaScript, \d ne reconnaît que 0-9, comme [0-9] côté serveur.
-  const MOTIF_NOM_SAUVEGARDE = /^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+)?)?$/;
+  // « _avant-restauration » (copie de sécurité), « _avant-format-v<N> » (juste avant le passage
+  // au format N) ou « _avant-import » (juste avant un import, lot 5). En JavaScript, \d ne reconnaît
+  // que 0-9, comme [0-9] côté serveur.
+  const MOTIF_NOM_SAUVEGARDE = /^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+|_avant-import)?)?$/;
   // Motifs acceptés par sauvegarder(motif) : liste FERMÉE, la même que MOTIFS_SAUVEGARDE de serveur.py.
-  const MOTIFS_SAUVEGARDE = ['avant-format-v2'];
+  const MOTIFS_SAUVEGARDE = ['avant-format-v2', 'avant-import'];
   // 'html' : rapport mensuel figé (lot 3, ARCHITECTURE.md §15.1).
   const EXTENSIONS_DOCUMENTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'doc', 'docx',
     'xls', 'xlsx', 'odt', 'ods', 'html'];

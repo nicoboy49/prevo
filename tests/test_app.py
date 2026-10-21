@@ -357,7 +357,7 @@ class TestServeur(CasApp):
             self.assertNotIn("pas encore disponibles", contenu)
             self.assertEqual(page.get_attribute("#contenu a[href='GUIDE.html']", "href"), "GUIDE.html")
             for bibliotheque in ("PapaParse 5.7.0", "qrcode-generator 2.0.4", "jsQR 1.4.0", "JSZip 3.10.2",
-                                 "ECharts 5.5.1", "Sora", "MIT", "Apache-2.0", "OFL"):
+                                 "ECharts 5.5.1", "SheetJS CE 0.20.3", "Sora", "MIT", "Apache-2.0", "OFL"):
                 self.assertIn(bibliotheque, contenu)
             self.assertEqual(page.get_attribute("#contenu a[href='js/lib/LICENCES.txt']", "href"), "js/lib/LICENCES.txt")
             self.assertIn("Serveur", contenu)

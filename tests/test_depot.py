@@ -20,6 +20,8 @@ EMPREINTES = {
     "js/lib/jsQR.js": "bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859",
     "js/lib/jszip.min.js": "7f839b2d4688b845c105ebf5d2f9803075f91ea0fe72bdaac176c3a04dd3d2c1",
     "js/lib/echarts.min.js": "e84270bd0cd5bdf60fefc26d00c2a391cb2e81f4d26a7a9ee16185a54773a3cf",
+    # SheetJS CE 0.20.3 (lot 5), CDN officiel cdn.sheetjs.com, téléchargé le 2026-10-21
+    "js/lib/xlsx.full.min.js": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41",
     "css/polices/sora-latin-wght-normal.woff2": "714cfbc8e4b3f224102a517dd5f39c85e114b27163602159deee4d8c4a8602f0",
 }
 
@@ -48,6 +50,8 @@ ORDRE_MODULES = [
     "indicateurs-regles.js", "indicateurs-series.js", "indicateurs-graphiques.js", "indicateurs-ecrans.js",
     "rapport-contenu.js", "rapport-ecrans.js",
     "parametres.js", "parametres-codes.js",
+    "import-regles.js", "import-historique.js", "import-lecture.js", "import-ecritures.js", "import-modeles.js",
+    "import-ecrans.js", "import-apercu.js",
 ]
 LIGNES_MAX_MODULE = 700   # décision D28 : aucun fichier de js/modules/ au-delà
 

@@ -1,0 +1,3 @@
+/* Import (lot 5, ARCHITECTURE.md §18.9) : assistant « Importer des données ». Variables de la charte
+   seulement (thème clair compris). */
+.import-etapes { display: flex; flex-direction: column; gap: 18px; }

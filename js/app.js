@@ -260,6 +260,27 @@ const App = (() => {
   // ECharts (js/lib/echarts.min.js, ≈ 1 Mo) n'est jamais chargé au démarrage : il est injecté à la
   // première ouverture des Indicateurs ou d'un rapport (lot 3, ARCHITECTURE.md §15.1). Même mécanisme
   // que le jeu de démo : une balise <script>, compatible file://. Un échec permet un nouvel essai.
+  // SheetJS (js/lib/xlsx.full.min.js, ≈ 0,9 Mo) : même principe, injecté à l'ouverture de l'assistant
+  // d'import (lot 5, ARCHITECTURE.md §18.1), jamais au démarrage.
+  let promesseSheetJS = null;
+  function chargerSheetJS() {
+    if (typeof XLSX !== 'undefined') return Promise.resolve(XLSX);
+    if (!promesseSheetJS) {
+      promesseSheetJS = new Promise((resoudre, rejeter) => {
+        const script = document.createElement('script');
+        script.src = 'js/lib/xlsx.full.min.js';
+        script.onload = () => resoudre(XLSX);
+        script.onerror = () => {
+          promesseSheetJS = null;
+          script.remove();
+          rejeter(new Error('La bibliothèque de lecture des fichiers Excel (js/lib/xlsx.full.min.js) n\'a pas pu être chargée.'));
+        };
+        document.head.appendChild(script);
+      });
+    }
+    return promesseSheetJS;
+  }
+
   function chargerEcharts() {
     if (typeof echarts !== 'undefined') return Promise.resolve(echarts);
     if (!promesseEcharts) {
@@ -996,6 +1017,7 @@ const App = (() => {
     adressesReseau: adressesDuReseau,
     chargerScriptDemo,
     chargerEcharts,
+    chargerSheetJS,
     changerProfil,
     exporterZip,
     signalerErreur,

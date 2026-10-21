@@ -112,12 +112,13 @@ MOTIF_NOM_DOCUMENT = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', re.ASCII)
 #   AAAA-MM-JJ_HHMMSS                        manuelle
 #   AAAA-MM-JJ_HHMMSS_avant-restauration     copie de sécurité faite avant une restauration
 #   AAAA-MM-JJ_HHMMSS_avant-format-v<N>      faite juste avant le passage au format N des fichiers
+#   AAAA-MM-JJ_HHMMSS_avant-import           faite juste avant un import de données (lot 5)
 MOTIF_NOM_SAUVEGARDE = re.compile(
-    r'[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{6}(_avant-restauration|_avant-format-v[0-9]+)?)?', re.ASCII)
+    r'[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{6}(_avant-restauration|_avant-format-v[0-9]+|_avant-import)?)?', re.ASCII)
 # Motifs acceptés par POST /api/sauvegarde {"motif": "…"} : liste FERMÉE (tout autre motif → 400).
 # Le motif devient la fin du nom de la sauvegarde (« _avant-format-v2 »). Règle générale :
 # « avant-format-v<N> » ; on n'ajoute ici que les versions que Prévo sait vraiment produire.
-MOTIFS_SAUVEGARDE = ('avant-format-v2',)
+MOTIFS_SAUVEGARDE = ('avant-format-v2', 'avant-import')
 
 # Types MIME des documents acceptés (l'extension décide du type, jamais le contenu).
 TYPES_DOCUMENTS = {

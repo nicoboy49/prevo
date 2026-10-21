@@ -14,3 +14,5 @@ js/lib/** -text
 # git ne doit pas convertir leurs fins de ligne (sinon un clone neuf sous Windows les passerait en CRLF).
 js/demo-donnees.js -text
 tests/fixtures/*.json -text
+# Fichiers d'essai de l'import (lot 5) : écrits par outils/generer_fixtures_import.py, comparés à l'octet.
+tests/fixtures/import/** -text

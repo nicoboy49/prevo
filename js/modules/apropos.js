@@ -13,6 +13,7 @@ const Apropos = (() => {
     { nom: 'jsQR', version: '1.4.0', licence: 'Apache-2.0', role: 'lecture des QR codes par la caméra' },
     { nom: 'JSZip', version: '3.10.2', licence: 'MIT', role: 'export ZIP' },
     { nom: 'ECharts', version: '5.5.1', licence: 'Apache-2.0', role: 'graphiques des indicateurs' },
+    { nom: 'SheetJS CE', version: '0.20.3', licence: 'Apache-2.0', role: 'lecture des fichiers Excel et OpenDocument (import)' },
     { nom: 'Police Sora', version: '', licence: 'OFL 1.1', role: 'police de caractères' },
   ];
 
