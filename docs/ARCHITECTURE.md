@@ -16,8 +16,8 @@ Lancer_GMAO.bat            lanceur Windows      lancer.sh   lanceur Mac/Linux
 css/style.css              charte « Cockpit » adaptée (écran sombre + impression noir sur blanc)
 css/modules/*.css          mise en page propre à chaque module (une feuille par module : app, accueil,
                            parc, demandes, ordres, preventif, magasin, parametres, depuis le lot 3
-                           equipe, controles, planning, indicateurs, etiquettes, et depuis le lot 3 bis
-                           suggestions ; chargées par index.html)
+                           equipe, controles, planning, indicateurs, etiquettes, depuis le lot 3 bis
+                           suggestions, et depuis le lot 4 ia, poste ; chargées par index.html)
 css/polices/               police Sora (OFL)
 js/lib/                    bibliothèques tierces + LICENCES.txt (jamais modifiées)
 js/schema.js               Schema    : description des 22 tables (champs, types, identifiants)
@@ -31,10 +31,15 @@ js/modules/*.js            modules métier : un module = un préfixe de fichiers
                            ordres-regles.js … ordres-impression.js pour l'objet Ordres ; petits
                            modules en un seul fichier (accueil.js, apropos.js, causes-frequentes.js) ;
                            liste et ordre exacts au §15.1 (lot 3), complétés au §16.1 (lot 3 bis)
+                           et au §17.1 (lot 4 : ia, ia-prompts, ia-encadre, dictee, poste)
 js/app.js                  App       : démarrage, choix du mode, profils, navigation
 donnees/                   les CSV réels (hors dépôt git) + documents/ + sauvegardes/
 donnees/demo/              le jeu de démo en CSV (versionné)
 outils/generer_demo.py     génère donnees/demo/*.csv, js/demo-donnees.js et tests/fixtures/demo-scenarios.json
+outils/generer_fiche_csv.py   écrit FICHE_TECHNIQUE_CSV.md d'après Schema (lot 4)
+outils/generer_captures.py    captures du guide et du README (docs/captures/*.png, lot 4)
+GUIDE.html                 guide d'utilisation autonome et imprimable (lot 4, servi par serveur.py)
+FICHE_TECHNIQUE_CSV.md     format des 22 fichiers CSV (lot 4, généré)
 tests/                     tests automatisés (unittest + Playwright) ; tests/fixtures/ : pages et
                            fichiers d'essai (servis seulement avec serveur.py --servir-tests, §7)
 ```
@@ -44,7 +49,9 @@ tests/                     tests automatisés (unittest + Playwright) ; tests/fi
 `js/schema.js`, `js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
 `js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
 §15.1 (il remplace, depuis le lot 3, celui du §14.2 ; le lot 3 bis y insère `suggestions-regles.js` et
-`suggestions-ecrans.js` juste après `preventif-calendrier.js`, §16.1), `js/app.js` (en dernier).
+`suggestions-ecrans.js` juste après `preventif-calendrier.js`, §16.1 ; le lot 4 insère `ia.js`,
+`ia-prompts.js`, `ia-encadre.js`, `dictee.js`, `poste.js` juste après `causes-frequentes.js`, §17.1),
+`js/app.js` (en dernier).
 `js/demo-donnees.js` n'est **pas** chargé au démarrage : `App` l'injecte (balise `<script>`
 créée dynamiquement, compatible `file://`) quand on choisit la démo ou la copie du jeu de démo.
 ECharts (`js/lib/echarts.min.js`, version 5.5.1) n'est pas non plus chargé au démarrage :
@@ -419,6 +426,10 @@ Lancement : `py serveur.py [--port 8080] [--donnees CHEMIN] [--sans-navigateur] 
 réseau ; ouvre le navigateur. `--servir-tests` n'est utile qu'aux tests automatiques.
 Adresses réseau : interface de sortie trouvée par un `connect()` UDP vers une adresse privée
 (aucun paquet envoyé) + `gethostbyname_ex`, adresses de bouclage exclues.
+Lot 4 (§17.2) : `POST /api/ia` relaie l'appel du navigateur vers le fournisseur d'IA (liste fermée de
+chemins, sans redirection, délai et taille plafonnés, fournisseur en ligne refusé en 403 sans
+l'autorisation du responsable) ; `--certificat FICHIER --cle FICHIER` (les deux ensemble) font passer
+le serveur en https (adresses, `/api/info` et QR en `https://`).
 
 ## 8. Application (`js/app.js`, `index.html`)
 
@@ -548,6 +559,12 @@ Badge de signature en bas du menu : « Développé par Claude (Anthropic) à
 la demande de Nicolas Briand — SELECTIS » → `#/apropos`.
 `#impression` doit être un enfant direct de `<body>` (la feuille d'impression masque tous les autres
 enfants de `body`) ; `#toast` (vide, `role="status"`) est présent dans `index.html` dès le chargement.
+
+**Lot 4 (§17)** : dès la lecture de `js/app.js`, le thème du poste est posé (`<html
+data-theme="clair">`, `Poste.appliquerTheme`) avant le premier écran ; après le chargement des
+tables, `Ia.verifierAuDemarrage()` (un seul test du fournisseur si l'IA est active sur le poste, aucun
+appel sinon) et `Dictee.surveiller(document.body)` (boutons micro posés au fil des écrans). Route
+`#/poste` « Ce poste » pour les trois profils.
 
 ## 9. Interface (`js/interface.js`, `css/style.css`)
 
@@ -760,6 +777,9 @@ La liste ci-dessous est celle des clés réellement exposées (relevée dans le 
   `suiviFiche(gammeId, requete)`, `apresModificationGamme(gammeId, champs)`, `apresCheckListe(gammeId)`.
 - **`Apropos`** : `CREDIT`, `afficher`.
 
+Lot 4 : objets `Ia` (`ia.js`, `ia-prompts.js`, `ia-encadre.js`), `Dictee` et `Poste` — API aux
+§17.3, §17.4, §17.6, §17.7, précisées au §17.11.
+
 ## 11. Données de démo
 
 `outils/generer_demo.py` (graine fixe, date de référence fixe `DATE_REFERENCE`) écrit
@@ -842,6 +862,14 @@ navigateur à la date de référence de la démo, 10 h (`clock.set_fixed_time` d
 minuteurs tournent) : `ServeurPrevo` copie la démo brute, non décalée, et les rôles du §16.8 ne
 valent qu'à cette date ; le mode démo tourne, lui, à la date réelle.
 
+Fichiers ajoutés au lot 4 (§17.10, aligné au §17.11) : `test_serveur_ia.py`, `test_https.py`,
+`test_ia_regles.py`, `test_ia_fonctions.py`, `test_ia_fonctions_2.py`, `test_dictee.py`, `test_poste.py`,
+`test_guide.py`, `test_fiche_csv.py`, `test_recette_lot4.py` (captures dans `tests/resultats/recette-lot4/`),
+`test_ia_reel.py` ; faux fournisseur d'IA `tests/faux_fournisseur_ia.py` (jamais un vrai modèle dans la
+suite) ; `test_performance.py` vérifie aussi qu'aucun appel réseau ne part à l'ouverture sans IA.
+L'essai réel de l'IA (`tests/test_ia_reel.py` : vrai Ollama, `qwen2.5:7b`) ne s'exécute que si
+`PREVO_TEST_IA=1`, comme le vrai Excel.
+
 Playwright et Chromium ne sont nécessaires que pour les tests, jamais pour utiliser Prévo.
 Le test d'aller-retour par le **vrai Excel** (`tests/test_excel_reel.py`, `tests/test_csv.py`) ne
 s'exécute que si la variable d'environnement `PREVO_TEST_EXCEL=1` est définie ; sinon il est
@@ -854,12 +882,10 @@ serveur (§7) en réduisent la fréquence sans l'annuler.
 
 ## 13. Points d'extension (lots suivants)
 
-Les lots 2, 3 et 3 bis sont réalisés (contrats aux §14, §15 et §16). Un module ajouté plus tard suit
-les mêmes règles : préfixe de fichiers, 700 lignes au plus par fichier, place dans l'ordre du §15.1
-complété au §16.1 **et** dans `ORDRE_MODULES` de `tests/test_depot.py`. Restent, dans l'ordre prévu :
-- **Lot 4** : `js/modules/ia.js`, `js/modules/ia-prompts.js`, `js/modules/dictee.js` ; les champs
-  `texte_long` des formulaires portent `data-dictee` pour recevoir un bouton micro ; `GUIDE.html`
-  (déjà dans la liste blanche du serveur, §7), `FICHE_TECHNIQUE_CSV.md`, https local en option.
+Les lots 2, 3, 3 bis et 4 sont réalisés (contrats aux §14, §15, §16 et §17 ; version 1.0.0). Un module
+ajouté plus tard suit les mêmes règles : préfixe de fichiers, 700 lignes au plus par fichier, place
+dans l'ordre du §15.1 complété aux §16.1 et §17.1 **et** dans `ORDRE_MODULES` de `tests/test_depot.py`.
+Restent, dans l'ordre prévu :
 - **Lot « Import »** : assistant d'import (les `synonymes` du schéma servent à reconnaître les
   colonnes), lecture des fichiers `.xls` (SheetJS).
 - Piste notée par Nicolas : stocker le prix unitaire dans `mouvements_stock` au moment de la sortie
@@ -1809,7 +1835,8 @@ en ligne, défaut non), **D72 (a)** (`qwen2.5:7b` conseillé, mesuré sur le PC)
 - **Réglages propres au poste** (navigateur du poste seulement, `localStorage`, lecture protégée comme
   au §8) : `prevo.ia` = `{ actif, fournisseur: 'ollama' | 'openai', url, modele, cle, delaiS }`
   (défauts : inactif, `ollama`, `http://localhost:11434`, `qwen2.5:7b`, clé vide, 120 s) ;
-  `prevo.dictee` = `{ active, avertie }` (défaut : active, non avertie) ; `prevo.theme` = `sombre` |
+  `prevo.dictee` = `{ active, avertie }` (défaut : active, non avertie ; `avertie` = `local` ou `nuage`,
+  le lieu de transcription annoncé, §17.11) ; `prevo.theme` = `sombre` |
   `clair` (défaut sombre). **La clé n'est écrite nulle part ailleurs** (ni CSV, ni journal, ni
   `sessionStorage`, ni réponse ou console du serveur).
 - **Fichiers** : `ia.js` (crée `Ia` : réglages, portée, appel du fournisseur direct ou par relais,
@@ -1832,12 +1859,19 @@ en ligne, défaut non), **D72 (a)** (`qwen2.5:7b` conseillé, mesuré sur le PC)
   **sans suivre de redirection**, avec un délai (≤ 300 s, celui demandé) et une réponse plafonnée
   (2 Mo) ; il rend `{ statut, corps }` (corps JSON du fournisseur, ou texte s'il n'est pas du JSON).
   Refus : chemin hors liste ou adresse invalide → 400 ; fournisseur injoignable → 502 ; délai → 504.
+  Ajouts de la relecture : fournisseur **distant** sans `ia_distant_autorise` = 1 dans `parametres.csv`
+  → **403** avant tout appel (D67 côté serveur ; hôte classé sans résolution DNS : boucle locale,
+  adresses privées et noms en `.local` restent dans l'atelier, tout autre nom — `*.localhost` compris —
+  est distant) ; délai non fini, adresse avec espace ou caractère de contrôle, clé non ASCII → 400 ;
+  réponse coupée ou illisible → 502 ; jamais 500. Limite : le délai vaut pour chaque opération
+  réseau, pas pour la durée totale.
   Jamais la clé dans un message, une erreur ou la console (la ligne de journal d'une écriture ne montre
   que `POST /api/ia`). `localhost` désigne le PC qui fait tourner le serveur (le PC atelier).
 - **https en option** : `serveur.py --certificat FICHIER --cle FICHIER` (PEM, les deux ensemble, sinon
   message clair et arrêt) → serveur en https (`ssl` de la bibliothèque standard) ; adresses affichées,
   `GET /api/info` et QR en `https://` ; sans ces options, http comme avant. Certificat de test :
-  `tests/fixtures/https/` (auto-signé, réservé aux tests).
+  fabriqué à chaque exécution par openssl (`tests/test_https.py`) — écart retenu : aucune clé privée
+  n'est versionnée.
 
 ### 17.3 Règles de l'IA (`ia.js`, objet `Ia`)
 - `Ia.reglages()` / `Ia.enregistrerReglages(r)` ; `Ia.distantAutorise()` (`parametres.csv`) ;
@@ -1859,7 +1893,7 @@ en ligne, défaut non), **D72 (a)** (`qwen2.5:7b` conseillé, mesuré sur le PC)
   et démo : appel direct (`fetch`). Erreurs nommées : `IaIndisponible`, `IaDelai`, `IaAnnulee`,
   `IaReponseInvalide` (JSON illisible ou hors schéma), `IaRefusee` (portée non autorisée), avec un
   message en français.
-- **Validations pures** (`Ia.valider`) : `codes(objet, lignesCodes)` → codes gardés seulement s'ils
+- **Validations pures** (`Ia.valider`, dans `ia-prompts.js` depuis la relecture) : `codes(objet, lignesCodes)` → codes gardés seulement s'ils
   existent dans `codes_defaillance` **et** dans la bonne famille, `rejetes` listés (D70) ; `impact(v)` ∈
   `gêne`, `dégradé`, `arrêt`, `sécurité` ; `checkList(objet)` → 1 à 20 opérations (texte non vide,
   200 caractères au plus, valeur attendue 120 au plus) ; `commentaire(texte, jetons)` → **refus si un
@@ -1969,9 +2003,54 @@ et l'écran `preventif` du responsable dépend aussi de `journal`, `demandes`, `
 ### 17.10 Tests du lot 4
 Faux fournisseur `tests/faux_fournisseur_ia.py` (serveur de test : `api/tags`, `api/chat`, `models`,
 `chat/completions`, CORS ouvert ; comportement choisi par le modèle demandé : `faux`, `faux-lent`,
-`faux-invente`, `faux-illisible`, `faux-chiffres` ; il garde les requêtes reçues pour vérifier les
-données envoyées et la clé transmise). Fichiers : `test_socle_lot4.py`, `test_serveur_ia.py`,
+`faux-invente`, `faux-illisible`, `faux-chiffres`, puis `faux-schema`, `faux-enorme`, `faux-redirige`,
+`faux-tronque`, `faux-tronque-morceaux`, `faux-html` ; il garde les requêtes reçues pour vérifier les
+données envoyées et la clé transmise). Fichiers : `test_serveur_ia.py` (écart retenu : pas de
+`test_socle_lot4.py`, le socle est vérifié par `test_depot.py` et `test_parametres.py` ;
+`test_ia_fonctions_2.py` couvre la gamme, la fiche équipement et le rapport),
 `test_https.py`, `test_ia_regles.py`, `test_poste.py`, `test_dictee.py` (reconnaissance simulée),
 `test_ia_fonctions.py`, `test_guide.py`, `test_fiche_csv.py`, `test_recette_lot4.py`,
 `test_performance.py` complété (aucun appel réseau à l'ouverture sans IA), `test_ia_reel.py`
 (`PREVO_TEST_IA=1` : vrai Ollama et `qwen2.5:7b`, jeu d'essai en français, mesures affichées).
+
+### 17.11 Alignement de fin de lot (T75) : écarts retenus et précisions
+Relu sur le code final ; les décisions de Nicolas (D67 a, D72 a, D76 a, D79) sont tenues.
+- **IA, règles** (`ia.js`) : `Ia.portee` en mode serveur classe `*.localhost` « distant » (même règle
+  que le relais) ; la **clé** n'est gardée que pour l'API compatible OpenAI à la même origine, sauf clé
+  donnée explicitement (`enregistrerReglages`, `tester`) : jamais envoyée à une autre adresse ;
+  `Ia.evenements` signale aussi l'autorisation du responsable changée (`raison: 'autorisation'`) ;
+  modes dossier et démo : un fournisseur en ligne qui refuse les appels du navigateur → « … ne répond pas
+  à ce navigateur (hôte) : passez par le mode serveur (voir le guide) » (D66) ; liens locaux 169.254/16 et
+  fe80::/10 classés « atelier » ; repli « format json » pour un vieil Ollama ; délai du navigateur =
+  `delaiS` + 5 s en mode serveur (le relais coupe le premier).
+- **Validations** (`Ia.valider`, `ia-prompts.js`) : le commentaire du rapport refuse aussi les nombres
+  écrits en lettres (deux… seize, vingt… soixante, cent, mille, millions, milliards, moitié ; « neuf »
+  permis : « un moteur neuf ») ; jeton `{mois}` ajouté.
+- **Boutons** (`ia-encadre.js`) : `Ia.emplacement(libelle, surClic)` → `<div class="ia-emplacement">` qui
+  pose ou retire le bouton au fil de l'état de l'IA (test d'ouverture fini, fournisseur injoignable,
+  réglages, autorisation) sans réafficher l'écran ; l'encadré se place **après** l'emplacement (un message
+  d'erreur reste visible). La DI et l'OT suivent le même principe par leurs propres zones.
+- **Fonctions dans les écrans** : DI — un impact « sécurité » déjà choisi n'est jamais baissé ; aucune
+  demande sans texte. OT — boutons seulement si le compte rendu est modifiable ; trace des seuls champs
+  venus de l'IA **et gardés** (un code changé à la main n'est pas tracé), une fois. Check-list — une
+  opération ajoutée n'est pas rajoutée après un échec partiel. Résumé — carte masquée sans IA.
+  Commentaire du rapport — mois de la proposition retenu : figer un autre mois est refusé (avertissement
+  au changement de mois) ; points à examiner envoyés **sans chiffres ni montants** ; trace en échec sans
+  faire croire à l'échec du rapport ; « Recalculer » crée une révision sans le commentaire (ses chiffres
+  auraient pu changer). La trace dit qu'une proposition a été reprise, même retouchée ensuite.
+- **Dictée** (`dictee.js`) : `Dictee.surveiller(racine)` (MutationObserver) pose les micros au fil des
+  écrans, onglets et fenêtres (au lieu d'un appel après chaque affichage) ; la dictée **repart du contenu
+  du champ** s'il a changé pendant l'écoute (frappe, « Utiliser » de l'IA) : rien n'est jamais effacé ;
+  `avertie` retient le lieu annoncé (`local` ou `nuage`) et l'avertissement revient si la voix doit
+  partir dans le nuage.
+- **« Ce poste » et thème** : le lieu de transcription est demandé sur clic (« Où la voix est-elle
+  transcrite ? ») — `SpeechRecognition.available()` fait planter l'onglet dans le Chromium 148 des tests ;
+  champ de clé toujours vide (vide = garder, case « Effacer la clé enregistrée ») ; thème clair : contour
+  des champs `--bord-champ` (≥ 3:1), badges d'état, retards de l'accueil et sous-titres des gros boutons
+  en teinte foncée (≥ 4,5:1), vérifiés **sur les textes réellement affichés** de 12 écrans
+  (`test_poste.py`) ; menu latéral qui défile plutôt que de recouvrir le bouton de repli. Limite notée :
+  le thème sombre de la charte n'est pas audité de la même façon (contour des champs 1,43:1).
+- **Finitions** : écran « À propos » à jour (lots 1 à 4, lien vers le guide).
+- **Essai réel (D72)**, 21/10/2026, RTX 3060 6 Go, Ollama 0.40.3, `qwen2.5:7b`, mode serveur, jeu de
+  démo : codes 32/36 justes (89 %), 8,6 s en médiane (22 s à la première demande) ; reformulation ≈ 9 s ;
+  compte rendu ≈ 16 s. Détail dans `GUIDE.html` §5.5 et `docs/PILOTAGE.md`.

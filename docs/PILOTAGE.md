@@ -406,7 +406,94 @@ défaut, que rien n'est écrit sans action (le fichier des gammes reste identiqu
 - **Rien n'est écrit sans action** : le fichier des gammes reste identique à l'octet après
   l'ouverture de Prévo, des onglets et des fiches par les trois profils.
 
-## 10. À retenir pour piloter une IA
+## 10. Lot 4 : assistant IA, dictée, guide, version 1.0.0
+
+Le lot 4 ajoute un **assistant IA** qui propose sans jamais décider (reformuler une demande, mettre en
+forme un compte rendu, proposer les codes de défaillance, une check-list de départ, le résumé de
+l'historique d'un équipement, le commentaire du rapport mensuel), la **dictée vocale** dans les champs
+de texte, l'écran **« Ce poste »** (réglages propres à chaque navigateur, thème clair), le **https** en
+option, un **guide d'utilisation** imprimable, la **fiche technique** des fichiers CSV et des finitions.
+Il clôt la version **v1.0.0**. Même méthode qu'aux lots 3 et 3 bis : l'orchestrateur a écrit le socle,
+le serveur, la fiche technique, la dictée, les fonctions IA de la gamme et du rapport, les finitions,
+la recette et la documentation ; des sous-agents ont écrit les règles de l'IA, l'écran « Ce poste », les
+fonctions IA de la demande et de l'OT, le guide, puis des corrections du relais du serveur.
+
+### Les décisions de Nicolas
+
+Le cahier des charges compte **16 décisions** (D64 à D79) et **15 critères de succès** (CS64 à CS78).
+Règle de fond, celle du brief : **l'IA propose, l'humain valide**. Rien n'est enregistré sans le
+bouton habituel ; sans IA, Prévo est identique et n'appelle rien. Quatre réponses de Nicolas :
+
+- **Qui décide d'envoyer des données hors de l'atelier** (D67) : le responsable. Par défaut, seule une
+  IA installée dans l'atelier (Ollama) est utilisable ; un service en ligne demande son autorisation,
+  puis un avertissement explicite sur le poste.
+- **Le modèle conseillé** (D72) : `qwen2.5:7b`, déjà installé, **mesuré** sur son PC plutôt que choisi
+  sur la foi d'articles (aucune source ne mesure le français sur des textes de maintenance).
+- **Le thème clair** (D76) : oui, réglé par poste.
+- **La publication** (D79) : dépôt GitHub privé d'abord (ses élèves le testent), envoi en fin de lot
+  seulement, adresse de commit professionnelle.
+
+### Les chiffres
+
+- **13 tâches** (T64 à T76) en **7 vagues**, chacune validée par l'outil de vérification et revérifiée
+  après les corrections ; la suite complète finale est partagée entre les deux dernières vagues.
+- **1 relecture complète** du lot (sous-agent, défauts reproduits dans une copie du dépôt) : **3 défauts
+  critiques** et 12 mineurs, tous traités ; la recette de l'orchestrateur en avait trouvé un de plus
+  avant la relecture.
+- **Plus de 35 défauts injectés** volontairement pour prouver que les tests savent échouer ; 6 n'étaient
+  pas détectés au premier essai et ont reçu un test.
+- **907 tests** dans la suite (781 à la fin du lot 3 bis), plus l'essai réel de l'IA, lancé à part.
+- **Performance** sur le jeu de charge (500 équipements, 5 000 OT) : chargement complet 1,3 s au
+  premier passage et 0,6 s ensuite (budget 2 s), **aucun appel réseau à l'ouverture** tant que l'IA
+  n'est pas activée (vérifié en mode serveur et en démo).
+- **Essai réel du modèle conseillé** (`qwen2.5:7b` sur le PC de Nicolas, carte RTX 3060 6 Go) :
+  **32 codes justes sur 36** (89 %) sur douze interventions réelles de la démo, aucun code inventé
+  (liste fermée imposée au modèle), réponse en 8,6 s en médiane ; reformulation d'une demande en
+  9 s, compte rendu structuré en 16 s. Ses erreurs sont des choix voisins, et il a une fois proposé
+  l'impact « Sécurité » pour un compresseur qui « passe en sécurité » : la relecture humaine reste
+  nécessaire, ce que le guide rappelle.
+
+### Ce que les relectures et la recette ont trouvé
+
+La recette a trouvé un défaut que les tests de chaque écran ne voyaient pas : quand le responsable
+**retire** l'autorisation des services en ligne, le bouton IA restait affiché sur l'écran ouvert d'un
+technicien. Rien ne partait (la demande était refusée), mais l'écran mentait. Les boutons suivent
+désormais l'état de l'IA sans réafficher l'écran.
+
+La relecture a trouvé **trois défauts critiques** :
+
+- un commentaire proposé par l'IA pour **septembre** pouvait être figé dans le rapport d'**août**, avec
+  les chiffres de septembre et la mention « relu et validé par le responsable » ;
+- la dictée **effaçait** ce que l'on tapait au clavier pendant qu'elle écoutait (et une proposition
+  de l'IA posée entre-temps), alors que la règle est « jamais d'écrasement » ;
+- en thème clair, les **badges d'état** (« en retard », « en service », « Criticité B ») étaient sous
+  le contraste exigé : le test ne mesurait que des couples de couleurs, pas les textes affichés. Il
+  mesure maintenant chaque texte réellement affiché sur douze écrans.
+
+Parmi les mineurs : le relais du serveur acceptait d'appeler un service en ligne même sans
+l'autorisation du responsable (le contrôle n'était fait que dans le navigateur) ; un nombre écrit en
+lettres (« trois points ») passait le contrôle des chiffres du commentaire ; aucun test ne prouvait
+qu'une réponse piégée de l'IA (du code HTML) serait affichée comme du texte. Tous ont reçu un test qui
+échouait avant la correction.
+
+### Les preuves propres au lot 4
+
+- **Jamais un vrai modèle dans la suite** : un faux fournisseur d'IA imite Ollama et les API
+  compatibles OpenAI, y compris les réponses lentes, illisibles, inventées, chiffrées, tronquées,
+  piégées ou trop grandes ; il garde chaque requête reçue, ce qui prouve ce qui part (aucun nom de
+  personne, aucun taux, aucun coût d'OT) et que la clé ne va qu'au bon service.
+- **Rien n'est écrit sans action** : avant le bouton habituel, les fichiers restent identiques à
+  l'octet, quelle que soit la proposition utilisée ou ignorée.
+- **La clé d'un service en ligne** n'apparaît dans aucun fichier, journal, console ni page.
+- **Le guide** s'ouvre sans aucune ressource externe, s'imprime, et ses liens sont vérifiés.
+
+### La publication
+
+Le dépôt privé `nicoboy49/prevo` a été créé par Nicolas ; l'historique a été réécrit avant le premier
+envoi pour porter son adresse professionnelle (contenu identique, vérifié, sauvegarde gardée). Les
+étiquettes `lot-1` à `lot-3-bis` y sont ; `lot-4` et `v1.0.0` sont envoyées à la clôture.
+
+## 11. À retenir pour piloter une IA
 
 1. Faire écrire et valider le cahier des charges et ses critères de succès avant le code.
 2. Écrire le contrat entre les morceaux avant de distribuer le travail.
@@ -414,3 +501,6 @@ défaut, que rien n'est écrit sans action (le fichier des gammes reste identiqu
 4. Faire relire par quelqu'un qui n'a pas écrit le code.
 5. Reproduire chaque défaut par un test avant de le corriger.
 6. Réserver à l'humain les décisions, et lui demander les vérifications physiques.
+7. Mesurer un modèle d'IA sur ses propres données plutôt que de le choisir sur réputation, et ne
+   jamais laisser un vrai modèle dans la suite de tests : un faux fournisseur rend les tests
+   rapides, reproductibles, et capables de simuler les pannes.

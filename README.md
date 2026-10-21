@@ -12,7 +12,7 @@ embarquées et aucun appel vers Internet (sauf l'assistant IA en ligne, s'il est
 - **Guide d'utilisation** : [GUIDE.html](GUIDE.html), à ouvrir dans le navigateur (imprimable).
 - **Format des fichiers** : [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md).
 
-Cette version contient les **lots 1 à 4** du cahier des charges ; un lot « Import » est prévu ensuite.
+Cette version, la **1.0.0**, contient les **lots 1 à 4** du cahier des charges ; un lot « Import » est prévu ensuite.
 
 ## Essayer en 30 secondes
 
