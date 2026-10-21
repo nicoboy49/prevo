@@ -244,7 +244,7 @@ Object.assign(Rapport, (() => {
 
   /** Point du rapport envoyé à l'IA sans chiffre ni montant (§17.3 : aucun coût ; D71 : l'IA n'écrit aucun chiffre). */
   function sansChiffres(point) {
-    return texte(point).replace(/\d[\d\s  .,]*(?:\s?(?:€|%|h\b|j\b))?/g, '… ').replace(/\s+/g, ' ').trim();
+    return texte(point).replace(/\d[\d\s\u00a0\u202f.,]*(?:\s?(?:€|%|h\b|j\b))?/g, '… ').replace(/\s+/g, ' ').trim();
   }
 
   /** Fige (ou recalcule) puis réaffiche l'onglet avec le message de réussite. */
