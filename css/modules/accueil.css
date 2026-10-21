@@ -31,6 +31,7 @@
 
 /* Retard d'un OT : texte, jamais la couleur seule */
 .accueil-retard { color: var(--ambre); font-weight: 700; }
+:root[data-theme="clair"] .accueil-retard { color: var(--texte-ambre); }   /* 4,5:1 (CS74) */
 
 /* Carte « Connecter un téléphone » : le QR à gauche, les explications à droite */
 .accueil-connexion { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }

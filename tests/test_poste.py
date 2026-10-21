@@ -23,7 +23,7 @@ import re
 import unittest
 
 import test_dictee   # reconnaissance vocale simulée et relevé des toasts (module seul : ses tests ne sont pas repris)
-from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
+from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo, url_fichier
 from faux_fournisseur_ia import FauxFournisseur
 
 CLE = "sk-test-cle-poste-prevo-8d41b2"
@@ -85,6 +85,49 @@ CONTRASTES_JS = """() => {
   resultat.bordJeton = getComputedStyle(sonde).color;
   sonde.remove();
   return resultat;
+}"""
+
+# Textes réellement affichés (relecture du lot 4) : couleur du texte sur le fond composé de ses ancêtres
+# (couleurs avec transparence comprises ; un fond en image ou dégradé compte pour sa couleur de fond),
+# opacité des ancêtres comprise. Seuil 4,5:1, ou 3:1 pour un grand texte (24 px, ou 18,66 px gras).
+# Non mesurés : éléments masqués, champs désactivés (WCAG les exempte), textes des graphiques (SVG).
+AUDIT_TEXTES_JS = """(racine) => {
+  const lire = (c) => { const m = (c || '').match(/[0-9.]+/g); if (!m) return null;
+    const v = m.map(Number); return { r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1 }; };
+  const sur = (h, b) => ({ r: h.r * h.a + b.r * (1 - h.a), g: h.g * h.a + b.g * (1 - h.a), b: h.b * h.a + b.b * (1 - h.a), a: 1 });
+  const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const fondDe = (el) => {
+    const couches = [];
+    for (let e = el; e; e = e.parentElement) {
+      const c = lire(getComputedStyle(e).backgroundColor);
+      if (c && c.a > 0) { couches.push(c); if (c.a >= 1) break; }
+    }
+    let fond = { r: 255, g: 255, b: 255, a: 1 };
+    for (let i = couches.length - 1; i >= 0; i -= 1) fond = sur(couches[i], fond);
+    return fond;
+  };
+  const opacite = (el) => { let o = 1; for (let e = el; e; e = e.parentElement) o *= Number(getComputedStyle(e).opacity); return o; };
+  const echecs = [];
+  for (const el of document.querySelectorAll(racine + ' *')) {
+    if (el.closest('svg, [hidden], .visuellement-cache') || el.disabled || el.closest(':disabled')) continue;
+    const texte = Array.from(el.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
+    if (!texte || !el.getClientRects().length) continue;
+    const style = getComputedStyle(el);
+    if (style.visibility === 'hidden') continue;
+    const couleur = lire(style.color);
+    const o = opacite(el);
+    const fond = fondDe(el);
+    const r = ratio(sur({ r: couleur.r, g: couleur.g, b: couleur.b, a: couleur.a * o }, fond), fond);
+    const taille = parseFloat(style.fontSize);
+    const grand = taille >= 24 || (taille >= 18.66 && Number(style.fontWeight) >= 700);
+    if (r < (grand ? 3 : 4.5)) {
+      echecs.push((el.className && typeof el.className === 'string' ? el.tagName.toLowerCase() + '.' + el.className.trim().split(/\\s+/).join('.') : el.tagName.toLowerCase())
+        + ' « ' + texte.slice(0, 30) + ' » ' + Math.round(r * 100) / 100 + ':1');
+    }
+  }
+  return Array.from(new Set(echecs));
 }"""
 
 
@@ -420,6 +463,23 @@ class TestCePosteServeur(CasPoste):
                 self.assertGreaterEqual(ratio, 3.0, "%s : %s:1" % (nom, ratio))
         # Les vrais champs de l'écran portent ce contour (ajout de l'orchestrateur).
         self.assertEqual(mesures["bordReel"], mesures["bordJeton"])
+
+    def test_textes_affiches_aa_en_theme_clair_sur_les_ecrans_principaux(self):
+        """Relecture du lot 4 (CS74) : en thème clair, chaque texte affiché atteint 4,5:1 (3:1 en grand)."""
+        page = self.ouvrir()
+        page.check("#poste-theme-clair")
+        page.wait_for_function("document.documentElement.dataset.theme === 'clair'")
+        scenarios = scenarios_demo()
+        routes = ["#/accueil", "#/planning", "#/ot", "#/ot/" + scenarios["ot_statut_en_cours"],
+                  "#/equipement/" + scenarios["causes_equipement"], "#/preventif?onglet=suggestions", "#/di",
+                  "#/indicateurs", "#/magasin", "#/poste", "#/parametres", "#/di/nouvelle"]
+        for route in routes:
+            with self.subTest(route=route):
+                page.evaluate("hash => { location.hash = hash; }", route)
+                page.wait_for_function("hash => location.hash.startsWith(hash)", arg=route)
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(400)
+                self.assertEqual(page.evaluate(AUDIT_TEXTES_JS, "#app"), [], route)
 
     def test_impression_inchangee_noir_sur_blanc_et_pdf(self):
         page = self.ouvrir()

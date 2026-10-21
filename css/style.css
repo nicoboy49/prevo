@@ -698,6 +698,12 @@ a.vignette img, button.vignette img { width: 100%; height: 100%; object-fit: cov
 .toast.erreur { background: var(--rouge); color: var(--sur-clair); }
 .toast.attention { background: var(--ambre); color: var(--sur-clair); }
 :root[data-theme="clair"] .toast.succes, :root[data-theme="clair"] .toast.erreur, :root[data-theme="clair"] .toast.attention { color: var(--sur-couleur); }
+/* Thème clair : les badges (13 px gras = petit texte, 4,5:1 exigé) prennent la teinte foncée de leur
+   couleur ; le sous-titre d'un gros bouton reste opaque (relecture du lot 4, CS74). */
+:root[data-theme="clair"] .badge.ok { color: var(--texte-vert); }
+:root[data-theme="clair"] .badge.ko { color: var(--texte-rouge); }
+:root[data-theme="clair"] .badge.attention { color: var(--texte-ambre); }
+:root[data-theme="clair"] .btn-gros small { opacity: 1; }
 
 /* Zone d'impression : vide et invisible à l'écran (voir §14) */
 #impression { display: none; }
