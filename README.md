@@ -1,5 +1,21 @@
 # Prévo
 
+**La GMAO libre et gratuite des PME industrielles.**
+
+> **Version 1.0.0 — en test sur le terrain.** Prévo est utilisé dans de premières
+> entreprises pilotes. Sauvegardez régulièrement votre dossier de données, et
+> signalez tout problème dans l'onglet *Issues*.
+
+## Pour qui, pourquoi
+
+Dans beaucoup de PME, la maintenance tient sur un cahier, un tableur ou la mémoire
+du technicien. Les GMAO du marché sont chères, longues à déployer et pensées pour
+de grandes équipes. Prévo s'adresse aux entreprises de moins de 50 personnes dont
+la maintenance repose sur 1 à 3 techniciens : il est gratuit, tourne sur un PC de
+l'atelier, se consulte au téléphone, et garde les données dans des fichiers CSV qui
+restent à l'entreprise. Il a été conçu par un technicien de maintenance devenu
+formateur, à partir de vingt ans de terrain.
+
 Prévo est une GMAO (gestion de maintenance assistée par ordinateur) pour un atelier ou une petite
 industrie : parc d'équipements, demandes d'intervention, ordres de travail, maintenance préventive et
 préventif suggéré, magasin de pièces, planning, contrôles réglementaires, indicateurs et rapport mensuel.
@@ -132,21 +148,7 @@ en tête de cellule et la retire à la lecture. À la lecture, il accepte aussi 
 Ne modifiez pas un fichier dans Excel pendant que quelqu'un enregistre dans Prévo : le serveur
 signale un fichier verrouillé, et le mode dossier détecte le conflit.
 
-## Lancer les tests
-
-```
-py -m unittest discover -s tests -v
-```
-
-Les tests de navigateur demandent Playwright et Chromium (`pip install playwright`, puis
-`playwright install chromium`) ; ils ne servent qu'aux tests, pas à l'utilisation de Prévo. Pour
-exécuter aussi l'aller-retour par le vrai Excel (Excel doit être installé sur le poste), définissez
-`PREVO_TEST_EXCEL=1` ; pour l'essai avec un vrai Ollama et `qwen2.5:7b`, `PREVO_TEST_IA=1`. Sans
-ces variables, ces tests sont sautés. La suite complète prend plusieurs minutes.
-
-Outils de développement (Playwright aussi) : `py outils/generer_captures.py` refait les captures
-d'écran (`docs/captures/` et images du guide) sur le jeu de démo ; `py outils/generer_fiche_csv.py`
-refait la fiche technique d'après le schéma.
+Pour lancer les tests ou contribuer : voir CONTRIBUTING.md.
 
 ## Limites connues
 
@@ -202,3 +204,8 @@ bibliothèques tierces et la police, voir `NOTICE`.
 Prévo embarque, sans modification, PapaParse, qrcode-generator, jsQR, JSZip (et pako) et Apache
 ECharts, ainsi que la police Sora (SIL Open Font License 1.1). Leurs licences sont reproduites dans
 `js/lib/LICENCES.txt`.
+
+## Contact
+
+Nicolas Briand — SELECTIS, formation et maintenance industrielle.
+Site : https://selectis.eu

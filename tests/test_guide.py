@@ -199,8 +199,12 @@ class TestReadme(unittest.TestCase):
         self.assertIsNotNone(image, "image Markdown de %s attendue" % CAPTURE_README)
         self.assertTrue((RACINE / CAPTURE_README).is_file(), CAPTURE_README + " absent")
         self.assertTrue((RACINE / CAPTURE_README).read_bytes().startswith(b"\x89PNG"))
-        premier_titre = re.search(r"^## ", texte, re.MULTILINE)
-        self.assertLess(image.start(), premier_titre.start(), "la capture doit être en tête, avant le premier chapitre")
+        # « Pour qui, pourquoi » (passe de lancement) précède la présentation : c'est l'introduction,
+        # la capture doit venir avant le premier vrai chapitre qui la suit.
+        chapitres = [m for m in re.finditer(r"^## (.*)$", texte, re.MULTILINE) if m.group(1) != "Pour qui, pourquoi"]
+        premier_titre = chapitres[0]
+        self.assertLess(image.start(), premier_titre.start(),
+                        "la capture doit être en tête, avant le premier chapitre (hors « Pour qui, pourquoi »)")
         self.assertIn("## Essayer en 30 secondes", texte)
         self.assertIn("(GUIDE.html)", texte)
         self.assertIn("(FICHE_TECHNIQUE_CSV.md)", texte)
