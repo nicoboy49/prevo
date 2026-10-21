@@ -237,15 +237,15 @@ class TestPlanning(CasPlanning):
         lignes = ".pl-grille tr[data-technicien]"
         self.assertEqual(page.eval_on_selector_all(lignes, "l => l.map(e => e.dataset.technicien)"), [technicien])
         self.assertIn("Voir toute l'équipe", page.inner_text(".pl-filtre"))
+        suivant = (datetime.date.fromisoformat(lundi) + datetime.timedelta(days=7)).isoformat()
         page.click(".pl-navigation >> text=Semaine suivante")
-        page.wait_for_function("location.hash.indexOf('semaine=%s') < 0" % lundi)
-        attendre_pret(page)
+        page.wait_for_selector('.pl-ecran[data-lundi="%s"]' % suivant)        # l'écran est réaffiché
         self.assertIn("technicien=" + technicien, page.evaluate("location.hash"))
         self.assertEqual(page.eval_on_selector_all(lignes, "l => l.map(e => e.dataset.technicien)"), [technicien])
         page.click(".pl-filtre a")
-        page.wait_for_function("location.hash.indexOf('technicien=') < 0")
-        attendre_pret(page)
-        self.assertGreater(page.locator(lignes).count(), 1)
+        # Attendre le réaffichage lui-même (le hash change avant lui) : toute l'équipe revient.
+        page.wait_for_function("document.querySelectorAll(%r).length > 1" % lignes)
+        self.assertEqual(page.locator(".pl-filtre").count(), 0)
 
     def test_grille_sans_defilement_et_pas_plus_etroite_sur_grand_ecran(self):
         """Recette puis relecture : à 1 440 et 1 920 px, la grille tient dans son cadre, et la mise en
