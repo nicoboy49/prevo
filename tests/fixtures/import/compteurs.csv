@@ -1,0 +1,8 @@
+Repère;Libellé;Unité
+CP-01;Compteur horaire de marche;h
+CH-01;Compteur horaire du chariot;heures
+PO-02;Compteur horaire de la pompe;h
+CU-01;Compteur horaire de broche;h
+GF-01;Compteur de démarrages du compresseur frigorifique;démarrages
+007;Compteur horaire de la rectifieuse;h
+;Compteur général électrique;kWh

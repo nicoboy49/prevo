@@ -1,0 +1,13 @@
+Code article;Libellé;Famille;Marque;Réf. fabricant;Casier;Unité;Qté stock;Stock mini;Prix achat;Fournisseur;Délai livraison
+ROU-001;Roulement à billes 6204-2RS;Roulements;Rouloran;6204-2RS;A1-01;u;;4;5,15;Mécaroule Distribution;3
+FIL-001;Filtre à air compresseur CP-01;Filtration;Filtravel;FA-3011;D1-01;u;;1;38;Lubrifix Industrie;5
+ROU-101;Roulement à rouleaux coniques 30205;Roulements;Rouloran;30205-J2;A3-02;u;6;2;18,40;Mécaroule Distribution;5
+JNT-201;Joint d’étanchéité Ø 40 x 52 x 7;Étanchéité;Garnitec;004512;E2-01;u;25;10;1,75;Garnitech Pompes;7
+FIX-010;Œillet de levage M12;Visserie;Levamax;OL-M12;F1-03;u;4;;12,90;Boulonnerie des Cimes;10
+ELE-150;Câble souple H07RN-F 3G1,5 (au mètre);Électricité;Voltavel;H07RN-3G15;C3-01;m;120,5;20;2,35;Électro-Alpes Distribution;4
+ROU-101;Roulement conique 30205;Roulements;Rouloran;30205;A3-02;u;2;;18,40;Mécaroule Distribution;5
+LUB-010;Graisse alimentaire H1 (cartouche 400 g);Lubrifiants;Lubrazur;GA-H1;D2-05;cartouche;0;6;9,80;Lubrifix Industrie;5
+FIX-011;Écrou frein M12 (boîte de 50);Visserie;Levamax;EF-M12-50;F1-04;boîte;;1;14,60;Boulonnerie des Cimes;10
+VAR-001;Variateur de fréquence 7,5 kW;Électricité;Voltavel;VF-75;C2-05;u;1;1;1 250,00;Électro-Alpes Distribution;15
+OUT-020;;Outillage;Outilix;FC-10;A2-09;u;5;2;24,00;Mécaroule Distribution;3
+PNE-020;Silencieux pneumatique G1/4;Pneumatique;Hydronel;SP-14;B1-06;u;10;4;3,20;Fluidalpes Services;2 semaines

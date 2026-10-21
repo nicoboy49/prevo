@@ -1,0 +1,20 @@
+N° OT,Machine,Date demande,Début,Fin,Type,Libellé,Compte rendu,Durée arrêt (h),Arrêt,Symptôme,Cause,Remède,Intervenant,Temps (h)
+3987,PO-01,18/11/2024 15:45,18/11/2024 16:00,18/11/2024 17:30,Dépannage,Pompe ne démarre plus,"Contacteur de puissance hors service, remplacé. Essai de démarrage correct.",1.5,oui,Ne démarre pas,Contacteur hors service,Remplacement de composant électrique,GARNIER Thomas,1.5
+3990,SC-01,09/12/2024 08:00,09/12/2024 08:30,09/12/2024 09:30,Préventif,Graissage mensuel de la scie,"Guides graissés, tension du ruban contrôlée.",,non,,,,Karim Benali,1
+4512,CP-01,14/01/2025 07:40,14/01/2025 08:05,14/01/2025 10:30,Dépannage,Fuite d'huile au carter,"Joint de carter remplacé, niveau d'huile complété.",2.5,oui,Fuite,Garniture usée,R01,Karim Benali,2.5
+4513,PO-02,03/02/2025 10:15,03/02/2025 10:40,03/02/2025 12:10,Curatif,Bruit anormal de la pompe,"Roulement côté accouplement remplacé, alignement contrôlé.",1.5,oui,Bruit anormal,Roulement hors service,Remplacement de pièce,Karim Benali,"1,75"
+4514,CV-02,11/02/2025 06:50,11/02/2025 07:05,11/02/2025 07:50,Dépannage,Arrêts intempestifs du convoyeur,"Cellule de détection encrassée, nettoyée et réglée.",0.75,oui,Arrêt intempestif,Capteur encrassé,Nettoyage,Julien Moreau,0.75
+4515,PR-01,24/02/2025 13:20,24/02/2025 13:30,24/02/2025 16:00,Dépannage,Fuite sur flexible hydraulique,"Flexible HP percé, remplacé par un flexible ""DN10"" serti.
+Essai sous pression : aucune fuite.",,oui,S01,C10,R01,Thomas Garnier,2.5
+4516,GF-01,10/03/2025 09:00,10/03/2025 09:15,10/03/2025 12:15,Préventif,Entretien trimestriel du groupe froid,"Condenseurs nettoyés, pressions relevées et conformes.",,non,,,,Julien Moreau,3
+4517,CU-01,19/03/2025 14:10,20/03/2025 08:00,20/03/2025 11:30,Correctif différé,Changeur d'outils bloqué en position,Came d'indexage desserrée : resserrée et réglée.,1.5,oui,Arrêt intempestif,Desserrage,Resserrage,Sophie Lambert,3.5
+4518,EM-01,02/04/2025 10:00,07/04/2025 13:00,07/04/2025 17:00,Amélioration,Ajout d'un capteur de présence film,"Capteur ajouté et câblé, programme modifié, essais concluants.",,non,,,Modification,Sophie Lambert,4
+4519,PT-01,15/04/2025 08:00,16/04/2025 08:00,16/04/2025 10:00,Réglementaire,Levée des observations de la VGP,Fin de course de levée réglé ; crochet remplacé par le constructeur.,,non,,,,Pierre Martel,
+4520,CP-01,14/01/2025 07:40,14/01/2025 08:10,14/01/2025 10:20,Dépannage,Fuite d'huile au carter,Joint du carter changé.,2.5,oui,Fuite,Garniture usée,R01,Karim Benali,2.5
+4521,CV-03,,,05/05/2025 16:00,Dépannage,Bande déchirée en sortie de ligne,Bande remplacée.,1,oui,,,Remplacement de pièce,Thomas Garnier,1
+4522,ET-01,,12/05/2025 09:30,12/05/2025 10:15,Dépannage,Étiquettes posées de travers,Tête de pose déréglée : réglage puis essai sur 50 étiquettes.,0.5,oui,défaut qualité,Dérive de réglage,Réglage,Thomas Garnier,0.75
+4523,XX-99,19/05/2025 11:00,19/05/2025 11:20,19/05/2025 12:00,Dépannage,Fuite d'air sur le réseau,Raccord resserré.,,non,Fuite,Desserrage,Resserrage,Julien Moreau,0.5
+4524,CH-01,20/05/2025 14:00,20/05/2025 14:20,20/05/2025 16:20,Dépannage,Le chariot ne lève plus,"Fuite sur le vérin de levée, joint remplacé.",2,,C04,Usure générale,Réparation,Karim Benali,2
+4525,VE-01,03/06/2025 07:30,03/06/2025 08:00,03/06/2025 09:10,,,"Courroie du ventilateur détendue : retendue et alignée, puis vibrations mesurées et correctes après remise en marche.",,non,Vibration,Courroie détendue,Réglage,Julien Moreau,1
+4601,CV-02,25/09/2025 12:54,25/09/2025 13:51,25/09/2025 14:51,Dépannage,"CV-02 — Arrêts intempestifs, capteur à nettoyer","Cellule nettoyée, câblage vérifié.",2,oui,S05,C04,R03,Julien Moreau,1
+4514,CV-02,11/02/2025 06:50,11/02/2025 07:05,11/02/2025 07:50,Dépannage,Arrêts intempestifs du convoyeur,"Cellule de détection encrassée, nettoyée et réglée.",0.75,oui,Arrêt intempestif,Capteur encrassé,Nettoyage,Julien Moreau,1

@@ -1,0 +1,44 @@
+Famille;Code;Libellé
+Symptome;S01;Fuite
+Symptome;S02;Bruit anormal
+Symptome;S03;Vibration
+Symptome;S04;Échauffement
+Symptome;S05;Arrêt intempestif
+Symptome;S06;Ne démarre pas
+Symptome;S07;Défaut qualité
+Symptome;S08;Pression ou débit bas
+Symptome;S09;Déclenchement disjoncteur
+Symptome;S10;Odeur de brûlé
+Symptome;S99;Autre symptôme
+symptôme;S11;Fumée
+CAUSE;C01;Garniture usée
+CAUSE;C02;Roulement hors service
+CAUSE;C03;Courroie détendue
+CAUSE;C04;Capteur encrassé
+CAUSE;C05;Filtre colmaté
+CAUSE;C06;Desserrage
+CAUSE;C07;Défaut de lubrification
+CAUSE;C08;Surcharge moteur
+CAUSE;C09;Contacteur hors service
+CAUSE;C10;Flexible percé
+CAUSE;C11;Dérive de réglage
+CAUSE;C12;Erreur de manœuvre
+CAUSE;C13;Corrosion
+CAUSE;C14;Pièce cassée
+CAUSE;C99;Autre cause
+Cause;C15;Usure normale
+Remede;R01;Remplacement de pièce
+Remede;R02;Réglage
+Remede;R03;Nettoyage
+Remede;R04;Resserrage
+Remede;R05;Graissage
+Remede;R06;Réparation
+Remede;R07;Remplacement de composant électrique
+Remede;R08;Réarmement
+Remede;R09;Modification
+Remede;R10;Sous-traitance
+remède;R11;Remplacement de l'ensemble
+REMÈDE;R12;Mise à jour du programme automate
+Défaut;D01;Défaut électrique
+cause;;Sans code
+Cause;C15;Usure
