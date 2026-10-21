@@ -348,7 +348,7 @@ class TestServeur(CasApp):
             attendre_pret(page)
             contenu = self.texte("#contenu")
             self.assertIn(CREDIT, contenu)
-            self.assertIn("0.1.0", contenu)
+            self.assertIn("1.0.0", contenu)
             self.assertIn("Les profils adaptent les écrans, ce n'est pas une sécurité", contenu)
             self.assertIn("Usage sur réseau local uniquement, sans authentification", contenu)
             # Lot 4 : assistant IA et dictée décrits, lien vers le guide (servi par serveur.py)

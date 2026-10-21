@@ -36,8 +36,8 @@
 
 const App = (() => {
 
-  const VERSION = '0.1.0';
-  const DATE_VERSION = '2026-10-19';
+  const VERSION = '1.0.0';
+  const DATE_VERSION = '2026-10-21';
   const CLE_PROFIL = 'prevo.profil';
   const CLE_POSTE = 'prevo.poste';
   const CLE_MENU_REPLIE = 'prevo.menuReplie';
