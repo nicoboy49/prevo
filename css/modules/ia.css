@@ -74,3 +74,7 @@
 @media print {
   .dictee-bouton, .dictee-aide { display: none !important; }
 }
+
+/* Emplacement d'un bouton IA (Ia.emplacement) : la carte « Résumé de l'historique (IA) » de la fiche
+   équipement n'apparaît qu'avec son bouton (IA utilisable sur ce poste). */
+.parc-resume-ia:has(> .ia-emplacement[hidden]) { display: none; }

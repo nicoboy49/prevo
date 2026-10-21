@@ -113,7 +113,7 @@ const Ia = (() => {
 
   // Minuscules sans accents : « Dégradé » et « degrade » se comparent pareil.
   function motComparable(valeur) {
-    return texte(valeur).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    return texte(valeur).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
   function modeCourant() {
@@ -669,6 +669,17 @@ const Ia = (() => {
    */
   function tracerUtilisation(table, id, champ, modele) {
     return Donnees.journaliser(table, id, 'proposition IA utilisée (' + texte(modele) + ') : ' + texte(champ));
+  }
+
+  // Autorisation du responsable changée (parametres.csv, sur ce poste ou un autre) : « changement »
+  // (raison 'autorisation'), pour que les écrans posent ou retirent leurs boutons sans réafficher (D67).
+  let autorisationConnue = null;
+  if (typeof Donnees !== 'undefined' && Donnees.evenements) {
+    Donnees.evenements.addEventListener('changement', (evenement) => {
+      if (!((evenement.detail && evenement.detail.tables) || []).includes('parametres')) return;
+      const autorise = distantAutorise();
+      if (autorise !== autorisationConnue) { autorisationConnue = autorise; signaler('autorisation'); }
+    });
   }
 
   return {

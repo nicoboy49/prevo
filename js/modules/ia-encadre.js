@@ -8,6 +8,10 @@
 // API :
 //   Ia.bouton(libelle, surClic) → <button class="ia-bouton"> ou null si l'IA n'est pas utilisable
 //     (Ia.active() et Ia.etat() === 'ok') ; surClic(evenement, bouton).
+//   Ia.emplacement(libelle, surClic) → <div class="ia-emplacement"> qui porte ce bouton quand l'IA est
+//     utilisable et le retire sinon, au fil des changements de l'IA (test d'ouverture fini, fournisseur
+//     injoignable, réglages du poste, autorisation du responsable), sans réafficher l'écran ; masqué
+//     (hidden) sans bouton.
 //   Ia.ouvrirEncadre({ apres, fonction, donnees, rendu, utiliser, modifier, boutons }) → Promise de
 //     l'issue { choix, resultat, modele, fournisseur, erreur } ; choix : 'utiliser' | 'modifier' |
 //     'ignorer' | 'annuler' | 'erreur' | 'ferme' | la `valeur` d'un bouton propre.
@@ -233,5 +237,27 @@ Object.assign(Ia, (() => {
     });
   }
 
-  return { bouton, ouvrirEncadre, fermerEncadre, afficherMention };
+  /** Emplacement d'un bouton IA qui suit l'état de l'IA tant qu'il est dans la page (voir l'en-tête). */
+  function emplacement(libelle, surClic) {
+    const zone = UI.element(UI.html`<div class="ia-emplacement" hidden></div>`);
+    let insere = false;
+    const poser = () => {
+      const disponible = Ia.active() && Ia.etat() === 'ok';
+      if (Boolean(zone.firstElementChild) === disponible) return;     // inchangé : l'encadré ouvert reste
+      zone.textContent = '';
+      const element = disponible ? bouton(libelle, surClic) : null;
+      if (element) zone.appendChild(element);
+      zone.hidden = !element;
+    };
+    const suivre = () => {
+      if (!zone.isConnected) { if (insere) Ia.evenements.removeEventListener('changement', suivre); return; }
+      insere = true;
+      poser();
+    };
+    Ia.evenements.addEventListener('changement', suivre);
+    poser();
+    return zone;
+  }
+
+  return { bouton, emplacement, ouvrirEncadre, fermerEncadre, afficherMention };
 })());

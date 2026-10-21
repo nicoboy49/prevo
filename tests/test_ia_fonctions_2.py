@@ -180,7 +180,24 @@ class TestResume(CasFonctions):
         autre.goto(self.serveur.url + "/#/equipement/" + equipement)
         attendre_pret(autre)
         autre.wait_for_selector(".parc-complements")
-        self.assertEqual(autre.locator(".parc-resume-ia, .ia-bouton").count(), 0)
+        # Sans IA : carte masquée (elle suit l'état de l'IA, Ia.emplacement) et aucun bouton
+        self.assertEqual(autre.locator(".parc-resume-ia:visible, .ia-bouton").count(), 0)
+
+    def test_bouton_pose_a_la_fin_du_test_d_ouverture_sans_reafficher(self):
+        """Fiche ouverte AVANT la fin du test du fournisseur (relais retardé) : la carte et son bouton
+        apparaissent ensuite d'eux-mêmes, sans réafficher la fiche (ajout de l'orchestrateur)."""
+        equipement = scenarios_demo()["causes_equipement"]
+        regler_ia(self.contexte, url=self.faux.url, modele="faux")
+        preregler_profil(self.contexte, "responsable", "Responsable")
+        self.contexte.route(self.serveur.url + "/api/ia", lambda route: (time.sleep(1.5), route.continue_()))
+        page = self.page
+        page.goto(self.serveur.url + "/#/equipement/" + equipement)
+        page.wait_for_selector(".parc-complements")
+        self.assertEqual(page.evaluate("Ia.etat()"), "inconnu")
+        self.assertEqual(page.locator(".parc-resume-ia:visible, .ia-bouton").count(), 0)
+        page.evaluate("document.querySelector('.parc-complements').dataset.temoin = '1'")
+        page.wait_for_selector(".parc-resume-ia .ia-bouton", state="visible")
+        self.assertEqual(page.evaluate("document.querySelector('.parc-complements').dataset.temoin"), "1")
 
 
 class TestCommentaireRapport(CasFonctions):

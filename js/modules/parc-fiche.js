@@ -139,7 +139,8 @@ Object.assign(Parc, (() => {
   }
 
   // Lot 4 (§17.5) : résumé de l'historique par l'IA (technicien et responsable). Rien n'est écrit :
-  // « Copier » met le texte dans le presse-papiers. Carte absente si l'IA n'est pas utilisable.
+  // « Copier » met le texte dans le presse-papiers. Carte masquée tant que l'IA n'est pas utilisable
+  // (Ia.emplacement : elle apparaît ou disparaît avec le bouton, sans réafficher la fiche).
   function libelleCode(famille, code) {
     const ligne = code ? Donnees.lignes('codes_defaillance').find((c) => c.famille === famille && c.code === code) : null;
     return ligne ? ligne.libelle : (code || '');
@@ -148,7 +149,7 @@ Object.assign(Parc, (() => {
   function carteResumeIa(equipement) {
     const carte = UI.element(UI.html`<article class="carte parc-resume-ia"><div class="entete-carte"><h2>Résumé de l'historique (IA)</h2></div>
       <p class="note">L'IA résume les interventions de l'équipement : relisez avant de vous en servir.</p></article>`);
-    const bouton = Ia.bouton('Résumer l\'historique', () => {
+    const zone = Ia.emplacement('Résumer l\'historique', (evenement, bouton) => {
       const ots = Donnees.lignes('ordres_travail').filter((ot) => ot.equipement_id === equipement.id && ot.statut !== 'Annulé')
         .map((ot) => ({ date: (ot.date_fin || ot.date_creation || '').slice(0, 10), type: ot.type, titre: ot.titre, compteRendu: ot.compte_rendu,
           codes: [libelleCode('symptôme', ot.symptome_code), libelleCode('cause', ot.cause_code), libelleCode('remède', ot.remede_code)].filter(Boolean) }));
@@ -159,8 +160,7 @@ Object.assign(Parc, (() => {
           return true;
         } }] });
     });
-    if (!bouton) return null;
-    carte.appendChild(bouton);
+    carte.appendChild(zone);
     return carte;
   }
 

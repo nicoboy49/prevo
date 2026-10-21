@@ -522,9 +522,12 @@ Object.assign(Preventif, (() => {
         : UI.html`<p class="muted">Aucune opération${responsable ? ' : ajoutez ci-dessous les opérations à réaliser, dans l\'ordre.' : '.'}</p>`}
       ${responsable ? formulaireAjoutHtml() : ''}
       <p class="note">Chaque OT généré reçoit une copie de cette check-list : la modifier ne change pas les OT déjà créés.</p>`);
-    // Lot 4 (§17.5) : check-list de départ proposée par l'IA (responsable ; bouton absent sans IA).
-    const boutonIa = responsable ? Ia.bouton('Proposer une check-list', () => proposerCheckListe(section, gammeId, boutonIa)) : null;
-    if (boutonIa) UI.$('.pv-ajout-operation', section).insertAdjacentElement('afterend', boutonIa);
+    // Lot 4 (§17.5) : check-list de départ proposée par l'IA (responsable ; bouton absent sans IA, posé
+    // ou retiré au fil de l'état de l'IA).
+    if (responsable) {
+      UI.$('.pv-ajout-operation', section).insertAdjacentElement('afterend',
+        Ia.emplacement('Proposer une check-list', (evenement, bouton) => proposerCheckListe(section, gammeId, bouton)));
+    }
   }
 
   /** Cause visée par la gamme : celle d'une suggestion ouverte qui la cite, ou « Prévenir : <cause> ». */

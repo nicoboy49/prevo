@@ -197,7 +197,7 @@ Object.assign(Rapport, (() => {
    */
   function brancherCommentaireIa(formulaire, zoneCommentaire) {
     zoneCommentaire.addEventListener('input', () => { if (!zoneCommentaire.value.trim()) delete zoneCommentaire.dataset.iaModele; });
-    const bouton = Ia.bouton('Proposer un commentaire', () => {
+    const zone = Ia.emplacement('Proposer un commentaire', (evenement, bouton) => {
       const mois = formulaire.querySelector('#rapports-mois').value;
       const rapport = Rapport.donnees(mois);
       const remplir = (resultat, reponse, retoucher) => {
@@ -209,7 +209,7 @@ Object.assign(Rapport, (() => {
         donnees: { mois: libelleMois(mois), jetons: Rapport.jetonsCommentaire(rapport), points: rapport.faits.concat(rapport.decisions) },
         utiliser: (resultat, reponse) => remplir(resultat, reponse, false), modifier: (resultat, reponse) => remplir(resultat, reponse, true) });
     });
-    if (bouton) zoneCommentaire.closest('.champ').insertAdjacentElement('afterend', bouton);
+    zoneCommentaire.closest('.champ').insertAdjacentElement('afterend', zone);
   }
 
   /** Fige (ou recalcule) puis réaffiche l'onglet avec le message de réussite. */
