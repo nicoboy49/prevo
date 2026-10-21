@@ -362,14 +362,18 @@ d'anomalie n'était pas saisie) ; une suggestion ignorée ne revient que si les 
 
 ### Les chiffres
 
-- **9 tâches** (T55 à T63) en **6 vagues** ; la suite complète finale est partagée entre les deux
-  dernières vagues, pour que chaque vérification outillée tienne au premier plan sans être coupée
-  faute de mémoire (leçon du lot 3).
-- Avant la clôture : **779 tests** dans la suite (718 à la fin du lot 3).
+- **9 tâches** (T55 à T63) en **6 vagues**, toutes validées par l'outil de vérification ; une
+  étiquette git par vague, puis l'étiquette `lot-3-bis`. La suite complète finale est partagée entre
+  les deux dernières vagues (environ 7 minutes chacune), pour que chaque vérification tienne au
+  premier plan sans être coupée faute de mémoire, comme au lot 3. Les vagues déjà validées ont été
+  revérifiées après chaque série de corrections.
+- **2 relectures** (les cinq premières tâches, puis une relecture finale des écrans, de la recette
+  et de toutes les corrections) : **1 défaut critique** et 19 défauts mineurs, tous corrigés.
+- **781 tests** dans la suite (718 à la fin du lot 3).
 - **Performance** sur le jeu de charge (500 équipements, 5 000 OT) : l'onglet des suggestions
-  s'affiche en une trentaine de millisecondes (budget 1 s ; 75 suggestions), le chargement complet
-  reste sous la seconde en médiane (budget 2 s). Le budget a été forcé à 1 ms pour prouver que le
-  test sait échouer.
+  s'affiche en moins de 0,1 s, mise en page comprise (budget 1 s ; 75 suggestions), et le chargement
+  complet reste sous la seconde en médiane (budget 2 s). Le budget a été forcé à 1 ms pour prouver
+  que le test sait échouer.
 
 ### Ce que les relectures ont trouvé
 
@@ -378,6 +382,18 @@ tous corrigés. Le plus parlant : pour trois pannes survenues le même jour, la 
 « environ une par jour », une fréquence fausse ; elle n'en annonce plus aucune. Le relecteur a aussi
 prouvé que le jeu de démo complété garde le contenu de toutes les lignes des lots précédents, alors
 que leurs numéros se sont décalés.
+
+La relecture finale a trouvé **un défaut critique** : les cartes « créer une gamme » et « revoir le
+préventif » n'affichaient **aucune date**, alors que le critère CS53 exige les dates de chaque
+suggestion. Le contrat d'architecture les avait oubliées, et ni les tests ni la recette ne les
+vérifiaient : la vérification outillée passait donc. Chaque carte montre maintenant la période des
+faits et la date de chaque OT lié. Parmi les dix défauts mineurs : un motif contenant un séparateur
+de ligne Unicode était écrit au journal mais jamais relu (la suggestion restait ouverte) ; fermer la
+fenêtre « Ignorer » avec Échap pendant l'écriture laissait un compteur faux ; sur téléphone, l'onglet
+« Suggestions » ouvert depuis l'accueil était hors de vue dans sa barre. Chaque nouveau test a été
+lancé sur l'ancien code pour prouver qu'il échouait. Le relecteur a aussi vérifié, sans y trouver de
+défaut, que rien n'est écrit sans action (le fichier des gammes reste identique à l'octet sur
+114 affichages, par les trois profils) et qu'un motif piégé s'affiche comme du texte.
 
 ### Les preuves propres au lot 3 bis
 
