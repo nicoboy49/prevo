@@ -1,12 +1,12 @@
 # Prévo
 
 Prévo est une GMAO (gestion de maintenance assistée par ordinateur) pour un atelier ou une petite
-industrie : parc d'équipements, demandes d'intervention, ordres de travail, maintenance préventive
-et magasin de pièces. Elle tourne sans installation lourde ni abonnement : les données sont des
+industrie : parc d'équipements, demandes d'intervention, ordres de travail, maintenance préventive,
+magasin de pièces, planning, contrôles réglementaires et indicateurs. Elle tourne sans installation lourde ni abonnement : les données sont des
 fichiers CSV lisibles dans Excel, stockés dans un dossier de votre choix. Le code est écrit en
 français, avec des bibliothèques embarquées et aucun appel vers Internet.
 
-Cette version contient les **lots 1 et 2** ; les lots suivants sont listés plus bas. Une
+Cette version contient les **lots 1 à 3** ; les lots suivants sont listés plus bas. Une
 présentation avec capture d'écran viendra au lot 4.
 
 ## Essayer en 30 secondes
@@ -88,17 +88,49 @@ quotidiennes (`donnees/sauvegardes/`) et les documents joints.
   automatiquement, et le tout est retenté à l'ouverture suivante.
 - Un jeu de démo fictif de treize mois d'historique.
 
+## Ce que contient le lot 3
+
+- **Indicateurs** (responsable) : disponibilité, MTBF, MTTR (avec « dont attente de pièces » quand
+  l'historique le permet), durée d'arrêt, part et respect du préventif, OT en retard, délais de prise
+  en charge, coût et valeur du stock, sur une période au choix (12 mois glissants par défaut), par
+  criticité ou par atelier. Chaque chiffre dit sur combien d'OT il porte et donne la liste de ses OT
+  sources ; un chiffre qui ne peut pas être calculé dit pourquoi au lieu d'afficher zéro. Un encadré
+  « Comprendre » donne les définitions. Graphiques : Pareto des pannes et des arrêts, heures par mois,
+  MTBF et MTTR des équipements critiques, causes des pannes, charge et capacité des techniciens ;
+  chacun avec ses valeurs en tableau et des exports CSV et image.
+- **Planning de la semaine** (lundi à dimanche) : une ligne par technicien avec sa charge et sa
+  capacité, et la liste des OT préparés à planifier. On glisse une carte sur un jour, ou on passe par
+  le bouton « Planifier… » (sans souris). Les règles des OT s'appliquent : pièce manquante → mise en
+  attente proposée, habilitation manquante → avertissement inscrit au journal. Le technicien consulte ;
+  sur téléphone, le planning est une liste par jour.
+- **Étiquettes QR par lot** : un atelier ou une ligne (avec tout ce qu'il contient), planches A4 de
+  24 ou de 8 étiquettes, décalage d'impression réglable ; le repère de l'équipement est écrit en clair.
+- **Contrôles réglementaires** : échéancier par équipement (en retard, observations à lever, à
+  planifier, à jour), enregistrement d'un contrôle réalisé avec son rapport (PDF ou photo), levée des
+  observations, création d'un OT réglementaire pré-rempli. Prévo calcule la date suivante à partir
+  de la périodicité que vous saisissez ; il ne fait pas de veille réglementaire.
+- **Équipe et habilitations** : techniciens (capacité, taux horaire visible du seul responsable),
+  habilitations avec leur échéance ; un renouvellement ajoute une ligne et garde l'historique.
+- **Accueil** : compteurs « contrôles sous 30 jours » et « habilitations à renouveler ».
+- **Rapport mensuel figé** : une page A4 par mois (chiffres clés comparés au mois précédent et à
+  l'année précédente, faits marquants, jusqu'à trois points à examiner, dont « réparer ou remplacer ? »
+  quand le coût de maintenance d'un équipement sur 12 mois dépasse un seuil réglable, 50 % de sa
+  valeur de remplacement par défaut). Il est enregistré avec les documents et se rouvre sans Prévo.
+  Au début de chaque mois, l'accueil propose de figer le mois écoulé ; « Préparer un courriel » ouvre
+  la messagerie du poste avec un résumé : Prévo n'envoie rien lui-même.
+- **Paramètres** : codes de défaillance (ajout, changement de libellé) et réglages (tolérance du
+  préventif, seuil « réparer ou remplacer ? »…).
+- Format des fichiers inchangé (version 2) : une base du lot 2 s'ouvre telle quelle. Le jeu de démo
+  est complété (contrôles, planning sur quatre semaines, historique des statuts des pannes).
+
 ## Ce qui vient ensuite
 
-- **Lot 3** : indicateurs, planning, étiquettes QR, contrôles réglementaires, habilitations,
-  rapport mensuel.
 - **Lot 3 bis** : préventif suggéré, à partir des anomalies constatées pendant les préventifs.
 - **Lot 4** : assistant IA, dictée vocale, `GUIDE.html`, `FICHE_TECHNIQUE_CSV.md`, présentation
   du projet avec capture d'écran.
 - **Lot « Import »** : assistant d'import de fichiers existants (dont `.xls`).
 
-Ces éléments ne sont pas encore réalisés. Les compteurs d'accueil correspondants (contrôles
-réglementaires, habilitations) arriveront avec le lot 3.
+Ces éléments ne sont pas encore réalisés.
 
 ## Format des données
 
@@ -138,7 +170,17 @@ minutes.
 - **Chrome ou Edge requis pour le mode dossier** (API d'accès aux fichiers).
 - **Coût des pièces au prix actuel.** Le coût d'un OT utilise le prix actuel de l'article ; une
   réception d'achat ne change pas ce prix (le responsable le modifie à la main), mais un changement
-  de prix modifie aussi le coût des OT passés.
+  de prix modifie aussi le coût des OT passés, et donc les indicateurs de coût. Un rapport mensuel
+  figé, lui, garde les chiffres du jour où il a été figé (« Recalculer » en crée une nouvelle version).
+- **Étiquettes QR et adresse du PC.** En mode serveur, le QR contient l'adresse réseau du PC. Si
+  elle change (la box attribue une autre adresse, le port change), les étiquettes déjà collées ne
+  mènent plus à la fiche : réservez une adresse fixe pour ce PC dans la box. En modes dossier et
+  démo, le QR contient `GMAO:<identifiant>`, lisible seulement par le scan de Prévo sur ce poste.
+- **Les indicateurs valent ce que vaut la saisie.** MTBF, MTTR et disponibilité reposent sur la durée
+  d'arrêt saisie à la clôture et sur les heures de fonctionnement par jour de chaque équipement ; un
+  équipement sans ces heures est exclu, et la liste des exclus est affichée. « Dont attente de
+  pièces » n'est calculé que pour les pannes dont tout l'historique est au journal de Prévo (pas pour
+  un OT ajouté à la main dans Excel).
 - Sur téléphone en mode serveur, la page est servie en HTTP : le scan par caméra intégrée à la
   page n'est pas proposé ; la photo passe par l'appareil photo du téléphone.
 
@@ -147,7 +189,7 @@ minutes.
 Le cahier des charges a été rédigé par Nicolas Briand avec Claude ; le code a ensuite été produit
 par des sous-agents Claude Code, sous la coordination d'un orchestrateur qui n'accepte une tâche
 que si sa vérification passe, avec relecture indépendante à chaque étape. La méthode et les
-preuves, lot 1 puis lot 2, sont détaillées dans [docs/PILOTAGE.md](docs/PILOTAGE.md).
+preuves, lot par lot, sont détaillées dans [docs/PILOTAGE.md](docs/PILOTAGE.md).
 
 ## Licence et crédits
 

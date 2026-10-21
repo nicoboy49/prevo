@@ -7,7 +7,7 @@ vise un lecteur qui se demande si un projet confié à une IA peut être contrô
 Les chiffres cités viennent de commandes lancées au moment de la rédaction (suite de tests, historique
 git) ou du journal de chantier, qui consigne chaque vérification. Ce qui n'a pas été vérifié est
 présenté comme prévu. Les sections 1 à 6 décrivent la méthode et le lot 1 ; la section 7 décrit le
-lot 2, mené de la même façon.
+lot 2 et la section 8 le lot 3, menés de la même façon.
 
 ## 1. Principe : écrire ce qui est attendu avant de coder
 
@@ -106,7 +106,7 @@ suite rejoue **une seule fois** le test concerné en le signalant ; toute autre 
 - Les chiffres de performance sont ceux d'un poste et d'un jeu de données précis.
 - Prévo n'a pas d'authentification (voir les limites dans le `README.md`) : c'est un choix de
   périmètre assumé, pas une propriété que la méthode corrigerait.
-- Les lots 3, 3 bis (préventif suggéré), 4 et « Import » ne sont pas réalisés.
+- Les lots 3 bis (préventif suggéré), 4 et « Import » ne sont pas réalisés.
 
 ## 7. Lot 2 : préventif, magasin, causes fréquentes
 
@@ -207,7 +207,111 @@ La règle du lot 1 est restée : reproduire un défaut par un test qui échoue, 
   la documentation, les tests et le code du serveur répondent « introuvable ». Un relecteur a
   essayé 125 chemins d'attaque sur cette liste : aucune fuite.
 
-## 8. À retenir pour piloter une IA
+## 8. Lot 3 : indicateurs, planning, contrôles, rapport mensuel
+
+Le lot 3 ajoute le pilotage : indicateurs et graphiques, planning de la semaine, étiquettes QR par
+lot, contrôles réglementaires, équipe et habilitations, et un rapport mensuel figé. Il a suivi la
+même méthode : cahier des charges validé par Nicolas avant le code, contrat d'architecture écrit
+avant les tâches (§15 de `docs/ARCHITECTURE.md`), vérification relancée par l'orchestrateur,
+relecture indépendante, recette automatisée.
+
+Une différence d'organisation : la méthode a été **allégée**. L'orchestrateur a écrit lui-même les
+tâches courtes ou très liées au contrat (socle, règles des indicateurs, des contrôles, de l'équipe et
+du planning, écran du planning, rapport mensuel, accueil, recette, performance, documentation) ; des
+sous-agents ont écrit les autres (jeu de démo, étiquettes, contrôles, équipe, paramètres, écran des
+indicateurs). Le code de l'orchestrateur a été relu comme celui des sous-agents, par des relecteurs
+qui ne l'avaient pas écrit. C'est utile : six des sept défauts critiques trouvés étaient dans son
+code ou dans ses corrections.
+
+### Les décisions de Nicolas
+
+Le cahier des charges du lot 3 compte **17 décisions** (D33 à D49) et **15 critères de succès**
+(CS36 à CS50). Trois décisions ont été tranchées par Nicolas sur des options présentées avec leurs
+conséquences, et trois propositions validées :
+
+- **Définition du MTTR** (D36) : durée d'arrêt moyenne d'une panne, attentes comprises (le « temps
+  moyen de rétablissement » de la norme CEI 60050-192) ; avec, en plus, « dont attente de pièces »
+  quand l'historique des statuts de la panne est complet dans le journal.
+- **Repère « réparer ou remplacer ? »** (D44) : seuil en paramètre modifiable, **50 %** par défaut,
+  du coût de maintenance des 12 derniers mois rapporté à la valeur de remplacement ; l'équipement est
+  signalé « à examiner », jamais « à remplacer ».
+- **Diffusion du rapport** (D45) : Prévo n'envoie rien ; « Préparer un courriel » ouvre la
+  messagerie du poste avec un résumé, et le rapport reste imprimable.
+- Propositions validées : l'écran Équipe est ouvert au technicien **sans aucun taux horaire** ; le
+  planning va du lundi au dimanche ; deux formats de planches d'étiquettes (24 et 8 par page).
+
+D'autres choix, plus techniques, ont été pris par l'orchestrateur et signalés à Nicolas : un MTBF ou
+une disponibilité qui serait négatif (durée d'arrêt plus longue que le temps requis de la période)
+est déclaré non calculable, avec sa raison ; sans panne sur la période, la disponibilité vaut 100 % ;
+pour un délai cible de 0 h (« immédiat »), seule la médiane est affichée, car une part « dans le
+délai » de 0 % serait trompeuse ; une habilitation dont l'échéance est illisible est tenue pour échue.
+
+### Les chiffres
+
+- **14 tâches** (T41 à T54) réparties en **6 vagues** ; une étiquette git par vague validée.
+- **3 relectures** : vagues 1 et 2, vagues 3 à 5, puis une relecture finale des dernières tâches et
+  de toutes les corrections. Les deux premières ont trouvé **7 défauts critiques** (détail
+  ci-dessous), tous corrigés test à l'appui.
+- **715 tests** dans la suite (581 à la fin du lot 2).
+- **Performance** mesurée sur le jeu de charge de 500 équipements et 5 000 ordres de travail :
+  premier chargement d'environ 1,3 s (budget 2 s) ; écran Indicateurs sur 12 mois, ECharts compris,
+  d'environ 0,6 s (budget 2 s) ; planning de la semaine en quelques millisecondes (budget 1 s) ;
+  rapport mensuel figé d'environ 0,4 s (budget 5 s). Chaque budget a été forcé à 1 ms pour prouver
+  que le test sait échouer.
+
+### Ce que les relectures et la recette ont trouvé
+
+Les sept défauts critiques :
+
+- un document `.html` (un rapport mensuel, par exemple) ouvert **hors serveur** (modes dossier et
+  démo) **exécutait ses scripts** : un fichier déposé dans les documents aurait pu agir dans Prévo ;
+  il s'affiche maintenant dans un cadre isolé où aucun script ne s'exécute, comme en mode serveur ;
+- le **MTBF et la disponibilité pouvaient être négatifs** quand la durée d'arrêt dépassait le temps
+  requis de la période (panne à cheval sur une période courte) ; ils sont maintenant déclarés non
+  calculables, avec la raison ;
+- une demande **regroupée après coup** sur un OT pouvait dater la panne, trop tard, ce qui faussait le
+  MTBF et les délais de prise en charge. Le défaut a été trouvé **deux fois** : la première correction
+  laissait passer les OT sans lien direct vers leur demande ;
+- la **part du préventif** affichait un nombre de saisies comme si c'était des heures : une régression
+  introduite par une correction de l'orchestrateur ;
+- sur téléphone, l'onglet des rapports mensuels **faisait défiler toute la page** de côté (classe CSS
+  inexistante). La recette ne l'avait pas vu, car la liste des rapports y était vide ;
+- les **liens vers les OT sources** de chaque chiffre, exigés par le cahier des charges (D35),
+  manquaient à l'écran des indicateurs.
+
+Parmi les autres défauts relevés et corrigés :
+
+- un test du rapport mensuel avait le mois **écrit en dur** : il aurait échoué à partir du 1er novembre ;
+  il calcule maintenant le mois écoulé depuis la date du jour ;
+- une ancienne habilitation à l'échéance illisible **l'emportait sur un renouvellement** valide ;
+- une date impossible (« 2026-02-30 ») était rangée dans le planning, et un contrôle à la date
+  illisible passait pour « à jour » ;
+- le **planning était illisible** à 1 440 px de large : vu par l'orchestrateur en relisant les
+  captures de la recette, alors que les tests passaient ;
+- une modification de l'accueil a cassé un test du lot 1 (paramètres) que l'orchestrateur n'avait pas
+  relancé : il n'avait lancé que les tests de l'accueil. Leçon notée : après une modification d'un
+  écran partagé, relancer aussi les tests des écrans qui en dépendent.
+
+### Les preuves propres au lot 3
+
+- **Calcul à la main.** Pour trois équipements (dont un critique), les indicateurs **affichés** à
+  l'écran sont égaux à ceux d'un calcul Python indépendant, écrit à part sur les fichiers CSV, en modes
+  serveur et démo.
+- **Rapport autonome.** Le rapport figé s'ouvre seul, sans Prévo ni réseau (aucune requête, aucun
+  script) et s'imprime sur une page A4.
+- **Recette en modes serveur et démo.** Planification avec avertissement d'habilitation, contrôle
+  réalisé et habilitation renouvelée (le compteur de l'accueil baisse de un), étiquettes d'un atelier,
+  rapport figé puis rouvert (et téléchargé en démo), 9 écrans × 3 profils, captures à 1 440 et 375 px
+  relues. Les recettes des lots 1 et 2 repassent.
+- **Rien d'autre n'a bougé.** Les bibliothèques de `js/lib/` sont identiques à celles du lot 1 (seule
+  leur notice de licence a été corrigée : ECharts est en version 5.5.1, et non 5.6.0 comme écrit
+  depuis le lot 1) ; le format des fichiers reste en version 2.
+
+Limite connue : dans le graphique « charge et capacité », les semaines 1 et 4 restent proches pour
+une personne atteinte de protanopie ; elles se distinguent par leur position, la légende et le
+tableau des valeurs.
+
+## 9. À retenir pour piloter une IA
 
 1. Faire écrire et valider le cahier des charges et ses critères de succès avant le code.
 2. Écrire le contrat entre les morceaux avant de distribuer le travail.

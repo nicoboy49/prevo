@@ -15,7 +15,8 @@ serveur.py                 serveur local (Python 3.8+, bibliothèque standard se
 Lancer_GMAO.bat            lanceur Windows      lancer.sh   lanceur Mac/Linux
 css/style.css              charte « Cockpit » adaptée (écran sombre + impression noir sur blanc)
 css/modules/*.css          mise en page propre à chaque module (une feuille par module : app, accueil,
-                           parc, demandes, ordres, preventif, magasin, parametres ; chargées par index.html)
+                           parc, demandes, ordres, preventif, magasin, parametres, et depuis le lot 3
+                           equipe, controles, planning, indicateurs, etiquettes ; chargées par index.html)
 css/polices/               police Sora (OFL)
 js/lib/                    bibliothèques tierces + LICENCES.txt (jamais modifiées)
 js/schema.js               Schema    : description des 22 tables (champs, types, identifiants)
@@ -27,8 +28,8 @@ js/demo-donnees.js         DEMO_DONNEES : jeu de démo généré (chargé à la 
 js/interface.js            UI        : helpers d'écran (html, tableaux, fenêtres, QR, photos…)
 js/modules/*.js            modules métier : un module = un préfixe de fichiers (§14.2), ex.
                            ordres-regles.js … ordres-impression.js pour l'objet Ordres ; petits
-                           modules en un seul fichier (accueil.js, apropos.js, parametres.js,
-                           causes-frequentes.js)
+                           modules en un seul fichier (accueil.js, apropos.js, causes-frequentes.js) ;
+                           liste et ordre exacts au §15.1 (lot 3)
 js/app.js                  App       : démarrage, choix du mode, profils, navigation
 donnees/                   les CSV réels (hors dépôt git) + documents/ + sauvegardes/
 donnees/demo/              le jeu de démo en CSV (versionné)
@@ -41,10 +42,11 @@ tests/                     tests automatisés (unittest + Playwright) ; tests/fi
 `js/lib/papaparse.min.js`, `js/lib/qrcode.js`, `js/lib/jsQR.js`, `js/lib/jszip.min.js`,
 `js/schema.js`, `js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
 `js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
-§14.2, `js/app.js` (en dernier).
+§15.1 (il remplace, depuis le lot 3, celui du §14.2), `js/app.js` (en dernier).
 `js/demo-donnees.js` n'est **pas** chargé au démarrage : `App` l'injecte (balise `<script>`
 créée dynamiquement, compatible `file://`) quand on choisit la démo ou la copie du jeu de démo.
-ECharts (présent dans `js/lib/`) n'est chargé qu'à partir du lot 3.
+ECharts (`js/lib/echarts.min.js`, version 5.5.1) n'est pas non plus chargé au démarrage :
+`App.chargerEcharts()` l'injecte de la même façon au premier graphique (lot 3, §15.1).
 
 **Un objet global par fichier du socle, un objet global par module** (`const Schema = …`,
 `const Donnees = …`, `const Ordres = …`). Rien d'autre n'est global. Un module découpé en
@@ -482,12 +484,20 @@ Routes ajoutées au lot 2 : `#/preventif`, `#/preventif/gamme/nouvelle`, `#/prev
 `#/magasin`, `#/magasin/article/nouveau`, `#/magasin/article/<id>`. Les routes « fiche » excluent
 explicitement `nouveau`/`nouvelle` (`(?!nouveau$)`), en plus d'être déclarées après la route de
 création.
+Routes ajoutées au lot 3 (§15.1) : `#/planning`, `#/controles`, `#/controles/nouveau`,
+`#/controles/<id>`, `#/indicateurs`, `#/equipe`, `#/equipe/nouveau`, `#/equipe/<id>`,
+`#/parc/etiquettes`.
 Profils : l'accueil, les DI, le parc et À propos sont ouverts aux trois profils ; les OT
 (`#/ot`, `#/ot/<id>`), le préventif (`#/preventif`, `#/preventif/gamme/<id>`) et le magasin
 (`#/magasin`, `#/magasin/article/<id>`) au technicien et au responsable (le technicien y est en
 consultation, D27) ; `#/ot/nouveau`, la création et la modification d'équipement,
 `#/preventif/gamme/nouvelle`, `#/magasin/article/nouveau`, `#/parametres` et `#/controle` au
 responsable seul. Le demandeur ne voit ni Préventif ni Magasin.
+Lot 3 (§15.2) : le planning, les contrôles (liste et fiche) et l'équipe (liste et fiche) sont
+ouverts au technicien en lecture et au responsable ; le technicien ne voit aucun taux horaire (ni à
+l'écran ni dans le DOM). Les indicateurs (onglet des rapports compris), les étiquettes,
+`#/controles/nouveau` et `#/equipe/nouveau` sont réservés au responsable. Le demandeur ne voit
+aucun écran du lot 3.
 Paramètres d'adresse lus :
 - `#/di` : `?statut=` (ex. `Nouvelle`), `?portee=` (`mes` ou `toutes`), `?q=` (recherche), `?equipement=` ;
 - `#/ot` : `?filtre=retard` (OT en retard) ou `?filtre=p1` (P1 ouverts), liens de l'accueil ; aussi
@@ -500,7 +510,13 @@ Paramètres d'adresse lus :
 - `#/magasin` : `?onglet=articles|mouvements|inventaire|a-commander|achats|fournisseurs` (l'onglet
   « Inventaire » est réservé au responsable) ; filtres d'un lien, appliqués une fois : articles
   `?recherche=`, `?categorie=`, `?etat=` ; mouvements `?type=`, `?article=`, `?ot=` ; achats
-  `?recherche=`.
+  `?recherche=` ;
+- lot 3 : `#/ot/nouveau` lit aussi `?type=` et `?titre=` (OT réglementaire créé depuis un contrôle) ;
+  `#/planning` : `?semaine=` (un lundi), `?technicien=` ; `#/controles` : `?statut=`, `?filtre=30j`,
+  `?equipement=`, `?recherche=`, `?inactifs=1` ; `#/controles/nouveau` : `?equipement=` ;
+  `#/indicateurs` : `?periode=` (`mois`, `mois-precedent`, `3-mois`, `12-mois`, `du-au` avec `?du=` et
+  `?au=`), `?criticite=`, `?atelier=`, `?onglet=tableau|rapports` ; `#/equipe` : `?filtre=a-renouveler` ;
+  `#/parc/etiquettes` : `?localisation=`, `?criticite=`, `?ids=` (identifiants séparés par des virgules).
 
 Un écran dont un formulaire a été modifié et non enregistré n'est pas
 réaffiché par un changement distant : un bandeau « Des données ont changé sur un autre poste —
@@ -509,14 +525,18 @@ Actualiser » s'affiche à la place.
 `App.adaptateur`, `App.ecran(définition)`, `App.naviguer(hash)`, `App.reafficher()`,
 `App.definirTitre(texte)`, `App.marquerSaisie(booléen)`, `App.estResponsable()`,
 `App.estTechnicien()`, `App.estDemandeur()`, `App.libelleProfil()`, `App.changerProfil()`,
-`App.urlFicheEquipement(id)` (URL réseau en mode serveur, sinon `GMAO:<id>`),
-`App.chargerScriptDemo()`, `App.exporterZip()`, `App.signalerErreur(erreur)`.
+`App.urlFicheEquipement(id)` (URL réseau en mode serveur — depuis le lot 3, `adresse_qr` quand
+elle est renseignée —, sinon `GMAO:<id>`), `App.chargerScriptDemo()`, `App.exporterZip()`,
+`App.signalerErreur(erreur)`, et depuis le lot 3 `App.chargerEcharts()` et `App.adressesReseau()`
+(§15.1).
 
 **Menu** : latéral sur grand écran (≥ 1100 px), repliable en icônes (mémorisé
 `prevo.menuReplie`), icônes seules de 641 à 1099 px, barre du bas sur téléphone (≤ 640 px :
 4 entrées + « Plus »). En tête du menu latéral : « Prévo », « GMAO », puis le nom de l'entreprise
 (`entreprise_nom`) sur deux lignes au plus, nom complet en infobulle (D32). Entrées ajoutées au
-lot 2 : « Préventif » (ordre 35, icône `preventif`) et « Magasin » (ordre 45, icône `magasin`).
+lot 2 : « Préventif » (ordre 35, icône `preventif`) et « Magasin » (ordre 45, icône `magasin`) ;
+au lot 3 : « Planning » (33), « Contrôles » (37), « Indicateurs » (50) et « Équipe » (85, groupe
+« Administration », avant Paramètres).
 Badge de signature en bas du menu : « Développé par Claude (Anthropic) à
 la demande de Nicolas Briand — SELECTIS » → `#/apropos`.
 `#impression` doit être un enfant direct de `<body>` (la feuille d'impression masque tous les autres
@@ -544,21 +564,25 @@ CSS : variables et composants de la charte Cockpit (`--fond`, `--carte`, `--bleu
 boutons et cellules en 16 px ; badges et en-têtes de colonnes 13–14 px. Sur téléphone, toute
 zone tactile mesure au moins 48 px de haut (gants). `@media print` : noir sur blanc, menu et
 boutons masqués, mise en page A4 du bon de travail (`#impression`) ; classe `.sans-impression`
-pour masquer un élément à l'impression (réutilisée par le futur rapport mensuel).
+pour masquer un élément à l'impression (le rapport mensuel du lot 3, document autonome, en
+définit une copie dans ses propres styles).
 
 `css/style.css` porte la charte et **tous les composants communs** ; un module n'y touche pas :
 sa mise en page propre va dans `css/modules/<module>.css` (une feuille par module, même découpé en
 plusieurs fichiers JS ; toutes référencées par `index.html`, dont `preventif.css` et `magasin.css`
-au lot 2), en réutilisant les variables de la charte (jamais de couleur codée en dur).
+au lot 2, `equipe.css`, `controles.css`, `planning.css`, `indicateurs.css` et `etiquettes.css` au
+lot 3), en réutilisant les variables de la charte (jamais de couleur codée en dur).
 `UI.icone(nom)` connaît depuis le lot 2 les icônes `preventif` (calendrier coché) et `magasin`
-(carton) ; `UI.estTelephone()` sert à masquer la carte « Connecter un téléphone » de l'accueil (D31).
+(carton), et depuis le lot 3 `planning`, `controles`, `indicateurs` et `equipe` ; `UI.estTelephone()` sert à masquer la carte « Connecter un téléphone » de l'accueil (D31).
 Les champs `texte_long` des formulaires portent l'attribut `data-dictee` (crochet pour le bouton
 micro du lot 4 ; en attendant, la dictée du clavier du téléphone fonctionne sans code).
 
-## 10. Règles métier (lots 1 et 2)
+## 10. Règles métier (lots 1 à 3)
 
 RG1 à RG4, RG7 et RG8 viennent du lot 1 (RG3 révisée au lot 2, voir ci-dessous) ; RG5 (préventif)
-et RG6 (magasin) sont détaillées aux §14.3 et §14.4.
+et RG6 (magasin) sont détaillées aux §14.3 et §14.4 ; RG9 (contrôles réglementaires, lot 3) au
+§15.7. Depuis le lot 3, RG8 est aussi vérifiée quand on planifie un OT (§15.5), avec le même
+avertissement au journal.
 
 - **RG1** DI : `Nouvelle` → `Acceptée` (crée un OT, `ot_id` renseigné) · `Regroupée`
   (rattachée à un OT ouvert du même équipement) · `Différée` · `Refusée` (motif obligatoire,
@@ -621,7 +645,7 @@ Les fonctions de règles sont **pures** et exposées pour les tests :
 `Ordres.verifierCloture(ot)` → liste des manques, `Ordres.cout(ot)`,
 `Ordres.verifierHabilitation(equipement, technicienId, dateIso)` → message ou `null`.
 
-### API effective des modules (`js/modules/`, état du lot 2)
+### API effective des modules (`js/modules/`, état du lot 3)
 
 Un module = un objet global, réparti sur un préfixe de fichiers (§14.2) ; ses écrans s'enregistrent
 dans un seul écouteur `DOMContentLoaded` (§8). Les fonctions d'écriture sont `async`, passent par
@@ -635,7 +659,10 @@ La liste ci-dessous est celle des clés réellement exposées (relevée dans le 
   `verifierLocalisation` (règles : repère unique parmi les équipements actifs, aucun équipement
   ancêtre de lui-même), `afficherListe`, `afficherFiche`, `afficherFormulaire`. Lot 2 (par l'écran,
   sans fonction publique nouvelle) : valeur de remplacement, « Saisir un relevé », carte Préventif
-  (§14.6).
+  (§14.6). Lot 3 (`parc-etiquettes.js`, §15.6) : `FORMATS_ETIQUETTES`,
+  `equipementsPourEtiquettes({ localisationId, criticite, ids })`, `planchesEtiquettes(equipements,
+  format, decalage)`, `afficherEtiquettes(conteneur, parametres)` ; carte « Contrôles
+  réglementaires » de la fiche (par l'écran).
 - **`Demandes`** : constantes `STATUTS`, `IMPACTS`, `MATRICE_PRIORITE` ; règles pures
   `prioriteCalculee(criticite, impact)`, `normaliserImpact`, `typePropose(priorite)`,
   `datePrevue(priorite, aujourdhuiIso)`, `libelleEquipement`, **`codeSymptome(texte)`** (lot 2 :
@@ -679,10 +706,42 @@ La liste ci-dessous est celle des clés réellement exposées (relevée dans le 
   d'OT ; `articlesACommander` : éléments de `Magasin.aCommander()`), `otEnRetard(ot, aujourdhui)`,
   `p1Ouvert(ot)`, et depuis le lot 2 `dimancheDe(dateIso)` (dimanche de la semaine du lundi au
   dimanche, calculé en UTC) et `preventifDeLaSemaine(ot, dimanche)` (OT d'origine `préventif`,
-  ouvert, date prévue ≤ ce dimanche, retards compris).
-- **`Parametres`** : écrans `#/parametres` et `#/controle` ; n'expose que `decrireSauvegarde(nom)`
-  (lot 2 : type « Avant format 2 » pour `…_avant-format-v2`) et `numeroLigneFichier(probleme)`
-  (utilitaires testés).
+  ouvert, date prévue ≤ ce dimanche, retards compris). Lot 3 : `calculerCompteurs()` renvoie aussi
+  `controlesSous30j` et `habilitationsARenouveler` (§15.9).
+- **`Parametres`** (`parametres.js`, `parametres-codes.js`) : écrans `#/parametres` et `#/controle` ;
+  `decrireSauvegarde(nom)` (lot 2 : type « Avant format 2 » pour `…_avant-format-v2`) et
+  `numeroLigneFichier(probleme)` (utilitaires testés) ; lot 3 (§15.11) : `FAMILLES_CODES`,
+  `codePropose(famille, lignes)`, `verifierCode(valeurs, lignes, idCourant)` (→ `[{ nom, message }]`),
+  `ajouterCode({ famille, libelle, code })`, `modifierLibelleCode(id, libelle)`.
+- **`Equipe`** (lot 3, §15.8) : constante `STATUTS_HABILITATION` ; règles pures
+  `etatHabilitation(habilitation, aujourdhui)`, `habilitationsQuiComptent(technicienId)`,
+  `aRenouveler(aujourdhui)` ; écritures `verifierTechnicien(valeurs, lignesTechniciens, idCourant)`
+  (→ `[{ nom, message }]`), `creerTechnicien(valeurs)`, `modifierTechnicien(technicienId, valeurs)`,
+  `ajouterHabilitation(technicienId, valeurs)`, `modifierHabilitation(habilitationId, valeurs)`,
+  `renouvelerHabilitation(habilitationId, { date_obtention, date_echeance })` (→ identifiant créé).
+- **`Controles`** (lot 3, §15.7) : constante `STATUTS` ; règles pures `ajouterMois(dateIso, n)`,
+  `prochaineDate(controle)`, `etat(controle, aujourdhui)`, `sous30Jours(aujourdhui)` ; écritures
+  `verifierControle(valeurs, aujourdhui)`, `creerControle(valeurs)`, `modifierControle(controleId,
+  valeurs)`, `ecrireRapport(controleId, date, fichier)` (→ nom du document écrit),
+  `enregistrerRealisation(controleId, { date, organisme, rapport, observations })`,
+  `leverObservations(controleId, { date, commentaire })`.
+- **`Planning`** (lot 3, §15.5) : règles pures `lundiDe(dateIso)`, `joursDeLaSemaine(lundi)`,
+  `ordresDeLaSemaine(lundi)`, `chargeSemaine(technicienId, lundi)`, `semaine(lundi)` ; écriture
+  `planifier(otId, statutAttendu, technicienId, dateIso)` (→ `{ statut, avertissements }`).
+- **`Indicateurs`** (lot 3, §15.3 et §15.4) : constantes `PERIODES`, `COULEURS_SERIES`,
+  `COULEUR_AUTRES` ; règles pures `periode(code, aujourdhui, du, au)`, `periodeDuMois('AAAA-MM')`,
+  `tempsRequis`, `pannes`, `attentePieces`, `partPreventif`, `respectPreventif`, `otEnRetard`,
+  `delaisPriseEnCharge`, `coutParEquipement`, `coutsParMois`, `valeurStock`, `parEquipement`,
+  `global`, `paretoPannes`, `paretoArrets`, `heuresParMois`, `mtbfMttrCriticiteA`, `causes`,
+  `chargeCapacite` ; graphiques `graphique(conteneur, reglages)` (→ promesse de l'instance ECharts,
+  ou `null`), `libererGraphiques(racine)`, `habillerOption(option, support, titre, largeur)` (thème
+  `ecran` ou `papier`, réutilisé par le rapport mensuel), `options` (constructeurs des options des
+  graphiques de l'écran).
+- **`Rapport`** (lot 3, §15.10) : `PREFIXE_FICHIER` (`rapport-mensuel-`) ; règles pures
+  `donnees(mois, aujourdhui, maintenant)`, `moisAProposer(aujourdhui)`, `rapportsFiges()` (noms lus
+  dans `rapports_mensuels`), `texteCourriel(donnees)` ; `html(mois, options)` (async, texte HTML
+  autonome), `figer(mois, options)` (async, → `{ nom, rapport }`) ; écrans `afficherOnglet(conteneur)`
+  (onglet de `#/indicateurs`) et `bandeauAccueil()` (élément ou `null`).
 - **`Apropos`** : `CREDIT`, `afficher`.
 
 ## 11. Données de démo
@@ -697,10 +756,12 @@ nombre de **semaines entières** écoulées depuis `dateReference`, pour que l'h
 toujours aujourd'hui (les identifiants gardent leur année d'origine).
 
 Depuis le lot 2 (D30), l'historique couvre **13 mois** : `DATE_REFERENCE` = `2026-10-19` (un
-lundi), premières lignes en septembre 2025. Le jeu par défaut contient notamment 31 équipements,
-150 DI, 232 OT, 10 gammes, 56 relevés, 52 articles, 302 mouvements de stock et 36 achats, avec les
-champs du format v2 renseignés (valeur de remplacement de chaque équipement, code symptôme sur 127
-DI, deux OT préventifs avec anomalie et leur DI liée) et au moins deux équipements qui ont 5 OT
+lundi), premières lignes en septembre 2025. Depuis le lot 3, le jeu par défaut contient notamment
+31 équipements, 155 DI, 256 OT, 10 gammes, 56 relevés, 52 articles, 302 mouvements de stock,
+36 achats, 6 contrôles réglementaires, 4 techniciens, 10 habilitations et 77 lignes de journal
+(historique des statuts des pannes récentes, §15.12), avec les champs du format v2 renseignés
+(valeur de remplacement de chaque équipement, code symptôme sur 132 DI, deux OT préventifs avec
+anomalie et leur DI liée) et au moins deux équipements qui ont 5 OT
 correctifs clôturés d'un même symptôme (encart des causes fréquentes). Le générateur
 s'auto-vérifie (clés étrangères, listes de valeurs, règles RG1 à RG6, aucun stock négatif à aucun
 moment, colonne `stock` = stock recalculé, scénarios) et s'arrête au moindre défaut ; deux
@@ -715,7 +776,7 @@ produit aussi gammes, relevés, mouvements et achats en proportion.
 (ni avec `--sortie`, ni avec `--volume` ; `--fichier-scenarios` l'écrit ailleurs) : pour chaque rôle
 de scénario (OT par statut, P1 ouvert, OT en retard, DI par statut, gamme mensuelle échue, kit
 garniture, articles sous le point de commande, techniciens BR valide ou échue, préventif avec
-anomalie…), l'identifiant de la ligne qui le joue. Les rôles sont décrits dans la docstring de
+anomalie… ; rôles du lot 3 au §15.12), l'identifiant de la ligne qui le joue. Les rôles sont décrits dans la docstring de
 `outils/generer_demo.py`. Les tests lisent ce fichier par `commun.scenarios_demo()` au lieu
 d'écrire des numéros en dur. `.gitattributes` déclare `js/demo-donnees.js` et `tests/fixtures/*.json`
 en `-text` (jamais de conversion de fins de ligne : la démo régénérée reste identique à l'octet).
@@ -743,7 +804,18 @@ Fichiers ajoutés au lot 2 (un par sujet) : `test_format_v2.py`, `test_version_s
 lot 2 de bout en bout, en modes serveur et démo) ; `test_excel_reel.py` couvre aussi le format v2
 et une base du lot 1 passée par Excel ; `test_performance.py` mesure le chargement génération du
 préventif comprise, la création de DI et la sortie de pièce sur le jeu de charge ; `test_depot.py`
-vérifie le découpage (700 lignes au plus par fichier de `js/modules/`, ordre exact du §14.2).
+vérifie le découpage (700 lignes au plus par fichier de `js/modules/`, ordre exact du §15.1 depuis
+le lot 3).
+
+Fichiers ajoutés au lot 3 (§15.13) : `test_socle_lot3.py`, `test_regles_indicateurs.py` (dont un
+calcul Python indépendant des indicateurs, `CalculPython`, sur les CSV de démo), `test_regles_lot3.py`,
+`test_equipe.py`, `test_controles.py`, `test_planning.py`, `test_etiquettes.py`, `test_indicateurs.py`,
+`test_rapport.py`, `test_accueil_lot3.py`, `test_recette_lot3.py` (captures d'écran dans
+`tests/resultats/recette-lot3/`) ; `test_performance.py` mesure aussi l'écran Indicateurs sur 12 mois,
+le planning et le rapport figé. Les tests de glisser-déposer du planning ouvrent une fenêtre haute
+(1440 × 1600) : Playwright ne fait pas défiler la page pendant le geste. Les tests du rapport
+calculent le mois écoulé depuis la vraie date du jour (l'application la lit aussi) : aucun mois
+écrit en dur.
 
 Playwright et Chromium ne sont nécessaires que pour les tests, jamais pour utiliser Prévo.
 Le test d'aller-retour par le **vrai Excel** (`tests/test_excel_reel.py`, `tests/test_csv.py`) ne
@@ -757,18 +829,14 @@ serveur (§7) en réduisent la fréquence sans l'annuler.
 
 ## 13. Points d'extension (lots suivants)
 
-Le lot 2 est réalisé (§14) ; le contrat du lot 3 est au §15. Restent, dans l'ordre prévu :
-- **Lot 3** (contrat au §15) : indicateurs (E11, ECharts déjà présent dans `js/lib/`), planning (E6), étiquettes QR
-  par lot, contrôles réglementaires (E10, RG9), écran des habilitations, rapport mensuel (réutilise
-  `.sans-impression`). Nouveaux modules en préfixes de fichiers (`indicateurs-*.js`…), 700 lignes au
-  plus par fichier, ajoutés à l'ordre du §14.2 **et** à `ORDRE_MODULES` de `tests/test_depot.py`.
-  Compteurs de l'accueil (brief E1) restant à ajouter : contrôles réglementaires sous 30 jours,
-  habilitations échues ou à moins de 60 jours ; `Accueil.calculerCompteurs()` est le point
-  d'extension (il renvoie déjà `preventifsSemaine` et `articlesACommander`).
+Les lots 2 et 3 sont réalisés (contrats aux §14 et §15). Un module ajouté plus tard suit les mêmes
+règles : préfixe de fichiers, 700 lignes au plus par fichier, place dans l'ordre du §15.1 **et** dans
+`ORDRE_MODULES` de `tests/test_depot.py`. Restent, dans l'ordre prévu :
 - **Lot 3 bis** : préventif **suggéré**. Le champ `ordres_travail.anomalie_constatee` et le lien
   `demandes.ot_origine_id` (DI signalée pendant un préventif) sont posés et remplis depuis le lot 2
   pour être exploités là (ex. raccourcir une périodicité quand les anomalies se répètent) ;
-  l'encart des causes fréquentes pourra recevoir un indicateur de fiabilité statistique (D25).
+  l'encart des causes fréquentes pourra recevoir un indicateur de fiabilité statistique (D25) ; les
+  règles des indicateurs (§15.3 : pannes, causes, durées d'arrêt par équipement) sont réutilisables.
 - **Lot 4** : `js/modules/ia.js`, `js/modules/ia-prompts.js`, `js/modules/dictee.js` ; les champs
   `texte_long` des formulaires portent `data-dictee` pour recevoir un bouton micro ; `GUIDE.html`
   (déjà dans la liste blanche du serveur, §7), `FICHE_TECHNIQUE_CSV.md`, https local en option.
@@ -1094,8 +1162,12 @@ options au §11.
 
 ## 15. Contrat du lot 3 (CDC validé le 2026-10-20 : D33–D49)
 
-Écrit avant le code du lot 3 ; il sera relu et aligné sur le code à la fin du lot (mentions « écart
-retenu : … », comme au §14). Les définitions métier du CDC sont recopiées ici : ce contrat se suffit.
+Ce contrat a été écrit avant le code du lot 3, puis **relu et aligné sur le code** à la fin du lot :
+là où le code s'écarte du texte d'origine, une mention « écart retenu : … » dit ce qui a été fait et
+pourquoi (comme au §14). Les définitions métier du CDC sont recopiées ici : ce contrat se suffit.
+Écart retenu (constaté en T41) : `js/lib/echarts.min.js`, inchangé depuis le lot 1, est la version
+**5.5.1** d'ECharts (le CDC disait 5.6.0, qui est la version de zrender, le moteur de dessin qu'elle
+embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveur » utilisée.
 
 ### 15.1 Socle
 - **Format CSV inchangé** : `Schema.version` reste 2, aucun champ ajouté. Nouvelles clés de
@@ -1262,6 +1334,21 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   technicien sur 4 semaines (barres de charge, capacité en marque horizontale, même axe en heures).
 - La palette est vérifiée lisible en deutéranopie et protanopie (test : écart de couleur simulé
   suffisant entre séries d'un même graphique).
+- Écarts retenus (T49) : la légende est écrite en HTML au-dessus du graphique (lue par un lecteur
+  d'écran, imprimée), pas par ECharts ; le bouton « Image » redessine le graphique avec le thème
+  « papier » (`habillerOption(option, 'papier', …)`, fond blanc) au lieu de copier l'écran sombre ;
+  les couleurs de texte et de grille sont lues dans les variables CSS de la charte ;
+  `Indicateurs.graphique` accepte aussi `id`, `classe`, `sousTitre`, `notes` et `vide` (texte affiché
+  à la place d'un graphique sans données) ; une carte « Délais de prise en charge » donne, par
+  priorité, la médiane, la part dans le délai cible et l'effectif. Sous la part du préventif, une note
+  dit les heures comptées (« x h de préventif sur y h »).
+- Limite connue : dans « charge et capacité », les semaines 1 et 4 restent proches en protanopie ;
+  elles se distinguent par leur position, la légende et « Voir les valeurs » (une rampe de bleus,
+  essayée, a été écartée : 4e semaine à 1,9:1 de contraste sur le fond).
+- Gardés après relecture : le lien de l'instrument « OT en retard » ouvre `#/ot?filtre=retard` sans
+  reprendre les filtres de criticité et d'atelier ; les graphiques MTBF et MTTR des équipements A ne
+  suivent pas le filtre de criticité (ils portent sur A par définition) ; les délais écartés
+  (négatifs ou illisibles) ne sont pas listés à l'écran.
 
 ### 15.5 Planning (`planning-*.js`, objet `Planning`)
 - Règles : `Planning.lundiDe(dateIso)`, `Planning.joursDeLaSemaine(lundi)` (7 dates ISO, UTC) ;
@@ -1292,6 +1379,14 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   **Bouton « Planifier… »** sur chaque carte déplaçable (fenêtre : technicien, date) : même résultat
   sans glisser (WCAG 2.2, 2.5.7). Technicien : lecture, sa ligne en tête, aucun glisser ni bouton.
   Téléphone : une liste par jour (pas de grille).
+- Écarts retenus (T48, recette et relecture) : sous 1 700 px de large, la colonne « À planifier » passe
+  au-dessus de la grille (à 1 440 px, la grille était illisible) ; samedi et dimanche sont plus étroits ;
+  le titre d'une carte tient sur trois lignes au plus ; `?technicien=` ne garde que la ligne de ce
+  technicien ; la mise en attente pour pièce écrit le motif « Pièce : … » avec ce qui est déjà sorti,
+  comme la fiche OT ; les écouteurs sont posés sur la racine de l'écran (`.pl-ecran`), jamais sur
+  `#contenu`, qui survit aux changements d'écran. Gardé : la grille nomme les techniciens « Nom
+  Prénom » (tri par nom), l'écran Équipe « Prénom Nom » ; un OT à date impossible n'apparaît pas dans
+  la grille (Contrôle de la base le signale).
 
 ### 15.6 Étiquettes QR (`parc-etiquettes.js`, complète `Parc`)
 - `Parc.FORMATS_ETIQUETTES` = `{ '24': { colonnes: 3, lignes: 8, largeurMm: 70, hauteurMm: 37 },
@@ -1309,6 +1404,11 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   (réservation dans la box) », choix parmi `App.adressesReseau()` quand il y en a plusieurs → écrit
   `adresse_qr` (`Donnees.modifier('parametres')`). Modes dossier et démo : « Le QR contient
   GMAO:<id>, lisible par la caméra de ce poste ». Responsable seul.
+- Écarts retenus (T45) : les planches utilisent une page **nommée** (`@page etiquettes { size: A4;
+  margin: 0 }`, `css/modules/etiquettes.css`) : une `@page` sans nom aurait aussi annulé les marges de
+  12 mm du bon de travail ; le décalage est borné de −10 à +10 mm (pas de 0,5 mm), une valeur hors
+  bornes est ramenée dans l'intervalle ; l'écran est enregistré par `parc-fiche.js`
+  (`Parc.afficherEtiquettes(conteneur, parametres)`).
 
 ### 15.7 Contrôles réglementaires (`controles-*.js`, objet `Controles`)
 - Règles : `Controles.STATUTS` = `['en retard', 'observations à lever', 'à planifier', 'à jour']` ;
@@ -1333,6 +1433,12 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   `urlDocument`, OT réglementaires de l'équipement, « Créer un OT » → `#/ot/nouveau?equipement=…&
   type=réglementaire&titre=…` pré-rempli : `#/ot/nouveau` lit désormais `?type=` et `?titre=`).
   Carte « Contrôles réglementaires » sur la fiche équipement (technicien et responsable).
+- Écarts retenus (T47) : la liste ne montre par défaut que les contrôles des équipements suivis
+  (actifs, hors rebut) — `?inactifs=1` montre les autres — et accepte `?recherche=` ; la périodicité
+  est un nombre entier de 1 à 240 mois ; la dernière date et la date de réalisation ne sont jamais
+  futures ; lever des observations exige un commentaire ; le rapport est écrit par
+  `Controles.ecrireRapport(controleId, date, fichier)` sous le nom `controle-<id>-<date>.<ext>`
+  (« -2 », « -3 »… si le nom existe ; une photo est réduite en JPEG ; 9 Mo au plus).
 
 ### 15.8 Équipe et habilitations (`equipe-*.js`, objet `Equipe`)
 - Règles : `Equipe.etatHabilitation(hab, aujourdhui)` → `{ statut, joursRestants }`, statut ∈
@@ -1349,6 +1455,12 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   valeurs)`, `modifierHabilitation(id, valeurs)` (correction), `renouvelerHabilitation(id, {
   date_obtention, date_echeance })` = **nouvelle ligne** de même intitulé (l'ancienne reste) ;
   échéance ≥ obtention.
+- Écarts retenus (T46) : ajouter une habilitation d'un intitulé que le technicien a déjà est refusé (le
+  message renvoie à « Renouveler » ou « Corriger ») ; un renouvellement doit dépasser l'échéance
+  actuelle (sinon l'ancienne ligne compterait encore), et une habilitation sans échéance ne se
+  renouvelle pas (elle se corrige) ; deux techniciens actifs ne peuvent pas porter le même nom ;
+  `Equipe.STATUTS_HABILITATION` et `verifierTechnicien(valeurs, lignesTechniciens, idCourant)` sont
+  exposés (contrôles affichés sous les champs avant d'écrire).
 - Écrans : `#/equipe` (`?filtre=a-renouveler`), `#/equipe/nouveau`, `#/equipe/<id>` (habilitations
   avec statut, historique). Pour le technicien : lecture, **sans `taux_horaire`** (absent du DOM).
 
@@ -1358,7 +1470,9 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
 `#/controles?filtre=30j`, « Habilitations à renouveler » → `#/equipe?filtre=a-renouveler`
 (technicien et responsable). Pour le responsable, bandeau « Figer le rapport de <mois> ? » quand
 `Rapport.moisAProposer(aujourdhui)` renvoie un mois (§15.10), boutons « Figer » et « Plus tard »
-(masqué jusqu'à la prochaine ouverture : sessionStorage).
+(masqué jusqu'à la prochaine ouverture : sessionStorage). Écart retenu : le bandeau, construit par
+`Rapport.bandeauAccueil()`, dit « Le rapport de <mois> n'est pas encore figé. » et son bouton « Figer
+le rapport de <mois> » (avec élision : « d'octobre », « d'août ») ; rien n'est écrit sans ce clic.
 
 ### 15.10 Rapport mensuel (`rapport-*.js`, objet `Rapport`)
 - `Rapport.donnees(mois 'AAAA-MM', aujourdhui)` (pur) → `{ mois, libelleMois, genereLe, tuiles:
@@ -1389,6 +1503,12 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   `App.adaptateur.urlDocument`, imprimer), « Figer le mois de … » (choix du mois), « Recalculer »
   (nouvelle révision). Mode démo : le document reste en mémoire, « Télécharger » (`UI.telecharger`)
   et export ZIP (documents en mémoire, déjà pris par `App.exporterZip`).
+- Écarts retenus (T51 et relecture) : `Rapport.donnees` prend aussi `maintenant` (horodatage « données
+  au … ») et `figer(mois, options)` renvoie `{ nom, rapport }` ; le corps du courriel a des fins de
+  ligne CRLF (RFC 6068) et ne parle d'aucune pièce jointe ; faits et décisions sur les contrôles et le
+  repère « réparer ou remplacer ? » ne portent que sur les équipements suivis (actifs, hors rebut) ;
+  couleurs et nombres arrondis comme à l'écran ; à 375 px, la liste des rapports défile dans son cadre,
+  jamais la page. Gardé : le Pareto du rapport montre les barres sans le cumul en % (gardé à l'écran).
 
 ### 15.11 Paramètres (`parametres.js`, `parametres-codes.js`)
 - Réglages ajoutés au formulaire : `tolerance_preventif_pct` (0–100), `seuil_remplacement_pct`
@@ -1400,6 +1520,9 @@ Valeurs non arrondies ; l'écran arrondit (heures 1 décimale, % 1 décimale, �
   modifiable ; code unique, libellé non vide et unique dans la famille) ;
   `Parametres.modifierLibelleCode(id, libelle)`. Ni désactivation ni suppression (la table n'a pas
   de champ `actif`).
+- Écart retenu (T46) : les réglages sont réunis dans une carte « Réglages » ;
+  `Parametres.FAMILLES_CODES`, `codePropose(famille, lignes)` et `verifierCode(valeurs, lignes,
+  idCourant)` sont exposés (contrôles affichés sous les champs avant d'écrire).
 
 ### 15.12 Démo (D49)
 Le générateur ajoute ou corrige : contrôles couvrant les 4 statuts à la date de référence (chariot
@@ -1414,7 +1537,10 @@ sans heures de fonctionnement, habilitation échue et à renouveler…). Nouveau
 `demo-scenarios.json` : `controle_en_retard`, `controle_a_planifier`, `controle_observations`,
 `controle_a_jour`, `technicien_surcharge` (+ `semaine_surcharge`), `ot_a_planifier`,
 `ot_a_planifier_br`, `panne_attente_pieces`, `panne_sans_duree`, `equipements_calcul_main`
-(3 équipements dont un A, avec pannes, heures connues).
+(3 équipements dont un A, avec pannes, heures connues). Écarts retenus (T42) : le journal de démo
+n'est plus vide (77 lignes, au format réel « <description> — <action> » de `Donnees.modifier`, §15.3) ;
+le pont roulant cite aussi « art. 23 » ; la démo garde `delai_p1_h` = 0 (« immédiat ») : la cible P1
+n'affiche donc que la médiane (§15.3).
 
 ### 15.13 Tests du lot 3
 Un fichier par sujet : `test_socle_lot3.py`, `test_regles_indicateurs.py` (règles des indicateurs,
