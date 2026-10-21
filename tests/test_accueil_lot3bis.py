@@ -64,6 +64,23 @@ class TestAccueilLot3bis(CasNavigateur):
         # Les sept indicateurs des lots 2 et 3 restent là, le nouveau s'y ajoute
         self.assertEqual(self.page.locator("#contenu .accueil-instruments > a").count(), 8)
 
+    def test_sans_suggestion_sur_criticite_a_le_complement_dit_a_examiner(self):
+        # Serveur à part : ses équipements de criticité A passent en B (écriture dans sa copie seulement).
+        with ServeurPrevo() as serveur:
+            self.ouvrir(self.page, self.contexte)
+            self.page.goto(serveur.url + "/#/accueil")
+            attendre_pret(self.page)
+            self.page.wait_for_load_state("networkidle")
+            self.page.evaluate("""() => Donnees.modifier('equipements', (lignes) => {
+              lignes.forEach((ligne) => { if (ligne.criticite === 'A') ligne.criticite = 'B'; });
+            })""")
+            self.page.evaluate("() => App.reafficher()")
+            lien = self.page.locator("#contenu .accueil-instruments a[href='%s']" % LIEN)
+            self.page.wait_for_function("(lien) => { const a = document.querySelector(`#contenu a[href='${lien}'] .comp`);"
+                                        " return a && a.textContent === 'à examiner'; }", arg=LIEN)
+            attendues = calcul_python(self.page.evaluate("Donnees.aujourdhui()"), dossier=serveur.dossier)
+            self.assertEqual(int(lien.locator(".chiffre").inner_text()), len(attendues))
+
     def test_profils_technicien_et_demandeur_ne_le_voient_pas(self):
         technicien = next(t for t in lire_csv(self.serveur.dossier, "techniciens.csv") if t["actif"] != "0")
         for profil, nom, technicien_id in (("technicien", technicien["prenom"] + " " + technicien["nom"], technicien["id"]),
