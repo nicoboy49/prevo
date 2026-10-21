@@ -6,7 +6,7 @@ Toujours serveur.py sur une copie du jeu de démo (ServeurPrevo). Familles (le n
                 #/controles?filtre=30j et #/equipe?filtre=a-renouveler ; complément « dont n en
                 retard » / « dont n échue(s) » ;
     profils   : le technicien voit les deux indicateurs, le demandeur ne les voit pas ;
-    telephone : 375 px, aucun défilement horizontal de la page avec sept indicateurs.
+    telephone : 375 px, aucun défilement horizontal de la page avec huit indicateurs (lot 3 bis).
 
 Aucun identifiant du jeu de démo écrit en dur. Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_accueil_lot3.py" -v
@@ -140,8 +140,8 @@ class TestAccueilLot3(CasNavigateur):
         # Mêmes valeurs que les règles (calculerCompteurs est le point d'extension)
         self.assertEqual(self.page.evaluate("Accueil.calculerCompteurs().controlesSous30j.length"), controles)
         self.assertEqual(self.page.evaluate("Accueil.calculerCompteurs().habilitationsARenouveler.length"), habilitations)
-        # Les cinq indicateurs du lot 2 sont toujours là
-        self.assertEqual(self.page.locator("#contenu .accueil-instruments > a").count(), 7)
+        # Les cinq indicateurs du lot 2 sont toujours là (plus celui du lot 3 bis, §16.6)
+        self.assertEqual(self.page.locator("#contenu .accueil-instruments > a").count(), 8)
 
     def test_profils_technicien_voit_les_deux_indicateurs_demandeur_aucun(self):
         technicien = next(t for t in lire_csv(self.serveur.dossier, "techniciens.csv") if brut(t["actif"]) != "0")

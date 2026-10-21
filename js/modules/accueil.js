@@ -1,9 +1,10 @@
 'use strict';
 // Accueil : écran d'arrivée (#/accueil), adapté au profil (brief §9 E1, ARCHITECTURE.md §10 et §14.6).
 //
-//   Responsable : sept indicateurs (DI à traiter, OT en retard, P1 ouverts, préventifs de la
+//   Responsable : huit indicateurs (DI à traiter, OT en retard, P1 ouverts, préventifs de la
 //                 semaine, articles à commander ; depuis le lot 3 : contrôles réglementaires sous
-//                 30 jours, habilitations à renouveler) qui mènent à la liste filtrée, une alerte si
+//                 30 jours, habilitations à renouveler ; depuis le lot 3 bis : suggestions de
+//                 préventif, §16.6) qui mènent à la liste filtrée, une alerte si
 //                 « Contrôle de la base » signale des erreurs, les 5 DI à traiter et les 5 OT en
 //                 retard les plus anciens.
 //   Technicien  : gros bouton « Signaler », les deux indicateurs du lot 3 (contrôles sous 30 jours,
@@ -173,6 +174,16 @@ const Accueil = (() => {
       habilitationsEchues ? 'dont ' + pluriel(habilitationsEchues, 'échue') : 'dans les 60 jours')}`;
   }
 
+  // Lot 3 bis (§16.6) : suggestions de préventif ouvertes, pour le responsable. Le complément dit
+  // combien concernent un équipement de criticité A (la couleur aide seulement). Suggestions est
+  // chargé après ce fichier : appelé au moment de l'affichage.
+  function indicateurSuggestions(aujourdhui) {
+    const ouvertes = Suggestions.ouvertes(aujourdhui);
+    const surA = ouvertes.filter((suggestion) => suggestion.criticite === 'A').length;
+    return indicateur('#/preventif?onglet=suggestions', surA ? 'ambre' : '', 'Suggestions de préventif', ouvertes.length,
+      surA ? 'dont ' + surA + ' sur criticité A' : 'à examiner');
+  }
+
   // Alerte du responsable : « Contrôle de la base » a trouvé des erreurs.
   function alerteControle() {
     const erreurs = Donnees.problemes().filter((p) => p.gravite === 'erreur').length;
@@ -265,6 +276,7 @@ const Accueil = (() => {
         ${indicateur('#/magasin?onglet=a-commander', '', 'Articles à commander', compteurs.articlesACommander.length,
           articlesCritiques ? 'dont ' + pluriel(articlesCritiques, 'critique') : 'stock au point de commande')}
         ${indicateursConformite(compteurs, aujourdhui)}
+        ${indicateurSuggestions(aujourdhui)}
       </div>
       <div class="grille">
         <div class="c6">${carteListe('Demandes à traiter', compteurs.diATraiter.length,
