@@ -4,6 +4,11 @@
 // correctifs clôturés, montrée dans un encart « Causes fréquentes ici — n cas » : jamais un
 // diagnostic (on écrit « fréquent ici », jamais « cause certaine »).
 //
+// Lot 3 bis (D59, ARCHITECTURE.md §16.7) : l'encart dit aussi la solidité de ses chiffres. Sur 12 cas,
+// « 7 cas sur 12 » veut dire « entre 32 % et 81 % des cas » (fourchette de Wilson à 95 %) : quand une
+// fourchette dépasse ± 20 points, la mention « Peu de cas : à prendre comme une piste. » s'affiche, et
+// les fourchettes sont toujours dans un détail que l'on déplie.
+//
 // Utilisé par les fiches DI et OT (onglets Préparation et Compte rendu), pour tous les profils.
 // Fonctions de lecture seule : rien n'est écrit. Toute donnée insérée dans l'encart passe par
 // UI.html (échappement).
@@ -15,6 +20,9 @@ const CausesFrequentes = (() => {
   const LIENS_PAR_CAUSE = 5;          // au plus 5 liens « voir les OT » par cause (les plus récents)
   const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
   const MENTION = 'Statistique de l\'historique, pas un diagnostic';
+  const Z_95 = 1.96;                  // fourchette à 95 % (loi normale)
+  const DEMI_LARGEUR_PISTE = 0.20;    // au-delà de ± 20 points : « peu de cas »
+  const MENTION_PISTE = 'Peu de cas : à prendre comme une piste.';
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -36,6 +44,54 @@ const CausesFrequentes = (() => {
   /** Date d'un cas : fin des travaux, sinon clôture technique, sinon création (AAAA-MM-JJ). */
   function dateDuCas(ot) {
     return (texte(ot.date_fin) || texte(ot.date_cloture_tech) || texte(ot.date_creation)).slice(0, 10);
+  }
+
+  /**
+   * Fourchette de la part k / n (D59) : intervalle de Wilson à 95 %, { bas, haut } entre 0 et 1,
+   * ou null si n = 0. Plus juste que « k / n plus ou moins … » quand il y a peu de cas ou quand la
+   * part est proche de 0 ou de 1 (la fourchette ne sort jamais de 0–100 %).
+   */
+  function fourchette(k, n) {
+    const total = Number(n);
+    const cas = Number(k);
+    if (!(total > 0) || !(cas >= 0) || cas > total) return null;
+    const part = cas / total;
+    const z2 = Z_95 * Z_95;
+    const denominateur = 1 + z2 / total;
+    const centre = (part + z2 / (2 * total)) / denominateur;
+    const marge = (Z_95 * Math.sqrt(part * (1 - part) / total + z2 / (4 * total * total))) / denominateur;
+    // Bornes exactes aux extrêmes (aucun cas : 0 % ; tous les cas : 100 %), sans erreur d'arrondi.
+    return { bas: cas === 0 ? 0 : Math.max(0, centre - marge), haut: cas === total ? 1 : Math.min(1, centre + marge) };
+  }
+
+  /** 0,3195 → « 32 % » : arrondi à l'unité, demi vers le haut. */
+  function pourcent(part) {
+    return Math.floor(part * 100 + 0.5) + '\u00a0%';
+  }
+
+  /** « entre 32 % et 81 % des cas » (vide si n = 0). */
+  function texteFourchette(k, n) {
+    const resultat = fourchette(k, n);
+    return resultat ? 'entre ' + pourcent(resultat.bas) + ' et ' + pourcent(resultat.haut) + ' des cas' : '';
+  }
+
+  /** Vrai si au moins une cause affichée a une fourchette de plus de ± 20 points. */
+  function peuDeCas(resultat) {
+    return resultat.causes.some((cause) => {
+      const f = fourchette(cause.nombre, resultat.total);
+      return f !== null && (f.haut - f.bas) / 2 > DEMI_LARGEUR_PISTE;
+    });
+  }
+
+  /** Détail replié « Précision de ces chiffres » : la fourchette de chaque cause affichée. */
+  function precisionHtml(resultat) {
+    return UI.html`<details class="causes-precision">
+      <summary>Précision de ces chiffres</summary>
+      <dl class="causes-fourchettes">${resultat.causes.map((cause) => UI.html`<div><dt>${cause.libelle} :</dt>
+        <dd>${texteFourchette(cause.nombre, resultat.total)}</dd></div>`)}</dl>
+      <p class="causes-explication">La part réelle de chaque cause a 95 chances sur 100 d'être dans sa fourchette
+        (méthode de Wilson) ; la fourchette se resserre quand les cas s'accumulent.</p>
+    </details>`;
   }
 
   /** Plus récent d'abord (date du cas, puis identifiant). */
@@ -193,10 +249,12 @@ const CausesFrequentes = (() => {
     return UI.element(UI.html`<div class="encadre causes-frequentes">
       <h3>Causes fréquentes ici — ${resultat.total} cas</h3>
       <p class="aide">Portée : ${resultat.libellePortee}</p>
+      ${peuDeCas(resultat) ? UI.html`<p class="causes-piste"><b>${MENTION_PISTE}</b></p>` : ''}
       <ul>${resultat.causes.map((cause) => ligneCause(cause, resultat, equipementId))}</ul>
       <p class="note">${MENTION}</p>
+      ${precisionHtml(resultat)}
     </div>`);
   }
 
-  return { MINIMUM_PAR_DEFAUT, MENTION, calculer, encart };
+  return { MINIMUM_PAR_DEFAUT, MENTION, MENTION_PISTE, calculer, encart, fourchette, texteFourchette };
 })();

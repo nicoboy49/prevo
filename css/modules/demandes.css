@@ -165,7 +165,20 @@
    css/modules/ sont chargées partout, et l'encart sert aussi sur la fiche d'un OT.
    ========================================================================================= */
 
+/* Lot 3 bis (D59) : mention « peu de cas » et détail des fourchettes */
+.causes-piste { margin: .3rem 0; }
+.causes-precision { margin-top: .4rem; }
+.causes-precision summary {
+  cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center;
+}
+.causes-fourchettes { margin: .3rem 0; }
+.causes-fourchettes > div { display: flex; flex-wrap: wrap; gap: 0 .4rem; }
+.causes-fourchettes dt { font-weight: 600; }
+.causes-fourchettes dd { margin: 0; }
+.causes-explication { font-size: .875rem; margin: .3rem 0 0; }
+
 @media (max-width: 640px) {
+  .causes-precision summary { min-height: var(--tactile); }
   /* liens « voir les OT » et « et n autres » : pastilles de 48 px de haut, qui passent à la ligne */
   .causes-frequentes li a {
     display: inline-flex; align-items: center; vertical-align: middle; min-height: 48px; max-width: 100%;
