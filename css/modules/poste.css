@@ -1,6 +1,51 @@
 /* Écran « Ce poste » (lot 4, ARCHITECTURE.md §17.7) : identité, assistant IA, dictée, affichage.
-   Variables de la charte seulement : le thème clair les redéfinit. */
+   Variables de la charte seulement (css/style.css) : le thème clair les redéfinit, l'impression aussi.
+   Zones cliquables : var(--tactile), qui vaut 48 px sur téléphone. */
 
-.poste {
-  min-width: 0;
+/* Colonnes : les cartes d'une colonne s'empilent ; rien ne déborde sur un téléphone */
+.poste > .poste-colonne { min-width: 0; }
+.poste .carte { overflow-wrap: anywhere; }
+.poste .poste-intro { margin: 0 0 1rem; }
+.poste .entete-carte .badge { white-space: normal; text-align: center; }
+
+/* --- Assistant IA --- */
+.poste-ia .champ .case { align-self: flex-start; }
+.poste-ia-zone-cle { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.poste-ia-zone-cle[hidden] { display: none; }
+
+/* Portée : « Où vont les textes : reste sur ce PC » ; en ambre quand les textes partent en ligne */
+.poste-ia-portee {
+  border: 1px solid var(--bord-bleu); background: var(--teinte-bleu-faible); border-radius: 14px;
+  padding: 10px 14px; color: var(--texte-bleu); min-width: 0;
+}
+.poste-ia-portee p { margin: 0; }
+.poste-ia-portee .aide { margin-top: .3rem; color: var(--texte-2); }
+.poste-ia-portee b { color: var(--fort); }
+.poste-ia-portee.distant { border-color: var(--bord-ambre); background: var(--teinte-ambre-faible); color: var(--texte-ambre); }
+.poste-ia-portee.distant .aide { color: var(--texte-ambre); }
+.poste-ia-portee.invalide { border-color: var(--bord-rouge); background: var(--teinte-rouge-faible); color: var(--texte-important); }
+.poste-ia-portee a { font-weight: 600; }
+.poste-ia .actions { margin-top: 0; }
+.poste-ia-resultat:empty { display: none; }
+.poste-ia-resultat .alerte { margin: 0; }
+.poste-ia-resultat .chargement { padding: 6px 0; }
+
+/* --- Dictée et affichage --- */
+.poste-etat-detecte { margin: .6rem 0 0; color: var(--texte-2); }
+.poste-etat-detecte b { color: var(--texte); font-weight: 600; }
+.poste-themes { display: flex; flex-direction: column; gap: .25rem; }
+.poste-themes legend { padding: 0 .4rem; }
+
+/* Fenêtre d'avertissement d'un fournisseur en ligne */
+.poste-avertissement-distant p { margin: 0; }
+.poste-avertissement-distant b { color: var(--texte-ambre); }
+
+/* Téléphone (≤ 640 px) : liens assez hauts pour un doigt */
+@media (max-width: 640px) {
+  .poste-ia-portee a { display: inline-flex; align-items: center; min-height: var(--tactile); }
+}
+
+/* Impression : les réglages du poste ne s'impriment pas */
+@media print {
+  .poste-ia-resultat, .poste-ia-zone-cle { display: none !important; }
 }

@@ -34,6 +34,11 @@
   overflow-wrap: anywhere;
 }
 
+/* --- menu latéral plus haut que l'écran (lot 4 : entrée « Ce poste ») : ses blocs gardent leur
+   hauteur et c'est le menu qui défile (overflow-y de style.css). Sinon l'en-tête rétrécit, et le logo
+   et le bouton de repli passent sous les entrées du menu, qui les recouvrent. --- */
+.menu-lateral > * { flex-shrink: 0; }
+
 /* --- bouton de profil du menu latéral (.etat-poste, composant de style.css, ici en <button>) --- */
 button.etat-poste {
   width: 100%; min-height: var(--tactile); background: none; border: 1px solid transparent; border-radius: 12px;

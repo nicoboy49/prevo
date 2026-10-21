@@ -381,11 +381,18 @@ class TestParametres(CasParametres):
             self.assertEqual(page.input_value("#form-parametres [name=delai_p2_h]"), "48")
 
     def test_ce_poste_et_changement_de_profil(self):
+        # Lot 4 (§17.1, §17.7) : la carte « Ce poste » de Paramètres renvoie à l'écran « Ce poste »
+        # (#/poste), qui porte désormais le bouton « Changer de profil ou de nom de poste… ».
         with ServeurPrevo() as serveur:
             page = self.ouvrir(serveur, route="#/parametres")
             self.attendre_ecran("Paramètres")
             self.assertEqual(self.texte("#poste-nom"), "Poste test")
             self.assertEqual(self.texte("#poste-profil"), "Responsable")
+            self.assertEqual(page.get_attribute("#lien-ce-poste", "href"), "#/poste")
+            self.assertIn("Ouvrir « Ce poste »", self.texte("#lien-ce-poste"))
+            page.click("#lien-ce-poste")
+            page.wait_for_function("location.hash === '#/poste'")
+            self.attendre_ecran("Ce poste")
             page.click("#btn-changer-profil")
             page.wait_for_function("document.documentElement.dataset.etat === 'profil'")
             page.click("#profil-annuler")

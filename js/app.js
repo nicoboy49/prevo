@@ -67,9 +67,23 @@ const App = (() => {
   let resoudreBaseVide = null;     // fonction qui termine l'écran « base vide » en cours
   const alertesCoque = [];         // bandeaux à montrer dans la coque (ex. verrou du dossier)
 
+  // Thème du poste (lot 4, §17.7) : <html data-theme="clair"> posé dès la lecture de ce fichier, donc
+  // avant DOMContentLoaded et avant le premier écran (pas d'écran sombre qui passe au clair).
+  appliquerThemeDuPoste();
+
   // ===========================================================================================
   // 1. Petits outils
   // ===========================================================================================
+
+  // Thème mémorisé sur le poste (prevo.theme, lu par Poste avec une lecture protégée) ; une erreur
+  // n'empêche jamais Prévo de démarrer : le thème sombre par défaut reste alors en place.
+  function appliquerThemeDuPoste() {
+    try {
+      if (typeof Poste !== 'undefined') Poste.appliquerTheme(Poste.themeMemorise());
+    } catch (erreur) {
+      console.warn('Prévo : thème du poste non appliqué (' + (erreur && erreur.message) + ').', erreur);
+    }
+  }
 
   // localStorage peut être refusé (navigation privée, réglage) : on continue sans mémoire.
   function lireMemoire(cle) {

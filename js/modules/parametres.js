@@ -4,8 +4,9 @@
 //
 //   Paramètres : entreprise, délais par priorité, préventif et indicateurs (lot 3, §15.11),
 //                rafraîchissement (écrits dans parametres.csv par Donnees.modifier), ce poste (nom,
-//                profil), sauvegardes (créer, restaurer), lien vers le contrôle de la base, export
-//                ZIP ; carte « Codes de défaillance » (parametres-codes.js, appelée par un relais).
+//                profil, lien vers l'écran « Ce poste » #/poste du lot 4), sauvegardes (créer,
+//                restaurer), lien vers le contrôle de la base, export ZIP ; carte « Codes de
+//                défaillance » (parametres-codes.js, appelée par un relais).
 //   Contrôle   : problèmes de Donnees.problemes() groupés par gravité, attribution des identifiants
 //                manquants, relecture des fichiers, liens vers les DI / OT concernés.
 
@@ -357,8 +358,8 @@ const Parametres = (() => {
               <dt>Profil</dt><dd id="poste-profil">${App.libelleProfil()}</dd>
               <dt>Stockage</dt><dd>${App.adaptateur.libelle || App.mode}</dd>
             </dl>
-            <p class="note">Le nom du poste est inscrit au journal avec chaque modification.</p>
-            <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-changer-profil">${UI.icone('utilisateur')}Changer de profil ou de nom de poste…</button></div>
+            <p class="note">Nom, profil, assistant IA, dictée et thème de ce navigateur se règlent dans « Ce poste ».</p>
+            <div class="actions"><a class="btn btn-secondaire" id="lien-ce-poste" href="#/poste">${UI.icone('utilisateur')}Ouvrir « Ce poste »</a></div>
           </article>
           <article class="carte">
             <div class="entete-carte"><h2>Contrôle de la base</h2>${resumeControle}</div>
@@ -380,7 +381,6 @@ const Parametres = (() => {
       UI.$('#zone-sauvegardes', conteneur).appendChild(tableauSauvegardes(sauvegardes.liste));
       mettreSurLeBouton(conteneur, '#btn-sauvegarder', (bouton) => pendant(bouton, 'sauvegarde', sauvegarderMaintenant));
     }
-    mettreSurLeBouton(conteneur, '#btn-changer-profil', () => { App.changerProfil(); });
     mettreSurLeBouton(conteneur, '#btn-export-zip', (bouton) => pendant(bouton, 'export ZIP', () => App.exporterZip()));
   }
 
