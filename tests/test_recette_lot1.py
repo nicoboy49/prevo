@@ -731,7 +731,7 @@ class TestRecetteTraversee(unittest.TestCase):
 class TestRecetteDesign(CasRecette):
 
     ECRANS = (
-        ("#/accueil", "#contenu .instruments"),
+        ("#/accueil", "#contenu #bento"),                 # accueil « bento » du responsable (T90)
         ("#/di/nouvelle", ".di-formulaire"),
         ("#/equipement/" + POMPE, ".parc-qr-carte"),
         ("#/ot/" + SCENARIOS["ot_p1_ouvert"], ".ot-fiche .ot-numero"),

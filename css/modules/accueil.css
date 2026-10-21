@@ -1,13 +1,15 @@
-/* Prévo — mise en page propre au module Accueil (js/modules/accueil.js).
+/* Prévo — mise en page propre au module Accueil (js/modules/accueil.js, accueil-bento.js).
    Les composants communs (cartes, indicateurs, listes de cartes, QR) sont dans css/style.css ;
    ici seulement ce qui est propre à l'accueil. Uniquement des variables de la charte. */
 
-/* Cinq indicateurs du responsable : une seule ligne sur grand écran, trois colonnes sur tablette,
-   deux sur téléphone (règles plus bas). */
-/* Lot 3 : sept indicateurs pour le responsable (deux lignes de quatre au plus, lisibles), deux pour le technicien */
-.accueil-instruments { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.accueil-instruments-technicien { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 640px; }
-.accueil-instruments .lib { overflow-wrap: anywhere; }
+/* =========================================================================================
+   Technicien et demandeur (inchangés par la refonte du responsable)
+   ========================================================================================= */
+
+/* Deux indicateurs pour le technicien (contrôles, habilitations) */
+.instruments.accueil-instruments { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.instruments.accueil-instruments-technicien { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 640px; }
+.instruments.accueil-instruments .lib { overflow-wrap: anywhere; }
 
 /* Technicien : ses préventifs de la semaine, puis ses autres OT, dans la même carte */
 .accueil-sous-titre { display: flex; align-items: center; gap: .5rem; font-size: 1rem; margin: 1rem 0 .6rem; color: var(--texte); }
@@ -41,15 +43,266 @@
 .accueil-rappels { margin: .4rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .35rem; color: var(--texte-2); }
 .accueil-rappels b { color: var(--texte); }
 
-@media (max-width: 1099.98px) {
-  .accueil-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .accueil-instruments-technicien { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* =========================================================================================
+   Responsable : accueil « bento » (T90, BRIEF_design_accueil.md)
+   Grille de 12 colonnes internes (les 6 colonnes du brief), écart 16 px :
+     synthèse 8 × 2 rangées · « en premier » 4 × 2 · 4 compteurs de 2 (3 sans la tuile du rapport) ·
+     rapport 4 · listes 6 + 6 · 3 tuiles « à surveiller » de 4.
+   ========================================================================================= */
+
+/* --- en-tête : « Bonjour », date ; mention démo et « Exporter en ZIP » --- */
+.bento-entete { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; margin-bottom: 22px; }
+.bento-salut h1 { font-size: 2rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.15; }
+.bento-date { margin: 4px 0 0; color: var(--texte-2); font-weight: 500; }
+.bento-entete-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bento-demo {
+  display: inline-flex; align-items: center; gap: .45rem; min-height: 34px; padding: 4px 14px 4px 12px; border-radius: 999px;
+  background: var(--teinte-ambre); color: var(--texte-ambre); font-size: .875rem; font-weight: 700;
+}
+.bento-demo .icone { width: 16px; height: 16px; }
+.bento-zip { border: 1px solid var(--trait-2); border-radius: 999px; padding: .5rem 1.15rem; }
+/* Le bandeau démo de la coque laisse la place à la mention de l'en-tête, sur cet écran seulement */
+.zone-principale:has(#contenu .bento) > .bandeau-demo { display: none; }
+
+/* --- grille et tuiles --- */
+.bento { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+.bento > * { min-width: 0; }
+.bento-tuile {
+  position: relative; padding: 22px; border-radius: var(--rayon-tuile); color: var(--texte);
+  background: var(--carte); border: 1px solid var(--trait); box-shadow: var(--ombre-tuile);
+}
+a.bento-tuile { text-decoration: none; transition: transform .25s ease, border-color .25s ease; }
+a.bento-tuile:hover { transform: translateY(-4px); border-color: var(--bord-bleu-fort); }
+
+/* Pastilles d'icône et grosses pastilles carrées : teinte pastel, texte de la même famille */
+.bento-pastille-icone, .bento-carre { display: grid; place-items: center; flex: none; }
+.bento-pastille-icone { width: 42px; height: 42px; border-radius: 14px; }
+.bento-pastille-icone .icone { width: 22px; height: 22px; }
+.bento-pastille-icone.bleu, .bento-carre.bleu { background: var(--teinte-bleu); color: var(--texte-bleu); }
+.bento-pastille-icone.rouge, .bento-carre.rouge { background: var(--teinte-rouge); color: var(--texte-rouge); }
+.bento-pastille-icone.ambre, .bento-carre.ambre { background: var(--teinte-ambre); color: var(--texte-ambre); }
+.bento-pastille-icone.vert, .bento-carre.vert { background: var(--teinte-vert); color: var(--texte-vert); }
+.bento-pastille-icone.violet, .bento-carre.violet { background: var(--teinte-violet); color: var(--texte-violet); }
+
+/* Chiffres : le texte du DOM est la valeur (lecteurs d'écran) ; le dessin est un compteur CSS mené par
+   --compte, qui défile de 0 à la valeur à l'ouverture (1,1 s, décélération) */
+@property --compte { syntax: '<integer>'; inherits: false; initial-value: 0; }
+.bento .chiffre {
+  --compte: var(--valeur); counter-reset: bento-compte var(--compte);
+  display: block; font-size: 2.125rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; color: var(--fort);
+}
+.bento .chiffre::after { content: counter(bento-compte); content: counter(bento-compte) / ""; }
+.bento-anime .chiffre { animation: bento-compter 1.1s cubic-bezier(.16, 1, .3, 1) both; }
+@keyframes bento-compter { from { --compte: 0; } }
+
+.bento .lib { display: block; font-weight: 600; font-size: .9375rem; color: var(--texte); }
+.bento .comp { display: block; font-size: .875rem; font-weight: 600; color: var(--muted); }
+.bento .comp.rouge { color: var(--texte-rouge); }
+.bento .comp.ambre { color: var(--texte-ambre); }
+
+/* --- 1. synthèse : dégradé bleu, texte blanc, décor « lueur » --- */
+.bento-synthese {
+  grid-column: span 8; grid-row: span 2; display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
+  padding: 28px 30px; border: 0; border-radius: var(--rayon-tuile-grande); overflow: hidden; isolation: isolate;
+  background: var(--fond-synthese); background-color: var(--fond-synthese-uni); box-shadow: var(--ombre-synthese);
+  color: var(--sur-synthese);
+}
+.bento.sans-premier .bento-synthese { grid-column: span 12; }
+.bento-synthese :focus-visible { outline-color: var(--sur-synthese); }
+.bento-lueur { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+/* Voile sombre discret en bas de la tuile, au-dessus des halos et sous le texte : la ligne secondaire et
+   le bouton « verre » gardent 4,5:1 (le dégradé seul descend à 4,2:1 à droite de la ligne). */
+.bento-synthese::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(to top, var(--synthese-voile), var(--synthese-voile) 30%, transparent 72%);
+}
+.bento-halo { position: absolute; border-radius: 50%; filter: blur(18px); }
+.bento-halo-blanc {
+  width: 58%; aspect-ratio: 1; top: -62%; right: -26%;
+  background: radial-gradient(closest-side, var(--halo-synthese-blanc), transparent);
+  animation: bento-derive-blanc 14s ease-in-out infinite alternate;
+}
+.bento-halo-cyan {
+  width: 64%; aspect-ratio: 1; bottom: -62%; left: -20%;
+  background: radial-gradient(closest-side, var(--halo-synthese-cyan), transparent);
+  animation: bento-derive-cyan 18s ease-in-out infinite alternate;
+}
+/* Le halo blanc dérive le long du bord haut (vers le bas, il éclaircirait la fin de la phrase : < 3:1) */
+@keyframes bento-derive-blanc { to { transform: translate(-12%, -4%) scale(1.08); } }
+@keyframes bento-derive-cyan { to { transform: translate(10%, -8%) scale(1.06); } }
+
+.bento-moment {
+  display: inline-flex; align-items: center; gap: .55rem; margin: 0; padding: 6px 14px 6px 12px; border-radius: 999px;
+  background: var(--synthese-pastille); font-size: .875rem; font-weight: 600;
+}
+.bento-moment::before, .bento-securite::before {
+  content: ""; flex: none; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor;
+  animation: bento-pouls 2s ease-out infinite;
+}
+.bento-moment::before { color: var(--pouls-vert); }
+@keyframes bento-pouls { from { box-shadow: 0 0 0 0 currentColor; } to { box-shadow: 0 0 0 .55rem transparent; } }
+
+.bento-phrase { margin: 4px 0 0; max-width: 18ch; font-size: 2.875rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.08; color: inherit; }
+.bento-securite {
+  display: inline-flex; align-items: center; gap: .3em; padding: .02em .42em .06em .34em; border-radius: 999px;
+  background: var(--synthese-bouton-fond); color: var(--synthese-securite); font-size: .78em; vertical-align: .08em; white-space: nowrap;
+}
+.bento-securite::before { width: .32em; height: .32em; }
+.bento-resume { margin: 0; font-size: 1.0625rem; font-weight: 500; }
+.bento-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto; padding-top: 6px; }
+.bento-actions .btn { border-radius: 999px; padding: .6rem 1.25rem; }
+.bento-btn-blanc { background: var(--synthese-bouton-fond); color: var(--synthese-bouton-texte); font-weight: 700; }
+.bento-btn-blanc:hover { background: var(--synthese-bouton-survol); }
+.bento-btn-verre {
+  color: var(--sur-synthese); border: 1px solid var(--synthese-verre-bord);
+  background: linear-gradient(var(--synthese-verre), var(--synthese-verre)), var(--synthese-voile);
+}
+.bento-btn-verre:hover { background: linear-gradient(var(--synthese-verre-survol), var(--synthese-verre-survol)), var(--synthese-voile); }
+
+/* --- 2. « À traiter en premier » --- */
+.bento-premier {
+  grid-column: span 4; grid-row: span 2; display: flex; flex-direction: column; gap: 10px;
+  padding: 24px; border-radius: var(--rayon-tuile-grande);
+}
+.bento-premier-tete { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.bento-premier-tete h2 { font-size: .9375rem; color: var(--texte-2); }
+.bento-premier-element { margin: 0; font-size: 1.1875rem; font-weight: 700; line-height: 1.3; color: var(--fort); overflow-wrap: anywhere; }
+.bento-premier-detail {
+  margin: 0; color: var(--texte-2); font-size: .9375rem; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.bento-pastilles { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 0; }
+.bento-premier-action { margin-top: auto; width: 100%; border-radius: 14px; }
+
+/* --- 3. compteurs --- */
+.bento-compteur { grid-column: span 3; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 20px 20px 18px; }
+.bento:has(> .bento-rapport) .bento-compteur { grid-column: span 2; }
+.bento-compteur .bento-pastille-icone { margin-bottom: 12px; }
+
+/* --- 4. rapport du mois écoulé (Rapport.tuileAccueil) --- */
+.bento-rapport { grid-column: span 4; display: flex; flex-direction: column; gap: 10px; background: var(--carte-2); }
+.bento-rapport p { margin: 6px 0 0; color: var(--texte-2); font-size: .9375rem; }
+.bento-rapport-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+.bento-rapport-actions .btn { border-radius: 999px; }
+
+/* --- 5. listes : lignes de 56 px, séparateur fin --- */
+.bento-liste { grid-column: span 6; padding: 18px 22px 12px; }
+.bento-liste-tete h2, .bento-rapport h2 { font-size: 1.0625rem; }
+.bento-liste-tete { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.bento-tout-voir { display: inline-flex; align-items: center; min-height: var(--tactile); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.bento-tout-voir:hover { text-decoration: underline; }
+.bento-liste ul { list-style: none; margin: 0; padding: 0; }
+.bento-liste li + li { border-top: 1px solid var(--trait); }
+.bento-liste li a {
+  display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 8px; margin: 0 -8px; border-radius: 12px;
+  color: var(--texte); text-decoration: none;
+}
+.bento-liste li a:hover { background: var(--survol); }
+.bento-point { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.bento-point.rouge { background: var(--rouge); } .bento-point.ambre { background: var(--ambre); } .bento-point.bleu { background: var(--bleu); }
+.bento-ligne-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.bento-ligne-titre, .bento-ligne-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bento-ligne-titre { font-weight: 600; font-size: .9375rem; }
+.bento-ligne-meta { font-size: .8125rem; color: var(--muted); }
+.bento-liste .badge { flex: none; }
+.bento-retard { flex: none; font-weight: 700; color: var(--texte-ambre); white-space: nowrap; }
+.bento-vide { margin: 14px 0 10px; color: var(--texte-2); }
+
+/* --- 6. « à surveiller » --- */
+.bento-surveiller { grid-column: span 4; display: flex; align-items: center; gap: 16px; padding: 18px 20px; }
+.bento-carre { width: 60px; height: 60px; border-radius: 18px; }
+.bento-carre .chiffre { font-size: 1.625rem; color: inherit; }
+.bento-surveiller-corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bento-chevron { flex: none; width: 20px; height: 20px; color: var(--muted); }
+.bento-conformite { align-items: flex-start; }
+.bento-conformite h2.lib { margin-bottom: 2px; }
+/* Un lien par liste (contrôles, habilitations) : chiffre, libellé, puis le détail coloré dessous */
+.bento-sous-lien {
+  display: flex; align-items: center; gap: 10px; min-height: var(--tactile); margin: 0 -8px; padding: 4px 8px;
+  border-radius: 12px; color: var(--texte-2); text-decoration: none; font-size: .875rem; line-height: 1.35;
+}
+.bento-sous-lien:hover { background: var(--survol); }
+.bento-sous-lien .chiffre { flex: none; min-width: 1.4em; font-size: 1.125rem; text-align: center; }
+.bento-sous-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.bento-sous-lien .comp { font-size: .8125rem; }
+.bento-sous-lien .bento-chevron { width: 18px; height: 18px; }
+
+/* Carte « Connecter un téléphone » (mode serveur) sous la grille */
+.bento + #carte-connexion { margin-top: 16px; }
+
+/* --- mouvements coupés (le reste l'est par css/style.css §13) : pas de soulèvement au survol --- */
+@media (prefers-reduced-motion: reduce) {
+  a.bento-tuile:hover { transform: none; }
 }
 
+/* --- PC étroit et tablette (moins de 1360 px : moins de 1 030 px de contenu) : la grille du brief y
+   serrerait trop les compteurs et les tuiles « à surveiller ». Le rapport passe sur sa propre ligne
+   (les compteurs gardent la leur), « Articles » et « Suggestions » côte à côte, « Contrôles et
+   habilitations » dessous, sur toute la largeur. --- */
+@media (max-width: 1359.98px) {
+  .bento:has(> .bento-rapport) .bento-compteur { grid-column: span 3; }
+  .bento-rapport { grid-column: span 12; flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 20px; }
+  .bento-rapport-texte { flex: 1 1 320px; min-width: 0; }
+  .bento-rapport-actions { margin-top: 0; }
+  .bento-surveiller { grid-column: span 6; }
+  .bento-conformite { grid-column: span 12; order: 1; }
+  .bento-conformite .bento-surveiller-corps { flex-direction: row; flex-wrap: wrap; column-gap: 24px; }
+  .bento-conformite h2.lib { flex: 1 0 100%; }
+  .bento-conformite .bento-sous-lien { flex: 1 1 240px; margin: 0; }
+}
+@media (min-width: 1100px) and (max-width: 1359.98px) {
+  .bento-synthese { grid-column: span 7; }
+  .bento-premier { grid-column: span 5; }
+  .bento-phrase { font-size: 2.5rem; }
+}
+/* --- tablette (641 à 1099 px) : synthèse, « en premier » et listes sur toute la largeur --- */
+@media (max-width: 1099.98px) {
+  .instruments.accueil-instruments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .instruments.accueil-instruments-technicien { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bento-synthese, .bento-premier, .bento-liste { grid-column: span 12; grid-row: auto; }
+}
+@media (min-width: 900px) and (max-width: 1099.98px) {
+  .bento-liste { grid-column: span 6; }
+}
+/* Moins de 900 px : les tuiles « à surveiller » l'une sous l'autre, dans l'ordre */
+@media (max-width: 899.98px) {
+  .bento-surveiller, .bento-conformite { grid-column: span 12; order: 0; }
+  .bento-conformite .bento-surveiller-corps { flex-direction: column; }
+  .bento-conformite .bento-sous-lien { flex: none; margin: 0 -8px; }
+}
+@media (min-width: 641px) and (max-width: 799.98px) {
+  .bento-compteur, .bento:has(> .bento-rapport) .bento-compteur { grid-column: span 6; }
+}
+
+/* --- téléphone (≤ 640 px) : 2 colonnes, écart 12 px ; l'en-tête mobile dit « Bonjour » et la date --- */
 @media (max-width: 640px) {
-  .accueil-instruments { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .accueil-instruments .lib { font-size: .8125rem; }
-  .accueil-instruments .comp { font-size: .75rem; }
+  .instruments.accueil-instruments { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .instruments.accueil-instruments .lib { font-size: .8125rem; }
+  .instruments.accueil-instruments .comp { font-size: .75rem; }
   .accueil-connexion { justify-content: center; }
   .accueil-signaler { max-width: none; }
+
+  .bento-entete { margin-bottom: 12px; }
+  .bento-salut {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .bento-zip { display: none; }
+  .zone-principale:has(#contenu .bento) #btn-profil-mobile { border-radius: 50%; background: var(--teinte-bleu); color: var(--texte-bleu); }
+  .bento { gap: 12px; }
+  .bento-tuile { padding: 18px; }
+  .bento-synthese { padding: 22px 20px; gap: 12px; }
+  .bento-phrase { font-size: 1.875rem; }
+  .bento-compteur, .bento:has(> .bento-rapport) .bento-compteur { grid-column: span 6; padding: 16px; }
+  #bento-demandes { display: none; }
+  .bento-rapport { flex-direction: row; align-items: center; gap: 12px; padding: 14px 16px; }
+  .bento-rapport-texte { flex: 1; min-width: 0; }
+  .bento-rapport p { display: none; }
+  .bento-rapport h2 { font-size: 1rem; }
+  .bento-rapport-actions { margin-top: 0; flex-wrap: nowrap; }
+  .bento-rapport-suite {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .bento-actions { align-self: stretch; }
+  .bento-actions .btn { flex: 1 1 auto; }
+  .bento-rapport h2 { font-size: .9375rem; }
 }

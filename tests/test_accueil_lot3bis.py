@@ -61,8 +61,11 @@ class TestAccueilLot3bis(CasNavigateur):
         self.assertEqual(self.page.evaluate("Suggestions.ouvertes(Donnees.aujourdhui()).length"), len(attendues))
         complement = lien.locator(".comp").inner_text()
         self.assertEqual(complement, "dont %d sur criticité A" % sur_a if sur_a else "à examiner")
-        # Les sept indicateurs des lots 2 et 3 restent là, le nouveau s'y ajoute
-        self.assertEqual(self.page.locator("#contenu .accueil-instruments > a").count(), 8)
+        # Les sept indicateurs des lots 2 et 3 restent là, le nouveau s'y ajoute (accueil « bento », T90 :
+        # 4 compteurs, 2 tuiles « à surveiller », les 2 liens de « Contrôles et habilitations »)
+        self.assertEqual(self.page.locator(
+            "#contenu #bento :is(a.bento-compteur, a.bento-surveiller, a.bento-sous-lien)").count(), 8)
+        self.assertIn("bento-surveiller", lien.get_attribute("class"))
 
     def test_sans_suggestion_sur_criticite_a_le_complement_dit_a_examiner(self):
         # Serveur à part : ses équipements de criticité A passent en B (écriture dans sa copie seulement).

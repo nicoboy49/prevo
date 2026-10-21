@@ -3,7 +3,8 @@
 Toujours serveur.py sur une copie du jeu de démo (ServeurPrevo). Familles (le nom du test le dit) :
     compteurs : « Contrôles sous 30 j » et « Habilitations à renouveler » = calcul Python
                 indépendant sur les CSV du serveur (date du jour réelle) ; liens vers
-                #/controles?filtre=30j et #/equipe?filtre=a-renouveler ; complément « dont n en
+                #/controles?filtre=30j et #/equipe?filtre=a-renouveler (les deux liens de la tuile
+                « Contrôles et habilitations » de l'accueil « bento », T90) ; complément « dont n en
                 retard » / « dont n échue(s) » ;
     profils   : le technicien voit les deux indicateurs, le demandeur ne les voit pas ;
     telephone : 375 px, aucun défilement horizontal de la page avec huit indicateurs (lot 3 bis).
@@ -140,8 +141,13 @@ class TestAccueilLot3(CasNavigateur):
         # Mêmes valeurs que les règles (calculerCompteurs est le point d'extension)
         self.assertEqual(self.page.evaluate("Accueil.calculerCompteurs().controlesSous30j.length"), controles)
         self.assertEqual(self.page.evaluate("Accueil.calculerCompteurs().habilitationsARenouveler.length"), habilitations)
-        # Les cinq indicateurs du lot 2 sont toujours là (plus celui du lot 3 bis, §16.6)
-        self.assertEqual(self.page.locator("#contenu .accueil-instruments > a").count(), 8)
+        # Les cinq indicateurs du lot 2 sont toujours là (plus celui du lot 3 bis, §16.6) ; accueil
+        # « bento » (T90) : 4 compteurs, 2 tuiles « à surveiller » et les 2 liens de « Contrôles et habilitations »
+        self.assertEqual(self.page.locator(
+            "#contenu #bento :is(a.bento-compteur, a.bento-surveiller, a.bento-sous-lien)").count(), 8)
+        # Contrôles et habilitations réunis dans une tuile
+        self.assertEqual(self.page.locator("#contenu .bento-conformite a[href='%s']" % LIEN_CONTROLES).count(), 1)
+        self.assertEqual(self.page.locator("#contenu .bento-conformite a[href='%s']" % LIEN_HABILITATIONS).count(), 1)
 
     def test_profils_technicien_voit_les_deux_indicateurs_demandeur_aucun(self):
         technicien = next(t for t in lire_csv(self.serveur.dossier, "techniciens.csv") if brut(t["actif"]) != "0")

@@ -112,21 +112,28 @@ class TestFichier(CasApp):
         self.choisir_responsable()
         self.assertEqual(page.evaluate("App.mode"), "demo")
         self.assertEqual(page.evaluate("location.hash"), "#/accueil")
-        self.assertTrue(page.is_visible("#bandeau-demo"))
-        self.assertIn("Démo — rien n'est enregistré", self.texte("#bandeau-demo"))
+        # Accueil du responsable (T90) : la mention démo et « Exporter en ZIP » sont dans son en-tête ;
+        # le bandeau démo de la coque reprend sa place sur les autres écrans.
+        self.assertTrue(page.is_visible("#accueil-demo"))
+        self.assertIn("Démo — rien n'est enregistré", self.texte("#accueil-demo"))
         self.assertTrue(page.is_visible("#ecran-chargement") is False)
         self.assertEqual(page.evaluate("App.urlFicheEquipement('EQ-0001')"), "GMAO:EQ-0001")
         self.assertEqual(page.evaluate("performance.getEntriesByName('prevo:pret').length"), 1)
 
         # Export ZIP : les 22 CSV (BOM UTF-8) dans un fichier nommé prevo-export-AAAA-MM-JJ.zip
-        with page.expect_download() as attente:
-            page.click("#btn-export-demo")
-        telechargement = attente.value
-        self.assertRegex(telechargement.suggested_filename, r"^prevo-export-\d{4}-\d{2}-\d{2}\.zip$")
-        with zipfile.ZipFile(telechargement.path()) as archive:
-            noms_csv = sorted(n for n in archive.namelist() if n.endswith(".csv"))
-            self.assertEqual(noms_csv, noms_tables_demo())
-            self.assertTrue(archive.read("equipements.csv").startswith(BOM))
+        for bouton in ("#btn-export-accueil", "#btn-export-demo"):
+            if bouton == "#btn-export-demo":
+                page.evaluate("location.hash = '#/apropos'")
+                page.wait_for_selector("#bandeau-demo", state="visible")
+                self.assertIn("Démo — rien n'est enregistré", self.texte("#bandeau-demo"))
+            with page.expect_download() as attente:
+                page.click(bouton)
+            telechargement = attente.value
+            self.assertRegex(telechargement.suggested_filename, r"^prevo-export-\d{4}-\d{2}-\d{2}\.zip$")
+            with zipfile.ZipFile(telechargement.path()) as archive:
+                noms_csv = sorted(n for n in archive.namelist() if n.endswith(".csv"))
+                self.assertEqual(noms_csv, noms_tables_demo())
+                self.assertTrue(archive.read("equipements.csv").startswith(BOM))
 
         # Changement de profil sans rechargement (en démo, recharger ferait tout perdre)
         page.evaluate("window.__memePage = true")

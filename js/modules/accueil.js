@@ -1,12 +1,13 @@
 'use strict';
-// Accueil : écran d'arrivée (#/accueil), adapté au profil (brief §9 E1, ARCHITECTURE.md §10 et §14.6).
+// Accueil (1/2) : écran d'arrivée (#/accueil), adapté au profil (brief §9 E1, ARCHITECTURE.md §10 et §14.6).
+// Ce fichier : calculs des compteurs, accueils du technicien et du demandeur, carte de connexion,
+// affichage ; l'accueil du responsable (« bento », T90) est dans accueil-bento.js, qui complète Accueil.
 //
-//   Responsable : huit indicateurs (DI à traiter, OT en retard, P1 ouverts, préventifs de la
-//                 semaine, articles à commander ; depuis le lot 3 : contrôles réglementaires sous
-//                 30 jours, habilitations à renouveler ; depuis le lot 3 bis : suggestions de
-//                 préventif, §16.6) qui mènent à la liste filtrée, une alerte si
-//                 « Contrôle de la base » signale des erreurs, les 5 DI à traiter et les 5 OT en
-//                 retard les plus anciens.
+//   Responsable : tuile de synthèse, « À traiter en premier », compteurs (DI à traiter, OT en retard,
+//                 P1 ouverts, préventifs de la semaine), rapport du mois écoulé, 5 DI à traiter et 5 OT
+//                 en retard, tuiles « à surveiller » (articles à commander ; contrôles sous 30 jours et
+//                 habilitations à renouveler, lot 3 ; suggestions de préventif, lot 3 bis, §16.6), une
+//                 alerte si « Contrôle de la base » signale des erreurs (accueil-bento.js).
 //   Technicien  : gros bouton « Signaler », les deux indicateurs du lot 3 (contrôles sous 30 jours,
 //                 habilitations à renouveler) et la liste de ses OT ouverts : d'abord ses préventifs
 //                 de la semaine (ou la mention qu'il n'en a pas), puis ses autres OT.
@@ -174,16 +175,6 @@ const Accueil = (() => {
       habilitationsEchues ? 'dont ' + pluriel(habilitationsEchues, 'échue') : 'dans les 60 jours')}`;
   }
 
-  // Lot 3 bis (§16.6) : suggestions de préventif ouvertes, pour le responsable. Le complément dit
-  // combien concernent un équipement de criticité A (la couleur aide seulement). Suggestions est
-  // chargé après ce fichier : appelé au moment de l'affichage.
-  function indicateurSuggestions(aujourdhui) {
-    const ouvertes = Suggestions.ouvertes(aujourdhui);
-    const surA = ouvertes.filter((suggestion) => suggestion.criticite === 'A').length;
-    return indicateur('#/preventif?onglet=suggestions', surA ? 'ambre' : '', 'Suggestions de préventif', ouvertes.length,
-      surA ? 'dont ' + surA + ' sur criticité A' : 'à examiner');
-  }
-
   // Alerte du responsable : « Contrôle de la base » a trouvé des erreurs.
   function alerteControle() {
     const erreurs = Donnees.problemes().filter((p) => p.gravite === 'erreur').length;
@@ -254,54 +245,8 @@ const Accueil = (() => {
   }
 
   // ===========================================================================================
-  // 4. Les trois accueils
+  // 4. Accueils du technicien et du demandeur (celui du responsable : accueil-bento.js)
   // ===========================================================================================
-
-  function accueilResponsable() {
-    const aujourdhui = Donnees.aujourdhui();
-    const compteurs = calculerCompteurs();
-    const nombreSecurite = compteurs.diATraiter.filter((di) => di.impact === 'sécurité').length;
-    const nombreP1EnCours = compteurs.p1Ouverts.filter((ot) => ot.statut === 'En cours').length;
-    const preventifsEnRetard = compteurs.preventifsSemaine.filter((ot) => otEnRetard(ot, aujourdhui)).length;
-    const articlesCritiques = compteurs.articlesACommander.filter((a) => a.article.critique === '1').length;
-
-    // Demandes de sécurité d'abord, puis les plus anciennes.
-    const demandes = compteurs.diATraiter.slice().sort((a, b) =>
-      (b.impact === 'sécurité') - (a.impact === 'sécurité') || a.date_heure.localeCompare(b.date_heure));
-    // Les OT les plus en retard d'abord.
-    const retards = compteurs.otEnRetard.slice().sort((a, b) => a.date_prevue.localeCompare(b.date_prevue));
-
-    return UI.html`
-      <div class="entete-page"><div>
-        <h1>Accueil</h1>
-        <p>Vue d'ensemble de l'atelier au ${UI.dateFr(aujourdhui)}.</p>
-      </div></div>
-      ${alerteControle()}
-      ${carteBaseVide()}
-      <div class="instruments accueil-instruments">
-        ${indicateur('#/di?statut=Nouvelle', 'cyan', 'DI à traiter', compteurs.diATraiter.length,
-          nombreSecurite ? 'dont ' + nombreSecurite + ' sécurité' : 'demandes nouvelles')}
-        ${indicateur('#/ot?filtre=retard', 'ambre', 'OT en retard', compteurs.otEnRetard.length, 'date prévue dépassée')}
-        ${indicateur('#/ot?filtre=p1', 'rouge', 'P1 ouverts', compteurs.p1Ouverts.length,
-          nombreP1EnCours ? 'dont ' + nombreP1EnCours + ' en cours' : 'priorité la plus haute')}
-        ${indicateur('#/preventif?onglet=calendrier', 'vert', 'Préventifs de la semaine', compteurs.preventifsSemaine.length,
-          preventifsEnRetard ? 'dont ' + preventifsEnRetard + ' en retard' : 'd\'ici dimanche ' + UI.dateFr(dimancheDe(aujourdhui)))}
-        ${indicateur('#/magasin?onglet=a-commander', '', 'Articles à commander', compteurs.articlesACommander.length,
-          articlesCritiques ? 'dont ' + pluriel(articlesCritiques, 'critique') : 'stock au point de commande')}
-        ${indicateursConformite(compteurs, aujourdhui)}
-        ${indicateurSuggestions(aujourdhui)}
-      </div>
-      <div class="grille">
-        <div class="c6">${carteListe('Demandes à traiter', compteurs.diATraiter.length,
-          demandes.slice(0, NOMBRE_LIGNES).map((di) => carteDemande(di, false)),
-          '#/di?statut=Nouvelle', 'Voir toutes les demandes à traiter',
-          'Aucune demande à traiter', 'Les nouvelles demandes d\'intervention apparaîtront ici.', 'demandes')}</div>
-        <div class="c6">${carteListe('Ordres de travail en retard', compteurs.otEnRetard.length,
-          retards.slice(0, NOMBRE_LIGNES).map((ot) => carteOrdre(ot, aujourdhui)),
-          '#/ot?filtre=retard', 'Voir tous les OT en retard',
-          'Aucun OT en retard', 'Tous les ordres de travail ouverts sont dans les temps.', 'ordres')}</div>
-      </div>`;
-  }
 
   // Carte du technicien : ses préventifs de la semaine d'abord (ou la mention qu'il n'en a pas),
   // puis ses autres OT ouverts. Un OT n'apparaît qu'une fois.
@@ -380,17 +325,12 @@ const Accueil = (() => {
     // Si l'utilisateur est parti ailleurs pendant l'attente, on n'écrase pas son nouvel écran.
     if (!/^#\/accueil/.test(location.hash)) return;
 
-    let contenu;
-    if (App.estResponsable()) contenu = accueilResponsable();
-    else if (App.estTechnicien()) contenu = accueilTechnicien();
-    else contenu = accueilDemandeur();
-    UI.remplir(conteneur, UI.html`${contenu}${adresses === null ? '' : carteConnexion(adresses)}`);
-    // Lot 3 (§15.9) : le responsable se voit proposer de figer le rapport du mois écoulé (rien n'est
-    // écrit sans son clic). Rapport est chargé après ce fichier : appelé au moment de l'affichage.
-    const bandeauRapport = App.estResponsable() && typeof Rapport !== 'undefined' && typeof Rapport.bandeauAccueil === 'function'
-      ? Rapport.bandeauAccueil() : null;
-    const entete = conteneur.querySelector('.entete-page');
-    if (bandeauRapport && entete) entete.after(bandeauRapport);
+    const connexion = adresses === null ? '' : carteConnexion(adresses);
+    // Responsable : accueil « bento » (accueil-bento.js, chargé après ce fichier : appelé au moment de
+    // l'affichage), avec la tuile du rapport du mois écoulé (lot 3, §15.9).
+    if (App.estResponsable()) { Accueil.afficherResponsable(conteneur, connexion); return; }
+    const contenu = App.estTechnicien() ? accueilTechnicien() : accueilDemandeur();
+    UI.remplir(conteneur, UI.html`${contenu}${connexion}`);
   }
 
   // App est chargé après les modules : l'écran est enregistré une fois la page lue.
@@ -406,5 +346,10 @@ const Accueil = (() => {
     });
   });
 
-  return { afficher, calculerCompteurs, otEnRetard, p1Ouvert, dimancheDe, preventifDeLaSemaine };
+  return {
+    afficher, calculerCompteurs, otEnRetard, p1Ouvert, dimancheDe, preventifDeLaSemaine,
+    // Pour accueil-bento.js seulement (pas une API : aucun autre module ni test ne s'en sert).
+    interne: { otOuvert, joursEntre, pluriel, libelleEquipement, badgeImpact, alerteControle, carteBaseVide,
+      NOMBRE_LIGNES, ORIGINE_PREVENTIF },
+  };
 })();

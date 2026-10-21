@@ -2240,3 +2240,31 @@ indépendant** de l'aperçu attendu sur ces fichiers), `test_import_historique.p
 chargement de Prévo sans SheetJS) ; vrai Excel (`.xls` enregistré par Excel) seulement avec
 `PREVO_TEST_EXCEL=1`.
 
+## 19. Accueil du responsable « bento » (T89–T90, après le lot 5)
+
+Demande de Nicolas (`BRIEF_design_accueil.md`, non versionné) : seul l'accueil du **responsable** change,
+plus le menu latéral, la barre du bas et le toast ; accueils du technicien et du demandeur et écrans de
+travail inchangés. Mêmes calculs qu'avant (`Accueil.calculerCompteurs`, `Suggestions.ouvertes`).
+- **Fichiers** : `accueil-bento.js` (complète `Accueil` : `afficherResponsable`, `choisirEnPremier`,
+  `momentDeLaJournee`, `phraseDemandes`, `ligneSecondaire`) chargé **juste après `accueil.js`**
+  (`ORDRE_MODULES` suit) ; `accueil.js` expose `Accueil.interne` pour lui seul. Mise en page dans
+  `css/modules/accueil.css` ; jetons du brief (`--fond-synthese`, `--ombre-synthese`, `--ombre-tuile`,
+  `--fond-barre-verre`, `--rayon-tuile`, `--rayon-tuile-grande`) et leurs nuances dans `css/style.css`,
+  dans les deux thèmes.
+- **Grille** `#bento` (classe gardée `accueil-instruments`, point d'accroche des tests) : 12 colonnes
+  internes (les 6 du brief), écart 16 px ; 2 colonnes au téléphone. Synthèse (`#bento-synthese`), « À
+  traiter en premier » (`#bento-premier`, `data-type` = `securite` | `p1` | `retard` | `preventif`, absente
+  s'il n'y a rien), 4 compteurs (`a.bento-compteur`), tuile du rapport (`#bandeau-rapport`, rendue par
+  **`Rapport.tuileAccueil()`**, qui remplace `Rapport.bandeauAccueil()` du §15.10 ; mêmes boutons
+  `data-action`), listes `#bento-demandes` (pas au téléphone) et `#bento-retards`, 3 tuiles « à surveiller »
+  (`.bento-surveiller` ; « Contrôles et habilitations » réunit les deux liens du lot 3). Chaque tuile mène à
+  la liste filtrée de l'indicateur d'avant. Alerte « Contrôle de la base » et `#carte-import-accueil` entre
+  l'en-tête et la grille, `#carte-connexion` sous la grille.
+- **Chiffres** : le texte du DOM est la valeur ; le dessin est un compteur CSS mené par la propriété
+  enregistrée `--compte`, qui défile de 0 à la valeur à l'ouverture de l'écran (pas à un réaffichage).
+  `prefers-reduced-motion: reduce` coupe tout (défilement, halos, points, soulèvement au survol).
+- **Coque** : `App.definirTitreMobile(titre, détail)` (« Bonjour » et la date dans l'en-tête mobile) ;
+  bandeau démo de la coque masqué sur cet accueil seulement (la mention est dans son en-tête) ; en démo,
+  plus de toast « n OT préventif(s) généré(s) » à l'ouverture (la génération reste) ; toast en bulle en
+  bas à droite, 3 s (4,5 s en alerte, 7 s en erreur).
+- Tests : `tests/test_bento.py`.

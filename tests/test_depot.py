@@ -35,7 +35,7 @@ NON_IGNORES = ["donnees/demo/equipements.csv", "donnees/.gitkeep", "docs/brief-g
 # Ordre exact des scripts js/modules/ dans index.html : RECOPIE de docs/ARCHITECTURE.md §15.1
 # (ordre du lot 3, qui complète celui du §14.2). Le contrat et ce test changent ensemble.
 ORDRE_MODULES = [
-    "apropos.js", "accueil.js", "causes-frequentes.js",
+    "apropos.js", "accueil.js", "accueil-bento.js", "causes-frequentes.js",
     "ia.js", "ia-prompts.js", "ia-encadre.js", "dictee.js", "poste.js",
     "parc-regles.js", "parc-arbre.js", "parc-formulaires.js", "parc-etiquettes.js", "parc-fiche.js",
     "demandes-regles.js", "demandes-ecritures.js", "demandes-signaler.js", "demandes-liste.js", "demandes-fiche.js",

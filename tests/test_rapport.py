@@ -2,9 +2,10 @@
 
 Mode serveur : un serveur.py neuf par test (copie du jeu de démo, dates non décalées), responsable ;
 vérifications sur le disque (donnees/documents/, parametres.csv, journal.csv). Familles :
-    figer       le bandeau de l'accueil propose le mois écoulé ; « Figer » écrit
-                rapport-mensuel-AAAA-MM.html dans les documents, l'ajoute à rapports_mensuels et au
-                journal ; rien n'est écrit sans clic ; « Plus tard » masque le bandeau ;
+    figer       la tuile du rapport de l'accueil (#bandeau-rapport, grille « bento » depuis T90) propose
+                le mois écoulé ; « Figer » écrit rapport-mensuel-AAAA-MM.html dans les documents,
+                l'ajoute à rapports_mensuels et au journal ; rien n'est écrit sans clic ; « Plus tard »
+                retire la tuile ;
     autonome    le fichier n'a ni <script> ni ressource externe (seul lien : mailto:), s'ouvre seul en
                 file:// sans erreur ni requête réseau, et tient sur UNE page A4 imprimée (PDF) ;
     chiffres    tuiles = Indicateurs.global du mois ; comparaison à N-1 « non comparable » quand
@@ -111,6 +112,7 @@ class TestFiger(CasRapport):
     def test_figer_depuis_l_accueil_ecrit_le_document_la_liste_et_le_journal(self):
         self.ouvrir()
         self.assertIn(LIBELLE, self.page.inner_text("#bandeau-rapport"))
+        self.assertEqual(self.page.locator("#bento > #bandeau-rapport").count(), 1)      # tuile de la grille (T90)
         # Rien n'est écrit sans clic
         self.assertFalse((self.documents / NOM).exists())
         self.assertFalse(parametre(self.serveur.dossier, "rapports_mensuels"))
@@ -118,7 +120,7 @@ class TestFiger(CasRapport):
         self.assertIn("Rapport mensuel de maintenance — " + LIBELLE, contenu)
         self.assertTrue(self.attendre(lambda: any("rapport mensuel figé : " + NOM in entree["action"]
                                                   for entree in lire_csv(self.serveur.dossier, "journal.csv"))))
-        # Le bandeau ne revient pas : le mois est figé
+        # La tuile ne revient pas : le mois est figé
         self.page.wait_for_function("!document.querySelector('#bandeau-rapport')")
         self.assertIsNone(self.page.evaluate("Rapport.moisAProposer(Donnees.aujourdhui())"))
 

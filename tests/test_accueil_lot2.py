@@ -5,13 +5,13 @@ Familles (le nom du test le dit) :
     compteurs  : « Préventifs de la semaine » et « Articles à commander » = calcul Python sur les CSV
                  du serveur APRÈS le chargement (la génération du préventif a eu lieu ; semaine
                  calculée depuis la date du jour réelle) ; liens vers le calendrier du préventif et
-                 l'onglet « À commander » du magasin ; technicien : ses préventifs de la semaine dans
-                 sa liste d'OT, ou la mention qu'il n'en a pas ;
+                 l'onglet « À commander » du magasin (tuiles de l'accueil « bento », T90) ; technicien :
+                 ses préventifs de la semaine dans sa liste d'OT, ou la mention qu'il n'en a pas ;
     telephone  : contexte 375 × 812 « is_mobile » → pas de carte « Connecter un téléphone » (D31),
                  aucun défilement horizontal, zones tactiles d'au moins 48 px ; 1440 px → carte présente ;
     menu       : entreprise_nom long (≈ 60 caractères) écrit dans parametres.csv → à 1440 px le nom
-                 tient sur deux lignes (ni une seule coupée, ni plus de deux), infobulle = nom complet ;
-                 menu replié : rien ne déborde ; 375 px : aucun défilement horizontal (D32).
+                 est sur sa propre ligne, en entier (D32 revu en T89), infobulle = nom complet ;
+                 menu replié : rien ne déborde ; 375 px : aucun défilement horizontal.
 
 Aucun numéro d'OT, de DI, de mouvement ou d'achat écrit en dur. Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_accueil_lot2.py" -v
@@ -46,6 +46,10 @@ PETITES_ZONES_JS = """() => {
 
 DEBORDEMENT_JS = """(selecteur) => { const e = document.querySelector(selecteur);
     return e ? [e.scrollWidth, e.clientWidth] : null; }"""
+
+# Indicateurs de l'accueil du responsable (« bento », T90) : les 4 compteurs, les 2 tuiles « à surveiller »
+# qui sont des liens, et les 2 liens de la tuile « Contrôles et habilitations ».
+INDICATEURS = "#contenu #bento :is(a.bento-compteur, a.bento-surveiller, a.bento-sous-lien)"
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +151,7 @@ class CasAccueil(CasNavigateur):
         return page
 
     def chiffre(self, lien):
-        return int(self.page.inner_text('#contenu .instruments a[href="%s"] .chiffre' % lien))
+        return int(self.page.inner_text(INDICATEURS + '[href="%s"] .chiffre' % lien))
 
     def sans_defilement_horizontal(self, page, contexte):
         largeurs = page.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
@@ -181,19 +185,19 @@ class TestCompteurs(CasAccueil):
             self.assertEqual(page.evaluate("Accueil.dimancheDe(%r)" % jour.isoformat()), dimanche_de(jour).isoformat())
             # Les cinq indicateurs des lots 1 et 2 (les deux du lot 3 s'y ajoutent : test_accueil_lot3).
             for lien in ("#/di?statut=Nouvelle", "#/ot?filtre=retard", "#/ot?filtre=p1", LIEN_PREVENTIFS, LIEN_ARTICLES):
-                self.assertEqual(page.locator('#contenu .instruments > a[href="%s"]' % lien).count(), 1, lien)
+                self.assertEqual(page.locator(INDICATEURS + '[href="%s"]' % lien).count(), 1, lien)
             # 5 du lot 2, 2 du lot 3 (§15.9), 1 du lot 3 bis (§16.6 : suggestions de préventif)
-            self.assertEqual(page.locator("#contenu .instruments > a").count(), 8)
-            self.assertIn("Préventifs de la semaine", page.inner_text('#contenu .instruments a[href="%s"]' % LIEN_PREVENTIFS))
-            self.assertIn("Articles à commander", page.inner_text('#contenu .instruments a[href="%s"]' % LIEN_ARTICLES))
+            self.assertEqual(page.locator(INDICATEURS).count(), 8)
+            self.assertIn("Préventifs de la semaine", page.inner_text(INDICATEURS + '[href="%s"]' % LIEN_PREVENTIFS))
+            self.assertIn("Articles à commander", page.inner_text(INDICATEURS + '[href="%s"]' % LIEN_ARTICLES))
 
             # Les liens mènent aux bons écrans.
-            page.click('#contenu .instruments a[href="%s"]' % LIEN_PREVENTIFS)
+            page.click(INDICATEURS + '[href="%s"]' % LIEN_PREVENTIFS)
             page.wait_for_function("lien => location.hash === lien", arg=LIEN_PREVENTIFS)
             page.wait_for_selector(".pv-calendrier")
             page.evaluate("location.hash = '#/accueil'")
-            page.wait_for_selector('#contenu .instruments a[href="%s"]' % LIEN_ARTICLES)
-            page.click('#contenu .instruments a[href="%s"]' % LIEN_ARTICLES)
+            page.wait_for_selector(INDICATEURS + '[href="%s"]' % LIEN_ARTICLES)
+            page.click(INDICATEURS + '[href="%s"]' % LIEN_ARTICLES)
             page.wait_for_function("lien => location.hash === lien", arg=LIEN_ARTICLES)
             page.wait_for_selector(".magasin-a-commander")
             page.wait_for_load_state("networkidle")
@@ -247,7 +251,7 @@ class TestTelephone(CasAccueil):
                 telephone = contexte.new_page()
                 self.surveiller(telephone)
                 self.ouvrir(serveur, largeur=375, hauteur=812, page=telephone, contexte=contexte)
-                telephone.wait_for_selector("#contenu .instruments")
+                telephone.wait_for_selector("#contenu #bento")
                 self.assertTrue(telephone.evaluate("UI.estTelephone()"))
                 self.assertEqual(telephone.locator("#carte-connexion").count(), 0)
                 self.sans_defilement_horizontal(telephone, "accueil, téléphone 375 px")
@@ -261,23 +265,24 @@ class TestTelephone(CasAccueil):
 
 
 # ---------------------------------------------------------------------------
-# menu : nom de l'entreprise sur deux lignes au plus (D32)
+# menu : nom de l'entreprise sur sa propre ligne, en entier (D32 revu en T89, lot 5)
 # ---------------------------------------------------------------------------
 
 class TestMenu(CasAccueil):
 
     MESURE_NOM_JS = """() => { const e = document.getElementById('nom-entreprise'); const s = getComputedStyle(e);
         return { hauteur: e.getBoundingClientRect().height, interligne: parseFloat(s.lineHeight),
+                 coupe: e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1,
                  texte: e.textContent, titre: e.title, visible: e.offsetParent !== null, blanc: s.whiteSpace }; }"""
 
-    def test_menu_nom_long_sur_deux_lignes_avec_infobulle_menu_replie_et_telephone_sans_debordement(self):
+    def test_menu_nom_long_en_entier_avec_infobulle_menu_replie_et_telephone_sans_debordement(self):
         self.assertGreaterEqual(len(NOM_LONG), 60)
         with ServeurPrevo() as serveur:
             ecrire_parametre(serveur.dossier, "entreprise_nom", NOM_LONG)
             page = self.ouvrir(serveur)
 
-            # « GMAO » puis le nom de l'entreprise, sur deux lignes : ni coupé après la première,
-            # ni plus de deux ; le nom complet est en infobulle.
+            # « GMAO » puis le nom de l'entreprise sur sa propre ligne, en entier (jamais coupé, aussi en
+            # infobulle).
             self.assertEqual(page.inner_text(".menu-tete .titre small").strip().upper(), "GMAO")
             mesure = page.evaluate(self.MESURE_NOM_JS)
             self.assertTrue(mesure["visible"], mesure)
@@ -285,13 +290,13 @@ class TestMenu(CasAccueil):
             self.assertEqual(mesure["titre"], NOM_LONG)
             self.assertNotEqual(mesure["blanc"], "nowrap")
             self.assertGreaterEqual(mesure["hauteur"], 2 * mesure["interligne"] - 1, mesure)
-            self.assertLessEqual(mesure["hauteur"], 2 * mesure["interligne"] + 1, mesure)
-            # Rien ne déborde du menu ; le nom reste à gauche du bouton « Replier ».
+            self.assertFalse(mesure["coupe"], mesure)
+            # Rien ne déborde du menu ; le nom est sous la ligne du titre et du bouton « Replier ».
             largeurs = page.evaluate(DEBORDEMENT_JS, ".menu-lateral")
             self.assertLessEqual(largeurs[0], largeurs[1], "menu déplié : %r" % (largeurs,))
-            droite_nom = page.evaluate("document.getElementById('nom-entreprise').getBoundingClientRect().right")
-            gauche_bouton = page.evaluate("document.getElementById('btn-replier').getBoundingClientRect().left")
-            self.assertLessEqual(droite_nom, gauche_bouton + 0.5)
+            haut_nom = page.evaluate("document.getElementById('nom-entreprise').getBoundingClientRect().top")
+            bas_bouton = page.evaluate("document.getElementById('btn-replier').getBoundingClientRect().bottom")
+            self.assertGreaterEqual(haut_nom, bas_bouton - 1)
             self.sans_defilement_horizontal(page, "1440 px, menu déplié")
 
             # Menu replié : le nom est masqué, rien ne déborde.

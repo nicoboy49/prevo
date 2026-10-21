@@ -334,9 +334,9 @@ class OutilsLot2:
         return page.inner_text(panneau)
 
     def compteur_accueil(self, lien):
-        """Chiffre d'un indicateur de l'accueil (ouvert depuis un autre écran)."""
+        """Chiffre d'un indicateur de l'accueil (ouvert depuis un autre écran ; tuile de la grille « bento », T90)."""
         self.aller("#/accueil")
-        selecteur = '#contenu .instruments a[href="%s"] .chiffre' % lien
+        selecteur = '#contenu #bento :is(a.bento-compteur, a.bento-surveiller, a.bento-sous-lien)[href="%s"] .chiffre' % lien
         self.page.wait_for_selector(selecteur)
         return int(self.page.inner_text(selecteur))
 
@@ -506,7 +506,10 @@ class TestRecette2Gamme(CasRecette2):
         page = self.page
         self.demarrer_demo_sans_profil()
         self.choisir_profil("responsable")
-        self.attendre_toast_note(TOAST_GENERATION)                       # génération à l'ouverture
+        # Génération à l'ouverture : en démo, sans notification depuis T89 (elle revenait à chaque
+        # ouverture) ; l'étape est finie (marque prevo:preventif), l'OT ouvert est vérifié ci-dessous.
+        page.wait_for_function("performance.getEntriesByName('prevo:preventif').length === 1")
+        self.assertFalse([t for t in page.evaluate("window.__toasts || []") if re.search(TOAST_GENERATION, t)])
         self.liste_des_gammes()
         ligne = self.ligne_gamme(GAMME_MENSUELLE)
         self.assertEqual(ligne["statut"], "OT ouvert")
@@ -914,6 +917,7 @@ class TestRecette2Design(CasRecette2):
 
     MESURE_NOM_JS = """() => { const e = document.getElementById('nom-entreprise'); const s = getComputedStyle(e);
         return { hauteur: e.getBoundingClientRect().height, interligne: parseFloat(s.lineHeight),
+                 coupe: e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1,
                  texte: e.textContent, titre: e.title, visible: e.offsetParent !== null }; }"""
 
     def test_design_serveur_360_px_preventif_magasin_pieces_sorties_et_1440_px(self):
@@ -925,7 +929,7 @@ class TestRecette2Design(CasRecette2):
             attendre_pret(page)
             page.wait_for_load_state("networkidle")
             self.assertTrue(page.evaluate("UI.estTelephone()"))
-            page.wait_for_selector("#contenu .instruments")
+            page.wait_for_selector("#contenu #bento")                     # accueil « bento » (T90)
             self.assertEqual(page.locator("#carte-connexion").count(), 0, "carte QR affichée sur un téléphone")
             self.verifier_ecran("360 px accueil")
 
@@ -938,7 +942,7 @@ class TestRecette2Design(CasRecette2):
             for route, selecteur in ecrans:
                 with self.subTest(largeur=360, route=route):
                     self.aller("#/accueil")                 # chaque écran est ouvert depuis un autre écran
-                    page.wait_for_selector("#contenu .instruments")
+                    page.wait_for_selector("#contenu #bento")
                     self.aller(route)
                     page.wait_for_selector(selecteur)
                     self.verifier_ecran("360 px " + route)
@@ -974,7 +978,7 @@ class TestRecette2Design(CasRecette2):
             self.assertTrue(mesure["visible"], mesure)
             self.assertEqual((mesure["texte"], mesure["titre"]), (self.NOM_LONG, self.NOM_LONG))
             self.assertGreaterEqual(mesure["hauteur"], 2 * mesure["interligne"] - 1, mesure)
-            self.assertLessEqual(mesure["hauteur"], 2 * mesure["interligne"] + 1, mesure)
+            self.assertFalse(mesure["coupe"], mesure)      # en entier (T89, lot 5)
             largeurs = page.evaluate("(() => { const m = document.querySelector('.menu-lateral'); return [m.scrollWidth, m.clientWidth]; })()")
             self.assertLessEqual(largeurs[0], largeurs[1], "le menu déborde : %r" % (largeurs,))
             self.sans_defilement_horizontal("1440 px paramètres")

@@ -1,10 +1,10 @@
 'use strict';
 // Rapport (2/2) — figer un rapport mensuel (document HTML daté, jamais écrasé : « Recalculer » crée
-// une révision), onglet « Rapports mensuels » de l'écran Indicateurs, bandeau de l'accueil qui
+// une révision), onglet « Rapports mensuels » de l'écran Indicateurs, tuile de l'accueil qui
 // propose de figer le mois écoulé (ARCHITECTURE.md §15.10 ; CDC du lot 3, D43 à D45).
 //   4. Figer : écriture du document, liste rapports_mensuels (parametres.csv), journal
 //   5. Onglet « Rapports mensuels » : figer un mois, ouvrir, imprimer, recalculer, télécharger (démo)
-//   6. Bandeau de l'accueil (responsable) : « Figer » ou « Plus tard » ; rien n'est écrit sans clic
+//   6. Tuile de l'accueil (responsable, T90) : « Figer » ou « Plus tard » ; rien n'est écrit sans clic
 // Complète l'objet Rapport créé par rapport-contenu.js.
 
 Object.assign(Rapport, (() => {
@@ -264,7 +264,7 @@ Object.assign(Rapport, (() => {
   }
 
   // ===========================================================================================
-  // 6. Bandeau de l'accueil (responsable)
+  // 6. Tuile de l'accueil (responsable)
   // ===========================================================================================
 
   function moisReporte() {
@@ -272,35 +272,44 @@ Object.assign(Rapport, (() => {
   }
 
   /**
-   * Bandeau « Le rapport de <mois> n'est pas encore figé » (élément DOM) ou null : responsable
-   * seulement, mois proposé par Rapport.moisAProposer, sauf s'il a été reporté (« Plus tard ») pendant
-   * cette ouverture de Prévo. Rien n'est écrit sans clic sur « Figer ».
+   * Tuile « Rapport de <mois> — pas encore figé » de l'accueil du responsable (élément DOM, T90 ; mise
+   * en page : css/modules/accueil.css) ou null : responsable seulement, mois proposé par
+   * Rapport.moisAProposer, sauf s'il a été reporté (« Plus tard ») pendant cette ouverture de Prévo.
+   * Rien n'est écrit sans clic sur « Figer ». « Plus tard » retire la tuile : la ligne des compteurs
+   * s'étend (la grille ne la réserve que si elle est là).
    */
-  function bandeauAccueil() {
+  function tuileAccueil() {
     if (!App.estResponsable()) return null;
     const mois = Rapport.moisAProposer(Donnees.aujourdhui());
     if (!mois || moisReporte() === mois) return null;
-    const bloc = UI.bandeau('info', UI.html`<b>Le rapport ${deMois(mois)} n'est pas encore figé.</b>
-      Figez-le pour garder une photographie du mois (une page A4, rouvrable sans Prévo).
-      <div class="actions"><button type="button" class="btn btn-primaire" data-action="figer-rapport">Figer le rapport ${deMois(mois)}</button>
-      <button type="button" class="btn btn-fantome" data-action="rapport-plus-tard">Plus tard</button></div>`);
-    bloc.id = 'bandeau-rapport';
+    const bloc = UI.element(UI.html`<section class="bento-tuile bento-rapport" id="bandeau-rapport" aria-labelledby="bento-rapport-titre">
+      <div class="bento-rapport-texte">
+        <h2 id="bento-rapport-titre">Rapport ${deMois(mois)}</h2>
+        <p>Pas encore figé : une page A4 qui garde la photographie du mois, rouvrable sans Prévo.</p>
+      </div>
+      <div class="bento-rapport-actions">
+        <button type="button" class="btn btn-primaire" data-action="figer-rapport"><span>Figer<span class="bento-rapport-suite"> le rapport</span></span></button>
+        <button type="button" class="btn btn-fantome" data-action="rapport-plus-tard">Plus tard</button>
+      </div>
+    </section>`);
     bloc.querySelector('[data-action="figer-rapport"]').addEventListener('click', async (evenement) => {
-      evenement.currentTarget.disabled = true;
+      const bouton = evenement.currentTarget;
+      bouton.disabled = true;
       try {
         const resultat = await figer(mois);
         UI.toast('Rapport figé : ' + resultat.nom, 'succes');
         await App.reafficher();
       } catch (erreur) {
+        bouton.disabled = false;
         App.signalerErreur(erreur, 'rapport mensuel');
       }
     });
     bloc.querySelector('[data-action="rapport-plus-tard"]').addEventListener('click', () => {
-      try { sessionStorage.setItem(CLE_PLUS_TARD, mois); } catch (erreur) { /* stockage refusé : le bandeau disparaît quand même */ }
+      try { sessionStorage.setItem(CLE_PLUS_TARD, mois); } catch (erreur) { /* stockage refusé : la tuile part quand même */ }
       bloc.remove();
     });
     return bloc;
   }
 
-  return { figer, afficherOnglet, bandeauAccueil };
+  return { figer, afficherOnglet, tuileAccueil };
 })());

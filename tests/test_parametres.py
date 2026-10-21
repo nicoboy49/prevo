@@ -35,6 +35,8 @@ DOSSIER_DEMO = RACINE / "donnees" / "demo"
 DI_NOUVELLE = scenarios_demo()["di_statut_nouvelle"]
 BOM = "﻿"
 STATUTS_OT_FERMES = ("Clôturé techniquement", "Clôturé administrativement", "Annulé")
+# Compteur de l'accueil du responsable (tuile-lien de la grille « bento », T90)
+COMPTEUR = "#contenu #bento a.bento-compteur[href='%s']"
 
 # Lecture du QR de l'accueil par jsQR : le SVG est dessiné dans un canvas puis décodé.
 LIRE_QR_JS = """async () => {
@@ -154,8 +156,8 @@ class TestAccueil(CasParametres):
             securite = [d for d in a_traiter if d["impact"] == "sécurité"]
 
             page = self.ouvrir(serveur)
-            self.assertEqual(self.texte("#contenu h1"), "Accueil")
-            chiffre = lambda lien: int(page.inner_text('.instruments a[href="%s"] .chiffre' % lien))
+            self.assertEqual(self.texte("#contenu h1"), "Bonjour")               # accueil « bento » (T90)
+            chiffre = lambda lien: int(page.inner_text(COMPTEUR % lien + " .chiffre"))
             self.assertEqual(chiffre("#/di?statut=Nouvelle"), len(a_traiter))
             self.assertEqual(chiffre("#/ot?filtre=retard"), len(en_retard))
             self.assertEqual(chiffre("#/ot?filtre=p1"), len(p1_ouverts))
@@ -163,7 +165,7 @@ class TestAccueil(CasParametres):
             self.assertGreater(len(a_traiter), 0)
             self.assertGreater(len(en_retard), 0)
             self.assertGreater(len(p1_ouverts), 0)
-            self.assertIn("dont %d sécurité" % len(securite), self.texte('.instruments a[href="#/di?statut=Nouvelle"]'))
+            self.assertIn("dont %d sécurité" % len(securite), self.texte(COMPTEUR % "#/di?statut=Nouvelle"))
 
             # Les trois indicateurs sont des liens (liste filtrée) ; les fonctions du module donnent les mêmes nombres.
             self.assertEqual(page.evaluate(
@@ -171,15 +173,15 @@ class TestAccueil(CasParametres):
                 [len(a_traiter), len(en_retard), len(p1_ouverts)])
 
             # Listes : 5 DI à traiter au plus (la demande de sécurité d'abord), 5 OT en retard au plus (les plus anciens d'abord).
-            cartes_di = page.locator('.c6:has(h2:text("Demandes à traiter")) .liste-cartes > li')
+            cartes_di = page.locator('#bento-demandes:has(h2:text("Demandes à traiter")) li')
             self.assertEqual(cartes_di.count(), min(5, len(a_traiter)))
-            premiere_di = cartes_di.first.locator("b").first.inner_text()
+            premiere_di = cartes_di.first.locator(".bento-id").inner_text()
             self.assertEqual(premiere_di, securite[0]["id"])
             self.assertEqual(cartes_di.first.locator("a").get_attribute("href"), "#/di/" + securite[0]["id"])
-            cartes_ot = page.locator('.c6:has(h2:text("Ordres de travail en retard")) .liste-cartes > li')
+            cartes_ot = page.locator('#bento-retards:has(h2:text("OT en retard")) li')
             self.assertEqual(cartes_ot.count(), min(5, len(en_retard)))
             plus_ancien = sorted(en_retard, key=lambda o: o["date_prevue"])[0]["id"]
-            self.assertEqual(cartes_ot.first.locator("b").first.inner_text(), plus_ancien)
+            self.assertEqual(cartes_ot.first.locator(".bento-id").inner_text(), plus_ancien)
             self.assertIn("en retard de", cartes_ot.first.inner_text())
 
             # Pas d'alerte de contrôle : le jeu de démo est sain.
@@ -298,9 +300,9 @@ class TestAccueil(CasParametres):
         self.page.click("#btn-demo")
         attendre_pret(self.page)
         self.assertEqual(self.page.evaluate("App.mode"), "demo")
-        self.assertEqual(self.texte("#contenu h1"), "Accueil")
+        self.assertEqual(self.texte("#contenu h1"), "Bonjour")                   # accueil « bento » (T90)
         self.assertEqual(self.page.locator("#carte-connexion").count(), 0)
-        self.assertGreater(int(self.page.inner_text('.instruments a[href="#/di?statut=Nouvelle"] .chiffre')), 0)
+        self.assertGreater(int(self.page.inner_text(COMPTEUR % "#/di?statut=Nouvelle" + " .chiffre")), 0)
 
 
 # ---------------------------------------------------------------------------
