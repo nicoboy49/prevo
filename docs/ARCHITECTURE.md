@@ -2054,3 +2054,189 @@ Relu sur le code final ; les décisions de Nicolas (D67 a, D72 a, D76 a, D79) so
 - **Essai réel (D72)**, 21/10/2026, RTX 3060 6 Go, Ollama 0.40.3, `qwen2.5:7b`, mode serveur, jeu de
   démo : codes 32/36 justes (89 %), 8,6 s en médiane (22 s à la première demande) ; reformulation ≈ 9 s ;
   compte rendu ≈ 16 s. Détail dans `GUIDE.html` §5.5 et `docs/PILOTAGE.md`.
+
+## 18. Contrat du lot 5 — assistant d'import (CDC validé le 2026-10-21 : D80–D92)
+
+Écrit avant le code du lot 5 ; il sera relu et aligné sur le code à la fin du lot. Décisions de Nicolas :
+**D82 (b)** (référentiels **et** historique des interventions), **D84 (a)** (fiches existantes complétées,
+au choix), **D87 (a)** (IA sur les titres de colonnes seulement), **D88 (a)** (localisations et
+fournisseurs manquants créés, montrés à l'aperçu), **D92** avec trois ajustements (ancien numéro d'OT
+dans le compte rendu ; doublons d'abord par ce numéro, doublons supposés montrés avec le choix ; OT sans
+durée d'arrêt exclu du MTTR et de la disponibilité). Règle de fond : **rien n'est écrit avant
+« Importer »** ; sauvegarde juste avant ; retour arrière possible. Format CSV inchangé (`Schema.version`
+= 2) ; version de clôture `v1.1.0`.
+
+### 18.1 Socle
+- **Bibliothèque** : `js/lib/xlsx.full.min.js` = **SheetJS CE 0.20.3** (CDN officiel
+  `https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js`), empreinte SHA-256 dans
+  `EMPREINTES` de `tests/test_depot.py`, licence Apache-2.0 ajoutée à `js/lib/LICENCES.txt`, ligne dans
+  `BIBLIOTHEQUES` de « À propos ». **Pas chargée au démarrage** : `App.chargerSheetJS()` l'injecte comme
+  `App.chargerEcharts()` (§15.1), à l'ouverture de l'assistant ; objet global `XLSX`.
+- **Module `Import`** (préfixe `import-`, chargé **à la fin** de `js/modules/`, après
+  `parametres-codes.js`, dans cet ordre) : `import-regles.js` (crée `Import` : types de données,
+  correspondance, conversion, clés naturelles, aperçu — fonctions pures), `import-historique.js`
+  (règles de l'historique, D92), `import-lecture.js` (lecture des fichiers et du collage),
+  `import-ecritures.js` (écriture, sauvegarde, annulation), `import-modeles.js` (modèles à remplir),
+  `import-ecrans.js` et `import-apercu.js` (l'assistant). Feuille `css/modules/import.css` (après
+  `poste.css`). 700 lignes au plus par fichier ; `ORDRE_MODULES` suit.
+- **Route** `#/import` « Importer des données » : **responsable seulement** (même refus que les autres
+  écrans réservés) ; pas d'entrée de menu propre : un lien depuis Paramètres (carte « Importer des
+  données ») et depuis l'accueil d'une base sans équipement.
+- **Sauvegarde** : nouveau motif **`avant-import`** dans les listes fermées `MOTIFS_SAUVEGARDE`
+  (`serveur.py`) et `MOTIFS_SAUVEGARDE` (`js/stockage-dossier.js`) ; type « Avant import » dans la liste
+  des sauvegardes de Paramètres (`decrireSauvegarde`).
+
+### 18.2 Types de données (`Import.TYPES`)
+Chaque type liste ses **champs importables** (champs du schéma, plus quelques champs « virtuels »
+propres à l'import), sa **clé naturelle** et ses **références**. Les identifiants Prévo ne sont jamais
+pris dans le fichier (D85).
+
+| Type (`cle`) | Tables écrites | Clé naturelle | Champs virtuels et références |
+| --- | --- | --- | --- |
+| `localisations` | `localisations` | chemin `Site > Atelier > Ligne` | `chemin` (un à trois niveaux, `>` ou `/` ou `\` comme séparateur ; type déduit du niveau) |
+| `equipements` | `localisations`, `equipements` | repère | `chemin_localisation` (ou une colonne par niveau) ; `parent` par repère (doit exister ou être dans le fichier) |
+| `articles` | `fournisseurs`, `articles`, `mouvements_stock` | référence | `fournisseur` par nom (créé s'il manque, D88) ; `stock_initial` → un mouvement **inventaire** (motif « import ») |
+| `fournisseurs` | `fournisseurs` | nom | — |
+| `techniciens` | `techniciens` | nom + prénom | — |
+| `habilitations` | `habilitations` | technicien + intitulé | `technicien` par « Prénom Nom » ou « Nom Prénom » (doit exister) |
+| `codes` | `codes_defaillance` | famille + code | famille tolérante (« symptome », « Cause »…) |
+| `compteurs` | `compteurs` | équipement + libellé | `equipement` par repère (doit exister) |
+| `controles` | `controles_reglementaires` | équipement + nature | `equipement` par repère |
+| `gammes` | `gammes`, `gamme_operations` | équipement + libellé | `equipement` par repère ; `operations` : une ligne par opération (même gamme répétée) ou une colonne d'opérations séparées par « ; » |
+| `historique` | `ordres_travail`, `ot_temps` | ancien numéro, sinon équipement + date + titre (§18.6) | `ancien_numero`, `equipement` par repère, `technicien` par nom, `temps_passe_h`, codes par code ou libellé |
+
+`Import.TYPES[cle]` = `{ cle, libelle, aide, tables, champs: [{ cle, libelle, table, champ | null, type,
+obligatoire, synonymes, cleNaturelle }], refs }` ; les `synonymes` sont ceux du schéma, complétés pour
+les champs virtuels.
+
+### 18.3 Lecture (`import-lecture.js`)
+- `Import.lire(source)` → `Promise<{ nom, format, feuilles: [{ nom, lignes: [[texte]] }] }>` ; `source` =
+  `File` ou `{ texte, nom }` (collage). `.csv`, `.txt`, `.tsv` et collage : décodage UTF-8 (BOM) sinon
+  Windows-1252 (même règle que §3.3), séparateur deviné (`;`, `,`, tabulation), guillemets, par
+  PapaParse ; `.xlsx`, `.xlsm`, `.xls`, `.ods` : SheetJS (`cellDates`, valeurs calculées des formules,
+  `sheetRows` plafonné), dates rendues en `AAAA-MM-JJ` ou `AAAA-MM-JJ HH:MM`, nombres en texte sans
+  arrondi d'affichage. Toutes les cellules deviennent du **texte** (la conversion vient après, par le
+  schéma).
+- Plafonds : **10 Mo**, **20 000 lignes**, **200 colonnes** → `ErreurImport` (« fichier trop grand… »),
+  rien n'est lu ; fichier chiffré (mot de passe), vide, ou sans aucune ligne non vide → `ErreurImport`
+  avec un message clair. Erreur nommée `Import.ErreurImport`.
+- `Import.ligneEntete(lignes)` → rang de la ligne d'en-tête probable (la première ligne dont la plupart
+  des cellules non vides sont des textes non numériques et qui reconnaît le plus de synonymes du type ;
+  les lignes de titre au-dessus sont ignorées) ; modifiable dans l'assistant. En-tête sur deux lignes
+  fusionnées : les deux lignes sont jointes si l'utilisateur le choisit.
+
+### 18.4 Correspondance des colonnes (`import-regles.js`)
+- `Import.comparable(texte)` : minuscules, sans accents, ponctuation et espaces réduits (« N° de série »
+  ≈ « n de serie »).
+- `Import.correspondance(type, entetes, echantillon, memoire)` → `[{ colonne, entete, champ, statut,
+  raison }]`, `statut` ∈ `sure` (en-tête égal à la clé, au libellé ou à un synonyme), `a_confirmer`
+  (proche : contenu, préfixe, mot commun ; ou deux colonnes pour un même champ ; ou proposition de l'IA),
+  `non_utilisee`. Un champ n'est mis en correspondance qu'avec **une** colonne. Le type deviné sur
+  l'échantillon (dates, nombres) confirme ou baisse le statut.
+- **Mémoire** : la correspondance validée est gardée **sur le poste** (`localStorage` `prevo.import`,
+  lecture protégée), clé = type + en-têtes comparables ; au même jeu d'en-têtes, elle revient pré-remplie
+  (statut `sure`, raison « retenue lors d'un import précédent »).
+- **IA (D87 a)** : si `Ia.active()` et `Ia.etat()` = `ok`, bouton « Proposer avec l'IA » pour les colonnes
+  `non_utilisee` et `a_confirmer` ; fonction `Ia.PROMPTS.colonnesImport` : envoyé = **titres de ces
+  colonnes** et liste des champs du type (clé et libellé) — **aucune valeur de cellule** ; attendu =
+  `{ colonnes: [{ entete, champ }] }`, `champ` dans une **liste fermée** (enum des clés, ou `""`) ;
+  proposition toujours `a_confirmer` ; trace « proposition IA utilisée » au journal à l'import si une
+  correspondance proposée par l'IA a été gardée.
+
+### 18.5 Aperçu à blanc (`Import.preparer`)
+`Import.preparer(type, lignes, correspondance, options)` → `{ lignes: [{ numero, action, raisons,
+valeurs, changements, cible }], ecritures: { nomTable: { creer: [ligne], modifier: [{ id, changes }] } },
+referencesCreees: [{ table, libelle }], totaux }` — **pure** (lit `Donnees.lignes`, n'écrit rien) :
+- conversion de chaque cellule par `Donnees.normaliser` selon le type du champ (dates JJ/MM/AAAA, ISO,
+  date Excel déjà rendue par la lecture ; décimaux à virgule ou à point ; booléens « oui/non/x/1/0/vrai/
+  faux » ; listes fermées par `Import.comparable` et quelques équivalences affichées, D86) ; champs
+  `protege` gardés tels quels ; valeur illisible → ligne **refusée** avec la raison (jamais de valeur
+  inventée) ;
+- `action` ∈ `creer`, `mettre_a_jour` (D84 a, si `options.mettreAJour` : seulement les colonnes
+  importées et **non vides** qui changent ; `changements` = `[{ champ, avant, apres }]`), `identique`,
+  `refusee` (champ obligatoire vide, valeur hors liste, doublon dans le fichier, référence introuvable
+  non créable, plafond), et pour l'historique `doublon_sur`, `doublon_suppose` (§18.6) ;
+- références par clé naturelle : localisation (chemin), fournisseur (nom) **créés** s'ils manquent
+  (D88 a) et listés dans `referencesCreees` ; équipement parent, équipement d'un compteur, d'un contrôle
+  ou d'une gamme, technicien → doivent exister (dans la base ou plus haut dans le même fichier), sinon
+  ligne refusée ;
+- deux lignes du fichier avec la même clé naturelle → la seconde est refusée (« doublon dans le
+  fichier, ligne n ») ;
+- identifiants des créations par `Donnees.nouvelId` (dans l'ordre du fichier) ; `defaut` du schéma pour
+  les champs absents (`criticite` B, `statut` en service, `actif` 1…), signalé dans `raisons` quand il
+  remplace une valeur obligatoire.
+- `Import.rapportRefus(apercu, lignes, entetes)` → texte CSV (format de Prévo, §3.1) des lignes
+  refusées, avec une colonne « Raison » en tête.
+
+### 18.6 Historique des interventions (`import-historique.js`, D92)
+- Chaque ligne acceptée → un OT **« Clôturé administrativement »** : `origine` « manuel » (correctif,
+  amélioration, réglementaire) ou « préventif » (préventif, sans gamme) ; `type` par correspondance
+  tolérante (absent → « correctif différé », signalé) ; `priorite` absente → « P3 », signalée ; `titre`
+  absent → début du compte rendu (80 caractères) ; `date_creation` = date de création, sinon date de
+  début (ni l'une ni l'autre → refusée) ; `date_debut`, `date_fin` (absente → date de début) ;
+  `date_cloture_tech` = `date_cloture_admin` = `date_fin` ; `arret_production` (colonne, ou 1 si une
+  durée d'arrêt > 0 est donnée) ; `duree_arret_h` **vide si absente, jamais 0 inventé** ; codes par code
+  ou libellé **dans la bonne famille**, sinon vides et signalés (jamais de code créé) ; `technicien_id`
+  par nom (introuvable → vide, signalé) ; `temps_passe_h` → une ligne `ot_temps` (technicien de l'OT,
+  date de fin) ; `cout_soustraitance` ; `remise_service` 1.
+- **Ancien numéro** (ajustement 1) : la colonne « N° d'OT » de l'autre logiciel est écrite **en tête du
+  compte rendu**, sur sa propre ligne `Ancien n° : <numéro>` (puis le compte rendu importé).
+- **Doublons** (ajustement 2) : `doublon_sur` = un OT existant (ou une ligne précédente du fichier) dont
+  le compte rendu contient la ligne `Ancien n° : <même numéro>` → ignoré ; sinon `doublon_suppose` =
+  même équipement, même `date_creation` à la minute et même titre (comparable) → **montré** dans l'aperçu
+  avec une case « Importer quand même » (non cochée), jamais écarté en silence ; un OT existant n'est
+  **jamais modifié**.
+- Identifiant `OT-AAAA-NNNN` de **l'année de `date_creation`** (`Donnees.nouvelId('ordres_travail', …,
+  dateIso)`).
+- **Indicateurs (ajustement 3, pour tous les OT, importés ou saisis)** : une panne sans durée d'arrêt
+  reste comptée dans le nombre de pannes et le MTBF, mais elle est **exclue du MTTR** (déjà le cas) **et
+  de la disponibilité** : la disponibilité se calcule sur les seules pannes **avec** durée d'arrêt
+  (MTBF de ces pannes, MTTR) ; elle est « non calculable » s'il n'y en a aucune ; la liste des exclus
+  (« sans durée d'arrêt ») l'accompagne, comme pour le MTTR. Écart au §15 (lot 3) voulu par Nicolas ;
+  `CalculPython` de `test_regles_indicateurs.py` suit.
+
+### 18.7 Écriture et annulation (`import-ecritures.js`)
+- `Import.importer(apercu, { nomFichier })` → `{ sauvegarde, tables: { nom: { crees, misAJour } },
+  annulation }` : (1) **sauvegarde** `adaptateur.sauvegarder('avant-import')` en modes serveur et dossier
+  (échec → rien n'est écrit, message) ; en démo, instantané en mémoire des tables touchées ; (2) écriture
+  par `Donnees.modifier` table par table, dans l'ordre des références (localisations, fournisseurs,
+  techniciens, équipements, articles, mouvements, compteurs, contrôles, habilitations, gammes,
+  opérations, codes, OT, temps), en **revérifiant** sur les lignes fraîches (une fiche créée entre-temps
+  par un autre poste avec la même clé → ligne passée en « identique » ou « mettre à jour », jamais en
+  doublon) ; (3) journal : une ligne par table, `import <nom du fichier> : n créé(s), m mis à jour`.
+- `Import.annuler(resultat)` : modes serveur et dossier → `adaptateur.restaurer(sauvegarde, tables
+  touchées)` après confirmation (« les modifications faites depuis l'import, sur ces tables, seront
+  perdues ») ; démo → réécriture des tables touchées depuis l'instantané. Puis rechargement des tables.
+
+### 18.8 Modèles à remplir (`import-modeles.js`)
+`Import.modele(type, format)` → `Blob` : `xlsx` (SheetJS, feuille « Données » avec les en-têtes en
+libellés et une ligne d'exemple, feuille « Aide » : champs obligatoires, valeurs permises, formats de
+date) ou `csv` (format de Prévo, en-têtes en libellés, une ligne d'exemple). Un modèle rempli de sa
+ligne d'exemple s'importe sans refus (base de démo).
+
+### 18.9 Écran « Importer des données » (`import-ecrans.js`, `import-apercu.js`)
+Étapes, une à la fois, avec « Retour » : 1. **Quoi** (type, aide, modèles .xlsx et .csv) ; 2. **D'où**
+(zone de dépôt, « Choisir un fichier », zone de collage ; feuille ; ligne d'en-tête) ; 3. **Colonnes**
+(tableau : en-tête du fichier, trois valeurs d'exemple, champ choisi par liste déroulante, statut en
+texte et en couleur ; bouton IA §18.4) ; 4. **Aperçu** (totaux par action, filtres, tableau défilant
+dans son cadre — page sans défilement horizontal —, changements avant → après, références créées,
+doublons supposés avec « Importer quand même », case « Compléter et mettre à jour les fiches
+existantes » cochée par défaut, « Télécharger les lignes refusées ») ; 5. **Importer** (bouton désactivé
+tant qu'il n'y a rien à faire ; progression ; résultat ; « Annuler cet import »). Rien n'est écrit avant
+l'étape 5 ; les CSV restent identiques à l'octet. Téléphone 375 px : étapes lisibles, zones ≥ 48 px.
+
+### 18.10 Tests du lot 5
+Fichiers d'essai `tests/fixtures/import/` écrits par `outils/generer_fixtures_import.py` (déterministe) :
+liste d'équipements d'un atelier (.xlsx écrit par Python sans SheetJS : titre au-dessus de l'en-tête,
+colonnes dans le désordre, noms variés, repères à zéros en tête, dates Excel 1900, une ligne en
+erreur), la même en .ods (avec cellules répétées) et en .xls (écrit par SheetJS dans Chromium au moment
+de la génération), articles en CSV Windows-1252 `;`, fournisseurs et techniciens en collage tabulé,
+codes, compteurs, contrôles, gammes avec opérations, historique d'une autre GMAO (CSV UTF-8 `,`, « N° OT »,
+JJ/MM/AAAA, durées manquantes, doublons sûrs et supposés), fichiers piégés (trop de lignes, chiffré,
+vide). Fichiers : `test_import_lecture.py`, `test_import_regles.py` (avec un **calcul Python
+indépendant** de l'aperçu attendu sur ces fichiers), `test_import_historique.py`, `test_import_ecrans.py`,
+`test_import_modeles.py`, `test_recette_lot5.py` ; `test_regles_indicateurs.py` (ajustement 3),
+`test_depot.py` (SheetJS, ordre), `test_performance.py` (5 000 lignes : aperçu < 3 s, écriture < 5 s ;
+chargement de Prévo sans SheetJS) ; vrai Excel (`.xls` enregistré par Excel) seulement avec
+`PREVO_TEST_EXCEL=1`.
+
