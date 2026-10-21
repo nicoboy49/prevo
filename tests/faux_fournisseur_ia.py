@@ -17,7 +17,9 @@ et choisit sa réponse d'après la fonction (premier message système « Fonctio
     faux-redirige   répond par une redirection 302 (le relais ne doit pas la suivre) ;
     faux-tronque    réponse coupée : Content-Length annonce plus d'octets que le corps envoyé, puis la
                     connexion est fermée ;
-    faux-tronque-morceaux  idem en « Transfer-Encoding: chunked » : le morceau annoncé n'arrive pas en entier.
+    faux-tronque-morceaux  idem en « Transfer-Encoding: chunked » : le morceau annoncé n'arrive pas en entier ;
+    faux-html       réponse piégée : du HTML qui exécuterait du code s'il était inséré tel quel (PIEGE) dans
+                    chaque champ texte, codes compris.
 
     with FauxFournisseur() as faux:
         faux.url            # 'http://127.0.0.1:54321'  (Ollama) ; faux.url + '/v1' (OpenAI)
@@ -31,7 +33,10 @@ import threading
 import time
 
 MODELES = ["faux", "faux-lent", "faux-invente", "faux-illisible", "faux-chiffres", "faux-schema",
-           "faux-enorme", "faux-redirige", "faux-tronque", "faux-tronque-morceaux"]
+           "faux-enorme", "faux-redirige", "faux-tronque", "faux-tronque-morceaux", "faux-html"]
+# Texte piégé : une image dont l'erreur de chargement poserait window.__xss (aucun chiffre : le commentaire
+# du rapport le refuserait sinon).
+PIEGE = '<img src=x onerror="window.__xss=true">'
 MOTIF_FONCTION = re.compile(r"^Fonction\s*:\s*(\w+)")
 
 # Réponses correctes par fonction (les codes sont pris dans le schéma quand il en donne la liste).
@@ -80,10 +85,23 @@ def codes_du_schema(schema):
     return codes
 
 
+def reponse_piegee(fonction):
+    """Réponse de « faux-html » : PIEGE dans chaque champ texte de la fonction."""
+    if fonction == "reformulerDI":
+        return {"symptome": PIEGE + " fuite", "impact": "dégradé"}
+    if fonction == "codes":
+        return {"symptome": PIEGE, "cause": "<b>C01</b>", "remede": PIEGE}
+    if fonction == "checkList":
+        return {"operations": [{"operation": PIEGE + " contrôle", "valeur_attendue": PIEGE}]}
+    return {"texte": PIEGE + " texte proposé"}
+
+
 def contenu_reponse(modele, fonction, schema):
     """Texte que le faux modèle « écrit » (le plus souvent du JSON)."""
     if modele == "faux-illisible":
         return "Bien sûr ! Voici ma proposition : la garniture est usée."
+    if modele == "faux-html":
+        return json.dumps(reponse_piegee(fonction), ensure_ascii=False)
     if modele == "faux-enorme":
         return json.dumps({"texte": "x" * (3 * 1024 * 1024)})
     if fonction == "codes":

@@ -333,5 +333,36 @@ class TestCommentaireRapport(CasFonctions):
         self.assertIsNone(re.search(r"\d", points), points)
 
 
+class TestReponsesPiegees(CasFonctions):
+    """Relecture du lot 4 : check-list, résumé et commentaire piégés (faux-html) affichés en texte."""
+
+    def verifier_affiche_en_texte(self, selecteur):
+        page = self.page
+        page.wait_for_selector(selecteur + " .ia-encadre .ia-proposition", state="visible")
+        self.assertIn("<img", page.inner_text(selecteur + " .ia-encadre"))
+        self.assertEqual(page.locator(selecteur + " .ia-encadre img").count(), 0)
+        page.wait_for_timeout(300)
+        self.assertIsNone(page.evaluate("window.__xss === undefined ? null : window.__xss"))
+
+    def test_check_liste_resume_et_commentaire_html_affiches_en_texte(self):
+        gamme = lire_csv(self.serveur.dossier, "gammes.csv")[0]["id"]
+        page = self.ouvrir("#/preventif/gamme/" + gamme, modele="faux-html")
+        page.wait_for_selector(".pv-check-liste .ia-bouton")
+        page.click(".pv-check-liste .ia-bouton")
+        self.verifier_affiche_en_texte(".pv-check-liste")
+
+        page.evaluate("(route) => { location.hash = route; }", "#/equipement/" + scenarios_demo()["causes_equipement"])
+        page.wait_for_selector(".parc-resume-ia .ia-bouton")
+        page.click(".parc-resume-ia .ia-bouton")
+        self.verifier_affiche_en_texte(".parc-resume-ia")
+
+        page.evaluate("(route) => { location.hash = route; }", "#/indicateurs?onglet=rapports")
+        page.wait_for_selector(".rapports-figer .ia-bouton")
+        page.click(".rapports-figer .ia-bouton")
+        self.verifier_affiche_en_texte(".rapports-figer")
+        page.click(".rapports-figer .ia-encadre button:has-text('Utiliser')")
+        self.assertTrue(page.input_value("#rapports-commentaire").startswith("<img"))
+
+
 if __name__ == "__main__":
     unittest.main()

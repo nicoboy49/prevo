@@ -652,5 +652,45 @@ class TestParLeRelais(CasIaFonctions):
         self.choisir(choix)
 
 
+# ---------------------------------------------------------------------------
+# Réponses piégées : tout texte de l'IA est affiché comme du texte (relecture du lot 4)
+# ---------------------------------------------------------------------------
+
+class TestReponsesPiegees(CasIaFonctions):
+
+    def verifier_affiche_en_texte(self):
+        page = self.page
+        self.assertIn("<img", page.inner_text(".ia-encadre"))
+        self.assertEqual(page.locator(".ia-encadre img").count(), 0)          # <b> de l'écran permis, pas d'<img> venue de l'IA
+        self.assertNotIn("<b>C01</b>", page.inner_html(".ia-encadre"))     # code piégé : échappé
+        page.wait_for_timeout(300)
+        self.assertIsNone(page.evaluate("window.__xss === undefined ? null : window.__xss"))
+
+    def test_signaler_et_compte_rendu_proposition_html_affichee_en_texte(self):
+        regler_ia(self.contexte, url=self.faux.url, modele="faux-html")
+        ot_id = SCENARIOS["ot_statut_en_cours"]
+        technicien_id = ligne_demo("ordres_travail", ot_id)["technicien_id"]
+        page = self.ouvrir_signaler(profil="technicien", nom="Technicien essai", technicien_id=technicien_id)
+        page.wait_for_selector('.di-ia .ia-bouton')
+        page.fill("input[name=symptome]", "ça fuit")
+        self.cliquer_ia(LIBELLE_DI)
+        self.attendre_proposition()
+        self.verifier_affiche_en_texte()
+        self.choisir("Utiliser")
+        self.assertTrue(page.input_value("input[name=symptome]").startswith("<img"))   # texte brut dans le champ
+        self.assertIsNone(page.evaluate("window.__xss === undefined ? null : window.__xss"))
+
+        self.aller("#/ot/" + ot_id, ".ot-fiche")
+        self.onglet_compte_rendu(ot_id)
+        page.wait_for_selector('.ia-bouton:has-text("%s")' % LIBELLE_CODES)
+        page.fill(CHAMP_CR, NOTES)
+        for libelle in (LIBELLE_CODES, LIBELLE_CR):
+            with self.subTest(fonction=libelle):
+                self.cliquer_ia(libelle)
+                self.attendre_proposition()
+                self.verifier_affiche_en_texte()
+                self.choisir("Ignorer")
+
+
 if __name__ == "__main__":
     unittest.main()
