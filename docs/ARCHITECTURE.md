@@ -1559,3 +1559,184 @@ dont 3 équipements comparés à un calcul Python indépendant sur les CSV), `te
 `test_indicateurs.py`, `test_rapport.py`, `test_accueil_lot3.py`, `test_recette_lot3.py` (recette de
 bout en bout en modes serveur et démo, profils, design 1440 et 375 px) ; `test_performance.py`
 complété (CS49) ; `test_depot.py` (ordre §15.1, 700 lignes).
+
+## 16. Contrat du lot 3 bis — préventif suggéré (CDC validé le 2026-10-21 : D50–D63)
+
+Écrit avant le code du lot 3 bis ; il sera relu et aligné sur le code à la fin du lot (mentions
+« écart retenu : … », comme aux §14 et §15). Décisions de Nicolas : **D53 (a)** (toutes les causes
+comptent pour S2, format inchangé), **D56 (a)** (aucune périodicité proposée : les faits seulement),
+**D59 (a)** (mention « peu de cas » et fourchette dans un détail). Prévo **ne modifie jamais une gamme
+tout seul** : une suggestion n'écrit rien ; seules les actions du responsable écrivent (gamme créée ou
+modifiée par les écrans du §14.3, décision inscrite au journal).
+
+### 16.1 Socle
+- **Format CSV inchangé** : `Schema.version` reste 2, aucun champ ajouté. Clés ajoutées à
+  `parametres.csv` (lues par `Donnees.parametre`, absentes ou hors bornes → défaut) :
+  `suggestion_seuil_pannes` (`3`, entier de 2 à 20 : S1, S2), `suggestion_visites_sans_constat` (`5`,
+  de 3 à 20 : S4), `suggestion_fenetre_mois` (`12`, de 3 à 24). Elles s'ajoutent aux réglages de
+  Paramètres (section « Suggestions de préventif », §15.11). S3 (2 sur 4) est fixe.
+- **Fichiers** : `js/modules/suggestions-regles.js` (crée l'objet `Suggestions` : règles pures, lecture
+  des décisions au journal, écriture d'une décision) et `js/modules/suggestions-ecrans.js` (onglets,
+  cartes, encarts, actions), chargés **juste après `preventif-calendrier.js`** ; feuille
+  `css/modules/suggestions.css`, après `preventif.css`. `ORDRE_MODULES` de `tests/test_depot.py`
+  suit. `causes-frequentes.js` est complété (D59). Toujours 700 lignes au plus par fichier de
+  `js/modules/` ; aucune nouvelle bibliothèque.
+- Pas de nouvelle route : onglets « Suggestions » et « Décisions » de `#/preventif`
+  (`?onglet=suggestions`, `?onglet=decisions`) ; paramètre d'adresse `?suggestion=<clé>` sur
+  `#/preventif/gamme/nouvelle` et `#/preventif/gamme/<id>`.
+
+### 16.2 Définitions (D51, affichées dans l'encadré « Comprendre » de l'onglet)
+- `jour` : date du jour `AAAA-MM-JJ` (`Donnees.aujourdhui()`), passée en argument aux règles.
+- **Moment** d'un OT : `date_fin`, sinon `date_cloture_tech`, sinon `date_creation`, ramené à
+  `AAAA-MM-JJ HH:MM` (un `T` devient une espace ; une date seule reste `AAAA-MM-JJ`) ; son **jour** =
+  ses 10 premiers caractères (date valide exigée, sinon l'OT est ignoré). « Postérieur à » un autre
+  moment = texte strictement plus grand (une date seule, le jour d'une décision, n'est donc pas
+  postérieure à cette décision : prudence).
+- **Fenêtre** : du lendemain du même jour `suggestion_fenetre_mois` mois plus tôt jusqu'à `jour`,
+  bornes incluses (même définition que la période « 12 mois » des indicateurs, §15.3).
+- **Équipement suivi** : `actif` ≠ `0` et `statut` ≠ `rebut`.
+- **Correctif de même cause** (S1, S2) : OT de type `correctif immédiat` ou `correctif différé`,
+  `Clôturé techniquement` ou `Clôturé administrativement`, `cause_code` non vide (toutes les causes,
+  « Autre cause » comprise : D53 a), jour dans la fenêtre.
+- **Gamme suivie** (S2, S3, S4) : `actif` ≠ `0`, déclencheur `date` ou `compteur` (jamais `seuil`),
+  équipement suivi.
+- **Visite** d'une gamme : OT de cette gamme (`gamme_id`) clôturé (techniquement ou
+  administrativement), jour ≤ `jour` ; triées par moment puis identifiant. **Visite avec anomalie** :
+  `anomalie_constatee` = `1` **ou** au moins une DI dont `ot_origine_id` est cette visite.
+- **Passage au format 2** : la plus récente ligne du journal de table `parametres`, `id_ligne`
+  `version_schema`, dont l'action contient « passage au format 2 du fichier » (§14.1) ; son
+  `date_heure` est le moment du passage. Absente (base créée au format 2, démo) : aucune restriction.
+- **Intervalle médian** entre des pannes : médiane des écarts en jours entre jours consécutifs
+  (triés) ; nombre pair d'écarts → moyenne des deux du milieu ; affiché arrondi au jour (demi vers le
+  haut).
+- **Clé** d'une suggestion : `S1-<équipement>-<cause>`, `S2-<équipement>-<cause>`, `S3-<gamme>`,
+  `S4-<gamme>` (ex. `S2-EQ-0005-C01`, `S4-GAM-0005`).
+
+### 16.3 Règles (D52–D55 ; « seuil » = `suggestion_seuil_pannes`)
+Chaque règle ne compte que les faits **postérieurs à la dernière décision** sur sa clé (§16.4), s'il y
+en a une. Sous les seuils, rien n'est suggéré.
+- **S1 « Créer une gamme »** : équipement suivi **sans aucune gamme active** (tout déclencheur) ; par
+  cause, au moins *seuil* correctifs de même cause. Faits : ces correctifs.
+- **S2 « Revoir le préventif »** : équipement suivi ayant au moins une gamme suivie qui a au moins une
+  visite ; *première visite* = la plus ancienne visite de ces gammes ; par cause, au moins *seuil*
+  correctifs de même cause postérieurs à la première visite. Gammes citées : ces gammes. Faits : ces
+  correctifs. Toutes les causes comptent (D53 a) : la carte dit « À examiner : la gamme ne dit pas
+  quelles pannes elle prévient ».
+- **S3 « Anomalies répétées »** : gamme suivie ; parmi ses **4 dernières visites** (ou toutes, s'il y
+  en a moins), au moins **2** avec anomalie. Faits : ces visites ; DI liées.
+- **S4 « Allonger une gamme »** : gamme suivie dont l'équipement est de criticité `B` ou `C` (jamais
+  `A`, jamais vide) ; visites comptées = visites postérieures au passage au format 2 (s'il existe) ;
+  *série* = les dernières visites comptées, consécutives, sans anomalie ; au moins
+  `suggestion_visites_sans_constat` visites dans la série ; **aucun correctif** de l'équipement (type
+  correctif, tout statut sauf `Annulé`, toute cause) dont le jour de création est ≥ le jour de la
+  première visite de la série. Faits : les visites de la série.
+- **Ordre** : S2, puis S3, puis S1, puis S4 ; dans chaque groupe, criticité A, B, C, puis vide ; puis
+  nombre de faits décroissant ; puis clé.
+
+### 16.4 Décisions (D57) — au journal, aucun fichier nouveau
+- Écriture par `Donnees.journaliser(table, id, action)` : table `equipements` et l'équipement pour S1 et
+  S2, table `gammes` et la gamme pour S3 et S4. Action : `suggestion <clé> ignorée : <motif>` ou
+  `suggestion <clé> traitée : <ce qui a été fait>`. Échec d'écriture (`journaliser` rend `null`) →
+  `ErreurStockage` « La décision n'a pas pu être inscrite au journal… » : la suggestion reste ouverte.
+- `Suggestions.ignorer(cle, motif)` : motif obligatoire (espaces de bord retirés, sauts de ligne
+  remplacés par une espace, 300 caractères au plus) sinon `Donnees.ErreurValidation` ; clé qui n'est
+  pas ouverte → `ErreurValidation`. `Suggestions.marquerTraitee(cle, texte)` : texte libre
+  (« gamme GAM-0011 créée », « gamme modifiée : periodicite_jours »).
+- Lecture : toutes les lignes du journal dont l'action suit
+  `^suggestion (S[1-4]-\S+) (ignorée|traitée) : (.*)$` ; la **dernière décision** d'une clé = la plus
+  récente (`date_heure`, puis `id`). Une suggestion décidée **revient** seulement quand les faits
+  postérieurs à cette décision atteignent à nouveau le seuil de sa règle ; la carte rappelle alors la
+  décision précédente (date, motif).
+
+### 16.5 API (`suggestions-regles.js`)
+- `Suggestions.calculer(jour, reglages?)` → `{ ouvertes: [suggestion…], decisions: [decision…],
+  reglages: { seuilPannes, visitesSansConstat, fenetreMois, debutFenetre, passageFormat2 } }` ;
+  `reglages` facultatif remplace les paramètres (tests). Lecture seule.
+- Suggestion : `{ cle, regle ('S1'…'S4'), titre, equipementId, repere, criticite, gammeIds: [id…],
+  causeCode, causeLibelle, nombre (faits), sur (S3 : visites regardées), intervalleMedianJours (S1, S2 ;
+  null sinon), ots: [id…] (du plus récent au plus ancien), dis: [id…] (S3), dates: [jour…] (faits, du
+  plus ancien au plus récent), depuis (moment de la décision précédente ou null), decisionPrecedente
+  ({ decision, dateHeure, texte, profil } ou null), texte, question }`.
+- Décision : `{ cle, regle, decision ('ignorée' | 'traitée'), texte, dateHeure, profil, table,
+  idLigne, revenue }` (`revenue` vrai si c'est la dernière décision de cette clé et que la suggestion
+  est de nouveau ouverte), de la plus récente à la plus ancienne.
+- `Suggestions.ouvertes(jour)`, `Suggestions.pourEquipement(id, jour)` (S1, S2 de l'équipement et S3,
+  S4 de ses gammes), `Suggestions.pourGamme(id, jour)` (S2 qui la citent, S3, S4),
+  `Suggestions.trouver(cle, jour)` (ouverte, sinon `null`), `Suggestions.ignorer`,
+  `Suggestions.marquerTraitee`, `Suggestions.TITRES`.
+- Textes (D56 a : aucune périodicité proposée, les faits seulement ; *période* = « en N mois », ou
+  « depuis le JJ/MM/AAAA » après une décision) :
+  - S1 « CV-02 : 14 pannes « Capteur encrassé » en 12 mois (environ une toutes les 4 semaines), aucune
+    gamme active. » — question « Créer une gamme pour prévenir cette panne ? » (fréquence : intervalle
+    médian ≥ 14 j → « environ une toutes les N semaines », N = arrondi de médiane / 7 ; sinon « environ
+    une tous les N jours ») ;
+  - S2 « PO-02 : 6 pannes « Garniture usée » en 12 mois malgré la gamme GAM-0003 (tous les 90 j) ;
+    intervalle médian entre ces pannes : 58 jours. » — question « Raccourcir la périodicité, ajouter une
+    opération à la check-list ou créer une gamme dédiée ? À examiner : la gamme ne dit pas quelles
+    pannes elle prévient. » ;
+  - S3 « GAM-0006 (PR-01) : anomalie constatée à 2 des 4 dernières visites (12/03/2026, 10/07/2026). »
+    — question « Raccourcir la périodicité ou compléter la check-list ? » ;
+  - S4 « VE-01 : 13 visites de suite sans anomalie (gamme GAM-0005, tous les 30 j), aucune panne depuis
+    la première (29/09/2025). » — question « Allonger la périodicité ? Vérifiez d'abord qu'aucune
+    obligation (réglementaire, constructeur, garantie) ne l'impose. » Les contrôles réglementaires
+    (§15.7) ne sont jamais suggérés.
+  Périodicité : « tous les N j » (date), « toutes les N <unité> » (compteur). Aucun « NaN »,
+  « Infinity », « undefined » ni « null » dans un texte.
+
+### 16.6 Écrans (`suggestions-ecrans.js`, D57, D58, D60)
+- `#/preventif` : onglets « Suggestions » (compteur = nombre ouvert) et « Décisions », **responsable
+  seulement** ; pour un autre profil, `?onglet=suggestions|decisions` → accueil avec le message des
+  écrans interdits (§8 : « L'écran « Suggestions de préventif » n'est pas disponible pour le profil
+  … »). `preventif-ecrans.js` dessine ces onglets par une fonction relais (module chargé après).
+- **Carte** d'une suggestion : badge texte du type (« S2 · Revoir le préventif » : jamais la couleur
+  seule), équipement (lien) et criticité, texte, question, OT liés (5 au plus, les plus récents, puis
+  « et n autres »), DI liées (S3), décision précédente s'il y en a une, actions :
+  - S1 **« Créer la gamme »** → `#/preventif/gamme/nouvelle?equipement=<id>&suggestion=<clé>` :
+    formulaire pré-rempli (équipement, libellé « Prévenir : capteur encrassé » — libellé de la cause,
+    première lettre en minuscule —, déclencheur `date`) et rappel de la suggestion ; **rien n'est écrit
+    sans « Créer la gamme »** ; après création, `marquerTraitee(clé, 'gamme GAM-xxxx créée')` ;
+  - S2, S3, S4 **« Ouvrir la gamme <id> »** (une par gamme citée) →
+    `#/preventif/gamme/<id>?suggestion=<clé>` : rappel de la suggestion en tête de fiche ; un
+    enregistrement de la gamme **avec au moins un changement**, ou une modification de sa check-list,
+    marque la suggestion traitée (`gamme modifiée : <champs>` ou `check-list modifiée`) ;
+  - **« Ignorer… »** → fenêtre avec motif obligatoire → `Suggestions.ignorer` → la carte disparaît,
+    message « Suggestion ignorée (inscrite au journal). ».
+- Onglet **Décisions** : tableau (cartes sur téléphone) des décisions, de la plus récente à la plus
+  ancienne : date, clé et type, équipement / gamme (liens), décision, motif, profil, « revenue » le cas
+  échéant.
+- **Comprendre** (`<details>`) : définitions du §16.2, les 4 règles avec les seuils en vigueur, « Prévo
+  ne modifie jamais une gamme tout seul ».
+- **Encarts** « Suggestions de préventif » : sur la fiche équipement (`parc-fiche.js`, près de la carte
+  Préventif) et sur la fiche gamme (`preventif-ecrans.js`), responsable seulement, uniquement s'il y a
+  des suggestions ouvertes : mêmes cartes et mêmes actions.
+- **Accueil** (`accueil.js`, responsable) : instrument « Suggestions de préventif », nombre ouvert, lien
+  `#/preventif?onglet=suggestions`, complément « dont n sur criticité A » ou « à examiner ».
+- Charte Cockpit, `css/modules/suggestions.css` ; 1440 et 375 px sans défilement horizontal de la
+  page ; zones tactiles ≥ 48 px sur téléphone.
+
+### 16.7 Solidité de l'encart « causes fréquentes » (D59 a, `causes-frequentes.js`)
+- `CausesFrequentes.fourchette(k, n)` → `{ bas, haut }` : intervalle de Wilson à 95 % (z = 1,96) de la
+  part k / n ; `n` = 0 → `null`. Pourcentages affichés arrondis à l'unité (demi vers le haut).
+- Encart suffisant : si au moins une cause affichée a une demi-largeur `(haut − bas) / 2` > 0,20, la
+  mention « Peu de cas : à prendre comme une piste. » s'affiche sous le titre ; toujours, un
+  `<details>` « Précision de ces chiffres » liste « <cause> : entre 32 % et 81 % des cas » et explique
+  la fourchette en une phrase. Visible de tous les profils (D60). Les lignes existantes ne changent pas.
+
+### 16.8 Démo (D62)
+Générateur à part (graine `GRAINE_LOT3BIS`), lignes des lots 1 à 3 inchangées autant que possible.
+Ajouts : une gamme dont 2 des 4 dernières visites ont une anomalie (S3) ; un équipement de criticité
+A dont une gamme remplirait S4 (refus) ; une suggestion déjà ignorée au journal (avec motif), puis
+assez de nouvelles pannes pour qu'elle revienne. Rôles ajoutés à `demo-scenarios.json` :
+`suggestion_creer` (clé S1 de CV-02), `suggestion_revoir` (clé S2 de PO-02), `suggestion_anomalies`
+(clé S3), `suggestion_allonger` (clé S4 de VE-01), `suggestion_refus_criticite_a` (gamme refusée),
+`suggestion_sous_seuil` (`{ equipement, cause }` à `seuil − 1` pannes, sans gamme active),
+`suggestion_ignoree_revenue` (clé). Le générateur vérifie lui-même ces rôles par un calcul Python des
+règles du §16.3.
+
+### 16.9 Tests du lot 3 bis
+`test_regles_suggestions.py` (règles sur un jeu construit et sur la démo, égalité avec un calcul
+Python indépendant, décisions, passage au format 2, Wilson), `test_suggestions.py` (écrans, actions,
+profils, `gammes.csv` identique à l'octet), `test_accueil_lot3bis.py`, `test_recette_lot3bis.py`
+(bout en bout, modes serveur et démo, design 1440 et 375 px) ; `test_performance.py` complété (liste
+des suggestions < 1 s sur le jeu de charge) ; `test_depot.py` (ordre §16.1, 700 lignes) ; tests
+existants complétés pour Paramètres et l'encart des causes fréquentes.
