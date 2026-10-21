@@ -25,6 +25,7 @@ passée à hier). Trois budgets, médiane de trois mesures, toutes affichées :
     suggestions (lot 3 bis) : du changement d'adresse vers #/preventif?onglet=suggestions à l'affichage
                          des cartes (calcul des quatre règles sur tout l'historique compris) ;
                          budget 1 000 ms (médiane).
+    ouverture sans IA (lot 4) : aucun appel réseau hors du serveur Prévo (ni /api/ia), aucun en démo.
 Les chronomètres des actions sont posés dans la page (performance.now()).
 
 Lancer depuis la racine du projet :
@@ -41,7 +42,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil
+from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
 
 BUDGET_CHARGEMENT_MS = 2000
 BUDGET_CREATION_DI_MS = 1000
@@ -382,6 +383,32 @@ class TestPerformance(CasNavigateur):
         self.assertGreater(cartes, 0, "le jeu de charge doit produire des suggestions")
         self.assertEqual(cartes, page.evaluate("Suggestions.ouvertes(Donnees.aujourdhui()).length"))
         self.assertLess(mediane, BUDGET_SUGGESTIONS_MS)
+
+    def test_ouverture_sans_ia_aucun_appel_reseau_hors_du_serveur(self):
+        """Lot 4 (CS76) : tant que l'IA n'est pas activée, l'ouverture ne fait aucun appel hors du serveur
+        Prévo (ni /api/ia, ni fournisseur) ; même chose en démo (file://) : aucune requête hors du disque."""
+        page = self.nouvelle_page()
+        adresses = []
+        page.on("request", lambda requete: adresses.append(requete.url))
+        page.goto(self.serveur.url + "/")
+        attendre_pret(page, 30000)
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(500)
+        self.assertEqual(page.evaluate("[Ia.active(), Ia.etat()]"), [False, "inconnu"])
+        self.assertTrue(adresses)
+        self.assertEqual([a for a in adresses if not a.startswith(self.serveur.url + "/")], [])
+        self.assertEqual([a for a in adresses if "/api/ia" in a], [])
+
+        demo = self.nouvelle_page()
+        adresses_demo = []
+        demo.on("request", lambda requete: adresses_demo.append(requete.url))
+        demo.goto(url_fichier("index.html"))
+        demo.click("#btn-demo")
+        attendre_pret(demo, 30000)
+        demo.wait_for_load_state("networkidle")
+        demo.wait_for_timeout(500)
+        self.assertEqual(demo.evaluate("[Ia.active(), Ia.etat()]"), [False, "inconnu"])
+        self.assertEqual([a for a in adresses_demo if not a.startswith(("file:", "data:", "blob:"))], [])
 
 
 if __name__ == "__main__":

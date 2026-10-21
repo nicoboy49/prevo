@@ -683,7 +683,23 @@ postes et les téléphones passent par le serveur de Prévo, qui transmet les de
 <p>Prévo conseille le modèle <code>qwen2.5:7b</code>, celui retenu au cahier des charges. Il est essayé sur
 le PC de développement avec un jeu d'essai en français (reformulation d'une demande, compte rendu, choix
 des codes dans une liste fermée).</p>
-<!-- MESURES-D72 -->
+<p>Mesures du 21/10/2026 sur ce PC (carte graphique RTX&nbsp;3060 6&nbsp;Go, 16&nbsp;Go de mémoire), en mode serveur,
+sur le jeu de démo&nbsp;:</p>
+<table>
+  <thead><tr><th>Fonction</th><th>Résultat</th><th>Temps de réponse</th></tr></thead>
+  <tbody>
+    <tr><td>Codes de défaillance (12 OT réels de la démo)</td><td>32 codes justes sur 36 (89&nbsp;%)&nbsp;: symptôme 11/12,
+      cause 11/12, remède 10/12 ; aucun code inventé (liste fermée)</td><td>8,6&nbsp;s en médiane (22&nbsp;s pour la toute
+      première demande&nbsp;: Ollama charge le modèle)</td></tr>
+    <tr><td>Reformulation d'une demande (4 DI)</td><td>symptôme clair et impact proposé pour chacune</td><td>9&nbsp;s environ</td></tr>
+    <tr><td>Compte rendu à partir de notes brèves (4 OT)</td><td>texte structuré (constat, cause, action, pièces,
+      reste à faire) ; «&nbsp;non précisé&nbsp;» quand les notes ne disent rien</td><td>16&nbsp;s environ</td></tr>
+  </tbody>
+</table>
+<p class="note">Les erreurs observées sont des choix voisins (remède «&nbsp;nettoyage&nbsp;» au lieu de «&nbsp;réglage&nbsp;»,
+codes «&nbsp;Autre&nbsp;» d'un défaut non reproduit remplacés par des codes précis) et un impact «&nbsp;Sécurité&nbsp;» proposé pour un compresseur qui
+«&nbsp;passe en sécurité&nbsp;» (arrêt de protection de la machine)&nbsp;: relisez toujours la proposition avant de
+l'utiliser. L'essai se relance avec <code>tests/test_ia_reel.py</code> (variable <code>PREVO_TEST_IA=1</code>).</p>
 <p>La vitesse dépend surtout de la carte graphique du PC&nbsp;: sans carte graphique, une réponse peut prendre
 plus d'une minute. Le délai d'attente se règle dans «&nbsp;Ce poste&nbsp;» (120 secondes par défaut, 300 au plus).
 Un autre modèle installé dans Ollama peut être choisi&nbsp;: <span class="bouton">Tester la connexion</span>
