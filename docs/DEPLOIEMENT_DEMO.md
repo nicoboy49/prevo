@@ -38,6 +38,17 @@ Le script produit `dist/demo-web/` avec **uniquement** `index.html`, `favicon.sv
 `css/` et `js/`, et active la version web dans sa copie de `js/app.js` (`const VERSION_WEB = true;`).
 Le dépôt lui-même n'est pas modifié. Le dossier `dist/` n'est pas versionné.
 
+Pour une mise en ligne, construisez depuis une **copie propre de l'étiquette** publiée, comme le zip de
+la release ([RELEASE.md](RELEASE.md)) : un travail en cours du dossier de travail n'y entre pas.
+
+```
+git worktree add ../prevo-v1.1.0 v1.1.0
+py ../prevo-v1.1.0/outils/construire_demo_web.py
+```
+
+La démo est alors dans `../prevo-v1.1.0/dist/demo-web/` (à copier à l'étape 5) ; supprimez la copie
+ensuite par `git worktree remove ../prevo-v1.1.0`.
+
 Vérification rapide sur le PC, avant d'envoyer quoi que ce soit :
 
 ```

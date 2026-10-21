@@ -44,14 +44,19 @@ SCRIPT_DEMO_WEB = RACINE / "outils" / "construire_demo_web.py"
 SCRIPT_RELEASE = RACINE / "outils" / "construire_release.py"
 SCENARIOS = scenarios_demo()
 
-# Texte du brief (point 7), mot pour mot : les guillemets extérieurs du brief ne font pas partie du message.
+# Texte du brief (point 7), mot pour mot : les guillemets extérieurs du brief ne font pas partie du message ;
+# la section du guide est nommée comme dans GUIDE.html (« 5. L'assistant IA »), à la demande de Nicolas.
 MESSAGE_IA = (
     "L'assistant IA n'est pas proposé dans cette démo en ligne : Prévo fonctionne entièrement sans lui. "
     "Sur votre installation, vous choisirez de l'activer ou non, entre deux options : un assistant local "
     "et gratuit (Ollama, sur un PC de l'atelier ; vos textes ne quittent pas l'entreprise), ou un service "
     "en ligne via une clé d'API (plus rapide, mais les textes envoyés partent chez le fournisseur choisi). "
-    "Tout est expliqué dans le guide, section « Assistant IA »."
+    "Tout est expliqué dans le guide, section « 5. L'assistant IA »."
 )
+SOUS_TITRE_TELECHARGER = "Gratuit et libre : installez-le pour travailler sur vos propres données."
+TITRE_DONNEES_DEMO = "Où sont les données de cette démo ?"
+NOTE_DONNEES_DEMO = ("Nulle part : elles vivent dans cette page et disparaissent quand vous la fermez. Sur votre "
+                     "installation, ce sont des fichiers CSV sur votre PC, lisibles dans Excel.")
 ADRESSE_RELEASES = "https://github.com/nicoboy49/prevo/releases/latest"
 LISTE_BLANCHE_WEB = ["GUIDE.html", "css", "favicon.svg", "index.html", "js"]
 DRAPEAU_DEPOT = "const VERSION_WEB = false;"
@@ -271,7 +276,12 @@ class TestNavigateurDemoWeb(OutilsConstruction, CasNavigateur):
                 self.assertFalse(page.is_visible(cache), cache + " devrait être masqué en version web")
         self.assertIn("Essayer avec les données de démo", page.inner_text("#btn-demo"))
         self.assertIn("Télécharger Prévo", page.inner_text("#btn-telecharger"))
+        self.assertEqual(" ".join(page.inner_text("#btn-telecharger small").split()), SOUS_TITRE_TELECHARGER)
         self.assertEqual(page.get_attribute("#btn-telecharger", "href"), ADRESSE_RELEASES)
+        # « Où sont vos données ? » est remplacé par la question et la réponse propres à la démo en ligne.
+        self.assertFalse(page.is_visible("#titre-donnees"))
+        self.assertEqual(page.text_content("#titre-donnees-demo").strip(), TITRE_DONNEES_DEMO)
+        self.assertEqual(" ".join(page.inner_text("#note-donnees-demo").split()), NOTE_DONNEES_DEMO)
         page.wait_for_timeout(300)
         self.verifier_aucune_requete_hors_du_dossier()
 
@@ -368,6 +378,9 @@ class TestDepotInchange(CasNavigateur):
                 self.assertTrue(page.is_visible(visible), visible + " doit rester proposé")
         self.assertFalse(page.is_visible("#btn-telecharger"))
         self.assertIn("Choisir le dossier de données", page.inner_text("#btn-dossier"))
+        self.assertEqual(page.text_content("#titre-donnees").strip(), "Où sont vos données ?")
+        self.assertFalse(page.is_visible("#titre-donnees-demo"))
+        self.assertFalse(page.is_visible("#note-donnees-demo"))
 
     def test_depot_ia_toujours_appelee_et_sans_bouton_si_inactive(self):
         regler_ia(self.contexte, url=self.faux.url)

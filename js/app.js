@@ -203,11 +203,15 @@ const App = (() => {
   }
 
   // Version web : seule la démo est proposée ; « Télécharger Prévo » (dernière release, lien écrit
-  // dans index.html) remplace le mode dossier, le dépôt de CSV et le rappel du mode serveur.
+  // dans index.html) remplace le mode dossier, le dépôt de CSV et le rappel du mode serveur, et le titre
+  // « Où sont les données de cette démo ? » (avec sa réponse) remplace « Où sont vos données ? ».
   function preparerVersionWeb() {
     UI.$('#zone-depot').hidden = VERSION_WEB;
     UI.$('#note-mode-serveur').hidden = VERSION_WEB;
     UI.$('#btn-telecharger').hidden = !VERSION_WEB;
+    UI.$('#titre-donnees').hidden = VERSION_WEB;
+    UI.$('#titre-donnees-demo').hidden = !VERSION_WEB;
+    UI.$('#note-donnees-demo').hidden = !VERSION_WEB;
     const demo = UI.$('#btn-demo');
     demo.classList.toggle('btn-primaire', VERSION_WEB);
     demo.classList.toggle('btn-secondaire', !VERSION_WEB);

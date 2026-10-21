@@ -68,7 +68,11 @@
 
     <div id="alerte-navigateur" hidden></div>
 
-    <h2 class="sous-titre">Où sont vos données ?</h2>
+    <h2 class="sous-titre" id="titre-donnees">Où sont vos données ?</h2>
+    <!-- Version web seulement (App.versionWeb, démo en ligne) : remplace le titre ci-dessus -->
+    <h2 class="sous-titre" id="titre-donnees-demo" hidden>Où sont les données de cette démo ?</h2>
+    <p class="note" id="note-donnees-demo" hidden>Nulle part : elles vivent dans cette page et disparaissent
+      quand vous la fermez. Sur votre installation, ce sont des fichiers CSV sur votre PC, lisibles dans Excel.</p>
     <div class="pile-gros">
       <button type="button" class="btn btn-primaire btn-gros" id="btn-dossier">
         <span data-icone="document"></span>
@@ -86,7 +90,7 @@
       <a class="btn btn-secondaire btn-gros" id="btn-telecharger" href="https://github.com/nicoboy49/prevo/releases/latest"
         target="_blank" rel="noopener" hidden>
         <span data-icone="export"></span>
-        <span>Télécharger Prévo<small>Gratuit, pour travailler sur vos propres données</small></span>
+        <span>Télécharger Prévo<small>Gratuit et libre : installez-le pour travailler sur vos propres données.</small></span>
       </a>
     </div>
 

@@ -55,12 +55,13 @@ const Ia = (() => {
     + '« Assistant IA »). L\'IA locale reste possible.';
   const MENTIONS = { poste: 'reste sur ce PC', 'pc-atelier': 'reste sur le PC atelier', atelier: 'reste dans l\'atelier' };
   // Version web (démo en ligne, App.versionWeb) : l'assistant reste visible mais n'appelle rien ; tout
-  // appel rend ce message (texte du brief de lancement, point 7, mot pour mot).
+  // appel rend ce message (texte du brief de lancement, point 7, mot pour mot ; la section du guide est
+  // nommée comme dans GUIDE.html, à la demande de Nicolas).
   const MESSAGE_VERSION_WEB = 'L\'assistant IA n\'est pas proposé dans cette démo en ligne : Prévo fonctionne '
     + 'entièrement sans lui. Sur votre installation, vous choisirez de l\'activer ou non, entre deux options : '
     + 'un assistant local et gratuit (Ollama, sur un PC de l\'atelier ; vos textes ne quittent pas l\'entreprise), '
     + 'ou un service en ligne via une clé d\'API (plus rapide, mais les textes envoyés partent chez le fournisseur '
-    + 'choisi). Tout est expliqué dans le guide, section « Assistant IA ».';
+    + 'choisi). Tout est expliqué dans le guide, section « 5. L\'assistant IA ».';
 
   const evenements = new EventTarget();
   let etatCourant = 'inconnu';
