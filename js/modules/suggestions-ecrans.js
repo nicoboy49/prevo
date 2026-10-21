@@ -65,14 +65,35 @@ Object.assign(Suggestions, (() => {
     return UI.html`<a href="#/equipement/${encodeURIComponent(equipementId)}">${libelleEquipement(equipementId)}</a>`;
   }
 
-  /** « OT liés : OT-…, OT-… et 9 autres » (dans l'ordre reçu ; `limite` liens au plus). */
-  function liensHtml(classe, libelle, ids, prefixe, limite) {
+  /**
+   * « OT liés : OT-… (11/09/2026), OT-… et 9 autres » (dans l'ordre reçu ; `limite` liens au plus).
+   * `dateDe(rang)` (facultatif) : date affichée après le lien de ce rang.
+   */
+  function liensHtml(classe, libelle, ids, prefixe, limite, dateDe) {
     if (!ids.length) return '';
     const montres = ids.slice(0, limite || ids.length);
     const reste = ids.length - montres.length;
     return UI.html`<p class="sg-liens ${classe}"><span class="sg-libelle">${libelle}</span>
-      ${montres.map((id, rang) => UI.html`${rang ? ', ' : ''}<a href="${prefixe}${encodeURIComponent(id)}">${id}</a>`)}${reste
+      ${montres.map((id, rang) => UI.html`${rang ? ', ' : ''}<a href="${prefixe}${encodeURIComponent(id)}">${id}</a>${dateDe
+        ? UI.html` <span class="sg-date">(${UI.dateFr(dateDe(rang))})</span>` : ''}`)}${reste
       ? UI.html` <span>et ${reste} ${reste > 1 ? 'autres' : 'autre'}</span>` : ''}</p>`;
+  }
+
+  /**
+   * Dates des faits (CS53) : « Dates : du 03/11/2025 au 11/09/2026 » (« le … » pour un seul jour).
+   * `s.dates` va du plus ancien au plus récent ; `s.ots` du plus récent au plus ancien : l'OT de
+   * rang r a la date de rang (n − 1 − r).
+   */
+  function datesHtml(s) {
+    if (!s.dates.length) return '';
+    const premier = s.dates[0];
+    const dernier = s.dates[s.dates.length - 1];
+    return UI.html`<p class="sg-dates"><span class="sg-libelle">Dates :</span> ${premier === dernier
+      ? UI.html`le ${UI.dateFr(premier)}` : UI.html`du ${UI.dateFr(premier)} au ${UI.dateFr(dernier)}`}</p>`;
+  }
+
+  function dateDeLOt(s) {
+    return (rang) => s.dates[s.dates.length - 1 - rang];
   }
 
   /** « Ignorée le 23/03/2026 : <motif> ; revenue sur de nouveaux faits ». */
@@ -114,7 +135,7 @@ Object.assign(Suggestions, (() => {
       ? UI.html`<a class="btn btn-primaire" href="${adresseCreation(s)}">${UI.icone('ajouter')}Créer la gamme</a>`
       : s.gammeIds.map((id) => UI.html`<a class="btn btn-secondaire" href="${adresseGamme(id, s.cle)}">${UI.icone('preventif')}Ouvrir la gamme ${id}</a>`);
     return UI.html`<div class="actions sg-actions">${liens}
-      <button type="button" class="btn btn-fantome" data-action="ignorer">Ignorer…</button></div>`;
+      <button type="button" class="btn btn-fantome" data-action="ignorer" aria-label="Ignorer la suggestion ${s.cle}">Ignorer…</button></div>`;
   }
 
   function carteHtml(s) {
@@ -123,7 +144,8 @@ Object.assign(Suggestions, (() => {
       <h3 class="sg-titre">${lienEquipement(s.equipementId)}</h3>
       <p class="sg-texte">${s.texte}</p>
       <p class="sg-question">${s.question}</p>
-      ${liensHtml('sg-ots', 'OT liés :', s.ots, '#/ot/', OT_MONTRES)}
+      ${datesHtml(s)}
+      ${liensHtml('sg-ots', 'OT liés :', s.ots, '#/ot/', OT_MONTRES, dateDeLOt(s))}
       ${liensHtml('sg-dis', 'DI liées :', s.dis, '#/di/')}
       ${decisionPrecedenteHtml(s)}
       ${actionsHtml(s)}
@@ -170,6 +192,7 @@ Object.assign(Suggestions, (() => {
     let fermer = null;
     let fait = false;
     let enCours = false;
+    let ecriture = null;                 // écriture en cours : attendue même si la fenêtre est fermée (Échap)
 
     async function valider(dialogue) {
       if (enCours) return;
@@ -178,7 +201,8 @@ Object.assign(Suggestions, (() => {
       const boutons = UI.$$('button', dialogue);
       boutons.forEach((bouton) => { bouton.disabled = true; });
       try {
-        await Suggestions.ignorer(cle, zone.value);
+        ecriture = Suggestions.ignorer(cle, zone.value);
+        await ecriture;
         fait = true;
         fermer('ok');
       } catch (refus) {
@@ -201,7 +225,8 @@ Object.assign(Suggestions, (() => {
         return false;
       },
     });
-    if (choix !== 'ok') return;
+    if (choix !== 'ok' && ecriture) await ecriture.catch(() => {});   // fermée pendant l'écriture : son issue décide
+    if (!fait) return;
     UI.toast('Suggestion ignorée (inscrite au journal).', 'succes');
     await App.reafficher();
   }

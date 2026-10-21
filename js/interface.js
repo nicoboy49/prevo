@@ -1301,6 +1301,17 @@ const UI = (function () {
       panneau.dataset.affiche = '1';
     }
 
+    // Sur téléphone, la barre d'onglets défile : l'onglet choisi est ramené dans sa partie visible
+    // (la barre seule défile, jamais la page), après la mise en page.
+    function montrerDansLaBarre(bouton) {
+      requestAnimationFrame(() => {
+        if (barre.scrollWidth <= barre.clientWidth) return;
+        const cadre = barre.getBoundingClientRect();
+        const place = bouton.getBoundingClientRect();
+        if (place.left < cadre.left || place.right > cadre.right) barre.scrollLeft += place.left - cadre.left - 16;
+      });
+    }
+
     function activer(id, donnerLeFocus) {
       const onglet = listeOnglets.find((o) => o.id === id);
       if (!onglet) return;
@@ -1312,6 +1323,7 @@ const UI = (function () {
       });
       if (!panneaux[id].dataset.affiche) remplirPanneau(onglet);
       if (donnerLeFocus) boutons[id].focus();
+      montrerDansLaBarre(boutons[id]);
       const change = ongletActif !== id;
       ongletActif = id;
       if (change && typeof reglages.surChangement === 'function') reglages.surChangement(id);

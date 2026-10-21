@@ -35,7 +35,7 @@ import re
 import time
 import unittest
 
-from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo, url_fichier
+from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo, url_fichier
 from test_regles_suggestions import calcul_python, date_reference
 
 SCENARIOS = scenarios_demo()
@@ -208,6 +208,13 @@ class TestListe(CasEcrans):
                 else:
                     self.assertNotIn("autre", carte.locator(".sg-ots").inner_text())
                 self.assertEqual(self.hrefs(carte, ".sg-dis a"), ["#/di/" + i for i in s["dis"]])
+                # CS53 (relecture finale) : les dates des faits, en période et à côté de chaque OT lié
+                premier, dernier = s["dates"][0], s["dates"][-1]
+                self.assertEqual(espaces(carte.locator(".sg-dates").inner_text()),
+                                 "Dates : le %s" % date_fr(premier) if premier == dernier
+                                 else "Dates : du %s au %s" % (date_fr(premier), date_fr(dernier)))
+                self.assertEqual([t.strip("()") for t in carte.locator(".sg-ots .sg-date").all_inner_texts()],
+                                 [date_fr(d) for d in list(reversed(s["dates"]))[:5]])
                 if s["regle"] == "S1":
                     self.assertEqual(self.hrefs(carte, ".sg-actions a"),
                                      ["#/preventif/gamme/nouvelle?equipement=%s&suggestion=%s" % (s["equipementId"], s["cle"])])
@@ -218,6 +225,7 @@ class TestListe(CasEcrans):
                     self.assertEqual([espaces(t) for t in carte.locator(".sg-actions a").all_inner_texts()],
                                      ["Ouvrir la gamme " + g for g in s["gammeIds"]])
                 self.assertEqual(espaces(carte.locator(".sg-actions button").inner_text()), "Ignorer…")
+                self.assertEqual(carte.locator(".sg-actions button").get_attribute("aria-label"), "Ignorer la suggestion " + s["cle"])
                 self.assertEqual(carte.locator(".sg-precedente").count(), 1 if s["decisionPrecedente"] else 0)
         # Au moins une carte a plus de 5 OT liés (« et n autres ») et une carte S3 a une DI liée.
         self.assertTrue(any(len(s["ots"]) > 5 for s in ouvertes))
@@ -402,6 +410,26 @@ class TestIgnorer(CasEcrans):
         self.assertIn("ignorée", ligne)
         self.assertIn(motif, ligne)
 
+    def test_ignorer_echap_pendant_l_ecriture_message_et_reaffichage_quand_meme(self):
+        # Relecture finale : fenêtre fermée par Échap pendant l'écriture au journal → la décision écrite
+        # doit quand même donner le message, retirer la carte et mettre le compteur à jour.
+        serveur = self.serveur()
+        cle = SCENARIOS["suggestion_allonger"]
+        page = self.ouvrir(serveur, "#/preventif?onglet=suggestions")
+        avant = page.evaluate(CALCUL_JS)["ouvertes"]
+        page.evaluate("""() => { const original = Donnees.journaliser;
+            Donnees.journaliser = (...args) => new Promise((fini) => setTimeout(() => fini(original(...args)), 1500)); }""")
+        page.click(CARTE % cle + " .sg-actions button")
+        page.wait_for_selector("dialog[open] textarea[name=motif]")
+        page.fill("dialog[open] textarea[name=motif]", "Échap pendant l'écriture (test)")
+        page.click("dialog[open] .fenetre-actions .btn-primaire")
+        page.keyboard.press("Escape")
+        page.wait_for_selector("dialog[open]", state="detached")
+        self.assertEqual(self.attendre_toast_note(page, "^Suggestion ignorée"), "Suggestion ignorée (inscrite au journal).")
+        page.wait_for_function("sel => !document.querySelector(sel)", arg=CARTE % cle)
+        self.assertEqual(page.inner_text(".onglet[data-onglet='suggestions'] .badge").strip(), str(len(avant) - 1))
+        self.assertTrue(attendre(lambda: decisions_au_journal(serveur.dossier, cle)))
+
     def test_suggestion_ignoree_puis_revenue_decision_precedente_et_badge(self):
         serveur = self.serveur()
         cle = SCENARIOS["suggestion_ignoree_revenue"]
@@ -428,8 +456,12 @@ class TestCs54EtProfils(CasEcrans):
 
     def test_cs54_gammes_identique_a_l_octet_pour_les_trois_profils_et_profils(self):
         serveur = self.serveur()
+        # Référence : le fichier de la démo d'origine (la copie du serveur avant toute ouverture) — l'ouverture
+        # elle-même (génération des OT échus) est ainsi couverte (relecture finale).
+        avant = (RACINE / "donnees" / "demo" / "gammes.csv").read_bytes()
+        self.assertEqual((serveur.dossier / "gammes.csv").read_bytes(), avant)
         page = self.ouvrir(serveur, "#/accueil")
-        avant = (serveur.dossier / "gammes.csv").read_bytes()
+        self.assertEqual((serveur.dossier / "gammes.csv").read_bytes(), avant)
         cle_gamme, cle_equipement = SCENARIOS["suggestion_allonger"], SCENARIOS["suggestion_revoir"]
         gamme_id = page.evaluate(TROUVER_JS, cle_gamme)["gammeIds"][0]
         equipement_id = page.evaluate(TROUVER_JS, cle_equipement)["equipementId"]
@@ -498,6 +530,11 @@ class TestTelephone(CasEcrans):
         contexte, page = self.nouveau_contexte(largeur=375, telephone=True)
         self.ouvrir(serveur, "#/preventif?onglet=suggestions", contexte=contexte, page=page)
         page.wait_for_selector(PANNEAU + " .sg-carte")
+        # Relecture finale : l'onglet actif est dans la partie visible de la barre d'onglets (qui défile)
+        page.wait_for_function("""() => { const b = document.querySelector(".onglet[data-onglet='suggestions']");
+            const r = b.closest('.barre-onglets').getBoundingClientRect(); const p = b.getBoundingClientRect();
+            return p.left >= r.left - 1 && p.right <= r.right + 1; }""")
+        self.assertTrue(self.sans_defilement_horizontal(page), "onglet ramené sans faire défiler la page")
         page.click(PANNEAU + " details.sg-comprendre summary")
         self.assertTrue(self.sans_defilement_horizontal(page), "onglet Suggestions")
         self.assertEqual(page.evaluate(PETITES_ZONES_JS, PANNEAU + " .sg-carte, " + PANNEAU + " .sg-comprendre"), [])
