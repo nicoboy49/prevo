@@ -22,6 +22,9 @@ passée à hier). Trois budgets, médiane de trois mesures, toutes affichées :
                          (.pl-grille) ; budget 1 000 ms ;
     rapport figé (lot 3) : Rapport.figer(mois) — calcul des indicateurs du mois, de M-1 et de N-1,
                          page HTML avec ses graphiques SVG, écriture du document ; budget 5 000 ms.
+    suggestions (lot 3 bis) : du changement d'adresse vers #/preventif?onglet=suggestions à l'affichage
+                         des cartes (calcul des quatre règles sur tout l'historique compris) ;
+                         budget 1 000 ms (médiane).
 Les chronomètres des actions sont posés dans la page (performance.now()).
 
 Lancer depuis la racine du projet :
@@ -46,6 +49,7 @@ BUDGET_SORTIE_MS = 1000
 BUDGET_INDICATEURS_MS = 2000        # lot 3 (CS49) : écran Indicateurs sur 12 mois, ECharts compris
 BUDGET_PLANNING_MS = 1000           # lot 3 (CS49) : planning de la semaine affiché
 BUDGET_RAPPORT_MS = 5000            # lot 3 (CS49) : rapport figé (calcul, page HTML, écriture)
+BUDGET_SUGGESTIONS_MS = 1000        # lot 3 bis (CS62) : onglet Suggestions du Préventif affiché
 MESURES = 3
 GAMMES_VIEILLIES = 20
 STATUTS_FERMES = ("Clôturé techniquement", "Clôturé administrativement", "Annulé")
@@ -350,6 +354,32 @@ class TestPerformance(CasNavigateur):
         print("\n  [performance] rapport figé de %s (%s) : %.0f ms (budget %d)" % (mois, nom, duree, BUDGET_RAPPORT_MS))
         self.assertTrue((Path(self.serveur.dossier) / "documents" / nom).is_file())
         self.assertLess(duree, BUDGET_RAPPORT_MS)
+
+    # -- Lot 3 bis (CS62) --------------------------------------------------------------------------
+
+    def test_onglet_suggestions_mediane_sous_1_seconde(self):
+        page = self.ouvrir()
+        mesures = []
+        for _ in range(MESURES):
+            page.evaluate("location.hash = '#/accueil'")
+            page.wait_for_selector("#contenu .accueil-instruments")
+            duree = page.evaluate("""() => new Promise((resoudre) => {
+                const t0 = performance.now();
+                const observateur = new MutationObserver(() => {
+                  const panneau = document.querySelector("#contenu .panneau-onglet[data-onglet='suggestions']");
+                  if (panneau && panneau.querySelector('.sg-cartes, .vide')) { observateur.disconnect(); resoudre(performance.now() - t0); }
+                });
+                observateur.observe(document.getElementById('contenu'), { childList: true, subtree: true });
+                location.hash = '#/preventif?onglet=suggestions';
+            })""")
+            mesures.append(duree)
+        cartes = page.evaluate("document.querySelectorAll('#contenu .sg-carte').length")
+        mediane = statistics.median(mesures)
+        print("\n  [performance] onglet Suggestions (%d cartes) : %s ms -> médiane %.0f ms (budget %d)"
+              % (cartes, ", ".join("%.0f" % m for m in mesures), mediane, BUDGET_SUGGESTIONS_MS))
+        self.assertGreater(cartes, 0, "le jeu de charge doit produire des suggestions")
+        self.assertEqual(cartes, page.evaluate("Suggestions.ouvertes(Donnees.aujourdhui()).length"))
+        self.assertLess(mediane, BUDGET_SUGGESTIONS_MS)
 
 
 if __name__ == "__main__":
