@@ -33,7 +33,7 @@ const Parametres = (() => {
       aide: 'Un préventif est « respecté » s\'il est clôturé au plus tard à sa date prévue + ce pourcentage de sa période.' },
     { cle: 'seuil_remplacement_pct', type: 'entier', libelle: 'Seuil « réparer ou remplacer » (%)', defaut: '50', min: 1, max: 1000,
       aide: 'Coût des 12 derniers mois / valeur de remplacement à partir duquel le rapport mensuel propose d\'examiner un équipement.' },
-    { cle: 'heures_fonct_defaut', type: 'decimal', libelle: 'Heures de fonctionnement par jour (défaut)', defaut: '8', min: 0, max: 24,
+    { cle: 'heures_fonct_defaut', type: 'decimal', libelle: 'Heures de fonctionnement par jour (défaut)', defaut: '8', min: 1, max: 24,
       aide: 'Gammes « compteur » seulement : estime l\'échéance d\'un équipement sans heures par jour. Jamais utilisé par les indicateurs.' },
     { cle: 'rafraichissement_s', type: 'entier', libelle: 'Rafraîchissement (secondes)', defaut: '20', min: 2, max: 3600,
       section: 'Échanges entre postes', aide: 'Fréquence de lecture des changements faits sur les autres postes.' },

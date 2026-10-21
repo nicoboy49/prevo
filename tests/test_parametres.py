@@ -675,7 +675,8 @@ class TestReglagesEtCodes(CasParametres):
             # Bornes : refus sous le champ, fichier inchangé
             avant = chemin.read_bytes()
             for nom, valeur in (("tolerance_preventif_pct", "150"), ("seuil_remplacement_pct", "0"),
-                                ("horizon_calendrier_semaines", "60"), ("heures_fonct_defaut", "25")):
+                                ("horizon_calendrier_semaines", "60"), ("heures_fonct_defaut", "25"),
+                                ("heures_fonct_defaut", "0")):    # 0 : le préventif le remplacerait par 8 en silence
                 with self.subTest(nom=nom):
                     page.fill(formulaire + "[name=%s]" % nom, valeur)
                     page.click(formulaire + "button[type=submit]")

@@ -320,6 +320,11 @@ class TestProfils(CasEquipe):
                     html = page.evaluate(LIGNES_CONTENU_JS)
                     self.assertNotIn("taux", html.lower())
                     self.assertNotIn("€", html)
+                    # Tout le DOM, pas seulement l'écran : D41 dit « ni à l'écran ni dans le DOM » (relecture)
+                    dom = page.evaluate("document.documentElement.outerHTML")
+                    self.assertNotIn("taux", dom.lower())
+                    for valeur in taux:
+                        self.assertIsNone(re.search(r"\b%s(?:[.,]0+)?\s*€" % re.escape(valeur), dom), valeur)
                     for valeur in taux:
                         self.assertIsNone(re.search(r"\b%s(?:[.,]0+)?\s*€" % re.escape(valeur), html), valeur)
                     if route.startswith("#/equipe/"):
