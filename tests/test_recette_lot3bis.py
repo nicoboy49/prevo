@@ -144,16 +144,24 @@ class TestRecetteServeur(CasRecette):
                         if profil == "technicien":
                             self.attendre_toast_note(page, "Suggestions de préventif.*n'est pas disponible pour le profil Technicien")
                 if profil != "demandeur":
+                    # Liste du Préventif : les onglets Suggestions et Décisions n'existent que pour le responsable
+                    self.aller(page, "#/preventif")
+                    page.wait_for_selector(".pv-onglets .onglet[data-onglet='gammes']")
+                    for onglet in ("suggestions", "decisions"):
+                        self.assertEqual(page.locator(".pv-onglets .onglet[data-onglet='%s']" % onglet).count(),
+                                         1 if responsable else 0)
+                    # Fiche gamme : la carte (la check-list est la dernière partie dessinée) puis l'encart
                     self.aller(page, "#/preventif/gamme/" + gamme_s3)
-                    page.wait_for_selector(".pv-fiche[data-gamme='%s']" % gamme_s3)
-                    page.wait_for_timeout(200)
+                    page.wait_for_selector(".pv-fiche[data-gamme='%s'] .pv-check-liste h2" % gamme_s3)
+                    if responsable:
+                        page.wait_for_selector(".sg-encart")
                     self.assertEqual(page.locator(".sg-encart").count(), 1 if responsable else 0)
-                    self.assertEqual(page.locator(".onglet[data-onglet='suggestions']").count(), 0)
                 equipement = page.evaluate("(g) => { const ligne = Donnees.trouver('gammes', g); return ligne ? ligne.equipement_id : ''; }", gamme_s3)
                 if equipement:
                     self.aller(page, "#/equipement/" + equipement)
-                    page.wait_for_selector("#contenu h1")
-                    page.wait_for_timeout(200)
+                    page.wait_for_selector(".parc-complements")         # fiche dessinée (l'encart est posé avant), tous profils
+                    if responsable:
+                        page.wait_for_selector(".sg-encart")
                     self.assertEqual(page.locator(".sg-encart").count(), 1 if responsable else 0)
 
     def test_design_serveur_1440_et_375_px(self):

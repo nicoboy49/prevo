@@ -367,7 +367,9 @@ class TestPerformance(CasNavigateur):
                 const t0 = performance.now();
                 const observateur = new MutationObserver(() => {
                   const panneau = document.querySelector("#contenu .panneau-onglet[data-onglet='suggestions']");
-                  if (panneau && panneau.querySelector('.sg-cartes, .vide')) { observateur.disconnect(); resoudre(performance.now() - t0); }
+                  if (panneau && panneau.querySelector('.sg-cartes, .vide')) {
+                    // l'image suivante comprise (mise en page et affichage, relecture finale)
+                    observateur.disconnect(); requestAnimationFrame(() => resoudre(performance.now() - t0)); }
                 });
                 observateur.observe(document.getElementById('contenu'), { childList: true, subtree: true });
                 location.hash = '#/preventif?onglet=suggestions';
