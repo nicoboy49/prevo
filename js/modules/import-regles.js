@@ -92,7 +92,7 @@ const Import = (() => {
       S('habilitations', { intitule: ['H1V', '', CLE], date_obtention: '10/03/2025', date_echeance: '10/03/2028' })]),
     codes: type('codes', 'Codes de défaillance', 'Symptômes, causes et remèdes : un code par ligne, reconnu par sa famille et son code.', ['codes_defaillance'], [
       S('codes_defaillance', { famille: ['cause', 'famille de code|catégorie', NATUREL], code: ['C99', 'code défaillance|n° de code', NATUREL],
-        libelle: ['Corrosion', 'description|désignation|intitulé'] })]),
+        libelle: ['Usure par frottement', 'description|désignation|intitulé'] })]),
     compteurs: type('compteurs', 'Compteurs', 'Un compteur par ligne : équipement (repère, déjà dans Prévo) et libellé.', ['compteurs'], [equipementDe('compteurs'),
       S('compteurs', { libelle: ['Compteur de démarrages', 'compteur|nom du compteur', CLE], unite: ['démarrages', 'unité de mesure'] })]),
     controles: type('controles', 'Contrôles réglementaires', 'Un contrôle par ligne : équipement (repère, déjà dans Prévo) et nature du contrôle.', ['controles_reglementaires'], [equipementDe('controles_reglementaires'),
