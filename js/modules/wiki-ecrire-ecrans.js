@@ -71,14 +71,19 @@ Object.assign(Wiki, (() => {
       'contradiction-ancienne': [], 'ancrage-disparu': [] };
     const noter = (type, ligne, message) => { const r = repereDe(ligne); problemes[type].push({ type, page: r.id, titre: r.titre, message }); };
     const titres = new Set(actives.map((l) => Wiki.comparable(repereDe(l).titre)).concat(actives.map((l) => Wiki.comparable(l.titre))));
-    Donnees.lignes('equipements').forEach((e) => titres.add(Wiki.comparable(titreEquipement(e))));
-    Donnees.lignes('articles').forEach((a) => titres.add(Wiki.comparable(titreArticle(a))));
+    const calcules = Donnees.lignes('equipements').map((e) => ({ id: texte(e.id), titre: titreEquipement(e) }))
+      .concat(Donnees.lignes('articles').map((a) => ({ id: texte(a.id), titre: titreArticle(a) })));
+    calcules.forEach((p) => titres.add(Wiki.comparable(p.titre)));
+    // Lien vers une page archivée : signalé une fois, par le champ `liens` (« page archivée »), pas comme inconnu.
+    const archives = new Set(lignes.filter((l) => !estActive(l)).map((l) => Wiki.comparable(l.titre)));
     const sources = new Map();                    // cible (identifiant ou TITRE:forme) → pages actives qui y renvoient
     const relier = (cible, source) => { if (!sources.has(cible)) sources.set(cible, new Set()); sources.get(cible).add(source); };
     actives.forEach((ligne) => {
       Wiki.liensDe(ligne.texte).forEach((titre) => {
         relier('TITRE:' + Wiki.comparable(titre), ligne.id);
-        if (!titres.has(Wiki.comparable(titre))) noter('lien-casse', ligne, 'lien [[' + titre + ']] vers une page inconnue');
+        if (!titres.has(Wiki.comparable(titre)) && !archives.has(Wiki.comparable(titre))) {
+          noter('lien-casse', ligne, 'lien [[' + titre + ']] vers une page inconnue');
+        }
       });
       texte(ligne.liens).split(';').map(texte).filter(Boolean).forEach((id) => {
         relier(id, ligne.id);
@@ -97,8 +102,19 @@ Object.assign(Wiki, (() => {
       .forEach((l) => noter('sans-ot', l, texte(l.texte) ? 'son texte ne cite aucun OT' : 'page vide : aucun OT cité'));
     const parForme = new Map();
     actives.forEach((l) => { const forme = Wiki.formeDuTitre(repereDe(l).titre); if (forme) parForme.set(forme, (parForme.get(forme) || []).concat([l])); });
-    parForme.forEach((memes) => memes.length > 1 && memes.forEach((l) => noter('titre-proche', l, 'titre trop proche de '
-      + memes.filter((m) => m !== l).map((m) => '« ' + repereDe(m).titre + ' »').join(', '))));
+    // Titres calculés (équipements, articles) : une page libre de même forme qu'eux est trop proche, sauf sa propre page.
+    calcules.forEach((p) => {
+      const forme = Wiki.formeDuTitre(p.titre);
+      if (forme && parForme.has(forme)) parForme.set(forme, parForme.get(forme).concat([{ calcule: p }]));
+    });
+    const titreDe = (m) => (m.calcule ? m.calcule.titre : repereDe(m).titre);
+    parForme.forEach((memes) => {
+      const distincts = memes.filter((m, n) => !m.calcule || !memes.some((autre, k) => k !== n && !autre.calcule
+        && repereDe(autre).id === m.calcule.id));
+      if (distincts.length < 2) return;
+      distincts.filter((l) => !l.calcule).forEach((l) => noter('titre-proche', l, 'titre trop proche de '
+        + distincts.filter((m) => m !== l).map((m) => '« ' + titreDe(m) + ' »').join(', ')));
+    });
     actives.forEach((l) => {
       const rubriques = Wiki.lireTexte(l.texte).rubriques;
       const phrases = rubriques.reduce((n, r) => n + r.phrases.length, 0);
@@ -126,6 +142,7 @@ Object.assign(Wiki, (() => {
       const cible = id ? Donnees.trouver(table, id) : null;
       if (id && !cible) noter('ancrage-disparu', l, nom + ' ' + id + ' absent');
       else if (cible && texte(cible.actif) === '0') noter('ancrage-disparu', l, nom + ' ' + id + ' inactif');
+      else if (cible && table === 'equipements' && texte(cible.statut) === 'rebut') noter('ancrage-disparu', l, nom + ' ' + id + ' au rebut');
     }));
     return Object.keys(problemes).flatMap((type) => problemes[type]);
   }

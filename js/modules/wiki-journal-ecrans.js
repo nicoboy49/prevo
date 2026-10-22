@@ -394,7 +394,7 @@ Object.assign(Wiki, (() => {
       ${hors.length ? UI.html`<p class="wj-hors-total" data-nombre="${hors.length}"><b>${pluriel(hors.length,
         'OT clôturé administrativement n\'est pas', 'OT clôturés administrativement ne sont pas')} dans le wiki</b> (historique, import).
         Ils n'entrent dans la file que si vous les y ajoutez ; leur traitement envoie une requête à l'IA par OT.</p>
-        <div class="actions"><button type="button" class="btn btn-primaire wj-ajouter" data-equipement="" data-nombre="${hors.length}">
+        <div class="actions"><button type="button" class="btn btn-primaire wj-ajouter" data-tout="1" data-equipement="" data-nombre="${hors.length}">
           ${UI.icone('ajouter')}Ajouter ${hors.length > 1 ? 'les ' + hors.length + ' OT' : 'cet OT'} à la file</button></div>
         <ul class="wj-lignes wj-hors">${groupes.map((g) => UI.html`<li class="wj-ligne wj-hors-equipement" data-equipement="${g.id}" data-nombre="${g.nombre}">
           <div class="wj-hors-ligne"><span class="wj-hors-nom"><b>${texte(g.equipement.repere) || g.id || 'Sans équipement'}</b>
@@ -443,9 +443,22 @@ Object.assign(Wiki, (() => {
   // 5. Actions : valider, rejeter, relancer, ajouter à la file
   // ===========================================================================================
 
+  // Une action à la fois ; après le réaffichage, les clics sont ignorés un court instant : un double clic ne doit
+  // jamais agir sur la carte arrivée sous le pointeur (une proposition que le responsable n'a pas choisie).
+  const REPOS_APRES_ACTION_MS = 600;
+  let actionEnCours = false;
+  let reposJusqua = 0;
+  let racineEnRepos = null;                     // l'écran réaffiché après l'action (une autre vue n'est pas bloquée)
+
+  function clicPermis(evenement, racine) {
+    return !actionEnCours && evenement.detail <= 1 && !(racine === racineEnRepos && performance.now() < reposJusqua);
+  }
+
   /** Lance une action, puis réaffiche l'écran avec son bilan ; un refus s'affiche avec son message. */
   async function agir(bouton, action) {
     const racine = bouton.closest('.wj');
+    actionEnCours = true;
+    racine.dataset.occupe = '1';
     UI.$$('.wj-corps button', racine).forEach((b) => { b.disabled = true; });
     bouton.setAttribute('aria-busy', 'true');
     try {
@@ -457,7 +470,19 @@ Object.assign(Wiki, (() => {
         App.signalerErreur(erreur, 'journal du wiki');
       }
     }
-    await App.reafficher();
+    try {
+      await App.reafficher();
+    } finally {
+      actionEnCours = false;
+      reposJusqua = performance.now() + REPOS_APRES_ACTION_MS;
+      // Repos visible (data-occupe) : les tests et les lecteurs attendent qu'il soit levé.
+      const nouvelle = document.querySelector('.wj');
+      racineEnRepos = nouvelle;
+      if (nouvelle) {
+        nouvelle.dataset.occupe = '1';
+        setTimeout(() => { delete nouvelle.dataset.occupe; }, REPOS_APRES_ACTION_MS);
+      }
+    }
   }
 
   async function validerIds(ids) {
@@ -502,8 +527,9 @@ Object.assign(Wiki, (() => {
     annoncer('succes', UI.html`<b>OT ${entree.ot_id} remis dans la file</b> (${nouvelle}) : il sera traité avec « Traiter la file ».`);
   }
 
-  async function ajouterALaFile(equipementId) {
-    const ids = Wiki.horsDuWiki(equipementId ? { equipementId } : {}).map((ot) => ot.id);
+  // tout : tous les OT hors du wiki ; sinon ceux de cet équipement (« Sans équipement » : equipementId vide).
+  async function ajouterALaFile(tout, equipementId) {
+    const ids = Wiki.horsDuWiki().filter((ot) => tout || texte(ot.equipement_id) === texte(equipementId)).map((ot) => ot.id);
     const nombre = await Wiki.mettreEnFile(ids);
     annoncer('succes', UI.html`<b>${pluriel(nombre, 'OT ajouté', 'OT ajoutés')} à la file du wiki.</b> Ils seront traités avec « Traiter la file ».`);
   }
@@ -596,6 +622,7 @@ Object.assign(Wiki, (() => {
     racine.addEventListener('click', (evenement) => {
       const bouton = evenement.target.closest('button');
       if (!bouton || !racine.contains(bouton) || bouton.disabled) return;
+      if (!clicPermis(evenement, bouton.closest('.wj'))) { evenement.preventDefault(); return; }
       const id = bouton.dataset.entree;
       const classe = (nom) => bouton.classList.contains(nom);
       if (classe('wj-valider')) agir(bouton, () => validerIds([id]));
@@ -604,7 +631,7 @@ Object.assign(Wiki, (() => {
       else if (classe('wj-annuler-rejet')) ouvrirRejet(bouton, false);
       else if (classe('wj-confirmer-rejet')) confirmerRejet(bouton);
       else if (classe('wj-relancer')) agir(bouton, () => relancer(id));
-      else if (classe('wj-ajouter')) agir(bouton, () => ajouterALaFile(bouton.dataset.equipement));
+      else if (classe('wj-ajouter')) agir(bouton, () => ajouterALaFile(bouton.dataset.tout === '1', bouton.dataset.equipement));
       else if (classe('wj-traiter')) lancerTraitement();
       else if (classe('wj-arreter')) arreterTraitement();
     });

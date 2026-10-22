@@ -188,6 +188,11 @@ class CasEcrans(CasNavigateur):
     def textes(self, selecteur):
         return self.page.evaluate(TEXTES_JS, selecteur)
 
+    def agir(self, selecteur):
+        """Clic sur un bouton d'action du journal, une fois l'action précédente et son repos (data-occupe) finis."""
+        self.page.wait_for_selector(".wj:not([data-occupe])")
+        self.page.click(selecteur)
+
     def annonce(self):
         self.page.wait_for_selector(".wj-annonce .alerte, .wj-annonce .alerte-texte", state="attached", timeout=30000)
         return self.texte(".wj-annonce")
@@ -286,6 +291,24 @@ class TestJournal(CasEcrans):
         self.aller("#/wiki-journal?entree=WJ-00099", '.wj[data-vue="entree"]')
         self.assertIn("Entrée introuvable", self.texte(".wj-corps"))
 
+    def test_deux_clics_rapides_n_agissent_que_sur_la_proposition_choisie(self):
+        """Relecture de T120 : deux clics au même endroit à 150 ms d'intervalle ; le second ne doit pas valider la
+        carte arrivée sous le pointeur après le réaffichage."""
+        self.ouvrir(journal=True)
+        self.journal("?vue=a-valider")
+        avant = self.page.evaluate("Donnees.lignes('wiki_journal').filter((e) => e.statut === 'à valider').map((e) => e.id)")
+        bouton = self.page.locator(".wj-valider").first
+        choisie = bouton.get_attribute("data-entree")
+        bouton.scroll_into_view_if_needed()
+        boite = bouton.bounding_box()
+        x, y = boite["x"] + boite["width"] / 2, boite["y"] + boite["height"] / 2
+        self.page.mouse.click(x, y)
+        self.page.wait_for_timeout(150)
+        self.page.mouse.click(x, y)
+        self.page.wait_for_selector(".wj:not([data-occupe])")
+        validees = [i for i in avant if self.statut(i) == "validée"]
+        self.assertEqual(validees, [choisie])
+
     def test_valider_la_selection_puis_une_proposition_avec_contradiction(self):
         self.ouvrir(journal=True)
         self.journal("?vue=a-valider")
@@ -294,7 +317,7 @@ class TestJournal(CasEcrans):
         self.page.check(carte("WJ-00002") + " input.wj-choix")
         self.page.check(carte("WJ-00004") + " input.wj-choix")
         self.assertEqual(self.texte(bouton), "Valider les propositions sélectionnées (2)")
-        self.page.click(bouton)
+        self.agir(bouton)
         bilan = self.annonce()
         self.assertIn("2 propositions validées : WJ-00002, WJ-00004.", bilan)
         self.assertEqual((self.statut("WJ-00002"), self.statut("WJ-00004"), self.statut("WJ-00003")), ("validée", "validée", "à valider"))
@@ -302,7 +325,7 @@ class TestJournal(CasEcrans):
         self.assertEqual((po01["texte"], po01["version"]), (APRES_PO01, "2"))
         self.assertEqual(self.page.evaluate("Array.from(document.querySelectorAll('.wj-entree')).map((e) => e.dataset.entree)"), ["WJ-00003"])
         # Avec contradiction : validée seule, par son bouton.
-        self.page.click(carte("WJ-00003") + " .wj-valider")
+        self.agir(carte("WJ-00003") + " .wj-valider")
         self.assertIn("Proposition validée : WJ-00003.", self.annonce())
         self.assertEqual(self.statut("WJ-00003"), "validée")
         self.assertEqual(self.page.evaluate(LIGNE_JS, "WP-0003")["texte"], APRES_KIT)
@@ -323,13 +346,13 @@ class TestJournal(CasEcrans):
         self.page.evaluate(AJOUTER_JS, [[suite], None])
         self.journal("?vue=a-valider")
         avant = self.etat()
-        self.page.click(carte("WJ-00011") + " .wj-valider")
+        self.agir(carte("WJ-00011") + " .wj-valider")
         self.assertIn("Refusé : Validez d'abord WJ-00004", self.annonce())
         self.assertEqual(self.etat(), avant)
         # Une page changée entre-temps (autre poste) : la proposition passe « à refaire », le bilan le dit.
         self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => {
           const l = lignes.find((x) => x.id === 'WP-0001'); l.version = String(Number(l.version) + 1); })""")
-        self.page.click(carte("WJ-00002") + " .wj-valider")
+        self.agir(carte("WJ-00002") + " .wj-valider")
         bilan = self.annonce()
         self.assertIn("Aucune proposition validée.", bilan)
         self.assertIn("Passées « à refaire »", bilan)
@@ -348,7 +371,7 @@ class TestJournal(CasEcrans):
         self.assertEqual(self.page.evaluate("document.activeElement.classList.contains('wj-motif')"), True)
         avant = self.etat()
         self.page.fill(c4 + " .wj-motif", "   ")
-        self.page.click(c4 + " .wj-confirmer-rejet")
+        self.agir(c4 + " .wj-confirmer-rejet")
         self.assertEqual(self.texte(c4 + " .wj-rejet .erreur-champ"), "Le motif du rejet est obligatoire.")
         self.assertEqual(self.page.get_attribute(c4 + " .wj-motif", "aria-invalid"), "true")
         self.assertEqual(self.etat(), avant)
@@ -358,7 +381,7 @@ class TestJournal(CasEcrans):
         self.assertTrue(self.page.is_hidden(c4 + " .wj-rejet"))
         self.page.click(c4 + " .wj-rejeter")
         self.page.fill(c4 + " .wj-motif", "Phrase hors sujet")
-        self.page.click(c4 + " .wj-confirmer-rejet")
+        self.agir(c4 + " .wj-confirmer-rejet")
         self.assertIn("Proposition WJ-00004 rejetée (motif : Phrase hors sujet).", self.annonce())
         rejetee = self.page.evaluate("(id) => Donnees.trouver('wiki_journal', id)", "WJ-00004")
         self.assertEqual((rejetee["statut"], rejetee["motif"]), ("rejetée", "Phrase hors sujet"))
@@ -367,9 +390,9 @@ class TestJournal(CasEcrans):
         self.assertEqual(self.textes("#wj-echecs " + carte("WJ-00005") + " .wj-raisons li"), RAISONS)
         self.assertEqual(self.page.evaluate("Array.from(document.querySelectorAll('#wj-rejetees .wj-entree')).map((e) => e.dataset.entree)"),
                          ["WJ-00006", "WJ-00004"])
-        self.page.click("#wj-echecs " + carte("WJ-00005") + " .wj-relancer")
+        self.agir("#wj-echecs " + carte("WJ-00005") + " .wj-relancer")
         self.assertIn("OT OT-2026-0004 remis dans la file", self.annonce())
-        self.page.click("#wj-rejetees " + carte("WJ-00004") + " .wj-relancer")
+        self.agir("#wj-rejetees " + carte("WJ-00004") + " .wj-relancer")
         self.assertIn("OT OT-2026-0002 remis dans la file", self.annonce())
         file = self.page.evaluate(FILE_JS)
         self.assertIn("OT-2026-0004", file)
@@ -481,6 +504,19 @@ class TestTraiterLaFile(CasEcrans):
 
 class TestHorsDuWiki(CasEcrans):
 
+    def test_deux_clics_rapides_n_ajoutent_que_l_equipement_choisi(self):
+        self.ouvrir()
+        self.journal("?vue=hors")
+        bouton = self.page.locator('.wj-hors-equipement[data-equipement="EQ-0001"] .wj-ajouter')
+        bouton.scroll_into_view_if_needed()
+        boite = bouton.bounding_box()
+        x, y = boite["x"] + boite["width"] / 2, boite["y"] + boite["height"] / 2
+        self.page.mouse.click(x, y)
+        self.page.wait_for_timeout(150)
+        self.page.mouse.click(x, y)
+        self.page.wait_for_selector(".wj:not([data-occupe])")
+        self.assertEqual(self.page.evaluate(FILE_JS), ["OT-2026-0003", "OT-2026-0001", "OT-2026-0008"])
+
     def test_nombre_affiche_avant_puis_ajout_par_equipement_et_du_reste(self):
         self.ouvrir()
         self.journal("?vue=hors")
@@ -497,11 +533,11 @@ class TestHorsDuWiki(CasEcrans):
         for equipement, nombre, _ in par_equipement:
             self.assertEqual(self.page.evaluate("(id) => Wiki.horsDuWiki({ equipementId: id }).length", equipement), nombre)
         self.assertIn("Ajouter les 7 OT à la file", self.texte(".wj-hors-total + .actions .wj-ajouter"))
-        self.page.click('.wj-hors-equipement[data-equipement="EQ-0001"] .wj-ajouter')
+        self.agir('.wj-hors-equipement[data-equipement="EQ-0001"] .wj-ajouter')
         self.assertIn("3 OT ajoutés à la file du wiki.", self.annonce())
         self.assertEqual(self.page.evaluate(FILE_JS), ["OT-2026-0003", "OT-2026-0001", "OT-2026-0008"])
         self.assertIn("4 OT clôturés administrativement", self.texte(".wj-hors-total"))
-        self.page.click(".wj-hors-total + .actions .wj-ajouter")
+        self.agir(".wj-hors-total + .actions .wj-ajouter")
         self.assertIn("4 OT ajoutés à la file du wiki.", self.annonce())
         self.assertEqual(sorted(self.page.evaluate(FILE_JS)), sorted(hors))
         self.assertIn("Tous les OT clôturés administrativement sont dans le wiki", self.texte(".wj-corps"))
@@ -695,6 +731,29 @@ class TestControleDuWiki(CasEcrans):
                                      "#/wiki-ecrire/" + page_id)
         self.assertIn("Kit garniture HC 50", self.texte('.wj-controle-type[data-type="ancrage-disparu"]'))
         self.assertEqual(self.texte('.wj-vue[data-vue="controle"] .badge'), str(len(problemes)))
+
+    def test_relecture_titre_proche_d_un_article_lien_archive_une_fois_et_rebut(self):
+        """Relecture de T120 : une page libre de même forme qu'un article est trop proche ; un lien vers une page
+        archivée n'est signalé qu'une fois ; un équipement au rebut est un ancrage disparu."""
+        self.ouvrir()
+        self.page.evaluate("""async () => {
+          await Donnees.modifier('wiki_pages', (lignes) => {
+            lignes.push({ id: 'WP-0030', type: 'mode', titre: 'Filtres à huile', texte: '## Causes\\n- Usure [OT-2026-0002]',
+              version: '1', statut: 'active', liens: '', ot_cites: 'OT-2026-0002' });
+            const lien = lignes.find((l) => l.id === 'WP-0002');
+            lien.texte += '\\n- Voir [[Ancien geste]] [OT-2026-0007]';
+          });
+          await Donnees.modifier('equipements', (lignes) => { lignes.find((e) => e.id === 'EQ-0001').statut = 'rebut'; });
+        }""")
+        problemes = self.page.evaluate("Wiki.controleDuWiki()")
+        proches = [p for p in problemes if p["type"] == "titre-proche" and p["page"] == "WP-0030"]
+        self.assertEqual(len(proches), 1)
+        self.assertIn("« Filtre à huile »", proches[0]["message"])
+        # Une page ancrée n'est jamais trop proche de son propre équipement ou article.
+        self.assertEqual([p for p in problemes if p["type"] == "titre-proche" and p["page"] in ("EQ-0001", "ART-0001")], [])
+        self.assertEqual([p["message"] for p in problemes if p["type"] == "lien-casse" and p["page"] == "WP-0002"
+                          and "Ancien geste" in p["message"]], [])
+        self.assertTrue(any(p["type"] == "ancrage-disparu" and "EQ-0001 au rebut" in p["message"] for p in problemes), problemes)
 
 
 # ---------------------------------------------------------------------------------------------------
