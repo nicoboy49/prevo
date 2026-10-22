@@ -155,6 +155,8 @@ Organisation du fichier :
 """
 import argparse
 import calendar
+import csv
+import io
 import json
 import math
 import random
@@ -169,6 +171,9 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_DEMO = RACINE / 'donnees' / 'demo'
 FICHIER_JS = RACINE / 'js' / 'demo-donnees.js'
+# Lot 6 (ARCHITECTURE.md §20.8, D98) : synthèses [IA] de la démo, rédigées une fois (sous-agents Claude Code,
+# avec le prompt de Prévo) puis relues par Nicolas, figées dans ce fichier : jamais régénérées ici.
+FICHIER_SYNTHESES_FIGEES = RACINE / 'outils' / 'demo_wiki_syntheses.csv'
 FICHIER_SCENARIOS = RACINE / 'tests' / 'fixtures' / 'demo-scenarios.json'
 
 GRAINE = 42                      # graine fixe : deux exécutions donnent des fichiers identiques
@@ -4454,10 +4459,35 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
             generer_journal(ctx)
         with hasard_du_lot3bis(ctx):
             ajouter_decision_ignoree(ctx)
+    if not volume and mois == MOIS_PAR_DEFAUT:
+        ajouter_syntheses_figees(ctx)
     verifier_jeu(ctx)
     if not volume:
         verifier_demo_lot3(ctx)
     return ctx
+
+
+def ajouter_syntheses_figees(ctx, chemin=None):
+    """Synthèses du wiki de la démo (§20.8) : lignes de outils/demo_wiki_syntheses.csv copiées telles quelles
+    (le jeu de 13 mois seulement : leurs OT cités en dépendent). Arrêt si un OT cité ou envoyé n'existe pas
+    ou n'est pas celui de l'équipement de la synthèse. Sans fichier figé, la table reste vide."""
+    chemin = Path(chemin) if chemin else FICHIER_SYNTHESES_FIGEES
+    if not chemin.is_file():
+        return
+    noms = [champ['nom'] for champ in CHAMPS['wiki_syntheses']]
+    lecteur = csv.DictReader(io.StringIO(chemin.read_text(encoding='utf-8-sig')), delimiter=';')
+    if lecteur.fieldnames != noms:
+        raise SystemExit('%s : en-tête inattendu %r (attendu %r)' % (chemin.name, lecteur.fieldnames, noms))
+    ordres = {ot['id']: ot for ot in ctx.base['ordres_travail']}
+    for ligne in lecteur:
+        for champ in ('ot_cites', 'ot_sources'):
+            for identifiant in filter(None, (morceau.strip() for morceau in ligne[champ].split(';'))):
+                ot = ordres.get(identifiant)
+                if not ot or ot['equipement_id'] != ligne['equipement_id']:
+                    raise SystemExit('%s : synthèse %s, %s « %s » %s.' % (
+                        chemin.name, ligne['id'], champ, identifiant,
+                        "n'existe pas" if not ot else "est celui d'un autre équipement"))
+        ctx.base['wiki_syntheses'].append({nom: ligne[nom] for nom in noms})
 
 
 def lire_arguments(argv):

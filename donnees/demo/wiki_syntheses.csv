@@ -1,1 +1,109 @@
 ﻿id;equipement_id;texte;ot_cites;ot_sources;statut;modele;date_proposition;corrigee_par;date_modification;valide_par;date_validation
+WIKI-0001;EQ-0012;"Ce qui revient
+- Déclenchements du disjoncteur : 3 OT, dont 2 dus à une connexion desserrée (départ moteur, jeu de barres), fréquent ici. [OT-2026-0108] [OT-2026-0028] [OT-2025-0046]
+- Odeur de brûlé avec contacteur de puissance hors service : 2 OT. [OT-2026-0067] [OT-2026-0051]
+Ce qui a réglé le problème
+- Resserrage au couple des bornes du départ : essais sans déclenchement, thermographie sans point chaud. [OT-2026-0108] [OT-2026-0028]
+- Remplacement du contacteur tripolaire 25 A bobine 24 V, avec contrôle des câbles et du serrage des bornes. [OT-2026-0067] [OT-2026-0051]
+- Surcharge moteur ponctuelle : réarmement, intensité mesurée dans la plage. [OT-2025-0046]
+À surveiller
+- Échauffement des bornes et des contacteurs : deux contacteurs brûlés et deux connexions desserrées dans la liste. [OT-2026-0067] [OT-2026-0051] [OT-2026-0108] [OT-2026-0028]";"OT-2026-0108;OT-2026-0028;OT-2025-0046;OT-2026-0067;OT-2026-0051";"OT-2026-0108;OT-2026-0067;OT-2026-0051;OT-2026-0028;OT-2025-0046";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0002;EQ-0030;"Ce qui revient
+- Bruit de grincement, galets et chaîne secs : 4 fois, fréquent ici. [OT-2026-0156] [OT-2026-0136] [OT-2026-0119] [OT-2026-0040]
+- Arrêts intempestifs dus au fin de course encrassé : 4 fois. Chariot qui ne démarre pas à cause du contacteur hors service : 3 fois. [OT-2026-0155] [OT-2026-0011] [OT-2026-0002] [OT-2025-0049] [OT-2026-0168] [OT-2026-0004] [OT-2025-0018]
+Ce qui a réglé le problème
+- Graissage à la graisse EP2 : le bruit a disparu à chaque fois. Nettoyage et réglage du fin de course : les mouvements se font en entier, sans arrêt. [OT-2026-0156] [OT-2026-0136] [OT-2026-0119] [OT-2026-0040] [OT-2026-0155] [OT-2026-0011] [OT-2026-0002] [OT-2025-0049]
+- Remplacement du contacteur tripolaire 40 A. Essais de levage à vide et en charge concluants. [OT-2026-0168] [OT-2026-0004] [OT-2025-0018]
+- Galet cassé qui faisait vibrer le chariot : 2 fois. Galet remplacé et axe contrôlé (roue polyuréthane Ø200). [OT-2026-0141] [OT-2026-0057]
+À surveiller
+- Contacteur remplacé 3 fois et galet cassé 2 fois : pièces à suivre. Usure des bandages notée « à surveiller au prochain passage ». [OT-2026-0168] [OT-2026-0004] [OT-2025-0018] [OT-2026-0057] [OT-2026-0115] [OT-2026-0055]";"OT-2026-0156;OT-2026-0136;OT-2026-0119;OT-2026-0040;OT-2026-0155;OT-2026-0011;OT-2026-0002;OT-2025-0049;OT-2026-0168;OT-2026-0004;OT-2025-0018;OT-2026-0141;OT-2026-0057;OT-2026-0115;OT-2026-0055";"OT-2026-0168;OT-2026-0156;OT-2026-0155;OT-2026-0141;OT-2026-0136;OT-2026-0135;OT-2026-0119;OT-2026-0115;OT-2026-0085;OT-2026-0057;OT-2026-0055;OT-2026-0045;OT-2026-0040;OT-2026-0031;OT-2026-0006;OT-2026-0011;OT-2026-0004;OT-2026-0002;OT-2025-0049;OT-2025-0033;OT-2025-0018;OT-2025-0009";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0003;EQ-0014;"Ce qui revient
+- Bruit anormal de broche, roulements hors service : 4 OT, fréquent ici. [OT-2026-0097] [OT-2026-0027] [OT-2026-0009] [OT-2025-0052]
+- Défaut de cotes sur les pièces usinées, dérive de réglage : 3 OT. [OT-2026-0153] [OT-2026-0123] [OT-2026-0070]
+- Fuite sur le circuit d'arrosage, flexible ou raccord percé : 2 OT. [OT-2026-0190] [OT-2026-0064]
+Ce qui a réglé le problème
+- Broche déposée et reconditionnée en sous-traitance, puis remontage, contrôle du faux-rond et essai à toutes les vitesses. [OT-2026-0097] [OT-2026-0027] [OT-2025-0052]
+- Cotes : recalage des outils et correction d'usure, pièces contrôlées conformes. Fuite : raccord rapide G1/4 ou flexible d'arrosage remplacé. [OT-2026-0153] [OT-2026-0070] [OT-2026-0190] [OT-2026-0064]
+À surveiller
+- Bruit de broche revenu malgré les reconditionnements ; usure notée « à surveiller au prochain passage » sur plusieurs graissages. [OT-2026-0097] [OT-2026-0009] [OT-2026-0162] [OT-2026-0121]";"OT-2026-0097;OT-2026-0027;OT-2026-0009;OT-2025-0052;OT-2026-0153;OT-2026-0123;OT-2026-0070;OT-2026-0190;OT-2026-0064;OT-2026-0162;OT-2026-0121";"OT-2026-0190;OT-2026-0162;OT-2026-0153;OT-2026-0140;OT-2026-0123;OT-2026-0121;OT-2026-0103;OT-2026-0097;OT-2026-0081;OT-2026-0070;OT-2026-0064;OT-2026-0060;OT-2026-0056;OT-2026-0041;OT-2026-0027;OT-2026-0025;OT-2026-0005;OT-2026-0009;OT-2025-0052;OT-2025-0042;OT-2025-0025;OT-2025-0007";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0004;EQ-0001;"Ce qui revient
+- Échauffement dû à un filtre à huile colmaté : 7 fois dans la liste, fréquent ici. [OT-2026-0161] [OT-2026-0118] [OT-2026-0094] [OT-2026-0048] [OT-2026-0030] [OT-2025-0043] [OT-2025-0023]
+- Échauffement dû à un niveau d'huile bas (défaut de lubrification) : 4 fois dans la liste. [OT-2026-0138] [OT-2026-0076] [OT-2026-0012] [OT-2025-0004]
+Ce qui a réglé le problème
+- Remplacement de la cartouche filtre à huile, parfois avec soufflage du radiateur : la température de refoulement est redescendue à 84 °C et l'essai en charge s'est fait sans alarme. [OT-2026-0161] [OT-2026-0118] [OT-2026-0094] [OT-2026-0048] [OT-2026-0030] [OT-2025-0043] [OT-2025-0023]
+- Appoint d'huile compresseur à vis et contrôle du circuit : température de refoulement revenue à 82 °C, aucune fuite visible. [OT-2026-0138] [OT-2026-0076] [OT-2026-0012] [OT-2025-0004]
+À surveiller
+- Température de refoulement relevée à 90 ou 91 °C lors de trois entretiens mensuels. La sonde posée au refoulement donne l'alerte à 90 °C. [OT-2026-0127] [OT-2026-0089] [OT-2025-0048] [OT-2026-0143]
+- Séparateur air/huile : perte de charge de 0.81 bar avant son remplacement, puis 0.5 et 0.6 bar relevés aux entretiens des 2000 heures. [OT-2026-0061] [OT-2026-0117] [OT-2026-0013]";"OT-2026-0161;OT-2026-0118;OT-2026-0094;OT-2026-0048;OT-2026-0030;OT-2025-0043;OT-2025-0023;OT-2026-0138;OT-2026-0076;OT-2026-0012;OT-2025-0004;OT-2026-0127;OT-2026-0089;OT-2025-0048;OT-2026-0143;OT-2026-0061;OT-2026-0117;OT-2026-0013";"OT-2026-0171;OT-2026-0161;OT-2026-0149;OT-2026-0143;OT-2026-0138;OT-2026-0127;OT-2026-0117;OT-2026-0118;OT-2026-0109;OT-2026-0094;OT-2026-0089;OT-2026-0076;OT-2026-0068;OT-2026-0061;OT-2026-0049;OT-2026-0048;OT-2026-0032;OT-2026-0030;OT-2026-0015;OT-2026-0013;OT-2026-0012;OT-2025-0048;OT-2025-0043;OT-2025-0028;OT-2025-0023;OT-2025-0011;OT-2025-0004;OT-2025-0001";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0005;EQ-0016;"Ce qui revient
+- Défaut de cotes sur les pièces usinées, 3 fois, dû à une dérive de réglage : fréquent ici. [OT-2026-0147] [OT-2026-0007] [OT-2025-0015]
+- Arrêt intempestif après une fausse manœuvre, 2 fois, revenu malgré le rappel de la procédure au conducteur. [OT-2026-0165] [OT-2026-0128]
+Ce qui a réglé le problème
+- Défaut de cotes : réglage de la compensation d'outil ou recalage des outils avec correction d'usure, puis contrôle de 3 à 5 pièces, cotes conformes. [OT-2026-0147] [OT-2026-0007] [OT-2025-0015]
+- Arrêt après fausse manœuvre : réarmement et réinitialisation, avec rappel de la procédure au conducteur. [OT-2026-0165] [OT-2026-0128]
+- Fuite de liquide de coupe : flexible d'arrosage fendu remplacé et niveau de liquide complété. [OT-2025-0045]
+À surveiller
+- Jeu dans la compensation d'outil, 2 fois, et dérive du zéro pièce : suivre les cotes des pièces usinées. [OT-2026-0147] [OT-2025-0015] [OT-2026-0007]";"OT-2026-0147;OT-2026-0007;OT-2025-0015;OT-2026-0165;OT-2026-0128;OT-2025-0045";"OT-2026-0165;OT-2026-0147;OT-2026-0128;OT-2026-0007;OT-2025-0045;OT-2025-0015";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0006;EQ-0023;"Ce qui revient
+- Arrêt intempestif dû à un capteur encrassé, sur les 15 OT : fréquent ici. [OT-2026-0191] [OT-2026-0169] [OT-2026-0158] [OT-2026-0137] [OT-2026-0122] [OT-2026-0102] [OT-2026-0084] [OT-2026-0062] [OT-2026-0046] [OT-2026-0029] [OT-2026-0014] [OT-2025-0047] [OT-2025-0029] [OT-2025-0013] [OT-2025-0002]
+- Capteurs en cause : cellule de fin de course souillée (7 OT), capteur inductif encrassé et mal aligné (4 OT), capteur de présence empoussiéré (3 OT). [OT-2026-0084] [OT-2026-0046] [OT-2026-0029] [OT-2026-0014] [OT-2025-0047] [OT-2025-0029] [OT-2025-0002] [OT-2026-0191] [OT-2026-0158] [OT-2026-0137] [OT-2026-0062] [OT-2026-0122] [OT-2026-0102] [OT-2025-0013]
+Ce qui a réglé le problème
+- Nettoyage au nettoyant contacts et capteurs (aérosol), avec réalignement du capteur ou contrôle de la distance de détection ; essais concluants. [OT-2026-0191] [OT-2026-0158] [OT-2026-0122] [OT-2026-0102]
+- Capteur inductif M18 PNP remplacé une fois, en plus du nettoyage. [OT-2026-0137]
+À surveiller
+- Câblage de la cellule de fin de course, vérifié à chaque nettoyage ; encrassement à suivre lors du préventif. [OT-2026-0084] [OT-2025-0002]
+- Cellule de détection d'entrée salie par des résidus de film : propreté de la zone de détection à suivre. [OT-2026-0169]";"OT-2026-0191;OT-2026-0169;OT-2026-0158;OT-2026-0137;OT-2026-0122;OT-2026-0102;OT-2026-0084;OT-2026-0062;OT-2026-0046;OT-2026-0029;OT-2026-0014;OT-2025-0047;OT-2025-0029;OT-2025-0013;OT-2025-0002";"OT-2026-0191;OT-2026-0169;OT-2026-0158;OT-2026-0137;OT-2026-0122;OT-2026-0102;OT-2026-0084;OT-2026-0062;OT-2026-0046;OT-2026-0029;OT-2026-0014;OT-2025-0047;OT-2025-0029;OT-2025-0013;OT-2025-0002";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0007;EQ-0026;"Ce qui revient
+- Arrêts intempestifs : cellule photoélectrique encrassée par des résidus de film, 5 OT, fréquent ici. [OT-2026-0107] [OT-2026-0101] [OT-2026-0063] [OT-2025-0032] [OT-2025-0006]
+- Défaut de qualité de soudure, dérive du réglage de la température de soudure : 2 OT. [OT-2026-0176] [OT-2025-0014]
+Ce qui a réglé le problème
+- Nettoyage de la cellule au nettoyant contacts et capteurs, réalignement et réglage de la sensibilité. [OT-2026-0107] [OT-2026-0101] [OT-2026-0063] [OT-2025-0032]
+- Température de soudure réajustée, colis contrôlés conformes ; contacteur de puissance défectueux remplacé quand la machine ne démarrait pas. [OT-2026-0176] [OT-2025-0014] [OT-2026-0096]
+À surveiller
+- Courroie crantée retendue après un bruit anormal : remplacement à prévoir si le bruit revient. [OT-2026-0034]
+- Dysfonctionnement ponctuel non reproduit, connexions resserrées : suivi demandé au prochain préventif, comme pour la cellule encrassée. [OT-2026-0090] [OT-2025-0006]";"OT-2026-0107;OT-2026-0101;OT-2026-0063;OT-2025-0032;OT-2025-0006;OT-2026-0176;OT-2025-0014;OT-2026-0096;OT-2026-0034;OT-2026-0090";"OT-2026-0176;OT-2026-0107;OT-2026-0101;OT-2026-0096;OT-2026-0090;OT-2026-0063;OT-2026-0034;OT-2025-0032;OT-2025-0014;OT-2025-0006";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0008;EQ-0027;"Ce qui revient
+- Arrêts intempestifs dus à la cellule photoélectrique encrassée : 3 fois, fréquent ici. [OT-2026-0188] [OT-2026-0151] [OT-2026-0019]
+- Bruit de courroie détendue : 2 fois. Défaut de qualité de soudure ou de pose par dérive de réglage : 2 fois. [OT-2026-0150] [OT-2025-0056] [OT-2026-0066] [OT-2025-0055]
+Ce qui a réglé le problème
+- Cellule nettoyée au nettoyant contacts et capteurs (aérosol) puis réalignée : plus de défaut sur 1 h de marche. [OT-2026-0188] [OT-2026-0151] [OT-2026-0019]
+- Courroie retendue avec alignement contrôlé ; réglages réajustés (température de soudure, capteur de bord de matière, vitesse d'applique), produits conformes. [OT-2026-0150] [OT-2025-0056] [OT-2026-0066] [OT-2025-0055]
+- Flexible d'air comprimé percé : remplacé, avec un raccord rapide pneumatique G1/4 neuf. [OT-2026-0092]
+À surveiller
+- Encrassement de la cellule et bruit de courroie à contrôler au prochain préventif ; remplacement de la courroie à prévoir si le bruit revient. [OT-2026-0188] [OT-2025-0056] [OT-2026-0150]";"OT-2026-0188;OT-2026-0151;OT-2026-0019;OT-2026-0150;OT-2025-0056;OT-2026-0066;OT-2025-0055;OT-2026-0092";"OT-2026-0188;OT-2026-0151;OT-2026-0150;OT-2026-0092;OT-2026-0066;OT-2026-0019;OT-2025-0056;OT-2025-0055";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0009;EQ-0005;"Ce qui revient
+- Fuite à la garniture mécanique, garniture usée (faces rayées) : 7 OT, fréquent ici. La garniture est remplacée environ tous les 56 à 60 jours. [OT-2026-0175] [OT-2026-0133] [OT-2026-0098] [OT-2026-0058] [OT-2026-0026] [OT-2025-0044] [OT-2025-0010]
+- Fuite au raccord de refoulement : la bride s'est desserrée sous l'effet des vibrations (2 OT). [OT-2026-0082] [OT-2025-0030]
+Ce qui a réglé le problème
+- Remplacement par un kit garniture mécanique PO-02 neuf et contrôle de l'alignement : aucune fuite à la remise en service, mais la fuite revient. [OT-2026-0175] [OT-2026-0098] [OT-2026-0058]
+- Bride de refoulement : boulons resserrés au couple, en croix. Aucune fuite à la remise en pression. [OT-2026-0082] [OT-2025-0030]
+À surveiller
+- La garniture dure peu : les comptes rendus demandent une analyse de cause (alignement, vibrations, qualité de l'eau). [OT-2026-0175] [OT-2026-0133] [OT-2026-0098]
+- Vibrations au palier relevées entre 2.3 et 3.7 mm/s. La valeur la plus haute vient du dernier contrôle trimestriel, noté « à surveiller au prochain passage ». [OT-2026-0126] [OT-2026-0072] [OT-2026-0017] [OT-2025-0017]";"OT-2026-0175;OT-2026-0133;OT-2026-0098;OT-2026-0058;OT-2026-0026;OT-2025-0044;OT-2025-0010;OT-2026-0082;OT-2025-0030;OT-2026-0126;OT-2026-0072;OT-2026-0017;OT-2025-0017";"OT-2026-0175;OT-2026-0133;OT-2026-0126;OT-2026-0098;OT-2026-0082;OT-2026-0072;OT-2026-0058;OT-2026-0026;OT-2026-0017;OT-2025-0044;OT-2025-0030;OT-2025-0017;OT-2025-0010";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0010;EQ-0006;"Ce qui revient
+- Bruit anormal dû à un roulement hors service : 2 OT, fréquent ici. [OT-2026-0088] [OT-2025-0022]
+- Fuite à la garniture mécanique usée (faces rayées) : 1 OT. [OT-2025-0037]
+Ce qui a réglé le problème
+- Remplacement du roulement à billes 6305-2RS, graissage correct : plus de bruit à l'essai en marche. [OT-2026-0088] [OT-2025-0022]
+- Garniture remplacée par un kit garniture mécanique universelle Ø25, alignement contrôlé : aucune fuite ensuite. [OT-2025-0037]
+- Vibrations par desserrage des vis de l'accouplement : resserrage au couple et marquage au vernis témoin. [OT-2026-0042]
+À surveiller
+- Côté accouplement : bruit de roulement et vernis témoin des vis. Un dysfonctionnement ponctuel non reproduit, connexions resserrées, reste en suivi demandé. [OT-2026-0088] [OT-2026-0042] [OT-2025-0035]";"OT-2026-0088;OT-2025-0022;OT-2025-0037;OT-2026-0042;OT-2025-0035";"OT-2026-0088;OT-2026-0042;OT-2025-0035;OT-2025-0037;OT-2025-0022";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0011;EQ-0020;"Ce qui revient
+- Fuite d'huile par flexible hydraulique percé près du vérin : 6 OT correctifs, fréquent ici. [OT-2026-0132] [OT-2026-0078] [OT-2026-0073] [OT-2026-0050] [OT-2026-0043] [OT-2026-0037]
+- Pièces hors cote par dérive du réglage de course ou de la butée basse : 2 OT. [OT-2026-0091] [OT-2025-0038]
+Ce qui a réglé le problème
+- Remplacement du flexible hydraulique DN10 serti, complément d'huile, puis essai sous pression sans fuite. [OT-2026-0132] [OT-2026-0073] [OT-2026-0050] [OT-2026-0043] [OT-2026-0037]
+- Gaine de protection posée sur le flexible usé par frottement. [OT-2026-0078] [OT-2026-0073]
+- Butée recalée, puis pièces témoins contrôlées conformes. [OT-2026-0091] [OT-2025-0038]
+À surveiller
+- Flexibles près des vérins : un suintement relevé au préventif a mené à un remplacement. Filtre hydraulique : un colmatage a déjà fait baisser la pression. [OT-2026-0074] [OT-2026-0078] [OT-2026-0099]";"OT-2026-0132;OT-2026-0078;OT-2026-0073;OT-2026-0050;OT-2026-0043;OT-2026-0037;OT-2026-0091;OT-2025-0038;OT-2026-0074;OT-2026-0099";"OT-2026-0146;OT-2026-0132;OT-2026-0111;OT-2026-0099;OT-2026-0091;OT-2026-0078;OT-2026-0074;OT-2026-0073;OT-2026-0050;OT-2026-0043;OT-2026-0038;OT-2026-0037;OT-2025-0053;OT-2025-0038;OT-2025-0020";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
+WIKI-0012;EQ-0028;"Ce qui revient
+- Arrêts intempestifs causés par une cellule photoélectrique encrassée : 3 cas, fréquent ici. Une fois, des résidus de film ont été relevés sur le capteur. [OT-2026-0125] [OT-2026-0079] [OT-2026-0016]
+- Manque de pression d'air dû à un flexible percé : 2 cas. [OT-2026-0148] [OT-2026-0112]
+Ce qui a réglé le problème
+- Nettoyage et réalignement de la cellule, réglage de la sensibilité. Pièces utilisées : nettoyant contacts et capteurs, cellule photoélectrique réflex. [OT-2026-0125] [OT-2026-0079] [OT-2026-0016]
+- Remplacement du flexible air comprimé DN13 et contrôle des raccords. [OT-2026-0148] [OT-2026-0112]
+À surveiller
+- Usure des flexibles d'air et état des raccords, à vérifier au prochain préventif. [OT-2026-0148]
+- Courroie retendue après un bruit anormal : la remplacer si le bruit revient. [OT-2026-0100]";"OT-2026-0125;OT-2026-0079;OT-2026-0016;OT-2026-0148;OT-2026-0112;OT-2026-0100";"OT-2026-0148;OT-2026-0125;OT-2026-0112;OT-2026-0100;OT-2026-0079;OT-2026-0016";à valider;claude-opus-5-5 (sous-agent Claude Code);2026-10-19 09:00;;;;
