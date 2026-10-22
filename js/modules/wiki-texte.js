@@ -16,9 +16,13 @@
 //  - les nombres d'une phrase identique à une phrase d'avant ne sont pas recontrôlés ; ceux d'une phrase nouvelle
 //    ou reprise et du titre d'une page créée doivent figurer dans le texte de référence (l'OT ingéré et le texte
 //    d'avant de la page ; à la main : les OT cités) ; « 0,4 » et « 0.4 » sont le même nombre ;
-//  - dates : un nom de mois, une date en chiffres (« 12/03 », « 3/10/2026 ») ou une année précédée de « en »,
-//    « depuis », « année », « début », « fin » ou « mi » ; « l'entretien des 2000 heures » n'est pas une date ;
-//  - comptage : un nombre en chiffres, ou de « deux » à « vingt » en lettres, suivi de « fois », « OT »,
+//  - dates : un nom de mois, une date en chiffres (« 12/03 », « 3/10/2026 », « 2026-06-08 ») ou une année 19xx ou
+//    20xx qui n'est pas suivie d'une unité (« l'entretien des 2000 heures » n'est pas une date) ;
+//  - les numéros d'OT (cités ou écrits dans le texte) ne comptent jamais comme des nombres, ni dans une phrase ni
+//    dans le texte de référence ; une phrase réduite à ses citations est « vide » et refusée ;
+//  - un savoir-faire se rattache à une page envoyée d'équipement ou de composant ; une phrase gardée telle quelle
+//    garde tous ses OT ;
+//  - comptage : un nombre en chiffres, ou de « deux » à « cent » en lettres, suivi de « fois », « OT »,
 //    « intervention(s) », « panne(s) », « cas » ou « remplacement(s) » (« une fois remontée » est permis).
 
 Object.assign(Wiki, (() => {
@@ -31,14 +35,17 @@ Object.assign(Wiki, (() => {
   const MOTIF_LIEN = /\[\[([^[\]]+)\]\]/g;
   const MOTIF_NOMBRE = /\d+(?:[.,]\d+)*/g;
   const MOTS_NOMBRES = ['deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze',
-    'treize', 'quatorze', 'quinze', 'seize', 'vingt'];
+    'treize', 'quatorze', 'quinze', 'seize', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'cent'];
   const MOTIF_COMPTAGE = new RegExp('(?:^| )(?:\\d+|' + MOTS_NOMBRES.join('|')
     + ') (?:fois|ot|interventions?|pannes?|cas|remplacements?)(?= |$)');
   const MOIS = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'aout', 'septembre', 'octobre',
     'novembre', 'decembre'];
   const MOTIF_MOIS = new RegExp('(?:^| )(?:' + MOIS.join('|') + ')(?= |$)');
-  const MOTIF_ANNEE = /(?:^| )(?:en|depuis|annee|debut|fin|mi) (?:19|20)\d{2}(?= |$)/;
-  const MOTIF_DATE_CHIFFRES = /(?:^|[^\d/.])(?:\d{1,2}[/.]\d{1,2}[/.]\d{2,4}|\d{2}[/.]\d{2})(?![\d/.])/;
+  // Unités qui font d'un 19xx ou 20xx une quantité ; pas d'unité d'une lettre ambiguë (« en 2026 a été… »).
+  const UNITES = 'h|heures?|bars?|mm|cm|km|kg|tr|tours?|litres?|kw|kva|mn|min|minutes?|secondes?|pieces?|cycles?';
+  const MOTIF_ANNEE = new RegExp('(?:^| )(?:19|20)\\d{2}(?= |$)(?! (?:' + UNITES + ')(?: |$))');
+  const MOTIF_DATE_CHIFFRES = /(?:^|[^\d/.-])(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{2,4}|\d{2}[/.]\d{2})(?![\d/.])/;
+  const MOTIF_NUMERO_OT = /\bOT-\d{4}-\d{4,}\b/g;
   const MESSAGE_SECURITE = { ia: Wiki.MESSAGE_SECURITE_IA, manuel: Wiki.MESSAGE_SECURITE_MAIN };
 
   function texte(valeur) {
@@ -72,9 +79,13 @@ Object.assign(Wiki, (() => {
       .replace(/\s+/g, ' ').trim();
   }
 
-  /** Texte d'une phrase sans citations NI liens (pour les nombres : le titre d'une page n'est pas une affirmation). */
+  /**
+   * Texte d'une phrase sans citations, sans liens NI numéros d'OT (pour les nombres et les dates : le titre d'une
+   * page n'est pas une affirmation, un numéro d'OT n'est pas un nombre).
+   */
   function sansReferences(contenu) {
-    return String(contenu || '').replace(MOTIF_CITATION, ' ').replace(MOTIF_LIEN, ' ').replace(/\s+/g, ' ').trim();
+    return String(contenu || '').replace(MOTIF_CITATION, ' ').replace(MOTIF_LIEN, ' ').replace(MOTIF_NUMERO_OT, ' ')
+      .replace(/\s+/g, ' ').trim();
   }
 
   /** Identité d'une phrase : forme comparable de son texte sans citations ni crochets de lien. */
@@ -163,7 +174,8 @@ Object.assign(Wiki, (() => {
     const reprisesAnciennes = new Set();
     nouvelles.forEach((phrase) => {
       if (identitesAvant.has(identitePhrase(phrase.texte))) { resultat.identiques.push(phrase); return; }
-      const reprises = aReprendre.filter((ancienne) => ancienne.ot.length && ancienne.ot.every((id) => phrase.ot.includes(id)));
+      const reprises = phrase.propre ? aReprendre.filter((ancienne) => ancienne.ot.length
+        && ancienne.ot.every((id) => phrase.ot.includes(id))) : [];
       reprises.forEach((ancienne) => reprisesAnciennes.add(ancienne));
       if (reprises.length) resultat.reprises.push({ phrase, anciennes: reprises });
       else resultat.nouvelles.push(phrase);
@@ -228,7 +240,7 @@ Object.assign(Wiki, (() => {
     }
     const creees = pages.filter((page) => page.action === 'creer');
     if (creees.length > SEUILS.pagesCreeesMax) {
-      raisons.push(creees.length + ' pages créées : ' + SEUILS.pagesCreeesMax + ' au plus par OT.');
+      raisons.push('Proposition : ' + creees.length + ' pages créées, ' + SEUILS.pagesCreeesMax + ' au plus par OT.');
     }
     const connus = (ctx.catalogue || []).concat(envoyees).map((page) => texte(page.titre));
     const titresExistants = new Set(connus.map(Wiki.comparable));
@@ -273,7 +285,8 @@ Object.assign(Wiki, (() => {
     } else if (page.action === 'creer') {
       if (!TYPES.includes(type)) { raisons.push(nom + ' : type « ' + type + ' » inconnu.'); return; }
       if (type === 'équipement') raisons.push(nom + ' : une page d\'équipement ne se crée pas, elle existe déjà.');
-      if (type === 'savoir-faire' && !ctx.envoyeeDe.has(Wiki.comparable(page.rattacheA))) {
+      const rattachement = ctx.envoyeeDe.get(Wiki.comparable(page.rattacheA));
+      if (type === 'savoir-faire' && !(rattachement && ['équipement', 'composant'].includes(rattachement.type))) {
         raisons.push(nom + ' : un savoir-faire se rattache à une page envoyée (équipement ou composant).');
       }
       if (ctx.titresExistants.has(Wiki.comparable(titre))) {
@@ -301,6 +314,7 @@ Object.assign(Wiki, (() => {
       + lu.rubriques.reduce((total, rubrique) => total + Wiki.nombreDeMots(rubrique.nom), 0);
     if (mots > SEUILS.motsMax) raisons.push(nom + ' : ' + mots + ' mots, ' + SEUILS.motsMax + ' au plus (rubriques comprises, citations non comptées).');
     phrases.forEach((phrase) => {
+      if (!phrase.propre) raisons.push(nom + ' : phrase vide (réduite à ses citations).');
       if (!phrase.ot.length) raisons.push(nom + ' : phrase sans OT cité — « ' + court(phrase.propre) + ' ».');
       const horsListe = phrase.ot.filter((id) => !ctx.permis.has(id));
       if (horsListe.length) raisons.push(nom + ' : OT cité hors des OT permis : ' + horsListe.join(', ') + '.');
@@ -314,14 +328,21 @@ Object.assign(Wiki, (() => {
       const perdus = citationsDe(avant).filter((id) => !apres.has(id));
       if (perdus.length) raisons.push(nom + ' : OT cité retiré de la page : ' + perdus.join(', ') + '.');
       changements.retirees.forEach((phrase) => raisons.push(nom + ' : phrase retirée — « ' + court(phrase.propre) + ' ».'));
+      phrasesDe(lireTexte(avant)).forEach((ancienne) => {
+        const memes = phrases.filter((phrase) => identitePhrase(phrase.texte) === identitePhrase(ancienne.texte));
+        const manquants = memes.length ? ancienne.ot.filter((id) => !memes.some((phrase) => phrase.ot.includes(id))) : [];
+        if (manquants.length) {
+          raisons.push(nom + ' : OT retiré de la phrase « ' + court(ancienne.propre) + ' » : ' + manquants.join(', ') + '.');
+        }
+      });
     }
     // Phrases à contrôler en entier : nouvelles et reprises (une phrase identique à avant a déjà été contrôlée).
     const aControler = changements.nouvelles.concat(changements.reprises.map((reprise) => reprise.phrase));
     const reference = (ctx.manuel
       ? Array.from(new Set(phrases.flatMap((phrase) => phrase.ot))).map((id) => ctx.sources[id] || '').join('\n')
       : (ctx.otIngere && ctx.otIngere.sourceTexte) || '') + '\n' + avant;
-    const nombresConnus = new Set(nombresDe(sansReferences(reference)).concat(nombresDe(reference)));
-    const nombresTitre = page.action === 'creer' ? nombresDe(titre) : [];
+    const nombresConnus = new Set(nombresDe(sansReferences(reference)));
+    const nombresTitre = page.action === 'creer' ? nombresDe(sansReferences(titre)) : [];
     nombresTitre.filter((nombre) => !nombresConnus.has(nombre))
       .forEach((nombre) => raisons.push(nom + ' : nombre « ' + nombre + ' » du titre absent des OT.'));
     aControler.forEach((phrase) => {

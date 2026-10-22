@@ -185,10 +185,20 @@ class TestControles(CasControles):
         sans_rattachement["pages"][1]["rattacheA"] = ""
         self.refus(sans_rattachement, "un savoir-faire se rattache à une page envoyée")
         self.refus(avec_texte(APRES + "\ntexte libre"), "hors de la forme")
+        # Le rattachement : une page envoyée d'équipement ou de composant, jamais un mode.
+        avec_mode = copy.deepcopy(CONTEXTE)
+        avec_mode["pagesEnvoyees"].append({"titre": MODE, "type": "mode", "texte": "", "otDates": []})
+        sur_un_mode = copy.deepcopy(VALABLE)
+        sur_un_mode["pages"][1]["rattacheA"] = MODE
+        self.refus(sur_un_mode, "un savoir-faire se rattache à une page envoyée (équipement ou composant)", avec_mode)
+        sur_un_composant = copy.deepcopy(VALABLE)
+        sur_un_composant["pages"][1]["rattacheA"] = KIT
+        self.assertEqual(self.controler(sur_un_composant), {"ok": True, "raisons": []})
 
     def test_citations(self):
         self.refus(ajouter_phrase(VALABLE, "Bruit au démarrage"), "phrase sans OT cité — « Bruit au démarrage »")
         self.refus(ajouter_phrase(VALABLE, "Bruit au démarrage [OT-1999-9999]"), "OT cité hors des OT permis : OT-1999-9999")
+        self.refus(ajouter_phrase(VALABLE, "[OT-2026-0042]"), "phrase vide (réduite à ses citations)")
 
     def test_non_retrait(self):
         sans_ot = avec_texte(APRES.replace(" [OT-2026-0020]", ""))
@@ -202,6 +212,14 @@ class TestControles(CasControles):
         # Une reprise qui cite tous les OT de l'ancienne phrase est permise (reformulation).
         reprise = avec_texte(APRES.replace("Fuite à la garniture mécanique, fréquent ici", "Fuites répétées de la garniture, fréquentes ici"))
         self.assertTrue(self.controler(reprise)["ok"], self.controler(reprise)["raisons"])
+        # Une phrase vidée de son texte ne reprend rien : l'ancienne est retirée.
+        videe = avec_texte(APRES.replace("Remplacement de la garniture par un kit neuf [OT-2026-0010]", "[OT-2026-0010]"))
+        raisons = self.refus(videe, "phrase vide (réduite à ses citations)")
+        self.assertTrue(any("phrase retirée — « Remplacement de la garniture par un kit neuf »" in r for r in raisons), raisons)
+        # Une phrase gardée telle quelle garde tous ses OT, même si l'OT reste cité ailleurs sur la page.
+        perdu = avec_texte(APRES.replace("fréquent ici [OT-2026-0010] [OT-2026-0020]", "fréquent ici [OT-2026-0020]"))
+        raisons = self.refus(perdu, "OT retiré de la phrase « Fuite à la garniture mécanique, fréquent ici » : OT-2026-0010")
+        self.assertFalse(any("OT cité retiré de la page" in r for r in raisons), raisons)
 
     def test_nombres_comptage_et_dates(self):
         self.refus(ajouter_phrase(VALABLE, "Pression relevée à 7 bar [OT-2026-0042]"), "nombre « 7 » absent des OT cités")
@@ -211,6 +229,27 @@ class TestControles(CasControles):
         self.refus(ajouter_phrase(VALABLE, "Fuite apparue en 2026 [OT-2026-0042]"), "aucune date dans le wiki")
         self.refus(ajouter_phrase(VALABLE, "Fuite constatée en juin [OT-2026-0042]"), "aucune date dans le wiki")
         self.refus(ajouter_phrase(VALABLE, "Garniture changée le 12/03 [OT-2026-0042]"), "aucune date dans le wiki")
+        self.refus(ajouter_phrase(VALABLE, "Garniture changée le 2026-06-08 [OT-2026-0042]"), "aucune date dans le wiki")
+        self.refus(ajouter_phrase(VALABLE, "Fuite jamais vue avant 2026 [OT-2026-0042]"), "aucune date dans le wiki")
+        self.refus(ajouter_phrase(VALABLE, "Le kit posé avant 2025 a tenu [OT-2026-0042]"), "aucune date dans le wiki")
+        self.refus(ajouter_phrase(VALABLE, "Garniture changée trente fois [OT-2026-0042]"), "comptage interdit")
+        # Un numéro d'OT n'est pas un nombre connu : « 2026 » ne vient que des citations.
+        raisons = self.refus(ajouter_phrase(VALABLE, "Compteur à 2026 heures [OT-2026-0042]"), "nombre « 2026 » absent des OT cités")
+        self.assertFalse(any("aucune date" in r for r in raisons), raisons)
+        # Un numéro d'OT écrit dans la phrase n'est pas un nombre de la phrase.
+        rappel = ajouter_phrase(VALABLE, "Même cause que OT-2026-0010 [OT-2026-0042]")
+        self.assertTrue(self.controler(rappel)["ok"], self.controler(rappel)["raisons"])
+        # « l'entretien des 2000 heures » n'est pas une date (le nombre figure dans l'OT).
+        heures = copy.deepcopy(CONTEXTE)
+        heures["otIngere"]["sourceTexte"] = SOURCE + " Entretien des 2000 heures fait."
+        entretien = ajouter_phrase(VALABLE, "À revoir à l'entretien des 2000 heures [OT-2026-0042]")
+        self.assertTrue(self.controler(entretien, heures)["ok"], self.controler(entretien, heures)["raisons"])
+        # Le titre d'une page dans un lien n'est pas une affirmation : ses nombres ne sont pas contrôlés.
+        roulement = copy.deepcopy(CONTEXTE)
+        roulement["catalogue"].append({"titre": "Roulement 6204", "type": "composant"})
+        lien = ajouter_phrase(VALABLE, "Voir aussi [[Roulement 6204]] [OT-2026-0042]")
+        self.assertTrue(self.controler(lien, roulement)["ok"], self.controler(lien, roulement)["raisons"])
+        self.refus(ajouter_phrase(VALABLE, "Roulement 6204 à surveiller [OT-2026-0042]"), "nombre « 6204 » absent des OT cités", roulement)
         # Permis : un nombre de l'OT (« 0,4 » écrit « 0.4 »), « une fois », le titre d'une page dans un lien.
         permis = ajouter_phrase(VALABLE, "Une fois réaligné à 0.4 mm près, voir [[Kit garniture mécanique PO-02]] [OT-2026-0042]")
         self.assertTrue(self.controler(permis)["ok"], self.controler(permis)["raisons"])
@@ -249,13 +288,17 @@ class TestControles(CasControles):
         for numero in range(3):
             nombreuses["pages"].append({"action": "creer", "type": "mode", "titre": "Mode de défaillance %s" % "abc"[numero],
                                         "texte": "## Causes\n- Usure [OT-2026-0042]"})
-        self.refus(nombreuses, "4 pages créées : 3 au plus par OT")
+        self.refus(nombreuses, "Proposition : 4 pages créées, 3 au plus par OT")
 
     def test_liens_et_titres(self):
         self.refus(ajouter_phrase(VALABLE, "Voir [[Page inexistante]] [OT-2026-0042]"), "lien vers une page inconnue « Page inexistante »")
         meme = copy.deepcopy(VALABLE)
         meme["pages"][1].update({"type": "mode", "titre": MODE, "texte": "## Causes\n- Usure [OT-2026-0042]"})
         self.refus(meme, "une page de ce titre existe déjà")
+        composant = copy.deepcopy(VALABLE)
+        composant["pages"][1].update({"type": "composant", "titre": KIT, "rattacheA": "",
+                                      "texte": "## Défaillances\n- Usure [OT-2026-0042]"})
+        self.refus(composant, "Page « Kit garniture mécanique PO-02 » : une page de ce titre existe déjà")
         proche = copy.deepcopy(VALABLE)
         proche["pages"][1].update({"type": "mode", "titre": "Désalignements de l'accouplement", "texte": "## Causes\n- Usure [OT-2026-0042]"})
         self.refus(proche, "titre trop proche de « Désalignement d'accouplement »")
