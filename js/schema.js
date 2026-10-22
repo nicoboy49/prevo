@@ -1,6 +1,7 @@
 'use strict';
-// Schema : description des 23 tables de Prévo (champs, types, identifiants).
-// Contrat : docs/ARCHITECTURE.md §4, §14.1 et §20.2 (format 3 : table wiki_syntheses, lot 6). Les champs de chaque table sont d'abord exactement
+// Schema : description des 24 tables de Prévo (champs, types, identifiants).
+// Contrat : docs/ARCHITECTURE.md §4, §14.1 et §20.2 (format 3 : tables wiki_pages et wiki_journal, colonne
+// ordres_travail.astuce, lot 6). Les champs de chaque table sont d'abord exactement
 // ceux du tableau du brief §6, dans le même ordre (l'ordre des champs = l'ordre des colonnes CSV),
 // puis, en fin de table, les champs ajoutés par la version 2 du format (attribut depuisVersion: 2).
 // Un fichier écrit avant la version 2 n'a pas ces colonnes : la lecture les complète avec la
@@ -66,7 +67,7 @@ const Schema = (function () {
   const PRIORITES = ['P1', 'P2', 'P3', 'P4'];
 
   // ---------------------------------------------------------------------------
-  // Les 22 tables du brief §6, dans l'ordre de son tableau, puis wiki_syntheses (format 3, lot 6)
+  // Les 22 tables du brief §6, dans l'ordre de son tableau, puis wiki_pages et wiki_journal (format 3, lot 6)
   // ---------------------------------------------------------------------------
 
   const tables = {
@@ -207,6 +208,8 @@ const Schema = (function () {
         reference('ot_lie_id', 'Ordre de travail lié', 'ordres_travail'),
         // Version 2 du format (ARCHITECTURE.md §14.1)
         depuisVersion(2, booleen('anomalie_constatee', 'Anomalie constatée')),
+        // Version 3 du format (ARCHITECTURE.md §20.2, D110) : facultative, jamais exigée à la clôture
+        depuisVersion(3, champ('astuce', 'texte_long', 'Astuce pour la prochaine fois')),
       ],
     },
 
@@ -507,27 +510,67 @@ const Schema = (function () {
       ],
     },
 
-    // Format 3 (lot 6, ARCHITECTURE.md §20.2) : synthèses [IA] du wiki de maintenance. Une base plus
-    // ancienne n'a pas ce fichier : table vide, créée à la première écriture.
-    wiki_syntheses: {
-      fichier: 'wiki_syntheses.csv', libelle: 'Synthèses du wiki',
+    // Format 3 (lot 6 refondu, ARCHITECTURE.md §20.2) : le wiki de maintenance. Une base plus ancienne n'a pas
+    // ces fichiers : tables vides, créées à la première écriture. Seules les pages qui ont un texte validé ont
+    // une ligne ; les pages d'équipement et d'article existent toujours, calculées (§20.3).
+    wiki_pages: {
+      fichier: 'wiki_pages.csv', libelle: 'Pages du wiki',
       cle: 'id',
-      identifiant: { prefixe: 'WIKI-', chiffres: 4, annuel: false },
+      identifiant: { prefixe: 'WP-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       depuisVersion: 3,
       champs: [
         identifiantChamp(),
-        reference('equipement_id', 'Équipement', 'equipements', { obligatoire: true }),
-        champ('texte', 'texte_long', 'Synthèse'),
+        choix('type', 'Type', ['équipement', 'composant', 'mode', 'savoir-faire'], { obligatoire: true }),
+        champ('titre', 'texte', 'Titre', { obligatoire: true }),
+        champ('cle', 'texte', 'Clé (titre comparable)'),
+        reference('equipement_id', 'Équipement', 'equipements'),
+        reference('article_id', 'Article', 'articles'),
+        codeDefaillance('cause_code', 'Code cause', 'cause'),
+        reference('rattache_a', 'Rattaché à la page', 'wiki_pages'),
+        champ('texte', 'texte_long', 'Texte'),
         champ('ot_cites', 'texte', 'OT cités'),
-        champ('ot_sources', 'texte_long', 'OT envoyés à l\'IA'),
-        choix('statut', 'Statut', ['à valider', 'validée', 'remplacée'], { defaut: 'à valider' }),
+        champ('liens', 'texte', 'Pages liées'),
+        champ('version', 'entier', 'Version', { defaut: '0' }),
+        choix('origine', 'Origine', ['IA', 'manuel', 'IA et manuel']),
         champ('modele', 'texte', 'Modèle'),
-        champ('date_proposition', 'date_heure', 'Proposée le'),
-        champ('corrigee_par', 'texte', 'Corrigée par'),
-        champ('date_modification', 'date_heure', 'Modifiée le'),
-        champ('valide_par', 'texte', 'Validée par'),
-        champ('date_validation', 'date_heure', 'Validée le'),
+        reference('derniere_entree', 'Dernière entrée appliquée', 'wiki_journal'),
+        champ('valide_par', 'texte', 'Validé par'),
+        champ('valide_le', 'date_heure', 'Validé le'),
+        champ('cree_le', 'date_heure', 'Créée le'),
+        champ('modifie_le', 'date_heure', 'Modifiée le'),
+        choix('statut', 'Statut', ['active', 'archivée'], { defaut: 'active' }),
+      ],
+    },
+
+    // Journal du wiki (§20.2) : une ligne par OT ingéré, par écriture à la main et par décision sur une
+    // contradiction. Les changements et les contradictions sont du JSON dans un champ texte long.
+    wiki_journal: {
+      fichier: 'wiki_journal.csv', libelle: 'Journal du wiki',
+      cle: 'id',
+      identifiant: { prefixe: 'WJ-', chiffres: 5, annuel: false },
+      ajoutSeul: false,
+      depuisVersion: 3,
+      champs: [
+        identifiantChamp(),
+        choix('nature', 'Nature', ['ingestion', 'manuel', 'décision'], { obligatoire: true }),
+        reference('ot_id', 'Ordre de travail', 'ordres_travail'),
+        champ('date_intervention', 'date_heure', 'Date d\'intervention'),
+        choix('statut', 'Statut', ['en file', 'à valider', 'validée', 'rejetée', 'à refaire', 'refusée',
+          'rien à ajouter', 'appliquée'], { obligatoire: true }),
+        booleen('anterieure', 'Intervention antérieure'),
+        champ('ordre', 'entier', 'Rang de traitement'),
+        champ('pages', 'texte', 'Pages concernées'),
+        champ('changements', 'texte_long', 'Changements'),
+        champ('contradictions', 'texte_long', 'Contradictions'),
+        champ('raisons', 'texte_long', 'Raisons du refus'),
+        champ('modele', 'texte', 'Modèle'),
+        champ('essais', 'entier', 'Essais', { defaut: '0' }),
+        champ('cree_le', 'date_heure', 'Créée le'),
+        champ('traite_le', 'date_heure', 'Traitée le'),
+        champ('decide_par', 'texte', 'Décidé par'),
+        champ('decide_le', 'date_heure', 'Décidé le'),
+        champ('motif', 'texte_long', 'Motif'),
       ],
     },
   };
@@ -548,7 +591,7 @@ const Schema = (function () {
     return tableTrouvee.champs.find(function (c) { return c.nom === nomChamp; });
   }
 
-  // Noms des 23 tables, dans l'ordre du brief puis celles ajoutées par les versions du format.
+  // Noms des 24 tables, dans l'ordre du brief puis celles ajoutées par les versions du format.
   function nomsTables() {
     return Object.keys(tables);
   }

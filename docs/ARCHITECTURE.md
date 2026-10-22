@@ -2539,7 +2539,8 @@ Version de clôture `v1.2.0`.
   la main, contradictions, intégrité), `wiki-ecrans.js` (7/8, index, page, champ de recherche),
   `wiki-journal-ecrans.js` (8/8, journal, traitement de la file, écriture à la main, contrôle du wiki).
   **Retirés** : `wiki-ecritures.js` et `wiki-synthese.js` de la première version, la consigne
-  `syntheseWiki` et `Wiki.controlerSynthese`. Feuille `css/modules/wiki.css`. 700 lignes au plus par fichier.
+  `syntheseWiki` et `Wiki.controlerSynthese`. Feuilles `css/modules/wiki.css` et
+  `css/modules/wiki-journal.css` (écrans du responsable). 700 lignes au plus par fichier.
 - **Routes**, ouvertes aux trois profils sauf mention : `#/wiki` (index), `#/wiki/<id>` (une page ; `id` =
   identifiant d'équipement `EQ-…`, d'article `ART-…` ou de page `WP-…`), `#/wiki-journal` (**responsable
   seulement**). Entrée de menu et icône `wiki` inchangées (ordre 42).
@@ -2698,13 +2699,13 @@ Version de clôture `v1.2.0`.
 - **Lecture** : `Ia.lireReponse('ingestionWiki', contenu, donnees)` → `verifier` = `Wiki.lireIngestion` :
   mise en forme (§20.4) puis contrôles (§20.6) → `{ changements, contradictions, rien }`, ou
   `IaReponseInvalide` avec les raisons.
-- **Envoi** : `Ia.envoyer(requete, signal)` → `{ contenu, modele }` (nouvelle ; la partie réseau de
+- **Envoi** : `Ia.envoyerRequete(requete, signal)` → `{ contenu, modele }` (nouvelle ; la partie réseau de
   `Ia.demander`, qui l'appelle : même comportement, même autorisation D67, même délai).
 - **Ordonnanceur** `Wiki.prochainsEnvois(file, enCours)` (D112) : parcourt la file dans l'ordre ; un OT part
   si moins de `agentsSimultanes` sont en cours et si **aucune de ses `cles`** n'est prise par un OT en cours
   **ni par un OT plus ancien de la file resté en attente**. `Wiki.traiterFile({ appeler, surProgres, signal
   })` : boucle jusqu'à file vide ou arrêt ; `appeler(requete, donnees, signal)` → `{ contenu, modele }`,
-  par défaut `Ia.envoyer` (l'outil de la démo en donne un autre, §20.10). Résultat : acceptée → entrée « à
+  par défaut `Ia.envoyerRequete` (l'outil de la démo en donne un autre, §20.10). Résultat : acceptée → entrée « à
   valider » (`changements`, `contradictions`, `modele`, `anterieure`, `ordre` suivant, `traite_le`) ;
   « rien à ajouter » → statut du même nom ; refusée → « refusée » avec `raisons`, `essais` + 1 ; collision
   (page libre créée entre-temps, D112) → « en file » à nouveau, `motif` « rejoué : page créée entre-temps » ;

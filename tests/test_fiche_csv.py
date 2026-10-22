@@ -2,7 +2,7 @@
 
 FICHE_TECHNIQUE_CSV.md doit être exactement ce que outils/generer_fiche_csv.py écrit d'après le
 schéma réel (js/schema.js lu dans Chromium) : toute modification du schéma sans régénération fait
-échouer ce test. Contrôles de fond : les 23 fichiers, chacune de leurs colonnes et la version du
+échouer ce test. Contrôles de fond : les 24 fichiers, chacune de leurs colonnes et la version du
 format y figurent.
 
 Lancer depuis la racine du projet :
@@ -34,7 +34,7 @@ class TestFicheCsv(CasNavigateur):
                          "FICHE_TECHNIQUE_CSV.md n'est plus à jour : lancez py outils/generer_fiche_csv.py")
 
     def test_toutes_les_tables_et_colonnes_documentees(self):
-        self.assertEqual(len(self.schema["ordre"]), 23)
+        self.assertEqual(len(self.schema["ordre"]), 24)
         self.assertIn("format **version %d**" % self.schema["version"], self.fiche)
         for nom in self.schema["ordre"]:
             table = self.schema["tables"][nom]

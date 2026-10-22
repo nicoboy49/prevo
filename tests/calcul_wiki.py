@@ -47,11 +47,8 @@ CHAMPS_TEXTE = {
     "codes_defaillance": {"code": False, "libelle": False},
     "demandes": {"demandeur": False, "symptome": False, "description": False, "motif_decision": False},
     "mouvements_stock": {"utilisateur": False, "commentaire": False},
-    "wiki_syntheses": {"texte": False, "ot_cites": False, "ot_sources": False, "modele": False,
-                       "corrigee_par": False, "valide_par": False},
 }
-TABLES = ("equipements", "ordres_travail", "articles", "codes_defaillance", "demandes", "mouvements_stock",
-          "wiki_syntheses")
+TABLES = ("equipements", "ordres_travail", "articles", "codes_defaillance", "demandes", "mouvements_stock")
 
 FORMES_A_PROTEGER = [re.compile(motif) for motif in (
     r"[0-9]+([.,][0-9]+)?", r"[0-9]+([.,][0-9]+)?[eE][+-]?[0-9]+",
@@ -154,7 +151,6 @@ class CalculWiki:
         self.ordres = lu["ordres_travail"]
         self.articles = {a["id"]: a for a in lu["articles"]}
         self.mouvements = lu["mouvements_stock"]
-        self.syntheses = lu["wiki_syntheses"]
         self.libelles = {}
         for code in lu["codes_defaillance"]:
             self.libelles.setdefault((propre(code["famille"]), propre(code["code"])), propre(code["libelle"]))
@@ -311,25 +307,6 @@ class CalculWiki:
                  "extrait": extrait(ot["compte_rendu"]), "dureeArret": nombre(ot["duree_arret_h"])}
                 for ot in recentes[:NOMBRE_DERNIERES]]
 
-    def synthese(self, equipement_id, clotures):
-        """→ (synthèse courante ou None, état, remplacées) ; la synthèse porte « etat » et « depuis »."""
-        siennes = [s for s in self.syntheses if propre(s["equipement_id"]) == equipement_id]
-        ordre = lambda s: (propre(s["date_proposition"]), s["id"])
-        remplacees = sorted((s for s in siennes if propre(s["statut"]) == "remplacée"), key=ordre, reverse=True)
-        courantes = sorted((s for s in siennes if propre(s["statut"]) != "remplacée"), key=ordre, reverse=True)
-        if not courantes:
-            return None, "aucune", remplacees
-        courante = dict(courantes[0])
-        sources = {propre(x) for x in courante["ot_sources"].split(";") if propre(x)}
-        depuis = sum(1 for ot in clotures
-                     if ot["id"] not in sources and self.cloture(ot) > propre(courante["date_proposition"]))
-        if propre(courante["statut"]) == "validée":
-            etat = "a_revoir" if depuis > 0 else "validee"
-        else:
-            etat = "a_valider"
-        courante.update({"etat": etat, "depuis": depuis})
-        return courante, etat, remplacees
-
     def pannes_12_mois(self, ordres, maintenant):
         fin = maintenant[:10]
         debut = jour_suivant(fin, -364)
@@ -350,7 +327,6 @@ class CalculWiki:
                               and cle_modele(e["marque"]) == marque and cle_modele(e["modele"]) == modele),
                              key=lambda e: (propre(e["repere"]), e["id"]))
         consignation, document = equipement.get("consignation", ""), equipement.get("document", "")
-        synthese, etat, remplacees = self.synthese(equipement_id, clotures)
         return {
             "equipement": {"id": equipement_id, "repere": propre(equipement["repere"]),
                            "designation": propre(equipement["designation"]), "marque": propre(equipement["marque"]),
@@ -364,10 +340,6 @@ class CalculWiki:
             "total": len(clotures),
             "memeModele": {"equipements": [{"id": e["id"], "repere": propre(e["repere"])} for e in jumeaux],
                            "pannes": self.pannes({equipement_id} | {e["id"] for e in jumeaux})} if jumeaux else None,
-            "synthese": synthese,
-            "etat": etat,
-            "remplacees": remplacees,
-            "peutProposer": sum(1 for ot in clotures if propre(ot["type"]).startswith("correctif")) >= OT_MINIMUM,
         }
 
     def liste_pages(self, maintenant):
@@ -379,8 +351,7 @@ class CalculWiki:
                 continue
             pages.append({"equipementId": equipement["id"], "repere": propre(equipement["repere"]),
                           "designation": propre(equipement["designation"]),
-                          "pannes12Mois": self.pannes_12_mois(ordres, maintenant),
-                          "etat": self.synthese(equipement["id"], clotures)[1]})
+                          "pannes12Mois": self.pannes_12_mois(ordres, maintenant)})
         pages.sort(key=selon((lambda p: p["pannes12Mois"], True), (lambda p: p["repere"], False),
                              (lambda p: p["equipementId"], False)))
         return pages

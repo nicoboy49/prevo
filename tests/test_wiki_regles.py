@@ -1,4 +1,4 @@
-"""Couche calculée du wiki : Wiki.page et Wiki.listePages (lot 6, ARCHITECTURE.md §20.3 ; tâche T96).
+"""Couche calculée du wiki : Wiki.pageEquipement et Wiki.listePages (lot 6, ARCHITECTURE.md §20.3 ; tâche T96).
 
 Deux familles :
     - jeu de démo (donnees/demo, lu tel quel, sans décalage des dates ; « maintenant » = date de
@@ -167,40 +167,18 @@ MOUVEMENTS = table_csv("id;date;article_id;type;quantite;ot_id", [
     "MVT-000014;2026-08-20 07:00;ART-0004;sortie;0.5;OT-2026-0015",
 ])
 
-SOURCES_PO01 = ";".join("OT-2026-%04d" % n for n in (1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 14))
-SYNTHESES = table_csv("id;equipement_id;texte;ot_cites;ot_sources;statut;modele;date_proposition;corrigee_par;"
-                      "date_modification;valide_par;date_validation", [
-    # La plus récente de PO-01 est remplacée : jamais la synthèse courante.
-    ["WIKI-0001", "EQ-0001", "Ce qui revient\n- Fuite. [OT-2026-0001]", "OT-2026-0001", "OT-2026-0001", "remplacée",
-     "démo", "2026-09-01 10:00", "", "", "Responsable", "2026-09-01 10:05"],
-    # Validée le 02/07 ; clôturés après elle et absents des sources : 0012 (10/07) et 0015 (20/08) → depuis = 2
-    # (0014, clôturé le 20/07, est dans les sources).
-    ["WIKI-0002", "EQ-0001", "Ce qui revient\n- Garniture. [OT-2026-0001]", "OT-2026-0001", SOURCES_PO01, "validée",
-     "démo", "2026-07-02 09:00", "", "", "Responsable", "2026-07-02 09:30"],
-    ["WIKI-0003", "EQ-0002", "Ce qui revient\n- Fuite. [OT-2026-0020]", "OT-2026-0020",
-     "OT-2026-0020;OT-2026-0021;OT-2026-0022", "à valider", "démo", "2026-10-01 09:00", "", "", "", ""],
-    ["WIKI-0004", "EQ-0004", "Ce qui revient\n- Raccord. [OT-2026-0024]", "OT-2026-0024",
-     "OT-2026-0024;OT-2026-0025", "validée", "démo", "2026-10-01 09:00", "", "", "Responsable", "2026-10-01 09:10"],
-])
-
 BASE = {"equipements": EQUIPEMENTS, "codes_defaillance": CODES, "demandes": DEMANDES, "ordres_travail": ORDRES,
-        "articles": ARTICLES, "mouvements_stock": MOUVEMENTS, "wiki_syntheses": SYNTHESES,
+        "articles": ARTICLES, "mouvements_stock": MOUVEMENTS,
         "parametres": table_csv("cle;valeur", ["version_schema;3"])}
 EQUIPEMENTS_BASE = ["EQ-0001", "EQ-0002", "EQ-0003", "EQ-0004", "EQ-0005"]
 
 
 def comparable(valeur):
-    """Forme comparable d'un résultat : flottants arrondis à 12 décimales ; synthèse réduite à ce que le
-    calcul établit (identifiant, statut, état, depuis) ; synthèses remplacées réduites à leur identifiant."""
+    """Forme comparable d'un résultat : flottants arrondis à 12 décimales."""
     if isinstance(valeur, dict):
         resultat = {}
         for cle, contenu in valeur.items():
-            if cle == "synthese" and isinstance(contenu, dict):
-                resultat[cle] = {c: contenu.get(c) for c in ("id", "statut", "etat", "depuis")}
-            elif cle == "remplacees":
-                resultat[cle] = [s["id"] for s in contenu]
-            else:
-                resultat[cle] = comparable(contenu)
+            resultat[cle] = comparable(contenu)
         return resultat
     if isinstance(valeur, list):
         return [comparable(element) for element in valeur]
@@ -225,7 +203,7 @@ class CasWiki(CasNavigateur):
         }""", tables)
 
     def pages(self, equipements, maintenant=MAINTENANT):
-        return self.page.evaluate("([ids, maintenant]) => ids.map((id) => Wiki.page(id, { maintenant }))",
+        return self.page.evaluate("([ids, maintenant]) => ids.map((id) => Wiki.pageEquipement(id, { maintenant }))",
                                   [equipements, maintenant])
 
     def page_de(self, equipement, maintenant=MAINTENANT):
@@ -267,8 +245,6 @@ class TestDemo(CasWiki):
         self.assertGreater(recidives, 0)
         self.assertTrue(any(p["pieces"] for p in obtenues))
         self.assertTrue(any(p["memeModele"] for p in obtenues))
-        # D100 précisé par Nicolas : une synthèse se propose dès 5 OT correctifs clôturés, soit 12 équipements.
-        self.assertEqual(sum(1 for p in obtenues if p["peutProposer"]), 12)
         self.assertEqual(self.requetes_reseau(), [])
 
     def test_liste_des_pages_egale_au_calcul_python(self):
@@ -342,7 +318,6 @@ class TestBaseEssai(CasWiki):
     def test_dernieres_interventions(self):
         page = self.page_de("EQ-0001")
         self.assertEqual(page["total"], 13)
-        self.assertTrue(page["peutProposer"])
         self.assertEqual([d["id"][-4:] for d in page["dernieres"]],
                          ["0015", "0014", "0012", "0005", "0016", "0004", "0009", "0003", "0002", "0001"])
         par_id = {d["id"]: d for d in page["dernieres"]}
@@ -355,7 +330,6 @@ class TestBaseEssai(CasWiki):
         self.assertEqual(par_id["OT-2026-0002"]["dureeArret"], 2.5)
         self.assertEqual(par_id["OT-2026-0009"]["codes"], {"symptome": "Bruit anormal", "cause": "Garniture usée", "remede": "R09"})
         self.assertEqual(par_id["OT-2026-0012"]["codes"], {"symptome": "", "cause": "Desserrage", "remede": "Resserrage"})
-        self.assertFalse(self.page_de("EQ-0002")["peutProposer"])
 
     def test_consignation_telle_quelle(self):
         pages = dict(zip(EQUIPEMENTS_BASE, self.pages(EQUIPEMENTS_BASE)))
@@ -390,24 +364,13 @@ class TestBaseEssai(CasWiki):
             {"code": "R01", "libelle": "Remplacement de la pièce", "fois": 2, "recidives": 1},
             {"code": "R02", "libelle": "Réglage", "fois": 1, "recidives": 0}])
 
-    def test_etat_des_syntheses(self):
-        pages = dict(zip(EQUIPEMENTS_BASE, self.pages(EQUIPEMENTS_BASE)))
-        po01 = pages["EQ-0001"]
-        self.assertEqual((po01["etat"], po01["synthese"]["id"], po01["synthese"]["statut"], po01["synthese"]["depuis"]),
-                         ("a_revoir", "WIKI-0002", "validée", 2))
-        self.assertEqual(po01["synthese"]["etat"], "a_revoir")
-        self.assertEqual([s["id"] for s in po01["remplacees"]], ["WIKI-0001"])
-        self.assertEqual((pages["EQ-0002"]["etat"], pages["EQ-0002"]["synthese"]["depuis"]), ("a_valider", 0))
-        self.assertEqual((pages["EQ-0004"]["etat"], pages["EQ-0004"]["synthese"]["depuis"]), ("validee", 0))
-        self.assertEqual((pages["EQ-0003"]["etat"], pages["EQ-0003"]["synthese"]), ("aucune", None))
-
     def test_liste_des_pages(self):
         # PO-01 : 10 cas, dont 0008 hors des 365 jours → 9 ; CP-01 et PO-03 à égalité (1) : par repère.
         self.assertEqual(self.liste(), [
-            {"equipementId": "EQ-0001", "repere": "PO-01", "designation": "Pompe de process A", "pannes12Mois": 9, "etat": "a_revoir"},
-            {"equipementId": "EQ-0002", "repere": "PO-02", "designation": "Pompe de process B", "pannes12Mois": 3, "etat": "a_valider"},
-            {"equipementId": "EQ-0004", "repere": "CP-01", "designation": "Compresseur", "pannes12Mois": 1, "etat": "validee"},
-            {"equipementId": "EQ-0003", "repere": "PO-03", "designation": "Pompe déposée", "pannes12Mois": 1, "etat": "aucune"},
+            {"equipementId": "EQ-0001", "repere": "PO-01", "designation": "Pompe de process A", "pannes12Mois": 9},
+            {"equipementId": "EQ-0002", "repere": "PO-02", "designation": "Pompe de process B", "pannes12Mois": 3},
+            {"equipementId": "EQ-0004", "repere": "CP-01", "designation": "Compresseur", "pannes12Mois": 1},
+            {"equipementId": "EQ-0003", "repere": "PO-03", "designation": "Pompe déposée", "pannes12Mois": 1},
         ])
         self.assertEqual(self.page_de("EQ-0001")["pannes12Mois"], 9)
         # Un jour plus tard, la panne du 20/10/2025 sort de la fenêtre.
@@ -424,7 +387,7 @@ class TestBaseEssai(CasWiki):
           const modifier = Donnees.modifier;
           Donnees.modifier = async (...arguments_) => { ecritures += 1; return modifier(...arguments_); };
           try {
-            Donnees.lignes('equipements').forEach((e) => Wiki.page(e.id, { maintenant }));
+            Donnees.lignes('equipements').forEach((e) => Wiki.pageEquipement(e.id, { maintenant }));
             Wiki.listePages({ maintenant });
           } finally {
             Donnees.modifier = modifier;

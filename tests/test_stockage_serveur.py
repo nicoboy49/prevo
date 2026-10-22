@@ -259,7 +259,7 @@ class TestCsv(CasStockageServeur):
             (serveur.dossier / "equipements.csv").write_bytes(CSV_EQUIPEMENTS)
             self.ouvrir(serveur)
             versions = self.executer_ok("return await stockage.listerVersions();")
-            self.assertEqual(len(versions), 23)
+            self.assertEqual(len(versions), 24)
             noms_schema = self.page.evaluate("Schema.nomsTables()")
             self.assertEqual(sorted(versions), sorted(noms_schema))
             self.assertEqual(versions["equipements"], empreinte(CSV_EQUIPEMENTS))

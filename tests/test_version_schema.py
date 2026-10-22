@@ -10,9 +10,11 @@ restaurable depuis Paramètres comme les autres (Donnees.mettreAJourVersionSchem
                ligne de journal ; second appel sans effet ; un autre poste passé au format 3
                entre-temps : rien n'est réécrit ; écran Paramètres « Avant format 3 » puis
                restauration de toutes les tables ; API brute (motif inconnu, « ../x », corps vide) ;
-    format 2 : la démo remise au format 2 (sans wiki_syntheses.csv) passe au format 3 à l'ouverture :
-               une sauvegarde « avant-format-v3 », aucun autre fichier changé à l'octet que
-               parametres.csv et journal.csv, wiki_syntheses.csv toujours absent (table vide) ;
+    format 2 : la démo remise au format 2 (sans wiki_pages.csv ni wiki_journal.csv, ordres_travail.csv
+               sans la colonne astuce) passe au format 3 à l'ouverture : une sauvegarde
+               « avant-format-v3 », aucun autre fichier changé à l'octet que parametres.csv et
+               journal.csv, les deux tables du wiki toujours absentes (vides), la colonne astuce
+               signalée en simple information et lue vide ;
     echec    : sauvegarde impossible → version inchangée sur le disque, ErreurStockage claire ;
     dossier  : même passage avec StockageDossier (dossier simulé dans l'OPFS), restauration ;
                règles de noms identiques à celles du serveur ;
@@ -22,6 +24,7 @@ Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_version_schema.py" -v
 """
 import csv
+import io
 import http.client
 import json
 import re
@@ -243,9 +246,20 @@ class TestServeur(CasServeurV1):
             self.assertEqual(version_schema(self.octets(serveur, "parametres.csv")), FORMAT_COURANT)
 
 
+def retirer_derniere_colonne(chemin, nom):
+    """Réécrit un CSV de Prévo (BOM, « ; », CRLF) sans sa dernière colonne, qui doit s'appeler `nom` : le
+    fichier tel qu'une base au format 2 l'avait (lot 6 : ordres_travail.csv sans la colonne astuce)."""
+    texte = chemin.read_bytes().decode("utf-8-sig")
+    lignes = list(csv.reader(io.StringIO(texte, newline=""), delimiter=";"))
+    assert lignes[0][-1] == nom, lignes[0][-3:]
+    sortie = io.StringIO(newline="")
+    csv.writer(sortie, delimiter=";", lineterminator="\r\n").writerows(ligne[:-1] for ligne in lignes)
+    chemin.write_bytes(b"\xef\xbb\xbf" + sortie.getvalue().encode("utf-8"))
+
+
 class TestFormat2VersFormat3(CasServeurV1):
-    """Lot 6 (§20.2) : une base au format 2 (celle de la démo, sans wiki_syntheses.csv) passe au format 3
-    à l'ouverture de l'application ; seuls parametres.csv et journal.csv changent."""
+    """Lot 6 (§20.2) : une base au format 2 (la démo sans wiki_pages.csv, wiki_journal.csv ni colonne astuce)
+    passe au format 3 à l'ouverture de l'application ; seuls parametres.csv et journal.csv changent."""
 
     def test_ouverture_d_une_base_au_format_2_sauvegarde_puis_format_3_sans_toucher_aux_donnees(self):
         with ServeurPrevo() as serveur:
@@ -253,13 +267,16 @@ class TestFormat2VersFormat3(CasServeurV1):
             octets_v3 = parametres.read_bytes()
             self.assertIn(b"version_schema;'3", octets_v3)
             parametres.write_bytes(octets_v3.replace(b"version_schema;'3", b"version_schema;'2"))
-            (serveur.dossier / "wiki_syntheses.csv").unlink()
+            for nom in ("wiki_pages.csv", "wiki_journal.csv"):
+                (serveur.dossier / nom).unlink()
+            retirer_derniere_colonne(serveur.dossier / "ordres_travail.csv", "astuce")
             avant = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
-            self.assertNotIn("wiki_syntheses.csv", avant)
+            self.assertNotIn("wiki_pages.csv", avant)
+            self.assertNotIn(b";astuce", avant["ordres_travail.csv"].split(b"\r\n", 1)[0])
 
             # Demandeur : il ne génère pas les OT préventifs échus (RG5), qui changeraient ordres_travail.csv.
             preregler_profil(self.contexte, "demandeur", nom="Lucie Martin")
-            self.autoriser_erreur(re.compile(r"status of 404.*/api/csv/wiki_syntheses"))   # fichier absent = table vide
+            self.autoriser_erreur(re.compile(r"status of 404.*/api/csv/wiki_(pages|journal)"))   # fichier absent = table vide
             self.page.goto(serveur.url + "/#/accueil")
             attendre_pret(self.page)
 
@@ -270,18 +287,25 @@ class TestFormat2VersFormat3(CasServeurV1):
             self.assertEqual(version_schema(self.octets(serveur, "sauvegardes", sauvegardes[0], "parametres.csv")), "2")
             self.assertEqual(version_schema(parametres.read_bytes()), FORMAT_COURANT)
 
-            # Aucun autre fichier n'a changé à l'octet ; la nouvelle table n'est pas créée (vide).
+            # Aucun autre fichier n'a changé à l'octet ; les nouvelles tables ne sont pas créées (vides).
             apres = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
             self.assertEqual(set(apres), set(avant))
             changes = sorted(nom for nom in avant if apres[nom] != avant[nom])
             self.assertEqual(changes, ["journal.csv", "parametres.csv"])
-            self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_syntheses').length"), 0)
+            self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_pages').length"), 0)
+            self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_journal').length"), 0)
+            # La colonne astuce absente : lue vide, simple information (écrite au prochain enregistrement).
+            self.assertEqual(self.page.evaluate(
+                "Donnees.lignes('ordres_travail').filter((ot) => ot.astuce !== '').length"), 0)
+            self.assertEqual(self.page.evaluate(
+                "Donnees.problemes().filter((p) => p.table === 'ordres_travail' && p.champ === 'astuce')"
+                ".map((p) => p.gravite)"), ["info"])
             actions = actions_journal_version(self.octets(serveur, "journal.csv"))
             self.assertEqual(len(actions), 1, actions)
             self.assertIn("passage au format 3 du fichier ; sauvegarde %s faite juste avant" % sauvegardes[0], actions[0])
             # La base reste propre : aucun problème « erreur » ni « attention » nouveau.
             self.assertEqual(self.page.evaluate(
-                "Donnees.problemes().filter((p) => p.gravite !== 'info' && p.table === 'wiki_syntheses').length"), 0)
+                "Donnees.problemes().filter((p) => p.gravite !== 'info' && p.table.startsWith('wiki_')).length"), 0)
 
 
 # ---------------------------------------------------------------------------

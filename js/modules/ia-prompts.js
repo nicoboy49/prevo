@@ -16,8 +16,7 @@
 //     par Ia.demander (hors schéma → Ia.IaReponseInvalide) :
 //       reformulerDI { symptome, impact (null si hors liste) } ; compteRendu { texte } ;
 //       codes { symptome, cause, remede, rejetes } ; checkList { operations } ; resumeHistorique { texte } ;
-//       commentaireRapport { texte (jetons remplacés), texteAJetons } ;
-//       syntheseWiki { texte (forme du §20.4), otCites, otSources } (lot 6).
+//       commentaireRapport { texte (jetons remplacés), texteAJetons }.
 //
 // Données attendues par fonction (noms des champs de `donnees`) :
 //   reformulerDI       { symptome, description, repere, designation }
@@ -27,8 +26,6 @@
 //   checkList          { designation, marque, modele, libelle, declencheur, periodicite, causeVisee }
 //   resumeHistorique   { ot: [{ date, type, titre, codes: [libellés] | texte, compteRendu }] } (20 plus récents)
 //   commentaireRapport { mois, jetons: { nom: valeur }, points: [texte] } (le mois devient le jeton {mois})
-//   syntheseWiki       { repere, designation, marque, modele, ot: [{ id, date, type, titre, symptome, cause,
-//                      remede, compteRendu, pieces: [{ designation, quantite }], dureeArret }] } (40 plus récents)
 
 Object.assign(Ia, (() => {
 
@@ -359,87 +356,6 @@ Object.assign(Ia, (() => {
     },
   };
 
-  // Lot 6 (ARCHITECTURE.md §20.4) : synthèse du wiki de maintenance d'un équipement, à partir des seuls OT
-  // clôturés envoyés (les 40 plus récents). Chaque puce cite au moins un OT ; la réponse passe par
-  // Wiki.controlerSynthese (OT cités parmi ceux envoyés, 6 puces et 150 mots au plus, aucune consigne de
-  // sécurité) : une réponse refusée n'est jamais montrée. Jamais de nom de technicien, de coût ni de photo.
-  const OT_SYNTHESE_MAX = 40;                // = Wiki.SEUILS.otEnvoyesMax (D100)
-  const COMPTE_RENDU_SYNTHESE_MAX = 600;
-  const PIECES_SYNTHESE_MAX = 10;
-  const RUBRIQUES_SYNTHESE = Object.freeze(['Ce qui revient', 'Ce qui a réglé le problème', 'À surveiller']);   // = Wiki.RUBRIQUES
-
-  // OT envoyés : ceux qui ont un identifiant, du plus récent au plus ancien (date de fin), 40 au plus.
-  function otDeSynthese(d) {
-    return liste(d && d.ot).filter((ot) => ot && typeof ot === 'object' && texte(ot.id))
-      .slice().sort((a, b) => texte(b.date).localeCompare(texte(a.date)) || texte(b.id).localeCompare(texte(a.id)))
-      .slice(0, OT_SYNTHESE_MAX);
-  }
-
-  // Une ligne par OT, seulement les champs de la liste blanche.
-  function ligneOtSynthese(ot) {
-    const pieces = liste(ot.pieces).slice(0, PIECES_SYNTHESE_MAX)
-      .map((p) => uneLigne(p && p.designation, 120) + (texte(p && p.quantite) ? ' × ' + uneLigne(p.quantite, 20) : ''))
-      .filter((p) => texte(p));
-    return '- ' + [uneLigne(ot.id, 30), uneLigne(ot.date, 20), uneLigne(ot.type, 60), uneLigne(ot.titre, 200),
-      texte(ot.symptome) ? 'symptôme : ' + uneLigne(ot.symptome, 120) : '',
-      texte(ot.cause) ? 'cause : ' + uneLigne(ot.cause, 120) : '',
-      texte(ot.remede) ? 'remède : ' + uneLigne(ot.remede, 120) : '',
-      texte(ot.dureeArret) ? 'arrêt : ' + uneLigne(ot.dureeArret, 20) + ' h' : '',
-      pieces.length ? 'pièces : ' + pieces.join(' ; ') : '',
-      texte(ot.compteRendu) ? 'compte rendu : ' + uneLigne(ot.compteRendu, COMPTE_RENDU_SYNTHESE_MAX) : '']
-      .filter(Boolean).join(' · ');
-  }
-
-  const syntheseWiki = {
-    systeme: systeme('Fonction : syntheseWiki',
-      'rédige la synthèse du wiki de maintenance d\'un équipement, à partir des SEULS ordres de travail (OT) '
-        + 'clôturés fournis : au plus six puces courtes en tout, chacune rangée dans une des trois rubriques '
-        + '« Ce qui revient » (pannes ou symptômes qui reviennent, avec leur nombre compté dans la liste), « Ce qui a '
-        + 'réglé le problème » (remèdes et pièces qui ont marché) et « À surveiller » (signes ou pièces à suivre, '
-        + 'd\'après les OT). Chaque puce cite au moins un OT par son identifiant exact (liste « ot »), uniquement '
-        + 'parmi ceux fournis. Cent cinquante mots au plus en tout. Dis « fréquent ici », jamais « cause certaine » ; '
-        + 'aucun pourcentage ; aucune date, aucun mois, aucune année (les OT cités portent leurs dates). '
-        + 'N\'écris aucune consigne de sécurité ou de consignation, aucun équipement de '
-        + 'protection, aucune habilitation, aucune coupure d\'énergie : elles relèvent du responsable et de la fiche '
-        + 'de consignation de l\'équipement.',
-      '{"puces": [{"rubrique": "Ce qui revient | Ce qui a réglé le problème | À surveiller", "texte": "…", '
-        + '"ot": ["OT-AAAA-NNNN"]}]}'),
-    utilisateur(d) {
-      const lignes = otDeSynthese(d).map(ligneOtSynthese);
-      return message([
-        ligne('Équipement', equipement(d)),
-        ligne('Marque', uneLigne(d.marque, 100)),
-        ligne('Modèle', uneLigne(d.modele, 100)),
-        'Ordres de travail clôturés de l\'équipement, du plus récent au plus ancien :\n'
-          + (lignes.length ? lignes.join('\n') : '(aucun)'),
-      ]);
-    },
-    // Liste fermée (enum) des rubriques et des identifiants des OT envoyés.
-    schema(d) {
-      const identifiants = otDeSynthese(d).map((ot) => texte(ot.id));
-      return objet({ puces: { type: 'array', items: objet({
-        rubrique: { type: 'string', enum: RUBRIQUES_SYNTHESE.slice() },
-        texte: CHAINE,
-        ot: { type: 'array', items: { type: 'string', enum: identifiants.length ? identifiants : [''] } },
-      }) } });
-    },
-    // Mise en forme (Wiki.texteDeSynthese) puis contrôles du §20.4 ; refus = IaReponseInvalide avec les raisons.
-    verifier(o, d) {
-      if (typeof Wiki === 'undefined') throw new Error('syntheseWiki : le module Wiki n\'est pas chargé.');
-      if (!o || !Array.isArray(o.puces)) throw new Ia.IaReponseInvalide('La proposition de l\'IA ne contient pas de liste de puces.');
-      const puces = o.puces.map((p) => ({ rubrique: texte(p && p.rubrique), texte: texte(p && p.texte),
-        ot: liste(p && p.ot).map(texte).filter(Boolean) }));
-      const inconnues = puces.filter((p) => !RUBRIQUES_SYNTHESE.includes(p.rubrique)).map((p) => p.rubrique || '(vide)');
-      const envoyes = otDeSynthese(d).map((ot) => texte(ot.id));
-      const texteSynthese = Wiki.texteDeSynthese(puces);
-      const controle = Wiki.controlerSynthese(texteSynthese, envoyes, { origine: 'ia' });
-      const raisons = (inconnues.length ? ['Rubrique inconnue : « ' + inconnues.join(' », « ') + ' ».'] : [])
-        .concat(controle.raisons);
-      if (raisons.length) throw new Ia.IaReponseInvalide('Synthèse refusée : ' + raisons.join(' '));
-      return { texte: texteSynthese, otCites: controle.otCites, otSources: envoyes };
-    },
-  };
-
   // ===========================================================================================
   // Validations pures (Ia.valider ; déplacées de ia.js, lot 4)
   // ===========================================================================================
@@ -526,8 +442,7 @@ Object.assign(Ia, (() => {
   }
 
   return {
-    PROMPTS: Object.freeze({ reformulerDI, compteRendu, codes, checkList, resumeHistorique, commentaireRapport, colonnesImport,
-      syntheseWiki }),
+    PROMPTS: Object.freeze({ reformulerDI, compteRendu, codes, checkList, resumeHistorique, commentaireRapport, colonnesImport }),
     valider: Object.freeze({ codes: codesProposes, impact, checkList: checkListe, commentaire }),
     codesConnus,
     jetonsRapport,

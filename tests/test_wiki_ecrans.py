@@ -1,16 +1,15 @@
-"""Écrans du wiki de maintenance (tâche T100, ARCHITECTURE.md §20.7).
+"""Écrans du wiki de maintenance (tâche T100 ; socle du lot 6 refondu, T110 : sans la synthèse de la première
+version, réécrits en T119 — ARCHITECTURE.md §20.9).
 
 Toujours la démo (index.html en file://, « Essayer avec les données de démo »), horloge du navigateur fixée à la
 date de référence de la démo (2026-10-19 : dates non décalées, pannes des 12 derniers mois stables). Profils :
 responsable, technicien (TEC-0001), demandeur (Lucie Martin). Ce qui est vérifié :
     liste       #/wiki : une carte par élément de Wiki.listePages(), dans le même ordre (repère, désignation,
-                pannes sur 12 mois, badge d'état texte + couleur, lien vers la page) ; une synthèse « à valider »
-                n'est montrée qu'au responsable (§20.5 : « Aucune synthèse » pour les autres) ; filtre « À valider
-                ou à revoir » avec son compte pour le responsable seulement (#/wiki?filtre=a-relire le coche) ;
-    page        #/wiki/<id> : pour les 28 pages de la démo, contenu égal à Wiki.page (pannes habituelles : cas,
+                pannes sur 12 mois, lien vers la page) ;
+    page        #/wiki/<id> : pour les 28 pages de la démo, contenu égal à Wiki.pageEquipement (pannes habituelles : cas,
                 période, causes, remèdes et récidives, fourchettes du détail repliable, « peu de cas », message
                 « Pas encore assez de cas… (n sur 5) », mention ; pièces ; dernières interventions et « Voir les
-                autres » ; même marque et modèle), sections dans l'ordre du contrat, #wiki-synthese en dernier ;
+                autres » ; même marque et modèle), sections dans l'ordre du contrat ;
     consignation texte de la fiche identique au caractère près (retours à la ligne, CRLF, espaces), document en
                 lien, message d'absence et lien de modification pour le responsable seul, aucun texte d'IA ;
     piège       <img onerror>, <script>, <b> dans une consignation, un titre et un compte rendu : du texte, rien
@@ -39,8 +38,6 @@ from test_poste import AUDIT_TEXTES_JS
 
 HEURE_FIXE = "2026-10-19T09:00:00"
 PROFILS = {"demandeur": ("Lucie Martin", ""), "technicien": ("", "TEC-0001"), "responsable": ("", "")}
-ETATS = {"aucune": ("Aucune synthèse", "neutre"), "a_valider": ("Synthèse à valider", "attention"),
-         "validee": ("Synthèse validée", "ok"), "a_revoir": ("Synthèse à revoir", "violet")}
 MENTION = "Statistique de l'historique, pas un diagnostic"
 MENTION_PISTE = "Peu de cas : à prendre comme une piste."
 SANS_CONSIGNATION = "Aucune consignation saisie pour cet équipement"
@@ -51,13 +48,11 @@ SECTIONS = ["entete-page", "wiki-consignation", "wiki-recherche", "wiki-pannes",
 
 # --- lectures du DOM ---------------------------------------------------------------------------------
 
-LISTE_JS = """() => Array.from(document.querySelectorAll('.wiki-pages > li[data-equipement]')).map((li) => {
-  const badge = li.querySelector('.wiki-etat');
-  return { equipementId: li.dataset.equipement, etat: li.dataset.etat, pannes: Number(li.dataset.pannes),
-    repere: li.querySelector('.carte-tete b').textContent.trim(), designation: li.querySelector('.carte-titre').textContent.trim(),
-    texte: li.querySelector('.wiki-pannes').textContent.trim(), badge: badge.textContent.trim(),
-    classes: Array.from(badge.classList), href: li.querySelector('a').getAttribute('href') };
-})"""
+LISTE_JS = """() => Array.from(document.querySelectorAll('.wiki-pages > li[data-equipement]')).map((li) => ({
+  equipementId: li.dataset.equipement, pannes: Number(li.dataset.pannes),
+  repere: li.querySelector('.carte-tete b').textContent.trim(), designation: li.querySelector('.carte-titre').textContent.trim(),
+  texte: li.querySelector('.wiki-pannes').textContent.trim(), href: li.querySelector('a').getAttribute('href'),
+}))"""
 
 PAGE_JS = """() => {
   const t = (e) => (e ? e.textContent.replace(/\\s+/g, ' ').trim() : null);
@@ -74,7 +69,6 @@ PAGE_JS = """() => {
     detailFerme: Array.from(li.querySelectorAll('details.causes-precision')).every((d) => !d.open) }));
   const racine = document.querySelector('.wiki-page');
   const memeModele = document.querySelector('#wiki-meme-modele');
-  const synthese = document.querySelector('#wiki-synthese');
   const consignation = document.querySelector('#wiki-consignation');
   return {
     h1: t(document.querySelector('#contenu h1')),
@@ -101,8 +95,6 @@ PAGE_JS = """() => {
       absence: t(consignation.querySelector('.wiki-sans-consignation')),
       modifier: consignation.querySelector('#wiki-modifier-consignation')
         ? consignation.querySelector('#wiki-modifier-consignation').getAttribute('href') : null },
-    synthese: { derniere: racine.lastElementChild === synthese, vide: synthese.innerHTML === '',
-      carte: typeof Wiki.afficherSynthese === 'function' },
   };
 }"""
 
@@ -143,11 +135,6 @@ ZONES_JS = """(racine) => Array.from(document.querySelectorAll(['a', 'button', '
 
 ECRIRE_JS = """async ([table, id, valeurs]) => {
   await Donnees.modifier(table, (lignes) => { Object.assign(lignes.find((l) => l.id === id), valeurs); return true; },
-    { action: 'test des écrans du wiki' });
-}"""
-
-AJOUTER_SYNTHESES_JS = """async (lignes) => {
-  await Donnees.modifier('wiki_syntheses', (table) => { lignes.forEach((l) => table.push(l)); return true; },
     { action: 'test des écrans du wiki' });
 }"""
 
@@ -243,10 +230,10 @@ class CasWiki(CasNavigateur):
         self.page.wait_for_selector(attendre, state="attached")
 
     def aller_page(self, equipement):
-        self.aller("#/wiki/" + equipement, '.wiki-page[data-equipement="%s"] #wiki-synthese' % equipement)
+        self.aller("#/wiki/" + equipement, '.wiki-page[data-equipement="%s"] #wiki-dernieres' % equipement)
 
     def wiki_page(self, equipement):
-        return self.page.evaluate("(id) => Wiki.page(id)", equipement)
+        return self.page.evaluate("(id) => Wiki.pageEquipement(id)", equipement)
 
     def attendre_resultats(self, racine):
         self.page.wait_for_selector("%s .wiki-portee, %s .wiki-rien" % (racine, racine))
@@ -276,7 +263,7 @@ class CasWiki(CasNavigateur):
 
 
 # ---------------------------------------------------------------------------
-# #/wiki : liste des pages, états, filtre du responsable
+# #/wiki : liste des pages
 # ---------------------------------------------------------------------------
 
 class TestListe(CasWiki):
@@ -290,14 +277,10 @@ class TestListe(CasWiki):
         self.assertEqual(len(lue), len(attendue))
         self.assertEqual(page.inner_text("#wiki-nombre-pages").strip(), str(len(attendue)))
         for entree, element in zip(attendue, lue):
-            etat = entree["etat"]
-            if etat == "a_valider" and profil != "responsable":
-                etat = "aucune"          # §20.5 : la synthèse à valider n'est vue que du responsable
-            libelle, ton = ETATS[etat]
             self.assertEqual(element, {
-                "equipementId": entree["equipementId"], "etat": etat, "pannes": entree["pannes12Mois"],
+                "equipementId": entree["equipementId"], "pannes": entree["pannes12Mois"],
                 "repere": entree["repere"], "designation": entree["designation"], "texte": textes_pannes(entree["pannes12Mois"]),
-                "badge": libelle, "classes": ["badge", ton, "wiki-etat"], "href": "#/wiki/" + entree["equipementId"]})
+                "href": "#/wiki/" + entree["equipementId"]})
         return attendue, lue
 
     def test_liste_conforme_a_listePages_pour_les_trois_profils(self):
@@ -308,63 +291,7 @@ class TestListe(CasWiki):
                 self.assertEqual(len(lue), 28)
                 pannes = [e["pannes12Mois"] for e in attendue]
                 self.assertEqual(pannes, sorted(pannes, reverse=True))
-                self.assertEqual(self.page.locator("#wiki-filtre-relecture").count(), 1 if profil == "responsable" else 0)
-                self.assertEqual(self.page.locator(".wiki-filtre").count(), 1 if profil == "responsable" else 0)
-                etats = {e["etat"] for e in lue}
-                self.assertEqual(etats, {"a_valider", "aucune"} if profil == "responsable" else {"aucune"})
-
-    def test_etats_a_revoir_et_validee_vus_de_tous(self):
-        """Une synthèse validée suivie d'interventions → « à revoir » ; validée à jour → « validée » : les deux
-        sont vues du technicien et du demandeur, la synthèse « à valider » ne l'est pas."""
-        for profil in ("technicien", "demandeur", "responsable"):
-            with self.subTest(profil=profil):
-                page = self.ouvrir(profil)
-                sources = page.evaluate("""() => Donnees.lignes('ordres_travail')
-                    .filter((o) => o.equipement_id === 'EQ-0022' && /^Clôturé/.test(o.statut)).map((o) => o.id).join(';')""")
-                page.evaluate(AJOUTER_SYNTHESES_JS, [
-                    {"id": "WIKI-9001", "equipement_id": "EQ-0007", "texte": "", "ot_cites": "", "ot_sources": "",
-                     "statut": "validée", "modele": "essai", "date_proposition": "2025-01-01 09:00", "corrigee_par": "",
-                     "date_modification": "", "valide_par": "Responsable", "date_validation": "2025-01-02 09:00"},
-                    {"id": "WIKI-9002", "equipement_id": "EQ-0022", "texte": "", "ot_cites": "", "ot_sources": sources,
-                     "statut": "validée", "modele": "essai", "date_proposition": "2026-10-19 08:00", "corrigee_par": "",
-                     "date_modification": "", "valide_par": "Responsable", "date_validation": "2026-10-19 08:30"}])
-                _, lue = self.verifier_liste(profil)
-                par_id = {e["equipementId"]: e for e in lue}
-                self.assertEqual(par_id["EQ-0007"]["badge"], "Synthèse à revoir")
-                self.assertEqual(par_id["EQ-0022"]["badge"], "Synthèse validée")
-                self.assertEqual(par_id["EQ-0001"]["badge"],
-                                 "Synthèse à valider" if profil == "responsable" else "Aucune synthèse")
-
-    def test_filtre_a_valider_ou_a_revoir_du_responsable(self):
-        page = self.ouvrir("responsable")
-        page.evaluate(AJOUTER_SYNTHESES_JS, [
-            {"id": "WIKI-9001", "equipement_id": "EQ-0007", "texte": "", "ot_cites": "", "ot_sources": "",
-             "statut": "validée", "modele": "essai", "date_proposition": "2025-01-01 09:00", "corrigee_par": "",
-             "date_modification": "", "valide_par": "Responsable", "date_validation": "2025-01-02 09:00"}])
-        attendue, toutes = self.verifier_liste("responsable")
-        a_relire = [e["equipementId"] for e in attendue if e["etat"] in ("a_valider", "a_revoir")]
-        self.assertEqual(len(a_relire), 13)                     # 12 synthèses de la démo à valider + 1 à revoir
-        self.assertEqual(page.inner_text("#wiki-compte-relecture").strip(), "13")
-        self.assertIn("À valider ou à revoir", page.inner_text(".wiki-filtre"))
-        self.assertFalse(page.is_checked("#wiki-filtre-relecture"))
-        page.check("#wiki-filtre-relecture")
-        lue = page.evaluate(LISTE_JS)
-        self.assertEqual([e["equipementId"] for e in lue], a_relire)             # triée par pannes, comme la liste
-        self.assertEqual({e["etat"] for e in lue}, {"a_valider", "a_revoir"})
-        page.uncheck("#wiki-filtre-relecture")
-        self.assertEqual(page.evaluate(LISTE_JS), toutes)
-        # Adresse : #/wiki?filtre=a-relire coche le filtre
-        self.aller("#/accueil", "#bento")
-        self.aller("#/wiki?filtre=a-relire", ".wiki-pages > li[data-equipement]")
-        self.assertTrue(page.is_checked("#wiki-filtre-relecture"))
-        self.assertEqual([e["equipementId"] for e in page.evaluate(LISTE_JS)], a_relire)
-        # Plus rien à relire : message
-        page.evaluate("""async () => { await Donnees.modifier('wiki_syntheses', (table) => {
-            table.forEach((l) => { l.statut = 'remplacée'; }); return true; }, { action: 'test' }); }""")
-        self.aller("#/accueil", "#bento")
-        self.aller("#/wiki?filtre=a-relire", ".wiki-pages > li")
-        self.assertEqual(page.inner_text("#wiki-compte-relecture").strip(), "0")
-        self.assertIn("Rien à relire", page.inner_text(".wiki-pages"))
+                self.assertEqual(self.page.locator(".wiki-etat").count(), 0)   # plus de synthèse (lot 6 refondu)
 
     def test_liens_vers_les_pages_et_recherche_sur_le_parc(self):
         page = self.ouvrir("technicien")
@@ -382,7 +309,7 @@ class TestListe(CasWiki):
 
 
 # ---------------------------------------------------------------------------
-# #/wiki/<équipement> : contenu égal à Wiki.page, consignation, pièges, liens
+# #/wiki/<équipement> : contenu égal à Wiki.pageEquipement, consignation, pièges, liens
 # ---------------------------------------------------------------------------
 
 class TestPage(CasWiki):
@@ -395,7 +322,7 @@ class TestPage(CasWiki):
         liens = profil != "demandeur"
         self.assertEqual(lu["h1"], plat("%s — %s" % (eq["repere"], eq["designation"])))
         self.assertEqual(lu["fiche"], "#/equipement/" + equipement)
-        self.assertEqual(lu["sections"], SECTIONS + (["wiki-meme-modele"] if attendu["memeModele"] else []) + ["wiki-synthese"])
+        self.assertEqual(lu["sections"], SECTIONS + (["wiki-meme-modele"] if attendu["memeModele"] else []))
         # Pannes habituelles
         self.assertEqual(lu["pannes"], symptomes_attendus(attendu["pannes"]))
         self.assertEqual(lu["mention"], MENTION if attendu["pannes"] else None)
@@ -444,13 +371,9 @@ class TestPage(CasWiki):
         else:
             self.assertIsNone(lu["consignation"]["texte"])
             self.assertEqual(lu["consignation"]["absence"], SANS_CONSIGNATION)
-        # Synthèse [IA] : place réservée, en dernier (vide tant que wiki-synthese.js n'y pose pas sa carte)
-        self.assertTrue(lu["synthese"]["derniere"])
-        if not lu["synthese"]["carte"]:
-            self.assertTrue(lu["synthese"]["vide"])
         return attendu, lu
 
-    def test_les_28_pages_de_la_demo_conformes_a_Wiki_page(self):
+    def test_les_28_pages_de_la_demo_conformes_a_Wiki_pageEquipement(self):
         page = self.ouvrir("technicien")
         ids = page.evaluate("() => Wiki.listePages().map((p) => p.equipementId)")
         self.assertEqual(len(ids), 28)
@@ -490,11 +413,6 @@ class TestPage(CasWiki):
                 self.assertEqual(bloc["espaces"], "pre-wrap")
                 self.assertEqual(bloc["enfants"], 0)
                 self.assertNotIn("[IA]", page.inner_text("#wiki-consignation"))
-                # aucune phrase de la synthèse de l'équipement dans ce bloc
-                synthese = page.evaluate("(id) => Donnees.lignes('wiki_syntheses').filter((s) => s.equipement_id === id)"
-                                         ".map((s) => s.texte).join('\\n')", equipement)
-                for ligne in [l for l in synthese.split("\n") if len(l) > 20]:
-                    self.assertNotIn(ligne.strip("- "), page.inner_text("#wiki-consignation"))
 
     def test_consignation_piegee_document_et_absence(self):
         page = self.ouvrir("responsable")
@@ -546,7 +464,7 @@ class TestPage(CasWiki):
 
     def test_texte_piege_dans_un_compte_rendu_et_un_titre_reste_du_texte(self):
         page = self.ouvrir("technicien")
-        ot = page.evaluate("(id) => Wiki.page(id).dernieres[0].id", "EQ-0001")
+        ot = page.evaluate("(id) => Wiki.pageEquipement(id).dernieres[0].id", "EQ-0001")
         compte_rendu = "Fuite au palier " + PIEGE + " & « guillemets » \"doubles\" 'simples'"
         page.evaluate(ECRIRE_JS, ["ordres_travail", ot, {"compte_rendu": compte_rendu, "titre": "<b>Titre</b> piégé " + PIEGE}])
         self.aller_page("EQ-0001")
@@ -820,9 +738,6 @@ class TestAffichage(CasWiki):
         self.chercher("#contenu .wiki-recherche", "fuite garniture")
         page.click("#contenu .wiki-voir-plus")
         verifier("#contenu", "liste")
-        if profil == "responsable":
-            page.check("#wiki-filtre-relecture")
-            verifier("#contenu", "liste filtrée")
         for equipement in ("EQ-0001", "EQ-0023", "EQ-0031"):
             self.aller_page(equipement)
             self.chercher(".wiki-page .wiki-recherche", "capteur filtre")
@@ -835,7 +750,7 @@ class TestAffichage(CasWiki):
         self.attendre_resultats(".wiki-recherche-demande")
         verifier(".wiki-recherche-demande", "saisie d'une DI")
         if profil != "demandeur":
-            ot = page.evaluate("() => Wiki.page('EQ-0001').dernieres[1].id")
+            ot = page.evaluate("() => Wiki.pageEquipement('EQ-0001').dernieres[1].id")
             self.aller("#/ot/" + ot, ".ot-onglets")
             page.click(".onglet[data-onglet='preparation']")
             self.attendre_resultats("#contenu .wiki-recherche")

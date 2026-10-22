@@ -1,0 +1,3 @@
+/* Wiki — écrans du responsable (lot 6 refondu, ARCHITECTURE.md §20.9) : journal, file, écriture à la main,
+   contrôle du wiki. Socle (T110) : feuille posée ; les styles arrivent avec T120. */
+.wiki-journal { display: block; }

@@ -4,11 +4,11 @@
     "Données fabriquées, écrites à la main : six équipements (PR-01 et PR-02 de même marque et modèle, écrits avec une casse",
     "et des espaces différents ; PR-03 de même marque mais d'un autre modèle ; CV-01 sans marque), des OT clôturés et non",
     "clôturés (en cours, planifié, annulé), des DI d'origine (par di_id ou par ot_id) et une DI regroupée, les codes de",
-    "défaillance, une synthèse validée, une « à valider » et une « remplacée ». La DI regroupée sur l'OT-2026-0007 est plus",
+    "défaillance. La DI regroupée sur l'OT-2026-0007 est plus",
     "ancienne que la DI acceptée : la DI d'origine reste l'acceptée (règle D35, comme Indicateurs.contexte).",
     "Chaque table est une liste de lignes (champs du schéma, valeurs en texte) ; une valeur écrite comme une liste de lignes",
-    "est jointe par des sauts de ligne (texte d'une synthèse).",
-    "Requêtes : « attendus » = identifiants (OT ou synthèse) qui doivent sortir parmi les 3 premiers de la portée indiquée ;",
+    "est jointe par des sauts de ligne.",
+    "Requêtes : « attendus » = identifiants d'OT qui doivent sortir parmi les 3 premiers de la portée indiquée ;",
     "« jamais » = identifiants absents de toutes les portées ; « aucun » = aucun résultat dans aucune portée."
   ],
   "tables": {
@@ -140,24 +140,6 @@
        "date_creation": "2026-08-18 10:00", "date_fin": "2026-08-18 11:00", "date_cloture_tech": "2026-08-18 11:05",
        "symptome_code": "", "cause_code": "", "remede_code": "",
        "compte_rendu": "Vanne d'aspiration partiellement fermée : ouverte en grand, bruit disparu."}
-    ],
-    "wiki_syntheses": [
-      {"id": "WIKI-0001", "equipement_id": "EQ-0004",
-       "texte": ["Ce qui revient", "- Suintement à la garniture mécanique, fréquent ici [OT-2026-0005]",
-                 "Ce qui a réglé le problème", "- Remplacement de la garniture [OT-2026-0005]"],
-       "ot_cites": "OT-2026-0005", "ot_sources": "OT-2026-0005;OT-2026-0006", "statut": "validée", "modele": "faux-modele",
-       "date_proposition": "2026-07-01 10:00", "corrigee_par": "", "date_modification": "",
-       "valide_par": "Responsable démo", "date_validation": "2026-07-02 09:00"},
-      {"id": "WIKI-0002", "equipement_id": "EQ-0003",
-       "texte": ["Ce qui revient", "- Échangeur colmaté par la poussière, fréquent ici [OT-2026-0004]"],
-       "ot_cites": "OT-2026-0004", "ot_sources": "OT-2026-0004;OT-2026-0009", "statut": "à valider", "modele": "faux-modele",
-       "date_proposition": "2026-07-10 10:00", "corrigee_par": "", "date_modification": "",
-       "valide_par": "", "date_validation": ""},
-      {"id": "WIKI-0003", "equipement_id": "EQ-0001",
-       "texte": ["Ce qui revient", "- Tirant de colonne desserré [OT-2026-0001]"],
-       "ot_cites": "OT-2026-0001", "ot_sources": "OT-2026-0001;OT-2026-0002", "statut": "remplacée", "modele": "faux-modele",
-       "date_proposition": "2026-04-01 10:00", "corrigee_par": "", "date_modification": "",
-       "valide_par": "Responsable démo", "date_validation": "2026-04-02 09:00"}
     ]
   },
   "requetes": [
@@ -176,11 +158,6 @@
      "jamais": ["OT-2026-0008"]},
     {"nom": "OT annulé jamais trouvé", "texte": "grincement coulisseau", "attendus": {"parc": ["OT-2026-0002"]},
      "jamais": ["OT-2026-0010"]},
-    {"nom": "synthèse validée trouvée", "texte": "suintement garniture", "attendus": {"parc": ["WIKI-0001", "OT-2026-0005"]}},
-    {"nom": "synthèse validée dans la portée de son équipement", "texte": "garniture", "equipementId": "EQ-0004",
-     "attendus": {"equipement": ["WIKI-0001", "OT-2026-0005"]}},
-    {"nom": "synthèse « à valider » jamais trouvée", "texte": "échangeur poussière", "aucun": true},
-    {"nom": "synthèse « remplacée » jamais trouvée", "texte": "tirant", "aucun": true},
     {"nom": "DI d'origine (liée par ot_id) indexée", "texte": "bouton marche sans effet", "attendus": {"parc": ["OT-2026-0007"]}},
     {"nom": "DI regroupée sur l'OT non indexée", "texte": "étincelles", "aucun": true},
     {"nom": "libellé du code cause indexé", "texte": "encrassement", "attendus": {"parc": ["OT-2026-0004"]}},

@@ -2,7 +2,7 @@
 
 Document généré par `outils/generer_fiche_csv.py` d'après `js/schema.js` (et, pour la section 4, `js/modules/import-regles.js`) : ne pas le modifier à la main.
 
-Prévo range ses données dans **23 fichiers CSV** (format **version 3**), dans le dossier de données (`donnees/` à côté de `serveur.py`, ou le dossier choisi en mode dossier). Ils s'ouvrent et se modifient dans Excel. Le paramètre `version_schema` de `parametres.csv` indique la version du format.
+Prévo range ses données dans **24 fichiers CSV** (format **version 3**), dans le dossier de données (`donnees/` à côté de `serveur.py`, ou le dossier choisi en mode dossier). Ils s'ouvrent et se modifient dans Excel. Le paramètre `version_schema` de `parametres.csv` indique la version du format.
 
 ## 1. Règles communes à tous les fichiers
 
@@ -31,7 +31,7 @@ Prévo range ses données dans **23 fichiers CSV** (format **version 3**), dans 
 | `ref` | identifiant d'une ligne d'un autre fichier |
 | `document` | nom d'un fichier du dossier `documents/` (photo, PDF…) |
 
-## 3. Les 23 fichiers
+## 3. Les 24 fichiers
 
 | Fichier | Contenu | Identifiant |
 | --- | --- | --- |
@@ -57,7 +57,8 @@ Prévo range ses données dans **23 fichiers CSV** (format **version 3**), dans 
 | `achats.csv` | Demandes d'achat et commandes. | `ACH-NNNN` (ex. `ACH-0001`) |
 | `parametres.csv` | Réglages partagés de l'atelier (une ligne par clé). | saisi (la clé elle-même) |
 | `journal.csv` | Journal des modifications (qui, quand, quoi) ; on n'y fait qu'ajouter. | `J-AAAAMMJJHHMMSS-XXXX` (horodatage puis 4 caractères tirés au hasard) |
-| `wiki_syntheses.csv` | Synthèses [IA] du wiki de maintenance (format 3) : au plus une en cours par équipement (« à valider » ou « validée ») ; les précédentes restent, « remplacées ». | `WIKI-NNNN` (ex. `WIKI-0001`) |
+| `wiki_pages.csv` | Pages du wiki de maintenance (format 3) : équipements, composants, modes de défaillance et savoir-faire ; seul le texte validé y est enregistré. | `WP-NNNN` (ex. `WP-0001`) |
+| `wiki_journal.csv` | Journal du wiki (format 3) : OT en file, propositions de l'IA et leur décision, écritures à la main, contradictions tranchées. | `WJ-NNNNN` (ex. `WJ-00001`) |
 
 ### 3.1 `localisations.csv` — Localisations
 
@@ -160,6 +161,7 @@ Ordres de travail (OT) : correctifs, préventifs, réglementaires, amélioration
 | `motif_annulation` | Motif d'annulation | `texte_long` |  |  |  |  |
 | `ot_lie_id` | Ordre de travail lié | `ref` |  | réf. `ordres_travail.csv` |  |  |
 | `anomalie_constatee` | Anomalie constatée | `booleen` |  |  | `0` | depuis le format 2 |
+| `astuce` | Astuce pour la prochaine fois | `texte_long` |  |  |  | depuis le format 3 |
 
 ### 3.5 `ot_operations.csv` — Opérations d'ordre de travail
 
@@ -446,26 +448,61 @@ Journal des modifications (qui, quand, quoi) ; on n'y fait qu'ajouter.
 | `id_ligne` | Identifiant de la ligne | `texte` |  |  |  |  |
 | `action` | Action | `texte` |  |  |  |  |
 
-### 3.23 `wiki_syntheses.csv` — Synthèses du wiki
+### 3.23 `wiki_pages.csv` — Pages du wiki
 
-Synthèses [IA] du wiki de maintenance (format 3) : au plus une en cours par équipement (« à valider » ou « validée ») ; les précédentes restent, « remplacées ».
+Pages du wiki de maintenance (format 3) : équipements, composants, modes de défaillance et savoir-faire ; seul le texte validé y est enregistré.
 
-- Identifiant : `WIKI-NNNN` (ex. `WIKI-0001`).
+- Identifiant : `WP-NNNN` (ex. `WP-0001`).
 
 | Colonne | Libellé | Type | Obligatoire | Valeurs ou référence | Défaut | Remarques |
 | --- | --- | --- | --- | --- | --- | --- |
 | `id` | Identifiant | `id` |  |  |  |  |
-| `equipement_id` | Équipement | `ref` | oui | réf. `equipements.csv` |  |  |
-| `texte` | Synthèse | `texte_long` |  |  |  |  |
+| `type` | Type | `choix` | oui | `équipement`, `composant`, `mode`, `savoir-faire` |  |  |
+| `titre` | Titre | `texte` | oui |  |  |  |
+| `cle` | Clé (titre comparable) | `texte` |  |  |  |  |
+| `equipement_id` | Équipement | `ref` |  | réf. `equipements.csv` |  |  |
+| `article_id` | Article | `ref` |  | réf. `articles.csv` |  |  |
+| `cause_code` | Code cause | `ref` |  | réf. `codes_defaillance.csv` (colonne `code`), famille = cause |  |  |
+| `rattache_a` | Rattaché à la page | `ref` |  | réf. `wiki_pages.csv` |  |  |
+| `texte` | Texte | `texte_long` |  |  |  |  |
 | `ot_cites` | OT cités | `texte` |  |  |  |  |
-| `ot_sources` | OT envoyés à l'IA | `texte_long` |  |  |  |  |
-| `statut` | Statut | `choix` |  | `à valider`, `validée`, `remplacée` | `à valider` |  |
+| `liens` | Pages liées | `texte` |  |  |  |  |
+| `version` | Version | `entier` |  |  | `0` |  |
+| `origine` | Origine | `choix` |  | `IA`, `manuel`, `IA et manuel` |  |  |
 | `modele` | Modèle | `texte` |  |  |  |  |
-| `date_proposition` | Proposée le | `date_heure` |  |  |  |  |
-| `corrigee_par` | Corrigée par | `texte` |  |  |  |  |
-| `date_modification` | Modifiée le | `date_heure` |  |  |  |  |
-| `valide_par` | Validée par | `texte` |  |  |  |  |
-| `date_validation` | Validée le | `date_heure` |  |  |  |  |
+| `derniere_entree` | Dernière entrée appliquée | `ref` |  | réf. `wiki_journal.csv` |  |  |
+| `valide_par` | Validé par | `texte` |  |  |  |  |
+| `valide_le` | Validé le | `date_heure` |  |  |  |  |
+| `cree_le` | Créée le | `date_heure` |  |  |  |  |
+| `modifie_le` | Modifiée le | `date_heure` |  |  |  |  |
+| `statut` | Statut | `choix` |  | `active`, `archivée` | `active` |  |
+
+### 3.24 `wiki_journal.csv` — Journal du wiki
+
+Journal du wiki (format 3) : OT en file, propositions de l'IA et leur décision, écritures à la main, contradictions tranchées.
+
+- Identifiant : `WJ-NNNNN` (ex. `WJ-00001`).
+
+| Colonne | Libellé | Type | Obligatoire | Valeurs ou référence | Défaut | Remarques |
+| --- | --- | --- | --- | --- | --- | --- |
+| `id` | Identifiant | `id` |  |  |  |  |
+| `nature` | Nature | `choix` | oui | `ingestion`, `manuel`, `décision` |  |  |
+| `ot_id` | Ordre de travail | `ref` |  | réf. `ordres_travail.csv` |  |  |
+| `date_intervention` | Date d'intervention | `date_heure` |  |  |  |  |
+| `statut` | Statut | `choix` | oui | `en file`, `à valider`, `validée`, `rejetée`, `à refaire`, `refusée`, `rien à ajouter`, `appliquée` |  |  |
+| `anterieure` | Intervention antérieure | `booleen` |  |  | `0` |  |
+| `ordre` | Rang de traitement | `entier` |  |  |  |  |
+| `pages` | Pages concernées | `texte` |  |  |  |  |
+| `changements` | Changements | `texte_long` |  |  |  |  |
+| `contradictions` | Contradictions | `texte_long` |  |  |  |  |
+| `raisons` | Raisons du refus | `texte_long` |  |  |  |  |
+| `modele` | Modèle | `texte` |  |  |  |  |
+| `essais` | Essais | `entier` |  |  | `0` |  |
+| `cree_le` | Créée le | `date_heure` |  |  |  |  |
+| `traite_le` | Traitée le | `date_heure` |  |  |  |  |
+| `decide_par` | Décidé par | `texte` |  |  |  |  |
+| `decide_le` | Décidé le | `date_heure` |  |  |  |  |
+| `motif` | Motif | `texte_long` |  |  |  |  |
 
 ## 4. Import depuis un tableur
 

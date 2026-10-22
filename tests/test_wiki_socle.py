@@ -1,12 +1,12 @@
-"""Socle du lot 6 (tâche T95, ARCHITECTURE.md §20.1 et §20.2) : wiki de maintenance.
+"""Socle du lot 6 refondu (tâche T110, ARCHITECTURE.md §20.1 et §20.2) : wiki de maintenance.
 
-    routes   : #/wiki et #/wiki/<équipement> ouverts aux trois profils, entrée « Wiki » du menu avec son
-               icône, entre Parc et Magasin ; le module Wiki et ses seuils (D100) existent ;
-    format 3 : la démo porte version_schema = 3 et la table wiki_syntheses (12 synthèses livrées depuis le lot 6,
-               §20.8) ; l'export ZIP la contient (en-tête exact, une ligne par synthèse) ;
-    contrôle : Donnees.problemes() signale un OT cité inexistant ou d'un autre équipement, une synthèse
-               validée sans validateur, deux synthèses en cours pour un équipement ; une synthèse
-               correcte ne donne aucun problème ;
+    routes   : #/wiki et #/wiki/<id> ouverts aux trois profils, entrée « Wiki » du menu avec son icône, entre Parc
+               et Magasin ; #/wiki-journal réservé au responsable (le technicien et le demandeur ne l'atteignent
+               pas) ; le module Wiki et ses seuils (D100, §20.1) existent ;
+    format 3 : la démo porte version_schema = 3, les tables wiki_pages et wiki_journal (vides au socle) et la
+               colonne astuce des OT ; l'export ZIP contient les 24 tables, en-têtes exacts ;
+    modules  : la synthèse de la première version a disparu (Wiki.controlerSynthese, Wiki.afficherSynthese,
+               consigne syntheseWiki) ; Wiki.page(id) rend la page d'un équipement ;
     API      : Indicateurs.datePanne est publique (date de la DI d'origine, sinon création de l'OT).
 
 Lancer depuis la racine du projet :
@@ -18,36 +18,17 @@ import zipfile
 from commun import CasNavigateur, attendre_pret, preregler_profil, url_fichier
 
 BOM = b"\xef\xbb\xbf"
-ENTETE_WIKI = b"id;equipement_id;texte;ot_cites;ot_sources;statut;modele;date_proposition;corrigee_par;" \
-              b"date_modification;valide_par;date_validation\r\n"
+ENTETES = {
+    "wiki_pages.csv": b"id;type;titre;cle;equipement_id;article_id;cause_code;rattache_a;texte;ot_cites;liens;version;"
+                      b"origine;modele;derniere_entree;valide_par;valide_le;cree_le;modifie_le;statut\r\n",
+    "wiki_journal.csv": b"id;nature;ot_id;date_intervention;statut;anterieure;ordre;pages;changements;contradictions;"
+                        b"raisons;modele;essais;cree_le;traite_le;decide_par;decide_le;motif\r\n",
+}
 # Profil : (type, nom, technicienId) ; un technicien choisit sa fiche, un demandeur donne son nom.
 PROFILS = {"demandeur": ("Lucie Martin", ""), "technicien": ("", "TEC-0001"), "responsable": ("", "")}
-
-# Écrit des synthèses dans la base de démo (en mémoire) et rend les problèmes de la table.
-ECRIRE_ET_CONTROLER = """async (lignes) => {
-  await Donnees.modifier('wiki_syntheses', (table) => { lignes.forEach((l) => table.push(l)); return true; },
-    { action: 'test du socle' });
-  return Donnees.problemes().filter((p) => p.table === 'wiki_syntheses')
-    .map((p) => ({ gravite: p.gravite, id: p.id, champ: p.champ, valeur: p.valeur, message: p.message }));
-}"""
-
-# Deux OT clôturés de deux équipements différents, dans la démo ; le premier est d'un équipement qui n'a pas
-# encore de synthèse (la démo en livre 12, §20.8).
-DEUX_OT = """() => {
-  const avecSynthese = new Set(Donnees.lignes('wiki_syntheses').map((s) => s.equipement_id));
-  const clos = Donnees.lignes('ordres_travail').filter((ot) => /^Clôturé/.test(ot.statut));
-  const premier = clos.find((ot) => !avecSynthese.has(ot.equipement_id));
-  const autre = clos.find((ot) => ot.equipement_id !== premier.equipement_id);
-  return { equipement: premier.equipement_id, ot: premier.id, autreOt: autre.id };
-}"""
-
-
-def synthese(identifiant, equipement, **champs):
-    ligne = {"id": identifiant, "equipement_id": equipement, "texte": "", "ot_cites": "", "ot_sources": "",
-             "statut": "à valider", "modele": "faux", "date_proposition": "2026-10-19 09:00",
-             "corrigee_par": "", "date_modification": "", "valide_par": "", "date_validation": ""}
-    ligne.update(champs)
-    return ligne
+SEUILS = {"pagesCreeesMax": 3, "phrasesMax": 12, "motsMax": 250, "pagesEnvoyeesMax": 8, "catalogueMax": 400,
+          "agentsSimultanes": 5, "astuceMax": 500, "otMinimum": 5, "recidiveJours": 30, "dernieres": 10,
+          "symptomesMax": 5, "contradictionAncienneJours": 30, "demoAValiderJours": 14}
 
 
 class TestWikiSocle(CasNavigateur):
@@ -72,6 +53,14 @@ class TestWikiSocle(CasNavigateur):
         page.evaluate("location.hash = '#/wiki/EQ-0001'")
         page.wait_for_selector(".wiki-page", state="attached")
         self.assertEqual(lien.get_attribute("aria-current"), "page")
+        # Journal du wiki : responsable seulement ; ailleurs, l'écran n'est pas montré.
+        page.evaluate("location.hash = '#/wiki-journal'")
+        if profil == "responsable":
+            page.wait_for_selector(".wiki-journal", state="attached")
+            self.assertEqual(page.inner_text("#contenu h1").strip(), "Journal du wiki")
+        else:
+            page.wait_for_function("!document.querySelector('.wiki-page')")
+            self.assertEqual(page.locator(".wiki-journal").count(), 0)
 
     def test_routes_et_menu_demandeur(self):
         self.verifier_routes_et_menu("demandeur")
@@ -87,60 +76,42 @@ class TestWikiSocle(CasNavigateur):
         ordre = self.page.evaluate("Array.from(document.querySelectorAll('#menu a')).map((a) => a.dataset.ecran)")
         self.assertLess(ordre.index("parc"), ordre.index("wiki"))
         self.assertLess(ordre.index("wiki"), ordre.index("magasin"))
+        self.assertNotIn("wiki-journal", ordre)          # le journal n'a pas d'entrée de menu propre
 
     def test_module_et_seuils(self):
         self.ouvrir_demo("technicien")
-        self.assertEqual(self.page.evaluate("Wiki.SEUILS"), {
-            "otMinimum": 5, "otEnvoyesMax": 40, "pucesMax": 6, "motsMax": 150, "recidiveJours": 30,
-            "dernieres": 10, "symptomesMax": 5})
+        self.assertEqual(self.page.evaluate("Wiki.SEUILS"), SEUILS)
         self.assertTrue(self.page.evaluate("Object.isFrozen(Wiki.SEUILS)"))
+        absents = self.page.evaluate("""() => ['controlerSynthese', 'afficherSynthese', 'enregistrer', 'requetesDemo',
+          'donneesSynthese', 'ETATS_SYNTHESE'].filter((nom) => nom in Wiki)""")
+        self.assertEqual(absents, [])
+        self.assertFalse(self.page.evaluate("'syntheseWiki' in Ia.PROMPTS"))
+        page = self.page.evaluate("Wiki.page('EQ-0001')")
+        self.assertEqual((page["id"], page["type"]), ("EQ-0001", "équipement"))
+        self.assertEqual(page["calcul"], self.page.evaluate("Wiki.pageEquipement('EQ-0001')"))
+        self.assertIsNone(self.page.evaluate("Wiki.page('EQ-9999')"))
 
-    def test_demo_au_format_3_syntheses_livrees_et_export_zip(self):
+    def test_demo_au_format_3_et_export_zip(self):
         self.ouvrir_demo("responsable")
         self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "3")
         self.assertEqual(self.page.evaluate("Schema.version"), 3)
-        self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_syntheses').length"), 12)
-        self.assertEqual(self.page.evaluate("Donnees.problemes().filter((p) => p.table === 'wiki_syntheses').length"), 0)
+        self.assertEqual(self.page.evaluate("Schema.nomsTables().slice(-2)"), ["wiki_pages", "wiki_journal"])
+        self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_pages').length"), 0)
+        self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_journal').length"), 0)
+        self.assertTrue(self.page.evaluate("Donnees.lignes('ordres_travail').every((ot) => 'astuce' in ot)"))
+        self.assertEqual(self.page.evaluate(
+            "Donnees.problemes().filter((p) => p.gravite !== 'info' && p.table.startsWith('wiki_')).length"), 0)
         with self.page.expect_download() as attente:
             self.page.click("#btn-export-accueil")
         with zipfile.ZipFile(attente.value.path()) as archive:
             noms = [n for n in archive.namelist() if n.endswith(".csv")]
-            self.assertEqual(len(noms), 23)
-            contenu = archive.read("wiki_syntheses.csv")
-            self.assertTrue(contenu.startswith(BOM + ENTETE_WIKI))
-            self.assertEqual(contenu.count(b"\r\nWIKI-"), 12)
-
-    def test_problemes_de_la_table_des_syntheses(self):
-        self.ouvrir_demo("responsable")
-        cas = self.page.evaluate(DEUX_OT)
-        equipement, ot, autre_ot = cas["equipement"], cas["ot"], cas["autreOt"]
-
-        # Une synthèse correcte (validée, avec son validateur, OT de l'équipement) : aucun problème.
-        correcte = synthese("WIKI-9001", equipement, ot_cites=ot, ot_sources=ot, statut="validée",
-                            valide_par="Responsable", date_validation="2026-10-19 10:00")
-        self.assertEqual(self.page.evaluate(ECRIRE_ET_CONTROLER, [correcte]), [])
-
-        # Puis trois défauts : OT inventé, OT d'un autre équipement, validée sans validateur, et une
-        # seconde synthèse en cours pour le même équipement.
-        fautive = synthese("WIKI-9002", equipement, ot_cites="OT-1999-9999", ot_sources=autre_ot,
-                           statut="validée")
-        problemes = self.page.evaluate(ECRIRE_ET_CONTROLER, [fautive])
-        self.assertTrue(all(p["gravite"] == "attention" for p in problemes), problemes)
-        self.assertEqual(sorted((p["id"], p["champ"], p["valeur"]) for p in problemes), sorted([
-            ("WIKI-9002", "ot_cites", "OT-1999-9999"),
-            ("WIKI-9002", "ot_sources", autre_ot),
-            ("WIKI-9002", "valide_par", ""),
-            ("WIKI-9002", "statut", "validée"),
-        ]))
-        messages = " ".join(p["message"] for p in problemes)
-        self.assertIn("n'existe pas", messages)
-        self.assertIn("est celui d'un autre équipement", messages)
-        self.assertIn("déjà une synthèse en cours (WIKI-9001)", messages)
-
-        # Une synthèse remplacée ne compte pas comme « en cours ».
-        remplacee = synthese("WIKI-9003", equipement, ot_cites=ot, ot_sources=ot, statut="remplacée")
-        problemes = self.page.evaluate(ECRIRE_ET_CONTROLER, [remplacee])
-        self.assertFalse([p for p in problemes if p["id"] == "WIKI-9003"], problemes)
+            self.assertEqual(len(noms), 24)
+            self.assertNotIn("wiki_syntheses.csv", noms)
+            for nom, entete in ENTETES.items():
+                with self.subTest(fichier=nom):
+                    self.assertEqual(archive.read(nom), BOM + entete)
+            ordres = archive.read("ordres_travail.csv")
+            self.assertTrue(ordres.split(b"\r\n", 1)[0].endswith(b";anomalie_constatee;astuce"))
 
     def test_date_panne_publique(self):
         self.ouvrir_demo("responsable")

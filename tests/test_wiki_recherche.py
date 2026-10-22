@@ -104,7 +104,7 @@ def ot_clos(identifiant, equipement, titre, date_fin="2026-10-01 10:00", **champ
 
 
 def identifiant(resultat):
-    return resultat["otId"] if resultat["type"] == "ot" else resultat["syntheseId"]
+    return resultat["otId"]
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ class TestRequetesDuCorpus(CasRecherche):
                 if requete.get("aucun"):
                     self.assertEqual(tous, [])
 
-    def test_contenu_d_un_resultat_d_ot_et_de_synthese(self):
+    def test_contenu_d_un_resultat_d_ot(self):
         ot = self.chercher("temperature")["portees"][0]["resultats"][0]
         self.assertEqual(ot["type"], "ot")
         self.assertEqual(ot["otId"], "OT-2026-0004")
@@ -223,15 +223,6 @@ class TestRequetesDuCorpus(CasRecherche):
         self.assertEqual(ot["mots"], ["temperature"])
         self.assertGreater(ot["score"], 0)
 
-        reponse = self.chercher("suintement garniture", equipementId="EQ-0004")
-        synthese = next(r for r in reponse["portees"][0]["resultats"] if r["type"] == "synthese")
-        self.assertEqual(synthese["syntheseId"], "WIKI-0001")
-        self.assertNotIn("otId", synthese)
-        self.assertEqual((synthese["equipementId"], synthese["repere"], synthese["date"]), ("EQ-0004", "PO-01", "2026-07-02"))
-        self.assertEqual(synthese["titre"], "[IA] Synthèse validée — PO-01 Pompe centrifuge")
-        self.assertEqual((synthese["cause"], synthese["remede"]), ("", ""))
-        self.assertTrue(synthese["extrait"].startswith("Ce qui revient - Suintement à la garniture"), synthese["extrait"])
-        self.assertEqual(sorted(synthese["mots"]), ["garniture", "suintement"])
 
     def test_requete_et_mots_rendus(self):
         reponse = self.chercher("  Les FUITES du vérin  ")
@@ -413,7 +404,7 @@ class TestIndex(CasRecherche):
         self.assertEqual(self.etat(), {"construit": False, "documents": 0, "constructions": 0})
         self.chercher("fuite")
         clos = sum(1 for ot in CORPUS["tables"]["ordres_travail"] if ot["statut"].startswith("Clôturé"))
-        self.assertEqual(self.etat(), {"construit": True, "documents": clos + 1, "constructions": 1})
+        self.assertEqual(self.etat(), {"construit": True, "documents": clos, "constructions": 1})   # un document par OT clôturé
         self.chercher("bruit", equipementId="EQ-0001")
         self.assertEqual(self.etat()["constructions"], 1)                      # réutilisé
 
@@ -438,15 +429,7 @@ class TestIndex(CasRecherche):
         # codes_defaillance : libellé changé
         self.ecrire("codes_defaillance", {"id": "CD-0010", "libelle": "contacteur grillé"})
         self.assertEqual(self.ids(self.chercher("grillé")), ["OT-2026-0007"])
-        # wiki_syntheses : la synthèse « à valider » est validée
-        self.assertEqual(self.ids(self.chercher("échangeur")), [])
-        self.ecrire("wiki_syntheses", {"id": "WIKI-0002", "statut": "validée", "valide_par": "Responsable démo",
-                                       "date_validation": "2026-10-21 10:00"})
-        self.assertEqual(self.ids(self.chercher("échangeur")), ["WIKI-0002"])
-        # … puis remplacée : elle disparaît
-        self.ecrire("wiki_syntheses", {"id": "WIKI-0002", "statut": "remplacée"})
-        self.assertEqual(self.ids(self.chercher("échangeur")), [])
-        self.assertEqual(self.etat()["constructions"], 5)
+        self.assertEqual(self.etat()["constructions"], 3)
 
     def test_une_autre_table_ne_refait_pas_l_index(self):
         self.chercher("fuite")

@@ -76,8 +76,8 @@ DOSSIER_APPLICATION = os.path.dirname(os.path.abspath(__file__))
 BOM_UTF8 = b'\xef\xbb\xbf'
 FIN_DE_LIGNE = b'\r\n'
 
-# Les 23 tables de la GMAO (fichier = <nom>.csv dans le dossier de données) ; wiki_syntheses
-# depuis le format 3 (lot 6, ARCHITECTURE.md §20.2).
+# Les 24 tables de la GMAO (fichier = <nom>.csv dans le dossier de données) ; wiki_pages et
+# wiki_journal depuis le format 3 (lot 6, ARCHITECTURE.md §20.2).
 # RENVOI CROISÉ : cette liste est recopiée de js/schema.js (Schema.tables).
 # Si vous ajoutez ou renommez une table, modifiez les DEUX fichiers
 # (un test vérifie qu'ils restent cohérents).
@@ -104,7 +104,8 @@ TABLES = (
     'achats',
     'parametres',
     'journal',
-    'wiki_syntheses',
+    'wiki_pages',
+    'wiki_journal',
 )
 
 # Noms autorisés (re.ASCII : \d et \w ne reconnaissent que les caractères ASCII).
@@ -654,7 +655,7 @@ def morceaux_resolus(chemin, dossier):
 
 
 def chemin_table(config, table):
-    """Chemin du CSV d'une table ; 404 si la table n'est pas une des 23 du schéma."""
+    """Chemin du CSV d'une table ; 404 si la table n'est pas une des 24 du schéma."""
     if table not in TABLES:
         raise ErreurHttp(404, 'Table inconnue : %s.' % table)
     return chemin_sous(config.dossier_donnees, table + '.csv')
@@ -914,7 +915,7 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
 # ---------------------------------------------------------------------------
 
 def versions_des_tables(config):
-    """{"table": {"version", "modifie"} ou None} pour les 23 tables."""
+    """{"table": {"version", "modifie"} ou None} pour les 24 tables."""
     resultat = {}
     for table in TABLES:
         chemin = chemin_table(config, table)

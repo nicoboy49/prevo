@@ -14,7 +14,7 @@ ISO, décimaux à virgule, booléens, listes fermées D86, repères « 007 », D
 dans le fichier, références créées D88 a, introuvables refusées, stock initial, gammes et opérations,
 habilitations « Prénom Nom » / « Nom Prénom », codes par famille tolérante, mise à jour non demandée),
 Import.rapportRefus (format §3.1), délégation de l'historique, et la base IDENTIQUE À L'OCTET après
-l'aperçu : les 23 CSV sur le disque (mode serveur) et Donnees.instantane().
+l'aperçu : les 24 CSV sur le disque (mode serveur) et Donnees.instantane().
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_import_regles.py" -v
@@ -1155,7 +1155,7 @@ class TestBaseInchangee(CasNavigateur):
             self.page.wait_for_load_state("networkidle")
             # Les écritures du démarrage de l'application (s'il y en a) sont faites : l'aperçu part de là.
             avant = empreintes()
-            self.assertEqual(len(avant), 23)
+            self.assertEqual(len(avant), 24)
             ecritures.clear()
             instantane ="() => Object.entries(Donnees.instantane()).map(([t, o]) => t + ':' + Array.from(o).join(','))"
             memoire_avant = self.page.evaluate(instantane)

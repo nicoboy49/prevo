@@ -411,7 +411,7 @@ class TestParametres(CasParametres):
             self.assertRegex(telechargement.suggested_filename, r"^prevo-export-\d{4}-\d{2}-\d{2}\.zip$")
             with zipfile.ZipFile(telechargement.path()) as archive:
                 noms_csv = sorted(n for n in archive.namelist() if n.endswith(".csv"))
-                self.assertEqual(len(noms_csv), 23)
+                self.assertEqual(len(noms_csv), 24)
                 self.assertEqual(noms_csv, sorted(c.name for c in DOSSIER_DEMO.glob("*.csv")))
                 self.assertTrue(archive.read("equipements.csv").startswith(BOM.encode("utf-8")))
 
@@ -540,7 +540,7 @@ class TestSauvegarde(CasParametres):
         with page.expect_download() as attente:
             page.click("#btn-export-zip")
         with zipfile.ZipFile(attente.value.path()) as archive:
-            self.assertEqual(len([n for n in archive.namelist() if n.endswith(".csv")]), 23)
+            self.assertEqual(len([n for n in archive.namelist() if n.endswith(".csv")]), 24)
 
 
 # ---------------------------------------------------------------------------

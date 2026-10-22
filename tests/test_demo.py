@@ -2,7 +2,7 @@
 tests/fixtures/demo-scenarios.json.
 
 Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brief §13) :
-  - 23 fichiers CSV : BOM, séparateur « ; », fins de ligne CRLF, en-têtes identiques à js/schema.js ;
+  - 24 fichiers CSV : BOM, séparateur « ; », fins de ligne CRLF, en-têtes identiques à js/schema.js ;
   - références (clés étrangères) valides, valeurs des listes valides ;
   - volumes du brief §13, historique de 13 mois et présence des objets des scénarios de recette ;
   - champs du format v2 renseignés (valeur de remplacement, code symptôme, anomalies de préventif) ;
@@ -16,7 +16,7 @@ Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brie
     §16.3 écrit ici (réglages par défaut, décisions du journal comprises) : S1, S2, S3 (case cochée et DI
     liée), S4, refus pour la seule criticité A, cas sous le seuil, suggestion ignorée puis revenue ;
   - champs protégés par une apostrophe (§3.2) ;
-  - js/demo-donnees.js chargé dans Chromium : 23 tables, texte identique aux CSV ; démo en file://
+  - js/demo-donnees.js chargé dans Chromium : 24 tables, texte identique aux CSV ; démo en file://
     chargée vite et sans erreur au « Contrôle de la base » ;
   - reproductibilité (deux exécutions = fichiers identiques, et fichiers livrés à jour) ;
   - options --volume 500,5000 (moins de 60 s, gammes, compteurs, mouvements, achats) et --mois 6.
@@ -75,7 +75,7 @@ TABLES = [
     'ot_temps', 'gammes', 'gamme_operations', 'articles', 'article_equipement', 'mouvements_stock',
     'techniciens', 'habilitations', 'compteurs', 'releves', 'controles_reglementaires',
     'codes_defaillance', 'fournisseurs', 'achats', 'parametres', 'journal',
-    'wiki_syntheses']                                       # format 3 (lot 6, ARCHITECTURE.md §20.2)
+    'wiki_pages', 'wiki_journal']                           # format 3 (lot 6, ARCHITECTURE.md §20.2)
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +340,7 @@ def suggestions_ouvertes(t, aujourdhui=JOUR_REFERENCE, seuil=SEUIL_PANNES, jusqu
 # ---------------------------------------------------------------------------
 
 class TestFichiersCsv(unittest.TestCase):
-    """Format des 23 fichiers (§3.1)."""
+    """Format des 24 fichiers (§3.1)."""
 
     def test_23_fichiers_presents(self):
         presents = sorted(p.name for p in DOSSIER_DEMO.glob('*.csv'))

@@ -1,28 +1,31 @@
 'use strict';
-// Wiki (1/5) — wiki de maintenance (lot 6, ARCHITECTURE.md §20) : crée l'objet Wiki. Constantes, forme
-// et contrôles du texte d'une synthèse [IA] (§20.4) et couche calculée d'une page (Wiki.page, §20.3) :
-// des fonctions pures, sans écriture. Les fichiers suivants (wiki-recherche.js … wiki-ecrans.js)
-// complètent l'objet.
+// Wiki (1/8) — wiki de maintenance (lot 6 refondu, ARCHITECTURE.md §20) : crée l'objet Wiki. Constantes
+// (§20.1), forme comparable, vocabulaire de la sécurité (D97) et couche calculée de la page d'un
+// équipement (Wiki.pageEquipement, §20.3) : des fonctions pures, sans écriture. Les fichiers suivants
+// (wiki-calculs.js … wiki-journal-ecrans.js) complètent l'objet.
 
 const Wiki = (() => {
 
-  // Seuils du lot (D100), documentés dans le guide.
+  // Seuils du lot (D100, §20.1), documentés dans le guide.
   const SEUILS = Object.freeze({
-    otMinimum: 5,          // OT correctifs clôturés à partir desquels une synthèse peut être proposée (et cas d'un symptôme)
-    otEnvoyesMax: 40,      // OT envoyés à l'IA au plus (les plus récents)
-    pucesMax: 6,           // puces d'une synthèse
-    motsMax: 150,          // mots d'une synthèse (citations exclues)
+    pagesCreeesMax: 3,     // pages créées par un OT ingéré
+    phrasesMax: 12,        // phrases d'une page
+    motsMax: 250,          // mots d'une page (citations exclues)
+    pagesEnvoyeesMax: 8,   // pages jointes à une requête d'ingestion
+    catalogueMax: 400,     // titres du catalogue envoyé
+    agentsSimultanes: 5,   // requêtes d'ingestion en même temps (D112)
+    astuceMax: 500,        // caractères de l'astuce d'un OT (D110)
+    otMinimum: 5,          // cas d'un symptôme à partir desquels ses causes sont montrées (D25)
     recidiveJours: 30,     // récidive : même équipement, même cause, dans les 30 jours après la clôture
     dernieres: 10,         // dernières interventions montrées
     symptomesMax: 5,       // symptômes les plus fréquents montrés
+    contradictionAncienneJours: 30,   // contradiction ouverte signalée au contrôle du wiki (D108)
+    demoAValiderJours: 14, // démo : propositions des 14 derniers jours d'intervention laissées « à valider »
   });
 
   // ===========================================================================================
-  // 1. Forme et contrôles du texte d'une synthèse (§20.4, D97)
+  // 1. Forme comparable et vocabulaire de la sécurité (D97) ; balisage et contrôles : wiki-texte.js
   // ===========================================================================================
-
-  // Rubriques fixes, dans l'ordre où elles s'écrivent.
-  const RUBRIQUES = Object.freeze(['Ce qui revient', 'Ce qui a réglé le problème', 'À surveiller']);
 
   // Vocabulaire de la sécurité et de la consignation (D97), en forme comparable (sans accents ni
   // majuscules, apostrophes et ponctuation devenues des espaces). Une entrée finie par « * » est un
@@ -41,13 +44,11 @@ const Wiki = (() => {
   ]);
 
   const MESSAGE_SECURITE_IA = 'L\'IA ne rédige jamais de consigne de sécurité : voir la consignation de l\'équipement';
-  const MESSAGE_SECURITE_MAIN = 'Le bloc [IA] ne contient pas de consigne de sécurité : elle se saisit dans la '
+  const MESSAGE_SECURITE_MAIN = 'Le wiki ne contient pas de consigne de sécurité : elle se saisit dans la '
     + 'consignation de l\'équipement';
 
-  // Citation d'un OT dans une puce : « [OT-2026-0042] ».
+  // Citation d'un OT dans une phrase : « [OT-2026-0042] ».
   const MOTIF_CITATION = /\[(OT-\d{4}-\d{4,})\]/g;
-  // Début d'une puce : tiret, astérisque ou puce typographique, suivi d'un espace.
-  const MOTIF_DEBUT_PUCE = /^[-*•]\s+/;
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -68,7 +69,7 @@ const Wiki = (() => {
     return sansDoublon(Array.from(String(valeur || '').matchAll(MOTIF_CITATION), (m) => m[1]));
   }
 
-  // Texte d'une puce sans ses citations, espaces réduits.
+  // Texte d'une phrase sans ses citations, espaces réduits.
   function sansCitations(valeur) {
     return String(valeur || '').replace(MOTIF_CITATION, ' ').replace(/\s+/g, ' ').trim();
   }
@@ -76,54 +77,6 @@ const Wiki = (() => {
   // Nombre de mots d'un texte (citations exclues) : suites de caractères qui portent une lettre ou un chiffre.
   function nombreDeMots(valeur) {
     return sansCitations(valeur).split(' ').filter((mot) => /[\p{L}\p{N}]/u.test(mot)).length;
-  }
-
-  // Rubrique reconnue dans une ligne (casse, accents, « : » final et ponctuation ignorés), ou null.
-  function rubriqueDe(ligne) {
-    const cle = comparable(ligne);
-    return RUBRIQUES.find((rubrique) => comparable(rubrique) === cle) || null;
-  }
-
-  /**
-   * Puces → texte enregistré (champ `texte`) : les rubriques non vides dans l'ordre de RUBRIQUES, chacune
-   * sur sa ligne, suivie de ses puces « - <texte> [OT-…] [OT-…] ». Les citations écrites dans le texte
-   * d'une puce sont reportées en fin de ligne avec celles de `ot`.
-   */
-  function texteDeSynthese(puces) {
-    const lignes = [];
-    RUBRIQUES.forEach((rubrique) => {
-      const siennes = (puces || []).filter((puce) => puce && puce.rubrique === rubrique);
-      if (!siennes.length) return;
-      lignes.push(rubrique);
-      siennes.forEach((puce) => {
-        const ot = sansDoublon(citations(puce.texte).concat((puce.ot || []).map(texte).filter(Boolean)));
-        lignes.push(['-', sansCitations(puce.texte)].concat(ot.map((id) => '[' + id + ']')).join(' '));
-      });
-    });
-    return lignes.join('\n');
-  }
-
-  /**
-   * Texte enregistré → { puces: [{ rubrique, texte, ot }], horsForme: [numéros de ligne] } : une ligne est
-   * un titre de rubrique, une puce (sous une rubrique) ou vide ; toute autre ligne est « hors forme ».
-   */
-  function lireSynthese(valeur) {
-    const puces = [];
-    const horsForme = [];
-    let rubrique = null;
-    String(valeur || '').replace(/\r\n?/g, '\n').split('\n').forEach((ligne, rang) => {
-      const propre = ligne.trim();
-      if (!propre) return;
-      const titre = rubriqueDe(propre);
-      if (titre) { rubrique = titre; return; }
-      if (rubrique && MOTIF_DEBUT_PUCE.test(propre)) {
-        const contenu = propre.replace(MOTIF_DEBUT_PUCE, '');
-        puces.push({ rubrique, texte: sansCitations(contenu), ot: citations(contenu) });
-        return;
-      }
-      horsForme.push(rang + 1);
-    });
-    return { puces, horsForme };
   }
 
   /**
@@ -145,53 +98,14 @@ const Wiki = (() => {
     return sansDoublon(trouves);
   }
 
-  /**
-   * Contrôles du §20.4, pour une réponse de l'IA mise en forme (origine 'ia') comme pour un texte corrigé
-   * à la main (origine 'main') : forme, 1 à pucesMax puces, motsMax mots au plus (citations exclues), au
-   * moins un OT cité par puce, chaque OT cité parmi `otPermis`, aucun terme du vocabulaire de la
-   * sécurité. → { ok, raisons: [texte], puces, otCites }.
-   */
-  function controlerSynthese(valeur, otPermis, options) {
-    const origine = options && options.origine === 'main' ? 'main' : 'ia';
-    const lu = lireSynthese(valeur);
-    const raisons = [];
-    if (lu.horsForme.length) {
-      raisons.push((lu.horsForme.length > 1 ? 'Lignes ' : 'Ligne ') + lu.horsForme.join(', ')
-        + ' hors de la forme : chaque ligne est un titre de rubrique (« ' + RUBRIQUES.join(' », « ')
-        + ' ») ou une puce « - … » qui cite ses OT entre crochets.');
-    }
-    if (!lu.puces.length) raisons.push('Aucune puce : la synthèse est vide.');
-    if (lu.puces.length > SEUILS.pucesMax) {
-      raisons.push(lu.puces.length + ' puces : ' + SEUILS.pucesMax + ' au plus.');
-    }
-    const mots = lu.puces.reduce((total, puce) => total + nombreDeMots(puce.texte), 0);
-    if (mots > SEUILS.motsMax) raisons.push(mots + ' mots : ' + SEUILS.motsMax + ' au plus (citations non comptées).');
-    lu.puces.forEach((puce, rang) => {
-      if (!puce.texte) raisons.push('Puce ' + (rang + 1) + ' : elle est vide.');
-      else if (!puce.ot.length) raisons.push('Puce ' + (rang + 1) + ' : elle ne cite aucun OT (« ' + puce.texte.slice(0, 60) + ' »).');
-    });
-    const otCites = sansDoublon([].concat(...lu.puces.map((puce) => puce.ot)));
-    const permis = new Set((otPermis || []).map(texte));
-    const inconnus = otCites.filter((id) => !permis.has(id));
-    if (inconnus.length) {
-      raisons.push((inconnus.length > 1 ? 'OT cités absents des OT ' : 'OT cité absent des OT ')
-        + (origine === 'ia' ? 'envoyés à l\'IA' : 'de cet équipement') + ' : ' + inconnus.join(', ') + '.');
-    }
-    const termes = termesDeSecurite(valeur);
-    if (termes.length) {
-      raisons.push((origine === 'ia' ? MESSAGE_SECURITE_IA : MESSAGE_SECURITE_MAIN) + ' (« ' + termes.join(' », « ') + ' »).');
-    }
-    return { ok: raisons.length === 0, raisons, puces: lu.puces, otCites };
-  }
-
   return {
-    SEUILS, RUBRIQUES, VOCABULAIRE_SECURITE, MESSAGE_SECURITE_IA, MESSAGE_SECURITE_MAIN,
-    comparable, citations, nombreDeMots, texteDeSynthese, lireSynthese, termesDeSecurite, controlerSynthese,
+    SEUILS, VOCABULAIRE_SECURITE, MESSAGE_SECURITE_IA, MESSAGE_SECURITE_MAIN,
+    comparable, citations, sansCitations, nombreDeMots, termesDeSecurite,
   };
 })();
 
 // ===========================================================================================
-// 2. Couche calculée d'une page (§20.3) : Wiki.page — tâche T96, ajoutée sous ce bloc.
+// 2. Couche calculée de la page d'un équipement (§20.3) : Wiki.pageEquipement — tâche T96.
 // ===========================================================================================
 
 // Tout est relu dans Donnees.lignes à chaque appel : rien n'est écrit, rien n'est gardé entre deux
@@ -282,7 +196,6 @@ Object.assign(Wiki, (() => {
       ordresParEquipement: grouper(Donnees.lignes('ordres_travail'), (ot) => texte(ot.equipement_id)),
       mouvementsParOt: grouper(Donnees.lignes('mouvements_stock'), (mouvement) => texte(mouvement.ot_id)),
       articles: new Map(Donnees.lignes('articles').map((article) => [texte(article.id), article])),
-      synthesesParEquipement: grouper(Donnees.lignes('wiki_syntheses'), (synthese) => texte(synthese.equipement_id)),
       libelles,
     };
   }
@@ -434,28 +347,6 @@ Object.assign(Wiki, (() => {
       }));
   }
 
-  function plusRecenteDabord(a, b) {
-    return comparer(texte(b.date_proposition), texte(a.date_proposition)) || comparer(texte(b.id), texte(a.id));
-  }
-
-  /**
-   * Synthèse courante (la plus récente non « remplacée ») et son état : aucune, a_valider, validee ou
-   * a_revoir (validée, et `depuis` > 0 : elle reste validée). depuis = OT clôturés de l'équipement après
-   * date_proposition (date de clôture) et absents de ot_sources. → { synthese, etat, remplacees }.
-   */
-  function etatSynthese(ctx, equipementId, clotures) {
-    const syntheses = ctx.synthesesParEquipement.get(equipementId) || [];
-    const remplacees = syntheses.filter((s) => texte(s.statut) === 'remplacée').sort(plusRecenteDabord);
-    const courante = syntheses.filter((s) => texte(s.statut) !== 'remplacée').sort(plusRecenteDabord)[0];
-    const copies = remplacees.map((s) => Object.assign({}, s));
-    if (!courante) return { synthese: null, etat: 'aucune', remplacees: copies };
-    const sources = new Set(texte(courante.ot_sources).split(';').map(texte).filter(Boolean));
-    const proposee = texte(courante.date_proposition);
-    const depuis = clotures.filter((ot) => !sources.has(texte(ot.id)) && dateDeCloture(ot) > proposee).length;
-    const etat = texte(courante.statut) !== 'validée' ? 'a_valider' : (depuis > 0 ? 'a_revoir' : 'validee');
-    return { synthese: Object.assign({}, courante, { etat, depuis }), etat, remplacees: copies };
-  }
-
   /** Cas dont la panne tombe dans les 365 jours qui finissent le jour de `maintenant`. */
   function pannesDesDouzeMois(ctx, ordres, aujourdhui) {
     const debut = jourPlus(aujourdhui, 1 - JOURS_DE_LA_FENETRE);
@@ -471,10 +362,10 @@ Object.assign(Wiki, (() => {
   }
 
   /**
-   * Page d'un équipement (§20.3), ou null s'il n'existe pas. options.maintenant : 'AAAA-MM-JJ[ HH:MM]'
+   * Couche calculée de la page d'un équipement (§20.3), ou null s'il n'existe pas. options.maintenant : 'AAAA-MM-JJ[ HH:MM]'
    * (défaut : aujourd'hui), utilisé seulement par pannes12Mois.
    */
-  function page(equipementId, options) {
+  function pageEquipement(equipementId, options) {
     const id = texte(equipementId);
     const equipement = Donnees.trouver('equipements', id);
     if (!equipement) return null;
@@ -489,7 +380,6 @@ Object.assign(Wiki, (() => {
     // Consignation telle quelle (texte et document de la fiche) ; null seulement si les deux sont vides.
     const consignation = equipement.consignation === undefined ? '' : String(equipement.consignation);
     const documentConsignation = equipement.document === undefined ? '' : String(equipement.document);
-    const synthese = etatSynthese(ctx, id, clotures);
     return {
       equipement: {
         id, repere: texte(equipement.repere), designation: texte(equipement.designation),
@@ -506,17 +396,12 @@ Object.assign(Wiki, (() => {
         equipements: jumeaux.map((autre) => ({ id: texte(autre.id), repere: texte(autre.repere) })),
         pannes: pannesDe(ctx, [id].concat(jumeaux.map((autre) => texte(autre.id)))),
       } : null,
-      synthese: synthese.synthese,
-      etat: synthese.etat,
-      remplacees: synthese.remplacees,
-      // D100 précisé par Nicolas (2026-10-22) : 5 OT CORRECTIFS clôturés (12 synthèses dans la démo).
-      peutProposer: clotures.filter(estCorrectif).length >= SEUILS.otMinimum,
     };
   }
 
   /**
    * Liste des pages (écran #/wiki) : un élément par équipement qui a au moins un OT clôturé,
-   * { equipementId, repere, designation, pannes12Mois, etat }, par pannes12Mois décroissant puis repère.
+   * { equipementId, repere, designation, pannes12Mois }, par pannes12Mois décroissant puis repère.
    */
   function listePages(options) {
     const ctx = contexteWiki();
@@ -529,12 +414,12 @@ Object.assign(Wiki, (() => {
       if (!clotures.length) return;
       pages.push({
         equipementId: id, repere: texte(equipement.repere), designation: texte(equipement.designation),
-        pannes12Mois: pannesDesDouzeMois(ctx, ordres, aujourdhui), etat: etatSynthese(ctx, id, clotures).etat,
+        pannes12Mois: pannesDesDouzeMois(ctx, ordres, aujourdhui),
       });
     });
     return pages.sort((a, b) => b.pannes12Mois - a.pannes12Mois || comparer(a.repere, b.repere)
       || comparer(a.equipementId, b.equipementId));
   }
 
-  return { page, listePages, MENTION_STATISTIQUE: CausesFrequentes.MENTION, MENTION_PISTE: CausesFrequentes.MENTION_PISTE };
+  return { pageEquipement, listePages, MENTION_STATISTIQUE: CausesFrequentes.MENTION, MENTION_PISTE: CausesFrequentes.MENTION_PISTE };
 })());

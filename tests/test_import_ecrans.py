@@ -3,7 +3,7 @@
 Ce qui est vérifié, dans l'application complète, avec les vrais fichiers d'essai (tests/fixtures/import/,
 déposés par set_input_files) et un collage :
   - mode serveur : les cinq étapes sur equipements.xlsx (feuille, ligne d'en-tête proposée, correspondance,
-    aperçu, bilan) ; les 23 CSV restent identiques à l'octet et aucune requête d'écriture ne part tant que
+    aperçu, bilan) ; les 24 CSV restent identiques à l'octet et aucune requête d'écriture ne part tant que
     « Importer » n'est pas cliqué ; import (sauvegarde « …_avant-import », progression, résultat) puis
     « Annuler cet import » avec confirmation : seules les lignes du journal restent ;
   - démo : un collage (fournisseurs.tsv) de bout en bout puis annulation (tables rendues à l'octet) ;
@@ -239,7 +239,7 @@ class TestServeur(CasImport):
             self.page.on("request", lambda r: ecritures.append(r.method + " " + r.url) if r.method != "GET" else None)
             page = self.ouvrir_serveur(serveur)
             avant = empreintes(serveur.dossier)
-            self.assertEqual(len(avant), 23)
+            self.assertEqual(len(avant), 24)
             ecritures.clear()
 
             # 1. Quoi : les types et leur aide

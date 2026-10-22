@@ -42,8 +42,10 @@ ROLES = {
     "achats": "Demandes d'achat et commandes.",
     "parametres": "Réglages partagés de l'atelier (une ligne par clé).",
     "journal": "Journal des modifications (qui, quand, quoi) ; on n'y fait qu'ajouter.",
-    "wiki_syntheses": ("Synthèses [IA] du wiki de maintenance (format 3) : au plus une en cours par équipement "
-                       "(« à valider » ou « validée ») ; les précédentes restent, « remplacées »."),
+    "wiki_pages": ("Pages du wiki de maintenance (format 3) : équipements, composants, modes de défaillance et "
+                   "savoir-faire ; seul le texte validé y est enregistré."),
+    "wiki_journal": ("Journal du wiki (format 3) : OT en file, propositions de l'IA et leur décision, écritures "
+                     "à la main, contradictions tranchées."),
 }
 
 TYPES = [

@@ -1,7 +1,7 @@
 'use strict';
-// Wiki (2/5) — recherche dans l'historique, sans IA (lot 6, ARCHITECTURE.md §20.6, décision D99 a) :
-// index des OT clôturés (avec la DI d'origine et les libellés de leurs codes) et des synthèses
-// validées, mots comparables, lexique du dépannage, classement BM25, portées équipement → même marque
+// Wiki (4/8) — recherche dans l'historique, sans IA (lot 6, ARCHITECTURE.md §20.8, décision D99 a) :
+// index des OT clôturés (avec la DI d'origine et les libellés de leurs codes ; les astuces et les pages
+// validées arrivent avec T116), mots comparables, lexique du dépannage, classement BM25, portées équipement → même marque
 // et modèle → parc. Complète l'objet Wiki (créé par wiki-regles.js).
 //
 // Tout se passe dans la page : aucune requête réseau, aucune écriture. L'index est construit à la
@@ -12,10 +12,8 @@
 //  - `extrait` est du TEXTE BRUT ; chaque résultat porte aussi `mots` (les formes trouvées dans le
 //    document) : Wiki.surligner(extrait, mots) en fait un fragment UI.html, <mark> autour des mots et
 //    tout le reste échappé (jamais de HTML venu des données) ;
-//  - chaque résultat porte aussi `repere` (repère de l'équipement) ; une synthèse porte `syntheseId`
-//    et le titre « [IA] Synthèse validée — <repère> <désignation> » ; `cause` et `remede` sont les
-//    libellés des codes (vides pour une synthèse) ; `date` = AAAA-MM-JJ (fin des travaux, sinon
-//    clôture technique, sinon création ; pour une synthèse : validation, sinon proposition) ;
+//  - chaque résultat porte aussi `repere` (repère de l'équipement) ; `cause` et `remede` sont les
+//    libellés des codes ; `date` = AAAA-MM-JJ (fin des travaux, sinon clôture technique, sinon création) ;
 //  - avec un équipement, les trois portées sont toujours rendues dans l'ordre, même vides ;
 //  - « même marque et modèle » : comparaison sans casse ni espaces, comme CausesFrequentes (§14.5),
 //    équipements actifs ou non, l'équipement lui-même exclu ; marque ou modèle vide → portée vide ;
@@ -38,9 +36,8 @@ Object.assign(Wiki, (() => {
   });
 
   const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
-  const STATUT_VALIDEE = 'validée';
   // Tables lues par l'index : il est refait quand l'une d'elles change.
-  const TABLES_INDEXEES = ['ordres_travail', 'demandes', 'codes_defaillance', 'wiki_syntheses'];
+  const TABLES_INDEXEES = ['ordres_travail', 'demandes', 'codes_defaillance', 'wiki_pages'];
   const AVANT_LE_MOT = 50;   // caractères gardés, dans l'extrait, avant le premier mot trouvé
 
   // Mots vides, en forme comparable (minuscules, sans accents) : retirés des textes et des requêtes.
@@ -227,15 +224,6 @@ Object.assign(Wiki, (() => {
     return documents;
   }
 
-  /** Un document par synthèse « validée » (ni « à valider » ni « remplacée ») : il mène à la page. */
-  function documentsDesSyntheses(syntheses) {
-    return syntheses.filter((synthese) => texte(synthese.statut) === STATUT_VALIDEE).map((synthese) => ({
-      type: 'synthese', id: synthese.id, equipementId: texte(synthese.equipement_id),
-      date: (texte(synthese.date_validation) || texte(synthese.date_proposition)).slice(0, 10),
-      titre: '', cause: '', remede: '', corps: [synthese.texte], champs: [synthese.texte],
-    }));
-  }
-
   /**
    * Index inversé : pour chaque mot, la liste à plat [numéro de document, fréquence, …] ; longueur de
    * chaque document (nombre de mots indexés) et longueur moyenne (BM25).
@@ -244,8 +232,7 @@ Object.assign(Wiki, (() => {
     const sources = {};
     TABLES_INDEXEES.forEach((nom) => { sources[nom] = Donnees.lignes(nom); });
     const libelle = lecteurDeLibelles(sources.codes_defaillance);
-    const documents = documentsDesOt(sources.ordres_travail, sources.demandes, libelle)
-      .concat(documentsDesSyntheses(sources.wiki_syntheses));
+    const documents = documentsDesOt(sources.ordres_travail, sources.demandes, libelle);
     const postings = new Map();
     let longueurTotale = 0;
     documents.forEach((documentIndexe, numero) => {
@@ -472,10 +459,7 @@ Object.assign(Wiki, (() => {
       equipementId: source.equipementId, repere, date: source.date, cause: source.cause, remede: source.remede,
       extrait: extraitDe(source.corps, trouve.mots), mots: trouve.mots.slice(), score: trouve.score,
     };
-    if (source.type === 'ot') return Object.assign({ type: 'ot', otId: source.id, titre: source.titre }, commun);
-    const nom = [repere, equipement ? texte(equipement.designation) : ''].filter(Boolean).join(' ');
-    return Object.assign({ type: 'synthese', syntheseId: source.id,
-      titre: '[IA] Synthèse validée' + (nom ? ' — ' + nom : '') }, commun);
+    return Object.assign({ type: 'ot', otId: source.id, titre: source.titre }, commun);
   }
 
   /**

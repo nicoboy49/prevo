@@ -46,7 +46,7 @@ STATUTS_FERMES = ("Clôturé techniquement", "Clôturé administrativement", "An
 # Deux postes qui génèrent en même temps : le second voit sa première écriture refusée (409), relit
 # la table et n'écrit plus rien. Ce conflit est voulu ; toute autre erreur fait échouer le test.
 CONFLIT_GENERATION = re.compile(r"status of 409.*/api/csv/(ordres_travail|ot_operations)")
-ERREUR_CSV_ABSENT = re.compile(r"status of 404.*/api/csv/")       # base vide : les 23 CSV manquent
+ERREUR_CSV_ABSENT = re.compile(r"status of 404.*/api/csv/")       # base vide : les 24 CSV manquent
 TOAST_GENERATION = re.compile(r"^\d+ OT préventifs? générés?\.$")
 
 

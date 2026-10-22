@@ -538,7 +538,7 @@ class TestStockageDossier(CasNavigateur):
         self.choisir_dossier()
         avant = self.reussir("listerVersions")
         noms = self.page.evaluate("Schema.nomsTables()")
-        self.assertEqual(len(noms), 23)
+        self.assertEqual(len(noms), 24)
         self.assertEqual(sorted(avant.keys()), sorted(noms))
         self.assertTrue(all(v is None for v in avant.values()))
 

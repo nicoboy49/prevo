@@ -3,7 +3,8 @@
 Le schéma est chargé dans Chromium (page-vide.html en file://) puis lu avec JSON.stringify(Schema).
 Chaque table commence exactement par les champs du brief §6, suivis exactement des champs du
 tableau d'ARCHITECTURE.md §14.1 (version 2 du format, attribut depuisVersion: 2). Après les 22 tables du
-brief vient la table du format 3, wiki_syntheses (§20.2, attribut depuisVersion: 3 sur la table).
+brief viennent les tables du format 3, wiki_pages et wiki_journal (§20.2, attribut depuisVersion: 3 sur la
+table), et ordres_travail gagne la colonne astuce (depuisVersion: 3, en fin de table).
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_schema.py" -v
 """
@@ -100,19 +101,37 @@ IDENTIFIANTS_ATTENDUS = {
     "habilitations": ("HAB-", 4, False), "compteurs": ("CPT-", 4, False),
     "releves": ("REL-", 6, False), "controles_reglementaires": ("CTR-", 4, False),
     "codes_defaillance": ("CD-", 4, False), "achats": ("ACH-", 4, False),
-    "wiki_syntheses": ("WIKI-", 4, False),
+    "wiki_pages": ("WP-", 4, False), "wiki_journal": ("WJ-", 5, False),
 }
 
-# Table ajoutée par le format 3 (ARCHITECTURE.md §20.2) : (champ, type, libellé), dans l'ordre.
+# Tables ajoutées par le format 3 (ARCHITECTURE.md §20.2) : (champ, type, libellé), dans l'ordre.
 TABLES_FORMAT_3 = {
-    "wiki_syntheses": [
-        ("id", "id", "Identifiant"), ("equipement_id", "ref", "Équipement"), ("texte", "texte_long", "Synthèse"),
-        ("ot_cites", "texte", "OT cités"), ("ot_sources", "texte_long", "OT envoyés à l'IA"),
-        ("statut", "choix", "Statut"), ("modele", "texte", "Modèle"),
-        ("date_proposition", "date_heure", "Proposée le"), ("corrigee_par", "texte", "Corrigée par"),
-        ("date_modification", "date_heure", "Modifiée le"), ("valide_par", "texte", "Validée par"),
-        ("date_validation", "date_heure", "Validée le"),
+    "wiki_pages": [
+        ("id", "id", "Identifiant"), ("type", "choix", "Type"), ("titre", "texte", "Titre"),
+        ("cle", "texte", "Clé (titre comparable)"), ("equipement_id", "ref", "Équipement"),
+        ("article_id", "ref", "Article"), ("cause_code", "ref", "Code cause"),
+        ("rattache_a", "ref", "Rattaché à la page"), ("texte", "texte_long", "Texte"),
+        ("ot_cites", "texte", "OT cités"), ("liens", "texte", "Pages liées"), ("version", "entier", "Version"),
+        ("origine", "choix", "Origine"), ("modele", "texte", "Modèle"),
+        ("derniere_entree", "ref", "Dernière entrée appliquée"), ("valide_par", "texte", "Validé par"),
+        ("valide_le", "date_heure", "Validé le"), ("cree_le", "date_heure", "Créée le"),
+        ("modifie_le", "date_heure", "Modifiée le"), ("statut", "choix", "Statut"),
     ],
+    "wiki_journal": [
+        ("id", "id", "Identifiant"), ("nature", "choix", "Nature"), ("ot_id", "ref", "Ordre de travail"),
+        ("date_intervention", "date_heure", "Date d'intervention"), ("statut", "choix", "Statut"),
+        ("anterieure", "booleen", "Intervention antérieure"), ("ordre", "entier", "Rang de traitement"),
+        ("pages", "texte", "Pages concernées"), ("changements", "texte_long", "Changements"),
+        ("contradictions", "texte_long", "Contradictions"), ("raisons", "texte_long", "Raisons du refus"),
+        ("modele", "texte", "Modèle"), ("essais", "entier", "Essais"), ("cree_le", "date_heure", "Créée le"),
+        ("traite_le", "date_heure", "Traitée le"), ("decide_par", "texte", "Décidé par"),
+        ("decide_le", "date_heure", "Décidé le"), ("motif", "texte_long", "Motif"),
+    ],
+}
+
+# Colonnes ajoutées par le format 3 à des tables existantes (§20.2) : (champ, type, libellé), en fin de table.
+CHAMPS_FORMAT_3 = {
+    "ordres_travail": [("astuce", "texte_long", "Astuce pour la prochaine fois")],
 }
 
 CHAMPS_PROTEGES = {
@@ -129,7 +148,8 @@ OBLIGATOIRES = {
     ("techniciens", "nom"),
     ("codes_defaillance", "famille"), ("codes_defaillance", "code"), ("codes_defaillance", "libelle"),
     ("localisations", "libelle"), ("localisations", "type"),
-    ("wiki_syntheses", "equipement_id"),
+    ("wiki_pages", "type"), ("wiki_pages", "titre"),
+    ("wiki_journal", "nature"), ("wiki_journal", "statut"),
 }
 
 # Valeurs canoniques des listes : (table, champ) -> valeurs, accents compris
@@ -149,7 +169,12 @@ VALEURS_CANONIQUES = {
     ("mouvements_stock", "type"): ["entrée", "sortie", "inventaire", "retour"],
     ("achats", "statut"): ["demandée", "commandée", "reçue"],
     ("gammes", "declencheur"): ["date", "compteur", "seuil"],
-    ("wiki_syntheses", "statut"): ["à valider", "validée", "remplacée"],
+    ("wiki_pages", "type"): ["équipement", "composant", "mode", "savoir-faire"],
+    ("wiki_pages", "origine"): ["IA", "manuel", "IA et manuel"],
+    ("wiki_pages", "statut"): ["active", "archivée"],
+    ("wiki_journal", "nature"): ["ingestion", "manuel", "décision"],
+    ("wiki_journal", "statut"): ["en file", "à valider", "validée", "rejetée", "à refaire", "refusée",
+                                  "rien à ajouter", "appliquée"],
 }
 
 # Tous les champs « choix » du schéma doivent figurer ci-dessus (et inversement)
@@ -158,11 +183,12 @@ TYPES_PAR_NOM = {
              "date_obtention", "date_echeance", "derniere_date", "prochaine_date",
              "date_reception"],
     "date_heure": ["date_decision", "date_creation", "date_debut", "date_fin",
-                   "date_cloture_tech", "date_cloture_admin", "date_proposition", "date_modification",
-                   "date_validation"],
+                   "date_cloture_tech", "date_cloture_admin", "valide_le", "cree_le", "modifie_le",
+                   "date_intervention", "traite_le", "decide_le"],
     "booleen": ["actif", "arret_production", "remise_service", "fait", "critique",
-                "observations_levees", "anomalie_constatee"],
-    "entier": ["ordre", "delai_jours", "periodicite_jours", "avance_jours", "periodicite_mois"],
+                "observations_levees", "anomalie_constatee", "anterieure"],
+    "entier": ["ordre", "delai_jours", "periodicite_jours", "avance_jours", "periodicite_mois", "version",
+               "essais"],
     "decimal": ["heures_fonct_jour", "temps_prevu_h", "duree_arret_h", "cout_soustraitance",
                 "quantite", "quantite_prevue", "heures", "stock", "stock_securite",
                 "point_commande", "qte_commande", "prix_unitaire", "taux_horaire",
@@ -170,7 +196,7 @@ TYPES_PAR_NOM = {
                 "releve_derniere_realisation", "valeur", "valeur_remplacement"],
     "texte_long": ["description", "travail_a_faire", "consignes", "compte_rendu", "consignation",
                    "observations", "commentaire", "motif_decision", "motif_attente",
-                   "motif_annulation", "ot_sources"],
+                   "motif_annulation", "astuce", "changements", "contradictions", "raisons", "motif"],
     "document": [],
 }
 
@@ -185,7 +211,7 @@ TYPES_PAR_TABLE_ET_NOM = {
     ("equipements", "document"): "document", ("demandes", "photo"): "document",
     ("controles_reglementaires", "rapport"): "document",
     ("journal", "id_ligne"): "texte", ("journal", "table"): "texte",
-    ("wiki_syntheses", "texte"): "texte_long",
+    ("wiki_pages", "texte"): "texte_long",
 }
 
 # Références : (table, champ) -> (table visée, champCible, filtre)
@@ -224,7 +250,12 @@ REFERENCES_ATTENDUES = {
     ("controles_reglementaires", "equipement_id"): ("equipements", None, None),
     ("achats", "article_id"): ("articles", None, None),
     ("achats", "fournisseur_id"): ("fournisseurs", None, None),
-    ("wiki_syntheses", "equipement_id"): ("equipements", None, None),                        # v3
+    ("wiki_pages", "equipement_id"): ("equipements", None, None),                            # v3
+    ("wiki_pages", "article_id"): ("articles", None, None),                                # v3
+    ("wiki_pages", "cause_code"): ("codes_defaillance", "code", {"famille": "cause"}),        # v3
+    ("wiki_pages", "rattache_a"): ("wiki_pages", None, None),                              # v3
+    ("wiki_pages", "derniere_entree"): ("wiki_journal", None, None),                       # v3
+    ("wiki_journal", "ot_id"): ("ordres_travail", None, None),                             # v3
 }
 
 
@@ -243,7 +274,7 @@ class TestSchema(CasNavigateur):
         return {c["nom"]: c for c in self.tables[nom_table]["champs"]}
 
     def tous_les_champs(self):
-        """Itère sur (nom de table, champ) pour les 23 tables."""
+        """Itère sur (nom de table, champ) pour les 24 tables."""
         for nom_table, table in self.tables.items():
             for champ in table["champs"]:
                 yield nom_table, champ
@@ -253,15 +284,15 @@ class TestSchema(CasNavigateur):
     def test_le_brief_decrit_22_tables(self):
         self.assertEqual(len(self.brief), 22)
 
-    def test_22_tables_dans_l_ordre_du_brief_puis_celle_du_format_3(self):
+    def test_22_tables_dans_l_ordre_du_brief_puis_celles_du_format_3(self):
         attendu = list(self.brief.keys()) + list(TABLES_FORMAT_3.keys())
         self.assertEqual(list(self.tables.keys()), attendu)
-        self.assertEqual(len(self.tables), 23)
+        self.assertEqual(len(self.tables), 24)
         self.assertEqual(self.page.evaluate("Schema.nomsTables()"), attendu)
 
     def test_table_du_format_3(self):
-        """wiki_syntheses (§20.2) : champs, types et libellés exacts ; depuisVersion 3 sur la table, aucun
-        champ obligatoire hors l'équipement ; statut « à valider » par défaut ; le contrat cite chaque champ."""
+        """wiki_pages et wiki_journal (§20.2) : champs, types et libellés exacts ; depuisVersion 3 sur la table ;
+        statut « active » par défaut ; le contrat cite chaque champ."""
         contrat = (RACINE / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
         section = contrat[contrat.index("### 20.2"):contrat.index("### 20.3")]
         for nom_table, champs in TABLES_FORMAT_3.items():
@@ -270,8 +301,18 @@ class TestSchema(CasNavigateur):
             self.assertIs(table.get("depuisVersion"), 3)
             for nom, _, _ in champs:
                 self.assertIn("`" + nom + "`", section, nom)
-        self.assertEqual(self.champs_de("wiki_syntheses")["statut"]["defaut"], "à valider")
-        self.assertIs(self.tables["wiki_syntheses"]["ajoutSeul"], False)
+        self.assertEqual(self.champs_de("wiki_pages")["statut"]["defaut"], "active")
+        self.assertEqual(self.champs_de("wiki_pages")["version"]["defaut"], "0")
+        self.assertEqual(self.champs_de("wiki_journal")["essais"]["defaut"], "0")
+        for nom_table in TABLES_FORMAT_3:
+            self.assertIs(self.tables[nom_table]["ajoutSeul"], False)
+        for nom_table, champs in CHAMPS_FORMAT_3.items():
+            for nom, type_attendu, libelle in champs:
+                champ = self.champs_de(nom_table)[nom]
+                self.assertEqual((champ["type"], champ["libelle"]), (type_attendu, libelle))
+                self.assertIs(champ.get("depuisVersion"), 3)
+                self.assertFalse(champ.get("obligatoire", False))   # un fichier v2 n'a pas la colonne
+                self.assertIn("`" + nom_table + "." + nom + "`", section)
 
     def test_le_tableau_du_format_v2_decrit_4_champs_dans_3_tables(self):
         """Garde-fou de la lecture d'ARCHITECTURE.md §14.1 (sinon les tests ci-dessous ne prouvent rien)."""
@@ -294,7 +335,8 @@ class TestSchema(CasNavigateur):
                 champs_brief = attendu["champs"]
                 self.assertEqual(noms[:len(champs_brief)], champs_brief)
                 champs_v2 = [nom for nom, _, _ in self.version_2.get(nom_table, [])]
-                self.assertEqual(noms[len(champs_brief):], champs_v2)
+                champs_v3 = [nom for nom, _, _ in CHAMPS_FORMAT_3.get(nom_table, [])]
+                self.assertEqual(noms[len(champs_brief):], champs_v2 + champs_v3)
 
     def test_champs_v2_types_libelles_et_depuis_version(self):
         for nom_table, champs_v2 in self.version_2.items():
@@ -310,6 +352,7 @@ class TestSchema(CasNavigateur):
 
     def test_seuls_les_champs_v2_portent_depuis_version(self):
         attendus = {(t, nom) for t, champs in self.version_2.items() for nom, _, _ in champs}
+        attendus |= {(t, nom) for t, champs in CHAMPS_FORMAT_3.items() for nom, _, _ in champs}
         trouves = {(t, c["nom"]) for t, c in self.tous_les_champs() if "depuisVersion" in c}
         self.assertEqual(trouves, attendus)
 
@@ -490,7 +533,7 @@ class TestSchema(CasNavigateur):
         self.assertTrue(self.page.evaluate("Schema.champ('zzz', 'id') === undefined"))
         # un nom hérité d'Object (toString, constructor) n'est pas une table
         self.assertTrue(self.page.evaluate("Schema.table('constructor') === undefined"))
-        self.assertEqual(len(self.page.evaluate("Schema.nomsTables()")), 23)
+        self.assertEqual(len(self.page.evaluate("Schema.nomsTables()")), 24)
 
 
 if __name__ == "__main__":

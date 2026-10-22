@@ -171,9 +171,6 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_DEMO = RACINE / 'donnees' / 'demo'
 FICHIER_JS = RACINE / 'js' / 'demo-donnees.js'
-# Lot 6 (ARCHITECTURE.md §20.8, D98) : synthèses [IA] de la démo, rédigées une fois (sous-agents Claude Code,
-# avec le prompt de Prévo) puis relues par Nicolas, figées dans ce fichier : jamais régénérées ici.
-FICHIER_SYNTHESES_FIGEES = RACINE / 'outils' / 'demo_wiki_syntheses.csv'
 FICHIER_SCENARIOS = RACINE / 'tests' / 'fixtures' / 'demo-scenarios.json'
 
 GRAINE = 42                      # graine fixe : deux exécutions donnent des fichiers identiques
@@ -231,7 +228,7 @@ DEFINITION_SCHEMA = {
         'cause_code:ref>codes_defaillance.code=cause remede_code:ref>codes_defaillance.code=remède '
         'compte_rendu:texte_long remise_service:booleen cout_soustraitance:decimal '
         'date_cloture_tech:date_heure date_cloture_admin:date_heure motif_annulation:texte_long '
-        'ot_lie_id:ref>ordres_travail anomalie_constatee:booleen'),
+        'ot_lie_id:ref>ordres_travail anomalie_constatee:booleen astuce:texte_long'),
     'ot_operations': (
         'id:id ot_id:ref>ordres_travail ordre:entier operation:texte valeur_attendue:texte '
         'fait:booleen valeur_mesuree:texte'),
@@ -274,11 +271,19 @@ DEFINITION_SCHEMA = {
     'parametres': 'cle:id valeur:texte',
     'journal': (
         'id:id date_heure:date_heure poste:texte profil:texte table:texte id_ligne:texte action:texte'),
-    # Format 3 (lot 6, ARCHITECTURE.md §20.2) : synthèses [IA] du wiki de maintenance.
-    'wiki_syntheses': (
-        'id:id equipement_id:ref>equipements texte:texte_long ot_cites:texte ot_sources:texte_long '
-        'statut:choix[à valider|validée|remplacée] modele:texte date_proposition:date_heure '
-        'corrigee_par:texte date_modification:date_heure valide_par:texte date_validation:date_heure'),
+    # Format 3 (lot 6 refondu, ARCHITECTURE.md §20.2) : pages et journal du wiki de maintenance.
+    'wiki_pages': (
+        'id:id type:choix[équipement|composant|mode|savoir-faire] titre:texte cle:texte '
+        'equipement_id:ref>equipements article_id:ref>articles cause_code:ref>codes_defaillance.code=cause '
+        'rattache_a:ref>wiki_pages texte:texte_long ot_cites:texte liens:texte version:entier '
+        'origine:choix[IA|manuel|IA et manuel] modele:texte derniere_entree:ref>wiki_journal valide_par:texte '
+        'valide_le:date_heure cree_le:date_heure modifie_le:date_heure statut:choix[active|archivée]'),
+    'wiki_journal': (
+        'id:id nature:choix[ingestion|manuel|décision] ot_id:ref>ordres_travail date_intervention:date_heure '
+        'statut:choix[en file|à valider|validée|rejetée|à refaire|refusée|rien à ajouter|appliquée] '
+        'anterieure:booleen ordre:entier pages:texte changements:texte_long contradictions:texte_long '
+        'raisons:texte_long modele:texte essais:entier cree_le:date_heure traite_le:date_heure '
+        'decide_par:texte decide_le:date_heure motif:texte_long'),
 }
 
 # Format des identifiants : (préfixe, nombre de chiffres, numérotation annuelle ?).
@@ -295,7 +300,7 @@ IDENTIFIANTS = {
     'controles_reglementaires': ('CTR-', 4, False), 'codes_defaillance': ('CD-', 4, False),
     'fournisseurs': ('FOU-', 4, False), 'achats': ('ACH-', 4, False),
     'journal': ('J-', 4, False),     # J-AAAAMMJJHHMMSS-XXXX : 4 caractères aléatoires (écrit par l'application)
-    'wiki_syntheses': ('WIKI-', 4, False),
+    'wiki_pages': ('WP-', 4, False), 'wiki_journal': ('WJ-', 5, False),
 }
 
 
@@ -4459,35 +4464,10 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
             generer_journal(ctx)
         with hasard_du_lot3bis(ctx):
             ajouter_decision_ignoree(ctx)
-    if not volume and mois == MOIS_PAR_DEFAUT:
-        ajouter_syntheses_figees(ctx)
     verifier_jeu(ctx)
     if not volume:
         verifier_demo_lot3(ctx)
     return ctx
-
-
-def ajouter_syntheses_figees(ctx, chemin=None):
-    """Synthèses du wiki de la démo (§20.8) : lignes de outils/demo_wiki_syntheses.csv copiées telles quelles
-    (le jeu de 13 mois seulement : leurs OT cités en dépendent). Arrêt si un OT cité ou envoyé n'existe pas
-    ou n'est pas celui de l'équipement de la synthèse. Sans fichier figé, la table reste vide."""
-    chemin = Path(chemin) if chemin else FICHIER_SYNTHESES_FIGEES
-    if not chemin.is_file():
-        return
-    noms = [champ['nom'] for champ in CHAMPS['wiki_syntheses']]
-    lecteur = csv.DictReader(io.StringIO(chemin.read_text(encoding='utf-8-sig')), delimiter=';')
-    if lecteur.fieldnames != noms:
-        raise SystemExit('%s : en-tête inattendu %r (attendu %r)' % (chemin.name, lecteur.fieldnames, noms))
-    ordres = {ot['id']: ot for ot in ctx.base['ordres_travail']}
-    for ligne in lecteur:
-        for champ in ('ot_cites', 'ot_sources'):
-            for identifiant in filter(None, (morceau.strip() for morceau in ligne[champ].split(';'))):
-                ot = ordres.get(identifiant)
-                if not ot or ot['equipement_id'] != ligne['equipement_id']:
-                    raise SystemExit('%s : synthèse %s, %s « %s » %s.' % (
-                        chemin.name, ligne['id'], champ, identifiant,
-                        "n'existe pas" if not ot else "est celui d'un autre équipement"))
-        ctx.base['wiki_syntheses'].append({nom: ligne[nom] for nom in noms})
 
 
 def lire_arguments(argv):

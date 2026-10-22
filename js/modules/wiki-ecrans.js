@@ -1,13 +1,13 @@
 'use strict';
-// Wiki (5/5) — écrans du wiki de maintenance (lot 6, ARCHITECTURE.md §20.7), pour les trois profils :
-// #/wiki (recherche sur tout le parc, liste des pages, file de relecture du responsable) et
-// #/wiki/<équipement> (en-tête, consignation telle quelle, recherche limitée à l'équipement, pannes
-// habituelles, pièces consommées, dernières interventions, même marque et modèle, puis l'emplacement de
-// la synthèse [IA] que remplit wiki-synthese.js) ; champ de recherche réutilisable (Wiki.champRecherche,
+// Wiki (7/8) — écrans de lecture du wiki de maintenance (lot 6 refondu, ARCHITECTURE.md §20.9), pour les
+// trois profils. Socle (T110) : écrans de la première version sans la synthèse — #/wiki (recherche sur
+// tout le parc, liste des pages d'équipement) et #/wiki/<équipement> (en-tête, consignation telle quelle,
+// recherche limitée à l'équipement, pannes habituelles, pièces consommées, dernières interventions, même
+// marque et modèle) ; réécrits pour les quatre types de pages en T119. Champ de recherche réutilisable (Wiki.champRecherche,
 // posé dans l'onglet Préparation de l'OT ; Wiki.poserRechercheDemande, dans la saisie d'une DI) ;
 // enregistrement des écrans auprès d'App. Dernier fichier du module.
 //
-// Lecture seule : rien n'est écrit, aucun appel réseau (Wiki.page, Wiki.listePages, Wiki.rechercher).
+// Lecture seule : rien n'est écrit, aucun appel réseau (Wiki.pageEquipement, Wiki.listePages, Wiki.rechercher).
 // Toute donnée insérée passe par UI.html (échappement) ; la consignation est posée par textContent,
 // donc jamais interprétée, retours à la ligne compris. Le demandeur n'a accès ni aux écrans des OT ni au
 // magasin : il voit les numéros d'OT et les références d'articles en texte, sans lien.
@@ -16,18 +16,9 @@ Object.assign(Wiki, (() => {
 
   // Tables lues par les écrans : réaffichés si l'une change sur un autre poste.
   const TABLES = ['equipements', 'ordres_travail', 'demandes', 'codes_defaillance', 'mouvements_stock',
-    'articles', 'wiki_syntheses'];
+    'articles', 'wiki_pages', 'wiki_journal'];
   const PROFILS = ['demandeur', 'technicien', 'responsable'];
 
-  /** État de la synthèse d'une page : badge texte ET couleur (§20.7). */
-  const ETATS_SYNTHESE = Object.freeze({
-    aucune: Object.freeze({ libelle: 'Aucune synthèse', ton: 'neutre' }),
-    a_valider: Object.freeze({ libelle: 'Synthèse à valider', ton: 'attention' }),
-    validee: Object.freeze({ libelle: 'Synthèse validée', ton: 'ok' }),
-    a_revoir: Object.freeze({ libelle: 'Synthèse à revoir', ton: 'violet' }),
-  });
-  const ETATS_A_RELIRE = ['a_valider', 'a_revoir'];     // file de relecture du responsable
-  const FILTRE_RELECTURE = 'a-relire';                  // #/wiki?filtre=a-relire coche le filtre
   const DELAI_RECHERCHE_MS = 300;                       // la recherche part après 300 ms sans frappe
   const RESULTATS_MONTRES = 5;                          // par portée, avant « Voir les n autres résultats »
   const RESULTATS_MONTRES_DEMANDE = 3;                  // saisie d'une DI (téléphone) : formulaire plus court
@@ -55,17 +46,6 @@ Object.assign(Wiki, (() => {
   function lienOt(otId, liens) {
     return liens ? UI.html`<a class="wiki-lien-ot" href="#/ot/${encodeURIComponent(otId)}">${otId}</a>`
       : UI.html`<b class="wiki-numero-ot">${otId}</b>`;
-  }
-
-  /** État montré : une synthèse « à valider » n'est vue que du responsable (§20.5) ; les autres voient « aucune ». */
-  function etatVisible(etat) {
-    if (!ETATS_SYNTHESE[etat] || (etat === 'a_valider' && !App.estResponsable())) return 'aucune';
-    return etat;
-  }
-
-  function badgeEtat(etat) {
-    const entree = ETATS_SYNTHESE[etat] || ETATS_SYNTHESE.aucune;
-    return UI.html`<span class="badge ${entree.ton} wiki-etat" data-etat="${etat}">${entree.libelle}</span>`;
   }
 
   /** « le 11/09/2026 » ou « du 30/09/2025 au 11/09/2026 » (jours de panne AAAA-MM-JJ). */
@@ -267,20 +247,17 @@ Object.assign(Wiki, (() => {
   // ===========================================================================================
 
   function pageHtml(entree) {
-    return UI.html`<li data-equipement="${entree.equipementId}" data-etat="${entree.etat}" data-pannes="${entree.pannes12Mois}">
+    return UI.html`<li data-equipement="${entree.equipementId}" data-pannes="${entree.pannes12Mois}">
       <a href="#/wiki/${encodeURIComponent(entree.equipementId)}">
-        <div class="carte-tete"><b>${entree.repere || entree.equipementId}</b>${badgeEtat(entree.etat)}</div>
+        <div class="carte-tete"><b>${entree.repere || entree.equipementId}</b></div>
         <div class="carte-titre">${entree.designation}</div>
         <div class="carte-meta"><span class="wiki-pannes">${textePannes(entree.pannes12Mois)}</span></div>
       </a></li>`;
   }
 
-  function afficherListe(conteneur, parametres) {
-    const responsable = App.estResponsable();
+  function afficherListe(conteneur) {
     // Wiki.listePages trie par pannes des 12 derniers mois (décroissant), puis par repère.
-    const pages = Wiki.listePages().map((entree) => Object.assign({}, entree, { etat: etatVisible(entree.etat) }));
-    const aRelire = responsable ? pages.filter((entree) => ETATS_A_RELIRE.includes(entree.etat)) : [];
-    const requete = parametres && parametres.requete;
+    const pages = Wiki.listePages();
     App.definirTitre('Wiki');
     UI.remplir(conteneur, UI.html`
       <div class="wiki wiki-liste">
@@ -292,8 +269,6 @@ Object.assign(Wiki, (() => {
         <section class="wiki-pages-zone" aria-labelledby="wiki-titre-pages">
           <div class="entete-carte">
             <h2 id="wiki-titre-pages">Pages des équipements <span class="badge" id="wiki-nombre-pages">${pages.length}</span></h2>
-            ${responsable ? UI.html`<label class="case wiki-filtre" data-hors-saisie><input type="checkbox" id="wiki-filtre-relecture">
-              À valider ou à revoir <span class="badge attention" id="wiki-compte-relecture">${aRelire.length}</span></label>` : ''}
           </div>
           <p class="aide">Un équipement a sa page dès qu'une intervention y est clôturée ; les plus en panne
             sur les 12 derniers mois d'abord.</p>
@@ -302,24 +277,12 @@ Object.assign(Wiki, (() => {
       </div>`);
     UI.$('.wiki-zone-recherche', conteneur).replaceWith(champRecherche({ titre: 'Chercher dans l\'historique du parc' }));
     const liste = UI.$('.wiki-pages', conteneur);
-    const filtre = UI.$('#wiki-filtre-relecture', conteneur);
-
-    function dessiner() {
-      const relecture = Boolean(filtre && filtre.checked);
-      const montrees = relecture ? aRelire : pages;
-      if (montrees.length) {
-        UI.remplir(liste, montrees.map(pageHtml));
-        return;
-      }
-      UI.remplir(liste, UI.html`<li class="wiki-liste-vide">${relecture
-        ? UI.vide('Rien à relire', 'Aucune synthèse n\'est à valider ni à revoir.', 'valider')
-        : UI.vide('Aucune page pour l\'instant', 'Un équipement a sa page dès qu\'une intervention y est clôturée.', 'wiki')}</li>`);
+    if (pages.length) {
+      UI.remplir(liste, pages.map(pageHtml));
+      return;
     }
-    if (filtre) {
-      filtre.checked = Boolean(requete) && requete.get('filtre') === FILTRE_RELECTURE;
-      filtre.addEventListener('change', dessiner);
-    }
-    dessiner();
+    UI.remplir(liste, UI.html`<li class="wiki-liste-vide">${UI.vide('Aucune page pour l\'instant',
+      'Un équipement a sa page dès qu\'une intervention y est clôturée.', 'wiki')}</li>`);
   }
 
   // ===========================================================================================
@@ -485,7 +448,7 @@ Object.assign(Wiki, (() => {
 
   async function afficherPage(conteneur, parametres) {
     const id = texte(parametres.id);
-    const page = Wiki.page(id);
+    const page = Wiki.pageEquipement(id);
     if (!page) {
       afficherIntrouvable(conteneur, id);
       return;
@@ -512,13 +475,10 @@ Object.assign(Wiki, (() => {
         ${blocPieces(page, liens)}
         ${blocDernieres(page, liens)}
         ${blocMemeModele(page)}
-        <section class="wiki-synthese" id="wiki-synthese" aria-label="Synthèse [IA]"></section>
       </div>`);
     UI.$('.wiki-zone-consignation', conteneur).replaceWith(blocConsignation(page, App.estResponsable()));
     UI.$('.wiki-zone-recherche', conteneur).replaceWith(champRecherche({
       equipementId: equipement.id, titre: 'Chercher dans l\'historique de cet équipement' }));
-    // Carte de la synthèse [IA] (wiki-synthese.js, T102) : Wiki.afficherSynthese(section, page) la pose si elle existe.
-    if (typeof Wiki.afficherSynthese === 'function') await Wiki.afficherSynthese(UI.$('#wiki-synthese', conteneur), page);
   }
 
   // ===========================================================================================
@@ -546,5 +506,5 @@ Object.assign(Wiki, (() => {
     });
   });
 
-  return { ETATS_SYNTHESE, champRecherche, poserRechercheDemande };
+  return { champRecherche, poserRechercheDemande };
 })());

@@ -52,8 +52,7 @@ const Apropos = (() => {
             <li><b>Dossier</b> : <code>index.html</code> ouvert dans Chrome ou Edge, avec un dossier de fichiers CSV choisi sur le PC.
               Un seul poste, aucune installation.</li>
             <li><b>Démo</b> : un atelier fictif en mémoire, pour découvrir l'outil. Rien n'est enregistré ;
-              l'export ZIP permet de garder une copie. <span id="apropos-syntheses-demo">Synthèses de démo rédigées par Claude
-              avec le prompt de Prévo, puis relues par l'auteur.</span></li>
+              l'export ZIP permet de garder une copie.</li>
           </ul>
           <p class="note">Dans tous les modes, les données sont des fichiers CSV (séparateur « ; », UTF-8) lisibles dans Excel.</p>
         </article>

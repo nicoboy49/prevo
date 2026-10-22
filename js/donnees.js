@@ -972,42 +972,7 @@ const Donnees = (() => {
       controlerReferences(nomTable, description, lignesTable, memoireCibles, resultat);
     }
     controlerCoherence(resultat);
-    controlerSyntheses(resultat);
     return resultat;
-  }
-
-  // Synthèses du wiki (format 3, ARCHITECTURE.md §20.2) : OT cités ou envoyés qui n'existent pas ou
-  // sont d'un autre équipement, synthèse validée sans validateur, deux synthèses courantes pour un
-  // même équipement. Jamais bloquant (« attention ») : la synthèse n'est qu'un complément.
-  function controlerSyntheses(resultat) {
-    const indexOrdres = entreeDe('ordres_travail').index;
-    const courantes = new Map();
-    for (const synthese of entreeDe('wiki_syntheses').lignes) {
-      const reperage = 'Synthèse ' + (synthese.id || '(sans identifiant)');
-      for (const nomChamp of ['ot_cites', 'ot_sources']) {
-        const identifiants = String(synthese[nomChamp] || '').split(';').map((id) => id.trim()).filter(Boolean);
-        for (const otId of identifiants) {
-          const ordre = indexOrdres.get(otId);
-          if (ordre && ordre.equipement_id === synthese.equipement_id) { continue; }
-          resultat.push(probleme('attention', 'incoherence', 'wiki_syntheses', null, synthese.id, nomChamp, otId,
-            reperage + ' : l\'ordre de travail « ' + otId + ' » ' + (ordre ? 'est celui d\'un autre équipement'
-              : 'n\'existe pas') + '. Proposez une nouvelle synthèse ou corrigez-la.'));
-        }
-      }
-      if (synthese.statut === 'validée' && String(synthese.valide_par || '').trim() === '') {
-        resultat.push(probleme('attention', 'incoherence', 'wiki_syntheses', null, synthese.id, 'valide_par', '',
-          reperage + ' : elle est « validée » mais personne n\'est indiqué comme l\'ayant validée.'));
-      }
-      if (synthese.statut !== 'remplacée' && synthese.equipement_id) {
-        if (courantes.has(synthese.equipement_id)) {
-          resultat.push(probleme('attention', 'incoherence', 'wiki_syntheses', null, synthese.id, 'statut', synthese.statut,
-            reperage + ' : l\'équipement « ' + synthese.equipement_id + ' » a déjà une synthèse en cours ('
-            + courantes.get(synthese.equipement_id) + '). Une seule peut être « à valider » ou « validée ».'));
-        } else {
-          courantes.set(synthese.equipement_id, synthese.id);
-        }
-      }
-    }
   }
 
   // Tous les problèmes de la base (lecture + contrôles). Recalculé seulement après un changement.

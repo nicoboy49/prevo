@@ -23,11 +23,6 @@ et choisit sa réponse d'après la fonction (premier message système « Fonctio
     faux-html       réponse piégée : du HTML qui exécuterait du code s'il était inséré tel quel (PIEGE) dans
                     chaque champ texte, codes compris.
 
-    Synthèse du wiki (syntheseWiki, lot 6) : « faux » rend trois puces qui citent les OT de la liste fermée du
-    schéma ; réponses piégées, chacune refusée par les contrôles de Prévo (§20.4) sauf « faux-html » :
-    faux-invente (un OT jamais envoyé), faux-sans-ot (une puce sans OT), faux-trop-long (sept puces),
-    faux-trop-de-mots (151 mots), faux-consigne (« Consigner la presse… »), faux-alimentation (« Couper
-    l'alimentation… »), faux-html (PIEGE dans le texte d'une puce, qui cite un vrai OT).
 
     with FauxFournisseur() as faux:
         faux.url            # 'http://127.0.0.1:54321'  (Ollama) ; faux.url + '/v1' (OpenAI)
@@ -108,40 +103,6 @@ def colonnes_du_schema(schema, invente=False):
     return {"colonnes": colonnes}
 
 
-def ot_du_schema(schema):
-    """syntheseWiki : identifiants des OT envoyés (liste fermée `enum` des citations du schéma)."""
-    puces = ((schema.get("properties") or {}).get("puces") or {}).get("items") or {}
-    citations = ((puces.get("properties") or {}).get("ot") or {}).get("items") or {}
-    return [identifiant for identifiant in citations.get("enum") or [] if identifiant]
-
-
-def synthese_wiki(schema, modele):
-    """syntheseWiki : trois puces qui citent les OT envoyés ; variantes piégées selon le modèle."""
-    ids = ot_du_schema(schema) or ["OT-2026-0001"]
-    puces = [
-        {"rubrique": "Ce qui revient", "texte": "Fuite au joint de tige, fréquente ici", "ot": ids[:2]},
-        {"rubrique": "Ce qui a réglé le problème", "texte": "Remplacement du joint et serrage des raccords",
-         "ot": ids[:1]},
-        {"rubrique": "À surveiller", "texte": "Usure du roulement côté moteur", "ot": ids[-1:]},
-    ]
-    if modele == "faux-invente":
-        puces[0]["ot"] = puces[0]["ot"] + ["OT-1999-9999"]
-    elif modele == "faux-sans-ot":
-        puces[2]["ot"] = []
-    elif modele == "faux-trop-long":
-        puces += [{"rubrique": "À surveiller", "texte": "Point %d à suivre" % numero, "ot": ids[:1]}
-                  for numero in range(1, 5)]
-    elif modele == "faux-trop-de-mots":
-        puces[0]["texte"] = " ".join(["mot"] * 151)
-    elif modele == "faux-consigne":
-        puces[1]["texte"] = "Consigner la presse avant de changer le joint"
-    elif modele == "faux-alimentation":
-        puces[2]["texte"] = "Couper l'alimentation avant de contrôler le roulement"
-    elif modele == "faux-html":
-        puces[0]["texte"] = PIEGE + " fuite au joint"
-    return {"puces": puces}
-
-
 def reponse_piegee(fonction):
     """Réponse de « faux-html » : PIEGE dans chaque champ texte de la fonction."""
     if fonction == "reformulerDI":
@@ -157,8 +118,6 @@ def contenu_reponse(modele, fonction, schema):
     """Texte que le faux modèle « écrit » (le plus souvent du JSON)."""
     if modele == "faux-illisible":
         return "Bien sûr ! Voici ma proposition : la garniture est usée."
-    if fonction == "syntheseWiki" and modele != "faux-enorme":
-        return json.dumps(synthese_wiki(schema, modele), ensure_ascii=False)
     if modele == "faux-html":
         return json.dumps(reponse_piegee(fonction), ensure_ascii=False)
     if modele == "faux-enorme":
