@@ -186,6 +186,8 @@ class TestProfils(CasEcritures):
         self.page.click("#btn-demo")
         attendre_pret(self.page)
         cas = self.page.evaluate(CAS_JS)
+        # La démo livre des synthèses (§20.8) : rien ne doit changer dans la table.
+        avant = self.page.evaluate("JSON.stringify(Donnees.lignes('wiki_syntheses'))")
         for appel, args in (("enregistrer", [cas["equipement"], {"texte": texte_synthese(cas),
                                                                    "otSources": [cas["ot1"], cas["ot2"]], "modele": "faux"}]),
                             ("valider", ["WIKI-0001"]), ("modifier", ["WIKI-0001", texte_synthese(cas)])):
@@ -193,7 +195,7 @@ class TestProfils(CasEcritures):
                 resultat = self.appeler(appel, *args)
                 self.assertEqual((resultat["ok"], resultat["nom"]), (False, "ErreurValidation"))
                 self.assertEqual(resultat["message"], self.page.evaluate("Wiki.MESSAGE_RESERVE"))
-        self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_syntheses').length"), 0)
+        self.assertEqual(self.page.evaluate("JSON.stringify(Donnees.lignes('wiki_syntheses'))"), avant)
 
     def test_technicien(self):
         self.verifier_refus("technicien", "", "TEC-0001")
