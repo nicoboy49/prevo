@@ -582,26 +582,58 @@ const Ia = (() => {
     return r.fournisseur === 'ollama' ? FOURNISSEURS.ollama : (hoteAffiche(r.url) || FOURNISSEURS.openai);
   }
 
+  function consigneDe(fonction, appelant) {
+    const consigne = Ia.PROMPTS && Object.prototype.hasOwnProperty.call(Ia.PROMPTS, fonction) ? Ia.PROMPTS[fonction] : null;
+    if (!consigne) throw new Error(appelant + ' : fonction inconnue « ' + fonction + ' ».');
+    return consigne;
+  }
+
+  function valeursDe(donnees) {
+    return donnees && typeof donnees === 'object' ? donnees : {};
+  }
+
+  /**
+   * Requête réelle d'une fonction (lot 6, ARCHITECTURE.md §20.4) : { fonction, messages, schema, temperature },
+   * exactement ce que Ia.demander envoie au fournisseur (même construction : demander l'appelle). Sert
+   * aussi à exporter les requêtes de la démo (§20.8). Aucun appel réseau, rien n'est écrit.
+   */
+  function requete(fonction, donnees) {
+    const consigne = consigneDe(fonction, 'Ia.requete');
+    const valeurs = valeursDe(donnees);
+    return {
+      fonction,
+      messages: [{ role: 'system', content: consigne.systeme }, { role: 'user', content: consigne.utilisateur(valeurs) }],
+      schema: consigne.schema(valeurs),
+      temperature: TEMPERATURE,
+    };
+  }
+
+  /**
+   * Réponse brute du modèle (texte) → `resultat` contrôlé : objet JSON extrait (bloc ```json``` ou texte
+   * autour toléré), puis Ia.PROMPTS[fonction].verifier. Erreur nommée IaReponseInvalide sinon. Utilisée par
+   * Ia.demander et par la lecture des réponses de la démo (§20.8) : même circuit.
+   */
+  function lireReponse(fonction, contenu, donnees) {
+    return consigneDe(fonction, 'Ia.lireReponse').verifier(objetJson(contenu), valeursDe(donnees));
+  }
+
   /**
    * Demande une proposition à l'IA pour une fonction de Ia.PROMPTS. Renvoie
    * { resultat, modele, fournisseur } (resultat contrôlé par Ia.PROMPTS[fonction].verifier) ; sinon une
    * erreur nommée. options.signal : AbortSignal du bouton « Annuler ». Rien n'est écrit.
    */
   async function demander(fonction, donnees, options) {
-    const consigne = Ia.PROMPTS && Object.prototype.hasOwnProperty.call(Ia.PROMPTS, fonction) ? Ia.PROMPTS[fonction] : null;
-    if (!consigne) throw new Error('Ia.demander : fonction inconnue « ' + fonction + ' ».');
+    consigneDe(fonction, 'Ia.demander');
     if (versionWeb()) throw new IaIndisponible(MESSAGE_VERSION_WEB);   // IA réglée ou non : rien n'est appelé
     const r = reglages();
     if (!r.actif) throw new IaIndisponible('L\'assistant IA n\'est pas activé sur ce poste (« Ce poste »).');
     if (!urlValide(r.url)) throw new IaIndisponible('Adresse du fournisseur d\'IA invalide (« Ce poste »).');
     if (!porteeAutorisee(r.url)) throw new IaRefusee();
-    const valeurs = donnees && typeof donnees === 'object' ? donnees : {};
-    const messages = [{ role: 'system', content: consigne.systeme }, { role: 'user', content: consigne.utilisateur(valeurs) }];
-    const schema = consigne.schema(valeurs);
+    const { messages, schema } = requete(fonction, donnees);
     try {
       const contenu = await avecDelai(delaiNavigateur(r.delaiS), r.delaiS, options && options.signal,
         (signal) => discuter(r, fonction, messages, schema, signal));
-      const resultat = consigne.verifier(objetJson(contenu), valeurs);
+      const resultat = lireReponse(fonction, contenu, donnees);
       definirEtat('ok');
       return { resultat, modele: r.modele, fournisseur: libelleFournisseur(r) };
     } catch (erreur) {
@@ -638,7 +670,7 @@ const Ia = (() => {
     ErreurIa, IaIndisponible, IaDelai, IaAnnulee, IaReponseInvalide, IaRefusee,
     evenements,
     reglages, enregistrerReglages, distantAutorise, urlValide, portee, mention, active, etat, versionWeb,
-    verifierAuDemarrage, tester, demander,
+    verifierAuDemarrage, tester, demander, requete, lireReponse,
     tracerUtilisation,
   };
 })();

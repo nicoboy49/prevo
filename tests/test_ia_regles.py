@@ -31,7 +31,8 @@ from faux_fournisseur_ia import FauxFournisseur
 CLE = "sk-test-cle-ia-prevo-5f3a9c"
 SCRIPTS_REGLES = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/interface.js",
                   "js/modules/ia.js", "js/modules/ia-prompts.js", "js/modules/ia-encadre.js"]
-FONCTIONS = ["reformulerDI", "compteRendu", "codes", "checkList", "resumeHistorique", "commentaireRapport"]
+FONCTIONS = ["reformulerDI", "compteRendu", "codes", "checkList", "resumeHistorique", "commentaireRapport",
+             "syntheseWiki"]                                   # syntheseWiki : lot 6 (ARCHITECTURE.md §20.4)
 # Valeurs « interdites » glissées dans les données passées à Ia.demander : elles ne doivent jamais partir.
 MARQUEURS_INTERDITS = ["77.77", "987.65", "photo-secrete.jpg", "notice-secrete.pdf"]
 ERREUR_400 = re.compile(r"Failed to load resource: the server responded with a status of 400")
@@ -123,6 +124,11 @@ DONNEES_DEMO_JS = """() => {
   const historique = Donnees.lignes('ordres_travail').filter((o) => o.equipement_id === ot.equipement_id && o.compte_rendu)
     .map((o) => Object.assign({}, interdits, { date: (o.date_fin || o.date_creation).slice(0, 10), type: o.type, titre: o.titre,
       codes: [o.symptome_code, o.cause_code, o.remede_code].map(libelleCode).filter(Boolean), compteRendu: o.compte_rendu }));
+  // Lot 6 : OT clôturés du même équipement, avec leur identifiant (citations de la synthèse du wiki).
+  const otWiki = Donnees.lignes('ordres_travail').filter((o) => o.equipement_id === ot.equipement_id && /^Clôturé/.test(o.statut))
+    .map((o) => avec({ id: o.id, date: (o.date_fin || o.date_creation).slice(0, 10), type: o.type, titre: o.titre,
+      symptome: libelleCode(o.symptome_code), cause: libelleCode(o.cause_code), remede: libelleCode(o.remede_code),
+      compteRendu: o.compte_rendu, pieces, dureeArret: o.duree_arret_h }));
   return {
     otId: ot.id,
     donnees: {
@@ -134,6 +140,7 @@ DONNEES_DEMO_JS = """() => {
       resumeHistorique: avec({ ot: historique }),
       commentaireRapport: avec({ mois: 'septembre 2026', jetons: { disponibilite: '92,5 %', cout_du_mois: '12 340 €' },
         points: ['Pompe de relevage : coût élevé à examiner'] }),
+      syntheseWiki: avec({ repere: eq.repere, designation: eq.designation, marque: eq.marque, modele: eq.modele, ot: otWiki }),
     },
     attendus: {
       reformulerDI: [di.symptome, eq.repere, eq.designation, 'sécurité'],
@@ -142,6 +149,7 @@ DONNEES_DEMO_JS = """() => {
       checkList: [gamme.libelle, eqGamme.designation, 'Garniture usée'],
       resumeHistorique: [historique[0].titre],
       commentaireRapport: ['{disponibilite}', '92,5 %', 'Pompe de relevage : coût élevé à examiner'],
+      syntheseWiki: [eq.repere, otWiki[0].id, otWiki[0].titre],
     },
   };
 }"""
@@ -439,6 +447,9 @@ class TestReglesPures(CasNavigateur):
               periodicite: '30 jours', causeVisee: 'Garniture usée' }),
             resumeHistorique: avec({ ot: Array.from({ length: 25 }, (_, i) => ot(i + 1)) }),
             commentaireRapport: avec({ mois: 'septembre 2026', jetons: { disponibilite: '92 %' }, points: ['Pompe à examiner'] }),
+            syntheseWiki: avec({ repere: 'PO-03', designation: 'Pompe', marque: 'KSB', modele: 'Etanorm',
+              ot: Array.from({ length: 3 }, (_, i) => avec(Object.assign(ot(i + 1), { id: 'OT-2026-000' + (i + 1),
+                pieces: [avec({ designation: 'Kit garniture', quantite: '1' })] }))) }),
           };
           return fonctions.map((f) => ({ f, texte: Ia.PROMPTS[f].systeme + '\\n' + Ia.PROMPTS[f].utilisateur(donnees[f]) }));
         }""", FONCTIONS)
