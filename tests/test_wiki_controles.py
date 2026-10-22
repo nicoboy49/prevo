@@ -1,27 +1,102 @@
-"""Vocabulaire de la sécurité du wiki (D97, ARCHITECTURE.md §20.6) — socle du lot 6 refondu (T110).
+"""Balisage d'une page et contrôles d'une proposition du wiki (lot 6 refondu, tâche T113 ; ARCHITECTURE.md §20.4,
+§20.6 ; D97, D106, D111).
 
-    vocabulaire : chaque entrée de Wiki.VOCABULAIRE_SECURITE est trouvée par Wiki.termesDeSecurite (début de
-                  mot pour les entrées finies par « * », mot entier sinon), avec accents et apostrophes réels ;
-                  les faux amis (« épisodique », « Vatican », « soupape de sécurité »…) ne sont pas refusés.
-    Les contrôles d'une proposition (§20.6) s'ajoutent à ce fichier avec T113.
+    vocabulaire : chaque entrée de Wiki.VOCABULAIRE_SECURITE est trouvée (début de mot ou mot entier), avec accents
+                  et apostrophes réels ; les faux amis (« épisodique », « Vatican », « soupape de sécurité »…) passent ;
+    balisage    : lireTexte / ecrireTexte (aller-retour, rubriques dans l'ordre du type, citations en fin de phrase,
+                  lignes hors de la forme) ; comparerTextes (identiques, nouvelles, reprises, retirées) ;
+    contrôles   : une proposition conforme passe ; UN DÉFAUT INJECTÉ PAR MOTIF du §20.6 est refusé avec sa raison, qui
+                  nomme la page (forme, citations, non-retrait, nombres, comptage, dates, nouveauté pour un OT antérieur,
+                  sécurité, longueurs, liens, titres, contradictions) ; écriture à la main : retrait permis, le reste
+                  contrôlé, message de sécurité propre.
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_wiki_controles.py" -v
 """
+import copy
 import unittest
 
-from commun import CasNavigateur, attendre_pret, preregler_profil, url_fichier
+from commun import CasNavigateur, charger_scripts
+
+SCRIPTS = [
+    "js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js",
+    "js/modules/causes-frequentes.js", "js/modules/indicateurs-regles.js",
+    "js/modules/wiki-regles.js", "js/modules/wiki-calculs.js", "js/modules/wiki-texte.js", "js/modules/wiki-recherche.js",
+]
+
+OT = "OT-2026-0042"
+EQUIPEMENT = "PO-02 — Pompe centrifuge"
+KIT = "Kit garniture mécanique PO-02"
+MODE = "Désalignement d'accouplement"
+SOURCE = ("PO-02 — Fuite à la garniture mécanique · Fuite · Garniture usée · Remplacement de pièce · Kit garniture "
+          "mécanique PO-02 × 1 · Garniture usée remplacée ; accouplement désaligné de 0,4 mm, réaligné. Astuce : "
+          "contrôler l'alignement au comparateur avant de remonter la garniture.")
+AVANT = ("## Ce qui revient\n"
+         "- Fuite à la garniture mécanique, fréquent ici [OT-2026-0010] [OT-2026-0020]\n"
+         "## Ce qui a réglé le problème\n"
+         "- Remplacement de la garniture par un kit neuf [OT-2026-0010]")
+APRES = ("## Ce qui revient\n"
+         "- Fuite à la garniture mécanique, fréquent ici [OT-2026-0010] [OT-2026-0020] [OT-2026-0042]\n"
+         "## Ce qui a réglé le problème\n"
+         "- Remplacement de la garniture par un kit neuf [OT-2026-0010]\n"
+         "## À surveiller\n"
+         "- Accouplement désaligné de 0,4 mm, voir [[Désalignement d'accouplement]] [OT-2026-0042]")
+CONTEXTE = {
+    "otIngere": {"id": OT, "dateIntervention": "2026-06-08 10:00", "sourceTexte": SOURCE},
+    "anterieure": False,
+    "pagesEnvoyees": [
+        {"titre": EQUIPEMENT, "type": "équipement", "texte": AVANT,
+         "otDates": [{"id": "OT-2026-0010", "date": "2026-02-10 09:00"}, {"id": "OT-2026-0020", "date": "2026-04-10 09:00"}]},
+        {"titre": KIT, "type": "composant", "texte": "", "otDates": []},
+    ],
+    "catalogue": [{"titre": EQUIPEMENT, "type": "équipement"}, {"titre": KIT, "type": "composant"},
+                  {"titre": MODE, "type": "mode"}],
+}
+VALABLE = {
+    "rien": False,
+    "pages": [
+        {"action": "modifier", "titre": EQUIPEMENT, "texte": APRES},
+        {"action": "creer", "titre": "Contrôler l'alignement de PO-02", "type": "savoir-faire", "rattacheA": EQUIPEMENT,
+         "texte": "## Étapes\n- Contrôler l'alignement au comparateur avant de remonter la garniture [OT-2026-0042]"},
+    ],
+    "contradictions": [{"page": EQUIPEMENT, "phrase": "Fuite à la garniture mécanique, fréquent ici",
+                        "observation": "La cause trouvée est le désalignement de l'accouplement, pas l'usure.", "ot": [OT]}],
+}
 
 
-class TestVocabulaireDeSecurite(CasNavigateur):
-    """Fonctions pures de wiki-regles.js, dans la démo (aucun fournisseur d'IA)."""
+def ajouter_phrase(proposition, phrase, rubrique="À surveiller"):
+    """Copie de la proposition conforme, avec une phrase de plus dans la page de l'équipement."""
+    resultat = copy.deepcopy(proposition)
+    page = resultat["pages"][0]
+    page["texte"] = page["texte"].replace("## " + rubrique + "\n", "## " + rubrique + "\n- " + phrase + "\n", 1)
+    return resultat
+
+
+def avec_texte(texte, rang=0):
+    resultat = copy.deepcopy(VALABLE)
+    resultat["pages"][rang]["texte"] = texte
+    return resultat
+
+
+class CasControles(CasNavigateur):
 
     def setUp(self):
         super().setUp()
-        preregler_profil(self.contexte, "responsable")
-        self.page.goto(url_fichier("index.html"))
-        self.page.click("#btn-demo")
-        attendre_pret(self.page)
+        self.requetes = []
+        self.page.on("request", lambda requete: self.requetes.append(requete.url))
+        charger_scripts(self.page, SCRIPTS)
+
+    def controler(self, proposition, contexte=None):
+        return self.page.evaluate("([p, c]) => Wiki.controlerProposition(p, c)", [proposition, contexte or CONTEXTE])
+
+    def refus(self, proposition, attendu, contexte=None):
+        resultat = self.controler(proposition, contexte)
+        self.assertFalse(resultat["ok"], attendu)
+        self.assertTrue(any(attendu in raison for raison in resultat["raisons"]), (attendu, resultat["raisons"]))
+        return resultat["raisons"]
+
+
+class TestVocabulaireDeSecurite(CasControles):
 
     def termes(self, texte):
         return self.page.evaluate("(t) => Wiki.termesDeSecurite(t)", texte)
@@ -33,22 +108,192 @@ class TestVocabulaireDeSecurite(CasNavigateur):
             mot = entree[:-1] + "ation" if entree.endswith("*") else entree
             with self.subTest(entree=entree):
                 self.assertNotEqual(self.termes("Pendant l'intervention, %s du poste" % mot.upper()), [], entree)
-        # Avec accents et apostrophes réelles.
         for phrase in ("Couper l'alimentation générale", "Vérifier l'absence de tension", "Porter des gants",
                        "Mise en sécurité de la machine", "Poser le cadenas", "Habilitation BR requise"):
             with self.subTest(phrase=phrase):
                 self.assertNotEqual(self.termes(phrase), [])
-        # Faux amis : rien ne doit être refusé.
         for phrase in ("Panne épisodique du capteur", "Retour du Vatican", "La soupape de sécurité fuit",
                        "Le pressostat de sécurité déclenche", "Graissage du portique (gantry)", "Épingle cassée"):
             with self.subTest(faux_ami=phrase):
                 self.assertEqual(self.termes(phrase), [])
 
-    def test_messages_de_refus_de_securite(self):
+    def test_messages_et_rubriques(self):
         self.assertEqual(self.page.evaluate("Wiki.MESSAGE_SECURITE_IA"),
                          "L'IA ne rédige jamais de consigne de sécurité : voir la consignation de l'équipement")
-        self.assertTrue(self.page.evaluate("Wiki.MESSAGE_SECURITE_MAIN").startswith(
-            "Le wiki ne contient pas de consigne de sécurité"))
+        self.assertTrue(self.page.evaluate("Wiki.MESSAGE_SECURITE_MAIN").startswith("Le wiki ne contient pas de consigne"))
+        self.assertEqual(self.page.evaluate("Wiki.RUBRIQUES"), {
+            "équipement": ["Ce qui revient", "Ce qui a réglé le problème", "À surveiller", "Astuces"],
+            "composant": ["Défaillances", "Signes d'usure", "Montage et remplacement", "Équivalences"],
+            "mode": ["Symptômes", "Causes", "Remèdes", "Équipements concernés"],
+            "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges"]})
+        self.assertTrue(self.page.evaluate("Object.isFrozen(Wiki.RUBRIQUES) && Object.isFrozen(Wiki.VOCABULAIRE_NOUVEAUTE)"))
+
+
+class TestBalisage(CasControles):
+
+    def test_lire_et_ecrire_aller_retour(self):
+        lu = self.page.evaluate("(t) => Wiki.lireTexte(t)", APRES)
+        self.assertEqual(lu["erreurs"], [])
+        self.assertEqual([r["nom"] for r in lu["rubriques"]], ["Ce qui revient", "Ce qui a réglé le problème", "À surveiller"])
+        derniere = lu["rubriques"][2]["phrases"][0]
+        self.assertEqual(derniere["ot"], [OT])
+        self.assertEqual(derniere["liens"], [MODE])
+        self.assertEqual(derniere["propre"], "Accouplement désaligné de 0,4 mm, voir Désalignement d'accouplement")
+        rubriques = [{"rubrique": "À surveiller", "phrases": [{"texte": "Usure du roulement", "ot": [OT]}]},
+                     {"rubrique": "Ce qui revient", "phrases": [{"texte": "Fuite [OT-2026-0010] à l'arbre", "ot": [OT, "OT-2026-0010"]}]}]
+        ecrit = self.page.evaluate("([r, t]) => Wiki.ecrireTexte(r, t)", [rubriques, "équipement"])
+        self.assertEqual(ecrit, "## Ce qui revient\n- Fuite à l'arbre [OT-2026-0010] [OT-2026-0042]\n"
+                                "## À surveiller\n- Usure du roulement [OT-2026-0042]")
+        relu = self.page.evaluate("(t) => Wiki.ecrireTexte(Wiki.lireTexte(t).rubriques.map((r) => ({ nom: r.nom, phrases: r.phrases })), 'équipement')", APRES)
+        self.assertEqual(relu, APRES)
+
+    def test_lignes_hors_de_la_forme(self):
+        lu = self.page.evaluate("(t) => Wiki.lireTexte(t)", "- avant toute rubrique [OT-2026-0001]\n## Causes\ntexte libre\n\n- ok [OT-2026-0001]")
+        self.assertEqual([e["ligne"] for e in lu["erreurs"]], [1, 3])
+
+    def test_comparer_les_textes(self):
+        avant = AVANT + "\n## À surveiller\n- Roulement à suivre [OT-2026-0010]"
+        apres = ("## Ce qui a réglé le problème\n- Remplacement de la garniture par un kit neuf [OT-2026-0010]\n"
+                 "## Ce qui revient\n- Fuites répétées de la garniture [OT-2026-0010] [OT-2026-0020] [OT-2026-0042]\n"
+                 "## À surveiller\n- Alignement à contrôler [OT-2026-0042]")
+        c = self.page.evaluate("([a, b]) => Wiki.comparerTextes(a, b)", [avant, apres])
+        self.assertEqual([p["propre"] for p in c["identiques"]], ["Remplacement de la garniture par un kit neuf"])
+        self.assertEqual([p["propre"] for p in c["nouvelles"]], ["Alignement à contrôler"])
+        self.assertEqual([(r["phrase"]["propre"], [a["propre"] for a in r["anciennes"]]) for r in c["reprises"]],
+                         [("Fuites répétées de la garniture", ["Fuite à la garniture mécanique, fréquent ici", "Roulement à suivre"])])
+        self.assertEqual(c["retirees"], [])
+
+
+class TestControles(CasControles):
+
+    def test_une_proposition_conforme_passe(self):
+        self.assertEqual(self.controler(VALABLE), {"ok": True, "raisons": []})
+        self.assertEqual(self.controler({"rien": True, "pages": [], "contradictions": []}), {"ok": True, "raisons": []})
+        self.assertEqual([u for u in self.requetes if not u.startswith(("file:", "data:"))], [])
+
+    def test_forme(self):
+        self.refus(avec_texte(APRES + "\n## Historique\n- Ancienne fuite [OT-2026-0042]"),
+            "Page « PO-02 — Pompe centrifuge » : rubrique « Historique » inconnue pour une page équipement")
+        autre = copy.deepcopy(VALABLE)
+        autre["pages"][0]["titre"] = "CP-01 — Compresseur"
+        self.refus(autre, "Page « CP-01 — Compresseur » : cette page n'a pas été envoyée")
+        equipement = copy.deepcopy(VALABLE)
+        equipement["pages"][1].update({"type": "équipement", "titre": "CV-09 — Convoyeur",
+                                       "texte": "## Ce qui revient\n- Bruit [OT-2026-0042]"})
+        self.refus(equipement, "une page d'équipement ne se crée pas")
+        sans_rattachement = copy.deepcopy(VALABLE)
+        sans_rattachement["pages"][1]["rattacheA"] = ""
+        self.refus(sans_rattachement, "un savoir-faire se rattache à une page envoyée")
+        self.refus(avec_texte(APRES + "\ntexte libre"), "hors de la forme")
+
+    def test_citations(self):
+        self.refus(ajouter_phrase(VALABLE, "Bruit au démarrage"), "phrase sans OT cité — « Bruit au démarrage »")
+        self.refus(ajouter_phrase(VALABLE, "Bruit au démarrage [OT-1999-9999]"), "OT cité hors des OT permis : OT-1999-9999")
+
+    def test_non_retrait(self):
+        sans_ot = avec_texte(APRES.replace(" [OT-2026-0020]", ""))
+        raisons = self.refus(sans_ot, "OT cité retiré de la page : OT-2026-0020")
+        self.assertFalse(any("phrase retirée" in r for r in raisons), raisons)       # la phrase est restée
+        sans_phrase = avec_texte(APRES.replace("## Ce qui a réglé le problème\n- Remplacement de la garniture par un kit neuf [OT-2026-0010]\n", ""))
+        self.refus(sans_phrase, "phrase retirée — « Remplacement de la garniture par un kit neuf »")
+        oubli = avec_texte(APRES.replace("Fuite à la garniture mécanique, fréquent ici [OT-2026-0010] [OT-2026-0020] [OT-2026-0042]",
+                                         "Fuites répétées de la garniture [OT-2026-0010] [OT-2026-0042]"))
+        self.refus(oubli, "phrase retirée — « Fuite à la garniture mécanique, fréquent ici »")
+        # Une reprise qui cite tous les OT de l'ancienne phrase est permise (reformulation).
+        reprise = avec_texte(APRES.replace("Fuite à la garniture mécanique, fréquent ici", "Fuites répétées de la garniture, fréquentes ici"))
+        self.assertTrue(self.controler(reprise)["ok"], self.controler(reprise)["raisons"])
+
+    def test_nombres_comptage_et_dates(self):
+        self.refus(ajouter_phrase(VALABLE, "Pression relevée à 7 bar [OT-2026-0042]"), "nombre « 7 » absent des OT cités")
+        self.refus(ajouter_phrase(VALABLE, "Garniture changée 3 fois [OT-2026-0042]"), "comptage interdit")
+        raisons = self.refus(ajouter_phrase(VALABLE, "Garniture changée trois fois [OT-2026-0042]"), "comptage interdit")
+        self.assertFalse(any("nombre «" in r for r in raisons), raisons)
+        self.refus(ajouter_phrase(VALABLE, "Fuite apparue en 2026 [OT-2026-0042]"), "aucune date dans le wiki")
+        self.refus(ajouter_phrase(VALABLE, "Fuite constatée en juin [OT-2026-0042]"), "aucune date dans le wiki")
+        self.refus(ajouter_phrase(VALABLE, "Garniture changée le 12/03 [OT-2026-0042]"), "aucune date dans le wiki")
+        # Permis : un nombre de l'OT (« 0,4 » écrit « 0.4 »), « une fois », le titre d'une page dans un lien.
+        permis = ajouter_phrase(VALABLE, "Une fois réaligné à 0.4 mm près, voir [[Kit garniture mécanique PO-02]] [OT-2026-0042]")
+        self.assertTrue(self.controler(permis)["ok"], self.controler(permis)["raisons"])
+        titre = copy.deepcopy(VALABLE)
+        titre["pages"][1]["titre"] = "Contrôler l'alignement de PO-07"
+        self.refus(titre, "nombre « 07 » du titre absent des OT")
+
+    def test_nouveaute_pour_un_ot_anterieur(self):
+        phrase = "Désormais l'accouplement est réaligné [OT-2026-0042]"
+        anterieur = copy.deepcopy(CONTEXTE)
+        anterieur.update({"anterieure": True})
+        anterieur["otIngere"]["dateIntervention"] = "2026-03-01 10:00"
+        self.refus(ajouter_phrase(VALABLE, phrase), "intervention antérieure à des faits déjà intégrés", anterieur)
+        # La même phrase pour un OT non antérieur : permise.
+        self.assertTrue(self.controler(ajouter_phrase(VALABLE, phrase))["ok"])
+        # Une phrase qui cite aussi un OT plus récent n'est pas fondée sur le seul OT antérieur : permise.
+        appuyee = ajouter_phrase(VALABLE, "Désormais l'accouplement est réaligné [OT-2026-0042] [OT-2026-0020]")
+        self.assertTrue(self.controler(appuyee, anterieur)["ok"], self.controler(appuyee, anterieur)["raisons"])
+
+    def test_securite(self):
+        raisons = self.refus(ajouter_phrase(VALABLE, "Couper l'alimentation avant de démonter [OT-2026-0042]"),
+                             "L'IA ne rédige jamais de consigne de sécurité")
+        self.assertTrue(any("couper l alimentation" in r for r in raisons), raisons)
+        contradiction = copy.deepcopy(VALABLE)
+        contradiction["contradictions"][0]["observation"] = "Il fallait consigner la pompe."
+        self.refus(contradiction, "L'IA ne rédige jamais de consigne de sécurité")
+
+    def test_longueurs(self):
+        trop = copy.deepcopy(VALABLE)
+        trop["pages"][1]["texte"] = "## Étapes\n" + "\n".join("- Étape à suivre au comparateur [OT-2026-0042]" for _ in range(13))
+        self.refus(trop, "13 phrases, 12 au plus")
+        bavard = copy.deepcopy(VALABLE)
+        bavard["pages"][1]["texte"] = "## Étapes\n- " + " ".join(["mot"] * 250) + " [OT-2026-0042]"
+        self.refus(bavard, "251 mots, 250 au plus")         # 250 mots + « Étapes » (rubrique comprise)
+        nombreuses = copy.deepcopy(VALABLE)
+        for numero in range(3):
+            nombreuses["pages"].append({"action": "creer", "type": "mode", "titre": "Mode de défaillance %s" % "abc"[numero],
+                                        "texte": "## Causes\n- Usure [OT-2026-0042]"})
+        self.refus(nombreuses, "4 pages créées : 3 au plus par OT")
+
+    def test_liens_et_titres(self):
+        self.refus(ajouter_phrase(VALABLE, "Voir [[Page inexistante]] [OT-2026-0042]"), "lien vers une page inconnue « Page inexistante »")
+        meme = copy.deepcopy(VALABLE)
+        meme["pages"][1].update({"type": "mode", "titre": MODE, "texte": "## Causes\n- Usure [OT-2026-0042]"})
+        self.refus(meme, "une page de ce titre existe déjà")
+        proche = copy.deepcopy(VALABLE)
+        proche["pages"][1].update({"type": "mode", "titre": "Désalignements de l'accouplement", "texte": "## Causes\n- Usure [OT-2026-0042]"})
+        self.refus(proche, "titre trop proche de « Désalignement d'accouplement »")
+        # Un lien vers une page créée par la même proposition est permis.
+        cree = ajouter_phrase(VALABLE, "Voir [[Contrôler l'alignement de PO-02]] [OT-2026-0042]")
+        self.assertTrue(self.controler(cree)["ok"], self.controler(cree)["raisons"])
+
+    def test_contradictions(self):
+        inexistante = copy.deepcopy(VALABLE)
+        inexistante["contradictions"][0]["phrase"] = "Bruit au démarrage"
+        self.refus(inexistante, "la phrase contredite n'existe pas sur la page")
+        autre_ot = copy.deepcopy(VALABLE)
+        autre_ot["contradictions"][0]["ot"] = ["OT-2026-0010"]
+        self.refus(autre_ot, "elle doit citer l'OT ingéré (OT-2026-0042), et lui seul")
+        non_envoyee = copy.deepcopy(VALABLE)
+        non_envoyee["contradictions"][0]["page"] = "CP-01 — Compresseur"
+        self.refus(non_envoyee, "Contradiction sur la page « CP-01 — Compresseur » : cette page n'a pas été envoyée")
+        rien = copy.deepcopy(VALABLE)
+        rien["rien"] = True
+        self.refus(rien, "« Rien à ajouter » avec des pages ou des contradictions")
+
+    def test_ecriture_a_la_main(self):
+        contexte = {"manuel": True, "pagesEnvoyees": [CONTEXTE["pagesEnvoyees"][0]], "catalogue": CONTEXTE["catalogue"],
+                    "otPermis": ["OT-2026-0010", "OT-2026-0020", "OT-2026-0042"],
+                    "sources": {"OT-2026-0042": SOURCE, "OT-2026-0010": "Garniture remplacée.", "OT-2026-0020": "Fuite."}}
+        retrait = {"rien": False, "contradictions": [], "pages": [{"action": "modifier", "titre": EQUIPEMENT,
+                   "texte": "## Ce qui revient\n- Fuite à l'arbre due au désalignement de 0,4 mm [OT-2026-0042]"}]}
+        self.assertEqual(self.controler(retrait, contexte), {"ok": True, "raisons": []})
+        securite = copy.deepcopy(retrait)
+        securite["pages"][0]["texte"] += "\n- Porter des gants pour la dépose [OT-2026-0042]"
+        raisons = self.refus(securite, "Le wiki ne contient pas de consigne de sécurité", contexte)
+        self.assertFalse(any("L'IA ne rédige" in r for r in raisons), raisons)
+        hors = copy.deepcopy(retrait)
+        hors["pages"][0]["texte"] += "\n- Bruit [OT-2026-0099]"
+        self.refus(hors, "OT cité hors des OT permis : OT-2026-0099", contexte)
+        nombre = copy.deepcopy(retrait)
+        nombre["pages"][0]["texte"] += "\n- Pression à 7 bar [OT-2026-0010]"
+        self.refus(nombre, "nombre « 7 » absent des OT cités", contexte)
 
 
 if __name__ == "__main__":

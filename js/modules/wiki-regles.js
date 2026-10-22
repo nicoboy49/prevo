@@ -24,7 +24,8 @@ const Wiki = (() => {
   });
 
   // ===========================================================================================
-  // 1. Forme comparable et vocabulaire de la sécurité (D97) ; balisage et contrôles : wiki-texte.js
+  // 1. Forme comparable, rubriques, vocabulaires de la sécurité (D97) et de la nouveauté (D111) ;
+  //    balisage et contrôles : wiki-texte.js
   // ===========================================================================================
 
   // Vocabulaire de la sécurité et de la consignation (D97), en forme comparable (sans accents ni
@@ -41,6 +42,22 @@ const Wiki = (() => {
     'couper l energie', 'coupez l energie', 'couper l air', 'couper la pression', 'dissiper l energie',
     'mise en securite', 'mettre en securite', 'regle de securite', 'regles de securite',
     'mesure de securite', 'mesures de securite', 'pour votre securite',
+  ]);
+
+  // Rubriques d'une page, par type (§20.4), dans l'ordre où elles s'écrivent.
+  const RUBRIQUES = Object.freeze({
+    'équipement': Object.freeze(['Ce qui revient', 'Ce qui a réglé le problème', 'À surveiller', 'Astuces']),
+    'composant': Object.freeze(['Défaillances', 'Signes d\'usure', 'Montage et remplacement', 'Équivalences']),
+    'mode': Object.freeze(['Symptômes', 'Causes', 'Remèdes', 'Équipements concernés']),
+    'savoir-faire': Object.freeze(['Quand le faire', 'Étapes', 'Pièces et outillage', 'Pièges']),
+  });
+
+  // Vocabulaire de la nouveauté (D111), en forme comparable, mots ou expressions entiers : une phrase qui ne
+  // repose que sur un OT antérieur aux faits de sa page ne peut pas présenter son information comme la plus récente.
+  const VOCABULAIRE_NOUVEAUTE = Object.freeze([
+    'desormais', 'dorenavant', 'maintenant', 'actuellement', 'a present', 'aujourd hui', 'recemment',
+    'dernierement', 'depuis peu', 'le plus recent', 'la plus recente', 'les plus recents', 'les plus recentes',
+    'dernier', 'derniere', 'derniers', 'dernieres', 'nouvelle cause', 'nouveau remede',
   ]);
 
   const MESSAGE_SECURITE_IA = 'L\'IA ne rédige jamais de consigne de sécurité : voir la consignation de l\'équipement';
@@ -99,7 +116,7 @@ const Wiki = (() => {
   }
 
   return {
-    SEUILS, VOCABULAIRE_SECURITE, MESSAGE_SECURITE_IA, MESSAGE_SECURITE_MAIN,
+    SEUILS, RUBRIQUES, VOCABULAIRE_SECURITE, VOCABULAIRE_NOUVEAUTE, MESSAGE_SECURITE_IA, MESSAGE_SECURITE_MAIN,
     comparable, citations, sansCitations, nombreDeMots, termesDeSecurite,
   };
 })();
