@@ -651,6 +651,20 @@ voient pas.
   indicateurs, les causes fréquentes et les suggestions ; sur la démo, chaque fichier donne les totaux
   annoncés par son mode d'emploi.
 
+### La clôture
+
+La suite complète (1 070 tests) est passée en quatre vérifications, chacune au premier plan et en moins
+de 10 minutes : `test_[a-h]`, `test_[i-o]`, `test_[p-r]`, puis `test_[s-z]` en dernière vague, avant la
+pose des étiquettes `lot-5` et **`v1.1.0`** sur le même commit. Sont sautés, en le disant, les essais qui
+demandent le vrai Excel (`PREVO_TEST_EXCEL=1`) ou un vrai modèle d'IA (`PREVO_TEST_IA=1`). Les
+bibliothèques de `js/lib/` sont celles du lot 4, inchangées ; seule SheetJS s'y ajoute.
+
+### La publication
+
+`main` et les étiquettes `lot-5` et `v1.1.0` sont envoyées à la clôture sur le dépôt, toujours privé
+(accord de Nicolas, comme au lot 4) ; les étiquettes internes du chantier restent sur le poste. Le
+passage en public suivra une dernière vérification de tout l'historique, validée par Nicolas.
+
 ## 12. À retenir pour piloter une IA
 
 1. Faire écrire et valider le cahier des charges et ses critères de succès avant le code.
