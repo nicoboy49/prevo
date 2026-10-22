@@ -240,6 +240,91 @@ class TestValidation(CasJournal):
         self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
 
 
+AUTRE_POSTE_JS = """([table, geste]) => {
+  // Le geste d'un « autre poste » passe juste avant la prochaine écriture de `table` par ce poste, une seule fois.
+  const original = Donnees.modifier;
+  const gestes = {
+    rejeter: (id) => Wiki.rejeter(id, 'rejet sur un autre poste'),
+    valider: (id) => Wiki.valider([id]),
+    reecrire: () => original.call(Donnees, 'wiki_pages', (lignes) => { const l = lignes.find((x) => x.id === 'WP-0001');
+      l.version = String(Number(l.version) + 1); l.texte += '\\n- Ajout d\\'un autre poste [OT-2026-0007]'; }),
+  };
+  window.resultatAutre = null;
+  Donnees.modifier = async function (nom) {
+    if (nom === table) {
+      Donnees.modifier = original;
+      window.resultatAutre = await gestes[geste[0]](geste[1]).then(() => ({ ok: true }), (e) => ({ ok: false, message: e.message }));
+    }
+    return original.apply(this, arguments);
+  };
+}"""
+
+
+class TestDeuxPostes(CasJournal):
+    """Deux postes du responsable en même temps (CS101) : une entrée appliquée aux pages est validée, quoi que l'autre
+    poste ait fait entre les deux écritures ; rien ne reste publié contre le journal."""
+
+    def setUp(self):
+        super().setUp()
+        self.traiter(EN_FILE)
+        self.id_0003 = self.id_de("OT-2026-0003")
+
+    def autre_poste(self, table, geste, cible=""):
+        self.page.evaluate(AUTRE_POSTE_JS, [table, [geste, cible]])
+
+    def fin(self):
+        entree = self.entrees()["OT-2026-0003"]
+        self.assertEqual(entree["statut"], "validée")
+        self.assertEqual([c["page"] for c in json.loads(entree["changements"])], ["WP-0001"])
+        self.assertEqual(self.ligne("WP-0001")["derniere_entree"], self.id_0003)
+        self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
+        return entree
+
+    def test_rejet_apres_l_ecriture_des_pages_refuse(self):
+        self.autre_poste("wiki_journal", "rejeter", self.id_0003)
+        self.assertEqual(self.ok("valider", [self.id_0003])["validees"], [self.id_0003])
+        autre = self.page.evaluate("window.resultatAutre")
+        self.assertFalse(autre["ok"])
+        self.assertIn("vient d'être validée", autre["message"])
+        self.fin()
+
+    def test_rejet_avant_l_ecriture_des_pages_la_validation_l_emporte(self):
+        self.autre_poste("wiki_pages", "rejeter", self.id_0003)
+        self.assertEqual(self.ok("valider", [self.id_0003])["validees"], [self.id_0003])
+        self.assertEqual(self.page.evaluate("window.resultatAutre"), {"ok": True})
+        entree = self.fin()
+        self.assertIn("un autre poste l'avait passée « rejetée »", entree["motif"])
+        self.assertTrue(entree["ordre"])
+
+    def test_deux_validations_de_la_meme_proposition(self):
+        self.autre_poste("wiki_journal", "valider", self.id_0003)
+        self.assertEqual(self.ok("valider", [self.id_0003])["validees"], [self.id_0003])
+        autre = self.page.evaluate("window.resultatAutre")
+        self.assertFalse(autre["ok"])
+        self.assertIn("n'est pas « à valider » (validée)", autre["message"])
+        self.assertEqual(self.ligne("WP-0001")["version"], "2")              # appliquée une seule fois
+        self.fin()
+
+    def test_ecriture_a_la_main_et_page_reecrite_sur_un_autre_poste(self):
+        self.autre_poste("wiki_pages", "reecrire")
+        texte = "## Ce qui revient\n- Fuite de garniture au démarrage, fréquent ici [OT-2026-0007]"
+        self.refus("modifiée entre-temps (sans doute sur un autre poste)", "ecrire", {"pageId": "EQ-0001"}, texte, {"version": 1})
+        manuelle = self.page.evaluate("Donnees.lignes('wiki_journal').filter((e) => e.nature === 'manuel').pop()")
+        self.assertEqual(manuelle["statut"], "refusée")
+        self.assertIn("Ajout d'un autre poste", self.ligne("WP-0001")["texte"])
+
+    def test_rattrapage_avant_une_validation_enchainee(self):
+        # La validation de 0003 est interrompue après l'écriture des pages ; valider 0001 (construite sur elle) rattrape
+        # d'abord 0003 au lieu de la refuser.
+        self.page.evaluate("""() => { const modifier = Donnees.modifier;
+          Donnees.modifier = function (table) { if (table === 'wiki_journal') { Donnees.modifier = modifier;
+            return Promise.reject(new Error('disque plein')); } return modifier.apply(this, arguments); }; }""")
+        self.refus("disque plein", "valider", [self.id_0003])
+        self.assertEqual(self.ok("valider", [self.id_de("OT-2026-0001")])["validees"], [self.id_de("OT-2026-0001")])
+        self.assertEqual(self.entrees()["OT-2026-0003"]["statut"], "validée")
+        self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
+
+
 class TestContradictions(CasJournal):
 
     def test_selection_refusee_puis_tranchee_par_le_responsable(self):
@@ -351,6 +436,12 @@ class TestEcritureALaMain(CasJournal):
         entree = self.page.evaluate("(id) => Donnees.trouver('wiki_journal', id)", archive["entreeId"])
         self.assertTrue(json.loads(entree["changements"])[0]["archivage"])
         self.refus("est archivée", "ecrire", {"pageId": "WP-0006"}, "## Symptômes\n- Bruit [OT-2026-0001]")
+        # Une page créée à la main puis archivée : l'entrée de sa création porte son WP-…, l'intégrité reste ok.
+        self.ok("ecrire", {"pageId": mode["ligneId"]}, None, {"archiver": True})
+        creation = self.page.evaluate("""(id) => Donnees.lignes('wiki_journal').find((e) => e.nature === 'manuel'
+          && JSON.parse(e.changements)[0].creation && JSON.parse(e.changements)[0].page === id)""", mode["ligneId"])
+        self.assertIsNotNone(creation)
+        self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
         # L'écriture de la page échoue : l'entrée « manuel » passe « refusée » avec la raison.
         self.page.evaluate("""() => { const modifier = Donnees.modifier;
           Donnees.modifier = function (table) { if (table === 'wiki_pages') return Promise.reject(new Error('disque plein'));
@@ -378,6 +469,11 @@ class TestIntegriteEtDonnees(CasJournal):
         ecarts = self.integrite()["ecarts"]
         self.assertEqual([(e["page"], e["message"]) for e in ecarts],
                          [("PO-01 — Pompe de process A", "le texte de la page n'est pas l'« après » de sa dernière entrée")])
+        # Une page qui a un texte sans aucune entrée au journal : écart.
+        self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-0090', type: 'mode',
+          titre: 'Page écrite hors du journal', texte: '## Causes\\n- Usure [OT-2026-0001]', version: '1', statut: 'active' }); })""")
+        self.assertIn(("Page écrite hors du journal", "texte sans entrée au journal"),
+                      [(e["page"], e["message"]) for e in self.integrite()["ecarts"]])
         # Un « avant » qui n'est pas l'« après » de l'entrée précédente : chaîne rompue.
         self.page.evaluate("""(id) => Donnees.modifier('wiki_journal', (lignes) => { const e = lignes.find((x) => x.id === id);
           const changements = JSON.parse(e.changements); changements[0].avant += ' (falsifié)';

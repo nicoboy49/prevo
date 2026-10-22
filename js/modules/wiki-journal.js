@@ -21,8 +21,11 @@
 //    qui touchent la page passent « à refaire »), puis la page (derniere_entree = cette entrée, version vérifiée) ;
 //    si la page ne peut pas être écrite, l'entrée passe « refusée » avec la raison. OT permis : les OT clôturés
 //    administrativement et ceux que la page cite déjà ; les nombres sont cherchés dans le texte de leurs OT ;
-//  - rattrapage (Wiki.rattraper, appelé par les écrans et au début de Wiki.valider) : une entrée « à valider » dont
-//    l'identifiant est le derniere_entree de toutes les pages de ses changements est marquée « validée » ;
+//  - une entrée APPLIQUÉE (son identifiant est le derniere_entree de toutes les pages de ses changements) est validée,
+//    quoi que dise encore son statut : c'est ce qui départage deux postes entre deux écritures (validation contre
+//    rejet : la validation l'emporte et le motif le dit ; deux validations : une seule s'applique) ;
+//  - rattrapage (Wiki.rattraper, pages relues, appelé par les écrans, au début de Wiki.valider et de Wiki.ecrire) :
+//    une entrée « à valider » appliquée est marquée « validée » ;
 //  - visibilité : Wiki.contradictionsDe (contradictions ouvertes des entrées validées) pour tous les profils ;
 //    Wiki.enAttenteDe (propositions à valider qui changent la page) au responsable seulement.
 
@@ -104,9 +107,10 @@ Object.assign(Wiki, (() => {
   }
 
   /** Ligne de wiki_pages d'un changement ou d'une clé (null si la page n'a pas encore de ligne). */
-  function ligneDeCle(lignes, cle, pageId) {
+  function ligneDeCle(lignes, cle, pageId, archivees) {
     if (texte(pageId)) return lignes.find((ligne) => ligne.id === texte(pageId)) || null;
-    const actives = lignes.filter(estActive);
+    // archivees : pages archivées comprises, après les actives (intégrité, entrée appliquée à une page archivée depuis).
+    const actives = archivees ? lignes.filter(estActive).concat(lignes.filter((l) => !estActive(l))) : lignes.filter(estActive);
     const valeur = texte(cle);
     if (valeur.startsWith('EQ:')) {
       return actives.find((l) => texte(l.type) === 'équipement' && texte(l.equipement_id) === valeur.slice(3)) || null;
@@ -219,6 +223,8 @@ Object.assign(Wiki, (() => {
     const marquees = [];
     lignesJournal.filter((entree) => texte(entree.statut) === 'à valider' && rang(entree) > apres).sort(parRang)
       .forEach((entree) => {
+        const deja = appliqueeDans(entree, lignesPages);        // validée sur un autre poste : rien à refaire
+        if (deja) { marquerValidee(entree, deja, ''); return; }
         if (!depend(entree, perdues, lignesPages)) return;
         changeesDe(entree, lignesPages).forEach((cle) => perdues.add(cle));
         Object.assign(entree, { statut: 'à refaire', motif, changements: '', contradictions: '', ordre: '', traite_le: maintenant });
@@ -232,26 +238,39 @@ Object.assign(Wiki, (() => {
   // ===========================================================================================
 
   /**
-   * Rattrapage (§20.7) : une entrée « à valider » dont l'identifiant est le derniere_entree de toutes les pages de
-   * ses changements a été appliquée sans que son statut ait pu être écrit : elle est marquée « validée ». → nombre.
+   * Lignes de wiki_pages d'une entrée si elle y est APPLIQUÉE (son identifiant est le derniere_entree de toutes les
+   * pages de ses changements), sinon null. Une entrée appliquée est validée, quoi que dise encore son statut : c'est
+   * la règle qui départage deux postes (validation contre rejet, deux validations) entre deux écritures.
+   */
+  function appliqueeDans(entree, lignesPages) {
+    const changements = changementsDe(entree);
+    if (!changements.length) return null;
+    const lignes = changements.map((c) => ligneDeCle(lignesPages, c.cle, c.page, true));
+    return lignes.every((ligne) => ligne && texte(ligne.derniere_entree) === entree.id) ? lignes : null;
+  }
+
+  /** Marque « validée » une entrée appliquée (dans une fonction de Donnees.modifier sur wiki_journal). */
+  function marquerValidee(entree, pages, motif) {
+    Object.assign(entree, { statut: 'validée', decide_par: texte(pages[0].valide_par), decide_le: texte(pages[0].valide_le),
+      changements: JSON.stringify(changementsDe(entree).map((c, n) => Object.assign({}, c, { page: pages[n].id }))) });
+    if (motif) entree.motif = motif;
+  }
+
+  /**
+   * Rattrapage (§20.7) : une entrée « à valider » appliquée aux pages sans que son statut ait pu être écrit est
+   * marquée « validée » (pages relues d'abord). Aucun choix n'est fait : rien n'est réservé au responsable. → nombre.
    */
   async function rattraper() {
+    await Donnees.rechargerTable('wiki_pages');
     const lignesPages = Donnees.lignes('wiki_pages');
-    const appliquees = (entree) => {
-      const changements = changementsDe(entree);
-      if (!changements.length) return null;
-      const lignes = changements.map((c) => ligneDeCle(lignesPages, c.cle, c.page));
-      return lignes.every((ligne) => ligne && texte(ligne.derniere_entree) === entree.id) ? lignes : null;
-    };
-    const aMarquer = Donnees.lignes('wiki_journal').filter((e) => texte(e.statut) === 'à valider' && appliquees(e));
+    const aMarquer = Donnees.lignes('wiki_journal').filter((e) => texte(e.statut) === 'à valider' && appliqueeDans(e, lignesPages));
     if (!aMarquer.length) return 0;
     return Donnees.modifier('wiki_journal', (lignes) => {
       let nombre = 0;
       lignes.filter((e) => texte(e.statut) === 'à valider').forEach((entree) => {
-        const pages = appliquees(entree);
+        const pages = appliqueeDans(entree, lignesPages);
         if (!pages) return;
-        Object.assign(entree, { statut: 'validée', decide_par: texte(pages[0].valide_par), decide_le: texte(pages[0].valide_le),
-          changements: JSON.stringify(changementsDe(entree).map((c, n) => Object.assign({}, c, { page: pages[n].id }))) });
+        marquerValidee(entree, pages, '');
         nombre += 1;
       });
       return nombre;
@@ -326,21 +345,32 @@ Object.assign(Wiki, (() => {
       if (!fraiche || texte(fraiche.statut) !== 'à valider') continue;      // passée « à refaire » par une précédente
       const pages = await appliquer(fraiche, par);
       if (pages === null) {
-        bilan.aRefaire.push(...await Donnees.modifier('wiki_journal', (lignes, outils) => {
+        await Donnees.rechargerTable('wiki_pages');
+        const lignesFraiches = Donnees.lignes('wiki_pages');
+        const issue = await Donnees.modifier('wiki_journal', (lignes, outils) => {
           const ligne = lignes.find((e) => e.id === entree.id);
-          if (!ligne || texte(ligne.statut) !== 'à valider') return [];
-          const cles = changeesDe(ligne, Donnees.lignes('wiki_pages'));
+          if (!ligne || texte(ligne.statut) !== 'à valider') return { aRefaire: [] };
+          const deja = appliqueeDans(ligne, lignesFraiches);          // validée entre-temps sur un autre poste
+          if (deja) { marquerValidee(ligne, deja, ''); return { validee: true, aRefaire: [] }; }
+          const cles = changeesDe(ligne, lignesFraiches);
           const motif = 'à refaire : une page a changé depuis la proposition';
           Object.assign(ligne, { statut: 'à refaire', motif, changements: '', contradictions: '', ordre: '', traite_le: outils.maintenant() });
-          return [ligne.id].concat(cascade(lignes, cles, rang(entree), 'à refaire : suit ' + ligne.id, outils.maintenant()));
-        }, { journal: false }));
+          return { aRefaire: [ligne.id].concat(cascade(lignes, cles, rang(entree), 'à refaire : suit ' + ligne.id, outils.maintenant())) };
+        }, { journal: false });
+        if (issue.validee) bilan.validees.push(entree.id);
+        bilan.aRefaire.push(...issue.aRefaire);
         continue;
       }
+      // Les pages portent cette entrée : elle est validée, même si un autre poste l'a rejetée ou fait passer « à refaire »
+      // entre-temps (ses changements et son rang sont alors rétablis, et le motif le dit).
       await Donnees.modifier('wiki_journal', (lignes, outils) => {
         const ligne = lignes.find((e) => e.id === entree.id);
-        if (!ligne || texte(ligne.statut) !== 'à valider') return;
-        Object.assign(ligne, { statut: 'validée', decide_par: par, decide_le: outils.maintenant(),
-          changements: JSON.stringify(changementsDe(ligne).map((c, n) => Object.assign({}, c, { page: pages[n] }))) });
+        if (!ligne || texte(ligne.statut) === 'validée') return;
+        const autre = texte(ligne.statut) !== 'à valider' ? texte(ligne.statut) : '';
+        Object.assign(ligne, { statut: 'validée', decide_par: par, decide_le: outils.maintenant(), ordre: fraiche.ordre,
+          contradictions: fraiche.contradictions,
+          changements: JSON.stringify(changementsDe(fraiche).map((c, n) => Object.assign({}, c, { page: pages[n] }))) });
+        if (autre) ligne.motif = 'validée ici alors qu\'un autre poste l\'avait passée « ' + autre + ' » : son texte est publié';
       }, { journal: false });
       bilan.validees.push(entree.id);
     }
@@ -355,16 +385,25 @@ Object.assign(Wiki, (() => {
     exigerResponsable();
     if (!texte(motif)) throw ErreurValidation('Le motif du rejet est obligatoire.');
     const par = nomDuResponsable();
-    return Donnees.modifier('wiki_journal', (lignes, outils) => {
+    await Donnees.rechargerTable('wiki_pages');
+    const lignesPages = Donnees.lignes('wiki_pages');
+    const resultat = await Donnees.modifier('wiki_journal', (lignes, outils) => {
       const ligne = lignes.find((e) => e.id === texte(id));
       if (!ligne || texte(ligne.statut) !== 'à valider') {
         throw ErreurValidation('La proposition ' + texte(id) + ' n\'est pas « à valider ».');
       }
+      const deja = appliqueeDans(ligne, lignesPages);
+      if (deja) { marquerValidee(ligne, deja, ''); return { dejaValidee: true }; }
       const maintenant = outils.maintenant();
-      const cles = changeesDe(ligne, Donnees.lignes('wiki_pages'));
+      const cles = changeesDe(ligne, lignesPages);
       Object.assign(ligne, { statut: 'rejetée', motif: texte(motif), decide_par: par, decide_le: maintenant });
       return { rejetee: ligne.id, aRefaire: cascade(lignes, cles, rang(ligne), 'à refaire : ' + ligne.id + ' rejetée', maintenant) };
     }, { journal: false });
+    if (resultat.dejaValidee) {
+      throw ErreurValidation('La proposition ' + texte(id) + ' vient d\'être validée (sans doute sur un autre poste) : son texte '
+        + 'est publié, elle ne se rejette plus. Corrigez la page à la main si besoin.');
+    }
+    return resultat;
   }
 
   /** Relance l'OT d'une entrée « rejetée » ou « refusée » : une nouvelle entrée « en file ». → son identifiant. */
@@ -451,6 +490,7 @@ Object.assign(Wiki, (() => {
   async function ecrire(cible, valeur, options) {
     exigerResponsable();
     const opts = options || {};
+    await rattraper();                           // pages relues ; une validation interrompue est d'abord rattrapée
     const page = cibleDe(cible);
     const archiver = Boolean(opts.archiver);
     if (archiver && !page.ligne) throw ErreurValidation('Seule une page qui a un texte s\'archive.');
@@ -494,6 +534,12 @@ Object.assign(Wiki, (() => {
         return ligne.id;
       }, { action: archiver ? 'page du wiki archivée (' + entreeId + ')' : 'page du wiki écrite à la main (' + entreeId + ')' });
       const ligne = Donnees.trouver('wiki_pages', ligneId);
+      if (!page.ligne) {                         // page créée : son WP-… noté dans l'entrée (intégrité, même archivée)
+        await Donnees.modifier('wiki_journal', (lignes) => {
+          const entree = lignes.find((e) => e.id === entreeId);
+          if (entree) entree.changements = JSON.stringify(changementsDe(entree).map((c) => Object.assign({}, c, { page: ligneId })));
+        }, { journal: false }).catch(() => {});
+      }
       return { pageId: ligne ? idCanonique(ligne) : ligneId, ligneId, entreeId };
     } catch (erreur) {
       await Donnees.modifier('wiki_journal', (lignes) => {
@@ -602,7 +648,7 @@ Object.assign(Wiki, (() => {
     Donnees.lignes('wiki_journal').filter((e) => (texte(e.nature) === 'ingestion' && texte(e.statut) === 'validée')
       || (texte(e.nature) === 'manuel' && texte(e.statut) === 'appliquée')).sort(parRang).forEach((entree) => {
       changementsDe(entree).forEach((changement) => {
-        const ligne = ligneDeCle(lignesPages, changement.cle, changement.page);
+        const ligne = ligneDeCle(lignesPages, changement.cle, changement.page, true);
         const cle = ligne ? ligne.id : texte(changement.cle);
         if (!parPage.has(cle)) parPage.set(cle, []);
         parPage.get(cle).push({ entree, changement });
