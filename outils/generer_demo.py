@@ -172,6 +172,7 @@ RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_DEMO = RACINE / 'donnees' / 'demo'
 FICHIER_JS = RACINE / 'js' / 'demo-donnees.js'
 FICHIER_SCENARIOS = RACINE / 'tests' / 'fixtures' / 'demo-scenarios.json'
+DOSSIER_WIKI_FIGE = RACINE / 'outils'   # demo_wiki_pages.csv et demo_wiki_journal.csv (outils/wiki_demo.py figer)
 
 GRAINE = 42                      # graine fixe : deux exécutions donnent des fichiers identiques
 GRAINE_LOT3 = 4203               # graine des ajouts du lot 3 (générateur à part : le reste ne bouge pas)
@@ -4630,7 +4631,42 @@ def poser_astuces_lot6(ctx):
 # Construction complète et ligne de commande
 # ---------------------------------------------------------------------------
 
-def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
+FICHIERS_WIKI_FIGES = (('wiki_pages', 'demo_wiki_pages.csv'), ('wiki_journal', 'demo_wiki_journal.csv'))
+
+
+def lire_valeur(champ, valeur):
+    """Valeur lue dans un CSV écrit par Prévo : apostrophe de protection retirée (inverse de ecrire_valeur)."""
+    if valeur.startswith("'") and a_proteger(champ['type'], champ['protege'], valeur[1:]):
+        return valeur[1:]
+    return valeur
+
+
+def charger_wiki_fige(ctx, dossier):
+    """Tables du wiki de démo (§20.10) : les fichiers figés par outils/wiki_demo.py, jamais régénérés (absents :
+    tables vides). Contrôle : OT cités, OT des entrées et pages liées existants, sinon arrêt."""
+    for table, nom in FICHIERS_WIKI_FIGES:
+        chemin = Path(dossier) / nom
+        if not chemin.is_file():
+            continue
+        lignes = list(csv.reader(io.StringIO(chemin.read_bytes().decode('utf-8-sig'), newline=''), delimiter=';'))
+        if not lignes or lignes[0] != [champ['nom'] for champ in CHAMPS[table]]:
+            raise ErreurCoherence('%s : en-tête différent du schéma de %s' % (chemin, table))
+        ctx.base[table] = [{champ['nom']: lire_valeur(champ, valeur) for champ, valeur in zip(CHAMPS[table], ligne)}
+                           for ligne in lignes[1:]]
+    ordres = {ot['id'] for ot in ctx.base['ordres_travail']}
+    cibles = {'EQ-': {e['id'] for e in ctx.base['equipements']}, 'ART-': {a['id'] for a in ctx.base['articles']},
+              'WP-': {p['id'] for p in ctx.base['wiki_pages'] if p['statut'] != 'archivée'}}
+    erreurs = []
+    for page in ctx.base['wiki_pages']:
+        erreurs += ['%s : OT cité inexistant %s' % (page['id'], ot) for ot in page['ot_cites'].split(';') if ot and ot not in ordres]
+        erreurs += ['%s : page liée inexistante %s' % (page['id'], lien) for lien in page['liens'].split(';')
+                    if lien and not any(lien.startswith(debut) and lien in ids for debut, ids in cibles.items())]
+    erreurs += ['%s : OT inexistant %s' % (e['id'], e['ot_id']) for e in ctx.base['wiki_journal'] if e['ot_id'] and e['ot_id'] not in ordres]
+    if erreurs:
+        raise ErreurCoherence('Wiki de démo figé incohérent :\n' + '\n'.join(erreurs))
+
+
+def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None, dossier_wiki=None):
     """Construit toutes les tables en mémoire (liste de dictionnaires) et vérifie leur cohérence."""
     ctx = Contexte(mois, volume)
     generer_localisations(ctx)
@@ -4674,6 +4710,7 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
         with hasard_du_lot6(ctx):
             generer_journal(ctx, garder=lambda ot: id(ot) in scenario_lot6)
         ctx.base['journal'].sort(key=lambda entree: (entree['date_heure'], entree['id']))
+        charger_wiki_fige(ctx, dossier_wiki or DOSSIER_WIKI_FIGE)
     verifier_jeu(ctx)
     if not volume:
         verifier_demo_lot3(ctx)
@@ -4692,6 +4729,8 @@ def lire_arguments(argv):
                            help='dossier des CSV (défaut : donnees/demo ; dans ce cas js/demo-donnees.js et '
                                 'tests/fixtures/demo-scenarios.json sont aussi écrits)')
     analyseur.add_argument('--sans-js', action='store_true', help="n'écrit pas js/demo-donnees.js")
+    analyseur.add_argument('--wiki', metavar='DOSSIER', default=None,
+                           help='dossier des fichiers figés du wiki de démo (défaut : outils)')
     analyseur.add_argument('--fichier-js', metavar='CHEMIN', default=None,
                            help="écrit le fichier JavaScript à cet emplacement (utile aux tests)")
     analyseur.add_argument('--fichier-scenarios', metavar='CHEMIN', default=None,
@@ -4721,7 +4760,7 @@ def principal(argv=None):
         sys.stdout.reconfigure(encoding='utf-8')
     arguments = lire_arguments(argv)
     depart = time.time()
-    ctx = construire_jeu(arguments.mois, arguments.volume)
+    ctx = construire_jeu(arguments.mois, arguments.volume, arguments.wiki)
     textes = {table: serialiser_table(table, ctx.base[table]) for table in NOMS_TABLES}
     dossier = Path(arguments.sortie) if arguments.sortie else DOSSIER_DEMO
     ecrire_csv(dossier, textes)

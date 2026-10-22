@@ -23,6 +23,13 @@ const Apropos = (() => {
     demo: 'Démo',
   };
 
+  // Modèle qui a construit le wiki de la démo (lot 6, §20.10) : lu dans son journal, en mode démo seulement.
+  function modeleWikiDemo(mode) {
+    if (mode !== 'demo') return '';
+    const entree = Donnees.lignes('wiki_journal').find((ligne) => ligne.nature === 'ingestion' && ligne.modele);
+    return entree ? entree.modele : '';
+  }
+
   function afficher(conteneur) {
     const mode = App.mode;
     const libelleStockage = App.adaptateur ? App.adaptateur.libelle : '';
@@ -52,7 +59,9 @@ const Apropos = (() => {
             <li><b>Dossier</b> : <code>index.html</code> ouvert dans Chrome ou Edge, avec un dossier de fichiers CSV choisi sur le PC.
               Un seul poste, aucune installation.</li>
             <li><b>Démo</b> : un atelier fictif en mémoire, pour découvrir l'outil. Rien n'est enregistré ;
-              l'export ZIP permet de garder une copie.</li>
+              l'export ZIP permet de garder une copie. Son wiki de maintenance a été construit par
+              Claude${modeleWikiDemo(mode) ? ' (' + modeleWikiDemo(mode) + ')' : ''} avec la consigne de Prévo, un agent par OT,
+              dans l'ordre des interventions ; la démo n'appelle aucune IA.</li>
           </ul>
           <p class="note">Dans tous les modes, les données sont des fichiers CSV (séparateur « ; », UTF-8) lisibles dans Excel.</p>
         </article>
