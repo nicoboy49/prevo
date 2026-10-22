@@ -1,3 +1,172 @@
-/* Wiki — écrans du responsable (lot 6 refondu, ARCHITECTURE.md §20.9) : journal, file, écriture à la main,
-   contrôle du wiki. Socle (T110) : feuille posée ; les styles arrivent avec T120. */
-.wiki-journal { display: block; }
+/* Wiki — écrans du responsable (lot 6 refondu, ARCHITECTURE.md §20.9) : journal #/wiki-journal et ses vues, « Traiter
+   la file », écriture à la main #/wiki-ecrire/…, contrôle du wiki. Composants communs de css/style.css (cartes, badges,
+   alertes, champs) ; couleurs : jetons des deux thèmes ; toutes les règles portent sur des classes wj- (les feuilles
+   de css/modules/ sont chargées partout). */
+
+.wj { min-width: 0; }
+
+/* =========================================================================================
+   1. Vues du journal (pastilles) et annonces
+   ========================================================================================= */
+
+.wj-vues { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+.wj-vue {
+  display: inline-flex; align-items: center; gap: .4rem; min-height: var(--tactile); padding: 0 .9rem; border-radius: 999px;
+  border: 1px solid var(--trait-2); background: var(--champ); color: var(--texte); font-weight: 600; text-decoration: none;
+}
+.wj-vue:hover, .wj-vue:focus-visible { border-color: var(--bleu); background: var(--teinte-bleu-faible); }
+.wj-vue[aria-current="page"] { border-color: var(--bleu); background: var(--teinte-bleu); color: var(--texte-bleu); }
+.wj-annonce:not(:empty) { margin-bottom: 18px; }
+.wj-annonce .alerte-texte p { margin: 0 0 .3rem; }
+
+/* =========================================================================================
+   2. Sections, entrées, changements surlignés
+   ========================================================================================= */
+
+.wj-section { margin-bottom: 26px; min-width: 0; }
+.wj-section > .aide { margin: -.2rem 0 .9rem; max-width: 90ch; }
+.wj-section > .alerte { margin-bottom: 12px; }
+.wj-selection { margin: 0 0 12px; }
+.wj-liste { display: grid; gap: 0; }
+
+.wj-entree { overflow-wrap: anywhere; }
+.wj-entree-tete { display: flex; align-items: flex-start; gap: .4rem 1rem; flex-wrap: wrap; }
+.wj-entree-titres { flex: 1 1 320px; min-width: 0; }
+.wj-entree-titre { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .6rem; font-size: 1.0625rem; color: var(--fort); }
+.wj-entree-titre > span { color: var(--texte); font-weight: 600; }
+.wj-choisir { order: 2; margin-left: auto; padding: 0 .4rem; border-radius: 10px; }
+.wj-choisir:hover { background: var(--survol); }
+.wj-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .8rem; margin: .4rem 0 0; color: var(--texte-2); font-size: .9375rem; }
+.wj-id { color: var(--muted); }
+.wj-lien-ot { font-weight: 800; }
+
+.wj-contradictions {
+  margin: 14px 0 4px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--bord-ambre);
+  border-left: 5px solid var(--ambre); background: var(--teinte-ambre-faible);
+}
+.wj-contradictions h4 { display: flex; align-items: center; gap: .45rem; margin: 0 0 .4rem; color: var(--texte-ambre); font-size: 1rem; }
+.wj-contradictions h4 .icone { color: var(--ambre); }
+.wj-contradictions ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.wj-contradictions p { margin: 0 0 .2rem; color: var(--texte); }
+.wj-contradictions b { color: var(--fort); }
+.wj-contradiction-page { font-weight: 700; }
+.wj-contradictions q, .wj-contradiction q { font-style: italic; }
+
+.wj-changement { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--trait-2); min-width: 0; }
+.wj-changement h4 { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; margin: 0 0 .3rem; font-size: 1rem; color: var(--fort); }
+.wj-type { color: var(--texte-2); font-weight: 500; font-size: .9375rem; }
+.wj-rubrique { margin: .6rem 0 .2rem; font-size: .9375rem; color: var(--texte-2); font-weight: 700; }
+.wj-phrases { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+.wj-phrases > li { line-height: 1.55; color: var(--texte); min-width: 0; }
+.wj-citations { color: var(--texte-2); font-size: .875rem; }
+.wj-citation { white-space: nowrap; }
+.wj-etiquette {
+  display: inline-block; padding: 0 .45rem; border-radius: 6px; font-size: .75rem; font-weight: 800; letter-spacing: .02em;
+  text-transform: uppercase; vertical-align: .1em; background: var(--teinte-neutre); color: var(--texte-2);
+}
+.wj-nouvelle .wj-etiquette { background: var(--teinte-vert); color: var(--texte-vert); }
+.wj-nouvelle mark { background: var(--teinte-vert); color: var(--fort); border-radius: 4px; padding: 1px 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.wj-reprise .wj-etiquette { background: var(--teinte-bleu); color: var(--texte-info); }
+.wj-reprise ins { text-decoration: none; background: var(--teinte-bleu); color: var(--fort); border-radius: 4px; padding: 1px 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.wj-avant { display: block; margin-top: .15rem; color: var(--texte-2); font-size: .9375rem; }
+.wj-avant del, .wj-retiree del { color: var(--texte-2); text-decoration-thickness: 2px; text-decoration-color: var(--rouge); }
+.wj-avant del + del::before { content: " · "; }
+.wj-retiree .wj-etiquette { background: var(--teinte-rouge); color: var(--texte-rouge); }
+.wj-identiques { margin-top: .6rem; }
+.wj-identiques summary { cursor: pointer; color: var(--texte-2); font-size: .9375rem; min-height: 36px; display: flex; align-items: center; }
+.wj-identiques .wj-phrases { margin-top: .3rem; padding-left: .8rem; border-left: 2px solid var(--trait-2); }
+.wj-identiques .wj-phrases > li { color: var(--texte-2); }
+
+.wj-motif-lu, .wj-raisons-titre { margin: 12px 0 .2rem; }
+.wj-raisons { margin: .2rem 0 0; padding-left: 1.2rem; display: grid; gap: .2rem; color: var(--texte); }
+.wj-actions { margin-top: 14px; }
+.wj-rejet { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--trait-2); }
+.wj-rejet textarea { min-height: 5rem; }
+
+/* Lignes compactes : toutes les entrées, file, hors du wiki, contradictions, problèmes du contrôle */
+.wj-lignes { list-style: none; margin: 0; padding: 0; }
+.wj-lignes > li { display: grid; gap: .2rem; padding: 10px 0; border-top: 1px solid var(--trait); min-width: 0; overflow-wrap: anywhere; }
+.wj-lignes > li:first-child { border-top: 0; padding-top: 2px; }
+.wj-ligne-tete { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem .7rem; min-width: 0; }
+.wj-ligne-tete > a { font-weight: 800; }
+.wj-ligne p { margin: 0; }
+.wj-nature, .wj-date, .wj-essais { color: var(--texte-2); font-size: .9375rem; }
+.wj-ligne-quoi { color: var(--texte); }
+.wj-ligne-motif, .wj-probleme { color: var(--texte-2); font-size: .9375rem; }
+.wj-file > li, .wj-section > .wj-lignes, .wj-controle-type .wj-lignes { min-width: 0; }
+.wj-section > .wj-lignes { background: var(--carte); border: 1px solid var(--trait); border-radius: 16px; padding: 8px 16px; }
+.wj-modifier { margin-left: auto; font-weight: 600; }
+
+/* =========================================================================================
+   3. File : progression ; hors du wiki
+   ========================================================================================= */
+
+.wj-progression { margin-bottom: 14px; }
+.wj-progression-tete { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .6rem; color: var(--fort); }
+.wj-barre { width: 100%; height: 10px; margin: 12px 0 10px; accent-color: var(--bleu); }
+.wj-compteurs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px 16px; margin: 0; }
+.wj-compteurs > div { min-width: 0; }
+.wj-compteurs dt { color: var(--texte-2); font-size: .875rem; font-weight: 600; }
+.wj-compteurs dd { margin: 0; color: var(--texte-2); font-size: .875rem; }
+.wj-compteurs .wj-nombre { color: var(--fort); font-size: 1.375rem; font-weight: 700; }
+.wj-arret { margin-top: .6rem; color: var(--texte-ambre); }
+
+.wj-hors-total { color: var(--texte); max-width: 90ch; }
+.wj-hors-total b { color: var(--fort); }
+.wj-hors-ligne { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .8rem; }
+.wj-hors-nom { flex: 1 1 220px; min-width: 0; }
+.wj-hors-nom b { color: var(--fort); margin-right: .3rem; }
+
+/* =========================================================================================
+   4. Contrôle du wiki
+   ========================================================================================= */
+
+.wj-controle-type h3 { display: flex; align-items: center; gap: .5rem; margin-bottom: .3rem; color: var(--fort); }
+.wj-controle-type > .aide { margin-bottom: .6rem; }
+.wj-controle-type .muted { margin: 0; }
+
+/* =========================================================================================
+   5. Écriture à la main
+   ========================================================================================= */
+
+.wj-ecrire-grille { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 0 18px; align-items: start; }
+.wj-formulaire { display: flex; flex-direction: column; gap: 1rem; }
+.wj-formulaire .actions { margin-top: 0; }
+.wj-formulaire textarea#wj-texte { min-height: 22rem; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9375rem; line-height: 1.55; }
+.wj-aide-liste { margin: 0 0 .8rem; padding-left: 1.1rem; display: grid; gap: .5rem; color: var(--texte); }
+.wj-aide-securite b { color: var(--texte-important); }
+.wj-ecrire code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .875rem; color: var(--fort);
+  background: var(--teinte-neutre); border-radius: 6px; padding: 1px 5px; overflow-wrap: anywhere;
+}
+.wj-rubriques { color: var(--texte); }
+.wj-rubrique-nom { white-space: nowrap; }
+.wj-confirmation {
+  margin-top: .8rem; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--bord-rouge);
+  background: var(--teinte-rouge-faible); color: var(--texte);
+}
+.wj-confirmation p { margin: 0; }
+.wj-confirmation b { color: var(--fort); }
+
+/* =========================================================================================
+   6. Tablette et téléphone : une colonne, zones tactiles de 48 px
+   ========================================================================================= */
+
+@media (max-width: 900px) {
+  .wj-ecrire-grille { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .wj-vues { gap: 6px; }
+  .wj-vue { padding: 0 .75rem; }
+  .wj-choisir { order: 0; margin-left: 0; }
+  .wj-entree-titre a, .wj-ligne-tete > a, .wj-modifier { display: inline-flex; align-items: center; min-height: 48px; }
+  .wj-identiques summary { min-height: 48px; }
+  .wj-section > .wj-lignes { padding: 4px 12px; }
+  .wj-formulaire textarea#wj-texte { min-height: 16rem; }
+  .wj-hors-ligne .btn { flex: 1 1 100%; }
+}
+
+@media print {
+  .wj-vues, .wj-actions, .wj-rejet, .wj-selection, .wj-archiver { display: none !important; }
+}
