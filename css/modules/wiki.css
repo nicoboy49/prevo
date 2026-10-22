@@ -144,7 +144,7 @@
 .wiki-cote .wiki-phrases { padding-left: 1rem; }
 .wiki-observation { margin: 0 0 .3rem; color: var(--texte); overflow-wrap: anywhere; line-height: 1.6; }
 .wiki-cote-ot .wiki-citations { display: flex; margin: 0; }
-.wiki-depuis { margin-top: .6rem; }
+.wiki-depuis { margin-top: .6rem; color: var(--texte-2); }   /* sur le fond de la carte : AA aussi en thème sombre */
 .wiki-trancher { margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--trait); }
 .wiki-trancher textarea { min-height: 4.5rem; }
 

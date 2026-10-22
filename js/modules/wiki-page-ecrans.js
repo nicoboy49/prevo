@@ -181,7 +181,35 @@ Object.assign(Wiki, (() => {
     return trouvee ? trouvee.texte : contradiction.phrase;
   }
 
+  // Une décision à la fois ; après le réaffichage, les clics de tranchage sont ignorés un court instant : un double
+  // clic ne doit jamais trancher la contradiction arrivée sous le pointeur (relecture de T119, comme le journal).
+  const REPOS_APRES_DECISION_MS = 600;
+  let decisionEnCours = false;
+  let reposJusqua = 0;
+  let pageEnRepos = null;                       // la page réaffichée après la décision (une autre page n'est pas bloquée)
+
+  function decisionPermise(evenement, bouton) {
+    return !decisionEnCours && evenement.detail <= 1
+      && !(bouton.closest('.wiki-page') === pageEnRepos && performance.now() < reposJusqua);
+  }
+
   async function trancher(element, contradiction, bouton) {
+    decisionEnCours = true;
+    try {
+      await enregistrerDecision(element, contradiction, bouton);
+    } finally {
+      decisionEnCours = false;
+      reposJusqua = performance.now() + REPOS_APRES_DECISION_MS;
+      const page = document.querySelector('.wiki-page');
+      pageEnRepos = page;
+      if (page) {
+        page.dataset.occupe = '1';
+        setTimeout(() => { delete page.dataset.occupe; }, REPOS_APRES_DECISION_MS);
+      }
+    }
+  }
+
+  async function enregistrerDecision(element, contradiction, bouton) {
     const boutons = UI.$$('button[data-decision]', element);
     boutons.forEach((autre) => { autre.disabled = true; });
     bouton.setAttribute('aria-busy', 'true');
@@ -224,7 +252,9 @@ Object.assign(Wiki, (() => {
       </div>` : ''}
     </li>`);
     UI.$('.wiki-cote-page .wiki-phrases', element).appendChild(phraseElement(phraseContredite(page, contradiction), contexte));
-    UI.$$('button[data-decision]', element).forEach((bouton) => bouton.addEventListener('click', () => trancher(element, contradiction, bouton)));
+    UI.$$('button[data-decision]', element).forEach((bouton) => bouton.addEventListener('click', (evenement) => {
+      if (decisionPermise(evenement, bouton)) trancher(element, contradiction, bouton);
+    }));
     return element;
   }
 
@@ -450,6 +480,12 @@ Object.assign(Wiki, (() => {
 
   function coucheEquipement(page, contexte) {
     const calcul = page.calcul;
+    if (!calcul) {                               // équipement disparu (ligne retirée hors de Prévo) : rien à calculer
+      return [UI.element(UI.html`<section class="carte wiki-section" id="wiki-sans-equipement" aria-labelledby="wiki-titre-sans-equipement">
+        <h2 id="wiki-titre-sans-equipement">Équipement</h2>
+        <p><b>Équipement introuvable</b></p>
+        <p class="aide">L'équipement de cette page n'existe plus dans le parc : rien n'est calculé pour elle.</p></section>`)];
+    }
     const elements = [blocConsignation(calcul.consignation, { id: 'wiki-consignation', titre: 'Consignation',
       equipementId: calcul.equipement.id, responsable: contexte.responsable })];
     elements.push(Wiki.champRecherche({ equipementId: calcul.equipement.id, titre: 'Chercher dans l\'historique de cet équipement' }));
@@ -585,7 +621,8 @@ Object.assign(Wiki, (() => {
     const contexte = Object.assign({}, reglages, { resoudre: resolveur(reglages.index || Wiki.indexDesPages()) });
     const couches = { 'équipement': coucheEquipement, composant: coucheComposant, mode: coucheMode };
     const couche = couches[page.type] ? couches[page.type](page, contexte) : [];
-    App.definirTitre('Wiki ' + (page.type === 'équipement' && page.calcul.equipement.repere ? page.calcul.equipement.repere : page.titre));
+    App.definirTitre('Wiki ' + (page.type === 'équipement' && page.calcul && page.calcul.equipement.repere
+      ? page.calcul.equipement.repere : page.titre));
     UI.remplir(conteneur, UI.html`
       <div class="wiki wiki-page" data-page="${page.id}" data-type="${page.type}" data-equipement="${page.type === 'équipement' ? page.id : ''}">
         ${enteteHtml(page, contexte)}

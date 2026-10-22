@@ -38,7 +38,6 @@ Object.assign(Wiki, (() => {
   const PAGES_MONTREES = 24;                            // par section de l'index, avant « Tout afficher »
   const TITRE_RECHERCHE_DEMANDE = 'Déjà vu sur cette machine ?';
   const NOUVEL_ONGLET = 's\'ouvre dans un nouvel onglet';
-  const STATUTS_SUITE = ['en file', 'à refaire', 'à valider', 'validée', 'rien à ajouter'];
 
   const SECTIONS = [
     { type: 'équipement', cle: 'equipement', libelle: 'Équipements', vide: 'Aucun équipement dans le parc.' },
@@ -73,6 +72,9 @@ Object.assign(Wiki, (() => {
   function comparer(a, b) {
     return a < b ? -1 : (a > b ? 1 : 0);
   }
+
+  // Ordre alphabétique français des titres de l'index (« Électrovanne » avec les E), comme les listes de Prévo.
+  const ORDRE_FRANCAIS = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
 
   /** Le demandeur n'a accès ni aux OT ni au magasin (profils de leurs routes) : pas de lien pour lui. */
   function avecLiens() {
@@ -322,7 +324,7 @@ Object.assign(Wiki, (() => {
     });
     return SECTIONS.map((section) => Object.assign({}, section, {
       pages: Array.from(parType.get(section.type).values()).sort((a, b) => Number(b.avecTexte) - Number(a.avecTexte)
-        || comparer(a.titre, b.titre) || comparer(a.id, b.id)),
+        || ORDRE_FRANCAIS.compare(a.titre, b.titre) || comparer(a.id, b.id)),
     }));
   }
 
@@ -338,12 +340,16 @@ Object.assign(Wiki, (() => {
       .reduce((total, entree) => total + json(entree.contradictions)
         .filter((contradiction) => contradiction && texte(contradiction.statut) === 'ouverte').length, 0);
     const ingestions = journal.filter((entree) => texte(entree.nature) === 'ingestion' && texte(entree.ot_id));
-    const derniereSuite = new Map();                            // OT → numéro de sa dernière entrée qui le fait avancer
-    ingestions.filter((entree) => STATUTS_SUITE.includes(texte(entree.statut))).forEach((entree) => {
-      derniereSuite.set(texte(entree.ot_id), Math.max(derniereSuite.get(texte(entree.ot_id)) || 0, rangJournal(entree)));
+    // « En échec » = la vue où mène le compteur (wiki-journal-ecrans.js) : OT sans autre entrée que rejetée ou refusée,
+    // dont la dernière entrée est « refusée ».
+    const echoue = (entree) => ['rejetée', 'refusée'].includes(texte(entree.statut));
+    const vivants = new Set(ingestions.filter((entree) => !echoue(entree)).map((entree) => texte(entree.ot_id)));
+    const dernieres = new Map();
+    ingestions.filter((entree) => echoue(entree) && !vivants.has(texte(entree.ot_id))).forEach((entree) => {
+      const avant = dernieres.get(texte(entree.ot_id));
+      if (!avant || rangJournal(avant) < rangJournal(entree)) dernieres.set(texte(entree.ot_id), entree);
     });
-    const echecs = new Set(ingestions.filter((entree) => texte(entree.statut) === 'refusée'
-      && rangJournal(entree) > (derniereSuite.get(texte(entree.ot_id)) || 0)).map((entree) => texte(entree.ot_id)));
+    const echecs = Array.from(dernieres.values()).filter((entree) => texte(entree.statut) === 'refusée');
     let controle = null;
     if (typeof Wiki.controleDuWiki === 'function') {
       const resultat = Wiki.controleDuWiki();
@@ -351,7 +357,7 @@ Object.assign(Wiki, (() => {
     }
     return {
       aValider: journal.filter((entree) => texte(entree.statut) === 'à valider').length,
-      contradictions, file: Wiki.file().length, echecs: echecs.size, hors: Wiki.horsDuWiki().length, controle,
+      contradictions, file: Wiki.file().length, echecs: echecs.length, hors: Wiki.horsDuWiki().length, controle,
     };
   }
 

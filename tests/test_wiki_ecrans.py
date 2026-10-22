@@ -445,8 +445,9 @@ def titre_article(ligne):
     return (ligne.get("designation") or "").strip() or (ligne.get("reference") or "").strip() or ligne["id"]
 
 
-def sections_attendues(equipements, articles, pages):
-    """Pages par type, calculées ici à partir des tables : [(type, [(id, titre, texte OT, lien)])]."""
+def sections_attendues(equipements, articles, pages, trier=None):
+    """Pages par type, calculées ici à partir des tables : [(type, [(id, titre, texte OT, lien)])] ; `trier` range
+    chaque liste (pages avec texte d'abord, puis titre dans l'ordre alphabétique français, puis identifiant)."""
     par_type = {"équipement": {}, "composant": {}, "mode": {}, "savoir-faire": {}}
     for ligne in equipements:
         par_type["équipement"][ligne["id"]] = [ligne["id"], titre_equipement(ligne), 0, False]
@@ -467,7 +468,8 @@ def sections_attendues(equipements, articles, pages):
             entree[2], entree[3] = len(citations(ligne["texte"])), True
     resultat = []
     for type_ in ("équipement", "composant", "mode", "savoir-faire"):
-        triees = sorted(par_type[type_].values(), key=lambda e: (not e[3], e[1], e[0]))
+        valeurs = list(par_type[type_].values())
+        triees = trier(valeurs) if trier else sorted(valeurs, key=lambda e: (not e[3], e[1], e[0]))
         resultat.append((type_, [[e[0], e[1], "Aucun OT cité" if not e[2] else "%d OT cité%s" % (e[2], "s" if e[2] > 1 else ""),
                                   "#/wiki/" + e[0]] for e in triees]))
     return resultat
@@ -477,11 +479,14 @@ def compteurs_attendus(journal, ordres):
     """Compteurs du responsable, recalculés ici à partir des lignes (définitions de wiki-ecrans.js)."""
     numero = lambda e: int(re.sub(r"\D", "", e["id"]) or 0)  # noqa: E731
     ingestions = [e for e in journal if e["nature"] == "ingestion" and e["ot_id"]]
-    suites = {}
+    # « En échec » : OT sans autre entrée que rejetée ou refusée, dont la dernière est « refusée » (vue du journal).
+    vivants = {e["ot_id"] for e in ingestions if e["statut"] not in ("rejetée", "refusée")}
+    dernieres = {}
     for e in ingestions:
-        if e["statut"] in ("en file", "à refaire", "à valider", "validée", "rien à ajouter"):
-            suites[e["ot_id"]] = max(suites.get(e["ot_id"], 0), numero(e))
-    echecs = {e["ot_id"] for e in ingestions if e["statut"] == "refusée" and numero(e) > suites.get(e["ot_id"], 0)}
+        if e["statut"] in ("rejetée", "refusée") and e["ot_id"] not in vivants:
+            if e["ot_id"] not in dernieres or numero(e) > numero(dernieres[e["ot_id"]]):
+                dernieres[e["ot_id"]] = e
+    echecs = [ot for ot, e in dernieres.items() if e["statut"] == "refusée"]
     vus = {e["ot_id"] for e in journal if e["nature"] == "ingestion"}
     return {
         "a-valider": sum(1 for e in journal if e["statut"] == "à valider"),
@@ -585,7 +590,13 @@ class TestIndex(CasWiki):
     def sections_attendues(self):
         tables = self.page.evaluate("""() => ({ equipements: Donnees.lignes('equipements'), articles: Donnees.lignes('articles'),
             pages: Donnees.lignes('wiki_pages') })""")
-        return sections_attendues(tables["equipements"], tables["articles"], tables["pages"])
+        return sections_attendues(tables["equipements"], tables["articles"], tables["pages"], self.trier_en_francais)
+
+    def trier_en_francais(self, entrees):
+        """Tri de référence : texte d'abord, puis le collateur français du navigateur (Intl.Collator), puis l'identifiant."""
+        return self.page.evaluate("""(entrees) => { const fr = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
+          return entrees.slice().sort((a, b) => Number(b[3]) - Number(a[3]) || fr.compare(a[1], b[1]) || (a[0] < b[0] ? -1 : 1)); }""",
+                                  entrees)
 
     def verifier_sections(self):
         """Quatre sections dans l'ordre, nombres, 24 premières pages puis « Tout afficher » : égales au calcul fait ici."""
@@ -647,7 +658,9 @@ class TestIndex(CasWiki):
         lu = page.evaluate(INDEX_JS)
         attendus = compteurs_attendus(page.evaluate("Donnees.lignes('wiki_journal')"), page.evaluate("Donnees.lignes('ordres_travail')"))
         self.assertEqual(attendus["a-valider"], 2)
-        self.assertEqual((attendus["contradictions"], attendus["file"], attendus["echecs"]), (3, 3, 2))
+        # « En échec » : 1 — OT-2026-0072 a aussi une entrée « en file » (relancé) : il n'est plus en échec, comme dans la
+        # vue « En échec » du journal où mène le compteur.
+        self.assertEqual((attendus["contradictions"], attendus["file"], attendus["echecs"]), (3, 3, 1))
         self.assertEqual([(c["vue"], c["libelle"], c["href"]) for c in lu["compteurs"]], [
             ("a-valider", "À valider", "#/wiki-journal?vue=a-valider"),
             ("contradictions", "Contradictions ouvertes", "#/wiki-journal?vue=contradictions"),
@@ -907,6 +920,16 @@ class TestPagesDuWiki(CasWiki):
         self.assertIn('<img src=x onerror="window.__piege=1">', page.inner_text("#contenu .vide"))
         self.verifier_sans_piege()
 
+    def test_page_d_un_equipement_disparu(self):
+        """Relecture de T119 : une page d'équipement dont l'équipement n'existe plus s'affiche (sans couche calculée)."""
+        page = self.ouvrir("responsable", base=True)
+        page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-0090', type: 'équipement',
+          titre: 'XX-99 — Machine retirée', equipement_id: 'EQ-0999', texte: '## Ce qui revient\\n- Fuite [OT-2026-0001]',
+          version: '1', statut: 'active', origine: 'manuel', valide_par: 'Responsable', valide_le: '2026-10-01 10:00' }); })""")
+        self.aller("#/wiki/WP-0090", ".wiki-page #wiki-sans-equipement")
+        self.assertIn("Équipement introuvable", page.inner_text("#wiki-sans-equipement"))
+        self.assertIn("Fuite", page.inner_text("#contenu"))
+
     def test_titre_phrase_observation_et_consignation_piegees_restent_du_texte(self):
         page = self.ouvrir("responsable", base=True)
         page.evaluate(ECRIRE_JS, ["equipements", "EQ-0005", {"consignation": CONSIGNATION_PIEGEE}])
@@ -961,7 +984,8 @@ class TestTrancher(CasWiki):
                          ("appliquée", "OT-2026-0214", "Vu avec le fournisseur"))
         trace = json.loads(decisions[0]["contradictions"])[0]
         self.assertEqual((trace["entree"], trace["rang"], trace["decision"]), ("WJ-00002", 0, "ancien"))
-        # « Les deux sont vrais », sans note : l'encadré disparaît
+        # « Les deux sont vrais », sans note : l'encadré disparaît (après le repos qui suit une décision)
+        page.wait_for_selector(".wiki-page:not([data-occupe])")
         page.click('.wiki-contradiction[data-rang="1"] button[data-decision="les deux"]')
         page.wait_for_function("!document.querySelector('#wiki-a-trancher')")
         self.assertEqual([json.loads(d["contradictions"])[0]["decision"] for d in self.decisions()], ["ancien", "les deux"])
@@ -980,6 +1004,18 @@ class TestTrancher(CasWiki):
         # Les compteurs suivent
         self.aller_index()
         self.assertEqual(page.inner_text('.wiki-compteur[data-compteur="contradictions"] .chiffre').strip(), "0")
+
+    def test_deux_clics_rapides_ne_tranchent_qu_une_contradiction(self):
+        """Relecture de T119 : un clic sur une décision, puis aussitôt un autre (double clic, ou carte arrivée sous le
+        pointeur après le réaffichage) : une seule contradiction est tranchée."""
+        page = self.ouvrir("responsable", base=True)
+        self.lire_page("EQ-0005")
+        self.assertEqual(page.locator(".wiki-contradiction").count(), 2)
+        page.locator('.wiki-contradiction[data-rang="0"] button[data-decision="ancien"]').click()
+        page.locator('.wiki-contradiction button[data-decision="ancien"]').last.click()
+        page.wait_for_selector(".wiki-page:not([data-occupe])")
+        self.assertEqual(len(self.decisions()), 1)
+        self.assertEqual(len(page.evaluate("Wiki.page('EQ-0005').contradictions")), 1)
 
     def test_propositions_en_attente_et_boutons_absents_hors_responsable(self):
         page = self.ouvrir("responsable", base=True)
