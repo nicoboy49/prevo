@@ -2610,7 +2610,8 @@ affichage :
 - `synthese` : la synthèse courante (non « remplacée ») ou `null`, avec `etat` ∈ `aucune`, `a_valider`,
   `validee`, `a_revoir` et `depuis` = nombre d'OT de l'équipement clôturés après `date_proposition` et
   absents de `ot_sources` (`a_revoir` = validée et `depuis` > 0 ; elle **reste validée**).
-- `peutProposer` : au moins `otMinimum` OT clôturés sur l'équipement.
+- `peutProposer` : au moins `otMinimum` OT **correctifs** clôturés sur l'équipement (D100 précisé par Nicolas le
+  2026-10-22 : 12 synthèses dans la démo).
 Un calcul Python indépendant (`tests/calcul_wiki.py`) refait `pannes`, `remedes`, `recidives`,
 `pieces` et `dernieres` sur la démo et sur une base d'essai (CS97).
 

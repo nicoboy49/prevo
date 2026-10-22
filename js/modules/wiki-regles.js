@@ -8,7 +8,7 @@ const Wiki = (() => {
 
   // Seuils du lot (D100), documentés dans le guide.
   const SEUILS = Object.freeze({
-    otMinimum: 5,          // OT clôturés à partir desquels une synthèse peut être proposée
+    otMinimum: 5,          // OT correctifs clôturés à partir desquels une synthèse peut être proposée (et cas d'un symptôme)
     otEnvoyesMax: 40,      // OT envoyés à l'IA au plus (les plus récents)
     pucesMax: 6,           // puces d'une synthèse
     motsMax: 150,          // mots d'une synthèse (citations exclues)
@@ -509,7 +509,8 @@ Object.assign(Wiki, (() => {
       synthese: synthese.synthese,
       etat: synthese.etat,
       remplacees: synthese.remplacees,
-      peutProposer: clotures.length >= SEUILS.otMinimum,
+      // D100 précisé par Nicolas (2026-10-22) : 5 OT CORRECTIFS clôturés (12 synthèses dans la démo).
+      peutProposer: clotures.filter(estCorrectif).length >= SEUILS.otMinimum,
     };
   }
 

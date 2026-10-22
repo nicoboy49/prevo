@@ -367,7 +367,7 @@ class CalculWiki:
             "synthese": synthese,
             "etat": etat,
             "remplacees": remplacees,
-            "peutProposer": len(clotures) >= OT_MINIMUM,
+            "peutProposer": sum(1 for ot in clotures if propre(ot["type"]).startswith("correctif")) >= OT_MINIMUM,
         }
 
     def liste_pages(self, maintenant):

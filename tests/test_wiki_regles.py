@@ -267,6 +267,8 @@ class TestDemo(CasWiki):
         self.assertGreater(recidives, 0)
         self.assertTrue(any(p["pieces"] for p in obtenues))
         self.assertTrue(any(p["memeModele"] for p in obtenues))
+        # D100 précisé par Nicolas : une synthèse se propose dès 5 OT correctifs clôturés, soit 12 équipements.
+        self.assertEqual(sum(1 for p in obtenues if p["peutProposer"]), 12)
         self.assertEqual(self.requetes_reseau(), [])
 
     def test_liste_des_pages_egale_au_calcul_python(self):
