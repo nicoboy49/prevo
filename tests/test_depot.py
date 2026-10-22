@@ -50,7 +50,8 @@ ORDRE_MODULES = [
     "indicateurs-regles.js", "indicateurs-series.js", "indicateurs-graphiques.js", "indicateurs-ecrans.js",
     "rapport-contenu.js", "rapport-ecrans.js",
     "parametres.js", "parametres-codes.js",
-    "import-regles.js", "import-historique.js", "import-lecture.js", "import-ecritures.js", "import-modeles.js",
+    "import-regles.js", "import-historique.js", "import-controles.js", "import-lecture.js", "import-ecritures.js",
+    "import-modeles.js",
     "import-ecrans.js", "import-apercu.js",
 ]
 LIGNES_MAX_MODULE = 700   # décision D28 : aucun fichier de js/modules/ au-delà

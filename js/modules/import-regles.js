@@ -3,11 +3,13 @@
 // données, correspondance des colonnes, conversion, clés naturelles, aperçu à blanc. Fonctions pures : rien
 // n'est écrit dans la base (seule la mémoire du poste, localStorage « prevo.import », est écrite par
 // memoriserCorrespondance). Fichiers du préfixe : import-regles.js (crée Import), import-historique.js,
-// import-lecture.js, import-ecritures.js, import-modeles.js, import-ecrans.js, import-apercu.js.
+// import-controles.js (T92), import-lecture.js, import-ecritures.js, import-modeles.js, import-ecrans.js,
+// import-apercu.js.
 // Aperçu (Import.preparer, §18.5) : 1re passe dans l'ordre du fichier (conversion, références qui doivent
 // exister, clé naturelle, doublon dans le fichier, fiche existante ou à créer) ; 2e passe (parent,
 // localisations et fournisseurs créés s'ils manquent — D88 a —, stock initial, opérations, action D84 a) ;
-// fin (parent refusé → enfant refusé, seules les références utilisées sont créées, identifiants).
+// contrôles des formulaires (T92) ; fin (parent refusé → enfant refusé, seules les références utilisées
+// sont créées, identifiants).
 
 const Import = (() => {
   /** Erreur de l'import (fichier illisible, trop grand, chiffré…) : message en français pour l'écran. */
@@ -652,6 +654,7 @@ const Import = (() => {
     (lignes || []).forEach((cellules, rang) => premierePasse(contexte, cellules, rang));
     contexte.lignes.filter((l) => l.action !== 'refusee').forEach((ligne) => (SECONDES_PASSES[type] || decider)(contexte, ligne));
     if (type === 'equipements') cascadeEquipements(contexte);
+    if (typeof Import.controlerFormulaires === 'function') Import.controlerFormulaires(contexte);   // T92 : import-controles.js
     return terminer(contexte);
   }
 
