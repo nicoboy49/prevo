@@ -366,7 +366,7 @@ Object.assign(Wiki, (() => {
   }
 
   return {
-    lireTexte, ecrireTexte, comparerTextes, controlerProposition,
+    lireTexte, ecrireTexte, comparerTextes, controlerProposition, formeDuTitre,
     identitePhrase, citationsDe, liensDe, phrasesDe: (valeur) => phrasesDe(lireTexte(valeur)),
   };
 })());

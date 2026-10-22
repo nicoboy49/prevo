@@ -9,12 +9,18 @@
 //    valider) ; une clé « CAUSE:<code> » réserve la cause de l'OT (deux OT de même cause ne partent pas ensemble) ;
 //  - une page créée par une proposition à valider entre dans l'état proposé sous sa clé TITRE ; une proposition
 //    suivante qui la modifie la retrouve par son titre, avant comme après sa validation ;
+//  - titre d'une page d'article : désignation, sinon référence, sinon identifiant (comme Wiki.catalogue) ;
+//  - `version` d'une page de l'état proposé = version validée + propositions « à valider » qui la changent : c'est le
+//    `version_avant` noté sur chaque changement (avec `page`, son WP-… s'il existe), pris dans l'état ENVOYÉ ;
 //  - les écritures de wiki_journal ne sont pas recopiées au journal général (la table est elle-même un journal) ;
-//  - une réponse refusée par les contrôles : entrée « refusée », raisons une par ligne ; une collision (titre créé
-//    entre-temps par un autre OT) : entrée remise « en file », motif « rejoué : page créée entre-temps », au plus
-//    trois fois, puis « refusée » ;
-//  - toute autre erreur de l'IA (injoignable, délai, annulation, refus D67) arrête le traitement : l'OT reste en file,
-//    l'erreur est rendue dans le bilan ; les envois déjà partis finissent.
+//  - une réponse refusée par les contrôles : entrée « refusée », raisons une par ligne ; le résultat accepté est
+//    écrit dans la section critique de Donnees.modifier, sur le journal frais : une page concernée changée pendant
+//    l'envoi (motif « rejoué : pages changées pendant l'envoi ») ou une page créée entre-temps sous le même titre ou
+//    un titre trop proche (motif « rejoué : page créée entre-temps ») remet l'entrée « en file », trois fois au plus,
+//    puis « refusée » ; le motif reste sur l'entrée acceptée ensuite ;
+//  - le catalogue envoyé commence par les pages créées par des propositions à valider (jamais coupées) ;
+//  - toute autre erreur de l'IA (injoignable, délai, refus D67) arrête le traitement : l'OT reste en file, l'erreur est
+//    rendue dans le bilan ; « Arrêter » (signal) laisse finir les envois partis, `annuler` les coupe.
 
 Object.assign(Wiki, (() => {
 
@@ -24,6 +30,7 @@ Object.assign(Wiki, (() => {
   const STATUTS_DEJA = ['en file', 'à refaire', 'à valider', 'validée', 'rien à ajouter', 'refusée'];
   const ESSAIS_COLLISION_MAX = 3;
   const MOTIF_COLLISION = 'rejoué : page créée entre-temps';
+  const MOTIF_PAGES_CHANGEES = 'rejoué : pages changées pendant l\'envoi';
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -110,6 +117,11 @@ Object.assign(Wiki, (() => {
     return [texte(equipement.repere), texte(equipement.designation)].filter(Boolean).join(' — ');
   }
 
+  // Même règle que Wiki.catalogue (wiki-calculs.js) : désignation, sinon référence, sinon identifiant.
+  function titreArticle(article) {
+    return texte(article.designation) || texte(article.reference).replace(/^'/, '') || texte(article.id);
+  }
+
   function cleDeLigne(ligne) {
     if (texte(ligne.type) === 'équipement' && texte(ligne.equipement_id)) return 'EQ:' + texte(ligne.equipement_id);
     if (texte(ligne.type) === 'composant' && texte(ligne.article_id)) return 'ART:' + texte(ligne.article_id);
@@ -120,7 +132,7 @@ Object.assign(Wiki, (() => {
   function indexDesTitres(pages) {
     const index = new Map();
     Donnees.lignes('equipements').forEach((e) => index.set(Wiki.comparable(titreEquipement(e)), 'EQ:' + texte(e.id)));
-    Donnees.lignes('articles').forEach((a) => index.set(Wiki.comparable(a.designation), 'ART:' + texte(a.id)));
+    Donnees.lignes('articles').forEach((a) => index.set(Wiki.comparable(titreArticle(a)), 'ART:' + texte(a.id)));
     pages.forEach((page) => index.set(Wiki.comparable(page.titre), page.cle));
     return index;
   }
@@ -132,8 +144,13 @@ Object.assign(Wiki, (() => {
     page.rattacheA = cle;
   }
 
-  /** État proposé → Map clé → { cle, pageId, titre, type, texte, equipementId, articleId, causeCode, rattacheA, version }. */
-  function etatPropose() {
+  /**
+   * État proposé → Map clé → { cle, pageId, titre, type, texte, equipementId, articleId, causeCode, rattacheA, version } ;
+   * `version` = version validée + propositions « à valider » appliquées (celle qu'aura la page quand elles seront
+   * validées dans l'ordre). options.journal : lignes de wiki_journal à lire (fraîches, dans Donnees.modifier).
+   */
+  function etatPropose(options) {
+    const journal = (options && options.journal) || Donnees.lignes('wiki_journal');
     const pages = new Map();
     const lignes = Donnees.lignes('wiki_pages').filter((ligne) => texte(ligne.statut) !== 'archivée');
     // Rattachement d'un savoir-faire : la clé de la page visée (« ART:… » pour une page de composant ancrée).
@@ -145,16 +162,20 @@ Object.assign(Wiki, (() => {
         equipementId: texte(ligne.equipement_id), articleId: texte(ligne.article_id), causeCode: texte(ligne.cause_code),
         rattacheA: rattache ? cleDe.get(rattache) || 'WP:' + rattache : '', version: Number(ligne.version) || 0 });
     });
-    const enAttente = Donnees.lignes('wiki_journal').filter((entree) => texte(entree.statut) === 'à valider')
+    const enAttente = journal.filter((entree) => texte(entree.statut) === 'à valider')
       .sort((a, b) => (Number(a.ordre) || 0) - (Number(b.ordre) || 0) || comparer(texte(a.id), texte(b.id)));
     enAttente.forEach((entree) => json(entree.changements, []).forEach((changement) => {
       const index = indexDesTitres(Array.from(pages.values()));
       let cle = texte(changement.cle);
       if (cle.startsWith('TITRE:') && index.has(cle.slice(6))) cle = index.get(cle.slice(6));
-      const page = pages.get(cle);
-      if (page) { page.texte = changement.apres || ''; return; }
+      let page = pages.get(cle);
+      if (!page && pageCalculee(cle)) {               // page ancrée encore sans ligne : version 0 avant ce changement
+        page = pageCalculee(cle);
+        pages.set(cle, page);
+      }
+      if (page) { page.texte = changement.apres || ''; page.version += 1; return; }
       const nouvelle = { cle, pageId: '', titre: texte(changement.titre), type: texte(changement.type), texte: changement.apres || '',
-        equipementId: '', articleId: '', causeCode: '', rattacheA: '', version: 0 };
+        equipementId: '', articleId: '', causeCode: '', rattacheA: '', version: 1 };
       if (cle.startsWith('EQ:')) nouvelle.equipementId = cle.slice(3);
       if (cle.startsWith('ART:')) nouvelle.articleId = cle.slice(4);
       if (texte(changement.rattacheA)) rattacher(nouvelle, changement.rattacheA, index);
@@ -177,7 +198,7 @@ Object.assign(Wiki, (() => {
     return Array.from(net.entries()).filter(([, quantite]) => quantite > 0).sort((a, b) => comparer(a[0], b[0]))
       .map(([articleId, quantite]) => {
         const article = Donnees.trouver('articles', articleId) || {};
-        return { articleId, designation: texte(article.designation), reference: texte(article.reference).replace(/^'/, ''), quantite };
+        return { articleId, designation: titreArticle(article), reference: texte(article.reference).replace(/^'/, ''), quantite };
       });
   }
 
@@ -189,17 +210,17 @@ Object.assign(Wiki, (() => {
     }
     if (cle.startsWith('ART:')) {
       const article = Donnees.trouver('articles', cle.slice(4));
-      return article ? { cle, pageId: '', titre: texte(article.designation), type: 'composant', texte: '',
+      return article ? { cle, pageId: '', titre: titreArticle(article), type: 'composant', texte: '',
         equipementId: '', articleId: cle.slice(4), causeCode: '', rattacheA: '', version: 0 } : null;
     }
     return null;
   }
 
   /**
-   * Pages concernées par un OT, calculées avant l'envoi → { cles, envoyees } : clés de son équipement, de chaque
-   * article consommé et de sa cause, puis des pages envoyées ; envoyées dans l'ordre de priorité — équipement,
-   * savoir-faire de l'équipement, articles, savoir-faire des articles, modes ancrés sur la cause, pages liées depuis
-   * la page de l'équipement —, pagesEnvoyeesMax au plus.
+   * Pages concernées par un OT, calculées avant l'envoi → { cles, envoyees } : clés et pages dans l'ordre de priorité
+   * du §20.5 — équipement, articles consommés, cause (clé seule), savoir-faire de l'équipement (ancrés ou rattachés)
+   * puis des articles, modes ancrés sur la cause, pages liées depuis la page de l'équipement —, pagesEnvoyeesMax
+   * pages envoyées au plus.
    */
   function pagesConcernees(otId, etatDonne) {
     const etat = etatDonne || etatPropose();
@@ -217,17 +238,15 @@ Object.assign(Wiki, (() => {
     };
     const toutes = Array.from(etat.values()).sort((a, b) => comparer(a.titre, b.titre) || comparer(a.cle, b.cle));
     ajouter('EQ:' + equipementId);
+    articles.forEach((articleId) => ajouter('ART:' + articleId));
+    const cause = texte(ot.cause_code);
+    if (cause) cles.push('CAUSE:' + cause);
     toutes.filter((page) => page.type === 'savoir-faire'
       && (page.equipementId === equipementId || page.rattacheA === 'EQ:' + equipementId)).forEach((page) => ajouter(page.cle));
-    articles.forEach((articleId) => ajouter('ART:' + articleId));
     toutes.filter((page) => page.type === 'savoir-faire' && !page.equipementId
       && (articles.includes(page.articleId) || articles.some((articleId) => page.rattacheA === 'ART:' + articleId)))
       .forEach((page) => ajouter(page.cle));
-    const cause = texte(ot.cause_code);
-    if (cause) {
-      cles.push('CAUSE:' + cause);
-      toutes.filter((page) => page.type === 'mode' && page.causeCode === cause).forEach((page) => ajouter(page.cle));
-    }
+    if (cause) toutes.filter((page) => page.type === 'mode' && page.causeCode === cause).forEach((page) => ajouter(page.cle));
     const pageEquipement = etat.get('EQ:' + equipementId);
     if (pageEquipement) {
       const index = indexDesTitres(toutes);
@@ -267,10 +286,27 @@ Object.assign(Wiki, (() => {
       vus.add(cle);
       catalogue.push({ titre: texte(titre), type });
     };
-    Wiki.catalogue().forEach((page) => ajouter(page.titre, page.type));
+    // Pages créées par une proposition à valider d'abord : le plafond ne les coupe jamais.
     Array.from(etat.values()).filter((page) => !page.pageId && page.cle.startsWith('TITRE:'))
       .sort((a, b) => comparer(a.titre, b.titre)).forEach((page) => ajouter(page.titre, page.type));
+    Wiki.catalogue().forEach((page) => ajouter(page.titre, page.type));
     return catalogue.slice(0, SEUILS.catalogueMax);
+  }
+
+  /** L'OT tel qu'il est envoyé (liste blanche, CS99). */
+  function donneesOt(ot) {
+    const equipement = Donnees.trouver('equipements', texte(ot.equipement_id)) || {};
+    return {
+      id: texte(ot.id), dateIntervention: texte(ot.date_fin), type: texte(ot.type),
+      equipement: { repere: texte(equipement.repere), designation: texte(equipement.designation),
+        marque: texte(equipement.marque), modele: texte(equipement.modele) },
+      titre: texte(ot.titre), travail: texte(ot.travail_a_faire), symptome: libelleCode('symptôme', ot.symptome_code),
+      cause: libelleCode('cause', ot.cause_code), remede: libelleCode('remède', ot.remede_code),
+      compteRendu: ot.compte_rendu || '', astuce: ot.astuce || '',
+      pieces: articlesConsommes(texte(ot.id)).map((article) => ({ designation: article.designation,
+        reference: article.reference, quantite: String(article.quantite) })),
+      dureeArret: texte(ot.duree_arret_h), symptomeDI: symptomeDI(ot),
+    };
   }
 
   /**
@@ -282,23 +318,12 @@ Object.assign(Wiki, (() => {
     const etat = etatDonne || etatPropose();
     const ot = Donnees.trouver('ordres_travail', otId);
     if (!ot) throw new Error('Wiki.donneesIngestion : OT inconnu « ' + otId + ' ».');
-    const equipement = Donnees.trouver('equipements', texte(ot.equipement_id)) || {};
     const concernees = pagesConcernees(texte(ot.id), etat);
     const pages = concernees.envoyees.map((page) => ({ cle: page.cle, titre: page.titre, type: page.type, texte: page.texte,
       otDates: Wiki.citationsDe(page.texte).map((id) => ({ id, date: dateIntervention(id) })) }));
     const plusRecente = pages.flatMap((page) => page.otDates.map((entree) => entree.date)).filter(Boolean).sort().pop() || '';
     return {
-      ot: {
-        id: texte(ot.id), dateIntervention: texte(ot.date_fin), type: texte(ot.type),
-        equipement: { repere: texte(equipement.repere), designation: texte(equipement.designation),
-          marque: texte(equipement.marque), modele: texte(equipement.modele) },
-        titre: texte(ot.titre), travail: texte(ot.travail_a_faire), symptome: libelleCode('symptôme', ot.symptome_code),
-        cause: libelleCode('cause', ot.cause_code), remede: libelleCode('remède', ot.remede_code),
-        compteRendu: ot.compte_rendu || '', astuce: ot.astuce || '',
-        pieces: articlesConsommes(texte(ot.id)).map((article) => ({ designation: article.designation,
-          reference: article.reference, quantite: String(article.quantite) })),
-        dureeArret: texte(ot.duree_arret_h), symptomeDI: symptomeDI(ot),
-      },
+      ot: donneesOt(ot),
       anterieure: Boolean(plusRecente && texte(ot.date_fin) && texte(ot.date_fin) < plusRecente),
       pages,
       catalogue: catalogueIngestion(etat),
@@ -312,6 +337,12 @@ Object.assign(Wiki, (() => {
     return [ot.id, ot.type, eq.repere, eq.designation, eq.marque, eq.modele, ot.titre, ot.travail, ot.symptome, ot.cause,
       ot.remede, ot.compteRendu, ot.astuce, ot.dureeArret, ot.symptomeDI]
       .concat(...(ot.pieces || []).map((piece) => [piece.designation, piece.reference, piece.quantite])).map(texte).join('\n');
+  }
+
+  /** Texte de référence d'un OT pour les contrôles d'une écriture à la main (§20.7) : ce qui en serait envoyé. */
+  function texteSourceOt(otId) {
+    const ot = Donnees.trouver('ordres_travail', texte(otId));
+    return ot ? sourceDe(donneesOt(ot)) : '';
   }
 
   function liste(valeur) {
@@ -392,11 +423,72 @@ Object.assign(Wiki, (() => {
     }, { journal: false });
   }
 
-  async function traiterUne(entree, appeler, signal) {
+  /** Page de l'état pour une clé : directe, ou par son titre pour une page créée (TITRE:…) validée depuis. */
+  function pageDeCle(etat, cle) {
+    if (etat.has(cle)) return etat.get(cle);
+    if (!cle.startsWith('TITRE:')) return pageCalculee(cle);
+    return Array.from(etat.values()).find((page) => Wiki.comparable(page.titre) === cle.slice(6)) || null;
+  }
+
+  /** Ce qui a été envoyé de chaque page concernée (texte et version de l'état proposé) ; une cause n'a pas de page. */
+  function empreinteDe(cles, etat) {
+    return new Map(cles.filter((cle) => !cle.startsWith('CAUSE:')).map((cle) => {
+      const page = pageDeCle(etat, cle);
+      return [cle, { texte: page ? page.texte || '' : '', version: page ? page.version || 0 : 0 }];
+    }));
+  }
+
+  /**
+   * Écrit le résultat d'un envoi DANS la section critique (journal frais, D112) : si une page concernée a changé
+   * pendant l'envoi (rejet, écriture à la main ; une validation ne change pas l'état proposé) ou si une page que la
+   * réponse crée existe désormais (même titre ou titre trop proche), l'entrée repart « en file » avec son motif,
+   * ESSAIS_COLLISION_MAX fois au plus, puis « refusée ». Sinon « à valider » (ou « rien à ajouter »), rang suivant,
+   * `version_avant` et `page` de chaque changement pris dans l'état envoyé.
+   */
+  async function ecrireResultat(entree, envoi) {
+    const { donnees, etat, empreinte, lu, modele, essais } = envoi;
+    return Donnees.modifier('wiki_journal', (lignes, outils) => {
+      const ligne = lignes.find((candidate) => candidate.id === entree.id);
+      if (!ligne || !STATUTS_FILE.includes(texte(ligne.statut))) return 'déjà traitée';
+      const frais = etatPropose({ journal: lignes });
+      const changees = Array.from(empreinte).filter(([cle, envoye]) => {
+        const page = pageDeCle(frais, cle);
+        return (page ? page.texte || '' : '') !== envoye.texte || (page ? page.version || 0 : 0) !== envoye.version;
+      });
+      const anciens = new Set(Array.from(etat.values()).map((page) => Wiki.comparable(page.titre)));
+      const nouveaux = new Set(Array.from(frais.values()).filter((page) => !anciens.has(Wiki.comparable(page.titre)))
+        .flatMap((page) => [Wiki.comparable(page.titre), Wiki.formeDuTitre(page.titre)]));
+      const collision = lu.changements.some((changement) => changement.creation
+        && (nouveaux.has(Wiki.comparable(changement.titre)) || nouveaux.has(Wiki.formeDuTitre(changement.titre))));
+      Object.assign(ligne, { modele, essais, traite_le: outils.maintenant() });
+      if (changees.length || collision) {
+        const motif = collision ? MOTIF_COLLISION : MOTIF_PAGES_CHANGEES;
+        if (Number(essais) > ESSAIS_COLLISION_MAX) {
+          Object.assign(ligne, { statut: 'refusée', raisons: (collision ? 'Page créée en même temps par un autre OT'
+            : 'Pages changées pendant l\'envoi') + ', ' + essais + ' essais.', motif });
+          return 'refusée';
+        }
+        Object.assign(ligne, { statut: 'en file', motif });
+        return 'rejouée';
+      }
+      Object.assign(ligne, {
+        statut: lu.rien ? 'rien à ajouter' : 'à valider', raisons: '', anterieure: donnees.anterieure ? '1' : '0',
+        pages: donnees.cles.join(';'), ordre: String(lignes.reduce((max, autre) => Math.max(max, Number(autre.ordre) || 0), 0) + 1),
+        changements: JSON.stringify(lu.changements.map((changement) => {
+          const page = changement.creation ? null : pageDeCle(etat, changement.cle);
+          return Object.assign({ page: page ? page.pageId : '', version_avant: page ? page.version || 0 : 0 }, changement);
+        })),
+        contradictions: JSON.stringify(lu.contradictions.map((c) => Object.assign({ statut: 'ouverte' }, c))),
+      });
+      return lu.rien ? 'rien' : 'acceptée';
+    }, { journal: false });
+  }
+
+  async function traiterUne(entree, appeler, annuler) {
     const etat = etatPropose();
     const donnees = donneesIngestion(texte(entree.ot_id), etat);
-    const requete = Ia.requete('ingestionWiki', donnees);
-    const reponse = await appeler(requete, donnees, signal);
+    const empreinte = empreinteDe(donnees.cles, etat);
+    const reponse = await appeler(Ia.requete('ingestionWiki', donnees), donnees, annuler);
     const modele = texte(reponse && reponse.modele);
     const essais = String((Number(entree.essais) || 0) + 1);
     let lu;
@@ -407,36 +499,19 @@ Object.assign(Wiki, (() => {
       await ecrireEntree(entree.id, { statut: 'refusée', raisons: (erreur.raisons || [erreur.message]).join('\n'), modele, essais });
       return 'refusée';
     }
-    const titres = new Set(Array.from(etatPropose().values()).map((page) => Wiki.comparable(page.titre)));
-    if (lu.changements.some((changement) => changement.creation && titres.has(Wiki.comparable(changement.titre)))) {
-      if (Number(essais) > ESSAIS_COLLISION_MAX) {
-        await ecrireEntree(entree.id, { statut: 'refusée', raisons: 'Page créée en même temps par un autre OT, ' + essais
-          + ' essais.', modele, essais });
-        return 'refusée';
-      }
-      await ecrireEntree(entree.id, { statut: 'en file', motif: MOTIF_COLLISION, modele, essais });
-      return 'rejouée';
-    }
-    const versions = new Map(Donnees.lignes('wiki_pages').map((ligne) => [cleDeLigne(ligne), Number(ligne.version) || 0]));
-    await ecrireEntree(entree.id, {
-      statut: lu.rien ? 'rien à ajouter' : 'à valider', modele, essais, raisons: '', motif: '',
-      anterieure: donnees.anterieure ? '1' : '0', pages: donnees.cles.join(';'),
-      changements: JSON.stringify(lu.changements.map((changement) => Object.assign({ version_avant: versions.get(changement.cle) || 0 },
-        changement))),
-      contradictions: JSON.stringify(lu.contradictions.map((c) => Object.assign({ statut: 'ouverte' }, c))),
-    }, true);
-    return lu.rien ? 'rien' : 'acceptée';
+    return ecrireResultat(entree, { donnees, etat, empreinte, lu, modele, essais });
   }
 
   /**
-   * Traite la file (§20.5) : options { appeler(requete, donnees, signal) → { contenu, modele } (défaut :
-   * Ia.envoyerRequete), agents (défaut SEUILS.agentsSimultanes), signal (arrêt : rien d'autre ne part, les envois en
-   * cours finissent), surProgres(etat) }. → bilan { acceptees, rien, refusees, rejouees, erreur, envois: [{ ot, cles,
-   * debut, fin }] } (debut et fin : rangs d'événements, pour vérifier qu'aucune page n'a deux envois en même temps).
+   * Traite la file (§20.5) : options { appeler(requete, donnees, annuler) → { contenu, modele } (défaut :
+   * Ia.envoyerRequete), agents (défaut SEUILS.agentsSimultanes), signal (« Arrêter » : rien d'autre ne part, les
+   * envois en cours finissent), annuler (signal transmis aux envois eux-mêmes : les coupe), surProgres(etat) }.
+   * → bilan { acceptees, rien, refusees, rejouees, erreur, envois: [{ ot, cles, debut, fin }] } (debut et fin : rangs
+   * d'événements, pour vérifier qu'aucune page n'a deux envois en même temps).
    */
   async function traiterFile(options) {
     const opts = options || {};
-    const appeler = opts.appeler || ((requete, donnees, signal) => Ia.envoyerRequete(requete, signal));
+    const appeler = opts.appeler || ((requete, donnees, annuler) => Ia.envoyerRequete(requete, annuler));
     const agents = opts.agents || SEUILS.agentsSimultanes;
     const enCours = new Map();
     const bilan = { acceptees: 0, rien: 0, refusees: 0, rejouees: 0, erreur: null, envois: [] };
@@ -455,11 +530,11 @@ Object.assign(Wiki, (() => {
           const envoi = { ot: texte(entree.ot_id), cles, debut: ++rang, fin: null };
           bilan.envois.push(envoi);
           const suivi = { entree, cles };
-          suivi.promesse = traiterUne(entree, appeler, opts.signal).then((issue) => {
+          suivi.promesse = traiterUne(entree, appeler, opts.annuler).then((issue) => {
             if (issue === 'acceptée') bilan.acceptees += 1;
             else if (issue === 'rien') bilan.rien += 1;
             else if (issue === 'refusée') bilan.refusees += 1;
-            else bilan.rejouees += 1;
+            else if (issue === 'rejouée') bilan.rejouees += 1;
           }, (erreur) => {
             arret = true;
             if (!bilan.erreur) bilan.erreur = erreur;
@@ -479,6 +554,6 @@ Object.assign(Wiki, (() => {
 
   return {
     file, mettreEnFile, horsDuWiki, etatPropose, pagesConcernees, donneesIngestion, lireIngestion, prochainsEnvois,
-    traiterFile, articlesConsommes, MOTIF_COLLISION,
+    traiterFile, articlesConsommes, texteSourceOt, MOTIF_COLLISION, MOTIF_PAGES_CHANGEES,
   };
 })());

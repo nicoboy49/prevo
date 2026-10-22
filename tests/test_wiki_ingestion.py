@@ -194,6 +194,15 @@ TRAITER_JS = """async ([ids, options]) => {
     erreur: b.erreur ? { nom: b.erreur.name, message: b.erreur.message } : null };
 }"""
 JOURNAL_JS = "() => Donnees.lignes('wiki_journal').filter((e) => e.nature === 'ingestion' && e.ot_id !== 'OT-2026-0007')"
+# Stockage dont chaque écriture prend 50 ms : deux résultats peuvent s'écrire en même temps (course de D112).
+CHARGER_LENT_JS = """async (tables) => {
+  const stockage = StockageDemo.creer(tables);
+  const enregistrer = stockage.enregistrer;
+  stockage.enregistrer = async function () { await new Promise((r) => setTimeout(r, 50)); return enregistrer.apply(this, arguments); };
+  Donnees.initialiser(stockage, { poste: 'Poste test', profil: 'Responsable test' });
+  await Donnees.chargerTout();
+}"""
+RIEN = "JSON.stringify({ rien_a_ajouter: true, pages: [], contradictions: [] })"
 
 
 class CasIngestion(CasNavigateur):
@@ -254,17 +263,19 @@ class TestDonneesEtFile(CasIngestion):
 
     def test_pages_concernees_dans_l_ordre_de_priorite(self):
         concernees = self.page.evaluate("(ot) => Wiki.pagesConcernees(ot)", "OT-2026-0001")
-        self.assertEqual(concernees["cles"], ["EQ:EQ-0001", "WP:WP-0002", "WP:WP-0010", "ART:ART-0001", "WP:WP-0004",
-                                              "CAUSE:C01", "WP:WP-0005", "WP:WP-0006"])
+        # Ordre du §20.5 : équipement, articles, cause (clé seule), savoir-faire (équipement puis articles), modes de
+        # la cause, pages liées depuis la page de l'équipement.
+        self.assertEqual(concernees["cles"], ["EQ:EQ-0001", "ART:ART-0001", "CAUSE:C01", "WP:WP-0002", "WP:WP-0010",
+                                              "WP:WP-0004", "WP:WP-0005", "WP:WP-0006"])
         self.assertEqual([p["titre"] for p in concernees["envoyees"]],
-                         ["PO-01 — Pompe de process A", "Changer la garniture de PO-01", "Graisser le palier",
-                          "Kit garniture HC 50", "Monter le kit garniture", "Usure de garniture", "Cavitation"])
+                         ["PO-01 — Pompe de process A", "Kit garniture HC 50", "Changer la garniture de PO-01",
+                          "Graisser le palier", "Monter le kit garniture", "Usure de garniture", "Cavitation"])
         # Pages calculées (sans ligne) : équipement et article ; la cause réserve sa clé sans page.
         calculees = self.page.evaluate("(ot) => Wiki.pagesConcernees(ot)", "OT-2026-0002")
-        self.assertEqual(calculees["cles"], ["EQ:EQ-0002", "WP:WP-0008", "ART:ART-0003", "CAUSE:C02"])
+        self.assertEqual(calculees["cles"], ["EQ:EQ-0002", "ART:ART-0003", "CAUSE:C02", "WP:WP-0008"])
         self.assertEqual([(p["titre"], p["type"], p["texte"]) for p in calculees["envoyees"]],
-                         [("CP-01 — Compresseur", "équipement", ""), ("Nettoyer le filtre de CP-01", "savoir-faire", ""),
-                          ("Filtre à huile", "composant", "")])
+                         [("CP-01 — Compresseur", "équipement", ""), ("Filtre à huile", "composant", ""),
+                          ("Nettoyer le filtre de CP-01", "savoir-faire", "")])
         # Neuf articles consommés : toutes les clés, huit pages envoyées au plus.
         nombreuses = self.page.evaluate("(ot) => Wiki.pagesConcernees(ot)", "OT-2026-0006")
         self.assertEqual(nombreuses["cles"], ["EQ:EQ-0003"] + ["ART:ART-%04d" % n for n in range(4, 13)]
@@ -309,6 +320,19 @@ class TestDonneesEtFile(CasIngestion):
         permis = self.page.evaluate(LIRE_JS, ["OT-2026-0008", json.dumps(
             reponse_ingestion(self.message("OT-2026-0008"), "faux-recent"), ensure_ascii=False)])
         self.assertTrue(permis["ok"], permis)
+
+    def test_catalogue_au_plafond_garde_les_pages_en_attente(self):
+        catalogue = self.page.evaluate("""async () => {
+          await Donnees.modifier('equipements', (lignes) => { for (let n = 100; n < 520; n += 1) {
+            lignes.push({ id: 'EQ-0' + n, repere: 'ZZ-' + n, designation: 'Machine ' + n, statut: 'en service', actif: '1' }); } });
+          await Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00002', nature: 'ingestion',
+            ot_id: 'OT-2026-0004', statut: 'à valider', ordre: '2', essais: '1', changements: JSON.stringify([{
+            cle: 'TITRE:zzz usure tardive', titre: 'Zzz usure tardive', type: 'mode', creation: true, version_avant: 0,
+            avant: '', apres: '## Causes\\n- Usure [OT-2026-0004]' }]) }); });
+          return Wiki.donneesIngestion('OT-2026-0002').catalogue;
+        }""")
+        self.assertEqual(len(catalogue), self.page.evaluate("Wiki.SEUILS.catalogueMax"))
+        self.assertIn({"titre": "Zzz usure tardive", "type": "mode"}, catalogue)
 
     def test_prochains_envois(self):
         self.page.evaluate("(ids) => Wiki.mettreEnFile(ids)", EN_FILE)
@@ -357,7 +381,9 @@ class TestTraitement(CasIngestion):
                          {"OT-2026-0004": "0", "OT-2026-0003": "1", "OT-2026-0001": "1", "OT-2026-0002": "0",
                           "OT-2026-0006": "0", "OT-2026-0008": "0"})
         self.assertEqual(sorted(e["essais"] for e in journal.values()), ["1", "1", "1", "1", "1", "2"])
-        self.assertTrue(all(e["motif"] == "" and e["modele"] == "faux-cree-mode" for e in journal.values()), journal)
+        # Le motif du rejeu reste sur l'entrée acceptée ensuite (D112 : le journal le note).
+        self.assertEqual(sorted(e["motif"] for e in journal.values()), [""] * 5 + ["rejoué : page créée entre-temps"])
+        self.assertTrue(all(e["modele"] == "faux-cree-mode" for e in journal.values()), journal)
         creations = [c["titre"] for e in journal.values() for c in json.loads(e["changements"]) if c["creation"]]
         self.assertEqual(sorted(creations), ["Astuce de l'OT-2026-0001", "Usure commune"])
         # Pour chaque page : les OT dans l'ordre des dates d'intervention (rang de traitement), jamais deux à la fois.
@@ -376,8 +402,13 @@ class TestTraitement(CasIngestion):
         for ot in ("OT-2026-0003", "OT-2026-0001", "OT-2026-0007", "OT-2026-0008"):
             self.assertIn("[" + ot + "]", page_po01["apres"])
         self.assertIn("[[Cavitation]]", page_po01["apres"])
-        self.assertEqual(page_po01["version_avant"], 1)
-        self.assertEqual(journal["OT-2026-0001"]["pages"].split(";")[:4], ["EQ:EQ-0001", "WP:WP-0002", "WP:WP-0010", "ART:ART-0001"])
+        # Versions enchaînées (D105) : WP-0001 est en version 1 ; chaque proposition plus ancienne en attente l'avance.
+        versions = {ot: [(c["page"], c["version_avant"]) for c in json.loads(journal[ot]["changements"]) if c["cle"] == "EQ:EQ-0001"]
+                    for ot in ("OT-2026-0003", "OT-2026-0001", "OT-2026-0008")}
+        self.assertEqual(versions, {"OT-2026-0003": [("WP-0001", 1)], "OT-2026-0001": [("WP-0001", 2)],
+                                    "OT-2026-0008": [("WP-0001", 3)]})
+        self.assertEqual(self.page.evaluate("Wiki.etatPropose().get('EQ:EQ-0001').version"), 4)
+        self.assertEqual(journal["OT-2026-0001"]["pages"].split(";")[:4], ["EQ:EQ-0001", "ART:ART-0001", "CAUSE:C01", "WP:WP-0002"])
         # Requêtes réellement envoyées : une par envoi, rien d'interdit, l'astuce de 0001 et la mention de 0003.
         corps = [r["corps"] for r in self.faux.requetes_vers("/api/chat")]
         self.assertEqual(len(corps), 7)
@@ -390,6 +421,76 @@ class TestTraitement(CasIngestion):
         self.assertIn(MENTION, messages["OT-2026-0003"])
         self.assertNotIn(MENTION, messages["OT-2026-0008"])
         self.assertEqual(self.page.evaluate("Wiki.file().length"), 0)
+
+    def test_collision_vue_meme_avec_un_stockage_lent(self):
+        charger_scripts(self.page, SCRIPTS)
+        self.page.evaluate(CHARGER_LENT_JS, BASE)
+        bilan = self.traiter(EN_FILE, "faux-cree-mode")
+        self.assertIsNone(bilan["erreur"])
+        self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["rejouees"]), (6, 0, 1))
+        creations = [c["titre"] for e in self.journal().values() for c in json.loads(e["changements"]) if c["creation"]]
+        self.assertEqual(sorted(creations), ["Astuce de l'OT-2026-0001", "Usure commune"])
+
+    def test_collision_sur_un_titre_trop_proche(self):
+        resultat = self.page.evaluate("""async () => {
+          await Wiki.mettreEnFile(['OT-2026-0004', 'OT-2026-0002']);
+          const titres = { 'OT-2026-0004': ['Usure commune', 50], 'OT-2026-0002': ['Usures communes', 150] };
+          const bilan = await Wiki.traiterFile({ appeler: async (requete, donnees) => {
+            const [titre, delai] = titres[donnees.ot.id];
+            await new Promise((r) => setTimeout(r, delai));
+            return { modele: 'essai', contenu: JSON.stringify({ rien_a_ajouter: false, contradictions: [], pages: [{
+              action: 'creer', titre, type: 'mode', rattache_a: '', rubriques: [{ rubrique: 'Causes', phrases: [{
+              texte: 'Usure des pièces', ot: [donnees.ot.id] }] }] }] }) };
+          } });
+          return { bilan: [bilan.acceptees, bilan.refusees, bilan.rejouees],
+            journal: Donnees.lignes('wiki_journal').filter((e) => e.ot_id !== 'OT-2026-0007')
+              .map((e) => [e.ot_id, e.statut, e.motif, e.essais]) };
+        }""")
+        # 0002 voit « Usure commune » créée pendant son envoi : rejouée, puis refusée par les contrôles (titre trop proche).
+        self.assertEqual(resultat["bilan"], [1, 1, 1])
+        self.assertEqual(sorted(resultat["journal"]), [
+            ["OT-2026-0002", "refusée", "rejoué : page créée entre-temps", "2"], ["OT-2026-0004", "à valider", "", "1"]])
+        raisons = self.journal()["OT-2026-0002"]["raisons"]
+        self.assertIn("titre trop proche de « Usure commune »", raisons)
+
+    def test_page_changee_pendant_l_envoi_rejouee(self):
+        resultat = self.page.evaluate("""async () => {
+          await Wiki.mettreEnFile(['OT-2026-0008']);
+          let appels = 0;
+          const bilan = await Wiki.traiterFile({ appeler: async () => {
+            appels += 1;
+            // Écriture à la main de la page de PO-01 pendant le premier envoi.
+            if (appels === 1) await Donnees.modifier('wiki_pages', (lignes) => {
+              const ligne = lignes.find((l) => l.id === 'WP-0001');
+              ligne.texte = ligne.texte + '\\n## Astuces\\n- Repérer au feutre [OT-2026-0007]';
+              ligne.version = '2';
+            });
+            return { modele: 'essai', contenu: %s };
+          } });
+          const e = Donnees.lignes('wiki_journal').find((x) => x.ot_id === 'OT-2026-0008');
+          return { appels, rejouees: bilan.rejouees, rien: bilan.rien, statut: e.statut, motif: e.motif, essais: e.essais };
+        }""" % RIEN)
+        self.assertEqual(resultat, {"appels": 2, "rejouees": 1, "rien": 1, "statut": "rien à ajouter",
+                                    "motif": "rejoué : pages changées pendant l'envoi", "essais": "2"})
+        self.assertEqual(self.page.evaluate("Wiki.MOTIF_PAGES_CHANGEES"), "rejoué : pages changées pendant l'envoi")
+
+    def test_arreter_laisse_finir_les_envois_partis(self):
+        resultat = self.page.evaluate("""async () => {
+          await Wiki.mettreEnFile(['OT-2026-0004', 'OT-2026-0003', 'OT-2026-0002']);
+          const arret = new AbortController();
+          let appels = 0;
+          const bilan = await Wiki.traiterFile({ signal: arret.signal, appeler: async (requete, donnees, annuler) => {
+            appels += 1;
+            arret.abort();                                    // « Arrêter » pendant les envois
+            await new Promise((r) => setTimeout(r, 200));
+            if (annuler && annuler.aborted) throw new Error('envoi coupé');
+            return { modele: 'essai', contenu: %s };
+          } });
+          return { appels, rien: bilan.rien, erreur: bilan.erreur && bilan.erreur.message, envois: bilan.envois.length,
+            file: Wiki.file().map((e) => e.ot_id) };
+        }""" % RIEN)
+        # 0004 et 0002 sont partis ensemble (0003 attend 0004, cause C03) : ils finissent ; rien d'autre ne part.
+        self.assertEqual(resultat, {"appels": 2, "rien": 2, "erreur": None, "envois": 2, "file": ["OT-2026-0003"]})
 
     def test_refus_des_controles(self):
         bilan = self.traiter(["OT-2026-0002"], "faux-invente")
@@ -449,6 +550,17 @@ LISTE_REQUETES_JS = """() => { const etat = Wiki.etatPropose();
     .map((id) => Ia.requete('ingestionWiki', Wiki.donneesIngestion(id, etat))); }"""
 FICHIERS_JS = """() => Object.fromEntries(Object.entries(Donnees.instantane())
   .map(([nom, octets]) => [nom, new TextDecoder().decode(octets)]))"""
+# Un wiki non vide, écrit de la même façon dans chaque mode : une page validée et une proposition à valider.
+AJOUT_WIKI_JS = """async () => {
+  const ot = Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement').map((o) => o.id).sort()[0];
+  const equipement = Donnees.trouver('equipements', Donnees.trouver('ordres_travail', ot).equipement_id);
+  await Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-0001', type: 'équipement',
+    titre: equipement.repere + ' — ' + equipement.designation, equipement_id: equipement.id, version: '1', statut: 'active',
+    texte: '## Ce qui revient\\n- Panne connue ici [' + ot + ']' }); });
+  await Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00001', nature: 'ingestion', ot_id: ot,
+    statut: 'à valider', ordre: '1', essais: '1', changements: JSON.stringify([{ cle: 'TITRE:usure commune',
+    titre: 'Usure commune', type: 'mode', creation: true, version_avant: 0, avant: '', apres: '## Causes\\n- Usure [' + ot + ']' }]) }); });
+}"""
 ERREURS_SERVEUR_STATIQUE = [re.compile(r"status of 404.*/api/ping"), re.compile(r"status of 404.*/api/csv/")]
 
 
@@ -492,8 +604,12 @@ class TestDansLApplication(CasNavigateur):
         preregler_profil(self.contexte, "responsable")
         page = self.ouvrir_demo()
         self.assertEqual(page.evaluate("App.mode"), "demo")
-        demo = page.evaluate(LISTE_REQUETES_JS)
         fichiers = page.evaluate(FICHIERS_JS)
+        page.evaluate(AJOUT_WIKI_JS)
+        demo = page.evaluate(LISTE_REQUETES_JS)
+        messages = [r["messages"][1]["content"] for r in demo]
+        self.assertTrue(any("- Panne connue ici [OT-" in m for m in messages))
+        self.assertTrue(all("- Usure commune (mode)" in m for m in messages))
         noms = page.evaluate("""() => Donnees.lignes('techniciens').map((t) => (t.prenom + ' ' + t.nom).trim())
           .concat(Donnees.lignes('demandes').map((d) => d.demandeur)).filter(Boolean)""")
         astuces = page.evaluate("""() => Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement'
@@ -521,6 +637,7 @@ class TestDansLApplication(CasNavigateur):
             page_dossier.click("#btn-base-demo")
             attendre_pret(page_dossier, 30000)
             self.assertEqual(page_dossier.evaluate("App.mode"), "dossier")
+            page_dossier.evaluate(AJOUT_WIKI_JS)
             dossier = page_dossier.evaluate(LISTE_REQUETES_JS)
         self.assertEqual(dossier, demo)
 
@@ -538,6 +655,7 @@ class TestDansLApplication(CasNavigateur):
             page_serveur.goto(serveur.url + "/")
             attendre_pret(page_serveur, 30000)
             self.assertEqual(page_serveur.evaluate("App.mode"), "serveur")
+            page_serveur.evaluate(AJOUT_WIKI_JS)
             self.assertEqual(page_serveur.evaluate(LISTE_REQUETES_JS), demo)
 
 

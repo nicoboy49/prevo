@@ -624,21 +624,13 @@ const Ia = (() => {
    */
   async function demander(fonction, donnees, options) {
     consigneDe(fonction, 'Ia.demander');
-    const r = reglagesUtilisables();
-    const { messages, schema } = requete(fonction, donnees);
-    try {
-      const contenu = await transmettre(r, fonction, messages, schema, options && options.signal);
-      const resultat = lireReponse(fonction, contenu, donnees);
-      definirEtat('ok');
-      return { resultat, modele: r.modele, fournisseur: libelleFournisseur(r) };
-    } catch (erreur) {
-      if (erreur && erreur.reseau) definirEtat('injoignable');     // les boutons IA se masquent
-      throw erreur;
-    }
+    reglagesUtilisables();                        // refus (version web, IA inactive, portée D67) avant tout
+    const envoi = await envoyerRequete(requete(fonction, donnees), options && options.signal);
+    return { resultat: lireReponse(fonction, envoi.contenu, donnees), modele: envoi.modele, fournisseur: envoi.fournisseur };
   }
 
-  // Lot 6 (§20.5) : envoie une requête construite par Ia.requete → { contenu (texte brut), modele, fournisseur } ;
-  // mêmes contrôles et même délai que Ia.demander ; la réponse est lue par l'appelant (Ia.lireReponse).
+  // Lot 6 (§20.5) : la partie réseau de Ia.demander, qui l'appelle ; envoie une requête construite par Ia.requete →
+  // { contenu (texte brut), modele, fournisseur } ; la réponse est lue par l'appelant (Ia.lireReponse).
   async function envoyerRequete(requeteConstruite, signal) {
     const r = reglagesUtilisables();
     const { fonction, messages, schema } = requeteConstruite || {};
@@ -647,7 +639,7 @@ const Ia = (() => {
       definirEtat('ok');
       return { contenu, modele: r.modele, fournisseur: libelleFournisseur(r) };
     } catch (erreur) {
-      if (erreur && erreur.reseau) definirEtat('injoignable');
+      if (erreur && erreur.reseau) definirEtat('injoignable');     // les boutons IA se masquent
       throw erreur;
     }
   }
