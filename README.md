@@ -117,6 +117,12 @@ quotidiennes (`donnees/sauvegardes/`) et les documents joints.
   ouvre la messagerie du poste, Prévo n'envoie rien lui-même.
 - **Paramètres** : réglages partagés, codes de défaillance, sauvegardes et restauration, contrôle de la
   base, export ZIP.
+- **Reprendre ses données** (responsable) : l'assistant « Importer des données » reprend, en cinq étapes,
+  les listes d'un atelier (localisations, équipements, articles, fournisseurs, techniciens et
+  habilitations, codes, compteurs, contrôles, gammes) et l'historique des interventions d'une autre GMAO, depuis Excel (.xlsx,
+  .xls), OpenDocument (.ods), CSV ou un collage : colonnes reconnues par leur titre (l'IA peut en proposer,
+  sur les seuls titres), aperçu ligne par ligne avant toute écriture, sauvegarde juste avant, « Annuler cet
+  import ».
 - **Assistant IA** (facultatif, désactivé par défaut) : Ollama sur un PC de l'atelier (modèle conseillé
   `qwen2.5:7b`) ou une API compatible OpenAI. Il propose un symptôme et un impact pour une demande, un
   compte rendu structuré, des codes de défaillance pris **uniquement** dans la liste existante, une

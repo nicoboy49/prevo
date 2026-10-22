@@ -34,6 +34,7 @@ RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_CAPTURES = RACINE / "docs" / "captures"
 FICHIER_GUIDE = RACINE / "GUIDE.html"
 FICHIER_SCENARIOS = RACINE / "tests" / "fixtures" / "demo-scenarios.json"   # écrit par outils/generer_demo.py
+FICHIER_PARC = RACINE / "tests" / "fixtures" / "import" / "equipements.xlsx"   # fichier d'essai du lot 5
 
 BUDGET_GUIDE = 1500000          # octets de texte base64, toutes images du guide comprises (§17.8)
 QUALITES_JPEG = (0.82, 0.76, 0.70, 0.64, 0.58, 0.52, 0.46)
@@ -79,6 +80,8 @@ CAPTURES = [
      "attendre": "#contenu .sg-carte"},
     {"nom": "poste", "appareil": "bureau", "profil": "responsable", "route": "#/poste",
      "attendre": "#contenu #carte-ia"},
+    {"nom": "import", "appareil": "bureau", "profil": "responsable", "route": "#/import",
+     "attendre": '#contenu .import-etape[data-etape="1"]', "preparer": "import"},
 ]
 
 # Avant le chargement : profil et nom du poste mémorisés (le choix du profil est sauté).
@@ -127,6 +130,18 @@ def preparer(page, nom):
             "() => !document.querySelector('#contenu [data-graphique][data-etat=\"chargement\"]')",
             timeout=DELAI_MS)
         page.wait_for_timeout(1500)          # fin des animations des graphiques
+    elif nom == "import":
+        # Lot 5 : la liste du parc d'essai (equipements.xlsx) jusqu'à l'aperçu ; rien n'est écrit.
+        page.check('input[name="import-type"][value="equipements"]')
+        page.click("#import-continuer")
+        page.wait_for_selector('.import-etape[data-etape="2"]', timeout=DELAI_MS)
+        page.set_input_files("#import-fichier", str(FICHIER_PARC))
+        page.wait_for_selector("#import-lu:not([hidden]) #import-titres", timeout=DELAI_MS)
+        for etape in (3, 4):
+            page.click("#import-continuer")
+            page.wait_for_selector('.import-etape[data-etape="%d"]' % etape, timeout=DELAI_MS)
+        page.wait_for_selector("#contenu [data-total]", timeout=DELAI_MS)
+        page.evaluate("() => window.scrollTo(0, 0)")
 
 
 def prendre_capture(navigateur, capture):

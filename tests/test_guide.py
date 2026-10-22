@@ -30,7 +30,7 @@ README = RACINE / "README.md"
 DOSSIER_CAPTURES = RACINE / "docs" / "captures"
 CAPTURE_README = "docs/captures/accueil.png"
 BUDGET_CAPTURES = 1500000          # octets de texte base64, toutes images comprises (§17.8)
-CAPTURES = {"accueil", "signaler", "ot", "indicateurs", "planning", "suggestions", "poste"}
+CAPTURES = {"accueil", "signaler", "ot", "indicateurs", "planning", "suggestions", "poste", "import"}
 PREFIXE_JPEG = "data:image/jpeg;base64,"
 
 # Chapitres demandés par §17.8 (identifiants des sections du guide).

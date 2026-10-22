@@ -7,7 +7,8 @@ vise un lecteur qui se demande si un projet confié à une IA peut être contrô
 Les chiffres cités viennent de commandes lancées au moment de la rédaction (suite de tests, historique
 git) ou du journal de chantier, qui consigne chaque vérification. Ce qui n'a pas été vérifié est
 présenté comme prévu. Les sections 1 à 6 décrivent la méthode et le lot 1 ; la section 7 décrit le
-lot 2, la section 8 le lot 3 et la section 9 le lot 3 bis, menés de la même façon.
+lot 2, la section 8 le lot 3, la section 9 le lot 3 bis, la section 10 le lot 4 et la section 11 le
+lot 5, menés de la même façon.
 
 ## 1. Principe : écrire ce qui est attendu avant de coder
 
@@ -510,7 +511,109 @@ sombre), **l'interface est gelée** : les captures du guide et du README sont r�
 lancement, qui la montreront. Jusqu'au lancement, plus de changement visuel sans décision de Nicolas ;
 les écrans Indicateurs et Rapport mensuel pourront reprendre ce style dans une passe suivante, sur demande.
 
-## 11. À retenir pour piloter une IA
+## 11. Lot 5 : assistant d'import
+
+Le lot 5 permet au responsable de **reprendre les données existantes** d'un atelier sans les ressaisir :
+les référentiels (localisations, équipements, articles, fournisseurs, techniciens et habilitations, codes
+de défaillance, compteurs, contrôles réglementaires, gammes) et l'**historique des interventions** d'une
+autre GMAO, depuis Excel (.xlsx, .xls), OpenDocument (.ods), CSV ou un simple collage. Un assistant en
+cinq étapes reconnaît les colonnes, montre un aperçu ligne par ligne et **n'écrit rien avant
+« Importer »** ; une sauvegarde est faite juste avant, et l'import s'annule. Le format des fichiers ne
+change pas. Même méthode qu'au lot 4 : l'orchestrateur a écrit le socle, la nouvelle règle de
+disponibilité, la lecture des fichiers, l'écriture et l'annulation, les modèles à remplir et la consigne
+de l'IA, et il a revérifié chaque tâche confiée ; des sous-agents ont écrit les fichiers d'essai, les
+règles des référentiels et de l'historique, l'écran, la refonte de l'accueil (voir le gel de l'interface
+ci-dessus), la recette et la documentation.
+
+### Les décisions de Nicolas
+
+Le cahier des charges compte **13 décisions** (D80 à D92) et **17 critères de succès** (CS79 à CS95).
+Règle de fond : **rien n'est écrit sans validation** (aperçu complet, sauvegarde juste avant, journal,
+« Annuler cet import »). La bibliothèque de lecture des classeurs, SheetJS 0.20.3, découle de sa réponse
+de la veille (lire les .xls directement) ; elle est prise sur le site de l'éditeur, le paquet npm, plus
+ancien, ayant deux failles corrigées depuis. Quatre questions ont été tranchées par Nicolas :
+
+- **Quelles données** (D82) : les référentiels **et l'historique des interventions**, plus que l'option
+  recommandée (les seuls référentiels) : les indicateurs et les suggestions de préventif servent dès le
+  premier jour, au prix d'un effort plus grand et d'historiques très hétérogènes.
+- **Les fiches déjà présentes** (D84) : compléter et mettre à jour, au choix à chaque import (case cochée
+  par défaut), seulement pour les colonnes importées et non vides : une cellule vide n'efface jamais.
+- **L'IA dans l'import** (D87) : en complément, sur les **seuls titres des colonnes** ; aucune donnée de
+  l'atelier ne part, et la proposition reste « à confirmer ».
+- **Les références introuvables** (D88) : localisations et fournisseurs créés par l'import et montrés dans
+  l'aperçu ; un équipement parent ou un technicien inconnu reste une erreur.
+
+En validant le cahier des charges, Nicolas a ajusté la règle de l'historique (D92) sur trois points :
+l'ancien numéro d'OT de l'autre logiciel est gardé dans le compte rendu (« Ancien n° : … ») ; les
+doublons sont cherchés d'abord par ce numéro (réimporter ne recrée rien), sinon par équipement, date et
+titre, et ces doublons **supposés** sont montrés dans l'aperçu avec le choix de les importer quand même,
+jamais écartés en silence ; un OT sans durée d'arrêt est exclu du MTTR et de la disponibilité, jamais
+compté pour 0 h. Il a demandé de lancer le lot avec un envoi sur le dépôt privé en fin de lot, comme au
+lot 4.
+
+Le troisième ajustement visait l'OT importé. L'ancrage sur le code a montré que la disponibilité comptait
+jusque-là une panne sans durée comme 0 h d'arrêt : l'orchestrateur a appliqué la règle à **tous** les OT,
+importés ou saisis, sinon un même OT aurait été compté de deux façons ; Nicolas l'a confirmée le
+2026-10-22. Pendant le lot, Nicolas a aussi arrêté une passe de design générale au profit d'une refonte de
+l'accueil du responsable (avec le menu, la barre du bas et les notifications), validée sur planches
+avant/après avant tout commit. Le 2026-10-22, il a tranché les derniers points : les contrôles propres
+aux formulaires (périodicité d'un contrôle, date d'obtention d'une habilitation…) s'appliquent aussi à
+l'import — une ligne que le formulaire refuserait est refusée à l'aperçu, avec le même message (T92) — et
+trois choix de l'écran sont gardés (seuls les champs encore libres sont proposés à l'IA, une colonne « à
+confirmer » est importée telle quelle avec un avertissement, la correspondance est retenue sur le poste dès
+« Continuer »).
+
+### Ce que les relectures et la recette ont trouvé
+
+Les **fichiers d'essai**, écrits avant le code de lecture, ont trouvé dans la bibliothèque SheetJS trois
+pièges que ni sa documentation ni le contrat ne signalaient :
+
+- une date d'un fichier OpenDocument arrive à minuit heure locale : convertie en temps universel, elle
+  devenait la veille. Prévo calcule désormais les dates depuis leur numéro de série ;
+- un petit fichier OpenDocument piégé (cellules « répétées ») vaut un million de cellules : SheetJS les
+  déplie, mais annonce une feuille minuscule, si bien que le plafond de colonnes ne le voyait pas. Le
+  contrôle est fait sur le contenu du fichier, avant de l'ouvrir ;
+- SheetJS rend des lignes « à trous », qu'il faut compléter avant de compter les colonnes.
+
+Pour l'**écriture**, le contrat prévoyait, si un autre poste avait créé la même fiche entre l'aperçu et
+l'import, de passer la ligne en « identique » ou en « mise à jour » et d'écrire quand même.
+L'orchestrateur a préféré **ne rien écrire et montrer le nouvel aperçu** : Prévo n'écrit jamais autre
+chose que ce que le responsable a vu. Un test à deux postes le vérifie. Un échec en cours d'écriture
+laisse un import partiel, que « Annuler cet import » défait.
+
+Chaque tâche d'un sous-agent a été revérifiée par l'orchestrateur avec un défaut de plus, injecté par
+lui (mise à jour appliquée alors qu'elle n'est pas demandée, doublon supposé traité comme sûr, case
+« Compléter et mettre à jour » décochée par défaut) : chacun a fait échouer les tests ; les fichiers
+d'essai régénérés sont identiques à l'octet. Les règles de l'historique ont ajouté un titre de colonne
+oublié (« Temps (h) »), et un parent d'équipement est accepté n'importe où dans le fichier, pas seulement
+plus haut : l'ordre des lignes d'une liste de parc ne doit pas compter. Ces écarts au contrat sont
+consignés dans `docs/ARCHITECTURE.md` (§18).
+
+Hors du lot, trois échecs ont été trouvés en chemin : un test de l'IA du lot 4 échouait selon la
+charge du poste (une attente fixe dans le test ; c'est très probablement l'échec isolé vu au
+lot 4) ; un test du planning échouait selon la date du jour, sur la version 1.0.0 aussi (horloge
+désormais fixée) ; le premier chargement de la démo, génération du préventif comprise, dépassait son
+budget, déjà sur la version précédente : la recette du lot en cherche la cause.
+
+### Les preuves propres au lot 5
+
+- **Fichiers d'essai réalistes**, générés de façon reproductible : liste Excel d'un atelier avec un titre
+  au-dessus des colonnes, colonnes dans le désordre et noms variés, la même en .ods et en .xls, articles
+  exportés en CSV Windows-1252, collages tabulés, historique d'une autre GMAO avec durées manquantes et
+  doublons, fichiers piégés (trop de lignes, chiffré, vide, sans en-tête, cellules répétées).
+- **Calcul indépendant** : l'aperçu attendu de chaque fichier d'essai (lignes créées, mises à jour,
+  refusées, avec leurs raisons) est recalculé par un programme Python écrit à part.
+- **Rien n'est écrit avant « Importer »** : les 22 fichiers restent identiques à l'octet pendant tout
+  l'assistant, retours en arrière compris, et aucune requête d'écriture ne part.
+- **Retour arrière exact** : la sauvegarde « Avant import » est écrite avant les données ; « Annuler cet
+  import » rend les tables touchées identiques à l'octet, en modes serveur, dossier et démo ; une
+  sauvegarde impossible n'écrit rien.
+- **Ce qui part vers l'IA** : avec le faux fournisseur, seuls les titres des colonnes partent ; une valeur
+  de cellule repérable n'apparaît jamais dans la requête.
+- **Disponibilité** : les tests de la nouvelle règle ont été écrits avant le code et échouaient sur
+  l'ancien calcul ; le calcul Python indépendant des indicateurs du lot 3 suit la même règle.
+
+## 12. À retenir pour piloter une IA
 
 1. Faire écrire et valider le cahier des charges et ses critères de succès avant le code.
 2. Écrire le contrat entre les morceaux avant de distribuer le travail.
