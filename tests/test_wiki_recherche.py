@@ -1,21 +1,30 @@
-"""Recherche sans IA du wiki de maintenance (lot 6, tâche T98, ARCHITECTURE.md §20.6 ; décision D99 a).
+"""Recherche sans IA du wiki de maintenance (lot 6, tâches T98 et T116, ARCHITECTURE.md §20.8 ; décision D99 a).
 
 Les données sont un CORPUS D'ESSAI écrit à la main (tests/fixtures/wiki/corpus.json : équipements dont deux
-de même marque et modèle, OT clôturés et non clôturés, DI d'origine et DI regroupée, codes) chargé dans
-StockageDemo (les pages validées du wiki s'ajoutent à l'index avec T116), page file:// avec les seuls scripts utiles.
+de même marque et modèle, OT clôturés et non clôturés, DI d'origine et DI regroupée, codes, astuces d'OT, un
+article et des pages du wiki — actives, archivée, sans texte) chargé dans StockageDemo, page file:// avec les
+seuls scripts utiles.
 
 Couvert :
-    - chaque requête du corpus : ses OT attendus parmi les 3 premiers de leur portée, les
+    - chaque requête du corpus : ses OT ou pages attendus parmi les 3 premiers de leur portée, les
       « jamais » absents de toutes les portées, « aucun » sans aucun résultat (lexique, pluriels, accents,
-      majuscules, mots vides, expressions, OT non clôturés, DI d'origine) ;
+      majuscules, mots vides, expressions, OT non clôturés, DI d'origine ; T116 : mot présent seulement dans une
+      astuce, astuce d'un OT en cours jamais trouvée, mot présent seulement dans une page active, page archivée
+      et page sans texte jamais trouvées, citations [OT-…] et rubriques « ## » non indexées) ;
+    - résultat d'une page : type « page », pageId, lien canonique (EQ-…, ART-… ou WP-…, égal à Wiki.page(pageId).id),
+      titre de Wiki.page, équipement, repère, date (valide_le, sinon modifie_le), extrait sans balisage ;
+      portées d'une page (équipement, jumeau, parc) ;
     - mots comparables (Wiki.motsRecherche), Wiki.LEXIQUE (groupes du contrat, figé), Wiki.MOTS_VIDES ;
     - classement : scores BM25 égaux à un CALCUL PYTHON INDÉPENDANT (k1 = 1,2, b = 0,75, poids 0,7 d'un
-      équivalent du lexique), égalité de score départagée par la date ;
+      équivalent du lexique), sur des OT, puis sur des OT avec astuce et des pages (balisage retiré par Python),
+      égalité de score départagée par la date ;
     - portées : ordre équipement → même marque et modèle → parc, un résultat dans une seule portée,
       jumeaux comparés sans casse ni espaces, même marque mais autre modèle = parc, sans marque = portée
       « modèle » vide, sans équipement = parc seul, limite par portée ;
-    - index : construit à la première recherche, refait après une écriture dans chacune des quatre tables
-      indexées (Donnees.modifier) et après une relecture sans événement, pas refait pour une autre table ;
+    - index : construit à la première recherche (un document par OT clôturé et par page active avec texte),
+      refait après une écriture dans chacune des quatre tables indexées (Donnees.modifier ; wiki_pages : texte
+      ajouté, page archivée, nombre de constructions) et après une relecture sans événement, pas refait pour
+      une autre table ;
     - extrait (160 caractères au plus, autour du premier mot trouvé) et Wiki.surligner (<mark>, tout le
       reste échappé : le <script> d'un compte rendu reste du texte) ;
     - aucune requête réseau pendant les recherches ;
@@ -29,6 +38,7 @@ import io
 import json
 import math
 import random
+import re
 import statistics
 import sys
 import unittest
@@ -44,12 +54,13 @@ SCRIPTS = [
     "js/modules/causes-frequentes.js",
     "js/modules/indicateurs-regles.js",
     "js/modules/wiki-regles.js",
+    "js/modules/wiki-calculs.js",          # Wiki.page : lien canonique et titre d'une page (comparés aux résultats)
     "js/modules/wiki-recherche.js",
 ]
 FICHIER_CORPUS = RACINE / "tests" / "fixtures" / "wiki" / "corpus.json"
 CORPUS = json.loads(FICHIER_CORPUS.read_text(encoding="utf-8"))
 
-# Contrat §20.6 (copie indépendante du code) : groupes du lexique, poids d'un équivalent, BM25.
+# Contrat §20.8 (copie indépendante du code) : groupes du lexique, poids d'un équivalent, BM25.
 LEXIQUE_CONTRAT = [
     ["bruit", "grincement", "grince", "claquement", "claque", "cognement", "cogne", "sifflement", "siffle"],
     ["fuite", "fuit", "suintement", "suinte", "goutte"],
@@ -104,7 +115,8 @@ def ot_clos(identifiant, equipement, titre, date_fin="2026-10-01 10:00", **champ
 
 
 def identifiant(resultat):
-    return resultat["otId"]
+    """Identifiant d'un résultat : l'OT-… d'un OT, le WP-… d'une page."""
+    return resultat["otId"] if resultat["type"] == "ot" else resultat["pageId"]
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +132,19 @@ def poids_de_la_requete(requete):
                 for equivalent in groupe:
                     poids.setdefault(equivalent, POIDS_EQUIVALENT)
     return poids
+
+
+def texte_de_page(titre, balisage):
+    """Texte indexé d'une page, refait ici sans le code : le titre, puis chaque ligne du balisage qui n'est pas
+    une rubrique (« ## … »), sans la marque « - », sans les citations [OT-…], les liens [[titre]] gardés comme texte."""
+    lignes = [titre]
+    for ligne in balisage.splitlines():
+        if ligne.lstrip().startswith("##"):
+            continue
+        ligne = re.sub(r"^\s*-\s+", "", ligne)
+        ligne = re.sub(r"\[OT-\d{4}-\d{4,}\]", " ", ligne)
+        lignes.append(re.sub(r"\[\[([^\[\]]+)\]\]", r"\1", ligne))
+    return " ".join(" ".join(lignes).split())
 
 
 def bm25(documents, requete):
@@ -222,6 +247,62 @@ class TestRequetesDuCorpus(CasRecherche):
         self.assertEqual(ot["extrait"], "Radiateur encrassé : nettoyage à l'air comprimé, température revenue à 85 °C.")
         self.assertEqual(ot["mots"], ["temperature"])
         self.assertGreater(ot["score"], 0)
+
+    def test_contenu_d_un_resultat_de_page(self):
+        page = self.chercher("manomètre")["portees"][0]["resultats"][0]
+        self.assertEqual(list(page), ["type", "pageId", "lien", "titre", "equipementId", "repere", "date", "cause",
+                                      "remede", "extrait", "mots", "score"])
+        self.assertEqual((page["type"], page["pageId"], page["lien"]), ("page", "WP-0001", "EQ-0001"))
+        self.assertEqual(page["titre"], "PR-01 — Presse hydraulique 250 t")
+        self.assertEqual((page["equipementId"], page["repere"], page["date"]), ("EQ-0001", "PR-01", "2026-09-15"))
+        self.assertEqual((page["cause"], page["remede"]), ("", ""))
+        # Extrait tiré des phrases : ni marque « - », ni citation, ni rubrique.
+        self.assertEqual(page["extrait"], "Lire le manomètre du circuit principal avant chaque relance")
+        self.assertEqual(page["mots"], ["manometre"])
+        self.assertGreater(page["score"], 0)
+        # Lien [[titre]] gardé comme texte dans l'extrait.
+        page = self.chercher("magasin")["portees"][0]["resultats"][0]
+        self.assertEqual(page["extrait"], "Garder un Joint de tige 25 mm d'avance au magasin")
+
+    def test_lien_canonique_et_titre_de_chaque_page_comme_wiki_page(self):
+        # mot présent seulement dans la page → (pageId, lien, titre, equipementId, repère, date)
+        attendus = {
+            "manomètre": ("WP-0001", "EQ-0001", "PR-01 — Presse hydraulique 250 t", "EQ-0001", "PR-01", "2026-09-15"),
+            "sertisseuse": ("WP-0002", "WP-0002", "Changer un flexible hydraulique", "EQ-0002", "PR-02", "2026-09-20"),
+            "carbure": ("WP-0003", "WP-0003", "Usure de la garniture mécanique", "", "", "2026-08-01"),
+            "polir": ("WP-0006", "ART-0001", "Joint de tige 25 mm", "", "", "2026-09-16"),
+        }
+        for mot, (page_id, lien, titre, equipement, repere, date) in attendus.items():
+            with self.subTest(mot=mot):
+                resultats = self.chercher(mot, limite=100)["portees"][0]["resultats"]
+                self.assertEqual([identifiant(r) for r in resultats], [page_id])
+                page = resultats[0]
+                self.assertEqual((page["type"], page["lien"], page["titre"]), ("page", lien, titre))
+                self.assertEqual((page["equipementId"], page["repere"], page["date"]), (equipement, repere, date))
+                calculee = self.page.evaluate("(id) => { const p = Wiki.page(id); return [p.id, p.titre]; }", page_id)
+                self.assertEqual(calculee, [lien, titre])                    # même règle que Wiki.page
+
+    def test_portees_d_une_page(self):
+        # Page de PR-01 : sur l'équipement depuis PR-01, « modèle » depuis sa jumelle PR-02, parc ailleurs.
+        for equipement, portee in (("EQ-0001", "equipement"), ("EQ-0002", "modele"), ("EQ-0003", "parc")):
+            with self.subTest(equipement=equipement):
+                self.assertEqual(self.ids(self.chercher("manomètre", equipementId=equipement), portee), ["WP-0001"])
+        # Savoir-faire rattaché à PR-02 : « modèle » vu de PR-01 ; page sans équipement : toujours le parc.
+        self.assertEqual(self.ids(self.chercher("sertisseuse", equipementId="EQ-0001"), "modele"), ["WP-0002"])
+        self.assertEqual(self.ids(self.chercher("sertisseuse", equipementId="EQ-0002"), "equipement"), ["WP-0002"])
+        for equipement in ("EQ-0001", "EQ-0004"):
+            reponse = self.chercher("carbure", equipementId=equipement)
+            self.assertEqual([self.ids(reponse, p) for p in ("equipement", "modele", "parc")], [[], [], ["WP-0003"]])
+        self.assertEqual(self.ids(self.chercher("polir", equipementId="EQ-0001"), "parc"), ["WP-0006"])
+
+    def test_astuce_d_un_ot_cloture_indexee_et_dans_l_extrait(self):
+        resultat = self.chercher("extracteur")["portees"][0]["resultats"][0]
+        self.assertEqual((resultat["type"], resultat["otId"]), ("ot", "OT-2026-0005"))
+        self.assertEqual(resultat["extrait"], "Prévoir l'extracteur de chemise : la garniture colle souvent à l'arbre.")
+        # Un mot du compte rendu ET de l'astuce : l'extrait vient du compte rendu (premier texte du corps).
+        resultat = self.chercher("glissières")["portees"][0]["resultats"][0]
+        self.assertEqual(resultat["otId"], "OT-2026-0002")
+        self.assertTrue(resultat["extrait"].startswith("Glissières sèches"), resultat["extrait"])
 
 
     def test_requete_et_mots_rendus(self):
@@ -331,6 +412,55 @@ class TestClassement(CasRecherche):
         self.assertEqual([r["otId"] for r in egaux], ["OT-2026-0102", "OT-2026-0103", "OT-2026-0101"])
 
 
+# OT clôturés (titre, astuce) et pages du wiki (statut, titre, balisage) : mots simples, comme MINI.
+MINI_ASTUCES = {
+    "OT-2026-0001": ("pompe joint", "vanne courroie"),
+    "OT-2026-0002": ("moteur", "joint joint palier"),
+    "OT-2026-0003": ("courroie tendeur", ""),
+}
+MINI_PAGES = {
+    "WP-0001": ("active", "pompe moteur",
+                "## Etapes\n- graisser palier [OT-2026-0001]\n- changer joint [[courroie tendeur]] [OT-2026-0002] [OT-2026-0003]"),
+    "WP-0002": ("archivée", "vanne", "## Etapes\n- vanne vanne vanne [OT-2026-0001]"),
+    "WP-0003": ("active", "palier", ""),
+    "WP-0004": ("active", "claquement", "## Symptomes\n- claquement moteur [OT-2026-0002]\n\n- tendeur [OT-2026-0003]"),
+}
+
+
+class TestClassementAvecAstucesEtPages(CasRecherche):
+    """Les astuces et les pages entrent dans le calcul BM25 : scores égaux au calcul Python indépendant."""
+
+    def setUp(self):
+        super().setUp()
+        ordres = [ot_clos(cle, "EQ-0001", titre, date_fin="2026-0%d-10 10:00" % (1 + rang), astuce=astuce)
+                  for rang, (cle, (titre, astuce)) in enumerate(MINI_ASTUCES.items())]
+        pages = [{"id": cle, "type": "savoir-faire", "titre": titre, "texte": balisage, "statut": statut,
+                  "valide_le": "2026-09-01 10:00"} for cle, (statut, titre, balisage) in MINI_PAGES.items()]
+        self.charger({"equipements": CORPUS["tables"]["equipements"], "ordres_travail": ordres, "wiki_pages": pages})
+        # Documents attendus : chaque OT (titre + astuce) ; chaque page active avec texte (titre + phrases).
+        self.documents = {cle: titre + " " + astuce for cle, (titre, astuce) in MINI_ASTUCES.items()}
+        self.documents.update({cle: texte_de_page(titre, balisage) for cle, (statut, titre, balisage) in MINI_PAGES.items()
+                               if statut != "archivée" and balisage.strip()})
+
+    def test_documents_indexes(self):
+        self.chercher("pompe")
+        self.assertEqual(sorted(self.documents), ["OT-2026-0001", "OT-2026-0002", "OT-2026-0003", "WP-0001", "WP-0004"])
+        self.assertEqual(self.etat()["documents"], 5)
+        self.assertEqual(self.documents["WP-0001"], "pompe moteur graisser palier changer joint courroie tendeur")
+
+    def test_scores_bm25_egaux_au_calcul_python(self):
+        for requete in ("joint", "vanne", "palier", "courroie tendeur", "moteur pompe", "cognement", "bruit palier",
+                        "graisser joint", "etapes", "symptomes", "2026", "claquement tendeur"):
+            with self.subTest(requete=requete):
+                attendus = bm25(self.documents, requete)
+                resultats = self.chercher(requete, limite=50)["portees"][0]["resultats"]
+                self.assertEqual(sorted(identifiant(r) for r in resultats), sorted(attendus))
+                for resultat in resultats:
+                    self.assertAlmostEqual(resultat["score"], attendus[identifiant(resultat)], places=9)
+                scores = [r["score"] for r in resultats]
+                self.assertEqual(scores, sorted(scores, reverse=True))
+
+
 # ---------------------------------------------------------------------------
 # Portées
 # ---------------------------------------------------------------------------
@@ -404,7 +534,11 @@ class TestIndex(CasRecherche):
         self.assertEqual(self.etat(), {"construit": False, "documents": 0, "constructions": 0})
         self.chercher("fuite")
         clos = sum(1 for ot in CORPUS["tables"]["ordres_travail"] if ot["statut"].startswith("Clôturé"))
-        self.assertEqual(self.etat(), {"construit": True, "documents": clos, "constructions": 1})   # un document par OT clôturé
+        pages = sum(1 for page in CORPUS["tables"]["wiki_pages"]
+                    if page["statut"] != "archivée" and valeur_texte(page["texte"]).strip())
+        self.assertEqual(pages, 4)                                              # WP-0004 archivée, WP-0005 sans texte
+        # Un document par OT clôturé et par page active qui a un texte.
+        self.assertEqual(self.etat(), {"construit": True, "documents": clos + pages, "constructions": 1})
         self.chercher("bruit", equipementId="EQ-0001")
         self.assertEqual(self.etat()["constructions"], 1)                      # réutilisé
 
@@ -430,6 +564,31 @@ class TestIndex(CasRecherche):
         self.ecrire("codes_defaillance", {"id": "CD-0010", "libelle": "contacteur grillé"})
         self.assertEqual(self.ids(self.chercher("grillé")), ["OT-2026-0007"])
         self.assertEqual(self.etat()["constructions"], 3)
+        # ordres_travail : une astuce posée sur un OT clôturé
+        self.ecrire("ordres_travail", {"id": "OT-2026-0009", "astuce": "Repérer les masses d'équilibrage au feutre."})
+        self.assertEqual(self.ids(self.chercher("feutre")), ["OT-2026-0009"])
+        self.assertEqual(self.etat()["constructions"], 4)
+
+    def test_index_refait_quand_wiki_pages_change(self):
+        self.assertEqual(self.ids(self.chercher("cames")), [])
+        self.assertEqual(self.etat()["constructions"], 1)
+        # La page active sans texte reçoit un texte validé : elle entre dans l'index.
+        self.ecrire("wiki_pages", {"id": "WP-0005", "texte": "## Causes\n- Cames du convoyeur desserrées [OT-2026-0007]",
+                                   "valide_le": "2026-10-01 09:00"})
+        self.assertFalse(self.etat()["construit"])                             # oublié dès l'événement
+        self.assertEqual(self.ids(self.chercher("cames")), ["WP-0005"])
+        self.assertEqual(self.etat()["constructions"], 2)
+        # Texte d'une page changé : l'ancien mot n'est plus trouvé, le nouveau l'est.
+        self.ecrire("wiki_pages", {"id": "WP-0003", "texte": "## Causes\n- Garniture en céramique usée [OT-2026-0005]"})
+        self.assertEqual(self.ids(self.chercher("carbure")), [])
+        self.assertEqual(self.ids(self.chercher("céramique")), ["WP-0003"])
+        self.assertEqual(self.etat()["constructions"], 3)
+        # Page archivée : elle sort de l'index ; nouvelle page active : elle y entre.
+        self.ecrire("wiki_pages", {"id": "WP-0005", "statut": "archivée"},
+                    {"id": "WP-0007", "type": "mode", "titre": "Desserrage des cames", "statut": "active",
+                     "texte": "## Remèdes\n- Freiner les vis au frein-filet [OT-2026-0007]", "modifie_le": "2026-10-02 08:00"})
+        self.assertEqual(self.ids(self.chercher("cames")), ["WP-0007"])
+        self.assertEqual(self.etat()["constructions"], 4)
 
     def test_une_autre_table_ne_refait_pas_l_index(self):
         self.chercher("fuite")

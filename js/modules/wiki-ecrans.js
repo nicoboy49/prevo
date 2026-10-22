@@ -84,17 +84,20 @@ Object.assign(Wiki, (() => {
   const recherchesPosees = new WeakMap();      // élément du champ → { champ, chercherPlusTard, repris }
   const symptomesSuivis = new WeakSet();       // champs « symptôme » des DI déjà écoutés
 
-  /** Un résultat : OT (numéro en lien ou en texte selon le profil) ou synthèse validée (lien vers sa page). */
+  /**
+   * Un résultat : OT (numéro en lien ou en texte selon le profil, puis son titre) ou page du wiki (son titre en
+   * lien vers #/wiki/<lien>, pour tous les profils : le wiki est ouvert au demandeur).
+   */
   function resultatHtml(resultat, portee, liens, cache) {
     const estOt = resultat.type === 'ot';
     const tete = estOt ? lienOt(resultat.otId, liens)
-      : UI.html`<a class="wiki-lien-page" href="#/wiki/${encodeURIComponent(resultat.equipementId)}">Page du wiki</a>`;
+      : UI.html`<a class="wiki-lien-page" href="#/wiki/${encodeURIComponent(resultat.lien)}">${resultat.titre}</a><span class="badge info">Page du wiki</span>`;
     const repere = portee !== 'equipement' && resultat.repere ? UI.html`<span class="badge neutre">${resultat.repere}</span>` : '';
     const codes = [resultat.cause ? UI.html`<span>Cause : ${resultat.cause}</span>` : '',
       resultat.remede ? UI.html`<span>Remède : ${resultat.remede}</span>` : ''];
-    return UI.html`<li class="wiki-trouve" data-type="${resultat.type}" data-id="${estOt ? resultat.otId : resultat.syntheseId}"${cache ? UI.brut(' hidden') : ''}>
+    return UI.html`<li class="wiki-trouve" data-type="${resultat.type}" data-id="${estOt ? resultat.otId : resultat.pageId}"${cache ? UI.brut(' hidden') : ''}>
       <div class="wiki-ligne-tete">${tete}${repere}${resultat.date ? UI.html`<span class="wiki-date">${UI.dateFr(resultat.date)}</span>` : ''}</div>
-      <div class="carte-titre">${resultat.titre}</div>
+      ${estOt ? UI.html`<div class="carte-titre">${resultat.titre}</div>` : ''}
       ${resultat.cause || resultat.remede ? UI.html`<div class="carte-meta">${codes}</div>` : ''}
       ${resultat.extrait ? UI.html`<p class="wiki-extrait">${Wiki.surligner(resultat.extrait, resultat.mots)}</p>` : ''}
     </li>`;

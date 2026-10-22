@@ -1,19 +1,33 @@
 'use strict';
-// Wiki (4/8) — recherche dans l'historique, sans IA (lot 6, ARCHITECTURE.md §20.8, décision D99 a) :
-// index des OT clôturés (avec la DI d'origine et les libellés de leurs codes ; les astuces et les pages
-// validées arrivent avec T116), mots comparables, lexique du dépannage, classement BM25, portées équipement → même marque
-// et modèle → parc. Complète l'objet Wiki (créé par wiki-regles.js).
+// Wiki (4/8) — recherche dans l'historique et dans le wiki, sans IA (lot 6, ARCHITECTURE.md §20.8, décision
+// D99 a) : index des OT clôturés (avec la DI d'origine, les libellés de leurs codes et l'astuce) et des pages
+// validées du wiki (T116), mots comparables, lexique du dépannage, classement BM25, portées équipement → même
+// marque et modèle → parc. Complète l'objet Wiki (créé par wiki-regles.js).
 //
 // Tout se passe dans la page : aucune requête réseau, aucune écriture. L'index est construit à la
 // première recherche et oublié dès qu'une table qu'il lit change (Donnees.evenements) ; il est aussi
 // refait quand Donnees a relu ces tables sans événement (Donnees.initialiser puis chargerTout).
 //
-// Précisions au contrat (§20.6) :
+// Précisions au contrat (§20.8) :
 //  - `extrait` est du TEXTE BRUT ; chaque résultat porte aussi `mots` (les formes trouvées dans le
 //    document) : Wiki.surligner(extrait, mots) en fait un fragment UI.html, <mark> autour des mots et
 //    tout le reste échappé (jamais de HTML venu des données) ;
-//  - chaque résultat porte aussi `repere` (repère de l'équipement) ; `cause` et `remede` sont les
-//    libellés des codes ; `date` = AAAA-MM-JJ (fin des travaux, sinon clôture technique, sinon création) ;
+//  - document d'un OT clôturé : titre, libellés des codes, puis le corps (d'où vient l'extrait, dans cet
+//    ordre) : compte rendu, astuce, travail à faire, symptôme et description de la DI d'origine ;
+//  - document d'une page : chaque ligne de wiki_pages active (statut autre que « archivée ») dont le texte
+//    n'est pas vide ; sont indexés le titre et les phrases du texte, citations [OT-…] retirées, lien
+//    [[titre]] gardé comme texte ; les lignes de rubrique (« ## … ») ne sont pas indexées (c'est la
+//    structure de la page, pas son contenu) ; l'extrait vient des phrases ;
+//  - résultat d'un OT : { type: 'ot', otId, titre, equipementId, repere, date, cause, remede, extrait, mots,
+//    score } ; `repere` = repère de l'équipement ; `cause` et `remede` = libellés des codes ; `date` =
+//    AAAA-MM-JJ (fin des travaux, sinon clôture technique, sinon création) ;
+//  - résultat d'une page : { type: 'page', pageId (WP-…), lien, titre, equipementId, repere, date, cause: '',
+//    remede: '', extrait, mots, score } ; `lien` et `titre` suivent la règle de Wiki.page (wiki-calculs.js) :
+//    une page d'équipement ou un composant dont l'équipement ou l'article existe mène à son EQ-… ou ART-…
+//    et prend le titre calculé, toute autre page garde son WP-… et son titre ; `equipementId` = celui de la
+//    page ('' sans équipement) ; `date` = AAAA-MM-JJ de valide_le, sinon de modifie_le ;
+//  - portée d'une page : celle de son equipement_id, comme un OT (sans équipement : « parc ») ; à score
+//    égal, OT et pages se départagent de même (le plus récent, puis l'identifiant) ;
 //  - avec un équipement, les trois portées sont toujours rendues dans l'ordre, même vides ;
 //  - « même marque et modèle » : comparaison sans casse ni espaces, comme CausesFrequentes (§14.5),
 //    équipements actifs ou non, l'équipement lui-même exclu ; marque ou modèle vide → portée vide ;
@@ -23,7 +37,7 @@
 Object.assign(Wiki, (() => {
 
   // ===========================================================================================
-  // Réglages, mots vides et lexique (§20.6)
+  // Réglages, mots vides et lexique (§20.8)
   // ===========================================================================================
 
   const RECHERCHE = Object.freeze({
@@ -39,6 +53,11 @@ Object.assign(Wiki, (() => {
   // Tables lues par l'index : il est refait quand l'une d'elles change.
   const TABLES_INDEXEES = ['ordres_travail', 'demandes', 'codes_defaillance', 'wiki_pages'];
   const AVANT_LE_MOT = 50;   // caractères gardés, dans l'extrait, avant le premier mot trouvé
+  // Texte d'une page (balisage du §20.4) : citation d'un OT, lien vers une page, ligne de rubrique, marque de phrase.
+  const MOTIF_CITATION = /\[OT-\d{4}-\d{4,}\]/g;
+  const MOTIF_LIEN = /\[\[([^[\]]+)\]\]/g;
+  const MOTIF_RUBRIQUE = /^\s*##/;
+  const MOTIF_MARQUE_PHRASE = /^\s*-\s+/;
 
   // Mots vides, en forme comparable (minuscules, sans accents) : retirés des textes et des requêtes.
   // « avant », « arriere », « haut », « bas » ne le sont pas : ils situent une pièce (roulement avant).
@@ -54,7 +73,7 @@ Object.assign(Wiki, (() => {
     'quelles', 'ici', 'meme', 'autre', 'autres', 'entre',
   ]);
 
-  // Lexique du dépannage (§20.6, listé dans le guide) : dans un groupe, les mots sont équivalents
+  // Lexique du dépannage (§20.8, listé dans le guide) : dans un groupe, les mots sont équivalents
   // pour la recherche ; un mot du lexique cherche aussi ses équivalents (poids 0,7).
   const LEXIQUE = Object.freeze([
     ['bruit', 'grincement', 'grince', 'claquement', 'claque', 'cognement', 'cogne', 'sifflement', 'siffle'],
@@ -204,7 +223,7 @@ Object.assign(Wiki, (() => {
 
   /**
    * Un document par OT clôturé. `champs` : textes indexés ; `corps` : textes d'où l'extrait est
-   * tiré, dans cet ordre (compte rendu, travail à faire, symptôme et description de la DI).
+   * tiré, dans cet ordre (compte rendu, astuce, travail à faire, symptôme et description de la DI).
    */
   function documentsDesOt(ordres, demandes, libelle) {
     const origines = demandesDOrigine(ordres, demandes);
@@ -214,7 +233,7 @@ Object.assign(Wiki, (() => {
       const di = origines.get(ot.id) || {};
       const cause = libelle('cause', ot.cause_code);
       const remede = libelle('remède', ot.remede_code);
-      const corps = [ot.compte_rendu, ot.travail_a_faire, di.symptome, di.description];
+      const corps = [ot.compte_rendu, ot.astuce, ot.travail_a_faire, di.symptome, di.description];
       documents.push({
         type: 'ot', id: ot.id, equipementId: texte(ot.equipement_id), date: dateOt(ot), titre: texte(ot.titre),
         cause, remede, corps,
@@ -225,6 +244,55 @@ Object.assign(Wiki, (() => {
   }
 
   /**
+   * Phrases du texte d'une page, pour l'index et l'extrait : lignes vides et lignes de rubrique (« ## … »)
+   * omises, marque « - » retirée, citations [OT-…] retirées, lien [[titre]] gardé comme texte (« titre »).
+   */
+  function phrasesDePage(valeur) {
+    return String(valeur === null || valeur === undefined ? '' : valeur).split(/\r\n|\r|\n/)
+      .filter((ligne) => !MOTIF_RUBRIQUE.test(ligne))
+      .map((ligne) => ligne.replace(MOTIF_MARQUE_PHRASE, '').replace(MOTIF_CITATION, ' ')
+        .replace(MOTIF_LIEN, (_, titre) => titre).replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+  }
+
+  /**
+   * Un document par page active (statut autre que « archivée ») qui a un texte : titre et phrases indexés,
+   * extrait tiré des phrases. La ligne est gardée : son lien et son titre se calculent au rendu (enResultat).
+   */
+  function documentsDesPages(pages) {
+    const documents = [];
+    pages.forEach((ligne) => {
+      if (texte(ligne.statut) === 'archivée' || !texte(ligne.texte)) return;
+      const phrases = phrasesDePage(ligne.texte);
+      documents.push({
+        type: 'page', id: texte(ligne.id), ligne, equipementId: texte(ligne.equipement_id),
+        date: (texte(ligne.valide_le) || texte(ligne.modifie_le)).slice(0, 10), titre: texte(ligne.titre),
+        cause: '', remede: '', corps: phrases, champs: [ligne.titre].concat(phrases),
+      });
+    });
+    return documents;
+  }
+
+  /**
+   * Lien et titre d'une page, même règle que Wiki.page (wiki-calculs.js) : une page d'équipement dont
+   * l'équipement existe mène à son EQ-… (titre « repère — désignation ») ; un composant dont l'article existe,
+   * à son ART-… (titre : désignation, sinon référence) ; toute autre page, à son WP-… avec son titre.
+   */
+  function entreeDePage(ligne) {
+    const type = texte(ligne.type);
+    const equipement = type === 'équipement' && texte(ligne.equipement_id)
+      ? Donnees.trouver('equipements', texte(ligne.equipement_id)) : null;
+    if (equipement) {
+      return { lien: texte(equipement.id), titre: [texte(equipement.repere), texte(equipement.designation)].filter(Boolean).join(' — ') };
+    }
+    const article = type === 'composant' && texte(ligne.article_id) ? Donnees.trouver('articles', texte(ligne.article_id)) : null;
+    if (article) {
+      return { lien: texte(article.id), titre: texte(article.designation) || texte(article.reference) || texte(article.id) };
+    }
+    return { lien: texte(ligne.id), titre: texte(ligne.titre) };
+  }
+
+  /**
    * Index inversé : pour chaque mot, la liste à plat [numéro de document, fréquence, …] ; longueur de
    * chaque document (nombre de mots indexés) et longueur moyenne (BM25).
    */
@@ -232,7 +300,8 @@ Object.assign(Wiki, (() => {
     const sources = {};
     TABLES_INDEXEES.forEach((nom) => { sources[nom] = Donnees.lignes(nom); });
     const libelle = lecteurDeLibelles(sources.codes_defaillance);
-    const documents = documentsDesOt(sources.ordres_travail, sources.demandes, libelle);
+    const documents = documentsDesOt(sources.ordres_travail, sources.demandes, libelle)
+      .concat(documentsDesPages(sources.wiki_pages));
     const postings = new Map();
     let longueurTotale = 0;
     documents.forEach((documentIndexe, numero) => {
@@ -450,22 +519,27 @@ Object.assign(Wiki, (() => {
   // Recherche
   // ===========================================================================================
 
-  /** Un résultat rendu (§20.6, avec les précisions en tête de fichier). */
+  /** Un résultat rendu, OT ou page (§20.8, avec les précisions en tête de fichier). */
   function enResultat(trouve) {
     const source = trouve.documentIndexe;
-    const equipement = Donnees.trouver('equipements', source.equipementId);
+    const equipement = source.equipementId ? Donnees.trouver('equipements', source.equipementId) : null;
     const repere = equipement ? texte(equipement.repere) : '';
     const commun = {
       equipementId: source.equipementId, repere, date: source.date, cause: source.cause, remede: source.remede,
       extrait: extraitDe(source.corps, trouve.mots), mots: trouve.mots.slice(), score: trouve.score,
     };
+    if (source.type === 'page') {
+      const entree = entreeDePage(source.ligne);
+      return Object.assign({ type: 'page', pageId: source.id, lien: entree.lien, titre: entree.titre }, commun);
+    }
     return Object.assign({ type: 'ot', otId: source.id, titre: source.titre }, commun);
   }
 
   /**
-   * Recherche dans l'historique (§20.6) : texte libre ; options { equipementId, limite (10 par
-   * portée) }. → { requete, mots, equivalents, portees: [{ portee, libelle, resultats }] } ; un
-   * résultat n'est que dans la première portée qui le contient. Rien n'est cherché sans mot utile.
+   * Recherche dans l'historique et le wiki (§20.8) : texte libre ; options { equipementId, limite (10 par
+   * portée) }. → { requete, mots, equivalents, portees: [{ portee, libelle, resultats }] } ; résultats
+   * d'OT et de pages mêlés ; un résultat n'est que dans la première portée qui le contient. Rien n'est
+   * cherché sans mot utile.
    */
   function rechercher(texteRecherche, options) {
     const reglages = options || {};
@@ -490,7 +564,7 @@ Object.assign(Wiki, (() => {
     };
   }
 
-  /** État de l'index (suivi et tests) : { construit, documents, constructions }. */
+  /** État de l'index (suivi et tests) : { construit, documents (OT et pages), constructions }. */
   function etatRecherche() {
     return { construit: index !== null, documents: index ? index.documents.length : 0, constructions };
   }

@@ -2,9 +2,9 @@
 // Ordres (5/7) — contenu des onglets de la fiche OT (ARCHITECTURE.md §14.2 et §14.6) : Préparation
 // (causes fréquentes, travail, technicien et RG8, opérations, pièces prévues et stock RG3),
 // Exécution (check-list, déroulement, temps passés, pièces sorties de ordres-pieces.js), Compte
-// rendu (causes fréquentes, codes, compte rendu, assistant IA du lot 4, clôture technique RG4,
-// coût RG7) et Historique de l'équipement. Complète l'objet Ordres ; la fiche (ordres-fiche.js)
-// appelle ces onglets par Ordres.interne.
+// rendu (causes fréquentes, codes, compte rendu, astuce du lot 6, assistant IA du lot 4, clôture
+// technique RG4, coût RG7) et Historique de l'équipement. Complète l'objet Ordres ; la fiche
+// (ordres-fiche.js) appelle ces onglets par Ordres.interne.
 
 Object.assign(Ordres, (() => {
 
@@ -18,6 +18,9 @@ Object.assign(Ordres, (() => {
 
   // Fonction du fichier chargé APRÈS celui-ci (ordres-pieces.js) : cherchée au moment de l'appel.
   const afficherPiecesSorties = (bloc, ot) => Ordres.interne.afficherPiecesSorties(bloc, ot);
+  // Champ « Astuce pour la prochaine fois » (lot 6, §20.9) : aide mot pour mot ; longueur au plus = seuil astuceMax (§20.1).
+  const AIDE_ASTUCE = 'Ce qui vous aurait fait gagner du temps. Les consignes de sécurité restent dans la consignation de l\'équipement.';
+  const ASTUCE_MAX = 500;
 
   /**
    * Encart « Causes fréquentes ici » (D25, ARCHITECTURE.md §14.5) pour l'équipement et le code
@@ -418,6 +421,7 @@ Object.assign(Ordres, (() => {
         <fieldset class="ot-fieldset form-grille"${modifiable ? '' : UI.brut(' disabled')}>
           <div data-place="symptome_code"></div><div data-place="cause_code"></div><div data-place="remede_code"></div><div></div>
           <div class="large" data-place="compte_rendu"></div>
+          <div class="large" data-place="astuce"></div>
           <div class="large ot-remise" data-place="remise_service"></div>
         </fieldset>
         ${modifiable ? UI.html`<div class="actions"><button type="submit" class="btn btn-secondaire">${UI.icone('valider')}Enregistrer le compte rendu</button>
@@ -432,6 +436,9 @@ Object.assign(Ordres, (() => {
     placer('compte_rendu', champOt('compte_rendu', ot.compte_rendu, {
       aide: 'Ce qui a été constaté, la cause, ce qui a été fait (10 caractères au moins ; « RAS » refusé sur un correctif).',
     }));
+    // Astuce (facultative, jamais exigée par RG4) : mêmes règles d'édition ; en lecture seule, montrée si elle existe.
+    if (modifiable || texte(ot.astuce)) placer('astuce', champOt('astuce', ot.astuce, { aide: AIDE_ASTUCE }));
+    else UI.$('[data-place="astuce"]', formulaire).remove();
     placer('remise_service', champOt('remise_service', ot.remise_service, {
       libelle: 'Équipement remis en service en sécurité (protections remises, consignation levée, production prévenue)',
     }));
@@ -454,9 +461,13 @@ Object.assign(Ordres, (() => {
   // `ia` : propositions de l'IA reprises dans ce formulaire (tracées au journal après l'écriture).
   async function enregistrerCompteRendu(ot, formulaire, ia) {
     const valeurs = UI.lireFormulaire(formulaire);
+    const longueur = Array.from(valeurs.astuce || '').length;           // en caractères, pas en unités UTF-16
+    const refus = longueur > ASTUCE_MAX ? 'Astuce trop longue : ' + longueur + ' caractères, ' + ASTUCE_MAX + ' au plus. Raccourcissez-la : rien n\'a été enregistré.' : '';
+    UI.erreurChamp(formulaire, 'astuce', refus);
+    if (refus) { UI.toast(refus, 'erreur'); return false; }
     const changes = await pendant(UI.$('button[type=submit]', formulaire), () => modifierOt(ot.id, {
       symptome_code: valeurs.symptome_code, cause_code: valeurs.cause_code, remede_code: valeurs.remede_code,
-      compte_rendu: valeurs.compte_rendu, remise_service: valeurs.remise_service,
+      compte_rendu: valeurs.compte_rendu, remise_service: valeurs.remise_service, astuce: valeurs.astuce,
     }, 'compte rendu'), 'compte rendu');
     if (changes === undefined) return false;
     if (ia) await ia.apresEnregistrement(changes, valeurs);
