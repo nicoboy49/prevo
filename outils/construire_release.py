@@ -19,9 +19,9 @@ Fichier manquant (NOTICE…) : tous les absents sont listés et rien n'est écri
 
 Les fichiers sont pris tels qu'ils sont sur le disque : pour une release, construire depuis une copie
 propre de l'étiquette, pas depuis un chantier en cours, par exemple :
-    git worktree add ../prevo-v1.0.0 v1.0.0
-    py outils/construire_release.py --source ../prevo-v1.0.0
-    git worktree remove ../prevo-v1.0.0
+    git worktree add ../prevo-v1.1.0 v1.1.0
+    py outils/construire_release.py --source ../prevo-v1.1.0
+    git worktree remove ../prevo-v1.1.0
 
 Bibliothèque standard seulement. Lancer depuis la racine du projet :
     py outils/construire_release.py                          → dist/prevo-<version>.zip
