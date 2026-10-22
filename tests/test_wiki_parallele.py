@@ -1,0 +1,124 @@
+"""Parallélisme de l'ingestion du wiki (lot 6 refondu, tâche T118 ; ARCHITECTURE.md §20.5, §20.7 ; D112 ; CS111).
+
+Tous les OT clôturés administrativement de la démo sont ingérés avec le faux fournisseur (réponse tirée du seul
+message), une fois avec 1 agent, une fois avec Wiki.SEUILS.agentsSimultanes agents et des délais de réponse variés
+(l'ordre d'arrivée des réponses change), puis toutes les propositions sont validées. On vérifie :
+    - le wiki obtenu est le même (texte de chaque page, propositions de chaque OT) ;
+    - Wiki.verifierIntegrite est ok (chaîne de chaque page, ordre des dates, aucun envoi simultané sur une page) ;
+    - jamais plus de agentsSimultanes envois en cours, et le parallélisme a bien eu lieu (le plafond est atteint) ;
+    - jamais deux envois en cours qui partagent une clé (page ou cause) ; le faux modèle crée une page de mode par
+      combinaison de codes : deux OT de même cause partis ensemble la créeraient tous deux (aucun rejeu attendu).
+
+Lancer depuis la racine du projet :
+    py -m unittest discover -s tests -p "test_wiki_parallele.py" -v
+"""
+import json
+import unittest
+
+import test_wiki_ingestion as ingestion
+from commun import CasNavigateur, charger_scripts
+from faux_fournisseur_ia import FauxFournisseur
+
+SCRIPTS = ["js/demo-donnees.js"] + ingestion.SCRIPTS + ["js/modules/wiki-journal.js"]
+PROFIL_JS = """() => { window.App = { estResponsable: () => true, libelleProfil: () => 'Responsable',
+  profil: { type: 'responsable', nom: 'Nicolas' } }; }"""
+CHARGER_DEMO_JS = """async () => {
+  Donnees.initialiser(StockageDemo.creer(DEMO_DONNEES.tables), { poste: 'Poste test', profil: 'Responsable test' });
+  await Donnees.chargerTout();
+}"""
+# Ingestion de toute la démo puis validation de toutes les propositions, dans l'ordre de leur rang.
+INGERER_JS = """async (agents) => {
+  const ids = Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement').map((o) => o.id);
+  await Wiki.mettreEnFile(ids);
+  let n = 0;
+  const bilan = await Wiki.traiterFile({ agents, appeler: async (requete, donnees, annuler) => {
+    n += 1;
+    if (agents > 1) await new Promise((r) => setTimeout(r, (n * 37) % 23));      // réponses dans le désordre
+    return Ia.envoyerRequete(requete, annuler);
+  } });
+  const aValider = Donnees.lignes('wiki_journal').filter((e) => e.statut === 'à valider').map((e) => e.id);
+  const validation = await Wiki.valider(aValider);
+  return {
+    ot: ids.length, acceptees: bilan.acceptees, rien: bilan.rien, refusees: bilan.refusees, rejouees: bilan.rejouees,
+    erreur: bilan.erreur && bilan.erreur.message, envois: bilan.envois, validees: validation.validees.length,
+    aRefaire: validation.aRefaire.length,
+    integrite: Wiki.verifierIntegrite({ envois: bilan.envois }),
+    pages: Object.fromEntries(Donnees.lignes('wiki_pages').filter((l) => l.statut !== 'archivée')
+      .map((l) => [l.titre, { texte: l.texte, type: l.type, ot: l.ot_cites, liens: l.liens, version: l.version }])),
+    propositions: Object.fromEntries(Donnees.lignes('wiki_journal').filter((e) => e.nature === 'ingestion')
+      .map((e) => [e.ot_id, { statut: e.statut, anterieure: e.anterieure,
+        apres: JSON.parse(e.changements || '[]').map((c) => [c.titre, c.apres]) }])),
+    agentsMax: Wiki.SEUILS.agentsSimultanes,
+  };
+}"""
+
+
+def simultanes(envois):
+    """Plus grand nombre d'envois en cours en même temps (rangs debut/fin des événements)."""
+    evenements = sorted([(e["debut"], 1) for e in envois] + [(e["fin"], -1) for e in envois])
+    en_cours, maximum = 0, 0
+    for _rang, pas in evenements:
+        en_cours += pas
+        maximum = max(maximum, en_cours)
+    return maximum
+
+
+class TestParallele(CasNavigateur):
+
+    DELAI_PAR_DEFAUT_MS = 120000
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.faux = FauxFournisseur(lenteur_s=1)
+        cls.faux.demarrer()
+        cls.addClassCleanup(cls.faux.arreter)
+
+    def ingerer(self, agents):
+        contexte = self.navigateur.new_context(locale="fr-FR")
+        self.addCleanup(contexte.close)
+        ingestion.regler_ia(contexte, url=self.faux.url, modele="faux-mode-cause")
+        page = contexte.new_page()
+        page.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
+        self.surveiller(page)
+        charger_scripts(page, SCRIPTS)
+        page.evaluate(PROFIL_JS)
+        page.evaluate(CHARGER_DEMO_JS)
+        return page.evaluate(INGERER_JS, agents)
+
+    def test_meme_wiki_avec_1_et_5_agents(self):
+        seul = self.ingerer(1)
+        agents = seul["agentsMax"]
+        self.assertEqual(agents, 5)
+        plusieurs = self.ingerer(agents)
+        for nom, resultat in (("1 agent", seul), ("%d agents" % agents, plusieurs)):
+            with self.subTest(nom):
+                self.assertIsNone(resultat["erreur"])
+                self.assertGreater(resultat["ot"], 200)
+                self.assertEqual(resultat["acceptees"] + resultat["rien"] + resultat["refusees"], resultat["ot"])
+                self.assertEqual((resultat["refusees"], resultat["rejouees"]), (0, 0))
+                self.assertEqual((resultat["validees"], resultat["aRefaire"]), (resultat["acceptees"], 0))
+                self.assertEqual(resultat["integrite"], {"ok": True, "ecarts": []})
+                # Jamais deux envois en cours qui partagent une clé.
+                envois = resultat["envois"]
+                for n, a in enumerate(envois):
+                    for b in envois[n + 1:]:
+                        if set(a["cles"]) & set(b["cles"]):
+                            self.assertTrue(a["fin"] < b["debut"] or b["fin"] < a["debut"], (a, b))
+        self.assertEqual(simultanes(seul["envois"]), 1)
+        self.assertLessEqual(simultanes(plusieurs["envois"]), agents)
+        self.assertEqual(simultanes(plusieurs["envois"]), agents)             # le parallélisme a eu lieu
+        # Même wiki : chaque page, chaque proposition.
+        self.assertEqual(sorted(plusieurs["pages"]), sorted(seul["pages"]))
+        for titre, page in seul["pages"].items():
+            with self.subTest(page=titre):
+                self.assertEqual(plusieurs["pages"][titre], page)
+        self.assertEqual(plusieurs["propositions"], seul["propositions"])
+        self.assertGreater(len(seul["pages"]), 30)
+        self.assertGreater(len([p for p in seul["pages"].values() if p["type"] == "mode"]), 10)
+        # Toute la démo, dans l'ordre des dates : aucun OT n'arrive après des faits plus récents de ses pages.
+        self.assertTrue(all(p["anterieure"] == "0" for p in seul["propositions"].values()))
+
+
+if __name__ == "__main__":
+    unittest.main()

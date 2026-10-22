@@ -13,13 +13,16 @@ UNIQUEMENT à partir du message envoyé par Prévo (même message → même rép
     faux-retire        la première phrase de la page de l'équipement disparaît ;
     faux-consigne      la nouvelle phrase est une consigne de sécurité ;
     faux-sans-ot       la nouvelle phrase ne cite aucun OT ;
-    faux-cree-mode     en plus, un mode « Usure commune » est créé s'il n'est pas déjà au catalogue.
+    faux-cree-mode     en plus, un mode « Usure commune » est créé s'il n'est pas déjà au catalogue ;
+    faux-mode-cause    en plus, un mode « Mode : <codes de l'OT> » est créé s'il n'est pas déjà au catalogue : deux OT de
+                       mêmes codes (donc de même cause) qui partiraient ensemble le créeraient tous deux (D112).
 """
 import re
 
 MOTIF_OT_INGERE = re.compile(r"^OT à intégrer : (OT-\d{4}-\d{4,})", re.M)
 MOTIF_TITRE = re.compile(r"^Titre : (.*)$", re.M)
 MOTIF_ASTUCE = re.compile(r"^Astuce pour la prochaine fois : (.*)$", re.M)
+MOTIF_CODES = re.compile(r"^Codes : (.*)$", re.M)
 MOTIF_ENTETE_PAGE = re.compile(r"^=== Page « (.+) » \((.+)\) ===$", re.M)
 MOTIF_CITATION = re.compile(r"\[(OT-\d{4}-\d{4,})\]")
 FIN_DES_PAGES = re.compile(r"\n\n(?:Date d'intervention des OT déjà cités|Catalogue des pages)")
@@ -58,8 +61,10 @@ def lire_message(message):
                 catalogue.append(trouve.group(1))
     titre = MOTIF_TITRE.search(message)
     astuce = MOTIF_ASTUCE.search(message)
+    codes = MOTIF_CODES.search(message)
     return {"ot": MOTIF_OT_INGERE.search(message).group(1), "titre": titre.group(1).strip() if titre else "",
-            "astuce": astuce.group(1).strip() if astuce else "", "pages": pages, "catalogue": catalogue}
+            "astuce": astuce.group(1).strip() if astuce else "", "codes": codes.group(1).strip() if codes else "",
+            "pages": pages, "catalogue": catalogue}
 
 
 def reponse_ingestion(message, modele="faux"):
@@ -106,6 +111,9 @@ def reponse_ingestion(message, modele="faux"):
         pages.append({"action": "creer", "titre": "Astuce de l'" + ot, "type": "savoir-faire",
                       "rattache_a": equipement["titre"],
                       "rubriques": [{"rubrique": "Étapes", "phrases": [{"texte": lu["astuce"], "ot": [ot]}]}]})
+    if modele == "faux-mode-cause" and lu["codes"] and "Mode : " + lu["codes"] not in lu["catalogue"]:
+        pages.append({"action": "creer", "titre": "Mode : " + lu["codes"], "type": "mode", "rattache_a": "",
+                      "rubriques": [{"rubrique": "Causes", "phrases": [{"texte": "Constaté sur cet équipement", "ot": [ot]}]}]})
     if modele == "faux-cree-mode" and "Usure commune" not in lu["catalogue"]:
         pages.append({"action": "creer", "titre": "Usure commune", "type": "mode", "rattache_a": "",
                       "rubriques": [{"rubrique": "Causes", "phrases": [{"texte": "Usure normale des pièces", "ot": [ot]}]}]})
