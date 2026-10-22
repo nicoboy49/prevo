@@ -624,15 +624,10 @@ const Ia = (() => {
    */
   async function demander(fonction, donnees, options) {
     consigneDe(fonction, 'Ia.demander');
-    if (versionWeb()) throw new IaIndisponible(MESSAGE_VERSION_WEB);   // IA réglée ou non : rien n'est appelé
-    const r = reglages();
-    if (!r.actif) throw new IaIndisponible('L\'assistant IA n\'est pas activé sur ce poste (« Ce poste »).');
-    if (!urlValide(r.url)) throw new IaIndisponible('Adresse du fournisseur d\'IA invalide (« Ce poste »).');
-    if (!porteeAutorisee(r.url)) throw new IaRefusee();
+    const r = reglagesUtilisables();
     const { messages, schema } = requete(fonction, donnees);
     try {
-      const contenu = await avecDelai(delaiNavigateur(r.delaiS), r.delaiS, options && options.signal,
-        (signal) => discuter(r, fonction, messages, schema, signal));
+      const contenu = await transmettre(r, fonction, messages, schema, options && options.signal);
       const resultat = lireReponse(fonction, contenu, donnees);
       definirEtat('ok');
       return { resultat, modele: r.modele, fournisseur: libelleFournisseur(r) };
@@ -640,6 +635,35 @@ const Ia = (() => {
       if (erreur && erreur.reseau) definirEtat('injoignable');     // les boutons IA se masquent
       throw erreur;
     }
+  }
+
+  // Lot 6 (§20.5) : envoie une requête construite par Ia.requete → { contenu (texte brut), modele, fournisseur } ;
+  // mêmes contrôles et même délai que Ia.demander ; la réponse est lue par l'appelant (Ia.lireReponse).
+  async function envoyerRequete(requeteConstruite, signal) {
+    const r = reglagesUtilisables();
+    const { fonction, messages, schema } = requeteConstruite || {};
+    try {
+      const contenu = await transmettre(r, fonction, messages, schema, signal);
+      definirEtat('ok');
+      return { contenu, modele: r.modele, fournisseur: libelleFournisseur(r) };
+    } catch (erreur) {
+      if (erreur && erreur.reseau) definirEtat('injoignable');
+      throw erreur;
+    }
+  }
+
+  // Réglages du poste s'ils permettent un appel, sinon l'erreur nommée (version web : rien n'est appelé).
+  function reglagesUtilisables() {
+    if (versionWeb()) throw new IaIndisponible(MESSAGE_VERSION_WEB);
+    const r = reglages();
+    if (!r.actif) throw new IaIndisponible('L\'assistant IA n\'est pas activé sur ce poste (« Ce poste »).');
+    if (!urlValide(r.url)) throw new IaIndisponible('Adresse du fournisseur d\'IA invalide (« Ce poste »).');
+    if (!porteeAutorisee(r.url)) throw new IaRefusee();
+    return r;
+  }
+
+  function transmettre(r, fonction, messages, schema, signal) {
+    return avecDelai(delaiNavigateur(r.delaiS), r.delaiS, signal, (s) => discuter(r, fonction, messages, schema, s));
   }
 
   // ===========================================================================================
@@ -670,7 +694,7 @@ const Ia = (() => {
     ErreurIa, IaIndisponible, IaDelai, IaAnnulee, IaReponseInvalide, IaRefusee,
     evenements,
     reglages, enregistrerReglages, distantAutorise, urlValide, portee, mention, active, etat, versionWeb,
-    verifierAuDemarrage, tester, demander, requete, lireReponse,
+    verifierAuDemarrage, tester, demander, envoyerRequete, requete, lireReponse,
     tracerUtilisation,
   };
 })();

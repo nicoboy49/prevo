@@ -23,6 +23,10 @@ et choisit sa réponse d'après la fonction (premier message système « Fonctio
     faux-html       réponse piégée : du HTML qui exécuterait du code s'il était inséré tel quel (PIEGE) dans
                     chaque champ texte, codes compris.
 
+    Ingestion du wiki (ingestionWiki, lot 6) : réponse construite à partir du message envoyé par Prévo,
+    variantes par modèle (faux-rien, faux-contradiction, faux-recent, faux-invente, faux-retire, faux-consigne,
+    faux-sans-ot, faux-cree-mode) : voir tests/faux_wiki.py.
+
 
     with FauxFournisseur() as faux:
         faux.url            # 'http://127.0.0.1:54321'  (Ollama) ; faux.url + '/v1' (OpenAI)
@@ -35,9 +39,12 @@ import re
 import threading
 import time
 
+from faux_wiki import reponse_ingestion
+
 MODELES = ["faux", "faux-lent", "faux-invente", "faux-illisible", "faux-chiffres", "faux-schema",
            "faux-enorme", "faux-redirige", "faux-tronque", "faux-tronque-morceaux", "faux-html",
-           "faux-sans-ot", "faux-trop-long", "faux-trop-de-mots", "faux-consigne", "faux-alimentation"]
+           "faux-sans-ot", "faux-trop-long", "faux-trop-de-mots", "faux-consigne", "faux-alimentation",
+           "faux-rien", "faux-contradiction", "faux-recent", "faux-retire", "faux-cree-mode"]
 # Texte piégé : une image dont l'erreur de chargement poserait window.__xss (aucun chiffre : le commentaire
 # du rapport le refuserait sinon).
 PIEGE = '<img src=x onerror="window.__xss=true">'
@@ -112,7 +119,11 @@ def reponse_piegee(fonction):
     return {"texte": PIEGE + " texte proposé"}
 
 
-def contenu_reponse(modele, fonction, schema):
+def message_utilisateur(messages):
+    return next((str(m.get("content", "")) for m in messages or [] if m.get("role") == "user"), "")
+
+
+def contenu_reponse(modele, fonction, schema, messages=None):
     """Texte que le faux modèle « écrit » (le plus souvent du JSON)."""
     if modele == "faux-illisible":
         return "Bien sûr ! Voici ma proposition : la garniture est usée."
@@ -120,6 +131,8 @@ def contenu_reponse(modele, fonction, schema):
         return json.dumps(reponse_piegee(fonction), ensure_ascii=False)
     if modele == "faux-enorme":
         return json.dumps({"texte": "x" * (3 * 1024 * 1024)})
+    if fonction == "ingestionWiki":
+        return json.dumps(reponse_ingestion(message_utilisateur(messages), modele), ensure_ascii=False)
     if fonction == "colonnesImport":
         return json.dumps(colonnes_du_schema(schema, modele == "faux-invente"), ensure_ascii=False)
     if fonction == "codes":
@@ -225,7 +238,7 @@ class _Gestionnaire(http.server.BaseHTTPRequestHandler):
         if openai and modele == "faux-schema" and (corps.get("response_format") or {}).get("type") == "json_schema":
             return self._envoyer(400, {"error": {"message": "response_format json_schema non pris en charge"}})
         fonction = fonction_demandee(corps.get("messages"))
-        contenu = contenu_reponse(modele, fonction, schema_demande(corps, openai))
+        contenu = contenu_reponse(modele, fonction, schema_demande(corps, openai), corps.get("messages"))
         if openai:
             return self._envoyer(200, {"id": "faux-1", "object": "chat.completion", "model": modele,
                                        "choices": [{"index": 0, "message": {"role": "assistant", "content": contenu},

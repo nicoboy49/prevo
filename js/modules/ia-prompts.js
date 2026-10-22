@@ -324,6 +324,127 @@ Object.assign(Ia, (() => {
     },
   };
 
+  // Lot 6 (ARCHITECTURE.md §20.5) : intégrer un OT clôturé au wiki de maintenance. Données : l'OT (liste blanche,
+  // ni nom ni coût), les pages concernées avec leur texte actuel et la date d'intervention des OT qu'elles citent, le
+  // catalogue des titres. Réponse lue par Wiki.lireIngestion (mise en forme puis contrôles du §20.6) : une réponse
+  // refusée n'entre jamais dans le wiki.
+  const TYPES_PAGES = ['équipement', 'composant', 'mode', 'savoir-faire'];
+  const RUBRIQUES_PAGES = {
+    'équipement': ['Ce qui revient', 'Ce qui a réglé le problème', 'À surveiller', 'Astuces'],
+    'composant': ['Défaillances', 'Signes d\'usure', 'Montage et remplacement', 'Équivalences'],
+    'mode': ['Symptômes', 'Causes', 'Remèdes', 'Équipements concernés'],
+    'savoir-faire': ['Quand le faire', 'Étapes', 'Pièces et outillage', 'Pièges'],
+  };   // = Wiki.RUBRIQUES (wiki-regles.js), recopié ici : les consignes ne dépendent pas du module Wiki
+  const MENTION_ANTERIEURE = 'Intervention antérieure à des faits déjà intégrés : ne présente jamais son information '
+    + 'comme la plus récente.';
+
+  function citationsDuTexte(valeur) {
+    return Array.from(String(valeur || '').matchAll(/\[(OT-\d{4}-\d{4,})\]/g), (m) => m[1]);
+  }
+
+  // OT permis dans les citations : l'OT ingéré, puis ceux déjà cités dans les pages envoyées (liste fermée du schéma).
+  function otPermisIngestion(d) {
+    const ot = (d && d.ot) || {};
+    return Array.from(new Set([texte(ot.id)].concat(...liste(d && d.pages).map((page) => citationsDuTexte(page && page.texte)))
+      .filter(Boolean)));
+  }
+
+  function ligneOtIngestion(ot) {
+    const eq = ot.equipement || {};
+    const pieces = liste(ot.pieces).map((piece) => [uneLigne(piece && piece.designation, 120), texte(piece && piece.reference)
+      ? '(réf. ' + uneLigne(piece.reference, 40) + ')' : '', texte(piece && piece.quantite) ? '× ' + uneLigne(piece.quantite, 20) : '']
+      .filter(Boolean).join(' ')).filter(Boolean);
+    return message([
+      'OT à intégrer : ' + uneLigne(ot.id, 30) + ' · intervention du ' + uneLigne(ot.dateIntervention, 20) + ' · ' + uneLigne(ot.type, 60),
+      ligne('Équipement', [uneLigne(eq.repere, 60), uneLigne(eq.designation, 200)].filter(Boolean).join(' — ')),
+      ligne('Marque et modèle', [uneLigne(eq.marque, 100), uneLigne(eq.modele, 100)].filter(Boolean).join(' · ')),
+      ligne('Titre', uneLigne(ot.titre, 200)),
+      ligne('Symptôme signalé', uneLigne(ot.symptomeDI, 300)),
+      ligne('Travail demandé', uneLigne(ot.travail, 600)),
+      ligne('Codes', [ot.symptome, ot.cause, ot.remede].map((code) => uneLigne(code, 120)).filter(Boolean).join(' / ')),
+      ligne('Compte rendu', bloc(ot.compteRendu, 2000)),
+      ligne('Astuce pour la prochaine fois', bloc(ot.astuce, 600)),
+      ligne('Pièces consommées', pieces.join(' ; ')),
+      ligne('Durée d\'arrêt', texte(ot.dureeArret) ? uneLigne(ot.dureeArret, 20) + ' h' : ''),
+    ]);
+  }
+
+  const ingestionWiki = {
+    systeme: systeme('Fonction : ingestionWiki',
+      'intègre l\'ordre de travail (OT) ci-dessous au wiki de maintenance de l\'atelier. Le wiki est fait de pages '
+        + 'liées : équipement, composant (pièce), mode de défaillance, savoir-faire. Tu reçois les pages concernées par '
+        + 'cet OT avec leur texte actuel, et le catalogue des titres de toutes les pages.\n'
+        + 'Tu peux :\n'
+        + '- modifier une page reçue (action « modifier », son titre exact) : rends son texte complet ; garde toutes ses '
+        + 'phrases, à l\'identique ou reformulées, et tous les OT qu\'elles citent ; ajoute ce que l\'OT apprend ;\n'
+        + '- créer au plus 3 pages (action « creer ») : un mode de défaillance (« mode »), un savoir-faire '
+        + '(« savoir-faire », rattaché par « rattache_a » au titre exact d\'une page reçue d\'équipement ou de composant) '
+        + 'ou un composant absent du catalogue (« composant ») ; jamais une page d\'équipement ;\n'
+        + '- signaler dans « contradictions » une phrase existante que cet OT contredit (la phrase exacte, ton '
+        + 'observation, et cet OT seul) : ne modifie pas cette phrase, le responsable tranchera ;\n'
+        + '- répondre « rien_a_ajouter » vrai, sans page ni contradiction, si l\'OT n\'apprend rien (contrôle de routine '
+        + 'sans remarque).\n'
+        + 'Règles d\'écriture :\n'
+        + '- chaque phrase cite au moins un OT (liste « ot ») : cet OT ou un OT déjà cité dans les pages reçues ; jamais '
+        + 'une autre page comme preuve ;\n'
+        + '- rubriques permises : ' + TYPES_PAGES.map((type) => type + ' « ' + RUBRIQUES_PAGES[type].join(' », « ') + ' »')
+          .join(' ; ') + ' ;\n'
+        + '- un lien vers une autre page s\'écrit [[titre exact]] dans une phrase, vers une page du catalogue ou créée '
+        + 'dans ta réponse ;\n'
+        + '- au plus 12 phrases et 250 mots par page, phrases courtes ;\n'
+        + '- les pages savoir-faire s\'écrivent d\'abord à partir de l\'astuce de l\'OT, quand il y en a une ;\n'
+        + '- aucun comptage (pas de « 3 fois », « 4 OT ») : les nombres de cas sont calculés par le logiciel ; aucun '
+        + 'nombre qui ne figure pas dans l\'OT ou dans la page ; aucune date, aucun mois, aucune année ;\n'
+        + '- dis « fréquent ici », jamais « cause certaine » ;\n'
+        + '- aucune consigne de sécurité ou de consignation, aucun équipement de protection, aucune habilitation, aucune '
+        + 'coupure d\'énergie : elles relèvent de la fiche de consignation de l\'équipement ;\n'
+        + '- si l\'OT est une intervention antérieure à des faits déjà intégrés, ne présente jamais son information comme '
+        + 'la plus récente (ni « désormais », « maintenant », « actuellement », « récemment », « dernier »…).',
+      '{"rien_a_ajouter": false, "pages": [{"action": "modifier | creer", "titre": "…", "type": "équipement | composant '
+        + '| mode | savoir-faire", "rattache_a": "…", "rubriques": [{"rubrique": "…", "phrases": [{"texte": "…", '
+        + '"ot": ["OT-AAAA-NNNN"]}]}]}], "contradictions": [{"page": "…", "phrase": "…", "observation": "…", '
+        + '"ot": ["OT-AAAA-NNNN"]}]}'),
+    utilisateur(d) {
+      const pages = liste(d.pages);
+      const dates = new Map();
+      pages.forEach((page) => liste(page && page.otDates).forEach((entree) => dates.set(texte(entree.id), texte(entree.date))));
+      return [
+        ligneOtIngestion((d && d.ot) || {}) + (d.anterieure ? '\n' + MENTION_ANTERIEURE : ''),
+        'Pages concernées (texte actuel) :\n' + (pages.length ? pages.map((page) => '=== Page « ' + uneLigne(page.titre, 200)
+          + ' » (' + uneLigne(page.type, 20) + ') ===\n' + (bloc(page.texte, 6000) || '(page vide)')).join('\n') : '(aucune)'),
+        dates.size ? 'Date d\'intervention des OT déjà cités : ' + Array.from(dates.entries())
+          .map(([id, date]) => id + ' : ' + uneLigne(date, 20)).join(' ; ') : '',
+        'Catalogue des pages :\n' + (liste(d.catalogue).map((page) => '- ' + uneLigne(page && page.titre, 200) + ' ('
+          + uneLigne(page && page.type, 20) + ')').join('\n') || '(aucune)'),
+      ].filter(Boolean).join('\n\n');
+    },
+    // Listes fermées : action, type, rubrique, et les OT permis dans les citations.
+    schema(d) {
+      const permis = otPermisIngestion(d);
+      const ot = { type: 'array', items: { type: 'string', enum: permis.length ? permis : [''] } };
+      const rubriques = Array.from(new Set([].concat(...TYPES_PAGES.map((type) => RUBRIQUES_PAGES[type]))));
+      return objet({
+        rien_a_ajouter: { type: 'boolean' },
+        pages: { type: 'array', items: objet({
+          action: { type: 'string', enum: ['modifier', 'creer'] }, titre: CHAINE,
+          type: { type: 'string', enum: TYPES_PAGES.slice() }, rattache_a: CHAINE,
+          rubriques: { type: 'array', items: objet({
+            rubrique: { type: 'string', enum: rubriques },
+            phrases: { type: 'array', items: objet({ texte: CHAINE, ot }) },
+          }) },
+        }) },
+        contradictions: { type: 'array', items: objet({ page: CHAINE, phrase: CHAINE, observation: CHAINE, ot }) },
+      });
+    },
+    // Mise en forme puis contrôles du §20.6 (Wiki.lireIngestion) ; refus = IaReponseInvalide avec ses raisons.
+    verifier(o, d) {
+      if (typeof Wiki === 'undefined' || typeof Wiki.lireIngestion !== 'function') {
+        throw new Error('ingestionWiki : le module Wiki n\'est pas chargé.');
+      }
+      return Wiki.lireIngestion(o, d);
+    },
+  };
+
   // ===========================================================================================
   // Validations pures (Ia.valider ; déplacées de ia.js, lot 4)
   // ===========================================================================================
@@ -410,7 +531,8 @@ Object.assign(Ia, (() => {
   }
 
   return {
-    PROMPTS: Object.freeze({ reformulerDI, compteRendu, codes, checkList, commentaireRapport, colonnesImport }),
+    PROMPTS: Object.freeze({ reformulerDI, compteRendu, codes, checkList, commentaireRapport, colonnesImport,
+      ingestionWiki }),
     valider: Object.freeze({ codes: codesProposes, impact, checkList: checkListe, commentaire }),
     codesConnus,
     jetonsRapport,

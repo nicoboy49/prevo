@@ -72,6 +72,8 @@ Object.assign(Ordres, (() => {
   async function changerStatut(otId, statutAttendu, cible, complement) {
     const statut = await ecrireStatut(otId, statutAttendu, cible, complement);
     if (statut === 'Clôturé techniquement') await mettreAJourGamme(otId);
+    // Lot 6 (§20.5, D104) : l'OT verrouillé entre dans la file du wiki ; un échec n'annule pas la clôture (message).
+    if (statut === 'Clôturé administrativement' && typeof Wiki !== 'undefined') await Wiki.mettreEnFile([otId], { annoncer: true });
     return statut;
   }
 
