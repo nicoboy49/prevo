@@ -77,7 +77,7 @@ def regler_ia(contexte, **reglages):
         % json.dumps(json.dumps(valeur)))
 
 
-# Contenu texte des 22 fichiers en mémoire (Donnees.instantane() rend des octets).
+# Contenu texte des 23 fichiers en mémoire (Donnees.instantane() rend des octets).
 FICHIERS_JS = """() => Object.fromEntries(Object.entries(Donnees.instantane())
   .map(([nom, octets]) => [nom, new TextDecoder().decode(octets)]))"""
 
@@ -576,7 +576,7 @@ class TestDemanderDirect(CasDemoIa):
         jeu = page.evaluate(DONNEES_DEMO_JS)
         page.evaluate("(id) => Ia.tracerUtilisation('ordres_travail', id, 'compte_rendu', 'faux')", jeu["otId"])
         fichiers = page.evaluate(FICHIERS_JS)
-        self.assertEqual(len(fichiers), 22)
+        self.assertEqual(len(fichiers), 23)
         self.assertIn(";ordres_travail;%s;proposition IA utilisée (faux) : compte_rendu" % jeu["otId"], fichiers["journal"])
         for nom, contenu in fichiers.items():
             with self.subTest(fichier=nom):

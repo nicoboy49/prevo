@@ -22,7 +22,7 @@ revenue depuis avec assez de nouvelles pannes. Ces ajouts tirent leur hasard dan
 postérieurs aux nouvelles lignes se décalent, puisqu'ils suivent l'ordre chronologique).
 
 Sorties par défaut :
-    donnees/demo/<table>.csv          les 22 fichiers CSV (format ARCHITECTURE.md §3.1)
+    donnees/demo/<table>.csv          les 23 fichiers CSV (format ARCHITECTURE.md §3.1)
     js/demo-donnees.js                les mêmes textes, prêts à être chargés par la page (mode démo)
     tests/fixtures/demo-scenarios.json  identifiants des objets de scénario (voir plus bas)
 
@@ -269,6 +269,11 @@ DEFINITION_SCHEMA = {
     'parametres': 'cle:id valeur:texte',
     'journal': (
         'id:id date_heure:date_heure poste:texte profil:texte table:texte id_ligne:texte action:texte'),
+    # Format 3 (lot 6, ARCHITECTURE.md §20.2) : synthèses [IA] du wiki de maintenance.
+    'wiki_syntheses': (
+        'id:id equipement_id:ref>equipements texte:texte_long ot_cites:texte ot_sources:texte_long '
+        'statut:choix[à valider|validée|remplacée] modele:texte date_proposition:date_heure '
+        'corrigee_par:texte date_modification:date_heure valide_par:texte date_validation:date_heure'),
 }
 
 # Format des identifiants : (préfixe, nombre de chiffres, numérotation annuelle ?).
@@ -285,6 +290,7 @@ IDENTIFIANTS = {
     'controles_reglementaires': ('CTR-', 4, False), 'codes_defaillance': ('CD-', 4, False),
     'fournisseurs': ('FOU-', 4, False), 'achats': ('ACH-', 4, False),
     'journal': ('J-', 4, False),     # J-AAAAMMJJHHMMSS-XXXX : 4 caractères aléatoires (écrit par l'application)
+    'wiki_syntheses': ('WIKI-', 4, False),
 }
 
 
@@ -383,7 +389,7 @@ def serialiser_table(table, lignes):
 
 
 def ecrire_csv(dossier, textes):
-    """Écrit les 22 fichiers CSV (BOM UTF-8 + CRLF) octet pour octet."""
+    """Écrit les 23 fichiers CSV (BOM UTF-8 + CRLF) octet pour octet."""
     dossier.mkdir(parents=True, exist_ok=True)
     for table, texte in textes.items():
         (dossier / (table + '.csv')).write_bytes(b'\xef\xbb\xbf' + texte.encode('utf-8'))
@@ -2040,13 +2046,13 @@ def generer_controles(ctx):
 
 
 def generer_parametres(ctx):
-    # version_schema = Schema.version (js/schema.js) ; priorite_preventif et
+    # version_schema = Schema.version (js/schema.js : 3 depuis le lot 6, §20.2) ; priorite_preventif et
     # horizon_calendrier_semaines sont les clés ajoutées par le lot 2 (ARCHITECTURE.md §14.1).
     for cle, valeur in [('entreprise_nom', NOM_ENTREPRISE), ('delai_p1_h', 0), ('delai_p2_h', 24),
                         ('delai_p3_h', 168), ('delai_p4', 'prochain arrêt'), ('heures_fonct_defaut', 8),
                         ('tolerance_preventif_pct', 10), ('rafraichissement_s', 20),
                         ('priorite_preventif', 'P3'), ('horizon_calendrier_semaines', 12),
-                        ('version_schema', 2)]:
+                        ('version_schema', 3)]:
         creer_ligne(ctx, 'parametres', cle=cle, valeur=valeur)
 
 

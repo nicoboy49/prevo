@@ -76,7 +76,8 @@ DOSSIER_APPLICATION = os.path.dirname(os.path.abspath(__file__))
 BOM_UTF8 = b'\xef\xbb\xbf'
 FIN_DE_LIGNE = b'\r\n'
 
-# Les 22 tables de la GMAO (fichier = <nom>.csv dans le dossier de données).
+# Les 23 tables de la GMAO (fichier = <nom>.csv dans le dossier de données) ; wiki_syntheses
+# depuis le format 3 (lot 6, ARCHITECTURE.md §20.2).
 # RENVOI CROISÉ : cette liste est recopiée de js/schema.js (Schema.tables).
 # Si vous ajoutez ou renommez une table, modifiez les DEUX fichiers
 # (un test vérifie qu'ils restent cohérents).
@@ -103,6 +104,7 @@ TABLES = (
     'achats',
     'parametres',
     'journal',
+    'wiki_syntheses',
 )
 
 # Noms autorisés (re.ASCII : \d et \w ne reconnaissent que les caractères ASCII).
@@ -118,7 +120,7 @@ MOTIF_NOM_SAUVEGARDE = re.compile(
 # Motifs acceptés par POST /api/sauvegarde {"motif": "…"} : liste FERMÉE (tout autre motif → 400).
 # Le motif devient la fin du nom de la sauvegarde (« _avant-format-v2 »). Règle générale :
 # « avant-format-v<N> » ; on n'ajoute ici que les versions que Prévo sait vraiment produire.
-MOTIFS_SAUVEGARDE = ('avant-format-v2', 'avant-import')
+MOTIFS_SAUVEGARDE = ('avant-format-v2', 'avant-format-v3', 'avant-import')
 
 # Types MIME des documents acceptés (l'extension décide du type, jamais le contenu).
 TYPES_DOCUMENTS = {
@@ -652,7 +654,7 @@ def morceaux_resolus(chemin, dossier):
 
 
 def chemin_table(config, table):
-    """Chemin du CSV d'une table ; 404 si la table n'est pas une des 22 du schéma."""
+    """Chemin du CSV d'une table ; 404 si la table n'est pas une des 23 du schéma."""
     if table not in TABLES:
         raise ErreurHttp(404, 'Table inconnue : %s.' % table)
     return chemin_sous(config.dossier_donnees, table + '.csv')
@@ -912,7 +914,7 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
 # ---------------------------------------------------------------------------
 
 def versions_des_tables(config):
-    """{"table": {"version", "modifie"} ou None} pour les 22 tables."""
+    """{"table": {"version", "modifie"} ou None} pour les 23 tables."""
     resultat = {}
     for table in TABLES:
         chemin = chemin_table(config, table)

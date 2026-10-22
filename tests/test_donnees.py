@@ -157,7 +157,7 @@ class TestChargementDemo(CasDonnees):
           return { absentes: charge.tablesAbsentes.length, baseVide: Donnees.baseVide(),
                    lignes: Donnees.lignes('equipements').length, problemes: Donnees.problemes().length };
         }""")
-        self.assertEqual(resultat, {"absentes": 22, "baseVide": True, "lignes": 0, "problemes": 0})
+        self.assertEqual(resultat, {"absentes": 23, "baseVide": True, "lignes": 0, "problemes": 0})
 
     def test_decalage_des_dates(self):
         di = ligne_demo("demandes", SCENARIOS["di_plus_ancienne"])       # première ligne du fichier
@@ -756,7 +756,7 @@ class TestStockEtRafraichissement(CasDonnees):
           };
         }""")
         self.assertEqual(resultat["noms"], resultat["attendus"])
-        self.assertEqual(len(resultat["noms"]), 22)
+        self.assertEqual(len(resultat["noms"]), 23)
         self.assertTrue(resultat["tousOctets"])
         self.assertTrue(resultat["avecBom"])
         self.assertTrue(resultat["memesLignes"])
@@ -831,7 +831,7 @@ class TestStockageDemo(CasDonnees):
         self.assertEqual(resultat["conflitEntete"]["nom"], "ErreurConflit")
         self.assertEqual(resultat["journal"], "﻿id;action\r\nJ-1;un\r\nJ-2;deux\r\n")
         self.assertEqual(resultat["tableInconnue"]["nom"], "ErreurStockage")
-        self.assertEqual(resultat["nombreVersions"], 22)
+        self.assertEqual(resultat["nombreVersions"], 23)
         self.assertIsNone(resultat["versionEquipements"])
         self.assertEqual(resultat["versionTechniciens"], "v2")
         self.assertEqual(resultat["nomDocument"], "photo-1.jpg")
@@ -864,7 +864,7 @@ class TestStockageDemo(CasDonnees):
                    mode: depot.adaptateur.mode };
         }""")
         self.assertEqual(resultat["ignores"], ["notes.txt", "inconnue.csv", "equipements.csv"])
-        self.assertEqual(resultat["absentes"], 21)
+        self.assertEqual(resultat["absentes"], 22)
         self.assertEqual(resultat["equipements"], resultat["attendus"])
         self.assertEqual(resultat["mode"], "demo")
 
@@ -887,7 +887,7 @@ class TestPerformance(CasDonnees):
             self.assertEqual(processus.returncode, 0, processus.stderr.decode("utf-8", "replace"))
             fichiers = {chemin.stem: base64.b64encode(chemin.read_bytes()).decode("ascii")
                         for chemin in sorted(Path(dossier).glob("*.csv"))}
-        self.assertEqual(len(fichiers), 22)
+        self.assertEqual(len(fichiers), 23)
 
         resultat = self.js("""async (fichiers) => {
           const tables = {};

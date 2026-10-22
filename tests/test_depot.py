@@ -53,6 +53,7 @@ ORDRE_MODULES = [
     "import-regles.js", "import-historique.js", "import-controles.js", "import-lecture.js", "import-ecritures.js",
     "import-modeles.js",
     "import-ecrans.js", "import-apercu.js",
+    "wiki-regles.js", "wiki-recherche.js", "wiki-ecritures.js", "wiki-synthese.js", "wiki-ecrans.js",
 ]
 LIGNES_MAX_MODULE = 700   # décision D28 : aucun fichier de js/modules/ au-delà
 

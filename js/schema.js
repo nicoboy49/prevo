@@ -1,6 +1,6 @@
 'use strict';
-// Schema : description des 22 tables de Prévo (champs, types, identifiants).
-// Contrat : docs/ARCHITECTURE.md §4 et §14.1. Les champs de chaque table sont d'abord exactement
+// Schema : description des 23 tables de Prévo (champs, types, identifiants).
+// Contrat : docs/ARCHITECTURE.md §4, §14.1 et §20.2 (format 3 : table wiki_syntheses, lot 6). Les champs de chaque table sont d'abord exactement
 // ceux du tableau du brief §6, dans le même ordre (l'ordre des champs = l'ordre des colonnes CSV),
 // puis, en fin de table, les champs ajoutés par la version 2 du format (attribut depuisVersion: 2).
 // Un fichier écrit avant la version 2 n'a pas ces colonnes : la lecture les complète avec la
@@ -66,7 +66,7 @@ const Schema = (function () {
   const PRIORITES = ['P1', 'P2', 'P3', 'P4'];
 
   // ---------------------------------------------------------------------------
-  // Les 22 tables, dans l'ordre du tableau du brief §6
+  // Les 22 tables du brief §6, dans l'ordre de son tableau, puis wiki_syntheses (format 3, lot 6)
   // ---------------------------------------------------------------------------
 
   const tables = {
@@ -506,6 +506,30 @@ const Schema = (function () {
         champ('action', 'texte', 'Action'),
       ],
     },
+
+    // Format 3 (lot 6, ARCHITECTURE.md §20.2) : synthèses [IA] du wiki de maintenance. Une base plus
+    // ancienne n'a pas ce fichier : table vide, créée à la première écriture.
+    wiki_syntheses: {
+      fichier: 'wiki_syntheses.csv', libelle: 'Synthèses du wiki',
+      cle: 'id',
+      identifiant: { prefixe: 'WIKI-', chiffres: 4, annuel: false },
+      ajoutSeul: false,
+      depuisVersion: 3,
+      champs: [
+        identifiantChamp(),
+        reference('equipement_id', 'Équipement', 'equipements', { obligatoire: true }),
+        champ('texte', 'texte_long', 'Synthèse'),
+        champ('ot_cites', 'texte', 'OT cités'),
+        champ('ot_sources', 'texte_long', 'OT envoyés à l\'IA'),
+        choix('statut', 'Statut', ['à valider', 'validée', 'remplacée'], { defaut: 'à valider' }),
+        champ('modele', 'texte', 'Modèle'),
+        champ('date_proposition', 'date_heure', 'Proposée le'),
+        champ('corrigee_par', 'texte', 'Corrigée par'),
+        champ('date_modification', 'date_heure', 'Modifiée le'),
+        champ('valide_par', 'texte', 'Validée par'),
+        champ('date_validation', 'date_heure', 'Validée le'),
+      ],
+    },
   };
 
   // ---------------------------------------------------------------------------
@@ -524,13 +548,13 @@ const Schema = (function () {
     return tableTrouvee.champs.find(function (c) { return c.nom === nomChamp; });
   }
 
-  // Noms des 22 tables, dans l'ordre du brief.
+  // Noms des 23 tables, dans l'ordre du brief puis celles ajoutées par les versions du format.
   function nomsTables() {
     return Object.keys(tables);
   }
 
   return {
-    version: 2,                        // version du format des fichiers (ARCHITECTURE.md §14.1)
+    version: 3,                        // version du format des fichiers (ARCHITECTURE.md §14.1, §20.2)
     tables: tables,
     table: table,
     champ: champDeTable,

@@ -376,7 +376,7 @@ const Parametres = (() => {
           </article>
           <article class="carte">
             <div class="entete-carte"><h2>Exporter les données</h2></div>
-            <p>Un fichier ZIP avec les 22 fichiers CSV (lisibles dans Excel) et les documents joints.</p>
+            <p>Un fichier ZIP avec les ${Schema.nomsTables().length} fichiers CSV (lisibles dans Excel) et les documents joints.</p>
             <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-export-zip">${UI.icone('export')}Exporter en ZIP</button></div>
           </article>
         </div>
@@ -559,7 +559,7 @@ const Parametres = (() => {
       <div class="entete-page"><div>
         <div class="fil"><a href="#/parametres">Paramètres</a> › <span>Contrôle de la base</span></div>
         <h1>Contrôle de la base</h1>
-        <p>Prévo vérifie les 22 fichiers à chaque lecture : jamais une donnée cassée n'est ignorée en silence.</p>
+        <p>Prévo vérifie les ${Schema.nomsTables().length} fichiers à chaque lecture : jamais une donnée cassée n'est ignorée en silence.</p>
       </div>
       <div class="actions">
         <button type="button" class="btn btn-secondaire" id="btn-relire">${UI.icone('actualiser')}Relire les fichiers</button>

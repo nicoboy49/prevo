@@ -291,6 +291,8 @@ const UI = (function () {
     equipe: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.8 3.4-5.7 6.5-5.7s5.7 1.9 6.5 5.7"/><path d="M15 4.7a3.5 3.5 0 0 1 0 6.6M17.5 14.6c2 .6 3.4 2.4 4 5.4"/>',
     replier: '<path d="m14 6-6 6 6 6M19 6v12"/>',
     chevron: '<path d="m9 6 6 6-6 6"/>',
+    // Lot 6 (ARCHITECTURE.md §20.1) : wiki de maintenance (livre ouvert)
+    wiki: '<path d="M12 6.5C10 5 7 4.5 3.5 5v13.5c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5z"/><path d="M12 6.5V20"/>',
   };
 
   /** Icône SVG au trait par son nom (voir ICONES) ; `classe` ajoute des classes CSS. Inconnue → ''. */

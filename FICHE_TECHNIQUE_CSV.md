@@ -2,7 +2,7 @@
 
 Document généré par `outils/generer_fiche_csv.py` d'après `js/schema.js` (et, pour la section 4, `js/modules/import-regles.js`) : ne pas le modifier à la main.
 
-Prévo range ses données dans **22 fichiers CSV** (format **version 2**), dans le dossier de données (`donnees/` à côté de `serveur.py`, ou le dossier choisi en mode dossier). Ils s'ouvrent et se modifient dans Excel. Le paramètre `version_schema` de `parametres.csv` indique la version du format.
+Prévo range ses données dans **23 fichiers CSV** (format **version 3**), dans le dossier de données (`donnees/` à côté de `serveur.py`, ou le dossier choisi en mode dossier). Ils s'ouvrent et se modifient dans Excel. Le paramètre `version_schema` de `parametres.csv` indique la version du format.
 
 ## 1. Règles communes à tous les fichiers
 
@@ -31,7 +31,7 @@ Prévo range ses données dans **22 fichiers CSV** (format **version 2**), dans 
 | `ref` | identifiant d'une ligne d'un autre fichier |
 | `document` | nom d'un fichier du dossier `documents/` (photo, PDF…) |
 
-## 3. Les 22 fichiers
+## 3. Les 23 fichiers
 
 | Fichier | Contenu | Identifiant |
 | --- | --- | --- |
@@ -57,6 +57,7 @@ Prévo range ses données dans **22 fichiers CSV** (format **version 2**), dans 
 | `achats.csv` | Demandes d'achat et commandes. | `ACH-NNNN` (ex. `ACH-0001`) |
 | `parametres.csv` | Réglages partagés de l'atelier (une ligne par clé). | saisi (la clé elle-même) |
 | `journal.csv` | Journal des modifications (qui, quand, quoi) ; on n'y fait qu'ajouter. | `J-AAAAMMJJHHMMSS-XXXX` (horodatage puis 4 caractères tirés au hasard) |
+| `wiki_syntheses.csv` | Synthèses [IA] du wiki de maintenance (format 3) : au plus une en cours par équipement (« à valider » ou « validée ») ; les précédentes restent, « remplacées ». | `WIKI-NNNN` (ex. `WIKI-0001`) |
 
 ### 3.1 `localisations.csv` — Localisations
 
@@ -444,6 +445,27 @@ Journal des modifications (qui, quand, quoi) ; on n'y fait qu'ajouter.
 | `table` | Table | `texte` |  |  |  |  |
 | `id_ligne` | Identifiant de la ligne | `texte` |  |  |  |  |
 | `action` | Action | `texte` |  |  |  |  |
+
+### 3.23 `wiki_syntheses.csv` — Synthèses du wiki
+
+Synthèses [IA] du wiki de maintenance (format 3) : au plus une en cours par équipement (« à valider » ou « validée ») ; les précédentes restent, « remplacées ».
+
+- Identifiant : `WIKI-NNNN` (ex. `WIKI-0001`).
+
+| Colonne | Libellé | Type | Obligatoire | Valeurs ou référence | Défaut | Remarques |
+| --- | --- | --- | --- | --- | --- | --- |
+| `id` | Identifiant | `id` |  |  |  |  |
+| `equipement_id` | Équipement | `ref` | oui | réf. `equipements.csv` |  |  |
+| `texte` | Synthèse | `texte_long` |  |  |  |  |
+| `ot_cites` | OT cités | `texte` |  |  |  |  |
+| `ot_sources` | OT envoyés à l'IA | `texte_long` |  |  |  |  |
+| `statut` | Statut | `choix` |  | `à valider`, `validée`, `remplacée` | `à valider` |  |
+| `modele` | Modèle | `texte` |  |  |  |  |
+| `date_proposition` | Proposée le | `date_heure` |  |  |  |  |
+| `corrigee_par` | Corrigée par | `texte` |  |  |  |  |
+| `date_modification` | Modifiée le | `date_heure` |  |  |  |  |
+| `valide_par` | Validée par | `texte` |  |  |  |  |
+| `date_validation` | Validée le | `date_heure` |  |  |  |  |
 
 ## 4. Import depuis un tableur
 

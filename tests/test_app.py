@@ -29,7 +29,7 @@ NOM_DOSSIER_SIMULE = "donnees-test"
 # Chromium inscrit « Failed to load resource » en console.error pour toute réponse HTTP >= 400.
 # On n'autorise que les 404 attendus, précisément :
 ERREUR_PING_ABSENT = re.compile(r"status of 404.*/api/ping")      # serveur statique : pas de /api/ping
-ERREUR_CSV_ABSENT = re.compile(r"status of 404.*/api/csv/")       # base vide : les 22 CSV manquent
+ERREUR_CSV_ABSENT = re.compile(r"status of 404.*/api/csv/")       # base vide : les 23 CSV manquent
 
 # Une ligne ajoutée « par un autre poste » dans equipements.csv (16 colonnes, format du fichier).
 LIGNE_AJOUTEE = "EQ-0999;'ZZ-99;Machine ajoutée par le test;LOC-0002;;;;;;B;en service;;;;;1\r\n"
@@ -45,7 +45,7 @@ new MutationObserver(() => {
 
 
 def noms_tables_demo():
-    """Noms des 22 fichiers CSV du jeu de démo (equipements.csv…)."""
+    """Noms des 23 fichiers CSV du jeu de démo (equipements.csv…)."""
     return sorted(chemin.name for chemin in DOSSIER_DEMO.glob("*.csv"))
 
 
@@ -120,7 +120,7 @@ class TestFichier(CasApp):
         self.assertEqual(page.evaluate("App.urlFicheEquipement('EQ-0001')"), "GMAO:EQ-0001")
         self.assertEqual(page.evaluate("performance.getEntriesByName('prevo:pret').length"), 1)
 
-        # Export ZIP : les 22 CSV (BOM UTF-8) dans un fichier nommé prevo-export-AAAA-MM-JJ.zip
+        # Export ZIP : les 23 CSV (BOM UTF-8) dans un fichier nommé prevo-export-AAAA-MM-JJ.zip
         for bouton in ("#btn-export-accueil", "#btn-export-demo"):
             if bouton == "#btn-export-demo":
                 page.evaluate("location.hash = '#/apropos'")

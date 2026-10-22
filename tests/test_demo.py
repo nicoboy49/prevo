@@ -2,7 +2,7 @@
 tests/fixtures/demo-scenarios.json.
 
 Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brief §13) :
-  - 22 fichiers CSV : BOM, séparateur « ; », fins de ligne CRLF, en-têtes identiques à js/schema.js ;
+  - 23 fichiers CSV : BOM, séparateur « ; », fins de ligne CRLF, en-têtes identiques à js/schema.js ;
   - références (clés étrangères) valides, valeurs des listes valides ;
   - volumes du brief §13, historique de 13 mois et présence des objets des scénarios de recette ;
   - champs du format v2 renseignés (valeur de remplacement, code symptôme, anomalies de préventif) ;
@@ -16,7 +16,7 @@ Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brie
     §16.3 écrit ici (réglages par défaut, décisions du journal comprises) : S1, S2, S3 (case cochée et DI
     liée), S4, refus pour la seule criticité A, cas sous le seuil, suggestion ignorée puis revenue ;
   - champs protégés par une apostrophe (§3.2) ;
-  - js/demo-donnees.js chargé dans Chromium : 22 tables, texte identique aux CSV ; démo en file://
+  - js/demo-donnees.js chargé dans Chromium : 23 tables, texte identique aux CSV ; démo en file://
     chargée vite et sans erreur au « Contrôle de la base » ;
   - reproductibilité (deux exécutions = fichiers identiques, et fichiers livrés à jour) ;
   - options --volume 500,5000 (moins de 60 s, gammes, compteurs, mouvements, achats) et --mois 6.
@@ -74,7 +74,8 @@ TABLES = [
     'localisations', 'equipements', 'demandes', 'ordres_travail', 'ot_operations', 'ot_pieces',
     'ot_temps', 'gammes', 'gamme_operations', 'articles', 'article_equipement', 'mouvements_stock',
     'techniciens', 'habilitations', 'compteurs', 'releves', 'controles_reglementaires',
-    'codes_defaillance', 'fournisseurs', 'achats', 'parametres', 'journal']
+    'codes_defaillance', 'fournisseurs', 'achats', 'parametres', 'journal',
+    'wiki_syntheses']                                       # format 3 (lot 6, ARCHITECTURE.md §20.2)
 
 
 # ---------------------------------------------------------------------------
@@ -339,9 +340,9 @@ def suggestions_ouvertes(t, aujourdhui=JOUR_REFERENCE, seuil=SEUIL_PANNES, jusqu
 # ---------------------------------------------------------------------------
 
 class TestFichiersCsv(unittest.TestCase):
-    """Format des 22 fichiers (§3.1)."""
+    """Format des 23 fichiers (§3.1)."""
 
-    def test_22_fichiers_presents(self):
+    def test_23_fichiers_presents(self):
         presents = sorted(p.name for p in DOSSIER_DEMO.glob('*.csv'))
         self.assertEqual(presents, sorted(t + '.csv' for t in TABLES))
 
@@ -516,7 +517,7 @@ class TestContenuDemo(unittest.TestCase):
         parametres = {p['cle']: p['valeur'] for p in self.t['parametres']}
         self.assertEqual(parametres['entreprise_nom'], 'Atelier des Trois Vallées (démo)')
         for cle, valeur in [('delai_p1_h', '0'), ('delai_p2_h', '24'), ('delai_p3_h', '168'),
-                            ('delai_p4', 'prochain arrêt'), ('rafraichissement_s', '20'), ('version_schema', '2'),
+                            ('delai_p4', 'prochain arrêt'), ('rafraichissement_s', '20'), ('version_schema', '3'),
                             # clés ajoutées par le lot 2 (ARCHITECTURE.md §14.1)
                             ('priorite_preventif', 'P3'), ('horizon_calendrier_semaines', '12')]:
             self.assertEqual(parametres[cle], valeur, cle)
@@ -1750,7 +1751,7 @@ class TestAvecNavigateur(CasNavigateur):
                     if ligne[champ['nom']] != '':
                         self.assertTrue(ligne[champ['nom']].startswith("'"), '%s.%s' % (table, champ['nom']))
 
-    def test_demo_donnees_js_contient_les_22_tables_identiques_aux_csv(self):
+    def test_demo_donnees_js_contient_les_23_tables_identiques_aux_csv(self):
         charger_scripts(self.page, ['js/demo-donnees.js'])
         self.assertEqual(self.page.evaluate('DEMO_DONNEES.dateReference'), DATE_REFERENCE)
         noms = self.page.evaluate('Object.keys(DEMO_DONNEES.tables)')

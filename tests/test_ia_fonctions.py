@@ -163,7 +163,7 @@ class CasIaFonctions(CasNavigateur):
     # -- fichiers, encadré, données envoyées --------------------------------------------------
 
     def instantane(self):
-        """Serveur : octets de demandes.csv, ordres_travail.csv et journal.csv. Démo : les 22 fichiers en mémoire."""
+        """Serveur : octets de demandes.csv, ordres_travail.csv et journal.csv. Démo : les 23 fichiers en mémoire."""
         if self.serveur:
             return {nom: (self.serveur.dossier / (nom + ".csv")).read_bytes() for nom in TABLES_SURVEILLEES}
         return self.page.evaluate(FICHIERS_JS)

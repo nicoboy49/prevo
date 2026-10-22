@@ -327,8 +327,10 @@ class TestApiServeur(CasAvecServeur):
             self.assertRegex(adresse, r'^http://[0-9.]+:%d/$' % self.serveur.port)
             self.assertFalse(adresse.startswith('http://127.'))
 
-    def test_versions_22_tables(self):
-        self.assertEqual(len(TABLES), 22)
+    def test_versions_23_tables(self):
+        # 22 tables du brief, puis wiki_syntheses (format 3, lot 6, ARCHITECTURE.md §20.2).
+        self.assertEqual(len(TABLES), 23)
+        self.assertEqual(TABLES[-1], 'wiki_syntheses')
         self.mettre_csv('localisations', BOM + b'id;libelle;parent_id;type\r\n')
         tables = self.requete('GET', '/api/versions').json()['tables']
         self.assertEqual(set(tables), set(TABLES))
@@ -1016,9 +1018,9 @@ class TestCodeSource(unittest.TestCase):
         if hasattr(sys, 'stdlib_module_names'):
             self.assertEqual(modules - set(sys.stdlib_module_names), set())
 
-    def test_22_tables_et_renvoi_vers_schema_js(self):
-        self.assertEqual(len(TABLES), 22)
-        self.assertEqual(len(set(TABLES)), 22)
+    def test_23_tables_et_renvoi_vers_schema_js(self):
+        self.assertEqual(len(TABLES), 23)
+        self.assertEqual(len(set(TABLES)), 23)
         self.assertIn('js/schema.js', self.source)
 
     def test_tables_coherentes_avec_schema_js(self):

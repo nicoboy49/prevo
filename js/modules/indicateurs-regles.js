@@ -287,9 +287,12 @@ const Indicateurs = (() => {
     return TYPES_CORRECTIFS.includes(texte(ot.type)) && texte(ot.arret_production) === '1' && texte(ot.statut) !== 'Annulé';
   }
 
-  /** Date-heure de la panne : celle de la DI d'origine, sinon la création de l'OT. */
+  /**
+   * Date-heure de la panne : celle de la DI d'origine, sinon la création de l'OT. Publique depuis le
+   * lot 6 (wiki : récidives, ARCHITECTURE.md §20.1) ; ctx = contexte() déjà calculé, sinon il l'est ici.
+   */
   function datePanne(ot, ctx) {
-    const di = ctx.diParOt.get(ot.id);
+    const di = (ctx || contexte()).diParOt.get(ot.id);
     return texte(di && di.date_heure) || texte(ot.date_creation);
   }
 
@@ -634,6 +637,8 @@ const Indicateurs = (() => {
     // règles pures (ARCHITECTURE.md §15.3) ; les séries des graphiques sont dans indicateurs-series.js
     periode, periodeDuMois, pannes, tempsRequis, attentePieces, parEquipement, global,
     partPreventif, respectPreventif, otEnRetard, delaisPriseEnCharge, coutParEquipement, coutsParMois, valeurStock,
+    // Date de la panne et contexte de calcul (lot 6 : le wiki s'en sert, §20.1).
+    datePanne, contexte,
     // Usage interne au module (pas une API).
     interne: {
       TYPES_CORRECTIFS, TYPES_PREVENTIFS, texte, nombre, nombreOuZero, arrondi, jourDe, ajouterJours, ajouterMois,

@@ -12,7 +12,7 @@ Familles (le nom du test le dit) :
                   de sa check-list, modification, ordre, suppression journalisée ; calendrier de
                   12 semaines ; technicien en lecture seule ; demandeur sans accès ; téléphone 375 px ;
     demarrage   : base vide écrite au format courant (sans sauvegarde) ; base au format 1 →
-                  sauvegarde puis format 2 (tous profils) ; sauvegarde impossible → aucun OT généré
+                  sauvegarde puis format courant (tous profils) ; sauvegarde impossible → aucun OT généré
                   à cette ouverture, application utilisable, nouvel essai à l'ouverture suivante ;
                   démo : génération sans toast (T89 : la démo génère à chaque ouverture ; chaque toast
                   affiché est noté dès son apparition) ; marques.
@@ -46,7 +46,7 @@ STATUTS_FERMES = ("Clôturé techniquement", "Clôturé administrativement", "An
 # Deux postes qui génèrent en même temps : le second voit sa première écriture refusée (409), relit
 # la table et n'écrit plus rien. Ce conflit est voulu ; toute autre erreur fait échouer le test.
 CONFLIT_GENERATION = re.compile(r"status of 409.*/api/csv/(ordres_travail|ot_operations)")
-ERREUR_CSV_ABSENT = re.compile(r"status of 404.*/api/csv/")       # base vide : les 22 CSV manquent
+ERREUR_CSV_ABSENT = re.compile(r"status of 404.*/api/csv/")       # base vide : les 23 CSV manquent
 TOAST_GENERATION = re.compile(r"^\d+ OT préventifs? générés?\.$")
 
 
@@ -614,7 +614,8 @@ def version_schema(dossier):
 
 def sauvegardes_avant_format(dossier):
     racine = Path(dossier) / "sauvegardes"
-    return sorted(p.name for p in racine.glob("*_avant-format-v2")) if racine.is_dir() else []
+    # Sauvegarde faite juste avant le passage au format courant (3 depuis le lot 6, ARCHITECTURE.md §20.2).
+    return sorted(p.name for p in racine.glob("*_avant-format-v3")) if racine.is_dir() else []
 
 
 class TestDemarrage(CasPreventif):
@@ -634,7 +635,7 @@ class TestDemarrage(CasPreventif):
             self.assertEqual(lire_csv(serveur.dossier, "journal.csv"), [])     # rien d'autre n'a été écrit
             self.assertEqual(self.page.evaluate("performance.getEntriesByName('prevo:preventif').length"), 1)
 
-    def test_demarrage_base_au_format_1_sauvegarde_puis_format_2_pour_tous_les_profils(self):
+    def test_demarrage_base_au_format_1_sauvegarde_puis_format_courant_pour_tous_les_profils(self):
         with ServeurPrevo() as serveur:
             shutil.copyfile(str(PARAMETRES_V1), str(serveur.dossier / "parametres.csv"))
             self.ouvrir(serveur, profil="demandeur", nom="Lucie Test")
@@ -642,16 +643,16 @@ class TestDemarrage(CasPreventif):
             self.assertEqual(len(sauvegardes), 1, sauvegardes)
             copie = serveur.dossier / "sauvegardes" / sauvegardes[0] / "parametres.csv"
             self.assertEqual(copie.read_bytes(), PARAMETRES_V1.read_bytes())      # état d'avant
-            self.assertEqual(version_schema(serveur.dossier), "2")
-            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "2")
+            self.assertEqual(version_schema(serveur.dossier), "3")
+            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "3")
             self.page.reload()
             attendre_pret(self.page)
             self.assertEqual(sauvegardes_avant_format(serveur.dossier), sauvegardes)   # pas de seconde sauvegarde
 
     def test_demarrage_sauvegarde_impossible_aucun_ot_genere_application_utilisable_puis_nouvel_essai(self):
-        """Pas de passage au format 2 sans sauvegarde confirmée (décision de Nicolas) : sauvegarde
+        """Pas de passage au format courant sans sauvegarde confirmée (décision de Nicolas) : sauvegarde
         impossible → version inchangée, AUCUNE génération automatique à cette ouverture (elle
-        écrirait ordres_travail et ot_operations au format 2), application utilisable ; l'ouverture
+        écrirait ordres_travail et ot_operations au format courant), application utilisable ; l'ouverture
         suivante retente tout (sauvegarde, format, génération)."""
         self.autoriser_erreur(re.compile(r"status of 500.*/api/sauvegarde"))
         with ServeurPrevo() as serveur:
@@ -682,7 +683,7 @@ class TestDemarrage(CasPreventif):
             self.page.unroute("**/api/sauvegarde")
             self.page.reload()
             attendre_pret(self.page)
-            self.assertEqual(version_schema(serveur.dossier), "2")
+            self.assertEqual(version_schema(serveur.dossier), "3")
             self.assertEqual(len(sauvegardes_avant_format(serveur.dossier)), 1)
             self.assertEqual(len(ots_ouverts_de(serveur.dossier, GAMME_ECHUE)), 1)     # génération à cette ouverture
 

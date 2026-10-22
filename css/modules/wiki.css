@@ -1,0 +1,8 @@
+/* Wiki de maintenance (lot 6, ARCHITECTURE.md §20.7) : liste des pages, page d'un équipement, carte de
+   la synthèse [IA], champ de recherche. Jetons de css/style.css (deux thèmes). */
+
+.wiki-liste,
+.wiki-page {
+  display: grid;
+  gap: 16px;
+}

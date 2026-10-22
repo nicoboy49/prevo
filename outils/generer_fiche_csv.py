@@ -1,4 +1,4 @@
-"""Écrit FICHE_TECHNIQUE_CSV.md, la fiche technique des 22 fichiers CSV de Prévo, d'après le schéma.
+"""Écrit FICHE_TECHNIQUE_CSV.md, la fiche technique des fichiers CSV de Prévo (23 depuis le format 3), d'après le schéma.
 
 Le schéma est la seule source : js/schema.js (objet Schema) est lu dans Chromium (Playwright, outil de
 développement, déjà utilisé par les tests) ; la fiche est donc toujours fidèle aux fichiers réels.
@@ -42,6 +42,8 @@ ROLES = {
     "achats": "Demandes d'achat et commandes.",
     "parametres": "Réglages partagés de l'atelier (une ligne par clé).",
     "journal": "Journal des modifications (qui, quand, quoi) ; on n'y fait qu'ajouter.",
+    "wiki_syntheses": ("Synthèses [IA] du wiki de maintenance (format 3) : au plus une en cours par équipement "
+                       "(« à valider » ou « validée ») ; les précédentes restent, « remplacées »."),
 }
 
 TYPES = [

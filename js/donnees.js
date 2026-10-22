@@ -1,5 +1,5 @@
 'use strict';
-// Donnees : accès aux données de Prévo (les 22 fichiers CSV décrits par js/schema.js).
+// Donnees : accès aux données de Prévo (les 23 fichiers CSV décrits par js/schema.js).
 // Contrat : docs/ARCHITECTURE.md §3 (format des CSV) et §5 (Donnees).
 // Ce fichier contient, dans l'ordre :
 //   1. les erreurs propres à Prévo ;
@@ -797,7 +797,7 @@ const Donnees = (() => {
     identite = { poste: enTexte(valeurs.poste), profil: enTexte(valeurs.profil) };
   }
 
-  // Charge les 22 tables en parallèle. Renvoie { tablesAbsentes: [noms des fichiers absents] }.
+  // Charge les 23 tables en parallèle. Renvoie { tablesAbsentes: [noms des fichiers absents] }.
   async function chargerTout() {
     verifierInitialise();
     const noms = Schema.nomsTables();
@@ -813,7 +813,7 @@ const Donnees = (() => {
     return { tablesAbsentes: tablesAbsentes };
   }
 
-  // Vrai si aucun des 22 fichiers n'existe (proposer « base vide » ou « données de démo »).
+  // Vrai si aucun des 23 fichiers n'existe (proposer « base vide » ou « données de démo »).
   function baseVide() {
     const noms = Schema.nomsTables();
     return noms.every((nomTable) => cache.has(nomTable) && cache.get(nomTable).absente);
@@ -972,7 +972,42 @@ const Donnees = (() => {
       controlerReferences(nomTable, description, lignesTable, memoireCibles, resultat);
     }
     controlerCoherence(resultat);
+    controlerSyntheses(resultat);
     return resultat;
+  }
+
+  // Synthèses du wiki (format 3, ARCHITECTURE.md §20.2) : OT cités ou envoyés qui n'existent pas ou
+  // sont d'un autre équipement, synthèse validée sans validateur, deux synthèses courantes pour un
+  // même équipement. Jamais bloquant (« attention ») : la synthèse n'est qu'un complément.
+  function controlerSyntheses(resultat) {
+    const indexOrdres = entreeDe('ordres_travail').index;
+    const courantes = new Map();
+    for (const synthese of entreeDe('wiki_syntheses').lignes) {
+      const reperage = 'Synthèse ' + (synthese.id || '(sans identifiant)');
+      for (const nomChamp of ['ot_cites', 'ot_sources']) {
+        const identifiants = String(synthese[nomChamp] || '').split(';').map((id) => id.trim()).filter(Boolean);
+        for (const otId of identifiants) {
+          const ordre = indexOrdres.get(otId);
+          if (ordre && ordre.equipement_id === synthese.equipement_id) { continue; }
+          resultat.push(probleme('attention', 'incoherence', 'wiki_syntheses', null, synthese.id, nomChamp, otId,
+            reperage + ' : l\'ordre de travail « ' + otId + ' » ' + (ordre ? 'est celui d\'un autre équipement'
+              : 'n\'existe pas') + '. Proposez une nouvelle synthèse ou corrigez-la.'));
+        }
+      }
+      if (synthese.statut === 'validée' && String(synthese.valide_par || '').trim() === '') {
+        resultat.push(probleme('attention', 'incoherence', 'wiki_syntheses', null, synthese.id, 'valide_par', '',
+          reperage + ' : elle est « validée » mais personne n\'est indiqué comme l\'ayant validée.'));
+      }
+      if (synthese.statut !== 'remplacée' && synthese.equipement_id) {
+        if (courantes.has(synthese.equipement_id)) {
+          resultat.push(probleme('attention', 'incoherence', 'wiki_syntheses', null, synthese.id, 'statut', synthese.statut,
+            reperage + ' : l\'équipement « ' + synthese.equipement_id + ' » a déjà une synthèse en cours ('
+            + courantes.get(synthese.equipement_id) + '). Une seule peut être « à valider » ou « validée ».'));
+        } else {
+          courantes.set(synthese.equipement_id, synthese.id);
+        }
+      }
+    }
   }
 
   // Tous les problèmes de la base (lecture + contrôles). Recalculé seulement après un changement.
@@ -1404,7 +1439,7 @@ const Donnees = (() => {
 
   // --- 4.10 Instantané ----------------------------------------------------------------------
 
-  // { nomTable: Uint8Array } des 22 tables sérialisées depuis le cache (export ZIP, copie de la
+  // { nomTable: Uint8Array } des 23 tables sérialisées depuis le cache (export ZIP, copie de la
   // démo). Le journal, écrit par ajout, peut être en retard : faire `await rafraichir()` avant.
   function instantane() {
     const fichiers = {};

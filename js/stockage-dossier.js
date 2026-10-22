@@ -3,7 +3,7 @@
 // Contrat : docs/ARCHITECTURE.md §6 (contrat commun et paragraphe « Dossier ») et §7 (règles de
 // noms de documents et de sauvegardes, identiques à celles de serveur.py).
 //
-// L'utilisateur choisit un dossier de son PC (ou d'un partage réseau) ; les 22 fichiers CSV y sont
+// L'utilisateur choisit un dossier de son PC (ou d'un partage réseau) ; les 23 fichiers CSV y sont
 // lus et écrits directement par le navigateur. Ce fichier contient, dans l'ordre :
 //   1. les utilitaires (dates, empreintes, lecture et écriture de fichiers, erreurs) ;
 //   2. la mémorisation du dossier choisi (IndexedDB) ;
@@ -48,7 +48,7 @@ const StockageDossier = (() => {
   // que 0-9, comme [0-9] côté serveur.
   const MOTIF_NOM_SAUVEGARDE = /^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+|_avant-import)?)?$/;
   // Motifs acceptés par sauvegarder(motif) : liste FERMÉE, la même que MOTIFS_SAUVEGARDE de serveur.py.
-  const MOTIFS_SAUVEGARDE = ['avant-format-v2', 'avant-import'];
+  const MOTIFS_SAUVEGARDE = ['avant-format-v2', 'avant-format-v3', 'avant-import'];
   // 'html' : rapport mensuel figé (lot 3, ARCHITECTURE.md §15.1).
   const EXTENSIONS_DOCUMENTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'doc', 'docx',
     'xls', 'xlsx', 'odt', 'ods', 'html'];
@@ -664,7 +664,7 @@ const StockageDossier = (() => {
 
     // Remplace le CSV si sa version actuelle est celle attendue (null = le fichier ne doit pas
     // exister) ; sinon ErreurConflit.
-    // Ordre (relecture vague 3) : la sauvegarde quotidienne d'abord (copie des 22 CSV, longue),
+    // Ordre (relecture vague 3) : la sauvegarde quotidienne d'abord (copie des 23 CSV, longue),
     // PUIS lecture et contrôle de version, écriture dans le fichier temporaire, dernier contrôle
     // (contenu inchangé) et fermeture. Une écriture d'un autre poste pendant la sauvegarde ou
     // pendant notre écriture donne un conflit au lieu d'être écrasée.

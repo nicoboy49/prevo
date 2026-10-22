@@ -6,7 +6,7 @@
 //      sinon écran de démarrage : dossier (File System Access), dossier précédent, démo, CSV déposés ;
 //      version web (VERSION_WEB, démo en ligne) : pas de serveur cherché, la démo seule et
 //      « Télécharger Prévo » ;
-//   2. chargement des 22 tables ; base vide (serveur ou dossier) → « Partir des données de démo »
+//   2. chargement des 23 tables ; base vide (serveur ou dossier) → « Partir des données de démo »
 //      ou « Créer une base vide » ; puis passage des fichiers au format courant (version_schema,
 //      sauvegarde « avant-format-v2 » d'abord), avant toute autre écriture ;
 //   3. profil (mémorisé sur le poste) ; la route demandée avant (QR scanné) est gardée ;
@@ -421,13 +421,13 @@ const App = (() => {
   }
 
   function demanderBaseVide() {
-    UI.$('#texte-base-vide').textContent = 'Aucun des 22 fichiers de Prévo n\'a été trouvé ('
+    UI.$('#texte-base-vide').textContent = 'Aucun des ' + Schema.nomsTables().length + ' fichiers de Prévo n\'a été trouvé ('
       + (adaptateur.libelle || mode) + '). Par quoi voulez-vous commencer ?';
     montrer('ecran-base-vide', 'demarrage');
     return new Promise((resoudre) => { resoudreBaseVide = resoudre; });
   }
 
-  // Écrit les 22 fichiers (versionAttendue null : aucun ne doit exister, sinon ErreurConflit).
+  // Écrit les 23 fichiers (versionAttendue null : aucun ne doit exister, sinon ErreurConflit).
   async function remplirBaseVide(choix) {
     const contenus = {};
     if (choix === 'demo') {
@@ -882,7 +882,7 @@ const App = (() => {
   // 7. Export ZIP (tous modes) et adresse des fiches équipement
   // ===========================================================================================
 
-  /** Télécharge prevo-export-AAAA-MM-JJ.zip : les 22 CSV et les documents référencés. */
+  /** Télécharge prevo-export-AAAA-MM-JJ.zip : les 23 CSV et les documents référencés. */
   async function exporterZip() {
     if (!adaptateur) return;
     try {
@@ -900,7 +900,7 @@ const App = (() => {
       documents.trouves.forEach((document) => archive.file('documents/' + document.nom, document.blob));
       const blob = await archive.generateAsync({ type: 'blob', compression: 'DEFLATE' });
       UI.telecharger('prevo-export-' + Donnees.aujourdhui() + '.zip', blob);
-      let message = 'Export téléchargé : 22 fichiers CSV';
+      let message = 'Export téléchargé : ' + Schema.nomsTables().length + ' fichiers CSV';
       if (documents.trouves.length) message += ' et ' + documents.trouves.length + ' document(s)';
       if (documents.manquants.length) message += ' (' + documents.manquants.length + ' document(s) introuvable(s))';
       UI.toast(message + '.', documents.manquants.length ? 'attention' : 'succes');
