@@ -15,7 +15,7 @@
 //   - verifier(objet, donnees) : contrôle de la réponse par les règles Ia.valider → le `resultat` rendu
 //     par Ia.demander (hors schéma → Ia.IaReponseInvalide) :
 //       reformulerDI { symptome, impact (null si hors liste) } ; compteRendu { texte } ;
-//       codes { symptome, cause, remede, rejetes } ; checkList { operations } ; resumeHistorique { texte } ;
+//       codes { symptome, cause, remede, rejetes } ; checkList { operations } ;
 //       commentaireRapport { texte (jetons remplacés), texteAJetons }.
 //
 // Données attendues par fonction (noms des champs de `donnees`) :
@@ -24,15 +24,12 @@
 //   codes              { compteRendu, titre, symptomeDI } (les trois listes viennent de codes_defaillance ;
 //                      `codes: [{ famille, code, libelle }]` seulement si les tables ne sont pas chargées)
 //   checkList          { designation, marque, modele, libelle, declencheur, periodicite, causeVisee }
-//   resumeHistorique   { ot: [{ date, type, titre, codes: [libellés] | texte, compteRendu }] } (20 plus récents)
 //   commentaireRapport { mois, jetons: { nom: valeur }, points: [texte] } (le mois devient le jeton {mois})
 
 Object.assign(Ia, (() => {
 
   const CHAMP_MAX = 2000;                 // un texte saisi plus long est coupé avant l'envoi
   const PIECES_MAX = 30;
-  const OT_HISTORIQUE_MAX = 20;           // §17.3 : les 20 derniers OT de l'équipement
-  const COMPTE_RENDU_HISTORIQUE_MAX = 300;
   const POINTS_MAX = 20;
 
   // Règles communes à toutes les fonctions (à modifier ici pour toutes à la fois).
@@ -237,35 +234,6 @@ Object.assign(Ia, (() => {
     },
   };
 
-  // Les 20 OT les plus récents (date décroissante), compte rendu coupé à 300 caractères.
-  function lignesHistorique(ots) {
-    return liste(ots).filter((ot) => ot && typeof ot === 'object')
-      .slice().sort((a, b) => texte(b.date).localeCompare(texte(a.date)))
-      .slice(0, OT_HISTORIQUE_MAX)
-      .map((ot) => {
-        const libelles = Array.isArray(ot.codes) ? ot.codes.map((c) => uneLigne(c, 80)).filter(Boolean).join(' / ') : uneLigne(ot.codes, 240);
-        return '- ' + [uneLigne(ot.date, 20), uneLigne(ot.type, 60), uneLigne(ot.titre, 200),
-          libelles ? 'codes : ' + libelles : '',
-          texte(ot.compteRendu) ? 'compte rendu : ' + uneLigne(ot.compteRendu, COMPTE_RENDU_HISTORIQUE_MAX) : '']
-          .filter(Boolean).join(' · ');
-      });
-  }
-
-  const resumeHistorique = {
-    systeme: systeme('Fonction : resumeHistorique',
-      'résume l\'historique des interventions d\'un équipement en cinq phrases au plus : pannes qui reviennent (même '
-        + 'symptôme ou même cause, avec leur nombre compté dans la liste), dernières interventions, et ce qu\'il serait '
-        + 'utile de surveiller. Ne cite que des faits présents dans la liste ; pas de pourcentage, pas d\'estimation.',
-      '{"texte": "…"}'),
-    utilisateur(d) {
-      const lignes = lignesHistorique(d.ot);
-      return 'Interventions de l\'équipement, de la plus récente à la plus ancienne :\n'
-        + (lignes.length ? lignes.join('\n') : '(aucune intervention)');
-    },
-    schema: () => objet({ texte: CHAINE }),
-    verifier: (o) => ({ texte: textePropose(o.texte) }),
-  };
-
   const commentaireRapport = {
     systeme: systeme('Fonction : commentaireRapport',
       'rédige le commentaire du rapport mensuel de maintenance, en trois à six phrases : ce qui s\'est amélioré ou '
@@ -442,7 +410,7 @@ Object.assign(Ia, (() => {
   }
 
   return {
-    PROMPTS: Object.freeze({ reformulerDI, compteRendu, codes, checkList, resumeHistorique, commentaireRapport, colonnesImport }),
+    PROMPTS: Object.freeze({ reformulerDI, compteRendu, codes, checkList, commentaireRapport, colonnesImport }),
     valider: Object.freeze({ codes: codesProposes, impact, checkList: checkListe, commentaire }),
     codesConnus,
     jetonsRapport,

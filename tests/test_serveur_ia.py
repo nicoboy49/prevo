@@ -140,7 +140,7 @@ class TestRelaisIa(unittest.TestCase):
 
     def test_openai_cle_transmise_et_jamais_rendue(self):
         demande = {"url": self.faux.url + "/v1", "chemin": "chat/completions", "methode": "POST", "cle": CLE,
-                   "corps": {"model": "faux", "messages": [{"role": "system", "content": "Fonction : resumeHistorique"}]}}
+                   "corps": {"model": "faux", "messages": [{"role": "system", "content": "Fonction : compteRendu"}]}}
         statut, reponse = self.relayer(demande)
         self.assertEqual((statut, reponse["statut"]), (200, 200))
         self.assertIn("garniture", reponse["corps"]["choices"][0]["message"]["content"])

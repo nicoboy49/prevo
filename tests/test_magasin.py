@@ -512,6 +512,11 @@ class TestProfils(CasMagasin):
             for selecteur in ("#form-article", "#magasin-entree", "#magasin-demander-achat", "#magasin-reprendre-suggestion"):
                 self.assertEqual(page.locator(selecteur).count(), 0, selecteur)
             self.assertIn("Point de commande", page.inner_text(".magasin-fiche"))
+            # Lot 6 (§20.1) : lien vers le wiki de l'article, même forme que celui de la fiche équipement
+            lien = page.locator("#lien-wiki-article")
+            self.assertEqual(lien.get_attribute("href"), "#/wiki/" + KIT_GARNITURE)
+            self.assertEqual(lien.inner_text().strip(), "Wiki de cet article")
+            self.assertEqual(lien.locator("svg.icone").count(), 1)
             # Création d'article : réservée au responsable (retour à l'accueil)
             self.aller("#/magasin/article/nouveau")
             page.wait_for_function("location.hash === '#/accueil'")

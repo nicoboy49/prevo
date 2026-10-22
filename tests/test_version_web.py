@@ -298,11 +298,13 @@ class TestNavigateurDemoWeb(OutilsConstruction, CasNavigateur):
         page.click('.ia-bouton:has-text("Proposer avec l\'IA")')
         self.assertEqual(self.message_de_l_encadre(), MESSAGE_IA)
 
-        # Fiche équipement : emplacement (Ia.emplacement), carte visible avec son bouton
-        self.aller("#/equipement/" + SCENARIOS["causes_equipement"], ".parc-resume-ia .ia-bouton")
-        self.assertTrue(page.is_visible(".parc-resume-ia"))
-        page.click(".parc-resume-ia .ia-bouton")
-        self.assertEqual(self.message_de_l_encadre(".parc-resume-ia"), MESSAGE_IA)
+        # Fiche gamme : emplacement (Ia.emplacement) de la check-list, visible avec son bouton (le résumé IA de la
+        # fiche équipement, qui servait ici, est retiré au lot 6)
+        gamme = page.evaluate("Donnees.lignes('gammes')[0].id")
+        self.aller("#/preventif/gamme/" + gamme, ".pv-check-liste .ia-bouton")
+        self.assertTrue(page.is_visible(".pv-check-liste .ia-bouton"))
+        page.click(".pv-check-liste .ia-bouton")
+        self.assertEqual(self.message_de_l_encadre(".pv-check-liste"), MESSAGE_IA)
 
         # Compte rendu d'un OT : « Proposer les codes »
         ot_id = SCENARIOS["ot_statut_en_cours"]

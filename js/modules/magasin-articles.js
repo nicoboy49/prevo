@@ -559,6 +559,7 @@ Object.assign(Magasin, (() => {
             <div class="fil"><a href="#/magasin?onglet=articles">Magasin</a> <span aria-hidden="true">›</span> <span>${categorieArticle(article).libelle}</span></div>
             <h1>${libelleArticle(article)}</h1>
             <p class="magasin-badges">${badgesArticle(article, stock)}</p>
+            <p><a id="lien-wiki-article" href="#/wiki/${encodeURIComponent(article.id)}">${UI.icone('wiki')}Wiki de cet article</a></p>
           </div>
           ${responsable ? UI.html`<div class="actions">
             <button type="button" class="btn btn-secondaire" id="magasin-entree">${UI.icone('ajouter')}Entrée en stock</button>

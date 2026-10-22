@@ -31,7 +31,7 @@ from faux_fournisseur_ia import FauxFournisseur
 CLE = "sk-test-cle-ia-prevo-5f3a9c"
 SCRIPTS_REGLES = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/interface.js",
                   "js/modules/ia.js", "js/modules/ia-prompts.js", "js/modules/ia-encadre.js"]
-FONCTIONS = ["reformulerDI", "compteRendu", "codes", "checkList", "resumeHistorique", "commentaireRapport"]
+FONCTIONS = ["reformulerDI", "compteRendu", "codes", "checkList", "commentaireRapport"]
 # Valeurs « interdites » glissées dans les données passées à Ia.demander : elles ne doivent jamais partir.
 MARQUEURS_INTERDITS = ["77.77", "987.65", "photo-secrete.jpg", "notice-secrete.pdf"]
 ERREUR_400 = re.compile(r"Failed to load resource: the server responded with a status of 400")
@@ -110,7 +110,6 @@ DONNEES_DEMO_JS = """() => {
   const di = Donnees.trouver('demandes', ot.di_id);
   const eq = Donnees.trouver('equipements', ot.equipement_id);
   const tech = Donnees.trouver('techniciens', ot.technicien_id);
-  const libelleCode = (code) => { const l = Donnees.lignes('codes_defaillance').find((c) => c.code === code); return l ? l.libelle : ''; };
   const interdits = { demandeur: di.demandeur, technicien: tech.prenom + ' ' + tech.nom, technicien_id: ot.technicien_id,
     nom: tech.nom, taux_horaire: '77.77', cout: '987.65', cout_soustraitance: '987.65',
     photo: 'photo-secrete.jpg', document: 'notice-secrete.pdf' };
@@ -120,9 +119,6 @@ DONNEES_DEMO_JS = """() => {
     quantite: m.quantite, prix_unitaire: '987.65', utilisateur: tech.prenom + ' ' + tech.nom }));
   const gamme = Donnees.lignes('gammes').find((g) => g.equipement_id && g.libelle && g.declencheur === 'date');
   const eqGamme = Donnees.trouver('equipements', gamme.equipement_id);
-  const historique = Donnees.lignes('ordres_travail').filter((o) => o.equipement_id === ot.equipement_id && o.compte_rendu)
-    .map((o) => Object.assign({}, interdits, { date: (o.date_fin || o.date_creation).slice(0, 10), type: o.type, titre: o.titre,
-      codes: [o.symptome_code, o.cause_code, o.remede_code].map(libelleCode).filter(Boolean), compteRendu: o.compte_rendu }));
   return {
     otId: ot.id,
     donnees: {
@@ -131,7 +127,6 @@ DONNEES_DEMO_JS = """() => {
       codes: avec({ compteRendu: ot.compte_rendu, titre: ot.titre, symptomeDI: di.symptome }),
       checkList: avec({ designation: eqGamme.designation, marque: eqGamme.marque, modele: eqGamme.modele, libelle: gamme.libelle,
         declencheur: gamme.declencheur, periodicite: gamme.periodicite_jours + ' jours', causeVisee: 'Garniture usée' }),
-      resumeHistorique: avec({ ot: historique }),
       commentaireRapport: avec({ mois: 'septembre 2026', jetons: { disponibilite: '92,5 %', cout_du_mois: '12 340 €' },
         points: ['Pompe de relevage : coût élevé à examiner'] }),
     },
@@ -140,7 +135,6 @@ DONNEES_DEMO_JS = """() => {
       compteRendu: [ot.titre, eq.designation, pieces.length ? pieces[0].designation : ot.titre],
       codes: [ot.titre, di.symptome, 'S01', 'C01', 'R01'],
       checkList: [gamme.libelle, eqGamme.designation, 'Garniture usée'],
-      resumeHistorique: [historique[0].titre],
       commentaireRapport: ['{disponibilite}', '92,5 %', 'Pompe de relevage : coût élevé à examiner'],
     },
   };
@@ -428,8 +422,6 @@ class TestReglesPures(CasNavigateur):
             taux_horaire: '77.77', cout: '987.65', cout_soustraitance: '987.65', photo: 'photo-secrete.jpg',
             document: 'notice-secrete.pdf', consignes: 'Consigner le sectionneur Q1' };
           const avec = (o) => Object.assign({}, interdits, o);
-          const ot = (i) => avec({ date: '2026-09-' + String(i).padStart(2, '0'), type: 'correctif', titre: 'Intervention ' + i,
-            codes: ['Fuite'], compteRendu: 'R'.repeat(299) + 'XYZ' + i });
           const donnees = {
             reformulerDI: avec({ symptome: 'fuite', description: 'ça goutte', repere: 'PO-03', designation: 'Pompe' }),
             compteRendu: avec({ notes: 'garniture changée', titre: 'Fuite', type: 'correctif', repere: 'PO-03', designation: 'Pompe',
@@ -437,7 +429,6 @@ class TestReglesPures(CasNavigateur):
             codes: avec({ compteRendu: 'garniture changée', titre: 'Fuite', symptomeDI: 'fuite', codes: [] }),
             checkList: avec({ designation: 'Pompe', marque: 'KSB', modele: 'Etanorm', libelle: 'Contrôle', declencheur: 'date',
               periodicite: '30 jours', causeVisee: 'Garniture usée' }),
-            resumeHistorique: avec({ ot: Array.from({ length: 25 }, (_, i) => ot(i + 1)) }),
             commentaireRapport: avec({ mois: 'septembre 2026', jetons: { disponibilite: '92 %' }, points: ['Pompe à examiner'] }),
           };
           return fonctions.map((f) => ({ f, texte: Ia.PROMPTS[f].systeme + '\\n' + Ia.PROMPTS[f].utilisateur(donnees[f]) }));
@@ -446,13 +437,6 @@ class TestReglesPures(CasNavigateur):
             with self.subTest(fonction=element["f"]):
                 for interdit in ["Lucie Martin", "Julien Moreau", "TEC-0001", "Consigner le sectionneur"] + MARQUEURS_INTERDITS:
                     self.assertNotIn(interdit, element["texte"])
-        resume = next(e["texte"] for e in textes if e["f"] == "resumeHistorique")
-        # 20 derniers OT seulement (du 25 au 6 septembre), compte rendu coupé à 300 caractères
-        self.assertIn("Intervention 25", resume)
-        self.assertIn("Intervention 6", resume)
-        self.assertNotIn("Intervention 5\n", resume + "\n")
-        self.assertNotRegex(resume, r"Intervention [1-5]\b")
-        self.assertNotIn("XYZ", resume)
 
 
 # ---------------------------------------------------------------------------
@@ -559,8 +543,7 @@ class TestDemanderDirect(CasDemoIa):
         page = self.ouvrir_demo()
         self.assertEqual(page.evaluate("Ia.etat()"), "ok")
         self.assertEqual(self.faux.requetes[0]["chemin"], "/v1/models")
-        reponse = self.demander("resumeHistorique", {"ot": [{"date": "2026-09-01", "type": "correctif",
-                                                             "titre": "Fuite garniture", "compteRendu": "Garniture changée."}]})
+        reponse = self.demander("compteRendu", {"notes": "Garniture changée.", "titre": "Fuite garniture"})
         self.assertTrue(reponse["ok"], reponse)
         self.assertIn("garniture", reponse["resultat"]["texte"])
         self.assertEqual(reponse["fournisseur"], "127.0.0.1")
@@ -569,7 +552,7 @@ class TestDemanderDirect(CasDemoIa):
         corps = requete["corps"]
         self.assertEqual(corps["temperature"], 0.2)
         self.assertEqual(corps["response_format"]["type"], "json_schema")
-        self.assertEqual(corps["response_format"]["json_schema"]["name"], "resumeHistorique")
+        self.assertEqual(corps["response_format"]["json_schema"]["name"], "compteRendu")
         self.assertTrue(corps["response_format"]["json_schema"]["strict"])
         self.assertNotIn(CLE, json.dumps(corps))
         # Trace d'utilisation (après un enregistrement par l'écran) : journal, sans la clé
@@ -828,7 +811,7 @@ class TestDemanderRelais(CasNavigateur):
     def test_relais_repli_json_object_et_delai(self):
         regler_ia(self.contexte, fournisseur="openai", url=self.faux.url + "/v1", cle=CLE, modele="faux-schema")
         page = self.ouvrir()
-        reponse = self.demander("resumeHistorique", {"ot": []})
+        reponse = self.demander("compteRendu", {"notes": "fuite"})
         self.assertTrue(reponse["ok"], reponse)
         formats = [r["corps"]["response_format"]["type"] for r in self.faux.requetes_vers("/v1/chat/completions")]
         self.assertEqual(formats, ["json_schema", "json_object"])

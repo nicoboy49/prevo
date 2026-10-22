@@ -53,8 +53,6 @@ REPONSES = {
         {"operation": "Contrôler l'absence de fuite à la garniture", "valeur_attendue": "Aucune goutte"},
         {"operation": "Mesurer les vibrations au palier", "valeur_attendue": "< 4,5 mm/s"},
         {"operation": "Contrôler le serrage de l'accouplement", "valeur_attendue": "Serré"}]},
-    "resumeHistorique": {"texte": "Pannes récurrentes de garniture (environ tous les deux mois) ; "
-                                  "dernière intervention : remplacement de la garniture."},
     "commentaireRapport": {"texte": "La disponibilité du mois s'établit à {disponibilite} ; "
                                     "le coût du mois est de {cout_du_mois}."},
 }

@@ -4,9 +4,9 @@ points 4 à 6 ; CDC D65, D69, D71 ; CS66, CS68). Faux fournisseur seulement, mod
     - check-list (fiche gamme, responsable) : opérations cochables ; RIEN n'est écrit avant « Ajouter
       les opérations cochées », puis seules les cochées s'ajoutent (journal habituel + trace IA) ;
       Ignorer : rien ; technicien : pas de bouton ;
-    - résumé de l'historique (fiche équipement, technicien et responsable) : texte proposé, aucun
-      fichier modifié, 20 OT au plus envoyés, aucun nom de technicien ni de demandeur ; demandeur :
-      pas de carte ;
+    - résumé de l'historique : retiré au lot 6 (le wiki le remplace) — aucune carte sur la fiche équipement, quel
+      que soit le profil ; l'emplacement d'un bouton IA (posé à la fin du test d'ouverture, message d'erreur
+      gardé quand le bouton s'en va) est éprouvé sur la check-list de la fiche gamme ;
     - commentaire du rapport (onglet Rapports, responsable) : un chiffre écrit en clair par l'IA fait
       refuser la proposition ; sinon les jetons sont remplacés par les chiffres du rapport ; rien n'est
       figé sans « Figer le rapport » ; le rapport figé porte le commentaire et la mention « rédigé avec
@@ -173,79 +173,61 @@ class TestCheckListe(CasFonctions):
         self.assertEqual(autre.locator(".ia-bouton").count(), 0)
 
 
-class TestResume(CasFonctions):
+class TestSansResume(CasFonctions):
+    """Lot 6 : le résumé de l'historique (lot 4) est retiré ; ce que ses tests prouvaient pour Ia.emplacement est
+    éprouvé sur la check-list de la fiche gamme (responsable)."""
 
-    def test_resume_de_l_historique_sans_ecriture(self):
-        equipement = scenarios_demo()["causes_equipement"]
-        page = self.ouvrir("#/equipement/" + equipement)
-        page.wait_for_selector(".parc-resume-ia .ia-bouton")
-        avant = self.octets("ordres_travail.csv", "journal.csv", "equipements.csv")
-        page.click(".parc-resume-ia .ia-bouton")
-        page.wait_for_selector(".parc-resume-ia .ia-encadre .ia-texte")
-        self.assertIn("garniture", page.inner_text(".parc-resume-ia .ia-encadre"))
-        self.assertIn("Proposition de l'IA", page.inner_text(".parc-resume-ia .ia-encadre"))
-        page.wait_for_load_state("networkidle")
-        self.assertEqual(self.octets("ordres_travail.csv", "journal.csv", "equipements.csv"), avant)
-        message = self.faux.requetes_vers("/api/chat")[-1]["corps"]["messages"][-1]["content"]
-        self.assertLessEqual(message.count("\n- "), 20)
-        for nom in noms_de_la_demo():
-            self.assertNotIn(nom, message)
+    def gamme(self):
+        return lire_csv(self.serveur.dossier, "gammes.csv")[0]["id"]
 
-    def test_demandeur_sans_carte_et_sans_ia_sans_carte(self):
+    def test_fiche_equipement_sans_resume_ia_quel_que_soit_le_profil(self):
         equipement = scenarios_demo()["causes_equipement"]
-        page = self.ouvrir("#/equipement/" + equipement, profil="demandeur", nom="Paul Martin")
-        page.wait_for_selector(".parc-complements")
-        self.assertEqual(page.locator(".parc-resume-ia").count(), 0)
-        contexte = self.navigateur.new_context(locale="fr-FR")
-        self.addCleanup(contexte.close)
-        preregler_profil(contexte, "responsable", "Responsable")
-        autre = contexte.new_page()
-        self.surveiller(autre)
-        autre.goto(self.serveur.url + "/#/equipement/" + equipement)
-        attendre_pret(autre)
-        autre.wait_for_selector(".parc-complements")
-        # Sans IA : carte masquée (elle suit l'état de l'IA, Ia.emplacement) et aucun bouton
-        self.assertEqual(autre.locator(".parc-resume-ia:visible, .ia-bouton").count(), 0)
+        for profil, nom, technicien in (("responsable", "Responsable", ""), ("technicien", "", "TEC-0001"),
+                                        ("demandeur", "Paul Martin", "")):
+            with self.subTest(profil=profil):
+                page = self.ouvrir("#/equipement/" + equipement, profil=profil, nom=nom, technicien_id=technicien)
+                page.wait_for_selector(".parc-complements")
+                page.wait_for_function("Ia.etat() === 'ok'")
+                self.assertEqual(page.locator(".parc-resume-ia, .parc-complements .ia-bouton").count(), 0)
+        self.assertFalse(self.page.evaluate("'resumeHistorique' in Ia.PROMPTS"))
 
     def test_bouton_pose_a_la_fin_du_test_d_ouverture_sans_reafficher(self):
-        """Fiche ouverte AVANT la fin du test du fournisseur (relais retardé) : la carte et son bouton
-        apparaissent ensuite d'eux-mêmes, sans réafficher la fiche (ajout de l'orchestrateur)."""
-        equipement = scenarios_demo()["causes_equipement"]
+        """Fiche ouverte AVANT la fin du test du fournisseur (relais retardé) : le bouton apparaît ensuite de
+        lui-même, sans réafficher la fiche (ajout de l'orchestrateur au lot 4, reporté sur la check-list)."""
+        gamme = self.gamme()
         regler_ia(self.contexte, url=self.faux.url, modele="faux")
         preregler_profil(self.contexte, "responsable", "Responsable")
-        # Le test d'ouverture (relais /api/ia) est RETENU jusqu'à ce que la fiche soit vérifiée, puis libéré :
-        # aucun délai fixe (un time.sleep dans le gestionnaire faisait une course selon la charge du poste).
+        # Le test d'ouverture (relais /api/ia) est RETENU jusqu'à ce que la fiche soit vérifiée, puis libéré.
         retenues = []
         self.contexte.route(self.serveur.url + "/api/ia", lambda route: retenues.append(route))
         page = self.page
-        page.goto(self.serveur.url + "/#/equipement/" + equipement)
-        page.wait_for_selector(".parc-complements")
+        page.goto(self.serveur.url + "/#/preventif/gamme/" + gamme)
+        page.wait_for_selector(".pv-check-liste h2")
         for _ in range(100):                                # laisse arriver la requête retenue (5 s au plus)
             if retenues:
                 break
             page.wait_for_timeout(50)
         self.assertTrue(retenues, "le test d'ouverture du fournisseur n'est pas parti")
         self.assertEqual(page.evaluate("Ia.etat()"), "inconnu")
-        self.assertEqual(page.locator(".parc-resume-ia:visible, .ia-bouton").count(), 0)
-        page.evaluate("document.querySelector('.parc-complements').dataset.temoin = '1'")
+        self.assertEqual(page.locator(".pv-check-liste .ia-bouton:visible").count(), 0)
+        page.evaluate("document.querySelector('.pv-check-liste').dataset.temoin = '1'")
         for route in retenues:
             route.continue_()
-        page.wait_for_selector(".parc-resume-ia .ia-bouton", state="visible")
-        self.assertEqual(page.evaluate("document.querySelector('.parc-complements').dataset.temoin"), "1")
+        page.wait_for_selector(".pv-check-liste .ia-bouton", state="visible")
+        self.assertEqual(page.evaluate("document.querySelector('.pv-check-liste').dataset.temoin"), "1")
 
-    def test_erreur_reseau_message_visible_dans_la_carte(self):
-        """Relecture du lot 4 : relais injoignable au clic → l'IA passe « injoignable », le bouton s'en va,
-        mais le message d'erreur reste affiché dans la carte."""
-        equipement = scenarios_demo()["causes_equipement"]
-        page = self.ouvrir("#/equipement/" + equipement)
-        page.wait_for_selector(".parc-resume-ia .ia-bouton")
+    def test_erreur_reseau_message_visible_quand_le_bouton_s_en_va(self):
+        """Relecture du lot 4 : relais injoignable au clic → l'IA passe « injoignable », le bouton s'en va, mais le
+        message d'erreur reste affiché (reporté sur la check-list de la fiche gamme)."""
+        page = self.ouvrir("#/preventif/gamme/" + self.gamme())
+        page.wait_for_selector(".pv-check-liste .ia-bouton")
         self.autoriser_erreur("net::ERR_FAILED")
         self.contexte.route(self.serveur.url + "/api/ia", lambda route: route.abort("failed"))
-        page.click(".parc-resume-ia .ia-bouton")
-        page.wait_for_selector(".parc-resume-ia .ia-encadre .ia-erreur", state="visible")
+        page.click(".pv-check-liste .ia-bouton")
+        page.wait_for_selector(".pv-check-liste .ia-encadre .ia-erreur", state="visible")
         self.assertEqual(page.evaluate("Ia.etat()"), "injoignable")
-        self.assertEqual(page.locator(".parc-resume-ia .ia-bouton").count(), 0)
-        self.assertIn("ne répond pas", page.inner_text(".parc-resume-ia .ia-encadre"))
+        self.assertEqual(page.locator(".pv-check-liste .ia-bouton").count(), 0)
+        self.assertIn("ne répond pas", page.inner_text(".pv-check-liste .ia-encadre"))
 
 
 class TestCommentaireRapport(CasFonctions):
@@ -354,17 +336,12 @@ class TestReponsesPiegees(CasFonctions):
         page.wait_for_timeout(300)
         self.assertIsNone(page.evaluate("window.__xss === undefined ? null : window.__xss"))
 
-    def test_check_liste_resume_et_commentaire_html_affiches_en_texte(self):
+    def test_check_liste_et_commentaire_html_affiches_en_texte(self):
         gamme = lire_csv(self.serveur.dossier, "gammes.csv")[0]["id"]
         page = self.ouvrir("#/preventif/gamme/" + gamme, modele="faux-html")
         page.wait_for_selector(".pv-check-liste .ia-bouton")
         page.click(".pv-check-liste .ia-bouton")
         self.verifier_affiche_en_texte(".pv-check-liste")
-
-        page.evaluate("(route) => { location.hash = route; }", "#/equipement/" + scenarios_demo()["causes_equipement"])
-        page.wait_for_selector(".parc-resume-ia .ia-bouton")
-        page.click(".parc-resume-ia .ia-bouton")
-        self.verifier_affiche_en_texte(".parc-resume-ia")
 
         page.evaluate("(route) => { location.hash = route; }", "#/indicateurs?onglet=rapports")
         page.wait_for_selector(".rapports-figer .ia-bouton")
