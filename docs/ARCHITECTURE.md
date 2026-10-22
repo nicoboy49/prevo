@@ -2515,245 +2515,337 @@ travail inchangés. Mêmes calculs qu'avant (`Accueil.calculerCompteurs`, `Sugge
   bas à droite, 3 s (4,5 s en alerte, 7 s en erreur).
 - Tests : `tests/test_bento.py`.
 
-## 20. Contrat du lot 6 — wiki de maintenance (CDC validé le 2026-10-22 : D93–D103)
+## 20. Contrat du lot 6 — wiki de maintenance (refonte ; CDC validé le 2026-10-22 : D93–D112)
 
-Écrit avant le code du lot 6 ; il sera relu et aligné sur le code à la fin du lot (« écart retenu » avec
-sa raison, ou « précision »). Décisions de Nicolas : **D95 (a)** (nouvelle table, format 3), **D96 (a)**
-(pages par équipement seulement), **D98** (synthèses de la démo rédigées par des sous-agents Claude Code
-dans les conditions exactes de l'API, puis relues par lui), **D99 (a)** (aucune IA dans la recherche).
-Règles de fond : **deux couches** (D94) — la couche calculée est complète sans IA, la synthèse n'est
-qu'un complément toujours marqué [IA] ; **jamais de consigne de sécurité dans le bloc [IA]** (D97),
-contrôlé en code ; **seul le responsable valide**. Version de clôture `v1.2.0`.
+Écrit avant le code de la refonte ; relu et aligné sur le code à la fin du lot (« écart retenu » avec sa
+raison, ou « précision »). Il remplace le contrat de la première version du lot 6 (une synthèse IA par
+équipement, commit 53c7efd), dont restent : la couche calculée de l'équipement, le vocabulaire de la
+sécurité et les contrôles de citation, la recherche BM25 et ses champs posés dans l'OT et la DI. Le
+principe est celui du LLM Wiki : des **sources** (les OT clôturés administrativement, jamais modifiés par le
+wiki), des **pages** (le texte du wiki) et des **règles** (la consigne de l'IA et les contrôles en code) ;
+trois opérations : **ingérer**, **consulter**, **contrôler**. Règles de fond : **deux couches** (D94) — tout
+ce qui est calculé l'est sans IA et reste séparé du texte ; **une phrase cite au moins un OT, jamais une
+autre page** ; **l'IA ajoute et précise, elle ne retire rien** (une contradiction est signalée, jamais
+écrasée) ; **jamais de consigne de sécurité dans le texte du wiki** (D97) ; **seul le responsable valide**.
+Version de clôture `v1.2.0`.
 
 ### 20.1 Socle
-- **Module `Wiki`** (préfixe `wiki-`, chargé **à la fin** de `js/modules/`, après `import-apercu.js`, dans
-  cet ordre ; `ORDRE_MODULES` suit) : `wiki-regles.js` (1/5, crée `Wiki` : constantes, couche calculée,
-  état d'une synthèse, contrôles du texte — fonctions pures), `wiki-recherche.js` (2/5, index et
-  recherche), `wiki-ecritures.js` (3/5, enregistrer, valider, modifier, remplacer), `wiki-synthese.js`
-  (4/5, carte de la synthèse, encadré IA, requêtes de la démo), `wiki-ecrans.js` (5/5, écrans, champ de
-  recherche réutilisable, enregistrement des routes). Feuille `css/modules/wiki.css` (après `import.css`).
-  700 lignes au plus par fichier.
-- **Routes** : `#/wiki` « Wiki » (liste des pages) et `#/wiki/<équipement>` (page d'un équipement), pour
-  les **trois profils** ; `tables` : `equipements`, `ordres_travail`, `demandes`, `codes_defaillance`,
-  `mouvements_stock`, `articles`, `wiki_syntheses`. Entrée de menu `{ libelle: 'Wiki', icone: 'wiki',
-  ordre: 42 }` (entre Parc et Magasin) ; icône `wiki` (un livre ouvert) ajoutée à `ICONES` de
-  `interface.js`, même trait que les autres.
-- **Constantes** `Wiki.SEUILS` (D100) : `{ otMinimum: 5, otEnvoyesMax: 40, pucesMax: 6, motsMax: 150,
-  recidiveJours: 30, dernieres: 10, symptomesMax: 5 }`, documentées dans le guide.
-- **Ajouts hors du wiki** (interface gelée, CDC périmètre 6) : l'entrée de menu ; un lien « Wiki de cet
-  équipement » (`#lien-wiki-equipement`) en tête de la fiche équipement ; le champ de recherche dans
-  l'onglet Préparation de l'OT et dans la saisie d'une DI (§20.7). La carte « Résumé de l'historique
-  (IA) » de la fiche équipement et la fonction `resumeHistorique` (§17.3, §17.5 point 5) sont **retirées**
-  (la synthèse les remplace) ; le faux fournisseur et les tests du lot 4 suivent.
-- `Indicateurs.datePanne(ot)` passe de `Indicateurs.interne` à l'API publique (même règle qu'au lot 3 :
-  date de la DI d'origine, sinon date de création de l'OT).
+- **Modules** (préfixe `wiki-`, chargés **à la fin** de `js/modules/`, dans cet ordre ; `ORDRE_MODULES`
+  suit) : `wiki-regles.js` (1/8, crée `Wiki` : constantes, forme comparable, couche calculée de
+  l'équipement — reprise), `wiki-calculs.js` (2/8, couches calculées du composant et du mode, pages
+  virtuelles, catalogue), `wiki-texte.js` (3/8, balisage d'une page et contrôles du §20.6),
+  `wiki-recherche.js` (4/8, reprise), `wiki-ingestion.js` (5/8, file, pages concernées, requête,
+  ordonnanceur, lecture de la réponse), `wiki-journal.js` (6/8, propositions, validation, rejet, écriture à
+  la main, contradictions, intégrité), `wiki-ecrans.js` (7/8, index, page, champ de recherche),
+  `wiki-journal-ecrans.js` (8/8, journal, traitement de la file, écriture à la main, contrôle du wiki).
+  **Retirés** : `wiki-ecritures.js` et `wiki-synthese.js` de la première version, la consigne
+  `syntheseWiki` et `Wiki.controlerSynthese`. Feuille `css/modules/wiki.css`. 700 lignes au plus par fichier.
+- **Routes**, ouvertes aux trois profils sauf mention : `#/wiki` (index), `#/wiki/<id>` (une page ; `id` =
+  identifiant d'équipement `EQ-…`, d'article `ART-…` ou de page `WP-…`), `#/wiki-journal` (**responsable
+  seulement**). Entrée de menu et icône `wiki` inchangées (ordre 42).
+- **Constantes** `Wiki.SEUILS` (D100), documentées dans le guide : `{ pagesCreeesMax: 3, phrasesMax: 12,
+  motsMax: 250, pagesEnvoyeesMax: 8, catalogueMax: 400, agentsSimultanes: 5, astuceMax: 500, otMinimum: 5,
+  recidiveJours: 30, dernieres: 10, symptomesMax: 5, contradictionAncienneJours: 30,
+  demoAValiderJours: 14 }`.
+- **Ajouts hors du wiki** (interface gelée, CDC point 11) : le lien « Wiki de cet équipement »
+  (`#lien-wiki-equipement`, déjà là) ; un lien « Wiki de cet article » (`#lien-wiki-article`) en tête de la
+  fiche article ; le champ « Astuce pour la prochaine fois » (§20.2, §20.9) ; à la clôture administrative,
+  le message « OT ajouté à la file du wiki » ; les champs de recherche de l'OT et de la DI (déjà là). La
+  carte « Résumé de l'historique (IA) » de la fiche équipement et la consigne `resumeHistorique` (§17.3,
+  §17.5 point 5) sont **retirées** ; le faux fournisseur et les tests du lot 4 suivent.
 
-### 20.2 Format 3 : table `wiki_syntheses` (D95 a)
-- `Schema.version` = **3** ; `parametres.version_schema` = `3`. Nouvelle table (la 23e), fichier
-  `wiki_syntheses.csv`, identifiant `WIKI-0001` (`{ prefixe: 'WIKI-', chiffres: 4, annuel: false }`),
-  `ajoutSeul: false`, attribut `depuisVersion: 3` sur la table :
+### 20.2 Format 3 : `wiki_pages`, `wiki_journal`, `ordres_travail.astuce` (D95, D110)
+- `Schema.version` = **3** ; **24 tables** : les 22 du format 2 puis `wiki_pages` et `wiki_journal`
+  (attribut `depuisVersion: 3`, fichiers absents = tables vides, créés à la première écriture). La table
+  `wiki_syntheses` de la première version disparaît du schéma ; une base de développement qui a encore
+  `wiki_syntheses.csv` ne le lit plus et ne le supprime pas.
+- **`ordres_travail.astuce`** : `depuisVersion(3, champ('astuce', 'texte_long', 'Astuce pour la prochaine
+  fois'))`, en fin de table ; facultatif, `astuceMax` caractères au plus ; colonne absente → problème `info`
+  et valeur vide (§4, mécanisme du format 2).
+- **`wiki_pages`** (identifiant `WP-0001`, `{ prefixe: 'WP-', chiffres: 4, annuel: false }`) : seules les
+  pages qui ont un texte validé ont une ligne ; les pages d'équipement et d'article existent toujours,
+  calculées (§20.3).
 
-  | Champ | Type | Libellé | Règle |
-  | --- | --- | --- | --- |
-  | `id` | identifiant | Identifiant | |
-  | `equipement_id` | `ref` → `equipements` | Équipement | obligatoire |
-  | `texte` | `texte_long` | Synthèse | forme du §20.4, contrôlée (§20.4) |
-  | `ot_cites` | `texte` | OT cités | identifiants séparés par « ; », tirés du texte à l'enregistrement |
-  | `ot_sources` | `texte_long` | OT envoyés à l'IA | identifiants séparés par « ; » (péremption, contrôle des citations) |
-  | `statut` | choix `à valider`, `validée`, `remplacée` | Statut | une seule synthèse non « remplacée » par équipement |
-  | `modele` | `texte` | Modèle | tel que rendu par `Ia.demander` (ou le libellé de la démo, §20.8) |
-  | `date_proposition` | `date_heure` | Proposée le | |
-  | `corrigee_par` | `texte` | Corrigée par | nom du profil qui a modifié le texte après l'IA, sinon vide |
-  | `date_modification` | `date_heure` | Modifiée le | |
-  | `valide_par` | `texte` | Validée par | vide tant que « à valider » |
-  | `date_validation` | `date_heure` | Validée le | |
+  | Champ | Type | Règle |
+  | --- | --- | --- |
+  | `id` | identifiant | |
+  | `type` | choix `équipement`, `composant`, `mode`, `savoir-faire` | obligatoire |
+  | `titre` | texte | obligatoire ; imposé par Prévo pour une page ancrée (équipement : « <repère> — <désignation> » ; article : sa désignation) |
+  | `cle` | texte | forme comparable du titre (§20.6) ; unique parmi les pages actives |
+  | `equipement_id` | `ref` → `equipements` | page d'équipement, ou savoir-faire rattaché à un équipement |
+  | `article_id` | `ref` → `articles` | composant ancré, ou savoir-faire rattaché à un article |
+  | `cause_code` | code cause | mode ancré (facultatif) |
+  | `rattache_a` | `ref` → `wiki_pages` | savoir-faire rattaché à une page de composant libre |
+  | `texte` | `texte_long` | balisage du §20.4, contrôlé (§20.6) |
+  | `ot_cites` | texte | identifiants séparés par « ; », tirés du texte |
+  | `liens` | texte | identifiants des pages liées, séparés par « ; », tirés du texte |
+  | `version` | entier | +1 à chaque changement appliqué |
+  | `origine` | choix `IA`, `manuel`, `IA et manuel` | |
+  | `modele` | texte | modèle de la dernière proposition IA appliquée |
+  | `derniere_entree` | `ref` → `wiki_journal` | dernière entrée appliquée (rattrapage, §20.7) |
+  | `valide_par`, `valide_le` | texte, `date_heure` | dernier changement appliqué |
+  | `cree_le`, `modifie_le` | `date_heure` | |
+  | `statut` | choix `active`, `archivée` | |
 
-- **Passage au format 3** : `Donnees.mettreAJourVersionSchema()` (§5.6) tel quel, avec le motif
-  **`avant-format-v3`** ajouté aux listes fermées `MOTIFS_SAUVEGARDE` de `serveur.py` et de
-  `js/stockage-dossier.js` (nom `AAAA-MM-JJ_HHMMSS_avant-format-v3`, type « Avant format 3 » dans
-  Paramètres) ; le fichier `wiki_syntheses.csv` absent = table vide (§3.3), créé à la première écriture ;
-  **aucun autre fichier n'est réécrit**. Une base au format 1 passe directement au format 3 (une seule
-  sauvegarde). « Créer une base vide » et le jeu de démo portent `version_schema` = 3.
-- `serveur.py` : `TABLES` passe à 23 (commentaire de renvoi vers `js/schema.js`, test de cohérence) ;
-  `GET /api/versions` liste les 23 tables. Export ZIP, sauvegardes et restauration suivent `Schema.tables`.
-  Précision : restaurer une sauvegarde d'avant le format 3 laisse `wiki_syntheses.csv` tel quel (la
-  sauvegarde ne l'a pas) ; une citation devenue orpheline est signalée par `Donnees.problemes()`.
-- `Donnees.problemes()` : OT cité ou source inexistant ou d'un autre équipement (`attention`) ; statut
-  « validée » sans `valide_par` (`attention`) ; deux synthèses non « remplacées » pour un équipement
-  (`attention`).
+- **`wiki_journal`** (identifiant `WJ-00001`, 5 chiffres) : une ligne par OT ingéré, par écriture à la main
+  et par décision sur une contradiction.
 
-### 20.3 Couche calculée (`wiki-regles.js`, sans IA, sans écriture)
-`Wiki.page(equipementId, { maintenant })` → objet pur (lit `Donnees.lignes`), recalculé à chaque
-affichage :
-- `consignation` : `{ texte, document }` = champs `consignation` et `document` de la fiche, **tels
-  quels** ; texte vide → `null` (l'écran affiche « Aucune consignation saisie pour cet équipement »).
-- `pannes` : « cas » = OT **correctif** clôturé (techniquement ou administrativement) de l'équipement,
-  avec un code symptôme (même définition que `CausesFrequentes`, §14.5, sans exiger la cause pour le
-  comptage du symptôme). Les `symptomesMax` symptômes les plus fréquents, `{ code, libelle, cas,
-  debut, fin }` ; pour chacun, si `cas` ≥ `otMinimum` : `causes` (au plus 3, comptées sur les cas qui ont
-  une cause, avec `CausesFrequentes.fourchette` et la mention « Peu de cas : à prendre comme une
-  piste. » selon D59) et, pour chaque cause, `remedes : [{ code, libelle, fois, recidives }]` ; sinon
-  `suffisant: false` et l'écran affiche « Pas encore assez de cas pour ce symptôme (n sur 5) », comme
-  l'encart. **Récidive** : un cas de cause C clôturé le jour J (date de clôture technique, sinon date de
-  fin) est suivi d'une récidive s'il existe un autre OT correctif du même équipement, de même cause C,
-  dont la date de panne (`Indicateurs.datePanne`) est dans `]J, J + recidiveJours]`. Mention fixe sous
-  la section : « Statistique de l'historique, pas un diagnostic ».
-- `pieces` : mouvements `sortie` liés à un OT de l'équipement, moins les `retour` liés aux mêmes OT, par
-  article : `{ articleId, reference, designation, quantite, nombreOt, derniereDate }` (quantité nette > 0
-  seulement), triés par nombre d'OT puis quantité.
-- `dernieres` : les `dernieres` OT clôturés les plus récents (date de fin), `{ id, date, type, titre,
-  codes: { symptome, cause, remede } (libellés), extrait (compte rendu, 160 caractères), dureeArret
-  (null si absente) }` ; `total` pour « Voir les autres ».
-- `memeModele` : si d'autres équipements actifs ont la même marque et le même modèle (comparaison de
-  `CausesFrequentes`), le même calcul `pannes` sur l'ensemble du groupe, avec `equipements` (repères) ;
-  sinon `null`.
-- `synthese` : la synthèse courante (non « remplacée ») ou `null`, avec `etat` ∈ `aucune`, `a_valider`,
-  `validee`, `a_revoir` et `depuis` = nombre d'OT de l'équipement clôturés après `date_proposition` et
-  absents de `ot_sources` (`a_revoir` = validée et `depuis` > 0 ; elle **reste validée**).
-- `peutProposer` : au moins `otMinimum` OT **correctifs** clôturés sur l'équipement (D100 précisé par Nicolas le
-  2026-10-22 : 12 synthèses dans la démo).
-Un calcul Python indépendant (`tests/calcul_wiki.py`) refait `pannes`, `remedes`, `recidives`,
-`pieces` et `dernieres` sur la démo et sur une base d'essai (CS97).
+  | Champ | Type | Règle |
+  | --- | --- | --- |
+  | `id` | identifiant | |
+  | `nature` | choix `ingestion`, `manuel`, `décision` | |
+  | `ot_id` | `ref` → `ordres_travail` | ingestion |
+  | `date_intervention` | `date_heure` | copie de `date_fin` de l'OT (ordre de la file, D111) |
+  | `statut` | choix `en file`, `à valider`, `validée`, `rejetée`, `à refaire`, `refusée`, `rien à ajouter`, `appliquée` | |
+  | `anterieure` | booléen | D111 |
+  | `ordre` | entier | rang de traitement (enchaînement des propositions, D105) |
+  | `pages` | texte | clés des pages concernées (§20.5), séparées par « ; » |
+  | `changements` | `texte_long` | JSON `[{ page, cle, type, titre, creation, version_avant, avant, apres }]` |
+  | `contradictions` | `texte_long` | JSON `[{ page, phrase, observation, ot, statut, decision, decide_par, decide_le }]` |
+  | `raisons` | `texte_long` | raisons d'un refus, une par ligne |
+  | `modele` | texte | modèle réellement utilisé |
+  | `essais` | entier | |
+  | `cree_le`, `traite_le`, `decide_le` | `date_heure` | |
+  | `decide_par` | texte | |
+  | `motif` | `texte_long` | motif d'un rejet ; « rejoué : page créée entre-temps » (D112) |
 
-### 20.4 Synthèse IA : fonction `syntheseWiki` et contrôles (D97)
-- **Consigne** `Ia.PROMPTS.syntheseWiki` (`ia-prompts.js`) : première ligne « Fonction : syntheseWiki » ;
-  règles communes (dont « n'écris jamais de consigne de sécurité ni de consignation ») ; tâche : à
-  partir des seuls OT fournis, au plus 6 puces dans trois rubriques fixes, chaque puce cite au moins un
-  OT par son identifiant ; aucun chiffre ni fait absent des OT ; dire « fréquent ici », jamais « cause
-  certaine ».
-- **Envoyé** (rien d'autre) : repère, désignation, marque, modèle de l'équipement ; les OT clôturés de
-  l'équipement, les `otEnvoyesMax` plus récents : `{ id, date (fin), type, titre, symptome, cause, remede
-  (libellés), compteRendu (600 caractères), pieces: [{ designation, quantite }], dureeArret }`. **Jamais**
-  les noms des techniciens ou des demandeurs, les coûts, les documents, les photos (même liste que §17.3).
-- **Attendu** (schéma strict) : `{ puces: [{ rubrique, texte, ot: [identifiant] }] }`, `rubrique` ∈
-  « Ce qui revient », « Ce qui a réglé le problème », « À surveiller » ; `ot` : `enum` des identifiants
-  envoyés.
-- **Forme enregistrée** (champ `texte`) : les rubriques non vides dans cet ordre, chacune sur sa ligne,
-  suivie de ses puces `- <texte> [OT-AAAA-NNNN] [OT-…]` ; c'est ce texte que le responsable peut corriger.
-- **Contrôles** `Wiki.controlerSynthese(texte, otPermis)` → `{ ok, raisons: [texte], puces, otCites }` —
-  appliqués à la réponse de l'IA (après mise en forme) **et** au texte corrigé à la main avant
-  l'enregistrement : toute ligne est un titre de rubrique ou une puce ; 1 à `pucesMax` puces ; au plus
-  `motsMax` mots (citations exclues) ; chaque puce cite au moins un OT ; chaque OT cité ∈ `otPermis` (IA :
-  les OT envoyés ; correction : `ot_sources` ∪ OT clôturés de l'équipement) ; **aucun terme de
-  `Wiki.VOCABULAIRE_SECURITE`** dans le texte ramené en forme comparable (minuscules, sans accents,
-  ponctuation → espace), par début de mot : `consign`, `deconsign`, `cadenas`, `vat`, `absence de tension`,
-  `hors tension`, `epi`, `equipement de protection`, `gants`, `lunettes de protection`, `habilit`,
-  `couper l alimentation`, `couper le courant`, `couper l energie`, `couper l air`, `couper la pression`,
-  `dissiper l energie`, `mise en securite`, `mettre en securite`, `consigne de securite`, `regle de
-  securite`, `mesure de securite`, `pour votre securite`, `electrocution`, `loto`, `lockout`. Message
-  du refus pour ce dernier cas : « L'IA ne rédige jamais de consigne de sécurité : voir la consignation
-  de l'équipement » (pour une correction à la main : « Le bloc [IA] ne contient pas de consigne de
-  sécurité : elle se saisit dans la consignation de l'équipement »). Un refus d'une réponse de l'IA →
-  `IaReponseInvalide` avec les raisons ; rien n'est enregistré.
-- **`Ia.requete(fonction, donnees)`** (`ia.js`, nouvelle) → `{ fonction, messages, schema, temperature }`,
-  exactement ce que `Ia.demander` envoie (même construction : `demander` l'appelle) ; et
-  **`Ia.lireReponse(fonction, contenu, donnees)`** → le `resultat` contrôlé (extraction de l'objet JSON
-  puis `verifier`), utilisé par `demander` et par l'import des réponses de la démo (§20.8).
+- **Passage au format 3** : `Donnees.mettreAJourVersionSchema()` (§5.6) tel quel, motif `avant-format-v3`
+  (déjà dans `MOTIFS_SAUVEGARDE` de `serveur.py` et `js/stockage-dossier.js`) ; aucun fichier réécrit sauf
+  `parametres.csv` ; une base au format 1 passe directement au format 3. Une base déjà en version 3 (première
+  version du lot, jamais publiée) n'a rien à faire. « Créer une base vide » et la démo portent
+  `version_schema` = 3. `serveur.py` : `TABLES` à 24 (test de cohérence avec `js/schema.js`).
+- `Donnees.problemes()` : lien vers une page inexistante ou archivée, OT cité inexistant, deux pages actives
+  de même `cle`, entrée « validée » dont les changements ne sont pas dans les pages (`attention`) ; page
+  active sans OT cité, contradiction ouverte depuis plus de `contradictionAncienneJours` (`info`).
 
-### 20.5 Statuts et écritures (`wiki-ecritures.js`)
-Toutes par `Donnees.modifier('wiki_syntheses', …)` (contrôle de version, journal « <champs> —
-<action> »), **responsable seulement** (refus sinon, même message que les écrans réservés) :
-- `Wiki.enregistrer(equipementId, { texte, otSources, modele }, { valider })` : contrôle §20.4 ; la
-  synthèse courante, s'il y en a une, passe « remplacée » (après confirmation à l'écran : « Remplacer la
-  synthèse actuelle ? Elle reste dans l'historique de la page. ») ; nouvelle ligne « à valider », ou
-  « validée » avec `valide_par` = `App.profil.nom` et la date si `valider` ; action du journal
-  « synthèse proposée (<modèle>) » / « synthèse validée ».
-- `Wiki.valider(id)` : « à valider » → « validée » (nom, date) ; « synthèse validée ».
-- `Wiki.modifier(id, texte)` : contrôle §20.4 ; texte changé → statut **« à valider »**, `corrigee_par`,
-  `date_modification`, `valide_par` et `date_validation` vidés ; « synthèse corrigée — à valider ».
-  Un texte identique ne change rien.
-- Trace D65 : `Ia.tracerUtilisation('wiki_syntheses', id, 'synthèse', modele)` après un enregistrement
-  issu de l'IA.
-- Visibilité : la synthèse **validée** est montrée à tous les profils ; « à valider » et l'historique des
-  synthèses remplacées, **au responsable seulement** (le technicien et le demandeur ne voient alors
-  rien de la synthèse).
+### 20.3 Pages et couches calculées (`wiki-regles.js`, `wiki-calculs.js` ; sans IA, sans écriture)
+- **`Wiki.page(id, { maintenant, profil })`** → `{ id, type, titre, calcul, texte, origine, liens, retours,
+  contradictions, enAttente }` : `calcul` selon le type (ci-dessous) ; `texte` = la ligne de `wiki_pages`
+  (état **validé**) ou vide ; `retours` = pages actives dont `liens` contient cette page ; `contradictions`
+  = celles qui restent ouvertes ; `enAttente` = propositions « à valider » qui touchent la page
+  (responsable seulement, sinon vide).
+- **Équipement** (`EQ-…`) : la couche de la première version, inchangée — `consignation` telle quelle,
+  `pannes` (symptômes, causes avec `CausesFrequentes.fourchette`, remèdes, récidives à `recidiveJours`),
+  `pieces`, `dernieres`, `memeModele` — sans `synthese` ni `peutProposer`.
+- **Composant ancré** (`ART-…`, ou page `composant` avec `article_id`) : `article` (référence, désignation,
+  fabricant, référence fabricant, emplacement, stock) ; `montage` = équipements de `article_equipement`
+  (quantité) et équipements où l'article a été consommé ; `consommations` = OT clôturés où la quantité nette
+  sortie (sorties − retours, §20.3 de la première version) est positive, `{ otId, date, equipementId,
+  quantite }` ; `remplacements` par équipement `{ equipementId, nombre, intervalleMedianJours }` (médiane des
+  écarts entre dates d'intervention successives ; `null` sous 2 remplacements). Composant libre : `calcul`
+  = `null`, l'écran affiche « Pas d'article au magasin ».
+- **Mode ancré** (`cause_code`) : `cause` (code, libellé), `cas` (OT correctifs clôturés de cette cause),
+  `equipements` `[{ equipementId, cas }]`, `remedes` `[{ code, libelle, fois }]`. Mode libre : `calcul` =
+  `null`.
+- **Savoir-faire** : `entete` posé par Prévo — la consignation de l'équipement rattaché, telle quelle (ou,
+  pour un composant, les liens vers les équipements où il est monté) et la phrase fixe « Ce savoir-faire ne
+  remplace pas la consignation de l'équipement ». Jamais de texte d'IA dans `entete`.
+- **Catalogue** `Wiki.catalogue()` → `[{ id, titre, type }]` de toutes les pages actives et des pages
+  calculées d'équipement et d'article, `catalogueMax` au plus (les pages qui ont un texte d'abord).
+- Un calcul Python indépendant (`tests/calcul_wiki.py`, étendu) refait `montage`, `consommations`,
+  `remplacements`, `cas`, `equipements` et `remedes` sur la démo et sur une base d'essai (CS97).
 
-### 20.6 Recherche (`wiki-recherche.js`, sans IA, D99 a)
-- `Wiki.rechercher(texte, { equipementId, limite })` → `{ requete, mots, portees: [{ portee, libelle,
-  resultats: [{ type, otId | equipementId, date, titre, cause, remede, extrait, score }] }] }`, `portee` ∈
-  `equipement`, `modele`, `parc` dans cet ordre (sans `equipementId` : `parc` seul) ; un résultat n'est
-  que dans la première portée qui le contient ; `limite` 10 par portée.
-- **Documents indexés** : chaque OT clôturé (titre, travail à faire, compte rendu, libellés des trois
-  codes, symptôme et description de la DI d'origine) ; chaque synthèse **validée** (`type` = `synthese`,
-  mène à la page). Index construit à la première recherche, refait quand `ordres_travail`, `demandes`,
-  `codes_defaillance` ou `wiki_syntheses` changent (`Donnees.evenements`).
-- **Mots** : forme comparable (minuscules, sans accents), mots de 2 lettres au moins, `Wiki.MOTS_VIDES`
-  retirés, pluriel simple (`s` ou `x` final retiré au-delà de 3 lettres) ; **`Wiki.LEXIQUE`** : groupes
-  de mots du dépannage équivalents pour la recherche (bruit, grincement, grince, claquement, claque,
-  cognement, cogne, sifflement, siffle ; fuite, fuit, suintement, suinte, goutte ; chauffe, surchauffe,
-  chaud, temperature ; vibration, vibre, balourd ; bloque, blocage, coince, grippe ; casse, rupture,
-  fissure ; arret, stoppe, ne demarre pas ; pression, manque de pression ; usure, use) — écrit dans le
-  code, listé dans le guide ; un mot du lexique cherche aussi ses équivalents (poids 0,7).
-- **Classement** BM25 (k1 = 1,2, b = 0,75) ; extrait de 160 caractères autour du premier mot trouvé,
-  mots surlignés par `<mark>` (texte échappé par `UI.html`). Aucun appel réseau ; budget D101.
+### 20.4 Texte d'une page : balisage et rubriques
+- Lignes **`## <Rubrique>`** puis **`- <phrase> [OT-AAAA-NNNN] [OT-…]`** ; un lien s'écrit **`[[<titre exact
+  d'une page>]]`** dans une phrase ; rien d'autre (une ligne vide est ignorée). Rubriques vides omises,
+  ordre fixe par type (`Wiki.RUBRIQUES`) :
+  - équipement : « Ce qui revient », « Ce qui a réglé le problème », « À surveiller », « Astuces » ;
+  - composant : « Défaillances », « Signes d'usure », « Montage et remplacement », « Équivalences » ;
+  - mode : « Symptômes », « Causes », « Remèdes », « Équipements concernés » ;
+  - savoir-faire : « Quand le faire », « Étapes », « Pièces et outillage », « Pièges ».
+- `Wiki.lireTexte(texte)` → `{ rubriques: [{ nom, phrases: [{ texte, ot, liens }] }], erreurs }` ;
+  `Wiki.ecrireTexte(rubriques, type)` → le balisage. Affichage par `textContent` (liens et OT cités en
+  éléments construits), jamais en HTML.
+- **Identité d'une phrase** : forme comparable de son texte sans citations ni crochets de lien.
 
-### 20.7 Écrans (`wiki-ecrans.js`, `wiki-synthese.js`)
-- **`#/wiki`** : champ de recherche (portée parc), puis la liste des équipements qui ont au moins un OT
-  clôturé : repère, désignation, pannes sur 12 mois, état de la synthèse (badge texte + couleur :
-  aucune, à valider, validée, à revoir) ; le responsable a un filtre « À valider ou à revoir » (sa file
-  de relecture, triée par nombre de pannes, avec le compte) ; tri par pannes décroissantes.
-- **`#/wiki/<équipement>`**, de haut en bas : en-tête (repère, désignation, lien vers la fiche) ;
-  **Consignation** (`#wiki-consignation`, texte humain tel quel, document, ou le message d'absence et,
-  au responsable, le lien de modification de la fiche) ; recherche limitée à l'équipement ; **Pannes
-  habituelles** ; **Pièces consommées** ; **Dernières interventions** ; **Même marque et modèle** ;
-  enfin **Synthèse [IA]** (`#wiki-synthese`), séparée par un titre et un fond distinct : bandeau
-  « [IA] Synthèse proposée par <modèle> le <date> — validée par <nom> le <date> » (ou « — à valider », ou
-  « — corrigée par <nom> le <date>, à valider ») ; « n interventions depuis cette synthèse » si
-  `depuis` > 0 ; les puces avec leurs OT cités en liens (sans lien pour le demandeur).
-- **Responsable** : « Proposer une synthèse » (bouton `Ia.emplacement`, présent seulement si
-  `peutProposer` et l'IA utilisable ; version web : message du lot 4) → encadré du §17.4 avec la
-  proposition déjà contrôlée, **Enregistrer (à valider)**, **Valider**, **Modifier** (zone de texte, puis
-  contrôle §20.4 et enregistrement « à valider »), **Ignorer** ; sur une synthèse existante : « Valider »
-  (si « à valider »), « Modifier », « Proposer une nouvelle synthèse ». Historique des synthèses
-  remplacées dans un détail repliable.
-- **Champ de recherche réutilisable** `Wiki.champRecherche({ equipementId, texteInitial, titre })` →
-  élément (champ `type="search"` `data-hors-saisie`, résultats sous le champ, recherche après 300 ms
-  sans frappe) ; posé dans l'**onglet Préparation de l'OT** (pré-rempli avec le titre, titre « Chercher
-  dans l'historique ») et dans la **saisie d'une DI** une fois l'équipement choisi (pré-rempli avec le
-  symptôme, titre « Déjà vu sur cette machine ? ») ; une ligne d'appel dans `ordres-onglets.js` (686
-  lignes) et `demandes-signaler.js`. Le demandeur voit les résultats sans lien vers les OT.
-- Design : style actuel (cartes, badges, jetons des deux thèmes), 1440 et 375 px sans défilement
-  horizontal de la page, zones tactiles ≥ 48 px, contrastes AA en thème clair (CS104).
+### 20.5 Ingestion (`wiki-ingestion.js`, D104, D111, D112)
+- **File** : `Wiki.mettreEnFile(otIds)` crée une entrée `ingestion` « en file » par OT **clôturé
+  administrativement** qui n'a pas déjà une entrée `en file`, `à valider`, `validée`, `rien à ajouter` ou
+  `refusée` ; appelée **après** le passage réussi à « Clôturé administrativement » (`ordres-ecritures.js`,
+  une ligne ; un échec n'annule pas la clôture : message, et l'OT apparaît dans « hors du wiki »).
+  `Wiki.horsDuWiki({ equipementId })` → OT clôturés administrativement sans entrée (historique, import du
+  lot 5) ; le responsable les ajoute, en tout ou par équipement, après avoir vu leur nombre.
+- **Ordre** (D111) : entrées `en file` et `à refaire` triées par `date_intervention` (`date_fin` de l'OT ;
+  un OT importé en a toujours une) puis `ot_id` ; jamais par saisie ni par clôture.
+- **État proposé** `Wiki.etatPropose()` : pages validées, puis les changements des entrées « à valider »
+  appliqués dans l'ordre de `ordre` (D105). Les requêtes sont construites sur cet état.
+- **Pages concernées** `Wiki.pagesConcernees(otId, etat)` (D112) → `{ cles, envoyees }` : `cles` = `EQ:<id>`
+  de son équipement, `ART:<id>` de chaque article consommé, `CAUSE:<code>` de sa cause, `WP:<id>` des
+  savoir-faire rattachés à cet équipement ou à ces articles, des modes ancrés sur sa cause et des pages liées
+  depuis la page de l'équipement ; `envoyees` = ces pages (texte de l'état proposé, vide si aucun), dans cet
+  ordre de priorité, `pagesEnvoyeesMax` au plus.
+- **Antériorité** (D111) : `anterieure` = la date d'intervention de l'OT est plus ancienne que celle d'au
+  moins un OT cité dans ses pages envoyées (état proposé).
+- **Données** `Wiki.donneesIngestion(otId, etat)` (liste blanche, CS99) : `{ ot: { id, dateIntervention, type,
+  equipement: { repere, designation, marque, modele }, titre, travail, symptome, cause, remede (libellés),
+  compteRendu, astuce, pieces: [{ designation, reference, quantite }], dureeArret, symptomeDI },
+  anterieure, pages: [{ titre, type, texte, otDates: [{ id, date }] }], catalogue: [{ titre, type }] }` ;
+  **jamais** les noms des techniciens ou des demandeurs, les coûts, les documents, les photos.
+- **Consigne** `Ia.PROMPTS.ingestionWiki` (`ia-prompts.js`) : première ligne « Fonction : ingestionWiki » ;
+  règles communes ; tâche : intégrer cet OT aux pages fournies — modifier une page envoyée en rendant son
+  texte complet, ou créer au plus `pagesCreeesMax` pages (mode, savoir-faire, composant sans article) ;
+  chaque phrase cite au moins un OT (cet OT ou un OT déjà cité dans les pages) ; ne jamais retirer une
+  phrase ni un OT cité (une phrase reformulée garde tous ses OT) ; ce qui contredit une phrase existante va
+  dans `contradictions`, la phrase reste ; aucun comptage, aucune date, aucun nombre absent de l'OT ou des
+  pages ; « fréquent ici », jamais « cause certaine » ; **les pages savoir-faire s'écrivent d'abord à partir
+  de l'astuce** ; aucune consigne de sécurité ; si `anterieure` : « intervention antérieure à des faits déjà
+  intégrés », ne jamais présenter cette information comme la plus récente ; « rien à ajouter » si l'OT
+  n'apprend rien.
+- **Réponse attendue** (schéma de `Ia.requete`) : `{ rien_a_ajouter, pages: [{ action: 'modifier' | 'creer',
+  titre, type, rattache_a, rubriques: [{ rubrique, phrases: [{ texte, ot: [identifiant] }] }] }],
+  contradictions: [{ page, phrase, observation, ot: [identifiant] }] }` ; `ot` : `enum` des identifiants
+  permis (cet OT et ceux des pages envoyées).
+- **Lecture** : `Ia.lireReponse('ingestionWiki', contenu, donnees)` → `verifier` = `Wiki.lireIngestion` :
+  mise en forme (§20.4) puis contrôles (§20.6) → `{ changements, contradictions, rien }`, ou
+  `IaReponseInvalide` avec les raisons.
+- **Envoi** : `Ia.envoyer(requete, signal)` → `{ contenu, modele }` (nouvelle ; la partie réseau de
+  `Ia.demander`, qui l'appelle : même comportement, même autorisation D67, même délai).
+- **Ordonnanceur** `Wiki.prochainsEnvois(file, enCours)` (D112) : parcourt la file dans l'ordre ; un OT part
+  si moins de `agentsSimultanes` sont en cours et si **aucune de ses `cles`** n'est prise par un OT en cours
+  **ni par un OT plus ancien de la file resté en attente**. `Wiki.traiterFile({ appeler, surProgres, signal
+  })` : boucle jusqu'à file vide ou arrêt ; `appeler(requete, donnees, signal)` → `{ contenu, modele }`,
+  par défaut `Ia.envoyer` (l'outil de la démo en donne un autre, §20.10). Résultat : acceptée → entrée « à
+  valider » (`changements`, `contradictions`, `modele`, `anterieure`, `ordre` suivant, `traite_le`) ;
+  « rien à ajouter » → statut du même nom ; refusée → « refusée » avec `raisons`, `essais` + 1 ; collision
+  (page libre créée entre-temps, D112) → « en file » à nouveau, `motif` « rejoué : page créée entre-temps » ;
+  IA injoignable → arrêt, l'OT reste « en file ».
 
-### 20.8 Démo (D98)
-- **Requêtes** : `Wiki.requetesDemo()` (`wiki-synthese.js`) → pour chaque équipement où `peutProposer`,
-  `{ equipementId, repere, requete: Ia.requete('syntheseWiki', donnees), otSources }` ;
-  `outils/wiki_demo.py exporter` ouvre la démo dans Chromium (Playwright, horloge fixée à la date de
-  référence) et écrit une requête par fichier dans `.chantier/wiki-demo/requetes/<repère>.json`.
-- **Rédaction** (orchestrateur) : un sous-agent Claude Code par requête, qui reçoit la phrase fixe
-  « Réponds exactement comme l'API à cette requête, sans utiliser d'outil. » suivie du JSON de la
-  requête (messages et schéma), rien d'autre ; sa réponse brute est écrite telle quelle dans
-  `.chantier/wiki-demo/reponses/<repère>.txt` ; le nombre d'appels d'outils de chaque sous-agent est
-  noté dans `.chantier/wiki-demo/JOURNAL.md` (attendu : 0) avec le modèle utilisé.
-- **Lecture** : `outils/wiki_demo.py importer --modele "<libellé>"` repasse chaque réponse par
-  `Ia.lireReponse('syntheseWiki', …)` dans la page (même circuit que le produit), écrit les verdicts
-  (`verdicts.json` : accepté, ou refusé et ses raisons) et, pour les acceptées, les lignes « à valider »
-  dans le fichier figé **`outils/demo_wiki_syntheses.csv`** (versionné). **Une réponse refusée = défaut de
-  la fonction** (consigne ou analyse) : corrigé dans le code, la requête est réexportée et rejouée par un
-  nouveau sous-agent ; aucun texte n'est retouché à la main.
-- **Relecture** : `outils/wiki_demo.py relecture` écrit `.chantier/wiki-demo/relecture.html` (chaque
-  synthèse à côté de ses OT cités, en entier) ; Nicolas dit pour chacune « validée », « laissée à
-  valider » (deux, à son choix) ou « rejetée » (→ consigne corrigée, requête rejouée) ; `outils/wiki_demo.py
-  valider <repère>…` applique ses choix au fichier figé (`valide_par` = le responsable fictif de la démo,
-  date = date de référence).
-- `outils/generer_demo.py` copie `outils/demo_wiki_syntheses.csv` dans `donnees/demo/wiki_syntheses.csv`
-  et `js/demo-donnees.js` **sans jamais les régénérer** ; il vérifie que chaque OT cité existe et
-  appartient à l'équipement (arrêt sinon) ; `version_schema` = 3 ; deux exécutions donnent des fichiers
-  identiques à l'octet. Le décalage des dates de la démo (§11) s'applique aussi à ses champs date.
-- **Mention** dans « À propos » et dans le guide : « Synthèses de démo rédigées par Claude avec le prompt
-  de Prévo » ; le champ `modele` porte le modèle réellement utilisé par les sous-agents.
-- **Essai réel D102** : `PREVO_TEST_IA=1` passe les mêmes requêtes par qwen2.5:7b (Ollama du PC) :
-  proportion acceptée par les contrôles, motifs de refus, temps médian, comparés aux réponses des
-  sous-agents ; chiffres dans le guide (§ du wiki) et le PILOTAGE.
+### 20.6 Contrôles d'une proposition (`wiki-texte.js`, D97, D106, D111)
+`Wiki.controlerProposition(proposition, contexte)` → `{ ok, raisons: [texte] }` ; chaque raison nomme la
+page. Refus si :
+- forme : rubrique hors de `Wiki.RUBRIQUES` du type ; page modifiée qui n'était pas envoyée ; création d'un
+  type interdit (équipement, ou composant d'un article) ; savoir-faire sans rattachement à une page envoyée ;
+- citations : phrase sans OT ; OT cité hors des OT permis ;
+- **non-retrait** : un OT cité avant disparaît de la page ; une phrase existante n'est ni identique ni
+  **reprise** (une phrase nouvelle la reprend si elle cite tous ses OT) ;
+- **nombres** : un nombre (chiffres, virgule ou point) absent du texte de l'OT ingéré (tous les champs
+  envoyés) et du texte précédent de la page ; les citations et les crochets de lien ne comptent pas ;
+- **comptage** : « <nombre ou nombre en lettres> fois | OT | interventions | pannes | cas | remplacements » ;
+- **dates** : année 19xx ou 20xx hors citation, nom de mois, date en chiffres ;
+- **nouveauté** (D111) : pour un OT `anterieure`, une phrase nouvelle ou reprise dont l'OT cité le plus récent
+  (date d'intervention) est cet OT et qui emploie `Wiki.VOCABULAIRE_NOUVEAUTE` (désormais, dorénavant,
+  maintenant, actuellement, à présent, aujourd'hui, récemment, dernièrement, depuis peu, le plus récent,
+  la plus récente, dernier, dernière, derniers, dernières) ;
+- sécurité : un terme de `Wiki.VOCABULAIRE_SECURITE` (liste et règle de la première version) ;
+- longueurs : plus de `phrasesMax` phrases ou de `motsMax` mots (citations exclues) dans une page ; plus de
+  `pagesCreeesMax` pages créées ;
+- liens : `[[titre]]` qui n'est ni au catalogue ni créé par la proposition ;
+- titres : titre créé dont la forme de recherche (mots vides retirés, pluriel simple, §20.8) égale celle
+  d'une page existante (« titre trop proche ») ;
+- contradictions : `phrase` qui n'est pas une phrase existante de la page ; `ot` autre que l'OT ingéré.
 
-### 20.9 Tests du lot 6
-`test_wiki_regles.py` (couche calculée contre `calcul_wiki.py`, contrôles du §20.4, défauts injectés),
-`test_wiki_synthese.py` (faux fournisseur : requête envoyée — ni nom ni coût —, refus, enregistrement,
-statuts, visibilité par profil, journal, modes serveur, dossier et démo, version web sans appel),
-`test_wiki_recherche.py` (corpus d'essai, lexique, pluriels, accents, portées, aucun appel réseau),
-`test_wiki_ecrans.py` (écrans, liens, 1440 et 375 px, contrastes, champ de recherche dans l'OT et la DI),
-`test_version_schema.py` et `test_schema.py` (format 3, passage depuis 1 et 2, sauvegarde « avant format
-3 », aucun autre fichier changé), `test_wiki_demo.py` (fichier figé, citations, régénération à l'octet,
-mention), `test_performance.py` (D101), `test_recette_lot6.py` (parcours complet). Le faux fournisseur
-(`tests/faux_fournisseur_ia.py`) rend une réponse `syntheseWiki` valable, et sur demande une réponse
-piégée (OT inventé, puce sans OT, trop longue, consigne de sécurité).
+Écriture à la main (`contexte.manuel`) : mêmes contrôles, sauf le non-retrait ; les OT permis sont tous les
+OT clôturés ; pour les nombres, le texte de référence est celui des OT cités.
+
+### 20.7 Journal, validation, contradictions, écriture à la main (`wiki-journal.js`)
+Toutes les écritures par `Donnees.modifier` (contrôle de version, journal général), **responsable
+seulement** (même refus que les écrans réservés) :
+- **`Wiki.valider(ids)`** : dans l'ordre de `ordre` ; refusé si une entrée « à valider » plus ancienne touche
+  une même page. Pour chacune : (1) **une** écriture de `wiki_pages` — chaque page du changement doit avoir
+  `version` = `version_avant` (sinon l'entrée passe « à refaire ») ; texte, `ot_cites`, `liens`, `version` +
+  1, `origine`, `modele`, `derniere_entree`, `valide_par`, `valide_le` ; (2) l'entrée passe « validée »
+  (`decide_par`, `decide_le`). Si (2) échoue, **rattrapage** au prochain affichage : une entrée « à valider »
+  dont l'identifiant est le `derniere_entree` de ses pages est marquée « validée ».
+- **`Wiki.rejeter(id, motif)`** : « rejetée » ; les entrées « à valider » suivantes qui touchent une même page
+  passent « à refaire » (leurs changements sont abandonnés, leur OT est retraité sur le nouvel état) ;
+  `Wiki.remettreEnFile(id)` relance un OT rejeté ou refusé.
+- **`Wiki.ecrire({ pageId | nouvelle }, texte)`** : contrôles §20.6 (`manuel`) ; page écrite (`origine` mise
+  à jour) et entrée `manuel` « appliquée » avec avant et après ; les entrées « à valider » qui touchent la
+  page passent « à refaire ». Créer une page de n'importe quel type et archiver une page passent par là.
+- **`Wiki.trancher(entreeId, rang, decision, note)`** : `decision` ∈ `ancien`, `nouveau`, `les deux` ; la
+  contradiction est fermée (`decision`, `decide_par`, `decide_le`) et une entrée `décision` « appliquée » la
+  trace ; `nouveau` ouvre ensuite l'écriture à la main de la page. Une contradiction venue d'un OT
+  `anterieure` est présentée comme « observation antérieure aux faits de la page » (D107).
+- **Visibilité** : pages validées et encadré « À trancher » pour tous les profils (boutons au responsable) ;
+  propositions, journal, file : responsable seulement.
+- **Intégrité** `Wiki.verifierIntegrite()` → `{ ok, ecarts }` : pour chaque page, les entrées appliquées dans
+  l'ordre de `ordre` forment une chaîne (l'« avant » de chacune est l'« après » de la précédente ; le texte
+  de la page est l'« après » de la dernière) ; les OT intégrés à une page le sont par date d'intervention
+  croissante, sauf les entrées `anterieure` ; jamais deux entrées d'un même passage en cours avec une page
+  commune (CS111).
+
+### 20.8 Recherche (`wiki-recherche.js`, sans IA, D99)
+Comme dans la première version (forme comparable, mots vides, pluriel simple, `Wiki.LEXIQUE`, BM25, portées
+équipement → même marque et modèle → parc, extraits surlignés, aucun appel réseau), avec : l'**astuce** dans
+le document de chaque OT clôturé ; les **pages validées** (titre et texte, `type` = `page`, mènent à la page)
+à la place des synthèses ; index refait quand `ordres_travail`, `demandes`, `codes_defaillance` ou
+`wiki_pages` changent.
+
+### 20.9 Écrans (`wiki-ecrans.js`, `wiki-journal-ecrans.js`)
+- **`#/wiki`** : recherche (portée parc) ; quatre sections — Équipements, Composants, Modes de défaillance,
+  Savoir-faire — avec leur nombre de pages, chaque page avec son titre et son nombre d'OT cités. Au
+  responsable, en tête : « À valider », « Contradictions ouvertes », « En file » (bouton « Traiter la
+  file »), « En échec », « Hors du wiki » (bouton « Ajouter à la file »), « Contrôle du wiki » (D108), chacun
+  avec son nombre et son lien.
+- **`#/wiki/<id>`**, de haut en bas : en-tête (type, titre, lien vers la fiche) ; pour un savoir-faire,
+  l'`entete` du §20.3 ; la **couche calculée** ; le **texte** par rubrique (OT cités en liens, sans lien pour
+  le demandeur ; liens vers les pages), précédé du bandeau d'origine « Rédigé avec l'IA (<modèle>) à partir
+  des OT cités — validé par <nom> le <date> » ou « Écrit par <nom> le <date> » ; l'encadré **« À
+  trancher »** ; **« Pages qui renvoient ici »** ; au responsable : « Modifier », propositions en attente sur
+  cette page.
+- **`#/wiki-journal`** (responsable) : les entrées par statut (à valider d'abord, puis refusées, puis
+  toutes) ; pour une proposition : OT (lien), date d'intervention, « intervention antérieure » s'il y a lieu,
+  modèle ; **contradictions en tête** ; par page, les **changements** : phrases identiques repliées, phrases
+  nouvelles surlignées, phrases reprises avec l'ancienne forme barrée ; pages créées en entier ; boutons
+  **Valider**, **Rejeter** (motif), cases à cocher et « Valider les propositions sélectionnées » (sans
+  contradiction). « Traiter la file » : progression (en cours, au plus `agentsSimultanes` ; restants ;
+  refusées), **Arrêter** (les envois en cours finissent, rien d'autre ne part) ; version web : message du lot
+  4. Écriture à la main : zone de texte du balisage, aide, contrôles à l'enregistrement. **Contrôle du
+  wiki** (D108) : liens cassés, pages orphelines, pages sans OT cité, titres trop proches, pages trop
+  longues, contradictions anciennes, ancrages disparus — calculé à l'ouverture, rien corrigé tout seul.
+- **OT** : champ « Astuce pour la prochaine fois » dans l'onglet Compte rendu, sous le compte rendu, mêmes
+  règles d'édition que lui (aide : « Ce qui vous aurait fait gagner du temps. Les consignes de sécurité
+  restent dans la consignation de l'équipement. ») ; montré sur l'OT clôturé ; jamais exigé (RG4 inchangée).
+- Design : style actuel, 1440 et 375 px sans défilement horizontal, zones tactiles ≥ 48 px, contrastes AA
+  (CS106).
+
+### 20.10 Démo (D98, D109, D110, D112)
+- **Générateur** (`outils/generer_demo.py`) : un générateur à part (`GRAINE_LOT6`) ajoute des **astuces** à
+  une partie des OT correctifs (textes écrits dans les scénarios, comme les comptes rendus) et **deux OT de
+  scénario** à la fin de l'historique, clôturés administrativement, qui contredisent ce que l'atelier
+  croyait (PO-02 : la fuite revient, la cause trouvée est le désalignement de l'accouplement ; un second sur
+  un autre équipement). Le reste du jeu ne change pas, sauf la colonne `astuce` et les numéros d'OT suivants.
+  Les tables du wiki viennent des fichiers figés **`outils/demo_wiki_pages.csv`** et
+  **`outils/demo_wiki_journal.csv`** (versionnés), copiés dans `donnees/demo/` et `js/demo-donnees.js` sans
+  jamais être régénérés ; contrôle : OT cités et pages liées existants (arrêt sinon) ; deux exécutions
+  donnent des fichiers identiques à l'octet ; le décalage des dates (§11) s'applique aux champs date du
+  journal et des pages.
+- **Fabrication** `py outils/wiki_demo.py fabriquer [--agents 5]` : démo **sans wiki** ouverte dans Chromium
+  (Playwright, horloge à la date de référence) ; les 227 OT clôturés administrativement mis en file
+  (`Wiki.mettreEnFile`) ; **`Wiki.traiterFile`** de Prévo avec un `appeler` relié à Python
+  (`expose_function`) qui lance, pour chaque requête, **un agent neuf** :
+  `claude -p --model sonnet --tools "" --system-prompt <message système de la requête> --setting-sources ""
+  --strict-mcp-config --no-session-persistence --disable-slash-commands --output-format json`, avec le
+  message utilisateur de la requête sur l'entrée standard, **octet pour octet**. **Claude Sonnet
+  seulement** : jamais Ollama, qwen ni modèle local. Pour chaque appel, la trace
+  (`.chantier/wiki-demo/chaine/<OT>.json`) garde la requête, la réponse brute, le modèle relevé
+  (`modelUsage`), le nombre de tours, les jetons, le coût et la durée ; **un modèle autre que Sonnet ou plus
+  d'un tour arrête la fabrication**. Une réponse déjà obtenue pour une requête identique à l'octet est
+  reprise de la trace (reprise après correction, sans nouvel appel ; marqué dans la trace). Chaque
+  proposition acceptée est validée au nom du responsable fictif, sauf si sa date d'intervention est dans les
+  `demoAValiderJours` derniers jours (laissée « à valider ») ; **une réponse refusée arrête la fabrication** :
+  défaut de la fonction, corrigé dans le code, puis la fabrication reprend. À la fin : `Wiki.verifierIntegrite`
+  doit être `ok`, puis `figer` écrit les deux fichiers.
+- `py outils/wiki_demo.py relecture` → `.chantier/wiki-demo/relecture.html` : les pages **par type**
+  (équipement, composant, mode, savoir-faire), **les plus riches d'abord** (nombre d'OT cités distincts,
+  puis nombre de phrases), chacune avec sa couche calculée résumée, ses OT cités en entier (compte rendu et
+  astuce) et ses contradictions en tête. Ce que Nicolas refuse est corrigé dans la fonction, puis la
+  fabrication est rejouée ; aucune page retouchée à la main.
+- **Mention** dans « À propos » et le guide : « Wiki de démo construit par Claude (<modèle>) avec la consigne
+  de Prévo, un agent par OT, dans l'ordre des interventions ». La démo en ligne n'appelle aucune IA.
+
+### 20.11 Tests du lot 6
+`test_version_schema.py` et `test_schema.py` (format 3, 24 tables, colonne `astuce`, passages depuis 1 et
+2) ; `test_wiki_socle.py` (routes, profils, export ZIP) ; `test_wiki_regles.py` et `test_wiki_calculs.py`
+(couches calculées contre `calcul_wiki.py`, CS97, CS98) ; `test_wiki_controles.py` (chaque motif du §20.6 par
+un défaut injecté, CS100) ; `test_wiki_ingestion.py` (liste blanche, pages concernées, ordre, antériorité,
+ordonnanceur, faux fournisseur, CS99, CS110) ; `test_wiki_journal.py` (validation, rejet, à refaire,
+rattrapage, écriture à la main, contradictions, visibilité, modes serveur, dossier et démo, CS101, CS102) ;
+`test_wiki_parallele.py` (1 agent contre 5 : même wiki, intégrité, jamais deux envois sur une même page,
+jamais plus de 5, CS111) ; `test_wiki_recherche.py` (astuce et pages, CS104) ; `test_wiki_ecrans.py` et
+`test_wiki_journal_ecrans.py` (écrans, 1440 et 375 px, contrastes, origine, liens, CS103, CS106) ;
+`test_wiki_astuce.py` (champ, aide, export, CS109) ; `test_wiki_demo.py` (fichiers figés, citations,
+intégrité du journal de démo, traces : Sonnet, un tour, régénération à l'octet, mention, CS105, CS111) ;
+`test_performance.py` (D101) ; `test_recette_lot6.py` (parcours complet). Le faux fournisseur
+(`tests/faux_fournisseur_ia.py`) rend pour `ingestionWiki` une réponse valable construite sur les données
+reçues, et sur demande une réponse piégée par motif du §20.6.
