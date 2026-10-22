@@ -103,8 +103,8 @@
 .wiki-recherche-demande { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--trait-2); }
 .wiki-recherche-demande .wiki-recherche-titre { font-size: 1rem; }
 
-/* Fiche équipement : lien « Wiki de cet équipement » sous les badges de l'en-tête */
-#lien-wiki-equipement { display: inline-flex; align-items: center; gap: .4rem; min-height: var(--tactile); font-weight: 600; }
+/* Fiches équipement et article : liens « Wiki de cet équipement » et « Wiki de cet article » */
+#lien-wiki-equipement, #lien-wiki-article { display: inline-flex; align-items: center; gap: .4rem; min-height: var(--tactile); font-weight: 600; }
 
 /* =========================================================================================
    4. Téléphone (≤ 640 px) : une colonne, zones tactiles de 48 px
@@ -121,5 +121,5 @@
 }
 
 @media print {
-  .wiki-recherche, .wiki-recherche-demande, #lien-wiki-equipement { display: none !important; }
+  .wiki-recherche, .wiki-recherche-demande, #lien-wiki-equipement, #lien-wiki-article { display: none !important; }
 }
