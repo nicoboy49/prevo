@@ -563,6 +563,32 @@ trois choix de l'écran sont gardés (seuls les champs encore libres sont propos
 confirmer » est importée telle quelle avec un avertissement, la correspondance est retenue sur le poste dès
 « Continuer »).
 
+### Les chiffres
+
+- **18 tâches** (T77 à T94) en **13 vagues**, chacune validée par l'outil de vérification ; six se sont
+  ajoutées en cours de lot à la demande de Nicolas (refonte de l'accueil en trois tâches, contrôles des
+  formulaires à l'import) ou pour tenir la suite complète en quatre vérifications de moins de 10 minutes.
+- **28 commits** depuis la version 1.0.0 avant la clôture : 18 de tâches, 8 de la passe de lancement
+  (licence, README, modèles d'issues, CHANGELOG, rangement, démo en ligne), le contrat du lot et une
+  correction de test.
+- **1 070 tests** dans la suite (907 à la fin du lot 4), partagée en quatre vérifications : 330, 282 et
+  458 tests (a-h, i-o, p-z) ; l'essai réel d'Excel reste lancé à part.
+- **Plus de 100 défauts injectés** volontairement pour prouver que les tests savent échouer, dont un par
+  l'orchestrateur sur chaque tâche d'un sous-agent ; 5 n'étaient pas détectés au premier essai et ont
+  reçu un test ou un cas de plus.
+- **Environ 2 850 lignes** de code pour l'import (huit fichiers `import-*.js`), 4 200 lignes ajoutées à
+  l'application en tout (accueil repensé compris) et 7 200 lignes de tests ; aucune bibliothèque nouvelle
+  hormis SheetJS CE 0.20.3 (empreinte vérifiée), chargée seulement à la première lecture d'un tableur.
+- **Recette** sur une base vide : un atelier complet repris depuis les dix fichiers d'essai (dont un par
+  l'écran de bout en bout et un collé) ; réimport complet : **0 fiche créée** ; annulation : fichiers
+  rendus à l'octet ; l'historique importé compte dans les indicateurs (MTBF 718,8 h, MTTR 2,5 h,
+  disponibilité 99,8 % sur l'équipement témoin, égaux au calcul Python).
+- **Performance** sur le jeu de charge (500 équipements, 5 000 OT) : premier chargement 1,4 s et 0,76 s
+  ensuite (budget 2 s), sans SheetJS ; import de 5 000 articles : aperçu 0,5 s (budget 3 s), écriture
+  1,1 s (budget 5 s) ; de 5 000 OT d'historique : aperçu 0,75 s, écriture 1,8 s.
+- **Durée** : du contrat du lot (21 octobre 2026, 18 h 06) au dernier commit avant la clôture (22 octobre,
+  9 h 01), nuit comprise.
+
 ### Ce que les relectures et la recette ont trouvé
 
 Les **fichiers d'essai**, écrits avant le code de lecture, ont trouvé dans la bibliothèque SheetJS trois
@@ -592,8 +618,16 @@ consignés dans `docs/ARCHITECTURE.md` (§18).
 Hors du lot, trois échecs ont été trouvés en chemin : un test de l'IA du lot 4 échouait selon la
 charge du poste (une attente fixe dans le test ; c'est très probablement l'échec isolé vu au
 lot 4) ; un test du planning échouait selon la date du jour, sur la version 1.0.0 aussi (horloge
-désormais fixée) ; le premier chargement de la démo, génération du préventif comprise, dépassait son
-budget, déjà sur la version précédente : la recette du lot en cherche la cause.
+désormais fixée) ; le premier chargement d'une grande base, génération du préventif comprise, dépassait
+son budget, déjà sur la version précédente. La recette en a trouvé la cause **par la mesure** (profil du
+navigateur) et non par supposition : à chaque ordre de travail préventif créé à l'ouverture, Prévo
+relisait toute la table pour choisir l'identifiant suivant. Corrigé (un seul parcours), le premier
+chargement passe de 1,5 à 2 s environ à 1,4 s ; aucun budget n'a été relevé.
+
+La suite complète a enfin montré qu'avec les contrôles des formulaires, la ligne d'exemple du modèle des
+codes de défaillance (« Corrosion ») était refusée, ce libellé existant déjà dans la démo : l'exemple a
+été changé. C'est le rôle de la suite complète : voir ce que les tests de chaque tâche, lancés seuls, ne
+voient pas.
 
 ### Les preuves propres au lot 5
 
@@ -612,6 +646,10 @@ budget, déjà sur la version précédente : la recette du lot en cherche la cau
   de cellule repérable n'apparaît jamais dans la requête.
 - **Disponibilité** : les tests de la nouvelle règle ont été écrits avant le code et échouaient sur
   l'ancien calcul ; le calcul Python indépendant des indicateurs du lot 3 suit la même règle.
+- **Recette d'un atelier complet** (`tests/test_recette_lot5.py`) : base vide reprise depuis les fichiers
+  d'essai en mode serveur, réimport sans création, annulation à l'octet, historique compté dans les
+  indicateurs, les causes fréquentes et les suggestions ; sur la démo, chaque fichier donne les totaux
+  annoncés par son mode d'emploi.
 
 ## 12. À retenir pour piloter une IA
 
