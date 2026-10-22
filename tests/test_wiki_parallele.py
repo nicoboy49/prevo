@@ -31,10 +31,21 @@ INGERER_JS = """async (agents) => {
   const ids = Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement').map((o) => o.id);
   await Wiki.mettreEnFile(ids);
   let n = 0;
-  const bilan = await Wiki.traiterFile({ agents, appeler: async (requete, donnees, annuler) => {
+  let enVol = 0;
+  let enVolMax = 0;
+  const messages = {};
+  // agents absent : le plafond par défaut de Prévo (Wiki.SEUILS.agentsSimultanes), comme l'écran.
+  const bilan = await Wiki.traiterFile({ agents: agents || undefined, appeler: async (requete, donnees, annuler) => {
     n += 1;
-    if (agents > 1) await new Promise((r) => setTimeout(r, (n * 37) % 23));      // réponses dans le désordre
-    return Ia.envoyerRequete(requete, annuler);
+    enVol += 1;                                   // appels en cours, comptés ici, hors de la comptabilité de Prévo
+    enVolMax = Math.max(enVolMax, enVol);
+    messages[donnees.ot.id] = requete.messages[1].content.split('\\nCatalogue des pages :')[0];
+    try {
+      if (agents !== 1) await new Promise((r) => setTimeout(r, (n * 37) % 23));      // réponses dans le désordre
+      return await Ia.envoyerRequete(requete, annuler);
+    } finally {
+      enVol -= 1;
+    }
   } });
   const aValider = Donnees.lignes('wiki_journal').filter((e) => e.statut === 'à valider').map((e) => e.id);
   const validation = await Wiki.valider(aValider);
@@ -48,7 +59,8 @@ INGERER_JS = """async (agents) => {
     propositions: Object.fromEntries(Donnees.lignes('wiki_journal').filter((e) => e.nature === 'ingestion')
       .map((e) => [e.ot_id, { statut: e.statut, anterieure: e.anterieure,
         apres: JSON.parse(e.changements || '[]').map((c) => [c.titre, c.apres]) }])),
-    agentsMax: Wiki.SEUILS.agentsSimultanes,
+    agentsMax: Wiki.SEUILS.agentsSimultanes, enVolMax, messages,
+    dates: Object.fromEntries(Donnees.lignes('ordres_travail').map((o) => [o.id, o.date_fin])),
   };
 }"""
 
@@ -90,7 +102,7 @@ class TestParallele(CasNavigateur):
         seul = self.ingerer(1)
         agents = seul["agentsMax"]
         self.assertEqual(agents, 5)
-        plusieurs = self.ingerer(agents)
+        plusieurs = self.ingerer(None)                    # plafond par défaut de Prévo
         for nom, resultat in (("1 agent", seul), ("%d agents" % agents, plusieurs)):
             with self.subTest(nom):
                 self.assertIsNone(resultat["erreur"])
@@ -99,15 +111,26 @@ class TestParallele(CasNavigateur):
                 self.assertEqual((resultat["refusees"], resultat["rejouees"]), (0, 0))
                 self.assertEqual((resultat["validees"], resultat["aRefaire"]), (resultat["acceptees"], 0))
                 self.assertEqual(resultat["integrite"], {"ok": True, "ecarts": []})
-                # Jamais deux envois en cours qui partagent une clé.
+                # Pour deux envois qui partagent une clé (page ou cause, articles compris) : le plus ancien (date
+                # d'intervention, puis numéro d'OT) a fini avant que le plus récent parte — jamais ensemble, jamais
+                # dans le désordre.
                 envois = resultat["envois"]
+                rang = lambda e: (resultat["dates"][e["ot"]], e["ot"])  # noqa: E731
                 for n, a in enumerate(envois):
                     for b in envois[n + 1:]:
                         if set(a["cles"]) & set(b["cles"]):
-                            self.assertTrue(a["fin"] < b["debut"] or b["fin"] < a["debut"], (a, b))
+                            ancien, recent = (a, b) if rang(a) < rang(b) else (b, a)
+                            self.assertLess(ancien["fin"], recent["debut"], (ancien, recent))
         self.assertEqual(simultanes(seul["envois"]), 1)
         self.assertLessEqual(simultanes(plusieurs["envois"]), agents)
         self.assertEqual(simultanes(plusieurs["envois"]), agents)             # le parallélisme a eu lieu
+        # Mesuré aussi dans `appeler`, hors de la comptabilité de Prévo.
+        self.assertEqual((seul["enVolMax"], plusieurs["enVolMax"]), (1, agents))
+        # Mêmes requêtes, catalogue mis à part : le catalogue d'un envoi dépend des OT déjà finis sur d'autres pages
+        # (pages créées par eux), et c'est la seule différence permise (précision de D112).
+        self.assertEqual(sorted(plusieurs["messages"]), sorted(seul["messages"]))
+        differents = [ot for ot in seul["messages"] if plusieurs["messages"][ot] != seul["messages"][ot]]
+        self.assertEqual(differents, [])
         # Même wiki : chaque page, chaque proposition.
         self.assertEqual(sorted(plusieurs["pages"]), sorted(seul["pages"]))
         for titre, page in seul["pages"].items():

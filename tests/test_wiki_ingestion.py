@@ -298,6 +298,16 @@ class TestDonneesEtFile(CasIngestion):
         self.assertEqual(self.page.evaluate("(ids) => Wiki.mettreEnFile(ids)", EN_FILE), 0)       # jamais deux fois
         self.assertEqual(self.page.evaluate("Donnees.lignes('journal').filter((l) => l.table === 'wiki_journal').length"), 0)
 
+    def test_egalite_de_date_departagee_par_le_numero_d_ot(self):
+        """Relecture de T118 : trois OT de même date d'intervention, mis en file dans le désordre, sortent par numéro."""
+        self.page.evaluate("""() => Donnees.modifier('ordres_travail', (lignes) => {
+          lignes.find((o) => o.id === 'OT-2026-0008').date_fin = '2026-03-10 10:00'; })""")
+        self.page.evaluate("(ids) => Wiki.mettreEnFile(ids)", ["OT-2026-0008", "OT-2026-0002", "OT-2026-0001"])
+        self.assertEqual(self.page.evaluate("Wiki.file().map((e) => e.ot_id)"), ["OT-2026-0001", "OT-2026-0002", "OT-2026-0008"])
+        # 0001 et 0008 partagent PO-01 : 0008, plus grand numéro, attend.
+        self.assertEqual(self.page.evaluate("Wiki.prochainsEnvois(Wiki.file(), [], { agents: 5 }).map((c) => c.entree.ot_id)"),
+                         ["OT-2026-0001", "OT-2026-0002"])
+
     def test_anteriorite_par_les_pages_de_l_ot(self):
         anterieure = self.donnees("OT-2026-0003")              # PO-01, février ; ses pages citent OT-2026-0007 (avril)
         self.assertTrue(anterieure["anterieure"])
