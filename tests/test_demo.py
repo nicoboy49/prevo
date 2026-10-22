@@ -15,6 +15,8 @@ Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brie
   - lot 3 bis (§16.8, D62) : rôles des suggestions de préventif, prouvés par un calcul Python des règles du
     §16.3 écrit ici (réglages par défaut, décisions du journal comprises) : S1, S2, S3 (case cochée et DI
     liée), S4, refus pour la seule criticité A, cas sous le seuil, suggestion ignorée puis revenue ;
+  - lot 6 (§20.10, D109, D110) : astuces sur des OT correctifs clôturés, tirées de leur scénario, sans vocabulaire
+    de la sécurité ; deux OT de scénario contradictoires (CP-01, PO-02), clôturés administrativement, numérotés en dernier ;
   - champs protégés par une apostrophe (§3.2) ;
   - js/demo-donnees.js chargé dans Chromium : 24 tables, texte identique aux CSV ; démo en file://
     chargée vite et sans erreur au « Contrôle de la base » ;
@@ -1140,7 +1142,9 @@ class TestScenariosDemo(unittest.TestCase):
         self.assertTrue(fuite['type'].startswith('correctif') and fuite['statut'].startswith('Clôturé'))
         pieces = [(p['article_id'], p['quantite_prevue']) for p in self.t['ot_pieces'] if p['ot_id'] == fuite['id']]
         self.assertEqual(pieces, [(self.s['kit_garniture'], '1')])
-        po02 = [o for o in self.t['ordres_travail'] if o['equipement_id'] == fuite['equipement_id']]
+        # La dernière fuite de garniture USÉE (C01) de PO-02 ; l'OT de scénario du lot 6 (désalignement, C11) est
+        # plus récent, voulu ainsi (TestDemoLot6).
+        po02 = [o for o in self.t['ordres_travail'] if o['equipement_id'] == fuite['equipement_id'] and o['cause_code'] == 'C01']
         self.assertEqual(max(po02, key=lambda o: (o['date_creation'], o['id']))['id'], fuite['id'])
         acceptee = self.di('di_statut_acceptee')
         self.assertEqual(self.s['ot_de_di_acceptee'], acceptee['ot_id'])
@@ -1668,8 +1672,67 @@ JSON.stringify(Schema.nomsTables().map(nom => {
 """
 
 
+class TestDemoLot6(unittest.TestCase):
+    """Le jeu de démo complété pour le lot 6 (ARCHITECTURE.md §20.10, D109, D110) : des OT correctifs clôturés
+    portent une astuce tirée de celles de leur scénario ; deux OT de scénario, clôturés administrativement et
+    numérotés en dernier, contredisent ce que l'atelier croyait (PO-02 : désalignement, pas l'usure ; CP-01 :
+    radiateur, pas le filtre)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.generateur = charger_generateur()
+        cls.t = {table: lignes_propres(DOSSIER_DEMO, table) for table in TABLES}
+        cls.repere = {e['id']: e['repere'] for e in cls.t['equipements']}
+        cls.scenarios = [o for o in cls.t['ordres_travail'] if o['titre'].endswith('cause trouvée')]
+
+    def test_astuces_sur_des_correctifs_clotures_tirees_de_leur_scenario(self):
+        avec = [o for o in self.t['ordres_travail'] if o['astuce']]
+        self.assertGreaterEqual(len(avec), 30)
+        astuces = self.generateur.ASTUCES
+        for ot in avec:
+            with self.subTest(ot=ot['id']):
+                self.assertTrue(ot['type'].startswith('correctif'))
+                self.assertEqual(ot['statut'][:8], 'Clôturé ')
+                self.assertLessEqual(len(ot['astuce']), 500)
+                if ot not in self.scenarios:
+                    self.assertIn(ot['astuce'], astuces[ot['titre'].split(' — ', 1)[1]])
+        self.assertTrue(all(not o['astuce'] for o in self.t['ordres_travail'] if not o['type'].startswith('correctif')))
+
+    def test_deux_ot_de_scenario_contradictoires(self):
+        self.assertEqual([self.repere[o['equipement_id']] for o in self.scenarios], ['CP-01', 'PO-02'])
+        cp01, po02 = self.scenarios
+        for ot, cause, remede in ((cp01, 'C99', 'R03'), (po02, 'C11', 'R02')):
+            with self.subTest(ot=ot['id']):
+                self.assertEqual(ot['statut'], 'Clôturé administrativement')
+                self.assertEqual((ot['cause_code'], ot['remede_code']), (cause, remede))
+                self.assertTrue(ot['astuce'] and ot['compte_rendu'] and ot['di_id'])
+        self.assertGreater((JOUR_REFERENCE - jour(cp01['date_fin'])).days, 14)     # validée dans le wiki de démo
+        self.assertLessEqual((JOUR_REFERENCE - jour(po02['date_fin'])).days, 14)   # laissée « à valider »
+        # PO-02 : après la dernière garniture changée pour usure (C01), dont elle contredit la cause.
+        garnitures = [o for o in self.t['ordres_travail']
+                      if o['equipement_id'] == po02['equipement_id'] and o['cause_code'] == 'C01']
+        self.assertTrue(garnitures)
+        self.assertGreater(po02['date_fin'], max(o['date_fin'] for o in garnitures))
+        self.assertIn('désaligné', po02['compte_rendu'])
+        self.assertIn('radiateur', cp01['compte_rendu'])
+        # Numérotés en dernier, dans l'ordre de leurs dates : aucun autre numéro d'OT n'a bougé.
+        numeros_2026 = sorted(o['id'] for o in self.t['ordres_travail'] if o['id'].startswith('OT-2026-'))
+        self.assertEqual(numeros_2026[-2:], [cp01['id'], po02['id']])
+
+
 class TestAvecNavigateur(CasNavigateur):
     """Comparaisons avec js/schema.js et chargement de js/demo-donnees.js dans Chromium."""
+
+    def test_astuces_sans_vocabulaire_de_securite(self):
+        """D97 : les astuces de la démo ne contiennent aucun terme du vocabulaire de la sécurité du wiki."""
+        charger_scripts(self.page, ['js/lib/papaparse.min.js', 'js/schema.js', 'js/donnees.js',
+                                    'js/modules/causes-frequentes.js', 'js/modules/indicateurs-regles.js',
+                                    'js/modules/wiki-regles.js'])
+        astuces = sorted({o['astuce'] for o in lignes_propres(DOSSIER_DEMO, 'ordres_travail') if o['astuce']}
+                         | {a for liste in charger_generateur().ASTUCES.values() for a in liste})
+        trouves = self.page.evaluate("(liste) => liste.map((a) => [a, Wiki.termesDeSecurite(a)])"
+                                     ".filter(([, termes]) => termes.length)", astuces)
+        self.assertEqual(trouves, [])
 
     def schema_js(self):
         charger_scripts(self.page, ['js/schema.js'])

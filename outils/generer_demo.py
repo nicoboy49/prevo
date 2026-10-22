@@ -176,6 +176,7 @@ FICHIER_SCENARIOS = RACINE / 'tests' / 'fixtures' / 'demo-scenarios.json'
 GRAINE = 42                      # graine fixe : deux exécutions donnent des fichiers identiques
 GRAINE_LOT3 = 4203               # graine des ajouts du lot 3 (générateur à part : le reste ne bouge pas)
 GRAINE_LOT3BIS = 4204            # graine des ajouts du lot 3 bis (même principe : les lots 1 à 3 ne bougent pas)
+GRAINE_LOT6 = 4206               # graine des ajouts du lot 6 : astuces et OT de scénario du wiki (D109, D110)
 DATE_REFERENCE = '2026-10-19'    # « aujourd'hui » du jeu de démo (un lundi)
 MOIS_PAR_DEFAUT = 13             # durée de l'historique (ARCHITECTURE.md §14.8)
 PART_DI_AVEC_CODE = 0.8          # proportion des DI dont le demandeur a choisi un code symptôme
@@ -1509,6 +1510,7 @@ class Contexte:
         self.rng = random.Random(GRAINE)
         self.rng_lot3 = random.Random(GRAINE_LOT3)    # hasard des ajouts du lot 3 (voir hasard_du_lot3)
         self.rng_lot3bis = random.Random(GRAINE_LOT3BIS)   # hasard des ajouts du lot 3 bis (hasard_du_lot3bis)
+        self.rng_lot6 = random.Random(GRAINE_LOT6)    # hasard des ajouts du lot 6 (hasard_du_lot6)
         self.mois = mois
         self.volume = volume                          # None ou (nombre d'équipements, nombre d'OT)
         self.ref = jour_depuis_texte(DATE_REFERENCE)
@@ -1575,6 +1577,21 @@ def hasard_du_lot3bis(ctx):
     """
     principal = ctx.rng
     ctx.rng = ctx.rng_lot3bis
+    try:
+        yield
+    finally:
+        ctx.rng = principal
+
+
+@contextmanager
+def hasard_du_lot6(ctx):
+    """Pendant le bloc, ctx.rng est le générateur du lot 6 (graine GRAINE_LOT6).
+
+    Même principe que hasard_du_lot3 : les tirages des lots précédents restent les mêmes, donc le contenu de
+    leurs lignes aussi (seule la colonne astuce s'ajoute).
+    """
+    principal = ctx.rng
+    ctx.rng = ctx.rng_lot6
     try:
         yield
     finally:
@@ -4425,6 +4442,185 @@ def verifier_scenarios(ctx, scenarios):
 
 
 # ---------------------------------------------------------------------------
+# Lot 6 (ARCHITECTURE.md §20.10) : astuces des OT (D110) et deux OT de scénario qui contredisent ce que
+# l'atelier croyait (D109), pour le wiki de maintenance
+# ---------------------------------------------------------------------------
+
+# Astuces « pour la prochaine fois » (lot 6, D110), par titre de scénario : ce qu'un technicien aurait aimé savoir
+# avant d'intervenir. Jamais de consigne de sécurité ni de consignation (elles restent dans la fiche de
+# l'équipement) : le vocabulaire de la sécurité du wiki y est interdit (test_demo le vérifie).
+ASTUCES = {
+    'Fuite à la garniture mécanique': [
+        "Contrôler l'alignement de l'accouplement au comparateur avant de remonter la garniture neuve : un désalignement l'use en quelques semaines.",
+        "Prévoir deux joints toriques de rechange : ceux du kit se pincent facilement au remontage.",
+        "Repérer la position du grain fixe au feutre avant la dépose : le remontage est deux fois plus rapide.",
+    ],
+    'Fuite au raccord de refoulement': [
+        "Serrer la bride en croix en trois passes, puis poser un trait de vernis témoin pour voir tout de suite si elle bouge.",
+        "Regarder aussi les supports de tuyauterie : c'est leur jeu qui desserre la bride.",
+    ],
+    'Bruit anormal, roulement à remplacer': [
+        "Chauffer le roulement neuf à l'inducteur plutôt que de le frapper : la piste ne se marque pas.",
+        "Noter le relevé de vibrations avant et après : il sert de référence au prochain contrôle.",
+    ],
+    'Vibrations anormales, resserrage': [
+        "Après resserrage, refaire un contrôle au bout d'une semaine : les vis de l'accouplement reprennent du jeu.",
+    ],
+    'Pression basse en sortie de pompe': [
+        "Commencer par la crépine d'aspiration : c'est elle dans la plupart des cas, avant de démonter la pompe.",
+    ],
+    'Arrêts intempestifs, capteur à nettoyer': [
+        "Nettoyer la face du capteur au chiffon sec puis au nettoyant contacts : l'eau laisse un film qui fausse la détection.",
+        "Après nettoyage, contrôler la distance de détection avec une pièce de la production, pas avec la main.",
+        "Le capteur d'entrée s'encrasse plus vite que les autres : le regarder en premier.",
+    ],
+    'Bruit de roulement, graissage insuffisant': [
+        "Un coup de pompe à graisse suffit sur chaque palier : trop de graisse fait chauffer le roulement.",
+    ],
+    'Courroie qui patine': [
+        "Régler la tension au tensiomètre et noter la valeur sur le carter : la prochaine fois, il suffit de la reprendre.",
+    ],
+    'Ne démarre pas, contacteur à remplacer': [
+        "Vérifier d'abord la bobine au multimètre : si elle est bonne, ce sont souvent les contacts collés.",
+        "Garder un contacteur de rechange au magasin : c'est la panne qui immobilise le plus longtemps.",
+    ],
+    "Vibration du tambour d'entraînement": [
+        "Remplacer les deux roulements du tambour en même temps : le second lâche peu après.",
+    ],
+    'Échauffement du compresseur, filtre colmaté': [
+        "Souffler le radiateur à chaque changement de filtre : l'échauffement revient sinon en quelques semaines.",
+        "Noter la température de refoulement avant l'intervention : elle montre si c'était bien le filtre.",
+    ],
+    "Échauffement, niveau d'huile bas": [
+        "Faire l'appoint avec la même huile que celle en place : un mélange mousse et fait remonter la température.",
+    ],
+    "Chute de pression du réseau d'air": [
+        "Chercher la fuite au détecteur à ultrasons à l'arrêt de la production : on l'entend beaucoup mieux.",
+    ],
+    "Fuite d'huile hydraulique": [
+        "Poser une gaine de protection sur le flexible neuf là où il frotte : c'est toujours au même endroit qu'il se perce.",
+        "Mesurer la longueur du flexible sur l'ancien avant de le jeter : le magasin a deux longueurs proches.",
+    ],
+    'Pression hydraulique basse': [
+        "Changer la cartouche avant que l'indicateur de colmatage soit au rouge : la pompe souffre moins.",
+    ],
+    'Pièces hors cote à la presse': [
+        "Valider le réglage sur trois pièces témoins de la même série, pas sur une seule.",
+    ],
+    'Défaut de cotes sur les pièces usinées': [
+        "Contrôler le zéro pièce avant de toucher aux correcteurs d'outil : c'est lui qui dérive le plus souvent.",
+    ],
+    'Fuite de liquide de coupe': [
+        "Remplacer le raccord en même temps que le flexible d'arrosage : le vieux raccord fuit au remontage.",
+    ],
+    'Machine en défaut après fausse manœuvre': [
+        "Faire refaire le référencement des axes par le conducteur avec vous : il saura le faire la prochaine fois.",
+    ],
+    'Odeur de brûlé, contacteur à remplacer': [
+        "Resserrer toutes les bornes du départ en même temps que le contacteur : l'échauffement vient souvent d'une borne.",
+    ],
+    'Départ moteur qui ne démarre pas': [
+        "Regarder le fusible de commande avant de démonter le contacteur.",
+    ],
+    'Déclenchements dus à une connexion desserrée': [
+        "Une thermographie rapide de l'armoire en marche montre la borne qui chauffe en deux minutes.",
+    ],
+    'Bruit de courroie de ventilateur': [
+        "Aligner les poulies à la règle avant de retendre : une courroie mal alignée se vitrifie.",
+    ],
+    "Débit d'air faible, filtres colmatés": [
+        "Noter la perte de charge relevée au manomètre : elle dit quand changer les filtres la prochaine fois.",
+    ],
+    'Haute pression et échauffement du groupe froid': [
+        "Nettoyer le condenseur de l'intérieur vers l'extérieur : la poussière ne s'enfonce pas dans les ailettes.",
+    ],
+    'Arrêts intempestifs, fin de course encrassé': [
+        "Après nettoyage, faire un cycle complet à vide : un fin de course mal réglé ne se voit qu'en fin de course.",
+    ],
+    'Bruit de grincement, graissage': [
+        "Graisser la chaîne sur toute sa longueur en déplaçant le chariot : les maillons du milieu sont toujours secs.",
+    ],
+    'Roue ou galet cassé': [
+        "Contrôler l'axe du galet en même temps : un axe usé casse le galet neuf.",
+    ],
+    'Défaut de qualité de soudure ou de pose': [
+        "Faire valider la température de soudure sur dix colis témoins avant de relancer la ligne.",
+    ],
+    'Arrêts intempestifs, cellule encrassée': [
+        "Nettoyer le réflecteur en même temps que la cellule : on l'oublie et le défaut revient.",
+    ],
+    'Bruit de courroie': [
+        "Repérer la tension sur le carter après réglage : elle évite de retendre à l'oreille.",
+    ],
+    "Manque de pression d'air": [
+        "Changer le raccord avec le flexible : c'est souvent à la sertissure que l'air fuit.",
+    ],
+}
+
+PART_OT_AVEC_ASTUCE = 1 / 3          # environ un OT correctif clôturé sur trois porte une astuce
+
+# Les deux OT de scénario (D109) : (repère, jours avant la référence, scénario, astuce), dans l'ordre des dates
+# (leurs numéros suivent). CP-01 tombe avant les deux dernières semaines (sa contradiction est ouverte sur la
+# page) ; PO-02 dedans (sa proposition reste « à valider » dans le wiki de démo).
+SCENARIOS_CONTRADICTOIRES = [
+    ('CP-01', 25, scenario(
+        'S04', 'C99', 'R03', 1, [MECA, POLY], (1.5, 2.5), (('arrêt', 1),), (),
+        'Échauffement du compresseur, cause trouvée',
+        "Rechercher pourquoi le compresseur chauffe encore avec un filtre à huile neuf.",
+        ['Le compresseur {rep} chauffe de nouveau, le filtre a pourtant été changé.'],
+        ["Échauffement avec un filtre à huile propre : ce n'est pas le filtre. Le radiateur d'huile est "
+         "colmaté par la poussière et l'huile ; nettoyé au dégraissant puis soufflé, température de "
+         "refoulement revenue à 80 °C après 1 h en charge."]),
+     "Quand le compresseur chauffe, regarder le radiateur d'huile avant de changer le filtre : s'il est gras, "
+     "c'est lui."),
+    ('PO-02', 9, scenario(
+        'S01', 'C11', 'R02', 1, [MECA, POLY], (2.0, 3.0), (('dégradé', 1),), (),
+        'Fuite à la garniture mécanique, cause trouvée',
+        "Rechercher la cause des fuites répétées de la garniture : alignement, vibrations, qualité de l'eau.",
+        ["La pompe {rep} fuit encore à l'arbre, à peine deux mois après la dernière garniture."],
+        ["Fuite naissante à la garniture. Contrôle de l'alignement au comparateur : accouplement désaligné de "
+         "0,4 mm, c'est lui qui use la garniture, pas l'usure normale. Accouplement réaligné et calé ; la "
+         "garniture, peu marquée, est gardée : plus de fuite après rodage, à contrôler dans un mois."]),
+     "Contrôler l'alignement de l'accouplement au comparateur à chaque garniture : 0,4 mm de désalignement "
+     "suffit à user une garniture neuve en deux mois."),
+]
+
+
+def ajouter_ot_de_scenario_lot6(ctx):
+    """Les deux OT de scénario du wiki (D109), créés après la numérotation de l'historique : ils prennent les
+    numéros suivants (DI, OT, temps), aucun autre numéro ne bouge. Clôturés administrativement (le wiki ne
+    lit que ceux-là), sans pièce sortie (le stock du jeu ne change pas)."""
+    tables = ('demandes', 'ordres_travail', 'ot_temps', 'ot_pieces', 'ot_operations')
+    deja = {table: len(ctx.base[table]) for table in tables}
+    for repere, jours, scenario_, astuce in SCENARIOS_CONTRADICTOIRES:
+        jour = jour_ouvre_avant(ctx.ref - timedelta(days=jours))
+        _, ot = creer_correctif(ctx, ctx.equipement[repere], scenario_, heure_aleatoire(ctx.rng, jour, 7.5, 9.0),
+                                scenario_['impacts'][0][0], 'clos', pieces=[], heures=quart_heure(sum(scenario_['duree']) / 2.0),
+                                symptome_code=scenario_['symptome'], description='Problème déjà signalé plusieurs fois.')
+        fin_technique = instant_depuis_texte(ot['date_cloture_tech'])
+        admin = instant(jour_ouvre_apres(fin_technique.date() + timedelta(days=1)), 9.0)
+        renseigner(ot, statut='Clôturé administrativement', date_cloture_admin=texte_dh(min(admin, ctx.maintenant)),
+                   astuce=astuce)
+    for table in tables:
+        for ligne in ctx.base[table][deja[table]:]:
+            if ligne['id']:
+                continue
+            champ_date = {'demandes': 'date_heure', 'ordres_travail': 'date_creation'}.get(table)
+            ligne['id'] = nouvel_identifiant(ctx, table, int(ligne[champ_date][:4]) if champ_date else None)
+
+
+def poser_astuces_lot6(ctx):
+    """Astuces (D110) sur environ un OT correctif clôturé sur trois, tirées parmi celles de son scénario (titre de
+    l'OT après le repère) ; ordre des OT par identifiant, tirages du générateur du lot 6 seulement."""
+    for ot in sorted(ctx.base['ordres_travail'], key=lambda ligne: ligne['id']):
+        if ot.get('astuce') or not ot['type'].startswith('correctif') or not ot['statut'].startswith('Clôturé'):
+            continue
+        titre = ot['titre'].split(' — ', 1)[-1]
+        if titre in ASTUCES and ctx.rng.random() < PART_OT_AVEC_ASTUCE:
+            renseigner(ot, astuce=ctx.rng.choice(ASTUCES[titre]))
+
+
+# ---------------------------------------------------------------------------
 # Construction complète et ligne de commande
 # ---------------------------------------------------------------------------
 
@@ -4455,6 +4651,10 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
         with hasard_du_lot3bis(ctx):
             completer_demo_lot3bis(ctx)
     attribuer_identifiants_historique(ctx)
+    if not volume:
+        with hasard_du_lot6(ctx):
+            ajouter_ot_de_scenario_lot6(ctx)
+            poser_astuces_lot6(ctx)
     construire_stock(ctx)
     generer_liens_article_equipement(ctx)
     generer_parametres(ctx)
