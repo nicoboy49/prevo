@@ -414,6 +414,7 @@ Object.assign(Parc, (() => {
             <h1>${libelleEquipement(equipement.id)}</h1>
             <p class="parc-badges-fiche">${badgeCriticite(equipement.criticite)} ${equipement.statut ? UI.badgeStatut(equipement.statut) : ''}
               ${actif ? '' : UI.html`<span class="badge neutre barre">Inactif</span>`}</p>
+            <p><a id="lien-wiki-equipement" href="#/wiki/${idUrl}">${UI.icone('wiki')}Wiki de cet équipement</a></p>
           </div>
         </div>
 

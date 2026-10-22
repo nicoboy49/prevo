@@ -90,6 +90,7 @@ Object.assign(Ordres, (() => {
       });
     }
     placerCausesFrequentes(UI.$('.ot-causes', panneau), ot);
+    UI.$('#form-preparation', panneau).before(Wiki.champRecherche({ equipementId: ot.equipement_id, texteInitial: ot.titre, titre: 'Chercher dans l\'historique', montres: 3 }));
     afficherOperationsPreparation(UI.$('#ot-bloc-operations', panneau), ot, modifiable);
     afficherPieces(UI.$('#ot-bloc-pieces', panneau), ot, modifiable);
   }

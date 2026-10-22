@@ -1,8 +1,125 @@
-/* Wiki de maintenance (lot 6, ARCHITECTURE.md §20.7) : liste des pages, page d'un équipement, carte de
-   la synthèse [IA], champ de recherche. Jetons de css/style.css (deux thèmes). */
+/* Wiki de maintenance (lot 6, ARCHITECTURE.md §20.7) : liste des pages, page d'un équipement, champ de
+   recherche (aussi posé dans l'onglet Préparation de l'OT et dans la saisie d'une DI), lien depuis la fiche
+   équipement ; la carte de la synthèse [IA] (wiki-synthese.js) a sa place réservée, #wiki-synthese.
+   Composants communs de css/style.css (cartes, badges, liste de cartes) ; couleurs : jetons des deux thèmes.
+   Toutes les feuilles de css/modules/ sont chargées partout : les règles portent sur des classes wiki-. */
 
-.wiki-liste,
-.wiki-page {
-  display: grid;
-  gap: 16px;
+.wiki { min-width: 0; }
+
+/* =========================================================================================
+   1. Liste des pages (#/wiki)
+   ========================================================================================= */
+
+.wiki-pages-zone { margin-bottom: 18px; }
+.wiki-pages-zone > .aide { margin-bottom: 12px; }
+.wiki-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.wiki-pages > li { min-width: 0; }
+.wiki-pages > li > a { height: 100%; }
+.wiki-pages .carte-tete .wiki-etat { margin-left: auto; }
+.wiki-pages > .wiki-liste-vide { grid-column: 1 / -1; }
+.wiki-filtre { color: var(--texte); }
+.wiki-filtre .badge { margin-left: .2rem; }
+
+/* =========================================================================================
+   2. Page d'un équipement (#/wiki/<équipement>)
+   ========================================================================================= */
+
+.wiki-sous-titre { overflow-wrap: anywhere; }
+.wiki-section > .aide { margin: -.3rem 0 .8rem; }
+
+/* Consignation : même repère visuel que sur la fiche équipement (bord ambre), texte humain tel quel */
+.wiki-consignation {
+  border-color: var(--bord-ambre); border-left: 6px solid var(--ambre);
+  background: linear-gradient(var(--teinte-ambre-faible), var(--teinte-ambre-faible)), var(--carte);
+}
+.wiki-consignation h2 { display: flex; align-items: center; gap: .5rem; color: var(--fort); margin-bottom: .5rem; }
+.wiki-consignation h2 .icone { color: var(--ambre); width: 1.4em; height: 1.4em; }
+.wiki-consignation .aide { margin-bottom: .5rem; }
+.wiki-consignation-texte {
+  white-space: pre-wrap; color: var(--texte); font-size: 1.0625rem; line-height: 1.6; overflow-wrap: anywhere;
+}
+.wiki-sans-consignation { color: var(--texte-ambre); margin-bottom: .4rem; }
+.wiki-sans-consignation b { color: var(--texte-ambre); }
+.wiki-consignation-document { margin: .8rem 0 0; color: var(--texte-2); overflow-wrap: anywhere; }
+.wiki-lien-document { display: inline-flex; align-items: center; gap: .35rem; min-height: var(--tactile); font-weight: 600; }
+
+/* Pannes habituelles (et même marque et modèle) : un bloc par symptôme */
+.wiki-symptomes { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.wiki-symptome { border: 1px solid var(--trait); border-radius: 14px; padding: 12px 16px; background: var(--survol); min-width: 0; }
+.wiki-symptome-tete { display: flex; align-items: baseline; flex-wrap: wrap; gap: .25rem .6rem; }
+.wiki-symptome-tete h3 { font-size: 1.0625rem; color: var(--fort); }
+.wiki-periode { color: var(--texte-2); font-size: .9375rem; }
+.wiki-insuffisant, .wiki-sans-cause { margin: .45rem 0 0; color: var(--texte-2); }
+.wiki-piste { margin: .45rem 0 0; color: var(--texte-ambre); }
+.wiki-piste b { color: var(--texte-ambre); }
+.wiki-causes { margin: .5rem 0 0; padding-left: 1.2rem; display: grid; gap: .5rem; }
+.wiki-causes > li { overflow-wrap: anywhere; }
+.wiki-cause b { color: var(--fort); }
+.wiki-remedes { margin: .2rem 0 0; padding-left: 1.2rem; color: var(--texte-2); font-size: .9375rem; }
+.wiki-remede { color: var(--texte); font-weight: 600; }
+.wiki-precision { margin-top: .6rem; }
+.wiki-mention { margin-top: .8rem; }
+
+/* Jumeaux (même marque et modèle) : pastilles vers leur page */
+.wiki-jumeaux { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.wiki-jumeaux a {
+  display: inline-flex; align-items: center; min-height: var(--tactile); padding: 0 .9rem; border-radius: 999px;
+  border: 1px solid var(--trait-2); background: var(--champ); font-weight: 700; text-decoration: none;
+}
+.wiki-jumeaux a:hover, .wiki-jumeaux a:focus-visible { border-color: var(--bleu); background: var(--teinte-bleu-faible); }
+
+/* Lignes : pièces, interventions, résultats de recherche */
+.wiki-lignes { list-style: none; margin: 0; padding: 0; }
+.wiki-lignes > li { display: grid; gap: .2rem; padding: 10px 0; border-top: 1px solid var(--trait); min-width: 0; }
+.wiki-lignes > li:first-child { border-top: 0; padding-top: 2px; }
+.wiki-ligne-tete { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem .6rem; min-width: 0; }
+.wiki-ligne-tete > a, .wiki-ligne-tete > b { font-weight: 800; }
+.wiki-ligne-tete > b { color: var(--fort); }
+.wiki-designation { color: var(--texte); overflow-wrap: anywhere; }
+.wiki-date { color: var(--texte-2); font-size: .9375rem; white-space: nowrap; }
+.wiki-extrait { margin: 0; color: var(--texte-2); font-size: .9375rem; overflow-wrap: anywhere; }
+.wiki-extrait mark { background: var(--teinte-ambre); color: var(--fort); border-radius: 4px; padding: 0 2px; }
+
+/* Synthèse [IA] : vide tant que wiki-synthese.js n'y pose pas sa carte */
+.wiki-synthese:empty { display: none; }
+
+/* =========================================================================================
+   3. Champ de recherche (Wiki.champRecherche)
+   ========================================================================================= */
+
+.wiki-recherche-titre {
+  flex-direction: row; align-items: center; gap: .5rem; margin-bottom: .5rem;
+  font-size: 1.125rem; font-weight: 700; color: var(--texte);
+}
+.wiki-recherche-titre .icone { color: var(--texte-2); }
+.wiki-recherche-aide { margin-top: .4rem; }
+.wiki-resultats:not(:empty) { margin-top: 14px; }
+.wiki-rien { margin: 0 0 .2rem; color: var(--texte); }
+.wiki-portee + .wiki-portee { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--trait-2); }
+.wiki-portee h3 { display: flex; align-items: center; gap: .5rem; margin-bottom: .3rem; color: var(--texte); }
+.wiki-voir-plus { margin-top: .3rem; }
+
+/* Saisie d'une DI : « Déjà vu sur cette machine ? » sous le symptôme, dans la carte de l'étape */
+.wiki-recherche-demande { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--trait-2); }
+.wiki-recherche-demande .wiki-recherche-titre { font-size: 1rem; }
+
+/* Fiche équipement : lien « Wiki de cet équipement » sous les badges de l'en-tête */
+#lien-wiki-equipement { display: inline-flex; align-items: center; gap: .4rem; min-height: var(--tactile); font-weight: 600; }
+
+/* =========================================================================================
+   4. Téléphone (≤ 640 px) : une colonne, zones tactiles de 48 px
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  .wiki-pages { grid-template-columns: minmax(0, 1fr); }
+  .wiki-consignation { border-left-width: 5px; }
+  .wiki-consignation-texte { font-size: 1rem; }
+  .wiki-symptome { padding: 12px; }
+  .wiki-causes, .wiki-remedes { padding-left: 1rem; }
+  .wiki-ligne-tete > a, .wiki-lien-page { display: inline-flex; align-items: center; min-height: 48px; }
+  .wiki-precision summary { min-height: 48px; }
+}
+
+@media print {
+  .wiki-recherche, .wiki-recherche-demande, #lien-wiki-equipement { display: none !important; }
 }

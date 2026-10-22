@@ -137,8 +137,10 @@ Object.assign(Demandes, (() => {
         App.marquerSaisie(true);
         effacerErreur('equipement_id');
         mettreAJourPriorite();
+        Wiki.poserRechercheDemande(champSymptome, selecteur.valeur());   // « Déjà vu sur cette machine ? » (§20.7)
       },
     });
+    Wiki.poserRechercheDemande(champSymptome, selecteur.valeur());
     if (equipementDemande && !selecteur.valeur()) {
       UI.$('.di-alerte-equipement', conteneur).appendChild(UI.bandeau('attention',
         UI.html`L'équipement <b>${equipementDemande}</b> est inconnu ou n'est plus actif : choisissez-le dans la liste.`));
