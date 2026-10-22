@@ -959,6 +959,76 @@ const Donnees = (() => {
     }
   }
 
+  // --- Lot 6 (ARCHITECTURE.md §20.2) : problèmes du wiki --------------------------------------
+  // Liens et OT cités lus dans les champs `liens` et `ot_cites` des pages actives (tirés du texte à l'écriture) ;
+  // une entrée « validée » doit avoir laissé chaque page de ses changements au moins à version_avant + 1.
+
+  function listeDe(valeur) {
+    return enTexte(valeur).split(';').map((morceau) => morceau.trim()).filter(Boolean);
+  }
+
+  function joursDepuis(dateTexte) {
+    const lu = /^(\d{4})-(\d{2})-(\d{2})/.exec(enTexte(dateTexte));
+    const jour = /^(\d{4})-(\d{2})-(\d{2})/.exec(aujourdhui());
+    if (!lu || !jour) { return 0; }
+    return Math.round((Date.UTC(+jour[1], jour[2] - 1, +jour[3]) - Date.UTC(+lu[1], lu[2] - 1, +lu[3])) / 86400000);
+  }
+
+  function controlerWiki(resultat) {
+    const pages = entreeDe('wiki_pages');
+    const journal = entreeDe('wiki_journal').lignes;
+    if (!pages.lignes.length && !journal.length) { return; }
+    const cibles = { 'EQ-': entreeDe('equipements').index, 'ART-': entreeDe('articles').index, 'WP-': pages.index };
+    const ordres = entreeDe('ordres_travail').index;
+    const parCle = new Map();
+    const signaler = (gravite, page, champ, valeur, message) => resultat.push(probleme(gravite, 'wiki', 'wiki_pages', null,
+      page.id, champ, valeur, 'Page du wiki ' + (page.id || '(sans identifiant)') + ' (« ' + page.titre + ' ») : ' + message));
+    for (const page of pages.lignes.filter((ligne) => ligne.statut !== 'archivée')) {
+      for (const lien of listeDe(page.liens)) {
+        const prefixe = Object.keys(cibles).find((debut) => lien.startsWith(debut));
+        const cible = prefixe ? cibles[prefixe].get(lien) : null;
+        if (!cible || (prefixe === 'WP-' && cible.statut === 'archivée')) {
+          signaler('attention', page, 'liens', lien, 'lien vers une page inexistante ou archivée (« ' + lien + ' »).');
+        }
+      }
+      for (const ot of listeDe(page.ot_cites)) {
+        if (!ordres.has(ot)) { signaler('attention', page, 'ot_cites', ot, 'elle cite l\'OT « ' + ot + ' », qui n\'existe pas.'); }
+      }
+      if (enTexte(page.texte).trim() && !listeDe(page.ot_cites).length) {
+        signaler('info', page, 'ot_cites', '', 'elle ne cite aucun OT.');
+      }
+      const cle = enTexte(page.cle).trim();
+      if (cle) { parCle.set(cle, (parCle.get(cle) || []).concat([page])); }
+    }
+    parCle.forEach((memes) => {
+      if (memes.length > 1) {
+        signaler('attention', memes[1], 'cle', memes[1].cle, 'même titre que la page ' + memes[0].id + ' (deux pages actives de même clé).');
+      }
+    });
+    const ancienne = typeof Wiki !== 'undefined' && Wiki.SEUILS ? Wiki.SEUILS.contradictionAncienneJours : 30;
+    for (const entree of journal.filter((ligne) => ligne.statut === 'validée')) {
+      let changements = [];
+      let contradictions = [];
+      try { changements = JSON.parse(entree.changements || '[]') || []; } catch (erreur) { changements = null; }
+      try { contradictions = JSON.parse(entree.contradictions || '[]') || []; } catch (erreur) { contradictions = []; }
+      const absents = changements === null ? ['(changements illisibles)'] : changements.filter((c) => {
+        const page = c && c.page ? pages.index.get(c.page) : null;
+        return !page || (Number(page.version) || 0) < (Number(c.version_avant) || 0) + 1;
+      }).map((c) => (c && (c.page || c.titre)) || '?');
+      if (absents.length) {
+        resultat.push(probleme('attention', 'wiki', 'wiki_journal', null, entree.id, 'changements', absents.join(', '),
+          'Entrée ' + entree.id + ' du journal du wiki : elle est « validée » mais ses changements ne sont pas dans les pages ('
+          + absents.join(', ') + ').'));
+      }
+      contradictions.filter((c) => c && c.statut === 'ouverte'
+        && joursDepuis(entree.decide_le || entree.traite_le) > ancienne).forEach((c) => {
+        resultat.push(probleme('info', 'wiki', 'wiki_journal', null, entree.id, 'contradictions', enTexte(c.page),
+          'Entrée ' + entree.id + ' du journal du wiki : contradiction ouverte depuis plus de ' + ancienne + ' jours sur la page « '
+          + enTexte(c.page) + ' ».'));
+      });
+    }
+  }
+
   function calculerProblemes() {
     const resultat = [];
     const memoireCibles = new Map();
@@ -972,6 +1042,7 @@ const Donnees = (() => {
       controlerReferences(nomTable, description, lignesTable, memoireCibles, resultat);
     }
     controlerCoherence(resultat);
+    controlerWiki(resultat);
     return resultat;
   }
 
