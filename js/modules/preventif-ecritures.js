@@ -106,9 +106,11 @@ Object.assign(Preventif, (() => {
     if (!otsACompleter(idsCrees, Donnees.lignes('ot_operations')).length) return 0;
     return Donnees.modifier('ot_operations', (lignes, outils) => {
       let copiees = 0;
+      let dernier = '';      // identifiant suivant tiré du dernier créé : un seul parcours de la table (T86)
       otsACompleter(idsCrees, lignes).forEach((otId) => {
         operationsDeGamme(Donnees.trouver('ordres_travail', otId).gamme_id).forEach((operation) => {
-          lignes.push({ id: outils.nouvelId(lignes), ot_id: otId, ordre: operation.ordre, operation: operation.operation,
+          dernier = outils.nouvelId(dernier ? [{ id: dernier }] : lignes);
+          lignes.push({ id: dernier, ot_id: otId, ordre: operation.ordre, operation: operation.operation,
             valeur_attendue: operation.valeur_attendue, fait: '0', valeur_mesuree: '' });
           copiees += 1;
         });
@@ -132,7 +134,9 @@ Object.assign(Preventif, (() => {
       crees = await Donnees.modifier('ordres_travail', (lignes, outils) => {
         const identifiants = [];
         gammesEchuesSansOt(lignes, jour).forEach(({ gamme, etat }) => {
-          const id = outils.nouvelId(lignes, outils.aujourdhui());
+          // Un seul parcours des OT existants : les suivants partent du dernier créé (même année).
+          const dernier = identifiants[identifiants.length - 1];
+          const id = outils.nouvelId(dernier ? [{ id: dernier }] : lignes, outils.aujourdhui());
           lignes.push(nouvelOtPreventif(gamme, etat, jour, id, outils.maintenant()));
           identifiants.push(id);
         });

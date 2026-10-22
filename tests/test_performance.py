@@ -26,7 +26,20 @@ passée à hier). Trois budgets, médiane de trois mesures, toutes affichées :
                          des cartes (calcul des quatre règles sur tout l'historique compris) ;
                          budget 1 000 ms (médiane).
     ouverture sans IA (lot 4) : aucun appel réseau hors du serveur Prévo (ni /api/ia), aucun en démo.
+    chargement sans SheetJS (lot 5, D89, CS93) : js/lib/xlsx.full.min.js n'est jamais demandé à l'ouverture
+                         (serveur et démo), il ne l'est qu'à la demande (App.chargerSheetJS) ;
+    import (lot 5, D89, CS93) : 5 000 lignes d'articles puis 5 000 OT d'historique fabriqués ici, importés dans
+                         une copie du jeu de charge : lecture et aperçu (Import.lire, Import.correspondance,
+                         Import.preparer) < 3 000 ms ; écriture (Import.importer : aperçu recalculé sur les
+                         données fraîches, sauvegarde « avant-import », tables et journal) < 5 000 ms.
 Les chronomètres des actions sont posés dans la page (performance.now()).
+
+Horloge : le navigateur vit à la date de référence du jeu de charge (DATE_REFERENCE de outils/generer_demo.py,
+la même que la démo), 9 h 30 au début de chaque page, et le vieillissement part de cette date. Avec la vraie
+date, les gammes que le temps rend échues s'ajoutaient aux 20 vieillies (5 le 2026-10-22, 21 le 2026-10-29 : le
+test du chargement aurait échoué sur son nombre d'OT). La date est décalée, pas figée (Date.now avance) et
+performance.now n'est pas touché : clock.set_fixed_time de Playwright remplace aussi l'objet performance, dont
+getEntriesByName rend alors une liste vide (plus de marques de chargement).
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_performance.py" -v
@@ -43,6 +56,7 @@ import unittest
 from pathlib import Path
 
 from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
+from test_controles import date_reference
 
 BUDGET_CHARGEMENT_MS = 2000
 BUDGET_CREATION_DI_MS = 1000
@@ -51,6 +65,10 @@ BUDGET_INDICATEURS_MS = 2000        # lot 3 (CS49) : écran Indicateurs sur 12 m
 BUDGET_PLANNING_MS = 1000           # lot 3 (CS49) : planning de la semaine affiché
 BUDGET_RAPPORT_MS = 5000            # lot 3 (CS49) : rapport figé (calcul, page HTML, écriture)
 BUDGET_SUGGESTIONS_MS = 1000        # lot 3 bis (CS62) : onglet Suggestions du Préventif affiché
+BUDGET_APERCU_IMPORT_MS = 3000      # lot 5 (D89) : lecture et aperçu d'un fichier de 5 000 lignes
+BUDGET_ECRITURE_IMPORT_MS = 5000    # lot 5 (D89) : écriture de l'import (sauvegarde et journal compris)
+LIGNES_IMPORT = 5000
+SHEETJS = "js/lib/xlsx.full.min.js"
 MESURES = 3
 GAMMES_VIEILLIES = 20
 STATUTS_FERMES = ("Clôturé techniquement", "Clôturé administrativement", "Annulé")
@@ -97,6 +115,41 @@ CHRONO_SORTIE_JS = """([article, net]) => {
     }
   });
   observateur.observe(document.getElementById('contenu'), { childList: true, subtree: true, characterData: true });
+}"""
+
+# Date du navigateur décalée vers `debut` (millisecondes) au chargement de chaque page : Date.now avance,
+# performance n'est pas touché (voir l'en-tête). new Date(…) avec arguments reste la vraie.
+HORLOGE_JS = """(() => {
+  const Natif = Date;
+  const decalage = %d - Natif.now();
+  function DateDecalee(...valeurs) {
+    if (!new.target) return new Natif(Natif.now() + decalage).toString();
+    return valeurs.length ? new Natif(...valeurs) : new Natif(Natif.now() + decalage);
+  }
+  DateDecalee.prototype = Natif.prototype;
+  DateDecalee.now = () => Natif.now() + decalage;
+  DateDecalee.parse = Natif.parse;
+  DateDecalee.UTC = Natif.UTC;
+  window.Date = DateDecalee;
+})();"""
+
+# Import de 5 000 lignes (lot 5) : lecture d'un fichier CSV, correspondance automatique et aperçu, puis écriture.
+IMPORT_JS = """async ([type, nom, texte]) => {
+  const t0 = performance.now();
+  const lu = await Import.lire(new File([texte], nom, { type: 'text/csv' }));
+  const lignes = lu.feuilles[0].lignes;
+  const rang = Import.ligneEntete(lignes, type);
+  const donnees = lignes.slice(rang + 1);
+  const correspondance = Import.correspondance(type, Import.entetes(lignes, rang, false), donnees, 'auto');
+  const t1 = performance.now();
+  const reglages = { mettreAJour: true, numeroPremiereLigne: rang + 2, maintenant: Donnees.maintenant() };
+  const apercu = Import.preparer(type, donnees, correspondance, reglages);
+  const t2 = performance.now();
+  const resultat = await Import.importer(apercu, { nomFichier: nom,
+    recalculer: () => Import.preparer(type, donnees, correspondance, reglages) });
+  const t3 = performance.now();
+  return { lecture: t1 - t0, apercu: t2 - t1, ecriture: t3 - t2, totaux: apercu.totaux, tables: resultat.tables,
+           sauvegarde: resultat.sauvegarde, pasSures: correspondance.filter((c) => c.statut !== 'sure').map((c) => c.entete) };
 }"""
 
 
@@ -156,6 +209,54 @@ def vieillir(dossier, aujourdhui, nombre):
     return sorted(g[colonne["id"]] for g in candidates)
 
 
+def texte_csv(lignes, separateur):
+    tampon = io.StringIO(newline="")
+    csv.writer(tampon, delimiter=separateur, lineterminator="\r\n").writerows(lignes)
+    return tampon.getvalue()
+
+
+def fichier_articles(dossier):
+    """Export d'une autre GMAO : 5 000 articles nouveaux (« ; », décimales à virgule), fournisseurs du jeu de
+    charge et trois nouveaux (créés une fois, D88)."""
+    fournisseurs = [f["nom"] for f in lire_dictionnaires(Path(dossier) / "fournisseurs.csv")]
+    fournisseurs += ["Fournisseur importé %d" % n for n in (1, 2, 3)]
+    lignes = [["Code article", "Libellé", "Fournisseur", "Qté stock", "Prix achat", "Stock mini", "Délai livraison"]]
+    for n in range(1, LIGNES_IMPORT + 1):
+        lignes.append(["IMP-%05d" % n, "Article importé n° %d" % n, fournisseurs[n % len(fournisseurs)],
+                       str(n % 40), "%d,%02d" % (1 + n % 300, n % 100), "2", str(3 + n % 10)])
+    return texte_csv(lignes, ";")
+
+
+def fichier_historique(dossier):
+    """Historique d'une autre GMAO : 5 000 OT clôturés (« , », dates JJ/MM/AAAA HH:MM) sur les équipements du jeu
+    de charge, types libres, codes par code, intervenants par « Prénom Nom », temps passé."""
+    dossier = Path(dossier)
+    reperes = [e["repere"].lstrip("'") for e in lire_dictionnaires(dossier / "equipements.csv") if e["actif"] != "0"]
+    techniciens = ["%s %s" % (t["prenom"], t["nom"]) for t in lire_dictionnaires(dossier / "techniciens.csv")]
+    codes = {}
+    for code in lire_dictionnaires(dossier / "codes_defaillance.csv"):
+        codes.setdefault(code["famille"], []).append(code["code"])
+    types = ["Dépannage", "Préventif", "Curatif", "Correctif différé", "Amélioration"]
+    depart = datetime.datetime(2023, 1, 2, 7, 0)
+    lignes = [["N° OT", "Machine", "Date demande", "Début", "Fin", "Type", "Libellé", "Compte rendu", "Durée arrêt (h)",
+               "Arrêt", "Symptôme", "Cause", "Remède", "Intervenant", "Temps (h)"]]
+    for n in range(LIGNES_IMPORT):
+        demande = depart + datetime.timedelta(minutes=101 * n)
+        type_ = types[n % len(types)]
+        panne = type_ in ("Dépannage", "Curatif")
+        lignes.append([
+            "H%05d" % n, reperes[n % len(reperes)], demande.strftime("%d/%m/%Y %H:%M"),
+            (demande + datetime.timedelta(minutes=20)).strftime("%d/%m/%Y %H:%M"),
+            (demande + datetime.timedelta(minutes=140)).strftime("%d/%m/%Y %H:%M"), type_,
+            "Intervention importée n° %d" % n, "Compte rendu de l'intervention %d : remis en état, essais concluants." % n,
+            "1.5" if panne else "", "oui" if panne else "non",
+            codes["symptôme"][n % len(codes["symptôme"])] if panne else "",
+            codes["cause"][n % len(codes["cause"])] if panne else "",
+            codes["remède"][n % len(codes["remède"])] if panne else "",
+            techniciens[n % len(techniciens)], "1,25"])
+    return texte_csv(lignes, ",")
+
+
 class TestPerformance(CasNavigateur):
 
     @classmethod
@@ -171,7 +272,9 @@ class TestPerformance(CasNavigateur):
             timeout=600)
         if resultat.returncode != 0:
             raise RuntimeError("generer_demo.py a échoué :\n" + resultat.stdout.decode("utf-8", "replace"))
-        cls.aujourdhui = datetime.date.today()
+        # Date de référence du jeu (voir l'en-tête), et non la date du jour.
+        cls.aujourdhui = date_reference()
+        cls.debut_horloge_ms = int(datetime.datetime.combine(cls.aujourdhui, datetime.time(9, 30)).timestamp() * 1000)
         cls.gammes_vieillies = vieillir(cls.source, cls.aujourdhui, GAMMES_VIEILLIES)
         # Serveur partagé par les mesures d'actions (DI, sortie) ; le chargement a le sien (premier chargement).
         cls.serveur = ServeurPrevo(source=cls.source)
@@ -183,6 +286,7 @@ class TestPerformance(CasNavigateur):
         contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1280, "height": 800})
         self.addCleanup(contexte.close)
         contexte.set_default_timeout(30000)
+        contexte.add_init_script(HORLOGE_JS % self.debut_horloge_ms)
         preregler_profil(contexte, "responsable")
         page = contexte.new_page()
         self.surveiller(page)
@@ -216,12 +320,14 @@ class TestPerformance(CasNavigateur):
         with ServeurPrevo(source=self.source) as serveur:
             ordres = serveur.dossier / "ordres_travail.csv"
             nombre = len(lire_lignes(ordres)[1])
-            mesures, crees, octets = [], [], None
+            mesures, crees, octets, demandes = [], [], None, []
             for numero in range(MESURES):
                 page = self.nouvelle_page()
+                page.on("request", lambda requete: demandes.append(requete.url))
                 page.goto(serveur.url + "/")
                 attendre_pret(page, 30000)
                 mesures.append(page.evaluate(CHARGEMENT_JS))
+                self.assertEqual(page.evaluate("[Donnees.aujourdhui(), typeof XLSX]"), [self.aujourdhui.isoformat(), "undefined"])
                 crees.append(len(lire_lignes(ordres)[1]) - nombre)            # OT générés par ce chargement
                 nombre = len(lire_lignes(ordres)[1])
                 if numero == 0:
@@ -237,8 +343,14 @@ class TestPerformance(CasNavigateur):
               % (crees[0], mesures[0], ", ".join("%.0f" % m for m in mesures[1:]), mediane, BUDGET_CHARGEMENT_MS))
         # CS34 : « chargement complet < 2 s génération du préventif comprise ». Seul le premier
         # chargement génère des OT : la médiane seule ne le garderait pas (relecture de la vague 5).
+        # T86 : ce premier chargement dépassait parfois 2 s. Mesuré (profil du processeur) : la génération
+        # cherchait l'identifiant suivant en relisant toute la table pour chaque OT et chaque opération de
+        # check-list créés (plusGrandNumero, première fonction du profil) ; corrigé dans preventif-ecritures.js.
+        # Le reste de l'écart avec les chargements suivants est la réécriture de ordres_travail et ot_operations.
         self.assertLess(mesures[0], BUDGET_CHARGEMENT_MS, "premier chargement (avec génération du préventif)")
         self.assertLess(mediane, BUDGET_CHARGEMENT_MS)
+        # CS93 (lot 5) : ce chargement ne demande pas SheetJS
+        self.assertEqual([a for a in demandes if SHEETJS in a], [])
 
     def test_creation_di_mediane_sous_1_seconde(self):
         page = self.ouvrir()
@@ -409,6 +521,59 @@ class TestPerformance(CasNavigateur):
         demo.wait_for_timeout(500)
         self.assertEqual(demo.evaluate("[Ia.active(), Ia.etat()]"), [False, "inconnu"])
         self.assertEqual([a for a in adresses_demo if not a.startswith(("file:", "data:", "blob:"))], [])
+
+    # -- Lot 5 (D89, CS93) -------------------------------------------------------------------------
+
+    def test_chargement_sans_sheetjs_serveur_et_demo_sous_2_secondes(self):
+        """Ouverture (serveur, puis démo) : SheetJS n'est jamais demandé ; il ne l'est qu'à la demande
+        (App.chargerSheetJS, à l'ouverture d'un classeur) — ce qui prouve aussi que la surveillance le verrait."""
+        for nom, ouvrir in (("serveur", lambda p: p.goto(self.serveur.url + "/")),
+                            ("démo", lambda p: (p.goto(url_fichier("index.html")), p.click("#btn-demo")))):
+            with self.subTest(mode=nom):
+                page = self.nouvelle_page()
+                adresses = []
+                page.on("request", lambda requete: adresses.append(requete.url))
+                ouvrir(page)
+                attendre_pret(page, 30000)
+                page.wait_for_load_state("networkidle")
+                duree = page.evaluate(CHARGEMENT_JS)
+                print("\n  [performance] chargement (%s) sans SheetJS : %.0f ms (budget %d), %d fichiers demandés"
+                      % (nom, duree, BUDGET_CHARGEMENT_MS, len(adresses)))
+                self.assertEqual([a for a in adresses if SHEETJS in a], [])
+                self.assertEqual(page.evaluate("typeof XLSX"), "undefined")
+                self.assertLess(duree, BUDGET_CHARGEMENT_MS)
+                page.evaluate("App.chargerSheetJS().then(() => true)")
+                self.assertEqual(len([a for a in adresses if SHEETJS in a]), 1, "à la demande : demandé une fois")
+                self.assertEqual(page.evaluate("typeof XLSX.read"), "function")
+
+    def test_import_5000_articles_et_5000_ot_apercu_sous_3_s_ecriture_sous_5_s(self):
+        """D89 : sur une copie du jeu de charge, 5 000 lignes d'articles puis 5 000 OT d'historique : lecture et
+        aperçu (Import.preparer) < 3 s, écriture (Import.importer) < 5 s, chacun mesuré dans la page."""
+        with ServeurPrevo(source=self.source) as serveur:
+            page = self.nouvelle_page()
+            page.goto(serveur.url + "/")
+            attendre_pret(page, 30000)
+            page.wait_for_load_state("networkidle")
+            avant = page.evaluate("['articles', 'mouvements_stock', 'ordres_travail', 'ot_temps'].map((t) => Donnees.lignes(t).length)")
+            for type_, nom, texte, tables in (
+                    ("articles", "articles-5000.csv", fichier_articles(self.source), ("articles", "mouvements_stock")),
+                    ("historique", "historique-5000.csv", fichier_historique(self.source), ("ordres_travail", "ot_temps"))):
+                with self.subTest(type=type_):
+                    mesure = page.evaluate(IMPORT_JS, [type_, nom, texte])
+                    print("\n  [performance] import de %d lignes (%s) : lecture %.0f ms + aperçu %.0f ms = %.0f ms (budget %d) ;"
+                          " écriture %.0f ms (budget %d)" % (LIGNES_IMPORT, type_, mesure["lecture"], mesure["apercu"],
+                                                             mesure["lecture"] + mesure["apercu"], BUDGET_APERCU_IMPORT_MS,
+                                                             mesure["ecriture"], BUDGET_ECRITURE_IMPORT_MS))
+                    # Le jeu fabriqué est entièrement valable : on mesure 5 000 créations, pas des refus.
+                    self.assertEqual(mesure["pasSures"], [])
+                    self.assertEqual((mesure["totaux"]["creer"], mesure["totaux"]["refusee"]), (LIGNES_IMPORT, 0), mesure["totaux"])
+                    for table in tables:
+                        self.assertEqual(mesure["tables"][table]["crees"], LIGNES_IMPORT, table)
+                    self.assertRegex(mesure["sauvegarde"], r"_avant-import$")
+                    self.assertLess(mesure["lecture"] + mesure["apercu"], BUDGET_APERCU_IMPORT_MS, "lecture et aperçu")
+                    self.assertLess(mesure["ecriture"], BUDGET_ECRITURE_IMPORT_MS, "écriture")
+            apres = page.evaluate("['articles', 'mouvements_stock', 'ordres_travail', 'ot_temps'].map((t) => Donnees.lignes(t).length)")
+            self.assertEqual([b - a for a, b in zip(avant, apres)], [LIGNES_IMPORT] * 4)
 
 
 if __name__ == "__main__":

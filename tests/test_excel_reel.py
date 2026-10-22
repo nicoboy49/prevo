@@ -31,12 +31,20 @@ Format v2 (lot 2, tâche T34 ; ARCHITECTURE.md §14.1) :
          équipement modifié, la DI acceptée ajoutent chacune des colonnes v2 en fin de table, toutes
          les autres cellules restant celles du lot 1.
 
+Import (lot 5, tâche T86 ; ARCHITECTURE.md §18.3, §18.10) :
+    xls  la liste du parc des fichiers d'essai (tests/fixtures/import/equipements.xlsx) ouverte par le vrai Excel
+         et enregistrée en « Classeur Excel 97-2003 » (.xls) : Import.lire (démo, file://) lit ce .xls comme le
+         .xlsx (mêmes feuilles, mêmes cellules en texte : dates AAAA-MM-JJ, « 007 », « 1E5 », « 00481723 ») et
+         l'aperçu donne les mêmes actions, ligne par ligne (LISEZMOI : 5 créer, 1 mettre à jour, 14 identique,
+         3 refusée).
+
 Seuls les Excel lancés par tests/excel.py sont pilotés (et arrêtés en cas de blocage) : un Excel
 déjà ouvert par l'utilisateur n'est jamais touché (vérifié ici : ses processus sont toujours là).
 
 Lancer depuis la racine du projet (Git Bash) :
     PREVO_TEST_EXCEL=1 py -m unittest discover -s tests -p "test_excel_reel.py" -v
 """
+import base64
 import csv
 import io
 import re
@@ -48,7 +56,28 @@ from pathlib import Path
 
 import excel
 import test_format_v2 as format_v2      # import du module (pas de ses classes) : ses tests ne sont pas relancés ici
-from commun import CasNavigateur, DOSSIER_DEMO, RACINE, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo
+from commun import (CasNavigateur, DOSSIER_DEMO, RACINE, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo,
+                    url_fichier)
+from test_import_lecture import normaliser
+
+FIXTURES_IMPORT = RACINE / "tests" / "fixtures" / "import"
+XL_EXCEL8 = 56                                   # XlFileFormat : « Classeur Excel 97-2003 » (.xls)
+SIGNATURE_OLE = bytes([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])
+# Lecture de classeurs (nom, base64) par Import.lire, puis aperçu du parc sur la démo (correspondance automatique).
+LIRE_CLASSEURS_JS = """async (classeurs) => {
+  const resultats = {};
+  for (const [nom, contenu] of classeurs) {
+    const lu = await Import.lire(new File([Uint8Array.from(atob(contenu), (c) => c.charCodeAt(0))], nom));
+    const lignes = lu.feuilles[0].lignes;
+    const rang = Import.ligneEntete(lignes, 'equipements');
+    const donnees = lignes.slice(rang + 1);
+    const correspondance = Import.correspondance('equipements', Import.entetes(lignes, rang, false), donnees, 'auto');
+    const apercu = Import.preparer('equipements', donnees, correspondance, { numeroPremiereLigne: rang + 2 });
+    resultats[nom] = { format: lu.format, feuilles: lu.feuilles, rang, totaux: apercu.totaux,
+                       actions: apercu.lignes.map((l) => [l.numero, l.action]) };
+  }
+  return resultats;
+}"""
 
 BOM = b"\xef\xbb\xbf"
 DESIGNATION = "Tour à commande numérique « Ébène »"
@@ -501,6 +530,51 @@ class TestExcelReel(CasNavigateur):
             self.assertEqual((nouvel_ot["id"], nouvel_ot["di_id"], nouvel_ot["anomalie_constatee"]), (ot_cree, di, "0"))
             self.assertEqual(len(ecrits["ordres_travail"]), len(lignes_v1["ordres_travail"]) + 1)
             self.assertEqual([p for p in self.problemes() if p[1] == "colonne"], [])     # plus rien à signaler
+
+    def test_excel_xls_enregistre_par_excel_lu_par_import_comme_le_xlsx(self):
+        # Le vrai Excel ouvre une copie de equipements.xlsx et l'enregistre en .xls (Excel 97-2003)
+        dossier = Path(tempfile.mkdtemp(prefix="prevo-excel-xls-"))
+        try:
+            entree, sortie = dossier / "parc.xlsx", dossier / "parc.xls"
+            shutil.copyfile(str(FIXTURES_IMPORT / "equipements.xlsx"), str(entree))
+            code, console = excel._executer_vbs("\r\n".join([
+                'etape = "ouverture du classeur"',
+                "Set wb = xl.Workbooks.Open(%s, , , , , , , , , , , , , True)" % excel.chaine_vbs(str(entree)),
+                "Verifier",
+                'etape = "enregistrement en .xls"',
+                "wb.SaveAs %s, %d" % (excel.chaine_vbs(str(sortie)), XL_EXCEL8),
+                "Verifier",
+            ]))
+            self.assertEqual(code, 0, console)
+            self.assertTrue(sortie.is_file(), console)
+            octets_xls = sortie.read_bytes()
+        finally:
+            shutil.rmtree(dossier, ignore_errors=True)
+        self.assertEqual(octets_xls[:8], SIGNATURE_OLE, "un .xls est un conteneur OLE")
+
+        # Import.lire (démo, file://) : le .xls d'Excel donne les mêmes cellules et le même aperçu que le .xlsx
+        page = self.page
+        preregler_profil(self.contexte, "responsable")
+        page.goto(url_fichier("index.html"))
+        page.click("#btn-demo")
+        attendre_pret(page)
+        xlsx = base64.b64encode((FIXTURES_IMPORT / "equipements.xlsx").read_bytes()).decode("ascii")
+        lus = page.evaluate(LIRE_CLASSEURS_JS, [["parc.xlsx", xlsx], ["parc.xls", base64.b64encode(octets_xls).decode("ascii")]])
+        reference, excel_xls = lus["parc.xlsx"], lus["parc.xls"]
+        self.assertEqual((reference["format"], excel_xls["format"]), ("xlsx", "xls"))
+        feuilles = lambda lu: {f["nom"]: normaliser(f["lignes"]) for f in lu["feuilles"] if normaliser(f["lignes"])}
+        self.assertEqual(list(feuilles(excel_xls)), list(feuilles(reference)))
+        for nom, lignes in feuilles(reference).items():
+            with self.subTest(feuille=nom):
+                self.assertEqual(feuilles(excel_xls)[nom], lignes)
+        parc = feuilles(excel_xls)["Parc"]
+        self.assertIn("007", [l[1] for l in parc if len(l) > 1])
+        self.assertIn("1E5", [l[5] for l in parc if len(l) > 5])
+        self.assertEqual(excel_xls["rang"], 1)
+        self.assertEqual(excel_xls["actions"], reference["actions"])
+        self.assertEqual({a: excel_xls["totaux"][a] for a in ("creer", "mettre_a_jour", "identique", "refusee")},
+                         {"creer": 5, "mettre_a_jour": 1, "identique": 14, "refusee": 3})
+
 
 if __name__ == "__main__":
     unittest.main()
