@@ -1715,9 +1715,60 @@ class TestDemoLot6(unittest.TestCase):
         self.assertGreater(po02['date_fin'], max(o['date_fin'] for o in garnitures))
         self.assertIn('désaligné', po02['compte_rendu'])
         self.assertIn('radiateur', cp01['compte_rendu'])
+        # CP-01 : après le dernier filtre colmaté (C05) clôturé, dont elle contredit la cause.
+        filtres = [o for o in self.t['ordres_travail'] if o['equipement_id'] == cp01['equipement_id']
+                   and o['cause_code'] == 'C05' and o['statut'].startswith('Clôturé')]
+        self.assertTrue(filtres)
+        self.assertGreater(cp01['date_fin'], max(o['date_fin'] for o in filtres))
+        # Sans pièce : ni pièce prévue, ni mouvement de stock.
+        ids = {cp01['id'], po02['id']}
+        self.assertEqual([p for p in self.t['ot_pieces'] if p['ot_id'] in ids], [])
+        self.assertEqual([m for m in self.t['mouvements_stock'] if m['ot_id'] in ids], [])
         # Numérotés en dernier, dans l'ordre de leurs dates : aucun autre numéro d'OT n'a bougé.
         numeros_2026 = sorted(o['id'] for o in self.t['ordres_travail'] if o['id'].startswith('OT-2026-'))
         self.assertEqual(numeros_2026[-2:], [cp01['id'], po02['id']])
+
+    def test_astuces_ne_devoilent_pas_les_ot_de_scenario(self):
+        """Ce que les OT de scénario découvrent (alignement de l'accouplement, radiateur d'huile) n'est dans aucune
+        autre astuce : sinon le wiki lirait une confirmation, pas une contradiction (D109)."""
+        autres = [o for o in self.t['ordres_travail'] if o['astuce'] and o not in self.scenarios]
+        for mot in ('alignement', 'radiateur'):
+            self.assertEqual([o['id'] for o in autres if mot in o['astuce'].lower()], [], mot)
+            self.assertEqual([a for liste in self.generateur.ASTUCES.values() for a in liste if mot in a.lower()], [], mot)
+
+    def test_le_lot_6_n_ajoute_que_les_astuces_et_les_deux_ot_de_scenario(self):
+        """§20.10 : le reste du jeu ne change pas. Jeu construit sans les ajouts du lot 6 = jeu de démo moins la
+        colonne astuce et moins les lignes des deux OT de scénario (OT, DI, temps, entrées du journal)."""
+        generateur = self.generateur
+        normal = generateur.construire_jeu().base
+        originaux = (generateur.ajouter_ot_de_scenario_lot6, generateur.poser_astuces_lot6)
+
+        def sans_scenario(ctx):
+            ctx.ot_scenario_lot6 = []
+        generateur.ajouter_ot_de_scenario_lot6 = sans_scenario
+        generateur.poser_astuces_lot6 = lambda ctx: None
+        try:
+            sans_lot6 = generateur.construire_jeu().base
+        finally:
+            generateur.ajouter_ot_de_scenario_lot6, generateur.poser_astuces_lot6 = originaux
+        ot_scenario = {o['id'] for o in normal['ordres_travail'] if o['titre'].endswith('cause trouvée')}
+        di_scenario = {d['id'] for d in normal['demandes'] if d['ot_id'] in ot_scenario}
+        self.assertEqual(len(ot_scenario), 2)
+        self.assertEqual(len(di_scenario), 2)
+        a_retirer = {
+            'ordres_travail': lambda l: l['id'] in ot_scenario, 'demandes': lambda l: l['id'] in di_scenario,
+            'ot_temps': lambda l: l['ot_id'] in ot_scenario, 'ot_pieces': lambda l: l['ot_id'] in ot_scenario,
+            'ot_operations': lambda l: l['ot_id'] in ot_scenario,
+            'journal': lambda l: l['id_ligne'] in ot_scenario | di_scenario,
+        }
+        retirees = 0
+        for table in TABLES:
+            with self.subTest(table=table):
+                filtre = a_retirer.get(table, lambda l: False)
+                gardees = [dict(l, astuce='') if table == 'ordres_travail' else l for l in normal[table] if not filtre(l)]
+                retirees += len(normal[table]) - len(gardees)
+                self.assertEqual(gardees, sans_lot6[table])
+        self.assertEqual(retirees, 2 + 2 + 6 + len([t for t in normal['ot_temps'] if t['ot_id'] in ot_scenario]))
 
 
 class TestAvecNavigateur(CasNavigateur):

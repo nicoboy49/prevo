@@ -66,20 +66,20 @@ J-20260921091307-Q5UZ;2026-09-21 09:13;Poste démo;Responsable;ordres_travail;OT
 J-20260921091349-V4TA;2026-09-21 09:13;Poste démo;Responsable;demandes;DI-2026-0099;modification : statut, date_decision, ot_id — acceptée → OT-2026-0168
 J-20260921101325-FBP1;2026-09-21 10:13;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0168;modification : statut, date_debut — statut Créé → En cours
 J-20260921132145-OQGM;2026-09-21 13:21;Poste démo;Technicien TEC-0001;ordres_travail;OT-2026-0168;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
-J-20260924075554-SEI4;2026-09-24 07:55;Poste démo;Demandeur Antoine Mercier;demandes;DI-2026-0124;création — demande signalée
-J-20260924094507-XEUE;2026-09-24 09:45;Poste démo;Responsable;ordres_travail;OT-2026-0168;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
-J-20260924100202-EH8P;2026-09-24 10:02;Poste démo;Responsable;ordres_travail;OT-2026-0213;création — acceptation de DI-2026-0124
-J-20260924100254-X7UI;2026-09-24 10:02;Poste démo;Responsable;demandes;DI-2026-0124;modification : statut, date_decision, ot_id — acceptée → OT-2026-0213
-J-20260924101717-DM1E;2026-09-24 10:17;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0213;modification : statut, date_debut — statut Créé → En cours
-J-20260924133321-EB0Y;2026-09-24 13:33;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0213;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
-J-20260925090039-9YHS;2026-09-25 09:00;Poste démo;Responsable;ordres_travail;OT-2026-0213;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
-J-20260925102010-OD7E;2026-09-25 10:20;Poste démo;Demandeur Lucas Perrot;demandes;DI-2026-0100;création — demande signalée
-J-20260925103010-4D84;2026-09-25 10:30;Poste démo;Responsable;ordres_travail;OT-2026-0169;création — acceptation de DI-2026-0100
-J-20260925103028-9U49;2026-09-25 10:30;Poste démo;Responsable;demandes;DI-2026-0100;modification : statut, date_decision, ot_id — acceptée → OT-2026-0169
-J-20260925105446-94SJ;2026-09-25 10:54;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0169;modification : statut, date_debut — statut Créé → En cours
-J-20260925122954-NEIM;2026-09-25 12:29;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0169;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
-J-20260928093004-Q088;2026-09-28 09:30;Poste démo;Responsable;ordres_travail;OT-2026-0169;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
-J-20261019073638-KLUI;2026-10-19 07:36;Poste démo;Demandeur Paul Dubois;demandes;DI-2026-0123;création — demande signalée
-J-20261019075015-LVZW;2026-10-19 07:50;Poste démo;Responsable;ordres_travail;OT-2026-0212;création — acceptation de DI-2026-0123
-J-20261019075051-QE2W;2026-10-19 07:50;Poste démo;Responsable;demandes;DI-2026-0123;modification : statut, date_decision, ot_id — acceptée → OT-2026-0212
-J-20261019081250-M0XR;2026-10-19 08:12;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0212;modification : statut, date_debut — statut Créé → En cours
+J-20260924075534-YCGP;2026-09-24 07:55;Poste démo;Demandeur Antoine Mercier;demandes;DI-2026-0124;création — demande signalée
+J-20260924094554-SEI4;2026-09-24 09:45;Poste démo;Responsable;ordres_travail;OT-2026-0168;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260924100223-E0VY;2026-09-24 10:02;Poste démo;Responsable;ordres_travail;OT-2026-0213;création — acceptation de DI-2026-0124
+J-20260924100239-39XC;2026-09-24 10:02;Poste démo;Responsable;demandes;DI-2026-0124;modification : statut, date_decision, ot_id — acceptée → OT-2026-0213
+J-20260924101739-UHJU;2026-09-24 10:17;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0213;modification : statut, date_debut — statut Créé → En cours
+J-20260924133315-PM6Z;2026-09-24 13:33;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0213;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260925090004-QC7Q;2026-09-25 09:00;Poste démo;Responsable;ordres_travail;OT-2026-0213;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20260925102007-XEUE;2026-09-25 10:20;Poste démo;Demandeur Lucas Perrot;demandes;DI-2026-0100;création — demande signalée
+J-20260925103002-EH8P;2026-09-25 10:30;Poste démo;Responsable;ordres_travail;OT-2026-0169;création — acceptation de DI-2026-0100
+J-20260925103054-X7UI;2026-09-25 10:30;Poste démo;Responsable;demandes;DI-2026-0100;modification : statut, date_decision, ot_id — acceptée → OT-2026-0169
+J-20260925105417-DM1E;2026-09-25 10:54;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0169;modification : statut, date_debut — statut Créé → En cours
+J-20260925122921-EB0Y;2026-09-25 12:29;Poste démo;Technicien TEC-0003;ordres_travail;OT-2026-0169;modification : statut, date_cloture_tech — statut En cours → Clôturé techniquement
+J-20260928093039-9YHS;2026-09-28 09:30;Poste démo;Responsable;ordres_travail;OT-2026-0169;modification : statut, date_cloture_admin — statut Clôturé techniquement → Clôturé administrativement
+J-20261019073610-OD7E;2026-10-19 07:36;Poste démo;Demandeur Paul Dubois;demandes;DI-2026-0123;création — demande signalée
+J-20261019075010-4D84;2026-10-19 07:50;Poste démo;Responsable;ordres_travail;OT-2026-0212;création — acceptation de DI-2026-0123
+J-20261019075028-9U49;2026-10-19 07:50;Poste démo;Responsable;demandes;DI-2026-0123;modification : statut, date_decision, ot_id — acceptée → OT-2026-0212
+J-20261019081246-94SJ;2026-10-19 08:12;Poste démo;Technicien TEC-0002;ordres_travail;OT-2026-0212;modification : statut, date_debut — statut Créé → En cours

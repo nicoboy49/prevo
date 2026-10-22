@@ -3182,11 +3182,13 @@ def identifiant_journal(ctx, moment, seconde, pris):
             return identifiant
 
 
-def generer_journal(ctx):
+def generer_journal(ctx, garder=None):
     """Journal de la démo : historique des statuts des pannes récentes et de leurs DI (voir la docstring).
 
     Les entrées d'une même minute reçoivent des secondes croissantes dans l'ordre où Prévo les écrit :
     trier le fichier par date_heure puis identifiant redonne cet ordre (§15.3).
+    `garder(ot)` : seuls les OT retenus ont leurs entrées (défaut : tous) ; les OT de scénario du lot 6 sont écrits
+    à part, sous hasard_du_lot6, pour que les entrées des autres OT ne changent pas.
     """
     base = ctx.base
     demandes = {d['id']: d for d in base['demandes']}
@@ -3200,6 +3202,8 @@ def generer_journal(ctx):
     debut = debut_historique_statuts(ctx)
     entrees = []                      # (instant, table, id_ligne, profil, action), dans l'ordre d'écriture
     for ot in base['ordres_travail']:
+        if garder is not None and not garder(ot):
+            continue
         if not (est_panne(ot) and date_de_panne(ot, demandes, demandes_par_ot) >= debut):
             continue
         entrees += [(moment, 'ordres_travail', ot['id'], profil, action)
@@ -3209,7 +3213,7 @@ def generer_journal(ctx):
                     for moment, identifiant, profil, action in entrees_des_demandes(ctx, ot, liees)]
     # Ordre du temps ; à la même minute, l'ordre d'écriture (rang dans la liste).
     ordonnees = [entree for _rang, entree in sorted(enumerate(entrees), key=lambda e: (e[1][0], e[0]))]
-    pris = set()
+    pris = {ligne['id'] for ligne in base['journal']}
     for minute, groupe in groupby(ordonnees, key=lambda entree: entree[0]):
         groupe = list(groupe)
         secondes = sorted(ctx.rng.sample(range(60), len(groupe)))
@@ -4451,7 +4455,7 @@ def verifier_scenarios(ctx, scenarios):
 # l'équipement) : le vocabulaire de la sécurité du wiki y est interdit (test_demo le vérifie).
 ASTUCES = {
     'Fuite à la garniture mécanique': [
-        "Contrôler l'alignement de l'accouplement au comparateur avant de remonter la garniture neuve : un désalignement l'use en quelques semaines.",
+        "Nettoyer les faces de frottement de la garniture neuve juste avant le montage : une poussière suffit à la faire fuir.",
         "Prévoir deux joints toriques de rechange : ceux du kit se pincent facilement au remontage.",
         "Repérer la position du grain fixe au feutre avant la dépose : le remontage est deux fois plus rapide.",
     ],
@@ -4488,7 +4492,7 @@ ASTUCES = {
         "Remplacer les deux roulements du tambour en même temps : le second lâche peu après.",
     ],
     'Échauffement du compresseur, filtre colmaté': [
-        "Souffler le radiateur à chaque changement de filtre : l'échauffement revient sinon en quelques semaines.",
+        "Écrire la date de pose au marqueur sur le filtre neuf : on voit tout de suite depuis quand il est en place.",
         "Noter la température de refoulement avant l'intervention : elle montre si c'était bien le filtre.",
     ],
     "Échauffement, niveau d'huile bas": [
@@ -4577,7 +4581,7 @@ SCENARIOS_CONTRADICTOIRES = [
         'S01', 'C11', 'R02', 1, [MECA, POLY], (2.0, 3.0), (('dégradé', 1),), (),
         'Fuite à la garniture mécanique, cause trouvée',
         "Rechercher la cause des fuites répétées de la garniture : alignement, vibrations, qualité de l'eau.",
-        ["La pompe {rep} fuit encore à l'arbre, à peine deux mois après la dernière garniture."],
+        ["La pompe {rep} fuit encore à l'arbre, alors que sa garniture vient d'être changée."],
         ["Fuite naissante à la garniture. Contrôle de l'alignement au comparateur : accouplement désaligné de "
          "0,4 mm, c'est lui qui use la garniture, pas l'usure normale. Accouplement réaligné et calé ; la "
          "garniture, peu marquée, est gardée : plus de fuite après rodage, à contrôler dans un mois."]),
@@ -4592,6 +4596,7 @@ def ajouter_ot_de_scenario_lot6(ctx):
     lit que ceux-là), sans pièce sortie (le stock du jeu ne change pas)."""
     tables = ('demandes', 'ordres_travail', 'ot_temps', 'ot_pieces', 'ot_operations')
     deja = {table: len(ctx.base[table]) for table in tables}
+    ctx.ot_scenario_lot6 = []
     for repere, jours, scenario_, astuce in SCENARIOS_CONTRADICTOIRES:
         jour = jour_ouvre_avant(ctx.ref - timedelta(days=jours))
         _, ot = creer_correctif(ctx, ctx.equipement[repere], scenario_, heure_aleatoire(ctx.rng, jour, 7.5, 9.0),
@@ -4601,6 +4606,7 @@ def ajouter_ot_de_scenario_lot6(ctx):
         admin = instant(jour_ouvre_apres(fin_technique.date() + timedelta(days=1)), 9.0)
         renseigner(ot, statut='Clôturé administrativement', date_cloture_admin=texte_dh(min(admin, ctx.maintenant)),
                    astuce=astuce)
+        ctx.ot_scenario_lot6.append(ot)
     for table in tables:
         for ligne in ctx.base[table][deja[table]:]:
             if ligne['id']:
@@ -4660,10 +4666,14 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None):
     generer_parametres(ctx)
     resoudre_references(ctx)
     if not volume:                    # le jeu de charge garde un journal vide
+        scenario_lot6 = {id(ot) for ot in ctx.ot_scenario_lot6}
         with hasard_du_lot3(ctx):
-            generer_journal(ctx)
+            generer_journal(ctx, garder=lambda ot: id(ot) not in scenario_lot6)
         with hasard_du_lot3bis(ctx):
             ajouter_decision_ignoree(ctx)
+        with hasard_du_lot6(ctx):
+            generer_journal(ctx, garder=lambda ot: id(ot) in scenario_lot6)
+        ctx.base['journal'].sort(key=lambda entree: (entree['date_heure'], entree['id']))
     verifier_jeu(ctx)
     if not volume:
         verifier_demo_lot3(ctx)
