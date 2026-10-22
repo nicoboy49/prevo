@@ -5,7 +5,7 @@
 // recherche limitée à l'équipement, pannes habituelles, pièces consommées, dernières interventions, même
 // marque et modèle) ; réécrits pour les quatre types de pages en T119. Champ de recherche réutilisable (Wiki.champRecherche,
 // posé dans l'onglet Préparation de l'OT ; Wiki.poserRechercheDemande, dans la saisie d'une DI) ;
-// enregistrement des écrans auprès d'App. Dernier fichier du module.
+// enregistrement des écrans auprès d'App (le dernier fichier du module est wiki-journal-ecrans.js).
 //
 // Lecture seule : rien n'est écrit, aucun appel réseau (Wiki.pageEquipement, Wiki.listePages, Wiki.rechercher).
 // Toute donnée insérée passe par UI.html (échappement) ; la consignation est posée par textContent,
@@ -157,7 +157,7 @@ Object.assign(Wiki, (() => {
     const id = UI.identifiantUnique('wiki-recherche');
     const aide = equipementId
       ? 'Dans les interventions clôturées : cet équipement d\'abord, puis ceux de même marque et modèle, puis le reste du parc.'
-      : 'Dans les interventions clôturées et les synthèses validées de tout le parc.';
+      : 'Dans les interventions clôturées de tout le parc.';
     const element = UI.element(UI.html`
       <section class="carte wiki-recherche" data-hors-saisie role="search" aria-label="${titre}" data-equipement="${equipementId}">
         <label class="wiki-recherche-titre" for="${id}">${UI.icone('recherche')}<span>${titre}</span></label>

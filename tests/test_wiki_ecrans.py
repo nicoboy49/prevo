@@ -139,7 +139,7 @@ ECRIRE_JS = """async ([table, id, valeurs]) => {
 }"""
 
 
-# --- valeurs attendues, calculées ici à partir de Wiki.page -------------------------------------------
+# --- valeurs attendues, calculées ici à partir de Wiki.pageEquipement ----------------------------------
 
 def date_fr(iso):
     return "%s/%s/%s" % (iso[8:10], iso[5:7], iso[0:4]) if iso else ""

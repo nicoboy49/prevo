@@ -245,6 +245,30 @@ class TestServeur(CasServeurV1):
             self.assertTrue(resultat["ok"] and resultat["valeur"]["misAJour"], resultat)
             self.assertEqual(version_schema(self.octets(serveur, "parametres.csv")), FORMAT_COURANT)
 
+    def test_passage_1_vers_3_tables_du_wiki_vides_colonne_astuce_vide_aucun_autre_fichier_change(self):
+        """Lot 6 (§20.2) : une base au format 1, sans fichiers du wiki ni colonne astuce, passe directement au format
+        3 ; les deux tables du wiki restent absentes (vides), la colonne astuce est lue vide (simple information),
+        et seuls parametres.csv et journal.csv changent sur le disque."""
+        with ServeurPrevo() as serveur:
+            for nom in ("wiki_pages.csv", "wiki_journal.csv"):
+                (serveur.dossier / nom).unlink()
+            retirer_derniere_colonne(serveur.dossier / "ordres_travail.csv", "astuce")
+            self.autoriser_erreur(re.compile(r"status of 404.*/api/csv/wiki_(pages|journal)"))   # fichier absent = table vide
+            self.ouvrir_application_v1(serveur)
+            avant = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
+            resultat = self.mettre_a_jour()
+            self.assertTrue(resultat["ok"] and resultat["valeur"]["misAJour"], resultat)
+            self.assertRegex(resultat["valeur"]["sauvegarde"], MOTIF_NOM_AVANT_FORMAT_COURANT)
+            apres = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
+            self.assertEqual(set(apres), set(avant))                  # aucun fichier du wiki créé
+            self.assertEqual(sorted(nom for nom in avant if apres[nom] != avant[nom]), ["journal.csv", "parametres.csv"])
+            self.assertEqual(self.page.evaluate("[Donnees.lignes('wiki_pages').length, Donnees.lignes('wiki_journal').length]"),
+                             [0, 0])
+            self.assertEqual(self.page.evaluate(
+                "Donnees.lignes('ordres_travail').filter((ot) => ot.astuce !== '').length"), 0)
+            # (Le problème « info » de la colonne absente est prouvé par TestFormat2VersFormat3 : ici, la base a été
+            # lue d'abord avec les paramètres de la démo, au format 3, avant l'installation de ceux du format 1.)
+
 
 def retirer_derniere_colonne(chemin, nom):
     """Réécrit un CSV de Prévo (BOM, « ; », CRLF) sans sa dernière colonne, qui doit s'appeler `nom` : le

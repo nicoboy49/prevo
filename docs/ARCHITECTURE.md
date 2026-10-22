@@ -2606,8 +2606,8 @@ Version de clôture `v1.2.0`.
   | `raisons` | `texte_long` | raisons d'un refus, une par ligne |
   | `modele` | texte | modèle réellement utilisé |
   | `essais` | entier | |
-  | `cree_le`, `traite_le`, `decide_le` | `date_heure` | |
-  | `decide_par` | texte | |
+  | `cree_le`, `traite_le` | `date_heure` | |
+  | `decide_par`, `decide_le` | texte, `date_heure` | qui a décidé, et quand |
   | `motif` | `texte_long` | motif d'un rejet ; « rejoué : page créée entre-temps » (D112) |
 
 - **Passage au format 3** : `Donnees.mettreAJourVersionSchema()` (§5.6) tel quel, motif `avant-format-v3`

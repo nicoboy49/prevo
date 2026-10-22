@@ -1,13 +1,13 @@
 """Recherche sans IA du wiki de maintenance (lot 6, tâche T98, ARCHITECTURE.md §20.6 ; décision D99 a).
 
 Les données sont un CORPUS D'ESSAI écrit à la main (tests/fixtures/wiki/corpus.json : équipements dont deux
-de même marque et modèle, OT clôturés et non clôturés, DI d'origine et DI regroupée, codes, synthèses
-validée, « à valider » et « remplacée ») chargé dans StockageDemo, page file:// avec les seuls scripts utiles.
+de même marque et modèle, OT clôturés et non clôturés, DI d'origine et DI regroupée, codes) chargé dans
+StockageDemo (les pages validées du wiki s'ajoutent à l'index avec T116), page file:// avec les seuls scripts utiles.
 
 Couvert :
-    - chaque requête du corpus : ses OT (ou synthèses) attendus parmi les 3 premiers de leur portée, les
+    - chaque requête du corpus : ses OT attendus parmi les 3 premiers de leur portée, les
       « jamais » absents de toutes les portées, « aucun » sans aucun résultat (lexique, pluriels, accents,
-      majuscules, mots vides, expressions, OT non clôturés, synthèses non validées, DI d'origine) ;
+      majuscules, mots vides, expressions, OT non clôturés, DI d'origine) ;
     - mots comparables (Wiki.motsRecherche), Wiki.LEXIQUE (groupes du contrat, figé), Wiki.MOTS_VIDES ;
     - classement : scores BM25 égaux à un CALCUL PYTHON INDÉPENDANT (k1 = 1,2, b = 0,75, poids 0,7 d'un
       équivalent du lexique), égalité de score départagée par la date ;

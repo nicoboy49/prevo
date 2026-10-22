@@ -10,8 +10,8 @@ Deux familles :
       jamais pris pour une récidive ; retour qui annule une sortie ; symptôme à 4 cas (insuffisant) et
       à 5 cas ; OT annulé et OT préventif ignorés ; clôture administrative comptée ; équipement sans
       consignation ; jumeaux de même marque et modèle écrits avec une autre casse et d'autres espaces,
-      jumeau inactif écarté, récidive jamais comptée d'un équipement à l'autre ; synthèse validée suivie
-      de 2 OT clôturés (à revoir, depuis = 2) et synthèse remplacée ignorée ;
+      jumeau inactif écarté, récidive jamais comptée d'un équipement à l'autre (la synthèse de la première
+      version du lot 6 a disparu avec la refonte, T110) ;
     - pureté : aucune écriture (tables identiques, Donnees.modifier jamais appelé), aucun appel réseau.
 
 Lancer depuis la racine du projet :

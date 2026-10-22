@@ -344,7 +344,7 @@ def suggestions_ouvertes(t, aujourdhui=JOUR_REFERENCE, seuil=SEUIL_PANNES, jusqu
 class TestFichiersCsv(unittest.TestCase):
     """Format des 24 fichiers (§3.1)."""
 
-    def test_23_fichiers_presents(self):
+    def test_24_fichiers_presents(self):
         presents = sorted(p.name for p in DOSSIER_DEMO.glob('*.csv'))
         self.assertEqual(presents, sorted(t + '.csv' for t in TABLES))
 
