@@ -2710,8 +2710,8 @@ Version de clôture `v1.2.0`.
   texte complet, ou créer au plus `pagesCreeesMax` pages (mode, savoir-faire, composant sans article) ;
   chaque phrase cite au moins un OT (cet OT ou un OT déjà cité dans les pages) ; ne jamais retirer une
   phrase ni un OT cité (une phrase reformulée garde tous ses OT) ; ce qui contredit une phrase existante va
-  dans `contradictions`, la phrase reste ; aucun comptage, aucune date, aucun nombre absent de l'OT ou des
-  pages ; « fréquent ici », jamais « cause certaine » ; **les pages savoir-faire s'écrivent d'abord à partir
+  dans `contradictions`, la phrase reste ; aucune date, aucun nombre absent de l'OT à intégrer ou du texte
+  actuel de la page écrite (§20.6) ; aucune fréquence ni aucun comptage ; jamais « cause certaine » ; **les pages savoir-faire s'écrivent d'abord à partir
   de l'astuce** ; aucune consigne de sécurité ; si `anterieure` : « intervention antérieure à des faits déjà
   intégrés », ne jamais présenter cette information comme la plus récente ; « rien à ajouter » si l'OT
   n'apprend rien. Une page est une synthèse, pas un historique ; ses limites sont celles de son en-tête ;
@@ -2758,8 +2758,13 @@ page. Refus si :
 - citations : phrase sans OT ; OT cité hors des OT permis ;
 - **non-retrait** : un OT cité avant disparaît de la page ; une phrase existante n'est ni identique ni
   **reprise** (une phrase nouvelle la reprend si elle cite tous ses OT) ;
-- **nombres** : un nombre (chiffres, virgule ou point) absent du texte de l'OT ingéré (tous les champs
-  envoyés) et du texte précédent de la page ; les citations et les crochets de lien ne comptent pas ;
+- **nombres** : un nombre (chiffres, virgule ou point) d'une phrase nouvelle ou reprise, ou du titre d'une page
+  créée, absent du texte de référence — le texte de l'OT ingéré (tous les champs envoyés, sauf sa date) et le texte
+  précédent de la page (rien pour une page créée ; le texte et le titre de sa mère pour une sous-page créée) ; les
+  citations, les numéros d'OT et les crochets de lien ne comptent pas ; la raison dit ce texte de référence :
+  « absent de l'OT intégré et du texte d'avant de cette page » (page modifiée), « absent de l'OT intégré, seule
+  source des nombres d'une page créée » (page créée, et « du titre absent … » pour son titre), « absent de l'OT
+  intégré, du texte et du titre de sa page mère » (sous-page créée) ; à la main : « absent des OT cités » (T140) ;
 - **comptage** : « <nombre ou nombre en lettres> fois | OT | interventions | pannes | cas | remplacements » ;
 - **dates** : année 19xx ou 20xx hors citation, nom de mois, date en chiffres ;
 - **nouveauté** (D111) : pour un OT `anterieure`, une phrase nouvelle ou reprise dont l'OT cité le plus récent
@@ -2775,7 +2780,8 @@ page. Refus si :
 - contradictions : `phrase` qui n'est pas une phrase existante de la page ; `ot` autre que l'OT ingéré.
 
 Écriture à la main (`contexte.manuel`) : mêmes contrôles, sauf le non-retrait ; les OT permis sont tous les
-OT clôturés ; pour les nombres, le texte de référence est celui des OT cités.
+OT clôturés ; pour les nombres, le texte de référence est celui des OT cités, plus le texte précédent de la page
+(et, pour une sous-page, le texte et le titre de sa mère).
 
 ### 20.7 Journal, validation, contradictions, écriture à la main (`wiki-journal.js`)
 Toutes les écritures par `Donnees.modifier` (contrôle de version, journal général), **responsable
@@ -2935,11 +2941,22 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
   savoir-faire rattachés à cette machine ou à ces articles et leurs sous-pages ; plus de clé `CAUSE:`, plus de pages
   liées depuis la machine ; 8 envoyées au plus.
 - **Consigne `ingestionWiki`** : l'IA met à jour seulement « En bref » (ce qu'il faut savoir d'abord de cette
-  machine : ce qui revient, ce qui a réglé le problème), « Astuces » (tirées des astuces des OT), « À quoi il sert »
-  de chaque article consommé (son rôle sur les machines, ses signes d'usure), et crée ou modifie des savoir-faire
-  (d'abord à partir de l'astuce, D110) ; une synthèse, pas un historique ; les longueurs de l'en-tête de chaque
-  texte ; toutes les autres règles inchangées. **Seuls les OT clôturés administrativement** entrent dans la file
-  (inchangé, §20.5) : l'IA ne rédige qu'à partir d'eux.
+  machine : ce qui revient, ce qui a réglé le problème), « Astuces » (une astuce courte d'un OT, en une phrase),
+  « À quoi il sert » de chaque article consommé — seulement ce que les OT observent de lui (son rôle sur la machine
+  si l'OT le dit, ses signes d'usure ou de casse, ce qui l'use, comment il se monte ou se change), jamais où ni quand
+  il a été changé, ni la panne qu'il a réglée, ni un rôle supposé ; sinon la page n'est pas renvoyée (une page
+  concernée non renvoyée reste inchangée) —, et crée ou modifie des savoir-faire (d'abord à partir de l'astuce,
+  D110 ; créé seulement si l'OT décrit au moins deux gestes réutilisables ; titre = le geste et le repère de la
+  machine, ou l'article) ; une astuce à un seul endroit (« Astuces » ou un savoir-faire, jamais aux deux ni dans
+  « À quoi il sert ») ; une synthèse, pas un historique ; les longueurs de l'en-tête de chaque texte — rubrique
+  pleine : ajouter l'OT à la phrase qu'il confirme, regrouper deux phrases en gardant tous leurs OT, ou n'y rien
+  écrire ; relevés d'un contrôle de routine non écrits sauf si l'OT les dit anormaux ou s'ils expliquent la panne ;
+  aucun comptage, même dans une étape, aucune fréquence (« fréquent », « souvent », « régulièrement », « à chaque
+  fois »), jamais « cause certaine » ; nombres : la règle du contrôle (§20.6) — l'OT à intégrer ou le texte actuel
+  de la page écrite (page créée, titre compris : l'OT seul ; sous-page : aussi le texte et le titre de sa mère),
+  jamais un nombre d'une autre page reçue ; étape d'arrêt : « Mettre la machine à l'arrêt selon la fiche en tête de
+  sa page » ; toutes les autres règles inchangées (T140). **Seuls les OT clôturés administrativement** entrent dans
+  la file (inchangé, §20.5) : l'IA ne rédige qu'à partir d'eux.
 - **Pages et identifiants** (`Wiki.entite(id, { profil, maintenant })`, D113 ; l'écran d'une page ne lit que `Wiki.entite` —
   `Wiki.page` garde l'ancienne forme pour l'écriture à la main et le journal, et donne à `Wiki.entite` l'en-tête, la mère
   et les sous-pages d'un savoir-faire) : `EQ-…` machine, `ART-…` article,
