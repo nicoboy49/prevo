@@ -5,11 +5,14 @@ Toujours avec un faux `claude` (tests/fixtures/wiki/faux_claude.py), jamais un v
                   la requête de Prévo octet pour octet (message système en --system-prompt, message utilisateur sur
                   l'entrée standard) avec les options d'un agent sans outil ; propositions validées sauf celles des
                   14 derniers jours d'intervention ; intégrité ok ;
-    reprise     : une requête identique à l'octet reprend la réponse de la trace, sans nouvel appel ;
-    arrêts      : modèle autre que Sonnet, plus d'un tour, réponse en erreur, réponse refusée par Prévo ;
+    reprise     : une requête identique à l'octet reprend la réponse de la trace, sans nouvel appel (relance comprise) ;
+    relance     : (D106 révisée, §20.10) une réponse refusée par Prévo est relancée avec la raison : un agent neuf
+                  de plus, dans la même trace, et la fabrication continue ; une relance refusée l'arrête ;
+    arrêts      : modèle autre que Sonnet, plus d'un tour, réponse en erreur, réponse refusée par Prévo deux fois ;
     figer       : les fichiers figés repris par le générateur donnent une démo identique à l'octet d'une génération
-                  à l'autre ; vérification (traces, une entrée par OT, intégrité) ; page de relecture par type ; un
-                  fichier figé qui cite un OT inexistant arrête le générateur ;
+                  à l'autre ; vérification (traces, une entrée par OT reliée à la réponse acceptée — relance
+                  comprise —, intégrité) ; page de relecture par type ; un fichier figé qui cite un OT inexistant
+                  arrête le générateur ;
     À propos    : mention « construit par Claude (<modèle>) avec la consigne de Prévo, un agent par OT ».
 
 Lancer depuis la racine du projet :
@@ -39,6 +42,8 @@ FAUX = RACINE / 'tests' / 'fixtures' / 'wiki' / 'faux_claude.py'
 DEMO = RACINE / 'donnees' / 'demo'
 OPTIONS_AGENT = ['-p', '--model', 'sonnet', '--tools', '', '--system-prompt', None, '--setting-sources', '',
                  '--strict-mcp-config', '--no-session-persistence', '--disable-slash-commands', '--output-format', 'json']
+MARQUE_RELANCE = '\n\nTa réponse précédente :\n'
+REFUS_SANS_OT = 'phrase sans OT cité'          # premier refus du faux claude en mode « relance »
 
 
 def charger_outil():
@@ -77,9 +82,14 @@ class TestFabrication(unittest.TestCase):
         cls.traces = cls.dossier / 'chaine'
         cls.appels = cls.dossier / 'appels'
         cls.resultat = cls.dossier / 'resultat'
+        # Un OT du milieu de l'historique est refusé une fois par Prévo, puis accepté à la relance avec la raison.
+        clotures = sorted((o['date_fin'], o['id']) for o in lignes_csv(DEMO / 'ordres_travail.csv')
+                          if o['statut'] == 'Clôturé administrativement')
+        cls.relance = clotures[len(clotures) // 2][1]
         # Lancée comme depuis une session Claude Code : ses variables ne doivent pas passer aux agents.
         cls.sortie = lancer(OUTIL, ['fabriquer', '--agents', 5, '--claude', FAUX, '--traces', cls.traces,
                                     '--resultat', cls.resultat], {'FAUX_CLAUDE_TRACES': str(cls.appels),
+                                                                  'FAUX_CLAUDE_MODE': 'relance', 'FAUX_CLAUDE_RELANCE': cls.relance,
                                                                   'CLAUDECODE': '1', 'CLAUDE_CODE_SESSION_ID': 'session-de-test',
                                                                   'ANTHROPIC_BASE_URL': 'http://127.0.0.1:9'})
 
@@ -104,6 +114,29 @@ class TestFabrication(unittest.TestCase):
         pages = lignes_csv(self.resultat / 'wiki_pages.csv')
         self.assertGreater(len(pages), 50)
         self.assertEqual({p['valide_par'] for p in pages}, {'Responsable'})
+
+    def test_relance_avec_la_raison_un_agent_de_plus_dans_la_meme_trace(self):
+        """§20.10 : la réponse refusée par Prévo est relancée avec la raison (un agent neuf de plus, même trace) ; la
+        fabrication continue ; l'entrée garde les raisons du premier refus et compte deux essais."""
+        self.assertEqual(self.sortie.returncode, 0, self.sortie.stdout + self.sortie.stderr)
+        self.assertIn('relances avec la raison : 1 ·', self.sortie.stdout)
+        self.assertIn('Acceptées à la relance avec la raison : ' + self.relance + '\n', self.sortie.stdout)
+        traces = {p.stem: json.loads(p.read_text(encoding='utf-8')) for p in self.traces.glob('*.json')}
+        origine, relance = traces[self.relance]['appels']
+        self.assertEqual((origine['reprise'], origine['relance'], relance['reprise'], relance['relance']), (False, False, False, True))
+        self.assertEqual(relance['systeme'], origine['systeme'])
+        self.assertTrue(relance['utilisateur'].startswith(origine['utilisateur'] + MARQUE_RELANCE + origine['contenu'] + '\n\n'))
+        self.assertIn(REFUS_SANS_OT, relance['utilisateur'])
+        for appel in (origine, relance):
+            self.assertEqual((appel['modele'], appel['tours']), ('claude-sonnet-5-5', 1))
+        # Aucune autre relance : un seul appel par OT, jamais une requête de relance.
+        autres = [a for ot, t in traces.items() if ot != self.relance for a in t['appels']]
+        self.assertEqual(len(autres), len(traces) - 1)
+        self.assertFalse(any(a['relance'] or MARQUE_RELANCE in a['utilisateur'] for a in autres))
+        entree = next(e for e in lignes_csv(self.resultat / 'wiki_journal.csv') if e['ot_id'] == self.relance)
+        self.assertEqual((entree['statut'], entree['essais'], entree['modele']), ('validée', '2', 'claude-sonnet-5-5'))
+        self.assertIn(REFUS_SANS_OT, entree['raisons'])
+        self.assertEqual(traces[self.relance]['verdict']['statut'], 'validée')
 
     def test_requete_octet_pour_octet_et_options_d_un_agent_sans_outil(self):
         recus = [json.loads(p.read_text(encoding='utf-8')) for p in self.appels.glob('*.json')]
@@ -205,6 +238,18 @@ class TestFabrication(unittest.TestCase):
         sortie = lancer(OUTIL, ['verifier', '--demo', csv_demo, '--wiki', abime, '--traces', self.traces])
         self.assertEqual(sortie.returncode, 1)
         self.assertIn('OT sans entrée au journal figé', sortie.stdout)
+        # Vérification en échec : l'entrée acceptée à la relance n'est plus reliée à sa réponse (relance, ou réponse
+        # refusée, absente de la trace).
+        for nom, garder in (('sans-relance', slice(0, 1)), ('sans-refus', slice(1, 2))):
+            traces = self.dossier / ('chaine-' + nom)
+            shutil.copytree(self.traces, traces)
+            chemin = traces / (self.relance + '.json')
+            trace = json.loads(chemin.read_text(encoding='utf-8'))
+            trace['appels'] = trace['appels'][garder]
+            chemin.write_text(json.dumps(trace, ensure_ascii=False), encoding='utf-8')
+            sortie = lancer(OUTIL, ['verifier', '--demo', csv_demo, '--wiki', fige, '--traces', traces])
+            self.assertEqual(sortie.returncode, 1, nom)
+            self.assertIn('DÉFAUT : %s : acceptée à la relance' % self.relance, sortie.stdout, nom)
 
     def test_generateur_refuse_un_wiki_fige_incoherent(self):
         fige = self.dossier / 'fige-incoherent'
@@ -255,8 +300,52 @@ class TestArrets(unittest.TestCase):
         self.arreter('erreur', 'réponse en erreur')
 
     def test_reponse_refusee_par_prevo(self):
-        sortie = self.arreter('refus', 'ARRÊT : réponse refusée par les contrôles de Prévo')
+        sortie = self.arreter('refus', 'ARRÊT : réponse refusée par les contrôles de Prévo, même à sa relance avec la raison')
         self.assertIn('OT cité hors des OT permis : OT-1999-9999', sortie)
+
+    def test_relance_refusee_arrete_et_trace_ses_deux_appels(self):
+        """Refusée deux fois (à l'envoi puis à la relance avec la raison) : la fabrication s'arrête ; la trace de l'OT
+        porte ses deux appels, la relance citant la réponse refusée et sa raison."""
+        dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-arret-'))
+        self.addCleanup(shutil.rmtree, dossier, True)
+        sortie = self.lancer_petit(dossier, 'refus', ['--agents', 1])
+        self.assertEqual(sortie.returncode, 1, sortie.stdout)
+        self.assertIn('ARRÊT : réponse refusée par les contrôles de Prévo', sortie.stdout)
+        # Une seule relance, et aucun envoi ne part après le refus : deux agents en tout (l'envoi et sa relance).
+        self.assertIn('relances avec la raison : 1 ·', sortie.stdout)
+        self.assertIn('Agents lancés : 2 ·', sortie.stdout)
+        traces = [json.loads(p.read_text(encoding='utf-8')) for p in (dossier / 'chaine').glob('*.json')]
+        refusees = [t for t in traces if (t.get('verdict') or {}).get('statut') == 'refusée']
+        self.assertEqual(len(refusees), 1)
+        origine, relance = refusees[0]['appels']
+        self.assertEqual((origine['relance'], relance['relance']), (False, True))
+        self.assertTrue(relance['utilisateur'].startswith(origine['utilisateur'] + MARQUE_RELANCE + origine['contenu']))
+        self.assertIn('OT cité hors des OT permis : OT-1999-9999', relance['utilisateur'])
+        self.assertIn('OT cité hors des OT permis : OT-1999-9999', refusees[0]['verdict']['raisons'])
+
+    def test_relance_acceptee_reprise_par_empreinte(self):
+        """Chaque OT refusé une fois puis accepté à la relance : la fabrication réussit ; une seconde fabrication
+        reprend des traces la réponse refusée et la réponse à la relance (requêtes identiques à l'octet)."""
+        dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-relance-'))
+        self.addCleanup(shutil.rmtree, dossier, True)
+        sorties = []
+        for numero in (1, 2):
+            sortie = lancer(OUTIL, ['fabriquer', '--agents', 1, '--limite', 3, '--claude', FAUX, '--traces', dossier / 'chaine',
+                                    '--resultat', dossier / ('resultat-%d' % numero)], {'FAUX_CLAUDE_MODE': 'relance'})
+            self.assertEqual(sortie.returncode, 0, sortie.stdout + sortie.stderr)
+            sorties.append(sortie.stdout)
+        self.assertIn('Agents lancés : 6 · réponses reprises des traces : 0 · relances avec la raison : 3 ·', sorties[0])
+        self.assertIn('Agents lancés : 0 · réponses reprises des traces : 6 · relances avec la raison : 3 ·', sorties[1])
+        self.assertEqual(wiki_de(dossier / 'resultat-2'), wiki_de(dossier / 'resultat-1'))
+        for chemin in (dossier / 'chaine').glob('*.json'):
+            appels = json.loads(chemin.read_text(encoding='utf-8'))['appels']
+            self.assertEqual([(a['reprise'], a['relance']) for a in appels],
+                             [(False, False), (False, True), (True, False), (True, True)], chemin.stem)
+        journal = lignes_csv(dossier / 'resultat-2' / 'wiki_journal.csv')
+        self.assertEqual(len(journal), 3)
+        for entree in journal:
+            self.assertEqual(entree['essais'], '2', entree['ot_id'])
+            self.assertIn(REFUS_SANS_OT, entree['raisons'])
 
     def lancer_petit(self, dossier, mode='sonnet', options=()):
         return lancer(OUTIL, ['fabriquer', '--agents', 2, '--limite', 3, '--claude', FAUX, '--traces', dossier / 'chaine',

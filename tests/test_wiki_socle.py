@@ -26,7 +26,7 @@ ENTETES = {
 }
 # Profil : (type, nom, technicienId) ; un technicien choisit sa fiche, un demandeur donne son nom.
 PROFILS = {"demandeur": ("Lucie Martin", ""), "technicien": ("", "TEC-0001"), "responsable": ("", "")}
-SEUILS = {"pagesCreeesMax": 3, "phrasesMax": 12, "motsMax": 250, "pagesEnvoyeesMax": 8, "catalogueMax": 400,
+SEUILS = {"pagesCreeesMax": 3, "phrasesMax": 12, "motsMax": 250, "relancesMax": 1, "pagesEnvoyeesMax": 8, "catalogueMax": 400,
           "agentsSimultanes": 5, "astuceMax": 500, "otMinimum": 5, "recidiveJours": 30, "dernieres": 10,
           "symptomesMax": 5, "contradictionAncienneJours": 30, "demoAValiderJours": 14}
 

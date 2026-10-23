@@ -19,6 +19,12 @@
                     antériorité notée, ordre par page, aucune page dans deux envois à la fois) ; refus → « refusée »
                     avec ses raisons ; collision → « en file » avec le motif puis acceptée, et « refusée » après trois
                     collisions ; IA injoignable → arrêt, OT laissés en file ;
+    relance       : (D106 révisée, CS112) une réponse refusée par les contrôles, ou illisible, est redemandée une fois
+                    par une requête neuve — même message système et même schéma, message d'origine suivi de la réponse
+                    refusée et de chaque raison, rien d'autre — dans le même envoi ; corrigée → « à valider », 2 essais,
+                    raisons du premier refus gardées ; refusée deux fois → « refusée » avec les raisons du second refus ;
+                    jamais plus d'une relance ; une collision est rejouée, jamais relancée ; « Arrêter » retient la
+                    relance (OT laissé en file), `annuler` la coupe ;
     clôture       : la clôture administrative d'un OT le met en file ; un échec de la mise en file n'annule pas la
                     clôture (message, OT « hors du wiki ») ;
     trois modes   : la requête de chaque OT clôturé administrativement de la démo est la même en modes démo, dossier
@@ -203,6 +209,17 @@ CHARGER_LENT_JS = """async (tables) => {
   await Donnees.chargerTout();
 }"""
 RIEN = "JSON.stringify({ rien_a_ajouter: true, pages: [], contradictions: [] })"
+# Relance avec la raison (§20.5) : ce qui suit le message d'origine.
+MARQUE_RELANCE = NL + NL + "Ta réponse précédente :" + NL
+REFUS_RELANCE = NL + NL + "Elle a été refusée par les contrôles de Prévo :" + NL
+DEMANDE_RELANCE = ("Corrige-la : rends une réponse complète (le même objet JSON, avec le texte complet de chaque page "
+                   "modifiée ou créée) qui respecte les règles et ne reproduit aucune de ces erreurs.")
+
+
+def message_de_relance(origine, reponse, raisons):
+    """Message attendu d'une relance : le message d'origine, la réponse refusée, chaque raison sur sa ligne, la demande."""
+    return (origine + MARQUE_RELANCE + reponse + REFUS_RELANCE + NL.join("- " + raison for raison in raisons)
+            + NL + NL + DEMANDE_RELANCE)
 
 
 class CasIngestion(CasNavigateur):
@@ -423,6 +440,8 @@ class TestTraitement(CasIngestion):
         # Requêtes réellement envoyées : une par envoi, rien d'interdit, l'astuce de 0001 et la mention de 0003.
         corps = [r["corps"] for r in self.faux.requetes_vers("/api/chat")]
         self.assertEqual(len(corps), 7)
+        # La collision est rejouée par une requête d'origine (sur le nouvel état), jamais relancée avec une raison.
+        self.assertFalse(any(MARQUE_RELANCE in c["messages"][1]["content"] for c in corps))
         textes = [json.dumps(c, ensure_ascii=False) for c in corps]
         for interdit in INTERDITS:
             self.assertFalse(any(interdit in t for t in textes), interdit)
@@ -457,10 +476,11 @@ class TestTraitement(CasIngestion):
             journal: Donnees.lignes('wiki_journal').filter((e) => e.ot_id !== 'OT-2026-0007')
               .map((e) => [e.ot_id, e.statut, e.motif, e.essais]) };
         }""")
-        # 0002 voit « Usure commune » créée pendant son envoi : rejouée, puis refusée par les contrôles (titre trop proche).
+        # 0002 voit « Usure commune » créée pendant son envoi : rejouée (sans relance), puis refusée par les contrôles
+        # (titre trop proche), relancée avec la raison et refusée encore : trois essais.
         self.assertEqual(resultat["bilan"], [1, 1, 1])
         self.assertEqual(sorted(resultat["journal"]), [
-            ["OT-2026-0002", "refusée", "rejoué : page créée entre-temps", "2"], ["OT-2026-0004", "à valider", "", "1"]])
+            ["OT-2026-0002", "refusée", "rejoué : page créée entre-temps", "3"], ["OT-2026-0004", "à valider", "", "1"]])
         raisons = self.journal()["OT-2026-0002"]["raisons"]
         self.assertIn("titre trop proche de « Usure commune »", raisons)
 
@@ -468,8 +488,9 @@ class TestTraitement(CasIngestion):
         resultat = self.page.evaluate("""async () => {
           await Wiki.mettreEnFile(['OT-2026-0008']);
           let appels = 0;
-          const bilan = await Wiki.traiterFile({ appeler: async () => {
+          const bilan = await Wiki.traiterFile({ appeler: async (requete) => {
             appels += 1;
+            if (requete.messages[1].content.includes('Ta réponse précédente')) throw new Error('collision relancée');
             // Écriture à la main de la page de PO-01 pendant le premier envoi.
             if (appels === 1) await Donnees.modifier('wiki_pages', (lignes) => {
               const ligne = lignes.find((l) => l.id === 'WP-0001');
@@ -504,14 +525,116 @@ class TestTraitement(CasIngestion):
         self.assertEqual(resultat, {"appels": 2, "rien": 2, "erreur": None, "envois": 2, "file": ["OT-2026-0003"]})
 
     def test_refus_des_controles(self):
+        # Le faux modèle invente à chaque fois : refusée, relancée avec la raison, refusée encore.
         bilan = self.traiter(["OT-2026-0002"], "faux-invente")
         self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["erreur"]), (0, 1, None))
         entree = self.journal()["OT-2026-0002"]
-        self.assertEqual((entree["statut"], entree["modele"], entree["essais"], entree["ordre"]), ("refusée", "faux-invente", "1", ""))
+        self.assertEqual((entree["statut"], entree["modele"], entree["essais"], entree["ordre"]), ("refusée", "faux-invente", "2", ""))
         self.assertIn("OT cité hors des OT permis : OT-1999-9999", entree["raisons"])
+        self.assertEqual(len(self.faux.requetes_vers("/api/chat")), 2)
         rien = self.traiter(["OT-2026-0004"], "faux-rien")
         self.assertEqual(rien["rien"], 1)
         self.assertEqual(self.journal()["OT-2026-0004"]["statut"], "rien à ajouter")
+        self.assertEqual(self.journal()["OT-2026-0004"]["raisons"], "")
+
+    def requetes_ia(self):
+        """Corps des requêtes reçues par le faux fournisseur : (système, utilisateur, schéma, modèle) de chacune."""
+        return [(c["messages"][0]["content"], c["messages"][1]["content"], c["format"], c["model"])
+                for c in (r["corps"] for r in self.faux.requetes_vers("/api/chat"))]
+
+    def test_relance_avec_la_raison_puis_acceptee(self):
+        """CS112 : la réponse refusée (phrase sans OT) est redemandée une fois par une requête neuve — même système,
+        même schéma, message d'origine suivi de la réponse refusée et de chaque raison, rien d'autre — puis acceptée."""
+        attendu = self.message("OT-2026-0002")                         # message d'origine, avant l'envoi
+        bilan = self.traiter(["OT-2026-0002"], "faux-corrige")
+        self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["rejouees"], bilan["erreur"]), (1, 0, 0, None))
+        self.assertEqual(len(bilan["envois"]), 1)                       # la relance fait partie du même envoi
+        entree = self.journal()["OT-2026-0002"]
+        self.assertEqual((entree["statut"], entree["essais"], entree["modele"], entree["motif"], entree["ordre"]),
+                         ("à valider", "2", "faux-corrige", "", "2"))
+        raisons = entree["raisons"].split(NL)
+        self.assertEqual(raisons, ["Page « CP-01 — Compresseur » : phrase sans OT cité — « Filtre encrassé : fréquent ici »."])
+        changements = json.loads(entree["changements"])
+        self.assertEqual([(c["titre"], c["apres"]) for c in changements],
+                         [("CP-01 — Compresseur", "## Ce qui revient" + NL + "- Filtre encrassé : fréquent ici [OT-2026-0002]")])
+        requetes = self.requetes_ia()
+        self.assertEqual(len(requetes), 2)
+        (systeme, origine, schema, modele), relance = requetes
+        self.assertEqual(origine, attendu)
+        self.assertNotIn("Ta réponse précédente", origine)
+        refusee = json.dumps(reponse_ingestion(origine, "faux-corrige"), ensure_ascii=False)
+        self.assertEqual(relance, (systeme, message_de_relance(origine, refusee, raisons), schema, modele))
+        for interdit in INTERDITS:
+            self.assertNotIn(interdit, relance[1])
+
+    def test_refusee_deux_fois_raisons_du_second_refus(self):
+        """CS112 : refusée à l'envoi (phrase sans OT) puis à la relance (OT inventé) → « refusée » avec les raisons du
+        second refus ; jamais plus d'une relance."""
+        bilan = self.traiter(["OT-2026-0002"], "faux-refuse-deux")
+        self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["erreur"]), (0, 1, None))
+        entree = self.journal()["OT-2026-0002"]
+        self.assertEqual((entree["statut"], entree["essais"], entree["ordre"]), ("refusée", "2", ""))
+        self.assertEqual(entree["raisons"], "Page « CP-01 — Compresseur » : OT cité hors des OT permis : OT-1999-9999.")
+        requetes = self.requetes_ia()
+        self.assertEqual(len(requetes), 2)
+        refusee = json.dumps(reponse_ingestion(requetes[0][1], "faux-refuse-deux"), ensure_ascii=False)
+        self.assertEqual(requetes[1][1], message_de_relance(requetes[0][1], refusee, [
+            "Page « CP-01 — Compresseur » : phrase sans OT cité — « Filtre encrassé : fréquent ici »."]))
+        self.assertEqual(self.page.evaluate("Wiki.file().length"), 0)
+
+    def test_relance_d_une_reponse_illisible_et_donnees_de_la_relance(self):
+        """Une réponse illisible est relancée de même, avec son message pour raison ; les données de la relance portent
+        { reponse, raisons } ; la relance passe par le même `appeler`, une seule fois."""
+        resultat = self.page.evaluate("""async () => {
+          await Wiki.mettreEnFile(['OT-2026-0004']);
+          const recus = [];
+          const bilan = await Wiki.traiterFile({ appeler: async (requete, donnees) => {
+            recus.push({ relance: donnees.relance || null, message: requete.messages[1].content, ot: donnees.ot.id });
+            return { modele: 'essai', contenu: recus.length === 1 ? 'Bien sûr ! Voici ma réponse.' : %s };
+          } });
+          const e = Donnees.lignes('wiki_journal').find((x) => x.ot_id === 'OT-2026-0004');
+          return { recus, rien: bilan.rien, statut: e.statut, essais: e.essais, raisons: e.raisons };
+        }""" % RIEN)
+        raison = "Réponse de l'IA illisible : aucune proposition."
+        self.assertEqual((resultat["rien"], resultat["statut"], resultat["essais"], resultat["raisons"]),
+                         (1, "rien à ajouter", "2", raison))
+        premier, second = resultat["recus"]
+        self.assertEqual((premier["relance"], second["ot"]), (None, "OT-2026-0004"))
+        self.assertEqual(second["relance"], {"reponse": "Bien sûr ! Voici ma réponse.", "raisons": [raison]})
+        self.assertEqual(second["message"], message_de_relance(premier["message"], "Bien sûr ! Voici ma réponse.", [raison]))
+
+    def test_arreter_retient_la_relance_et_annuler_la_coupe(self):
+        refus = "JSON.stringify({ rien_a_ajouter: true, pages: [{ action: 'creer' }], contradictions: [] })"
+        resultat = self.page.evaluate("""async () => {
+          await Wiki.mettreEnFile(['OT-2026-0004']);
+          // « Arrêter » pendant l'envoi dont la réponse est refusée : la relance ne part pas, l'OT reste en file.
+          const arret = new AbortController();
+          let appels = 0;
+          const arrete = await Wiki.traiterFile({ signal: arret.signal, appeler: async () => {
+            appels += 1;
+            arret.abort();
+            return { modele: 'essai', contenu: %s };
+          } });
+          const apresArret = { appels, refusees: arrete.refusees, envois: arrete.envois.length, erreur: arrete.erreur,
+            file: Wiki.file().map((e) => [e.ot_id, e.statut, e.essais]) };
+          // `annuler` coupe la relance en cours : elle le reçoit comme l'envoi d'origine.
+          const annuler = new AbortController();
+          const signaux = [];
+          const coupe = await Wiki.traiterFile({ annuler: annuler.signal, appeler: async (requete, donnees, signal) => {
+            signaux.push(signal === annuler.signal);
+            if (!donnees.relance) return { modele: 'essai', contenu: %s };
+            annuler.abort();
+            await new Promise((r) => setTimeout(r, 50));
+            if (signal.aborted) throw new Error('relance coupée');
+            return { modele: 'essai', contenu: %s };
+          } });
+          return { apresArret, signaux, erreur: coupe.erreur && coupe.erreur.message, refusees: coupe.refusees,
+            file: Wiki.file().map((e) => [e.ot_id, e.statut, e.essais]) };
+        }""" % (refus, refus, RIEN))
+        self.assertEqual(resultat["apresArret"], {"appels": 1, "refusees": 0, "envois": 1, "erreur": None,
+                                                  "file": [["OT-2026-0004", "en file", "0"]]})
+        self.assertEqual((resultat["signaux"], resultat["erreur"], resultat["refusees"]), ([True, True], "relance coupée", 0))
+        self.assertEqual(resultat["file"], [["OT-2026-0004", "en file", "0"]])
 
     def test_trois_collisions_puis_refus(self):
         resultat = self.page.evaluate("""async () => {
@@ -521,6 +644,7 @@ class TestTraitement(CasIngestion):
           const bilan = await Wiki.traiterFile({ agents: 1, appeler: async (requete, donnees) => {
             const titre = titres[appels];
             appels += 1;
+            if (donnees.relance || requete.messages[1].content.includes('Ta réponse précédente')) throw new Error('collision relancée');
             // Un autre OT crée la même page pendant l'envoi.
             await Donnees.modifier('wiki_journal', (lignes, outils) => { lignes.push({ id: outils.nouvelId(lignes),
               nature: 'ingestion', statut: 'à valider', ordre: '99', changements: JSON.stringify([{ cle: 'TITRE:'

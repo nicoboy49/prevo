@@ -13,11 +13,15 @@
 //  - `version` d'une page de l'état proposé = version validée + propositions « à valider » qui la changent : c'est le
 //    `version_avant` noté sur chaque changement (avec `page`, son WP-… s'il existe), pris dans l'état ENVOYÉ ;
 //  - les écritures de wiki_journal ne sont pas recopiées au journal général (la table est elle-même un journal) ;
-//  - une réponse refusée par les contrôles : entrée « refusée », raisons une par ligne ; le résultat accepté est
-//    écrit dans la section critique de Donnees.modifier, sur le journal frais : une page concernée changée pendant
-//    l'envoi (motif « rejoué : pages changées pendant l'envoi ») ou une page créée entre-temps sous le même titre ou
-//    un titre trop proche (motif « rejoué : page créée entre-temps ») remet l'entrée « en file », trois fois au plus,
-//    puis « refusée » ; le motif reste sur l'entrée acceptée ensuite ;
+//  - une réponse refusée par les contrôles (ou illisible) est relancée avec la raison (D106 révisée), relancesMax fois
+//    par envoi, dans le même envoi (pages réservées, même `appeler`, même `annuler`) ; acceptée à la relance, l'entrée
+//    garde les raisons du premier refus ; encore refusée : « refusée », raisons du dernier refus une par ligne ; une
+//    relance compte pour un essai ; « Arrêter » avant une relance : elle ne part pas, l'OT reste en file ;
+//  - le résultat accepté est écrit dans la section critique de Donnees.modifier, sur le journal frais : une page
+//    concernée changée pendant l'envoi (motif « rejoué : pages changées pendant l'envoi ») ou une page créée
+//    entre-temps sous le même titre ou un titre trop proche (motif « rejoué : page créée entre-temps ») remet l'entrée
+//    « en file » sans relance, tant que ses essais ne dépassent pas trois, puis « refusée » ; le motif reste sur
+//    l'entrée acceptée ensuite ;
 //  - le catalogue envoyé commence par les pages créées par des propositions à valider (jamais coupées) ;
 //  - toute autre erreur de l'IA (injoignable, délai, refus D67) arrête le traitement : l'OT reste en file, l'erreur est
 //    rendue dans le bilan ; « Arrêter » (signal) laisse finir les envois partis, `annuler` les coupe.
@@ -446,10 +450,11 @@ Object.assign(Wiki, (() => {
    * pendant l'envoi (rejet, écriture à la main ; une validation ne change pas l'état proposé) ou si une page que la
    * réponse crée existe désormais (même titre ou titre trop proche), l'entrée repart « en file » avec son motif,
    * ESSAIS_COLLISION_MAX fois au plus, puis « refusée ». Sinon « à valider » (ou « rien à ajouter »), rang suivant,
-   * `version_avant` et `page` de chaque changement pris dans l'état envoyé.
+   * `version_avant` et `page` de chaque changement pris dans l'état envoyé, `raisons` du premier refus si la réponse
+   * a été acceptée à la relance.
    */
   async function ecrireResultat(entree, envoi) {
-    const { donnees, etat, empreinte, lu, modele, essais } = envoi;
+    const { donnees, etat, empreinte, lu, modele, essais, raisons } = envoi;
     return Donnees.modifier('wiki_journal', (lignes, outils) => {
       const ligne = lignes.find((candidate) => candidate.id === entree.id);
       if (!ligne || !STATUTS_FILE.includes(texte(ligne.statut))) return 'déjà traitée';
@@ -475,7 +480,8 @@ Object.assign(Wiki, (() => {
         return 'rejouée';
       }
       Object.assign(ligne, {
-        statut: lu.rien ? 'rien à ajouter' : 'à valider', raisons: '', anterieure: donnees.anterieure ? '1' : '0',
+        statut: lu.rien ? 'rien à ajouter' : 'à valider', raisons: (raisons || []).join('\n'),
+        anterieure: donnees.anterieure ? '1' : '0',
         pages: donnees.cles.join(';'), ordre: String(lignes.reduce((max, autre) => Math.max(max, Number(autre.ordre) || 0), 0) + 1),
         changements: JSON.stringify(lu.changements.map((changement) => {
           const page = changement.creation ? null : pageDeCle(etat, changement.cle);
@@ -487,28 +493,51 @@ Object.assign(Wiki, (() => {
     }, { journal: false });
   }
 
-  async function traiterUne(entree, appeler, annuler) {
+  function arrete(opts) {
+    return Boolean((opts.signal && opts.signal.aborted) || (opts.annuler && opts.annuler.aborted));
+  }
+
+  /**
+   * Un envoi (§20.5). Une réponse refusée par les contrôles, ou illisible (son message pour raison), est redemandée
+   * SEUILS.relancesMax fois au plus par une requête neuve — même message système, message d'origine suivi de la
+   * réponse refusée et de ses raisons (donnees.relance) — dans le même envoi : mêmes données, pages toujours réservées,
+   * même `appeler` et même `annuler`. Une collision (ecrireResultat) n'est jamais relancée : elle est rejouée.
+   */
+  async function traiterUne(entree, appeler, opts) {
     const etat = etatPropose();
     const donnees = donneesIngestion(texte(entree.ot_id), etat);
     const empreinte = empreinteDe(donnees.cles, etat);
-    const reponse = await appeler(Ia.requete('ingestionWiki', donnees), donnees, annuler);
-    const modele = texte(reponse && reponse.modele);
-    const essais = String((Number(entree.essais) || 0) + 1);
-    let lu;
-    try {
-      lu = Ia.lireReponse('ingestionWiki', reponse && reponse.contenu, donnees);
-    } catch (erreur) {
-      if (!erreur || erreur.name !== 'IaReponseInvalide') throw erreur;
-      await ecrireEntree(entree.id, { statut: 'refusée', raisons: (erreur.raisons || [erreur.message]).join('\n'), modele, essais });
-      return 'refusée';
+    let essais = Number(entree.essais) || 0;
+    let envoyees = donnees;
+    let premierRefus = null;
+    for (let relances = 0; ; relances += 1) {
+      const reponse = await appeler(Ia.requete('ingestionWiki', envoyees), envoyees, opts.annuler);
+      const modele = texte(reponse && reponse.modele);
+      essais += 1;
+      let lu = null;
+      let raisons = null;
+      try {
+        lu = Ia.lireReponse('ingestionWiki', reponse && reponse.contenu, donnees);
+      } catch (erreur) {
+        if (!erreur || erreur.name !== 'IaReponseInvalide') throw erreur;
+        raisons = erreur.raisons || [erreur.message];
+      }
+      if (lu) return ecrireResultat(entree, { donnees, etat, empreinte, lu, modele, essais: String(essais), raisons: premierRefus });
+      if (relances >= SEUILS.relancesMax) {
+        await ecrireEntree(entree.id, { statut: 'refusée', raisons: raisons.join('\n'), modele, essais: String(essais) });
+        return 'refusée';
+      }
+      if (arrete(opts)) return 'arrêtée';          // « Arrêter » : la relance ne part pas, l'OT reste en file
+      premierRefus = premierRefus || raisons;
+      envoyees = Object.assign({}, donnees, { relance: { reponse: texte(reponse && reponse.contenu), raisons } });
     }
-    return ecrireResultat(entree, { donnees, etat, empreinte, lu, modele, essais });
   }
 
   /**
    * Traite la file (§20.5) : options { appeler(requete, donnees, annuler) → { contenu, modele } (défaut :
-   * Ia.envoyerRequete), agents (défaut SEUILS.agentsSimultanes), signal (« Arrêter » : rien d'autre ne part, les
-   * envois en cours finissent), annuler (signal transmis aux envois eux-mêmes : les coupe), surProgres(etat) }.
+   * Ia.envoyerRequete ; une relance passe par lui), agents (défaut SEUILS.agentsSimultanes), signal (« Arrêter » :
+   * rien d'autre ne part, relance comprise, les envois en cours finissent), annuler (signal transmis aux envois
+   * eux-mêmes : les coupe, relance comprise), surProgres(etat) }.
    * → bilan { acceptees, rien, refusees, rejouees, erreur, envois: [{ ot, cles, debut, fin }] } (debut et fin : rangs
    * d'événements, pour vérifier qu'aucune page n'a deux envois en même temps).
    */
@@ -533,17 +562,19 @@ Object.assign(Wiki, (() => {
           const envoi = { ot: texte(entree.ot_id), cles, debut: ++rang, fin: null };
           bilan.envois.push(envoi);
           const suivi = { entree, cles };
-          suivi.promesse = traiterUne(entree, appeler, opts.annuler).then((issue) => {
+          suivi.promesse = traiterUne(entree, appeler, opts).then((issue) => {
             if (issue === 'acceptée') bilan.acceptees += 1;
             else if (issue === 'rien') bilan.rien += 1;
             else if (issue === 'refusée') bilan.refusees += 1;
             else if (issue === 'rejouée') bilan.rejouees += 1;
+            else if (issue === 'arrêtée') arret = true;    // relance retenue par « Arrêter » ou `annuler`
           }, (erreur) => {
             arret = true;
             if (!bilan.erreur) bilan.erreur = erreur;
           }).then(() => {
             envoi.fin = ++rang;
             enCours.delete(entree.id);
+            progres();                                // avant tout nouvel envoi : surProgres peut encore arrêter
           });
           enCours.set(entree.id, suivi);
         });

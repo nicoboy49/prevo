@@ -4,7 +4,10 @@ de `claude -p --output-format json`, dont le texte est construit par tests/faux_
 
 Variables d'environnement :
     FAUX_CLAUDE_MODE     sonnet (défaut) | opus (un autre modèle) | deux-tours | refus (réponse que Prévo refuse :
-                         un OT cité hors de la liste) | erreur (réponse en erreur) | lent (répond après 8 s)
+                         un OT cité hors de la liste, relance comprise) | relance (réponse que Prévo refuse — une
+                         phrase sans OT — puis, à la relance avec la raison, une réponse valable) | erreur (réponse en
+                         erreur) | lent (répond après 8 s)
+    FAUX_CLAUDE_RELANCE  mode relance : OT concernés, séparés par des virgules (défaut : tous)
     FAUX_CLAUDE_TRACES   dossier : chaque appel y écrit appel-<identifiant>.json (arguments, entrée standard et
                          variables CLAUDE*/ANTHROPIC* reçus)
 """
@@ -16,7 +19,18 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))       # tests/
-from faux_wiki import reponse_ingestion  # noqa: E402
+from faux_wiki import MOTIF_OT_INGERE, est_relance, reponse_ingestion  # noqa: E402
+
+
+def variante(mode, entree):
+    """Variante du faux modèle (tests/faux_wiki.py) selon le mode et le message reçu."""
+    if mode == 'refus':
+        return 'faux-invente'
+    if mode == 'relance' and not est_relance(entree):
+        concernes = [ot.strip() for ot in os.environ.get('FAUX_CLAUDE_RELANCE', '').split(',') if ot.strip()]
+        if not concernes or MOTIF_OT_INGERE.search(entree).group(1) in concernes:
+            return 'faux-sans-ot'
+    return 'faux-mode-cause'
 
 
 def principal():
@@ -32,9 +46,9 @@ def principal():
     if mode == 'lent':                            # répond après 8 s ; « fini » prouve qu'on ne l'a pas coupé
         time.sleep(8)
         if dossier:
-            (Path(dossier) / 'fini-%s' % uuid.uuid4().hex).write_text('fini', encoding='utf-8')
+            (Path(dossier) / ('fini-%s' % uuid.uuid4().hex)).write_text('fini', encoding='utf-8')
     modele = 'claude-opus-5-5' if mode == 'opus' else 'claude-sonnet-5-5'
-    reponse = reponse_ingestion(entree, 'faux-invente' if mode == 'refus' else 'faux-mode-cause')
+    reponse = reponse_ingestion(entree, variante(mode, entree))
     sortie = {
         'type': 'result', 'subtype': 'error_during_execution' if mode == 'erreur' else 'success',
         'is_error': mode == 'erreur', 'num_turns': 2 if mode == 'deux-tours' else 1,

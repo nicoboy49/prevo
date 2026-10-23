@@ -327,7 +327,8 @@ Object.assign(Ia, (() => {
   // Lot 6 (ARCHITECTURE.md §20.5) : intégrer un OT clôturé au wiki de maintenance. Données : l'OT (liste blanche,
   // ni nom ni coût), les pages concernées avec leur texte actuel et la date d'intervention des OT qu'elles citent, le
   // catalogue des titres. Réponse lue par Wiki.lireIngestion (mise en forme puis contrôles du §20.6) : une réponse
-  // refusée n'entre jamais dans le wiki.
+  // refusée n'entre jamais dans le wiki ; elle est redemandée une fois, avec ses raisons (donnees.relance : { reponse,
+  // raisons }), par le même message système et le message d'origine suivi de la réponse refusée et des raisons.
   const TYPES_PAGES = ['équipement', 'composant', 'mode', 'savoir-faire'];
   const RUBRIQUES_PAGES = {
     'équipement': ['Ce qui revient', 'Ce qui a réglé le problème', 'À surveiller', 'Astuces'],
@@ -337,6 +338,22 @@ Object.assign(Ia, (() => {
   };   // = Wiki.RUBRIQUES (wiki-regles.js), recopié ici : les consignes ne dépendent pas du module Wiki
   const MENTION_ANTERIEURE = 'Intervention antérieure à des faits déjà intégrés : ne présente jamais son information '
     + 'comme la plus récente.';
+  // Relance avec la raison du refus (D106 révisée, §20.5) : message d'origine, puis la réponse refusée telle quelle et
+  // les raisons du refus, une par ligne, puis la demande d'une réponse corrigée ; rien d'autre (liste blanche, CS112).
+  const RELANCE_REPONSE_MAX = 20000;
+  const DEMANDE_RELANCE = 'Corrige-la : rends une réponse complète (le même objet JSON, avec le texte complet de chaque '
+    + 'page modifiée ou créée) qui respecte les règles et ne reproduit aucune de ces erreurs.';
+
+  function relanceIngestion(relance) {
+    // Toutes les raisons (elles viennent des contrôles de Prévo, une par élément refusé), chacune sur sa ligne.
+    const raisons = liste(relance.raisons).map((raison) => uneLigne(raison, 1000)).filter(Boolean);
+    return [
+      'Ta réponse précédente :\n' + (bloc(relance.reponse, RELANCE_REPONSE_MAX) || '(vide)'),
+      'Elle a été refusée par les contrôles de Prévo :\n' + (raisons.length ? raisons.map((raison) => '- ' + raison).join('\n')
+        : '- (aucune raison donnée)'),
+      DEMANDE_RELANCE,
+    ].join('\n\n');
+  }
 
   function citationsDuTexte(valeur) {
     return Array.from(String(valeur || '').matchAll(/\[(OT-\d{4}-\d{4,})\]/g), (m) => m[1]);
@@ -426,7 +443,7 @@ Object.assign(Ia, (() => {
       const limites = (d && d.limites) || {};
       const taille = (page) => (Number.isFinite(page.phrases) && Number.isFinite(page.mots) && limites.phrases
         ? ' · ' + page.phrases + ' phrases sur ' + limites.phrases + ', ' + page.mots + ' mots sur ' + limites.mots : '');
-      return [
+      const origine = [
         ligneOtIngestion((d && d.ot) || {}) + (d.anterieure ? '\n' + MENTION_ANTERIEURE : ''),
         'Pages concernées (texte actuel) :\n' + (pages.length ? pages.map((page) => '=== Page « ' + uneLigne(page.titre, 200)
           + ' » (' + uneLigne(page.type, 20) + taille(page) + ') ===\n' + (bloc(page.texte, 6000) || '(page vide)')).join('\n')
@@ -436,6 +453,8 @@ Object.assign(Ia, (() => {
         'Catalogue des pages :\n' + (liste(d.catalogue).map((page) => '- ' + uneLigne(page && page.titre, 200) + ' ('
           + uneLigne(page && page.type, 20) + ')').join('\n') || '(aucune)'),
       ].filter(Boolean).join('\n\n');
+      // Relance (Wiki.traiterFile) : le message d'origine tel quel, suivi de la réponse refusée et de ses raisons.
+      return d && d.relance && typeof d.relance === 'object' ? origine + '\n\n' + relanceIngestion(d.relance) : origine;
     },
     // Listes fermées : action, type, rubrique, et les OT permis dans les citations.
     schema(d) {

@@ -15,10 +15,17 @@ UNIQUEMENT à partir du message envoyé par Prévo (même message → même rép
     faux-sans-ot       la nouvelle phrase ne cite aucun OT ;
     faux-cree-mode     en plus, un mode « Usure commune » est créé s'il n'est pas déjà au catalogue ;
     faux-mode-cause    en plus, un mode « Mode : <codes de l'OT> » est créé s'il n'est pas déjà au catalogue : deux OT de
-                       mêmes codes (donc de même cause) qui partiraient ensemble le créeraient tous deux (D112).
+                       mêmes codes (donc de même cause) qui partiraient ensemble le créeraient tous deux (D112) ;
+    faux-corrige       refusée puis corrigée : la nouvelle phrase ne cite aucun OT (refusée par les contrôles), sauf
+                       dans une relance, qui reçoit la réponse de « faux » ;
+    faux-refuse-deux   refusée deux fois : la nouvelle phrase ne cite aucun OT, puis, dans la relance, cite OT-1999-9999.
+
+Relance avec la raison (§20.5) : le message est celui d'origine, suivi de « Ta réponse précédente : », de la réponse
+refusée et de ses raisons ; la réponse est tirée du seul message d'origine (les variantes ci-dessus s'appliquent).
 """
 import re
 
+MARQUE_RELANCE = "\n\nTa réponse précédente :\n"
 MOTIF_OT_INGERE = re.compile(r"^OT à intégrer : (OT-\d{4}-\d{4,})", re.M)
 MOTIF_TITRE = re.compile(r"^Titre : (.*)$", re.M)
 MOTIF_ASTUCE = re.compile(r"^Astuce pour la prochaine fois : (.*)$", re.M)
@@ -68,9 +75,18 @@ def lire_message(message):
             "pages": pages, "catalogue": catalogue}
 
 
+def est_relance(message):
+    return MARQUE_RELANCE in message
+
+
 def reponse_ingestion(message, modele="faux"):
-    """Réponse JSON (objet Python) du faux modèle à un message `ingestionWiki`."""
-    lu = lire_message(message)
+    """Réponse JSON (objet Python) du faux modèle à un message `ingestionWiki` (d'origine ou de relance)."""
+    relance = est_relance(message)
+    if modele == "faux-corrige":
+        modele = "faux" if relance else "faux-sans-ot"
+    elif modele == "faux-refuse-deux":
+        modele = "faux-invente" if relance else "faux-sans-ot"
+    lu = lire_message(message.split(MARQUE_RELANCE, 1)[0])
     ot = lu["ot"]
     if modele == "faux-rien":
         return {"rien_a_ajouter": True, "pages": [], "contradictions": []}

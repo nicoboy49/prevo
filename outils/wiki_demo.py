@@ -10,12 +10,15 @@ fois sur des pages distinctes. Pour chaque requête de Prévo, un agent Claude S
            --no-session-persistence --disable-slash-commands --output-format json
 
 avec le message utilisateur sur l'entrée standard, octet pour octet. Claude Sonnet seulement : jamais Ollama, qwen ni
-modèle local. Ce que l'agent répond passe les contrôles de Prévo (Ia.lireReponse, §20.6).
+modèle local. Ce que l'agent répond passe les contrôles de Prévo (Ia.lireReponse, §20.6). Une réponse refusée est
+relancée avec la raison, comme chez un client (§20.5, D106 révisée) : Prévo envoie une requête neuve (message
+d'origine, réponse refusée, raisons du refus), qui lance un agent neuf de plus, tracé dans la même trace.
 
     py outils/wiki_demo.py fabriquer [--agents 5]   fabrication ; reprend les réponses déjà obtenues (même requête)
     py outils/wiki_demo.py figer                      copie le résultat dans outils/demo_wiki_pages.csv et
                                                       outils/demo_wiki_journal.csv (puis : py outils/generer_demo.py)
-    py outils/wiki_demo.py verifier                   traces (Sonnet, un tour), une entrée par OT, intégrité
+    py outils/wiki_demo.py verifier                   traces (Sonnet, un tour), une entrée par OT reliée à la réponse
+                                                      acceptée (relance comprise), intégrité
     py outils/wiki_demo.py relecture                  .chantier/wiki-demo/relecture.html (pages par type)
 
 Chaque appel laisse une trace dans .chantier/wiki-demo/chaine/<OT>.json : requête (système et utilisateur),
@@ -23,11 +26,11 @@ empreinte, réponse brute, modèle relevé (modelUsage), nombre de tours, jetons
 d'une trace (requête identique à l'octet) y est marquée. Avec un seul agent, une nouvelle fabrication envoie les
 mêmes requêtes et reprend tout ; avec plusieurs, le catalogue d'une requête peut différer d'une fabrication à
 l'autre (pages créées par des OT traités en même temps sur d'autres pages, déjà finis ou non) : cette requête est
-alors renvoyée. La fabrication s'arrête (code retour 1) sur un modèle autre
-que Sonnet, plus d'un tour, une réponse en erreur, une réponse refusée par les contrôles de Prévo (défaut de la
-fonction : on corrige le code, puis on relance — les réponses déjà obtenues sont reprises sans nouvel appel), une
-IA injoignable ou une intégrité en défaut. Les propositions acceptées sont validées au nom du responsable, sauf
-celles des demoAValiderJours derniers jours d'intervention, laissées « à valider ». Un agent ne met jamais Claude
+alors renvoyée ; une requête de relance identique à l'octet est reprise de même. La fabrication s'arrête (code
+retour 1) sur un modèle autre que Sonnet, plus d'un tour, une réponse en erreur, une relance refusée par les contrôles
+de Prévo (défaut de la fonction : on corrige le code, puis on relance — les réponses déjà obtenues sont reprises sans
+nouvel appel), une IA injoignable ou une intégrité en défaut. Les propositions acceptées sont validées au nom du
+responsable, sauf celles des demoAValiderJours derniers jours d'intervention, laissées « à valider ». Un agent ne met jamais Claude
 Code à jour ; si claude.exe disparaît un instant (mise à jour faite ailleurs), l'agent attend qu'il revienne.
 """
 import argparse
@@ -57,6 +60,9 @@ from generer_demo import DATE_REFERENCE  # noqa: E402  (« aujourd'hui » du jeu
 HEURE_REFERENCE = 9                     # il est 9 h à la date de référence
 DELAI_APPEL_S = 300
 ATTENTE_COMMANDE_S = 120     # claude.exe absent au lancement (mise à jour de Claude Code en cours) : attente maximale
+# Début de la suite d'un message de relance avec la raison (consigne ingestionWiki, ia-prompts.js) : avant lui, le
+# message d'origine tel quel ; après, la réponse refusée et les raisons du refus.
+MARQUE_RELANCE = '\n\nTa réponse précédente :\n'
 SCRIPTS = [
     'js/lib/papaparse.min.js', 'js/schema.js', 'js/donnees.js', 'js/stockage-demo.js',
     'js/modules/causes-frequentes.js', 'js/modules/indicateurs-regles.js', 'js/modules/ia.js', 'js/modules/ia-prompts.js',
@@ -82,9 +88,12 @@ TRAITER_JS = """async ({ agents, limite }) => {
     appeler: (requete, donnees) => window.appelerClaude(requete, donnees.ot.id),
     surProgres: (etat) => { window.progresFabrication(etat); if (etat.refusees) arret.abort(); } });
   window.dernierBilan = bilan;
+  const entrees = Donnees.lignes('wiki_journal').filter((e) => e.nature === 'ingestion');
   return { ot: ids.length, acceptees: bilan.acceptees, rien: bilan.rien, refusees: bilan.refusees, rejouees: bilan.rejouees,
     erreur: bilan.erreur ? (bilan.erreur.message || String(bilan.erreur)) : null, enFile: Wiki.file().length,
-    refus: Donnees.lignes('wiki_journal').filter((e) => e.statut === 'refusée').map((e) => [e.ot_id, e.raisons]) };
+    refus: entrees.filter((e) => e.statut === 'refusée').map((e) => [e.ot_id, e.raisons]),
+    // Acceptées à la relance avec la raison : l'entrée garde les raisons du premier refus.
+    relances: entrees.filter((e) => ['à valider', 'rien à ajouter'].includes(e.statut) && e.raisons).map((e) => e.ot_id) };
 }"""
 VALIDER_JS = """async (limite) => {
   const resultat = { validees: 0, laissees: [], bloquees: [] };
@@ -241,6 +250,7 @@ class Fabrique:
         self.attente_commande = attente_commande
         self.appels = 0
         self.reprises = 0
+        self.relances = 0
         self.cout = 0.0
         self.arret = None
         self.dernier = None
@@ -252,12 +262,15 @@ class Fabrique:
             raise ErreurFabrication('requête inattendue pour %s : %s' % (ot, [m.get('role') for m in messages]))
         systeme, utilisateur = messages[0]['content'], messages[1]['content']
         cle = empreinte(systeme, utilisateur)
+        relance = MARQUE_RELANCE in utilisateur        # relance avec la raison : une requête de plus pour le même OT
+        self.relances += relance
         trace = lire_trace(self.traces, ot)
         deja = next((a for a in reversed(trace['appels']) if a.get('empreinte') == cle and not a.get('reprise')
                      and a.get('contenu') and reponse_valable(a)), None)
         if deja:
             self.reprises += 1
-            trace['appels'].append({'empreinte': cle, 'reprise': True, 'date': datetime.now().isoformat(timespec='seconds')})
+            trace['appels'].append({'empreinte': cle, 'reprise': True, 'relance': relance,
+                                    'date': datetime.now().isoformat(timespec='seconds')})
             ecrire_trace(self.traces, trace)
             return {'contenu': deja['contenu'], 'modele': deja['modele']}
         try:
@@ -285,8 +298,8 @@ class Fabrique:
 
     async def appeler_agent(self, ot, systeme, utilisateur, cle, trace):
         depart = time.time()
-        appel = {'empreinte': cle, 'reprise': False, 'date': datetime.now().isoformat(timespec='seconds'),
-                 'systeme': systeme, 'utilisateur': utilisateur}
+        appel = {'empreinte': cle, 'reprise': False, 'relance': MARQUE_RELANCE in utilisateur,
+                 'date': datetime.now().isoformat(timespec='seconds'), 'systeme': systeme, 'utilisateur': utilisateur}
         trace['appels'].append(appel)
         self.appels += 1                          # tout agent lancé compte, même arrêté ensuite
         try:
@@ -366,15 +379,18 @@ async def fabriquer_async(arguments):
             fabrique.noter_verdicts(await page.evaluate(ENTREES_JS))
             ecrire('OT : %(ot)s · acceptées %(acceptees)s · rien à ajouter %(rien)s · refusées %(refusees)s · '
                    'rejouées %(rejouees)s · encore en file %(enFile)s' % bilan)
-            ecrire('Agents lancés : %d · réponses reprises des traces : %d · coût : %.2f $'
-                   % (fabrique.appels, fabrique.reprises, fabrique.cout))
+            ecrire('Agents lancés : %d · réponses reprises des traces : %d · relances avec la raison : %d · coût : %.2f $'
+                   % (fabrique.appels, fabrique.reprises, fabrique.relances, fabrique.cout))
+            if bilan['relances']:
+                ecrire('Acceptées à la relance avec la raison : %s' % ', '.join(bilan['relances']))
             if fabrique.arret or bilan['erreur']:
                 ecrire('ARRÊT : %s' % (fabrique.arret or bilan['erreur']))
                 return 1
             if bilan['refusees']:
                 for ot, raisons in bilan['refus']:
                     ecrire('REFUSÉE %s :\n    %s' % (ot, '\n    '.join(str(raisons).splitlines())))
-                ecrire('ARRÊT : réponse refusée par les contrôles de Prévo (défaut de la fonction à corriger, puis relancer).')
+                ecrire('ARRÊT : réponse refusée par les contrôles de Prévo, même à sa relance avec la raison (défaut de la '
+                       'fonction à corriger, puis relancer).')
                 return 1
             if bilan['enFile']:
                 ecrire('ARRÊT : %d OT encore en file.' % bilan['enFile'])
@@ -440,27 +456,60 @@ async def integrite_async(dossier):
             await navigateur.close()
 
 
+def espaces(texte):
+    return ' '.join(str(texte or '').split())
+
+
+def reponse_acceptee(appels, entree):
+    """Réponse d'agent dont vient une entrée du journal figé → (appel, défaut). Sans raisons au journal : la dernière
+    réponse Sonnet valable à une requête d'origine. Acceptée à la relance (l'entrée garde les raisons du premier refus,
+    §20.5) : la dernière réponse valable à une relance qui cite chacune de ces raisons, précédée dans la trace de la
+    réponse refusée à la requête d'origine (le message de la relance commence par le message d'origine)."""
+    valables = [a for a in appels if not a.get('reprise') and a.get('contenu') and reponse_valable(a)]
+    raisons = [espaces(raison) for raison in str(entree.get('raisons') or '').splitlines() if raison.strip()]
+    if not raisons:
+        retenue = next((a for a in reversed(valables) if MARQUE_RELANCE not in a.get('utilisateur', '')), None)
+        return retenue, None if retenue else 'aucune réponse Sonnet à sa requête dans les traces'
+    for rang in range(len(valables) - 1, -1, -1):
+        origine, marque, suite = valables[rang].get('utilisateur', '').partition(MARQUE_RELANCE)
+        if marque and all(raison in espaces(suite) for raison in raisons) \
+                and any(a.get('utilisateur') == origine for a in valables[:rang]):
+            return valables[rang], None
+    return None, ('acceptée à la relance (raisons du premier refus au journal), sans la réponse refusée puis la relance '
+                  'qui cite ces raisons dans les traces')
+
+
 def verifier(arguments):
     defauts = []
     appels = 0
     sans_reponse = 0
-    valables = set()                             # OT qui ont au moins une réponse Sonnet en un tour
+    traces = {}
     for chemin in sorted(Path(arguments.traces).glob('*.json')):
-        for appel in json.loads(chemin.read_text(encoding='utf-8')).get('appels', []):
+        traces[chemin.stem] = json.loads(chemin.read_text(encoding='utf-8')).get('appels', [])
+        for appel in traces[chemin.stem]:
             if appel.get('reprise'):
                 continue
             appels += 1
             if 'modele' not in appel:            # agent coupé avant de répondre (délai, lancement impossible)
                 sans_reponse += 1
                 continue
-            if reponse_valable(appel):
-                valables.add(chemin.stem)
-            else:
+            if not reponse_valable(appel):
                 defauts.append('%s : réponse de %s en %s tour(s)%s' % (chemin.stem, appel.get('modele') or 'modèle inconnu',
                                appel.get('tours'), (' (' + appel['erreur'] + ')') if appel.get('erreur') else ''))
     journal = lignes_csv((Path(arguments.wiki) / FICHIERS_FIGES['wiki_journal']).read_bytes().decode('utf-8'))
-    integres = {ligne['ot_id'] for ligne in journal if ligne.get('nature') == 'ingestion'}
-    sans_trace = sorted(ot for ot in integres if ot not in valables)
+    entrees = [ligne for ligne in journal if ligne.get('nature') == 'ingestion']
+    integres = {ligne['ot_id'] for ligne in entrees}
+    # Chaque entrée reliée à la réponse que Prévo a acceptée (relance comprise), du modèle noté sur l'entrée.
+    sans_trace = []
+    for entree in sorted(entrees, key=lambda ligne: ligne['ot_id']):
+        appel, defaut = reponse_acceptee(traces.get(entree['ot_id'], []), entree)
+        if defaut and not entree.get('raisons'):
+            sans_trace.append(entree['ot_id'])
+        elif defaut:
+            defauts.append('%s : %s' % (entree['ot_id'], defaut))
+        elif entree.get('modele') not in [m.strip() for m in str(appel.get('modele', '')).split(',')]:
+            defauts.append('%s : modèle %s au journal figé, %s dans la réponse acceptée' % (entree['ot_id'],
+                           entree.get('modele') or 'absent', appel.get('modele')))
     if sans_trace:
         defauts.append('entrées du journal figé sans réponse Sonnet dans les traces : %s' % ', '.join(sans_trace))
     ordres = lignes_csv((Path(arguments.demo) / 'ordres_travail.csv').read_bytes().decode('utf-8'))

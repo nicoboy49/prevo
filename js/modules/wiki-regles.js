@@ -11,6 +11,7 @@ const Wiki = (() => {
     pagesCreeesMax: 3,     // pages créées par un OT ingéré
     phrasesMax: 12,        // phrases d'une page
     motsMax: 250,          // mots d'une page (citations exclues)
+    relancesMax: 1,        // relance avec la raison d'une réponse refusée par les contrôles (D106 révisée, §20.5)
     pagesEnvoyeesMax: 8,   // pages jointes à une requête d'ingestion
     catalogueMax: 400,     // titres du catalogue envoyé
     agentsSimultanes: 5,   // requêtes d'ingestion en même temps (D112)

@@ -438,6 +438,42 @@ class TestReglesPures(CasNavigateur):
                 for interdit in ["Lucie Martin", "Julien Moreau", "TEC-0001", "Consigner le sectionneur"] + MARQUEURS_INTERDITS:
                     self.assertNotIn(interdit, element["texte"])
 
+    def test_ingestion_relance_avec_la_raison(self):
+        """Relance d'ingestionWiki (D106 révisée, §20.5, CS112) : même message système, même schéma ; message
+        utilisateur = message d'origine, réponse refusée telle quelle (bornée), chaque raison sur sa ligne, demande de
+        correction ; rien d'autre (un champ de plus dans la relance n'est pas envoyé)."""
+        resultat = self.page.evaluate("""() => {
+          const d = { ot: { id: 'OT-2026-0001', dateIntervention: '2026-03-10 10:00', type: 'correctif immédiat',
+              titre: 'PO-01 — Fuite', compteRendu: 'Garniture changée.', equipement: { repere: 'PO-01', designation: 'Pompe' } },
+            pages: [{ titre: 'PO-01 — Pompe', type: 'équipement', texte: '## Ce qui revient\\n- Fuite [OT-2026-0007]',
+              otDates: [{ id: 'OT-2026-0007', date: '2026-04-15 08:00' }], phrases: 1, mots: 4 }],
+            limites: { phrases: 12, mots: 250 }, catalogue: [{ titre: 'Cavitation', type: 'mode' }] };
+          const reponse = '{"rien_a_ajouter": false,\\n "pages": [], "contradictions": []}';
+          const avec = (relance) => Object.assign({}, d, { relance });
+          const relance = avec({ reponse, raisons: ['Page « PO-01 — Pompe » : phrase sans OT cité — « Fuite ».',
+            'Page « PO-01 — Pompe » :   aucune date\\n dans le wiki.'], technicien: 'Julien Moreau', cout: '987.65' });
+          return { origine: Ia.requete('ingestionWiki', d), relance: Ia.requete('ingestionWiki', relance),
+            longue: Ia.PROMPTS.ingestionWiki.utilisateur(avec({ reponse: 'x'.repeat(30000), raisons: [] })) };
+        }""")
+        origine, relance = resultat["origine"], resultat["relance"]
+        self.assertEqual(relance["messages"][0], origine["messages"][0])
+        self.assertEqual((relance["schema"], relance["temperature"]), (origine["schema"], origine["temperature"]))
+        message = origine["messages"][1]["content"]
+        self.assertNotIn("Ta réponse précédente", message)
+        self.assertEqual(relance["messages"][1]["content"], message
+                         + '\n\nTa réponse précédente :\n{"rien_a_ajouter": false,\n "pages": [], "contradictions": []}'
+                         + "\n\nElle a été refusée par les contrôles de Prévo :\n"
+                         + "- Page « PO-01 — Pompe » : phrase sans OT cité — « Fuite ».\n"
+                         + "- Page « PO-01 — Pompe » : aucune date dans le wiki.\n\n"
+                         + "Corrige-la : rends une réponse complète (le même objet JSON, avec le texte complet de chaque "
+                           "page modifiée ou créée) qui respecte les règles et ne reproduit aucune de ces erreurs.")
+        for interdit in ("Julien Moreau", "987.65"):
+            self.assertNotIn(interdit, relance["messages"][1]["content"])
+        # Réponse refusée bornée à 20 000 caractères ; sans raison donnée, la ligne le dit.
+        self.assertIn("\nTa réponse précédente :\n" + "x" * 20000 + "\n\nElle a été refusée", resultat["longue"])
+        self.assertNotIn("x" * 20001, resultat["longue"])
+        self.assertIn("refusée par les contrôles de Prévo :\n- (aucune raison donnée)\n\n", resultat["longue"])
+
 
 # ---------------------------------------------------------------------------
 # Appel direct (index.html en file://, démo)
