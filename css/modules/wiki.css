@@ -1,6 +1,6 @@
 /* Wiki de maintenance (lot 6 refondu, ARCHITECTURE.md §20.9) : index #/wiki (compteurs du responsable, pages par
    type), page #/wiki/<id> des quatre types (en-tête, en-tête des savoir-faire, couche calculée, texte et origine,
-   « À trancher », pages qui renvoient ici, propositions en attente), champ de recherche (aussi posé dans l'onglet
+   sous-pages et mère d'une sous-page, « À trancher », pages qui renvoient ici, propositions en attente), champ de recherche (aussi posé dans l'onglet
    Préparation de l'OT et dans la saisie d'une DI), liens depuis les fiches équipement et article.
    Composants communs de css/style.css (cartes, badges, instruments, valeurs) ; couleurs : jetons des deux thèmes.
    Toutes les feuilles de css/modules/ sont chargées partout : les règles portent sur des classes wiki-. */
@@ -148,10 +148,17 @@
 .wiki-trancher { margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--trait); }
 .wiki-trancher textarea { min-height: 4.5rem; }
 
-/* Pages qui renvoient ici */
-.wiki-retours { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
-.wiki-retours > li { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem .6rem; min-width: 0; }
-.wiki-lien-retour { display: inline-flex; align-items: center; min-height: var(--tactile); font-weight: 700; overflow-wrap: anywhere; max-width: 100%; }
+/* Pages qui renvoient ici ; sous-pages d'une page mère (§20.4) */
+.wiki-retours, .wiki-sous-pages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.wiki-retours > li, .wiki-sous-pages > li { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem .6rem; min-width: 0; }
+.wiki-lien-retour, .wiki-lien-sous-page {
+  display: inline-flex; align-items: center; min-height: var(--tactile); font-weight: 700; overflow-wrap: anywhere; max-width: 100%;
+}
+
+/* Sous-page : « Sous-page de <mère> » sous le titre (lien vers la mère, ou son titre si elle est archivée) */
+.entete-page .wiki-mere { display: flex; align-items: center; flex-wrap: wrap; gap: .2rem .45rem; overflow-wrap: anywhere; }
+.wiki-lien-mere { display: inline-flex; align-items: center; min-height: var(--tactile); font-weight: 700; max-width: 100%; }
+.wiki-mere-archivee { color: var(--fort); }
 
 /* =========================================================================================
    3. Champ de recherche (Wiki.champRecherche)

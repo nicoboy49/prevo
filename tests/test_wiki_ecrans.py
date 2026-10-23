@@ -25,6 +25,12 @@ file ; refusées suivies ou non d'une relance ; à refaire ; rejetée ; manuelle
                 « Observation antérieure aux faits de la page »), note et boutons au responsable seulement ;
                 « L'ancien reste », « Les deux sont vrais » : la contradiction disparaît, une entrée « décision »
                 est écrite ; « Le nouveau remplace » mène à #/wiki-ecrire/<page> ;
+    sous-pages  (T131, base à part) « Sous-page de <mère> » en lien sous le titre, consignation de l'équipement de la
+                mère en tête (à l'octet, phrase de Prévo), aucune couche calculée, fiche de la mère ; sous-pages de
+                composant et de savoir-faire (en-tête de la mère, même rattachée par la page de l'équipement) ; mère
+                archivée nommée sans lien ; la mère liste ses sous-pages après le texte (liens, ordre alphabétique
+                français, archivée exclue) ; index : section du type, comptée ; trois profils ; titres piégés ;
+                « Modifier » ; 1440 et 375 px, zones de 48 px, contrastes AA en thème clair et sombre ;
     piège       HTML dans un titre, une phrase, une observation, une consignation, un compte rendu, l'adresse :
                 du texte, rien n'est exécuté ;
     recherche   depuis l'index (parc, pages du wiki comprises), la page (portées équipement, modèle, parc),
@@ -1472,10 +1478,290 @@ class TestRecherche(CasWiki):
 
 
 # ---------------------------------------------------------------------------
+# Sous-pages (§20.4, §20.9 ; T131) : base d'essai = PAGES, la page de PO-02 avec ses renvois, et des sous-pages
+# ---------------------------------------------------------------------------
+
+PHRASE_SOUS_PAGE = "Cette page ne remplace pas la consignation de l'équipement"
+TITRE_SP_GARNITURE = "PO-02 — garniture"
+TITRE_SP_ETANCHEITE = "PO-02 — Étanchéité"
+TITRE_SP_PIEGE = 'PO-02 — <img src=x onerror="window.__piege = 6">Régler <b>gras</b>'
+TITRE_SP_KIT = TITRE_KIT + " — usure"
+TITRE_SP_REGLAGE = TITRE_PIEGE + " — réglage fin"
+TITRE_SF_ALIGNER = "Aligner l'accouplement de PO-02"
+TITRE_SP_ALIGNER = TITRE_SF_ALIGNER + " — comparateur"
+TEXTE_SP_GARNITURE = ("## Ce qui revient\n- La garniture fuit au démarrage [OT-2025-0010]\n"
+                      "## Astuces\n- Garder un kit d'avance au magasin [OT-2025-0044]")
+TEXTE_SP_KIT = "## Signes d'usure\n- La face se raye [OT-2026-0214]"
+RENVOI_PO02 = "- Le détail est dans [[%s]], [[%s]] et [[%s]] [OT-2025-0010] [OT-2026-0214]" % (
+    TITRE_SP_GARNITURE, TITRE_SP_ETANCHEITE, TITRE_SP_PIEGE)
+SOUS_PAGES = [
+    page_wiki("WP-0012", "équipement", TITRE_SP_GARNITURE, TEXTE_SP_GARNITURE, "IA", "", "2026-10-18 10:00", rattache_a="WP-0001"),
+    page_wiki("WP-0013", "équipement", TITRE_SP_ETANCHEITE, "## À surveiller\n- Le joint de corps suinte [OT-2026-0214]",
+              "manuel", rattache_a="WP-0001"),
+    page_wiki("WP-0014", "équipement", TITRE_SP_PIEGE, "## Astuces\n- Régler sans forcer [OT-2026-0098]", "IA", rattache_a="WP-0001"),
+    page_wiki("WP-0015", "équipement", "PO-02 — accouplement", "## Astuces\n- Aligner à froid [OT-2026-0214]", "IA",
+              rattache_a="WP-0001", statut="archivée"),
+    page_wiki("WP-0016", "composant", TITRE_SP_KIT, TEXTE_SP_KIT, "IA", rattache_a="WP-0004"),
+    page_wiki("WP-0017", "savoir-faire", TITRE_SP_REGLAGE, "## Étapes\n- Reprendre le réglage à froid [OT-2026-0098]", "IA",
+              rattache_a="WP-0011"),
+    # Savoir-faire rattaché à la page de PO-02 par rattache_a (pas une sous-page : autre type), et sa sous-page
+    # (relecture de T130, CS98 : la consignation remonte deux rattachements).
+    page_wiki("WP-0018", "savoir-faire", TITRE_SF_ALIGNER, "## Étapes\n- Poser le comparateur sur le moyeu [OT-2026-0214]", "IA",
+              rattache_a="WP-0001"),
+    page_wiki("WP-0019", "savoir-faire", TITRE_SP_ALIGNER, "## Pièces et outillage\n- Comparateur à cadran [OT-2026-0214]", "IA",
+              rattache_a="WP-0018"),
+]
+PAGES_SOUS_PAGES = [dict(p, texte=p["texte"] + "\n" + RENVOI_PO02, liens=p["liens"] + ";WP-0012;WP-0013;WP-0014")
+                    if p["id"] == "WP-0001" else p for p in PAGES] + SOUS_PAGES
+
+SOUS_PAGE_JS = """() => {
+  const t = (e) => (e ? e.textContent.replace(/\\s+/g, ' ').trim() : null);
+  const racine = document.querySelector('.wiki-page');
+  const mere = document.querySelector('#wiki-mere');
+  const lien = mere ? mere.querySelector('a') : null;
+  const liste = document.querySelector('#wiki-sous-pages');
+  return { dataMere: racine.dataset.mere, dataEquipement: racine.dataset.equipement, mere: t(mere),
+    mereLien: lien ? [lien.textContent, lien.getAttribute('href')] : null,
+    mereArchivee: mere ? t(mere.querySelector('.wiki-mere-archivee')) : null,
+    sousPages: liste ? Array.from(liste.querySelectorAll('li')).map((li) => [li.dataset.id, li.querySelector('a').textContent,
+      li.querySelector('a').getAttribute('href')]) : null,
+    nombre: liste ? t(liste.querySelector('h2 .badge')) : null,
+    recherche: document.querySelectorAll('.wiki-page .wiki-recherche').length,
+    calcule: document.querySelectorAll('#wiki-couche, #wiki-sans-equipement, #wiki-sans-article, #wiki-sans-cause').length };
+}"""
+TRIER_TITRES_JS = """(pages) => { const fr = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
+  return pages.slice().sort((a, b) => fr.compare(a[1], b[1]) || (a[0] < b[0] ? -1 : 1)).map((p) => p[0]); }"""
+SOUS_PAGES_PARCOURUES = ("EQ-0005", "WP-0012", "WP-0014", "ART-0016", "WP-0016", "WP-0011", "WP-0017", "WP-0019")
+
+
+class TestSousPages(CasWiki):
+    """Sous-pages : « Sous-page de <mère> » (lien), consignation de l'équipement de la mère en tête, aucune couche
+    calculée ; la mère liste ses sous-pages après le texte ; l'index les range dans la section de leur type ; trois
+    profils ; titres piégés ; « Modifier » ; 1440 et 375 px, zones de 48 px, contrastes AA en thème clair et sombre."""
+
+    sections_attendues = TestIndex.sections_attendues
+    trier_en_francais = TestIndex.trier_en_francais
+    verifier_sections = TestIndex.verifier_sections
+    verifier_texte = TestPagesDuWiki.verifier_texte
+    verifier_retours = TestPagesDuWiki.verifier_retours
+
+    def poser_base(self):
+        self.page.evaluate(BASE_JS, [PAGES_SOUS_PAGES, JOURNAL])
+
+    def lire(self, identifiant):
+        lu = self.lire_page(identifiant)
+        lu.update(self.page.evaluate(SOUS_PAGE_JS))
+        return lu
+
+    def consignation_po02(self):
+        """Consignation de la fiche de PO-02, telle quelle, et celle de sa page d'équipement (Wiki.pageEquipement)."""
+        fiche = self.page.evaluate("Donnees.trouver('equipements', 'EQ-0005').consignation")
+        self.assertGreater(fiche.count("\n"), 2)
+        self.assertEqual(self.wiki_page("EQ-0005")["consignation"]["texte"], fiche)
+        return fiche
+
+    def test_sous_page_d_equipement_pour_les_trois_profils(self):
+        for profil in ("demandeur", "technicien", "responsable"):
+            with self.subTest(profil=profil):
+                page = self.ouvrir(profil, base=True)
+                liens = profil != "demandeur"
+                responsable = profil == "responsable"
+                lu = self.lire("WP-0012")
+                self.assertEqual((lu["id"], lu["type"], lu["h1"], lu["typeBadge"]),
+                                 ("WP-0012", "équipement", TITRE_SP_GARNITURE, "Équipement"))
+                # Sous le titre, « Sous-page de <mère> » en lien vers la mère ; la fiche est celle de l'équipement de la mère.
+                self.assertEqual(lu["mere"], "Sous-page de " + TITRE_PO02)
+                self.assertEqual(lu["mereLien"], [TITRE_PO02, "#/wiki/EQ-0005"])
+                self.assertEqual(page.evaluate("document.querySelector('#wiki-mere').previousElementSibling.tagName"), "H1")
+                self.assertEqual((lu["dataMere"], lu["dataEquipement"]), ("EQ-0005", ""))
+                self.assertEqual(lu["fiche"], ["Fiche de l'équipement", "#/equipement/EQ-0005"])
+                # En tête, la consignation de l'équipement de sa mère, à l'octet ; aucune couche calculée.
+                self.assertEqual(lu["blocs"], ["entete-page", "wiki-entete", "wiki-texte", "wiki-retours"]
+                                 + (["wiki-en-attente"] if responsable else []))
+                self.assertEqual((lu["couche"], lu["calcule"], lu["recherche"]), ([], 0, 0))
+                self.assertEqual(lu["entete"]["titre"], "Consignation de PO-02")
+                self.assertEqual(lu["entete"]["phrase"], PHRASE_SOUS_PAGE)
+                self.assertEqual(lu["entete"]["phrase"], page.evaluate("Wiki.PHRASE_SOUS_PAGE"))
+                self.assertEqual(lu["entete"]["consignation"], self.consignation_po02())
+                self.assertEqual(page.locator("#wiki-entete .wiki-consignation-texte *, #wiki-modifier-consignation").count(), 0)
+                self.assertIsNone(self.wiki("WP-0012")["calcul"])
+                # Le texte, son origine, les OT cités (sans lien pour le demandeur), la mère dans « Pages qui renvoient ici ».
+                self.verifier_texte(lu, TEXTE_SP_GARNITURE, liens, ORIGINE_IA % "18/10/2026")
+                self.verifier_retours(lu, "WP-0012", [("EQ-0005", TITRE_PO02, "équipement")])
+                self.assertIsNone(lu["sousPages"])
+                self.assertEqual(lu["modifier"], ["Modifier", "#/wiki-ecrire/WP-0012"] if responsable else None)
+                if not liens:
+                    self.assertEqual(page.locator('#contenu a[href^="#/ot"], #contenu a[href^="#/magasin"]').count(), 0)
+                self.verifier_sans_piege()
+
+    def test_la_mere_liste_ses_sous_pages_apres_le_texte(self):
+        for profil in ("demandeur", "technicien", "responsable"):
+            with self.subTest(profil=profil):
+                page = self.ouvrir(profil, base=True)
+                responsable = profil == "responsable"
+                lu = self.lire("EQ-0005")
+                # Par titre, dans l'ordre alphabétique français (« Étanchéité » avant « garniture ») ; l'archivée n'y est pas.
+                titres = {"WP-0012": TITRE_SP_GARNITURE, "WP-0013": TITRE_SP_ETANCHEITE, "WP-0014": TITRE_SP_PIEGE}
+                ordre = page.evaluate(TRIER_TITRES_JS, list(titres.items()))
+                self.assertLess(ordre.index("WP-0013"), ordre.index("WP-0012"))
+                self.assertEqual(lu["sousPages"], [[i, titres[i], "#/wiki/" + i] for i in ordre])
+                self.assertEqual([[s["id"], s["titre"]] for s in self.wiki("EQ-0005")["sousPages"]], [[i, titres[i]] for i in ordre])
+                self.assertEqual(lu["nombre"], "3")
+                self.assertEqual(lu["blocs"], ["entete-page", "wiki-couche", "wiki-texte", "wiki-sous-pages", "wiki-a-trancher",
+                                               "wiki-retours"] + (["wiki-en-attente"] if responsable else []))
+                self.assertIsNone(lu["mere"])
+                self.assertEqual(lu["dataMere"], "")
+                # La phrase de renvoi de la mère mène à ses sous-pages.
+                self.assertEqual(lu["rubriques"][3][1][-1]["liens"], [[TITRE_SP_GARNITURE, "#/wiki/WP-0012"],
+                                                                      [TITRE_SP_ETANCHEITE, "#/wiki/WP-0013"],
+                                                                      [plat(TITRE_SP_PIEGE), "#/wiki/WP-0014"]])
+                # Mère d'un autre type : composant, savoir-faire ; une page sans sous-page n'a pas la section.
+                self.assertEqual(self.lire("ART-0016")["sousPages"], [["WP-0016", TITRE_SP_KIT, "#/wiki/WP-0016"]])
+                self.assertEqual(self.lire("WP-0011")["sousPages"], [["WP-0017", TITRE_SP_REGLAGE, "#/wiki/WP-0017"]])
+                self.assertEqual(self.lire("WP-0018")["sousPages"], [["WP-0019", TITRE_SP_ALIGNER, "#/wiki/WP-0019"]])
+                for identifiant in ("WP-0002", "WP-0003", "WP-0012"):
+                    self.assertIsNone(self.lire(identifiant)["sousPages"], identifiant)
+                self.verifier_sans_piege()
+        # On va de la mère à la sous-page, puis de la sous-page à la mère.
+        self.aller_wiki("EQ-0005")
+        page.click('#wiki-sous-pages a[href="#/wiki/WP-0013"]')
+        page.wait_for_selector('.wiki-page[data-page="WP-0013"] #wiki-mere')
+        page.click("#wiki-mere a")
+        page.wait_for_selector('.wiki-page[data-page="EQ-0005"] #wiki-sous-pages')
+
+    def test_sous_pages_de_composant_et_de_savoir_faire_et_mere_archivee(self):
+        for profil in ("technicien", "demandeur"):
+            with self.subTest(profil=profil):
+                page = self.ouvrir(profil, base=True)
+                liens = profil == "technicien"
+                # Composant : la mère, la fiche de l'article de la mère (pas de magasin pour le demandeur), rien de calculé.
+                lu = self.lire("WP-0016")
+                self.assertEqual((lu["h1"], lu["typeBadge"], lu["mere"], lu["mereLien"]),
+                                 (TITRE_SP_KIT, "Composant", "Sous-page de " + TITRE_KIT, [TITRE_KIT, "#/wiki/ART-0016"]))
+                self.assertEqual(lu["fiche"], ["Fiche de l'article", "#/magasin/article/ART-0016"] if liens else None)
+                self.assertEqual(lu["blocs"], ["entete-page", "wiki-texte", "wiki-retours"])
+                self.assertEqual((lu["entete"], lu["calcule"]), (None, 0))
+                self.assertNotIn("Pas d'article au magasin", page.inner_text("#contenu"))
+                self.verifier_texte(lu, TEXTE_SP_KIT, liens, ORIGINE_IA % "15/10/2026")
+                # Savoir-faire : l'en-tête de sa mère — consignation de la fiche, telle quelle, et la phrase des savoir-faire —,
+                # que la mère soit rattachée à l'équipement (WP-0011) ou à la page de l'équipement (WP-0018).
+                consignation = self.consignation_po02()
+                for identifiant, mere, titre_mere in (("WP-0017", "WP-0011", TITRE_PIEGE), ("WP-0019", "WP-0018", TITRE_SF_ALIGNER)):
+                    lu = self.lire(identifiant)
+                    self.assertEqual(lu["mereLien"], [titre_mere, "#/wiki/" + mere], identifiant)
+                    self.assertEqual(lu["blocs"], ["entete-page", "wiki-entete", "wiki-texte", "wiki-retours"], identifiant)
+                    self.assertEqual((lu["entete"]["titre"], lu["entete"]["phrase"], lu["entete"]["consignation"]),
+                                     ("Consignation de PO-02", PHRASE_SAVOIR_FAIRE, consignation), identifiant)
+                    self.assertEqual(lu["fiche"], ["Fiche de l'équipement", "#/equipement/EQ-0005"], identifiant)
+                    self.assertEqual(self.lire(mere)["entete"]["consignation"], consignation, mere)
+                self.assertIsNone(self.lire("WP-0018")["mere"])               # rattaché à une page d'un autre type
+                self.verifier_sans_piege()
+        # Mère archivée : nommée sans lien, « page archivée » ; la sous-page garde sa consignation.
+        page.evaluate(ECRIRE_JS, ["wiki_pages", "WP-0018", {"statut": "archivée"}])
+        lu = self.lire("WP-0019")
+        self.assertEqual((lu["mere"], lu["mereLien"], lu["mereArchivee"]),
+                         ("Sous-page de " + TITRE_SF_ALIGNER + " page archivée", None, TITRE_SF_ALIGNER))
+        self.assertEqual(lu["entete"]["consignation"], consignation)
+
+    def test_index_range_et_compte_les_sous_pages(self):
+        for profil in ("demandeur", "technicien", "responsable"):
+            with self.subTest(profil=profil):
+                page = self.ouvrir(profil, base=True)
+                self.aller_index()
+                attendues, lu = self.verifier_sections()
+                # Base de TestIndex (31, 53, 2, 5) : trois sous-pages d'équipement, une de composant, deux de savoir-faire
+                # (WP-0017, WP-0019) et le savoir-faire WP-0018.
+                self.assertEqual([len(p) for _, p in attendues], [34, 54, 2, 8])
+                for section, identifiant, titre in (("équipement", "WP-0012", TITRE_SP_GARNITURE), ("équipement", "WP-0013", TITRE_SP_ETANCHEITE),
+                                                    ("équipement", "WP-0014", TITRE_SP_PIEGE), ("composant", "WP-0016", TITRE_SP_KIT),
+                                                    ("savoir-faire", "WP-0017", TITRE_SP_REGLAGE), ("savoir-faire", "WP-0019", TITRE_SP_ALIGNER)):
+                    lien = page.evaluate("""([type, id]) => { const li = document.querySelector('.wiki-index-section[data-type="' + type
+                      + '"] li[data-id="' + id + '"]'); return li ? [li.querySelector('.wiki-index-titre').textContent,
+                      li.querySelector('a').getAttribute('href')] : null; }""", [section, identifiant])
+                    self.assertEqual(lien, [titre, "#/wiki/" + identifiant], identifiant)
+                self.assertEqual(page.locator('.wiki-index-liste li[data-id="WP-0015"]').count(), 0)
+                self.verifier_sans_piege()
+
+    def test_titres_pieges_de_sous_page_restent_du_texte(self):
+        page = self.ouvrir("responsable", base=True)
+        lu = self.lire("WP-0014")
+        self.assertEqual(page.evaluate("document.querySelector('#contenu h1').textContent"), TITRE_SP_PIEGE)
+        self.assertEqual(lu["mereLien"], [TITRE_PO02, "#/wiki/EQ-0005"])
+        self.verifier_sans_piege()
+        # Sous-page d'une mère au titre piégé : « Sous-page de » reste du texte.
+        lu = self.lire("WP-0017")
+        self.assertEqual(lu["mereLien"], [TITRE_PIEGE, "#/wiki/WP-0011"])
+        self.assertEqual(page.evaluate("document.querySelector('#contenu h1').textContent"), TITRE_SP_REGLAGE)
+        self.verifier_sans_piege()
+        # Liste des sous-pages de la mère et index.
+        self.assertIn(["WP-0014", TITRE_SP_PIEGE, "#/wiki/WP-0014"], self.lire("EQ-0005")["sousPages"])
+        self.assertEqual(page.locator("#wiki-sous-pages *:not(h2):not(.badge):not(ul):not(li):not(a):not(p)").count(), 0)
+        self.verifier_sans_piege()
+        self.aller_index()
+        self.assertEqual(page.evaluate("document.querySelector('li[data-id=\"WP-0014\"] .wiki-index-titre').textContent"), TITRE_SP_PIEGE)
+        self.verifier_sans_piege()
+
+    def test_modifier_une_sous_page(self):
+        page = self.ouvrir("responsable", base=True)
+        self.lire("WP-0012")
+        page.click("#wiki-modifier")
+        page.wait_for_selector('.wj-ecrire[data-page="WP-0012"]')
+        self.assertEqual(page.input_value("#wj-texte"), TEXTE_SP_GARNITURE)
+        apres = TEXTE_SP_GARNITURE + "\n- La garniture tient après le rodage [OT-2025-0010]"
+        page.fill("#wj-texte", apres)
+        page.click(".wj-enregistrer")
+        page.wait_for_function("location.hash === '#/wiki/WP-0012'")
+        ligne = page.evaluate("Donnees.trouver('wiki_pages', 'WP-0012')")
+        self.assertEqual((ligne["texte"], ligne["version"], ligne["rattache_a"], ligne["equipement_id"], ligne["statut"]),
+                         (apres, "2", "WP-0001", "", "active"))
+        lu = self.lire("WP-0012")
+        self.assertEqual(lu["mereLien"], [TITRE_PO02, "#/wiki/EQ-0005"])
+        self.assertIn("La garniture tient après le rodage", page.inner_text("#wiki-texte"))
+        self.assertIn(", puis modifié à la main — validé par", lu["origine"])
+        self.assertEqual((lu["entete"]["titre"], lu["entete"]["consignation"]), ("Consignation de PO-02", self.consignation_po02()))
+
+    def parcourir(self, verifier):
+        """Index (tout affiché), mères et sous-pages des trois types."""
+        page = self.page
+        self.aller_index()
+        while page.locator(".wiki-tout-afficher").count():
+            page.locator(".wiki-tout-afficher").first.click()
+        verifier("#contenu", "index")
+        for identifiant in SOUS_PAGES_PARCOURUES:
+            self.aller_wiki(identifiant)
+            verifier("#contenu", "page " + identifiant)
+
+    def test_1440_et_375_px_sans_defilement_horizontal_et_zones_de_48_px(self):
+        for largeur, hauteur, telephone in ((1440, 900, False), (375, 812, True)):
+            for profil in ("responsable", "demandeur"):
+                with self.subTest(largeur=largeur, profil=profil):
+                    self.ouvrir(profil, largeur=largeur, hauteur=hauteur, telephone=telephone, base=True)
+
+                    def verifier(racine, ou):
+                        largeur_page, ecran = self.page.evaluate(LARGEUR_JS)
+                        self.assertLessEqual(largeur_page, ecran, "%s : page plus large que l'écran (%s > %s)" % (ou, largeur_page, ecran))
+                        if telephone:
+                            zones = self.page.evaluate(ZONES_JS, racine)
+                            self.assertEqual([z for z in zones if z[2] < 47.5], [], "%s : zones de moins de 48 px" % ou)
+                    self.parcourir(verifier)
+
+    def test_contrastes_aa_en_theme_clair_et_sombre(self):
+        for theme in ("clair", None):
+            with self.subTest(theme=theme or "sombre"):
+                page = self.ouvrir("technicien", largeur=1440, hauteur=900, theme=theme, base=True)
+                self.assertEqual(page.evaluate("document.documentElement.dataset.theme || null"), theme)
+
+                def verifier(racine, ou):
+                    page.wait_for_timeout(100)
+                    self.assertEqual(page.evaluate(AUDIT_TEXTES_JS, racine), [], ou)
+                self.parcourir(verifier)
+
+
+# ---------------------------------------------------------------------------
 # Affichage : 1440 et 375 px, zones tactiles, contrastes, réseau
 # ---------------------------------------------------------------------------
 
-PAGES_PARCOURUES = ("EQ-0005", "ART-0016", "WP-0002", "WP-0003", "WP-0005", "WP-0006", "WP-0007", "WP-0010", "WP-0011")
+PAGES_PARCOURUES =("EQ-0005", "ART-0016", "WP-0002", "WP-0003", "WP-0005", "WP-0006", "WP-0007", "WP-0010", "WP-0011")
 
 
 class TestAffichage(CasWiki):

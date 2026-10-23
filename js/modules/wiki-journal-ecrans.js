@@ -8,7 +8,9 @@
 //  - adresses : #/wiki-journal (journal : à valider, puis refusées, puis toutes les entrées), ?vue=a-valider |
 //    contradictions | file | echecs | hors | controle, ?entree=<WJ-…> (une entrée, avec ses changements) ;
 //  - Wiki.rattraper() est appelé à chaque affichage du journal (§20.7) ;
-//  - une proposition : OT (lien), date d'intervention, « Intervention antérieure », modèle, rang ; ses contradictions
+//  - une proposition : OT (lien), date d'intervention, « Intervention antérieure », modèle, rang, « Acceptée à la
+//    relance, après le refus : » et les raisons du premier refus (D106 : entrée d'ingestion acceptée — à valider, rien à
+//    ajouter, validée, rejetée, à refaire — qui garde des raisons ; une refusée garde « Raisons du refus ») ; contradictions
 //    en tête (jamais de case à cocher : elle se valide seule) ; par page, d'après Wiki.comparerTextes : phrases
 //    nouvelles surlignées (<mark>, étiquette « Nouvelle »), reprises (<ins>, ancienne forme en <del>), retirées (<del>),
 //    identiques repliées (<details>) ; page créée en entier ; « Valider », « Rejeter » (motif exigé dans la page) ;
@@ -43,12 +45,14 @@ Object.assign(Wiki, (() => {
     { type: 'sans-ot', libelle: 'Pages sans OT cité', aide: 'Chaque phrase du wiki cite au moins un OT.' },
     { type: 'titre-proche', libelle: 'Titres trop proches', aide: 'Même titre une fois les mots vides et les pluriels retirés.' },
     { type: 'trop-longue', libelle: 'Pages trop longues',
-      aide: 'Plus de ' + S.phrasesMax + ' phrases ou de ' + S.motsMax + ' mots : à découper en pages liées.' },
+      aide: 'Plus de ' + S.phrasesMax + ' phrases ou de ' + S.motsMax + ' mots : à découper en sous-pages.' },
     { type: 'contradiction-ancienne', libelle: 'Contradictions anciennes',
       aide: 'Ouvertes depuis plus de ' + S.contradictionAncienneJours + ' jours : à trancher sur leur page.' },
     { type: 'ancrage-disparu', libelle: 'Ancrages disparus',
-      aide: 'La page est ancrée sur un équipement ou un article retiré ou désactivé.' },
+      aide: 'La page est ancrée sur un équipement ou un article retiré ou désactivé, ou rattachée à une page (sa mère, '
+        + 'pour une sous-page) archivée ou absente.' },
   ];
+  const ACCEPTEES = ['à valider', 'rien à ajouter', 'validée', 'rejetée', 'à refaire'];   // ses raisons : le refus d'avant la relance
 
   let annonce = null;        // message posé avant un réaffichage : { type, contenu }
   let traitement = null;     // « Traiter la file » en cours : { controleur, etat, arret }
@@ -236,9 +240,13 @@ Object.assign(Wiki, (() => {
         ${texte(entree.decide_le) ? UI.html`<span>le ${UI.dateHeureFr(entree.decide_le)}</span>` : ''}<span class="wj-id">${entree.id}</span></p>`;
   }
 
-  function raisonsHtml(entree) {
+  /** Raisons, une par ligne ; titrées « Acceptée à la relance, après le refus : » (D106), ou « Raisons du refus : » (carte). */
+  function raisonsHtml(entree, carte) {
     const raisons = texte(entree.raisons).split('\n').map(texte).filter(Boolean);
-    return raisons.length ? UI.html`<ul class="wj-raisons">${raisons.map((r) => UI.html`<li>${r}</li>`)}</ul>` : '';
+    const relance = texte(entree.nature) === 'ingestion' && ACCEPTEES.includes(texte(entree.statut));
+    const titre = relance ? 'Acceptée à la relance, après le refus :' : (carte ? 'Raisons du refus :' : '');
+    return raisons.length ? UI.html`${titre ? UI.html`<p class="wj-raisons-titre${relance ? ' wj-relance' : ''}"><b>${titre}</b></p>` : ''}
+      <ul class="wj-raisons">${raisons.map((r) => UI.html`<li>${r}</li>`)}</ul>` : '';
   }
 
   function actionsHtml(entree) {
@@ -269,7 +277,7 @@ Object.assign(Wiki, (() => {
       ${contradictions.length ? contradictionsHtml(entree, contradictions) : ''}
       ${changementsDe(entree).map(changementHtml)}
       ${texte(entree.motif) ? UI.html`<p class="wj-motif-lu"><b>Motif :</b> ${entree.motif}</p>` : ''}
-      ${texte(entree.raisons) ? UI.html`<p class="wj-raisons-titre"><b>Raisons du refus :</b></p>${raisonsHtml(entree)}` : ''}
+      ${raisonsHtml(entree, true)}
       ${actions ? actionsHtml(entree) : ''}
       ${relance ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire wj-relancer" data-entree="${entree.id}">${UI.icone('actualiser')}Relancer</button></div>` : ''}
     </article>`;

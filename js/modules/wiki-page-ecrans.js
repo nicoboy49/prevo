@@ -5,7 +5,9 @@
 // savoir-faire, l'en-tête posé par Prévo (consignation de l'équipement telle quelle et « Ce savoir-faire ne
 // remplace pas la consignation de l'équipement ») ; la couche calculée, séparée du texte ; le texte par rubrique,
 // précédé de son origine ; l'encadré « À trancher » ; « Pages qui renvoient ici » ; au responsable, « Modifier »
-// et les propositions en attente sur la page.
+// et les propositions en attente sur la page. Sous-page (§20.4, T131) : « Sous-page de <mère> » sous le titre, pour
+// un équipement la consignation de l'équipement de sa mère en tête (même bloc qu'un savoir-faire), pas de couche
+// calculée, le lien vers la fiche de sa mère ; page mère : « Sous-pages » (liens) juste après le texte.
 //
 // Aucune donnée n'est insérée comme HTML : UI.html échappe, la consignation est posée par textContent, et le
 // texte d'une page est construit élément par élément (texte, liens vers les pages, OT cités). Le demandeur voit
@@ -24,6 +26,7 @@ Object.assign(Wiki, (() => {
   const MESSAGE_SANS_CONSIGNATION = 'Aucune consignation saisie pour cet équipement';
   const MESSAGE_SANS_TEXTE = 'Aucun texte validé pour l\'instant.';
   const PHRASE_SAVOIR_FAIRE = 'Ce savoir-faire ne remplace pas la consignation de l\'équipement';   // = Wiki.PHRASE_SAVOIR_FAIRE
+  const PHRASE_SOUS_PAGE = 'Cette page ne remplace pas la consignation de l\'équipement';           // = Wiki.PHRASE_SOUS_PAGE
   const TYPES = { 'équipement': 'Équipement', composant: 'Composant', mode: 'Mode de défaillance', 'savoir-faire': 'Savoir-faire' };
   const DECISIONS = [['ancien', 'L\'ancien reste'], ['nouveau', 'Le nouveau remplace'], ['les deux', 'Les deux sont vrais']];
   const SOURCES_MONTAGE = { liste: 'dans la liste des pièces', consommation: 'consommé en intervention',
@@ -278,6 +281,16 @@ Object.assign(Wiki, (() => {
     </section>`;
   }
 
+  /** Sous-pages d'une page mère (§20.9), juste après le texte : liens, dans l'ordre de Wiki.page. */
+  function blocSousPages(page) {
+    return UI.html`<section class="carte wiki-section" id="wiki-sous-pages" aria-labelledby="wiki-titre-sous-pages">
+      <h2 id="wiki-titre-sous-pages">Sous-pages <span class="badge">${page.sousPages.length}</span></h2>
+      <p class="aide">La page est découpée en pages liées : chacune reprend un sujet, avec ses OT cités.</p>
+      <ul class="wiki-sous-pages">${page.sousPages.map((sousPage) => UI.html`<li data-id="${sousPage.id}">
+        ${lienWiki(sousPage.id, sousPage.titre, 'wiki-lien-sous-page')}</li>`)}</ul>
+    </section>`;
+  }
+
   function blocEnAttente(page) {
     const propositions = page.enAttente;
     return UI.html`<section class="carte wiki-section" id="wiki-en-attente" aria-labelledby="wiki-titre-attente">
@@ -326,9 +339,18 @@ Object.assign(Wiki, (() => {
     return section;
   }
 
-  /** Rattachement d'un savoir-faire (même règle que son en-tête, §20.3) → { equipementId } | { articleId } | { pageId } | {}. */
+  /** Ligne de la mère d'une sous-page (rattache_a de sa ligne) ; null pour une autre page. */
+  function ligneMere(page) {
+    const ligne = page.mere ? Donnees.trouver('wiki_pages', page.pageId) : null;
+    return (ligne && Donnees.trouver('wiki_pages', texte(ligne.rattache_a))) || null;
+  }
+
+  /**
+   * Rattachement d'un savoir-faire (même règle que son en-tête, §20.3 ; celui de sa mère pour une sous-page) →
+   * { equipementId } | { articleId } | { pageId } | {}.
+   */
   function rattachementDe(page) {
-    const ligne = Donnees.trouver('wiki_pages', page.pageId) || {};
+    const ligne = ligneMere(page) || Donnees.trouver('wiki_pages', page.pageId) || {};
     let cible = ligne;
     if (!texte(ligne.equipement_id) && !texte(ligne.article_id) && texte(ligne.rattache_a)) {
       cible = Donnees.trouver('wiki_pages', texte(ligne.rattache_a)) || {};
@@ -356,6 +378,13 @@ Object.assign(Wiki, (() => {
         : UI.html`<p class="aide">Aucun équipement connu pour ce savoir-faire : voir la consignation de l'équipement sur sa fiche.</p>`}
     </section>`);
     return section;
+  }
+
+  /** En-tête d'une sous-page d'équipement (§20.3) : la consignation de l'équipement de sa mère, telle quelle. */
+  function enteteSousPage(page, contexte) {
+    const equipement = page.entete.equipements[0] || { equipementId: '', repere: page.mere.titre };
+    return blocConsignation(page.entete.consignation, { id: 'wiki-entete', titre: 'Consignation de ' + equipement.repere,
+      phrase: page.entete.phrase || PHRASE_SOUS_PAGE, equipementId: equipement.equipementId, responsable: contexte.responsable });
   }
 
   // ===========================================================================================
@@ -584,11 +613,16 @@ Object.assign(Wiki, (() => {
   // 6. La page
   // ===========================================================================================
 
-  /** Lien de l'en-tête vers la fiche de l'équipement ou de l'article (pas de magasin pour le demandeur). */
+  /**
+   * Lien de l'en-tête vers la fiche de l'équipement ou de l'article (pas de magasin pour le demandeur) ; pour une
+   * sous-page d'équipement ou de composant, celle de l'équipement ou de l'article de sa mère (aucune sans ancrage).
+   */
   function ficheDe(page, contexte) {
     const equipement = (id) => ({ href: '#/equipement/' + encodeURIComponent(id), libelle: 'Fiche de l\'équipement', icone: 'parc' });
     const article = (id) => (contexte.liens ? { href: '#/magasin/article/' + encodeURIComponent(id), libelle: 'Fiche de l\'article', icone: 'magasin' } : null);
-    if (page.type === 'équipement') return equipement(page.id);
+    const mere = page.mere ? page.mere.id : '';
+    if (page.type === 'équipement') return !mere ? equipement(page.id) : (Donnees.trouver('equipements', mere) ? equipement(mere) : null);
+    if (page.type === 'composant' && mere) return Donnees.trouver('articles', mere) ? article(mere) : null;
     if (page.type === 'composant') return page.calcul ? article(page.calcul.article.id) : null;
     if (page.type !== 'savoir-faire') return null;
     const rattachement = rattachementDe(page);
@@ -596,6 +630,15 @@ Object.assign(Wiki, (() => {
     if (rattachement.articleId) return article(rattachement.articleId);
     if (rattachement.pageId) return { href: '#/wiki/' + encodeURIComponent(rattachement.pageId), libelle: 'Page du composant', icone: 'wiki' };
     return null;
+  }
+
+  /** « Sous-page de <mère> » (§20.9) : lien vers la mère ; sans lien si sa page est archivée (elle reste nommée). */
+  function mereHtml(page) {
+    const ligne = page.mere.id.startsWith('WP-') ? Donnees.trouver('wiki_pages', page.mere.id) : null;
+    const archivee = Boolean(ligne) && texte(ligne.statut) === 'archivée';
+    return UI.html`<p class="wiki-mere" id="wiki-mere">Sous-page de ${archivee
+      ? UI.html`<b class="wiki-mere-archivee">${page.mere.titre}</b> <span class="badge attention">page archivée</span>`
+      : lienWiki(page.mere.id, page.mere.titre, 'wiki-lien-mere')}</p>`;
   }
 
   function enteteHtml(page, contexte) {
@@ -606,6 +649,7 @@ Object.assign(Wiki, (() => {
       <div>
         <div class="fil"><a href="#/wiki">Wiki</a> <span aria-hidden="true">›</span> <span>${TYPES[page.type] || page.type}</span></div>
         <h1>${page.titre || page.id}</h1>
+        ${page.mere ? mereHtml(page) : ''}
         <p class="wiki-sous-titre"><span class="badge info wiki-type">${TYPES[page.type] || page.type}</span>
           ${calcul ? (marqueModele ? marqueModele + ' · ' : '') + textePannes(calcul.pannes12Mois) : ''}</p>
       </div>
@@ -620,22 +664,26 @@ Object.assign(Wiki, (() => {
   function rendrePage(conteneur, page, reglages) {
     const contexte = Object.assign({}, reglages, { resoudre: resolveur(reglages.index || Wiki.indexDesPages()) });
     const couches = { 'équipement': coucheEquipement, composant: coucheComposant, mode: coucheMode };
-    const couche = couches[page.type] ? couches[page.type](page, contexte) : [];
+    const couche = !page.mere && couches[page.type] ? couches[page.type](page, contexte) : [];     // sous-page : rien de calculé
+    const entete = page.type === 'savoir-faire' ? enteteSavoirFaire : (page.mere && page.entete ? enteteSousPage : null);
+    const sousPages = page.sousPages || [];
     App.definirTitre('Wiki ' + (page.type === 'équipement' && page.calcul && page.calcul.equipement.repere
       ? page.calcul.equipement.repere : page.titre));
     UI.remplir(conteneur, UI.html`
-      <div class="wiki wiki-page" data-page="${page.id}" data-type="${page.type}" data-equipement="${page.type === 'équipement' ? page.id : ''}">
+      <div class="wiki wiki-page" data-page="${page.id}" data-type="${page.type}" data-mere="${page.mere ? page.mere.id : ''}"
+          data-equipement="${page.type === 'équipement' && !page.mere ? page.id : ''}">
         ${enteteHtml(page, contexte)}
-        ${page.type === 'savoir-faire' ? UI.html`<div class="wiki-zone-entete"></div>` : ''}
+        ${entete ? UI.html`<div class="wiki-zone-entete"></div>` : ''}
         ${couche.length ? UI.html`<div class="wiki-couche" id="wiki-couche">
           <p class="wiki-couche-titre">${UI.icone('indicateurs')}<span>Calculé par Prévo à partir de l'historique, sans IA</span></p>
         </div>` : ''}
         <div class="wiki-zone-texte"></div>
+        ${sousPages.length ? blocSousPages(page) : ''}
         <div class="wiki-zone-trancher"></div>
         ${blocRetours(page)}
         ${contexte.responsable ? blocEnAttente(page) : ''}
       </div>`);
-    if (page.type === 'savoir-faire') UI.$('.wiki-zone-entete', conteneur).replaceWith(enteteSavoirFaire(page, contexte));
+    if (entete) UI.$('.wiki-zone-entete', conteneur).replaceWith(entete(page, contexte));
     if (couche.length) couche.forEach((element) => UI.$('#wiki-couche', conteneur).appendChild(element));
     UI.$('.wiki-zone-texte', conteneur).replaceWith(blocTexte(page, contexte));
     const zone = UI.$('.wiki-zone-trancher', conteneur);

@@ -14,13 +14,18 @@
 // - cas d'une cause : OT correctif (type commençant par « correctif ») clôturé, de cette cause (le code
 //   symptôme n'est pas exigé) ;
 // - un équipement inconnu (référence cassée) n'entre dans aucune liste d'équipements ;
-// - les tris départagent par l'ordre des caractères (reproductible par tests/calcul_wiki.py).
+// - les tris départagent par l'ordre des caractères (reproductible par tests/calcul_wiki.py) ;
+// - sous-page (§20.4, T131) : ligne active dont rattache_a désigne une ligne de même type (sa mère, même archivée) ;
+//   pas de couche calculée ; ses sous-pages, la mère les liste par titre dans l'ordre alphabétique français, comme
+//   l'index du wiki (ce n'est pas un calcul de tests/calcul_wiki.py).
 
 Object.assign(Wiki, (() => {
 
   const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
   const PHRASE_SAVOIR_FAIRE = 'Ce savoir-faire ne remplace pas la consignation de l\'équipement';
+  const PHRASE_SOUS_PAGE = 'Cette page ne remplace pas la consignation de l\'équipement';
   const MILLISECONDES_PAR_JOUR = 86400000;
+  const ORDRE_FRANCAIS = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -275,6 +280,38 @@ Object.assign(Wiki, (() => {
   }
 
   // ===========================================================================================
+  // 3 bis. Sous-pages (§20.4) : mère, en-tête repris de la mère, liste des sous-pages
+  // ===========================================================================================
+
+  /** Ligne de la mère d'une ligne de wiki_pages si c'en est une sous-page (rattache_a de même type), sinon null. */
+  function ligneMere(ligne) {
+    const mere = texte(ligne.rattache_a) ? Donnees.trouver('wiki_pages', texte(ligne.rattache_a)) : null;
+    return mere && texte(mere.type) === texte(ligne.type) ? mere : null;
+  }
+
+  /**
+   * En-tête d'une sous-page, posé par Prévo comme celui d'un savoir-faire (CS98, jamais de texte d'IA) : sous-page
+   * d'équipement → la consignation de l'équipement de sa mère, telle quelle, et « Cette page ne remplace pas la
+   * consignation de l'équipement » ; sous-page de savoir-faire → l'en-tête de sa mère ; sinon null.
+   */
+  function enteteSousPage(ligne, mere) {
+    if (texte(ligne.type) === 'savoir-faire') return enteteSavoirFaire(mere);
+    if (texte(ligne.type) !== 'équipement') return null;
+    const equipementId = texte(mere.equipement_id);
+    const fiche = equipement(equipementId);
+    return { consignation: fiche ? consignationDe(fiche) : null,
+      equipements: fiche ? [{ equipementId, repere: texte(fiche.repere) }] : [], phrase: PHRASE_SOUS_PAGE };
+  }
+
+  /** Sous-pages actives d'une ligne : [{ id, titre }], par titre (ordre alphabétique français) puis identifiant. */
+  function sousPagesDe(actives, ligne) {
+    const id = texte(ligne.id);
+    return actives.filter((autre) => texte(autre.id) !== id && texte(autre.rattache_a) === id && texte(autre.type) === texte(ligne.type))
+      .map((autre) => ({ id: texte(autre.id), titre: texte(autre.titre) }))
+      .sort((a, b) => ORDRE_FRANCAIS.compare(a.titre, b.titre) || comparer(a.id, b.id));
+  }
+
+  // ===========================================================================================
   // 4. Pages, retours, catalogue
   // ===========================================================================================
 
@@ -316,11 +353,15 @@ Object.assign(Wiki, (() => {
 
   /**
    * Assemble une page : la base { id, type, titre, calcul, entete } et le texte validé de sa ligne de
-   * wiki_pages (vide sans ligne).
+   * wiki_pages (vide sans ligne) ; `mere` (sous-page : { id, titre } canoniques de sa mère, sinon null) et
+   * `sousPages` (page mère : ses sous-pages actives, sinon []).
    */
-  function assembler(base, ligne, actives, options) {
+  function assembler(base, ligne, actives, options, mere) {
     const pageId = ligne ? texte(ligne.id) : '';
+    const entreeMere = mere ? entreeDe(mere) : null;
     const page = Object.assign(base, {
+      mere: entreeMere ? { id: entreeMere.id, titre: entreeMere.titre } : null,
+      sousPages: ligne ? sousPagesDe(actives, ligne) : [],
       texte: ligne ? brut(ligne.texte) : '',
       origine: ligne ? texte(ligne.origine) : '',
       modele: ligne ? texte(ligne.modele) : '',
@@ -362,9 +403,10 @@ Object.assign(Wiki, (() => {
 
   /**
    * Page d'un identifiant (§20.3) : EQ-… (équipement), ART-… (article) ou WP-… (ligne active de
-   * wiki_pages ; une page ancrée rend la page de son équipement ou de son article). → { id, type, titre,
-   * calcul, entete, texte, origine, modele, validePar, valideLe, liens, retours, contradictions, enAttente,
-   * pageId } ou null (identifiant inconnu, page archivée). options : { maintenant, profil }.
+   * wiki_pages ; une page ancrée rend la page de son équipement ou de son article ; une sous-page n'a pas de
+   * couche calculée). → { id, type, titre, calcul, entete, mere, sousPages, texte, origine, modele, validePar,
+   * valideLe, liens, retours, contradictions, enAttente, pageId } ou null (identifiant inconnu, page archivée).
+   * options : { maintenant, profil }.
    */
   function page(id, options) {
     const identifiant = texte(id);
@@ -376,6 +418,11 @@ Object.assign(Wiki, (() => {
     if (!ligne || !estActive(ligne)) return null;
     const entree = entreeDe(ligne);
     if (entree.ancree) return pageAncree(entree.type, entree.id, actives, options);
+    const mere = ligneMere(ligne);
+    if (mere) {
+      return assembler({ id: entree.id, type: entree.type, titre: entree.titre, calcul: null, entete: enteteSousPage(ligne, mere) },
+        ligne, actives, options, mere);
+    }
     const causeCode = texte(ligne.cause_code);
     const calcul = entree.type === 'mode' && causeCode ? pageMode(causeCode) : null;
     const entete = entree.type === 'savoir-faire' ? enteteSavoirFaire(ligne) : null;
@@ -384,7 +431,7 @@ Object.assign(Wiki, (() => {
 
   /**
    * Catalogue (§20.3) : [{ id, titre, type }] — un équipement par EQ-…, un article par ART-…, puis les
-   * pages actives non ancrées (modes, savoir-faire, composants libres) ; celles qui ont un texte d'abord,
+   * pages actives non ancrées (modes, savoir-faire, composants libres, sous-pages) ; celles qui ont un texte d'abord,
    * puis par titre et identifiant ; catalogueMax au plus.
    */
   function catalogue() {
@@ -407,5 +454,5 @@ Object.assign(Wiki, (() => {
       .slice(0, Wiki.SEUILS.catalogueMax);
   }
 
-  return { page, pageComposant, pageMode, catalogue, PHRASE_SAVOIR_FAIRE };
+  return { page, pageComposant, pageMode, catalogue, PHRASE_SAVOIR_FAIRE, PHRASE_SOUS_PAGE };
 })());

@@ -337,6 +337,46 @@ class TestJournal(CasEcrans):
         self.assertIn("Ce que dit la page : Bruit de gravier", self.texte('.wj-contradiction[data-entree="WJ-00001"]'))
         self.assertEqual(self.page.get_attribute('.wj-contradiction[data-entree="WJ-00001"] .wj-lien-page', "href"), "#/wiki/WP-0006")
 
+    def test_acceptee_a_la_relance_et_refusee_inchangee(self):
+        """D106 (T129, écran en T131) : une proposition acceptée à la relance garde les raisons du premier refus, sous
+        « Acceptée à la relance, après le refus : » ; une entrée refusée garde « Raisons du refus : »."""
+        self.ouvrir(journal=True)
+        apres = "## Ce qui revient" + NL + "- Courroie changée [OT-2026-0009]"
+        relancees = [
+            entree("WJ-00011", "OT-2026-0009", "à valider", "11", "2026-07-02 08:00", pages="EQ:EQ-0003", essais="2",
+                   raisons=NL.join(RAISONS), changements=[changement("", "EQ:EQ-0003", "équipement", "CV-01 — Convoyeur", "", apres, 0)]),
+            entree("WJ-00012", "OT-2026-0005", "rien à ajouter", date="2026-03-01 08:00", essais="2", raisons=RAISONS[0])]
+        self.page.evaluate(AJOUTER_JS, [relancees, None])
+        self.journal()
+        acceptee = "#wj-a-valider " + carte("WJ-00011")
+        self.assertEqual(self.textes(acceptee + " .wj-raisons-titre"), ["Acceptée à la relance, après le refus :"])
+        self.assertEqual(self.textes(acceptee + " .wj-relance"), ["Acceptée à la relance, après le refus :"])
+        self.assertEqual(self.textes(acceptee + " .wj-raisons li"), RAISONS)
+        self.assertNotIn("Raisons du refus", self.texte(acceptee))
+        self.assertEqual(self.page.locator(acceptee + " .wj-valider").count(), 1)
+        # Une entrée refusée : inchangée (« Raisons du refus : », ses raisons ligne par ligne, « Relancer »).
+        refusee = "#wj-refusees " + carte("WJ-00005")
+        self.assertEqual(self.textes(refusee + " .wj-raisons-titre"), ["Raisons du refus :"])
+        self.assertEqual(self.page.locator(refusee + " .wj-relance").count(), 0)
+        self.assertEqual(self.textes(refusee + " .wj-raisons li"), RAISONS)
+        self.assertEqual(self.page.locator(refusee + " .wj-relancer").count(), 1)
+        # « Toutes les entrées » : les relances titrées, la refusée comme avant (ses raisons sans titre).
+        ligne = '#wj-toutes .wj-ligne[data-entree="%s"]'
+        self.assertIn("Acceptée à la relance, après le refus : " + RAISONS[0], self.texte(ligne % "WJ-00011"))
+        self.assertIn("Acceptée à la relance, après le refus : " + RAISONS[0], self.texte(ligne % "WJ-00012"))
+        self.assertIn(RAISONS[1], self.texte(ligne % "WJ-00005"))
+        self.assertNotIn("relance", self.texte(ligne % "WJ-00005"))
+        self.assertNotIn("Raisons du refus", self.texte(ligne % "WJ-00005"))
+        # Une entrée seule, puis validée : toujours acceptée à la relance.
+        self.aller("#/wiki-journal?entree=WJ-00011", '.wj[data-vue="entree"]')
+        self.assertEqual(self.textes(carte("WJ-00011") + " .wj-relance"), ["Acceptée à la relance, après le refus :"])
+        self.page.evaluate("""() => Donnees.modifier('wiki_journal', (lignes) => {
+          lignes.find((e) => e.id === 'WJ-00011').statut = 'validée'; }, { journal: false })""")
+        self.aller("#/wiki-journal?entree=WJ-00005", '.wj[data-vue="entree"] ' + carte("WJ-00005"))
+        self.assertEqual(self.textes(carte("WJ-00005") + " .wj-raisons-titre"), ["Raisons du refus :"])
+        self.aller("#/wiki-journal?entree=WJ-00011", '.wj[data-vue="entree"] ' + carte("WJ-00011") + '[data-statut="validée"]')
+        self.assertEqual(self.textes(carte("WJ-00011") + " .wj-relance"), ["Acceptée à la relance, après le refus :"])
+
     def test_refus_affiche_et_passage_a_refaire(self):
         self.ouvrir(journal=True)
         # Une proposition construite sur WJ-00004 (même page) ne passe pas avant elle.
@@ -754,6 +794,54 @@ class TestControleDuWiki(CasEcrans):
         self.assertEqual([p["message"] for p in problemes if p["type"] == "lien-casse" and p["page"] == "WP-0002"
                           and "Ancien geste" in p["message"]], [])
         self.assertTrue(any(p["type"] == "ancrage-disparu" and "EQ-0001 au rebut" in p["message"] for p in problemes), problemes)
+
+    def test_sous_pages_ancrage_de_la_mere_et_rien_a_tort(self):
+        """T131 (§20.9) : une sous-page n'a pas d'ancrage propre, elle n'est ni « disparue » ni orpheline ; sa mère
+        archivée ou absente est un ancrage disparu ; une sous-page de 30 phrases n'est pas trop longue."""
+        self.ouvrir()
+        constats = NL.join(["- Constat numéro %d [OT-2026-0007]" % numero for numero in range(1, 31)])
+        page = lambda id_, type_, titre, texte, **autres: dict(  # noqa: E731
+            {"id": id_, "type": type_, "titre": titre, "texte": texte, "version": "1", "statut": "active", "origine": "manuel"}, **autres)
+        self.page.evaluate("""async (pages) => {
+          await Donnees.modifier('wiki_pages', (lignes) => {
+            pages.forEach((p) => lignes.push(p));
+            lignes.find((l) => l.id === 'WP-0007').statut = 'archivée';
+          });
+        }""", [
+            # Sous-pages normales (aucun renvoi depuis leur mère) : d'équipement (30 phrases), de composant, de mode.
+            page("WP-0020", "équipement", "PO-01 — garniture", "## Ce qui revient" + NL + constats, rattache_a="WP-0001"),
+            page("WP-0021", "composant", "Kit garniture HC 50 — faces", "## Défaillances" + NL + "- Faces rayées [OT-2026-0007]",
+                 rattache_a="WP-0003"),
+            page("WP-0022", "mode", "Cavitation — bruit", "## Symptômes" + NL + "- Gravier à mi-débit [OT-2026-0007]", rattache_a="WP-0006"),
+            # Mère archivée (mode, savoir-faire), mère absente ; savoir-faire rattaché à une page absente.
+            page("WP-0023", "mode", "Desserrage — raccords", "## Causes" + NL + "- Vibrations [OT-2026-0007]", rattache_a="WP-0007"),
+            page("WP-0024", "équipement", "XX-01 — mère perdue", "## Astuces" + NL + "- Caler [OT-2026-0007]", rattache_a="WP-0098"),
+            page("WP-0025", "savoir-faire", "Ancien geste — détail", "## Étapes" + NL + "- Purger [OT-2026-0007]", rattache_a="WP-0009"),
+            page("WP-0026", "savoir-faire", "Régler la tension", "## Étapes" + NL + "- Tendre [OT-2026-0007]", rattache_a="WP-0099"),
+        ])
+        problemes = self.page.evaluate("Wiki.controleDuWiki()")
+        par_page = {}
+        for p in problemes:
+            par_page.setdefault(p["page"], []).append((p["type"], p["message"]))
+        for identifiant in ("WP-0020", "WP-0021", "WP-0022", "WP-0001", "EQ-0001", "ART-0001", "WP-0006"):
+            with self.subTest(page=identifiant):
+                self.assertEqual(par_page.get(identifiant), None)
+        self.assertEqual(par_page.get("WP-0023"), [("ancrage-disparu", "page mère « Desserrage » (WP-0007) archivée")])
+        self.assertEqual(par_page.get("WP-0024"), [("ancrage-disparu", "page mère WP-0098 absente")])
+        self.assertEqual(par_page.get("WP-0025"), [("ancrage-disparu", "page mère « Ancien geste » (WP-0009) archivée")])
+        self.assertEqual(par_page.get("WP-0026"), [("ancrage-disparu", "page de rattachement WP-0099 absente")])
+        # La sous-page de 31 phrases, elle, est trop longue (mêmes limites qu'une page).
+        self.page.evaluate("""(texte) => Donnees.modifier('wiki_pages', (lignes) => {
+          lignes.find((l) => l.id === 'WP-0020').texte = texte; })""", "## Ce qui revient" + NL + constats + NL + "- Constat 31 [OT-2026-0007]")
+        self.assertEqual([(p["type"], p["message"][:10]) for p in self.page.evaluate("Wiki.controleDuWiki()") if p["page"] == "WP-0020"],
+                         [("trop-longue", "31 phrases")])
+        # La vue : les sous-pages dont la mère a disparu, chacune avec son lien et « Modifier ».
+        self.journal("?vue=controle")
+        bloc = '.wj-controle-type[data-type="ancrage-disparu"]'
+        pages = self.page.evaluate("(s) => Array.from(document.querySelectorAll(s + ' li')).map((li) => li.dataset.page)", bloc)
+        self.assertEqual([p for p in pages if p.startswith("WP-002")], ["WP-0023", "WP-0024", "WP-0025", "WP-0026"])
+        self.assertIn("sa mère, pour une sous-page", self.texte(bloc + " .aide"))
+        self.assertEqual(self.page.get_attribute(bloc + ' li[data-page="WP-0024"] .wj-lien-page', "href"), "#/wiki/WP-0024")
 
 
 # ---------------------------------------------------------------------------------------------------

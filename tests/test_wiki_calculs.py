@@ -13,6 +13,9 @@ Trois familles :
       rattaché à un équipement, à un article, à une page de composant, ancrage disparu), identifiant inconnu
       et page archivée → null ; en-tête du savoir-faire (consignation identique à la fiche : CRLF, espaces,
       tabulation, caractères spéciaux) ; retours ; crochets de wiki-journal.js ; catalogue (ordre, plafond) ;
+      sous-pages (T131) : mère, sous-pages de la mère (actives, ordre alphabétique français), pas de couche
+      calculée, en-tête d'une sous-page d'équipement = consignation de la fiche de l'équipement de sa mère,
+      sous-page de savoir-faire = en-tête de sa mère, mère archivée, absente, sans équipement ; catalogue ;
     - pureté : aucune écriture (tables identiques, Donnees.modifier jamais appelé), aucun appel réseau.
 
 Lancer depuis la racine du projet :
@@ -178,7 +181,7 @@ def page_wiki(id_, type_, titre, texte="", liens="", equipement="", article="", 
 
 
 TEXTE_PO01 = "## Ce qui revient" + NL + "- Fuite de garniture fréquente ici [OT-2026-0001] [OT-2026-0002]"
-WIKI_PAGES = table_csv(ENTETE_WIKI, [
+LIGNES_WIKI = [
     page_wiki("WP-0001", "équipement", "PO-01 — Pompe de process A", TEXTE_PO01, "WP-0004; ART-0001", equipement="EQ-0001"),
     page_wiki("WP-0002", "composant", "Roulement 6205", "## Défaillances" + NL + "- Usure rapide [OT-2026-0003]",
               "EQ-0001", article="ART-0001", origine="manuel"),
@@ -202,7 +205,34 @@ WIKI_PAGES = table_csv(ENTETE_WIKI, [
     page_wiki("WP-0012", "mode", "Bouchage d'aspiration", cause="C02"),
     page_wiki("WP-0013", "équipement", "Ancienne presse", "## Astuces" + NL + "- Caler [OT-2026-0024]", "WP-0004",
               equipement="EQ-0099"),
-])
+]
+WIKI_PAGES = table_csv(ENTETE_WIKI, LIGNES_WIKI)
+
+# Sous-pages (§20.4, T131), ajoutées à la base pour leurs seuls tests : rattache_a = la ligne de la mère, de même type.
+PHRASE_SOUS_PAGE = "Cette page ne remplace pas la consignation de l'équipement"
+SOUS_PAGES = [
+    page_wiki("WP-0020", "équipement", "PO-01 — garniture", "## Ce qui revient" + NL + "- Garniture sèche [OT-2026-0001]",
+              rattache="WP-0001"),
+    page_wiki("WP-0021", "équipement", "PO-01 — Étanchéité", "## À surveiller" + NL + "- Joint de corps [OT-2026-0002]",
+              rattache="WP-0001"),
+    page_wiki("WP-0022", "équipement", "PO-01 — accouplement", "## Astuces" + NL + "- Aligner [OT-2026-0001]",
+              rattache="WP-0001", statut="archivée"),
+    page_wiki("WP-0023", "composant", "Roulement 6205 — montage", "## Montage et remplacement" + NL + "- Chauffer [OT-2026-0003]",
+              rattache="WP-0002"),
+    page_wiki("WP-0024", "mode", "Cavitation — bruit", "## Symptômes" + NL + "- Gravier [OT-2026-0010]", rattache="WP-0004"),
+    page_wiki("WP-0025", "savoir-faire", "Changer la garniture de PO-01 — remontage", "## Étapes" + NL + "- Serrer [OT-2026-0001]",
+              rattache="WP-0006"),
+    page_wiki("WP-0026", "équipement", "Ancienne presse — vérin", "## Astuces" + NL + "- Purger [OT-2026-0024]",
+              rattache="WP-0013"),
+    page_wiki("WP-0027", "mode", "Ancienne page — détail", "## Causes" + NL + "- Vieux [OT-2026-0001]", rattache="WP-0010"),
+    page_wiki("WP-0028", "équipement", "XX-01 — mère perdue", "## Astuces" + NL + "- Rien [OT-2026-0001]", rattache="WP-0099"),
+    # Savoir-faire rattaché à la page de PO-01 par rattache_a (pas une sous-page : autre type), et sa sous-page :
+    # l'en-tête remonte deux rattachements jusqu'à la consignation (relecture de T130, CS98).
+    page_wiki("WP-0029", "savoir-faire", "Graisser le palier de PO-01", "## Étapes" + NL + "- Graisser [OT-2026-0001]",
+              rattache="WP-0001"),
+    page_wiki("WP-0030", "savoir-faire", "Graisser le palier de PO-01 — graisse", "## Pièces et outillage" + NL
+              + "- Graisse au lithium [OT-2026-0001]", rattache="WP-0029"),
+]
 
 BASE = {"equipements": EQUIPEMENTS, "codes_defaillance": CODES, "ordres_travail": ORDRES, "articles": ARTICLES,
         "article_equipement": ARTICLE_EQUIPEMENT, "mouvements_stock": MOUVEMENTS, "wiki_pages": WIKI_PAGES,
@@ -396,7 +426,7 @@ class TestBaseEssai(CasCalculs):
         self.assertEqual(page["calcul"], calcul)
         self.assertEqual({k: v for k, v in page.items() if k not in ("calcul", "retours")}, {
             "id": "EQ-0001", "type": "équipement", "titre": "PO-01 — Pompe de process A", "entete": None,
-            "texte": TEXTE_PO01, "origine": "IA", "modele": "claude-sonnet-5-5", "validePar": "Responsable fictif",
+            "mere": None, "sousPages": [], "texte": TEXTE_PO01, "origine": "IA", "modele": "claude-sonnet-5-5", "validePar": "Responsable fictif",
             "valideLe": "2026-10-01 10:00", "liens": ["WP-0004", "ART-0001"], "contradictions": [], "enAttente": [],
             "pageId": "WP-0001"})
         # La ligne WP-0001 rend la même page (identifiant canonique EQ-0001).
@@ -556,6 +586,92 @@ class TestBaseEssai(CasCalculs):
         }""", MAINTENANT)
         # 5 équipements + 4 articles + 12 lignes actives (WP-0010 archivée).
         self.assertEqual(resultat, {"identique": True, "ecritures": 0, "pages": 21})
+        self.assertEqual(self.requetes_reseau(), [])
+
+
+class TestSousPages(CasCalculs):
+    """Sous-pages (§20.3, §20.4, T131) : mère, sous-pages de la mère (actives, ordre alphabétique français), pas de
+    couche calculée, en-tête d'une sous-page d'équipement = la consignation de la fiche de l'équipement de sa mère."""
+
+    def setUp(self):
+        super().setUp()
+        self.charger(dict(BASE, wiki_pages=table_csv(ENTETE_WIKI, LIGNES_WIKI + SOUS_PAGES)))
+
+    def sous_pages(self, identifiant):
+        return [(s["id"], s["titre"]) for s in self.page_wiki(identifiant)["sousPages"]]
+
+    def test_mere_et_sous_pages_par_titre_archivee_exclue(self):
+        # « Étanchéité » avant « garniture » (ordre français ; l'ordre des caractères mettrait « É » après « g ») ;
+        # WP-0022 archivée n'est pas listée ; la ligne WP-0001 de la mère rend les mêmes sous-pages.
+        attendues = [("WP-0021", "PO-01 — Étanchéité"), ("WP-0020", "PO-01 — garniture")]
+        self.assertEqual(self.sous_pages("EQ-0001"), attendues)
+        self.assertEqual(self.sous_pages("WP-0001"), attendues)
+        # Composant, mode, savoir-faire : leurs sous-pages ; un savoir-faire rattaché à un composant n'en est pas une.
+        self.assertEqual(self.sous_pages("ART-0001"), [("WP-0023", "Roulement 6205 — montage")])
+        self.assertEqual(self.sous_pages("WP-0004"), [("WP-0024", "Cavitation — bruit")])
+        self.assertEqual(self.sous_pages("WP-0006"), [("WP-0025", "Changer la garniture de PO-01 — remontage")])
+        for identifiant in ("WP-0003", "WP-0005", "EQ-0002", "ART-0002", "WP-0020"):
+            with self.subTest(page=identifiant):
+                self.assertEqual(self.sous_pages(identifiant), [])
+        meres = {identifiant: self.page_wiki(identifiant)["mere"] for identifiant in (
+            "WP-0020", "WP-0021", "WP-0023", "WP-0024", "WP-0025", "WP-0026", "WP-0027")}
+        self.assertEqual(meres, {
+            "WP-0020": {"id": "EQ-0001", "titre": "PO-01 — Pompe de process A"},
+            "WP-0021": {"id": "EQ-0001", "titre": "PO-01 — Pompe de process A"},
+            "WP-0023": {"id": "ART-0001", "titre": "Roulement 6205"},
+            "WP-0024": {"id": "WP-0004", "titre": "Cavitation"},
+            "WP-0025": {"id": "WP-0006", "titre": "Changer la garniture de PO-01"},
+            "WP-0026": {"id": "WP-0013", "titre": "Ancienne presse"},       # mère dont l'équipement a disparu
+            "WP-0027": {"id": "WP-0010", "titre": "Ancienne page"},         # mère archivée : la sous-page reste une page
+        })
+        # Pas de mère : page ordinaire, savoir-faire rattaché à un article ou à un composant, mère absente.
+        for identifiant in ("EQ-0001", "WP-0003", "WP-0007", "WP-0009", "WP-0028"):
+            with self.subTest(page=identifiant):
+                self.assertIsNone(self.page_wiki(identifiant)["mere"])
+        self.assertIsNone(self.page_wiki("WP-0022"))                       # sous-page archivée : introuvable
+
+    def test_pas_de_couche_calculee_et_en_tete_repris_de_la_mere(self):
+        for identifiant, type_ in (("WP-0020", "équipement"), ("WP-0023", "composant"), ("WP-0024", "mode"),
+                                   ("WP-0025", "savoir-faire"), ("WP-0026", "équipement")):
+            with self.subTest(page=identifiant):
+                page = self.page_wiki(identifiant)
+                self.assertEqual((page["id"], page["type"], page["calcul"], page["pageId"]), (identifiant, type_, None, identifiant))
+        # Sous-page d'équipement : la consignation de l'équipement de sa mère, telle quelle, et la phrase de Prévo.
+        self.assertEqual(self.page_wiki("WP-0020")["entete"], {
+            "consignation": {"texte": CONSIGNATION, "document": DOCUMENT},
+            "equipements": [{"equipementId": "EQ-0001", "repere": "PO-01"}], "phrase": PHRASE_SOUS_PAGE})
+        self.assertEqual(self.page.evaluate("Wiki.PHRASE_SOUS_PAGE"), PHRASE_SOUS_PAGE)
+        resultat = self.page.evaluate("""() => {
+          const fiche = Donnees.trouver('equipements', 'EQ-0001');
+          return { fiche: { texte: fiche.consignation, document: fiche.document }, sousPage: Wiki.page('WP-0021').entete.consignation,
+                   equipement: Wiki.pageEquipement('EQ-0001').consignation };
+        }""")
+        self.assertEqual(resultat["sousPage"], resultat["fiche"])
+        self.assertEqual(resultat["sousPage"], resultat["equipement"])
+        self.assertEqual(resultat["sousPage"]["texte"].encode("utf-8"), CONSIGNATION.encode("utf-8"))
+        # Mère dont l'équipement a disparu : ni consignation ni équipement, la phrase reste.
+        self.assertEqual(self.page_wiki("WP-0026")["entete"], {"consignation": None, "equipements": [], "phrase": PHRASE_SOUS_PAGE})
+        # Sous-page de savoir-faire : l'en-tête de sa mère (même consignation, même phrase), que la mère soit rattachée
+        # à l'équipement par equipement_id (WP-0006) ou par rattache_a vers la page de l'équipement (WP-0029).
+        en_tete_po01 = {"consignation": {"texte": CONSIGNATION, "document": DOCUMENT},
+                        "equipements": [{"equipementId": "EQ-0001", "repere": "PO-01"}], "phrase": PHRASE}
+        for sous_page, mere in (("WP-0025", "WP-0006"), ("WP-0030", "WP-0029")):
+            with self.subTest(sous_page=sous_page):
+                self.assertEqual(self.page_wiki(mere)["entete"], en_tete_po01)
+                self.assertEqual(self.page_wiki(sous_page)["entete"], en_tete_po01)
+                self.assertEqual(self.page_wiki(sous_page)["mere"]["id"], mere)
+        self.assertIsNone(self.page_wiki("WP-0029")["mere"])               # rattaché à une page d'un autre type
+        self.assertIsNone(self.page_wiki("WP-0023")["entete"])
+        self.assertIsNone(self.page_wiki("WP-0024")["entete"])
+        # Mère absente : ce n'est pas une sous-page (rien ne dit son type) ; page d'équipement sans couche.
+        absente = self.page_wiki("WP-0028")
+        self.assertEqual((absente["calcul"], absente["entete"], absente["mere"]), (None, None, None))
+
+    def test_catalogue_comprend_les_sous_pages_actives(self):
+        catalogue = {e["id"]: (e["titre"], e["type"]) for e in self.page.evaluate("Wiki.catalogue()")}
+        for ligne in SOUS_PAGES:
+            with self.subTest(page=ligne[0]):
+                self.assertEqual(catalogue.get(ligne[0]), None if ligne[-1] == "archivée" else (ligne[2], ligne[1]))
         self.assertEqual(self.requetes_reseau(), [])
 
 

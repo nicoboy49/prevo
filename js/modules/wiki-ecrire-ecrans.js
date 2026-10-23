@@ -13,12 +13,14 @@
 //    mode (code cause facultatif) ou savoir-faire (rattaché à un équipement ou à un composant) ;
 //  - Wiki.controleDuWiki() → [{ type, page (id canonique), titre, message }], types dans cet ordre : lien-casse
 //    ([[titre]] inconnu du texte ; identifiant du champ liens inexistant ou page archivée), orpheline (page libre —
-//    mode sans code cause, composant sans article, savoir-faire sans équipement, article ni rattachement — vers
-//    laquelle aucune autre page active ne fait de lien, par son identifiant ou son titre), sans-ot (aucune citation
-//    dans le texte, page vide comprise), titre-proche (même Wiki.formeDuTitre entre pages actives, une ligne par
-//    page), trop-longue (plus de phrasesMax phrases ou de motsMax mots, rubriques comprises, comme §20.6),
-//    contradiction-ancienne (ouverte sur une entrée validée depuis plus de contradictionAncienneJours, comptés depuis
-//    decide_le, sinon traite_le), ancrage-disparu (equipement_id ou article_id absent ou inactif) ; pages actives.
+//    mode sans code cause, composant sans article, savoir-faire sans équipement ni article, aucune sans rattache_a :
+//    une sous-page tient à sa mère — vers laquelle aucune autre page active ne fait de lien, par son identifiant ou
+//    son titre), sans-ot (aucune citation dans le texte, page vide comprise), titre-proche (même Wiki.formeDuTitre
+//    entre pages actives, une ligne par page), trop-longue (Wiki.mesurerTexte : plus de phrasesMax phrases ou de
+//    motsMax mots, comme §20.6), contradiction-ancienne (ouverte sur une entrée validée depuis plus de
+//    contradictionAncienneJours, comptés depuis decide_le, sinon traite_le), ancrage-disparu (equipement_id ou
+//    article_id absent ou inactif ; rattache_a vers une page absente ou archivée : la mère d'une sous-page, ou la page
+//    d'un savoir-faire — une sous-page n'a pas d'ancrage propre et n'est pas « disparue » pour autant) ; pages actives.
 
 Object.assign(Wiki, (() => {
 
@@ -93,8 +95,8 @@ Object.assign(Wiki, (() => {
         else if (table === 'wiki_pages' && !estActive(cible)) noter('lien-casse', ligne, 'lien vers « ' + texte(cible.titre) + ' » (' + id + '), page archivée');
       });
     });
-    const libre = (l) => ({ mode: !texte(l.cause_code), composant: !texte(l.article_id),
-      'savoir-faire': !texte(l.equipement_id) && !texte(l.article_id) && !texte(l.rattache_a) })[texte(l.type)] === true;
+    const libre = (l) => !texte(l.rattache_a) && ({ mode: !texte(l.cause_code), composant: !texte(l.article_id),
+      'savoir-faire': !texte(l.equipement_id) && !texte(l.article_id) })[texte(l.type)] === true;
     const liee = (l) => [l.id, repereDe(l).id, 'TITRE:' + Wiki.comparable(l.titre)]
       .some((cible) => Array.from(sources.get(cible) || []).some((source) => source !== l.id));
     actives.filter((l) => libre(l) && !liee(l)).forEach((l) => noter('orpheline', l, 'aucune page ne renvoie ici et elle n\'est rattachée à rien'));
@@ -116,9 +118,7 @@ Object.assign(Wiki, (() => {
         + distincts.filter((m) => m !== l).map((m) => '« ' + titreDe(m) + ' »').join(', ')));
     });
     actives.forEach((l) => {
-      const rubriques = Wiki.lireTexte(l.texte).rubriques;
-      const phrases = rubriques.reduce((n, r) => n + r.phrases.length, 0);
-      const mots = rubriques.reduce((n, r) => n + Wiki.nombreDeMots(r.nom) + r.phrases.reduce((m, p) => m + Wiki.nombreDeMots(p.propre), 0), 0);
+      const { phrases, mots } = Wiki.mesurerTexte(l.texte);
       if (phrases > S.phrasesMax || mots > S.motsMax) {
         noter('trop-longue', l, phrases + ' phrases et ' + mots + ' mots (au plus ' + S.phrasesMax + ' phrases et ' + S.motsMax + ' mots)');
       }
@@ -144,6 +144,15 @@ Object.assign(Wiki, (() => {
       else if (cible && texte(cible.actif) === '0') noter('ancrage-disparu', l, nom + ' ' + id + ' inactif');
       else if (cible && table === 'equipements' && texte(cible.statut) === 'rebut') noter('ancrage-disparu', l, nom + ' ' + id + ' au rebut');
     }));
+    // Rattachement (§20.4) : la mère d'une sous-page (même type ; tout rattachement d'une page qui n'est pas un
+    // savoir-faire), ou la page d'un savoir-faire, absente ou archivée.
+    actives.filter((l) => texte(l.rattache_a)).forEach((l) => {
+      const id = texte(l.rattache_a);
+      const cible = lignes.find((autre) => autre.id === id);
+      const nom = (cible ? texte(cible.type) === texte(l.type) : texte(l.type) !== 'savoir-faire') ? 'page mère' : 'page de rattachement';
+      if (!cible) noter('ancrage-disparu', l, nom + ' ' + id + ' absente');
+      else if (!estActive(cible)) noter('ancrage-disparu', l, nom + ' « ' + texte(cible.titre) + ' » (' + id + ') archivée');
+    });
     return Object.keys(problemes).flatMap((type) => problemes[type]);
   }
 
