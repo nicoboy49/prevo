@@ -324,24 +324,27 @@ Object.assign(Ia, (() => {
     },
   };
 
-  // Lot 6 (ARCHITECTURE.md §20.5) : intégrer un OT clôturé au wiki de maintenance. Données : l'OT (liste blanche,
-  // ni nom ni coût), les pages concernées avec leur texte actuel, leur taille et ses limites, la mère d'une sous-page et
-  // la date d'intervention des OT qu'elles citent, le catalogue des titres. Une page qui dépasserait ses limites se
-  // découpe en sous-pages (§20.4 ; les limites viennent de l'en-tête de chaque page, jamais du message système, écrit
-  // au chargement avant wiki-regles.js). Réponse lue par Wiki.lireIngestion (mise en forme puis contrôles du §20.6) : une réponse
-  // refusée n'entre jamais dans le wiki ; elle est redemandée une fois, avec ses raisons (donnees.relance : { reponse,
-  // raisons }), par le même message système et le message d'origine suivi de la réponse refusée et des raisons.
-  const TYPES_PAGES = ['équipement', 'composant', 'mode', 'savoir-faire'];
+  // Lot 6 (ARCHITECTURE.md §20.5 ; refonte 2, §20.12) : intégrer un OT clôturé au wiki de l'atelier. L'IA ne rédige que
+  // les textes reçus — « En bref » et « Astuces » de la machine, « À quoi il sert » de chaque article consommé, les
+  // savoir-faire (seule page qui se crée) — ; tout le reste est calculé par Prévo. Données : l'OT (liste blanche, ni
+  // nom ni coût), les textes concernés avec leur contenu actuel, leurs longueurs et leurs limites (par rubrique ; un
+  // savoir-faire entier), la mère d'une sous-page et la date d'intervention des OT qu'ils citent, le catalogue des
+  // titres (machines, articles, pannes, savoir-faire). Un savoir-faire qui dépasserait ses limites se découpe en
+  // sous-pages (§20.4 ; les limites viennent de l'en-tête de chaque texte, jamais du message système, écrit au
+  // chargement avant wiki-regles.js). Réponse lue par Wiki.lireIngestion (mise en forme puis contrôles du §20.6) : une
+  // réponse refusée n'entre jamais dans le wiki ; elle est redemandée une fois, avec ses raisons (donnees.relance :
+  // { reponse, raisons }), par le même message système et le message d'origine suivi de la réponse refusée et des raisons.
+  const TYPES_PAGES = ['équipement', 'composant', 'savoir-faire'];
+  const TYPE_CREE = 'savoir-faire';         // seul type qui se crée (sous-pages comprises, §20.12)
   const RUBRIQUES_PAGES = {
-    'équipement': ['Ce qui revient', 'Ce qui a réglé le problème', 'À surveiller', 'Astuces'],
-    'composant': ['Défaillances', 'Signes d\'usure', 'Montage et remplacement', 'Équivalences'],
-    'mode': ['Symptômes', 'Causes', 'Remèdes', 'Équipements concernés'],
+    'équipement': ['En bref', 'Astuces'],
+    'composant': ['À quoi il sert'],
     'savoir-faire': ['Quand le faire', 'Étapes', 'Pièces et outillage', 'Pièges'],
   };   // = Wiki.RUBRIQUES (wiki-regles.js), recopié ici : les consignes ne dépendent pas du module Wiki
   const MENTION_ANTERIEURE = 'Intervention antérieure à des faits déjà intégrés : ne présente jamais son information '
     + 'comme la plus récente.';
-  // Texte d'une page envoyée : jamais coupé pour une page à ses limites (phrasesMax et motsMax de Wiki.SEUILS, avec leurs
-  // citations) — une page coupée ferait refuser la réponse (phrases « retirées »).
+  // Texte d'une page envoyée : jamais coupé pour un texte à ses limites (Wiki.LIMITES, avec ses citations) — un texte
+  // coupé ferait refuser la réponse (phrases « retirées »).
   const PAGE_TEXTE_MAX = 16000;
   // Relance avec la raison du refus (D106 révisée, §20.5) : message d'origine, puis la réponse refusée telle quelle et
   // les raisons du refus, une par ligne, puis la demande d'une réponse corrigée ; rien d'autre (liste blanche, CS112).
@@ -358,6 +361,23 @@ Object.assign(Ia, (() => {
         : '- (aucune raison donnée)'),
       DEMANDE_RELANCE,
     ].join('\n\n');
+  }
+
+  // « 2 phrases », « 1 phrase », « 0 mot ».
+  function nombreDe(valeur, nom) {
+    return valeur + ' ' + nom + (valeur > 1 ? 's' : '');
+  }
+
+  /**
+   * Une longueur d'un texte envoyé (§20.12) → « En bref : 2 phrases sur 5, 34 mots sur 120 » (sans rubrique : le
+   * savoir-faire entier ; motsMax null : les phrases seules) ; '' si ses nombres ne sont pas des entiers.
+   */
+  function longueurEnTete(l) {
+    if (!l || typeof l !== 'object') return '';
+    const motsMax = l.motsMax === null ? null : l.motsMax;
+    if (![l.phrases, l.phrasesMax, l.mots].every(Number.isInteger) || (motsMax !== null && !Number.isInteger(motsMax))) return '';
+    return (texte(l.rubrique) ? uneLigne(l.rubrique, 60) + ' : ' : '') + nombreDe(l.phrases, 'phrase') + ' sur ' + l.phrasesMax
+      + (motsMax === null ? '' : ', ' + nombreDe(l.mots, 'mot') + ' sur ' + motsMax);
   }
 
   function citationsDuTexte(valeur) {
@@ -393,17 +413,23 @@ Object.assign(Ia, (() => {
 
   const ingestionWiki = {
     systeme: systeme('Fonction : ingestionWiki',
-      'intègre l\'ordre de travail (OT) ci-dessous au wiki de maintenance de l\'atelier. Le wiki est fait de pages '
-        + 'liées : équipement, composant (pièce), mode de défaillance, savoir-faire. Tu reçois les pages concernées par '
-        + 'cet OT avec leur texte actuel, et le catalogue des titres de toutes les pages.\n'
+      'intègre l\'ordre de travail (OT) ci-dessous au wiki de l\'atelier. Prévo calcule les faits (pannes, '
+        + 'interventions, pièces, stock) ; tu rédiges seulement les textes reçus :\n'
+        + '- « En bref » de la machine (type « équipement ») : ce qu\'il faut savoir d\'abord de cette machine, ce qui '
+        + 'revient et ce qui a réglé le problème ; une synthèse, pas un historique ;\n'
+        + '- « Astuces » de la machine : les astuces tirées des OT (« Astuce pour la prochaine fois ») ;\n'
+        + '- « À quoi il sert » de chaque article consommé (type « composant ») : son rôle sur les machines où il sert, '
+        + 'ses signes d\'usure ;\n'
+        + '- les savoir-faire : un geste ou une méthode, écrits d\'abord à partir de l\'astuce de l\'OT.\n'
+        + 'Tu reçois ces textes (pages) avec leur contenu actuel, et le catalogue des titres (machines, articles, pannes, '
+        + 'savoir-faire) pour les liens.\n'
         + 'Tu peux :\n'
         + '- modifier une page reçue (action « modifier », son titre exact) : rends son texte complet ; garde toutes ses '
-        + 'phrases, à l\'identique ou reformulées, et tous les OT qu\'elles citent (une phrase déplacée dans une sous-page '
-        + 'est remplacée par la phrase de renvoi, voir le découpage) ; ajoute ce que l\'OT apprend ;\n'
-        + '- créer au plus 3 pages (action « creer »), sous-pages comprises : un mode de défaillance (« mode »), un '
-        + 'savoir-faire (« savoir-faire », rattaché par « rattache_a » au titre exact d\'une page reçue d\'équipement ou de '
-        + 'composant, jamais d\'une sous-page : à sa mère), un composant absent du catalogue (« composant ») ou une '
-        + 'sous-page d\'une page reçue (voir le découpage ci-dessous) ; jamais une page d\'équipement, sauf comme sous-page ;\n'
+        + 'phrases, à l\'identique ou reformulées, et tous les OT qu\'elles citent (sauf une phrase déplacée dans une '
+        + 'sous-page, voir le découpage) ; ajoute ce que l\'OT apprend ;\n'
+        + '- créer au plus 3 savoir-faire (action « creer », type « savoir-faire »), sous-pages comprises, rattachés par '
+        + '« rattache_a » au titre exact de la machine ou d\'un article reçus (une sous-page : à son savoir-faire) ; aucune '
+        + 'autre page ne se crée ;\n'
         + '- signaler dans « contradictions » une phrase existante que cet OT contredit (la phrase exacte, ton '
         + 'observation, et cet OT seul) : ne modifie pas cette phrase, le responsable tranchera ;\n'
         + '- répondre « rien_a_ajouter » vrai, sans page ni contradiction, si l\'OT n\'apprend rien (contrôle de routine '
@@ -412,26 +438,25 @@ Object.assign(Ia, (() => {
         + '- chaque phrase cite au moins un OT (liste « ot ») : cet OT ou un OT déjà cité dans les pages reçues ; jamais '
         + 'une autre page comme preuve ;\n'
         + '- rubriques permises : ' + TYPES_PAGES.map((type) => type + ' « ' + RUBRIQUES_PAGES[type].join(' », « ') + ' »')
-          .join(' ; ') + ' ;\n'
+          .join(' ; ') + ' ; un texte reçu dans d\'autres rubriques (ancien wiki) se réécrit dans les siennes en '
+          + 'regroupant ses phrases, chaque phrase regroupée citant tous les OT des phrases qu\'elle reprend ;\n'
         + '- un lien vers une autre page s\'écrit [[titre exact]] dans une phrase, vers une page du catalogue ou créée '
         + 'dans ta réponse ;\n'
-        + '- une page est une synthèse, pas un historique : une phrase par fait utile pour la prochaine intervention ; '
-        + 'si l\'OT confirme une phrase existante, ajoute seulement son numéro aux OT de cette phrase, sans nouvelle '
-        + 'phrase ; regroupe en une seule les phrases qui disent la même chose (la phrase regroupée cite tous leurs OT) ; '
-        + 'n\'écris pas ce qui ne vaut que pour une intervention (durée d\'arrêt, essai après réparation, personne '
-        + 'prévenue) : c\'est dans l\'OT ;\n'
-        + '- phrases courtes ; l\'en-tête de chaque page reçue donne sa taille et ses limites (« N phrases sur P, M mots '
-        + 'sur Q » : rubriques comprises, citations non comptées) : une page ne dépasse jamais ses limites ; quand elle en '
-        + 'approche, regroupe d\'abord : ajoute seulement le numéro de l\'OT à la phrase qu\'il confirme, regroupe deux '
-        + 'phrases proches en une (qui cite tous leurs OT), ou écris le fait dans une page liée (mode de défaillance, '
-        + 'savoir-faire) et ajoute son lien à une phrase existante ;\n'
-        + '- découpage : une page qui dépasserait ses limites se découpe en sous-pages liées. Crée une sous-page (action '
-        + '« creer », « type » de la page mère, « rattache_a » = titre exact de la mère, titre « <repère de l\'équipement, '
-        + 'ou titre de la mère> — <sujet> », par exemple « PO-02 — garniture » pour la page « PO-02 — Pompe centrifuge ») ; '
-        + 'déplace-y les phrases d\'un même sujet, telles quelles ou regroupées, avec tous leurs OT ; modifie la mère dans '
-        + 'la même réponse : à la place des phrases déplacées, une phrase courte de renvoi [[titre de la sous-page]] qui '
-        + 'cite tous leurs OT ; une sous-page (« sous-page de … » dans son en-tête) ne se découpe pas : un seul niveau ;\n'
-        + '- les pages savoir-faire s\'écrivent d\'abord à partir de l\'astuce de l\'OT, quand il y en a une ;\n'
+        + '- phrases courtes, une par fait utile pour la prochaine intervention ; si l\'OT confirme une phrase existante, '
+        + 'ajoute seulement son numéro aux OT de cette phrase ; regroupe en une seule les phrases qui disent la même chose '
+        + '(elle cite tous leurs OT) ; n\'écris pas ce qui ne vaut que pour une intervention (durée d\'arrêt, essai après '
+        + 'réparation, personne prévenue) : c\'est dans l\'OT ;\n'
+        + '- longueurs : l\'en-tête de chaque page reçue donne la taille et la limite de chaque rubrique (pour un '
+        + 'savoir-faire, de la page entière, rubriques comprises) : « N phrases sur P, M mots sur Q », citations non '
+        + 'comptées, un lien compte les mots de son titre ; ne dépasse jamais une limite : quand elle est proche, regroupe '
+        + '(voir ci-dessus) ou mets le détail dans un savoir-faire et son lien dans une phrase existante ;\n'
+        + '- découpage : un savoir-faire qui dépasserait ses limites se découpe en sous-pages liées. Crée une sous-page '
+        + '(action « creer », type « savoir-faire », « rattache_a » = titre exact '
+        + 'du savoir-faire, titre « <titre du savoir-faire> — <sujet> », par exemple « Changer la garniture — étapes '
+        + 'détaillées ») ; déplace-y les phrases d\'un même sujet, telles quelles ou regroupées, avec tous leurs OT ; '
+        + 'modifie la mère dans la même réponse : à la place des phrases déplacées, une phrase courte de renvoi [[titre '
+        + 'de la sous-page]] qui cite tous leurs OT ; une sous-page (« sous-page de … » dans son en-tête) ne se découpe '
+        + 'pas : un seul niveau ;\n'
         + '- aucun comptage (pas de « 3 fois », « 4 OT ») : les nombres de cas sont calculés par le logiciel ; aucun '
         + 'nombre qui ne figure pas dans l\'OT ou dans la page ; aucune date, aucun mois, aucune année ;\n'
         + '- dis « fréquent ici », jamais « cause certaine » ;\n'
@@ -444,25 +469,24 @@ Object.assign(Ia, (() => {
         + 'de réglage », jamais « consigne » ;\n'
         + '- si l\'OT est une intervention antérieure à des faits déjà intégrés, ne présente jamais son information comme '
         + 'la plus récente (ni « désormais », « maintenant », « actuellement », « récemment », « dernier »…).',
-      '{"rien_a_ajouter": false, "pages": [{"action": "modifier | creer", "titre": "…", "type": "équipement | composant '
-        + '| mode | savoir-faire", "rattache_a": "…", "rubriques": [{"rubrique": "…", "phrases": [{"texte": "…", '
-        + '"ot": ["OT-AAAA-NNNN"]}]}]}], "contradictions": [{"page": "…", "phrase": "…", "observation": "…", '
-        + '"ot": ["OT-AAAA-NNNN"]}]}'),
+      '{"rien_a_ajouter": false, "pages": [{"action": "modifier", "titre": "…", "type": "équipement | composant | '
+        + 'savoir-faire", "rattache_a": "", "rubriques": [{"rubrique": "…", "phrases": [{"texte": "…", "ot": '
+        + '["OT-AAAA-NNNN"]}]}]}, {"action": "creer", "titre": "…", "type": "savoir-faire", "rattache_a": "…", '
+        + '"rubriques": […]}], "contradictions": [{"page": "…", "phrase": "…", "observation": "…", "ot": ["OT-AAAA-NNNN"]}]}'),
     utilisateur(d) {
       const pages = liste(d.pages);
       const dates = new Map();
       pages.forEach((page) => liste(page && page.otDates).forEach((entree) => dates.set(texte(entree.id), texte(entree.date))));
-      // Taille de la page et limites (« 28 phrases sur 30, 544 mots sur 600 ») : le modèle ne compte pas lui-même ; une
-      // sous-page le dit (« sous-page de « <mère> » »).
-      const limites = (d && d.limites) || {};
-      const taille = (page) => (Number.isFinite(page.phrases) && Number.isFinite(page.mots) && limites.phrases
-        ? ' · ' + page.phrases + ' phrases sur ' + limites.phrases + ', ' + page.mots + ' mots sur ' + limites.mots : '');
+      // Longueurs de chaque texte et leurs limites (« En bref : 2 phrases sur 5, 34 mots sur 120 » ; un savoir-faire
+      // entier : « 28 phrases sur 30, 544 mots sur 600 ») : le modèle ne compte pas lui-même ; une sous-page le dit
+      // (« sous-page de « <mère> » »).
+      const longueurs = (page) => liste(page.longueurs).map(longueurEnTete).filter(Boolean).map((l) => ' · ' + l).join('');
       const mere = (page) => (texte(page.mere) ? ' · sous-page de « ' + uneLigne(page.mere, 200) + ' »' : '');
       const origine = [
         ligneOtIngestion((d && d.ot) || {}) + (d.anterieure ? '\n' + MENTION_ANTERIEURE : ''),
         'Pages concernées (texte actuel) :\n' + (pages.length ? pages.map((page) => '=== Page « ' + uneLigne(page.titre, 200)
-          + ' » (' + uneLigne(page.type, 20) + mere(page) + taille(page) + ') ===\n' + (bloc(page.texte, PAGE_TEXTE_MAX) || '(page vide)'))
-          .join('\n') : '(aucune)'),
+          + ' » (' + uneLigne(page.type, 20) + mere(page) + longueurs(page) + ') ===\n'
+          + (bloc(page.texte, PAGE_TEXTE_MAX) || '(page vide)')).join('\n') : '(aucune)'),
         dates.size ? 'Date d\'intervention des OT déjà cités : ' + Array.from(dates.entries())
           .map(([id, date]) => id + ' : ' + uneLigne(date, 20)).join(' ; ') : '',
         'Catalogue des pages :\n' + (liste(d.catalogue).map((page) => '- ' + uneLigne(page && page.titre, 200) + ' ('
@@ -471,21 +495,23 @@ Object.assign(Ia, (() => {
       // Relance (Wiki.traiterFile) : le message d'origine tel quel, suivi de la réponse refusée et de ses raisons.
       return d && d.relance && typeof d.relance === 'object' ? origine + '\n\n' + relanceIngestion(d.relance) : origine;
     },
-    // Listes fermées : action, type, rubrique, et les OT permis dans les citations.
+    // Listes fermées : action, type, rubrique, et les OT permis dans les citations. Une page modifiée est de l'un des trois
+    // types (toutes leurs rubriques) ; une page créée est un savoir-faire (ses rubriques) : deux formes (anyOf).
     schema(d) {
       const permis = otPermisIngestion(d);
       const ot = { type: 'array', items: { type: 'string', enum: permis.length ? permis : [''] } };
-      const rubriques = Array.from(new Set([].concat(...TYPES_PAGES.map((type) => RUBRIQUES_PAGES[type]))));
+      const page = (action, types, rubriques) => objet({
+        action: { type: 'string', enum: [action] }, titre: CHAINE, type: { type: 'string', enum: types }, rattache_a: CHAINE,
+        rubriques: { type: 'array', items: objet({
+          rubrique: { type: 'string', enum: rubriques },
+          phrases: { type: 'array', items: objet({ texte: CHAINE, ot }) },
+        }) },
+      });
+      const toutes = Array.from(new Set([].concat(...TYPES_PAGES.map((type) => RUBRIQUES_PAGES[type]))));
       return objet({
         rien_a_ajouter: { type: 'boolean' },
-        pages: { type: 'array', items: objet({
-          action: { type: 'string', enum: ['modifier', 'creer'] }, titre: CHAINE,
-          type: { type: 'string', enum: TYPES_PAGES.slice() }, rattache_a: CHAINE,
-          rubriques: { type: 'array', items: objet({
-            rubrique: { type: 'string', enum: rubriques },
-            phrases: { type: 'array', items: objet({ texte: CHAINE, ot }) },
-          }) },
-        }) },
+        pages: { type: 'array', items: { anyOf: [page('modifier', TYPES_PAGES.slice(), toutes),
+          page('creer', [TYPE_CREE], RUBRIQUES_PAGES[TYPE_CREE].slice())] } },
         contradictions: { type: 'array', items: objet({ page: CHAINE, phrase: CHAINE, observation: CHAINE, ot }) },
       });
     },

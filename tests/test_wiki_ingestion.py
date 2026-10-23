@@ -1,14 +1,23 @@
 """Ingestion du wiki : file, pages concernées, antériorité, données envoyées, ordonnanceur, traitement de la file
-(lot 6 refondu, tâche T115 ; ARCHITECTURE.md §20.5 ; D104, D111, D112 ; CS99, CS110).
+(lot 6 refondu, tâche T115 ; refonte 2, tâche T134 ; ARCHITECTURE.md §20.5, §20.12 ; D104, D111, D112 ; CS99, CS110).
 
     liste blanche : la requête d'un OT contient son astuce, son compte rendu, ses codes, le symptôme de sa DI, les
                     pièces consommées (sorties − retours), les pages concernées et le catalogue ; jamais le nom d'un
                     technicien ou d'un demandeur, un coût, un taux horaire, une valeur, le numéro de série, les
                     consignes, la consignation, la description ou la photo de la DI, un document ; les rubriques de la
                     consigne sont celles de Wiki.RUBRIQUES ;
-    pages         : clés et pages envoyées d'un OT dans l'ordre de priorité (équipement, savoir-faire de l'équipement
-                    — par ancrage ou par rattachement —, articles consommés, savoir-faire des articles, cause, modes
-                    de la cause, pages liées), page archivée exclue, plafond des pages envoyées ;
+    consigne      : (refonte 2) elle ne demande que « En bref » et « Astuces » de la machine, « À quoi il sert » des
+                    articles consommés et des savoir-faire (seule page créée) ; aucune limite en dur ; schéma : un
+                    savoir-faire seulement à la création ;
+    pages         : clés et pages envoyées d'un OT dans l'ordre de priorité (sa machine, ses articles consommés, les
+                    savoir-faire de la machine puis des articles — par ancrage ou par rattachement —, chacun suivi de
+                    ses sous-pages), plus de cause, de mode ni de page liée depuis la machine ; page archivée exclue,
+                    ancienne sous-page d'équipement non envoyée, plafond des pages envoyées ;
+    longueurs     : l'en-tête de chaque texte donne la mesure de chaque rubrique et sa limite (Wiki.LIMITES), celles
+                    d'un savoir-faire entier ; le faux modèle s'y tient (rubrique pleine : l'OT confirme sa dernière
+                    phrase) ;
+    catalogue     : machines, articles, savoir-faire et pannes (codes symptôme qui ont un cas) ; ni technicien, ni
+                    intervention, ni ancienne page de mode ou libre ; un lien [[<panne>]] est accepté ;
     file          : ordre par date d'intervention puis numéro d'OT, quel que soit l'ordre de mise en file ou de
                     clôture (OT importés compris) ; OT non clôturé administrativement, inconnu ou déjà intégré écarté ;
     antériorité   : mention et dates pour un OT plus ancien que les faits de SES pages ; aucune mention si les OT plus
@@ -16,7 +25,8 @@
     ordonnanceur  : prochainsEnvois (plafond d'agents, clés prises par un envoi en cours ou par une entrée plus
                     ancienne restée en attente) ;
     traitement    : bout en bout avec le faux fournisseur (requêtes réellement envoyées, état proposé enchaîné,
-                    antériorité notée, ordre par page, aucune page dans deux envois à la fois) ; refus → « refusée »
+                    antériorité notée, ordre par page, aucune page dans deux envois à la fois ; tous les textes de la
+                    refonte 2 acceptés ; ancien texte réécrit dans ses rubriques accepté) ; refus → « refusée »
                     avec ses raisons ; collision → « en file » avec le motif puis acceptée, et « refusée » après trois
                     collisions ; IA injoignable → arrêt, OT laissés en file ;
     relance       : (D106 révisée, CS112) une réponse refusée par les contrôles, ou illisible, est redemandée une fois
@@ -50,7 +60,8 @@ from faux_wiki import lire_message, reponse_ingestion
 SCRIPTS = [
     "js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/stockage-demo.js",
     "js/modules/causes-frequentes.js", "js/modules/indicateurs-regles.js", "js/modules/ia.js", "js/modules/ia-prompts.js",
-    "js/modules/wiki-regles.js", "js/modules/wiki-calculs.js", "js/modules/wiki-texte.js", "js/modules/wiki-recherche.js",
+    "js/modules/wiki-regles.js", "js/modules/wiki-calculs.js", "js/modules/wiki-entites.js", "js/modules/wiki-texte.js",
+    "js/modules/wiki-recherche.js",
     "js/modules/wiki-ingestion.js",
 ]
 NL = chr(10)
@@ -93,6 +104,7 @@ EQUIPEMENTS = table_csv("id;repere;designation;marque;modele;num_serie;statut;co
 ])
 CODES = table_csv("id;famille;code;libelle", [
     "CD-0001;symptôme;S01;Fuite", "CD-0002;symptôme;S02;Bruit anormal",
+    "CD-0008;symptôme;S03;Vibration",                               # aucun OT : pas de page Panne, hors du catalogue
     "CD-0003;cause;C01;Garniture usée", "CD-0004;cause;C02;Encrassement", "CD-0005;cause;C03;Desserrage",
     "CD-0006;remède;R01;Remplacement de la pièce", "CD-0007;remède;R02;Nettoyage",
 ])
@@ -152,25 +164,31 @@ def page_wiki(id_, type_, titre, texte="", equipement="", article="", cause="", 
             "", "", "2026-04-20 09:00", "2026-04-20 09:00", statut]
 
 
-TEXTE_PO01 = ("## Ce qui revient" + NL + "- Fuite de garniture au démarrage, fréquent ici [OT-2026-0007]" + NL
-              + "## À surveiller" + NL + "- Voir [[Cavitation]] [OT-2026-0007]")
+# Base de la refonte 2 (§20.12) : « En bref » de PO-01 (avec un lien vers le savoir-faire d'une autre machine, qui n'est
+# plus envoyé pour autant), « À quoi il sert » du kit, des savoir-faire ancrés ou rattachés à la machine et aux articles,
+# et des pages d'avant la refonte 2 qui ne sont ni envoyées ni au catalogue : deux modes ancrés sur les causes de OT
+# (C01, C03) et un composant libre.
+TEXTE_PO01 = ("## En bref" + NL + "- Fuite de garniture au démarrage, fréquent ici [OT-2026-0007]" + NL
+              + "- Voir [[Nettoyer le filtre de CP-01]] [OT-2026-0007]")
+TEXTE_KIT = "## À quoi il sert" + NL + "- Étanchéité de l'arbre de la pompe [OT-2026-0007]"
 WIKI_PAGES = table_csv(ENTETE_WIKI, [
     page_wiki("WP-0001", "équipement", "PO-01 — Pompe de process A", TEXTE_PO01, equipement="EQ-0001"),
     page_wiki("WP-0002", "savoir-faire", "Changer la garniture de PO-01", "## Étapes" + NL + "- Repérer l'accouplement [OT-2026-0007]",
               equipement="EQ-0001"),
-    page_wiki("WP-0003", "composant", "Kit garniture HC 50", "## Défaillances" + NL + "- Usure de la face [OT-2026-0007]",
-              article="ART-0001"),
+    page_wiki("WP-0003", "composant", "Kit garniture HC 50", TEXTE_KIT, article="ART-0001"),
     # Rattaché à la page du composant (pas d'article_id) : trouvé par son rattachement.
     page_wiki("WP-0004", "savoir-faire", "Monter le kit garniture", "## Étapes" + NL + "- Lubrifier les joints [OT-2026-0007]",
               rattache="WP-0003"),
     page_wiki("WP-0005", "mode", "Usure de garniture", "## Causes" + NL + "- Garniture usée [OT-2026-0007]", cause="C01"),
-    page_wiki("WP-0006", "mode", "Cavitation", "## Symptômes" + NL + "- Bruit de gravier [OT-2026-0007]"),
+    page_wiki("WP-0006", "composant", "Joint torique 20x2", "## Défaillances" + NL + "- Joint pincé [OT-2026-0007]"),
     page_wiki("WP-0007", "mode", "Desserrage", cause="C03"),
     page_wiki("WP-0008", "savoir-faire", "Nettoyer le filtre de CP-01", equipement="EQ-0002"),
     page_wiki("WP-0009", "savoir-faire", "Ancien geste", "## Étapes" + NL + "- Vieux [OT-2026-0007]", equipement="EQ-0001",
               statut="archivée"),
     # Rattaché à la page de l'équipement (pas d'equipement_id) : trouvé par son rattachement.
     page_wiki("WP-0010", "savoir-faire", "Graisser le palier", "## Étapes" + NL + "- Graisser [OT-2026-0007]", rattache="WP-0001"),
+    # Ancré sur un article (article_id) : envoyé avec les OT qui le consomment.
+    page_wiki("WP-0011", "savoir-faire", "Changer le filtre à huile", article="ART-0003"),
 ])
 JOURNAL_WIKI = table_csv("id;nature;ot_id;date_intervention;statut;anterieure;ordre;pages;changements;contradictions;raisons;"
                          "modele;essais;cree_le;traite_le;decide_par;decide_le;motif",
@@ -209,25 +227,29 @@ CHARGER_LENT_JS = """async (tables) => {
   await Donnees.chargerTout();
 }"""
 RIEN = "JSON.stringify({ rien_a_ajouter: true, pages: [], contradictions: [] })"
-# Sous-pages (§20.4) : deux validées (de PO-01 et du kit HC 50) et une « à valider », créée avant la modification de sa
-# mère dans les changements de son entrée (l'ordre ne compte pas). Argument : le texte d'après de la page de PO-01.
-SOUS_PAGES_JS = """async ([apresMere]) => {
+# Sous-pages (§20.4 ; savoir-faire seulement, §20.12) : deux validées (du savoir-faire de PO-01 et de celui du kit HC 50),
+# une « à valider », créée avant la modification de sa mère dans les changements de son entrée (l'ordre ne compte pas),
+# et une ancienne sous-page d'équipement (d'avant la refonte 2), qui n'est plus envoyée.
+SOUS_PAGES_JS = """async () => {
   const NL = String.fromCharCode(10);
   const page = (id, type, titre, texte, rattache) => ({ id, type, titre, texte, rattache_a: rattache, version: '1',
     statut: 'active', origine: 'IA' });
   await Donnees.modifier('wiki_pages', (lignes) => {
-    lignes.push(page('WP-0020', 'équipement', 'PO-01 — garniture', '## Ce qui revient' + NL + '- Garniture sèche [OT-2026-0007]',
+    lignes.push(page('WP-0020', 'savoir-faire', 'Changer la garniture de PO-01 — dépose', '## Étapes' + NL
+      + '- Déposer le kit usé [OT-2026-0007]', 'WP-0002'));
+    lignes.push(page('WP-0021', 'savoir-faire', 'Monter le kit garniture — faces', '## Pièges' + NL + '- Faces rayées [OT-2026-0007]',
+      'WP-0004'));
+    lignes.push(page('WP-0022', 'équipement', 'PO-01 — garniture', '## Ce qui revient' + NL + '- Garniture sèche [OT-2026-0007]',
       'WP-0001'));
-    lignes.push(page('WP-0021', 'composant', 'Kit garniture HC 50 — faces', '## Défaillances' + NL + '- Faces rayées [OT-2026-0007]',
-      'WP-0003'));
   });
   await Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00002', nature: 'ingestion', ot_id: 'OT-2026-0003',
     statut: 'à valider', ordre: '2', essais: '1', changements: JSON.stringify([
-      { cle: 'TITRE:po 01 accouplement', titre: 'PO-01 — accouplement', type: 'équipement', creation: true,
-        rattacheA: 'PO-01 — Pompe de process A', version_avant: 0, avant: '',
-        apres: '## Ce qui revient' + NL + '- Accouplement desserré [OT-2026-0003]' },
-      { cle: 'EQ:EQ-0001', page: 'WP-0001', titre: 'PO-01 — Pompe de process A', type: 'équipement', creation: false,
-        version_avant: 1, avant: '', apres: apresMere }]) }); }, { journal: false });
+      { cle: 'TITRE:graisser le palier frequence', titre: 'Graisser le palier — fréquence', type: 'savoir-faire', creation: true,
+        rattacheA: 'Graisser le palier', version_avant: 0, avant: '',
+        apres: '## Quand le faire' + NL + '- Au bruit de grincement [OT-2026-0003]' },
+      { cle: 'WP:WP-0010', page: 'WP-0010', titre: 'Graisser le palier', type: 'savoir-faire', creation: false, version_avant: 1,
+        avant: '', apres: '## Étapes' + NL + '- Graisser [OT-2026-0007]' + NL
+          + '- Fréquence : voir [[Graisser le palier — fréquence]] [OT-2026-0003]' }]) }); }, { journal: false });
 }"""
 # Relance avec la raison (§20.5) : ce qui suit le message d'origine.
 MARQUE_RELANCE = NL + NL + "Ta réponse précédente :" + NL
@@ -285,9 +307,11 @@ class TestDonneesEtFile(CasIngestion):
                         "Travail demandé : Changer la garniture", "Codes : Fuite / Garniture usée / Remplacement de la pièce",
                         "Compte rendu : Garniture usée remplacée, fuite stoppée.", "Astuce pour la prochaine fois : " + ASTUCE,
                         "Pièces consommées : Kit garniture HC 50 (réf. KG-50) × 1", "Durée d'arrêt : 2.5 h",
-                        "=== Page « PO-01 — Pompe de process A » (équipement · 2 phrases sur 30, 14 mots sur 600) ===",
-                        TEXTE_PO01,
-                        "Catalogue des pages :", "- Cavitation (mode)", "- Roulement 6205 (composant)"):
+                        "=== Page « PO-01 — Pompe de process A » (équipement · En bref : 2 phrases sur 5, 13 mots sur 120 · "
+                        "Astuces : 0 phrase sur 10) ===\n" + TEXTE_PO01,
+                        "=== Page « Kit garniture HC 50 » (composant · À quoi il sert : 1 phrase sur 3, 6 mots sur 80) ===\n"
+                        + TEXTE_KIT,
+                        "Catalogue des pages :", "- Fuite (panne)", "- Roulement 6205 (composant)"):
             self.assertIn(attendu, message)
         tout = json.dumps(requete, ensure_ascii=False)
         for interdit in INTERDITS:
@@ -299,59 +323,158 @@ class TestDonneesEtFile(CasIngestion):
         for type_, rubriques in self.page.evaluate("Wiki.RUBRIQUES").items():
             self.assertIn(type_ + " « " + " », « ".join(rubriques) + " »", systeme)
 
+    def test_consigne_ne_demande_que_les_textes_de_la_refonte_2(self):
+        """§20.12 : l'IA ne rédige que « En bref » et « Astuces » de la machine, « À quoi il sert » des articles consommés
+        et des savoir-faire (seule page créée) ; ni mode, ni ancienne rubrique, ni limite en dur ; un texte d'avant la
+        refonte se réécrit dans ses rubriques ; le schéma ne permet de créer qu'un savoir-faire."""
+        requete = self.page.evaluate(REQUETE_JS, "OT-2026-0001")
+        systeme = requete["messages"][0]["content"]
+        for attendu in ("« En bref » de la machine (type « équipement ») : ce qu'il faut savoir d'abord de cette machine, "
+                        "ce qui revient et ce qui a réglé le problème ; une synthèse, pas un historique",
+                        "« Astuces » de la machine : les astuces tirées des OT",
+                        "« À quoi il sert » de chaque article consommé (type « composant ») : son rôle sur les machines où il "
+                        "sert, ses signes d'usure", "les savoir-faire : un geste ou une méthode, écrits d'abord à partir de "
+                        "l'astuce de l'OT", "créer au plus 3 savoir-faire (action « creer », type « savoir-faire »)",
+                        "aucune autre page ne se crée", "le catalogue des titres (machines, articles, pannes, savoir-faire)",
+                        "un texte reçu dans d'autres rubriques (ancien wiki) se réécrit dans les siennes en regroupant ses "
+                        "phrases, chaque phrase regroupée citant tous les OT des phrases qu'elle reprend",
+                        "l'en-tête de chaque page reçue donne la taille et la limite de chaque rubrique",
+                        "un lien compte les mots de son titre",
+                        "un savoir-faire qui dépasserait ses limites se découpe en sous-pages liées"):
+            self.assertIn(attendu, systeme)
+        self.assertNotRegex(systeme, r"\bmodes?\b")
+        for absent in ("Ce qui revient", "À surveiller", "Défaillances", "Symptômes", "composant absent du catalogue",
+                       "sauf comme sous-page", "repère de l'équipement"):
+            self.assertNotIn(absent, systeme)
+        self.assertNotRegex(systeme, r"\b(5|10|30|80|120|600)\b")      # les limites sont dans l'en-tête de chaque texte
+        formes = requete["schema"]["properties"]["pages"]["items"]["anyOf"]
+        self.assertEqual([(f["properties"]["action"]["enum"], f["properties"]["type"]["enum"]) for f in formes],
+                         [(["modifier"], ["équipement", "composant", "savoir-faire"]), (["creer"], ["savoir-faire"])])
+
+    def test_entete_de_chaque_texte_mesure_par_rubrique_et_limites(self):
+        """§20.12 : chaque texte envoyé porte sa mesure par rubrique et la limite de Wiki.LIMITES (une machine est limitée
+        à 5 phrases d'« En bref », jamais « sur 30 ») ; un savoir-faire, sa mesure de page et ses limites ; les données le
+        disent aussi (`longueurs`), plus de limite générique."""
+        d = self.donnees("OT-2026-0001")
+        self.assertNotIn("limites", d)
+        self.assertEqual(sorted(d["pages"][0]), ["cle", "longueurs", "mere", "otDates", "texte", "titre", "type"])
+        self.assertEqual({p["titre"]: p["longueurs"] for p in d["pages"][:3]}, {
+            "PO-01 — Pompe de process A": [
+                {"rubrique": "En bref", "phrases": 2, "mots": 13, "phrasesMax": 5, "motsMax": 120},
+                {"rubrique": "Astuces", "phrases": 0, "mots": 0, "phrasesMax": 10, "motsMax": None}],
+            "Kit garniture HC 50": [{"rubrique": "À quoi il sert", "phrases": 1, "mots": 6, "phrasesMax": 3, "motsMax": 80}],
+            "Changer la garniture de PO-01": [{"rubrique": "", "phrases": 1, "mots": 3, "phrasesMax": 30, "motsMax": 600}]})
+        message = self.message("OT-2026-0001")
+        self.assertIn("=== Page « Changer la garniture de PO-01 » (savoir-faire · 1 phrase sur 30, 3 mots sur 600) ===",
+                      message)
+        self.assertNotIn("phrases sur 30, 13 mots", message)
+        # Textes vides : machine, article (page calculée sans ligne) et savoir-faire.
+        vide = self.message("OT-2026-0002")
+        for attendu in ("=== Page « CP-01 — Compresseur » (équipement · En bref : 0 phrase sur 5, 0 mot sur 120 · Astuces : "
+                        "0 phrase sur 10) ===\n(page vide)",
+                        "=== Page « Filtre à huile » (composant · À quoi il sert : 0 phrase sur 3, 0 mot sur 80) ===\n(page vide)",
+                        "=== Page « Nettoyer le filtre de CP-01 » (savoir-faire · 0 phrase sur 30, 0 mot sur 600) ===\n"
+                        "(page vide)"):
+            self.assertIn(attendu, vide)
+        # Le faux modèle lit ces longueurs (même en-tête qu'il analyse).
+        self.assertEqual(lire_message(message)["pages"][0]["longueurs"], {
+            "En bref": {"phrases": 2, "phrases_max": 5, "mots": 13, "mots_max": 120},
+            "Astuces": {"phrases": 0, "phrases_max": 10, "mots": None, "mots_max": None}})
+
+    def test_catalogue_machines_articles_savoir_faire_et_pannes(self):
+        """§20.12 : le catalogue envoyé (liens [[…]]) : machines, articles, savoir-faire et pannes (code symptôme qui a au
+        moins un cas) ; jamais un technicien, une intervention, une ancienne page de mode ou un composant libre ; le
+        contrôle accepte un lien vers une panne et refuse un lien vers ce qui n'est pas au catalogue."""
+        catalogue = self.donnees("OT-2026-0001")["catalogue"]
+        self.assertEqual({p["type"] for p in catalogue}, {"équipement", "composant", "savoir-faire", "panne"})
+        self.assertEqual([p["titre"] for p in catalogue if p["type"] == "panne"], ["Bruit anormal", "Fuite"])
+        titres = [p["titre"] for p in catalogue]
+        for attendu in ("PO-01 — Pompe de process A", "CV-01 — Convoyeur", "Kit garniture HC 50", "Pièce de convoyeur I",
+                        "Changer la garniture de PO-01", "Graisser le palier", "Changer le filtre à huile"):
+            self.assertIn(attendu, titres)
+        for absent in ("Vibration", "Usure de garniture", "Desserrage", "Joint torique 20x2", "Ancien geste"):
+            self.assertNotIn(absent, titres)
+        texte = json.dumps(catalogue, ensure_ascii=False)
+        for interdit in ("Ledoux", "Zéphyrin", "TEC-", "OT-20"):
+            self.assertNotIn(interdit, texte)
+        # Les pannes juste après les savoir-faire à valider (aucun ici), avant les titres de Wiki.catalogue.
+        self.assertIn("Catalogue des pages :\n- Bruit anormal (panne)\n- Fuite (panne)\n- Changer la garniture de PO-01 "
+                      "(savoir-faire)\n", self.message("OT-2026-0001"))
+
+        def avec_lien(titre):
+            reponse = {"rien_a_ajouter": False, "contradictions": [], "pages": [{
+                "action": "modifier", "titre": "PO-01 — Pompe de process A", "type": "équipement", "rattache_a": "",
+                "rubriques": [{"rubrique": "En bref", "phrases": [
+                    {"texte": "Fuite de garniture au démarrage, fréquent ici", "ot": ["OT-2026-0007"]},
+                    {"texte": "Voir [[Nettoyer le filtre de CP-01]]", "ot": ["OT-2026-0007"]},
+                    {"texte": "Fuite à la garniture, voir [[" + titre + "]]", "ot": ["OT-2026-0001"]}]}]}]}
+            return self.page.evaluate(LIRE_JS, ["OT-2026-0001", json.dumps(reponse, ensure_ascii=False)])
+
+        self.assertTrue(avec_lien("Fuite")["ok"], avec_lien("Fuite"))
+        for inconnu in ("Vibration", "Usure de garniture", "Zéphyrin Ledoux"):
+            with self.subTest(lien=inconnu):
+                refus = avec_lien(inconnu)
+                self.assertFalse(refus["ok"])
+                self.assertIn("Page « PO-01 — Pompe de process A » : lien vers une page inconnue « %s »." % inconnu,
+                              refus["raisons"])
+
     def test_pages_concernees_dans_l_ordre_de_priorite(self):
         concernees = self.page.evaluate("(ot) => Wiki.pagesConcernees(ot)", "OT-2026-0001")
-        # Ordre du §20.5 : équipement, articles, cause (clé seule), savoir-faire (équipement puis articles), modes de
-        # la cause, pages liées depuis la page de l'équipement.
-        self.assertEqual(concernees["cles"], ["EQ:EQ-0001", "ART:ART-0001", "CAUSE:C01", "WP:WP-0002", "WP:WP-0010",
-                                              "WP:WP-0004", "WP:WP-0005", "WP:WP-0006"])
+        # Ordre du §20.12 (D112 révisée) : sa machine, ses articles consommés, les savoir-faire de la machine (ancrés ou
+        # rattachés) puis des articles ; ni cause (C01), ni mode ancré sur elle (WP-0005), ni savoir-faire d'une autre
+        # machine lié depuis la page de PO-01 (WP-0008), ni page archivée (WP-0009).
+        self.assertEqual(concernees["cles"], ["EQ:EQ-0001", "ART:ART-0001", "WP:WP-0002", "WP:WP-0010", "WP:WP-0004"])
         self.assertEqual([p["titre"] for p in concernees["envoyees"]],
                          ["PO-01 — Pompe de process A", "Kit garniture HC 50", "Changer la garniture de PO-01",
-                          "Graisser le palier", "Monter le kit garniture", "Usure de garniture", "Cavitation"])
-        # Pages calculées (sans ligne) : équipement et article ; la cause réserve sa clé sans page.
+                          "Graisser le palier", "Monter le kit garniture"])
+        # Pages calculées (sans ligne) : équipement et article ; savoir-faire ancré sur la machine, puis sur l'article.
         calculees = self.page.evaluate("(ot) => Wiki.pagesConcernees(ot)", "OT-2026-0002")
-        self.assertEqual(calculees["cles"], ["EQ:EQ-0002", "ART:ART-0003", "CAUSE:C02", "WP:WP-0008"])
+        self.assertEqual(calculees["cles"], ["EQ:EQ-0002", "ART:ART-0003", "WP:WP-0008", "WP:WP-0011"])
         self.assertEqual([(p["titre"], p["type"], p["texte"]) for p in calculees["envoyees"]],
                          [("CP-01 — Compresseur", "équipement", ""), ("Filtre à huile", "composant", ""),
-                          ("Nettoyer le filtre de CP-01", "savoir-faire", "")])
+                          ("Nettoyer le filtre de CP-01", "savoir-faire", ""), ("Changer le filtre à huile", "savoir-faire", "")])
         # Neuf articles consommés : toutes les clés, huit pages envoyées au plus.
         nombreuses = self.page.evaluate("(ot) => Wiki.pagesConcernees(ot)", "OT-2026-0006")
-        self.assertEqual(nombreuses["cles"], ["EQ:EQ-0003"] + ["ART:ART-%04d" % n for n in range(4, 13)]
-                         + ["CAUSE:C02"])
+        self.assertEqual(nombreuses["cles"], ["EQ:EQ-0003"] + ["ART:ART-%04d" % n for n in range(4, 13)])
         self.assertEqual(len(nombreuses["envoyees"]), self.page.evaluate("Wiki.SEUILS.pagesEnvoyeesMax"))
         self.assertEqual(len(nombreuses["envoyees"]), 8)
+        # Aucune clé de cause, pour aucun OT.
+        self.assertEqual(self.page.evaluate("""() => Donnees.lignes('ordres_travail').flatMap((o) => Wiki.pagesConcernees(o.id).cles)
+          .filter((cle) => !/^(EQ|ART|WP|TITRE):/.test(cle))"""), [])
 
     def test_sous_pages_juste_apres_leur_mere(self):
-        """CS113 (§20.5, 2026-10-23) : après chaque page concernée, ses sous-pages (validées ou « à valider », de même
-        type, par titre), clés comprises ; un savoir-faire rattaché à la page n'en est pas une ; l'en-tête le dit."""
-        self.page.evaluate(SOUS_PAGES_JS, [TEXTE_PO01 + NL + "- Accouplement : voir [[PO-01 — accouplement]] [OT-2026-0003]"])
+        """CS113 (§20.5 ; savoir-faire seulement, §20.12) : après chaque savoir-faire concerné, ses sous-pages (validées ou
+        « à valider », par titre), clés comprises ; une ancienne sous-page d'équipement n'est pas envoyée ; un savoir-faire
+        rattaché à une machine n'est pas une sous-page ; l'en-tête le dit."""
+        self.page.evaluate(SOUS_PAGES_JS)
         concernees = self.page.evaluate("(ot) => Wiki.pagesConcernees(ot)", "OT-2026-0001")
-        self.assertEqual(concernees["cles"], ["EQ:EQ-0001", "TITRE:po 01 accouplement", "WP:WP-0020", "ART:ART-0001",
-                                              "WP:WP-0021", "CAUSE:C01", "WP:WP-0002", "WP:WP-0010", "WP:WP-0004",
-                                              "WP:WP-0005", "WP:WP-0006"])
+        self.assertEqual(concernees["cles"], ["EQ:EQ-0001", "ART:ART-0001", "WP:WP-0002", "WP:WP-0020", "WP:WP-0010",
+                                              "TITRE:graisser le palier frequence", "WP:WP-0004", "WP:WP-0021"])
         self.assertEqual([p["titre"] for p in concernees["envoyees"]],
-                         ["PO-01 — Pompe de process A", "PO-01 — accouplement", "PO-01 — garniture", "Kit garniture HC 50",
-                          "Kit garniture HC 50 — faces", "Changer la garniture de PO-01", "Graisser le palier",
-                          "Monter le kit garniture"])                   # pagesEnvoyeesMax : les clés restent toutes
+                         ["PO-01 — Pompe de process A", "Kit garniture HC 50", "Changer la garniture de PO-01",
+                          "Changer la garniture de PO-01 — dépose", "Graisser le palier", "Graisser le palier — fréquence",
+                          "Monter le kit garniture", "Monter le kit garniture — faces"])
         # État proposé : une sous-page (validée ou à valider) a la clé de sa mère pour rattachement, aucun ancrage propre.
         etat = self.page.evaluate("""() => { const etat = Wiki.etatPropose();
-          return ['TITRE:po 01 accouplement', 'WP:WP-0020', 'WP:WP-0021', 'WP:WP-0010'].map((cle) => { const p = etat.get(cle);
-            return [p.type, p.rattacheA, p.equipementId, p.articleId]; }); }""")
-        self.assertEqual(etat, [["équipement", "EQ:EQ-0001", "", ""], ["équipement", "EQ:EQ-0001", "", ""],
-                                ["composant", "ART:ART-0001", "", ""], ["savoir-faire", "EQ:EQ-0001", "", ""]])
+          return ['WP:WP-0020', 'TITRE:graisser le palier frequence', 'WP:WP-0021', 'WP:WP-0010', 'WP:WP-0022'].map((cle) => {
+            const p = etat.get(cle); return [p.type, p.rattacheA, p.equipementId, p.articleId]; }); }""")
+        self.assertEqual(etat, [["savoir-faire", "WP:WP-0002", "", ""], ["savoir-faire", "WP:WP-0010", "", ""],
+                                ["savoir-faire", "WP:WP-0004", "", ""], ["savoir-faire", "EQ:EQ-0001", "", ""],
+                                ["équipement", "EQ:EQ-0001", "", ""]])
         # Données : chaque page porte `mere` (le titre de sa mère pour une sous-page) ; l'en-tête le dit.
         d = self.donnees("OT-2026-0001")
-        self.assertEqual(sorted(d["pages"][0]), ["cle", "mere", "mots", "otDates", "phrases", "texte", "titre", "type"])
-        self.assertEqual([p["mere"] for p in d["pages"]], ["", "PO-01 — Pompe de process A", "PO-01 — Pompe de process A", "",
-                                                           "Kit garniture HC 50", "", "", ""])
+        self.assertEqual([p["mere"] for p in d["pages"]], ["", "", "", "Changer la garniture de PO-01", "", "Graisser le palier",
+                                                           "", "Monter le kit garniture"])
         message = self.message("OT-2026-0001")
-        self.assertIn("=== Page « PO-01 — garniture » (équipement · sous-page de « PO-01 — Pompe de process A » · 1 phrases "
-                      "sur 30, 5 mots sur 600) ===", message)
-        self.assertIn("=== Page « Kit garniture HC 50 » (composant · 1 phrases sur 30, 5 mots sur 600) ===", message)
-        self.assertEqual([(p["titre"], p["type"], p["mere"]) for p in lire_message(message)["pages"]][:3],
-                         [("PO-01 — Pompe de process A", "équipement", ""),
-                          ("PO-01 — accouplement", "équipement", "PO-01 — Pompe de process A"),
-                          ("PO-01 — garniture", "équipement", "PO-01 — Pompe de process A")])
+        self.assertIn("=== Page « Changer la garniture de PO-01 — dépose » (savoir-faire · sous-page de « Changer la "
+                      "garniture de PO-01 » · 1 phrase sur 30, 5 mots sur 600) ===", message)
+        self.assertIn("=== Page « Graisser le palier » (savoir-faire · 2 phrases sur 30, 8 mots sur 600) ===", message)
+        self.assertIn("=== Page « Graisser le palier — fréquence » (savoir-faire · sous-page de « Graisser le palier » · "
+                      "1 phrase sur 30, 7 mots sur 600) ===", message)
+        self.assertNotIn("PO-01 — garniture", message.split("Catalogue des pages :")[0])
+        self.assertEqual([(p["titre"], p["type"], p["mere"]) for p in lire_message(message)["pages"]][2:4],
+                         [("Changer la garniture de PO-01", "savoir-faire", ""),
+                          ("Changer la garniture de PO-01 — dépose", "savoir-faire", "Changer la garniture de PO-01")])
         # Réservations (D112) : un envoi en cours sur une sous-page retient l'OT.
         self.page.evaluate("(ids) => Wiki.mettreEnFile(ids)", ["OT-2026-0001"])
         self.assertEqual(self.page.evaluate("Wiki.prochainsEnvois(Wiki.file(), [{ cles: ['WP:WP-0021'] }]).length"), 0)
@@ -410,23 +533,28 @@ class TestDonneesEtFile(CasIngestion):
             lignes.push({ id: 'EQ-0' + n, repere: 'ZZ-' + n, designation: 'Machine ' + n, statut: 'en service', actif: '1' }); } });
           await Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00002', nature: 'ingestion',
             ot_id: 'OT-2026-0004', statut: 'à valider', ordre: '2', essais: '1', changements: JSON.stringify([{
-            cle: 'TITRE:zzz usure tardive', titre: 'Zzz usure tardive', type: 'mode', creation: true, version_avant: 0,
-            avant: '', apres: '## Causes\\n- Usure [OT-2026-0004]' }]) }); });
+            cle: 'TITRE:zzz usure tardive', titre: 'Zzz usure tardive', type: 'savoir-faire', creation: true,
+            rattacheA: 'CV-01 — Convoyeur', version_avant: 0, avant: '', apres: '## Quand le faire\\n- Usure [OT-2026-0004]' }]) }); });
           return Wiki.donneesIngestion('OT-2026-0002').catalogue;
         }""")
         self.assertEqual(len(catalogue), self.page.evaluate("Wiki.SEUILS.catalogueMax"))
-        self.assertIn({"titre": "Zzz usure tardive", "type": "mode"}, catalogue)
+        self.assertEqual(catalogue[:3], [{"titre": "Zzz usure tardive", "type": "savoir-faire"},
+                                         {"titre": "Bruit anormal", "type": "panne"}, {"titre": "Fuite", "type": "panne"}])
 
     def test_prochains_envois(self):
         self.page.evaluate("(ids) => Wiki.mettreEnFile(ids)", EN_FILE)
         choisir = """([agents, enCours]) => Wiki.prochainsEnvois(Wiki.file(), enCours, { agents })
           .map((c) => c.entree.ot_id)"""
-        # 0003, 0001 et 0008 attendent 0004 (cause C03) puis 0003 (PO-01) ; 0006 attend 0004 (CV-01).
-        self.assertEqual(self.page.evaluate(choisir, [5, []]), ["OT-2026-0004", "OT-2026-0002"])
+        # Plus de clé de cause (refonte 2) : 0003 (PO-01) part avec 0004 (CV-01) malgré leur cause commune C03 ; 0001 et
+        # 0008 attendent 0003 (PO-01) ; 0006 attend 0004 (CV-01).
+        self.assertEqual(self.page.evaluate(choisir, [5, []]), ["OT-2026-0004", "OT-2026-0003", "OT-2026-0002"])
         self.assertEqual(self.page.evaluate(choisir, [1, []]), ["OT-2026-0004"])
-        self.assertEqual(self.page.evaluate(choisir, [5, [{"cles": ["ART:ART-0003"]}]]), ["OT-2026-0004"])
+        self.assertEqual(self.page.evaluate(choisir, [5, [{"cles": ["ART:ART-0003"]}]]), ["OT-2026-0004", "OT-2026-0003"])
         self.assertEqual(self.page.evaluate(choisir, [2, [{"cles": ["EQ:EQ-0009"]}]]), ["OT-2026-0004"])
-        self.assertEqual(self.page.evaluate(choisir, [5, [{"cles": ["CAUSE:C03"]}]]), ["OT-2026-0002"])
+        self.assertEqual(self.page.evaluate(choisir, [5, [{"cles": ["EQ:EQ-0003"]}]]), ["OT-2026-0003", "OT-2026-0002"])
+        # Une clé de cause encore portée par un envoi (entrée d'avant la refonte 2) ne retient plus personne.
+        self.assertEqual(self.page.evaluate(choisir, [5, [{"cles": ["CAUSE:C03"]}]]),
+                         ["OT-2026-0004", "OT-2026-0003", "OT-2026-0002"])
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -453,25 +581,32 @@ class TestTraitement(CasIngestion):
         return self.page.evaluate(TRAITER_JS, [ids, options])
 
     def test_bout_en_bout_requetes_etat_propose_et_ordre_par_page(self):
-        bilan = self.traiter(EN_FILE, "faux-cree-mode")
+        bilan = self.traiter(EN_FILE, "faux-cree-commun")
         self.assertIsNone(bilan["erreur"])
-        # 0004 et 0002 partent ensemble et créent tous deux « Usure commune » : le second est rejoué.
-        self.assertEqual((bilan["acceptees"], bilan["rien"], bilan["refusees"], bilan["rejouees"]), (6, 0, 0, 1))
+        # 0004 (CV-01), 0003 (PO-01) et 0002 (CP-01) n'ont aucune page commune (plus de clé de cause) : ils partent
+        # ensemble et créent tous trois le savoir-faire « Usure commune » ; le premier écrit l'emporte, les deux autres
+        # sont rejoués et le trouvent alors au catalogue.
+        self.assertEqual((bilan["acceptees"], bilan["rien"], bilan["refusees"], bilan["rejouees"]), (6, 0, 0, 2))
         journal = self.journal()
         self.assertEqual(sorted(journal), sorted(EN_FILE))
         self.assertEqual({ot: e["statut"] for ot, e in journal.items()}, {ot: "à valider" for ot in EN_FILE})
         self.assertEqual({ot: e["anterieure"] for ot, e in journal.items()},
                          {"OT-2026-0004": "0", "OT-2026-0003": "1", "OT-2026-0001": "1", "OT-2026-0002": "0",
                           "OT-2026-0006": "0", "OT-2026-0008": "0"})
-        self.assertEqual(sorted(e["essais"] for e in journal.values()), ["1", "1", "1", "1", "1", "2"])
+        self.assertEqual(sorted(e["essais"] for e in journal.values()), ["1", "1", "1", "1", "2", "2"])
         # Le motif du rejeu reste sur l'entrée acceptée ensuite (D112 : le journal le note).
-        self.assertEqual(sorted(e["motif"] for e in journal.values()), [""] * 5 + ["rejoué : page créée entre-temps"])
-        self.assertTrue(all(e["modele"] == "faux-cree-mode" for e in journal.values()), journal)
-        creations = [c["titre"] for e in journal.values() for c in json.loads(e["changements"]) if c["creation"]]
-        self.assertEqual(sorted(creations), ["Astuce de l'OT-2026-0001", "Usure commune"])
+        self.assertEqual(sorted(e["motif"] for e in journal.values()), [""] * 4 + ["rejoué : page créée entre-temps"] * 2)
+        self.assertEqual({ot for ot, e in journal.items() if e["motif"]} | {ot for ot, e in journal.items()
+                         if any(c["titre"] == "Usure commune" for c in json.loads(e["changements"]))},
+                         {"OT-2026-0004", "OT-2026-0003", "OT-2026-0002"})
+        self.assertTrue(all(e["modele"] == "faux-cree-commun" for e in journal.values()), journal)
+        creations = [(c["titre"], c["type"]) for e in journal.values() for c in json.loads(e["changements"]) if c["creation"]]
+        self.assertEqual(sorted(creations), [("Astuce de l'OT-2026-0001", "savoir-faire"), ("Usure commune", "savoir-faire")])
         # Pour chaque page : les OT dans l'ordre des dates d'intervention (rang de traitement), jamais deux à la fois.
         envois = bilan["envois"]
-        self.assertEqual(len(envois), 7)
+        self.assertEqual(len(envois), 8)
+        self.assertEqual(sorted(e["ot"] for e in envois if e["debut"] < min(x["fin"] for x in envois)),
+                         ["OT-2026-0002", "OT-2026-0003", "OT-2026-0004"])
         for cle in {cle for envoi in envois for cle in envoi["cles"]}:
             avec = sorted((e for e in envois if cle in e["cles"]), key=lambda e: e["debut"])
             for avant, apres in zip(avec, avec[1:]):
@@ -484,17 +619,18 @@ class TestTraitement(CasIngestion):
         page_po01 = [c for c in json.loads(journal["OT-2026-0008"]["changements"]) if c["cle"] == "EQ:EQ-0001"][0]
         for ot in ("OT-2026-0003", "OT-2026-0001", "OT-2026-0007", "OT-2026-0008"):
             self.assertIn("[" + ot + "]", page_po01["apres"])
-        self.assertIn("[[Cavitation]]", page_po01["apres"])
+        self.assertIn("[[Nettoyer le filtre de CP-01]]", page_po01["apres"])
         # Versions enchaînées (D105) : WP-0001 est en version 1 ; chaque proposition plus ancienne en attente l'avance.
         versions = {ot: [(c["page"], c["version_avant"]) for c in json.loads(journal[ot]["changements"]) if c["cle"] == "EQ:EQ-0001"]
                     for ot in ("OT-2026-0003", "OT-2026-0001", "OT-2026-0008")}
         self.assertEqual(versions, {"OT-2026-0003": [("WP-0001", 1)], "OT-2026-0001": [("WP-0001", 2)],
                                     "OT-2026-0008": [("WP-0001", 3)]})
         self.assertEqual(self.page.evaluate("Wiki.etatPropose().get('EQ:EQ-0001').version"), 4)
-        self.assertEqual(journal["OT-2026-0001"]["pages"].split(";")[:4], ["EQ:EQ-0001", "ART:ART-0001", "CAUSE:C01", "WP:WP-0002"])
+        self.assertEqual(journal["OT-2026-0001"]["pages"].split(";")[:4], ["EQ:EQ-0001", "ART:ART-0001", "WP:WP-0002", "WP:WP-0010"])
+        self.assertNotIn("CAUSE:", "".join(e["pages"] for e in journal.values()))
         # Requêtes réellement envoyées : une par envoi, rien d'interdit, l'astuce de 0001 et la mention de 0003.
         corps = [r["corps"] for r in self.faux.requetes_vers("/api/chat")]
-        self.assertEqual(len(corps), 7)
+        self.assertEqual(len(corps), 8)
         # La collision est rejouée par une requête d'origine (sur le nouvel état), jamais relancée avec une raison.
         self.assertFalse(any(MARQUE_RELANCE in c["messages"][1]["content"] for c in corps))
         textes = [json.dumps(c, ensure_ascii=False) for c in corps]
@@ -510,9 +646,9 @@ class TestTraitement(CasIngestion):
     def test_collision_vue_meme_avec_un_stockage_lent(self):
         charger_scripts(self.page, SCRIPTS)
         self.page.evaluate(CHARGER_LENT_JS, BASE)
-        bilan = self.traiter(EN_FILE, "faux-cree-mode")
+        bilan = self.traiter(EN_FILE, "faux-cree-commun")
         self.assertIsNone(bilan["erreur"])
-        self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["rejouees"]), (6, 0, 1))
+        self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["rejouees"]), (6, 0, 2))
         creations = [c["titre"] for e in self.journal().values() for c in json.loads(e["changements"]) if c["creation"]]
         self.assertEqual(sorted(creations), ["Astuce de l'OT-2026-0001", "Usure commune"])
 
@@ -524,8 +660,8 @@ class TestTraitement(CasIngestion):
             const [titre, delai] = titres[donnees.ot.id];
             await new Promise((r) => setTimeout(r, delai));
             return { modele: 'essai', contenu: JSON.stringify({ rien_a_ajouter: false, contradictions: [], pages: [{
-              action: 'creer', titre, type: 'mode', rattache_a: '', rubriques: [{ rubrique: 'Causes', phrases: [{
-              texte: 'Usure des pièces', ot: [donnees.ot.id] }] }] }] }) };
+              action: 'creer', titre, type: 'savoir-faire', rattache_a: donnees.pages[0].titre, rubriques: [{
+              rubrique: 'Quand le faire', phrases: [{ texte: 'Usure des pièces', ot: [donnees.ot.id] }] }] }] }) };
           } });
           return { bilan: [bilan.acceptees, bilan.refusees, bilan.rejouees],
             journal: Donnees.lignes('wiki_journal').filter((e) => e.ot_id !== 'OT-2026-0007')
@@ -563,7 +699,7 @@ class TestTraitement(CasIngestion):
 
     def test_arreter_laisse_finir_les_envois_partis(self):
         resultat = self.page.evaluate("""async () => {
-          await Wiki.mettreEnFile(['OT-2026-0004', 'OT-2026-0003', 'OT-2026-0002']);
+          await Wiki.mettreEnFile(['OT-2026-0004', 'OT-2026-0003', 'OT-2026-0002', 'OT-2026-0006']);
           const arret = new AbortController();
           let appels = 0;
           const bilan = await Wiki.traiterFile({ signal: arret.signal, appeler: async (requete, donnees, annuler) => {
@@ -576,8 +712,8 @@ class TestTraitement(CasIngestion):
           return { appels, rien: bilan.rien, erreur: bilan.erreur && bilan.erreur.message, envois: bilan.envois.length,
             file: Wiki.file().map((e) => e.ot_id) };
         }""" % RIEN)
-        # 0004 et 0002 sont partis ensemble (0003 attend 0004, cause C03) : ils finissent ; rien d'autre ne part.
-        self.assertEqual(resultat, {"appels": 2, "rien": 2, "erreur": None, "envois": 2, "file": ["OT-2026-0003"]})
+        # 0004, 0003 et 0002 sont partis ensemble (0006 attend 0004, CV-01) : ils finissent ; rien d'autre ne part.
+        self.assertEqual(resultat, {"appels": 3, "rien": 3, "erreur": None, "envois": 3, "file": ["OT-2026-0006"]})
 
     def test_refus_des_controles(self):
         # Le faux modèle invente à chaque fois : refusée, relancée avec la raison, refusée encore.
@@ -593,37 +729,93 @@ class TestTraitement(CasIngestion):
         self.assertEqual(self.journal()["OT-2026-0004"]["raisons"], "")
 
     def test_reponse_qui_decoupe_acceptee(self):
-        """CS113 : une réponse qui découpe la page de l'équipement (faux-decoupe : sous-page de même type rattachée à elle,
-        renvoi dans la mère) passe les contrôles ; la sous-page entre dans l'état proposé sans ancrage propre ; l'OT suivant
-        de l'équipement l'envoie juste après sa mère et peut la modifier."""
+        """CS113 (savoir-faire seulement, §20.12) : une réponse qui découpe un savoir-faire de la machine (faux-decoupe :
+        sous-page savoir-faire rattachée à lui, renvoi dans la mère) passe les contrôles ; la sous-page entre dans l'état
+        proposé sans ancrage propre ; l'OT suivant de la machine l'envoie juste après sa mère et peut la modifier."""
+        mere = "Changer la garniture de PO-01"
+        titre = mere + " — étapes détaillées"
         bilan = self.traiter(["OT-2026-0001"], "faux-decoupe")
         self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["erreur"]), (1, 0, None))
         entree = self.journal()["OT-2026-0001"]
         self.assertEqual((entree["statut"], entree["essais"], entree["raisons"]), ("à valider", "1", ""))
         changements = {c["titre"]: c for c in json.loads(entree["changements"])}
-        self.assertEqual(sorted(changements), ["Astuce de l'OT-2026-0001", "PO-01 — Pompe de process A",
-                                               "PO-01 — pannes qui reviennent"])
-        sous_page = changements["PO-01 — pannes qui reviennent"]
+        self.assertEqual(sorted(changements), ["Astuce de l'OT-2026-0001", mere, titre, "PO-01 — Pompe de process A"])
+        sous_page = changements[titre]
         self.assertEqual((sous_page["cle"], sous_page["type"], sous_page["creation"], sous_page["rattacheA"]),
-                         ("TITRE:po 01 pannes qui reviennent", "équipement", True, "PO-01 — Pompe de process A"))
-        self.assertEqual(sous_page["apres"], "## Ce qui revient" + NL + "- Fuite de garniture au démarrage, fréquent ici "
-                         "[OT-2026-0007]" + NL + "- Fuite à la garniture : fréquent ici [OT-2026-0001]")
-        self.assertIn("- Détail des pannes qui reviennent : voir [[PO-01 — pannes qui reviennent]] [OT-2026-0007] "
-                      "[OT-2026-0001]", changements["PO-01 — Pompe de process A"]["apres"])
-        etat = self.page.evaluate("""() => { const p = Wiki.etatPropose().get('TITRE:po 01 pannes qui reviennent');
+                         ("TITRE:changer la garniture de po 01 etapes detaillees", "savoir-faire", True, mere))
+        self.assertEqual(sous_page["apres"], "## Étapes" + NL + "- Repérer l'accouplement [OT-2026-0007]")
+        self.assertEqual(changements[mere]["apres"], "## Étapes" + NL + "- Détail des étapes : voir [[" + titre + "]] "
+                         "[OT-2026-0007]")
+        etat = self.page.evaluate("""() => { const p = Wiki.etatPropose().get('TITRE:changer la garniture de po 01 etapes detaillees');
           return [p.type, p.rattacheA, p.equipementId, p.articleId]; }""")
-        self.assertEqual(etat, ["équipement", "EQ:EQ-0001", "", ""])
+        self.assertEqual(etat, ["savoir-faire", "WP:WP-0002", "", ""])
         # L'OT suivant de PO-01 : la sous-page part juste après sa mère ; la nouvelle phrase y va.
-        self.assertEqual(self.page.evaluate("(ot) => Wiki.pagesConcernees(ot).cles", "OT-2026-0008")[:2],
-                         ["EQ:EQ-0001", "TITRE:po 01 pannes qui reviennent"])
-        self.assertIn("=== Page « PO-01 — pannes qui reviennent » (équipement · sous-page de « PO-01 — Pompe de process A » · "
-                      "2 phrases sur 30, 16 mots sur 600) ===", self.message("OT-2026-0008"))
+        cles = self.page.evaluate("(ot) => Wiki.pagesConcernees(ot).cles", "OT-2026-0008")
+        self.assertEqual(cles.index("TITRE:changer la garniture de po 01 etapes detaillees"), cles.index("WP:WP-0002") + 1)
+        self.assertIn("=== Page « " + titre + " » (savoir-faire · sous-page de « " + mere + " » · 1 phrase sur 30, 3 mots "
+                      "sur 600) ===", self.message("OT-2026-0008"))
         bilan = self.traiter(["OT-2026-0008"], "faux-decoupe")
         self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["erreur"]), (1, 0, None))
         suite = json.loads(self.journal()["OT-2026-0008"]["changements"])
-        self.assertEqual([(c["titre"], c["creation"], c["version_avant"]) for c in suite],
-                         [("PO-01 — pannes qui reviennent", False, 1)])
+        self.assertEqual([(c["titre"], c["creation"], c["version_avant"]) for c in suite], [(titre, False, 1)])
         self.assertTrue(suite[0]["apres"].endswith("- Fuite encore : fréquent ici [OT-2026-0008]"), suite[0]["apres"])
+
+    def test_tous_les_textes_de_la_refonte_2_acceptes_de_bout_en_bout(self):
+        """§20.12 : la réponse du faux modèle qui écrit tous les textes (faux-textes) — « En bref » qui lie la panne de
+        l'OT, l'astuce dans « Astuces » et dans un savoir-faire créé, « À quoi il sert » de l'article consommé — passe
+        les contrôles de bout en bout."""
+        bilan = self.traiter(["OT-2026-0001"], "faux-textes")
+        self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["rejouees"], bilan["erreur"]), (1, 0, 0, None))
+        entree = self.journal()["OT-2026-0001"]
+        self.assertEqual((entree["statut"], entree["essais"], entree["raisons"]), ("à valider", "1", ""))
+        changements = {c["titre"]: (c["type"], c["creation"], c["apres"]) for c in json.loads(entree["changements"])}
+        self.assertEqual(changements, {
+            "PO-01 — Pompe de process A": ("équipement", False, TEXTE_PO01 + NL
+                                           + "- Fuite à la garniture : fréquent ici ([[Fuite]]) [OT-2026-0001]" + NL
+                                           + "## Astuces" + NL + "- " + ASTUCE + " [OT-2026-0001]"),
+            "Kit garniture HC 50": ("composant", False, TEXTE_KIT + NL + "- Fuite à la garniture (sur PO-01) [OT-2026-0001]"),
+            "Astuce de l'OT-2026-0001": ("savoir-faire", True, "## Étapes" + NL + "- " + ASTUCE + " [OT-2026-0001]")})
+
+    def test_rubrique_pleine_le_faux_modele_s_y_tient(self):
+        """« En bref » à sa limite (5 phrases, lue dans l'en-tête) : la réponse du faux modèle ne fait que confirmer la
+        dernière phrase (l'OT s'ajoute à ses citations) et passe les contrôles."""
+        self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { const NL = String.fromCharCode(10);
+          lignes.find((l) => l.id === 'WP-0001').texte += ['', '- Bruit de palier [OT-2026-0007]', '- Joint sec [OT-2026-0007]',
+            '- Garniture neuve [OT-2026-0007]'].join(NL); })""")
+        self.assertIn("(équipement · En bref : 5 phrases sur 5, 20 mots sur 120 · Astuces : 0 phrase sur 10)",
+                      self.message("OT-2026-0008"))
+        bilan = self.traiter(["OT-2026-0008"], "faux")
+        self.assertEqual((bilan["acceptees"], bilan["refusees"]), (1, 0))
+        apres = json.loads(self.journal()["OT-2026-0008"]["changements"])[0]["apres"]
+        self.assertEqual(len([ligne for ligne in apres.split(NL) if ligne.startswith("- ")]), 5)
+        self.assertTrue(apres.endswith("- Garniture neuve [OT-2026-0007] [OT-2026-0008]"), apres)
+
+    def test_ancien_texte_reecrit_dans_ses_rubriques(self):
+        """Base de développement (avant la refonte 2) : un texte de machine aux anciennes rubriques, réécrit dans les
+        siennes en regroupant ses phrases (chaque phrase regroupée cite tous leurs OT, liens retirés), est accepté ; le
+        même texte gardé tel quel est refusé (rubriques inconnues)."""
+        self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { const NL = String.fromCharCode(10);
+          lignes.push({ id: 'WP-0030', type: 'équipement', titre: 'CV-01 — Convoyeur', equipement_id: 'EQ-0003', version: '1',
+            statut: 'active', origine: 'IA', texte: ['## Ce qui revient', '- Bande qui patine [OT-2026-0004]',
+              '- Rouleau bruyant [OT-2026-0004]', '## À surveiller', '- Voir [[Desserrage]] [OT-2026-0004]'].join(NL) }); })""")
+        message = self.message("OT-2026-0006")
+        self.assertIn("(équipement · En bref : 0 phrase sur 5, 0 mot sur 120 · Astuces : 0 phrase sur 10) ===\n## Ce qui revient",
+                      message)
+        lu = self.page.evaluate(LIRE_JS, ["OT-2026-0006", json.dumps(reponse_ingestion(message, "faux"), ensure_ascii=False)])
+        self.assertTrue(lu["ok"], lu)
+        self.assertEqual(lu["lu"]["changements"][0]["apres"], NL.join([
+            "## En bref", "- Ce qui revient : Bande qui patine ; Rouleau bruyant [OT-2026-0004]",
+            "- À surveiller : Voir Desserrage [OT-2026-0004]", "- Rouleaux encrassés : fréquent ici [OT-2026-0006]"]))
+        garde = {"rien_a_ajouter": False, "contradictions": [], "pages": [{"action": "modifier", "titre": "CV-01 — Convoyeur",
+                 "type": "équipement", "rattache_a": "", "rubriques": [
+                     {"rubrique": "Ce qui revient", "phrases": [{"texte": "Bande qui patine", "ot": ["OT-2026-0004"]},
+                                                                {"texte": "Rouleau bruyant", "ot": ["OT-2026-0004"]}]},
+                     {"rubrique": "À surveiller", "phrases": [{"texte": "Voir Desserrage", "ot": ["OT-2026-0004"]}]},
+                     {"rubrique": "En bref", "phrases": [{"texte": "Rouleaux encrassés", "ot": ["OT-2026-0006"]}]}]}]}
+        refus = self.page.evaluate(LIRE_JS, ["OT-2026-0006", json.dumps(garde, ensure_ascii=False)])
+        self.assertFalse(refus["ok"])
+        self.assertIn("Page « CV-01 — Convoyeur » : rubrique « Ce qui revient » inconnue pour une page équipement.",
+                      refus["raisons"])
 
     def requetes_ia(self):
         """Corps des requêtes reçues par le faux fournisseur : (système, utilisateur, schéma, modèle) de chacune."""
@@ -644,7 +836,7 @@ class TestTraitement(CasIngestion):
         self.assertEqual(raisons, ["Page « CP-01 — Compresseur » : phrase sans OT cité — « Filtre encrassé : fréquent ici »."])
         changements = json.loads(entree["changements"])
         self.assertEqual([(c["titre"], c["apres"]) for c in changements],
-                         [("CP-01 — Compresseur", "## Ce qui revient" + NL + "- Filtre encrassé : fréquent ici [OT-2026-0002]")])
+                         [("CP-01 — Compresseur", "## En bref" + NL + "- Filtre encrassé : fréquent ici [OT-2026-0002]")])
         requetes = self.requetes_ia()
         self.assertEqual(len(requetes), 2)
         (systeme, origine, schema, modele), relance = requetes
@@ -736,10 +928,11 @@ class TestTraitement(CasIngestion):
             // Un autre OT crée la même page pendant l'envoi.
             await Donnees.modifier('wiki_journal', (lignes, outils) => { lignes.push({ id: outils.nouvelId(lignes),
               nature: 'ingestion', statut: 'à valider', ordre: '99', changements: JSON.stringify([{ cle: 'TITRE:'
-              + Wiki.comparable(titre), titre, type: 'mode', creation: true, avant: '', apres: '' }]) }); }, { journal: false });
+              + Wiki.comparable(titre), titre, type: 'savoir-faire', creation: true, avant: '', apres: '' }]) }); },
+              { journal: false });
             return { modele: 'essai', contenu: JSON.stringify({ rien_a_ajouter: false, contradictions: [], pages: [{
-              action: 'creer', titre, type: 'mode', rattache_a: '', rubriques: [{ rubrique: 'Causes', phrases: [{
-              texte: 'Constaté sur le compresseur', ot: [donnees.ot.id] }] }] }] }) };
+              action: 'creer', titre, type: 'savoir-faire', rattache_a: donnees.pages[0].titre, rubriques: [{
+              rubrique: 'Quand le faire', phrases: [{ texte: 'Constaté sur le compresseur', ot: [donnees.ot.id] }] }] }] }) };
           } });
           const entree = Donnees.lignes('wiki_journal').find((e) => e.ot_id === 'OT-2026-0002');
           return { appels, rejouees: bilan.rejouees, refusees: bilan.refusees, statut: entree.statut, essais: entree.essais,
@@ -781,13 +974,14 @@ AJOUT_WIKI_JS = """async () => {
   const phrase = '\\n- Panne connue ici [' + ot + ']';
   await Donnees.modifier('wiki_pages', (lignes) => {
     const ligne = lignes.find((l) => l.type === 'équipement' && l.equipement_id === equipement.id && l.statut !== 'archivée');
-    if (ligne) ligne.texte = (ligne.texte || '## Ce qui revient') + phrase;
+    if (ligne) ligne.texte = (ligne.texte || '## En bref') + phrase;
     else lignes.push({ id: 'WP-9001', type: 'équipement', titre: equipement.repere + ' — ' + equipement.designation,
-      equipement_id: equipement.id, version: '1', statut: 'active', texte: '## Ce qui revient' + phrase });
+      equipement_id: equipement.id, version: '1', statut: 'active', texte: '## En bref' + phrase });
   });
   await Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-99001', nature: 'ingestion', ot_id: ot,
     statut: 'à valider', ordre: '9999', essais: '1', changements: JSON.stringify([{ cle: 'TITRE:usure commune essai',
-    titre: 'Usure commune essai', type: 'mode', creation: true, version_avant: 0, avant: '', apres: '## Causes\\n- Usure [' + ot + ']' }]) }); });
+    titre: 'Usure commune essai', type: 'savoir-faire', creation: true, rattacheA: equipement.repere + ' — ' + equipement.designation,
+    version_avant: 0, avant: '', apres: '## Quand le faire\\n- Usure [' + ot + ']' }]) }); });
 }"""
 ERREURS_SERVEUR_STATIQUE = [re.compile(r"status of 404.*/api/ping"), re.compile(r"status of 404.*/api/csv/")]
 
@@ -837,7 +1031,7 @@ class TestDansLApplication(CasNavigateur):
         demo = page.evaluate(LISTE_REQUETES_JS)
         messages = [r["messages"][1]["content"] for r in demo]
         self.assertTrue(any("- Panne connue ici [OT-" in m for m in messages))
-        self.assertTrue(all("- Usure commune essai (mode)" in m for m in messages))
+        self.assertTrue(all("- Usure commune essai (savoir-faire)" in m for m in messages))
         noms = page.evaluate("""() => Donnees.lignes('techniciens').map((t) => (t.prenom + ' ' + t.nom).trim())
           .concat(Donnees.lignes('demandes').map((d) => d.demandeur)).filter(Boolean)""")
         astuces = page.evaluate("""() => Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement'

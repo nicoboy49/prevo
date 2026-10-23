@@ -446,9 +446,10 @@ class TestReglesPures(CasNavigateur):
         resultat = self.page.evaluate("""() => {
           const d = { ot: { id: 'OT-2026-0001', dateIntervention: '2026-03-10 10:00', type: 'correctif immédiat',
               titre: 'PO-01 — Fuite', compteRendu: 'Garniture changée.', equipement: { repere: 'PO-01', designation: 'Pompe' } },
-            pages: [{ titre: 'PO-01 — Pompe', type: 'équipement', texte: '## Ce qui revient\\n- Fuite [OT-2026-0007]',
-              otDates: [{ id: 'OT-2026-0007', date: '2026-04-15 08:00' }], phrases: 1, mots: 4 }],
-            limites: { phrases: 30, mots: 600 }, catalogue: [{ titre: 'Cavitation', type: 'mode' }] };
+            pages: [{ titre: 'PO-01 — Pompe', type: 'équipement', texte: '## En bref\\n- Fuite [OT-2026-0007]',
+              otDates: [{ id: 'OT-2026-0007', date: '2026-04-15 08:00' }], longueurs: [{ rubrique: 'En bref', phrases: 1,
+                mots: 1, phrasesMax: 5, motsMax: 120 }] }],
+            catalogue: [{ titre: 'Fuite', type: 'panne' }] };
           const reponse = '{"rien_a_ajouter": false,\\n "pages": [], "contradictions": []}';
           const avec = (relance) => Object.assign({}, d, { relance });
           const relance = avec({ reponse, raisons: ['Page « PO-01 — Pompe » : phrase sans OT cité — « Fuite ».',
@@ -476,40 +477,94 @@ class TestReglesPures(CasNavigateur):
         self.assertIn("refusée par les contrôles de Prévo :\n- (aucune raison donnée)\n\n", resultat["longue"])
 
     def test_ingestion_consigne_du_decoupage_en_sous_pages(self):
-        """Révision du 2026-10-23 (D96, D100, CS113) : la consigne renvoie aux limites de l'en-tête de chaque page (aucun
-        nombre de Wiki.SEUILS : plus de « 12 phrases » ni de « 250 mots ») et dit le découpage en sous-pages ; l'en-tête
-        d'une sous-page nomme sa mère (titre à parenthèses compris, lu de même par le faux modèle)."""
+        """Révisions du 2026-10-23 (D96, D100, CS113 ; refonte 2, §20.12) : la consigne renvoie aux limites de l'en-tête
+        de chaque texte (aucun nombre de Wiki.LIMITES) et dit le découpage d'un savoir-faire en sous-pages ; l'en-tête
+        d'une sous-page nomme sa mère (titre à parenthèses compris, lu de même par le faux modèle) ; l'en-tête donne la
+        mesure de chaque rubrique avec sa limite, ou celle d'un savoir-faire entier ; un nombre qui n'est pas un entier
+        n'y est jamais écrit."""
         resultat = self.page.evaluate("""() => {
           const d = { ot: { id: 'OT-2026-0001', dateIntervention: '2026-03-10 10:00', type: 'correctif immédiat',
               titre: 'PO-02 — Fuite', equipement: { repere: 'PO-02', designation: 'Pompe' } },
-            pages: [{ titre: 'PO-02 — Pompe (A)', type: 'équipement', mere: '', texte: '## Ce qui revient\\n- Fuite [OT-2026-0007]',
-                otDates: [], phrases: 1, mots: 4 },
-              { titre: 'PO-02 — garniture', type: 'équipement', mere: 'PO-02 — Pompe (A)', texte: '', otDates: [], phrases: 0,
-                mots: 0 }],
-            limites: { phrases: 30, mots: 600 }, catalogue: [] };
+            pages: [{ titre: 'PO-02 — Pompe (A)', type: 'équipement', mere: '', texte: '## En bref\\n- Fuite [OT-2026-0007]',
+                otDates: [], longueurs: [{ rubrique: 'En bref', phrases: 1, mots: 1, phrasesMax: 5, motsMax: 120 },
+                  { rubrique: 'Astuces', phrases: 0, mots: 0, phrasesMax: 10, motsMax: null }] },
+              { titre: 'Kit (B)', type: 'composant', mere: '', texte: '', otDates: [],
+                longueurs: [{ rubrique: 'À quoi il sert', phrases: 2, mots: 'beaucoup', phrasesMax: 3, motsMax: 80 }, null,
+                  { rubrique: 'À quoi il sert', phrases: 1, mots: 4, phrasesMax: null, motsMax: 80 },
+                  { rubrique: 'À quoi il sert', phrases: 1, mots: 4, phrasesMax: 3 }] },
+              { titre: 'Changer la garniture (A)', type: 'savoir-faire', mere: '', texte: '## Étapes\\n- Déposer [OT-2026-0007]',
+                otDates: [], longueurs: [{ rubrique: '', phrases: 1, mots: 2, phrasesMax: 30, motsMax: 600 }] },
+              { titre: 'Changer la garniture (A) — dépose', type: 'savoir-faire', mere: 'Changer la garniture (A)', texte: '',
+                otDates: [], longueurs: [{ rubrique: '', phrases: 0, mots: 0, phrasesMax: 30, motsMax: 600 }] }],
+            catalogue: [] };
           const requete = Ia.requete('ingestionWiki', d);
           return { systeme: requete.messages[0].content, message: requete.messages[1].content };
         }""")
         systeme = resultat["systeme"]
-        for absent in ("12 phrases", "250 mots", "page à 12"):
-            self.assertNotIn(absent, systeme)
-        self.assertNotRegex(systeme, r"\b(12|250|30|600)\b")
-        for attendu in ("l'en-tête de chaque page reçue donne sa taille et ses limites", "une page ne dépasse jamais ses limites",
-                        "découpage : une page qui dépasserait ses limites se découpe en sous-pages liées",
-                        "« type » de la page mère, « rattache_a » = titre exact de la mère",
-                        "titre « <repère de l'équipement, ou titre de la mère> — <sujet> »", "« PO-02 — garniture »",
+        self.assertNotRegex(systeme, r"\b(5|10|12|30|80|120|250|600)\b")
+        for attendu in ("l'en-tête de chaque page reçue donne la taille et la limite de chaque rubrique (pour un "
+                        "savoir-faire, de la page entière, rubriques comprises)", "ne dépasse jamais une limite",
+                        "découpage : un savoir-faire qui dépasserait ses limites se découpe en sous-pages liées",
+                        "type « savoir-faire », « rattache_a » = titre exact du savoir-faire",
+                        "titre « <titre du savoir-faire> — <sujet> »", "« Changer la garniture — étapes détaillées »",
                         "phrases d'un même sujet, telles quelles ou regroupées, avec tous leurs OT",
                         "une phrase courte de renvoi [[titre de la sous-page]] qui cite tous leurs OT",
                         "une sous-page (« sous-page de … » dans son en-tête) ne se découpe pas : un seul niveau",
-                        "créer au plus 3 pages (action « creer »), sous-pages comprises",
-                        "jamais une page d'équipement, sauf comme sous-page"):
+                        "créer au plus 3 savoir-faire (action « creer », type « savoir-faire »), sous-pages comprises",
+                        "aucune autre page ne se crée"):
             self.assertIn(attendu, systeme)
+        for absent in ("« type » de la page mère", "repère de l'équipement", "sauf comme sous-page", "mode de défaillance"):
+            self.assertNotIn(absent, systeme)
         message = resultat["message"]
-        self.assertIn("=== Page « PO-02 — Pompe (A) » (équipement · 1 phrases sur 30, 4 mots sur 600) ===", message)
-        self.assertIn("=== Page « PO-02 — garniture » (équipement · sous-page de « PO-02 — Pompe (A) » · 0 phrases sur 30, "
-                      "0 mots sur 600) ===\n(page vide)", message)
+        self.assertIn("=== Page « PO-02 — Pompe (A) » (équipement · En bref : 1 phrase sur 5, 1 mot sur 120 · Astuces : "
+                      "0 phrase sur 10) ===", message)
+        self.assertIn("=== Page « Kit (B) » (composant) ===\n(page vide)", message)
+        self.assertIn("=== Page « Changer la garniture (A) » (savoir-faire · 1 phrase sur 30, 2 mots sur 600) ===", message)
+        self.assertIn("=== Page « Changer la garniture (A) — dépose » (savoir-faire · sous-page de « Changer la garniture (A) » "
+                      "· 0 phrase sur 30, 0 mot sur 600) ===\n(page vide)", message)
         self.assertEqual([(p["titre"], p["type"], p["mere"]) for p in lire_message(message)["pages"]],
-                         [("PO-02 — Pompe (A)", "équipement", ""), ("PO-02 — garniture", "équipement", "PO-02 — Pompe (A)")])
+                         [("PO-02 — Pompe (A)", "équipement", ""), ("Kit (B)", "composant", ""),
+                          ("Changer la garniture (A)", "savoir-faire", ""),
+                          ("Changer la garniture (A) — dépose", "savoir-faire", "Changer la garniture (A)")])
+
+    def test_ingestion_schema_et_textes_demandes(self):
+        """Refonte 2 (§20.12) : la consigne ne demande que « En bref », « Astuces », « À quoi il sert » et les savoir-faire ;
+        le schéma (listes fermées) n'accepte une création que d'un savoir-faire, avec ses rubriques ; une modification, l'un
+        des trois types et leurs rubriques ; les OT permis sont l'OT ingéré et ceux des pages reçues."""
+        resultat = self.page.evaluate("""() => {
+          const d = { ot: { id: 'OT-2026-0001', titre: 'PO-01 — Fuite', equipement: { repere: 'PO-01' } },
+            pages: [{ titre: 'PO-01 — Pompe', type: 'équipement', texte: '## En bref\\n- Fuite [OT-2026-0007]', otDates: [] }],
+            catalogue: [] };
+          return { systeme: Ia.PROMPTS.ingestionWiki.systeme, schema: Ia.requete('ingestionWiki', d).schema };
+        }""")
+        systeme = resultat["systeme"]
+        for attendu in ("« En bref » de la machine (type « équipement ») : ce qu'il faut savoir d'abord de cette machine",
+                        "« Astuces » de la machine : les astuces tirées des OT (« Astuce pour la prochaine fois »)",
+                        "« À quoi il sert » de chaque article consommé (type « composant »)",
+                        "les savoir-faire : un geste ou une méthode, écrits d'abord à partir de l'astuce de l'OT",
+                        "rubriques permises : équipement « En bref », « Astuces » ; composant « À quoi il sert » ; savoir-faire "
+                        "« Quand le faire », « Étapes », « Pièces et outillage », « Pièges »",
+                        '"type": "savoir-faire", "rattache_a": "…"'):
+            self.assertIn(attendu, systeme)
+        self.assertNotRegex(systeme, r"\bmodes?\b")
+        schema = resultat["schema"]
+        self.assertEqual((schema["type"], schema["additionalProperties"], sorted(schema["required"])),
+                         ("object", False, ["contradictions", "pages", "rien_a_ajouter"]))
+        formes = schema["properties"]["pages"]["items"]["anyOf"]
+        for forme in formes:
+            self.assertFalse(forme["additionalProperties"])
+            self.assertEqual(sorted(forme["required"]), sorted(forme["properties"]))
+        modifier, creer = formes
+        self.assertEqual((modifier["properties"]["action"]["enum"], modifier["properties"]["type"]["enum"]),
+                         (["modifier"], ["équipement", "composant", "savoir-faire"]))
+        self.assertEqual((creer["properties"]["action"]["enum"], creer["properties"]["type"]["enum"]),
+                         (["creer"], ["savoir-faire"]))
+        rubrique = lambda forme: forme["properties"]["rubriques"]["items"]["properties"]["rubrique"]["enum"]  # noqa: E731
+        self.assertEqual(rubrique(modifier), ["En bref", "Astuces", "À quoi il sert", "Quand le faire", "Étapes",
+                                              "Pièces et outillage", "Pièges"])
+        self.assertEqual(rubrique(creer), ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges"])
+        phrases = creer["properties"]["rubriques"]["items"]["properties"]["phrases"]["items"]
+        self.assertEqual(phrases["properties"]["ot"]["items"]["enum"], ["OT-2026-0001", "OT-2026-0007"])
 
 
 # ---------------------------------------------------------------------------

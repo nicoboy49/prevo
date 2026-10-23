@@ -6,8 +6,10 @@ message), une fois avec 1 agent, une fois avec Wiki.SEUILS.agentsSimultanes agen
     - le wiki obtenu est le même (texte de chaque page, propositions de chaque OT) ;
     - Wiki.verifierIntegrite est ok (chaîne de chaque page, ordre des dates, aucun envoi simultané sur une page) ;
     - jamais plus de agentsSimultanes envois en cours, et le parallélisme a bien eu lieu (le plafond est atteint) ;
-    - jamais deux envois en cours qui partagent une clé (page ou cause) ; le faux modèle crée une page de mode par
-      combinaison de codes : deux OT de même cause partis ensemble la créeraient tous deux (aucun rejeu attendu).
+    - jamais deux envois en cours qui partagent une clé (page : machine, article, savoir-faire ; plus de cause, refonte 2)
+      ; le faux modèle écrit tous les textes de la refonte 2 (faux-textes) : « En bref » et « Astuces » de la machine,
+      « À quoi il sert » de chaque article consommé, savoir-faire de l'astuce ; deux OT d'une même machine ou d'un même
+      article partis ensemble seraient rejoués (pages changées pendant l'envoi) : aucun rejeu attendu.
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_wiki_parallele.py" -v
@@ -92,7 +94,7 @@ class TestParallele(CasNavigateur):
     def ingerer(self, agents):
         contexte = self.navigateur.new_context(locale="fr-FR")
         self.addCleanup(contexte.close)
-        ingestion.regler_ia(contexte, url=self.faux.url, modele="faux-mode-cause")
+        ingestion.regler_ia(contexte, url=self.faux.url, modele="faux-textes")
         page = contexte.new_page()
         page.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
         self.surveiller(page)
@@ -114,7 +116,7 @@ class TestParallele(CasNavigateur):
                 self.assertEqual((resultat["refusees"], resultat["rejouees"]), (0, 0))
                 self.assertEqual((resultat["validees"], resultat["aRefaire"]), (resultat["acceptees"], 0))
                 self.assertEqual(resultat["integrite"], {"ok": True, "ecarts": []})
-                # Pour deux envois qui partagent une clé (page ou cause, articles compris) : le plus ancien (date
+                # Pour deux envois qui partagent une clé (machine, article ou savoir-faire) : le plus ancien (date
                 # d'intervention, puis numéro d'OT) a fini avant que le plus récent parte — jamais ensemble, jamais
                 # dans le désordre.
                 envois = resultat["envois"]
@@ -141,7 +143,12 @@ class TestParallele(CasNavigateur):
                 self.assertEqual(plusieurs["pages"][titre], page)
         self.assertEqual(plusieurs["propositions"], seul["propositions"])
         self.assertGreater(len(seul["pages"]), 30)
-        self.assertGreater(len([p for p in seul["pages"].values() if p["type"] == "mode"]), 10)
+        # Les textes de la refonte 2 seulement : machines, articles consommés (« À quoi il sert »), savoir-faire.
+        types = [p["type"] for p in seul["pages"].values()]
+        self.assertEqual(set(types), {"équipement", "composant", "savoir-faire"})
+        self.assertGreater(types.count("composant"), 10)
+        self.assertTrue(any("## Astuces" in p["texte"] for p in seul["pages"].values() if p["type"] == "équipement"))
+        self.assertFalse(any(cle.startswith("CAUSE:") for e in seul["envois"] for cle in e["cles"]))
         # Toute la démo, dans l'ordre des dates : aucun OT n'arrive après des faits plus récents de ses pages.
         self.assertTrue(all(p["anterieure"] == "0" for p in seul["propositions"].values()))
 

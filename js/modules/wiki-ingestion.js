@@ -3,10 +3,15 @@
 // administrativement, état proposé, pages concernées, antériorité, données envoyées à l'IA (liste blanche), lecture
 // de la réponse (mise en forme puis contrôles de wiki-texte.js), ordonnanceur et traitement de la file.
 //
-// Précisions au contrat (§20.5) :
+// Précisions au contrat (§20.5 ; refonte 2, §20.12 : pages concernées, longueurs, catalogue) :
 //  - clés des pages : « EQ:<équipement> », « ART:<article> » (pages ancrées, qu'elles aient un texte ou non),
 //    « WP:<page> » (pages libres validées), « TITRE:<titre comparable> » (page créée par une proposition encore à
-//    valider) ; une clé « CAUSE:<code> » réserve la cause de l'OT (deux OT de même cause ne partent pas ensemble) ;
+//    valider) ; plus de clé « CAUSE:<code> » (refonte 2 : une panne est une page calculée, sans texte à réserver) ;
+//  - chaque texte envoyé porte ses longueurs (Wiki.LIMITES) : une par rubrique limitée du texte d'une machine ou d'un
+//    article, une pour un savoir-faire entier ; le modèle ne compte pas, il les lit dans l'en-tête du texte ;
+//  - catalogue envoyé (liens [[…]]) : machines, articles, savoir-faire et pannes (libellé d'un code symptôme qui a au
+//    moins un cas : OT correctif clôturé de ce code, comme la page PANNE-<code>) ; jamais un technicien ni une
+//    intervention ; une ancienne page de mode ou une page libre d'un autre type n'y est plus ;
 //  - une page créée par une proposition à valider entre dans l'état proposé sous sa clé TITRE ; une proposition
 //    suivante qui la modifie la retrouve par son titre, avant comme après sa validation ;
 //  - titre d'une page d'article : désignation, sinon référence, sinon identifiant (comme Wiki.catalogue) ;
@@ -26,7 +31,8 @@
 //    entre-temps sous le même titre ou un titre trop proche (motif « rejoué : page créée entre-temps ») remet l'entrée
 //    « en file » sans relance, tant que ses essais ne dépassent pas trois, puis « refusée » ; le motif reste sur
 //    l'entrée acceptée ensuite ;
-//  - le catalogue envoyé commence par les pages créées par des propositions à valider (jamais coupées) ;
+//  - le catalogue envoyé commence par les savoir-faire créés par des propositions à valider (jamais coupés), puis les
+//    pannes ;
 //  - toute autre erreur de l'IA (injoignable, délai, refus D67) arrête le traitement : l'OT reste en file, l'erreur est
 //    rendue dans le bilan ; « Arrêter » (signal) laisse finir les envois partis, `annuler` les coupe.
 
@@ -34,6 +40,7 @@ Object.assign(Wiki, (() => {
 
   const SEUILS = Wiki.SEUILS;
   const STATUT_CLOTURE_ADMIN = 'Clôturé administrativement';
+  const STATUTS_CLOTURES = ['Clôturé techniquement', STATUT_CLOTURE_ADMIN];
   const STATUTS_FILE = ['en file', 'à refaire'];
   const STATUTS_DEJA = ['en file', 'à refaire', 'à valider', 'validée', 'rien à ajouter', 'refusée'];
   const ESSAIS_COLLISION_MAX = 3;
@@ -236,7 +243,7 @@ Object.assign(Wiki, (() => {
     return null;
   }
 
-  /** Les pages de l'état triées par titre (ordre stable des savoir-faire, modes et sous-pages). */
+  /** Les pages de l'état triées par titre (ordre stable des savoir-faire et de leurs sous-pages). */
   function parTitre(etat) {
     return Array.from(etat.values()).sort((a, b) => comparer(a.titre, b.titre) || comparer(a.cle, b.cle));
   }
@@ -253,10 +260,11 @@ Object.assign(Wiki, (() => {
   }
 
   /**
-   * Pages concernées par un OT, calculées avant l'envoi → { cles, envoyees } : clés et pages dans l'ordre de priorité
-   * du §20.5 — équipement, articles consommés, cause (clé seule), savoir-faire de l'équipement (ancrés ou rattachés)
-   * puis des articles, modes ancrés sur la cause, pages liées depuis la page de l'équipement ; chacune suivie de ses
-   * sous-pages, par titre —, pagesEnvoyeesMax pages envoyées au plus (toutes les clés sont gardées).
+   * Pages concernées par un OT, calculées avant l'envoi (D112 révisée, §20.12) → { cles, envoyees } : clés et pages dans
+   * l'ordre de priorité — le texte de sa machine, ceux des articles qu'il a consommés, les savoir-faire de la machine
+   * (ancrés ou rattachés) puis ceux des articles, chacun suivi de ses sous-pages, par titre —, pagesEnvoyeesMax pages
+   * envoyées au plus (toutes les clés sont gardées : elles réservent les pages pour l'ordonnanceur et l'antériorité).
+   * Ni cause, ni page de mode, ni page liée depuis la machine.
    */
   function pagesConcernees(otId, etatDonne) {
     const etat = etatDonne || etatPropose();
@@ -264,7 +272,7 @@ Object.assign(Wiki, (() => {
     if (!ot) return { cles: [], envoyees: [] };
     const equipementId = texte(ot.equipement_id);
     const articles = articlesConsommes(texte(ot.id)).map((article) => article.articleId);
-    const toutes = parTitre(etat);
+    const savoirs = parTitre(etat).filter((page) => page.type === 'savoir-faire');
     const cles = [];
     const envoyees = [];
     const ajouter = (cle) => {
@@ -272,23 +280,16 @@ Object.assign(Wiki, (() => {
       cles.push(cle);
       const page = etat.get(cle) || pageCalculee(cle);
       if (page && envoyees.length < SEUILS.pagesEnvoyeesMax) envoyees.push(page);
-      if (page) sousPages(page, toutes).forEach((sousPage) => ajouter(sousPage.cle));     // juste après leur mère
+      // Seul un savoir-faire a des sous-pages (§20.12) : juste après leur mère.
+      if (page && page.type === 'savoir-faire') sousPages(page, savoirs).forEach((sousPage) => ajouter(sousPage.cle));
     };
     ajouter('EQ:' + equipementId);
     articles.forEach((articleId) => ajouter('ART:' + articleId));
-    const cause = texte(ot.cause_code);
-    if (cause) cles.push('CAUSE:' + cause);
-    toutes.filter((page) => page.type === 'savoir-faire'
-      && (page.equipementId === equipementId || page.rattacheA === 'EQ:' + equipementId)).forEach((page) => ajouter(page.cle));
-    toutes.filter((page) => page.type === 'savoir-faire' && !page.equipementId
+    savoirs.filter((page) => equipementId && (page.equipementId === equipementId || page.rattacheA === 'EQ:' + equipementId))
+      .forEach((page) => ajouter(page.cle));
+    savoirs.filter((page) => !page.equipementId
       && (articles.includes(page.articleId) || articles.some((articleId) => page.rattacheA === 'ART:' + articleId)))
       .forEach((page) => ajouter(page.cle));
-    if (cause) toutes.filter((page) => page.type === 'mode' && page.causeCode === cause).forEach((page) => ajouter(page.cle));
-    const pageEquipement = etat.get('EQ:' + equipementId);
-    if (pageEquipement) {
-      const index = indexDesTitres(toutes);
-      Wiki.liensDe(pageEquipement.texte).forEach((titre) => ajouter(index.get(Wiki.comparable(titre))));
-    }
     return { cles, envoyees };
   }
 
@@ -314,6 +315,23 @@ Object.assign(Wiki, (() => {
     return di ? texte(di.symptome) : '';
   }
 
+  /**
+   * Titres des pannes (§20.12) : libellé de chaque code symptôme qui a au moins un cas — OT correctif clôturé
+   * (techniquement ou administrativement) de ce code, comme la page PANNE-<code> —, par libellé ; un code sans libellé
+   * garde son code. Une panne est une page calculée : on peut la lier, pas l'écrire.
+   */
+  function titresDesPannes() {
+    const codes = new Set(Donnees.lignes('ordres_travail').filter((ot) => /^correctif/.test(texte(ot.type))
+      && STATUTS_CLOTURES.includes(texte(ot.statut)) && texte(ot.symptome_code)).map((ot) => texte(ot.symptome_code)));
+    return Array.from(codes, (code) => libelleCode('symptôme', code)).sort(comparer);
+  }
+
+  /**
+   * Catalogue envoyé (§20.12), pour les liens [[…]] → [{ titre, type }] : les savoir-faire créés par des propositions à
+   * valider (jamais coupés par le plafond), les pannes (type « panne »), puis les machines, les articles et les
+   * savoir-faire de Wiki.catalogue ; jamais un technicien ni une intervention, ni une ancienne page de mode ou une page
+   * libre d'un autre type (composant libre, ancienne sous-page). catalogueMax titres au plus.
+   */
   function catalogueIngestion(etat) {
     const vus = new Set();
     const catalogue = [];
@@ -323,11 +341,36 @@ Object.assign(Wiki, (() => {
       vus.add(cle);
       catalogue.push({ titre: texte(titre), type });
     };
-    // Pages créées par une proposition à valider d'abord : le plafond ne les coupe jamais.
-    Array.from(etat.values()).filter((page) => !page.pageId && page.cle.startsWith('TITRE:'))
+    Array.from(etat.values()).filter((page) => !page.pageId && page.cle.startsWith('TITRE:') && page.type === 'savoir-faire')
       .sort((a, b) => comparer(a.titre, b.titre)).forEach((page) => ajouter(page.titre, page.type));
-    Wiki.catalogue().forEach((page) => ajouter(page.titre, page.type));
+    titresDesPannes().forEach((titre) => ajouter(titre, 'panne'));
+    Wiki.catalogue().filter((page) => page.type === 'savoir-faire'
+      || (page.type === 'équipement' && Donnees.trouver('equipements', page.id))
+      || (page.type === 'composant' && Donnees.trouver('articles', page.id))).forEach((page) => ajouter(page.titre, page.type));
     return catalogue.slice(0, SEUILS.catalogueMax);
+  }
+
+  /**
+   * Longueurs d'un texte envoyé (§20.12, Wiki.LIMITES) → [{ rubrique, phrases, mots, phrasesMax, motsMax }] : une par
+   * rubrique limitée du texte d'une machine ou d'un article (Wiki.mesurerRubriques : mots sans le nom de la rubrique ;
+   * motsMax null : pas de limite de mots) ; une seule, rubrique vide, pour un savoir-faire entier (Wiki.mesurerTexte :
+   * noms des rubriques compris). Le modèle ne compte pas : il lit ces nombres dans l'en-tête du texte.
+   */
+  function longueursDe(page) {
+    const limites = Wiki.LIMITES[page.type];
+    if (!limites) return [];
+    if (limites.page) {
+      const mesure = Wiki.mesurerTexte(page.texte);
+      return [{ rubrique: '', phrases: mesure.phrases, mots: mesure.mots, phrasesMax: limites.page.phrases,
+        motsMax: limites.page.mots }];
+    }
+    const mesures = Object.entries(Wiki.mesurerRubriques(page.texte));
+    return Object.keys(limites.rubriques).map((rubrique) => {
+      const trouvee = mesures.find(([nom]) => Wiki.comparable(nom) === Wiki.comparable(rubrique));
+      const mesure = trouvee ? trouvee[1] : { phrases: 0, mots: 0 };
+      const limite = limites.rubriques[rubrique];
+      return { rubrique, phrases: mesure.phrases, mots: mesure.mots, phrasesMax: limite.phrases, motsMax: limite.mots };
+    });
   }
 
   /** L'OT tel qu'il est envoyé (liste blanche, CS99). */
@@ -347,27 +390,25 @@ Object.assign(Wiki, (() => {
   }
 
   /**
-   * Données d'une requête d'ingestion (§20.5) : l'OT (liste blanche : jamais les noms des techniciens ou des demandeurs,
-   * les coûts, les documents, les photos), l'antériorité, les pages envoyées (clé, titre, type, mère d'une sous-page,
-   * texte, dates d'intervention des OT qu'elles citent, taille) et le catalogue.
+   * Données d'une requête d'ingestion (§20.5, §20.12) : l'OT (liste blanche : jamais les noms des techniciens ou des
+   * demandeurs, les coûts, les documents, les photos), l'antériorité, les pages envoyées (clé, titre, type, mère d'une
+   * sous-page, texte, dates d'intervention des OT qu'elles citent, longueurs et leurs limites) et le catalogue.
    */
   function donneesIngestion(otId, etatDonne) {
     const etat = etatDonne || etatPropose();
     const ot = Donnees.trouver('ordres_travail', otId);
     if (!ot) throw new Error('Wiki.donneesIngestion : OT inconnu « ' + otId + ' ».');
     const concernees = pagesConcernees(texte(ot.id), etat);
-    // Taille de chaque page (phrases, mots) : le modèle ne compte pas ; il sait ainsi qu'une page pleine se regroupe ou se
-    // découpe. Une sous-page porte le titre de sa mère (`mere`, vide pour une autre page).
-    const pages = concernees.envoyees.map((page) => Object.assign({ cle: page.cle, titre: page.titre, type: page.type,
+    // Longueurs de chaque texte (le modèle ne compte pas : il sait ainsi qu'une rubrique pleine se regroupe, qu'un
+    // savoir-faire plein se découpe). Une sous-page porte le titre de sa mère (`mere`, vide pour une autre page).
+    const pages = concernees.envoyees.map((page) => ({ cle: page.cle, titre: page.titre, type: page.type,
       mere: (mereDe(page, etat) || { titre: '' }).titre, texte: page.texte,
-      otDates: Wiki.citationsDe(page.texte).map((id) => ({ id, date: dateIntervention(id) })) },
-    Wiki.mesurerTexte(page.texte)));
+      otDates: Wiki.citationsDe(page.texte).map((id) => ({ id, date: dateIntervention(id) })), longueurs: longueursDe(page) }));
     const plusRecente = pages.flatMap((page) => page.otDates.map((entree) => entree.date)).filter(Boolean).sort().pop() || '';
     return {
       ot: donneesOt(ot),
       anterieure: Boolean(plusRecente && texte(ot.date_fin) && texte(ot.date_fin) < plusRecente),
       pages,
-      limites: { phrases: SEUILS.phrasesMax, mots: SEUILS.motsMax },
       catalogue: catalogueIngestion(etat),
       cles: concernees.cles,
     };
@@ -472,9 +513,9 @@ Object.assign(Wiki, (() => {
     return Array.from(etat.values()).find((page) => Wiki.comparable(page.titre) === cle.slice(6)) || null;
   }
 
-  /** Ce qui a été envoyé de chaque page concernée (texte et version de l'état proposé) ; une cause n'a pas de page. */
+  /** Ce qui a été envoyé de chaque page concernée (texte et version de l'état proposé). */
   function empreinteDe(cles, etat) {
-    return new Map(cles.filter((cle) => !cle.startsWith('CAUSE:')).map((cle) => {
+    return new Map(cles.map((cle) => {
       const page = pageDeCle(etat, cle);
       return [cle, { texte: page ? page.texte || '' : '', version: page ? page.version || 0 : 0 }];
     }));

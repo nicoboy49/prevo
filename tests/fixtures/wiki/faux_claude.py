@@ -1,6 +1,6 @@
 """Faux `claude` (la commande de Claude Code) pour les essais de outils/wiki_demo.py : mêmes options, réponse JSON
-de `claude -p --output-format json`, dont le texte est construit par tests/faux_wiki.py (variante faux-mode-cause)
-à partir du seul message reçu sur l'entrée standard.
+de `claude -p --output-format json`, dont le texte est construit par tests/faux_wiki.py (variante faux-textes : tous
+les textes de la refonte 2, §20.12) à partir du seul message reçu sur l'entrée standard.
 
 Variables d'environnement :
     FAUX_CLAUDE_MODE     sonnet (défaut) | opus (un autre modèle) | deux-tours | refus (réponse que Prévo refuse :
@@ -32,7 +32,7 @@ def variante(mode, entree):
         concernes = [ot.strip() for ot in os.environ.get('FAUX_CLAUDE_RELANCE', '').split(',') if ot.strip()]
         if not concernes or MOTIF_OT_INGERE.search(entree).group(1) in concernes:
             return 'faux-sans-ot'
-    return 'faux-mode-cause'
+    return 'faux-textes'
 
 
 def principal():
