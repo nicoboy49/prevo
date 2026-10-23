@@ -451,7 +451,10 @@ class TestArrets(unittest.TestCase):
         dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-maj-'))
         self.addCleanup(shutil.rmtree, dossier, True)
         commande = dossier / 'claude.exe'
-        minuteur = threading.Timer(2, shutil.copyfile, (shutil.which('whoami'), commande))
+        # Copie sous un autre nom puis renommage : claude.exe n'apparaît qu'entier (comme une mise à jour), jamais
+        # pendant son écriture (WinError 32 sous charge).
+        copie = dossier / 'claude.exe.part'
+        minuteur = threading.Timer(2, lambda: (shutil.copyfile(shutil.which('whoami'), copie), os.replace(copie, commande)))
         minuteur.start()
         self.addCleanup(minuteur.cancel)
 
