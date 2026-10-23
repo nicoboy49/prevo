@@ -3010,7 +3010,8 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
     temps pointé), **taux horaire** ; aucun texte ; son nom n'est jamais dans une requête à l'IA (inchangé, CS99).
   - **Intervention** : tout l'OT en lecture seule (machine, technicien(s), type, priorité, statut, dates, arrêt,
     panne, cause, remède, demande d'origine, travail, compte rendu, astuce, motifs d'attente et d'annulation s'ils sont
-    renseignés, pièces sorties, opérations, temps) ;
+    renseignés, pièces sorties, opérations, temps) ; la fiche nomme tous ses techniciens (celui de l'OT et ceux qui
+    y ont pointé du temps : « Techniciens » s'ils sont plusieurs) ;
     « Cité dans le wiki » (pages dont un texte cite l'OT) ; `ficheOT` = `#/ot/<id>`.
   - **Savoir-faire** : inchangé (§20.3, en-tête de consignation ; une sous-page de savoir-faire reprend celui de
     sa mère).
@@ -3024,7 +3025,8 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
   n'est rendu qu'au responsable ; le **prix** au responsable et au technicien. La recherche suit la même règle.
 - **Références** (D113) : `Wiki.references(textes, aTrancher)` numérote les OT cités dans l'ordre d'apparition sur la
   page — « À trancher », en tête, puis les textes (T137) ; à l'écran, chaque citation est un petit numéro (`<sup class="wiki-ref">`, lien `#/wiki/<OT>`,
-  bulle « <OT> · <date> · <titre> » ; sans lien pour le demandeur) et la page finit par « Références » (numéro, OT,
+  bulle « <OT> · <date> · <titre> » ; pour le demandeur, un bouton sans lien qui ouvre cette bulle au toucher, au clic
+  ou au clavier ; `aria-label` « Référence n : <OT> · <date> · <titre> ») et la page finit par « Références » (numéro, OT,
   date, machine, titre). Jamais `[OT-…]` affiché ; le balisage stocké ne change pas.
 - **Routes** : `#/wiki` (accueil), `#/wiki/machines`, `#/wiki/pannes`, `#/wiki/articles`, `#/wiki/techniciens`
   (pas pour le demandeur), `#/wiki/savoir-faire`, `#/wiki/interventions` (pas pour le demandeur) — les listes —, et
@@ -3044,6 +3046,7 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
   « Ouvrir la fiche OT » sur une page Intervention. Style actuel de Prévo (tuiles de l'accueil, Sora, thèmes
   sombre et clair), 1440 et 375 px sans défilement horizontal, zones tactiles ≥ 48 px, contrastes AA (CS106) ;
   longues listes (D101, jeu de charge) : seuls les premiers éléments sont créés, « Voir les n autres » crée le reste ;
+  un tableau triable trie toute la liste, puis n'en crée que les premières lignes ;
   **aucun appel réseau pour afficher une page** (D101 : le rattrapage du journal ne relit pas `wiki_pages` à chaque
   affichage).
 - **Contrôle du wiki** (D108 précisée) : sur les textes rédigés et les savoir-faire ; les pages calculées existent
