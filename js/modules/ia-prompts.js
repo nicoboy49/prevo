@@ -396,7 +396,11 @@ Object.assign(Ia, (() => {
         + 'phrase ; regroupe en une seule les phrases qui disent la même chose (la phrase regroupée cite tous leurs OT) ; '
         + 'n\'écris pas ce qui ne vaut que pour une intervention (durée d\'arrêt, essai après réparation, personne '
         + 'prévenue) : c\'est dans l\'OT ;\n'
-        + '- au plus 12 phrases et 250 mots par page, phrases courtes : quand la page en approche, regroupe d\'abord ;\n'
+        + '- au plus 12 phrases et 250 mots par page (rubriques comprises, citations non comptées), phrases courtes ; '
+        + 'chaque page reçue indique ses phrases et ses mots : quand elle en approche, regroupe d\'abord ; une page à 12 '
+        + 'phrases ne prend aucune phrase de plus : ajoute seulement le numéro de l\'OT à la phrase qu\'il confirme, '
+        + 'regroupe deux phrases proches en une (qui cite tous leurs OT), ou écris le fait dans une page liée (mode de '
+        + 'défaillance, savoir-faire) et ajoute son lien à une phrase existante ;\n'
         + '- les pages savoir-faire s\'écrivent d\'abord à partir de l\'astuce de l\'OT, quand il y en a une ;\n'
         + '- aucun comptage (pas de « 3 fois », « 4 OT ») : les nombres de cas sont calculés par le logiciel ; aucun '
         + 'nombre qui ne figure pas dans l\'OT ou dans la page ; aucune date, aucun mois, aucune année ;\n'
@@ -418,10 +422,15 @@ Object.assign(Ia, (() => {
       const pages = liste(d.pages);
       const dates = new Map();
       pages.forEach((page) => liste(page && page.otDates).forEach((entree) => dates.set(texte(entree.id), texte(entree.date))));
+      // Taille de la page et limites (« 12 phrases sur 12, 244 mots sur 250 ») : le modèle ne compte pas lui-même.
+      const limites = (d && d.limites) || {};
+      const taille = (page) => (Number.isFinite(page.phrases) && Number.isFinite(page.mots) && limites.phrases
+        ? ' · ' + page.phrases + ' phrases sur ' + limites.phrases + ', ' + page.mots + ' mots sur ' + limites.mots : '');
       return [
         ligneOtIngestion((d && d.ot) || {}) + (d.anterieure ? '\n' + MENTION_ANTERIEURE : ''),
         'Pages concernées (texte actuel) :\n' + (pages.length ? pages.map((page) => '=== Page « ' + uneLigne(page.titre, 200)
-          + ' » (' + uneLigne(page.type, 20) + ') ===\n' + (bloc(page.texte, 6000) || '(page vide)')).join('\n') : '(aucune)'),
+          + ' » (' + uneLigne(page.type, 20) + taille(page) + ') ===\n' + (bloc(page.texte, 6000) || '(page vide)')).join('\n')
+          : '(aucune)'),
         dates.size ? 'Date d\'intervention des OT déjà cités : ' + Array.from(dates.entries())
           .map(([id, date]) => id + ' : ' + uneLigne(date, 20)).join(' ; ') : '',
         'Catalogue des pages :\n' + (liste(d.catalogue).map((page) => '- ' + uneLigne(page && page.titre, 200) + ' ('

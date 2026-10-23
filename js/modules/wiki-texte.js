@@ -157,6 +157,13 @@ Object.assign(Wiki, (() => {
       Object.assign({ rubrique: rubrique.nom }, phrase))));
   }
 
+  /** Taille d'une page comme la comptent les contrôles (§20.6) → { phrases, mots } (rubriques comprises, citations non). */
+  function mesureDe(lu) {
+    const phrases = phrasesDe(lu);
+    return { phrases: phrases.length, mots: phrases.reduce((total, phrase) => total + Wiki.nombreDeMots(phrase.propre), 0)
+      + lu.rubriques.reduce((total, rubrique) => total + Wiki.nombreDeMots(rubrique.nom), 0) };
+  }
+
   /**
    * Changements d'une page (§20.6, §20.9) → { identiques, nouvelles, reprises: [{ phrase, anciennes }], retirees } :
    * une phrase d'après identique à une phrase d'avant est « identique » ; sinon, elle « reprend » les phrases d'avant
@@ -310,8 +317,7 @@ Object.assign(Wiki, (() => {
     const phrases = phrasesDe(lu);
     if (!phrases.length) raisons.push(nom + ' : aucune phrase.');
     if (phrases.length > SEUILS.phrasesMax) raisons.push(nom + ' : ' + phrases.length + ' phrases, ' + SEUILS.phrasesMax + ' au plus.');
-    const mots = phrases.reduce((total, phrase) => total + Wiki.nombreDeMots(phrase.propre), 0)
-      + lu.rubriques.reduce((total, rubrique) => total + Wiki.nombreDeMots(rubrique.nom), 0);
+    const mots = mesureDe(lu).mots;
     if (mots > SEUILS.motsMax) raisons.push(nom + ' : ' + mots + ' mots, ' + SEUILS.motsMax + ' au plus (rubriques comprises, citations non comptées).');
     phrases.forEach((phrase) => {
       if (!phrase.propre) raisons.push(nom + ' : phrase vide (réduite à ses citations).');
@@ -368,5 +374,6 @@ Object.assign(Wiki, (() => {
   return {
     lireTexte, ecrireTexte, comparerTextes, controlerProposition, formeDuTitre,
     identitePhrase, citationsDe, liensDe, phrasesDe: (valeur) => phrasesDe(lireTexte(valeur)),
+    mesurerTexte: (valeur) => mesureDe(lireTexte(valeur)),
   };
 })());

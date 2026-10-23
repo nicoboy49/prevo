@@ -248,7 +248,8 @@ class TestDonneesEtFile(CasIngestion):
                         "Travail demandé : Changer la garniture", "Codes : Fuite / Garniture usée / Remplacement de la pièce",
                         "Compte rendu : Garniture usée remplacée, fuite stoppée.", "Astuce pour la prochaine fois : " + ASTUCE,
                         "Pièces consommées : Kit garniture HC 50 (réf. KG-50) × 1", "Durée d'arrêt : 2.5 h",
-                        "=== Page « PO-01 — Pompe de process A » (équipement) ===", TEXTE_PO01,
+                        "=== Page « PO-01 — Pompe de process A » (équipement · 2 phrases sur 12, 14 mots sur 250) ===",
+                        TEXTE_PO01,
                         "Catalogue des pages :", "- Cavitation (mode)", "- Roulement 6205 (composant)"):
             self.assertIn(attendu, message)
         tout = json.dumps(requete, ensure_ascii=False)
@@ -560,16 +561,21 @@ LISTE_REQUETES_JS = """() => { const etat = Wiki.etatPropose();
     .map((id) => Ia.requete('ingestionWiki', Wiki.donneesIngestion(id, etat))); }"""
 FICHIERS_JS = """() => Object.fromEntries(Object.entries(Donnees.instantane())
   .map(([nom, octets]) => [nom, new TextDecoder().decode(octets)]))"""
-# Un wiki non vide, écrit de la même façon dans chaque mode : une page validée et une proposition à valider.
+# Écrit de la même façon dans chaque mode, par-dessus le wiki de la démo (qui peut déjà avoir la page) : une phrase
+# de plus sur la page de l'équipement du premier OT (créée si besoin) et une proposition à valider qui crée une page.
 AJOUT_WIKI_JS = """async () => {
   const ot = Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement').map((o) => o.id).sort()[0];
   const equipement = Donnees.trouver('equipements', Donnees.trouver('ordres_travail', ot).equipement_id);
-  await Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-0001', type: 'équipement',
-    titre: equipement.repere + ' — ' + equipement.designation, equipement_id: equipement.id, version: '1', statut: 'active',
-    texte: '## Ce qui revient\\n- Panne connue ici [' + ot + ']' }); });
-  await Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00001', nature: 'ingestion', ot_id: ot,
-    statut: 'à valider', ordre: '1', essais: '1', changements: JSON.stringify([{ cle: 'TITRE:usure commune',
-    titre: 'Usure commune', type: 'mode', creation: true, version_avant: 0, avant: '', apres: '## Causes\\n- Usure [' + ot + ']' }]) }); });
+  const phrase = '\\n- Panne connue ici [' + ot + ']';
+  await Donnees.modifier('wiki_pages', (lignes) => {
+    const ligne = lignes.find((l) => l.type === 'équipement' && l.equipement_id === equipement.id && l.statut !== 'archivée');
+    if (ligne) ligne.texte = (ligne.texte || '## Ce qui revient') + phrase;
+    else lignes.push({ id: 'WP-9001', type: 'équipement', titre: equipement.repere + ' — ' + equipement.designation,
+      equipement_id: equipement.id, version: '1', statut: 'active', texte: '## Ce qui revient' + phrase });
+  });
+  await Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-99001', nature: 'ingestion', ot_id: ot,
+    statut: 'à valider', ordre: '9999', essais: '1', changements: JSON.stringify([{ cle: 'TITRE:usure commune essai',
+    titre: 'Usure commune essai', type: 'mode', creation: true, version_avant: 0, avant: '', apres: '## Causes\\n- Usure [' + ot + ']' }]) }); });
 }"""
 ERREURS_SERVEUR_STATIQUE = [re.compile(r"status of 404.*/api/ping"), re.compile(r"status of 404.*/api/csv/")]
 
@@ -619,7 +625,7 @@ class TestDansLApplication(CasNavigateur):
         demo = page.evaluate(LISTE_REQUETES_JS)
         messages = [r["messages"][1]["content"] for r in demo]
         self.assertTrue(any("- Panne connue ici [OT-" in m for m in messages))
-        self.assertTrue(all("- Usure commune (mode)" in m for m in messages))
+        self.assertTrue(all("- Usure commune essai (mode)" in m for m in messages))
         noms = page.evaluate("""() => Donnees.lignes('techniciens').map((t) => (t.prenom + ' ' + t.nom).trim())
           .concat(Donnees.lignes('demandes').map((d) => d.demandeur)).filter(Boolean)""")
         astuces = page.evaluate("""() => Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement'

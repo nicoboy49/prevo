@@ -319,13 +319,16 @@ Object.assign(Wiki, (() => {
     const ot = Donnees.trouver('ordres_travail', otId);
     if (!ot) throw new Error('Wiki.donneesIngestion : OT inconnu « ' + otId + ' ».');
     const concernees = pagesConcernees(texte(ot.id), etat);
-    const pages = concernees.envoyees.map((page) => ({ cle: page.cle, titre: page.titre, type: page.type, texte: page.texte,
-      otDates: Wiki.citationsDe(page.texte).map((id) => ({ id, date: dateIntervention(id) })) }));
+    // Taille de chaque page (phrases, mots) : le modèle ne compte pas ; il sait ainsi qu'une page pleine se regroupe.
+    const pages = concernees.envoyees.map((page) => Object.assign({ cle: page.cle, titre: page.titre, type: page.type,
+      texte: page.texte, otDates: Wiki.citationsDe(page.texte).map((id) => ({ id, date: dateIntervention(id) })) },
+    Wiki.mesurerTexte(page.texte)));
     const plusRecente = pages.flatMap((page) => page.otDates.map((entree) => entree.date)).filter(Boolean).sort().pop() || '';
     return {
       ot: donneesOt(ot),
       anterieure: Boolean(plusRecente && texte(ot.date_fin) && texte(ot.date_fin) < plusRecente),
       pages,
+      limites: { phrases: SEUILS.phrasesMax, mots: SEUILS.motsMax },
       catalogue: catalogueIngestion(etat),
       cles: concernees.cles,
     };

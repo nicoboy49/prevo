@@ -23,7 +23,8 @@ MOTIF_OT_INGERE = re.compile(r"^OT à intégrer : (OT-\d{4}-\d{4,})", re.M)
 MOTIF_TITRE = re.compile(r"^Titre : (.*)$", re.M)
 MOTIF_ASTUCE = re.compile(r"^Astuce pour la prochaine fois : (.*)$", re.M)
 MOTIF_CODES = re.compile(r"^Codes : (.*)$", re.M)
-MOTIF_ENTETE_PAGE = re.compile(r"^=== Page « (.+) » \((.+)\) ===$", re.M)
+# En-tête d'une page envoyée : titre, type, puis sa taille (« · 2 phrases sur 12, 14 mots sur 250 »).
+MOTIF_ENTETE_PAGE = re.compile(r"^=== Page « (.+) » \(([^·)]+?)(?: · [^)]*)?\) ===$", re.M)
 MOTIF_CITATION = re.compile(r"\[(OT-\d{4}-\d{4,})\]")
 FIN_DES_PAGES = re.compile(r"\n\n(?:Date d'intervention des OT déjà cités|Catalogue des pages)")
 
