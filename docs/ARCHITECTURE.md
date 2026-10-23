@@ -2515,7 +2515,7 @@ travail inchangés. Mêmes calculs qu'avant (`Accueil.calculerCompteurs`, `Sugge
   bas à droite, 3 s (4,5 s en alerte, 7 s en erreur).
 - Tests : `tests/test_bento.py`.
 
-## 20. Contrat du lot 6 — wiki de maintenance (refonte ; CDC validé le 2026-10-22 : D93–D112)
+## 20. Contrat du lot 6 — wiki de maintenance (refonte ; CDC validé le 2026-10-22 : D93–D112 ; refonte 2, l'encyclopédie, validée le 2026-10-23 : D113–D115, §20.12)
 
 Écrit avant le code de la refonte ; relu et aligné sur le code à la fin du lot (« écart retenu » avec sa
 raison, ou « précision »). Il remplace le contrat de la première version du lot 6 (une synthèse IA par
@@ -2908,3 +2908,100 @@ relance avec la raison dans `test_wiki_ingestion.py` (CS112) ; sous-pages dans `
 bloc, intégrité) et `test_wiki_ecrans.py` (mère, consignation, liste des sous-pages) (CS113). Le faux fournisseur
 (`tests/faux_fournisseur_ia.py`) rend pour `ingestionWiki` une réponse valable construite sur les données
 reçues, et sur demande une réponse piégée par motif du §20.6.
+
+### 20.12 Refonte 2 — l'encyclopédie de l'atelier (CDC D113 à D115, validés par Nicolas le 2026-10-23)
+Écrite avant le code de la refonte 2, d'après la maquette validée (`.chantier/maquette-wiki/`). Elle **prime** sur
+§20.1 à §20.11 là où elle diffère ; ce qu'elle ne dit pas reste valable (journal, validation, contradictions,
+relance, parallélisme, contrôles des citations, des nombres, des dates et de la sécurité).
+
+- **Modules** : deux modules nouveaux, chargés dans cet ordre avec les autres (`ORDRE_MODULES`, `index.html`,
+  listes de scripts des outils et des tests qui chargent le wiki) : `wiki-entites.js` (après `wiki-calculs.js` :
+  calculs des pages Panne, Technicien, Intervention et du stock dans le temps d'un article, ordre des
+  interventions, visibilité, références) et `wiki-entites-ecrans.js` (après `wiki-page-ecrans.js` : accueil,
+  listes, pages Panne, Technicien et Intervention). 700 lignes au plus par fichier, comme partout.
+- **Textes rédigés** (D96 révisée 2, D100 révisée 2) : `wiki_pages` ne garde que trois types —
+  - `équipement` (texte de la machine, ancré sur `equipement_id`) : rubriques « En bref » (**5 phrases et 120 mots**
+    au plus) et « Astuces » (**10 phrases**) ;
+  - `composant` (texte de l'article, ancré sur `article_id`) : rubrique « À quoi il sert » (**3 phrases et 80 mots**) ;
+  - `savoir-faire` : rubriques inchangées (« Quand le faire », « Étapes », « Pièces et outillage », « Pièges »),
+    **30 phrases et 600 mots**, sous-pages au-delà (§20.4) — **les seules sous-pages** ;
+  - `mode` disparaît (choix du schéma, `Wiki.RUBRIQUES`, consigne, contrôles, écrans) : une panne est calculée.
+  Les limites sont des constantes nommées par type et par rubrique (`Wiki.LIMITES`), lues par les contrôles
+  (§20.6 : « <rubrique> : N phrases, P au plus ») et par l'en-tête des pages envoyées. Un composant libre (sans
+  article) ne se crée plus ; seul un savoir-faire se crée (`pagesCreeesMax` 3).
+- **Pages concernées** d'un OT (D112 révisée) : `EQ:<sa machine>`, `ART:<chaque article consommé>`, les
+  savoir-faire rattachés à cette machine ou à ces articles et leurs sous-pages ; plus de clé `CAUSE:`, plus de pages
+  liées depuis la machine ; 8 envoyées au plus.
+- **Consigne `ingestionWiki`** : l'IA met à jour seulement « En bref » (ce qu'il faut savoir d'abord de cette
+  machine : ce qui revient, ce qui a réglé le problème), « Astuces » (tirées des astuces des OT), « À quoi il sert »
+  de chaque article consommé (son rôle sur les machines, ses signes d'usure), et crée ou modifie des savoir-faire
+  (d'abord à partir de l'astuce, D110) ; une synthèse, pas un historique ; les longueurs de l'en-tête de chaque
+  texte ; toutes les autres règles inchangées. **Seuls les OT clôturés administrativement** entrent dans la file
+  (inchangé, §20.5) : l'IA ne rédige qu'à partir d'eux.
+- **Pages et identifiants** (`Wiki.page(id, { profil, maintenant })`, D113) : `EQ-…` machine, `ART-…` article,
+  `TEC-…` technicien, `OT-…` intervention, `WP-…` savoir-faire (et texte d'une machine ou d'un article, qui mène à
+  leur page), **panne** = `PANNE-<code symptôme>`. Chaque page → `{ id, type, titre, faits, sections, textes,
+  aTrancher, enAttente, liens }` : `faits` = la fiche (paires libellé, valeur ; liens vers les entités), `sections` =
+  les blocs calculés dans leur ordre, `textes` = les rubriques rédigées et leur origine. Calculé, sans IA, sans
+  écriture :
+  - **Machine** : fiche (repère, lieu, marque et modèle, série, mise en service, criticité, état, habilitation,
+    parent, sous-ensembles, nombre d'interventions), consignation (en tête), pannes fréquentes `{ code, cas, derniere
+    }` (OT correctifs clôturés), interventions, articles montés (`article_equipement`) et consommés `{ articleId,
+    quantite, ot }`, savoir-faire, gammes actives et contrôles réglementaires ; textes « En bref », « Astuces ».
+  - **Panne** (code symptôme qui a au moins un OT clôturé) : machines touchées `{ machine, cas }`, **causes** et
+    **remèdes** `{ code, libelle, cas }` en sections, articles changés `{ articleId, quantite, ot }`, interventions,
+    premier et dernier cas ; aucun texte.
+  - **Article** : fiche (référence, fabricant et sa référence, emplacement, stock et unité, état « en stock » / « sous
+    le seuil » / « rupture », sécurité, point et quantité de commande, délai, fournisseur, **prix**, critique) ; **stock
+    dans le temps** = commandes (`achats` : date, quantité, fournisseur, statut, réception), sorties (mouvements
+    imputés à un OT, avec le stock restant) et **ruptures** (périodes où le stock reconstitué par les mouvements —
+    un inventaire fixe la quantité, une entrée ou un retour ajoute, une sortie retire — est à 0 ou moins) ; où il
+    est monté, consommé sur (machine, nombre d'OT), interventions où il a servi, savoir-faire ; texte « À quoi il sert ».
+  - **Technicien** : métier, capacité, heures pointées (`ot_temps`), habilitations `{ intitule, obtention,
+    echeance, etat }` (« échue », « à renouveler » sous 90 jours, « valide »), interventions (technicien de l'OT ou
+    temps pointé), **taux horaire** ; aucun texte ; son nom n'est jamais dans une requête à l'IA (inchangé, CS99).
+  - **Intervention** : tout l'OT en lecture seule (machine, technicien(s), type, priorité, statut, dates, arrêt,
+    panne, cause, remède, demande d'origine, travail, compte rendu, astuce, pièces sorties, opérations, temps) ;
+    « Cité dans le wiki » (pages dont un texte cite l'OT) ; `ficheOT` = `#/ot/<id>`.
+  - **Savoir-faire** : inchangé (§20.3, en-tête de consignation ; une sous-page de savoir-faire reprend celui de
+    sa mère).
+  - **Ordre des interventions** dans toutes les listes (D113, réponse 5) : d'abord les OT **ouverts** (Créé,
+    Planifié, Préparé, En cours, En attente : « En cours » d'abord, puis par date prévue), puis les autres (clôturés,
+    annulés) du plus récent au plus ancien ; chaque ligne porte son statut.
+  - Un calcul Python indépendant (`tests/calcul_wiki.py`, étendu) refait ces faits sur la démo et sur une base
+    d'essai (CS114).
+- **Visibilité** (D114) : `Wiki.page` et les listes appliquent le profil — le **demandeur** n'a ni page Technicien
+  (`null`, nom sans lien ailleurs), ni page Intervention (numéro sans lien), ni prix d'article ; le **taux horaire**
+  n'est rendu qu'au responsable ; le **prix** au responsable et au technicien. La recherche suit la même règle.
+- **Références** (D113) : `Wiki.references(textes)` numérote les OT cités par les textes d'une page dans l'ordre
+  d'apparition ; à l'écran, chaque citation est un petit numéro (`<sup class="wiki-ref">`, lien `#/wiki/<OT>`,
+  bulle « <OT> · <date> · <titre> » ; sans lien pour le demandeur) et la page finit par « Références » (numéro, OT,
+  date, machine, titre). Jamais `[OT-…]` affiché ; le balisage stocké ne change pas.
+- **Routes** : `#/wiki` (accueil), `#/wiki/machines`, `#/wiki/pannes`, `#/wiki/articles`, `#/wiki/techniciens`
+  (pas pour le demandeur), `#/wiki/savoir-faire`, `#/wiki/interventions` (pas pour le demandeur) — les listes —, et
+  `#/wiki/<id>` (une page). `#/wiki-journal` et `#/wiki-ecrire/<id>` inchangés (écriture à la main : textes d'une
+  machine ou d'un article, savoir-faire).
+- **Écrans** (§20.9 remplacé pour l'accueil et les pages) : **accueil** = grande tuile « Ce que l'atelier sait »
+  (phrase-résumé dont chaque nombre mène à sa liste, champ de recherche dedans, résultats groupés par type), cinq
+  briques (Machines, Pannes, Articles, Techniciens — pas pour le demandeur —, Savoir-faire : icône et couleur
+  discrète du type, nombre, une ligne utile), « Suivi du wiki » au responsable (à valider, à trancher, en échec :
+  discrètes à zéro, liens vers `#/wiki-journal?vue=…`), dernières interventions, pannes les plus fréquentes ;
+  **listes** : machines par lieu (sous-ensembles sous leur machine), pannes par nombre de cas, articles en tableau
+  filtrable avec l'état du stock, techniciens en cartes, savoir-faire, interventions ; **page** : fil d'Ariane,
+  type (icône et couleur), titre, **consignation et « À trancher » en tête**, sections, « Références », et la
+  **fiche des faits** à droite (au-dessus sur téléphone) ; textes rédigés avec leur bandeau d'origine (§20.9) ;
+  « Ouvrir la fiche OT » sur une page Intervention. Style actuel de Prévo (tuiles de l'accueil, Sora, thèmes
+  sombre et clair), 1440 et 375 px sans défilement horizontal, zones tactiles ≥ 48 px, contrastes AA (CS106) ;
+  **aucun appel réseau pour afficher une page** (D101 : le rattrapage du journal ne relit pas `wiki_pages` à chaque
+  affichage).
+- **Contrôle du wiki** (D108 précisée) : sur les textes rédigés et les savoir-faire ; les pages calculées existent
+  toujours (plus de page orpheline à chercher pour elles).
+- **Démo** (D115) : `py outils/wiki_demo.py fabriquer --limite 40` (les 40 premiers OT par date d'intervention), page
+  de relecture de ce premier temps envoyée à Nicolas, puis `fabriquer` sur tous les OT : les 40 premiers repris des
+  traces sans nouvel appel (reprise fidèle) ; **coût estimé donné avant chaque temps**. `generer_demo.py` ne
+  reprend le wiki figé que pour la démo standard (une autre durée d'historique ou une variante → tables du wiki
+  vides, avec un message) ; `js/demo-donnees.js` reste sous 1 Mo (CS105 : chargement rapide).
+- **Tests** : `test_wiki_entites.py` (faits des six pages contre `calcul_wiki.py`, ordre des interventions,
+  visibilité, références) ; `test_wiki_ecrans.py` réécrit pour l'accueil, les listes et les pages (profils, liens,
+  petits numéros, 1440 et 375 px) ; les tests des textes rédigés suivent les nouveaux types et limites ;
+  `test_wiki_demo.py` : fabrication en deux temps.
