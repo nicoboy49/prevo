@@ -11,7 +11,7 @@
 //  - une proposition : { rien, pages: [{ action: 'modifier' | 'creer', titre, type, rattacheA, texte }],
 //    contradictions: [{ page, phrase, observation, ot }] } (texte = balisage complet de la page après) ;
 //  - un contexte : { otIngere: { id, dateIntervention, sourceTexte }, anterieure, pagesEnvoyees: [{ titre, type,
-//    texte, otDates: [{ id, date }] }], catalogue: [{ titre, type }] } ; écriture à la main : { manuel: true,
+//    texte, mere, otDates: [{ id, date }] }], catalogue: [{ titre, type }] } ; écriture à la main : { manuel: true,
 //    pagesEnvoyees (la page écrite), catalogue, otPermis: [identifiants], sources: { otId: texte } } ;
 //  - les nombres d'une phrase identique à une phrase d'avant ne sont pas recontrôlés ; ceux d'une phrase nouvelle
 //    ou reprise et du titre d'une page créée doivent figurer dans le texte de référence (l'OT ingéré et le texte
@@ -23,7 +23,15 @@
 //  - un savoir-faire se rattache à une page envoyée d'équipement ou de composant ; une phrase gardée telle quelle
 //    garde tous ses OT ;
 //  - comptage : un nombre en chiffres, ou de « deux » à « cent » en lettres, suivi de « fois », « OT »,
-//    « intervention(s) », « panne(s) », « cas » ou « remplacement(s) » (« une fois remontée » est permis).
+//    « intervention(s) », « panne(s) », « cas » ou « remplacement(s) » (« une fois remontée » est permis) ;
+//  - sous-page (§20.4, révision du 2026-10-23) : page créée dont « rattache_a » désigne une page de même type
+//    (envoyée, au catalogue ou créée par la proposition) ; sa mère doit être une page envoyée qui n'est pas elle-même
+//    une sous-page (`mere` d'une page envoyée : titre de sa mère, vide sinon), modifiée par la même proposition avec
+//    un renvoi [[titre de la sous-page]] (à la main, une page s'écrit à la fois et le retrait est permis : ni l'un ni
+//    l'autre n'est exigé) ; son titre commence par « <préfixe> — » suivi d'un mot (préfixe : le repère, titre avant
+//    « — », d'une page d'équipement ancrée, sinon le titre entier de la mère) ; ses phrases se comparent au texte
+//    d'avant de sa mère (une phrase déplacée telle quelle n'est pas recontrôlée ; les nombres d'une phrase nouvelle ou
+//    reprise sont cherchés aussi dans le texte et le titre de la mère).
 
 Object.assign(Wiki, (() => {
 
@@ -218,6 +226,53 @@ Object.assign(Wiki, (() => {
     }
   }
 
+  /**
+   * Préfixe du titre d'une sous-page (§20.4) : le repère d'une page d'équipement ancrée (son titre avant « — »),
+   * sinon le titre entier de la mère. mere = { titre, type, mere } (mere.mere : titre de sa propre mère, vide sinon).
+   */
+  function prefixeSousPage(mere) {
+    const titre = texte(mere && mere.titre);
+    return mere && texte(mere.type) === 'équipement' && !texte(mere.mere) ? titre.split(' — ')[0].trim() : titre;
+  }
+
+  /** Le titre commence par « <préfixe> — » suivi d'au moins un mot (en forme comparable). */
+  function suitLePrefixe(titre, prefixe) {
+    const attendu = Wiki.comparable(prefixe);
+    return Boolean(attendu) && Array.from(titre.matchAll(/—/g)).some((m) => Wiki.comparable(titre.slice(0, m.index)) === attendu
+      && Wiki.comparable(titre.slice(m.index + 1)) !== '');
+  }
+
+  /**
+   * Contrôles propres à une sous-page créée (§20.6) : mère envoyée, qui n'est pas elle-même une sous-page, modifiée par
+   * la même proposition et qui renvoie à elle (sauf à la main), titre « <préfixe> — <sujet> ».
+   */
+  function controlerSousPage(page, nom, mere, ctx, raisons) {
+    const titre = texte(page.titre);
+    const nomMere = '« ' + texte(mere.titre) + ' »';
+    if (!ctx.envoyeeDe.has(Wiki.comparable(mere.titre))) {
+      raisons.push(nom + ' : sa page mère ' + nomMere + ' n\'a pas été envoyée (une sous-page se crée sous une page reçue).');
+      return;
+    }
+    if (texte(mere.mere)) {
+      raisons.push(nom + ' : sa page mère ' + nomMere + ' est elle-même une sous-page (de « ' + texte(mere.mere)
+        + ' ») : un seul niveau, une sous-page ne se découpe pas.');
+    }
+    if (!ctx.manuel) {
+      const modifiee = ctx.modifiees.get(Wiki.comparable(mere.titre));
+      const renvoi = '[[' + titre + ']] qui cite les OT des phrases déplacées';
+      if (!modifiee) {
+        raisons.push(nom + ' : sa page mère ' + nomMere + ' n\'est pas modifiée par la proposition (elle garde une phrase de '
+          + 'renvoi ' + renvoi + ').');
+      } else if (!liensDe(modifiee.texte).some((lien) => Wiki.comparable(lien) === Wiki.comparable(titre))) {
+        raisons.push(nom + ' : sa page mère ' + nomMere + ' ne renvoie pas à elle (phrase de renvoi ' + renvoi + ' attendue).');
+      }
+    }
+    const prefixe = prefixeSousPage(mere);
+    if (!suitLePrefixe(titre, prefixe)) {
+      raisons.push(nom + ' : le titre d\'une sous-page commence par « ' + prefixe + ' — » suivi de son sujet.');
+    }
+  }
+
   /** L'OT cité le plus récent d'une phrase, par date d'intervention (puis identifiant). */
   function plusRecent(ot, dates) {
     return ot.slice().sort((a, b) => String(dates.get(b) || '').localeCompare(String(dates.get(a) || ''))
@@ -253,9 +308,12 @@ Object.assign(Wiki, (() => {
     const titresExistants = new Set(connus.map(Wiki.comparable));
     const titresConnus = new Set(connus.concat(creees.map((page) => texte(page.titre))).map(Wiki.comparable));
     const formes = new Map(connus.map((titre) => [formeDuTitre(titre), titre]));
+    // Pages qu'un rattachement peut viser (type d'une sous-page) et pages modifiées (renvoi de la mère).
+    const connuesDe = new Map(creees.concat(ctx.catalogue || [], envoyees).map((page) => [Wiki.comparable(page.titre), page]));
+    const modifiees = new Map(pages.filter((page) => page.action === 'modifier').map((page) => [Wiki.comparable(page.titre), page]));
     pages.forEach((page) => controlerPage(page, {
-      manuel, envoyeeDe, otIngere, dates, permis, titresExistants, titresConnus, formes, sources: ctx.sources || {},
-      anterieure: Boolean(ctx.anterieure),
+      manuel, envoyeeDe, connuesDe, modifiees, otIngere, dates, permis, titresExistants, titresConnus, formes,
+      sources: ctx.sources || {}, anterieure: Boolean(ctx.anterieure),
     }, raisons));
     contradictions.forEach((contradiction) => {
       const nom = 'Contradiction sur la page « ' + texte(contradiction.page) + ' »';
@@ -282,6 +340,9 @@ Object.assign(Wiki, (() => {
     const envoyee = ctx.envoyeeDe.get(Wiki.comparable(titre));
     let type = texte(page.type);
     let avant = '';
+    let origine = '';               // texte d'où viennent ses phrases : son texte d'avant ; sous-page créée : celui de sa mère
+    let titreMere = '';
+    let sousPage = false;
     if (page.action === 'modifier') {
       if (!envoyee) {
         raisons.push(nom + ' : cette page n\'a pas été envoyée, elle ne peut pas être modifiée.');
@@ -289,11 +350,22 @@ Object.assign(Wiki, (() => {
       }
       type = envoyee.type;
       avant = envoyee.texte || '';
+      origine = avant;
+      sousPage = Boolean(texte(envoyee.mere));
     } else if (page.action === 'creer') {
       if (!TYPES.includes(type)) { raisons.push(nom + ' : type « ' + type + ' » inconnu.'); return; }
-      if (type === 'équipement') raisons.push(nom + ' : une page d\'équipement ne se crée pas, elle existe déjà.');
       const rattachement = ctx.envoyeeDe.get(Wiki.comparable(page.rattacheA));
-      if (type === 'savoir-faire' && !(rattachement && ['équipement', 'composant'].includes(rattachement.type))) {
+      const visee = texte(page.rattacheA) ? ctx.connuesDe.get(Wiki.comparable(page.rattacheA)) : null;
+      // Sous-page (§20.4) : rattachée à une page de même type ; un équipement ne se crée que comme sous-page.
+      sousPage = Boolean(visee && texte(visee.type) === type);
+      if (sousPage) {
+        controlerSousPage(page, nom, visee, ctx, raisons);
+        if (rattachement) { origine = rattachement.texte || ''; titreMere = texte(rattachement.titre); }
+      } else if (type === 'équipement') {
+        raisons.push(nom + ' : une page d\'équipement ne se crée pas, elle existe déjà (seule une sous-page se crée, '
+          + 'rattachée à sa mère).');
+      }
+      if (type === 'savoir-faire' && !sousPage && !(rattachement && ['équipement', 'composant'].includes(rattachement.type))) {
         raisons.push(nom + ' : un savoir-faire se rattache à une page envoyée (équipement ou composant).');
       }
       if (ctx.titresExistants.has(Wiki.comparable(titre))) {
@@ -316,9 +388,17 @@ Object.assign(Wiki, (() => {
     });
     const phrases = phrasesDe(lu);
     if (!phrases.length) raisons.push(nom + ' : aucune phrase.');
-    if (phrases.length > SEUILS.phrasesMax) raisons.push(nom + ' : ' + phrases.length + ' phrases, ' + SEUILS.phrasesMax + ' au plus.');
+    // Longueurs (Wiki.mesurerTexte) ; une page qui n'est pas une sous-page se découpe au-delà (§20.4).
+    const decoupe = sousPage ? '' : 'au-delà, la page se découpe en sous-pages';
+    if (phrases.length > SEUILS.phrasesMax) {
+      raisons.push(nom + ' : ' + phrases.length + ' phrases, ' + SEUILS.phrasesMax + ' au plus'
+        + (decoupe ? ' (' + decoupe + ')' : '') + '.');
+    }
     const mots = mesureDe(lu).mots;
-    if (mots > SEUILS.motsMax) raisons.push(nom + ' : ' + mots + ' mots, ' + SEUILS.motsMax + ' au plus (rubriques comprises, citations non comptées).');
+    if (mots > SEUILS.motsMax) {
+      raisons.push(nom + ' : ' + mots + ' mots, ' + SEUILS.motsMax + ' au plus (rubriques comprises, citations non comptées'
+        + (decoupe ? ' ; ' + decoupe : '') + ').');
+    }
     phrases.forEach((phrase) => {
       if (!phrase.propre) raisons.push(nom + ' : phrase vide (réduite à ses citations).');
       if (!phrase.ot.length) raisons.push(nom + ' : phrase sans OT cité — « ' + court(phrase.propre) + ' ».');
@@ -327,8 +407,9 @@ Object.assign(Wiki, (() => {
       phrase.liens.filter((lien) => !ctx.titresConnus.has(Wiki.comparable(lien)))
         .forEach((lien) => raisons.push(nom + ' : lien vers une page inconnue « ' + lien + ' ».'));
     });
-    // Non-retrait (D106) : seulement pour l'IA ; le responsable peut retirer.
-    const changements = comparerTextes(avant, page.texte);
+    // Non-retrait (D106) : seulement pour l'IA ; le responsable peut retirer. Sous-page créée : ses phrases se comparent
+    // au texte d'avant de sa mère (une phrase déplacée telle quelle y est « identique »).
+    const changements = comparerTextes(origine, page.texte);
     if (!ctx.manuel && page.action === 'modifier') {
       const apres = new Set(citationsDe(page.texte));
       const perdus = citationsDe(avant).filter((id) => !apres.has(id));
@@ -346,7 +427,7 @@ Object.assign(Wiki, (() => {
     const aControler = changements.nouvelles.concat(changements.reprises.map((reprise) => reprise.phrase));
     const reference = (ctx.manuel
       ? Array.from(new Set(phrases.flatMap((phrase) => phrase.ot))).map((id) => ctx.sources[id] || '').join('\n')
-      : (ctx.otIngere && ctx.otIngere.sourceTexte) || '') + '\n' + avant;
+      : (ctx.otIngere && ctx.otIngere.sourceTexte) || '') + '\n' + origine + '\n' + titreMere;
     const nombresConnus = new Set(nombresDe(sansReferences(reference)));
     const nombresTitre = page.action === 'creer' ? nombresDe(sansReferences(titre)) : [];
     nombresTitre.filter((nombre) => !nombresConnus.has(nombre))
@@ -372,7 +453,7 @@ Object.assign(Wiki, (() => {
   }
 
   return {
-    lireTexte, ecrireTexte, comparerTextes, controlerProposition, formeDuTitre,
+    lireTexte, ecrireTexte, comparerTextes, controlerProposition, formeDuTitre, prefixeSousPage,
     identitePhrase, citationsDe, liensDe, phrasesDe: (valeur) => phrasesDe(lireTexte(valeur)),
     mesurerTexte: (valeur) => mesureDe(lireTexte(valeur)),
   };

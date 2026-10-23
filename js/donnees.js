@@ -997,6 +997,13 @@ const Donnees = (() => {
       if (enTexte(page.texte).trim() && !listeDe(page.ot_cites).length) {
         signaler('info', page, 'ot_cites', '', 'elle ne cite aucun OT.');
       }
+      // Rattachement (sous-page, §20.4 : sa mère, de même type ; savoir-faire) vers une page archivée. Une page absente
+      // est déjà une référence cassée ; une sous-page n'a pas d'ancrage propre (ni equipement_id ni article_id).
+      const mere = enTexte(page.rattache_a).trim() ? pages.index.get(enTexte(page.rattache_a).trim()) : null;
+      if (mere && mere.statut === 'archivée') {
+        signaler('attention', page, 'rattache_a', mere.id, (mere.type === page.type ? 'sous-page de la page archivée « '
+          : 'rattachée à la page archivée « ') + mere.titre + ' » (' + mere.id + ').');
+      }
       const cle = enTexte(page.cle).trim();
       if (cle) { parCle.set(cle, (parCle.get(cle) || []).concat([page])); }
     }

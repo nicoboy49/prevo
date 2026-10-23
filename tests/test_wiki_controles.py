@@ -64,6 +64,42 @@ VALABLE = {
 }
 
 
+# Découpage en sous-pages (§20.4, §20.6 ; révision de Nicolas du 2026-10-23) : la page de l'équipement garde une phrase
+# de renvoi qui cite les OT des phrases déplacées dans la sous-page « PO-02 — garniture » (rien n'est retiré).
+SOUS_PAGE = "PO-02 — garniture"
+AVANT_MERE = ("## Ce qui revient\n"
+              "- Fuite à la garniture mécanique, fréquent ici [OT-2026-0010] [OT-2026-0020]\n"
+              "- Jeu axial de 0,2 mm à la garniture [OT-2026-0020]\n"
+              "## Ce qui a réglé le problème\n"
+              "- Remplacement de la garniture par un kit neuf [OT-2026-0010]")
+APRES_MERE = ("## Ce qui revient\n"
+              "- Garniture : voir [[PO-02 — garniture]] [OT-2026-0010] [OT-2026-0020] [OT-2026-0042]\n"
+              "## Ce qui a réglé le problème\n"
+              "- Remplacement de la garniture par un kit neuf [OT-2026-0010]")
+# Une phrase déplacée telle quelle, une regroupée (son nombre vient du texte de la mère), une nouvelle (de l'OT ingéré).
+TEXTE_SOUS_PAGE = ("## Ce qui revient\n"
+                   "- Fuite à la garniture mécanique, fréquent ici [OT-2026-0010] [OT-2026-0020]\n"
+                   "- Jeu axial de 0,2 mm relevé à la garniture [OT-2026-0020]\n"
+                   "## À surveiller\n"
+                   "- Accouplement désaligné de 0,4 mm [OT-2026-0042]")
+CONTEXTE_DECOUPE = copy.deepcopy(CONTEXTE)
+CONTEXTE_DECOUPE["pagesEnvoyees"][0].update({"texte": AVANT_MERE, "mere": ""})
+CONTEXTE_DECOUPE["pagesEnvoyees"].append({"titre": MODE, "type": "mode", "mere": "", "otDates": [],
+                                          "texte": "## Causes\n- Accouplement mal aligné [OT-2026-0010]"})
+DECOUPE = {"rien": False, "contradictions": [], "pages": [
+    {"action": "creer", "titre": SOUS_PAGE, "type": "équipement", "rattacheA": EQUIPEMENT, "texte": TEXTE_SOUS_PAGE},
+    {"action": "modifier", "titre": EQUIPEMENT, "texte": APRES_MERE},
+]}
+
+
+def decoupe(titre=SOUS_PAGE):
+    """Le découpage conforme, sous-page titrée `titre` (la mère renvoie à ce titre)."""
+    proposition = copy.deepcopy(DECOUPE)
+    proposition["pages"][0]["titre"] = titre
+    proposition["pages"][1]["texte"] = APRES_MERE.replace("[[" + SOUS_PAGE + "]]", "[[" + titre + "]]")
+    return proposition
+
+
 def ajouter_phrase(proposition, phrase, rubrique="À surveiller"):
     """Copie de la proposition conforme, avec une phrase de plus dans la page de l'équipement."""
     resultat = copy.deepcopy(proposition)
@@ -177,10 +213,13 @@ class TestControles(CasControles):
         autre = copy.deepcopy(VALABLE)
         autre["pages"][0]["titre"] = "CP-01 — Compresseur"
         self.refus(autre, "Page « CP-01 — Compresseur » : cette page n'a pas été envoyée")
-        equipement = copy.deepcopy(VALABLE)
-        equipement["pages"][1].update({"type": "équipement", "titre": "CV-09 — Convoyeur",
-                                       "texte": "## Ce qui revient\n- Bruit [OT-2026-0042]"})
-        self.refus(equipement, "une page d'équipement ne se crée pas")
+        # Une page d'équipement ne se crée que comme sous-page : sans rattachement, ou rattachée à une page d'un autre type.
+        for rattachement in ("", KIT):
+            with self.subTest(rattachement=rattachement):
+                equipement = copy.deepcopy(VALABLE)
+                equipement["pages"][1].update({"type": "équipement", "titre": "CV-09 — Convoyeur", "rattacheA": rattachement,
+                                               "texte": "## Ce qui revient\n- Bruit [OT-2026-0042]"})
+                self.refus(equipement, "Page « CV-09 — Convoyeur » : une page d'équipement ne se crée pas")
         sans_rattachement = copy.deepcopy(VALABLE)
         sans_rattachement["pages"][1]["rattacheA"] = ""
         self.refus(sans_rattachement, "un savoir-faire se rattache à une page envoyée")
@@ -278,12 +317,21 @@ class TestControles(CasControles):
         self.refus(contradiction, "L'IA ne rédige jamais de consigne de sécurité")
 
     def test_longueurs(self):
+        self.assertEqual(self.page.evaluate("[Wiki.SEUILS.phrasesMax, Wiki.SEUILS.motsMax]"), [30, 600])
+        # Aux bornes : 30 phrases et 600 mots passent ; 31 phrases, 601 mots non.
+        juste = copy.deepcopy(VALABLE)
+        juste["pages"][1]["texte"] = "## Étapes\n" + "\n".join("- Étape à suivre au comparateur [OT-2026-0042]" for _ in range(30))
+        self.assertEqual(self.controler(juste), {"ok": True, "raisons": []})
         trop = copy.deepcopy(VALABLE)
-        trop["pages"][1]["texte"] = "## Étapes\n" + "\n".join("- Étape à suivre au comparateur [OT-2026-0042]" for _ in range(13))
-        self.refus(trop, "13 phrases, 12 au plus")
+        trop["pages"][1]["texte"] = "## Étapes\n" + "\n".join("- Étape à suivre au comparateur [OT-2026-0042]" for _ in range(31))
+        raisons = self.refus(trop, "31 phrases, 30 au plus (au-delà, la page se découpe en sous-pages)")
+        self.assertEqual(len(raisons), 1, raisons)
+        assez = copy.deepcopy(VALABLE)
+        assez["pages"][1]["texte"] = "## Étapes\n- " + " ".join(["mot"] * 599) + " [OT-2026-0042]"
+        self.assertEqual(self.controler(assez), {"ok": True, "raisons": []})          # 599 mots + « Étapes »
         bavard = copy.deepcopy(VALABLE)
-        bavard["pages"][1]["texte"] = "## Étapes\n- " + " ".join(["mot"] * 250) + " [OT-2026-0042]"
-        self.refus(bavard, "251 mots, 250 au plus")         # 250 mots + « Étapes » (rubrique comprise)
+        bavard["pages"][1]["texte"] = "## Étapes\n- " + " ".join(["mot"] * 600) + " [OT-2026-0042]"
+        self.refus(bavard, "601 mots, 600 au plus")         # 600 mots + « Étapes » (rubrique comprise)
         nombreuses = copy.deepcopy(VALABLE)
         for numero in range(3):
             nombreuses["pages"].append({"action": "creer", "type": "mode", "titre": "Mode de défaillance %s" % "abc"[numero],
@@ -337,6 +385,96 @@ class TestControles(CasControles):
         nombre = copy.deepcopy(retrait)
         nombre["pages"][0]["texte"] += "\n- Pression à 7 bar [OT-2026-0010]"
         self.refus(nombre, "nombre « 7 » absent des OT cités", contexte)
+
+
+class TestSousPages(CasControles):
+    """Découpage d'une page en sous-pages (§20.4, §20.6, CS113) : un découpage conforme passe, d'un bloc ; chaque
+    sous-page mal formée est refusée avec sa raison, qui la nomme."""
+
+    OK = {"ok": True, "raisons": []}
+
+    def test_un_decoupage_conforme_passe(self):
+        self.assertEqual(self.controler(DECOUPE, CONTEXTE_DECOUPE), self.OK)
+        # L'ordre des pages dans la proposition ne compte pas (la mère d'abord, ici).
+        inverse = copy.deepcopy(DECOUPE)
+        inverse["pages"].reverse()
+        self.assertEqual(self.controler(inverse, CONTEXTE_DECOUPE), self.OK)
+        # Une sous-page de composant ou de mode : mêmes règles, le préfixe est le titre entier de la mère.
+        for mere, type_, rubrique in ((KIT, "composant", "Défaillances"), (MODE, "mode", "Causes")):
+            with self.subTest(type=type_):
+                titre = mere + " — faces"
+                proposition = {"rien": False, "contradictions": [], "pages": [
+                    {"action": "modifier", "titre": mere, "texte": "## %s\n- Usure des faces, voir [[%s]] [OT-2026-0042]%s"
+                     % (rubrique, titre, "\n- Accouplement mal aligné [OT-2026-0010]" if type_ == "mode" else "")},
+                    {"action": "creer", "titre": titre, "type": type_, "rattacheA": mere,
+                     "texte": "## %s\n- Faces usées par le désalignement [OT-2026-0042]" % rubrique}]}
+                self.assertEqual(self.controler(proposition, CONTEXTE_DECOUPE), self.OK)
+        # Les phrases nouvelles d'une sous-page restent contrôlées (nombre absent de l'OT et de la mère).
+        nombre = copy.deepcopy(DECOUPE)
+        nombre["pages"][0]["texte"] += "\n- Jeu de 0,7 mm à revoir [OT-2026-0042]"
+        self.refus(nombre, "Page « PO-02 — garniture » : nombre « 0.7 » absent des OT cités", CONTEXTE_DECOUPE)
+
+    def test_mere_non_modifiee_ou_sans_renvoi(self):
+        seule = copy.deepcopy(DECOUPE)
+        seule["pages"] = seule["pages"][:1]
+        raisons = self.refus(seule, "Page « PO-02 — garniture » : sa page mère « PO-02 — Pompe centrifuge » n'est pas modifiée "
+                                    "par la proposition", CONTEXTE_DECOUPE)
+        self.assertEqual(len(raisons), 1, raisons)
+        sans_renvoi = copy.deepcopy(DECOUPE)
+        sans_renvoi["pages"][1]["texte"] = APRES_MERE.replace("voir [[PO-02 — garniture]]", "voir la page garniture")
+        raisons = self.refus(sans_renvoi, "Page « PO-02 — garniture » : sa page mère « PO-02 — Pompe centrifuge » ne renvoie pas "
+                                          "à elle", CONTEXTE_DECOUPE)
+        self.assertEqual(len(raisons), 1, raisons)
+
+    def test_titre_d_une_sous_page(self):
+        for titre in ("Garniture de PO-02", "PO-02 - garniture", "PO-02 —", "PO-02 garniture"):
+            with self.subTest(titre=titre):
+                raisons = self.refus(decoupe(titre), "Page « %s » : le titre d'une sous-page commence par « PO-02 — » suivi de "
+                                                     "son sujet" % titre, CONTEXTE_DECOUPE)
+                self.assertEqual(len(raisons), 1, raisons)
+        # Un autre repère : refusé (et son nombre n'est pas dans l'OT).
+        self.refus(decoupe("PO-03 — garniture"), "commence par « PO-02 — »", CONTEXTE_DECOUPE)
+        # Comparé en forme comparable : casse et accents indifférents.
+        self.assertEqual(self.controler(decoupe("po-02 — Garniture usée"), CONTEXTE_DECOUPE), self.OK)
+
+    def test_mere_elle_meme_sous_page_ou_non_envoyee(self):
+        contexte = copy.deepcopy(CONTEXTE_DECOUPE)
+        contexte["pagesEnvoyees"].append({"titre": "PO-02 — joints", "type": "équipement", "mere": EQUIPEMENT, "otDates": [],
+                                          "texte": "## Ce qui revient\n- Joint torique sec [OT-2026-0020]"})
+        petite = {"rien": False, "contradictions": [], "pages": [
+            {"action": "modifier", "titre": "PO-02 — joints",
+             "texte": "## Ce qui revient\n- Joints : voir [[PO-02 — joints — toriques]] [OT-2026-0020]"},
+            {"action": "creer", "titre": "PO-02 — joints — toriques", "type": "équipement", "rattacheA": "PO-02 — joints",
+             "texte": "## Ce qui revient\n- Joint torique sec [OT-2026-0020]"}]}
+        raisons = self.refus(petite, "Page « PO-02 — joints — toriques » : sa page mère « PO-02 — joints » est elle-même une "
+                                     "sous-page (de « PO-02 — Pompe centrifuge »)", contexte)
+        self.assertEqual(len(raisons), 1, raisons)
+        # Rattachée à une page de même type du catalogue, qui n'a pas été envoyée.
+        non_envoyee = {"rien": False, "contradictions": [], "pages": [
+            {"action": "creer", "titre": MODE + " — contrôle", "type": "mode", "rattacheA": MODE,
+             "texte": "## Causes\n- Accouplement mal aligné [OT-2026-0042]"}]}
+        self.refus(non_envoyee, "sa page mère « Désalignement d'accouplement » n'a pas été envoyée", CONTEXTE)
+
+    def test_longueurs_et_pages_creees_sous_pages_comprises(self):
+        longue = copy.deepcopy(DECOUPE)
+        longue["pages"][0]["texte"] += "\n" + "\n".join("- Accouplement à revoir [OT-2026-0042]" for _ in range(28))
+        raisons = self.refus(longue, "Page « PO-02 — garniture » : 31 phrases, 30 au plus.", CONTEXTE_DECOUPE)
+        self.assertFalse(any("découpe" in raison for raison in raisons), raisons)   # une sous-page ne se découpe pas
+        nombreuses = copy.deepcopy(DECOUPE)
+        for lettre in "abc":
+            nombreuses["pages"].append({"action": "creer", "type": "mode", "titre": "Mode de défaillance " + lettre,
+                                        "texte": "## Causes\n- Usure [OT-2026-0042]"})
+        self.refus(nombreuses, "Proposition : 4 pages créées, 3 au plus par OT", CONTEXTE_DECOUPE)
+
+    def test_sous_page_ecrite_a_la_main(self):
+        # À la main, une page s'écrit à la fois : la mère n'a pas à être modifiée en même temps ; le titre reste contrôlé.
+        contexte = {"manuel": True, "pagesEnvoyees": [CONTEXTE_DECOUPE["pagesEnvoyees"][0]], "catalogue": CONTEXTE["catalogue"],
+                    "otPermis": ["OT-2026-0010", "OT-2026-0020", "OT-2026-0042"],
+                    "sources": {"OT-2026-0042": SOURCE, "OT-2026-0010": "Garniture remplacée.", "OT-2026-0020": "Fuite."}}
+        seule = {"rien": False, "contradictions": [], "pages": [DECOUPE["pages"][0]]}
+        self.assertEqual(self.controler(seule, contexte), self.OK)
+        self.refus({"rien": False, "contradictions": [], "pages": [decoupe("Garniture de PO-02")["pages"][0]]},
+                   "le titre d'une sous-page commence par « PO-02 — »", contexte)
 
 
 if __name__ == "__main__":

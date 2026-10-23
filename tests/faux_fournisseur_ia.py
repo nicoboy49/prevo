@@ -25,8 +25,8 @@ et choisit sa réponse d'après la fonction (premier message système « Fonctio
 
     Ingestion du wiki (ingestionWiki, lot 6) : réponse construite à partir du message envoyé par Prévo,
     variantes par modèle (faux-rien, faux-contradiction, faux-recent, faux-invente, faux-retire, faux-consigne,
-    faux-sans-ot, faux-cree-mode ; faux-corrige et faux-refuse-deux pour la relance avec la raison) : voir
-    tests/faux_wiki.py.
+    faux-sans-ot, faux-cree-mode ; faux-corrige et faux-refuse-deux pour la relance avec la raison ; faux-decoupe
+    pour le découpage en sous-pages) : voir tests/faux_wiki.py.
 
 
     with FauxFournisseur() as faux:
@@ -46,7 +46,7 @@ MODELES = ["faux", "faux-lent", "faux-invente", "faux-illisible", "faux-chiffres
            "faux-enorme", "faux-redirige", "faux-tronque", "faux-tronque-morceaux", "faux-html",
            "faux-sans-ot", "faux-trop-long", "faux-trop-de-mots", "faux-consigne", "faux-alimentation",
            "faux-rien", "faux-contradiction", "faux-recent", "faux-retire", "faux-cree-mode", "faux-corrige",
-           "faux-refuse-deux"]
+           "faux-refuse-deux", "faux-decoupe"]
 # Texte piégé : une image dont l'erreur de chargement poserait window.__xss (aucun chiffre : le commentaire
 # du rapport le refuserait sinon).
 PIEGE = '<img src=x onerror="window.__xss=true">'

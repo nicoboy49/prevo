@@ -27,6 +27,7 @@ import unittest
 from commun import (RACINE, CasNavigateur, ServeurPrevo, attendre_pret, charger_scripts,
                     preregler_profil, url_fichier)
 from faux_fournisseur_ia import FauxFournisseur
+from faux_wiki import lire_message
 
 CLE = "sk-test-cle-ia-prevo-5f3a9c"
 SCRIPTS_REGLES = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/interface.js",
@@ -447,7 +448,7 @@ class TestReglesPures(CasNavigateur):
               titre: 'PO-01 — Fuite', compteRendu: 'Garniture changée.', equipement: { repere: 'PO-01', designation: 'Pompe' } },
             pages: [{ titre: 'PO-01 — Pompe', type: 'équipement', texte: '## Ce qui revient\\n- Fuite [OT-2026-0007]',
               otDates: [{ id: 'OT-2026-0007', date: '2026-04-15 08:00' }], phrases: 1, mots: 4 }],
-            limites: { phrases: 12, mots: 250 }, catalogue: [{ titre: 'Cavitation', type: 'mode' }] };
+            limites: { phrases: 30, mots: 600 }, catalogue: [{ titre: 'Cavitation', type: 'mode' }] };
           const reponse = '{"rien_a_ajouter": false,\\n "pages": [], "contradictions": []}';
           const avec = (relance) => Object.assign({}, d, { relance });
           const relance = avec({ reponse, raisons: ['Page « PO-01 — Pompe » : phrase sans OT cité — « Fuite ».',
@@ -473,6 +474,42 @@ class TestReglesPures(CasNavigateur):
         self.assertIn("\nTa réponse précédente :\n" + "x" * 20000 + "\n\nElle a été refusée", resultat["longue"])
         self.assertNotIn("x" * 20001, resultat["longue"])
         self.assertIn("refusée par les contrôles de Prévo :\n- (aucune raison donnée)\n\n", resultat["longue"])
+
+    def test_ingestion_consigne_du_decoupage_en_sous_pages(self):
+        """Révision du 2026-10-23 (D96, D100, CS113) : la consigne renvoie aux limites de l'en-tête de chaque page (aucun
+        nombre de Wiki.SEUILS : plus de « 12 phrases » ni de « 250 mots ») et dit le découpage en sous-pages ; l'en-tête
+        d'une sous-page nomme sa mère (titre à parenthèses compris, lu de même par le faux modèle)."""
+        resultat = self.page.evaluate("""() => {
+          const d = { ot: { id: 'OT-2026-0001', dateIntervention: '2026-03-10 10:00', type: 'correctif immédiat',
+              titre: 'PO-02 — Fuite', equipement: { repere: 'PO-02', designation: 'Pompe' } },
+            pages: [{ titre: 'PO-02 — Pompe (A)', type: 'équipement', mere: '', texte: '## Ce qui revient\\n- Fuite [OT-2026-0007]',
+                otDates: [], phrases: 1, mots: 4 },
+              { titre: 'PO-02 — garniture', type: 'équipement', mere: 'PO-02 — Pompe (A)', texte: '', otDates: [], phrases: 0,
+                mots: 0 }],
+            limites: { phrases: 30, mots: 600 }, catalogue: [] };
+          const requete = Ia.requete('ingestionWiki', d);
+          return { systeme: requete.messages[0].content, message: requete.messages[1].content };
+        }""")
+        systeme = resultat["systeme"]
+        for absent in ("12 phrases", "250 mots", "page à 12"):
+            self.assertNotIn(absent, systeme)
+        self.assertNotRegex(systeme, r"\b(12|250|30|600)\b")
+        for attendu in ("l'en-tête de chaque page reçue donne sa taille et ses limites", "une page ne dépasse jamais ses limites",
+                        "découpage : une page qui dépasserait ses limites se découpe en sous-pages liées",
+                        "« type » de la page mère, « rattache_a » = titre exact de la mère",
+                        "titre « <repère de l'équipement, ou titre de la mère> — <sujet> »", "« PO-02 — garniture »",
+                        "phrases d'un même sujet, telles quelles ou regroupées, avec tous leurs OT",
+                        "une phrase courte de renvoi [[titre de la sous-page]] qui cite tous leurs OT",
+                        "une sous-page (« sous-page de … » dans son en-tête) ne se découpe pas : un seul niveau",
+                        "créer au plus 3 pages (action « creer »), sous-pages comprises",
+                        "jamais une page d'équipement, sauf comme sous-page"):
+            self.assertIn(attendu, systeme)
+        message = resultat["message"]
+        self.assertIn("=== Page « PO-02 — Pompe (A) » (équipement · 1 phrases sur 30, 4 mots sur 600) ===", message)
+        self.assertIn("=== Page « PO-02 — garniture » (équipement · sous-page de « PO-02 — Pompe (A) » · 0 phrases sur 30, "
+                      "0 mots sur 600) ===\n(page vide)", message)
+        self.assertEqual([(p["titre"], p["type"], p["mere"]) for p in lire_message(message)["pages"]],
+                         [("PO-02 — Pompe (A)", "équipement", ""), ("PO-02 — garniture", "équipement", "PO-02 — Pompe (A)")])
 
 
 # ---------------------------------------------------------------------------

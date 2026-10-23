@@ -451,6 +451,107 @@ class TestEcritureALaMain(CasJournal):
         self.assertEqual((derniere["statut"], derniere["raisons"]), ("refusée", "disque plein"))
 
 
+SOUS_PAGE_PO01 = "PO-01 — pannes qui reviennent"
+CLES_JS = """() => Array.from(Wiki.etatPropose().values()).filter((p) => p.titre.startsWith('PO-01') || p.titre.startsWith('CP-01'))
+  .map((p) => [p.cle, p.titre, p.rattacheA, p.equipementId]).sort()"""
+PROBLEMES_WIKI_JS = """(ids) => Donnees.problemes().filter((p) => p.table === 'wiki_pages' && ids.includes(p.id))
+  .map((p) => [p.gravite, p.id, p.champ, p.message])"""
+
+
+class TestDecoupage(CasJournal):
+    """Découpage en sous-pages (§20.4, §20.7, CS113) : validé d'un bloc, la sous-page reçoit rattache_a = la ligne de sa
+    mère (créée d'abord si besoin, quel que soit l'ordre des changements), jamais l'ancrage de sa mère ; la mère garde sa
+    clé ; intégrité ; la proposition suivante envoie la sous-page ; rejet, cascade et rattrapage."""
+
+    def lignes(self):
+        return {ligne["titre"]: ligne for ligne in self.page.evaluate("Donnees.lignes('wiki_pages')")}
+
+    def test_validation_d_un_decoupage_d_un_bloc(self):
+        self.traiter(["OT-2026-0001"], "faux-decoupe")
+        id_0001 = self.id_de("OT-2026-0001")
+        nombre = len(self.lignes())
+        self.assertEqual(self.ok("valider", [id_0001]), {"validees": [id_0001], "aRefaire": []})
+        lignes = self.lignes()
+        self.assertEqual(len(lignes), nombre + 2)                              # la sous-page et l'astuce
+        sous_page, mere = lignes[SOUS_PAGE_PO01], self.ligne("WP-0001")
+        self.assertEqual({k: sous_page[k] for k in ("type", "rattache_a", "equipement_id", "article_id", "cause_code", "version",
+                                                    "origine", "cle", "derniere_entree", "statut", "ot_cites")},
+                         {"type": "équipement", "rattache_a": "WP-0001", "equipement_id": "", "article_id": "", "cause_code": "",
+                          "version": "1", "origine": "IA", "cle": "po 01 pannes qui reviennent", "derniere_entree": id_0001,
+                          "statut": "active", "ot_cites": "OT-2026-0007;OT-2026-0001"})
+        self.assertEqual((mere["equipement_id"], mere["version"], mere["derniere_entree"], mere["liens"]),
+                         ("EQ-0001", "2", id_0001, sous_page["id"] + ";WP-0006"))
+        self.assertIn("[[" + SOUS_PAGE_PO01 + "]]", mere["texte"])
+        actives = [l["cle"] for l in lignes.values() if l["statut"] == "active" and l["cle"]]    # posées à l'écriture
+        self.assertEqual(len(actives), len(set(actives)))                     # clés uniques
+        self.assertEqual(sorted(actives), ["astuce de l ot 2026 0001", "po 01 pannes qui reviennent", "po 01 pompe de process a"])
+        # La mère garde sa clé (EQ:) ; la sous-page a la sienne (WP:), rattachée à celle de sa mère.
+        self.assertEqual(self.page.evaluate(CLES_JS), [
+            ["EQ:EQ-0001", "PO-01 — Pompe de process A", "", "EQ-0001"],
+            ["WP:" + sous_page["id"], SOUS_PAGE_PO01, "EQ:EQ-0001", ""]])
+        self.assertEqual([c["page"] for c in json.loads(self.entrees()["OT-2026-0001"]["changements"])],
+                         ["WP-0001", sous_page["id"], lignes["Astuce de l'OT-2026-0001"]["id"]])
+        self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
+        self.assertEqual(self.page.evaluate(PROBLEMES_WIKI_JS, ["WP-0001", sous_page["id"]]), [])
+        # La proposition suivante sur PO-01 envoie la sous-page juste après sa mère ; validée à son tour, intègre.
+        self.assertEqual(self.page.evaluate("(ot) => Wiki.pagesConcernees(ot).cles", "OT-2026-0008")[:2],
+                         ["EQ:EQ-0001", "WP:" + sous_page["id"]])
+        self.traiter(["OT-2026-0008"], "faux-decoupe")
+        suite = self.entrees()["OT-2026-0008"]
+        self.assertEqual([(c["page"], c["version_avant"]) for c in json.loads(suite["changements"])], [(sous_page["id"], 1)])
+        self.ok("valider", [suite["id"]])
+        self.assertEqual((self.ligne(sous_page["id"])["version"], self.ligne(sous_page["id"])["rattache_a"]), ("2", "WP-0001"))
+        self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
+
+    def test_mere_sans_ligne_creee_d_abord_quel_que_soit_l_ordre(self):
+        # CP-01 n'a pas de page écrite : la proposition découpe sa page calculée ; la sous-page est mise en premier.
+        self.traiter(["OT-2026-0002"], "faux-decoupe")
+        entree = self.entrees()["OT-2026-0002"]
+        self.assertEqual([c["titre"] for c in json.loads(entree["changements"])], ["CP-01 — Compresseur", "CP-01 — pannes qui reviennent"])
+        self.page.evaluate("""(id) => Donnees.modifier('wiki_journal', (lignes) => { const e = lignes.find((x) => x.id === id);
+          e.changements = JSON.stringify(JSON.parse(e.changements).reverse()); }, { journal: false })""", entree["id"])
+        self.assertIsNone(self.page.evaluate("Donnees.lignes('wiki_pages').find((l) => l.equipement_id === 'EQ-0002' && l.type === 'équipement') || null"))
+        self.assertEqual(self.ok("valider", [entree["id"]])["validees"], [entree["id"]])
+        lignes = self.lignes()
+        mere, sous_page = lignes["CP-01 — Compresseur"], lignes["CP-01 — pannes qui reviennent"]
+        self.assertEqual((mere["type"], mere["equipement_id"], mere["version"]), ("équipement", "EQ-0002", "1"))
+        self.assertEqual((sous_page["type"], sous_page["rattache_a"], sous_page["equipement_id"], sous_page["article_id"]),
+                         ("équipement", mere["id"], "", ""))
+        self.assertLess(mere["id"], sous_page["id"])                          # la ligne de la mère d'abord
+        self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
+        self.assertEqual(self.page.evaluate(PROBLEMES_WIKI_JS, [mere["id"], sous_page["id"]]), [])
+
+    def test_rejet_cascade_et_rattrapage_d_un_decoupage(self):
+        self.traiter(["OT-2026-0001"], "faux-decoupe")
+        self.traiter(["OT-2026-0008"], "faux-decoupe")                       # sur la sous-page encore à valider
+        id_0001, id_0008 = self.id_de("OT-2026-0001"), self.id_de("OT-2026-0008")
+        self.refus("Validez d'abord " + id_0001, "valider", [id_0008])
+        self.assertEqual(self.ok("rejeter", id_0001, "Découpage à revoir"), {"rejetee": id_0001, "aRefaire": [id_0008]})
+        self.assertNotIn(SOUS_PAGE_PO01, self.lignes())
+        # Retraitées (0001 relancé) : le découpage revient ; sa validation est interrompue après l'écriture des pages,
+        # puis rattrapée.
+        self.ok("remettreEnFile", id_0001)
+        self.traiter([], "faux-decoupe")
+        id_0001 = self.id_de("OT-2026-0001")
+        self.page.evaluate("""() => { const modifier = Donnees.modifier;
+          Donnees.modifier = function (table) { if (table === 'wiki_journal') { Donnees.modifier = modifier;
+            return Promise.reject(new Error('disque plein')); } return modifier.apply(this, arguments); }; }""")
+        self.refus("disque plein", "valider", [id_0001])
+        self.assertEqual(self.lignes()[SOUS_PAGE_PO01]["derniere_entree"], id_0001)
+        self.assertEqual(self.ok("rattraper"), 1)
+        self.assertEqual(self.entrees()["OT-2026-0001"]["statut"], "validée")
+        self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
+
+    def test_mere_archivee_signalee(self):
+        self.traiter(["OT-2026-0001"], "faux-decoupe")
+        self.ok("valider", [self.id_de("OT-2026-0001")])
+        sous_page = self.lignes()[SOUS_PAGE_PO01]
+        self.ok("ecrire", {"pageId": "WP-0001"}, None, {"archiver": True})
+        self.assertIn(["attention", sous_page["id"], "rattache_a",
+                       "Page du wiki %s (« %s ») : sous-page de la page archivée « PO-01 — Pompe de process A » (WP-0001)."
+                       % (sous_page["id"], SOUS_PAGE_PO01)], self.page.evaluate(PROBLEMES_WIKI_JS, [sous_page["id"]]))
+
+
 class TestIntegriteEtDonnees(CasJournal):
 
     def test_integrite_chaine_dates_et_envois(self):

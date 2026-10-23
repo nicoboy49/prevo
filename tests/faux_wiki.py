@@ -18,7 +18,12 @@ UNIQUEMENT à partir du message envoyé par Prévo (même message → même rép
                        mêmes codes (donc de même cause) qui partiraient ensemble le créeraient tous deux (D112) ;
     faux-corrige       refusée puis corrigée : la nouvelle phrase ne cite aucun OT (refusée par les contrôles), sauf
                        dans une relance, qui reçoit la réponse de « faux » ;
-    faux-refuse-deux   refusée deux fois : la nouvelle phrase ne cite aucun OT, puis, dans la relance, cite OT-1999-9999.
+    faux-refuse-deux   refusée deux fois : la nouvelle phrase ne cite aucun OT, puis, dans la relance, cite OT-1999-9999 ;
+    faux-decoupe       comme « faux », puis la page de l'équipement est découpée (§20.4) : sa rubrique « Ce qui revient »
+                       part dans une sous-page « <repère> — pannes qui reviennent » (type équipement, rattachée à la page
+                       de l'équipement), et la mère garde à sa place une phrase de renvoi [[<sous-page>]] qui cite tous
+                       les OT des phrases déplacées ; si cette sous-page est déjà envoyée, la nouvelle phrase y va (la
+                       mère n'est pas modifiée).
 
 Relance avec la raison (§20.5) : le message est celui d'origine, suivi de « Ta réponse précédente : », de la réponse
 refusée et de ses raisons ; la réponse est tirée du seul message d'origine (les variantes ci-dessus s'appliquent).
@@ -30,8 +35,11 @@ MOTIF_OT_INGERE = re.compile(r"^OT à intégrer : (OT-\d{4}-\d{4,})", re.M)
 MOTIF_TITRE = re.compile(r"^Titre : (.*)$", re.M)
 MOTIF_ASTUCE = re.compile(r"^Astuce pour la prochaine fois : (.*)$", re.M)
 MOTIF_CODES = re.compile(r"^Codes : (.*)$", re.M)
-# En-tête d'une page envoyée : titre, type, puis sa taille (« · 2 phrases sur 12, 14 mots sur 250 »).
-MOTIF_ENTETE_PAGE = re.compile(r"^=== Page « (.+) » \(([^·)]+?)(?: · [^)]*)?\) ===$", re.M)
+# En-tête d'une page envoyée : titre, type (l'un des quatre), la mère d'une sous-page (« · sous-page de « … » », titre
+# qui peut contenir des parenthèses), puis sa taille (« · 2 phrases sur 30, 14 mots sur 600 »).
+MOTIF_ENTETE_PAGE = re.compile(r"^=== Page « (.+?) » \((équipement|composant|mode|savoir-faire)"
+                               r"(?: · sous-page de « (.+) »)?(?: · \d+ phrases sur \d+, \d+ mots sur \d+)?\) ===$", re.M)
+SUJET_DECOUPE = "pannes qui reviennent"
 MOTIF_CITATION = re.compile(r"\[(OT-\d{4}-\d{4,})\]")
 FIN_DES_PAGES = re.compile(r"\n\n(?:Date d'intervention des OT déjà cités|Catalogue des pages)")
 
@@ -59,7 +67,7 @@ def lire_message(message):
         for rang, entete in enumerate(entetes):
             fin = entetes[rang + 1].start() if rang + 1 < len(entetes) else len(section)
             corps = section[entete.end():fin].strip("\n")
-            pages.append({"titre": entete.group(1), "type": entete.group(2),
+            pages.append({"titre": entete.group(1), "type": entete.group(2), "mere": entete.group(3) or "",
                           "rubriques": [] if corps.strip() == "(page vide)" else lire_page(corps)})
     catalogue = []
     if "Catalogue des pages :\n" in message:
@@ -79,6 +87,20 @@ def est_relance(message):
     return MARQUE_RELANCE in message
 
 
+def decouper(pages, titre):
+    """faux-decoupe (§20.4) : la rubrique « Ce qui revient » de la page de l'équipement (pages[0], modifiée) part dans
+    une sous-page `titre` rattachée à elle ; la mère garde à sa place une phrase de renvoi [[titre]] qui cite tous les
+    OT des phrases déplacées (chacune y est « reprise »)."""
+    mere = pages[0]
+    revient = next(rubrique for rubrique in mere["rubriques"] if rubrique["rubrique"] == "Ce qui revient")
+    citees = []
+    for phrase in revient["phrases"]:
+        citees += [identifiant for identifiant in phrase["ot"] if identifiant not in citees]
+    pages.append({"action": "creer", "titre": titre, "type": "équipement", "rattache_a": mere["titre"],
+                  "rubriques": [{"rubrique": "Ce qui revient", "phrases": revient["phrases"]}]})
+    revient["phrases"] = [{"texte": "Détail des pannes qui reviennent : voir [[" + titre + "]]", "ot": citees}]
+
+
 def reponse_ingestion(message, modele="faux"):
     """Réponse JSON (objet Python) du faux modèle à un message `ingestionWiki` (d'origine ou de relance)."""
     relance = est_relance(message)
@@ -90,10 +112,16 @@ def reponse_ingestion(message, modele="faux"):
     ot = lu["ot"]
     if modele == "faux-rien":
         return {"rien_a_ajouter": True, "pages": [], "contradictions": []}
-    equipement = next((page for page in lu["pages"] if page["type"] == "équipement"), None)
+    equipement = next((page for page in lu["pages"] if page["type"] == "équipement" and not page["mere"]), None)
     if equipement is None:
         return {"rien_a_ajouter": True, "pages": [], "contradictions": []}
-    rubriques = equipement["rubriques"]
+    sous_page = None
+    if modele == "faux-decoupe":
+        titre_sous_page = equipement["titre"].split(" — ", 1)[0] + " — " + SUJET_DECOUPE
+        sous_page = next((page for page in lu["pages"] if page["mere"] == equipement["titre"]
+                          and page["titre"] == titre_sous_page), None)
+    cible = sous_page or equipement               # la page qui reçoit la nouvelle phrase
+    rubriques = cible["rubriques"]
     contradictions = []
     premiere = next((phrase for rubrique in rubriques for phrase in rubrique["phrases"]), None)
     if modele == "faux-contradiction" and premiere:
@@ -122,8 +150,10 @@ def reponse_ingestion(message, modele="faux"):
         meme["ot"] = meme["ot"] + [identifiant for identifiant in citees if identifiant not in meme["ot"]]
     else:
         revient["phrases"].append({"texte": texte, "ot": citees})
-    pages = [{"action": "modifier", "titre": equipement["titre"], "type": "équipement", "rattache_a": "",
+    pages = [{"action": "modifier", "titre": cible["titre"], "type": "équipement", "rattache_a": "",
               "rubriques": [r for r in rubriques if r["phrases"]]}]
+    if modele == "faux-decoupe" and sous_page is None:
+        decouper(pages, titre_sous_page)
     if lu["astuce"]:
         pages.append({"action": "creer", "titre": "Astuce de l'" + ot, "type": "savoir-faire",
                       "rattache_a": equipement["titre"],

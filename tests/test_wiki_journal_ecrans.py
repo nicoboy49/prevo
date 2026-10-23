@@ -657,8 +657,8 @@ class TestEcritureALaMain(CasEcrans):
 # Contrôle du wiki (D108)
 # ---------------------------------------------------------------------------------------------------
 
-DOUZE = NL.join(["- Constat %s [OT-2026-0007]" % mot for mot in
-                 ["un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze", "treize"]])
+# Une page trop longue : 31 phrases, une de plus que Wiki.SEUILS.phrasesMax (30).
+TROP_DE_PHRASES = NL.join(["- Constat numéro %d [OT-2026-0007]" % numero for numero in range(1, 32)])
 CONTROLE_JS = """async () => {
   const page = (id, type, titre, texte, autres) => Object.assign({ id, type, titre, texte, version: '1', statut: 'active',
     origine: 'manuel' }, autres || {});
@@ -680,7 +680,7 @@ CONTROLE_JS = """async () => {
       decide_le: Donnees.maintenant(), contradictions: JSON.stringify([
         { page: 'Desserrage', pageCle: 'WP:WP-0007', phrase: 'z', observation: 'récente', statut: 'ouverte' }]) });
   }, { journal: false });
-}""" % json.dumps(DOUZE)
+}""" % json.dumps(TROP_DE_PHRASES)
 ATTENDU_CONTROLE = {
     "lien-casse": ["WP-0002", "WP-0010", "WP-0010"],
     "orpheline": ["WP-0011"],
@@ -713,7 +713,7 @@ class TestControleDuWiki(CasEcrans):
                         ("ancrage-disparu", "WP-0014", "équipement EQ-0099 absent"),
                         ("contradiction-ancienne", "WP-0006", "ouverte depuis le 02/01/2026 (OT-2026-0001, WJ-00050)")]:
             self.assertIn(attendu, messages)
-        self.assertIn("13 phrases", [p["message"] for p in problemes if p["type"] == "trop-longue"][0])
+        self.assertIn("31 phrases", [p["message"] for p in problemes if p["type"] == "trop-longue"][0])
         self.assertIn("« Usures de garniture »", [p["message"] for p in problemes if p["page"] == "WP-0005"][0])
         # La vue : par type, chaque page avec son lien et « Modifier ».
         self.journal("?vue=controle")

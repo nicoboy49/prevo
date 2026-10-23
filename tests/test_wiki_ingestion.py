@@ -45,7 +45,7 @@ from pathlib import Path
 from commun import (CasNavigateur, RACINE, ServeurPrevo, ServeurStatique, attendre_pret, charger_scripts,
                     installer_dossier_simule, port_libre, preregler_profil, url_fichier)
 from faux_fournisseur_ia import FauxFournisseur
-from faux_wiki import reponse_ingestion
+from faux_wiki import lire_message, reponse_ingestion
 
 SCRIPTS = [
     "js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/stockage-demo.js",
@@ -209,6 +209,26 @@ CHARGER_LENT_JS = """async (tables) => {
   await Donnees.chargerTout();
 }"""
 RIEN = "JSON.stringify({ rien_a_ajouter: true, pages: [], contradictions: [] })"
+# Sous-pages (§20.4) : deux validées (de PO-01 et du kit HC 50) et une « à valider », créée avant la modification de sa
+# mère dans les changements de son entrée (l'ordre ne compte pas). Argument : le texte d'après de la page de PO-01.
+SOUS_PAGES_JS = """async ([apresMere]) => {
+  const NL = String.fromCharCode(10);
+  const page = (id, type, titre, texte, rattache) => ({ id, type, titre, texte, rattache_a: rattache, version: '1',
+    statut: 'active', origine: 'IA' });
+  await Donnees.modifier('wiki_pages', (lignes) => {
+    lignes.push(page('WP-0020', 'équipement', 'PO-01 — garniture', '## Ce qui revient' + NL + '- Garniture sèche [OT-2026-0007]',
+      'WP-0001'));
+    lignes.push(page('WP-0021', 'composant', 'Kit garniture HC 50 — faces', '## Défaillances' + NL + '- Faces rayées [OT-2026-0007]',
+      'WP-0003'));
+  });
+  await Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00002', nature: 'ingestion', ot_id: 'OT-2026-0003',
+    statut: 'à valider', ordre: '2', essais: '1', changements: JSON.stringify([
+      { cle: 'TITRE:po 01 accouplement', titre: 'PO-01 — accouplement', type: 'équipement', creation: true,
+        rattacheA: 'PO-01 — Pompe de process A', version_avant: 0, avant: '',
+        apres: '## Ce qui revient' + NL + '- Accouplement desserré [OT-2026-0003]' },
+      { cle: 'EQ:EQ-0001', page: 'WP-0001', titre: 'PO-01 — Pompe de process A', type: 'équipement', creation: false,
+        version_avant: 1, avant: '', apres: apresMere }]) }); }, { journal: false });
+}"""
 # Relance avec la raison (§20.5) : ce qui suit le message d'origine.
 MARQUE_RELANCE = NL + NL + "Ta réponse précédente :" + NL
 REFUS_RELANCE = NL + NL + "Elle a été refusée par les contrôles de Prévo :" + NL
@@ -265,7 +285,7 @@ class TestDonneesEtFile(CasIngestion):
                         "Travail demandé : Changer la garniture", "Codes : Fuite / Garniture usée / Remplacement de la pièce",
                         "Compte rendu : Garniture usée remplacée, fuite stoppée.", "Astuce pour la prochaine fois : " + ASTUCE,
                         "Pièces consommées : Kit garniture HC 50 (réf. KG-50) × 1", "Durée d'arrêt : 2.5 h",
-                        "=== Page « PO-01 — Pompe de process A » (équipement · 2 phrases sur 12, 14 mots sur 250) ===",
+                        "=== Page « PO-01 — Pompe de process A » (équipement · 2 phrases sur 30, 14 mots sur 600) ===",
                         TEXTE_PO01,
                         "Catalogue des pages :", "- Cavitation (mode)", "- Roulement 6205 (composant)"):
             self.assertIn(attendu, message)
@@ -300,6 +320,41 @@ class TestDonneesEtFile(CasIngestion):
                          + ["CAUSE:C02"])
         self.assertEqual(len(nombreuses["envoyees"]), self.page.evaluate("Wiki.SEUILS.pagesEnvoyeesMax"))
         self.assertEqual(len(nombreuses["envoyees"]), 8)
+
+    def test_sous_pages_juste_apres_leur_mere(self):
+        """CS113 (§20.5, 2026-10-23) : après chaque page concernée, ses sous-pages (validées ou « à valider », de même
+        type, par titre), clés comprises ; un savoir-faire rattaché à la page n'en est pas une ; l'en-tête le dit."""
+        self.page.evaluate(SOUS_PAGES_JS, [TEXTE_PO01 + NL + "- Accouplement : voir [[PO-01 — accouplement]] [OT-2026-0003]"])
+        concernees = self.page.evaluate("(ot) => Wiki.pagesConcernees(ot)", "OT-2026-0001")
+        self.assertEqual(concernees["cles"], ["EQ:EQ-0001", "TITRE:po 01 accouplement", "WP:WP-0020", "ART:ART-0001",
+                                              "WP:WP-0021", "CAUSE:C01", "WP:WP-0002", "WP:WP-0010", "WP:WP-0004",
+                                              "WP:WP-0005", "WP:WP-0006"])
+        self.assertEqual([p["titre"] for p in concernees["envoyees"]],
+                         ["PO-01 — Pompe de process A", "PO-01 — accouplement", "PO-01 — garniture", "Kit garniture HC 50",
+                          "Kit garniture HC 50 — faces", "Changer la garniture de PO-01", "Graisser le palier",
+                          "Monter le kit garniture"])                   # pagesEnvoyeesMax : les clés restent toutes
+        # État proposé : une sous-page (validée ou à valider) a la clé de sa mère pour rattachement, aucun ancrage propre.
+        etat = self.page.evaluate("""() => { const etat = Wiki.etatPropose();
+          return ['TITRE:po 01 accouplement', 'WP:WP-0020', 'WP:WP-0021', 'WP:WP-0010'].map((cle) => { const p = etat.get(cle);
+            return [p.type, p.rattacheA, p.equipementId, p.articleId]; }); }""")
+        self.assertEqual(etat, [["équipement", "EQ:EQ-0001", "", ""], ["équipement", "EQ:EQ-0001", "", ""],
+                                ["composant", "ART:ART-0001", "", ""], ["savoir-faire", "EQ:EQ-0001", "", ""]])
+        # Données : chaque page porte `mere` (le titre de sa mère pour une sous-page) ; l'en-tête le dit.
+        d = self.donnees("OT-2026-0001")
+        self.assertEqual(sorted(d["pages"][0]), ["cle", "mere", "mots", "otDates", "phrases", "texte", "titre", "type"])
+        self.assertEqual([p["mere"] for p in d["pages"]], ["", "PO-01 — Pompe de process A", "PO-01 — Pompe de process A", "",
+                                                           "Kit garniture HC 50", "", "", ""])
+        message = self.message("OT-2026-0001")
+        self.assertIn("=== Page « PO-01 — garniture » (équipement · sous-page de « PO-01 — Pompe de process A » · 1 phrases "
+                      "sur 30, 5 mots sur 600) ===", message)
+        self.assertIn("=== Page « Kit garniture HC 50 » (composant · 1 phrases sur 30, 5 mots sur 600) ===", message)
+        self.assertEqual([(p["titre"], p["type"], p["mere"]) for p in lire_message(message)["pages"]][:3],
+                         [("PO-01 — Pompe de process A", "équipement", ""),
+                          ("PO-01 — accouplement", "équipement", "PO-01 — Pompe de process A"),
+                          ("PO-01 — garniture", "équipement", "PO-01 — Pompe de process A")])
+        # Réservations (D112) : un envoi en cours sur une sous-page retient l'OT.
+        self.page.evaluate("(ids) => Wiki.mettreEnFile(ids)", ["OT-2026-0001"])
+        self.assertEqual(self.page.evaluate("Wiki.prochainsEnvois(Wiki.file(), [{ cles: ['WP:WP-0021'] }]).length"), 0)
 
     def test_ordre_de_la_file_par_date_d_intervention_puis_numero(self):
         self.assertEqual(self.page.evaluate("Wiki.horsDuWiki().map((o) => o.id)"), EN_FILE)
@@ -536,6 +591,39 @@ class TestTraitement(CasIngestion):
         self.assertEqual(rien["rien"], 1)
         self.assertEqual(self.journal()["OT-2026-0004"]["statut"], "rien à ajouter")
         self.assertEqual(self.journal()["OT-2026-0004"]["raisons"], "")
+
+    def test_reponse_qui_decoupe_acceptee(self):
+        """CS113 : une réponse qui découpe la page de l'équipement (faux-decoupe : sous-page de même type rattachée à elle,
+        renvoi dans la mère) passe les contrôles ; la sous-page entre dans l'état proposé sans ancrage propre ; l'OT suivant
+        de l'équipement l'envoie juste après sa mère et peut la modifier."""
+        bilan = self.traiter(["OT-2026-0001"], "faux-decoupe")
+        self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["erreur"]), (1, 0, None))
+        entree = self.journal()["OT-2026-0001"]
+        self.assertEqual((entree["statut"], entree["essais"], entree["raisons"]), ("à valider", "1", ""))
+        changements = {c["titre"]: c for c in json.loads(entree["changements"])}
+        self.assertEqual(sorted(changements), ["Astuce de l'OT-2026-0001", "PO-01 — Pompe de process A",
+                                               "PO-01 — pannes qui reviennent"])
+        sous_page = changements["PO-01 — pannes qui reviennent"]
+        self.assertEqual((sous_page["cle"], sous_page["type"], sous_page["creation"], sous_page["rattacheA"]),
+                         ("TITRE:po 01 pannes qui reviennent", "équipement", True, "PO-01 — Pompe de process A"))
+        self.assertEqual(sous_page["apres"], "## Ce qui revient" + NL + "- Fuite de garniture au démarrage, fréquent ici "
+                         "[OT-2026-0007]" + NL + "- Fuite à la garniture : fréquent ici [OT-2026-0001]")
+        self.assertIn("- Détail des pannes qui reviennent : voir [[PO-01 — pannes qui reviennent]] [OT-2026-0007] "
+                      "[OT-2026-0001]", changements["PO-01 — Pompe de process A"]["apres"])
+        etat = self.page.evaluate("""() => { const p = Wiki.etatPropose().get('TITRE:po 01 pannes qui reviennent');
+          return [p.type, p.rattacheA, p.equipementId, p.articleId]; }""")
+        self.assertEqual(etat, ["équipement", "EQ:EQ-0001", "", ""])
+        # L'OT suivant de PO-01 : la sous-page part juste après sa mère ; la nouvelle phrase y va.
+        self.assertEqual(self.page.evaluate("(ot) => Wiki.pagesConcernees(ot).cles", "OT-2026-0008")[:2],
+                         ["EQ:EQ-0001", "TITRE:po 01 pannes qui reviennent"])
+        self.assertIn("=== Page « PO-01 — pannes qui reviennent » (équipement · sous-page de « PO-01 — Pompe de process A » · "
+                      "2 phrases sur 30, 16 mots sur 600) ===", self.message("OT-2026-0008"))
+        bilan = self.traiter(["OT-2026-0008"], "faux-decoupe")
+        self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["erreur"]), (1, 0, None))
+        suite = json.loads(self.journal()["OT-2026-0008"]["changements"])
+        self.assertEqual([(c["titre"], c["creation"], c["version_avant"]) for c in suite],
+                         [("PO-01 — pannes qui reviennent", False, 1)])
+        self.assertTrue(suite[0]["apres"].endswith("- Fuite encore : fréquent ici [OT-2026-0008]"), suite[0]["apres"])
 
     def requetes_ia(self):
         """Corps des requêtes reçues par le faux fournisseur : (système, utilisateur, schéma, modèle) de chacune."""

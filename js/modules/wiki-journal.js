@@ -7,6 +7,8 @@
 //  - page d'un changement : `page` (WP-…) quand il est connu, sinon sa clé (« EQ:<équipement> », « ART:<article> »,
 //    « WP:<page> », « TITRE:<titre comparable> ») ; une ligne est créée pour une page ancrée encore sans texte et pour
 //    une page créée ; la validation inscrit `page` dans chaque changement ;
+//  - sous-page créée (§20.4) : rattache_a = la ligne de sa mère (de même type, créée d'abord : pages modifiées avant pages
+//    créées), jamais equipement_id ni article_id ; à la main, sous une page qui a déjà une ligne ;
 //  - `version_avant` (wiki-ingestion.js) compte les propositions plus anciennes en attente sur la page : validées dans
 //    l'ordre de `ordre`, chacune trouve la page dans la version attendue ;
 //  - dépendance (« touche une même page ») : B, plus récente, dépend de A si A CHANGE une page sur laquelle B a été
@@ -33,6 +35,7 @@ Object.assign(Wiki, (() => {
 
   const DECISIONS = ['ancien', 'nouveau', 'les deux'];
   const MESSAGE_RESERVE = 'Réservé au responsable : le wiki se valide et s\'écrit depuis son profil.';
+  const { cleDeLigne, idCanonique, titreEquipement, titreArticle } = Wiki;      // clés, titres : wiki-ingestion.js
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -82,28 +85,8 @@ Object.assign(Wiki, (() => {
       || 'Responsable';
   }
 
-  function titreEquipement(equipement) {
-    return [texte(equipement.repere), texte(equipement.designation)].filter(Boolean).join(' — ');
-  }
-
-  function titreArticle(article) {
-    return texte(article.designation) || texte(article.reference).replace(/^'/, '') || texte(article.id);
-  }
-
   function estActive(ligne) {
     return texte(ligne.statut) !== 'archivée';
-  }
-
-  function cleDeLigne(ligne) {
-    if (texte(ligne.type) === 'équipement' && texte(ligne.equipement_id)) return 'EQ:' + texte(ligne.equipement_id);
-    if (texte(ligne.type) === 'composant' && texte(ligne.article_id)) return 'ART:' + texte(ligne.article_id);
-    return 'WP:' + texte(ligne.id);
-  }
-
-  /** Identifiant canonique d'une ligne (celui de #/wiki/<id>) : EQ-… ou ART-… pour une page ancrée, sinon WP-…. */
-  function idCanonique(ligne) {
-    const cle = cleDeLigne(ligne);
-    return cle.slice(cle.indexOf(':') + 1);
   }
 
   /** Ligne de wiki_pages d'un changement ou d'une clé (null si la page n'a pas encore de ligne). */
@@ -188,22 +171,29 @@ Object.assign(Wiki, (() => {
       valide_le: contexte.maintenant, modifie_le: contexte.maintenant });
   }
 
-  /** Nouvelle ligne pour une clé (page ancrée sans ligne, ou page créée) ; rattachement par le titre visé. */
-  function nouvelleLigne(lignes, outils, cle, changement, index) {
+  /**
+   * Nouvelle ligne pour une clé (page ancrée sans ligne, ou page créée), rattachée à la page `vise` (identifiant
+   * canonique, ou vide) : une page de même type en fait une sous-page (§20.4 : rattache_a = la ligne de sa mère, aucun
+   * ancrage propre) ; sinon l'équipement ou l'article visé (equipement_id, article_id), ou la ligne visée (rattache_a).
+   */
+  function nouvelleLigne(lignes, outils, cle, changement, vise) {
     const ligne = { id: outils.nouvelId(lignes), type: texte(changement.type), titre: texte(changement.titre), version: '0',
       statut: 'active', cree_le: outils.maintenant() };
+    const prefixe = vise.startsWith('EQ-') ? 'EQ:' : (vise.startsWith('ART-') ? 'ART:' : 'WP:');
+    const mere = vise ? ligneDeCle(lignes, prefixe + vise, '') : null;
+    const typeVise = { 'EQ:': 'équipement', 'ART:': 'composant' }[prefixe] || texte(mere && mere.type);
     if (cle.startsWith('EQ:')) {
       const equipement = Donnees.trouver('equipements', cle.slice(3)) || { id: cle.slice(3) };
       Object.assign(ligne, { type: 'équipement', equipement_id: cle.slice(3), titre: titreEquipement(equipement) });
     } else if (cle.startsWith('ART:')) {
       const article = Donnees.trouver('articles', cle.slice(4)) || { id: cle.slice(4) };
       Object.assign(ligne, { type: 'composant', article_id: cle.slice(4), titre: titreArticle(article) });
-    } else if (texte(changement.rattacheA)) {
-      const vise = index.get(Wiki.comparable(changement.rattacheA)) || '';
-      if (vise.startsWith('EQ-')) ligne.equipement_id = vise;
-      else if (vise.startsWith('ART-')) ligne.article_id = vise;
-      else if (vise) ligne.rattache_a = vise;
-    }
+    } else if (vise && typeVise === ligne.type) {
+      if (!mere) throw ErreurValidation('La page mère de « ' + ligne.titre + ' » n\'a pas encore de texte : écrivez-la d\'abord.');
+      ligne.rattache_a = mere.id;
+    } else if (vise.startsWith('EQ-')) ligne.equipement_id = vise;
+    else if (vise.startsWith('ART-')) ligne.article_id = vise;
+    else if (vise) ligne.rattache_a = vise;
     lignes.push(ligne);
     return ligne;
   }
@@ -291,9 +281,17 @@ Object.assign(Wiki, (() => {
             throw erreur;
           }
         });
-        let index = indexDesLiens(lignes);
-        const pages = trouvees.map((ligne, n) => ligne || nouvelleLigne(lignes, outils, texte(changements[n].cle), changements[n], index));
-        index = indexDesLiens(lignes);
+        // Lignes nouvelles : pages modifiées (page ancrée encore sans ligne) avant pages créées — la mère d'une sous-page
+        // a sa ligne avant elle, quel que soit l'ordre des changements dans l'entrée.
+        const pages = trouvees.slice();
+        changements.map((c, n) => n).filter((n) => !pages[n])
+          .sort((a, b) => Number(Boolean(changements[a].creation)) - Number(Boolean(changements[b].creation)) || a - b)
+          .forEach((n) => {
+            const rattacheA = texte(changements[n].rattacheA);
+            const vise = rattacheA ? indexDesLiens(lignes).get(Wiki.comparable(rattacheA)) || '' : '';
+            pages[n] = nouvelleLigne(lignes, outils, texte(changements[n].cle), changements[n], vise);
+          });
+        const index = indexDesLiens(lignes);
         const contexte = { index, parIa: true, modele: texte(entree.modele), entreeId: entree.id, par, maintenant: outils.maintenant() };
         pages.forEach((ligne, n) => poserTexte(ligne, changements[n].apres || '', contexte));
         return pages.map((ligne) => ligne.id);
@@ -450,15 +448,20 @@ Object.assign(Wiki, (() => {
     }
     const nouvelle = cible && cible.nouvelle;
     if (!nouvelle) throw ErreurValidation('Page à écrire non précisée.');
-    if (texte(nouvelle.type) === 'équipement') throw ErreurValidation('Une page d\'équipement ne se crée pas : elle existe déjà.');
+    if (texte(nouvelle.type) === 'équipement' && !texte(nouvelle.rattacheA)) {
+      throw ErreurValidation('Une page d\'équipement ne se crée pas : elle existe déjà (seule une sous-page se crée, rattachée à sa mère).');
+    }
     return { ligne: null, nouvelle: true, cle: 'TITRE:' + Wiki.comparable(nouvelle.titre), type: texte(nouvelle.type),
       titre: texte(nouvelle.titre), rattache: texte(nouvelle.rattacheA), causeCode: texte(nouvelle.causeCode) };
   }
 
-  /** Page (catalogue) d'un identifiant canonique, pour le contrôle du rattachement d'un savoir-faire. */
+  /** Page d'un identifiant canonique, pour le contrôle du rattachement (savoir-faire, sous-page : `mere` si c'en est une). */
   function pageEnvoyee(id) {
     const page = id ? Wiki.page(id) : null;
-    return page ? { titre: page.titre, type: page.type, texte: page.texte || '' } : null;
+    const ligne = page ? Donnees.trouver('wiki_pages', page.pageId || page.id) : null;
+    const mere = ligne && texte(ligne.rattache_a) ? Donnees.trouver('wiki_pages', texte(ligne.rattache_a)) : null;
+    return page ? { titre: page.titre, type: page.type, texte: page.texte || '',
+      mere: mere && texte(mere.type) === page.type ? texte(mere.titre) : '' } : null;
   }
 
   function controlerEcriture(page, valeur) {
@@ -519,13 +522,8 @@ Object.assign(Wiki, (() => {
           throw ErreurValidation('La page a été modifiée entre-temps (sans doute sur un autre poste) : rechargez-la puis recommencez.');
         }
         if (page.nouvelle && ligne) throw ErreurValidation('Une page de ce titre existe déjà.');
-        const index = indexDesLiens(lignes);
         if (!ligne) {
-          ligne = nouvelleLigne(lignes, outils, page.cle, { type: page.type, titre: page.titre }, index);
-          const vise = page.rattache;
-          if (vise.startsWith('EQ-')) ligne.equipement_id = vise;
-          else if (vise.startsWith('ART-')) ligne.article_id = vise;
-          else if (vise) ligne.rattache_a = vise;
+          ligne = nouvelleLigne(lignes, outils, page.cle, { type: page.type, titre: page.titre }, texte(page.rattache));
           if (page.causeCode) ligne.cause_code = page.causeCode;
         }
         const contexte = { index: indexDesLiens(lignes), parIa: false, entreeId, par, maintenant: outils.maintenant() };

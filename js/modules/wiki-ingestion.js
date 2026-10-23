@@ -10,6 +10,10 @@
 //  - une page créée par une proposition à valider entre dans l'état proposé sous sa clé TITRE ; une proposition
 //    suivante qui la modifie la retrouve par son titre, avant comme après sa validation ;
 //  - titre d'une page d'article : désignation, sinon référence, sinon identifiant (comme Wiki.catalogue) ;
+//  - sous-page (§20.4) : page dont le rattachement désigne une page de même type ; dans l'état proposé, `rattacheA` =
+//    la clé de sa mère, sans equipementId ni articleId (sa clé est la sienne : WP:… ou TITRE:…) ; un savoir-faire
+//    rattaché à un équipement ou à un article en prend l'ancrage ; une page envoyée qui est une sous-page porte `mere`
+//    (le titre de sa mère ; vide pour les autres) ;
 //  - `version` d'une page de l'état proposé = version validée + propositions « à valider » qui la changent : c'est le
 //    `version_avant` noté sur chaque changement (avec `page`, son WP-… s'il existe), pris dans l'état ENVOYÉ ;
 //  - les écritures de wiki_journal ne sont pas recopiées au journal général (la table est elle-même un journal) ;
@@ -132,6 +136,12 @@ Object.assign(Wiki, (() => {
     return 'WP:' + texte(ligne.id);
   }
 
+  /** Identifiant canonique d'une ligne (celui de #/wiki/<id>) : EQ-… ou ART-… pour une page ancrée, sinon WP-…. */
+  function idCanonique(ligne) {
+    const cle = cleDeLigne(ligne);
+    return cle.slice(cle.indexOf(':') + 1);
+  }
+
   /** Titre comparable → clé, pour toutes les pages de l'état et toutes les pages calculées (équipements, articles). */
   function indexDesTitres(pages) {
     const index = new Map();
@@ -141,11 +151,17 @@ Object.assign(Wiki, (() => {
     return index;
   }
 
-  function rattacher(page, rattacheA, index) {
+  /**
+   * Rattachement d'une page créée par une proposition, par le titre visé : `rattacheA` = la clé de la page visée ; une
+   * page de même type est une sous-page (aucun ancrage propre) ; sinon un équipement ou un article visé donne son ancrage.
+   */
+  function rattacher(page, rattacheA, index, pages) {
     const cle = index.get(Wiki.comparable(rattacheA)) || '';
+    const visee = cle ? pages.get(cle) || pageCalculee(cle) : null;
+    page.rattacheA = cle;
+    if (visee && visee.type === page.type) return;
     if (cle.startsWith('EQ:')) page.equipementId = cle.slice(3);
     if (cle.startsWith('ART:')) page.articleId = cle.slice(4);
-    page.rattacheA = cle;
   }
 
   /**
@@ -182,7 +198,7 @@ Object.assign(Wiki, (() => {
         equipementId: '', articleId: '', causeCode: '', rattacheA: '', version: 1 };
       if (cle.startsWith('EQ:')) nouvelle.equipementId = cle.slice(3);
       if (cle.startsWith('ART:')) nouvelle.articleId = cle.slice(4);
-      if (texte(changement.rattacheA)) rattacher(nouvelle, changement.rattacheA, index);
+      if (texte(changement.rattacheA)) rattacher(nouvelle, changement.rattacheA, index, pages);
       pages.set(cle, nouvelle);
     }));
     return pages;
@@ -220,11 +236,27 @@ Object.assign(Wiki, (() => {
     return null;
   }
 
+  /** Les pages de l'état triées par titre (ordre stable des savoir-faire, modes et sous-pages). */
+  function parTitre(etat) {
+    return Array.from(etat.values()).sort((a, b) => comparer(a.titre, b.titre) || comparer(a.cle, b.cle));
+  }
+
+  /** Sous-pages d'une page de l'état proposé (§20.4) : pages de même type rattachées à sa clé, par titre. */
+  function sousPages(page, toutes) {
+    return toutes.filter((autre) => autre.cle !== page.cle && autre.rattacheA === page.cle && autre.type === page.type);
+  }
+
+  /** Mère d'une page de l'état proposé si c'est une sous-page (rattachée à une page de même type), sinon null. */
+  function mereDe(page, etat) {
+    const mere = page.rattacheA ? etat.get(page.rattacheA) || pageCalculee(page.rattacheA) : null;
+    return mere && mere.type === page.type ? mere : null;
+  }
+
   /**
    * Pages concernées par un OT, calculées avant l'envoi → { cles, envoyees } : clés et pages dans l'ordre de priorité
    * du §20.5 — équipement, articles consommés, cause (clé seule), savoir-faire de l'équipement (ancrés ou rattachés)
-   * puis des articles, modes ancrés sur la cause, pages liées depuis la page de l'équipement —, pagesEnvoyeesMax
-   * pages envoyées au plus.
+   * puis des articles, modes ancrés sur la cause, pages liées depuis la page de l'équipement ; chacune suivie de ses
+   * sous-pages, par titre —, pagesEnvoyeesMax pages envoyées au plus (toutes les clés sont gardées).
    */
   function pagesConcernees(otId, etatDonne) {
     const etat = etatDonne || etatPropose();
@@ -232,6 +264,7 @@ Object.assign(Wiki, (() => {
     if (!ot) return { cles: [], envoyees: [] };
     const equipementId = texte(ot.equipement_id);
     const articles = articlesConsommes(texte(ot.id)).map((article) => article.articleId);
+    const toutes = parTitre(etat);
     const cles = [];
     const envoyees = [];
     const ajouter = (cle) => {
@@ -239,8 +272,8 @@ Object.assign(Wiki, (() => {
       cles.push(cle);
       const page = etat.get(cle) || pageCalculee(cle);
       if (page && envoyees.length < SEUILS.pagesEnvoyeesMax) envoyees.push(page);
+      if (page) sousPages(page, toutes).forEach((sousPage) => ajouter(sousPage.cle));     // juste après leur mère
     };
-    const toutes = Array.from(etat.values()).sort((a, b) => comparer(a.titre, b.titre) || comparer(a.cle, b.cle));
     ajouter('EQ:' + equipementId);
     articles.forEach((articleId) => ajouter('ART:' + articleId));
     const cause = texte(ot.cause_code);
@@ -315,17 +348,19 @@ Object.assign(Wiki, (() => {
 
   /**
    * Données d'une requête d'ingestion (§20.5) : l'OT (liste blanche : jamais les noms des techniciens ou des demandeurs,
-   * les coûts, les documents, les photos), l'antériorité, les pages envoyées (clé, titre, type, texte, dates
-   * d'intervention des OT qu'elles citent) et le catalogue.
+   * les coûts, les documents, les photos), l'antériorité, les pages envoyées (clé, titre, type, mère d'une sous-page,
+   * texte, dates d'intervention des OT qu'elles citent, taille) et le catalogue.
    */
   function donneesIngestion(otId, etatDonne) {
     const etat = etatDonne || etatPropose();
     const ot = Donnees.trouver('ordres_travail', otId);
     if (!ot) throw new Error('Wiki.donneesIngestion : OT inconnu « ' + otId + ' ».');
     const concernees = pagesConcernees(texte(ot.id), etat);
-    // Taille de chaque page (phrases, mots) : le modèle ne compte pas ; il sait ainsi qu'une page pleine se regroupe.
+    // Taille de chaque page (phrases, mots) : le modèle ne compte pas ; il sait ainsi qu'une page pleine se regroupe ou se
+    // découpe. Une sous-page porte le titre de sa mère (`mere`, vide pour une autre page).
     const pages = concernees.envoyees.map((page) => Object.assign({ cle: page.cle, titre: page.titre, type: page.type,
-      texte: page.texte, otDates: Wiki.citationsDe(page.texte).map((id) => ({ id, date: dateIntervention(id) })) },
+      mere: (mereDe(page, etat) || { titre: '' }).titre, texte: page.texte,
+      otDates: Wiki.citationsDe(page.texte).map((id) => ({ id, date: dateIntervention(id) })) },
     Wiki.mesurerTexte(page.texte)));
     const plusRecente = pages.flatMap((page) => page.otDates.map((entree) => entree.date)).filter(Boolean).sort().pop() || '';
     return {
@@ -590,5 +625,6 @@ Object.assign(Wiki, (() => {
   return {
     file, mettreEnFile, horsDuWiki, etatPropose, pagesConcernees, donneesIngestion, lireIngestion, prochainsEnvois,
     traiterFile, articlesConsommes, texteSourceOt, MOTIF_COLLISION, MOTIF_PAGES_CHANGEES,
+    cleDeLigne, idCanonique, titreEquipement, titreArticle,       // repris par wiki-journal.js (mêmes clés, mêmes titres)
   };
 })());

@@ -9,8 +9,8 @@ const Wiki = (() => {
   // Seuils du lot (D100, §20.1), documentés dans le guide.
   const SEUILS = Object.freeze({
     pagesCreeesMax: 3,     // pages créées par un OT ingéré
-    phrasesMax: 12,        // phrases d'une page
-    motsMax: 250,          // mots d'une page (citations exclues)
+    phrasesMax: 30,        // phrases d'une page (au-delà : sous-pages, §20.4 ; révision de Nicolas du 2026-10-23)
+    motsMax: 600,          // mots d'une page (rubriques comprises, citations exclues ; idem)
     relancesMax: 1,        // relance avec la raison d'une réponse refusée par les contrôles (D106 révisée, §20.5)
     pagesEnvoyeesMax: 8,   // pages jointes à une requête d'ingestion
     catalogueMax: 400,     // titres du catalogue envoyé
