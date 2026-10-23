@@ -523,25 +523,34 @@ class TestIntegriteEtDonnees(CasJournal):
 # Visibilité dans l'application : « à valider » invisible aux autres profils, dans les trois modes
 # ---------------------------------------------------------------------------------------------------
 
+# Par-dessus le wiki de la démo (qui peut déjà avoir la page) : la page du premier équipement (créée si besoin, avec
+# son entrée validée), puis une proposition à valider qui la change.
 AJOUT_JS = """async () => {
-  if (Donnees.trouver('wiki_pages', 'WP-0001')) return;
+  if (Donnees.trouver('wiki_journal', 'WJ-99002')) return;
   const equipement = Donnees.lignes('equipements')[0];
-  const titre = equipement.repere + ' — ' + equipement.designation;
   const ot = Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement').map((o) => o.id).sort()[0];
-  const valide = '## Ce qui revient\\n- Texte validé [' + ot + ']';
-  await Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-0001', type: 'équipement', titre,
-    equipement_id: equipement.id, texte: valide, version: '1', statut: 'active', origine: 'IA', derniere_entree: 'WJ-00001' }); });
-  await Donnees.modifier('wiki_journal', (lignes) => {
-    lignes.push({ id: 'WJ-00001', nature: 'ingestion', ot_id: ot, statut: 'validée', ordre: '1', pages: 'EQ:' + equipement.id,
-      changements: JSON.stringify([{ page: 'WP-0001', cle: 'EQ:' + equipement.id, version_avant: 0, avant: '', apres: valide }]),
-      contradictions: '[]' });
-    lignes.push({ id: 'WJ-00002', nature: 'ingestion', ot_id: ot, statut: 'à valider', ordre: '2', pages: 'EQ:' + equipement.id,
-      changements: JSON.stringify([{ page: 'WP-0001', cle: 'EQ:' + equipement.id, version_avant: 1, avant: valide,
-        apres: valide + '\\n- Texte proposé [' + ot + ']' }]), contradictions: '[]' });
-  });
+  const actuelle = () => Donnees.lignes('wiki_pages').find((l) => l.type === 'équipement' && l.equipement_id === equipement.id
+    && l.statut !== 'archivée');
+  if (!actuelle()) {
+    const valide = '## Ce qui revient\\n- Texte validé [' + ot + ']';
+    await Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-9001', type: 'équipement',
+      titre: equipement.repere + ' — ' + equipement.designation, equipement_id: equipement.id, texte: valide, version: '1',
+      statut: 'active', origine: 'IA', derniere_entree: 'WJ-99001' }); });
+    await Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-99001', nature: 'ingestion', ot_id: ot,
+      statut: 'validée', ordre: '9998', pages: 'EQ:' + equipement.id, contradictions: '[]',
+      changements: JSON.stringify([{ page: 'WP-9001', cle: 'EQ:' + equipement.id, version_avant: 0, avant: '', apres: valide }]) }); });
+  }
+  const ligne = actuelle();
+  await Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-99002', nature: 'ingestion', ot_id: ot,
+    statut: 'à valider', ordre: '9999', pages: 'EQ:' + equipement.id, contradictions: '[]',
+    changements: JSON.stringify([{ page: ligne.id, cle: 'EQ:' + equipement.id, version_avant: Number(ligne.version) || 0,
+      avant: ligne.texte, apres: ligne.texte + '\\n- Texte proposé [' + ot + ']' }]) }); });
 }"""
-VU_JS = """() => { const page = Wiki.page(Donnees.lignes('equipements')[0].id);
-  return { texte: page.texte, enAttente: page.enAttente.map((e) => e.entreeId), integre: Wiki.verifierIntegrite().ok }; }"""
+VU_JS = """() => { const equipement = Donnees.lignes('equipements')[0]; const page = Wiki.page(equipement.id);
+  const ligne = Donnees.lignes('wiki_pages').find((l) => l.type === 'équipement' && l.equipement_id === equipement.id
+    && l.statut !== 'archivée');
+  return { texte: page.texte, valide: ligne.texte, enAttente: page.enAttente.map((e) => e.entreeId),
+    integre: Wiki.verifierIntegrite().ok }; }"""
 
 
 class TestVisibiliteTroisModes(CasNavigateur):
@@ -549,9 +558,12 @@ class TestVisibiliteTroisModes(CasNavigateur):
     def verifier(self, page, responsable):
         page.evaluate(AJOUT_JS)
         vu = page.evaluate(VU_JS)
-        self.assertEqual(vu["texte"].count("Texte validé"), 1)
+        self.assertEqual(vu["texte"], vu["valide"])                      # le texte validé, jamais la proposition
         self.assertNotIn("Texte proposé", vu["texte"])
-        self.assertEqual(vu["enAttente"], ["WJ-00002"] if responsable else [])
+        if responsable:
+            self.assertIn("WJ-99002", vu["enAttente"])
+        else:
+            self.assertEqual(vu["enAttente"], [])
         self.assertTrue(vu["integre"])
 
     def nouvelle_page(self, profil, dossier=None):

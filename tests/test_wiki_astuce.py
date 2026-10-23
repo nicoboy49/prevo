@@ -342,9 +342,12 @@ class TestPiegeEtDemo(CasAstuce):
 # ---------------------------------------------------------------------------
 
 # Deux pages validées écrites en mémoire (démo) : une page d'équipement (lien canonique EQ-0005) et un
-# savoir-faire sans équipement au titre piégé (lien WP-0002) ; le mot « stroboscope » n'est que dans elles.
+# savoir-faire sans équipement au titre piégé (lien WP-0002) ; le mot « stroboscope » n'est que dans elles. Elles
+# remplacent le wiki figé de la démo (T122).
 PAGES_JS = """async () => {
+  await Donnees.modifier('wiki_journal', (lignes) => { lignes.splice(0, lignes.length); });
   await Donnees.modifier('wiki_pages', (lignes) => {
+    lignes.splice(0, lignes.length);
     lignes.push({ id: 'WP-0001', type: 'équipement', titre: 'PO-02', equipement_id: 'EQ-0005', statut: 'active',
       texte: '## À surveiller\\n- Contrôler la vitesse au stroboscope après un remontage [OT-2025-0010]',
       valide_le: '2026-10-01 10:00', version: '1', origine: 'IA' });

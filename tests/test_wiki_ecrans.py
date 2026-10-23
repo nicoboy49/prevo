@@ -196,9 +196,10 @@ ORIGINE_IA = "Rédigé avec l'IA (claude-sonnet-5-5) à partir des OT cités —
 ORIGINE_MANUEL = "Écrit par Paul Martin le %s"
 ORIGINE_MIXTE = "Rédigé avec l'IA (claude-sonnet-5-5) à partir des OT cités, puis modifié à la main — validé par Paul Martin le %s"
 
+# La base remplace le wiki figé de la démo (T122).
 BASE_JS = """async ([pages, journal]) => {
-  await Donnees.modifier('wiki_pages', (lignes) => { lignes.push(...pages); }, { journal: false });
-  await Donnees.modifier('wiki_journal', (lignes) => { lignes.push(...journal); }, { journal: false });
+  await Donnees.modifier('wiki_pages', (lignes) => { lignes.splice(0, lignes.length, ...pages); }, { journal: false });
+  await Donnees.modifier('wiki_journal', (lignes) => { lignes.splice(0, lignes.length, ...journal); }, { journal: false });
 }"""
 
 # --- lectures du DOM ---------------------------------------------------------------------------------

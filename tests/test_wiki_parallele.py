@@ -23,7 +23,10 @@ SCRIPTS = ["js/demo-donnees.js"] + ingestion.SCRIPTS + ["js/modules/wiki-journal
 PROFIL_JS = """() => { window.App = { estResponsable: () => true, libelleProfil: () => 'Responsable',
   profil: { type: 'responsable', nom: 'Nicolas' } }; }"""
 CHARGER_DEMO_JS = """async () => {
-  Donnees.initialiser(StockageDemo.creer(DEMO_DONNEES.tables), { poste: 'Poste test', profil: 'Responsable test' });
+  // La démo porte son wiki figé (T122) : le test le reconstruit à partir d'un wiki vide.
+  const tables = Object.assign({}, DEMO_DONNEES.tables);
+  ['wiki_pages', 'wiki_journal'].forEach((nom) => { tables[nom] = tables[nom].split('\\r\\n')[0] + '\\r\\n'; });
+  Donnees.initialiser(StockageDemo.creer(tables), { poste: 'Poste test', profil: 'Responsable test' });
   await Donnees.chargerTout();
 }"""
 # Ingestion de toute la démo puis validation de toutes les propositions, dans l'ordre de leur rang.
