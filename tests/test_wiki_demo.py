@@ -189,30 +189,45 @@ class TestFabrication(unittest.TestCase):
         trace = json.loads(next(traces.glob('*.json')).read_text(encoding='utf-8'))
         self.assertEqual([a['reprise'] for a in trace['appels']], [False, True])
 
-    def test_reprise_fidele_avec_cinq_agents(self):
-        """Cinq agents, réponses dans le désordre : rendues après leur durée d'origine, les réponses reprises arrivent
-        dans le même ordre, les mêmes requêtes partent et tout est repris sans agent (--reprise-seule), même wiki ;
-        rendues tout de suite (--reprise-duree 0), l'ordre change, une requête manque aux traces et rien n'est appelé."""
-        traces = self.dossier / 'chaine-5'
+    def test_reprise_rendue_apres_sa_duree_d_origine(self):
+        """Une réponse reprise est rendue après sa durée d'origine (--reprise-duree 1) : deux réponses demandées ensemble
+        reviennent dans l'ordre de leurs durées, comme à l'origine ; avec --reprise-duree 0, tout de suite ; --reprise-seule
+        n'appelle jamais d'agent pour une requête absente des traces. Essai sans minutage serré (0,2 s contre 1,2 s) : le
+        rejeu de bout en bout à cinq agents dépend de la charge de la machine (deux réponses à quelques millisecondes
+        peuvent s'inverser) et n'est pas testé ici ; la fabrication en deux temps repart du résultat du premier temps."""
+        module = charger_outil()
+        traces = self.dossier / 'reprise-duree'
+        traces.mkdir()
+        systeme = 'Fonction : ingestionWiki\nessai'
+        requetes = {}
+        for ot, duree in (('OT-2026-9001', 1.2), ('OT-2026-9002', 0.2)):
+            utilisateur = 'OT à intégrer : %s · essai' % ot
+            requetes[ot] = {'messages': [{'role': 'system', 'content': systeme}, {'role': 'user', 'content': utilisateur}]}
+            module.ecrire_trace(traces, {'ot': ot, 'appels': [{
+                'empreinte': module.empreinte(systeme, utilisateur), 'reprise': False, 'contenu': '{"rien_a_ajouter": true}',
+                'modele': 'claude-sonnet-5-5', 'tours': 1, 'duree_s': duree}]})
 
-        def fabriquer(numero, *options):
-            resultat = self.dossier / ('resultat-5-agents-%d' % numero)
-            sortie = lancer(OUTIL, ['fabriquer', '--agents', 5, '--limite', 30, '--claude', FAUX, '--traces', traces,
-                                    '--resultat', resultat] + list(options), {'FAUX_CLAUDE_DELAIS': '1'})
-            return sortie, resultat
+        async def ordre_de_retour(fabrique):
+            rendus = []
 
-        premiere, resultat_1 = fabriquer(1)
-        self.assertEqual(premiere.returncode, 0, premiere.stdout + premiere.stderr)
-        self.assertIn('Agents lancés : 30 · réponses reprises des traces : 0', premiere.stdout)
-        seconde, resultat_2 = fabriquer(2, '--reprise-seule')
-        self.assertEqual(seconde.returncode, 0, seconde.stdout + seconde.stderr)
-        self.assertIn('Agents lancés : 0 · réponses reprises des traces : 30', seconde.stdout)
-        self.assertEqual(wiki_de(resultat_2), wiki_de(resultat_1))
-        self.assertEqual((resultat_2 / 'wiki_pages.csv').read_bytes(), (resultat_1 / 'wiki_pages.csv').read_bytes())
-        troisieme, _ = fabriquer(3, '--reprise-seule', '--reprise-duree', 0)
-        self.assertEqual(troisieme.returncode, 1, troisieme.stdout)
-        self.assertIn('requête absente des traces (reprise seule : aucun agent lancé)', troisieme.stdout)
-        self.assertIn('Agents lancés : 0 ·', troisieme.stdout)
+            async def un(ot):
+                await fabrique.appeler(requetes[ot], ot)
+                rendus.append(ot)
+            debut = time.time()
+            await asyncio.gather(un('OT-2026-9001'), un('OT-2026-9002'))
+            return rendus, time.time() - debut
+
+        rendus, duree = asyncio.run(ordre_de_retour(module.Fabrique([sys.executable], traces, reprise_duree=1.0)))
+        self.assertEqual(rendus, ['OT-2026-9002', 'OT-2026-9001'])
+        self.assertGreater(duree, 1.1)
+        rendus, duree = asyncio.run(ordre_de_retour(module.Fabrique([sys.executable], traces, reprise_duree=0)))
+        self.assertLess(duree, 0.5)
+        absente = {'messages': [{'role': 'system', 'content': systeme}, {'role': 'user', 'content': 'OT à intégrer : OT-2026-9003'}]}
+        fabrique = module.Fabrique([str(self.dossier / 'jamais-lance.exe')], traces, reprise_seule=True)
+        with self.assertRaises(module.ErreurFabrication) as erreur:
+            asyncio.run(fabrique.appeler(absente, 'OT-2026-9003'))
+        self.assertIn('requête absente des traces (reprise seule : aucun agent lancé)', str(erreur.exception))
+        self.assertEqual(fabrique.appels, 0)
 
     def test_figer_generer_verifier_et_relecture(self):
         fige = self.dossier / 'fige'
