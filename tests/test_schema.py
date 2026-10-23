@@ -169,7 +169,7 @@ VALEURS_CANONIQUES = {
     ("mouvements_stock", "type"): ["entrée", "sortie", "inventaire", "retour"],
     ("achats", "statut"): ["demandée", "commandée", "reçue"],
     ("gammes", "declencheur"): ["date", "compteur", "seuil"],
-    ("wiki_pages", "type"): ["équipement", "composant", "mode", "savoir-faire"],
+    ("wiki_pages", "type"): ["équipement", "composant", "savoir-faire"],         # refonte 2 (§20.12) : « mode » retiré
     ("wiki_pages", "origine"): ["IA", "manuel", "IA et manuel"],
     ("wiki_pages", "statut"): ["active", "archivée"],
     ("wiki_journal", "nature"): ["ingestion", "manuel", "décision"],
@@ -445,6 +445,14 @@ class TestSchema(CasNavigateur):
     def test_aucun_choix_non_prevu(self):
         trouves = {(t, c["nom"]) for t, c in self.tous_les_champs() if c["type"] == "choix"}
         self.assertEqual(trouves, set(VALEURS_CANONIQUES.keys()))
+
+    def test_valeurs_retirees(self):
+        """Une valeur retirée (`retirees`) n'est plus proposée, mais une ancienne ligne qui la porte reste lue : seul le
+        type « mode » des pages du wiki (refonte 2, §20.12)."""
+        trouves = {(t, c["nom"]): c["retirees"] for t, c in self.tous_les_champs() if "retirees" in c}
+        self.assertEqual(trouves, {("wiki_pages", "type"): ["mode"]})
+        for (nom_table, nom_champ), retirees in trouves.items():
+            self.assertFalse(set(retirees) & set(self.champs_de(nom_table)[nom_champ]["valeurs"]))
 
     def test_listes_conformes_aux_parentheses_du_brief(self):
         """Les valeurs écrites « a / b / c » entre parenthèses dans le brief sont celles du schéma."""

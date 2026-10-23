@@ -1,16 +1,44 @@
 'use strict';
 // Wiki (1/8) — wiki de maintenance (lot 6 refondu, ARCHITECTURE.md §20) : crée l'objet Wiki. Constantes
-// (§20.1), forme comparable, vocabulaire de la sécurité (D97) et couche calculée de la page d'un
-// équipement (Wiki.pageEquipement, §20.3) : des fonctions pures, sans écriture. Les fichiers suivants
-// (wiki-calculs.js … wiki-journal-ecrans.js) complètent l'objet.
+// (§20.1), rubriques et longueurs des textes rédigés (§20.12, refonte 2), forme comparable, vocabulaire de la
+// sécurité (D97) et couche calculée de la page d'un équipement (Wiki.pageEquipement, §20.3) : des fonctions
+// pures, sans écriture. Les fichiers suivants (wiki-calculs.js … wiki-journal-ecrans.js) complètent l'objet.
 
 const Wiki = (() => {
 
+  // Rubriques des textes rédigés, par type (§20.4 ; refonte 2, D96 révisée 2, §20.12), dans l'ordre où elles
+  // s'écrivent : le texte d'une machine (« En bref », « Astuces »), celui d'un article (« À quoi il sert ») et les
+  // savoir-faire. Le type « mode » est retiré (une panne est une page calculée) : il n'a plus de rubrique.
+  const RUBRIQUES = Object.freeze({
+    'équipement': Object.freeze(['En bref', 'Astuces']),
+    'composant': Object.freeze(['À quoi il sert']),
+    'savoir-faire': Object.freeze(['Quand le faire', 'Étapes', 'Pièces et outillage', 'Pièges']),
+  });
+
+  // Longueurs des textes rédigés (D100 révisée 2, §20.12 ; réponse 2 de Nicolas du 2026-10-23), par type, lues par
+  // les contrôles (wiki-texte.js) et par l'en-tête des textes envoyés à l'IA. Les mots se comptent comme
+  // Wiki.mesurerTexte : mots des phrases, citations exclues (liens comptés comme leur titre).
+  //  - rubriques[<rubrique>] = { phrases, mots } au plus pour une rubrique d'un texte d'équipement ou de composant :
+  //    ses phrases, et les mots de ses phrases sans le nom de la rubrique (Wiki.mesurerRubriques) ; mots null : pas de
+  //    limite de mots ;
+  //  - page = { phrases, mots } au plus pour un savoir-faire entier (Wiki.mesurerTexte : noms des rubriques compris),
+  //    découpé en sous-pages au-delà (§20.4) ; null pour un texte limité rubrique par rubrique.
+  const LIMITES = Object.freeze({
+    'équipement': Object.freeze({ page: null, rubriques: Object.freeze({
+      'En bref': Object.freeze({ phrases: 5, mots: 120 }),
+      'Astuces': Object.freeze({ phrases: 10, mots: null }),
+    }) }),
+    'composant': Object.freeze({ page: null, rubriques: Object.freeze({
+      'À quoi il sert': Object.freeze({ phrases: 3, mots: 80 }),
+    }) }),
+    'savoir-faire': Object.freeze({ page: Object.freeze({ phrases: 30, mots: 600 }), rubriques: Object.freeze({}) }),
+  });
+
   // Seuils du lot (D100, §20.1), documentés dans le guide.
   const SEUILS = Object.freeze({
-    pagesCreeesMax: 3,     // pages créées par un OT ingéré
-    phrasesMax: 30,        // phrases d'une page (au-delà : sous-pages, §20.4 ; révision de Nicolas du 2026-10-23)
-    motsMax: 600,          // mots d'une page (rubriques comprises, citations exclues ; idem)
+    pagesCreeesMax: 3,     // pages créées par un OT ingéré (des savoir-faire, §20.12)
+    phrasesMax: LIMITES['savoir-faire'].page.phrases,   // phrases d'un savoir-faire (au-delà : sous-pages, §20.4) : Wiki.LIMITES
+    motsMax: LIMITES['savoir-faire'].page.mots,         // mots d'un savoir-faire (rubriques comprises, citations exclues) : idem
     relancesMax: 1,        // relance avec la raison d'une réponse refusée par les contrôles (D106 révisée, §20.5)
     pagesEnvoyeesMax: 8,   // pages jointes à une requête d'ingestion
     catalogueMax: 400,     // titres du catalogue envoyé
@@ -25,7 +53,7 @@ const Wiki = (() => {
   });
 
   // ===========================================================================================
-  // 1. Forme comparable, rubriques, vocabulaires de la sécurité (D97) et de la nouveauté (D111) ;
+  // 1. Forme comparable, vocabulaires de la sécurité (D97) et de la nouveauté (D111) ;
   //    balisage et contrôles : wiki-texte.js
   // ===========================================================================================
 
@@ -44,14 +72,6 @@ const Wiki = (() => {
     'mise en securite', 'mettre en securite', 'regle de securite', 'regles de securite',
     'mesure de securite', 'mesures de securite', 'pour votre securite',
   ]);
-
-  // Rubriques d'une page, par type (§20.4), dans l'ordre où elles s'écrivent.
-  const RUBRIQUES = Object.freeze({
-    'équipement': Object.freeze(['Ce qui revient', 'Ce qui a réglé le problème', 'À surveiller', 'Astuces']),
-    'composant': Object.freeze(['Défaillances', 'Signes d\'usure', 'Montage et remplacement', 'Équivalences']),
-    'mode': Object.freeze(['Symptômes', 'Causes', 'Remèdes', 'Équipements concernés']),
-    'savoir-faire': Object.freeze(['Quand le faire', 'Étapes', 'Pièces et outillage', 'Pièges']),
-  });
 
   // Vocabulaire de la nouveauté (D111), en forme comparable, mots ou expressions entiers : une phrase qui ne
   // repose que sur un OT antérieur aux faits de sa page ne peut pas présenter son information comme la plus récente.
@@ -117,7 +137,7 @@ const Wiki = (() => {
   }
 
   return {
-    SEUILS, RUBRIQUES, VOCABULAIRE_SECURITE, VOCABULAIRE_NOUVEAUTE, MESSAGE_SECURITE_IA, MESSAGE_SECURITE_MAIN,
+    SEUILS, RUBRIQUES, LIMITES, VOCABULAIRE_SECURITE, VOCABULAIRE_NOUVEAUTE, MESSAGE_SECURITE_IA, MESSAGE_SECURITE_MAIN,
     comparable, citations, sansCitations, nombreDeMots, termesDeSecurite,
   };
 })();

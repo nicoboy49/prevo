@@ -2,10 +2,10 @@
 UNIQUEMENT à partir du message envoyé par Prévo (même message → même réponse). Sert au faux fournisseur
 (tests/faux_fournisseur_ia.py) et au faux `claude` de la fabrication de la démo.
 
-    faux               la page de l'équipement reçoit la phrase « <titre de l'OT> : fréquent ici » qui cite l'OT (ou,
-                       si une phrase de même texte existe déjà, l'OT s'ajoute à ses citations) ; toutes ses phrases et
-                       tous ses OT sont gardés ; si l'OT a une astuce, un savoir-faire « Astuce de l'<OT> » est créé,
-                       rattaché à la page de l'équipement ;
+    faux               la rubrique « En bref » de la page de l'équipement (refonte 2, §20.12) reçoit la phrase « <titre
+                       de l'OT> : fréquent ici » qui cite l'OT (ou, si une phrase de même texte existe déjà, l'OT
+                       s'ajoute à ses citations) ; toutes ses phrases et tous ses OT sont gardés ; si l'OT a une astuce,
+                       un savoir-faire « Astuce de l'<OT> » est créé, rattaché à la page de l'équipement ;
     faux-rien          « rien à ajouter » ;
     faux-contradiction en plus, une contradiction sur la première phrase de la page de l'équipement ;
     faux-recent        la nouvelle phrase commence par « Désormais » (refusée pour un OT antérieur) ;
@@ -19,11 +19,12 @@ UNIQUEMENT à partir du message envoyé par Prévo (même message → même rép
     faux-corrige       refusée puis corrigée : la nouvelle phrase ne cite aucun OT (refusée par les contrôles), sauf
                        dans une relance, qui reçoit la réponse de « faux » ;
     faux-refuse-deux   refusée deux fois : la nouvelle phrase ne cite aucun OT, puis, dans la relance, cite OT-1999-9999 ;
-    faux-decoupe       comme « faux », puis la page de l'équipement est découpée (§20.4) : sa rubrique « Ce qui revient »
-                       part dans une sous-page « <repère> — pannes qui reviennent » (type équipement, rattachée à la page
-                       de l'équipement), et la mère garde à sa place une phrase de renvoi [[<sous-page>]] qui cite tous
-                       les OT des phrases déplacées ; si cette sous-page est déjà envoyée, la nouvelle phrase y va (la
-                       mère n'est pas modifiée).
+    faux-decoupe       comme « faux », puis un savoir-faire envoyé est découpé (§20.4 ; seules sous-pages, §20.12) — celui
+                       dont la sous-page est déjà envoyée, sinon le premier dont la rubrique « Étapes » a des phrases :
+                       ses « Étapes » partent dans une sous-page « <titre du savoir-faire> — étapes détaillées »
+                       (savoir-faire rattaché à lui), et la mère garde à leur place une phrase de renvoi [[<sous-page>]]
+                       qui cite tous les OT des phrases déplacées ; si cette sous-page est déjà envoyée, la nouvelle
+                       phrase va dans ses « Étapes » (ni l'équipement ni la mère ne sont modifiés).
 
 Relance avec la raison (§20.5) : le message est celui d'origine, suivi de « Ta réponse précédente : », de la réponse
 refusée et de ses raisons ; la réponse est tirée du seul message d'origine (les variantes ci-dessus s'appliquent).
@@ -39,7 +40,9 @@ MOTIF_CODES = re.compile(r"^Codes : (.*)$", re.M)
 # qui peut contenir des parenthèses), puis sa taille (« · 2 phrases sur 30, 14 mots sur 600 »).
 MOTIF_ENTETE_PAGE = re.compile(r"^=== Page « (.+?) » \((équipement|composant|mode|savoir-faire)"
                                r"(?: · sous-page de « (.+) »)?(?: · \d+ phrases sur \d+, \d+ mots sur \d+)?\) ===$", re.M)
-SUJET_DECOUPE = "pannes qui reviennent"
+SUJET_DECOUPE = "étapes détaillées"
+RUBRIQUE_EQUIPEMENT = "En bref"           # §20.12 : ce qu'il faut savoir d'abord de la machine
+RUBRIQUE_SAVOIR_FAIRE = "Étapes"
 MOTIF_CITATION = re.compile(r"\[(OT-\d{4}-\d{4,})\]")
 FIN_DES_PAGES = re.compile(r"\n\n(?:Date d'intervention des OT déjà cités|Catalogue des pages)")
 
@@ -87,18 +90,35 @@ def est_relance(message):
     return MARQUE_RELANCE in message
 
 
-def decouper(pages, titre):
-    """faux-decoupe (§20.4) : la rubrique « Ce qui revient » de la page de l'équipement (pages[0], modifiée) part dans
-    une sous-page `titre` rattachée à elle ; la mère garde à sa place une phrase de renvoi [[titre]] qui cite tous les
-    OT des phrases déplacées (chacune y est « reprise »)."""
-    mere = pages[0]
-    revient = next(rubrique for rubrique in mere["rubriques"] if rubrique["rubrique"] == "Ce qui revient")
+def titre_de_sous_page(savoir):
+    return savoir["titre"] + " — " + SUJET_DECOUPE
+
+
+def a_decouper(pages):
+    """faux-decoupe : le savoir-faire envoyé (pas une sous-page) dont la sous-page est déjà envoyée, sinon le premier dont
+    la rubrique « Étapes » a des phrases ; None s'il n'y en a pas."""
+    savoirs = [page for page in pages if page["type"] == "savoir-faire" and not page["mere"]]
+    for savoir in savoirs:
+        if any(page["mere"] == savoir["titre"] and page["titre"] == titre_de_sous_page(savoir) for page in pages):
+            return savoir
+    return next((savoir for savoir in savoirs if any(rubrique["rubrique"] == RUBRIQUE_SAVOIR_FAIRE and rubrique["phrases"]
+                                                     for rubrique in savoir["rubriques"])), None)
+
+
+def decouper(pages, savoir):
+    """faux-decoupe (§20.4) : les « Étapes » du savoir-faire `savoir` partent dans une sous-page créée, rattachée à lui ;
+    la mère, modifiée, garde à leur place une phrase de renvoi [[titre]] qui cite tous les OT des phrases déplacées
+    (chacune y est « reprise »). La sous-page est mise avant sa mère : l'ordre ne compte pas."""
+    titre = titre_de_sous_page(savoir)
+    etapes = next(rubrique for rubrique in savoir["rubriques"] if rubrique["rubrique"] == RUBRIQUE_SAVOIR_FAIRE)
     citees = []
-    for phrase in revient["phrases"]:
+    for phrase in etapes["phrases"]:
         citees += [identifiant for identifiant in phrase["ot"] if identifiant not in citees]
-    pages.append({"action": "creer", "titre": titre, "type": "équipement", "rattache_a": mere["titre"],
-                  "rubriques": [{"rubrique": "Ce qui revient", "phrases": revient["phrases"]}]})
-    revient["phrases"] = [{"texte": "Détail des pannes qui reviennent : voir [[" + titre + "]]", "ot": citees}]
+    pages.append({"action": "creer", "titre": titre, "type": "savoir-faire", "rattache_a": savoir["titre"],
+                  "rubriques": [{"rubrique": RUBRIQUE_SAVOIR_FAIRE, "phrases": etapes["phrases"]}]})
+    etapes["phrases"] = [{"texte": "Détail des étapes : voir [[" + titre + "]]", "ot": citees}]
+    pages.append({"action": "modifier", "titre": savoir["titre"], "type": "savoir-faire", "rattache_a": "",
+                  "rubriques": [rubrique for rubrique in savoir["rubriques"] if rubrique["phrases"]]})
 
 
 def reponse_ingestion(message, modele="faux"):
@@ -115,12 +135,11 @@ def reponse_ingestion(message, modele="faux"):
     equipement = next((page for page in lu["pages"] if page["type"] == "équipement" and not page["mere"]), None)
     if equipement is None:
         return {"rien_a_ajouter": True, "pages": [], "contradictions": []}
-    sous_page = None
-    if modele == "faux-decoupe":
-        titre_sous_page = equipement["titre"].split(" — ", 1)[0] + " — " + SUJET_DECOUPE
-        sous_page = next((page for page in lu["pages"] if page["mere"] == equipement["titre"]
-                          and page["titre"] == titre_sous_page), None)
-    cible = sous_page or equipement               # la page qui reçoit la nouvelle phrase
+    savoir = a_decouper(lu["pages"]) if modele == "faux-decoupe" else None
+    sous_page = next((page for page in lu["pages"] if page["mere"] == savoir["titre"]
+                      and page["titre"] == titre_de_sous_page(savoir)), None) if savoir else None
+    cible = sous_page or equipement               # la page qui reçoit la nouvelle phrase, dans cette rubrique :
+    rubrique_cible = RUBRIQUE_SAVOIR_FAIRE if sous_page else RUBRIQUE_EQUIPEMENT
     rubriques = cible["rubriques"]
     contradictions = []
     premiere = next((phrase for rubrique in rubriques for phrase in rubrique["phrases"]), None)
@@ -141,19 +160,19 @@ def reponse_ingestion(message, modele="faux"):
         citees = [ot, "OT-1999-9999"]
     elif modele == "faux-sans-ot":
         citees = []
-    revient = next((rubrique for rubrique in rubriques if rubrique["rubrique"] == "Ce qui revient"), None)
-    if revient is None:
-        revient = {"rubrique": "Ce qui revient", "phrases": []}
-        rubriques.insert(0, revient)
-    meme = next((phrase for phrase in revient["phrases"] if phrase["texte"] == texte), None)
+    recoit = next((rubrique for rubrique in rubriques if rubrique["rubrique"] == rubrique_cible), None)
+    if recoit is None:
+        recoit = {"rubrique": rubrique_cible, "phrases": []}
+        rubriques.insert(0, recoit)
+    meme = next((phrase for phrase in recoit["phrases"] if phrase["texte"] == texte), None)
     if meme is not None and citees:
         meme["ot"] = meme["ot"] + [identifiant for identifiant in citees if identifiant not in meme["ot"]]
     else:
-        revient["phrases"].append({"texte": texte, "ot": citees})
-    pages = [{"action": "modifier", "titre": cible["titre"], "type": "équipement", "rattache_a": "",
+        recoit["phrases"].append({"texte": texte, "ot": citees})
+    pages = [{"action": "modifier", "titre": cible["titre"], "type": cible["type"], "rattache_a": "",
               "rubriques": [r for r in rubriques if r["phrases"]]}]
-    if modele == "faux-decoupe" and sous_page is None:
-        decouper(pages, titre_sous_page)
+    if savoir is not None and sous_page is None:
+        decouper(pages, savoir)
     if lu["astuce"]:
         pages.append({"action": "creer", "titre": "Astuce de l'" + ot, "type": "savoir-faire",
                       "rattache_a": equipement["titre"],

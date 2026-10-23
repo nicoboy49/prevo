@@ -2,7 +2,9 @@
 
     routes   : #/wiki et #/wiki/<id> ouverts aux trois profils, entrée « Wiki » du menu avec son icône, entre Parc
                et Magasin ; #/wiki-journal réservé au responsable (le technicien et le demandeur ne l'atteignent
-               pas) ; le module Wiki et ses seuils (D100, §20.1) existent ;
+               pas) ; le module Wiki, ses seuils (D100, §20.1) et les limites des textes rédigés (refonte 2,
+               D100 révisée 2, §20.12 : Wiki.LIMITES par type et par rubrique, d'où viennent phrasesMax et motsMax
+               d'un savoir-faire) existent ;
     format 3 : la démo porte version_schema = 3, les tables wiki_pages et wiki_journal (vides au socle) et la
                colonne astuce des OT ; l'export ZIP contient les 24 tables, en-têtes exacts ;
     modules  : la synthèse de la première version a disparu (Wiki.controlerSynthese, Wiki.afficherSynthese,
@@ -29,6 +31,11 @@ PROFILS = {"demandeur": ("Lucie Martin", ""), "technicien": ("", "TEC-0001"), "r
 SEUILS = {"pagesCreeesMax": 3, "phrasesMax": 30, "motsMax": 600, "relancesMax": 1, "pagesEnvoyeesMax": 8, "catalogueMax": 400,
           "agentsSimultanes": 5, "astuceMax": 500, "otMinimum": 5, "recidiveJours": 30, "dernieres": 10,
           "symptomesMax": 5, "contradictionAncienneJours": 30, "demoAValiderJours": 14}
+LIMITES = {
+    "équipement": {"page": None, "rubriques": {"En bref": {"phrases": 5, "mots": 120}, "Astuces": {"phrases": 10, "mots": None}}},
+    "composant": {"page": None, "rubriques": {"À quoi il sert": {"phrases": 3, "mots": 80}}},
+    "savoir-faire": {"page": {"phrases": 30, "mots": 600}, "rubriques": {}},
+}
 
 
 class TestWikiSocle(CasNavigateur):
@@ -82,6 +89,13 @@ class TestWikiSocle(CasNavigateur):
         self.ouvrir_demo("technicien")
         self.assertEqual(self.page.evaluate("Wiki.SEUILS"), SEUILS)
         self.assertTrue(self.page.evaluate("Object.isFrozen(Wiki.SEUILS)"))
+        # Limites des textes rédigés (§20.12) : un type par type de Wiki.RUBRIQUES (plus de « mode ») ; les seuils de page
+        # (phrasesMax, motsMax) sont ceux d'un savoir-faire.
+        self.assertEqual(self.page.evaluate("Wiki.LIMITES"), LIMITES)
+        self.assertTrue(self.page.evaluate("Object.isFrozen(Wiki.LIMITES) && Object.isFrozen(Wiki.LIMITES['équipement'].rubriques)"))
+        self.assertEqual(sorted(self.page.evaluate("Object.keys(Wiki.RUBRIQUES)")), sorted(LIMITES))
+        self.assertEqual((SEUILS["phrasesMax"], SEUILS["motsMax"]),
+                         (LIMITES["savoir-faire"]["page"]["phrases"], LIMITES["savoir-faire"]["page"]["mots"]))
         absents = self.page.evaluate("""() => ['controlerSynthese', 'afficherSynthese', 'enregistrer', 'requetesDemo',
           'donneesSynthese', 'ETATS_SYNTHESE'].filter((nom) => nom in Wiki)""")
         self.assertEqual(absents, [])

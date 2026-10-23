@@ -15,7 +15,7 @@ const Schema = (function () {
   // ---------------------------------------------------------------------------
 
   // Champ générique : nom, type, libellé, puis options facultatives
-  // (obligatoire, defaut, protege, synonymes, valeurs, table, champCible, filtre, depuisVersion).
+  // (obligatoire, defaut, protege, synonymes, valeurs, retirees, table, champCible, filtre, depuisVersion).
   function champ(nom, type, libelle, options) {
     return Object.assign({ nom: nom, type: type, libelle: libelle }, options || {});
   }
@@ -24,7 +24,8 @@ const Schema = (function () {
     return champ('id', 'id', 'Identifiant');
   }
 
-  // Champ « choix » : liste fermée de valeurs canoniques.
+  // Champ « choix » : liste fermée de valeurs canoniques. Option `retirees` : valeurs qui ne sont plus proposées ni
+  // permises, mais encore lues sans erreur dans une ancienne ligne (Donnees la signale par le contrôle de sa table).
   function choix(nom, libelle, valeurs, options) {
     return champ(nom, 'choix', libelle, Object.assign({ valeurs: valeurs }, options || {}));
   }
@@ -512,7 +513,9 @@ const Schema = (function () {
 
     // Format 3 (lot 6 refondu, ARCHITECTURE.md §20.2) : le wiki de maintenance. Une base plus ancienne n'a pas
     // ces fichiers : tables vides, créées à la première écriture. Seules les pages qui ont un texte validé ont
-    // une ligne ; les pages d'équipement et d'article existent toujours, calculées (§20.3).
+    // une ligne ; les pages d'équipement et d'article existent toujours, calculées (§20.3). Refonte 2 (§20.12) :
+    // trois types de textes ; « mode » est retiré (une panne est une page calculée) : une ancienne ligne de ce
+    // type reste lue, signalée « type de page retiré ». `cause_code` reste une colonne du format 3, inutilisée.
     wiki_pages: {
       fichier: 'wiki_pages.csv', libelle: 'Pages du wiki',
       cle: 'id',
@@ -521,7 +524,7 @@ const Schema = (function () {
       depuisVersion: 3,
       champs: [
         identifiantChamp(),
-        choix('type', 'Type', ['équipement', 'composant', 'mode', 'savoir-faire'], { obligatoire: true }),
+        choix('type', 'Type', ['équipement', 'composant', 'savoir-faire'], { obligatoire: true, retirees: ['mode'] }),
         champ('titre', 'texte', 'Titre', { obligatoire: true }),
         champ('cle', 'texte', 'Clé (titre comparable)'),
         reference('equipement_id', 'Équipement', 'equipements'),

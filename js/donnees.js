@@ -477,7 +477,14 @@ const Donnees = (() => {
       case 'decimal': resultat = normaliserDecimal(nettoye); break;
       case 'entier': resultat = normaliserEntier(nettoye); break;
       case 'booleen': resultat = normaliserBooleen(nettoye); break;
-      case 'choix': resultat = normaliserChoix(nettoye, champ.valeurs); break;
+      case 'choix': {
+        resultat = normaliserChoix(nettoye, champ.valeurs);
+        // Valeur retirée du schéma (champ.retirees : le type « mode » des pages du wiki, §20.12) : une ancienne ligne
+        // reste lue sans erreur ; le contrôle de sa table la signale.
+        const retiree = !resultat.ok && champ.retirees ? normaliserChoix(nettoye, champ.retirees) : null;
+        if (retiree && retiree.ok) { resultat = retiree; }
+        break;
+      }
       default:   // id, ref, document : simple nettoyage des espaces
         return { valeur: nettoye.trim(), probleme: null };
     }
@@ -980,6 +987,7 @@ const Donnees = (() => {
     if (!pages.lignes.length && !journal.length) { return; }
     const cibles = { 'EQ-': entreeDe('equipements').index, 'ART-': entreeDe('articles').index, 'WP-': pages.index };
     const ordres = entreeDe('ordres_travail').index;
+    const typesRetires = (descriptionTable('wiki_pages').champs.find((champ) => champ.nom === 'type') || {}).retirees || [];
     const parCle = new Map();
     const signaler = (gravite, page, champ, valeur, message) => resultat.push(probleme(gravite, 'wiki', 'wiki_pages', null,
       page.id, champ, valeur, 'Page du wiki ' + (page.id || '(sans identifiant)') + ' (« ' + page.titre + ' ») : ' + message));
@@ -996,6 +1004,11 @@ const Donnees = (() => {
       }
       if (enTexte(page.texte).trim() && !listeDe(page.ot_cites).length) {
         signaler('info', page, 'ot_cites', '', 'elle ne cite aucun OT.');
+      }
+      // Type retiré par la refonte 2 (§20.12 : « mode », une panne est une page calculée) : la ligne reste lue, à archiver.
+      if (typesRetires.includes(page.type)) {
+        signaler('attention', page, 'type', page.type, 'type de page retiré (« ' + page.type + ' » : une panne est une page '
+          + 'calculée par Prévo) ; archivez-la.');
       }
       // Rattachement (sous-page, §20.4 : sa mère, de même type ; savoir-faire) vers une page archivée. Une page absente
       // est déjà une référence cassée ; une sous-page n'a pas d'ancrage propre (ni equipement_id ni article_id).

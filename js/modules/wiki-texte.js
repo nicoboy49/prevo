@@ -20,12 +20,18 @@
 //    20xx qui n'est pas suivie d'une unité (« l'entretien des 2000 heures » n'est pas une date) ;
 //  - les numéros d'OT (cités ou écrits dans le texte) ne comptent jamais comme des nombres, ni dans une phrase ni
 //    dans le texte de référence ; une phrase réduite à ses citations est « vide » et refusée ;
+//  - seul un savoir-faire se crée (§20.12) : le texte d'une machine ou d'un article s'écrit sur sa page, qui existe
+//    toujours ; un type hors de Wiki.RUBRIQUES (« mode », retiré) est refusé, créé ou modifié ;
 //  - un savoir-faire se rattache à une page envoyée d'équipement ou de composant ; une phrase gardée telle quelle
 //    garde tous ses OT ;
+//  - longueurs (Wiki.LIMITES, §20.12) : chaque rubrique d'un texte d'équipement ou de composant à sa limite (ses
+//    phrases ; les mots de ses phrases, sans le nom de la rubrique ; une rubrique écrite deux fois compte en une) ; un
+//    savoir-faire en entier (Wiki.mesurerTexte), avec le conseil de le découper sauf pour une sous-page ;
 //  - comptage : un nombre en chiffres, ou de « deux » à « cent » en lettres, suivi de « fois », « OT »,
 //    « intervention(s) », « panne(s) », « cas » ou « remplacement(s) » (« une fois remontée » est permis) ;
-//  - sous-page (§20.4, révision du 2026-10-23) : page créée dont « rattache_a » désigne une page de même type
-//    (envoyée, au catalogue ou créée par la proposition) ; sa mère doit être une page envoyée qui n'est pas elle-même
+//  - sous-page (§20.4, révision du 2026-10-23 ; savoir-faire seulement, §20.12) : page créée dont « rattache_a »
+//    désigne une page de même type (envoyée, au catalogue ou créée par la proposition) ; une sous-page d'équipement ou
+//    de composant est refusée ; sa mère doit être une page envoyée qui n'est pas elle-même
 //    une sous-page (`mere` d'une page envoyée : titre de sa mère, vide sinon), modifiée par la même proposition avec
 //    un renvoi [[titre de la sous-page]] (à la main, une page s'écrit à la fois et le retrait est permis : ni l'un ni
 //    l'autre n'est exigé) ; son titre commence par « <préfixe> — » suivi d'un mot (préfixe : le repère, titre avant
@@ -55,6 +61,13 @@ Object.assign(Wiki, (() => {
   const MOTIF_DATE_CHIFFRES = /(?:^|[^\d/.-])(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{2,4}|\d{2}[/.]\d{2})(?![\d/.])/;
   const MOTIF_NUMERO_OT = /\bOT-\d{4}-\d{4,}\b/g;
   const MESSAGE_SECURITE = { ia: Wiki.MESSAGE_SECURITE_IA, manuel: Wiki.MESSAGE_SECURITE_MAIN };
+  // Refus de la création d'un texte ancré (§20.12) : il existe toujours, sur la page de sa machine ou de son article.
+  const TEXTE_DE_SA_PAGE = {
+    'équipement': 'une page d\'équipement ne se crée pas : le texte d\'une machine s\'écrit sur sa page, qui existe toujours '
+      + '(seul un savoir-faire se crée).',
+    'composant': 'une page de composant ne se crée pas : le texte d\'un article s\'écrit sur sa page, qui existe toujours '
+      + '(seul un savoir-faire se crée).',
+  };
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -67,6 +80,11 @@ Object.assign(Wiki, (() => {
   function court(valeur) {
     const propre = texte(valeur).replace(/\s+/g, ' ');
     return propre.length > 70 ? propre.slice(0, 69) + '…' : propre;
+  }
+
+  /** Refus d'un type hors de Wiki.RUBRIQUES (« mode », retiré par la refonte 2 : une panne est une page calculée). */
+  function typeInconnu(type) {
+    return 'type « ' + type + ' » inconnu (' + TYPES.join(', ') + ').';
   }
 
   // ===========================================================================================
@@ -173,6 +191,23 @@ Object.assign(Wiki, (() => {
   }
 
   /**
+   * Taille de chaque rubrique (limites des textes rédigés, §20.12) → Map(rubrique comparable → { nom, phrases, mots }) :
+   * mots de ses phrases sans citations, sans le nom de la rubrique ; une rubrique écrite deux fois compte en une (nom :
+   * celui de sa première ligne).
+   */
+  function mesureDesRubriques(lu) {
+    const mesures = new Map();
+    lu.rubriques.forEach((rubrique) => {
+      const cle = Wiki.comparable(rubrique.nom);
+      if (!mesures.has(cle)) mesures.set(cle, { nom: rubrique.nom, phrases: 0, mots: 0 });
+      const mesure = mesures.get(cle);
+      mesure.phrases += rubrique.phrases.length;
+      mesure.mots += rubrique.phrases.reduce((total, phrase) => total + Wiki.nombreDeMots(phrase.propre), 0);
+    });
+    return mesures;
+  }
+
+  /**
    * Changements d'une page (§20.6, §20.9) → { identiques, nouvelles, reprises: [{ phrase, anciennes }], retirees } :
    * une phrase d'après identique à une phrase d'avant est « identique » ; sinon, elle « reprend » les phrases d'avant
    * (non gardées telles quelles) dont elle cite tous les OT, ou elle est « nouvelle » ; une phrase d'avant ni gardée
@@ -273,6 +308,36 @@ Object.assign(Wiki, (() => {
     }
   }
 
+  /**
+   * Longueurs d'un texte (§20.12, Wiki.LIMITES) : chaque rubrique d'un texte d'équipement ou de composant à sa limite ;
+   * un savoir-faire en entier (Wiki.mesurerTexte), qui se découpe en sous-pages au-delà, sauf s'il en est une (§20.4).
+   */
+  function controlerLongueurs(lu, type, nom, sousPage, raisons) {
+    const limites = Wiki.LIMITES[type] || { page: null, rubriques: {} };
+    const mesures = mesureDesRubriques(lu);
+    Object.keys(limites.rubriques).forEach((rubrique) => {
+      const limite = limites.rubriques[rubrique];
+      const mesure = mesures.get(Wiki.comparable(rubrique)) || { phrases: 0, mots: 0 };
+      if (mesure.phrases > limite.phrases) {
+        raisons.push(nom + ' : « ' + rubrique + ' » : ' + mesure.phrases + ' phrases, ' + limite.phrases + ' au plus.');
+      }
+      if (limite.mots !== null && mesure.mots > limite.mots) {
+        raisons.push(nom + ' : « ' + rubrique + ' » : ' + mesure.mots + ' mots, ' + limite.mots + ' au plus (citations non comptées).');
+      }
+    });
+    if (!limites.page) return;
+    const decoupe = sousPage ? '' : 'au-delà, la page se découpe en sous-pages';
+    const mesure = mesureDe(lu);
+    if (mesure.phrases > limites.page.phrases) {
+      raisons.push(nom + ' : ' + mesure.phrases + ' phrases, ' + limites.page.phrases + ' au plus'
+        + (decoupe ? ' (' + decoupe + ')' : '') + '.');
+    }
+    if (mesure.mots > limites.page.mots) {
+      raisons.push(nom + ' : ' + mesure.mots + ' mots, ' + limites.page.mots + ' au plus (rubriques comprises, citations non comptées'
+        + (decoupe ? ' ; ' + decoupe : '') + ').');
+    }
+  }
+
   /** L'OT cité le plus récent d'une phrase, par date d'intervention (puis identifiant). */
   function plusRecent(ot, dates) {
     return ot.slice().sort((a, b) => String(dates.get(b) || '').localeCompare(String(dates.get(a) || ''))
@@ -348,26 +413,30 @@ Object.assign(Wiki, (() => {
         raisons.push(nom + ' : cette page n\'a pas été envoyée, elle ne peut pas être modifiée.');
         return;
       }
-      type = envoyee.type;
+      type = texte(envoyee.type);
+      if (!TYPES.includes(type)) { raisons.push(nom + ' : ' + typeInconnu(type)); return; }
       avant = envoyee.texte || '';
       origine = avant;
       sousPage = Boolean(texte(envoyee.mere));
     } else if (page.action === 'creer') {
-      if (!TYPES.includes(type)) { raisons.push(nom + ' : type « ' + type + ' » inconnu.'); return; }
+      if (!TYPES.includes(type)) { raisons.push(nom + ' : ' + typeInconnu(type)); return; }
       const rattachement = ctx.envoyeeDe.get(Wiki.comparable(page.rattacheA));
       const visee = texte(page.rattacheA) ? ctx.connuesDe.get(Wiki.comparable(page.rattacheA)) : null;
-      // Sous-page (§20.4) : rattachée à une page de même type ; un équipement ne se crée que comme sous-page.
+      // Sous-page (§20.4) : rattachée à une page de même type. Seul un savoir-faire se crée, et lui seul a des
+      // sous-pages (§20.12) : le texte d'une machine ou d'un article est celui de sa page, qui existe toujours.
       sousPage = Boolean(visee && texte(visee.type) === type);
+      if (type !== 'savoir-faire') {
+        raisons.push(nom + ' : ' + (sousPage ? 'une sous-page n\'existe que pour un savoir-faire (seul un savoir-faire se crée).'
+          : TEXTE_DE_SA_PAGE[type]));
+        return;
+      }
       if (sousPage) {
         controlerSousPage(page, nom, visee, ctx, raisons);
         if (rattachement) { origine = rattachement.texte || ''; titreMere = texte(rattachement.titre); }
-      } else if (type === 'équipement') {
-        raisons.push(nom + ' : une page d\'équipement ne se crée pas, elle existe déjà (seule une sous-page se crée, '
-          + 'rattachée à sa mère).');
       }
-      if (type === 'savoir-faire' && !sousPage && !(rattachement && ['équipement', 'composant'].includes(rattachement.type))) {
+      if (!sousPage && !(rattachement && ['équipement', 'composant'].includes(rattachement.type))) {
         raisons.push(nom + ' : un savoir-faire se rattache à une page envoyée (équipement ou composant).');
-      } else if (type === 'savoir-faire' && !sousPage && texte(rattachement.mere)) {
+      } else if (!sousPage && texte(rattachement.mere)) {
         // Rattaché à une sous-page, il perdrait l'ancrage de l'équipement : ni envoyé avec ses OT, ni consignation.
         raisons.push(nom + ' : un savoir-faire se rattache à la page mère « ' + texte(rattachement.mere)
           + ' », jamais à une sous-page.');
@@ -392,17 +461,7 @@ Object.assign(Wiki, (() => {
     });
     const phrases = phrasesDe(lu);
     if (!phrases.length) raisons.push(nom + ' : aucune phrase.');
-    // Longueurs (Wiki.mesurerTexte) ; une page qui n'est pas une sous-page se découpe au-delà (§20.4).
-    const decoupe = sousPage ? '' : 'au-delà, la page se découpe en sous-pages';
-    if (phrases.length > SEUILS.phrasesMax) {
-      raisons.push(nom + ' : ' + phrases.length + ' phrases, ' + SEUILS.phrasesMax + ' au plus'
-        + (decoupe ? ' (' + decoupe + ')' : '') + '.');
-    }
-    const mots = mesureDe(lu).mots;
-    if (mots > SEUILS.motsMax) {
-      raisons.push(nom + ' : ' + mots + ' mots, ' + SEUILS.motsMax + ' au plus (rubriques comprises, citations non comptées'
-        + (decoupe ? ' ; ' + decoupe : '') + ').');
-    }
+    controlerLongueurs(lu, type, nom, sousPage, raisons);
     phrases.forEach((phrase) => {
       if (!phrase.propre) raisons.push(nom + ' : phrase vide (réduite à ses citations).');
       if (!phrase.ot.length) raisons.push(nom + ' : phrase sans OT cité — « ' + court(phrase.propre) + ' ».');
@@ -460,5 +519,8 @@ Object.assign(Wiki, (() => {
     lireTexte, ecrireTexte, comparerTextes, controlerProposition, formeDuTitre, prefixeSousPage,
     identitePhrase, citationsDe, liensDe, phrasesDe: (valeur) => phrasesDe(lireTexte(valeur)),
     mesurerTexte: (valeur) => mesureDe(lireTexte(valeur)),
+    // { <rubrique>: { phrases, mots } } (mots sans le nom de la rubrique), pour les limites de Wiki.LIMITES (§20.12).
+    mesurerRubriques: (valeur) => Object.fromEntries(Array.from(mesureDesRubriques(lireTexte(valeur)).values(),
+      (mesure) => [mesure.nom, { phrases: mesure.phrases, mots: mesure.mots }])),
   };
 })());
