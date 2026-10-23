@@ -8,7 +8,8 @@
     format 3 : la démo porte version_schema = 3, les tables wiki_pages et wiki_journal (vides au socle) et la
                colonne astuce des OT ; l'export ZIP contient les 24 tables, en-têtes exacts ;
     modules  : la synthèse de la première version a disparu (Wiki.controlerSynthese, Wiki.afficherSynthese,
-               consigne syntheseWiki) ; Wiki.page(id) rend la page d'un équipement ;
+               consigne syntheseWiki) ; Wiki.page(id) rend la page d'un équipement ; Wiki.entite (encyclopédie,
+               §20.12, T135) est chargé par l'application et prend son profil quand on ne lui en donne pas ;
     API      : Indicateurs.datePanne est publique (date de la DI d'origine, sinon création de l'OT).
 
 Lancer depuis la racine du projet :
@@ -104,6 +105,13 @@ class TestWikiSocle(CasNavigateur):
         self.assertEqual((page["id"], page["type"]), ("EQ-0001", "équipement"))
         self.assertEqual(page["calcul"], self.page.evaluate("Wiki.pageEquipement('EQ-0001')"))
         self.assertIsNone(self.page.evaluate("Wiki.page('EQ-9999')"))
+        # Encyclopédie (§20.12, T135) : wiki-entites.js chargé par l'application ; sans profil donné, celui de l'application
+        # (ici un technicien, qui ouvre la page d'un technicien), le demandeur non.
+        entite = self.page.evaluate("Wiki.entite('EQ-0001')")
+        self.assertEqual((entite["id"], entite["type"], entite["liens"]["technicien"]), ("EQ-0001", "machine", True))
+        self.assertEqual(self.page.evaluate("Wiki.entite('TEC-0001').type"), "technicien")
+        self.assertIsNone(self.page.evaluate("Wiki.entite('TEC-0001', { profil: 'demandeur' })"))
+        self.assertTrue(self.page.evaluate("Wiki.listeEntites('panne').every((panne) => panne.id.startsWith('PANNE-'))"))
 
     def test_demo_au_format_3_et_export_zip(self):
         self.ouvrir_demo("responsable")

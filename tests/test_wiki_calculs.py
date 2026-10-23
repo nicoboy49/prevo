@@ -34,7 +34,7 @@ DOSSIER_DEMO = RACINE / "donnees" / "demo"
 SCRIPTS = [
     "js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/stockage-demo.js",
     "js/modules/causes-frequentes.js", "js/modules/indicateurs-regles.js", "js/modules/wiki-regles.js",
-    "js/modules/wiki-calculs.js",
+    "js/modules/wiki-calculs.js", "js/modules/wiki-entites.js",
 ]
 MAINTENANT = "2026-10-19 10:00"
 PHRASE = "Ce savoir-faire ne remplace pas la consignation de l'équipement"

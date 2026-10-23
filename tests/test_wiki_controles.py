@@ -27,7 +27,8 @@ from commun import CasNavigateur, charger_scripts
 SCRIPTS = [
     "js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js",
     "js/modules/causes-frequentes.js", "js/modules/indicateurs-regles.js",
-    "js/modules/wiki-regles.js", "js/modules/wiki-calculs.js", "js/modules/wiki-texte.js", "js/modules/wiki-recherche.js",
+    "js/modules/wiki-regles.js", "js/modules/wiki-calculs.js", "js/modules/wiki-entites.js", "js/modules/wiki-texte.js",
+    "js/modules/wiki-recherche.js",
 ]
 
 OT = "OT-2026-0042"

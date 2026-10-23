@@ -69,7 +69,8 @@ MARQUE_RELANCE = '\n\nTa réponse précédente :\n'
 SCRIPTS = [
     'js/lib/papaparse.min.js', 'js/schema.js', 'js/donnees.js', 'js/stockage-demo.js',
     'js/modules/causes-frequentes.js', 'js/modules/indicateurs-regles.js', 'js/modules/ia.js', 'js/modules/ia-prompts.js',
-    'js/modules/wiki-regles.js', 'js/modules/wiki-calculs.js', 'js/modules/wiki-texte.js', 'js/modules/wiki-recherche.js',
+    'js/modules/wiki-regles.js', 'js/modules/wiki-calculs.js', 'js/modules/wiki-entites.js', 'js/modules/wiki-texte.js',
+    'js/modules/wiki-recherche.js',
     'js/modules/wiki-ingestion.js', 'js/modules/wiki-journal.js',
 ]
 # Options de chaque agent : aucun outil, aucun réglage, aucun serveur MCP, aucune session gardée (D98).

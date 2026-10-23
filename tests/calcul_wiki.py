@@ -33,13 +33,39 @@ Définitions de T112 (rapport .chantier/rapports/T112.md) :
                   d'intervention successifs (None sous 2) ; par repère ;
     cas d'un mode OT correctif clôturé de la cause (sans exiger de symptôme) ;
     un équipement inconnu n'entre dans aucune liste d'équipements.
+
+Encyclopédie (T135, ARCHITECTURE.md §20.12, D113, D114) : refait ce que rendent Wiki.entite(id, { profil, maintenant }),
+Wiki.listeEntites(type, { profil }), Wiki.accueilEncyclopedie({ profil, maintenant }), Wiki.ordreInterventions(ids)
+et Wiki.references(textes, aTrancher) :
+
+    calcul.entite("PANNE-S01", "technicien", "2026-10-19")
+    calcul.liste_entites("machine", "responsable")
+    calcul.accueil("demandeur", "2026-10-19")
+
+    OT ouvert      Créé, Préparé, Planifié, En cours, En attente ; date d'un OT : fin, sinon début, sinon date
+                   prévue, sinon création ;
+    ordre          les ouverts d'abord (« En cours », puis date prévue croissante, sans date prévue en dernier, puis
+                   identifiant), puis les autres de la date la plus récente à la plus ancienne (puis identifiant
+                   décroissant) ;
+    panne          code symptôme qui a un cas (OT correctif clôturé) ; identifiant « PANNE- » + code encodé comme
+                   encodeURIComponent ; ses interventions : tous les OT du code ;
+    pièces nettes  sorties − retours d'un article liés à un OT (positives) ; consommé : OT clôturé ;
+    stock          mouvements par date puis identifiant : inventaire = quantité fixée, entrée et retour ajoutent,
+                   sortie retire ; rupture : du mouvement qui laisse 0 ou moins à celui qui remonte au-dessus ;
+    habilitation   échue (échéance passée ou illisible), à renouveler (dans les 90 jours), valide ;
+    visibilité     demandeur : ni page technicien ni page intervention (null), pas de prix, références sans lien ;
+                   technicien : tout sauf le taux horaire ; responsable : tout.
+Les en-têtes, mères et sous-pages d'un savoir-faire sont ceux de Wiki.page (testés par test_wiki_calculs.py) : le
+calcul ne les refait pas.
 """
 import csv
 import datetime
 import functools
 import io
+import json
 import math
 import re
+import urllib.parse
 from pathlib import Path
 
 CLOTURES = ("Clôturé techniquement", "Clôturé administrativement")
@@ -56,15 +82,35 @@ CHAMPS_TEXTE = {
     "equipements": {"repere": True, "designation": False, "marque": False, "modele": False,
                     "num_serie": True, "habilitation_requise": False, "consignation": False},
     "ordres_travail": {"motif_attente": False, "titre": False, "travail_a_faire": False, "consignes": False,
-                       "compte_rendu": False, "motif_annulation": False},
+                       "compte_rendu": False, "motif_annulation": False, "astuce": False},
     "articles": {"reference": True, "designation": False, "fabricant": False, "ref_fabricant": True,
                  "emplacement": False, "unite": False},
     "codes_defaillance": {"code": False, "libelle": False},
     "demandes": {"demandeur": False, "symptome": False, "description": False, "motif_decision": False},
     "mouvements_stock": {"utilisateur": False, "commentaire": False},
+    "localisations": {"libelle": False},
+    "fournisseurs": {"nom": False, "contact": False, "telephone": True, "email": False},
+    "techniciens": {"nom": False, "prenom": False, "metier": False},
+    "habilitations": {"intitule": False},
+    "ot_operations": {"operation": False, "valeur_attendue": False, "valeur_mesuree": False},
+    "gammes": {"libelle": False, "consignes": False},
+    "controles_reglementaires": {"nature": False, "texte_reference": False, "organisme": False, "observations": False},
+    "wiki_pages": {"titre": False, "cle": False, "texte": False, "ot_cites": False, "liens": False, "modele": False,
+                   "valide_par": False},
+    "wiki_journal": {"pages": False, "changements": False, "contradictions": False, "raisons": False, "modele": False,
+                     "decide_par": False, "motif": False},
 }
 TABLES = ("equipements", "ordres_travail", "articles", "codes_defaillance", "demandes", "mouvements_stock",
-          "article_equipement")
+          "article_equipement", "localisations", "fournisseurs", "techniciens", "habilitations", "ot_temps",
+          "ot_operations", "achats", "gammes", "controles_reglementaires", "wiki_pages", "wiki_journal")
+
+# Encyclopédie (T135)
+OUVERTS = ("Créé", "Préparé", "Planifié", "En cours", "En attente")
+HORIZON_HABILITATION_JOURS = 90
+MACHINES_ACCUEIL = 3
+RUBRIQUES = {"équipement": ["En bref", "Astuces"], "composant": ["À quoi il sert"],
+             "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges"]}
+MOTIF_CITATION = re.compile(r"\[(OT-\d{4}-\d{4,})\]")
 
 FORMES_A_PROTEGER = [re.compile(motif) for motif in (
     r"[0-9]+([.,][0-9]+)?", r"[0-9]+([.,][0-9]+)?[eE][+-]?[0-9]+",
@@ -168,6 +214,7 @@ class CalculWiki:
         self.articles = {a["id"]: a for a in lu["articles"]}
         self.mouvements = lu["mouvements_stock"]
         self.article_equipement = lu["article_equipement"]
+        self.tables = lu                                   # encyclopédie (T135) : toutes les tables lues
         self.ordre_par_id = {ot["id"]: ot for ot in self.ordres}
         self.libelles = {}
         for code in lu["codes_defaillance"]:
@@ -495,3 +542,705 @@ class CalculWiki:
         remedes.sort(key=selon((lambda r: r["fois"], True), (lambda r: r["code"], False)))
         return {"cause": {"code": cause, "libelle": self.libelle("cause", cause)}, "cas": len(cas),
                 "equipements": equipements, "remedes": remedes}
+
+    # -- encyclopédie (T135, §20.12) : index ----------------------------------------------------------
+
+    def index(self):
+        """Index de l'encyclopédie, calculés une fois (les tables ne changent pas)."""
+        if getattr(self, "_index", None) is not None:
+            return self._index
+        t = self.tables
+        nets = {}                                    # OT -> {article: quantité nette}, dans l'ordre des mouvements
+        for m in sorted(self.mouvements, key=lambda m: (val(m, "date"), val(m, "id"))):
+            if not val(m, "ot_id") or val(m, "type") not in ("sortie", "retour"):
+                continue
+            q = nombre(m.get("quantite")) or 0
+            par_article = nets.setdefault(val(m, "ot_id"), {})
+            par_article[val(m, "article_id")] = par_article.get(val(m, "article_id"), 0) + (q if val(m, "type") == "sortie" else -q)
+        self._index = {
+            "nets": nets,
+            "cas": [ot for ot in self.ordres if self.est_un_cas(ot)],
+            "localisations": {l["id"]: l for l in t["localisations"]},
+            "fournisseurs": {f["id"]: f for f in t["fournisseurs"]},
+            "techniciens": {x["id"]: x for x in t["techniciens"]},
+            "demandes": {d["id"]: d for d in t["demandes"]},
+            "pages": {p["id"]: p for p in t["wiki_pages"]},
+            "actives": [p for p in t["wiki_pages"] if val(p, "statut") != "archivée"],
+        }
+        self._index["codes_avec_cas"] = {val(ot, "symptome_code") for ot in self._index["cas"]}
+        return self._index
+
+    # -- encyclopédie : ordre, références aux entités --------------------------------------------------
+
+    @staticmethod
+    def date_ot(ot):
+        return val(ot, "date_fin") or val(ot, "date_debut") or val(ot, "date_prevue") or val(ot, "date_creation")
+
+    def avant(self, a, b):
+        """Ordre des interventions (D113) : -1 si a vient avant b."""
+        ouvert_a, ouvert_b = val(a, "statut") in OUVERTS, val(b, "statut") in OUVERTS
+        if ouvert_a != ouvert_b:
+            return -1 if ouvert_a else 1
+        if ouvert_a:
+            cle_a = (val(a, "statut") != "En cours", jour(a.get("date_prevue")) == "", jour(a.get("date_prevue")), val(a, "id"))
+            cle_b = (val(b, "statut") != "En cours", jour(b.get("date_prevue")) == "", jour(b.get("date_prevue")), val(b, "id"))
+            return -1 if cle_a < cle_b else (1 if cle_a > cle_b else 0)
+        cle_a, cle_b = (self.date_ot(a), val(a, "id")), (self.date_ot(b), val(b, "id"))
+        return -1 if cle_a > cle_b else (1 if cle_a < cle_b else 0)
+
+    def ordonner(self, ordres):
+        return sorted(ordres, key=functools.cmp_to_key(self.avant))
+
+    def ordre_interventions(self, ids):
+        connus = []
+        for ot_id in ids:
+            ot = self.ordre_par_id.get(propre(ot_id))
+            if ot is not None and ot not in connus:
+                connus.append(ot)
+        return [ot["id"] for ot in self.ordonner(connus)]
+
+    def machine(self, equipement_id):
+        e = self.par_id.get(equipement_id) if equipement_id else None
+        if e is None:
+            return None
+        return {"equipementId": equipement_id, "titre": " — ".join(x for x in (val(e, "repere"), val(e, "designation")) if x),
+                "lien": equipement_id}
+
+    def article(self, article_id):
+        a = self.articles.get(article_id) if article_id else None
+        if a is None:
+            return None
+        return {"articleId": article_id, "titre": val(a, "designation") or val(a, "reference") or article_id, "lien": article_id}
+
+    def technicien(self, technicien_id, profil):
+        x = self.index()["techniciens"].get(technicien_id) if technicien_id else None
+        if x is None:
+            return None
+        nom = " ".join(v for v in (val(x, "prenom"), val(x, "nom")) if v) or technicien_id
+        return {"technicienId": technicien_id, "nom": nom, "lien": technicien_id if profil != "demandeur" else None}
+
+    def panne(self, code):
+        code = propre(code)
+        if not code:
+            return None
+        return {"code": code, "libelle": self.libelle("symptôme", code),
+                "lien": id_panne(code) if code in self.index()["codes_avec_cas"] else None}
+
+    def lieu(self, localisation_id):
+        localisations, noms, vus = self.index()["localisations"], [], set()
+        courant = localisations.get(propre(localisation_id))
+        while courant is not None and courant["id"] not in vus:
+            vus.add(courant["id"])
+            noms.insert(0, val(courant, "libelle"))
+            courant = localisations.get(val(courant, "parent_id"))
+        return " › ".join(n for n in noms if n)
+
+    def element(self, ot, profil):
+        """Ligne d'une liste d'interventions."""
+        ids = [val(ot, "technicien_id")] + [val(x, "technicien_id") for x in self.tables["ot_temps"] if val(x, "ot_id") == ot["id"]]
+        techniciens = []
+        for technicien_id in dict.fromkeys(i for i in ids if i):
+            if self.technicien(technicien_id, profil) is not None:
+                techniciens.append(self.technicien(technicien_id, profil))
+        return {"id": ot["id"], "titre": val(ot, "titre"), "statut": val(ot, "statut"), "type": val(ot, "type"),
+                "date": self.date_ot(ot)[:10], "datePrevue": jour(ot.get("date_prevue")),
+                "machine": self.machine(val(ot, "equipement_id")), "panne": self.panne(ot.get("symptome_code")),
+                "techniciens": techniciens, "lien": ot["id"] if profil != "demandeur" else None}
+
+    def elements(self, ordres, profil):
+        return [self.element(ot, profil) for ot in self.ordonner(ordres)]
+
+    # -- encyclopédie : pièces, pannes, codes ----------------------------------------------------------
+
+    def pieces_nettes(self, ordres, clotures_seulement):
+        totaux, ots = {}, {}
+        for ot in ordres:
+            if clotures_seulement and not self.est_cloture(ot):
+                continue
+            for article_id, net in self.index()["nets"].get(ot["id"], {}).items():
+                if net > 0 and article_id in self.articles:
+                    totaux[article_id] = totaux.get(article_id, 0) + net
+                    ots.setdefault(article_id, []).append(ot)
+        resultat = [dict(self.article(a), quantite=arrondi(q), ot=[o["id"] for o in self.ordonner(ots[a])])
+                    for a, q in totaux.items()]
+        resultat.sort(key=selon((lambda p: p["quantite"], True), (lambda p: p["articleId"], False)))
+        return resultat
+
+    def pannes_frequentes(self, ordres):
+        par_code = {}
+        for ot in ordres:
+            if self.est_un_cas(ot):
+                code = val(ot, "symptome_code")
+                cas, derniere = par_code.get(code, (0, ""))
+                par_code[code] = (cas + 1, max(derniere, self.date_ot(ot)[:10]))
+        pannes = [{"code": code, "libelle": self.libelle("symptôme", code), "cas": cas, "derniere": derniere,
+                   "lien": id_panne(code)} for code, (cas, derniere) in par_code.items()]
+        pannes.sort(key=selon((lambda p: p["cas"], True), (lambda p: p["derniere"], True), (lambda p: p["code"], False)))
+        return pannes
+
+    def compter(self, cas, champ, famille):
+        nombres = {}
+        for ot in cas:
+            if val(ot, champ):
+                nombres[val(ot, champ)] = nombres.get(val(ot, champ), 0) + 1
+        resultat = [{"code": c, "libelle": self.libelle(famille, c), "cas": n} for c, n in nombres.items()]
+        resultat.sort(key=selon((lambda c: c["cas"], True), (lambda c: c["code"], False)))
+        return resultat
+
+    # -- encyclopédie : textes, références, savoir-faire ------------------------------------------------
+
+    @staticmethod
+    def textes(ligne, type_):
+        if ligne is None:
+            return {"pageId": "", "origine": "", "modele": "", "validePar": "", "valideLe": "", "rubriques": []}
+        return {"pageId": ligne["id"], "origine": val(ligne, "origine"), "modele": val(ligne, "modele"),
+                "validePar": val(ligne, "valide_par"), "valideLe": val(ligne, "valide_le"),
+                "rubriques": rubriques(ligne.get("texte"), type_)}
+
+    def references_detaillees(self, textes, a_trancher, profil):
+        resultat = []
+        for numero, ot_id in enumerate(references(textes, a_trancher), start=1):
+            ot = self.ordre_par_id.get(ot_id)
+            resultat.append({"numero": numero, "id": ot_id, "date": self.date_ot(ot)[:10] if ot else "",
+                             "titre": val(ot, "titre") if ot else "", "machine": self.machine(val(ot, "equipement_id")) if ot else None,
+                             "lien": ot_id if ot is not None and profil != "demandeur" else None})
+        return resultat
+
+    def mere(self, ligne):
+        mere = self.index()["pages"].get(val(ligne, "rattache_a")) if val(ligne, "rattache_a") else None
+        return mere if mere is not None and val(mere, "type") == val(ligne, "type") else None
+
+    def rattachement(self, ligne):
+        source = self.mere(ligne) or ligne
+        cible = source
+        if not val(source, "equipement_id") and not val(source, "article_id") and val(source, "rattache_a"):
+            cible = self.index()["pages"].get(val(source, "rattache_a"), {})
+        machine = self.machine(val(cible, "equipement_id"))
+        if machine is not None:
+            return {"type": "machine", "id": machine["equipementId"], "titre": machine["titre"], "lien": machine["lien"]}
+        article = self.article(val(cible, "article_id"))
+        if article is not None:
+            return {"type": "article", "id": article["articleId"], "titre": article["titre"], "lien": article["lien"]}
+        return None
+
+    def savoir_faire_de(self, type_, entite_id):
+        trouves = []
+        for ligne in self.index()["actives"]:
+            if val(ligne, "type") != "savoir-faire" or self.mere(ligne) is not None:
+                continue
+            r = self.rattachement(ligne)
+            if r is not None and r["type"] == type_ and r["id"] == entite_id:
+                trouves.append({"id": ligne["id"], "titre": val(ligne, "titre"), "lien": ligne["id"]})
+        return sorted(trouves, key=lambda s: (s["titre"], s["id"]))
+
+    def texte_ancre(self, type_, champ, entite_id):
+        return next((p for p in self.index()["actives"] if val(p, "type") == type_ and val(p, champ) == entite_id), None)
+
+    def finir(self, base, textes, a_trancher, en_attente, profil):
+        a_trancher = list(a_trancher or [])
+        base.update({"textes": textes, "aTrancher": a_trancher, "enAttente": list(en_attente or []),
+                     "references": self.references_detaillees(textes, a_trancher, profil),
+                     "liens": {"machine": True, "panne": True, "article": True, "savoir-faire": True,
+                               "technicien": profil != "demandeur", "intervention": profil != "demandeur"}})
+        return base
+
+    # -- encyclopédie : machine ------------------------------------------------------------------------
+
+    def page_machine(self, e, profil, a_trancher, en_attente):
+        equipement_id = e["id"]
+        ordres = self.ordres_de(equipement_id)
+        faits = [fait("Repère", val(e, "repere")), fait("Lieu", self.lieu(e.get("localisation_id"))),
+                 fait("Marque et modèle", " ".join(x for x in (val(e, "marque"), val(e, "modele")) if x)),
+                 fait("N° de série", val(e, "num_serie")), fait("Mise en service", jour(e.get("date_mes"))),
+                 fait("Criticité", val(e, "criticite")), fait("État", val(e, "statut")),
+                 fait("Habilitation requise", val(e, "habilitation_requise"))]
+        if val(e, "parent_id"):
+            parent = self.machine(val(e, "parent_id"))
+            faits.append(fait("Fait partie de", parent["titre"] if parent else val(e, "parent_id"), parent["lien"] if parent else None))
+        faits.append(fait("Interventions", len(ordres)))
+        montes = {}
+        for ligne in self.article_equipement:
+            a = val(ligne, "article_id")
+            if val(ligne, "equipement_id") == equipement_id and a and a not in montes and a in self.articles:
+                montes[a] = nombre(ligne.get("quantite"))
+        gammes = [{"id": g["id"], "libelle": val(g, "libelle"), "declencheur": val(g, "declencheur"),
+                   "periodiciteJours": nombre(g.get("periodicite_jours")), "prochaine": jour(g.get("prochaine_echeance"))}
+                  for g in self.tables["gammes"] if val(g, "equipement_id") == equipement_id and val(g, "actif") != "0"]
+        controles = [{"id": c["id"], "nature": val(c, "nature"), "organisme": val(c, "organisme"),
+                      "derniere": jour(c.get("derniere_date")), "prochaine": jour(c.get("prochaine_date"))}
+                     for c in self.tables["controles_reglementaires"] if val(c, "equipement_id") == equipement_id]
+        consignation, document = e.get("consignation") or "", e.get("document") or ""
+        titre = self.machine(equipement_id)["titre"]
+        sections = {
+            "consignation": {"texte": consignation, "document": document} if propre(consignation) or propre(document) else None,
+            "sousEnsembles": sorted((self.machine(x["id"]) for x in self.equipements
+                                     if val(x, "parent_id") == equipement_id and x["id"] != equipement_id),
+                                    key=lambda m: (m["titre"], m["equipementId"])),
+            "pannes": self.pannes_frequentes(ordres),
+            "interventions": self.elements(ordres, profil),
+            "articlesMontes": sorted((dict(self.article(a), quantite=q) for a, q in montes.items()),
+                                     key=lambda a: (a["titre"], a["articleId"])),
+            "articlesConsommes": self.pieces_nettes(ordres, True),
+            "savoirFaire": self.savoir_faire_de("machine", equipement_id),
+            "gammes": sorted(gammes, key=lambda g: (g["prochaine"] == "", g["prochaine"], g["id"])),
+            "controles": sorted(controles, key=lambda c: (c["prochaine"] == "", c["prochaine"], c["id"])),
+        }
+        ligne = self.texte_ancre("équipement", "equipement_id", equipement_id)
+        base = {"id": equipement_id, "type": "machine", "titre": titre, "faits": faits, "sections": sections}
+        return self.finir(base, self.textes(ligne, "équipement"), a_trancher, en_attente, profil)
+
+    # -- encyclopédie : article ------------------------------------------------------------------------
+
+    def stock_dans_le_temps(self, article_id, profil):
+        """Stock rejoué mouvement par mouvement : (stock final, sorties imputées à un OT, ruptures)."""
+        stock, debut, sorties, ruptures = 0, None, [], []
+        for m in sorted((m for m in self.mouvements if val(m, "article_id") == article_id), key=lambda m: (val(m, "date"), val(m, "id"))):
+            q = nombre(m.get("quantite")) or 0
+            sens = val(m, "type")
+            if sens == "inventaire":
+                stock = q
+            elif sens in ("entrée", "retour"):
+                stock += q
+            elif sens == "sortie":
+                stock -= q
+            reste = arrondi(stock)
+            if val(m, "ot_id") and sens in ("sortie", "retour"):
+                ot = self.ordre_par_id.get(val(m, "ot_id"))
+                sorties.append({"id": m["id"], "date": jour(m.get("date")), "type": sens, "quantite": q, "ot": val(m, "ot_id"),
+                                "machine": self.machine(val(ot, "equipement_id")) if ot else None, "stock": reste,
+                                "lien": val(m, "ot_id") if ot is not None and profil != "demandeur" else None})
+            if reste <= 0 and debut is None:
+                debut = jour(m.get("date"))
+            elif reste > 0 and debut is not None:
+                ruptures.append({"debut": debut, "fin": jour(m.get("date"))})
+                debut = None
+        if debut is not None:
+            ruptures.append({"debut": debut, "fin": ""})
+        return arrondi(stock), sorties, ruptures
+
+    @staticmethod
+    def etat_stock(a, stock):
+        point = nombre(a.get("point_commande"))
+        if stock <= 0:
+            return "rupture"
+        return "sous le seuil" if point is not None and stock <= point else "en stock"
+
+    def ordres_servis(self, article_id):
+        """OT où les pièces nettes de l'article sont positives, dans l'ordre de leurs premiers mouvements."""
+        return [ot_id for ot_id, par_article in self.index()["nets"].items() if par_article.get(article_id, 0) > 0]
+
+    def nom_fournisseur(self, fournisseur_id):
+        f = self.index()["fournisseurs"].get(propre(fournisseur_id))
+        return (val(f, "nom") or f["id"]) if f is not None else propre(fournisseur_id)
+
+    def page_article(self, a, profil, a_trancher, en_attente):
+        article_id = a["id"]
+        stock, sorties, ruptures = self.stock_dans_le_temps(article_id, profil)
+        faits = [fait("Référence", val(a, "reference")), fait("Fabricant", val(a, "fabricant")),
+                 fait("Référence du fabricant", val(a, "ref_fabricant")), fait("Emplacement", val(a, "emplacement")),
+                 fait("Stock", stock), fait("Unité", val(a, "unite")), fait("État du stock", self.etat_stock(a, stock)),
+                 fait("Stock de sécurité", nombre(a.get("stock_securite"))), fait("Point de commande", nombre(a.get("point_commande"))),
+                 fait("Quantité de commande", nombre(a.get("qte_commande"))), fait("Délai (jours)", nombre(a.get("delai_jours"))),
+                 fait("Fournisseur", self.nom_fournisseur(a.get("fournisseur_id")))]
+        if profil != "demandeur":
+            faits.append(fait("Prix unitaire", nombre(a.get("prix_unitaire"))))
+        faits.append(fait("Critique", val(a, "critique") == "1"))
+        commandes = []
+        for achat in sorted((x for x in self.tables["achats"] if val(x, "article_id") == article_id), key=lambda x: (val(x, "date"), val(x, "id"))):
+            commande = {"id": achat["id"], "date": jour(achat.get("date")), "quantite": nombre(achat.get("quantite")),
+                        "fournisseur": self.nom_fournisseur(achat.get("fournisseur_id")), "statut": val(achat, "statut"),
+                        "reception": jour(achat.get("date_reception"))}
+            if profil != "demandeur":
+                commande["prixUnitaire"] = nombre(achat.get("prix_unitaire"))
+            commandes.append(commande)
+        montee = {}
+        for ligne in self.article_equipement:
+            e = val(ligne, "equipement_id")
+            if val(ligne, "article_id") == article_id and e and e not in montee and e in self.par_id:
+                montee[e] = nombre(ligne.get("quantite"))
+        consomme = {}
+        for ot_id in self.ordres_servis(article_id):
+            ot = self.ordre_par_id.get(ot_id)
+            if ot is None or not self.est_cloture(ot) or self.machine(val(ot, "equipement_id")) is None:
+                continue
+            e = val(ot, "equipement_id")
+            n, q = consomme.get(e, (0, 0))
+            consomme[e] = (n + 1, arrondi(q + self.index()["nets"][ot_id][article_id]))
+        sections = {
+            "commandes": commandes, "sorties": sorties, "ruptures": ruptures,
+            "montee": sorted((dict(self.machine(e), quantite=q) for e, q in montee.items()), key=lambda m: (m["titre"], m["equipementId"])),
+            "consommeSur": sorted((dict(self.machine(e), nombreOt=n, quantite=q) for e, (n, q) in consomme.items()),
+                                  key=selon((lambda m: m["nombreOt"], True), (lambda m: m["titre"], False),
+                                            (lambda m: m["equipementId"], False))),
+            "interventions": self.elements([self.ordre_par_id[i] for i in self.ordres_servis(article_id) if i in self.ordre_par_id], profil),
+            "savoirFaire": self.savoir_faire_de("article", article_id),
+        }
+        ligne = self.texte_ancre("composant", "article_id", article_id)
+        base = {"id": article_id, "type": "article", "titre": self.article(article_id)["titre"], "faits": faits, "sections": sections}
+        return self.finir(base, self.textes(ligne, "composant"), a_trancher, en_attente, profil)
+
+    # -- encyclopédie : panne, technicien, intervention, savoir-faire -----------------------------------
+
+    def page_panne(self, identifiant, profil):
+        try:
+            code = urllib.parse.unquote(identifiant[len("PANNE-"):], errors="strict")
+        except UnicodeDecodeError:
+            return None
+        cas = [ot for ot in self.index()["cas"] if val(ot, "symptome_code") == code]
+        if not code or id_panne(code) != identifiant or not cas:
+            return None
+        jours = sorted(j for j in (self.date_ot(ot)[:10] for ot in cas) if j)
+        par_machine = {}
+        for ot in cas:
+            if self.machine(val(ot, "equipement_id")) is not None:
+                par_machine[val(ot, "equipement_id")] = par_machine.get(val(ot, "equipement_id"), 0) + 1
+        machines = [dict(self.machine(e), cas=n) for e, n in par_machine.items()]
+        machines.sort(key=selon((lambda m: m["cas"], True), (lambda m: m["titre"], False), (lambda m: m["equipementId"], False)))
+        tous = [ot for ot in self.ordres if val(ot, "symptome_code") == code]
+        base = {"id": identifiant, "type": "panne", "titre": self.libelle("symptôme", code),
+                "faits": [fait("Code", code), fait("Cas", len(cas)), fait("Machines touchées", len(machines)),
+                          fait("Premier cas", jours[0] if jours else ""), fait("Dernier cas", jours[-1] if jours else "")],
+                "sections": {"machines": machines, "causes": self.compter(cas, "cause_code", "cause"),
+                             "remedes": self.compter(cas, "remede_code", "remède"),
+                             "articles": self.pieces_nettes(cas, True), "interventions": self.elements(tous, profil)}}
+        return self.finir(base, None, [], [], profil)
+
+    def habilitations(self, technicien_id, maintenant):
+        aujourdhui = maintenant[:10]
+        limite = jour_suivant(aujourdhui, HORIZON_HABILITATION_JOURS)
+        resultat = []
+        for h in self.tables["habilitations"]:
+            if val(h, "technicien_id") != technicien_id:
+                continue
+            echeance = jour(h.get("date_echeance"))
+            if not echeance:
+                etat = "valide"
+            elif self.jour_lisible(echeance) is None or echeance < aujourdhui:
+                etat = "échue"
+            else:
+                etat = "à renouveler" if echeance <= limite else "valide"
+            resultat.append({"id": h["id"], "intitule": val(h, "intitule"), "obtention": jour(h.get("date_obtention")),
+                             "echeance": echeance, "etat": etat})
+        resultat.sort(key=selon((lambda h: h["intitule"], False), (lambda h: h["echeance"], True), (lambda h: h["id"], False)))
+        return resultat
+
+    def ordres_du_technicien(self, technicien_id):
+        ids = {ot["id"] for ot in self.ordres if val(ot, "technicien_id") == technicien_id}
+        ids |= {val(x, "ot_id") for x in self.tables["ot_temps"] if val(x, "technicien_id") == technicien_id}
+        return [self.ordre_par_id[i] for i in ids if i in self.ordre_par_id]
+
+    def heures(self, technicien_id):
+        return arrondi(sum(nombre(x.get("heures")) or 0 for x in self.tables["ot_temps"] if val(x, "technicien_id") == technicien_id))
+
+    def page_technicien(self, x, profil, maintenant):
+        ordres = self.ordres_du_technicien(x["id"])
+        faits = [fait("Métier", val(x, "metier")), fait("Capacité (h par semaine)", nombre(x.get("capacite_h_semaine"))),
+                 fait("Heures pointées", self.heures(x["id"])), fait("Interventions", len(ordres)),
+                 fait("Actif", val(x, "actif") != "0")]
+        if profil == "responsable":
+            faits.append(fait("Taux horaire", nombre(x.get("taux_horaire"))))
+        base = {"id": x["id"], "type": "technicien", "titre": self.technicien(x["id"], profil)["nom"], "faits": faits,
+                "sections": {"habilitations": self.habilitations(x["id"], maintenant), "interventions": self.elements(ordres, profil)}}
+        return self.finir(base, None, [], [], profil)
+
+    def demande_origine(self, ot):
+        demande = self.index()["demandes"].get(val(ot, "di_id")) if val(ot, "di_id") else None
+        if demande is None:
+            acceptees = sorted((d for d in self.tables["demandes"] if val(d, "ot_id") == ot["id"] and val(d, "statut") == "Acceptée"),
+                               key=lambda d: val(d, "date_heure"))
+            demande = acceptees[0] if acceptees else None
+        if demande is None:
+            return None
+        return {"id": demande["id"], "date": val(demande, "date_heure"), "demandeur": val(demande, "demandeur"),
+                "symptome": val(demande, "symptome"), "description": val(demande, "description"), "statut": val(demande, "statut")}
+
+    def cite_dans(self, ot_id):
+        pages = {}
+        for ligne in self.index()["actives"]:
+            if ot_id not in citations(ligne.get("texte")):
+                continue
+            type_ = val(ligne, "type")
+            entree = None
+            if type_ == "équipement" and self.machine(val(ligne, "equipement_id")):
+                m = self.machine(val(ligne, "equipement_id"))
+                entree = {"id": m["equipementId"], "type": "machine", "titre": m["titre"], "lien": m["lien"]}
+            elif type_ == "composant" and self.article(val(ligne, "article_id")):
+                a = self.article(val(ligne, "article_id"))
+                entree = {"id": a["articleId"], "type": "article", "titre": a["titre"], "lien": a["lien"]}
+            elif type_ == "savoir-faire":
+                entree = {"id": ligne["id"], "type": "savoir-faire", "titre": val(ligne, "titre"), "lien": ligne["id"]}
+            if entree is not None and entree["id"] not in pages:
+                pages[entree["id"]] = entree
+        return sorted(pages.values(), key=lambda p: (p["titre"], p["id"]))
+
+    def page_intervention(self, ot, profil):
+        ot_id = ot["id"]
+        machine = self.machine(val(ot, "equipement_id"))
+        technicien = self.technicien(val(ot, "technicien_id"), profil)
+        panne = self.panne(ot.get("symptome_code"))
+        demande = self.demande_origine(ot)
+        faits = [fait("Machine", machine["titre"] if machine else val(ot, "equipement_id"), machine["lien"] if machine else None),
+                 fait("Type", val(ot, "type")), fait("Priorité", val(ot, "priorite")), fait("Statut", val(ot, "statut")),
+                 fait("Technicien", technicien["nom"] if technicien else "", technicien["lien"] if technicien else None),
+                 fait("Créé le", val(ot, "date_creation")), fait("Prévu le", val(ot, "date_prevue")),
+                 fait("Début", val(ot, "date_debut")), fait("Fin", val(ot, "date_fin")),
+                 fait("Arrêt de production", val(ot, "arret_production") == "1"), fait("Durée d'arrêt (h)", nombre(ot.get("duree_arret_h"))),
+                 fait("Panne", panne["libelle"] if panne else "", panne["lien"] if panne else None),
+                 fait("Cause", self.libelle("cause", ot.get("cause_code"))), fait("Remède", self.libelle("remède", ot.get("remede_code"))),
+                 fait("Demande d'origine", demande["id"] if demande else ""),
+                 fait("Clôture technique", val(ot, "date_cloture_tech")), fait("Clôture administrative", val(ot, "date_cloture_admin"))]
+        temps = []
+        for x in sorted((x for x in self.tables["ot_temps"] if val(x, "ot_id") == ot_id), key=lambda x: (val(x, "date"), val(x, "id"))):
+            qui = self.technicien(val(x, "technicien_id"), profil)
+            temps.append({"id": x["id"], "date": jour(x.get("date")), "technicienId": val(x, "technicien_id"),
+                          "nom": qui["nom"] if qui else "", "lien": qui["lien"] if qui else None, "heures": nombre(x.get("heures"))})
+        operations = sorted((o for o in self.tables["ot_operations"] if val(o, "ot_id") == ot_id),
+                            key=lambda o: (nombre(o.get("ordre")) or 0, val(o, "id")))
+        sections = {
+            "demande": demande, "travail": val(ot, "travail_a_faire"), "compteRendu": val(ot, "compte_rendu"),
+            "astuce": val(ot, "astuce"), "techniciens": self.element(ot, profil)["techniciens"],
+            "pieces": [dict(self.article(a), quantite=arrondi(q)) for a, q in self.index()["nets"].get(ot_id, {}).items()
+                       if q > 0 and a in self.articles],
+            "operations": [{"ordre": nombre(o.get("ordre")), "operation": val(o, "operation"), "valeurAttendue": val(o, "valeur_attendue"),
+                            "fait": val(o, "fait") == "1", "valeurMesuree": val(o, "valeur_mesuree")} for o in operations],
+            "temps": temps, "citeDans": self.cite_dans(ot_id),
+            "ficheOT": "#/ot/" + urllib.parse.quote(ot_id, safe="!*'()"),
+        }
+        base = {"id": ot_id, "type": "intervention", "titre": val(ot, "titre") or ot_id, "faits": faits, "sections": sections}
+        return self.finir(base, None, [], [], profil)
+
+    def page_savoir_faire(self, ligne, profil, a_trancher, en_attente):
+        """Sans l'en-tête, la mère ni les sous-pages (ceux de Wiki.page, que le test compare à part)."""
+        r = self.rattachement(ligne)
+        faits = [fait("Rattaché à", r["titre"] if r else "", r["lien"] if r else None)]
+        mere = self.mere(ligne)
+        if mere is not None:
+            faits.append(fait("Sous-page de", val(mere, "titre"), mere["id"]))
+        base = {"id": ligne["id"], "type": "savoir-faire", "titre": val(ligne, "titre"), "faits": faits,
+                "sections": {"rattachement": r}}
+        return self.finir(base, self.textes(ligne, "savoir-faire"), a_trancher, en_attente, profil)
+
+    def entite(self, identifiant, profil, maintenant, a_trancher=None, en_attente=None):
+        """Même forme que Wiki.entite(identifiant, { profil, maintenant }) ; a_trancher, en_attente : ce que rendent
+        les crochets de wiki-journal.js (vides sans eux)."""
+        identifiant = propre(identifiant)
+        if not identifiant:
+            return None
+        if identifiant.startswith("PANNE-"):
+            return self.page_panne(identifiant, profil)
+        if identifiant in self.par_id:
+            return self.page_machine(self.par_id[identifiant], profil, a_trancher, en_attente)
+        if identifiant in self.articles:
+            return self.page_article(self.articles[identifiant], profil, a_trancher, en_attente)
+        if identifiant in self.index()["techniciens"]:
+            return None if profil == "demandeur" else self.page_technicien(self.index()["techniciens"][identifiant], profil, maintenant)
+        if identifiant in self.ordre_par_id:
+            return None if profil == "demandeur" else self.page_intervention(self.ordre_par_id[identifiant], profil)
+        ligne = self.index()["pages"].get(identifiant)
+        if ligne is None or val(ligne, "statut") == "archivée":
+            return None
+        if val(ligne, "type") == "équipement" and val(ligne, "equipement_id") in self.par_id:
+            return self.page_machine(self.par_id[val(ligne, "equipement_id")], profil, a_trancher, en_attente)
+        if val(ligne, "type") == "composant" and val(ligne, "article_id") in self.articles:
+            return self.page_article(self.articles[val(ligne, "article_id")], profil, a_trancher, en_attente)
+        if val(ligne, "type") == "savoir-faire":
+            return self.page_savoir_faire(ligne, profil, a_trancher, en_attente)
+        return None
+
+    # -- encyclopédie : listes et accueil ----------------------------------------------------------------
+
+    def liste_machines(self, profil):
+        def dans_un_cycle(e):
+            courant, vus = e, set()
+            while courant is not None and val(courant, "parent_id") and courant["id"] not in vus:
+                vus.add(courant["id"])
+                if val(courant, "parent_id") == e["id"]:
+                    return True
+                courant = self.par_id.get(val(courant, "parent_id"))
+            return False
+
+        enfants, racines = {}, []
+        for e in self.equipements:
+            parent = val(e, "parent_id")
+            if parent and parent in self.par_id and not dans_un_cycle(e):
+                enfants.setdefault(parent, []).append(e)
+            else:
+                racines.append(e)
+
+        def noeud(e):
+            ordres = self.ordres_de(e["id"])
+            return dict(self.machine(e["id"]), lieu=self.lieu(e.get("localisation_id")),
+                        marqueModele=" ".join(x for x in (val(e, "marque"), val(e, "modele")) if x),
+                        interventions=len(ordres), pannes=self.pannes_frequentes(ordres),
+                        sousEnsembles=sorted((noeud(x) for x in enfants.get(e["id"], [])), key=lambda m: (m["titre"], m["equipementId"])))
+
+        groupes = {}
+        for m in sorted((noeud(e) for e in racines), key=lambda m: (m["titre"], m["equipementId"])):
+            groupes.setdefault(m["lieu"], []).append(m)
+        return [{"lieu": lieu, "machines": groupes[lieu]} for lieu in sorted(groupes, key=lambda l: (l == "", l))]
+
+    def liste_pannes(self):
+        codes = []
+        for ot in self.index()["cas"]:
+            if val(ot, "symptome_code") not in codes:
+                codes.append(val(ot, "symptome_code"))
+        pannes = []
+        for code in codes:
+            cas = [ot for ot in self.index()["cas"] if val(ot, "symptome_code") == code]
+            causes = self.compter(cas, "cause_code", "cause")
+            pannes.append({"id": id_panne(code), "code": code, "titre": self.libelle("symptôme", code), "cas": len(cas),
+                           "machines": len({val(ot, "equipement_id") for ot in cas if val(ot, "equipement_id") in self.par_id}),
+                           "cause": {"code": causes[0]["code"], "libelle": causes[0]["libelle"]} if causes else None,
+                           "derniere": max(self.date_ot(ot)[:10] for ot in cas), "lien": id_panne(code)})
+        pannes.sort(key=selon((lambda p: p["cas"], True), (lambda p: p["code"], False)))
+        return pannes
+
+    def liste_articles(self):
+        resultat = []
+        for a in self.articles.values():
+            stock = self.stock_dans_le_temps(a["id"], "responsable")[0]
+            resultat.append(dict(self.article(a["id"]), reference=val(a, "reference"), emplacement=val(a, "emplacement"),
+                                 stock=stock, unite=val(a, "unite"), etat=self.etat_stock(a, stock), critique=val(a, "critique") == "1",
+                                 interventions=len([i for i in self.ordres_servis(a["id"]) if i in self.ordre_par_id])))
+        return sorted(resultat, key=lambda a: (a["titre"], a["articleId"]))
+
+    def liste_techniciens(self, profil, maintenant):
+        resultat = [dict(self.technicien(x["id"], profil), metier=val(x, "metier"), actif=val(x, "actif") != "0",
+                         interventions=len(self.ordres_du_technicien(x["id"])),
+                         habilitations=len(self.habilitations(x["id"], maintenant)), heures=self.heures(x["id"]))
+                    for x in self.tables["techniciens"]]
+        return sorted(resultat, key=lambda x: (x["nom"], x["technicienId"]))
+
+    def liste_savoir_faire(self):
+        resultat = []
+        for ligne in self.index()["actives"]:
+            if val(ligne, "type") != "savoir-faire":
+                continue
+            mere = self.mere(ligne)
+            resultat.append({"id": ligne["id"], "titre": val(ligne, "titre"), "rattachement": self.rattachement(ligne),
+                             "mere": {"id": mere["id"], "titre": val(mere, "titre")} if mere is not None else None,
+                             "lien": ligne["id"]})
+        return sorted(resultat, key=lambda s: (s["titre"], s["id"]))
+
+    def liste_entites(self, type_, profil, maintenant="2026-10-19"):
+        if type_ == "machine":
+            return self.liste_machines(profil)
+        if type_ == "panne":
+            return self.liste_pannes()
+        if type_ == "article":
+            return self.liste_articles()
+        if type_ == "savoir-faire":
+            return self.liste_savoir_faire()
+        if type_ == "technicien":
+            return None if profil == "demandeur" else self.liste_techniciens(profil, maintenant)
+        if type_ == "intervention":
+            return None if profil == "demandeur" else self.elements(self.ordres, profil)
+        return None
+
+    def suivi(self):
+        """Suivi du wiki, définitions des compteurs du journal (wiki-ecrans.js, §20.9)."""
+        journal = self.tables["wiki_journal"]
+
+        def lire(valeur):
+            try:
+                lu = json.loads(valeur)
+            except ValueError:
+                return []
+            return lu if isinstance(lu, list) else []
+
+        a_trancher = sum(1 for e in journal if val(e, "statut") == "validée" for c in lire(e.get("contradictions"))
+                         if isinstance(c, dict) and propre(c.get("statut")) == "ouverte")
+        par_ot = {}
+        for e in journal:
+            if val(e, "nature") == "ingestion" and val(e, "ot_id"):
+                par_ot.setdefault(val(e, "ot_id"), []).append(e)
+        en_echec = 0
+        for entrees in par_ot.values():
+            if all(val(e, "statut") in ("rejetée", "refusée") for e in entrees):
+                derniere = max(entrees, key=lambda e: int(re.sub(r"\D", "", e["id"]) or 0))
+                en_echec += val(derniere, "statut") == "refusée"
+        return {"aValider": sum(1 for e in journal if val(e, "statut") == "à valider"), "aTrancher": a_trancher,
+                "enEchec": en_echec}
+
+    def accueil(self, profil, maintenant):
+        pannes = self.liste_pannes()
+        articles = self.liste_articles()
+        clotures = self.ordonner([ot for ot in self.ordres if self.est_cloture(ot)])
+        machines = sorted((dict(self.machine(e["id"]), interventions=len(self.ordres_de(e["id"]))) for e in self.equipements),
+                          key=selon((lambda m: m["interventions"], True), (lambda m: m["titre"], False), (lambda m: m["equipementId"], False)))
+        habilitations = None
+        if profil != "demandeur":
+            liste = [h for x in self.tables["techniciens"] for h in self.habilitations(x["id"], maintenant)]
+            habilitations = {"suivies": len(liste), "aRenouveler": sum(1 for h in liste if h["etat"] == "à renouveler"),
+                             "echues": sum(1 for h in liste if h["etat"] == "échue")}
+        return {
+            "nombres": {"machines": len(self.equipements), "pannes": len(pannes), "articles": len(articles),
+                        "techniciens": None if profil == "demandeur" else len(self.tables["techniciens"]),
+                        "savoirFaire": len(self.liste_savoir_faire()),
+                        "interventions": None if profil == "demandeur" else len(self.ordres), "cloturees": len(clotures)},
+            "machinesPlusDInterventions": machines[:MACHINES_ACCUEIL],
+            "pannePlusFrequente": pannes[0] if pannes else None,
+            "articles": {"sousLeSeuil": sum(1 for a in articles if a["etat"] == "sous le seuil"),
+                         "enRupture": sum(1 for a in articles if a["etat"] == "rupture")},
+            "habilitations": habilitations,
+            "dernieres": [self.element(ot, profil) for ot in clotures[:NOMBRE_DERNIERES]],
+            "pannesFrequentes": pannes[:SYMPTOMES_MAX],
+            "suivi": self.suivi() if profil == "responsable" else None,
+        }
+
+
+# -- encyclopédie : outils sans état ------------------------------------------------------------------
+
+def val(ligne, champ):
+    return propre((ligne or {}).get(champ))
+
+
+def jour(valeur):
+    return propre(valeur)[:10]
+
+
+def arrondi(valeur):
+    """Au millionième, demi vers le haut (Math.round de JavaScript)."""
+    return math.floor(valeur * 1e6 + 0.5) / 1e6
+
+
+def fait(libelle, valeur, lien=None):
+    return {"libelle": libelle, "valeur": valeur, "lien": lien or None}
+
+
+def id_panne(code):
+    """« PANNE- » et le code encodé comme le ferait encodeURIComponent."""
+    return "PANNE-" + urllib.parse.quote(propre(code), safe="!*'()")
+
+
+def citations(texte):
+    return list(dict.fromkeys(MOTIF_CITATION.findall(texte or "")))
+
+
+def rubriques(texte, type_):
+    """Rubriques d'un texte stocké (« ## Rubrique », « - phrase »), dans l'ordre des rubriques du type."""
+    lues = []
+    for ligne in (texte or "").replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        nette = ligne.strip()
+        titre = re.fullmatch(r"##\s+(.+?)\s*", nette)
+        phrase = re.fullmatch(r"-\s+(.*)", nette)
+        if titre:
+            lues.append({"nom": titre.group(1), "phrases": []})
+        elif phrase and lues:
+            lues[-1]["phrases"].append(phrase.group(1).strip())
+    ordre = RUBRIQUES.get(type_, [])
+    return sorted(lues, key=lambda r: ordre.index(r["nom"]) if r["nom"] in ordre else len(ordre))
+
+
+def references(textes, a_trancher):
+    """OT cités par les textes (rubriques dans l'ordre), puis par « À trancher » (phrase, puis OT observés, sinon l'OT
+    de l'entrée), sans doublon, dans l'ordre de première apparition."""
+    ids = []
+    for rubrique in (textes or {}).get("rubriques", []):
+        for phrase in rubrique["phrases"]:
+            ids += citations(phrase)
+    for contradiction in a_trancher or []:
+        ids += citations(contradiction.get("phrase"))
+        observes = [propre(o) for o in contradiction.get("ot") or [] if propre(o)]
+        ids += observes or ([propre(contradiction.get("otSource"))] if propre(contradiction.get("otSource")) else [])
+    return list(dict.fromkeys(ids))

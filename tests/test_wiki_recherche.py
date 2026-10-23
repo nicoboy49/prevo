@@ -55,6 +55,7 @@ SCRIPTS = [
     "js/modules/indicateurs-regles.js",
     "js/modules/wiki-regles.js",
     "js/modules/wiki-calculs.js",          # Wiki.page : lien canonique et titre d'une page (comparés aux résultats)
+    "js/modules/wiki-entites.js",
     "js/modules/wiki-recherche.js",
 ]
 FICHIER_CORPUS = RACINE / "tests" / "fixtures" / "wiki" / "corpus.json"

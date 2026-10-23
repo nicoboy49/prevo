@@ -1,7 +1,9 @@
 'use strict';
 // Wiki (2/8) — couches calculées du composant et du mode, pages et catalogue (lot 6 refondu,
-// ARCHITECTURE.md §20.3 ; tâche T112). Tout est relu dans Donnees.lignes à chaque appel : rien n'est
-// écrit, rien n'est gardé entre deux appels, aucun appel réseau, aucune IA.
+// ARCHITECTURE.md §20.3 ; tâche T112) ; pages Machine et Article de l'encyclopédie, rattachement d'un savoir-faire,
+// listes des machines et des savoir-faire (refonte 2, §20.12 ; tâche T135, section 5, sur le socle de
+// wiki-entites.js). Tout est relu dans Donnees.lignes à chaque appel : rien n'est écrit, rien n'est gardé entre deux
+// appels, aucun appel réseau, aucune IA.
 //
 // Définitions (§20.3 et précisions de T112, rapport .chantier/rapports/T112.md) :
 // - page active : ligne de wiki_pages dont le statut n'est pas « archivée » ;
@@ -454,5 +456,201 @@ Object.assign(Wiki, (() => {
       .slice(0, Wiki.SEUILS.catalogueMax);
   }
 
-  return { page, pageComposant, pageMode, catalogue, PHRASE_SAVOIR_FAIRE, PHRASE_SOUS_PAGE };
+  // ===========================================================================================
+  // 5. Encyclopédie (refonte 2, §20.12 ; T135) : pages Machine et Article, rattachement d'un savoir-faire, listes des
+  //    machines et des savoir-faire. Le socle (index `ctx` d'un appel, références aux entités, interventions, pièces,
+  //    textes, stock dans le temps, assemblage) est dans wiki-entites.js, chargé après ce fichier, qui l'ajoute à
+  //    Wiki.interne : ces fonctions l'y lisent à l'appel ; Wiki.entite et Wiki.listeEntites les appellent par là.
+  // ===========================================================================================
+
+  /**
+   * Rattachement d'un savoir-faire, règle de son en-tête (enteteSavoirFaire ; une sous-page : celui de sa mère) : sa
+   * machine (equipement_id de sa ligne ou de la page à laquelle il est rattaché), sinon son article → { type : 'machine'
+   * ou 'article', id, titre, lien } ; null sinon.
+   */
+  function rattachementDe(ligne) {
+    const socle = Wiki.interne;
+    const source = ligneMere(ligne) || ligne;
+    let cible = source;
+    if (!texte(source.equipement_id) && !texte(source.article_id) && texte(source.rattache_a)) {
+      cible = Donnees.trouver('wiki_pages', texte(source.rattache_a)) || {};
+    }
+    const machine = socle.refMachine(texte(cible.equipement_id));
+    if (machine) return { type: 'machine', id: machine.equipementId, titre: machine.titre, lien: machine.lien };
+    const article = socle.refArticle(texte(cible.article_id));
+    return article ? { type: 'article', id: article.articleId, titre: article.titre, lien: article.lien } : null;
+  }
+
+  /** Savoir-faire actifs rattachés à une machine ou à un article, sans les sous-pages (que leur mère liste) ; par titre. */
+  function savoirFaireDe(ctx, type, id) {
+    return ctx.pagesActives.filter((ligne) => texte(ligne.type) === 'savoir-faire' && !ligneMere(ligne))
+      .filter((ligne) => {
+        const rattachement = rattachementDe(ligne);
+        return rattachement !== null && rattachement.type === type && rattachement.id === id;
+      })
+      .map((ligne) => ({ id: texte(ligne.id), titre: texte(ligne.titre), lien: texte(ligne.id) }))
+      .sort(Wiki.interne.parTitre('id'));
+  }
+
+  /** Lignes de article_equipement du côté `champ` = id (la première d'un couple fait foi) : Map(autre id → quantité). */
+  function nomenclature(champ, id, autre, existe) {
+    const montes = new Map();
+    Donnees.lignes('article_equipement').forEach((ligne) => {
+      const cle = texte(ligne[autre]);
+      if (texte(ligne[champ]) === id && cle && !montes.has(cle) && existe(cle)) montes.set(cle, Donnees.nombre(ligne.quantite));
+    });
+    return montes;
+  }
+
+  /** Gammes et contrôles : prochaine échéance croissante (sans date en dernier), puis identifiant. */
+  function parProchaine(a, b) {
+    return Number(!a.prochaine) - Number(!b.prochaine) || comparer(a.prochaine, b.prochaine) || comparer(a.id, b.id);
+  }
+
+  function nomFournisseur(id) {
+    const fournisseur = texte(id) ? Donnees.trouver('fournisseurs', texte(id)) : null;
+    return fournisseur ? texte(fournisseur.nom) || texte(fournisseur.id) : texte(id);
+  }
+
+  /** Page Machine (§20.12) : fiche, consignation, sous-ensembles, pannes, interventions, articles, savoir-faire, préventif. */
+  function entiteMachine(ctx, fiche) {
+    const socle = Wiki.interne;
+    const { fait, parTitre } = socle;
+    const id = texte(fiche.id);
+    const ordres = ctx.ordresParEquipement.get(id) || [];
+    const parent = texte(fiche.parent_id);
+    const mere = socle.refMachine(parent);
+    const titre = titreEquipement(fiche);
+    const ligne = socle.ligneAncree(ctx, 'équipement', 'equipement_id', id);
+    return socle.assembler(ctx, {
+      id, type: 'machine', titre,
+      faits: [
+        fait('Repère', texte(fiche.repere)), fait('Lieu', socle.lieuDe(ctx, fiche.localisation_id)),
+        fait('Marque et modèle', [texte(fiche.marque), texte(fiche.modele)].filter(Boolean).join(' ')),
+        fait('N° de série', texte(fiche.num_serie)), fait('Mise en service', jour(fiche.date_mes)),
+        fait('Criticité', texte(fiche.criticite)), fait('État', texte(fiche.statut)),
+        fait('Habilitation requise', texte(fiche.habilitation_requise)),
+      ].concat(parent ? [fait('Fait partie de', mere ? mere.titre : parent, mere && mere.lien)] : [],
+        [fait('Interventions', ordres.length)]),
+      sections: {
+        consignation: consignationDe(fiche),
+        sousEnsembles: Donnees.lignes('equipements').filter((autre) => texte(autre.parent_id) === id && texte(autre.id) !== id)
+          .map((autre) => socle.refMachine(texte(autre.id))).sort(parTitre('equipementId')),
+        pannes: socle.pannesDe(ctx, ordres),
+        interventions: socle.interventions(ctx, ordres),
+        articlesMontes: Array.from(nomenclature('equipement_id', id, 'article_id', socle.refArticle),
+          ([articleId, quantite]) => Object.assign(socle.refArticle(articleId), { quantite })).sort(parTitre('articleId')),
+        articlesConsommes: socle.piecesDesOrdres(ctx, ordres, true),
+        savoirFaire: savoirFaireDe(ctx, 'machine', id),
+        gammes: Donnees.lignes('gammes').filter((gamme) => texte(gamme.equipement_id) === id && texte(gamme.actif) !== '0')
+          .map((gamme) => ({ id: texte(gamme.id), libelle: texte(gamme.libelle), declencheur: texte(gamme.declencheur),
+            periodiciteJours: Donnees.nombre(gamme.periodicite_jours), prochaine: jour(gamme.prochaine_echeance) }))
+          .sort(parProchaine),
+        controles: Donnees.lignes('controles_reglementaires').filter((controle) => texte(controle.equipement_id) === id)
+          .map((controle) => ({ id: texte(controle.id), nature: texte(controle.nature), organisme: texte(controle.organisme),
+            derniere: jour(controle.derniere_date), prochaine: jour(controle.prochaine_date) }))
+          .sort(parProchaine),
+      },
+    }, socle.textesDe(ligne, 'équipement'), { id, pageId: ligne ? texte(ligne.id) : '', type: 'équipement', titre });
+  }
+
+  /** Page Article (§20.12) : fiche (prix au technicien et au responsable, D114), stock dans le temps, montage, usages. */
+  function entiteArticle(ctx, article) {
+    const socle = Wiki.interne;
+    const { fait, parTitre } = socle;
+    const id = texte(article.id);
+    const prix = ctx.profil !== 'demandeur';
+    const temps = socle.stockDansLeTemps(ctx, id);
+    const titre = titreArticle(article);
+    const ligne = socle.ligneAncree(ctx, 'composant', 'article_id', id);
+    const consommeSur = new Map();                       // machine → { nombreOt, quantite } (OT clôturés, T112)
+    (ctx.servi.get(id) || []).forEach((otId) => {
+      const ot = Donnees.trouver('ordres_travail', otId);
+      const machine = ot && estCloture(ot) ? socle.refMachine(texte(ot.equipement_id)) : null;
+      if (!machine) return;
+      const entree = consommeSur.get(machine.equipementId) || Object.assign(machine, { nombreOt: 0, quantite: 0 });
+      entree.nombreOt += 1;
+      entree.quantite = socle.arrondi(entree.quantite + ctx.pieces.get(otId).get(id));
+      consommeSur.set(machine.equipementId, entree);
+    });
+    const nombre = (champ) => Donnees.nombre(article[champ]);
+    return socle.assembler(ctx, {
+      id, type: 'article', titre,
+      faits: [
+        fait('Référence', texte(article.reference)), fait('Fabricant', texte(article.fabricant)),
+        fait('Référence du fabricant', texte(article.ref_fabricant)), fait('Emplacement', texte(article.emplacement)),
+        fait('Stock', temps.stock), fait('Unité', texte(article.unite)), fait('État du stock', socle.etatDuStock(article, temps.stock)),
+        fait('Stock de sécurité', nombre('stock_securite')), fait('Point de commande', nombre('point_commande')),
+        fait('Quantité de commande', nombre('qte_commande')), fait('Délai (jours)', nombre('delai_jours')),
+        fait('Fournisseur', nomFournisseur(article.fournisseur_id)),
+      ].concat(prix ? [fait('Prix unitaire', nombre('prix_unitaire'))] : [], [fait('Critique', texte(article.critique) === '1')]),
+      sections: {
+        commandes: Donnees.lignes('achats').filter((achat) => texte(achat.article_id) === id)
+          .sort((a, b) => comparer(texte(a.date), texte(b.date)) || comparer(texte(a.id), texte(b.id)))
+          .map((achat) => Object.assign({ id: texte(achat.id), date: jour(achat.date), quantite: Donnees.nombre(achat.quantite),
+            fournisseur: nomFournisseur(achat.fournisseur_id), statut: texte(achat.statut), reception: jour(achat.date_reception) },
+          prix ? { prixUnitaire: Donnees.nombre(achat.prix_unitaire) } : {})),
+        sorties: temps.sorties,
+        ruptures: temps.ruptures,
+        montee: Array.from(nomenclature('article_id', id, 'equipement_id', socle.refMachine),
+          ([equipementId, quantite]) => Object.assign(socle.refMachine(equipementId), { quantite })).sort(parTitre('equipementId')),
+        consommeSur: Array.from(consommeSur.values()).sort((a, b) => b.nombreOt - a.nombreOt || parTitre('equipementId')(a, b)),
+        interventions: socle.interventions(ctx, socle.ordresDe(ctx.servi.get(id))),
+        savoirFaire: savoirFaireDe(ctx, 'article', id),
+      },
+    }, socle.textesDe(ligne, 'composant'), { id, pageId: ligne ? texte(ligne.id) : '', type: 'composant', titre });
+  }
+
+  /** Vrai si la chaîne des parents d'une machine revient à elle (elle reste alors en tête de la liste des machines). */
+  function dansUnCycle(fiche) {
+    const vues = new Set();
+    for (let courante = fiche; courante && texte(courante.parent_id) && !vues.has(texte(courante.id));
+      courante = equipement(texte(courante.parent_id))) {
+      vues.add(texte(courante.id));
+      if (texte(courante.parent_id) === texte(fiche.id)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Liste des machines : [{ lieu, machines: [{ equipementId, titre, lien, lieu, marqueModele, interventions, pannes,
+   * sousEnsembles }] }], par lieu (vide en dernier) puis titre ; un sous-ensemble sous sa machine (parent connu, sans cycle).
+   */
+  function listeMachines(ctx) {
+    const socle = Wiki.interne;
+    const enfants = new Map();
+    const racines = [];
+    Donnees.lignes('equipements').forEach((fiche) => {
+      const parent = texte(fiche.parent_id);
+      if (!parent || !equipement(parent) || dansUnCycle(fiche)) racines.push(fiche);
+      else enfants.set(parent, (enfants.get(parent) || []).concat([fiche]));
+    });
+    const noeud = (fiche) => {
+      const id = texte(fiche.id);
+      const ordres = ctx.ordresParEquipement.get(id) || [];
+      return Object.assign(socle.refMachine(id), { lieu: socle.lieuDe(ctx, fiche.localisation_id),
+        marqueModele: [texte(fiche.marque), texte(fiche.modele)].filter(Boolean).join(' '), interventions: ordres.length,
+        pannes: socle.pannesDe(ctx, ordres), sousEnsembles: (enfants.get(id) || []).map(noeud).sort(socle.parTitre('equipementId')) });
+    };
+    const groupes = new Map();
+    racines.map(noeud).sort(socle.parTitre('equipementId'))
+      .forEach((machine) => groupes.set(machine.lieu, (groupes.get(machine.lieu) || []).concat([machine])));
+    return Array.from(groupes, ([lieu, machines]) => ({ lieu, machines }))
+      .sort((a, b) => Number(!a.lieu) - Number(!b.lieu) || comparer(a.lieu, b.lieu));
+  }
+
+  /** Savoir-faire actifs, sous-pages comprises : [{ id, titre, rattachement, mere, lien }], par titre. */
+  function listeSavoirFaire(ctx) {
+    return ctx.pagesActives.filter((ligne) => texte(ligne.type) === 'savoir-faire').map((ligne) => {
+      const mere = ligneMere(ligne);
+      return { id: texte(ligne.id), titre: texte(ligne.titre), rattachement: rattachementDe(ligne),
+        mere: mere ? { id: texte(mere.id), titre: texte(mere.titre) } : null, lien: texte(ligne.id) };
+    }).sort(Wiki.interne.parTitre('id'));
+  }
+
+  return {
+    page, pageComposant, pageMode, catalogue, PHRASE_SAVOIR_FAIRE, PHRASE_SOUS_PAGE,
+    // Usage interne du wiki (pas une API) : complété par wiki-entites.js (socle de l'encyclopédie).
+    interne: { entiteMachine, entiteArticle, rattachementDe, listeMachines, listeSavoirFaire },
+  };
 })());
