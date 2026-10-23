@@ -36,6 +36,7 @@ import hashlib
 import html
 import io
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -50,7 +51,8 @@ DOSSIER_TRACES = DOSSIER_TRAVAIL / 'chaine'
 DOSSIER_RESULTAT = DOSSIER_TRAVAIL / 'resultat'
 DOSSIER_FIGE = RACINE / 'outils'
 FICHIERS_FIGES = {'wiki_pages': 'demo_wiki_pages.csv', 'wiki_journal': 'demo_wiki_journal.csv'}
-DATE_REFERENCE = '2026-10-19'           # celle de outils/generer_demo.py (« aujourd'hui » du jeu de démo)
+sys.path.insert(0, str(RACINE / 'outils'))
+from generer_demo import DATE_REFERENCE  # noqa: E402  (« aujourd'hui » du jeu de démo)
 HEURE_REFERENCE = 9                     # il est 9 h à la date de référence
 DELAI_APPEL_S = 300
 SCRIPTS = [
@@ -164,17 +166,37 @@ def commande_claude(chemin):
         absolu = str(Path(chemin).resolve())          # l'agent tourne dans un dossier neutre
         return [sys.executable, absolu] if chemin.endswith('.py') else [absolu]
     trouve = shutil.which('claude')
-    if trouve and trouve.lower().endswith(('.cmd', '.bat')):
-        exe = Path(trouve).parent / 'node_modules' / '@anthropic-ai' / 'claude-code' / 'bin' / 'claude.exe'
-        if exe.is_file():
-            return [str(exe)]
     if not trouve:
         raise ErreurFabrication('commande « claude » introuvable')
+    if trouve.lower().endswith(('.cmd', '.bat')):
+        # Jamais de repli sur cmd.exe : il couperait le message système et perdrait les options d'isolement.
+        exe = Path(trouve).parent / 'node_modules' / '@anthropic-ai' / 'claude-code' / 'bin' / 'claude.exe'
+        if not exe.is_file():
+            raise ErreurFabrication('claude.exe introuvable à côté de %s (passer --claude CHEMIN de claude.exe)' % trouve)
+        return [str(exe)]
     return [trouve]
 
 
+def options_agent(systeme):
+    """Arguments d'un agent après la commande : modèle, aucun outil, message système, isolement (D98)."""
+    return ['-p', '--model', 'sonnet', '--tools', '', '--system-prompt', systeme] + OPTIONS_CLAUDE
+
+
+def environnement_agent():
+    """Environnement d'un agent : sans les variables de la session Claude Code qui le lance ni ce qui changerait le
+    modèle ou l'adresse de l'API ; CLAUDE.md et mémoire automatique désactivés."""
+    retirees = ('CLAUDECODE', 'CLAUDE_EFFORT', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL')
+    env = {cle: valeur for cle, valeur in os.environ.items()
+           if not cle.startswith(('CLAUDE_CODE_', 'ANTHROPIC_DEFAULT_')) and cle not in retirees}
+    env.update({'CLAUDE_CODE_DISABLE_CLAUDE_MDS': '1', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY': '1'})
+    return env
+
+
 def empreinte(systeme, utilisateur):
-    return hashlib.sha256((systeme + '\x00' + utilisateur).encode('utf-8')).hexdigest()
+    """Empreinte d'une requête : options de l'agent (sans le message système) et les deux messages. Une option
+    changée invalide toutes les réponses gardées."""
+    options = json.dumps(options_agent(''), ensure_ascii=False)
+    return hashlib.sha256((options + '\x00' + systeme + '\x00' + utilisateur).encode('utf-8')).hexdigest()
 
 
 def lire_trace(dossier, ot):
@@ -185,6 +207,13 @@ def lire_trace(dossier, ot):
 def ecrire_trace(dossier, trace):
     dossier.mkdir(parents=True, exist_ok=True)
     (dossier / (trace['ot'] + '.json')).write_text(json.dumps(trace, ensure_ascii=False, indent=1), encoding='utf-8')
+
+
+def reponse_valable(appel):
+    """Une réponse gardée n'est reprise que si elle venait de Sonnet, en un seul tour, sans erreur."""
+    modeles = [m.strip() for m in str(appel.get('modele', '')).split(',') if m.strip()]
+    return (not appel.get('erreur') and bool(modeles) and all('sonnet' in m.lower() for m in modeles)
+            and appel.get('tours') == 1)
 
 
 def controler_reponse(donnees):
@@ -202,9 +231,10 @@ def controler_reponse(donnees):
 class Fabrique:
     """Pont entre Wiki.traiterFile (page) et les agents Claude (Python)."""
 
-    def __init__(self, commande, traces):
+    def __init__(self, commande, traces, delai=DELAI_APPEL_S):
         self.commande = commande
         self.traces = traces
+        self.delai = delai
         self.appels = 0
         self.reprises = 0
         self.cout = 0.0
@@ -219,7 +249,8 @@ class Fabrique:
         systeme, utilisateur = messages[0]['content'], messages[1]['content']
         cle = empreinte(systeme, utilisateur)
         trace = lire_trace(self.traces, ot)
-        deja = next((a for a in trace['appels'] if a.get('empreinte') == cle and not a.get('reprise') and a.get('contenu')), None)
+        deja = next((a for a in reversed(trace['appels']) if a.get('empreinte') == cle and not a.get('reprise')
+                     and a.get('contenu') and reponse_valable(a)), None)
         if deja:
             self.reprises += 1
             trace['appels'].append({'empreinte': cle, 'reprise': True, 'date': datetime.now().isoformat(timespec='seconds')})
@@ -232,38 +263,59 @@ class Fabrique:
             raise
 
     async def appeler_agent(self, ot, systeme, utilisateur, cle, trace):
-        arguments = self.commande + ['-p', '--model', 'sonnet', '--tools', '', '--system-prompt', systeme] + OPTIONS_CLAUDE
         depart = time.time()
+        appel = {'empreinte': cle, 'reprise': False, 'date': datetime.now().isoformat(timespec='seconds'),
+                 'systeme': systeme, 'utilisateur': utilisateur}
+        trace['appels'].append(appel)
+        self.appels += 1                          # tout agent lancé compte, même arrêté ensuite
         try:
             processus = await asyncio.create_subprocess_exec(
-                *arguments, cwd=str(self.dossier_neutre), stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            sortie, erreurs = await asyncio.wait_for(processus.communicate(utilisateur.encode('utf-8')), DELAI_APPEL_S)
-        except (OSError, asyncio.TimeoutError) as erreur:
-            raise ErreurFabrication('agent injoignable : %s' % (erreur or 'délai dépassé'))
+                *(self.commande + options_agent(systeme)), cwd=str(self.dossier_neutre), env=environnement_agent(),
+                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        except OSError as erreur:
+            appel['erreur'] = 'agent injoignable : %s' % erreur
+            ecrire_trace(self.traces, trace)
+            raise ErreurFabrication(appel['erreur'])
+        try:
+            sortie, erreurs = await asyncio.wait_for(processus.communicate(utilisateur.encode('utf-8')), self.delai)
+        except asyncio.TimeoutError:
+            processus.kill()                      # l'agent ne survit pas au délai
+            await processus.wait()
+            appel.update({'erreur': 'délai dépassé (%d s)' % self.delai, 'duree_s': round(time.time() - depart, 2)})
+            ecrire_trace(self.traces, trace)
+            raise ErreurFabrication('agent injoignable : délai dépassé (%d s)' % self.delai)
         brute = sortie.decode('utf-8', 'replace')
-        appel = {'empreinte': cle, 'reprise': False, 'date': datetime.now().isoformat(timespec='seconds'),
-                 'systeme': systeme, 'utilisateur': utilisateur, 'reponse_brute': brute,
-                 'stderr': erreurs.decode('utf-8', 'replace')[-2000:], 'code_retour': processus.returncode,
-                 'duree_s': round(time.time() - depart, 2)}
-        trace['appels'].append(appel)
+        appel.update({'reponse_brute': brute, 'stderr': erreurs.decode('utf-8', 'replace')[-2000:],
+                      'code_retour': processus.returncode, 'duree_s': round(time.time() - depart, 2)})
         try:
             donnees = json.loads(brute)
             appel.update({'modele': ', '.join(sorted((donnees.get('modelUsage') or {}).keys())),
                           'tours': donnees.get('num_turns'), 'jetons': donnees.get('usage'),
                           'cout_usd': donnees.get('total_cost_usd'), 'duree_api_ms': donnees.get('duration_api_ms')})
+            self.cout += float(donnees.get('total_cost_usd') or 0)
             modeles = controler_reponse(donnees)
         except ValueError:
+            appel['erreur'] = 'réponse illisible'
             ecrire_trace(self.traces, trace)
             raise ErreurFabrication('réponse illisible (code %s) : %s' % (processus.returncode, brute[:300] or appel['stderr'][-300:]))
-        except ErreurFabrication:
+        except ErreurFabrication as erreur:
+            appel['erreur'] = str(erreur)
             ecrire_trace(self.traces, trace)
             raise
         appel['contenu'] = donnees.get('result') or ''
         ecrire_trace(self.traces, trace)
-        self.appels += 1
-        self.cout += float(donnees.get('total_cost_usd') or 0)
         return {'contenu': appel['contenu'], 'modele': modeles[0]}
+
+    def noter_verdicts(self, entrees):
+        """Verdict de Prévo sur la dernière réponse de chaque OT (CS105) : statut de son entrée, raisons, motif."""
+        for entree in entrees:
+            chemin = self.traces / (entree['ot'] + '.json')
+            if not chemin.is_file():
+                continue
+            trace = lire_trace(self.traces, entree['ot'])
+            trace['verdict'] = {'entree': entree['id'], 'statut': entree['statut'], 'raisons': entree['raisons'],
+                                'motif': entree['motif']}
+            ecrire_trace(self.traces, trace)
 
     async def progres(self, etat):
         faits = (etat.get('acceptees') or 0) + (etat.get('rien') or 0)
@@ -274,9 +326,16 @@ class Fabrique:
                    'refusées %(refusees)s · rejouées %(rejouees)s' % etat)
 
 
+ENTREES_JS = """() => Donnees.lignes('wiki_journal').filter((e) => e.nature === 'ingestion')
+  .map((e) => ({ id: e.id, ot: e.ot_id, statut: e.statut, raisons: e.raisons, motif: e.motif }))"""
+
+
 async def fabriquer_async(arguments):
     commande = commande_claude(arguments.claude)
-    fabrique = Fabrique(commande, Path(arguments.traces))
+    fabrique = Fabrique(commande, Path(arguments.traces), arguments.delai_appel)
+    sortie = Path(arguments.resultat)
+    for table in FICHIERS_FIGES:                  # jamais de résultat périmé à figer après une fabrication arrêtée
+        (sortie / (table + '.csv')).unlink(missing_ok=True)
     from playwright.async_api import async_playwright
     async with async_playwright() as playwright:
         navigateur, page, erreurs = await ouvrir_page(playwright, lire_tables(arguments.demo, sans_wiki=True))
@@ -285,6 +344,7 @@ async def fabriquer_async(arguments):
             await page.expose_function('progresFabrication', fabrique.progres)
             ecrire('Fabrication du wiki de démo : %s agent(s), commande %s' % (arguments.agents, ' '.join(commande)))
             bilan = await page.evaluate(TRAITER_JS, {'agents': arguments.agents, 'limite': arguments.limite or 0})
+            fabrique.noter_verdicts(await page.evaluate(ENTREES_JS))
             ecrire('OT : %(ot)s · acceptées %(acceptees)s · rien à ajouter %(rien)s · refusées %(refusees)s · '
                    'rejouées %(rejouees)s · encore en file %(enFile)s' % bilan)
             ecrire('Agents lancés : %d · réponses reprises des traces : %d · coût : %.2f $'
@@ -300,8 +360,12 @@ async def fabriquer_async(arguments):
             if bilan['enFile']:
                 ecrire('ARRÊT : %d OT encore en file.' % bilan['enFile'])
                 return 1
-            limite = (date.fromisoformat(DATE_REFERENCE) - timedelta(days=arguments.a_valider_jours)).isoformat()
+            jours = arguments.a_valider_jours
+            if jours is None:
+                jours = await page.evaluate('Wiki.SEUILS.demoAValiderJours')
+            limite = (date.fromisoformat(DATE_REFERENCE) - timedelta(days=jours)).isoformat()
             resultat = await page.evaluate(VALIDER_JS, limite)
+            fabrique.noter_verdicts(await page.evaluate(ENTREES_JS))
             ecrire('Validées : %d · laissées « à valider » (après le %s) : %s'
                    % (resultat['validees'], limite, ', '.join(resultat['laissees']) or 'aucune'))
             if resultat['bloquees']:
@@ -313,7 +377,6 @@ async def fabriquer_async(arguments):
             if erreurs:
                 ecrire('ARRÊT : erreurs JavaScript : %s' % erreurs[:5])
                 return 1
-            sortie = Path(arguments.resultat)
             sortie.mkdir(parents=True, exist_ok=True)
             for table, texte in resultat['fichiers'].items():
                 (sortie / (table + '.csv')).write_bytes(texte.encode('utf-8'))
@@ -361,18 +424,26 @@ async def integrite_async(dossier):
 def verifier(arguments):
     defauts = []
     appels = 0
+    sans_reponse = 0
+    valables = set()                             # OT qui ont au moins une réponse Sonnet en un tour
     for chemin in sorted(Path(arguments.traces).glob('*.json')):
         for appel in json.loads(chemin.read_text(encoding='utf-8')).get('appels', []):
             if appel.get('reprise'):
                 continue
-            if not appel.get('contenu'):
-                continue                         # appel arrêté (déjà signalé à la fabrication), sans réponse gardée
             appels += 1
-            modeles = [m.strip() for m in str(appel.get('modele', '')).split(',') if m.strip()]
-            if not modeles or any('sonnet' not in m.lower() for m in modeles) or appel.get('tours') != 1:
-                defauts.append('%s : modèle %s, %s tour(s)' % (chemin.stem, appel.get('modele'), appel.get('tours')))
+            if 'modele' not in appel:            # agent coupé avant de répondre (délai, lancement impossible)
+                sans_reponse += 1
+                continue
+            if reponse_valable(appel):
+                valables.add(chemin.stem)
+            else:
+                defauts.append('%s : réponse de %s en %s tour(s)%s' % (chemin.stem, appel.get('modele') or 'modèle inconnu',
+                               appel.get('tours'), (' (' + appel['erreur'] + ')') if appel.get('erreur') else ''))
     journal = lignes_csv((Path(arguments.wiki) / FICHIERS_FIGES['wiki_journal']).read_bytes().decode('utf-8'))
     integres = {ligne['ot_id'] for ligne in journal if ligne.get('nature') == 'ingestion'}
+    sans_trace = sorted(ot for ot in integres if ot not in valables)
+    if sans_trace:
+        defauts.append('entrées du journal figé sans réponse Sonnet dans les traces : %s' % ', '.join(sans_trace))
     ordres = lignes_csv((Path(arguments.demo) / 'ordres_travail.csv').read_bytes().decode('utf-8'))
     clotures = sorted(o['id'] for o in ordres if o['statut'] == 'Clôturé administrativement')
     manquants = [ot for ot in clotures if ot not in integres]
@@ -391,8 +462,9 @@ def verifier(arguments):
         defauts.append('intégrité : %s' % json.dumps(integrite['ecarts'][:10], ensure_ascii=False))
     if erreurs:
         defauts.append('erreurs JavaScript : %s' % erreurs[:5])
-    ecrire('Traces : %d appels d\'agents · modèles du journal figé : %s · OT clôturés administrativement : %d, intégrés : %d'
-           % (appels, ', '.join(modeles) or 'aucun', len(clotures), len([ot for ot in clotures if ot in integres])))
+    ecrire('Traces : %d appels d\'agents (%d sans réponse) · modèles du journal figé : %s · OT clôturés administrativement : '
+           '%d, intégrés : %d' % (appels, sans_reponse, ', '.join(modeles) or 'aucun', len(clotures),
+                                  len([ot for ot in clotures if ot in integres])))
     for defaut in defauts:
         ecrire('DÉFAUT : ' + defaut)
     ecrire('Vérification : ' + ('OK' if not defauts else 'ÉCHEC'))
@@ -413,7 +485,17 @@ RELECTURE_JS = """() => {
   });
   pages.sort((a, b) => types.indexOf(a.type) - types.indexOf(b.type) || b.ot.length - a.ot.length
     || b.phrases - a.phrases || (a.titre < b.titre ? -1 : 1));
-  return pages;
+  // Propositions laissées « à valider » : elles seront visibles dans la démo (profil responsable), donc relues aussi.
+  const lire = (valeur) => { try { return JSON.parse(valeur || '[]') || []; } catch (e) { return []; } };
+  const attente = Donnees.lignes('wiki_journal').filter((e) => e.statut === 'à valider')
+    .sort((a, b) => Number(a.ordre) - Number(b.ordre)).map((e) => {
+      const o = Donnees.trouver('ordres_travail', e.ot_id) || {};
+      return { id: e.id, ot: e.ot_id, date: e.date_intervention, titre: o.titre, compteRendu: o.compte_rendu, astuce: o.astuce,
+        anterieure: e.anterieure === '1', modele: e.modele, contradictions: lire(e.contradictions),
+        changements: lire(e.changements).map((c) => ({ titre: c.titre, type: c.type, creation: Boolean(c.creation),
+          avant: c.avant || '', apres: c.apres || '' })) };
+    });
+  return { pages, attente };
 }"""
 
 
@@ -463,10 +545,32 @@ def page_html(page):
     return '\n'.join(lignes)
 
 
+def attente_html(entree):
+    e = html.escape
+    lignes = ['<section class="page attente-proposition"><h3>%s — %s <small>%s · intervention du %s%s</small></h3>'
+              % (e(entree['ot']), e(entree['titre'] or ''), e(entree['id']), e(entree['date'] or ''),
+                 ' · intervention antérieure' if entree['anterieure'] else '')]
+    for contradiction in entree['contradictions']:
+        lignes.append('<p class="contradiction"><b>Contradiction</b> sur « %s » : « %s » — %s</p>'
+                      % (e(contradiction.get('page', '')), e(contradiction.get('phrase', '')), e(contradiction.get('observation', ''))))
+    lignes.append('<p>%s%s</p>' % (e(entree['compteRendu'] or ''),
+                  ('<br><i>Astuce : %s</i>' % e(entree['astuce'])) if entree['astuce'] else ''))
+    for changement in entree['changements']:
+        lignes.append('<h4>%s « %s » (%s)</h4><pre>%s</pre>' % ('Page créée' if changement['creation'] else 'Page modifiée',
+                      e(changement['titre']), e(changement['type']), e(changement['apres'])))
+        if changement['avant']:
+            lignes.append('<details><summary>Texte d\'avant</summary><pre>%s</pre></details>' % e(changement['avant']))
+    lignes.append('</section>')
+    return '\n'.join(lignes)
+
+
 def relecture(arguments):
-    pages = asyncio.run(relecture_async(arguments.demo))
+    lu = asyncio.run(relecture_async(arguments.demo))
+    pages = lu['pages']
     titres = {'équipement': 'Équipements', 'composant': 'Composants', 'mode': 'Modes de défaillance', 'savoir-faire': 'Savoir-faire'}
-    corps = []
+    corps = ['<h2>Propositions à valider (%d)</h2><p>Laissées « à valider » dans la démo (les derniers jours '
+             'd\'intervention) : le profil responsable les verra.</p>' % len(lu['attente'])]
+    corps.extend(attente_html(entree) for entree in lu['attente'])
     for type_page, titre in titres.items():
         du_type = [p for p in pages if p['type'] == type_page]
         corps.append('<h2>%s (%d)</h2>' % (titre, len(du_type)))
@@ -481,7 +585,7 @@ def relecture(arguments):
     sortie = Path(arguments.sortie)
     sortie.parent.mkdir(parents=True, exist_ok=True)
     sortie.write_text(document, encoding='utf-8')
-    ecrire('Relecture : %s (%d pages)' % (sortie, len(pages)))
+    ecrire('Relecture : %s (%d pages, %d propositions à valider)' % (sortie, len(pages), len(lu['attente'])))
     return 0
 
 
@@ -497,7 +601,9 @@ def lire_arguments(argv):
     fabrication.add_argument('--agents', type=int, default=5, help='agents en même temps (1 à 5, défaut 5)')
     fabrication.add_argument('--claude', default='', help='commande claude (essais : un script .py)')
     fabrication.add_argument('--limite', type=int, default=0, help='seulement les N premiers OT (essais)')
-    fabrication.add_argument('--a-valider-jours', type=int, default=14, help='jours laissés « à valider » (défaut 14)')
+    fabrication.add_argument('--a-valider-jours', type=int, default=None,
+                             help='jours laissés « à valider » (défaut : Wiki.SEUILS.demoAValiderJours)')
+    fabrication.add_argument('--delai-appel', type=int, default=DELAI_APPEL_S, help='délai d\'un agent en secondes')
     sous.add_parser('figer', parents=[commun], help='copie le résultat dans les fichiers figés')
     sous.add_parser('verifier', parents=[commun], help='vérifie traces, journal figé et intégrité')
     lecture = sous.add_parser('relecture', parents=[commun], help='page de relecture du wiki de démo')

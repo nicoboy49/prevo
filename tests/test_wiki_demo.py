@@ -65,8 +65,11 @@ class TestFabrication(unittest.TestCase):
         cls.traces = cls.dossier / 'chaine'
         cls.appels = cls.dossier / 'appels'
         cls.resultat = cls.dossier / 'resultat'
+        # Lancée comme depuis une session Claude Code : ses variables ne doivent pas passer aux agents.
         cls.sortie = lancer(OUTIL, ['fabriquer', '--agents', 5, '--claude', FAUX, '--traces', cls.traces,
-                                    '--resultat', cls.resultat], {'FAUX_CLAUDE_TRACES': str(cls.appels)})
+                                    '--resultat', cls.resultat], {'FAUX_CLAUDE_TRACES': str(cls.appels),
+                                                                  'CLAUDECODE': '1', 'CLAUDE_CODE_SESSION_ID': 'session-de-test',
+                                                                  'ANTHROPIC_BASE_URL': 'http://127.0.0.1:9'})
 
     def test_fabrication_complete(self):
         self.assertEqual(self.sortie.returncode, 0, self.sortie.stdout + self.sortie.stderr)
@@ -110,6 +113,15 @@ class TestFabrication(unittest.TestCase):
             self.assertEqual((appel['modele'], appel['tours']), ('claude-sonnet-5-5', 1))
             self.assertTrue(appel['reponse_brute'] and appel['contenu'] and appel['empreinte'])
             self.assertIn('cout_usd', appel)
+            # Verdict de Prévo gardé dans la trace (CS105).
+            self.assertIn(trace['verdict']['statut'], ('validée', 'à valider'), ot)
+        # Environnement de chaque agent : sans les variables de la session qui lance, CLAUDE.md et mémoire désactivés.
+        for recu in recus:
+            env = recu['environnement']
+            self.assertNotIn('CLAUDECODE', env)
+            self.assertNotIn('CLAUDE_CODE_SESSION_ID', env)
+            self.assertNotIn('ANTHROPIC_BASE_URL', env)
+            self.assertEqual((env.get('CLAUDE_CODE_DISABLE_CLAUDE_MDS'), env.get('CLAUDE_CODE_DISABLE_AUTO_MEMORY')), ('1', '1'))
 
     def test_reprise_sans_nouvel_appel(self):
         # Un seul agent : les requêtes d'une fabrication à l'autre sont identiques à l'octet (avec plusieurs agents,
@@ -165,6 +177,12 @@ class TestFabrication(unittest.TestCase):
         nombres = [int(n) for n in re.findall(r'<small>équipement · (\d+) OT', section)]
         self.assertGreater(len(nombres), 5)
         self.assertEqual(nombres, sorted(nombres, reverse=True))
+        # Les propositions laissées « à valider » sont relues aussi, en tête : OT, texte proposé de chaque page.
+        self.assertLess(texte.index('<h2>Propositions à valider (2)'), positions[0])
+        attente = texte[texte.index('<h2>Propositions à valider'):positions[0]]
+        self.assertIn('OT-2026-0214', attente)
+        self.assertIn('Page modifiée', attente)
+        self.assertIn('[OT-2026-0214]', attente)
         # Vérification en échec : une entrée du journal figé retirée.
         abime = self.dossier / 'fige-abime'
         shutil.copytree(fige, abime)
@@ -187,6 +205,18 @@ class TestFabrication(unittest.TestCase):
         sortie = lancer(GENERATEUR, ['--wiki', fige, '--sortie', self.dossier / 'incoherent', '--sans-js'])
         self.assertEqual(sortie.returncode, 1)
         self.assertIn('OT cité inexistant OT-2099-0001', sortie.stderr)
+        # Une date d'intervention qui n'est pas la date de fin de l'OT arrête aussi le générateur.
+        dates = self.dossier / 'fige-dates'
+        lancer(OUTIL, ['figer', '--resultat', self.resultat, '--wiki', dates])
+        lignes = list(csv.reader(io.StringIO((dates / 'demo_wiki_journal.csv').read_bytes().decode('utf-8-sig'), newline=''),
+                                 delimiter=';'))
+        lignes[1][lignes[0].index('date_intervention')] = '2001-01-01 08:00'
+        sortie_csv = io.StringIO()
+        csv.writer(sortie_csv, delimiter=';', lineterminator='\r\n').writerows(lignes)
+        (dates / 'demo_wiki_journal.csv').write_bytes(sortie_csv.getvalue().encode('utf-8'))
+        sortie = lancer(GENERATEUR, ['--wiki', dates, '--sortie', self.dossier / 'incoherent-dates', '--sans-js'])
+        self.assertEqual(sortie.returncode, 1)
+        self.assertIn("date d'intervention 2001-01-01 08:00", sortie.stderr)
 
 
 class TestArrets(unittest.TestCase):
@@ -213,6 +243,81 @@ class TestArrets(unittest.TestCase):
     def test_reponse_refusee_par_prevo(self):
         sortie = self.arreter('refus', 'ARRÊT : réponse refusée par les contrôles de Prévo')
         self.assertIn('OT cité hors des OT permis : OT-1999-9999', sortie)
+
+    def lancer_petit(self, dossier, mode='sonnet', options=()):
+        return lancer(OUTIL, ['fabriquer', '--agents', 2, '--limite', 3, '--claude', FAUX, '--traces', dossier / 'chaine',
+                              '--resultat', dossier / 'resultat'] + list(options), {'FAUX_CLAUDE_MODE': mode})
+
+    def test_traces_d_un_arret_verdict_cout_et_resultat_perime(self):
+        dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-arret-'))
+        self.addCleanup(shutil.rmtree, dossier, True)
+        # Refus : le verdict de Prévo est dans la trace de l'OT refusé.
+        sortie = self.lancer_petit(dossier / 'refus', 'refus')
+        self.assertEqual(sortie.returncode, 1)
+        verdicts = [json.loads(p.read_text(encoding='utf-8')).get('verdict') for p in (dossier / 'refus' / 'chaine').glob('*.json')]
+        self.assertTrue(any(v and v['statut'] == 'refusée' and 'OT-1999-9999' in v['raisons'] for v in verdicts), verdicts)
+        # Une fabrication réussie, puis une autre arrêtée sur Opus : le résultat de la première ne reste pas à figer ;
+        # les agents lancés et leur coût sont comptés même à l'arrêt.
+        self.assertEqual(self.lancer_petit(dossier / 'perime').returncode, 0)
+        self.assertTrue((dossier / 'perime' / 'resultat' / 'wiki_journal.csv').is_file())
+        sortie = lancer(OUTIL, ['fabriquer', '--agents', 1, '--limite', 1, '--claude', FAUX, '--traces', dossier / 'perime' / 'autre',
+                                '--resultat', dossier / 'perime' / 'resultat'], {'FAUX_CLAUDE_MODE': 'opus'})
+        self.assertEqual(sortie.returncode, 1)
+        self.assertIn('Agents lancés : 1 ·', sortie.stdout)
+        self.assertIn('coût : 0.01 $', sortie.stdout)
+        self.assertFalse((dossier / 'perime' / 'resultat' / 'wiki_journal.csv').exists())
+        sortie = lancer(OUTIL, ['figer', '--resultat', dossier / 'perime' / 'resultat', '--wiki', dossier / 'fige'])
+        self.assertEqual(sortie.returncode, 1)
+
+    def test_delai_depasse_agent_coupe_et_trace(self):
+        dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-delai-'))
+        self.addCleanup(shutil.rmtree, dossier, True)
+        import time
+        depart = time.time()
+        sortie = lancer(OUTIL, ['fabriquer', '--agents', 1, '--limite', 1, '--delai-appel', 2, '--claude', FAUX,
+                                '--traces', dossier / 'chaine', '--resultat', dossier / 'resultat'],
+                        {'FAUX_CLAUDE_MODE': 'lent', 'FAUX_CLAUDE_TRACES': str(dossier / 'agent')})
+        self.assertEqual(sortie.returncode, 1)
+        self.assertIn('délai dépassé (2 s)', sortie.stdout)
+        appel = json.loads(next((dossier / 'chaine').glob('*.json')).read_text(encoding='utf-8'))['appels'][0]
+        self.assertEqual(appel['erreur'], 'délai dépassé (2 s)')
+        # L'agent lent (8 s) a été coupé : il n'a jamais fini.
+        time.sleep(max(0, 11 - (time.time() - depart)))
+        self.assertEqual(list((dossier / 'agent').glob('fini-*')), [])
+
+    def test_reprise_refuse_une_reponse_non_sonnet_et_verifier_la_signale(self):
+        dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-reprise-'))
+        self.addCleanup(shutil.rmtree, dossier, True)
+        self.assertEqual(self.lancer_petit(dossier, options=['--agents', 1]).returncode, 0)
+        chemin = next((dossier / 'chaine').glob('*.json'))
+        trace = json.loads(chemin.read_text(encoding='utf-8'))
+        trace['appels'][0]['modele'] = 'claude-opus-5-5'           # réponse gardée qui n'est pas de Sonnet
+        chemin.write_text(json.dumps(trace, ensure_ascii=False), encoding='utf-8')
+        sortie = self.lancer_petit(dossier, options=['--agents', 1])
+        self.assertEqual(sortie.returncode, 0, sortie.stdout)
+        self.assertIn('Agents lancés : 1 · réponses reprises des traces : 2', sortie.stdout)
+        # verifier refuse une trace qui contient une réponse d'un autre modèle.
+        lancer(OUTIL, ['figer', '--resultat', dossier / 'resultat', '--wiki', dossier / 'fige'])
+        sortie = lancer(OUTIL, ['verifier', '--demo', DEMO, '--wiki', dossier / 'fige', '--traces', dossier / 'chaine'])
+        self.assertEqual(sortie.returncode, 1)
+        self.assertIn('réponse de claude-opus-5-5 en 1 tour(s)', sortie.stdout)
+
+    def test_jamais_de_repli_sur_cmd(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('wiki_demo_essai', OUTIL)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-cmd-'))
+        self.addCleanup(shutil.rmtree, dossier, True)
+        (dossier / 'claude.cmd').write_text('@echo off\n', encoding='utf-8')
+        original = module.shutil.which
+        module.shutil.which = lambda nom: str(dossier / 'claude.cmd')
+        try:
+            with self.assertRaises(module.ErreurFabrication) as erreur:
+                module.commande_claude('')
+        finally:
+            module.shutil.which = original
+        self.assertIn('claude.exe introuvable', str(erreur.exception))
 
 
 class TestAPropos(CasNavigateur):

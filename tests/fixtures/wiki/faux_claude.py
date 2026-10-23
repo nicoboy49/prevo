@@ -4,12 +4,14 @@ de `claude -p --output-format json`, dont le texte est construit par tests/faux_
 
 Variables d'environnement :
     FAUX_CLAUDE_MODE     sonnet (défaut) | opus (un autre modèle) | deux-tours | refus (réponse que Prévo refuse :
-                         un OT cité hors de la liste) | erreur (réponse en erreur)
-    FAUX_CLAUDE_TRACES   dossier : chaque appel y écrit appel-<identifiant>.json (arguments et entrée standard reçus)
+                         un OT cité hors de la liste) | erreur (réponse en erreur) | lent (répond après 8 s)
+    FAUX_CLAUDE_TRACES   dossier : chaque appel y écrit appel-<identifiant>.json (arguments, entrée standard et
+                         variables CLAUDE*/ANTHROPIC* reçus)
 """
 import json
 import os
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -24,8 +26,13 @@ def principal():
     if dossier:
         Path(dossier).mkdir(parents=True, exist_ok=True)
         (Path(dossier) / ('appel-%s.json' % uuid.uuid4().hex)).write_text(
-            json.dumps({'arguments': arguments, 'entree': entree}, ensure_ascii=False), encoding='utf-8')
+            json.dumps({'arguments': arguments, 'entree': entree, 'environnement': {cle: valeur for cle, valeur in os.environ.items()
+                        if cle.startswith(('CLAUDE', 'ANTHROPIC'))}}, ensure_ascii=False), encoding='utf-8')
     mode = os.environ.get('FAUX_CLAUDE_MODE', 'sonnet')
+    if mode == 'lent':                            # répond après 8 s ; « fini » prouve qu'on ne l'a pas coupé
+        time.sleep(8)
+        if dossier:
+            (Path(dossier) / 'fini-%s' % uuid.uuid4().hex).write_text('fini', encoding='utf-8')
     modele = 'claude-opus-5-5' if mode == 'opus' else 'claude-sonnet-5-5'
     reponse = reponse_ingestion(entree, 'faux-invente' if mode == 'refus' else 'faux-mode-cause')
     sortie = {

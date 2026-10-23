@@ -4662,6 +4662,10 @@ def charger_wiki_fige(ctx, dossier):
         erreurs += ['%s : page liée inexistante %s' % (page['id'], lien) for lien in page['liens'].split(';')
                     if lien and not any(lien.startswith(debut) and lien in ids for debut, ids in cibles.items())]
     erreurs += ['%s : OT inexistant %s' % (e['id'], e['ot_id']) for e in ctx.base['wiki_journal'] if e['ot_id'] and e['ot_id'] not in ordres]
+    fins = {ot['id']: ot['date_fin'] for ot in ctx.base['ordres_travail']}
+    erreurs += ['%s : date d\'intervention %s, l\'OT %s a fini le %s' % (e['id'], e['date_intervention'], e['ot_id'], fins[e['ot_id']])
+                for e in ctx.base['wiki_journal']
+                if e['nature'] == 'ingestion' and e['ot_id'] in fins and e['date_intervention'] != fins[e['ot_id']]]
     if erreurs:
         raise ErreurCoherence('Wiki de démo figé incohérent :\n' + '\n'.join(erreurs))
 
