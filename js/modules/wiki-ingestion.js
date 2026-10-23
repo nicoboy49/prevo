@@ -448,8 +448,9 @@ Object.assign(Wiki, (() => {
   /**
    * Écrit le résultat d'un envoi DANS la section critique (journal frais, D112) : si une page concernée a changé
    * pendant l'envoi (rejet, écriture à la main ; une validation ne change pas l'état proposé) ou si une page que la
-   * réponse crée existe désormais (même titre ou titre trop proche), l'entrée repart « en file » avec son motif,
-   * ESSAIS_COLLISION_MAX fois au plus, puis « refusée ». Sinon « à valider » (ou « rien à ajouter »), rang suivant,
+   * réponse crée existe désormais (même titre ou titre trop proche), l'entrée repart « en file » avec son motif tant
+   * que ses essais ne dépassent pas ESSAIS_COLLISION_MAX, puis « refusée » (une relance compte pour un essai : un OT
+   * relancé à chaque envoi n'est rejoué qu'une fois). Sinon « à valider » (ou « rien à ajouter »), rang suivant,
    * `version_avant` et `page` de chaque changement pris dans l'état envoyé, `raisons` du premier refus si la réponse
    * a été acceptée à la relance.
    */
