@@ -1,33 +1,45 @@
 'use strict';
-// Wiki (9/9) — écriture à la main et contrôle du wiki (lot 6 refondu, ARCHITECTURE.md §20.7, §20.9 ; D97, D108) :
-// écran #/wiki-ecrire/<id> (EQ-…, ART-…, WP-…) et #/wiki-ecrire/nouvelle?type=<type>&rattache=<id canonique>
+// Wiki (9/9) — écriture à la main et contrôle du wiki (lot 6 refondu, ARCHITECTURE.md §20.7, §20.9 ; refonte 2,
+// §20.12 ; D97, D108) : écran #/wiki-ecrire/<id> (EQ-…, ART-…, WP-…) et #/wiki-ecrire/nouvelle?rattache=<id canonique>
 // (responsable seulement), et Wiki.controleDuWiki(), calculé sans IA et sans rien écrire (la vue « Contrôle du wiki »
 // du journal, wiki-journal-ecrans.js, et l'index #/wiki l'affichent). Dernier fichier du module.
 //
-// Précisions au contrat (§20.9) :
-//  - écriture : zone de texte du balisage pré-remplie avec le texte validé, aide (balisage, rubriques du type,
-//    aucune consigne de sécurité), motif facultatif ; « Enregistrer » → Wiki.ecrire(cible, texte, { version (celle
-//    affichée), motif }) ; un refus affiche ses raisons (erreur.raisons) une par ligne, rien n'est écrit ; succès :
-//    retour à #/wiki/<pageId> ; « Archiver » (page qui a une ligne) demande une confirmation dans la page, puis
-//    Wiki.ecrire(cible, null, { archiver: true, version }) et retour à #/wiki ; nouvelle page : composant (libre),
-//    mode (code cause facultatif) ou savoir-faire (rattaché à un équipement ou à un composant) ;
+// Précisions au contrat (§20.9, §20.12) :
+//  - écriture : zone de texte du balisage pré-remplie avec le texte validé, aide (balisage, rubriques du texte — d'une
+//    machine « En bref » et « Astuces », d'un article « À quoi il sert », d'un savoir-faire les siennes — avec leur rôle
+//    et leurs limites, Wiki.LIMITES ; aucune consigne de sécurité), motif facultatif ; « Enregistrer » →
+//    Wiki.ecrire(cible, texte, { version (celle affichée), motif }) ; un refus affiche ses raisons (erreur.raisons) une
+//    par ligne, rien n'est écrit ; succès : retour à #/wiki/<pageId> ; « Archiver » (page qui a une ligne) demande une
+//    confirmation dans la page, puis Wiki.ecrire(cible, null, { archiver: true, version }) et retour à #/wiki ;
+//    nouvelle page : un savoir-faire seulement, rattaché à une machine, à un article ou à un savoir-faire (sous-page) ;
+//    une ancienne page (Wiki.typeRetire : mode, sous-page d'équipement ou de composant) : « type de page retiré :
+//    archivez-la », l'archivage reste possible ;
 //  - Wiki.controleDuWiki() → [{ type, page (id canonique), titre, message }], types dans cet ordre : lien-casse
-//    ([[titre]] inconnu du texte ; identifiant du champ liens inexistant ou page archivée), orpheline (page libre —
-//    mode sans code cause, composant sans article, savoir-faire sans équipement ni article, aucune sans rattache_a :
-//    une sous-page tient à sa mère — vers laquelle aucune autre page active ne fait de lien, par son identifiant ou
-//    son titre), sans-ot (aucune citation dans le texte, page vide comprise), titre-proche (même Wiki.formeDuTitre
-//    entre pages actives, une ligne par page), trop-longue (Wiki.mesurerTexte : plus de phrasesMax phrases ou de
-//    motsMax mots, comme §20.6), contradiction-ancienne (ouverte sur une entrée validée depuis plus de
-//    contradictionAncienneJours, comptés depuis decide_le, sinon traite_le), ancrage-disparu (equipement_id ou
-//    article_id absent ou inactif ; rattache_a vers une page absente ou archivée : la mère d'une sous-page, ou la page
-//    d'un savoir-faire — une sous-page n'a pas d'ancrage propre et n'est pas « disparue » pour autant) ; pages actives.
+//    ([[titre]] inconnu du texte — ni page, ni machine, ni article, ni panne ; identifiant du champ liens inexistant
+//    ou page archivée), orpheline (savoir-faire sans machine, article ni rattache_a vers lequel aucune autre page active
+//    ne fait de lien, par son identifiant ou son titre ; les machines et les articles ont toujours leur page),
+//    sans-ot (aucune citation dans le texte, page vide comprise), titre-proche (même Wiki.formeDuTitre entre pages
+//    actives, une ligne par page), trop-longue (Wiki.LIMITES : chaque rubrique d'un texte de machine ou d'article, un
+//    savoir-faire entier, comme §20.6), anciennes-rubriques (texte encore dans des rubriques hors de Wiki.RUBRIQUES de
+//    son type : à réécrire dans les siennes), type-retire (Wiki.typeRetire), contradiction-ancienne (ouverte sur une
+//    entrée validée depuis plus de contradictionAncienneJours, comptés depuis decide_le, sinon traite_le),
+//    ancrage-disparu (equipement_id ou article_id absent ou inactif ; rattache_a vers une page absente ou archivée :
+//    la mère d'une sous-page, ou la page d'un savoir-faire — une sous-page n'a pas d'ancrage propre et n'est pas
+//    « disparue » pour autant) ; pages actives.
 
 Object.assign(Wiki, (() => {
 
   const TABLES = ['wiki_pages', 'wiki_journal', 'equipements', 'articles', 'codes_defaillance'];
-  const TYPES_NOUVELLE = ['composant', 'mode', 'savoir-faire'];
-  const LIBELLES = { 'équipement': 'équipement', composant: 'composant ou pièce', mode: 'mode de défaillance',
-    'savoir-faire': 'savoir-faire' };
+  const TYPE_NOUVELLE = 'savoir-faire';         // seule page qui se crée (§20.12), sous-page comprise
+  const LIBELLES = { 'équipement': 'machine', composant: 'article', 'savoir-faire': 'savoir-faire' };
+  const POUR = { 'équipement': 'le texte d\'une machine', composant: 'le texte d\'un article', 'savoir-faire': 'un savoir-faire' };
+  // Ce qu'on écrit dans chaque texte rédigé (§20.12 ; mêmes mots que la consigne de l'IA).
+  const ROLES = {
+    'équipement': '« En bref » : ce qu\'il faut savoir d\'abord de cette machine, ce qui revient et ce qui a réglé le '
+      + 'problème (une synthèse, pas un historique) ; « Astuces » : les astuces tirées des OT.',
+    composant: '« À quoi il sert » : son rôle sur les machines où il sert, ses signes d\'usure.',
+    'savoir-faire': 'Un geste ou une méthode, écrit d\'abord à partir des astuces des OT.',
+  };
   const S = Wiki.SEUILS;
 
   function texte(valeur) {
@@ -62,6 +74,11 @@ Object.assign(Wiki, (() => {
     return Math.round((Date.UTC(+jour[1], jour[2] - 1, +jour[3]) - Date.UTC(+lu[1], lu[2] - 1, +lu[3])) / 86400000);
   }
 
+  /** « 6 phrases et 130 mots » : une mesure, ou une limite de Wiki.LIMITES (sans les mots quand elle ne les compte pas). */
+  function longueur(mesure, limite) {
+    return mesure.phrases + ' phrases' + (limite.mots === null ? '' : ' et ' + mesure.mots + ' mots');
+  }
+
   // ===========================================================================================
   // 1. Contrôle du wiki (D108) : calculé, rien n'est corrigé
   // ===========================================================================================
@@ -70,12 +87,16 @@ Object.assign(Wiki, (() => {
     const lignes = Donnees.lignes('wiki_pages');
     const actives = lignes.filter(estActive);
     const problemes = { 'lien-casse': [], orpheline: [], 'sans-ot': [], 'titre-proche': [], 'trop-longue': [],
-      'contradiction-ancienne': [], 'ancrage-disparu': [] };
+      'anciennes-rubriques': [], 'type-retire': [], 'contradiction-ancienne': [], 'ancrage-disparu': [] };
     const noter = (type, ligne, message) => { const r = repereDe(ligne); problemes[type].push({ type, page: r.id, titre: r.titre, message }); };
     const titres = new Set(actives.map((l) => Wiki.comparable(repereDe(l).titre)).concat(actives.map((l) => Wiki.comparable(l.titre))));
     const calcules = Donnees.lignes('equipements').map((e) => ({ id: texte(e.id), titre: titreEquipement(e) }))
       .concat(Donnees.lignes('articles').map((a) => ({ id: texte(a.id), titre: titreArticle(a) })));
     calcules.forEach((p) => titres.add(Wiki.comparable(p.titre)));
+    // Pannes (pages calculées, même définition que leur page : Wiki.pannesDuWiki, wiki-journal.js) : liens valides.
+    const pannes = typeof Wiki.pannesDuWiki === 'function' ? Wiki.pannesDuWiki() : [];
+    pannes.forEach((p) => titres.add(Wiki.comparable(p.titre)));
+    const idsPannes = new Set(pannes.map((p) => p.id));
     // Lien vers une page archivée : signalé une fois, par le champ `liens` (« page archivée »), pas comme inconnu.
     const archives = new Set(lignes.filter((l) => !estActive(l)).map((l) => Wiki.comparable(l.titre)));
     const sources = new Map();                    // cible (identifiant ou TITRE:forme) → pages actives qui y renvoient
@@ -90,13 +111,13 @@ Object.assign(Wiki, (() => {
       texte(ligne.liens).split(';').map(texte).filter(Boolean).forEach((id) => {
         relier(id, ligne.id);
         const table = id.startsWith('EQ-') ? 'equipements' : (id.startsWith('ART-') ? 'articles' : 'wiki_pages');
-        const cible = Donnees.trouver(table, id);
+        const cible = id.startsWith('PANNE-') ? idsPannes.has(id) : Donnees.trouver(table, id);
         if (!cible) noter('lien-casse', ligne, 'lien vers ' + id + ', page inexistante');
         else if (table === 'wiki_pages' && !estActive(cible)) noter('lien-casse', ligne, 'lien vers « ' + texte(cible.titre) + ' » (' + id + '), page archivée');
       });
     });
-    const libre = (l) => !texte(l.rattache_a) && ({ mode: !texte(l.cause_code), composant: !texte(l.article_id),
-      'savoir-faire': !texte(l.equipement_id) && !texte(l.article_id) })[texte(l.type)] === true;
+    // Seul un savoir-faire peut être orphelin : une machine ou un article a toujours sa page (§20.12).
+    const libre = (l) => texte(l.type) === 'savoir-faire' && !texte(l.rattache_a) && !texte(l.equipement_id) && !texte(l.article_id);
     const liee = (l) => [l.id, repereDe(l).id, 'TITRE:' + Wiki.comparable(l.titre)]
       .some((cible) => Array.from(sources.get(cible) || []).some((source) => source !== l.id));
     actives.filter((l) => libre(l) && !liee(l)).forEach((l) => noter('orpheline', l, 'aucune page ne renvoie ici et elle n\'est rattachée à rien'));
@@ -118,9 +139,28 @@ Object.assign(Wiki, (() => {
         + distincts.filter((m) => m !== l).map((m) => '« ' + titreDe(m) + ' »').join(', ')));
     });
     actives.forEach((l) => {
-      const { phrases, mots } = Wiki.mesurerTexte(l.texte);
-      if (phrases > S.phrasesMax || mots > S.motsMax) {
-        noter('trop-longue', l, phrases + ' phrases et ' + mots + ' mots (au plus ' + S.phrasesMax + ' phrases et ' + S.motsMax + ' mots)');
+      const retire = Wiki.typeRetire(l);
+      if (retire) { noter('type-retire', l, 'type de page retiré (' + retire + ') : archivez-la'); return; }
+      const type = texte(l.type);
+      const limites = Wiki.LIMITES[type];
+      const mesures = Object.entries(Wiki.mesurerRubriques(l.texte));
+      Object.keys(limites.rubriques).forEach((rubrique) => {
+        const trouvee = mesures.find(([nom]) => Wiki.comparable(nom) === Wiki.comparable(rubrique));
+        const mesure = trouvee ? trouvee[1] : { phrases: 0, mots: 0 };
+        const limite = limites.rubriques[rubrique];
+        if (mesure.phrases > limite.phrases || (limite.mots !== null && mesure.mots > limite.mots)) {
+          noter('trop-longue', l, '« ' + rubrique + ' » : ' + longueur(mesure, limite) + ' (au plus ' + longueur(limite, limite) + ')');
+        }
+      });
+      const page = Wiki.mesurerTexte(l.texte);
+      if (limites.page && (page.phrases > limites.page.phrases || page.mots > limites.page.mots)) {
+        noter('trop-longue', l, longueur(page, limites.page) + ' (au plus ' + longueur(limites.page, limites.page) + ')');
+      }
+      const permises = Wiki.RUBRIQUES[type].map(Wiki.comparable);
+      const anciennes = mesures.map(([nom]) => nom).filter((nom) => !permises.includes(Wiki.comparable(nom)));
+      if (anciennes.length) {
+        noter('anciennes-rubriques', l, anciennes.map((nom) => '« ' + nom + ' »').join(', ') + ' : à réécrire dans ses rubriques ('
+          + Wiki.RUBRIQUES[type].map((nom) => '« ' + nom + ' »').join(', ') + ')');
       }
     });
     Donnees.lignes('wiki_journal').filter((e) => texte(e.statut) === 'validée').forEach((entree) => {
@@ -160,41 +200,56 @@ Object.assign(Wiki, (() => {
   // 2. Écran #/wiki-ecrire/<id> et #/wiki-ecrire/nouvelle
   // ===========================================================================================
 
+  /** Les limites d'un texte (Wiki.LIMITES) en clair : par rubrique, ou le savoir-faire entier et ses sous-pages au-delà. */
+  function limitesEnClair(type) {
+    const limites = Wiki.LIMITES[type];
+    if (!limites) return '';
+    if (limites.page) {
+      return 'Longueur : ' + longueur(limites.page, limites.page) + ' au plus, noms des rubriques compris (citations non '
+        + 'comptées, un lien compte les mots de son titre) ; au-delà, découpez-le en sous-pages « <titre> — <sujet> ».';
+    }
+    return 'Longueurs : ' + Object.keys(limites.rubriques).map((rubrique) => '« ' + rubrique + ' » '
+      + longueur(limites.rubriques[rubrique], limites.rubriques[rubrique]) + ' au plus').join(', ')
+      + ' (citations non comptées, un lien compte les mots de son titre).';
+  }
+
   function aideHtml(type) {
+    const limites = limitesEnClair(type);
     return UI.html`<h2 id="wj-titre-aide">Comment écrire</h2>
       <ul class="wj-aide-liste">
-        <li><code>## Rubrique</code> commence une rubrique. Pour une page ${LIBELLES[type] || type} :
+        <li><code>## Rubrique</code> commence une rubrique. Pour ${POUR[type] || 'cette page'} :
           <span class="wj-rubriques">${(Wiki.RUBRIQUES[type] || []).map((r, n) => UI.html`${n ? ', ' : ''}<span class="wj-rubrique-nom">« ${r} »</span>`)}</span>, dans cet ordre.</li>
+        ${ROLES[type] ? UI.html`<li class="wj-aide-roles">${ROLES[type]}</li>` : ''}
+        ${limites ? UI.html`<li class="wj-aide-limites">${limites}</li>` : ''}
         <li><code>- phrase [OT-AAAA-NNNN]</code> : une phrase par ligne, qui cite au moins un OT clôturé administrativement.</li>
-        <li><code>[[Titre d'une page]]</code> dans une phrase : lien vers une autre page du wiki.</li>
+        <li><code>[[Titre d'une page]]</code> dans une phrase : lien vers une autre page du wiki (machine, article, panne,
+          savoir-faire).</li>
         <li>Aucun comptage ni aucune date : les nombres de cas viennent de Prévo ; un nombre écrit doit figurer dans un OT cité.</li>
         <li class="wj-aide-securite"><b>Aucune consigne de sécurité</b> : elle se saisit dans la consignation de l'équipement.</li>
       </ul>
       <p class="aide">Mêmes contrôles que pour l'IA, sauf que vous pouvez retirer une phrase ou un OT cité. Chaque écriture entre au journal du wiki.</p>`;
   }
 
+  /** Rattachements d'un savoir-faire : une machine, un article, ou un savoir-faire (il en est alors une sous-page). */
   function optionsRattachement(choisi) {
     const option = (id, titre) => UI.html`<option value="${id}"${id === choisi ? UI.brut(' selected') : ''}>${titre}</option>`;
-    const libres = Donnees.lignes('wiki_pages').filter((l) => estActive(l) && texte(l.type) === 'composant' && !texte(l.article_id));
+    const savoirs = Donnees.lignes('wiki_pages').filter((l) => estActive(l) && texte(l.type) === TYPE_NOUVELLE && !Wiki.typeRetire(l)
+      && !(texte(l.rattache_a) && texte((Donnees.trouver('wiki_pages', texte(l.rattache_a)) || {}).type) === TYPE_NOUVELLE));
     return UI.html`<option value="">Choisir…</option>
-      <optgroup label="Équipements">${Donnees.lignes('equipements').map((e) => option(texte(e.id), titreEquipement(e) || e.id))}</optgroup>
-      <optgroup label="Composants">${Donnees.lignes('articles').map((a) => option(texte(a.id), titreArticle(a)))
-        .concat(libres.map((l) => option(texte(l.id), texte(l.titre))))}</optgroup>`;
+      <optgroup label="Machines">${Donnees.lignes('equipements').map((e) => option(texte(e.id), titreEquipement(e) || e.id))}</optgroup>
+      <optgroup label="Articles">${Donnees.lignes('articles').map((a) => option(texte(a.id), titreArticle(a)))}</optgroup>
+      <optgroup label="Savoir-faire (pour une sous-page)">${savoirs.map((l) => option(texte(l.id), texte(l.titre)))}</optgroup>`;
   }
 
-  function champsNouvelle(type, rattache) {
-    const causes = Donnees.lignes('codes_defaillance').filter((c) => texte(c.famille) === 'cause');
+  function champsNouvelle(rattache) {
     return UI.html`<div class="form-grille wj-nouvelle-champs">
-      <div class="champ"><label class="libelle" for="wj-type">Type de page</label>
-        <select id="wj-type" name="type">${TYPES_NOUVELLE.map((t) => UI.html`<option value="${t}"${t === type ? UI.brut(' selected') : ''}>${LIBELLES[t]}</option>`)}</select></div>
-      <div class="champ"><label class="libelle" for="wj-titre">Titre <span class="requis" aria-hidden="true">*</span></label>
+      <div class="champ"><label class="libelle" for="wj-titre">Titre du savoir-faire <span class="requis" aria-hidden="true">*</span></label>
         <input id="wj-titre" name="titre" maxlength="120" aria-required="true" aria-describedby="wj-titre-erreur" autocomplete="off">
         <p class="erreur-champ" id="wj-titre-erreur" role="alert" hidden></p></div>
       <div class="champ large wj-champ-rattache"><label class="libelle" for="wj-rattache">Rattaché à</label>
         <select id="wj-rattache" name="rattache">${optionsRattachement(rattache)}</select>
-        <p class="aide">Un savoir-faire se rattache à un équipement ou à un composant ; sa page reprend la consignation de l'équipement.</p></div>
-      <div class="champ large wj-champ-cause"><label class="libelle" for="wj-cause">Code cause (facultatif)</label>
-        <select id="wj-cause" name="cause"><option value="">Aucun</option>${causes.map((c) => UI.html`<option value="${texte(c.code)}">${c.code} — ${c.libelle}</option>`)}</select></div>
+        <p class="aide">Une machine ou un article : sa page reprend la consignation de la machine. Un savoir-faire : c'en est une
+          sous-page, dont le titre commence par « ${'<titre du savoir-faire>'} — ».</p></div>
     </div>`;
   }
 
@@ -240,27 +295,31 @@ Object.assign(Wiki, (() => {
     }
     const ligne = page && page.pageId ? Donnees.trouver('wiki_pages', page.pageId) : null;
     const version = ligne ? Number(ligne.version) || 0 : 0;
-    const type = nouvelle ? (TYPES_NOUVELLE.includes(requete.get('type')) ? requete.get('type') : 'mode') : page.type;
+    const type = nouvelle ? TYPE_NOUVELLE : page.type;
+    const retire = ligne ? Wiki.typeRetire(ligne) : '';
     const retour = nouvelle ? '#/wiki' : '#/wiki/' + encodeURIComponent(id);
     const attente = page ? new Set((page.enAttente || []).map((e) => e.entreeId)).size : 0;
-    App.definirTitre(nouvelle ? 'Nouvelle page du wiki' : 'Modifier ' + page.titre);
+    App.definirTitre(nouvelle ? 'Nouveau savoir-faire' : 'Modifier ' + page.titre);
     UI.remplir(conteneur, UI.html`<div class="wiki wj wj-ecrire" data-page="${nouvelle ? '' : id}" data-version="${version}">
       <div class="entete-page"><div>
         <div class="fil"><a href="#/wiki">Wiki</a>${page ? UI.html` <span aria-hidden="true">›</span> <a href="${retour}">${page.titre}</a>` : ''}</div>
-        <h1>${nouvelle ? 'Nouvelle page du wiki' : 'Modifier la page'}</h1>
+        <h1>${nouvelle ? 'Nouveau savoir-faire' : 'Modifier la page'}</h1>
         <p>${page ? page.titre + ' · ' + (LIBELLES[type] || type) + ' · version ' + version
-          : 'Une page de composant, de mode de défaillance ou de savoir-faire, écrite à la main.'}</p>
+          : 'Un savoir-faire écrit à la main : un geste ou une méthode, rattaché à une machine, à un article ou à un savoir-faire.'}</p>
       </div></div>
       <div class="wj-annonce" aria-live="polite"></div>
+      ${retire ? UI.html`<div class="alerte attention wj-type-retire" role="status">${UI.icone('alerte')}<div class="alerte-texte"><p><b>Page
+        d'avant la refonte du wiki (${retire}) : type de page retiré : archivez-la.</b> Son texte reste au journal ; ce qu'il
+        dit va dans les textes de la machine, de l'article ou d'un savoir-faire.</p></div></div>` : ''}
       ${attente ? UI.html`<div class="alerte attention" role="status">${UI.icone('alerte')}<div class="alerte-texte"><p>${attente > 1
         ? attente + ' propositions à valider portent sur cette page : enregistrer les fera passer « à refaire » (leurs OT reviennent dans la file).'
         : 'Une proposition à valider porte sur cette page : enregistrer la fera passer « à refaire » (son OT revient dans la file).'}</p></div></div>` : ''}
       <div class="wj-ecrire-grille">
         <form class="carte wj-formulaire" novalidate>
-          ${nouvelle ? champsNouvelle(type, texte(requete.get('rattache'))) : ''}
+          ${nouvelle ? champsNouvelle(texte(requete.get('rattache'))) : ''}
           <div class="champ"><label class="libelle" for="wj-texte">Texte de la page</label>
-            <textarea id="wj-texte" name="texte" rows="16" spellcheck="true" placeholder="## Rubrique
-- Phrase qui cite son OT [OT-2026-0042]"></textarea></div>
+            <textarea id="wj-texte" name="texte" rows="16" spellcheck="true" placeholder="${'## ' + ((Wiki.RUBRIQUES[type] || [])[0]
+              || 'Rubrique') + String.fromCharCode(10) + '- Phrase qui cite son OT [OT-2026-0042]'}"></textarea></div>
           <div class="champ"><label class="libelle" for="wj-motif-ecriture">Motif (facultatif)</label>
             <input id="wj-motif-ecriture" name="motif" maxlength="300" autocomplete="off" placeholder="Ex. remise en ordre après relecture"></div>
           <div class="actions"><button type="submit" class="btn btn-primaire wj-enregistrer">${UI.icone('sauvegarde')}Enregistrer</button>
@@ -274,7 +333,6 @@ Object.assign(Wiki, (() => {
     const zone = UI.$('.wj-annonce', racine);
     const formulaire = UI.$('.wj-formulaire', racine);
     UI.$('#wj-texte', racine).value = page ? page.texte || '' : '';
-    if (nouvelle) brancherNouvelle(racine);
     let enCours = false;
     formulaire.addEventListener('submit', async (evenement) => {
       evenement.preventDefault();
@@ -299,18 +357,7 @@ Object.assign(Wiki, (() => {
     if (ligne) brancherArchivage(racine, zone, id, version);
   }
 
-  function brancherNouvelle(racine) {
-    const choix = UI.$('#wj-type', racine);
-    const montrer = () => {
-      UI.$('.wj-champ-rattache', racine).hidden = choix.value !== 'savoir-faire';
-      UI.$('.wj-champ-cause', racine).hidden = choix.value !== 'mode';
-      UI.remplir(UI.$('.wj-aide-balisage', racine), aideHtml(choix.value));
-    };
-    choix.addEventListener('change', montrer);
-    montrer();
-  }
-
-  /** Cible d'une nouvelle page, ou null (titre manquant : message sous le champ). */
+  /** Cible d'un nouveau savoir-faire, ou null (titre manquant : message sous le champ). */
   function lireNouvelle(racine) {
     const champ = UI.$('#wj-titre', racine);
     const erreur = UI.$('#wj-titre-erreur', racine);
@@ -323,9 +370,7 @@ Object.assign(Wiki, (() => {
       return null;
     }
     champ.removeAttribute('aria-invalid');
-    const type = UI.$('#wj-type', racine).value;
-    return { nouvelle: { type, titre, rattacheA: type === 'savoir-faire' ? UI.$('#wj-rattache', racine).value : '',
-      causeCode: type === 'mode' ? UI.$('#wj-cause', racine).value : '' } };
+    return { nouvelle: { type: TYPE_NOUVELLE, titre, rattacheA: UI.$('#wj-rattache', racine).value } };
   }
 
   function brancherArchivage(racine, zone, id, version) {

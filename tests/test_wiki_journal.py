@@ -8,14 +8,18 @@ CS101, CS102).
                     refus d'une entrée dont une plus ancienne en attente touche une même page ; « valider la
                     sélection » refuse une contradiction ; texte, OT cités, liens, version, origine, modèle, dernière
                     entrée et validateur posés ;
-    rattrapage    : page écrite mais statut non écrit → « validée » au prochain affichage ;
+    rattrapage    : page écrite mais statut non écrit → « validée » au prochain affichage, sur les tables chargées (D101 :
+                    afficher l'index ou une page, en mode serveur, ne fait aucune requête /api/csv ; valider, écrire et
+                    ouvrir le journal relisent les pages) ; changements appliqués dans leur ordre (tri retiré, T138) ;
     rejet         : motif obligatoire ; les suivantes qui touchent une même page passent « à refaire » (en cascade),
                     les autres non ; relance d'un OT rejeté ;
     à la main     : contrôles du §20.6 (retrait permis ; OT permis, nombres, sécurité, limite d'« En bref » refusés),
                     entrée « manuel » avec avant et après, propositions en attente sur la page « à refaire », création
                     d'un savoir-faire seulement (refonte 2, §20.12 : mode, composant libre, équipement refusés ; sous-page
                     d'un savoir-faire seulement), archivage, conflit de version, échec de l'écriture de la page ;
-                    ancienne page de mode (type retiré) lue sans erreur, signalée, refusée à l'écriture, archivable ;
+                    ancienne page de mode ou sous-page d'équipement ou de composant (type retiré) lue sans erreur,
+                    refusée à l'écriture (« type de page retiré : archivez-la »), archivable ; lien vers une panne
+                    ([[Fuite]]) accepté et gardé dans `liens` (PANNE-<code>), à la main comme par l'IA ;
     contradictions: vues sur la page par tous les profils une fois la proposition validée, « observation antérieure »
                     pour un OT antérieur, fermées seulement par le responsable, décision au journal ;
     visibilité    : « à valider » invisible aux autres profils, en modes démo, dossier et serveur ;
@@ -268,6 +272,27 @@ class TestValidation(CasJournal):
         self.assertEqual({ot: e["statut"] for ot, e in self.entrees().items()}, {
             "OT-2026-0004": "rejetée", "OT-2026-0003": "à valider", "OT-2026-0001": "à valider", "OT-2026-0002": "à valider",
             "OT-2026-0006": "à valider", "OT-2026-0008": "à valider"})
+
+    def test_rattrapage_sur_les_tables_chargees_sans_relire_les_pages(self):
+        """D101 : Wiki.rattraper() (affichage d'une page du wiki) travaille sur les tables chargées, sans relire
+        wiki_pages ; { relire: true } (validation, écriture, ouverture du journal) les relit d'abord. Une validation
+        interrompue est rattrapée sans rien relire."""
+        espion = """async (options) => {
+          const relues = [];
+          const recharger = Donnees.rechargerTable;
+          Donnees.rechargerTable = function (table) { relues.push(table); return recharger.apply(this, arguments); };
+          try { return { nombre: await Wiki.rattraper(options || undefined), relues }; }
+          finally { Donnees.rechargerTable = recharger; }
+        }"""
+        self.assertEqual(self.page.evaluate(espion, None), {"nombre": 0, "relues": []})
+        self.assertEqual(self.page.evaluate(espion, {"relire": True}), {"nombre": 0, "relues": ["wiki_pages"]})
+        id_0003 = self.id_de("OT-2026-0003")
+        self.page.evaluate("""() => { const modifier = Donnees.modifier;
+          Donnees.modifier = function (table) { if (table === 'wiki_journal') { Donnees.modifier = modifier;
+            return Promise.reject(new Error('disque plein')); } return modifier.apply(this, arguments); }; }""")
+        self.refus("disque plein", "valider", [id_0003])
+        self.assertEqual(self.page.evaluate(espion, None), {"nombre": 1, "relues": []})
+        self.assertEqual(self.entrees()["OT-2026-0003"]["statut"], "validée")
 
     def test_rattrapage_d_une_validation_interrompue(self):
         id_0003 = self.id_de("OT-2026-0003")
@@ -527,7 +552,8 @@ class TestEcritureALaMain(CasJournal):
 
     def test_ancienne_page_de_mode(self):
         """Une page de mode d'une base de développement (type retiré par la refonte 2) : lue sans erreur, signalée
-        « type de page retiré » (attention), Wiki.page ne plante pas, refusée à l'écriture à la main, archivable."""
+        « type de page retiré » (attention), Wiki.page ne plante pas, refusée à l'écriture à la main (« type de page
+        retiré : archivez-la »), archivable."""
         problemes = """() => Donnees.problemes().filter((p) => p.table === 'wiki_pages' && p.gravite !== 'info')
           .map((p) => [p.gravite, p.type, p.id, p.champ, p.valeur, p.message])"""
         self.assertEqual(self.page.evaluate(problemes), [["attention", "wiki", "WP-0007", "type", "mode",
@@ -535,13 +561,63 @@ class TestEcritureALaMain(CasJournal):
             "Prévo) ; archivez-la."]])
         self.assertEqual(self.ligne("WP-0007")["type"], "mode")
         self.assertEqual(self.page.evaluate("Wiki.page('WP-0007').titre"), "Desserrage")
-        message = self.refus("Page « Desserrage » : type « mode » inconnu", "ecrire", {"pageId": "WP-0007"},
+        self.assertEqual(self.page.evaluate("Wiki.typeRetire(Donnees.trouver('wiki_pages', 'WP-0007'))"), "mode")
+        avant = self.etat()
+        message = self.refus("Page « Desserrage » (mode) : type de page retiré : archivez-la.", "ecrire", {"pageId": "WP-0007"},
                              "## Causes\n- Bornes desserrées [OT-2026-0007]")
         self.assertEqual(message.count("Page « "), 1, message)
+        self.assertEqual(self.etat(), avant)
         self.ok("ecrire", {"pageId": "WP-0007"}, None, {"archiver": True})
         self.assertEqual(self.ligne("WP-0007")["statut"], "archivée")
         self.assertEqual(self.page.evaluate(problemes), [])
         self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
+
+    def test_ancienne_sous_page_d_equipement_ou_de_composant(self):
+        """Une sous-page d'équipement ou de composant d'avant la refonte 2 (seuls les savoir-faire en ont, §20.12) : type
+        de page retiré, refusée à l'écriture à la main, archivable ; une sous-page de savoir-faire, elle, s'écrit."""
+        self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => {
+          const page = (id, type, titre, texte, rattache) => ({ id, type, titre, texte, rattache_a: rattache, version: '1',
+            statut: 'active', origine: 'IA' });
+          lignes.push(page('WP-0020', 'équipement', 'PO-01 — garniture', '## Ce qui revient\\n- Garniture sèche [OT-2026-0007]', 'WP-0001'));
+          lignes.push(page('WP-0021', 'composant', 'Kit garniture HC 50 — faces', '## Défaillances\\n- Faces rayées [OT-2026-0007]', 'WP-0003'));
+          lignes.push(page('WP-0022', 'savoir-faire', 'Changer la garniture de PO-01 — dépose', '## Étapes\\n- Déposer [OT-2026-0007]', 'WP-0002'));
+        })""")
+        retires = self.page.evaluate("['WP-0020', 'WP-0021', 'WP-0022', 'WP-0001', 'WP-0010'].map((id) => Wiki.typeRetire(Donnees.trouver('wiki_pages', id)))")
+        self.assertEqual(retires, ["sous-page d'équipement", "sous-page de composant", "", "", ""])
+        avant = self.etat()
+        self.refus("Page « PO-01 — garniture » (sous-page d'équipement) : type de page retiré : archivez-la.", "ecrire",
+                   {"pageId": "WP-0020"}, "## En bref\n- Garniture sèche [OT-2026-0007]")
+        self.refus("(sous-page de composant) : type de page retiré : archivez-la.", "ecrire", {"pageId": "WP-0021"},
+                   "## À quoi il sert\n- Faces rayées [OT-2026-0007]")
+        self.assertEqual(self.etat(), avant)
+        self.ok("ecrire", {"pageId": "WP-0022"}, "## Étapes\n- Déposer le kit usé [OT-2026-0007]")
+        for id_ in ("WP-0020", "WP-0021"):
+            self.ok("ecrire", {"pageId": id_}, None, {"archiver": True})
+            self.assertEqual(self.ligne(id_)["statut"], "archivée")
+
+    def test_lien_vers_une_panne_accepte_et_garde_dans_liens(self):
+        """Suite de T134 : [[Fuite]] (libellé d'un code symptôme qui a un cas : une page Panne) est accepté à l'écriture à la
+        main et gardé dans `liens` sous PANNE-<code> (même définition que la page, Wiki.listeEntites) ; une proposition de
+        l'IA validée aussi ; Donnees.problemes ne le signale pas ; [[Vibration]] (code sans OT) reste inconnu."""
+        texte = self.TEXTE + "\n- Fuite revenue, voir [[Fuite]] et [[Bruit anormal]] [OT-2026-0001]"
+        self.ok("ecrire", {"pageId": "EQ-0001"}, texte)
+        self.assertEqual(self.ligne("WP-0001")["liens"], "PANNE-S01;PANNE-S02")
+        self.assertEqual(self.page.evaluate("Wiki.pannesDuWiki().map((p) => [p.id, p.titre]).sort()"),
+                         [["PANNE-S01", "Fuite"], ["PANNE-S02", "Bruit anormal"]])
+        self.assertEqual(self.page.evaluate("""() => Donnees.problemes().filter((p) => p.table === 'wiki_pages' && p.champ === 'liens')
+          .map((p) => p.valeur)"""), [])
+        self.refus("lien vers une page inconnue « Vibration »", "ecrire", {"pageId": "EQ-0001"},
+                   texte + "\n- Voir [[Vibration]] [OT-2026-0001]")
+        # Un code symptôme qui n'existe pas : signalé par Donnees.problemes.
+        self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => {
+          lignes.find((l) => l.id === 'WP-0001').liens = 'PANNE-S01;PANNE-S99'; })""")
+        self.assertEqual(self.page.evaluate("""() => Donnees.problemes().filter((p) => p.table === 'wiki_pages' && p.champ === 'liens')
+          .map((p) => p.valeur)"""), ["PANNE-S99"])
+        # Par l'IA (faux-textes : « … : fréquent ici ([[Fuite]]) ») : la validation garde aussi le lien.
+        self.traiter(["OT-2026-0008"], "faux-textes")
+        self.ok("valider", [self.id_de("OT-2026-0008")])
+        self.assertIn("[[Fuite]]", self.ligne("WP-0001")["texte"])
+        self.assertIn("PANNE-S01", self.ligne("WP-0001")["liens"].split(";"))
 
 
 # Découpage d'un savoir-faire (refonte 2, §20.12 : seules sous-pages) par faux-decoupe : ses « Étapes » partent dans
@@ -684,6 +760,29 @@ class TestDecoupage(CasJournal):
         self.assertEqual(self.lignes()[SOUS_PAGE_SF]["derniere_entree"], id_0001)
         self.assertEqual(self.ok("rattraper"), 1)
         self.assertEqual(self.entrees()["OT-2026-0001"]["statut"], "validée")
+        self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
+
+    def test_changements_appliques_dans_leur_ordre(self):
+        """Tri retiré de `appliquer` (T138, « pages modifiées avant pages créées ») : une entrée qui crée un savoir-faire
+        rattaché à une machine encore sans ligne AVANT de modifier cette machine s'applique dans l'ordre de ses
+        changements ; le savoir-faire prend l'ancrage de la machine (equipement_id) sans attendre sa ligne. (La mère
+        d'une sous-page, elle, a toujours déjà sa ligne : un savoir-faire envoyé, ou créé par une entrée plus ancienne,
+        validée d'abord — test_mere_creee_par_une_proposition_plus_ancienne.)"""
+        self.page.evaluate("""() => Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00050',
+          nature: 'ingestion', ot_id: 'OT-2026-0002', statut: 'à valider', ordre: '50', pages: 'EQ:EQ-0002', contradictions: '[]',
+          changements: JSON.stringify([
+            { cle: 'TITRE:purger le circuit de cp 01', titre: 'Purger le circuit de CP-01', type: 'savoir-faire', creation: true,
+              rattacheA: 'CP-01 — Compresseur', version_avant: 0, avant: '', apres: '## Étapes\\n- Purger [OT-2026-0002]' },
+            { cle: 'EQ:EQ-0002', page: '', titre: 'CP-01 — Compresseur', type: 'équipement', creation: false, version_avant: 0,
+              avant: '', apres: '## En bref\\n- Filtre encrassé, voir [[Purger le circuit de CP-01]] [OT-2026-0002]' }]) }); },
+          { journal: false })""")
+        self.assertEqual(self.ok("valider", ["WJ-00050"]), {"validees": ["WJ-00050"], "aRefaire": []})
+        lignes = self.lignes()
+        savoir, machine = lignes["Purger le circuit de CP-01"], lignes["CP-01 — Compresseur"]
+        self.assertEqual((savoir["equipement_id"], savoir["rattache_a"], machine["equipement_id"], machine["type"]),
+                         ("EQ-0002", "", "EQ-0002", "équipement"))
+        self.assertLess(savoir["id"], machine["id"])                          # créées dans l'ordre des changements
+        self.assertEqual(machine["liens"], savoir["id"])
         self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
 
     def test_mere_archivee_signalee(self):
@@ -850,6 +949,39 @@ class TestVisibiliteTroisModes(CasNavigateur):
                     attendre_pret(page, 30000)
                     self.assertEqual(page.evaluate("App.mode"), "serveur")
                     self.verifier(page, profil == "responsable")
+
+
+class TestAffichageSansReseau(CasNavigateur):
+    """D101 (relevé du test de performance de T124 : afficher une page relisait /api/csv/wiki_pages) : en mode serveur,
+    afficher l'index du wiki puis la page d'une machine ne fait aucune requête /api/csv ; le journal, lui, relit les
+    pages à son ouverture (rattrapage, §20.7)."""
+
+    def test_index_et_page_sans_requete_csv_en_mode_serveur(self):
+        for motif in ingestion.ERREURS_SERVEUR_STATIQUE:
+            self.autoriser_erreur(motif)
+        with ServeurPrevo() as serveur:
+            contexte = self.navigateur.new_context(locale="fr-FR")
+            self.addCleanup(contexte.close)
+            preregler_profil(contexte, "responsable")
+            page = contexte.new_page()
+            self.surveiller(page)
+            page.goto(serveur.url + "/")
+            attendre_pret(page, 30000)
+            self.assertEqual(page.evaluate("App.mode"), "serveur")
+            equipement = page.evaluate("Donnees.lignes('equipements')[0].id")
+            requetes = []
+            page.on("request", lambda requete: requetes.append(requete.url))
+            for route in ("#/wiki", "#/wiki/" + equipement):
+                with self.subTest(route=route):
+                    page.evaluate("location.hash = '#/accueil'")
+                    page.wait_for_selector("#contenu .accueil-instruments")
+                    page.evaluate("(route) => { location.hash = route; }", route)
+                    page.wait_for_selector("#contenu .wiki")
+                    page.wait_for_timeout(300)
+                    self.assertEqual([u for u in requetes if "/api/csv" in u], [])
+            page.evaluate("location.hash = '#/wiki-journal'")
+            page.wait_for_selector('.wj[data-vue="journal"]')
+            self.assertTrue(any("/api/csv/wiki_pages" in u for u in requetes), requetes)
 
 
 if __name__ == "__main__":

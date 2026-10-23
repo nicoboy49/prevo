@@ -7,9 +7,12 @@
 //  - page d'un changement : `page` (WP-…) quand il est connu, sinon sa clé (« EQ:<équipement> », « ART:<article> »,
 //    « WP:<page> », « TITRE:<titre comparable> ») ; une ligne est créée pour une page ancrée encore sans texte et pour
 //    une page créée ; la validation inscrit `page` dans chaque changement ;
-//  - sous-page créée (§20.4 ; d'un savoir-faire seulement, §20.12) : rattache_a = la ligne de sa mère (de même type,
-//    créée d'abord : pages modifiées avant pages créées), jamais equipement_id ni article_id ; à la main, sous une page
-//    qui a déjà une ligne ; seul un savoir-faire se crée (contrôles de wiki-texte.js), à la main aussi ;
+//  - sous-page créée (§20.4 ; d'un savoir-faire seulement, §20.12) : rattache_a = la ligne de sa mère (un savoir-faire
+//    envoyé, donc déjà une ligne ou créé par une entrée plus ancienne, validée avant), jamais equipement_id ni
+//    article_id ; seul un savoir-faire se crée (contrôles de wiki-texte.js), à la main aussi ; une ancienne page (mode,
+//    sous-page d'équipement ou de composant, Wiki.typeRetire) ne s'écrit plus à la main : elle s'archive ;
+//  - lien vers une panne ([[<libellé du symptôme>]], page calculée de Wiki.listeEntites('panne')) : gardé dans `liens`
+//    sous son identifiant PANNE-<code>, accepté à la main comme un titre du catalogue ;
 //  - `version_avant` (wiki-ingestion.js) compte les propositions plus anciennes en attente sur la page : validées dans
 //    l'ordre de `ordre`, chacune trouve la page dans la version attendue ;
 //  - dépendance (« touche une même page ») : B, plus récente, dépend de A si A CHANGE une page sur laquelle B a été
@@ -27,8 +30,9 @@
 //  - une entrée APPLIQUÉE (son identifiant est le derniere_entree de toutes les pages de ses changements) est validée,
 //    quoi que dise encore son statut : c'est ce qui départage deux postes entre deux écritures (validation contre
 //    rejet : la validation l'emporte et le motif le dit ; deux validations : une seule s'applique) ;
-//  - rattrapage (Wiki.rattraper, pages relues, appelé par les écrans, au début de Wiki.valider et de Wiki.ecrire) :
-//    une entrée « à valider » appliquée est marquée « validée » ;
+//  - rattrapage (Wiki.rattraper) : une entrée « à valider » appliquée est marquée « validée » ; pages relues
+//    ({ relire: true }) au début de Wiki.valider et de Wiki.ecrire et à l'ouverture du journal, jamais à l'affichage
+//    d'une page (D101 : sur les tables chargées, aucun appel réseau tant qu'il n'y a rien à rattraper) ;
 //  - visibilité : Wiki.contradictionsDe (contradictions ouvertes des entrées validées) pour tous les profils ;
 //    Wiki.enAttenteDe (propositions à valider qui changent la page) au responsable seulement.
 
@@ -46,25 +50,12 @@ Object.assign(Wiki, (() => {
     try { return JSON.parse(valeur) || defaut; } catch (erreur) { return defaut; }
   }
 
-  function rang(entree) {
-    return Number(entree.ordre) || 0;
-  }
-
-  function parRang(a, b) {
-    return rang(a) - rang(b) || (texte(a.id) < texte(b.id) ? -1 : 1);
-  }
-
-  function ErreurValidation(message) {
-    return new Donnees.ErreurValidation(message);
-  }
-
-  function changementsDe(entree) {
-    return json(entree.changements, []).filter((changement) => changement && typeof changement === 'object');
-  }
-
-  function contradictionsDe(entree) {
-    return json(entree.contradictions, []).filter((contradiction) => contradiction && typeof contradiction === 'object');
-  }
+  const rang = (entree) => Number(entree.ordre) || 0;
+  const parRang = (a, b) => rang(a) - rang(b) || (texte(a.id) < texte(b.id) ? -1 : 1);
+  const ErreurValidation = (message) => new Donnees.ErreurValidation(message);
+  const changementsDe = (entree) => json(entree.changements, []).filter((changement) => changement && typeof changement === 'object');
+  const contradictionsDe = (entree) => json(entree.contradictions, []).filter((c) => c && typeof c === 'object');
+  const estActive = (ligne) => texte(ligne.statut) !== 'archivée';
 
   // ===========================================================================================
   // 1. Profil, pages et clés
@@ -75,19 +66,13 @@ Object.assign(Wiki, (() => {
     return typeof App !== 'undefined' && Boolean(App) && typeof App.estResponsable === 'function' && App.estResponsable();
   }
 
-  function exigerResponsable() {
-    if (!estResponsable()) throw ErreurValidation(MESSAGE_RESERVE);
-  }
+  const exigerResponsable = () => { if (!estResponsable()) throw ErreurValidation(MESSAGE_RESERVE); };
 
   function nomDuResponsable() {
     const profil = typeof App !== 'undefined' && App ? App.profil : null;
     if (profil && texte(profil.nom)) return texte(profil.nom);
     return (typeof App !== 'undefined' && App && typeof App.libelleProfil === 'function' && texte(App.libelleProfil()))
       || 'Responsable';
-  }
-
-  function estActive(ligne) {
-    return texte(ligne.statut) !== 'archivée';
   }
 
   /** Ligne de wiki_pages d'un changement ou d'une clé (null si la page n'a pas encore de ligne). */
@@ -139,13 +124,24 @@ Object.assign(Wiki, (() => {
     return lues.some((cle) => pagesA.changees.has(cle)) || liens.some((cle) => pagesA.creees.has(cle));
   }
 
-  /** Titre comparable → identifiant canonique (équipements, articles, pages actives), pour le champ `liens`. */
+  /** Pannes (pages calculées, wiki-entites.js : codes symptôme qui ont un cas) → [{ id (PANNE-…), titre }]. */
+  const pannes = () => (typeof Wiki.listeEntites === 'function' && Wiki.listeEntites('panne', { profil: 'responsable' })) || [];
+
+  /** Titre comparable → identifiant canonique (pannes, équipements, articles, pages actives), pour le champ `liens`. */
   function indexDesLiens(lignesPages) {
-    const index = new Map();
+    const index = new Map(pannes().map((panne) => [Wiki.comparable(panne.titre), panne.id]));
     Donnees.lignes('equipements').forEach((e) => index.set(Wiki.comparable(titreEquipement(e)), texte(e.id)));
     Donnees.lignes('articles').forEach((a) => index.set(Wiki.comparable(titreArticle(a)), texte(a.id)));
     lignesPages.filter(estActive).forEach((ligne) => index.set(Wiki.comparable(ligne.titre), idCanonique(ligne)));
     return index;
+  }
+
+  /** Ancienne page d'avant la refonte 2 (§20.12) → ce qu'elle est (« mode », « sous-page d'équipement »…), sinon ''. */
+  function typeRetire(ligne) {
+    const type = texte(ligne && ligne.type);
+    if (!Wiki.RUBRIQUES[type]) return type || 'sans type';
+    const mere = type !== 'savoir-faire' && texte(ligne.rattache_a) ? Donnees.trouver('wiki_pages', texte(ligne.rattache_a)) : null;
+    return mere && texte(mere.type) === type ? 'sous-page ' + (type === 'équipement' ? 'd\'équipement' : 'de composant') : '';
   }
 
   function liensDuTexte(valeur, index) {
@@ -254,10 +250,11 @@ Object.assign(Wiki, (() => {
 
   /**
    * Rattrapage (§20.7) : une entrée « à valider » appliquée aux pages sans que son statut ait pu être écrit est
-   * marquée « validée » (pages relues d'abord). Aucun choix n'est fait : rien n'est réservé au responsable. → nombre.
+   * marquée « validée ». options.relire : pages relues d'abord (validation, écriture, ouverture du journal) ; sinon sur
+   * les tables chargées (affichage d'une page, D101). Aucun choix n'est fait : rien n'est réservé au responsable. → nombre.
    */
-  async function rattraper() {
-    await Donnees.rechargerTable('wiki_pages');
+  async function rattraper(options) {
+    if (options && options.relire) await Donnees.rechargerTable('wiki_pages');
     const lignesPages = Donnees.lignes('wiki_pages');
     const aMarquer = Donnees.lignes('wiki_journal').filter((e) => texte(e.statut) === 'à valider' && appliqueeDans(e, lignesPages));
     if (!aMarquer.length) return 0;
@@ -287,16 +284,13 @@ Object.assign(Wiki, (() => {
             throw erreur;
           }
         });
-        // Lignes nouvelles : pages modifiées (page ancrée encore sans ligne) avant pages créées — la mère d'une sous-page
-        // a sa ligne avant elle, quel que soit l'ordre des changements dans l'entrée.
+        // Lignes nouvelles, dans l'ordre des changements : une page ancrée encore sans texte (machine, article) ou une page
+        // créée ; la mère d'une sous-page a toujours déjà sa ligne (un savoir-faire envoyé, §20.6), aucun ordre à imposer.
         const pages = trouvees.slice();
-        changements.map((c, n) => n).filter((n) => !pages[n])
-          .sort((a, b) => Number(Boolean(changements[a].creation)) - Number(Boolean(changements[b].creation)) || a - b)
-          .forEach((n) => {
-            const rattacheA = texte(changements[n].rattacheA);
-            const vise = rattacheA ? indexDesLiens(lignes).get(Wiki.comparable(rattacheA)) || '' : '';
-            pages[n] = nouvelleLigne(lignes, outils, texte(changements[n].cle), changements[n], vise);
-          });
+        changements.forEach((c, n) => {
+          const vise = !pages[n] && texte(c.rattacheA) ? indexDesLiens(lignes).get(Wiki.comparable(c.rattacheA)) || '' : '';
+          if (!pages[n]) pages[n] = nouvelleLigne(lignes, outils, texte(c.cle), c, vise);
+        });
         const index = indexDesLiens(lignes);
         const contexte = { index, parIa: true, modele: texte(entree.modele), entreeId: entree.id, par, maintenant: outils.maintenant() };
         pages.forEach((ligne, n) => poserTexte(ligne, changements[n].apres || '', contexte));
@@ -316,7 +310,7 @@ Object.assign(Wiki, (() => {
    */
   async function valider(ids) {
     exigerResponsable();
-    await rattraper();
+    await rattraper({ relire: true });
     const choisis = Array.from(new Set((ids || []).map(texte).filter(Boolean)));
     if (!choisis.length) throw ErreurValidation('Aucune proposition choisie.');
     const journal = Donnees.lignes('wiki_journal');
@@ -469,6 +463,8 @@ Object.assign(Wiki, (() => {
   }
 
   function controlerEcriture(page, valeur) {
+    const retire = page.ligne ? typeRetire(page.ligne) : '';
+    if (retire) throw ErreurValidation('Page « ' + page.titre + ' » (' + retire + ') : type de page retiré : archivez-la.');
     const avant = page.ligne ? page.ligne.texte || '' : '';
     const rattachement = page.rattache ? pageEnvoyee(page.rattache) : null;
     // Une sous-page modifiée porte sa mère : ses refus de longueur ne conseillent pas de la découper (un seul niveau).
@@ -482,7 +478,8 @@ Object.assign(Wiki, (() => {
     const controle = Wiki.controlerProposition({ rien: false, contradictions: [], pages: [{
       action: page.nouvelle ? 'creer' : 'modifier', titre: page.titre, type: page.type,
       rattacheA: rattachement ? rattachement.titre : '', texte: valeur }] }, {
-      manuel: true, pagesEnvoyees: envoyees, catalogue: Wiki.catalogue().map((p) => ({ titre: p.titre, type: p.type })),
+      manuel: true, pagesEnvoyees: envoyees,
+      catalogue: Wiki.catalogue().concat(pannes()).map((p) => ({ titre: p.titre, type: p.type || 'panne' })),
       otPermis: permis, sources });
     if (!controle.ok) {
       const erreur = ErreurValidation('Texte refusé : ' + controle.raisons.join(' '));
@@ -499,7 +496,7 @@ Object.assign(Wiki, (() => {
   async function ecrire(cible, valeur, options) {
     exigerResponsable();
     const opts = options || {};
-    await rattraper();                           // pages relues ; une validation interrompue est d'abord rattrapée
+    await rattraper({ relire: true });           // pages relues ; une validation interrompue est d'abord rattrapée
     const page = cibleDe(cible);
     const archiver = Boolean(opts.archiver);
     if (archiver && !page.ligne) throw ErreurValidation('Seule une page qui a un texte s\'archive.');
@@ -692,6 +689,6 @@ Object.assign(Wiki, (() => {
 
   return {
     valider, rattraper, rejeter, remettreEnFile, ecrire, trancher, verifierIntegrite,
-    contradictionsDe: contradictionsDePage, enAttenteDe,
+    contradictionsDe: contradictionsDePage, enAttenteDe, typeRetire, pannesDuWiki: pannes,
   };
 })());

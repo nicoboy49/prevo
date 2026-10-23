@@ -14,9 +14,14 @@ horloge fixée, réglages IA du poste vers le faux fournisseur. Ce qui est véri
                 pendant le traitement (les envois partis finissent, la file garde le reste), bilan ; IA injoignable ;
                 IA non activée et version web : pas de bouton, message du lot 4 ;
     hors        nombre affiché avant tout ajout, en tout et par équipement ; ajout par équipement puis du reste ;
-    à la main   texte pré-rempli, aide ; refus avec ses raisons une par ligne et rien d'écrit ; succès et retour à la
-                page ; nouvelle page (titre exigé, rattachement) ; archivage avec confirmation dans la page ;
-    contrôle    Wiki.controleDuWiki et sa vue : un cas de chaque problème (et ce qui n'en est pas un) ;
+    à la main   texte pré-rempli, aide (refonte 2, §20.12 : rubriques du texte d'une machine ou d'un article, leur rôle
+                et leurs limites Wiki.LIMITES ; un savoir-faire et sa longueur) ; refus avec ses raisons une par ligne et
+                rien d'écrit ; succès et retour à la page ; nouvelle page = un savoir-faire seulement (titre exigé,
+                rattachement à une machine, un article ou un savoir-faire : sous-page) ; ancienne page de mode : « type
+                de page retiré : archivez-la », archivage avec confirmation dans la page ;
+    contrôle    Wiki.controleDuWiki et sa vue : un cas de chaque problème (et ce qui n'en est pas un) — longueurs par
+                rubrique, anciennes rubriques, types retirés, orphelins parmi les savoir-faire seulement, liens vers les
+                pannes ; aides aux limites de la refonte 2 ;
     profils     routes refusées au technicien et au demandeur ;
     pièges      textes piégés venus des données : du texte, rien d'exécuté ;
     affichage   1440 et 375 px sans défilement horizontal, zones tactiles ≥ 48 px au téléphone, contrastes AA en thème
@@ -45,13 +50,16 @@ BASE["ordres_travail"] = ingestion.ORDRES + (
     "OT-2026-0009;EQ-0003;correctif différé;P3;Clôturé administrativement;CV-01 — Courroie usée;;;2026-07-01 08:00;"
     "2026-07-02 08:00;;;;S02;C02;R02;Courroie changée.;;2026-07-02 09:00;2026-07-03 09:00;\r\n")
 
+# Textes de la refonte 2 (§20.12) : « En bref » et « Astuces » d'une machine, « À quoi il sert » d'un article.
 TEXTE_PO01 = ingestion.TEXTE_PO01
-APRES_PO01 = NL.join(["## Ce qui revient", "- Fuite de garniture au démarrage, fréquent ici [OT-2026-0007]",
-                      "- Joint repris après la fuite, fréquent ici [OT-2026-0008]", "## À surveiller",
-                      "- Voir [[Cavitation]] et le bruit de gravier [OT-2026-0007] [OT-2026-0008]"])
-AVANT_KIT = "## Défaillances" + NL + "- Usure de la face [OT-2026-0007]"
+APRES_PO01 = NL.join(["## En bref", "- Fuite de garniture au démarrage, fréquent ici [OT-2026-0007]",
+                      "- Joint repris après la fuite, fréquent ici [OT-2026-0008]", "## Astuces",
+                      "- Voir [[Nettoyer le filtre de CP-01]] et le bruit de gravier [OT-2026-0007] [OT-2026-0008]"])
+AVANT_KIT = ingestion.TEXTE_KIT
 APRES_KIT = AVANT_KIT + NL + "- Joint torique abîmé au montage [OT-2026-0001]"
-APRES_CP01 = "## Ce qui revient" + NL + "- Filtre nettoyé, fréquent ici [OT-2026-0002]"
+APRES_CP01 = "## En bref" + NL + "- Filtre nettoyé, fréquent ici [OT-2026-0002]"
+SAVOIR_FAIRE = "Changer la garniture de PO-01"                 # WP-0002 de la base d'essai
+JOINT = "Resserrer le joint qui suinte"                         # savoir-faire créé par la proposition WJ-00002
 RAISONS = ["Page « CV-01 — Convoyeur » : phrase sans OT cité — « Bande tendue ».",
            "Page « CV-01 — Convoyeur » : nombre « 7 » absent des OT cités — « Tension à 7 bar »."]
 
@@ -71,15 +79,16 @@ def entree(id_, ot, statut, ordre="", date="", changements=(), contradictions=()
     return ligne
 
 
-CONTRADICTION_KIT = {"page": "Kit garniture HC 50", "pageCle": "ART:ART-0001", "phrase": "Usure de la face",
+CONTRADICTION_KIT = {"page": "Kit garniture HC 50", "pageCle": "ART:ART-0001", "phrase": "Étanchéité de l'arbre de la pompe",
                      "observation": "La face est intacte : le joint torique fuyait.", "ot": ["OT-2026-0001"], "statut": "ouverte"}
 # Journal d'essai : trois propositions à valider (dont une avec une contradiction, d'un OT antérieur), et une entrée de
 # chaque autre statut.
 ENTREES = [
-    entree("WJ-00002", "OT-2026-0008", "à valider", "2", "2026-06-01 08:00", pages="EQ:EQ-0001;ART:ART-0001;CAUSE:C01", changements=[
+    entree("WJ-00002", "OT-2026-0008", "à valider", "2", "2026-06-01 08:00", pages="EQ:EQ-0001;ART:ART-0001", changements=[
         changement("WP-0001", "EQ:EQ-0001", "équipement", "PO-01 — Pompe de process A", TEXTE_PO01, APRES_PO01, 1),
-        changement("", "TITRE:joint qui suinte", "mode", "Joint qui suinte", "",
-                   "## Symptômes" + NL + "- Goutte au joint après le démarrage [OT-2026-0008]", 0, creation=True)]),
+        dict(changement("", "TITRE:resserrer le joint qui suinte", "savoir-faire", JOINT, "",
+                        "## Quand le faire" + NL + "- Goutte au joint après le démarrage [OT-2026-0008]", 0, creation=True),
+             rattacheA="PO-01 — Pompe de process A")]),
     entree("WJ-00003", "OT-2026-0001", "à valider", "3", "2026-03-10 10:00", anterieure="1", pages="ART:ART-0001",
            changements=[changement("WP-0003", "ART:ART-0001", "composant", "Kit garniture HC 50", AVANT_KIT, APRES_KIT, 1)],
            contradictions=[CONTRADICTION_KIT]),
@@ -88,7 +97,7 @@ ENTREES = [
     entree("WJ-00005", "OT-2026-0004", "refusée", date="2026-01-15 08:00", raisons=NL.join(RAISONS), modele="faux-invente"),
     entree("WJ-00006", "OT-2026-0006", "rejetée", "6", "2026-05-01 08:00", motif="Hors sujet", decide_par="Responsable",
            decide_le="2026-10-21 10:00", changements=[changement("", "EQ:EQ-0003", "équipement", "CV-01 — Convoyeur", "",
-                                                                   "## Ce qui revient" + NL + "- Rouleaux [OT-2026-0006]", 0)]),
+                                                                   "## En bref" + NL + "- Rouleaux [OT-2026-0006]", 0)]),
     entree("WJ-00007", "OT-2026-0003", "à refaire", date="2026-02-01 08:00", motif="à refaire : WJ-00006 rejetée"),
     entree("WJ-00008", "OT-2026-0005", "rien à ajouter", date="2026-03-01 08:00"),
     entree("WJ-00009", "", "appliquée", "9", nature="manuel", pages="WP:WP-0002", motif="Remise en ordre",
@@ -97,11 +106,11 @@ ENTREES = [
                "## Étapes" + NL + "- Repérer l'accouplement [OT-2026-0007]", 0)]),
     entree("WJ-00010", "OT-2026-0007", "appliquée", "10", nature="décision", motif="Les deux arrivent",
            decide_par="Responsable", decide_le="2026-05-03 10:00", contradictions=[{
-               "entree": "WJ-00001", "rang": 0, "page": "Cavitation", "phrase": "Bruit de gravier", "observation": "Sifflement",
+               "entree": "WJ-00001", "rang": 0, "page": SAVOIR_FAIRE, "phrase": "Repérer l'accouplement", "observation": "Sifflement",
                "ot": ["OT-2026-0007"], "statut": "fermée", "decision": "les deux", "note": "Les deux arrivent"}]),
 ]
-# L'entrée validée de la base (OT-2026-0007) porte une contradiction ouverte, ancienne, sur « Cavitation ».
-CONTRADICTION_OUVERTE = {"page": "Cavitation", "pageCle": "WP:WP-0006", "phrase": "Bruit de gravier",
+# L'entrée validée de la base (OT-2026-0007) porte une contradiction ouverte, ancienne, sur un savoir-faire de PO-01.
+CONTRADICTION_OUVERTE = {"page": SAVOIR_FAIRE, "pageCle": "WP:WP-0002", "phrase": "Repérer l'accouplement",
                          "observation": "Plutôt un sifflement à mi-débit.", "ot": ["OT-2026-0007"], "statut": "ouverte"}
 
 AJOUTER_JS = """async ([entrees, contradiction]) => {
@@ -235,8 +244,8 @@ class TestJournal(CasEcrans):
         self.assertEqual(self.textes(page_po01 + " li.wj-nouvelle mark"), ["Joint repris après la fuite, fréquent ici [OT-2026-0008]"])
         self.assertEqual(self.textes(page_po01 + " li.wj-nouvelle .wj-etiquette"), ["Nouvelle"])
         self.assertEqual(self.textes(page_po01 + " li.wj-reprise ins"),
-                         ["Voir Cavitation et le bruit de gravier [OT-2026-0007] [OT-2026-0008]"])
-        self.assertEqual(self.textes(page_po01 + " li.wj-reprise del"), ["Voir Cavitation [OT-2026-0007]"])
+                         ["Voir Nettoyer le filtre de CP-01 et le bruit de gravier [OT-2026-0007] [OT-2026-0008]"])
+        self.assertEqual(self.textes(page_po01 + " li.wj-reprise del"), ["Voir Nettoyer le filtre de CP-01 [OT-2026-0007]"])
         # Phrase identique : repliée dans un détail fermé, nulle part ailleurs.
         self.assertEqual(self.texte(page_po01 + " details.wj-identiques summary"), "1 phrase inchangée")
         self.assertFalse(self.page.evaluate("(s) => document.querySelector(s).open", page_po01 + " details.wj-identiques"))
@@ -244,11 +253,11 @@ class TestJournal(CasEcrans):
         hors_details = self.page.evaluate("""(s) => Array.from(document.querySelectorAll(s + ' li'))
           .filter((li) => !li.closest('details')).map((li) => li.textContent)""", page_po01)
         self.assertFalse(any("Fuite de garniture" in t for t in hors_details), hors_details)
-        self.assertEqual(self.textes(page_po01 + " .wj-rubrique"), ["Ce qui revient", "À surveiller"])
-        # Page créée : en entier.
+        self.assertEqual(self.textes(page_po01 + " .wj-rubrique"), ["En bref", "Astuces"])
+        # Page créée (un savoir-faire, seule page qui se crée) : en entier.
         creee = c2 + ' .wj-changement[data-creation="oui"]'
         self.assertIn("Page créée", self.texte(creee + " h4"))
-        self.assertIn("Joint qui suinte", self.texte(creee + " h4"))
+        self.assertIn(JOINT, self.texte(creee + " h4"))
         self.assertEqual(self.textes(creee + " li.wj-creee"), ["Goutte au joint après le démarrage [OT-2026-0008]"])
         # Page ancrée encore sans texte : toutes ses phrases sont nouvelles.
         self.assertEqual(self.textes(carte("WJ-00004") + " li.wj-nouvelle mark"), ["Filtre nettoyé, fréquent ici [OT-2026-0002]"])
@@ -259,7 +268,7 @@ class TestJournal(CasEcrans):
         self.assertIn("wj-contradictions", enfants[1])
         self.assertIn("wj-changement", enfants[2])
         contradiction = self.texte(c3 + " .wj-contradictions")
-        for attendu in ("Page « Kit garniture HC 50 »", "Ce que dit la page : Usure de la face",
+        for attendu in ("Page « Kit garniture HC 50 »", "Ce que dit la page : Étanchéité de l'arbre de la pompe",
                         "Observation antérieure aux faits de la page : La face est intacte : le joint torique fuyait."):
             self.assertIn(attendu, contradiction)
         self.assertIn("Intervention antérieure", self.texte(c3 + " .wj-meta"))
@@ -282,7 +291,7 @@ class TestJournal(CasEcrans):
         self.assertIn("Motif : à refaire : WJ-00006 rejetée", lignes["WJ-00007"][1])
         self.assertIn("Écriture à la main", lignes["WJ-00009"][1])
         self.assertIn("Changer la garniture de PO-01", lignes["WJ-00009"][1])
-        self.assertIn("Page « Cavitation » : les deux sont vrais", lignes["WJ-00010"][1])
+        self.assertIn("Page « " + SAVOIR_FAIRE + " » : les deux sont vrais", lignes["WJ-00010"][1])
         # Une entrée seule.
         self.aller("#/wiki-journal?entree=WJ-00009", '.wj[data-vue="entree"]')
         self.assertIn("Écriture à la main — Changer la garniture de PO-01", self.texte(carte("WJ-00009") + " .wj-entree-titre"))
@@ -323,6 +332,8 @@ class TestJournal(CasEcrans):
         self.assertEqual((self.statut("WJ-00002"), self.statut("WJ-00004"), self.statut("WJ-00003")), ("validée", "validée", "à valider"))
         po01 = self.page.evaluate(LIGNE_JS, "WP-0001")
         self.assertEqual((po01["texte"], po01["version"]), (APRES_PO01, "2"))
+        joint = self.page.evaluate("(titre) => Donnees.lignes('wiki_pages').find((l) => l.titre === titre)", JOINT)
+        self.assertEqual((joint["type"], joint["equipement_id"], joint["origine"]), ("savoir-faire", "EQ-0001", "IA"))
         self.assertEqual(self.page.evaluate("Array.from(document.querySelectorAll('.wj-entree')).map((e) => e.dataset.entree)"), ["WJ-00003"])
         # Avec contradiction : validée seule, par son bouton.
         self.agir(carte("WJ-00003") + " .wj-valider")
@@ -334,14 +345,14 @@ class TestJournal(CasEcrans):
         ligne = '.wj-contradiction[data-entree="WJ-00003"]'
         self.assertEqual(self.page.get_attribute(ligne + " .wj-lien-page", "href"), "#/wiki/ART-0001")
         self.assertIn("Observation antérieure aux faits de la page : La face est intacte", self.texte(ligne))
-        self.assertIn("Ce que dit la page : Bruit de gravier", self.texte('.wj-contradiction[data-entree="WJ-00001"]'))
-        self.assertEqual(self.page.get_attribute('.wj-contradiction[data-entree="WJ-00001"] .wj-lien-page', "href"), "#/wiki/WP-0006")
+        self.assertIn("Ce que dit la page : Repérer l'accouplement", self.texte('.wj-contradiction[data-entree="WJ-00001"]'))
+        self.assertEqual(self.page.get_attribute('.wj-contradiction[data-entree="WJ-00001"] .wj-lien-page', "href"), "#/wiki/WP-0002")
 
     def test_acceptee_a_la_relance_et_refusee_inchangee(self):
         """D106 (T129, écran en T131) : une proposition acceptée à la relance garde les raisons du premier refus, sous
         « Acceptée à la relance, après le refus : » ; une entrée refusée garde « Raisons du refus : »."""
         self.ouvrir(journal=True)
-        apres = "## Ce qui revient" + NL + "- Courroie changée [OT-2026-0009]"
+        apres = "## En bref" + NL + "- Courroie changée [OT-2026-0009]"
         relancees = [
             entree("WJ-00011", "OT-2026-0009", "à valider", "11", "2026-07-02 08:00", pages="EQ:EQ-0003", essais="2",
                    raisons=NL.join(RAISONS), changements=[changement("", "EQ:EQ-0003", "équipement", "CV-01 — Convoyeur", "", apres, 0)]),
@@ -587,8 +598,8 @@ class TestHorsDuWiki(CasEcrans):
 # Écriture à la main
 # ---------------------------------------------------------------------------------------------------
 
-TEXTE_MAIN = NL.join(["## Ce qui revient", "- Fuite de garniture au démarrage, fréquent ici [OT-2026-0007]",
-                      "## Ce qui a réglé le problème", "- Garniture usée remplacée [OT-2026-0001]"])
+TEXTE_MAIN = NL.join(["## En bref", "- Fuite de garniture au démarrage, fréquent ici [OT-2026-0007]",
+                      "## Astuces", "- Garniture usée remplacée [OT-2026-0001]"])
 
 
 class TestEcritureALaMain(CasEcrans):
@@ -598,10 +609,15 @@ class TestEcritureALaMain(CasEcrans):
         self.aller("#/wiki-ecrire/EQ-0001", ".wj-ecrire")
         self.assertEqual(self.page.input_value("#wj-texte"), TEXTE_PO01)
         self.assertEqual(self.page.get_attribute(".wj-ecrire", "data-version"), "1")
+        # Le texte d'une machine (§20.12) : ses rubriques, leur rôle et leurs limites (Wiki.LIMITES).
         aide = self.texte(".wj-aide-balisage")
-        self.assertIn("« Ce qui revient », « Ce qui a réglé le problème », « À surveiller », « Astuces »", aide)
+        self.assertIn("Pour le texte d'une machine : « En bref », « Astuces », dans cet ordre.", aide)
+        self.assertIn("« En bref » : ce qu'il faut savoir d'abord de cette machine", aide)
+        self.assertIn("Longueurs : « En bref » 5 phrases et 120 mots au plus, « Astuces » 10 phrases au plus", aide)
         self.assertIn("Aucune consigne de sécurité", aide)
         self.assertIn("[[Titre d'une page]]", aide)
+        self.assertEqual(self.page.get_attribute("#wj-texte", "placeholder").split(NL)[0], "## En bref")
+        self.assertEqual(self.page.locator(".wj-type-retire").count(), 0)
         self.assertIn("Une proposition à valider porte sur cette page", self.texte(".wj-ecrire .alerte"))
         avant = self.etat()
         self.page.fill("#wj-texte", TEXTE_MAIN + NL + "- Porter des gants [OT-2026-0001]" + NL + "- Pression à 7 bar [OT-2026-0001]")
@@ -638,58 +654,95 @@ class TestEcritureALaMain(CasEcrans):
         self.assertIn("La page a été modifiée entre-temps", self.texte(".wj-annonce"))
         self.assertEqual(self.etat(), avant)
 
-    def test_nouvelle_page_titre_exige_et_rattachement(self):
+    def test_texte_d_un_article_rubrique_et_limites(self):
+        """§20.12 : le texte d'un article propose « À quoi il sert », son rôle et sa limite (Wiki.LIMITES) ; au-delà, refusé."""
         self.ouvrir()
-        self.aller("#/wiki-ecrire/nouvelle?type=savoir-faire&rattache=EQ-0001", ".wj-ecrire #wj-type")
-        self.assertEqual(self.page.input_value("#wj-type"), "savoir-faire")
+        self.aller("#/wiki-ecrire/ART-0001", '.wj-ecrire[data-page="ART-0001"]')
+        self.assertEqual(self.page.input_value("#wj-texte"), AVANT_KIT)
+        aide = self.texte(".wj-aide-balisage")
+        for attendu in ("Pour le texte d'un article : « À quoi il sert », dans cet ordre.",
+                        "« À quoi il sert » : son rôle sur les machines où il sert, ses signes d'usure.",
+                        "Longueurs : « À quoi il sert » 3 phrases et 80 mots au plus"):
+            self.assertIn(attendu, aide)
+        avant = self.etat()
+        self.page.fill("#wj-texte", AVANT_KIT + "".join(NL + "- Usure de la face %s [OT-2026-0001]" % n for n in ("avant", "arrière", "latérale")))
+        self.page.click(".wj-enregistrer")
+        self.page.wait_for_selector(".wj-annonce .wj-raisons li")
+        self.assertIn("Page « Kit garniture HC 50 » : « À quoi il sert » : 4 phrases, 3 au plus.", self.textes(".wj-annonce .wj-raisons li"))
+        self.assertEqual(self.etat(), avant)
+
+    def test_nouvelle_page_un_savoir_faire_seulement_titre_exige_et_rattachement(self):
+        """§20.12 : « Nouvelle page » ne crée qu'un savoir-faire (plus de choix de type, même demandé dans l'adresse),
+        rattaché à une machine, un article, ou un savoir-faire (sous-page)."""
+        self.ouvrir()
+        self.aller("#/wiki-ecrire/nouvelle?type=mode&rattache=EQ-0001", ".wj-ecrire #wj-rattache")
+        self.assertEqual(self.texte(".wj-ecrire h1"), "Nouveau savoir-faire")
+        self.assertEqual(self.page.locator("#wj-type, #wj-cause, .wj-champ-cause").count(), 0)
         self.assertEqual(self.page.input_value("#wj-rattache"), "EQ-0001")
-        self.assertTrue(self.page.is_visible(".wj-champ-rattache"))
-        self.assertTrue(self.page.is_hidden(".wj-champ-cause"))
-        self.assertIn("« Quand le faire », « Étapes », « Pièces et outillage », « Pièges »", self.texte(".wj-aide-balisage"))
+        groupes = self.page.evaluate("""() => Array.from(document.querySelectorAll('#wj-rattache optgroup'))
+          .map((g) => [g.label, Array.from(g.querySelectorAll('option')).map((o) => o.value)])""")
+        self.assertEqual([g[0] for g in groupes], ["Machines", "Articles", "Savoir-faire (pour une sous-page)"])
+        self.assertEqual(sorted(groupes[2][1]), ["WP-0002", "WP-0004", "WP-0008", "WP-0010", "WP-0011"])   # ni mode ni composant
+        aide = self.texte(".wj-aide-balisage")
+        self.assertIn("« Quand le faire », « Étapes », « Pièces et outillage », « Pièges »", aide)
+        self.assertIn("Longueur : 30 phrases et 600 mots au plus, noms des rubriques compris", aide)
+        self.assertNotIn("mode", aide)
         self.assertEqual(self.page.locator(".wj-archiver").count(), 0)
         avant = self.etat()
         self.page.fill("#wj-texte", "## Étapes" + NL + "- Marquer la position de l'accouplement [OT-2026-0001]")
         self.page.click(".wj-enregistrer")
         self.assertEqual(self.texte("#wj-titre-erreur"), "Le titre est obligatoire.")
         self.assertEqual(self.etat(), avant)
-        # Changer de type : l'aide et les champs suivent.
-        self.page.select_option("#wj-type", "mode")
-        self.assertTrue(self.page.is_hidden(".wj-champ-rattache"))
-        self.assertTrue(self.page.is_visible(".wj-champ-cause"))
-        self.assertIn("« Symptômes », « Causes », « Remèdes », « Équipements concernés »", self.texte(".wj-aide-balisage"))
-        self.page.select_option("#wj-type", "savoir-faire")
         self.page.fill("#wj-titre", "Poser la garniture")
         self.page.click(".wj-enregistrer")
         self.page.wait_for_function("location.hash.startsWith('#/wiki/WP-')")
         ligne = self.page.evaluate("(id) => Donnees.trouver('wiki_pages', id)", self.page.evaluate("location.hash").split("/")[-1])
         self.assertEqual((ligne["type"], ligne["titre"], ligne["equipement_id"], ligne["origine"]),
                          ("savoir-faire", "Poser la garniture", "EQ-0001", "manuel"))
+        # Une sous-page d'un savoir-faire, rattachée à lui.
+        self.aller("#/wiki-ecrire/nouvelle?rattache=WP-0002", ".wj-ecrire #wj-rattache")
+        self.assertEqual(self.page.input_value("#wj-rattache"), "WP-0002")
+        self.page.fill("#wj-titre", SAVOIR_FAIRE + " — dépose")
+        self.page.fill("#wj-texte", "## Étapes" + NL + "- Déposer le kit usé [OT-2026-0001]")
+        self.page.click(".wj-enregistrer")
+        self.page.wait_for_function("location.hash.startsWith('#/wiki/WP-') && location.hash !== '#/wiki/" + ligne["id"] + "'")
+        sous_page = self.page.evaluate("(id) => Donnees.trouver('wiki_pages', id)", self.page.evaluate("location.hash").split("/")[-1])
+        self.assertEqual((sous_page["type"], sous_page["rattache_a"], sous_page["equipement_id"]), ("savoir-faire", "WP-0002", ""))
 
-    def test_archiver_avec_confirmation_dans_la_page(self):
+    def test_ancienne_page_type_retire_puis_archiver_avec_confirmation(self):
+        """Une ancienne page de mode (type retiré, §20.12) : l'écran dit « type de page retiré : archivez-la », un
+        enregistrement est refusé avec ce message, l'archivage (confirmation dans la page) reste possible."""
         self.ouvrir()
         self.page.evaluate("""() => { window.__dialogues = [];
           window.confirm = (m) => { window.__dialogues.push(m); return true; };
           window.alert = (m) => { window.__dialogues.push(m); }; }""")
         self.aller("#/wiki-ecrire/EQ-0002", ".wj-ecrire")
         self.assertEqual(self.page.locator(".wj-archiver").count(), 0)         # page sans texte : rien à archiver
-        self.aller("#/wiki-ecrire/WP-0006", '.wj-ecrire[data-page="WP-0006"]')
+        self.aller("#/wiki-ecrire/WP-0005", '.wj-ecrire[data-page="WP-0005"]')
+        self.assertIn("type de page retiré : archivez-la", self.texte(".wj-type-retire"))
+        self.assertIn("(mode)", self.texte(".wj-type-retire"))
+        avant = self.etat()
+        self.page.click(".wj-enregistrer")
+        self.page.wait_for_selector(".wj-annonce .alerte")
+        self.assertIn("Page « Usure de garniture » (mode) : type de page retiré : archivez-la.", self.texte(".wj-annonce"))
+        self.assertEqual(self.etat(), avant)
         self.assertTrue(self.page.is_hidden(".wj-confirmation"))
         self.page.click(".wj-archiver-demande")
         self.assertTrue(self.page.is_visible(".wj-confirmation"))
-        self.assertIn("Archiver la page « Cavitation » ?", self.texte(".wj-confirmation"))
+        self.assertIn("Archiver la page « Usure de garniture » ?", self.texte(".wj-confirmation"))
         self.assertEqual(self.page.evaluate("document.querySelectorAll('dialog[open]').length"), 0)
-        self.assertEqual(self.page.evaluate(LIGNE_JS, "WP-0006")["statut"], "active")
+        self.assertEqual(self.page.evaluate(LIGNE_JS, "WP-0005")["statut"], "active")
         self.page.click(".wj-archiver-annuler")
         self.assertTrue(self.page.is_hidden(".wj-confirmation"))
-        self.assertEqual(self.page.evaluate(LIGNE_JS, "WP-0006")["statut"], "active")
+        self.assertEqual(self.page.evaluate(LIGNE_JS, "WP-0005")["statut"], "active")
         self.page.click(".wj-archiver-demande")
         self.page.click(".wj-archiver-confirmer")
         self.page.wait_for_function("location.hash === '#/wiki'")
-        self.assertEqual(self.page.evaluate(LIGNE_JS, "WP-0006")["statut"], "archivée")
+        self.assertEqual(self.page.evaluate(LIGNE_JS, "WP-0005")["statut"], "archivée")
         self.assertEqual(self.page.evaluate("window.__dialogues"), [])
         archivage = self.page.evaluate("Donnees.lignes('wiki_journal').filter((e) => e.nature === 'manuel').pop()")
         self.assertTrue(json.loads(archivage["changements"])[0]["archivage"])
-        self.aller("#/wiki-ecrire/WP-0006", ".wj-ecrire")
+        self.aller("#/wiki-ecrire/WP-0005", ".wj-ecrire")
         self.assertEqual(self.texte(".wj-ecrire h1"), "Page introuvable")
 
 
@@ -697,48 +750,66 @@ class TestEcritureALaMain(CasEcrans):
 # Contrôle du wiki (D108)
 # ---------------------------------------------------------------------------------------------------
 
-# Une page trop longue : 31 phrases, une de plus que Wiki.SEUILS.phrasesMax (30).
+# Textes trop longs (Wiki.LIMITES, §20.12) : « En bref » de PO-01 à 6 phrases (5 au plus) ; un savoir-faire de 31
+# phrases (30 au plus).
+EN_BREF_TROP_LONG = "## En bref" + NL + NL.join("- Fuite constatée %s [OT-2026-0007]" % lettre for lettre in "abcdef")
 TROP_DE_PHRASES = NL.join(["- Constat numéro %d [OT-2026-0007]" % numero for numero in range(1, 32)])
 CONTROLE_JS = """async () => {
   const page = (id, type, titre, texte, autres) => Object.assign({ id, type, titre, texte, version: '1', statut: 'active',
     origine: 'manuel' }, autres || {});
   await Donnees.modifier('wiki_pages', (lignes) => {
-    lignes.find((l) => l.id === 'WP-0002').texte += '\\n- Voir [[Page fantôme]] [OT-2026-0007]';
-    lignes.find((l) => l.id === 'WP-0010').liens = 'WP-0099;WP-0009';
-    lignes.push(page('WP-0011', 'mode', 'Grippage du palier', '## Causes\\n- Graisse sèche, voir [[Joint torique]] [OT-2026-0007]'));
-    lignes.push(page('WP-0012', 'mode', 'Usures de garniture', '## Causes\\n- Garniture sèche [OT-2026-0007]', { cause_code: 'C01' }));
-    lignes.push(page('WP-0013', 'composant', 'Joint torique', '## Défaillances\\n' + %s));
-    lignes.push(page('WP-0014', 'savoir-faire', 'Serrer la bride', '## Étapes\\n- Serrer [OT-2026-0007]', { equipement_id: 'EQ-0099' }));
+    const l = (id) => lignes.find((x) => x.id === id);
+    l('WP-0001').texte = %s;
+    l('WP-0002').texte += '\\n- Voir [[Page fantôme]] [OT-2026-0007]';
+    // Liens vers des pannes : [[Fuite]] et PANNE-S01 valides (la panne a des cas), PANNE-S03 (Vibration, aucun OT) cassé.
+    Object.assign(l('WP-0004'), { texte: l('WP-0004').texte + '\\n- Voir [[Fuite]] [OT-2026-0007]', liens: 'PANNE-S01;PANNE-S03' });
+    l('WP-0010').liens = 'WP-0099;WP-0009';
+    lignes.push(page('WP-0012', 'savoir-faire', 'Geste libre', '## Étapes\\n- Caler la pompe [OT-2026-0007]'));
+    lignes.push(page('WP-0013', 'savoir-faire', 'Usures de garniture', '## Étapes\\n- Garniture sèche [OT-2026-0007]',
+      { equipement_id: 'EQ-0002' }));
+    lignes.push(page('WP-0014', 'savoir-faire', 'Remonter le joint torique', '## Étapes\\n' + %s, { equipement_id: 'EQ-0003' }));
+    lignes.push(page('WP-0015', 'composant', 'Roulement 6205', '## Défaillances\\n- Grippé [OT-2026-0007]', { article_id: 'ART-0002' }));
+    lignes.push(page('WP-0016', 'équipement', 'PO-01 — garniture', '## Ce qui revient\\n- Garniture sèche [OT-2026-0007]',
+      { rattache_a: 'WP-0001' }));
+    lignes.push(page('WP-0017', 'composant', 'Kit garniture HC 50 — faces', '## Défaillances\\n- Faces rayées [OT-2026-0007]',
+      { rattache_a: 'WP-0003' }));
+    lignes.push(page('WP-0018', 'savoir-faire', 'Serrer la bride', '## Étapes\\n- Serrer [OT-2026-0007]', { equipement_id: 'EQ-0099' }));
   });
   await Donnees.modifier('articles', (lignes) => { lignes.find((a) => a.id === 'ART-0001').actif = '0'; });
   await Donnees.modifier('wiki_journal', (lignes) => {
     lignes.push({ id: 'WJ-00050', nature: 'ingestion', ot_id: 'OT-2026-0001', statut: 'validée', ordre: '50',
       changements: '[]', decide_le: '2026-01-02 10:00', contradictions: JSON.stringify([
-        { page: 'Cavitation', pageCle: 'WP:WP-0006', phrase: 'Bruit de gravier', observation: 'x', statut: 'ouverte' },
-        { page: 'Cavitation', pageCle: 'WP:WP-0006', phrase: 'Bruit de gravier', observation: 'y', statut: 'fermée' }]) });
+        { page: %s, pageCle: 'WP:WP-0002', phrase: 'Repérer l\\'accouplement', observation: 'x', statut: 'ouverte' },
+        { page: %s, pageCle: 'WP:WP-0002', phrase: 'Repérer l\\'accouplement', observation: 'y', statut: 'fermée' }]) });
     lignes.push({ id: 'WJ-00051', nature: 'ingestion', ot_id: 'OT-2026-0002', statut: 'validée', ordre: '51', changements: '[]',
       decide_le: Donnees.maintenant(), contradictions: JSON.stringify([
         { page: 'Desserrage', pageCle: 'WP:WP-0007', phrase: 'z', observation: 'récente', statut: 'ouverte' }]) });
   }, { journal: false });
-}""" % json.dumps(TROP_DE_PHRASES)
+}""" % (json.dumps(EN_BREF_TROP_LONG), json.dumps(TROP_DE_PHRASES), json.dumps(SAVOIR_FAIRE), json.dumps(SAVOIR_FAIRE))
 ATTENDU_CONTROLE = {
-    "lien-casse": ["WP-0002", "WP-0010", "WP-0010"],
-    "orpheline": ["WP-0011"],
-    "sans-ot": ["WP-0007", "WP-0008"],
-    "titre-proche": ["WP-0005", "WP-0012"],
-    "trop-longue": ["WP-0013"],
-    "contradiction-ancienne": ["WP-0006"],
-    "ancrage-disparu": ["ART-0001", "WP-0014"],
+    "lien-casse": ["WP-0002", "WP-0004", "WP-0010", "WP-0010"],
+    "orpheline": ["WP-0012"],                              # un savoir-faire seulement : jamais une machine ni un article
+    "sans-ot": ["WP-0007", "WP-0008", "WP-0011"],
+    "titre-proche": ["WP-0005", "WP-0013"],
+    "trop-longue": ["EQ-0001", "WP-0014"],
+    "anciennes-rubriques": ["WP-0006", "ART-0002"],
+    "type-retire": ["WP-0005", "WP-0007", "WP-0016", "WP-0017"],
+    "contradiction-ancienne": ["WP-0002"],
+    "ancrage-disparu": ["ART-0001", "WP-0018"],
 }
 
 
 class TestControleDuWiki(CasEcrans):
 
     def test_un_cas_de_chaque_probleme_et_sa_vue(self):
+        """D108 précisée (§20.12) : un cas de chaque problème — longueurs par rubrique et d'un savoir-faire entier,
+        anciennes rubriques, types de page retirés, orphelins parmi les savoir-faire seulement, liens vers les pannes
+        valides — et leur vue avec les aides."""
         self.ouvrir()
         avant = self.etat()
         self.assertEqual(self.page.evaluate("Wiki.controleDuWiki().map((p) => [p.type, p.page])"),
-                         [["sans-ot", "WP-0007"], ["sans-ot", "WP-0008"]])
+                         [["sans-ot", "WP-0007"], ["sans-ot", "WP-0008"], ["sans-ot", "WP-0011"],
+                          ["anciennes-rubriques", "WP-0006"], ["type-retire", "WP-0005"], ["type-retire", "WP-0007"]])
         self.assertEqual(self.etat(), avant)                                   # calculé, rien d'écrit
         self.page.evaluate(CONTROLE_JS)
         problemes = self.page.evaluate("Wiki.controleDuWiki()")
@@ -747,14 +818,20 @@ class TestControleDuWiki(CasEcrans):
         self.assertTrue(all(set(p) == {"type", "page", "titre", "message"} for p in problemes))
         messages = {(p["type"], p["page"], p["message"]) for p in problemes}
         for attendu in [("lien-casse", "WP-0002", "lien [[Page fantôme]] vers une page inconnue"),
+                        ("lien-casse", "WP-0004", "lien vers PANNE-S03, page inexistante"),
                         ("lien-casse", "WP-0010", "lien vers WP-0099, page inexistante"),
                         ("lien-casse", "WP-0010", "lien vers « Ancien geste » (WP-0009), page archivée"),
+                        ("trop-longue", "EQ-0001", "« En bref » : 6 phrases et 18 mots (au plus 5 phrases et 120 mots)"),
+                        ("trop-longue", "WP-0014", "31 phrases et 94 mots (au plus 30 phrases et 600 mots)"),
+                        ("anciennes-rubriques", "ART-0002", "« Défaillances » : à réécrire dans ses rubriques (« À quoi il sert »)"),
+                        ("type-retire", "WP-0005", "type de page retiré (mode) : archivez-la"),
+                        ("type-retire", "WP-0016", "type de page retiré (sous-page d'équipement) : archivez-la"),
+                        ("type-retire", "WP-0017", "type de page retiré (sous-page de composant) : archivez-la"),
                         ("ancrage-disparu", "ART-0001", "article ART-0001 inactif"),
-                        ("ancrage-disparu", "WP-0014", "équipement EQ-0099 absent"),
-                        ("contradiction-ancienne", "WP-0006", "ouverte depuis le 02/01/2026 (OT-2026-0001, WJ-00050)")]:
+                        ("ancrage-disparu", "WP-0018", "équipement EQ-0099 absent"),
+                        ("contradiction-ancienne", "WP-0002", "ouverte depuis le 02/01/2026 (OT-2026-0001, WJ-00050)")]:
             self.assertIn(attendu, messages)
-        self.assertIn("31 phrases", [p["message"] for p in problemes if p["type"] == "trop-longue"][0])
-        self.assertIn("« Usures de garniture »", [p["message"] for p in problemes if p["page"] == "WP-0005"][0])
+        self.assertIn("« Usures de garniture »", [p["message"] for p in problemes if p["page"] == "WP-0005" and p["type"] == "titre-proche"][0])
         # La vue : par type, chaque page avec son lien et « Modifier ».
         self.journal("?vue=controle")
         self.assertEqual(self.texte("#wj-titre-controle .badge"), str(len(problemes)))
@@ -771,6 +848,15 @@ class TestControleDuWiki(CasEcrans):
                                      "#/wiki-ecrire/" + page_id)
         self.assertIn("Kit garniture HC 50", self.texte('.wj-controle-type[data-type="ancrage-disparu"]'))
         self.assertEqual(self.texte('.wj-vue[data-vue="controle"] .badge'), str(len(problemes)))
+        # Les aides disent les limites de la refonte 2 (Wiki.LIMITES), plus celles d'avant (« Plus de 30 phrases »).
+        aides = {t: self.texte('.wj-controle-type[data-type="%s"] .aide' % t) for t in ATTENDU_CONTROLE}
+        self.assertEqual(aides["trop-longue"], "Au plus « En bref » 5 phrases et 120 mots, « Astuces » 10 phrases, « À quoi il "
+                         "sert » 3 phrases et 80 mots, un savoir-faire 30 phrases et 600 mots (au-delà, en sous-pages).")
+        self.assertIn("Savoir-faire sans machine, article ni rattachement", aides["orpheline"])
+        self.assertIn("ni panne", aides["lien-casse"])
+        self.assertIn("à réécrire dans ses rubriques", aides["anciennes-rubriques"])
+        self.assertIn("Page de mode, sous-page de machine ou d'article : à archiver.", aides["type-retire"])
+        self.assertNotIn("Mode sans code cause", self.texte(".wj-corps"))
 
     def test_relecture_titre_proche_d_un_article_lien_archive_une_fois_et_rebut(self):
         """Relecture de T120 : une page libre de même forme qu'un article est trop proche ; un lien vers une page
@@ -778,8 +864,8 @@ class TestControleDuWiki(CasEcrans):
         self.ouvrir()
         self.page.evaluate("""async () => {
           await Donnees.modifier('wiki_pages', (lignes) => {
-            lignes.push({ id: 'WP-0030', type: 'mode', titre: 'Filtres à huile', texte: '## Causes\\n- Usure [OT-2026-0002]',
-              version: '1', statut: 'active', liens: '', ot_cites: 'OT-2026-0002' });
+            lignes.push({ id: 'WP-0030', type: 'savoir-faire', titre: 'Filtres à huile', texte: '## Étapes\\n- Usure [OT-2026-0002]',
+              version: '1', statut: 'active', liens: '', ot_cites: 'OT-2026-0002', equipement_id: 'EQ-0002' });
             const lien = lignes.find((l) => l.id === 'WP-0002');
             lien.texte += '\\n- Voir [[Ancien geste]] [OT-2026-0007]';
           });
@@ -796,25 +882,25 @@ class TestControleDuWiki(CasEcrans):
         self.assertTrue(any(p["type"] == "ancrage-disparu" and "EQ-0001 au rebut" in p["message"] for p in problemes), problemes)
 
     def test_sous_pages_ancrage_de_la_mere_et_rien_a_tort(self):
-        """T131 (§20.9) : une sous-page n'a pas d'ancrage propre, elle n'est ni « disparue » ni orpheline ; sa mère
-        archivée ou absente est un ancrage disparu ; une sous-page de 30 phrases n'est pas trop longue."""
+        """T131 (§20.9 ; savoir-faire seulement, §20.12) : une sous-page de savoir-faire n'a pas d'ancrage propre, elle
+        n'est ni « disparue » ni orpheline ; sa mère archivée ou absente est un ancrage disparu ; une sous-page de 30
+        phrases n'est pas trop longue, de 31 elle l'est ; une ancienne sous-page d'équipement est un type retiré (rien
+        d'autre)."""
         self.ouvrir()
         constats = NL.join(["- Constat numéro %d [OT-2026-0007]" % numero for numero in range(1, 31)])
         page = lambda id_, type_, titre, texte, **autres: dict(  # noqa: E731
             {"id": id_, "type": type_, "titre": titre, "texte": texte, "version": "1", "statut": "active", "origine": "manuel"}, **autres)
         self.page.evaluate("""async (pages) => {
-          await Donnees.modifier('wiki_pages', (lignes) => {
-            pages.forEach((p) => lignes.push(p));
-            lignes.find((l) => l.id === 'WP-0007').statut = 'archivée';
-          });
+          await Donnees.modifier('wiki_pages', (lignes) => { pages.forEach((p) => lignes.push(p)); });
         }""", [
-            # Sous-pages normales (aucun renvoi depuis leur mère) : d'équipement (30 phrases), de composant, de mode.
-            page("WP-0020", "équipement", "PO-01 — garniture", "## Ce qui revient" + NL + constats, rattache_a="WP-0001"),
-            page("WP-0021", "composant", "Kit garniture HC 50 — faces", "## Défaillances" + NL + "- Faces rayées [OT-2026-0007]",
-                 rattache_a="WP-0003"),
-            page("WP-0022", "mode", "Cavitation — bruit", "## Symptômes" + NL + "- Gravier à mi-débit [OT-2026-0007]", rattache_a="WP-0006"),
-            # Mère archivée (mode, savoir-faire), mère absente ; savoir-faire rattaché à une page absente.
-            page("WP-0023", "mode", "Desserrage — raccords", "## Causes" + NL + "- Vibrations [OT-2026-0007]", rattache_a="WP-0007"),
+            # Sous-pages normales (aucun renvoi depuis leur mère) : d'un savoir-faire de PO-01 (30 phrases), de celui du kit.
+            page("WP-0020", "savoir-faire", SAVOIR_FAIRE + " — étapes", "## Étapes" + NL + constats, rattache_a="WP-0002"),
+            page("WP-0021", "savoir-faire", "Monter le kit garniture — faces", "## Pièges" + NL + "- Faces rayées [OT-2026-0007]",
+                 rattache_a="WP-0004"),
+            # Ancienne sous-page d'équipement : type retiré.
+            page("WP-0022", "équipement", "PO-01 — garniture", "## Ce qui revient" + NL + "- Garniture sèche [OT-2026-0007]",
+                 rattache_a="WP-0001"),
+            # Mère absente (une ancienne page d'équipement), mère archivée ; savoir-faire rattaché à une page absente.
             page("WP-0024", "équipement", "XX-01 — mère perdue", "## Astuces" + NL + "- Caler [OT-2026-0007]", rattache_a="WP-0098"),
             page("WP-0025", "savoir-faire", "Ancien geste — détail", "## Étapes" + NL + "- Purger [OT-2026-0007]", rattache_a="WP-0009"),
             page("WP-0026", "savoir-faire", "Régler la tension", "## Étapes" + NL + "- Tendre [OT-2026-0007]", rattache_a="WP-0099"),
@@ -823,23 +909,23 @@ class TestControleDuWiki(CasEcrans):
         par_page = {}
         for p in problemes:
             par_page.setdefault(p["page"], []).append((p["type"], p["message"]))
-        for identifiant in ("WP-0020", "WP-0021", "WP-0022", "WP-0001", "EQ-0001", "ART-0001", "WP-0006"):
+        for identifiant in ("WP-0020", "WP-0021", "WP-0002", "WP-0004", "WP-0001", "EQ-0001", "ART-0001"):
             with self.subTest(page=identifiant):
                 self.assertEqual(par_page.get(identifiant), None)
-        self.assertEqual(par_page.get("WP-0023"), [("ancrage-disparu", "page mère « Desserrage » (WP-0007) archivée")])
+        self.assertEqual(par_page.get("WP-0022"), [("type-retire", "type de page retiré (sous-page d'équipement) : archivez-la")])
         self.assertEqual(par_page.get("WP-0024"), [("ancrage-disparu", "page mère WP-0098 absente")])
         self.assertEqual(par_page.get("WP-0025"), [("ancrage-disparu", "page mère « Ancien geste » (WP-0009) archivée")])
         self.assertEqual(par_page.get("WP-0026"), [("ancrage-disparu", "page de rattachement WP-0099 absente")])
-        # La sous-page de 31 phrases, elle, est trop longue (mêmes limites qu'une page).
+        # La sous-page de 31 phrases, elle, est trop longue (mêmes limites qu'un savoir-faire).
         self.page.evaluate("""(texte) => Donnees.modifier('wiki_pages', (lignes) => {
-          lignes.find((l) => l.id === 'WP-0020').texte = texte; })""", "## Ce qui revient" + NL + constats + NL + "- Constat 31 [OT-2026-0007]")
+          lignes.find((l) => l.id === 'WP-0020').texte = texte; })""", "## Étapes" + NL + constats + NL + "- Constat 31 [OT-2026-0007]")
         self.assertEqual([(p["type"], p["message"][:10]) for p in self.page.evaluate("Wiki.controleDuWiki()") if p["page"] == "WP-0020"],
                          [("trop-longue", "31 phrases")])
         # La vue : les sous-pages dont la mère a disparu, chacune avec son lien et « Modifier ».
         self.journal("?vue=controle")
         bloc = '.wj-controle-type[data-type="ancrage-disparu"]'
         pages = self.page.evaluate("(s) => Array.from(document.querySelectorAll(s + ' li')).map((li) => li.dataset.page)", bloc)
-        self.assertEqual([p for p in pages if p.startswith("WP-002")], ["WP-0023", "WP-0024", "WP-0025", "WP-0026"])
+        self.assertEqual([p for p in pages if p.startswith("WP-002")], ["WP-0024", "WP-0025", "WP-0026"])
         self.assertIn("sa mère, pour une sous-page", self.texte(bloc + " .aide"))
         self.assertEqual(self.page.get_attribute(bloc + ' li[data-page="WP-0024"] .wj-lien-page', "href"), "#/wiki/WP-0024")
 
@@ -927,14 +1013,15 @@ class TestAffichage(CasEcrans):
         page.click(".wj-arreter")
         self.annonce()
         verifier("file, bilan")
-        self.aller("#/wiki-ecrire/WP-0006", ".wj-ecrire")
-        page.fill("#wj-texte", TEXTE_MAIN.replace("## Ce qui revient", "## Symptômes").replace("## Ce qui a réglé le problème", "## Causes")
-                  + NL + "- Porter des gants [OT-2026-0001]")
+        self.aller("#/wiki-ecrire/WP-0002", ".wj-ecrire")
+        page.fill("#wj-texte", "## Étapes" + NL + "- Repérer l'accouplement [OT-2026-0007]" + NL + "- Porter des gants [OT-2026-0001]")
         page.click(".wj-enregistrer")
         page.wait_for_selector(".wj-annonce .wj-raisons li")
         page.click(".wj-archiver-demande")
         verifier("écriture à la main")
-        self.aller("#/wiki-ecrire/nouvelle?type=savoir-faire&rattache=EQ-0001", ".wj-ecrire #wj-type")
+        self.aller("#/wiki-ecrire/WP-0005", ".wj-ecrire .wj-type-retire")
+        verifier("ancienne page de mode")
+        self.aller("#/wiki-ecrire/nouvelle?rattache=EQ-0001", ".wj-ecrire #wj-rattache")
         verifier("nouvelle page")
 
     def verifier_largeur(self, ou):

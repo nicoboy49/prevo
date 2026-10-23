@@ -985,7 +985,11 @@ const Donnees = (() => {
     const pages = entreeDe('wiki_pages');
     const journal = entreeDe('wiki_journal').lignes;
     if (!pages.lignes.length && !journal.length) { return; }
-    const cibles = { 'EQ-': entreeDe('equipements').index, 'ART-': entreeDe('articles').index, 'WP-': pages.index };
+    // Une panne (PANNE-<code symptôme encodé>, page calculée du wiki, §20.12) : son code doit exister ; qu'elle ait un cas,
+    // c'est le contrôle du wiki qui le dit (Wiki.controleDuWiki, même définition que sa page).
+    const symptomes = new Map(entreeDe('codes_defaillance').lignes.filter((c) => enTexte(c.famille).trim() === 'symptôme')
+      .map((c) => ['PANNE-' + encodeURIComponent(enTexte(c.code).trim()), c]));
+    const cibles = { 'EQ-': entreeDe('equipements').index, 'ART-': entreeDe('articles').index, 'WP-': pages.index, 'PANNE-': symptomes };
     const ordres = entreeDe('ordres_travail').index;
     const typesRetires = (descriptionTable('wiki_pages').champs.find((champ) => champ.nom === 'type') || {}).retirees || [];
     const parCle = new Map();

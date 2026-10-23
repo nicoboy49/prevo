@@ -163,6 +163,7 @@ import random
 import re
 import sys
 import time
+import urllib.parse
 from contextlib import contextmanager, nullcontext
 from datetime import date, datetime, timedelta
 from itertools import groupby
@@ -4654,8 +4655,11 @@ def charger_wiki_fige(ctx, dossier):
         ctx.base[table] = [{champ['nom']: lire_valeur(champ, valeur) for champ, valeur in zip(CHAMPS[table], ligne)}
                            for ligne in lignes[1:]]
     ordres = {ot['id'] for ot in ctx.base['ordres_travail']}
+    # Une panne (refonte 2, §20.12) se lie par « PANNE- » + son code symptôme encodé comme encodeURIComponent.
+    pannes = {'PANNE-' + urllib.parse.quote(c['code'], safe="-_.!~*'()") for c in ctx.base['codes_defaillance']
+              if c['famille'] == 'symptôme'}
     cibles = {'EQ-': {e['id'] for e in ctx.base['equipements']}, 'ART-': {a['id'] for a in ctx.base['articles']},
-              'WP-': {p['id'] for p in ctx.base['wiki_pages'] if p['statut'] != 'archivée'}}
+              'WP-': {p['id'] for p in ctx.base['wiki_pages'] if p['statut'] != 'archivée'}, 'PANNE-': pannes}
     erreurs = []
     for page in ctx.base['wiki_pages']:
         erreurs += ['%s : OT cité inexistant %s' % (page['id'], ot) for ot in page['ot_cites'].split(';') if ot and ot not in ordres]

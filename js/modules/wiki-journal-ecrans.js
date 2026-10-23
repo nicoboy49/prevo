@@ -7,7 +7,7 @@
 // Précisions au contrat (§20.9) :
 //  - adresses : #/wiki-journal (journal : à valider, puis refusées, puis toutes les entrées), ?vue=a-valider |
 //    contradictions | file | echecs | hors | controle, ?entree=<WJ-…> (une entrée, avec ses changements) ;
-//  - Wiki.rattraper() est appelé à chaque affichage du journal (§20.7) ;
+//  - Wiki.rattraper({ relire: true }) est appelé à chaque affichage du journal (§20.7 ; une page du wiki, elle, ne relit rien) ;
 //  - une proposition : OT (lien), date d'intervention, « Intervention antérieure », modèle, rang, « Acceptée à la
 //    relance, après le refus : » et les raisons du premier refus (D106 : entrée d'ingestion acceptée — à valider, rien à
 //    ajouter, validée, rejetée, à refaire — qui garde des raisons ; une refusée garde « Raisons du refus ») ; contradictions
@@ -37,15 +37,19 @@ Object.assign(Wiki, (() => {
   const COMPTEURS = [['enCours', 'En cours'], ['restants', 'Restants'], ['acceptees', 'Acceptées'],
     ['rien', 'Rien à ajouter'], ['refusees', 'Refusées'], ['rejouees', 'Rejouées']];
   const S = Wiki.SEUILS;
+  // Limites des textes rédigés en clair (Wiki.LIMITES, §20.12) : « « En bref » 5 phrases et 120 mots, …, un savoir-faire … ».
+  const LIMITES = Object.entries(Wiki.LIMITES).flatMap(([type, l]) => (l.page ? [['un ' + type, l.page]]
+    : Object.entries(l.rubriques).map(([rubrique, x]) => ['« ' + rubrique + ' »', x])))
+    .map(([nom, x]) => nom + ' ' + x.phrases + ' phrases' + (x.mots === null ? '' : ' et ' + x.mots + ' mots')).join(', ');
   const TYPES_CONTROLE = [
     { type: 'lien-casse', libelle: 'Liens cassés',
-      aide: 'Un lien [[titre]] vers une page inconnue, ou un lien vers une page inexistante ou archivée.' },
-    { type: 'orpheline', libelle: 'Pages orphelines',
-      aide: 'Mode sans code cause, composant sans article ou savoir-faire sans rattachement, vers lesquels aucune page ne renvoie.' },
+      aide: 'Un lien [[titre]] vers une page inconnue (ni page, ni machine, ni article, ni panne), ou vers une page inexistante ou archivée.' },
+    { type: 'orpheline', libelle: 'Pages orphelines', aide: 'Savoir-faire sans machine, article ni rattachement, vers lequel aucune page ne renvoie.' },
     { type: 'sans-ot', libelle: 'Pages sans OT cité', aide: 'Chaque phrase du wiki cite au moins un OT.' },
     { type: 'titre-proche', libelle: 'Titres trop proches', aide: 'Même titre une fois les mots vides et les pluriels retirés.' },
-    { type: 'trop-longue', libelle: 'Pages trop longues',
-      aide: 'Plus de ' + S.phrasesMax + ' phrases ou de ' + S.motsMax + ' mots : à découper en sous-pages.' },
+    { type: 'trop-longue', libelle: 'Textes trop longs', aide: 'Au plus ' + LIMITES + ' (au-delà, en sous-pages).' },
+    { type: 'anciennes-rubriques', libelle: 'Anciennes rubriques', aide: 'Texte écrit avant la refonte du wiki : à réécrire dans ses rubriques.' },
+    { type: 'type-retire', libelle: 'Types de page retirés', aide: 'Page de mode, sous-page de machine ou d\'article : à archiver.' },
     { type: 'contradiction-ancienne', libelle: 'Contradictions anciennes',
       aide: 'Ouvertes depuis plus de ' + S.contradictionAncienneJours + ' jours : à trancher sur leur page.' },
     { type: 'ancrage-disparu', libelle: 'Ancrages disparus',
@@ -651,7 +655,7 @@ Object.assign(Wiki, (() => {
   async function afficherJournal(conteneur, parametres) {
     App.definirTitre('Journal du wiki');
     try {
-      await Wiki.rattraper();
+      await Wiki.rattraper({ relire: true });     // à l'ouverture du journal seulement : pages relues (§20.7)
     } catch (erreur) {
       console.warn('Prévo (wiki) : rattrapage du journal impossible (' + (erreur && erreur.message) + ').', erreur);
     }
