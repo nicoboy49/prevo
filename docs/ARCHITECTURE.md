@@ -2731,7 +2731,9 @@ Version de clôture `v1.2.0`.
   permis (cet OT et ceux des pages envoyées).
 - **Lecture** : `Ia.lireReponse('ingestionWiki', contenu, donnees)` → `verifier` = `Wiki.lireIngestion` :
   mise en forme (§20.4) puis contrôles (§20.6) → `{ changements, contradictions, rien }`, ou
-  `IaReponseInvalide` avec les raisons.
+  `IaReponseInvalide` avec les raisons. Une page renvoyée avec le texte qu'elle avait à l'envoi (une fois mis en
+  forme) compte comme **non renvoyée** : ni contrôlée ni proposée ; s'il ne reste ni page ni contradiction, la
+  réponse vaut « rien à ajouter » (`rien` vrai : aucune proposition vide à valider ; suites de la relecture de T140).
 - **Envoi** : `Ia.envoyerRequete(requete, signal)` → `{ contenu, modele }` (nouvelle ; la partie réseau de
   `Ia.demander`, qui l'appelle : même comportement, même autorisation D67, même délai).
 - **Ordonnanceur** `Wiki.prochainsEnvois(file, enCours)` (D112) : parcourt la file dans l'ordre ; un OT part
@@ -2761,7 +2763,8 @@ page. Refus si :
 - **nombres** : un nombre (chiffres, virgule ou point) d'une phrase nouvelle ou reprise, ou du titre d'une page
   créée, absent du texte de référence — le texte de l'OT ingéré (tous les champs envoyés, sauf sa date) et le texte
   précédent de la page (rien pour une page créée ; le texte et le titre de sa mère pour une sous-page créée) ; les
-  citations, les numéros d'OT et les crochets de lien ne comptent pas ; la raison dit ce texte de référence :
+  citations, les numéros d'OT et le titre d'un lien `[[…]]` ne comptent pas (ni dans la phrase ni dans le texte de
+  référence) ; la raison dit ce texte de référence :
   « absent de l'OT intégré et du texte d'avant de cette page » (page modifiée), « absent de l'OT intégré, seule
   source des nombres d'une page créée » (page créée, et « du titre absent … » pour son titre), « absent de l'OT
   intégré, du texte et du titre de sa page mère » (sous-page créée) ; à la main : « absent des OT cités » (T140) ;
@@ -2778,6 +2781,8 @@ page. Refus si :
 - titres : titre créé dont la forme de recherche (mots vides retirés, pluriel simple, §20.8) égale celle
   d'une page existante (« titre trop proche ») ;
 - contradictions : `phrase` qui n'est pas une phrase existante de la page ; `ot` autre que l'OT ingéré.
+
+Une page que l'IA renvoie inchangée n'est pas contrôlée : `Wiki.lireIngestion` la retire avant (§20.5, lecture).
 
 Écriture à la main (`contexte.manuel`) : mêmes contrôles, sauf le non-retrait ; les OT permis sont tous les
 OT clôturés ; pour les nombres, le texte de référence est celui des OT cités, plus le texte précédent de la page
@@ -2941,20 +2946,24 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
   savoir-faire rattachés à cette machine ou à ces articles et leurs sous-pages ; plus de clé `CAUSE:`, plus de pages
   liées depuis la machine ; 8 envoyées au plus.
 - **Consigne `ingestionWiki`** : l'IA met à jour seulement « En bref » (ce qu'il faut savoir d'abord de cette
-  machine : ce qui revient, ce qui a réglé le problème), « Astuces » (une astuce courte d'un OT, en une phrase),
+  machine : ses pannes et ce qui les a réglées), « Astuces » (une astuce courte d'un OT, en une phrase qui dit l'ordre
+  des vérifications ou le geste, sans adverbe de fréquence : ni « toujours », ni « plus vite »),
   « À quoi il sert » de chaque article consommé — seulement ce que les OT observent de lui (son rôle sur la machine
   si l'OT le dit, ses signes d'usure ou de casse, ce qui l'use, comment il se monte ou se change), jamais où ni quand
   il a été changé, ni la panne qu'il a réglée, ni un rôle supposé ; sinon la page n'est pas renvoyée (une page
-  concernée non renvoyée reste inchangée) —, et crée ou modifie des savoir-faire (d'abord à partir de l'astuce,
-  D110 ; créé seulement si l'OT décrit au moins deux gestes réutilisables ; titre = le geste et le repère de la
+  concernée non renvoyée reste inchangée ; renvoyée inchangée, elle compte comme non renvoyée, §20.5) —, et crée ou
+  modifie des savoir-faire (d'abord à partir de l'astuce, D110 ; créé seulement avec au moins deux gestes que
+  l'astuce ou le compte rendu décrivent, le travail demandé seul ne suffit pas ; titre = le geste et le repère de la
   machine, ou l'article) ; une astuce à un seul endroit (« Astuces » ou un savoir-faire, jamais aux deux ni dans
   « À quoi il sert ») ; une synthèse, pas un historique ; les longueurs de l'en-tête de chaque texte — rubrique
   pleine : ajouter l'OT à la phrase qu'il confirme, regrouper deux phrases en gardant tous leurs OT, ou n'y rien
   écrire ; relevés d'un contrôle de routine non écrits sauf si l'OT les dit anormaux ou s'ils expliquent la panne ;
   aucun comptage, même dans une étape, aucune fréquence (« fréquent », « souvent », « régulièrement », « à chaque
   fois »), jamais « cause certaine » ; nombres : la règle du contrôle (§20.6) — l'OT à intégrer ou le texte actuel
-  de la page écrite (page créée, titre compris : l'OT seul ; sous-page : aussi le texte et le titre de sa mère),
-  jamais un nombre d'une autre page reçue ; étape d'arrêt : « Mettre la machine à l'arrêt selon la fiche en tête de
+  de la page écrite (page créée, titre compris : l'OT seul ; sous-page créée : aussi le texte et le titre de sa
+  mère), jamais un nombre d'une autre page reçue, le titre d'un lien `[[…]]` ne comptant pas ; « rien à ajouter »
+  pour un préventif sans remarque (gamme faite, relevés sans anomalie, usure normale, petit nettoyage
+  complémentaire) ; étape d'arrêt : « Mettre la machine à l'arrêt selon la fiche en tête de
   sa page » ; toutes les autres règles inchangées (T140). **Seuls les OT clôturés administrativement** entrent dans
   la file (inchangé, §20.5) : l'IA ne rédige qu'à partir d'eux.
 - **Pages et identifiants** (`Wiki.entite(id, { profil, maintenant })`, D113 ; l'écran d'une page ne lit que `Wiki.entite` —

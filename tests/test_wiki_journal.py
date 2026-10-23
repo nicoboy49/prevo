@@ -613,7 +613,7 @@ class TestEcritureALaMain(CasJournal):
           lignes.find((l) => l.id === 'WP-0001').liens = 'PANNE-S01;PANNE-S99'; })""")
         self.assertEqual(self.page.evaluate("""() => Donnees.problemes().filter((p) => p.table === 'wiki_pages' && p.champ === 'liens')
           .map((p) => p.valeur)"""), ["PANNE-S99"])
-        # Par l'IA (faux-textes : « … : fréquent ici ([[Fuite]]) ») : la validation garde aussi le lien.
+        # Par l'IA (faux-textes : « <titre de l'OT> ([[Fuite]]) ») : la validation garde aussi le lien.
         self.traiter(["OT-2026-0008"], "faux-textes")
         self.ok("valider", [self.id_de("OT-2026-0008")])
         self.assertIn("[[Fuite]]", self.ligne("WP-0001")["texte"])

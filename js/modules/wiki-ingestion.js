@@ -431,8 +431,9 @@ Object.assign(Wiki, (() => {
 
   /**
    * Réponse de l'IA (objet JSON) → { rien, changements: [{ cle, titre, type, creation, rattacheA, avant, apres }],
-   * contradictions: [{ page, pageCle, phrase, observation, ot }] } après les contrôles du §20.6 ; sinon
-   * Ia.IaReponseInvalide (raisons dans erreur.raisons). Sert de `verifier` à la consigne ingestionWiki.
+   * contradictions: [{ page, pageCle, phrase, observation, ot }] } après les contrôles du §20.6 (une page renvoyée
+   * inchangée n'en est pas un ; `rien` vrai aussi sans changement ni contradiction) ; sinon Ia.IaReponseInvalide
+   * (raisons dans erreur.raisons). Sert de `verifier` à la consigne ingestionWiki.
    */
   function lireIngestion(objet, donnees) {
     if (!objet || typeof objet !== 'object' || !Array.isArray(objet.pages) || !Array.isArray(objet.contradictions)
@@ -452,7 +453,13 @@ Object.assign(Wiki, (() => {
     });
     const contradictions = objet.contradictions.map((c) => ({ page: texte(c && c.page), phrase: texte(c && c.phrase),
       observation: texte(c && c.observation), ot: liste(c && c.ot).map(texte).filter(Boolean) }));
-    const controle = Wiki.controlerProposition({ rien: objet.rien_a_ajouter, pages, contradictions }, {
+    // Une page renvoyée avec le texte qu'elle avait à l'envoi (mis en forme de même) ne change rien : elle compte comme
+    // non renvoyée, ni contrôlée ni proposée (relecture de T140 : sinon, un changement vide à valider). S'il ne reste ni
+    // page ni contradiction, la réponse vaut « rien à ajouter ».
+    const changees = pages.filter((page) => !(page.action === 'modifier' && envoyeeDe.has(Wiki.comparable(page.titre))
+      && page.texte === Wiki.ecrireTexte(Wiki.lireTexte(page.avant).rubriques, page.type)));
+    const rien = objet.rien_a_ajouter || (!changees.length && !contradictions.length);
+    const controle = Wiki.controlerProposition({ rien: objet.rien_a_ajouter, pages: changees, contradictions }, {
       otIngere: { id: donnees.ot.id, dateIntervention: donnees.ot.dateIntervention, sourceTexte: sourceDe(donnees.ot) },
       anterieure: Boolean(donnees.anterieure), pagesEnvoyees: liste(donnees.pages), catalogue: liste(donnees.catalogue),
     });
@@ -462,8 +469,8 @@ Object.assign(Wiki, (() => {
       throw erreur;
     }
     return {
-      rien: objet.rien_a_ajouter,
-      changements: pages.map((page) => ({ cle: page.cle, titre: page.titre, type: page.type, creation: page.action === 'creer',
+      rien,
+      changements: changees.map((page) => ({ cle: page.cle, titre: page.titre, type: page.type, creation: page.action === 'creer',
         rattacheA: page.rattacheA, avant: page.avant, apres: page.texte })),
       contradictions: contradictions.map((c) => Object.assign({ pageCle: envoyeeDe.get(Wiki.comparable(c.page)).cle }, c)),
     };

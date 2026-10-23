@@ -15,7 +15,7 @@
 //    pagesEnvoyees (la page écrite), catalogue, otPermis: [identifiants], sources: { otId: texte } } ;
 //  - les nombres d'une phrase identique à une phrase d'avant ne sont pas recontrôlés ; ceux d'une phrase nouvelle
 //    ou reprise et du titre d'une page créée doivent figurer dans le texte de référence (l'OT ingéré et le texte
-//    d'avant de la page — rien pour une page créée, le texte et le titre de sa mère pour une sous-page ; à la main :
+//    d'avant de la page — rien pour une page créée, le texte et le titre de sa mère pour une sous-page créée ; à la main :
 //    les OT cités) ; « 0,4 » et « 0.4 » sont le même nombre ; le refus dit ce texte de référence (« absent de l'OT
 //    intégré et du texte d'avant de cette page », « … de l'OT intégré, seule source des nombres d'une page créée »,
 //    « … de l'OT intégré, du texte et du titre de sa page mère » ; à la main : « absent des OT cités ») ;

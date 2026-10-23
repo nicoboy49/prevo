@@ -10,13 +10,13 @@ texte qu'il modifie et qui est reçu dans d'anciennes rubriques (base de dévelo
 chaque ancienne rubrique devient une phrase « <rubrique> : <ses phrases> » de la première rubrique du type, qui cite tous
 ses OT (chacune y est reprise ; ses liens vers des titres connus restent des liens).
 
-    faux               « En bref » de la machine reçoit la phrase « <titre de l'OT> : fréquent ici » qui cite l'OT (ou,
-                       si une phrase de même texte existe déjà, l'OT s'ajoute à ses citations) ; toutes ses phrases et tous
-                       ses OT sont gardés ; si l'OT a une astuce, un savoir-faire « Astuce de l'<OT> » est créé, rattaché à
-                       la machine, l'astuce dans ses « Étapes » ;
+    faux               « En bref » de la machine reçoit la phrase « <titre de l'OT, sans le repère> » (la panne, sans
+                       fréquence ni comptage : T140) qui cite l'OT (ou, si une phrase de même texte existe déjà, l'OT
+                       s'ajoute à ses citations) ; toutes ses phrases et tous ses OT sont gardés ; si l'OT a une astuce,
+                       un savoir-faire « Astuce de l'<OT> » est créé, rattaché à la machine, l'astuce dans ses « Étapes » ;
     faux-textes        comme « faux », avec tous les textes de la refonte 2, chaque astuce à un seul endroit : la phrase
-                       d'« En bref » lie la panne de l'OT (« … : fréquent ici ([[<libellé du symptôme>]]) », si elle est
-                       au catalogue) ; une astuce courte (sans « puis ») va dans les « Astuces » de la machine, sans
+                       d'« En bref » lie la panne de l'OT (« <titre> ([[<libellé du symptôme>]]) », si elle est au
+                       catalogue) ; une astuce courte (sans « puis ») va dans les « Astuces » de la machine, sans
                        savoir-faire ; une méthode (« … puis … ») complète le savoir-faire reçu qui la porte déjà (l'OT
                        s'ajoute à ses citations), sinon crée « Astuce de l'<OT> », et les « Astuces » n'en reçoivent que
                        le lien (« Méthode : voir [[<savoir-faire>]] ») ; « À quoi il sert » de chaque article reçu ne dit
@@ -274,7 +274,7 @@ def reponse_ingestion(message, modele="faux"):
                 rubrique["phrases"].remove(premiere)
     if cible is equipement:
         reprendre_anciennes(equipement)
-    texte = (lu["titre"].split(" — ", 1)[-1] or "Intervention") + " : fréquent ici"
+    texte = lu["titre"].split(" — ", 1)[-1] or "Intervention"      # la panne de l'OT, jamais sa fréquence (T140)
     panne = lu["codes"].split(" / ", 1)[0]
     panne = panne if panne and lu["types"].get(panne) == "panne" else ""      # libellé du symptôme, s'il est une panne
     textes = modele == "faux-textes"
