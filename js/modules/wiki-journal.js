@@ -467,7 +467,9 @@ Object.assign(Wiki, (() => {
   function controlerEcriture(page, valeur) {
     const avant = page.ligne ? page.ligne.texte || '' : '';
     const rattachement = page.rattache ? pageEnvoyee(page.rattache) : null;
-    const envoyees = page.nouvelle ? [rattachement].filter(Boolean) : [{ titre: page.titre, type: page.type, texte: avant }];
+    // Une sous-page modifiée porte sa mère : ses refus de longueur ne conseillent pas de la découper (un seul niveau).
+    const envoyees = page.nouvelle ? [rattachement].filter(Boolean) : [{ titre: page.titre, type: page.type, texte: avant,
+      mere: page.ligne ? (pageEnvoyee(page.ligne.id) || {}).mere || '' : '' }];
     const cites = Wiki.citationsDe(valeur);
     const permis = Donnees.lignes('ordres_travail').filter((ot) => texte(ot.statut) === 'Clôturé administrativement')
       .map((ot) => ot.id).concat(Wiki.citationsDe(avant));

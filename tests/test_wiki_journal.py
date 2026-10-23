@@ -501,6 +501,11 @@ class TestDecoupage(CasJournal):
                          ["WP-0001", sous_page["id"], lignes["Astuce de l'OT-2026-0001"]["id"]])
         self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
         self.assertEqual(self.page.evaluate(PROBLEMES_WIKI_JS, ["WP-0001", sous_page["id"]]), [])
+        # Modifiée à la main au-delà des limites : refusée, sans le conseil de la découper (une sous-page ne se découpe pas).
+        trop = "## Ce qui revient\n" + "\n".join("- Constat %s [OT-2026-0001]" % ("x" * n) for n in range(1, 32))
+        message = self.refus("31 phrases, 30 au plus", "ecrire", {"pageId": sous_page["id"]}, trop)
+        self.assertNotIn("se découpe", message)
+        self.assertIn("se découpe", self.refus("31 phrases, 30 au plus", "ecrire", {"pageId": "EQ-0001"}, trop))
         # La proposition suivante sur PO-01 envoie la sous-page juste après sa mère ; validée à son tour, intègre.
         self.assertEqual(self.page.evaluate("(ot) => Wiki.pagesConcernees(ot).cles", "OT-2026-0008")[:2],
                          ["EQ:EQ-0001", "WP:" + sous_page["id"]])

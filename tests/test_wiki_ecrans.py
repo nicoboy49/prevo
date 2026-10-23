@@ -1249,8 +1249,10 @@ class TestPageEquipement(CasWiki):
                     page.wait_for_selector(".ot-onglets")
                     self.aller_page("EQ-0001")
                     page.click("#wiki-voir-autres")
-                    page.wait_for_function("location.hash === '#/ot?equipement=EQ-0001&etat=clotures'")
-                    page.wait_for_function("() => (document.querySelector('#contenu h1') || {}).textContent === 'Ordres de travail'")
+                    # La liste reprend les filtres de l'adresse puis la réécrit en « #/ot » (ordres-liste.js) : on attend
+                    # la liste et son filtre « Clôturés », jamais l'adresse passagère (course sous charge).
+                    page.wait_for_function("() => (document.querySelector('#contenu h1') || {}).textContent === 'Ordres de travail'"
+                                           " && (document.querySelector('#ot-filtre-etat') || {}).value === 'clotures'")
                 # Même marque et modèle : lien vers la page du jumeau, pour tous
                 self.aller_page("EQ-0023")
                 page.click('#wiki-meme-modele a[href="#/wiki/EQ-0025"]')
@@ -1761,7 +1763,7 @@ class TestSousPages(CasWiki):
 # Affichage : 1440 et 375 px, zones tactiles, contrastes, réseau
 # ---------------------------------------------------------------------------
 
-PAGES_PARCOURUES =("EQ-0005", "ART-0016", "WP-0002", "WP-0003", "WP-0005", "WP-0006", "WP-0007", "WP-0010", "WP-0011")
+PAGES_PARCOURUES = ("EQ-0005", "ART-0016", "WP-0002", "WP-0003", "WP-0005", "WP-0006", "WP-0007", "WP-0010", "WP-0011")
 
 
 class TestAffichage(CasWiki):

@@ -15,7 +15,7 @@
 //  - index : une page par équipement et par article (pages calculées, toujours présentes), plus les pages actives
 //    de wiki_pages (composants libres, modes, savoir-faire, et les sous-pages dans la section de leur type, comptées
 //    comme une page de plus) ; dans chaque section, les pages qui ont un texte
-//    validé d'abord, puis par titre (ordre des caractères) et identifiant ; nombre d'OT cités = citations
+//    validé d'abord, puis par titre (ordre alphabétique français) et identifiant ; nombre d'OT cités = citations
 //    distinctes du texte validé ; PAGES_MONTREES premières, le reste derrière « Tout afficher » ;
 //  - compteurs du responsable (Wiki.compteurs) : « À valider » = entrées « à valider » ; « Contradictions
 //    ouvertes » = contradictions « ouverte » des entrées « validée » ; « En file » = Wiki.file() ; « En échec » =
