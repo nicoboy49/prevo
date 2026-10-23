@@ -32,8 +32,14 @@ Couvert :
     - entités par leur nom (refonte 2, §20.12, T136 : Wiki.chercherEntites, recherche de l'accueil) sur le corpus et deux
       techniciens : chaque requête égale à un CALCUL PYTHON INDÉPENDANT pour les trois profils (préfixe de mot, accents,
       pluriels, mots vides, codes et références ; ni technicien ni intervention pour le demandeur, profil par défaut le
-      plus restreint), réponses écrites à la main, élément de Wiki.listeEntites, entrées refaites quand une table change
-      (écriture ou relecture), aucune requête réseau.
+      plus restreint), réponses écrites à la main, ligne de détail = champs de l'élément de Wiki.listeEntites, entrées
+      refaites quand une table change (écriture ou relecture), aucune requête réseau ;
+    - entités, relecture de T136 (D101) : sur la démo, le corpus et la base d'essai de test_wiki_entites.py, pour les trois
+      profils, résultats INCHANGÉS (égaux à Wiki.listeEntites filtrée par la règle des mots, ordre et détail compris) ; les
+      entrées ne lisent que les tables des noms (une écriture dans ot_temps, habilitations ou mouvements_stock ne les
+      refait pas ; chaque autre table ne refait que les types qui la lisent) ; ligne de détail calculée à sa première
+      lecture seulement ; sur le jeu de charge (500 équipements, 5 000 OT, outils/generer_demo.py), une recherche après
+      une écriture dans ot_temps en moins de 300 ms (D101), première recherche mesurée et affichée.
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_wiki_recherche.py" -v
@@ -45,9 +51,12 @@ import math
 import random
 import re
 import statistics
+import subprocess
 import sys
+import tempfile
 import unicodedata
 import unittest
+from pathlib import Path
 
 from commun import RACINE, CasNavigateur, charger_scripts
 
@@ -872,6 +881,25 @@ def mots_de_la_requete(requete, mots_vides):
     return resultat
 
 
+# Ligne de détail d'une entité trouvée (relecture de T136, copie du contrat en tête de wiki-recherche.js) : les champs de
+# l'élément de Wiki.listeEntites que l'accueil montre ; nom cherché de chaque type et titre montré.
+CHAMPS_DETAIL = {
+    "machine": ["equipementId", "titre", "lien", "lieu", "marqueModele"], "panne": ["id", "code", "titre", "cas", "machines", "lien"],
+    "article": ["articleId", "titre", "lien", "reference", "emplacement"], "technicien": ["technicienId", "nom", "lien", "metier", "actif"],
+    "savoir-faire": ["id", "titre", "rattachement", "mere", "lien"], "intervention": ["id", "titre", "statut", "date", "lien"],
+}
+NOMS_CHERCHES = {
+    "machine": lambda e: [e["titre"]], "panne": lambda e: [e["titre"], e["code"]], "article": lambda e: [e["titre"], e["reference"]],
+    "technicien": lambda e: [e["nom"]], "savoir-faire": lambda e: [e["titre"]], "intervention": lambda e: [e["id"], e["titre"]],
+}
+TYPES_ENTITES = ["machine", "panne", "article", "technicien", "savoir-faire", "intervention"]
+
+
+def detail_attendu(type_, element):
+    """Ligne de détail attendue : les champs du contrat, pris dans l'élément de Wiki.listeEntites."""
+    return {champ: element[champ] for champ in CHAMPS_DETAIL[type_]}
+
+
 def entites_attendues(tables, requete, profil, mots_vides):
     """Groupes attendus, calculés ici sur les tables du corpus : [(type, [lien])] ; interventions : ensemble des liens."""
     mots = mots_de_la_requete(requete, mots_vides)
@@ -974,7 +1002,9 @@ class TestEntites(CasRecherche):
         machine = self.page.evaluate("""() => { const g = Wiki.chercherEntites('PR-03', { profil: 'technicien' }).groupes[0];
           const liste = Wiki.listeEntites('machine', { profil: 'technicien' }).flatMap((l) => l.machines);
           return [g.entites[0], liste.find((m) => m.equipementId === 'EQ-0006')]; }""")
-        self.assertEqual(machine[0]["element"], machine[1])
+        # Ligne de détail : les champs de l'élément de la liste que l'accueil montre, mêmes valeurs (relecture de T136)
+        self.assertEqual(machine[0]["element"], detail_attendu("machine", machine[1]))
+        self.assertEqual(machine[0]["element"]["marqueModele"], "Schuler HP 400")
         self.assertEqual((machine[0]["type"], machine[0]["lien"], machine[0]["titre"]), ("machine", "EQ-0006", "PR-03 — Presse plieuse"))
         article = self.page.evaluate("Wiki.chercherEntites('joint de tige', { profil: 'demandeur' }).groupes[0].entites[0]")
         self.assertEqual((article["type"], article["lien"], article["element"]["reference"]), ("article", "ART-0001", "JT-25"))
@@ -1003,6 +1033,230 @@ class TestEntites(CasRecherche):
                 self.chercher_entites(requete, profil)
         self.assertEqual(self.requetes_reseau[avant:], [])
         self.assertEqual(self.page.evaluate("window.appelsReseau"), [])
+
+
+# ---------------------------------------------------------------------------
+# Entités, relecture de T136 (D101) : résultats inchangés, tables des noms seulement, détail à la lecture, jeu de charge
+# ---------------------------------------------------------------------------
+
+DOSSIER_DEMO = RACINE / "donnees" / "demo"
+PROFILS = ("demandeur", "technicien", "responsable")
+
+# Listes de Wiki.listeEntites d'un profil (machines à plat, sous-ensembles compris) : la référence des résultats d'avant.
+LISTES_JS = """(profil) => {
+  const aPlat = (machines) => machines.flatMap((m) => [m].concat(aPlat(m.sousEnsembles || [])));
+  return Object.fromEntries(TYPES.map((type) => {
+    const liste = Wiki.listeEntites(type, { profil });
+    return [type, liste && (type === 'machine' ? aPlat(liste.flatMap((g) => g.machines)) : liste)];
+  }));
+}""".replace("TYPES", json.dumps(TYPES_ENTITES))
+CHERCHER_TOUT_JS = """([requetes, profil]) => requetes.map((requete) => Wiki.chercherEntites(requete, { profil }).groupes.map((g) => ({
+  type: g.type, liens: g.entites.map((e) => e.lien), titres: g.entites.map((e) => e.titre), elements: g.entites.map((e) => e.element) })))"""
+# Modifie un champ de la première ligne d'une table ; rend vrai si la table a bien été réécrite.
+MODIFIER_PREMIERE_JS = """async ([table, champ, valeur]) => {
+  const avant = Donnees.lignes(table);
+  await Donnees.modifier(table, (lignes) => { lignes[0] = Object.assign({}, lignes[0], { [champ]: valeur }); return true; },
+    { action: 'test de la recherche des entités' });
+  return Donnees.lignes(table) !== avant;
+}"""
+
+
+def groupes_par_les_listes(listes, requete, mots_vides):
+    """Groupes que rendait la recherche d'avant (listes de Wiki.listeEntites filtrées par la règle des mots, ici en Python)."""
+    mots = mots_de_la_requete(requete, mots_vides)
+    if not mots:
+        return []
+    groupes = []
+    for type_ in TYPES_ENTITES:
+        elements = listes[type_]
+        if elements is None:                                     # type que le profil ne voit pas
+            continue
+        if type_ == "machine":
+            elements = sorted(elements, key=lambda e: (e["titre"], e["equipementId"]))
+        trouves = [e for e in elements
+                   if all(any(m.startswith(mot) for m in mots_d_un_nom(" ".join(NOMS_CHERCHES[type_](e)))) for mot in mots)]
+        if trouves:
+            groupes.append({"type": type_, "liens": [e["lien"] for e in trouves],
+                            "titres": [e["nom"] if type_ == "technicien" else e["titre"] for e in trouves],
+                            "elements": [detail_attendu(type_, e) for e in trouves]})
+    return groupes
+
+
+def requetes_des_noms(listes, nombre=220, graine=136):
+    """Requêtes tirées des noms : chaque mot, son début (3 lettres), les deux premiers mots d'un nom ; plus quelques cas fixes."""
+    requetes = set()
+    for type_ in TYPES_ENTITES:
+        for element in listes[type_] or []:
+            mots = mots_d_un_nom(" ".join(NOMS_CHERCHES[type_](element)))
+            requetes.update(mots)
+            requetes.update(mot[:3] for mot in mots)
+            if len(mots) > 1:
+                requetes.add(" ".join(mots[:2]))
+    choisies = random.Random(graine).sample(sorted(requetes), min(nombre, len(requetes)))
+    return choisies + ["pompe", "2025", "2026", "ot", "de la", "zzz", "PR-01", "Fuites"]
+
+
+class TestEntitesInchangees(CasRecherche):
+    """Résultats de Wiki.chercherEntites égaux à ceux d'avant (listes de Wiki.listeEntites), ordre et détail compris."""
+
+    SCRIPTS = SCRIPTS + ["js/modules/equipe-regles.js"]
+
+    def verifier(self, types_couverts):
+        mots_vides = set(self.page.evaluate("Wiki.MOTS_VIDES"))
+        listes = {profil: self.page.evaluate(LISTES_JS, profil) for profil in PROFILS}
+        requetes = requetes_des_noms(listes["responsable"])
+        couverts, trouves = set(), 0
+        for profil in PROFILS:
+            obtenus = self.page.evaluate(CHERCHER_TOUT_JS, [requetes, profil])
+            for requete, groupes in zip(requetes, obtenus):
+                with self.subTest(profil=profil, requete=requete):
+                    self.assertEqual(groupes, groupes_par_les_listes(listes[profil], requete, mots_vides))
+                couverts.update(g["type"] for g in groupes)
+                trouves += sum(len(g["liens"]) for g in groupes)
+                if profil == "demandeur":
+                    self.assertFalse({"technicien", "intervention"} & {g["type"] for g in groupes}, requete)
+        self.assertEqual(couverts, set(types_couverts))
+        self.assertGreater(trouves, 300)
+
+    def test_demo(self):
+        self.page.evaluate(CHARGER_JS, {f.stem: f.read_bytes().decode("utf-8-sig") for f in DOSSIER_DEMO.glob("*.csv")})
+        self.verifier([t for t in TYPES_ENTITES if t != "savoir-faire"])          # le wiki de la démo est vide au socle
+
+    def test_corpus(self):
+        self.charger(dict(CORPUS["tables"], techniciens=TECHNICIENS_CORPUS))
+        self.verifier(TYPES_ENTITES)
+
+    def test_base_d_essai_des_entites(self):
+        """Base d'essai de test_wiki_entites.py : sous-ensembles, cycle, parent inconnu, savoir-faire rattachés, sous-page, archivé."""
+        from test_wiki_entites import BASE
+        self.page.evaluate(CHARGER_JS, BASE)
+        self.verifier(TYPES_ENTITES)
+
+
+class TestEntitesTablesLues(CasRecherche):
+    """Les entrées ne lisent que les tables des noms ; la ligne de détail n'est calculée qu'à sa lecture."""
+
+    SCRIPTS = SCRIPTS + ["js/modules/equipe-regles.js"]
+
+    def setUp(self):
+        super().setUp()
+        from test_wiki_entites import BASE
+        self.page.evaluate(CHARGER_JS, BASE)
+
+    def etat(self):
+        return self.page.evaluate("Wiki.etatEntites()")
+
+    def modifier(self, table, champ, valeur):
+        self.assertTrue(self.page.evaluate(MODIFIER_PREMIERE_JS, [table, champ, valeur]), table)
+
+    def test_seules_les_tables_des_noms_refont_les_entrees(self):
+        self.page.evaluate("Wiki.chercherEntites('pompe', { profil: 'responsable' })")
+        self.assertEqual(self.etat()["types"], TYPES_ENTITES)
+        # Stock, heures pointées, habilitations, lieux, achats : aucune entrée refaite (D101, relecture de T136)
+        for table, champ, valeur in [("ot_temps", "heures", "9.75"), ("habilitations", "date_echeance", "2031-01-01"),
+                                     ("mouvements_stock", "quantite", "7"), ("localisations", "libelle", "Usine du bas"),
+                                     ("achats", "quantite", "9")]:
+            with self.subTest(table=table):
+                avant = self.etat()["constructions"]
+                self.modifier(table, champ, valeur)
+                self.assertEqual(self.etat()["types"], TYPES_ENTITES)
+                self.page.evaluate("Wiki.chercherEntites('pompe', { profil: 'responsable' })")
+                self.assertEqual(self.etat()["constructions"], avant)
+        # Chaque table des noms ne refait que les types qui la lisent
+        for table, champ, valeur, refaits in [
+                ("equipements", "designation", "Pompe B", ["machine", "savoir-faire"]),
+                ("ordres_travail", "titre", "Fuite reprise", ["panne", "intervention"]),
+                ("codes_defaillance", "libelle", "Fuite franche", ["panne"]),
+                ("articles", "designation", "Roulement 6206", ["article", "savoir-faire"]),
+                ("techniciens", "metier", "Chef d'équipe", ["technicien"]),
+                ("wiki_pages", "titre", "PO-01 — Pompe B", ["savoir-faire"])]:
+            with self.subTest(table=table):
+                avant = self.etat()["constructions"]
+                self.modifier(table, champ, valeur)
+                self.assertEqual(self.etat()["types"], [t for t in TYPES_ENTITES if t not in refaits])
+                self.page.evaluate("Wiki.chercherEntites('pompe', { profil: 'responsable' })")
+                self.assertEqual(self.etat()["constructions"], avant + len(refaits))
+
+    def test_detail_lu_frais_et_calcule_a_la_lecture(self):
+        resultat = self.page.evaluate("""() => {
+          const depart = Wiki.etatEntites().details;
+          const reponse = Wiki.chercherEntites('2026', { profil: 'responsable' });
+          const apresRecherche = Wiki.etatEntites().details;
+          const interventions = reponse.groupes.find((g) => g.type === 'intervention').entites;
+          interventions.slice(0, 6).forEach((e) => e.element);
+          const apresSix = Wiki.etatEntites().details;
+          interventions.slice(0, 6).forEach((e) => e.element);
+          return { trouvees: interventions.length, recherche: apresRecherche - depart, six: apresSix - apresRecherche,
+                   relues: Wiki.etatEntites().details - apresSix };
+        }""")
+        self.assertEqual(resultat, {"trouvees": 15, "recherche": 0, "six": 6, "relues": 0})
+        # Le lieu d'une machine est lu à l'appel : une localisation renommée se voit sans refaire les entrées
+        self.page.evaluate("Wiki.chercherEntites('PO-01', { profil: 'responsable' })")
+        avant = self.etat()["constructions"]
+        self.modifier("localisations", "libelle", "Usine du bas")
+        element = self.page.evaluate("Wiki.chercherEntites('PO-01', { profil: 'responsable' }).groupes[0].entites[0].element")
+        self.assertEqual((element["equipementId"], element["lieu"]), ("EQ-0001", "Usine du bas › Atelier A › Ligne 1"))
+        self.assertEqual(self.etat()["constructions"], avant)
+
+
+class TestEntitesJeuDeCharge(CasRecherche):
+    """D101 sur le jeu de charge (500 équipements, 5 000 OT, outils/generer_demo.py comme test_wiki_entites.py)."""
+
+    SCRIPTS = SCRIPTS + ["js/modules/equipe-regles.js"]
+
+    def test_recherche_apres_une_ecriture_dans_ot_temps_sous_300_ms(self):
+        with tempfile.TemporaryDirectory() as dossier:
+            resultat = subprocess.run([sys.executable, str(RACINE / "outils" / "generer_demo.py"), "--volume", "500,5000",
+                                       "--sortie", dossier, "--sans-js"], capture_output=True, cwd=RACINE)
+            self.assertEqual(resultat.returncode, 0, resultat.stdout.decode("utf-8", "replace"))
+            tables = {f.stem: f.read_bytes().decode("utf-8-sig") for f in Path(dossier).glob("*.csv")}
+        self.page.evaluate(CHARGER_JS, tables)
+        mesure = self.page.evaluate("""async () => {
+          // Une recherche de l'accueil : les entités (chaque ligne de détail lue, comme l'écran), puis le plein texte.
+          const chercher = (requete, profil) => {
+            const t0 = performance.now();
+            const entites = Wiki.chercherEntites(requete, { profil });
+            entites.groupes.forEach((g) => g.entites.forEach((e) => e.element));
+            const t1 = performance.now();
+            Wiki.rechercher(requete, {});
+            const t2 = performance.now();
+            return { entites: t1 - t0, pleinTexte: t2 - t1, total: t2 - t0,
+                     trouvees: entites.groupes.reduce((n, g) => n + g.entites.length, 0) };
+          };
+          const sortie = { volume: ['equipements', 'ordres_travail', 'ot_temps', 'habilitations', 'mouvements_stock']
+            .map((t) => Donnees.lignes(t).length), premiere: chercher('pompe', 'responsable'), apres: {} };
+          const champs = { ot_temps: ['heures', (v) => String((Number(v) || 1) + 0.25)],
+            habilitations: ['date_echeance', () => '2031-01-01'], mouvements_stock: ['quantite', (v) => String((Number(v) || 1) + 1)] };
+          for (const table of Object.keys(champs)) {
+            const [champ, valeur] = champs[table];
+            const avant = Wiki.etatEntites().constructions;
+            const lignes = Donnees.lignes(table);
+            await Donnees.modifier(table, (copie) => { copie[0] = Object.assign({}, copie[0], { [champ]: valeur(copie[0][champ]) }); return true; },
+              { action: 'test de la recherche des entités' });
+            sortie.apres[table] = Object.assign(chercher('roulement', 'responsable'), { ecrite: Donnees.lignes(table) !== lignes,
+              refaites: Wiki.etatEntites().constructions - avant });
+          }
+          sortie.demandeur = chercher('courroie', 'demandeur');
+          return sortie;
+        }""")
+        self.assertEqual(mesure["volume"][:2], [500, 5000])
+        premiere = mesure["premiere"]
+        sys.stderr.write("\n  [D101, jeu de charge] première recherche « pompe » : entités %.0f ms (%d trouvées), plein texte "
+                         "(index construit) %.0f ms, total %.0f ms\n" % (premiere["entites"], premiere["trouvees"],
+                                                                        premiere["pleinTexte"], premiere["total"]))
+        self.assertGreater(premiere["trouvees"], 0)
+        self.assertLess(premiere["entites"], 300)
+        for table, apres in mesure["apres"].items():
+            sys.stderr.write("  après une écriture dans %s : entités %.0f ms, plein texte %.0f ms, total %.0f ms\n"
+                             % (table, apres["entites"], apres["pleinTexte"], apres["total"]))
+            with self.subTest(table=table):
+                self.assertEqual((apres["ecrite"], apres["refaites"]), (True, 0))
+                self.assertGreater(apres["trouvees"], 0)
+                self.assertLess(apres["total"], 300)
+        demandeur = mesure["demandeur"]
+        sys.stderr.write("  demandeur, « courroie » : entités %.0f ms, plein texte %.0f ms, total %.0f ms\n"
+                         % (demandeur["entites"], demandeur["pleinTexte"], demandeur["total"]))
+        self.assertLess(demandeur["total"], 300)
 
 
 if __name__ == "__main__":

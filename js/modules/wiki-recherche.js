@@ -34,17 +34,20 @@
 //  - une expression du lexique (« ne demarre pas », « manque de pression ») est reconnue mot à mot,
 //    avant le retrait des mots vides, et compte comme un mot de plus dans le document.
 //
-// Entités par leur nom (refonte 2, §20.12, D113 et D114 ; tâche T136) : Wiki.chercherEntites, posée avant les
-// résultats plein texte sur l'accueil de l'encyclopédie. Précisions au contrat :
-//  - entités cherchées = celles des listes (Wiki.listeEntites) du profil : machines (sous-ensembles compris),
-//    pannes, articles, techniciens, savoir-faire, interventions ; rien de ce que le profil ne voit pas (le
-//    demandeur n'a ni techniciens ni interventions : listeEntites rend null) ;
-//  - nom cherché : repère et désignation d'une machine, libellé et code d'une panne, désignation et référence
-//    d'un article, nom d'un technicien, titre d'un savoir-faire, numéro et titre d'une intervention ;
-//  - une entité correspond si chaque mot de la requête (forme comparable, mots vides et pluriels retirés comme
-//    pour l'index) commence un mot de son nom (« pomp » trouve « Pompe centrifuge », « PR-01 » ne trouve pas
-//    « PR-02 » ni l'OT-2026-0010) ; groupes dans l'ordre des types, entités dans l'ordre de leur liste
-//    (machines par titre) ; les entrées sont refaites quand le profil ou une table qu'elles lisent change.
+// Entités par leur nom (refonte 2, §20.12, D113 et D114 ; T136) : Wiki.chercherEntites, posée avant les résultats plein
+// texte sur l'accueil de l'encyclopédie. Précisions au contrat :
+//  - entités cherchées = celles des listes (Wiki.listeEntites) du profil, dans leur ordre (machines par titre,
+//    sous-ensembles compris) ; le demandeur n'a ni techniciens ni interventions ; nom cherché : repère et désignation
+//    d'une machine, libellé et code d'une panne, désignation et référence d'un article, nom d'un technicien, titre d'un
+//    savoir-faire, numéro et titre d'une intervention ; une entité correspond si chaque mot de la requête (forme
+//    comparable, mots vides et pluriels retirés comme pour l'index) commence un mot de son nom (« pomp » trouve « Pompe
+//    centrifuge », « PR-01 » ne trouve ni « PR-02 » ni l'OT-2026-0010) ;
+//  - D101 (relecture de T136) : les entrées ne lisent que les tables d'un nom, d'un ordre ou d'une visibilité
+//    (TABLES_ENTITES, par type) — jamais ot_temps, habilitations ni mouvements_stock — et sont refaites, type par type,
+//    quand l'une d'elles change (écriture ou relecture) ; `element` d'une entité trouvée = sa ligne de détail, les champs
+//    de l'élément de Wiki.listeEntites que l'accueil montre, mêmes valeurs (machine : lieu, marqueModele ; panne : cas,
+//    machines ; article : reference, emplacement ; technicien : metier, actif ; savoir-faire : rattachement, mere ;
+//    intervention : statut, date ; et l'identifiant, le titre, le lien), calculée à sa première lecture (Wiki.etatEntites).
 
 Object.assign(Wiki, (() => {
 
@@ -192,13 +195,14 @@ Object.assign(Wiki, (() => {
 
   let index = null;          // { sources, documents, postings, longueurMoyenne } ou null (à construire)
   let constructions = 0;     // nombre d'index construits depuis l'ouverture (suivi, tests)
-  let entites = null;        // entrées de la recherche des entités : { profil, sources, parType } ou null
-
-  // Types des groupes de la recherche des entités, dans l'ordre de l'accueil, et tables lues par leurs listes
-  // (wiki-entites.js, wiki-calculs.js) : les entrées sont refaites quand l'une d'elles change.
+  const entites = new Map(); // entrées de la recherche des entités : type → { sources, entrees }
+  let [constructionsEntites, details] = [0, 0];   // entrées d'un type construites, lignes de détail calculées (suivi, tests)
+  // Types des entités, dans l'ordre de l'accueil ; tables de leur nom, de leur ordre et de leur visibilité ; types que le
+  // demandeur n'ouvre pas (`liens` du contexte de wiki-entites.js).
   const TYPES_ENTITES = ['machine', 'panne', 'article', 'technicien', 'savoir-faire', 'intervention'];
-  const TABLES_ENTITES = ['equipements', 'localisations', 'ordres_travail', 'codes_defaillance', 'articles',
-    'mouvements_stock', 'techniciens', 'habilitations', 'ot_temps', 'wiki_pages'];
+  const TABLES_ENTITES = Object.freeze({ machine: ['equipements'], panne: ['ordres_travail', 'codes_defaillance'], article: ['articles'],
+    technicien: ['techniciens'], 'savoir-faire': ['wiki_pages', 'equipements', 'articles'], intervention: ['ordres_travail'] });
+  const TYPES_RESERVES = ['technicien', 'intervention'];
   const PROFILS = ['demandeur', 'technicien', 'responsable'];
 
   /** Date d'un OT (AAAA-MM-JJ) : fin des travaux, sinon clôture technique, sinon création. */
@@ -228,17 +232,16 @@ Object.assign(Wiki, (() => {
     return origines;
   }
 
+  /** Libellés des codes de défaillance : Map('famille|code' → libellé), la première ligne fait foi. */
+  const libellesDesCodes = (codes) => codes.reduce((libelles, ligne) => {
+    const cle = texte(ligne.famille) + '|' + texte(ligne.code);
+    return libelles.has(cle) ? libelles : libelles.set(cle, texte(ligne.libelle));
+  }, new Map());
+
   /** Libellé d'un code de défaillance d'une famille (le premier trouvé), sinon le code ; '' sans code. */
   function lecteurDeLibelles(codes) {
-    const libelles = new Map();
-    codes.forEach((ligne) => {
-      const cle = texte(ligne.famille) + '|' + texte(ligne.code);
-      if (!libelles.has(cle)) libelles.set(cle, texte(ligne.libelle));
-    });
-    return (famille, code) => {
-      const valeur = texte(code);
-      return valeur ? libelles.get(famille + '|' + valeur) || valeur : '';
-    };
+    const libelles = libellesDesCodes(codes);
+    return (famille, code) => (texte(code) ? libelles.get(famille + '|' + texte(code)) || texte(code) : '');
   }
 
   /**
@@ -357,11 +360,12 @@ Object.assign(Wiki, (() => {
   }
 
   // Une table indexée change (ici ou sur un autre poste) : l'index sera refait à la prochaine recherche ; de même
-  // pour les entrées de la recherche des entités.
+  // pour les entrées de chaque type de la recherche des entités qui la lit.
   Donnees.evenements.addEventListener('changement', (evenement) => {
     const tables = evenement.detail && evenement.detail.tables;
-    if (!Array.isArray(tables) || tables.some((nom) => TABLES_INDEXEES.includes(nom))) index = null;
-    if (!Array.isArray(tables) || tables.some((nom) => TABLES_ENTITES.includes(nom))) entites = null;
+    const touchees = (lues) => !Array.isArray(tables) || tables.some((nom) => lues.includes(nom));
+    if (touchees(TABLES_INDEXEES)) index = null;
+    TYPES_ENTITES.forEach((type) => { if (touchees(TABLES_ENTITES[type])) entites.delete(type); });
   });
 
   // ===========================================================================================
@@ -591,67 +595,88 @@ Object.assign(Wiki, (() => {
   // ===========================================================================================
 
   /** Profil d'un appel, même règle que Wiki.entite : options.profil, sinon celui d'App, sinon demandeur. */
-  function profilDe(options) {
-    const demande = texte(options && options.profil);
-    if (PROFILS.includes(demande)) return demande;
-    const deLApp = typeof App !== 'undefined' && App && App.profil ? texte(App.profil.type) : '';
-    return PROFILS.includes(deLApp) ? deLApp : 'demandeur';
-  }
+  const profilDe = (options) => [texte(options && options.profil), typeof App !== 'undefined' && App && App.profil
+    ? texte(App.profil.type) : ''].find((profil) => PROFILS.includes(profil)) || 'demandeur';
+  const comparer = (a, b) => (a < b ? -1 : (a > b ? 1 : 0));          // ordre des caractères, comme wiki-entites.js
+  const socle = () => Wiki.interne;                                    // références et listes (wiki-calculs.js, wiki-entites.js)
+  // Règles de wiki-entites.js : nom d'un technicien (D78) ; date d'une intervention (fin, début, date prévue, création).
+  const nomTechnicien = (ligne) => [texte(ligne.prenom), texte(ligne.nom)].filter(Boolean).join(' ') || texte(ligne.id);
+  const dateDIntervention = (ot) => (texte(ot.date_fin) || texte(ot.date_debut) || texte(ot.date_prevue)
+    || texte(ot.date_creation)).slice(0, 10);
+  const nouvelleEntree = (lien, titre, noms, detail) => ({ lien, titre, mots: comparable(noms.join(' ')).split(' ').filter(Boolean),
+    detail });
+  const grouper = (lignes, cleDe) => lignes.reduce((groupes, ligne) => {
+    const cle = cleDe(ligne);
+    (groupes.get(cle) || groupes.set(cle, []).get(cle)).push(ligne);
+    return groupes;
+  }, new Map());
 
-  // Nom cherché de chaque type (précisions en tête de fichier) et titre montré.
-  const NOMS_ENTITES = {
-    machine: (e) => [e.titre], panne: (e) => [e.titre, e.code], article: (e) => [e.titre, e.reference],
-    technicien: (e) => [e.nom], 'savoir-faire': (e) => [e.titre], intervention: (e) => [e.id, e.titre],
+  // Lignes d'une table avec leur référence (Wiki.interne), par titre puis identifiant (parTitre) ; références cassées omises.
+  const parTitreAvecRef = (table, refDe, parTitre) => Donnees.lignes(table).map((ligne) => ({ ligne, ref: refDe(texte(ligne.id)) }))
+    .filter((x) => x.ref).sort((a, b) => parTitre(a.ref, b.ref));
+
+  // Entrées de chaque type, dans l'ordre de sa liste ; `detail(appel)` calcule sa ligne de détail (précisions en tête).
+  const ENTREES = {
+    machine: () => parTitreAvecRef('equipements', (id) => socle().refMachine(id), socle().parTitre('equipementId')).map(({ ligne, ref }) =>
+      nouvelleEntree(ref.lien, ref.titre, [ref.titre], (appel) => Object.assign({}, ref, { lieu: socle().lieuDe(appel,
+        ligne.localisation_id), marqueModele: [texte(ligne.marque), texte(ligne.modele)].filter(Boolean).join(' ') }))),
+    // Codes symptôme qui ont un cas (Wiki.interne.pannesDe) ; machines : celles, connues, dont les OT de ce code ont un cas.
+    panne: () => {
+      const ctx = { libelles: libellesDesCodes(Donnees.lignes('codes_defaillance')) };
+      const parCode = grouper(Donnees.lignes('ordres_travail'), (ot) => texte(ot.symptome_code));
+      return socle().pannesDe(ctx, Donnees.lignes('ordres_travail')).sort((a, b) => b.cas - a.cas || comparer(a.code, b.code))
+        .map((panne) => nouvelleEntree(panne.lien, panne.libelle, [panne.libelle, panne.code], () => ({ id: panne.lien,
+          code: panne.code, titre: panne.libelle, cas: panne.cas, lien: panne.lien,
+          machines: Array.from(grouper(parCode.get(panne.code) || [], (ot) => texte(ot.equipement_id)))
+            .filter(([equipementId, ordres]) => socle().refMachine(equipementId) && socle().pannesDe(ctx, ordres).length).length })));
+    },
+    article: () => parTitreAvecRef('articles', (id) => socle().refArticle(id), socle().parTitre('articleId')).map(({ ligne, ref }) =>
+      nouvelleEntree(ref.lien, ref.titre, [ref.titre, texte(ligne.reference)],
+        () => Object.assign({}, ref, { reference: texte(ligne.reference), emplacement: texte(ligne.emplacement) }))),
+    technicien: () => Donnees.lignes('techniciens').filter((ligne) => texte(ligne.id))
+      .map((ligne) => ({ ligne, ref: { technicienId: texte(ligne.id), nom: nomTechnicien(ligne), lien: texte(ligne.id) } }))
+      .sort((a, b) => comparer(a.ref.nom, b.ref.nom) || comparer(a.ref.technicienId, b.ref.technicienId)).map(({ ligne, ref }) =>
+        nouvelleEntree(ref.lien, ref.nom, [ref.nom], () => Object.assign({}, ref, { metier: texte(ligne.metier), actif: texte(ligne.actif) !== '0' }))),
+    'savoir-faire': () => socle().listeSavoirFaire({ pagesActives: Donnees.lignes('wiki_pages').filter((ligne) => texte(ligne.statut) !== 'archivée') })
+      .map((element) => nouvelleEntree(element.lien, element.titre, [element.titre], () => Object.assign({}, element))),
+    intervention: () => socle().ordresDe(Donnees.lignes('ordres_travail').map((ot) => texte(ot.id))).map((ot) => {
+      const id = texte(ot.id);
+      return nouvelleEntree(id, texte(ot.titre), [id, texte(ot.titre)],
+        () => ({ id, titre: texte(ot.titre), statut: texte(ot.statut), date: dateDIntervention(ot), lien: id }));
+    }),
   };
 
-  /** Machines de la liste par lieu, sous-ensembles compris, par titre puis identifiant. */
-  function machinesAPlat(groupes) {
-    const aPlat = (machines) => machines.flatMap((machine) => [machine].concat(aPlat(machine.sousEnsembles || [])));
-    return aPlat(groupes.flatMap((groupe) => groupe.machines))
-      .sort((a, b) => (a.titre < b.titre ? -1 : (a.titre > b.titre ? 1 : 0)) || (a.equipementId < b.equipementId ? -1 : 1));
+  /** Entrées d'un type, construites à la première recherche et refaites si une table qu'elles lisent a changé. */
+  function entreesDe(type) {
+    const construites = entites.get(type);
+    if (construites && TABLES_ENTITES[type].every((nom) => memeTable(construites.sources[nom], Donnees.lignes(nom)))) return construites.entrees;
+    entites.set(type, { sources: Object.fromEntries(TABLES_ENTITES[type].map((nom) => [nom, Donnees.lignes(nom)])), entrees: ENTREES[type]() });
+    constructionsEntites += 1;
+    return entites.get(type).entrees;
   }
 
-  /** Entrées d'un profil : Map(type → [{ type, lien, titre, mots, element }]) ; un type que le profil ne voit pas manque. */
-  function entreesDesEntites(profil) {
-    const parType = new Map();
-    TYPES_ENTITES.forEach((type) => {
-      const liste = Wiki.listeEntites(type, { profil });
-      if (!liste) return;
-      parType.set(type, (type === 'machine' ? machinesAPlat(liste) : liste).map((element) => ({
-        type, lien: element.lien, titre: type === 'technicien' ? element.nom : element.titre,
-        mots: comparable(NOMS_ENTITES[type](element).join(' ')).split(' ').filter(Boolean), element,
-      })));
-    });
-    return parType;
+  /** Une entité trouvée : { type, lien, titre, element } ; `element` (ligne de détail) est calculé à sa première lecture. */
+  function entiteTrouvee(type, trouvee, appel) {
+    let element = null;
+    const lire = () => {
+      if (element === null) { element = trouvee.detail(appel); details += 1; }
+      return element;
+    };
+    return Object.defineProperty({ type, lien: trouvee.lien, titre: trouvee.titre }, 'element', { enumerable: true, get: lire });
   }
 
-  /** Les entrées du profil, refaites si le profil ou une table lue a changé (même règle que l'index). */
-  function entitesAJour(profil) {
-    const aJour = entites !== null && entites.profil === profil
-      && TABLES_ENTITES.every((nom) => memeTable(entites.sources[nom], Donnees.lignes(nom)));
-    if (!aJour) {
-      const sources = {};
-      TABLES_ENTITES.forEach((nom) => { sources[nom] = Donnees.lignes(nom); });
-      entites = { profil, sources, parType: entreesDesEntites(profil) };
-    }
-    return entites.parType;
-  }
-
-  /**
-   * Entités dont le nom correspond à la requête (précisions en tête de fichier) ; options { profil }. →
-   * { requete, mots, groupes: [{ type, entites: [{ type, lien, titre, element }] }] } : groupes non vides, dans l'ordre
-   * des types ; `element` = l'élément de Wiki.listeEntites. Rien n'est cherché sans mot utile.
-   */
+  /** Entités dont le nom correspond à la requête (précisions en tête) ; options { profil }. → { requete, mots, groupes:
+   * [{ type, entites: [{ type, lien, titre, element }] }] }, groupes non vides des types que le profil voit, dans l'ordre. */
   function chercherEntites(texteRecherche, options) {
     const requete = texte(texteRecherche);
     const mots = Array.from(new Set(comparable(requete).split(' ').map(formeDuMot).filter(Boolean)));
     const groupes = [];
     if (!mots.length) return { requete, mots, groupes };
-    entitesAJour(profilDe(options)).forEach((entrees, type) => {
-      const trouvees = entrees.filter((entree) => mots.every((mot) => entree.mots.some((motDuNom) => motDuNom.startsWith(mot))));
-      if (trouvees.length) {
-        groupes.push({ type, entites: trouvees.map((entree) => ({ type, lien: entree.lien, titre: entree.titre, element: entree.element })) });
-      }
+    const profil = profilDe(options);
+    const appel = { lieux: new Map() };          // chemins des lieux, calculés une fois par recherche (Wiki.interne.lieuDe)
+    TYPES_ENTITES.filter((type) => profil !== 'demandeur' || !TYPES_RESERVES.includes(type)).forEach((type) => {
+      const trouvees = entreesDe(type).filter((candidate) => mots.every((mot) => candidate.mots.some((motDuNom) => motDuNom.startsWith(mot))));
+      if (trouvees.length) groupes.push({ type, entites: trouvees.map((trouvee) => entiteTrouvee(type, trouvee, appel)) });
     });
     return { requete, mots, groupes };
   }
@@ -661,9 +686,14 @@ Object.assign(Wiki, (() => {
     return { construit: index !== null, documents: index ? index.documents.length : 0, constructions };
   }
 
+  /** État de la recherche des entités (suivi et tests) : { types (entrées construites), constructions, details }. */
+  function etatEntites() {
+    return { types: TYPES_ENTITES.filter((type) => entites.has(type)), constructions: constructionsEntites, details };
+  }
+
   return {
     RECHERCHE, MOTS_VIDES, LEXIQUE,
-    rechercher, surligner, etatRecherche, chercherEntites,
+    rechercher, surligner, etatRecherche, chercherEntites, etatEntites,
     motsRecherche: (valeur) => termes(valeur),
   };
 })());
