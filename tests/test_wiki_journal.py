@@ -565,9 +565,10 @@ class TestDecoupage(CasJournal):
 
     def test_sous_page_ecrite_a_la_main_sans_ancrage(self):
         """Une sous-page de savoir-faire écrite à la main : rattachée à la ligne de sa mère, sans ancrage propre (ni
-        équipement, ni article, ni code cause, même demandé) ; sous un équipement ou un composant, refusée."""
-        self.ok("ecrire", {"nouvelle": {"type": "savoir-faire", "titre": MERE_SF + " — dépose", "rattacheA": "WP-0002",
-                                        "causeCode": "C01"}}, "## Étapes\n- Déposer le kit usé [OT-2026-0001]")
+        équipement, ni article, ni code cause : l'écriture à la main n'en reçoit plus, refonte 2) ; sous un équipement
+        ou un composant, refusée."""
+        self.ok("ecrire", {"nouvelle": {"type": "savoir-faire", "titre": MERE_SF + " — dépose", "rattacheA": "WP-0002"}},
+                "## Étapes\n- Déposer le kit usé [OT-2026-0001]")
         ligne = self.lignes()[MERE_SF + " — dépose"]
         self.assertEqual((ligne["type"], ligne["rattache_a"], ligne["equipement_id"], ligne["article_id"], ligne["cause_code"]),
                          ("savoir-faire", "WP-0002", "", "", ""))
@@ -577,17 +578,26 @@ class TestDecoupage(CasJournal):
 
     def test_ancienne_proposition_de_sous_page_d_equipement(self):
         """Une proposition encore à valider d'avant la refonte 2 (base de développement) qui crée une sous-page
-        d'équipement : sa validation est refusée, rien n'est écrit ; elle reste à valider (le responsable la rejette)."""
-        self.page.evaluate("""() => Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00097',
-          nature: 'ingestion', ot_id: 'OT-2026-0001', statut: 'à valider', ordre: '97', pages: 'EQ:EQ-0001',
-          contradictions: '[]', changements: JSON.stringify([{ cle: 'TITRE:po 01 garniture', titre: 'PO-01 — garniture',
-            type: 'équipement', creation: true, rattacheA: 'PO-01 — Pompe de process A', version_avant: 0, avant: '',
-            apres: '## Ce qui revient\\n- Garniture sèche [OT-2026-0001]' }]) }); }, { journal: false })""")
-        avant = self.etat()["pages"]
-        self.refus("« PO-01 — garniture » : une sous-page n'existe que pour un savoir-faire", "valider", ["WJ-00097"])
-        self.assertEqual(self.etat()["pages"], avant)
-        self.assertEqual(self.page.evaluate("Donnees.trouver('wiki_journal', 'WJ-00097').statut"), "à valider")
-        self.assertEqual(self.ok("rejeter", "WJ-00097", "Sous-page d'équipement retirée")["rejetee"], "WJ-00097")
+        d'équipement, une page de mode ou un composant libre : sa validation est refusée, rien n'est écrit ; elle reste
+        à valider, et le message dit au responsable de la rejeter."""
+        anciennes = [("WJ-00097", "TITRE:po 01 garniture", "PO-01 — garniture", "équipement", "PO-01 — Pompe de process A",
+                      "## Ce qui revient\\n- Garniture sèche [OT-2026-0001]"),
+                     ("WJ-00096", "TITRE:faces rayees", "Faces rayées", "mode", "", "## Causes\\n- Garniture sèche [OT-2026-0001]"),
+                     ("WJ-00095", "TITRE:joint torique 20x2", "Joint torique 20x2", "composant", "",
+                      "## Défaillances\\n- Joint pincé [OT-2026-0001]")]
+        for entree, cle, titre, type_, mere, apres in anciennes:
+            with self.subTest(type=type_):
+                self.page.evaluate("""([entree, cle, titre, type, mere, apres]) => Donnees.modifier('wiki_journal', (lignes) => {
+                  lignes.push({ id: entree, nature: 'ingestion', ot_id: 'OT-2026-0001', statut: 'à valider', ordre: entree.slice(-2),
+                    pages: 'EQ:EQ-0001', contradictions: '[]', changements: JSON.stringify([{ cle, titre, type, creation: true,
+                      rattacheA: mere, version_avant: 0, avant: '', apres: apres.split('\\\\n').join(String.fromCharCode(10)) }]) }); },
+                  { journal: false })""", [entree, cle, titre, type_, mere, apres])
+                avant = self.etat()["pages"]
+                self.refus("« %s » : seule une page savoir-faire se crée (proposition d'avant la refonte 2) : rejetez-la." % titre,
+                           "valider", [entree])
+                self.assertEqual(self.etat()["pages"], avant)
+                self.assertEqual(self.page.evaluate("(id) => Donnees.trouver('wiki_journal', id).statut", entree), "à valider")
+                self.assertEqual(self.ok("rejeter", entree, "Proposition d'avant la refonte 2")["rejetee"], entree)
 
     def test_validation_d_un_decoupage_d_un_bloc(self):
         self.traiter(["OT-2026-0001"], "faux-decoupe")

@@ -190,10 +190,9 @@ Object.assign(Wiki, (() => {
     } else if (cle.startsWith('ART:')) {
       const article = Donnees.trouver('articles', cle.slice(4)) || { id: cle.slice(4) };
       Object.assign(ligne, { type: 'composant', article_id: cle.slice(4), titre: titreArticle(article) });
+    } else if (ligne.type !== 'savoir-faire') {     // proposition d'avant la refonte 2 (§20.12 : mode, composant libre, sous-page)
+      throw ErreurValidation('« ' + ligne.titre + ' » : seule une page savoir-faire se crée (proposition d\'avant la refonte 2) : rejetez-la.');
     } else if (vise && typeVise === ligne.type) {
-      if (ligne.type !== 'savoir-faire') {           // proposition d'avant la refonte 2 (§20.12) : à rejeter
-        throw ErreurValidation('« ' + ligne.titre + ' » : une sous-page n\'existe que pour un savoir-faire.');
-      }
       if (!mere) throw ErreurValidation('La page mère de « ' + ligne.titre + ' » n\'a pas encore de texte : écrivez-la d\'abord.');
       ligne.rattache_a = mere.id;
     } else if (vise.startsWith('EQ-')) ligne.equipement_id = vise;
