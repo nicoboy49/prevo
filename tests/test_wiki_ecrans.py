@@ -3,11 +3,13 @@ T137 — ARCHITECTURE.md §20.9, §20.12 ; CS98, CS103, CS106, CS114, CS115).
 
 Toujours la démo (index.html en file://, « Essayer avec les données de démo »), horloge du navigateur fixée à la
 date de référence de la démo (2026-10-19 : dates non décalées). Profils : responsable, technicien (TEC-0001), demandeur
-(Lucie Martin). Une base d'essai (BASE_JS) pose sur la démo treize lignes de wiki_pages de la refonte 2 (texte de PO-02
-et de CP-01, texte d'un article, savoir-faire rattachés à une machine, à un article, à la page d'une machine, libre,
-sous-page, archivé, titre piégé ; une ancienne page de mode et une ancienne sous-page de machine, types retirés) et
-quatorze entrées de wiki_journal (contradictions ouvertes sur PO-02 et sur un savoir-faire — antérieure —, une fermée ;
-à valider ; en file ; refusées ; à refaire ; rejetée). Les valeurs attendues sont écrites à la main ou recalculées ici,
+(Lucie Martin). Une base d'essai (BASE_JS) pose sur la démo quatorze lignes de wiki_pages de la refonte 2 (texte de PO-02
+— un OT cité deux fois dans une phrase — et de CP-01, texte d'un article, savoir-faire rattachés à une machine, à un
+article, à la page d'une machine, libre, sous-page, archivé, titre piégé ; une ancienne page de mode, une ancienne
+sous-page de machine et un ancien composant libre, types retirés), quatorze entrées de wiki_journal (contradictions
+ouvertes sur PO-02 et sur un savoir-faire — antérieure —, une fermée ; à valider ; en file ; refusées ; à refaire ;
+rejetée) et une intervention piégée (OT_PIEGE : tous ses textes, en attente, sans technicien sur l'OT, deux techniciens
+y ont pointé du temps). Les valeurs attendues sont écrites à la main ou recalculées ici,
 et les faits des pages comparés au calcul Python indépendant de tests/calcul_wiki.py (CalculWiki, sur les CSV de la
 démo et la base). Ce qui est vérifié :
     accueil     #/wiki (T136) : « Ce que l'atelier sait », phrase-résumé dont chaque nombre mène à sa liste, « Tiré de
@@ -16,16 +18,19 @@ démo et la base). Ce qui est vérifié :
                 « Suivi du wiki » au responsable seulement ; titres piégés : du texte ;
     listes      les six listes pour les trois profils (« réservé » au demandeur pour les techniciens et les
                 interventions), éléments et ordre des interventions contre le calcul Python, état du stock aussi ;
-                interventions : 100 lignes sur PC, 40 cartes au téléphone, les autres créées au clic (D101) ;
+                interventions : 100 lignes sur PC, 40 cartes au téléphone, les autres créées au clic (D101) ; sur PC, le
+                tri ordonne toute la liste avant d'en créer les 100 premières lignes ;
     recherche   de l'accueil : entités groupées par type (les 6 premières créées, les autres au clic), un seul titre
                 quand rien n'est trouvé ;
     pages       #/wiki/<id> des six types (T137) pour les trois profils : fil d'Ariane, type, titre, consignation et
                 « À trancher » en tête, sections dans leur ordre, textes rédigés et bandeau d'origine, fiche des faits
                 (égale à Wiki.entite ET au calcul Python, un cas par type au moins, et toutes les machines, pannes et
                 techniciens de la démo), à droite à 1440 px et au-dessus à 375 px ; petits numéros (ordre
-                d'apparition, bulle, lien, sans lien pour le demandeur), « Références », jamais [OT-…] à l'écran, le
-                balisage stocké intact ; interventions dans l'ordre du calcul Python avec leur statut ; page
-                Intervention en lecture seule (motifs d'attente et d'annulation), « Ouvrir la fiche OT » ; visibilité
+                d'apparition, un seul pour un OT cité deux fois dans une phrase, bulle, nom accessible, lien ; pour le
+                demandeur, un bouton sans lien dont la bulle s'ouvre au toucher, dans l'écran), « Références », jamais
+                [OT-…] à l'écran, le balisage stocké intact ; interventions dans l'ordre du calcul Python avec leur
+                statut ; page Intervention en lecture seule (motifs d'attente et d'annulation, tous ses techniciens,
+                textes piégés restés du texte), « Ouvrir la fiche OT » ; visibilité
                 (D114 : prix, taux horaire, pages Technicien et Intervention) ; tout lien d'une page mène à une page
                 qui s'affiche ; « Modifier » ; pièges ;
     trancher    « À trancher » : décisions du responsable (D107), boutons absents pour les autres ;
@@ -36,7 +41,8 @@ démo et la base). Ce qui est vérifié :
     affichage   1440 et 375 px sans défilement horizontal, zones tactiles ≥ 48 px au téléphone, contrastes AA en thème
                 clair et sombre, focus visible ; aucune requête réseau pour afficher ; aucune requête /api/ en mode
                 serveur (les six types) ; jeu de charge (500 machines, 5 000 OT, mode serveur) : accueil, chaque liste
-                et une page de chaque type affichés en moins de 500 ms (D101).
+                et la page la plus lourde de chaque type affichés en moins de 500 ms, mise en page et peinture
+                comprises, sous 5 000 éléments ; tri des 5 000 interventions en moins de 500 ms (D101).
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_wiki_ecrans.py" -v
@@ -97,7 +103,8 @@ TEXTE_PO02 = "\n".join([
     "- Le remplacement du [[" + TITRE_KIT + "]] arrête la fuite, voir [[" + TITRE_SF + "]] [OT-2026-0026]",
     "- Le raccord de refoulement se desserre [OT-2025-0030]",
     "## Astuces",
-    "- Repérer l'accouplement avant le démontage, voir [[Fuite]] et [[Page disparue]] [OT-2026-0098] [OT-2025-0010]",
+    # Le même OT cité deux fois dans la phrase : un seul petit numéro (relecture de T137, m1)
+    "- Repérer l'accouplement [OT-2026-0098] avant le démontage, voir [[Fuite]] et [[Page disparue]] [OT-2026-0098] [OT-2025-0010]",
 ])
 TEXTE_CP01 = ("## Ce qui revient\n- Le filtre à air se colmate vite [OT-2026-0171]\n"
               "## En bref\n- Purger le sécheur chaque semaine [OT-2026-0161]")
@@ -151,8 +158,29 @@ PAGES = [
     page_wiki("WP-0012", "savoir-faire", "Règles de l'atelier", "## Étapes\n- Ranger l'outillage après chaque intervention [OT-2026-0001]",
               "manuel"),
     page_wiki("WP-0013", "équipement", TITRE_CP01, TEXTE_CP01, "manuel", "", "2026-10-16 09:00", equipement_id="EQ-0001"),
+    # Ancienne page « composant libre » (composant sans article) : plus de page (relecture de T137, m4)
+    page_wiki("WP-0014", "composant", "Joint torique libre", "## À quoi il sert\n- Il étanche le bouchon de vidange [OT-2026-0001]",
+              "manuel"),
 ]
 SAVOIR_FAIRE_ACTIFS = ["WP-0003", "WP-0004", "WP-0005", "WP-0006", "WP-0007", "WP-0008", "WP-0012"]
+
+# Intervention piégée (relecture de T137, m4) : chaque texte de la page Intervention porte des balises ; ouverte (en
+# attente), sans technicien sur l'OT, deux techniciens y ont pointé du temps (m7).
+OT_PIEGE = "OT-2026-9001"
+TEXTES_OT_PIEGE = {
+    "travail_a_faire": "Démonter <script>window.__piege = 11</script> le <b>carter</b> & « vérifier »\n  puis remonter",
+    "compte_rendu": '<img src=x onerror="window.__piege = 12">Joint <i>changé</i>\n\tRelevé : 3 bar',
+    "astuce": "<b>Graisser</b> le joint <script>window.__piege = 13</script>",
+    "motif_attente": 'Pièce <img src=x onerror="window.__piege = 14"> en commande',
+    "motif_annulation": '<a href="#/wiki">lien</a> <b>annulé</b> <svg onload="window.__piege = 15"></svg>',
+}
+SECTIONS_OT_PIEGE = {"wiki-travail": "travail_a_faire", "wiki-compte-rendu": "compte_rendu", "wiki-astuce": "astuce",
+                     "wiki-motif-attente": "motif_attente", "wiki-motif-annulation": "motif_annulation"}
+ORDRE_PIEGE = dict(TEXTES_OT_PIEGE, id=OT_PIEGE, origine="manuel", equipement_id="EQ-0031", type="correctif différé", priorite="P3",
+                   statut="En attente", titre='PE-01 — <img src=x onerror="window.__piege = 10">Fuite <b>vive</b>',
+                   date_creation="2026-10-18 08:00", date_prevue="2026-10-21", technicien_id="", arret_production="0")
+TEMPS_PIEGE = [{"id": "OTT-099001", "ot_id": OT_PIEGE, "technicien_id": "TEC-0003", "date": "2026-10-18", "heures": "1.5"},
+               {"id": "OTT-099002", "ot_id": OT_PIEGE, "technicien_id": "TEC-0001", "date": "2026-10-18", "heures": "0.5"}]
 
 OBSERVATION_PIEGEE = "Le raccord était serré <img src=x onerror=\"window.__piege = 5\"> : c'est le joint qui était cuit."
 CONTRADICTIONS_PO02 = [
@@ -214,10 +242,12 @@ ORIGINE_IA = "IA Rédigé avec l'IA (claude-sonnet-5-5) à partir des OT cités 
 ORIGINE_MANUEL = "Écrit par Paul Martin le %s"
 ORIGINE_MIXTE = "IA Rédigé avec l'IA (claude-sonnet-5-5) à partir des OT cités, puis modifié à la main — validé par Paul Martin le %s"
 
-# La base remplace le wiki (vide) de la démo.
-BASE_JS = """async ([pages, journal]) => {
+# La base remplace le wiki (vide) de la démo et ajoute l'intervention piégée et ses temps pointés.
+BASE_JS = """async ([pages, journal, ordre, temps]) => {
   await Donnees.modifier('wiki_pages', (lignes) => { lignes.splice(0, lignes.length, ...pages); }, { journal: false });
   await Donnees.modifier('wiki_journal', (lignes) => { lignes.splice(0, lignes.length, ...journal); }, { journal: false });
+  await Donnees.modifier('ordres_travail', (lignes) => { lignes.push(ordre); }, { journal: false });
+  await Donnees.modifier('ot_temps', (lignes) => { lignes.push(...temps); }, { journal: false });
 }"""
 
 
@@ -419,17 +449,42 @@ DELAI_JS = """([selecteur, texte]) => new Promise((resoudre) => {
   champ.dispatchEvent(new Event('input', { bubbles: true }));
 })"""
 
-# Durée d'affichage d'un écran : du changement d'adresse à l'apparition de `selecteur`, image suivante comprise.
+# Durée d'affichage d'un écran : du changement d'adresse à l'apparition de `selecteur`, mise en page forcée, puis
+# l'image suivante peinte (la tâche qui suit requestAnimationFrame) — relecture de T137 (critique) : arrêtée dans
+# requestAnimationFrame, la mesure ne comptait ni la mise en page ni la peinture.
 MESURE_JS = """([route, selecteur]) => new Promise((resoudre) => {
   const t0 = performance.now();
-  const fin = () => requestAnimationFrame(() => resoudre({ duree: performance.now() - t0,
-    elements: document.querySelectorAll('#contenu *').length }));
+  const fin = () => {
+    document.body.getBoundingClientRect();
+    requestAnimationFrame(() => setTimeout(() => resoudre({ duree: performance.now() - t0,
+      elements: document.querySelectorAll('#contenu *').length }), 0));
+  };
   const observateur = new MutationObserver(() => {
     if (document.querySelector(selecteur)) { observateur.disconnect(); fin(); }
   });
   observateur.observe(document.getElementById('contenu'), { childList: true, subtree: true });
   location.hash = route;
 })"""
+
+# Entité la plus lourde de chaque type : [identifiant, nombre] — machine et panne (code symptôme) qui ont le plus d'OT,
+# article qui a le plus de mouvements de stock, technicien qui a le plus d'interventions (son OT ou du temps pointé),
+# intervention qui a le plus de temps pointés, de mouvements et d'opérations (à égalité, le plus petit identifiant).
+LOURDES_JS = """() => {
+  const compter = (lignes, champ) => { const n = new Map();
+    lignes.forEach((l) => { const c = String(l[champ] || '').trim(); if (c) n.set(c, (n.get(c) || 0) + 1); }); return n; };
+  const plus = (n) => Array.from(n).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
+  const ordres = Donnees.lignes('ordres_travail');
+  const parTechnicien = new Map();
+  const poser = (technicien, ot) => { const t = String(technicien || '').trim(); if (!t) return;
+    if (!parTechnicien.has(t)) parTechnicien.set(t, new Set()); parTechnicien.get(t).add(ot); };
+  ordres.forEach((ot) => poser(ot.technicien_id, ot.id));
+  Donnees.lignes('ot_temps').forEach((t) => poser(t.technicien_id, t.ot_id));
+  const panne = plus(compter(ordres, 'symptome_code'));
+  return { machine: plus(compter(ordres, 'equipement_id')), panne: [Wiki.idPanne(panne[0]), panne[1]],
+    article: plus(compter(Donnees.lignes('mouvements_stock'), 'article_id')),
+    technicien: plus(new Map(Array.from(parTechnicien, ([t, ots]) => [t, ots.size]))),
+    intervention: plus(compter([].concat(Donnees.lignes('ot_temps'), Donnees.lignes('mouvements_stock'), Donnees.lignes('ot_operations')), 'ot_id')) };
+}"""
 
 # Largeur de la page et largeur visible : clientWidth, pas innerWidth — en émulation mobile, un débordement agrandit
 # la fenêtre de mise en page (innerWidth 451 pour 375 px d'écran) et la comparaison avec innerWidth ne voyait rien.
@@ -507,6 +562,21 @@ def faits_attendus(faits):
     """Fiche attendue : [libellé, valeur, lien] des faits non vides, dans l'ordre."""
     return [[f["libelle"], plat(valeur_fait(f)), "#/wiki/" + encoder(f["lien"]) if f["lien"] else None]
             for f in faits if valeur_fait(f) is not None]
+
+
+def fiche_attendue(entite):
+    """Fiche attendue d'une page : ses faits (faits_attendus) ; pour une intervention, à la place du fait « Technicien »,
+    tous ses techniciens (sections.techniciens : « Techniciens » s'ils sont plusieurs, lien du premier) — relecture de
+    T137, m7."""
+    techniciens = (entite["sections"].get("techniciens") or []) if entite["type"] == "intervention" else []
+    lignes = []
+    for fait in entite["faits"]:
+        if techniciens and fait["libelle"] == "Technicien":
+            lignes.append(["Techniciens" if len(techniciens) > 1 else "Technicien", ", ".join(t["nom"] for t in techniciens),
+                           "#/wiki/" + encoder(techniciens[0]["lien"]) if techniciens[0]["lien"] else None])
+        elif valeur_fait(fait) is not None:
+            lignes.extend(faits_attendus([fait]))
+    return lignes
 
 
 def titre_equipement(ligne):
@@ -688,7 +758,7 @@ class CasWiki(CasNavigateur):
         return self.page
 
     def poser_base(self):
-        self.page.evaluate(BASE_JS, [PAGES, JOURNAL])
+        self.page.evaluate(BASE_JS, [PAGES, JOURNAL, ORDRE_PIEGE, TEMPS_PIEGE])
 
     def aller(self, route, attendre):
         self.page.evaluate("(route) => { location.hash = route; }", route)
@@ -1146,6 +1216,42 @@ class TestListes(CasWiki):
             code = ot["symptome_code"].strip()
             self.assertEqual(ligne["panne"], lien_panne(code) if code in cas else None, ot["id"])
 
+    def test_tri_des_interventions_sur_toute_la_liste(self):
+        """Relecture de T137 (m5) : sur PC, trier le tableau des interventions ordonne TOUTE la liste (plus de 100 OT dans la
+        démo), puis n'en crée que les 100 premières lignes ; « Voir les n autres » ajoute la suite dans le même ordre ; un
+        tri après l'ouverture garde toutes les lignes. Tri stable (à égalité, l'ordre d'avant), comme UI.tableau."""
+        page = self.ouvrir("responsable", largeur=1440, hauteur=900)
+        self.lire_liste("interventions")
+        attendues = self.calcul().liste_entites("intervention", "responsable", MAINTENANT)
+        total = len(attendues)
+        self.assertGreater(total, 100)
+        dates = {e["id"]: e["date"] for e in attendues}
+        self.assertTrue(all(dates.values()))
+        courant = [e["id"] for e in attendues]
+        numero = lambda i: tuple(int(n) for n in re.findall(r"\d+", i))  # noqa: E731
+
+        def trier(cle):
+            page.click('#wiki-interventions th .tri[data-cle="%s"]' % cle)
+            return ([l["id"] for l in page.evaluate(INTERVENTIONS_JS)],
+                    page.evaluate("() => Array.from(document.querySelectorAll('#wiki-interventions th[aria-sort]')).map((th) => [th.textContent.trim(), th.getAttribute('aria-sort')])"))
+        # N° croissant, puis décroissant : les 100 premiers de toute la liste (pas les 100 lignes déjà créées, triées)
+        courant = sorted(courant, key=numero)
+        self.assertNotEqual(courant[:100], sorted(([e["id"] for e in attendues])[:100], key=numero))
+        self.assertEqual(trier("id"), (courant[:100], [["N°", "ascending"]]))
+        courant = sorted(courant, key=numero, reverse=True)
+        self.assertEqual(trier("id"), (courant[:100], [["N°", "descending"]]))
+        # Date croissante (à date égale, l'ordre d'avant : N° décroissant), puis toute la liste au clic
+        courant = sorted(courant, key=lambda i: dates[i])
+        self.assertEqual(trier("date"), (courant[:100], [["Date", "ascending"]]))
+        self.assertEqual(page.inner_text(".wiki-liste-entites .wiki-voir-autres").strip(), "Voir les %d autres interventions" % (total - 100))
+        page.click(".wiki-liste-entites .wiki-voir-autres")
+        self.assertEqual([l["id"] for l in page.evaluate(INTERVENTIONS_JS)], courant)
+        self.assertEqual(page.locator(".wiki-liste-entites .wiki-voir-autres").count(), 0)
+        # Après l'ouverture, un nouveau tri garde toutes les lignes
+        courant = sorted(courant, key=numero)
+        self.assertEqual(trier("id"), (courant, [["N°", "ascending"]]))
+        self.verifier_sans_piege()
+
 
 # ---------------------------------------------------------------------------
 # Recherche de l'accueil : entités par type, puis plein texte (D99, D114)
@@ -1272,10 +1378,12 @@ class TestPagesEntites(CasWiki):
                         continue
                     entite = self.entite(identifiant, profil)
                     self.verifier_entete(lu, type_, entite)
-                    # Fiche des faits : Wiki.entite ET le calcul Python indépendant (faits vides omis, valeurs à la française)
-                    self.assertEqual(lu["faits"][:len(faits_attendus(entite["faits"]))] if type_ != "machine"
-                                     else [f for f in lu["faits"] if f[0] != "Sous-ensembles"], faits_attendus(entite["faits"]))
+                    # Fiche des faits : Wiki.entite ET le calcul Python indépendant (faits vides omis, valeurs à la française ;
+                    # pour l'intervention, tous ses techniciens)
+                    self.assertEqual(lu["faits"][:len(fiche_attendue(entite))] if type_ != "machine"
+                                     else [f for f in lu["faits"] if f[0] != "Sous-ensembles"], fiche_attendue(entite))
                     self.assertEqual(faits_attendus(entite["faits"]), faits_attendus(calcul.entite(identifiant, profil, MAINTENANT)["faits"]))
+                    self.assertEqual(fiche_attendue(entite), fiche_attendue(calcul.entite(identifiant, profil, MAINTENANT)))
                     # Sections dans l'ordre du type ; consignation et « À trancher » en tête de page
                     self.assertEqual([s for s in lu["sections"] if s not in ("wiki-en-attente", "wiki-retours", "wiki-references")],
                                      SECTIONS[type_])
@@ -1338,12 +1446,15 @@ class TestPagesEntites(CasWiki):
                     for ref in entite["references"]:
                         ot = ordres[ref["id"]]
                         self.assertEqual(ref["date"], date_de_l_ot(ot)[:10])
-                    # Bulle « <OT> · <date> · <titre> » ; lien vers la page de l'OT, sans lien pour le demandeur
+                    # Bulle « <OT> · <date> · <titre> » et nom « Référence n : <bulle> » ; lien vers la page de l'OT ; pour le
+                    # demandeur, un bouton sans lien (relecture de T137, m6 : la bulle s'ouvre au toucher)
                     sups = page.evaluate("""() => Array.from(document.querySelectorAll('#contenu sup.wiki-ref')).map((s) => [s.dataset.ot,
-                      s.firstElementChild.tagName, s.firstElementChild.getAttribute('href'), s.firstElementChild.getAttribute('title')])""")
-                    for ot, balise, lien, bulle in sups:
+                      s.firstElementChild.tagName, s.firstElementChild.getAttribute('href'), s.firstElementChild.getAttribute('title'),
+                      s.firstElementChild.getAttribute('aria-label'), s.firstElementChild.textContent, s.querySelectorAll('a').length])""")
+                    for ot, balise, lien, bulle, nom, numero, liens in sups:
                         self.assertEqual(bulle, "%s · %s · %s" % (ot, date_fr(date_de_l_ot(ordres[ot])[:10]), ordres[ot]["titre"]))
-                        self.assertEqual((balise, lien), ("SPAN", None) if profil == "demandeur" else ("A", "#/wiki/" + ot))
+                        self.assertEqual(nom, "Référence %s : %s" % (numero, bulle))
+                        self.assertEqual((balise, lien, liens), ("BUTTON", None, 0) if profil == "demandeur" else ("A", "#/wiki/" + ot, 1))
                     # « Références » : numéro, OT, date, machine, titre — dans l'ordre des numéros
                     self.assertEqual([r[:2] for r in lu["references"]], [["wiki-ref-%d" % (rang + 1), ot] for rang, ot in enumerate(attendus)])
                     for (_, ot, texte, liens) in lu["references"]:
@@ -1377,6 +1488,14 @@ class TestPagesEntites(CasWiki):
                               for p in textes[rubrique]["phrases"]], [phrase_attendue(p) for p in phrases], rubrique)
         self.assertIn(["Fuite", "#/wiki/PANNE-S01"], textes["Astuces"]["phrases"][0]["liens"])    # [[Fuite]] → sa page de panne
         self.assertEqual(textes["Astuces"]["phrases"][0]["absents"], ["Page disparue"])
+        # Un OT cité deux fois dans la même phrase n'a qu'un petit numéro, à sa première place (relecture de T137, m1)
+        self.assertEqual(rubriques_du_texte(TEXTE_PO02)[1][1][0].count("[OT-2026-0098]"), 2)
+        self.assertEqual([r[1] for r in textes["Astuces"]["phrases"][0]["refs"]], ["OT-2026-0098", "OT-2025-0010"])
+        self.assertEqual(textes["Astuces"]["phrases"][0]["texte"], "Repérer l'accouplement avant le démontage, voir Fuite et Page disparue")
+        self.assertEqual(page.evaluate("""() => { const phrase = document.querySelector('.wiki-texte[data-rubrique="Astuces"] .wiki-phrase');
+          return [phrase.querySelectorAll('sup.wiki-ref[data-ot="OT-2026-0098"]').length,
+            phrase.firstElementChild.matches('sup.wiki-ref[data-ot="OT-2026-0098"]'), phrase.firstChild.textContent]; }"""),
+            [1, True, "Repérer l'accouplement"])
         # Une ancienne rubrique (avant la refonte 2) vient après celles du type ; une rubrique vide n'est pas montrée
         lu = self.lire("EQ-0001")
         self.assertEqual([t["rubrique"] for t in lu["textes"]], ["En bref", "Ce qui revient"])
@@ -1535,6 +1654,122 @@ class TestPagesEntites(CasWiki):
             self.assertEqual(self.entite(identifiant, "responsable")["sections"]["motifAttente" if champ == "motif_attente" else "motifAnnulation"],
                              ot[champ].strip())
 
+    def test_page_intervention_piegee_reste_du_texte(self):
+        """Relecture de T137 (m4) : titre, travail demandé, compte rendu, astuce, motifs d'attente et d'annulation d'une
+        intervention piégée (base d'essai) : du texte au caractère près, aucune balise interprétée — sur sa page, dans la
+        liste des interventions, sur la page de sa machine et de ses techniciens."""
+        for profil in ("technicien", "responsable"):
+            with self.subTest(profil=profil):
+                page = self.ouvrir(profil, base=True)
+                ot = page.evaluate("(id) => Donnees.trouver('ordres_travail', id)", OT_PIEGE)
+                self.assertEqual({champ: ot[champ] for champ in TEXTES_OT_PIEGE}, TEXTES_OT_PIEGE)      # stockés tels quels
+                lu = self.lire(OT_PIEGE)
+                self.assertEqual(lu["h1Brut"], OT_PIEGE + " — " + ORDRE_PIEGE["titre"])
+                self.assertEqual([s for s in lu["sections"] if s in SECTIONS_OT_PIEGE], list(SECTIONS_OT_PIEGE))
+                textes = page.evaluate("""(ids) => ids.map((id) => document.querySelector('#' + id + ' .wiki-texte-ot').textContent)""",
+                                       list(SECTIONS_OT_PIEGE))
+                self.assertEqual(textes, [TEXTES_OT_PIEGE[champ].strip() for champ in SECTIONS_OT_PIEGE.values()])
+                self.assertEqual(page.locator("#contenu .wiki-texte-ot *, #contenu h1 *").count(), 0)
+                self.verifier_sans_piege()
+                # Ailleurs : la liste des interventions, la page de sa machine, celle d'un technicien qui y a pointé du temps
+                for route, selecteur in (("#/wiki/interventions", "#wiki-interventions tbody tr"),
+                                         ("#/wiki/EQ-0031", '.wiki-page[data-page="EQ-0031"] .wiki-intervention[data-id="%s"]' % OT_PIEGE),
+                                         ("#/wiki/TEC-0003", '.wiki-page[data-page="TEC-0003"] .wiki-intervention[data-id="%s"]' % OT_PIEGE)):
+                    with self.subTest(profil=profil, route=route):
+                        self.aller(route, selecteur)
+                        self.assertIn(ORDRE_PIEGE["titre"], page.inner_text("#contenu"))
+                        self.verifier_sans_piege()
+
+    def test_techniciens_d_une_intervention(self):
+        """Relecture de T137 (m7) : la fiche d'une intervention nomme tous ses techniciens — celui de l'OT, puis ceux qui y ont
+        pointé du temps ; « Techniciens » s'ils sont plusieurs —, chacun en lien vers sa page, à la place du fait
+        « Technicien », comme Wiki.entite et le calcul Python indépendant ; aussi quand l'OT n'a pas de technicien."""
+        lire = """() => { const dt = document.querySelector('#wiki-faits dt[data-section="techniciens"]');
+          if (!dt) return null;
+          const dd = dt.nextElementSibling;
+          return { libelle: dt.textContent.trim(), noms: Array.from(dd.querySelectorAll('a, .wiki-nom-entite')).map((e) => [e.textContent,
+              e.getAttribute('href')]),
+            avant: dt.previousElementSibling.previousElementSibling.textContent.trim(),
+            apres: dd.nextElementSibling ? dd.nextElementSibling.textContent.trim() : null,
+            lignes: document.querySelectorAll('#wiki-faits dt[data-fait="Technicien"]').length }; }"""
+        for profil in ("technicien", "responsable"):
+            page = self.ouvrir(profil, base=True)
+            calcul = self.calcul()
+            for identifiant, attendus in (("OT-2026-0214", ["TEC-0002", "TEC-0004"]), (OT_PIEGE, ["TEC-0003", "TEC-0001"]),
+                                          ("OT-2025-0012", ["TEC-0002", "TEC-0001"]), ("OT-2025-0001", ["TEC-0002"])):
+                with self.subTest(profil=profil, intervention=identifiant):
+                    techniciens = calcul.entite(identifiant, profil, MAINTENANT)["sections"]["techniciens"]
+                    self.assertEqual([t["technicienId"] for t in techniciens], attendus)
+                    self.assertEqual(self.entite(identifiant, profil)["sections"]["techniciens"], techniciens)
+                    self.lire(identifiant)
+                    lu = page.evaluate(lire)
+                    self.assertEqual(lu["libelle"], "Techniciens" if len(attendus) > 1 else "Technicien")
+                    self.assertEqual(lu["noms"], [[t["nom"], "#/wiki/" + t["technicienId"]] for t in techniciens])
+                    self.assertEqual((lu["avant"], lu["apres"], lu["lignes"]), ("Statut", "Créé le", 1))      # à la place du fait
+            # Le lien d'un technicien mène à sa page
+            self.lire(OT_PIEGE)
+            page.click('#wiki-faits a[href="#/wiki/TEC-0003"]')
+            page.wait_for_selector('.wiki-page[data-page="TEC-0003"] .wiki-page-grille')
+        # Le demandeur n'ouvre pas la page d'une intervention, ni aucune page de technicien (D114)
+        page = self.ouvrir("demandeur", base=True)
+        self.assertEqual(self.lire("OT-2026-0214").get("introuvable"), True)
+        self.assertIsNone(self.calcul().entite("OT-2026-0214", "demandeur", MAINTENANT))
+
+    def test_bulle_d_un_petit_numero_au_toucher_pour_le_demandeur(self):
+        """Relecture de T137 (m6) : pour le demandeur, un petit numéro est un bouton sans lien, nommé « Référence n : <OT> ·
+        <date> · <titre> », qui montre sa bulle au toucher (au clic, au clavier), une seule à la fois, lisible et dans
+        l'écran ; un second toucher, un toucher ailleurs ou Échap la referment."""
+        bulle_js = """() => Array.from(document.querySelectorAll('#contenu .wiki-ref-bulle')).map((b) => {
+          b.scrollIntoView({ block: 'center' });
+          const r = b.getBoundingClientRect();
+          const dessus = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { texte: b.textContent, ot: b.closest('sup').dataset.ot, cache: b.getAttribute('aria-hidden'), gauche: r.left,
+            droite: r.right, largeur: r.width, hauteur: r.height, dessus: Boolean(dessus && dessus.closest('.wiki-ref-bulle') === b),
+            ecran: document.documentElement.clientWidth }; })"""
+        for largeur, hauteur, telephone, theme in ((375, 812, True, "clair"), (1440, 900, False, None)):
+            with self.subTest(largeur=largeur):
+                page = self.ouvrir("demandeur", largeur=largeur, hauteur=hauteur, telephone=telephone, theme=theme, base=True)
+                self.lire("EQ-0005")
+                ordres = {o["id"]: o for o in page.evaluate("Donnees.lignes('ordres_travail')")}
+                boutons = page.locator("#contenu sup.wiki-ref > button.wiki-ref-numero")
+                self.assertGreater(boutons.count(), 5)
+                self.assertEqual(page.locator("#contenu sup.wiki-ref a").count(), 0)
+                self.assertEqual(page.locator("#contenu .wiki-ref-bulle").count(), 0)
+                toucher = (lambda e: e.tap()) if telephone else (lambda e: e.click())
+                titre = page.locator("#contenu h1")
+                for rang in range(boutons.count()):
+                    bouton = boutons.nth(rang)
+                    ot = bouton.evaluate("(b) => b.closest('sup').dataset.ot")
+                    attendu = "%s · %s · %s" % (ot, date_fr(date_de_l_ot(ordres[ot])[:10]), ordres[ot]["titre"])
+                    self.assertEqual(bouton.get_attribute("aria-label"), "Référence %s : %s" % (bouton.inner_text().strip(), attendu))
+                    toucher(titre)                       # un toucher ailleurs ferme la bulle d'avant (elle peut couvrir ce numéro)
+                    self.assertEqual(page.locator("#contenu .wiki-ref-bulle").count(), 0)
+                    toucher(bouton)
+                    bulles = page.evaluate(bulle_js)
+                    self.assertEqual([(b["texte"], b["ot"], b["cache"], b["dessus"]) for b in bulles], [(attendu, ot, "true", True)], ot)
+                    self.assertGreaterEqual(bulles[0]["gauche"], 0)
+                    self.assertLessEqual(bulles[0]["droite"], bulles[0]["ecran"])
+                    self.assertGreater(bulles[0]["hauteur"], 10)
+                    largeur_page, ecran = page.evaluate(LARGEUR_JS)
+                    self.assertLessEqual(largeur_page, ecran, "bulle de %s : page plus large que l'écran" % ot)
+                    self.assertEqual(page.evaluate(AUDIT_TEXTES_JS, "#contenu sup.wiki-ref"), [], ot)
+                # Un second toucher sur le même numéro la referme ; une seule bulle à la fois ; toucher la bulle la referme
+                dernier = boutons.nth(boutons.count() - 1)
+                toucher(dernier)
+                self.assertEqual(page.locator("#contenu .wiki-ref-bulle").count(), 0)
+                toucher(boutons.first)
+                toucher(dernier)
+                self.assertEqual([b["ot"] for b in page.evaluate(bulle_js)], [dernier.evaluate("(b) => b.closest('sup').dataset.ot")])
+                toucher(page.locator("#contenu .wiki-ref-bulle"))
+                self.assertEqual(page.locator("#contenu .wiki-ref-bulle").count(), 0)
+                # Au clavier : Entrée l'ouvre, Échap la referme
+                boutons.first.focus()
+                page.keyboard.press("Enter")
+                self.assertEqual(page.locator("#contenu .wiki-ref-bulle").count(), 1)
+                page.keyboard.press("Escape")
+                self.assertEqual(page.locator("#contenu .wiki-ref-bulle").count(), 0)
+                self.verifier_sans_piege()
+
     def test_listes_d_interventions_dans_l_ordre_avec_leur_statut(self):
         """Une page ne crée que ses 10 premières interventions (D101) ; « Voir les n autres interventions » crée les autres ;
         ordre et statuts du calcul Python, les ouvertes en tête (D113)."""
@@ -1649,14 +1884,20 @@ class TestPagesEntites(CasWiki):
         self.assertEqual(lu["contradictions"][1]["observation"], OBSERVATION_PIEGEE)
         self.assertIn([plat(TITRE_PIEGE), "#/wiki/WP-0006"], [l for t in self.lire("ART-0016")["textes"] for p in t["phrases"] for l in p["liens"]])
         self.verifier_sans_piege()
-        # Identifiant piégé dans l'adresse ; page archivée, inconnue, d'un type retiré : « Page introuvable »
+        # Identifiant piégé dans l'adresse ; page archivée, inconnue, d'un type retiré (page de mode, sous-page de machine,
+        # composant libre — relecture de T137, m4) : « Page introuvable »
         self.aller("#/wiki/%3Cimg%20src%3Dx%20onerror%3D%22window.__piege%3D1%22%3E", ".wiki-introuvable")
         self.assertIn('<img src=x onerror="window.__piege=1">', page.inner_text("#contenu .vide"))
-        for identifiant in ("WP-0009", "WP-0010", "WP-0011", "EQ-9999", "PANNE-S00"):
+        libre = page.evaluate("Donnees.trouver('wiki_pages', 'WP-0014')")
+        self.assertEqual((libre["type"], libre["article_id"], libre["statut"]), ("composant", "", "active"))
+        calcul = self.calcul()
+        for identifiant in ("WP-0009", "WP-0010", "WP-0011", "WP-0014", "EQ-9999", "PANNE-S00"):
             with self.subTest(identifiant=identifiant):
                 lu = self.lire(identifiant)
                 self.assertEqual((lu.get("introuvable"), lu["h1"]), (True, "Page introuvable"))
                 self.assertEqual(page.get_attribute('#contenu a.btn[href="#/wiki"]', "href"), "#/wiki")
+                self.assertIsNone(self.entite(identifiant, "responsable"))
+                self.assertIsNone(calcul.entite(identifiant, "responsable", MAINTENANT))
         self.verifier_sans_piege()
 
 
@@ -2324,9 +2565,12 @@ class TestAffichage(CasWiki):
 
 class TestJeuDeCharge(CasWiki):
     """Jeu de charge (outils/generer_demo.py --volume 500,5000 : 500 machines, 5 000 OT), mode serveur, responsable, PC et
-    téléphone : l'accueil, chaque liste et une page de chaque type s'affichent en moins de 500 ms (médiane de trois
-    affichages, de l'adresse à l'image suivante), sans créer des dizaines de milliers d'éléments (avant : 63 065 pour la
-    liste des interventions, 5 s)."""
+    téléphone : l'accueil, chaque liste et la page la plus lourde de chaque type s'affichent en moins de 500 ms (médiane
+    de trois affichages, de l'adresse à l'image peinte, mise en page comprise), sans créer des dizaines de milliers
+    d'éléments (avant : 63 065 pour la liste des interventions, 5 s ; relecture de T137 : 14 443 pour la chronologie du
+    stock créée en entier d'un coup). Pages mesurées (relecture de T137, critique) : la machine et la panne qui ont le
+    plus d'OT, l'article qui a le plus de mouvements de stock, le technicien qui a le plus d'interventions (les siennes
+    et celles où il a pointé du temps), l'intervention qui a le plus de temps pointés, de mouvements et d'opérations."""
 
     ELEMENTS_MAX = 5000
 
@@ -2361,12 +2605,14 @@ class TestJeuDeCharge(CasWiki):
               titre: 'Geste de charge', equipement_id: Donnees.lignes('equipements')[0].id, texte: '## Étapes\\n- Un geste [' +
               Donnees.lignes('ordres_travail')[0].id + ']', version: '1', origine: 'manuel', valide_par: 'Responsable',
               valide_le: '2026-10-15 10:00', statut: 'active' }); return true; }, { action: 'test de charge du wiki' })""")
-        ids = page.evaluate("""() => {
-          const plus = (champ) => { const nombres = new Map();
-            Donnees.lignes('ordres_travail').forEach((ot) => nombres.set(ot[champ], (nombres.get(ot[champ]) || 0) + 1));
-            return Array.from(nombres).filter(([cle]) => cle).sort((a, b) => b[1] - a[1])[0][0]; };
-          return [plus('equipement_id'), Wiki.idPanne(plus('symptome_code')), Donnees.lignes('articles')[0].id, plus('technicien_id'),
-            Donnees.lignes('ordres_travail')[0].id, 'WP-9001']; }""")
+        lourdes = page.evaluate(LOURDES_JS)
+        ids = [lourdes[t][0] for t in ("machine", "panne", "article", "technicien", "intervention")] + ["WP-9001"]
+        sys.stderr.write("\n  [charge %d px] pages les plus lourdes : %s\n" % (largeur, lourdes))
+        # Bien les plus lourdes du jeu de charge : des milliers de mouvements, des centaines d'OT
+        self.assertGreater(lourdes["article"][1], 1000)
+        self.assertGreater(lourdes["panne"][1], 100)
+        self.assertGreater(lourdes["technicien"][1], 100)
+        self.assertTrue(all(page.evaluate("(id) => Boolean(Wiki.entite(id, { profil: 'responsable' }))", i) for i in ids))
         routes = [("#/wiki", "#wiki-accueil")]
         routes += [("#/wiki/" + liste, '.wiki-liste-entites[data-liste="%s"]' % liste) for liste in LISTES]
         routes += [("#/wiki/" + encoder(i), '.wiki-page[data-page="%s"] .wiki-page-grille' % i) for i in ids]
@@ -2389,6 +2635,17 @@ class TestJeuDeCharge(CasWiki):
         page.wait_for_selector(".wiki-liste-entites[data-liste=interventions] .wiki-voir-autres")
         selecteur = ".wiki-carte-intervention" if telephone else "#wiki-interventions tbody tr"
         self.assertEqual(page.locator(selecteur).count(), 40 if telephone else 100)
+        if not telephone:
+            # Trier par N° ordonne les 5 000 OT, puis ne crée que les 100 premières lignes, en moins de 500 ms (m5)
+            tri = page.evaluate("""() => new Promise((resoudre) => { const t0 = performance.now();
+              document.querySelector('#wiki-interventions th .tri[data-cle="id"]').click();
+              document.body.getBoundingClientRect();
+              requestAnimationFrame(() => setTimeout(() => resoudre({ duree: performance.now() - t0,
+                ids: Array.from(document.querySelectorAll('#wiki-interventions tbody tr')).map((tr) => tr.cells[1].textContent.trim()) }), 0)); })""")
+            tous = page.evaluate("Donnees.lignes('ordres_travail').map((ot) => ot.id)")
+            self.assertEqual(tri["ids"], sorted(tous, key=lambda i: tuple(int(n) for n in re.findall(r"\d+", i)))[:100])
+            self.assertLess(tri["duree"], BUDGET_MS)
+            sys.stderr.write("  [charge 1440 px] tri des %d interventions par N° : %.0f ms\n" % (len(tous), tri["duree"]))
         page.click(".wiki-liste-entites .wiki-voir-autres")
         page.wait_for_function("([s, n]) => document.querySelectorAll(s).length === n", arg=[selecteur, total])
 

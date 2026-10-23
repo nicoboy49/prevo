@@ -250,14 +250,22 @@ ul.wiki-tuile-lignes { padding: 6px 18px; }
 .wiki-lien-absent { color: var(--texte-2); text-decoration: underline dotted; text-underline-offset: 3px; }
 .wiki-sans-texte { margin: 0; color: var(--texte); }
 
-/* Petits numéros des OT cités (D113) et « Références » */
-.wiki-ref { margin-left: 2px; font-size: .75rem; font-weight: 700; line-height: 0; }
-.wiki-ref > a, .wiki-ref > span {
-  display: inline-block; min-width: 1.5em; padding: 1px 4px; border-radius: 6px; line-height: 1.35; text-align: center;
-  background: var(--teinte-bleu); color: var(--texte-bleu); text-decoration: none;
+/* Petits numéros des OT cités (D113) et « Références » ; pour le demandeur, un bouton (sans lien) qui ouvre sa bulle */
+.wiki-ref { position: relative; margin-left: 2px; font-size: .75rem; font-weight: 700; line-height: 0; }
+.wiki-ref > a, .wiki-ref > .wiki-ref-numero {
+  display: inline-block; min-width: 1.5em; margin: 0; padding: 1px 4px; border: 0; border-radius: 6px; line-height: 1.35;
+  text-align: center; background: var(--teinte-bleu); color: var(--texte-bleu); text-decoration: none;
 }
 .wiki-ref > a:hover { background: var(--bleu-bouton); color: var(--sur-couleur); }
-.wiki-ref > span { background: var(--teinte-neutre); color: var(--texte-2); }
+.wiki-ref > .wiki-ref-numero { font: inherit; line-height: 1.35; background: var(--teinte-neutre); color: var(--texte-2); cursor: pointer; }
+.wiki-ref > .wiki-ref-numero:hover { color: var(--texte); }
+/* Bulle « OT · date · titre » sous le numéro (gardée dans l'écran par wiki-page-ecrans.js) */
+.wiki-ref-bulle {
+  position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; width: max-content; max-width: min(22rem, calc(100vw - 16px));
+  padding: 6px 10px; border: 1px solid var(--trait-2); border-radius: 10px; background: var(--carte-2); color: var(--texte);
+  box-shadow: 0 8px 24px var(--ombre); font-size: .8125rem; font-weight: 600; line-height: 1.45; text-align: left;
+  white-space: normal; overflow-wrap: anywhere; letter-spacing: normal;
+}
 .wiki-refs { margin: 0; padding-left: 1.8rem; display: flex; flex-direction: column; gap: 6px; font-size: .9375rem; color: var(--texte-2); }
 .wiki-refs > li { overflow-wrap: anywhere; }
 .wiki-refs > li::marker { color: var(--texte-2); font-weight: 700; }
@@ -364,14 +372,16 @@ ul.wiki-tuile-lignes { padding: 6px 18px; }
   .wiki-phrase .wiki-lien-page, .wiki-observation .wiki-lien-page, .wiki-evenement-texte a, .wiki-refs a {
     margin: -12px 0; vertical-align: middle;
   }
-  .wiki-ref > a {
+  .wiki-ref > a, .wiki-ref > .wiki-ref-numero {
     position: relative; isolation: isolate; display: inline-flex; align-items: center; justify-content: center; min-width: 30px;
     min-height: 48px; margin: -18px 0; padding: 0 4px; background: none; vertical-align: middle;
   }
-  .wiki-ref > a::before {
+  .wiki-ref > a::before, .wiki-ref > .wiki-ref-numero::before {
     content: ""; position: absolute; z-index: -1; left: 2px; right: 2px; top: 50%; height: 1.6em; transform: translateY(-50%);
     border-radius: 6px; background: var(--teinte-bleu);
   }
+  .wiki-ref > .wiki-ref-numero::before { background: var(--teinte-neutre); }
+  .wiki-ref-bulle { top: calc(100% + 16px); }
   .wiki-evenement { grid-template-columns: minmax(0, 1fr) auto; }
   .wiki-evenement-date { grid-column: 1 / -1; }
   .wiki-barres-page > li { grid-template-columns: minmax(0, 1fr) auto; }
@@ -382,4 +392,6 @@ ul.wiki-tuile-lignes { padding: 6px 18px; }
   .wiki-recherche-accueil, .wiki-suivi-actions, .wiki-voir-autres, .wiki-filtres, .wiki-ecrire-lien { display: none !important; }
   .wiki-page-grille { display: block; }
   .wiki-fiche { position: static; }
+  .wiki-ref > button.wiki-ref-numero { display: inline-block !important; }    /* style.css cache les boutons à l'impression */
+  .wiki-ref-bulle { display: none !important; }
 }

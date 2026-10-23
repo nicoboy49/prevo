@@ -20,13 +20,17 @@
 //  - petits numéros : chaque citation [OT-…] d'une phrase devient, à sa place (l'espace qui la précède retirée ; répétée
 //    dans la même phrase, montrée une fois), <sup class="wiki-ref"> ; un OT garde son numéro sur toute la page ;
 //    numérotés dans l'ordre d'apparition (« À trancher », puis les textes : l'ordre de Wiki.entite().references) ; lien
-//    #/wiki/<OT>, bulle « <OT> · <date> · <titre> » ; pour le demandeur, le numéro et la bulle, sans lien ;
+//    #/wiki/<OT>, bulle « <OT> · <date> · <titre> » (title), nom « Référence n : <bulle> » (aria-label) ; pour le
+//    demandeur, sans lien : un bouton (même nom, même bulle) qui montre la bulle au clic ou au toucher, gardée dans
+//    l'écran, refermée par un autre clic ou Échap (relecture de T137, m6 : un title seul est invisible au toucher) ;
 //  - « Références » : numéro, OT (lien, sauf pour le demandeur), date, machine (lien), titre, dans l'ordre des numéros ;
 //  - [[titre]] → une page qui s'affiche (même index que le champ liens, wiki-journal.js) : panne, machine, article,
 //    savoir-faire actif, texte d'une machine ou d'un article (sa page) ; sinon le titre reste du texte ;
 //  - fiche : les faits de Wiki.entite dans l'ordre, un fait vide omis ; AAAA-MM-JJ → JJ/MM/AAAA, avec l'heure →
 //    JJ/MM/AAAA hh:mm, oui / non, nombre à la française, prix et taux horaire en euros (« / h ») ; un fait qui porte un
-//    lien mène à sa page ; pour une machine, ses sous-ensembles (liens) avant « Interventions » ;
+//    lien mène à sa page ; pour une machine, ses sous-ensembles (liens) avant « Interventions » ; pour une intervention,
+//    à la place du fait « Technicien », tous ses techniciens (le sien, puis ceux qui ont pointé du temps :
+//    sections.techniciens ; « Techniciens » s'ils sont plusieurs), chacun en lien vers sa page si le profil la voit ;
 //  - « Ce que dit la page » : la phrase telle que la contradiction l'a notée (maquette) ; les OT qui l'observent en
 //    petits numéros après l'observation ;
 //  - « Modifier » (responsable, seul profil de #/wiki-ecrire) : texte d'une machine ou d'un article, savoir-faire ;
@@ -116,14 +120,19 @@ Object.assign(Wiki, (() => {
     const detail = (ot) => details.get(ot) || { id: ot, date: '', titre: '', machine: null, lien: null };
     const bulle = (ot) => [ot, UI.dateFr(detail(ot).date), detail(ot).titre].filter(Boolean).join(' · ');
 
-    /** Petit numéro d'un OT cité : <sup class="wiki-ref"> (lien vers sa page, sauf pour le demandeur). */
+    /**
+     * Petit numéro d'un OT cité : <sup class="wiki-ref">, lien vers sa page ; pour le demandeur, un bouton qui montre la
+     * bulle (basculerBulle). Même nom accessible dans les deux cas.
+     */
     function element(ot) {
       if (!numeros.has(ot)) numeros.set(ot, numeros.size + 1);
       const numero = numeros.get(ot);
       const lien = detail(ot).lien;
+      const nom = 'Référence ' + numero + ' : ' + bulle(ot);
       return UI.element(lien
-        ? UI.html`<sup class="wiki-ref" data-ot="${ot}"><a href="${outils().adresse(lien)}" title="${bulle(ot)}" aria-label="Référence ${numero} : ${bulle(ot)}">${numero}</a></sup>`
-        : UI.html`<sup class="wiki-ref" data-ot="${ot}"><span class="wiki-ref-numero" title="${bulle(ot)}">${numero}</span></sup>`);
+        ? UI.html`<sup class="wiki-ref" data-ot="${ot}"><a href="${outils().adresse(lien)}" title="${bulle(ot)}" aria-label="${nom}">${numero}</a></sup>`
+        : UI.html`<sup class="wiki-ref" data-ot="${ot}"><button type="button" class="wiki-ref-numero" title="${bulle(ot)}"
+            aria-label="${nom}">${numero}</button></sup>`);
     }
 
     /** Section « Références » : numéro, OT, date, machine, titre. */
@@ -139,6 +148,33 @@ Object.assign(Wiki, (() => {
     }
 
     return { element, section, nombre: () => numeros.size };
+  }
+
+  const MARGE_BULLE = 8;                         // px gardés entre la bulle et le bord de l'écran
+
+  function fermerBulles(racine) {
+    UI.$$('.wiki-ref-bulle', racine).forEach((bulle) => bulle.remove());
+  }
+
+  /**
+   * Bulle d'un petit numéro sans lien (demandeur) : ouverte sous le numéro au clic ou au toucher, une seule à la fois,
+   * décalée pour rester dans l'écran (jamais de défilement horizontal) ; un second clic la referme. Son texte est celui
+   * du nom du bouton : elle est cachée aux lecteurs d'écran, qui l'ont déjà.
+   */
+  function basculerBulle(bouton) {
+    const sup = bouton.closest('.wiki-ref');
+    const ouverte = UI.$('.wiki-ref-bulle', sup);
+    fermerBulles(bouton.closest('.wiki-page') || document);
+    if (ouverte) return;
+    const bulle = document.createElement('span');
+    bulle.className = 'wiki-ref-bulle';
+    bulle.setAttribute('aria-hidden', 'true');
+    bulle.textContent = bouton.title;
+    sup.appendChild(bulle);
+    const cadre = bulle.getBoundingClientRect();
+    const largeur = document.documentElement.clientWidth;
+    const decalage = Math.max(MARGE_BULLE - cadre.left, Math.min(0, largeur - MARGE_BULLE - cadre.right));
+    if (decalage) bulle.style.left = Math.round(decalage) + 'px';
   }
 
   // ===========================================================================================
@@ -444,12 +480,22 @@ Object.assign(Wiki, (() => {
       </div>${actionsHtml(entite, contexte)}</div>`;
   }
 
+  /** Ligne des techniciens d'une intervention (précisions en tête) : un lien par technicien, en texte sans lien. */
+  function ligneTechniciens(techniciens) {
+    const o = outils();
+    return UI.html`<dt data-fait="Technicien" data-section="techniciens">${techniciens.length > 1 ? 'Techniciens' : 'Technicien'}</dt>
+      <dd>${o.joindre(techniciens.map((technicien) => o.lienEntite(technicien.lien, technicien.nom)), ', ')}</dd>`;
+  }
+
   /** Fiche des faits (précisions en tête), à droite de la page (au-dessus sur téléphone). */
   function ficheHtml(entite) {
     const o = outils();
-    const lignes = entite.faits.map((fait) => ({ fait, valeur: valeurFait(fait) })).filter((ligne) => ligne.valeur !== null)
-      .map(({ fait, valeur }) => UI.html`<dt data-fait="${fait.libelle}">${fait.libelle}</dt><dd>${fait.lien ? o.lienEntite(fait.lien, valeur)
-        : (fait.libelle === 'État du stock' ? UI.html`<span class="badge ${ETATS_STOCK[valeur] || 'neutre'}">${valeur}</span>` : valeur)}</dd>`);
+    const techniciens = entite.type === 'intervention' ? entite.sections.techniciens || [] : [];
+    const deTechniciens = (fait) => techniciens.length > 0 && fait.libelle === 'Technicien';
+    const lignes = entite.faits.map((fait) => ({ fait, valeur: valeurFait(fait) })).filter((ligne) => ligne.valeur !== null || deTechniciens(ligne.fait))
+      .map(({ fait, valeur }) => (deTechniciens(fait) ? ligneTechniciens(techniciens)
+        : UI.html`<dt data-fait="${fait.libelle}">${fait.libelle}</dt><dd>${fait.lien ? o.lienEntite(fait.lien, valeur)
+          : (fait.libelle === 'État du stock' ? UI.html`<span class="badge ${ETATS_STOCK[valeur] || 'neutre'}">${valeur}</span>` : valeur)}</dd>`));
     const sousEnsembles = entite.type === 'machine' ? entite.sections.sousEnsembles || [] : [];
     if (sousEnsembles.length) {
       const rang = entite.faits.filter((fait) => valeurFait(fait) !== null).findIndex((fait) => fait.libelle === 'Interventions');
@@ -494,6 +540,14 @@ Object.assign(Wiki, (() => {
       <div class="wiki-alertes"></div>
       <div class="wiki-page-grille"><div class="wiki-lecture"></div>${ficheHtml(entite)}</div>
     </div>`);
+    // Bulles des petits numéros sans lien (demandeur) : un clic sur un numéro l'ouvre ou la ferme, ailleurs les ferme.
+    const page = UI.$('.wiki-page', conteneur);
+    page.addEventListener('click', (evenement) => {
+      const bouton = evenement.target.closest('.wiki-ref-numero');
+      if (bouton) basculerBulle(bouton);
+      else fermerBulles(page);
+    });
+    page.addEventListener('keydown', (evenement) => { if (evenement.key === 'Escape') fermerBulles(page); });
     // En tête, dans l'ordre de la page : consignation, puis « À trancher » (les petits numéros commencent là).
     const alertes = UI.$('.wiki-alertes', conteneur);
     const consignation = consignationDe(entite, contexte);

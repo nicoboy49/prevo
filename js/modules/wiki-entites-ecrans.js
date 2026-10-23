@@ -33,8 +33,11 @@
 //  - dernières interventions : les DERNIERES_MONTREES premières de accueilEncyclopedie().dernieres ;
 //  - longues listes (D101, relecture de T136 : 5 006 OT du jeu de charge) : seules les premières lignes sont créées —
 //    recherche : ENTITES_MONTREES par type ; interventions : LIGNES_MONTREES lignes du tableau sur PC,
-//    CARTES_MONTREES cartes au téléphone — ; « Voir les n autres » crée les autres au clic (tableau.mettreAJour
-//    pour le tableau) ;
+//    CARTES_MONTREES cartes au téléphone — ; « Voir les n autres » crée les autres au clic ;
+//  - tableau des interventions (PC) : triable comme UI.tableau (mêmes classes et aria-sort, cellules vides en fin, tri
+//    stable), mais le tri porte sur TOUTE la liste, dont seules les LIGNES_MONTREES premières lignes sont alors créées
+//    (relecture de T137, m5 : avant, seules les 100 lignes déjà créées étaient triées) ; les cartes du téléphone ne se
+//    trient pas ;
 //  - lignes des briques : « : » et « · » collés au mot d'avant par une espace insécable (jamais seuls en tête de
 //    ligne) ; textes d'exemple des champs plus courts au téléphone.
 
@@ -525,13 +528,74 @@ Object.assign(Wiki, (() => {
     </a></li>`;
   }
 
+  /**
+   * Tableau triable d'une longue liste, posé dans `zone` (précisions en tête) : le tri ordonne toutes les `lignes`, puis
+   * seules les `montres` premières sont créées, les autres au clic sur « Voir les n autres <nom> » (les tris suivants
+   * les gardent). reglages : { libelle, vide, nom, montres, lignes, colonnes : [{ cle, libelle, classe, type ('nombre'),
+   * valeurTri (ligne → valeur ; sinon ligne[cle]), rendu (ligne → texte ou fragment UI.html ; sinon ligne[cle]) }] }.
+   */
+  function tableauParMorceaux(zone, reglages) {
+    const colonnes = reglages.colonnes;
+    let lignes = reglages.lignes.slice();
+    let tri = null;                                    // { cle, sens: 'asc' | 'desc' }, comme UI.tableau
+    let toutes = lignes.length <= reglages.montres;
+    const cadre = UI.element(UI.html`<div class="table-defile"><table class="table">
+      <caption class="visuellement-cache">${reglages.libelle}</caption>
+      <thead><tr>${colonnes.map((colonne) => UI.html`<th scope="col" class="${colonne.type === 'nombre' ? 'num' : ''}"><button type="button"
+        class="tri" data-cle="${colonne.cle}">${colonne.libelle}<span class="sens" aria-hidden="true"></span></button></th>`)}</tr></thead>
+      <tbody></tbody></table></div>`);
+    const corps = UI.$('tbody', cadre);
+    const rangee = (ligne) => UI.html`<tr>${colonnes.map((colonne) => UI.html`<td class="${[colonne.type === 'nombre' ? 'num' : '',
+      colonne.classe || ''].filter(Boolean).join(' ')}">${typeof colonne.rendu === 'function' ? colonne.rendu(ligne) : ligne[colonne.cle]}</td>`)}</tr>`;
+    const estVide = (valeur) => valeur === null || valeur === undefined || valeur === '';
+
+    /** Tri stable de toute la liste sur la colonne de `tri` ; les cellules vides en fin, dans les deux sens. */
+    function trier() {
+      const colonne = colonnes.find((c) => c.cle === tri.cle);
+      const valeurDe = (ligne) => (typeof colonne.valeurTri === 'function' ? colonne.valeurTri(ligne) : ligne[colonne.cle]);
+      const sens = tri.sens === 'desc' ? -1 : 1;
+      lignes = lignes.map((ligne, rang) => ({ ligne, rang, valeur: valeurDe(ligne) })).sort((a, b) => {
+        if (estVide(a.valeur) || estVide(b.valeur)) return (estVide(a.valeur) === estVide(b.valeur) ? 0 : (estVide(a.valeur) ? 1 : -1)) || a.rang - b.rang;
+        const ecart = colonne.type === 'nombre' ? Number(a.valeur) - Number(b.valeur) : ORDRE_FRANCAIS.compare(String(a.valeur), String(b.valeur));
+        return sens * ecart || a.rang - b.rang;
+      }).map((entree) => entree.ligne);
+    }
+
+    function afficher() {
+      corps.textContent = '';
+      if (!lignes.length) {
+        UI.remplir(corps, UI.html`<tr><td class="vide-table" colspan="${colonnes.length}">${reglages.vide}</td></tr>`);
+      } else {
+        ajouterA(corps, (toutes ? lignes : lignes.slice(0, reglages.montres)).map(rangee));
+      }
+      UI.$$('thead th', cadre).forEach((cellule) => {
+        if (tri && UI.$('.tri', cellule).dataset.cle === tri.cle) cellule.setAttribute('aria-sort', tri.sens === 'desc' ? 'descending' : 'ascending');
+        else cellule.removeAttribute('aria-sort');
+      });
+    }
+
+    UI.$$('thead .tri', cadre).forEach((bouton) => bouton.addEventListener('click', () => {
+      const cle = bouton.dataset.cle;
+      tri = tri && tri.cle === cle ? { cle, sens: tri.sens === 'asc' ? 'desc' : 'asc' } : { cle, sens: 'asc' };
+      trier();
+      afficher();
+    }));
+    afficher();
+    zone.appendChild(cadre);
+    if (!toutes) zone.appendChild(UI.element(boutonAutres(lignes.length - reglages.montres, reglages.nom)));
+    brancherSuite(zone, () => {
+      toutes = true;
+      return ajouterA(corps, lignes.slice(reglages.montres).map(rangee));
+    });
+  }
+
   /** Liste des interventions : LIGNES_MONTREES lignes (PC) ou CARTES_MONTREES cartes (téléphone), les autres au clic (D101). */
   function rendreInterventions(conteneur, interventions) {
     const cadre = cadreListe(conteneur, 'intervention', interventions.length, UI.html`<div class="bento-tuile wiki-tuile-tableau" id="wiki-interventions"></div>`);
     const zone = UI.$('#wiki-interventions', cadre);
     if (!UI.estTelephone()) {
-      const tableau = UI.tableau({
-        libelle: 'Interventions', vide: 'Aucune intervention.', lignes: interventions.slice(0, LIGNES_MONTREES),
+      tableauParMorceaux(zone, {
+        libelle: 'Interventions', vide: 'Aucune intervention.', nom: 'interventions', montres: LIGNES_MONTREES, lignes: interventions,
         colonnes: [
           { cle: 'date', libelle: 'Date', rendu: (ot) => UI.dateFr(ot.date) },
           { cle: 'id', libelle: 'N°', classe: 'sans-coupure', rendu: (ot) => lienEntite(ot.lien, ot.id) },
@@ -543,12 +607,6 @@ Object.assign(Wiki, (() => {
           { cle: 'techniciens', libelle: 'Technicien', valeurTri: (ot) => ot.techniciens.map((t) => t.nom).join(', '),
             rendu: (ot) => UI.html`${joindre(ot.techniciens.map((t) => lienEntite(t.lien, t.nom)), ', ')}` },
         ],
-      });
-      zone.appendChild(tableau);
-      if (interventions.length > LIGNES_MONTREES) zone.appendChild(UI.element(boutonAutres(interventions.length - LIGNES_MONTREES, 'interventions')));
-      brancherSuite(zone, () => {
-        tableau.mettreAJour(interventions);
-        return Array.from(tableau.querySelectorAll('tbody tr')).slice(LIGNES_MONTREES);
       });
       return;
     }
