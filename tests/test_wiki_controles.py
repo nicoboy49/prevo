@@ -426,6 +426,21 @@ class TestSousPages(CasControles):
                                           "à elle", CONTEXTE_DECOUPE)
         self.assertEqual(len(raisons), 1, raisons)
 
+    def test_savoir_faire_rattache_a_une_sous_page(self):
+        """Un savoir-faire se rattache à la page mère, jamais à une sous-page : il y perdrait l'ancrage de l'équipement
+        (envoyé avec ses OT, consignation en tête)."""
+        contexte = copy.deepcopy(CONTEXTE_DECOUPE)
+        contexte["pagesEnvoyees"].append({"titre": "PO-02 — joints", "type": "équipement", "mere": EQUIPEMENT, "otDates": [],
+                                          "texte": "## Ce qui revient\n- Joint torique sec [OT-2026-0020]"})
+        savoir = {"rien": False, "contradictions": [], "pages": [
+            {"action": "creer", "titre": "Changer un joint torique", "type": "savoir-faire", "rattacheA": "PO-02 — joints",
+             "texte": "## Étapes\n- Graisser le joint neuf avant la pose [OT-2026-0042]"}]}
+        raisons = self.refus(savoir, "Page « Changer un joint torique » : un savoir-faire se rattache à la page mère « %s », "
+                                     "jamais à une sous-page" % EQUIPEMENT, contexte)
+        self.assertEqual(len(raisons), 1, raisons)
+        savoir["pages"][0]["rattacheA"] = EQUIPEMENT                 # rattaché à la mère : accepté
+        self.assertEqual(self.controler(savoir, contexte), self.OK)
+
     def test_titre_d_une_sous_page(self):
         for titre in ("Garniture de PO-02", "PO-02 - garniture", "PO-02 —", "PO-02 garniture"):
             with self.subTest(titre=titre):

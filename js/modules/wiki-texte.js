@@ -367,6 +367,10 @@ Object.assign(Wiki, (() => {
       }
       if (type === 'savoir-faire' && !sousPage && !(rattachement && ['équipement', 'composant'].includes(rattachement.type))) {
         raisons.push(nom + ' : un savoir-faire se rattache à une page envoyée (équipement ou composant).');
+      } else if (type === 'savoir-faire' && !sousPage && texte(rattachement.mere)) {
+        // Rattaché à une sous-page, il perdrait l'ancrage de l'équipement : ni envoyé avec ses OT, ni consignation.
+        raisons.push(nom + ' : un savoir-faire se rattache à la page mère « ' + texte(rattachement.mere)
+          + ' », jamais à une sous-page.');
       }
       if (ctx.titresExistants.has(Wiki.comparable(titre))) {
         raisons.push(nom + ' : une page de ce titre existe déjà.');

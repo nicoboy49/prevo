@@ -524,7 +524,8 @@ Object.assign(Wiki, (() => {
         if (page.nouvelle && ligne) throw ErreurValidation('Une page de ce titre existe déjà.');
         if (!ligne) {
           ligne = nouvelleLigne(lignes, outils, page.cle, { type: page.type, titre: page.titre }, texte(page.rattache));
-          if (page.causeCode) ligne.cause_code = page.causeCode;
+          // Une sous-page (rattachée à sa mère) n'a pas d'ancrage propre, pas même un code cause.
+          if (page.causeCode && !texte(ligne.rattache_a)) ligne.cause_code = page.causeCode;
         }
         const contexte = { index: indexDesLiens(lignes), parIa: false, entreeId, par, maintenant: outils.maintenant() };
         poserTexte(ligne, nouveau, contexte);

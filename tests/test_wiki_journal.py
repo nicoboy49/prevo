@@ -466,6 +466,14 @@ class TestDecoupage(CasJournal):
     def lignes(self):
         return {ligne["titre"]: ligne for ligne in self.page.evaluate("Donnees.lignes('wiki_pages')")}
 
+    def test_sous_page_de_mode_ecrite_a_la_main_sans_code_cause(self):
+        """Une sous-page n'a pas d'ancrage propre : écrite à la main avec un code cause, elle ne le prend pas (sinon elle
+        serait calculée comme un mode ancré)."""
+        self.ok("ecrire", {"nouvelle": {"type": "mode", "titre": "Usure de garniture — faces", "rattacheA": "WP-0005",
+                                        "causeCode": "C01"}}, "## Causes\n- Faces rayées [OT-2026-0001]")
+        ligne = self.lignes()["Usure de garniture — faces"]
+        self.assertEqual((ligne["rattache_a"], ligne["cause_code"]), ("WP-0005", ""))
+
     def test_validation_d_un_decoupage_d_un_bloc(self):
         self.traiter(["OT-2026-0001"], "faux-decoupe")
         id_0001 = self.id_de("OT-2026-0001")
