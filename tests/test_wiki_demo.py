@@ -9,10 +9,15 @@ Toujours avec un faux `claude` (tests/fixtures/wiki/faux_claude.py), jamais un v
     relance     : (D106 révisée, §20.10) une réponse refusée par Prévo est relancée avec la raison : un agent neuf
                   de plus, dans la même trace, et la fabrication continue ; une relance refusée l'arrête ;
     arrêts      : modèle autre que Sonnet, plus d'un tour, réponse en erreur, réponse refusée par Prévo deux fois ;
+    deux temps  : (D115) --limite N garde l'état de départ de la suite (avant validations), temps-1.json (OT,
+                  empreintes, bilan, coût) et sa page de relecture ; --suite donne le même wiki à l'octet qu'une
+                  fabrication d'un seul tenant, sans aucun appel pour les N premiers, dans le même ordre ; refusée sans
+                  temps 1, sur d'autres données de démo, avec une autre consigne, ou avec --limite ;
     figer       : les fichiers figés repris par le générateur donnent une démo identique à l'octet d'une génération
                   à l'autre ; vérification (traces, une entrée par OT reliée à la réponse acceptée — relance
-                  comprise —, intégrité) ; page de relecture par type ; un fichier figé qui cite un OT inexistant
-                  arrête le générateur ;
+                  comprise —, intégrité) ; page de relecture par type (refonte 2 : machines, articles, savoir-faire ;
+                  chaque texte avec ses OT et leurs relances) ; un fichier figé qui cite un OT inexistant arrête le
+                  générateur ;
     À propos    : mention « construit par Claude (<modèle>) avec la consigne de Prévo, un agent par OT ».
 
 Lancer depuis la racine du projet :
@@ -24,6 +29,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -244,7 +250,10 @@ class TestFabrication(unittest.TestCase):
         csv_demo = self.dossier / 'generation-1' / 'csv'
         for table, nom in (('wiki_pages', 'demo_wiki_pages.csv'), ('wiki_journal', 'demo_wiki_journal.csv')):
             self.assertEqual(lignes_csv(csv_demo / (table + '.csv')), lignes_csv(fige / nom), table)
-        self.assertIn('wiki_journal: "id;nature;ot_id', generations[0]['demo.js'].decode('utf-8'))
+        # Le journal (textes d'avant et d'après de chaque changement) est écrit par morceaux dans js/demo-donnees.js
+        # (§20.10 ; recollés au chargement : test_demo le vérifie dans Chromium).
+        self.assertIn("\n    wiki_journal: ((m, s) => s.map((r) => m[r]).join(''))([\"id;nature;ot_id;",
+                      generations[0]['demo.js'].decode('utf-8'))
         # Le reste de la démo ne bouge pas.
         for fichier in DEMO.glob('*.csv'):
             if not fichier.stem.startswith('wiki_'):
@@ -256,10 +265,13 @@ class TestFabrication(unittest.TestCase):
         sortie = lancer(OUTIL, ['relecture', '--demo', csv_demo, '--sortie', relecture])
         self.assertEqual(sortie.returncode, 0, sortie.stdout + sortie.stderr)
         texte = relecture.read_text(encoding='utf-8')
-        positions = [texte.index('<h2>' + titre) for titre in ('Équipements', 'Composants', 'Modes de défaillance', 'Savoir-faire')]
+        # Refonte 2 (§20.12) : textes des machines, des articles, savoir-faire ; plus de pages de mode.
+        positions = [texte.index('<h2>' + titre) for titre in ('Machines — « En bref » et « Astuces »',
+                                                               'Articles — « À quoi il sert »', 'Savoir-faire')]
         self.assertEqual(positions, sorted(positions))
+        self.assertNotIn('Modes de défaillance', texte)
+        self.assertNotIn('<small>mode ·', texte)
         # Les plus riches d'abord, dans chaque type (nombre d'OT cités).
-        import re
         section = texte[positions[0]:positions[1]]
         nombres = [int(n) for n in re.findall(r'<small>équipement · (\d+) OT', section)]
         self.assertGreater(len(nombres), 5)
@@ -270,6 +282,12 @@ class TestFabrication(unittest.TestCase):
         self.assertIn('OT-2026-0214', attente)
         self.assertIn('Page modifiée', attente)
         self.assertIn('[OT-2026-0214]', attente)
+        # Chaque texte avec ses OT et leurs relances : l'OT relancé avec la raison l'est sous son texte et dans la liste.
+        relances = texte[texte.index('<h2>Refus, relances et rejeux (1)'):texte.index('<h2>Rien à ajouter')]
+        self.assertIn('<b>%s</b>' % self.relance, relances)
+        self.assertIn('Relancée avec la raison</b> (2 essais) — premier refus : ', relances)
+        self.assertIn(REFUS_SANS_OT, relances)
+        self.assertIn('dont 1 relancé(s) ou rejoué(s)', texte[positions[0]:])
         # Vérification en échec : une entrée du journal figé retirée.
         abime = self.dossier / 'fige-abime'
         shutil.copytree(fige, abime)
@@ -316,6 +334,140 @@ class TestFabrication(unittest.TestCase):
         sortie = lancer(GENERATEUR, ['--wiki', dates, '--sortie', self.dossier / 'incoherent-dates', '--sans-js'])
         self.assertEqual(sortie.returncode, 1)
         self.assertIn("date d'intervention 2001-01-01 08:00", sortie.stderr)
+
+
+def demo_reduite(cible, nombre):
+    """Copie de la démo où seuls les `nombre` premiers OT clôturés administrativement (par date d'intervention) le
+    restent ; les autres passent « Clôturé techniquement », hors de la file du wiki (essais courts). → les OT gardés,
+    dans l'ordre des interventions."""
+    shutil.copytree(DEMO, cible)
+    texte = (cible / 'ordres_travail.csv').read_bytes().decode('utf-8-sig')
+    clotures = [ot for _, ot in sorted((o['date_fin'], o['id']) for o in lignes_csv(DEMO / 'ordres_travail.csv')
+                                       if o['statut'] == 'Clôturé administrativement')]
+    retires = set(clotures[nombre:])
+    lignes = texte.split('\r\n')
+    for rang, ligne in enumerate(lignes):
+        if ligne.split(';', 1)[0] in retires:
+            lignes[rang] = ligne.replace(';Clôturé administrativement;', ';Clôturé techniquement;', 1)
+    (cible / 'ordres_travail.csv').write_bytes(b'\xef\xbb\xbf' + '\r\n'.join(lignes).encode('utf-8'))
+    gardes = [o['id'] for o in lignes_csv(cible / 'ordres_travail.csv') if o['statut'] == 'Clôturé administrativement']
+    assert sorted(gardes) == sorted(clotures[:nombre]), gardes
+    return clotures[:nombre]
+
+
+class TestDeuxTemps(unittest.TestCase):
+    """Fabrication en deux temps (D115, §20.12) : `fabriquer --limite N` (temps 1) garde l'état de départ de la suite,
+    temps-1.json et sa page de relecture ; `fabriquer --suite` repart de cet état exact et ne traite que les OT restants,
+    sans aucun appel pour ceux du temps 1, dans le même ordre, avec les validations d'une fabrication d'un seul tenant :
+    même wiki à l'octet (un agent). Sur une démo réduite à ses 24 premiers OT clôturés administrativement."""
+    GARDES, LIMITE = 24, 10
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dossier = d = Path(tempfile.mkdtemp(prefix='prevo-wiki-deux-temps-'))
+        cls.addClassCleanup(shutil.rmtree, d, True)
+        cls.demo = d / 'demo'
+        cls.ordre = demo_reduite(cls.demo, cls.GARDES)
+        commun = ['--agents', 1, '--claude', FAUX, '--demo', cls.demo]
+        cls.seul = lancer(OUTIL, ['fabriquer'] + commun + ['--traces', d / 'chaine-seul', '--resultat', d / 'seul'])
+        cls.temps_1 = lancer(OUTIL, ['fabriquer', '--limite', cls.LIMITE] + commun + ['--traces', d / 'chaine-1', '--resultat',
+                                                                                      d / 'temps-1'])
+        cls.traces_1 = {p.name: p.read_bytes() for p in (d / 'chaine-1').glob('*.json')}
+        # La suite, avec des traces neuves : un OT du temps 1 redemandé lancerait forcément un agent.
+        cls.suite = lancer(OUTIL, ['fabriquer', '--suite', '--depart', d / 'temps-1'] + commun
+                           + ['--traces', d / 'chaine-2', '--resultat', d / 'suite'], {'FAUX_CLAUDE_TRACES': str(d / 'appels-suite')})
+
+    def test_suite_meme_wiki_qu_une_fabrication_d_un_seul_tenant(self):
+        for nom, sortie in (('seul', self.seul), ('temps 1', self.temps_1), ('suite', self.suite)):
+            self.assertEqual(sortie.returncode, 0, nom + ' : ' + sortie.stdout + sortie.stderr)
+        for table in ('wiki_pages', 'wiki_journal'):
+            self.assertEqual((self.dossier / 'suite' / (table + '.csv')).read_bytes(),
+                             (self.dossier / 'seul' / (table + '.csv')).read_bytes(), table)
+        # La suite continue les pages du temps 1 : une page cite des OT des deux temps.
+        premiers, suivants = set(self.ordre[:self.LIMITE]), set(self.ordre[self.LIMITE:])
+        cites = [set(p['ot_cites'].split(';')) for p in lignes_csv(self.dossier / 'suite' / 'wiki_pages.csv')]
+        self.assertTrue(any(ot & premiers and ot & suivants for ot in cites))
+        # Même ordre chronologique : le rang de traitement suit la date d'intervention ; tout est validé.
+        journal = sorted(lignes_csv(self.dossier / 'suite' / 'wiki_journal.csv'), key=lambda e: int(e['ordre']))
+        self.assertEqual([e['ot_id'] for e in journal], self.ordre)
+        self.assertEqual({e['statut'] for e in journal}, {'validée'})
+
+    def test_aucun_appel_pour_les_ot_du_temps_1(self):
+        self.assertEqual(self.suite.returncode, 0, self.suite.stdout + self.suite.stderr)
+        self.assertIn('Suite du temps 1 (%s) : %d OT déjà intégrés, repris tels quels, sans nouvel appel.'
+                      % (self.dossier / 'temps-1', self.LIMITE), self.suite.stdout)
+        self.assertIn('OT : %d (%d mis en file)' % (self.GARDES, self.GARDES - self.LIMITE), self.suite.stdout)
+        self.assertIn('Agents lancés : %d · réponses reprises des traces : 0 ·' % (self.GARDES - self.LIMITE), self.suite.stdout)
+        appels = [json.loads(p.read_text(encoding='utf-8')) for p in (self.dossier / 'appels-suite').glob('*.json')]
+        recus = sorted(re.search(r'OT à intégrer : (OT-\d{4}-\d{4,})', a['entree']).group(1) for a in appels)
+        self.assertEqual(recus, sorted(self.ordre[self.LIMITE:]))
+        self.assertEqual(sorted(p.stem for p in (self.dossier / 'chaine-2').glob('*.json')), sorted(self.ordre[self.LIMITE:]))
+        # Les traces du temps 1 ne bougent pas (aucune réponse reprise, aucun verdict réécrit).
+        self.assertEqual({p.name: p.read_bytes() for p in (self.dossier / 'chaine-1').glob('*.json')}, self.traces_1)
+
+    def test_resultat_et_relecture_du_temps_1(self):
+        self.assertEqual(self.temps_1.returncode, 0, self.temps_1.stdout + self.temps_1.stderr)
+        dossier = self.dossier / 'temps-1'
+        temps = json.loads((dossier / 'temps-1.json').read_text(encoding='utf-8'))
+        self.assertEqual((temps['temps'], temps['limite'], temps['ot'], temps['agents_lances'], temps['reprises']),
+                         (1, self.LIMITE, self.ordre[:self.LIMITE], self.LIMITE, 0))
+        self.assertAlmostEqual(temps['cout_usd'], 0.0123 * self.LIMITE)
+        self.assertEqual(len(temps['empreinte_donnees']), 64)
+        # État de départ de la suite : avant les validations (propositions « à valider », aucune page validée).
+        etat = lignes_csv(dossier / 'etat-avant-validation' / 'wiki_journal.csv')
+        self.assertEqual(sorted(e['ot_id'] for e in etat), sorted(self.ordre[:self.LIMITE]))
+        self.assertEqual({e['statut'] for e in etat}, {'à valider'})
+        self.assertEqual(lignes_csv(dossier / 'etat-avant-validation' / 'wiki_pages.csv'), [])
+        # Le résultat validé, et sa page de relecture (refonte 2 : machines, articles, savoir-faire ; bilan et coût).
+        self.assertEqual({e['statut'] for e in lignes_csv(dossier / 'wiki_journal.csv')}, {'validée'})
+        texte = (dossier / 'relecture.html').read_text(encoding='utf-8')
+        self.assertIn('<h1>Wiki de démo — relecture du temps 1</h1>', texte)
+        self.assertIn('Temps 1 : %d premiers OT par date d\'intervention · acceptés' % self.LIMITE, texte)
+        self.assertIn('coût 0.12 $', texte)
+        positions = [texte.index('<h2>' + titre) for titre in ('Machines — « En bref » et « Astuces »',
+                                                               'Articles — « À quoi il sert »', 'Savoir-faire')]
+        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn('Modes de défaillance', texte)
+        for ot in self.ordre[:self.LIMITE]:
+            self.assertIn('<li id="%s"><b>%s</b>' % (ot, ot), texte)
+        self.assertIn('Temps 1 : ', self.temps_1.stdout)
+
+    def test_suite_refusee_sans_temps_1_ou_sur_d_autres_donnees(self):
+        d = self.dossier
+        commun = ['--agents', 1, '--claude', FAUX, '--traces', d / 'chaine-refus']
+        (d / 'vide').mkdir(exist_ok=True)
+        sans = lancer(OUTIL, ['fabriquer', '--suite', '--depart', d / 'vide', '--demo', self.demo, '--resultat', d / 'r1'] + commun)
+        self.assertEqual(sans.returncode, 1, sans.stdout)
+        self.assertIn('ARRÊT : --suite : aucun résultat de temps 1 dans %s' % (d / 'vide'), sans.stdout)
+        # Autres données : un compte rendu de la démo changé depuis le temps 1.
+        autre = d / 'demo-changee'
+        shutil.copytree(self.demo, autre)
+        chemin = autre / 'ordres_travail.csv'
+        texte = chemin.read_bytes().decode('utf-8')
+        ancien = next(o['compte_rendu'] for o in lignes_csv(self.demo / 'ordres_travail.csv')
+                      if o['compte_rendu'] and not set('"\r\n') & set(o['compte_rendu']) and texte.count(o['compte_rendu']) == 1)
+        chemin.write_bytes(texte.replace(ancien, ancien + ' Relu.', 1).encode('utf-8'))
+        changees = lancer(OUTIL, ['fabriquer', '--suite', '--depart', d / 'temps-1', '--demo', autre, '--resultat', d / 'r2'] + commun)
+        self.assertEqual(changees.returncode, 1, changees.stdout)
+        self.assertIn('fabriqué sur d\'autres données de démo que celles-ci', changees.stdout)
+        # Consigne changée depuis le temps 1 (empreinte gardée différente).
+        copie = d / 'temps-1-autre-consigne'
+        shutil.copytree(d / 'temps-1', copie)
+        temps = json.loads((copie / 'temps-1.json').read_text(encoding='utf-8'))
+        temps['empreinte_consigne'] = '0' * 64
+        (copie / 'temps-1.json').write_text(json.dumps(temps), encoding='utf-8')
+        consigne = lancer(OUTIL, ['fabriquer', '--suite', '--depart', copie, '--demo', self.demo, '--resultat', d / 'r3'] + commun)
+        self.assertEqual(consigne.returncode, 1, consigne.stdout)
+        self.assertIn('la consigne (message système d\'ingestionWiki ou options d\'un agent) a changé depuis le temps 1',
+                      consigne.stdout)
+        for sortie in (sans, changees, consigne):
+            self.assertNotIn('Agents lancés', sortie.stdout)
+        self.assertFalse((d / 'chaine-refus').exists())
+        for resultat in ('r1', 'r2', 'r3'):
+            self.assertFalse((d / resultat / 'wiki_journal.csv').exists())
+        ensemble = lancer(OUTIL, ['fabriquer', '--suite', '--limite', 5, '--demo', self.demo] + commun)
+        self.assertEqual(ensemble.returncode, 2)
+        self.assertIn('--suite et --limite ne vont pas ensemble', ensemble.stderr)
 
 
 class TestArrets(unittest.TestCase):

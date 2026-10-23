@@ -21,6 +21,9 @@ Ce qui est vérifié (docs/ARCHITECTURE.md §3, §4, §11, §14.1, §14.8 ; brie
   - js/demo-donnees.js chargé dans Chromium : 24 tables, texte identique aux CSV ; démo en file://
     chargée vite et sans erreur au « Contrôle de la base » ;
   - reproductibilité (deux exécutions = fichiers identiques, et fichiers livrés à jour) ;
+  - wiki de démo (§20.12, D115, CS105) : le wiki figé n'est repris que pour la démo standard (--mois 6 : tables du wiki
+    vides, avec un message) ; avec un wiki de l'ordre de grandeur d'un wiki complet, js/demo-donnees.js reste sous 1 Mo
+    (tables du wiki écrites par morceaux, identiques aux CSV une fois chargées) ; au-delà, le générateur s'arrête ;
   - options --volume 500,5000 (moins de 60 s, gammes, compteurs, mouvements, achats) et --mois 6.
 
 Lancer depuis la racine du projet :
@@ -31,6 +34,7 @@ import csv
 import importlib.util
 import io
 import json
+import random
 import re
 import subprocess
 import sys
@@ -113,6 +117,76 @@ def lignes_propres(dossier, table):
     """Lignes d'une table, valeurs débarrassées de l'apostrophe de protection."""
     _, lignes = lire_table(dossier, table)
     return [{nom: retirer_apostrophe(valeur) for nom, valeur in ligne.items()} for ligne in lignes]
+
+
+def ecrire_wiki_fige(dossier, generateur, page_unique=0):
+    """Wiki figé cohérent avec la démo livrée, de l'ordre de grandeur d'un wiki complet (passe 6 : 74 pages, 227
+    entrées, js/demo-donnees.js de 1,32 Mo en chaînes JSON) : pour chaque OT clôturé administrativement, dans l'ordre
+    des interventions, une entrée validée dont les changements portent le texte d'avant et d'après de la page de sa
+    machine et d'un savoir-faire de la machine (une phrase de plus chaque fois) ; les pages finissent avec toutes leurs
+    phrases. page_unique=N : N caractères sans aucune répétition, en pages d'une phrase, et aucune entrée."""
+    rng = random.Random(115)
+    vocabulaire = ['garniture', 'roulement', 'courroie', 'capteur', 'contacteur', 'filtre', 'joint', 'bobine', 'palier',
+                   'serrage', 'alignement', 'graissage', 'vibration', 'fuite', 'échauffement', 'nettoyage', 'réglage',
+                   'remplacé', 'contrôlé', 'encrassé', 'usé', 'desserré', 'vérifié', 'au', 'du', 'de', 'la', 'le', 'puis']
+    ordres = sorted((o for o in lignes_propres(DOSSIER_DEMO, 'ordres_travail') if o['statut'] == 'Clôturé administrativement'),
+                    key=lambda o: (o['date_fin'], o['id']))
+    equipements = {e['id']: e for e in lignes_propres(DOSSIER_DEMO, 'equipements')}
+    instant = DATE_REFERENCE + ' 09:00'
+    pages, journal = {}, []
+
+    def texte_de(rubrique, phrases):
+        return '\n'.join(['## ' + rubrique] + ['- %s [%s]' % phrase for phrase in phrases])
+
+    def ligne_page(identifiant, type_, titre, equipement, rubrique, phrases, version, derniere, rattache=''):
+        return [identifiant, type_, titre, titre.lower(), equipement, '', '', rattache, texte_de(rubrique, phrases),
+                ';'.join(sorted({ot for _, ot in phrases})), '', str(version), 'IA', 'claude-sonnet-5-5', derniere,
+                'Responsable', instant, instant, instant, 'active']
+
+    if page_unique:
+        # Pages de 100 000 caractères au plus (un champ CSV en a 131 072 au plus pour le module csv).
+        lignes_pages = []
+        for rang, debut in enumerate(range(0, page_unique, 100000), 1):
+            lettres = ''.join(rng.choice('abcdefghijklmnopqrstuvwxyz ') for _ in range(min(100000, page_unique - debut)))
+            lignes_pages.append(ligne_page('WP-%04d' % rang, 'équipement', 'Page unique %d' % rang,
+                                           ordres[0]['equipement_id'], 'En bref', [(lettres, ordres[0]['id'])], 1, ''))
+    else:
+        for rang, ot in enumerate(ordres, 1):
+            eq = equipements[ot['equipement_id']]
+            page = pages.setdefault(eq['id'], {'id': 'WP-%04d' % (2 * len(pages) + 1), 'titre': eq['repere'] + ' — '
+                                               + eq['designation'], 'en_bref': [], 'etapes': [], 'version': 0})
+            changements = []
+            for cle, type_, titre, rubrique, liste in (
+                    ('EQ:' + eq['id'], 'équipement', page['titre'], 'En bref', page['en_bref']),
+                    ('WP:WP-%04d' % (int(page['id'][3:]) + 1), 'savoir-faire', 'Méthode de ' + eq['repere'], 'Étapes',
+                     page['etapes'])):
+                avant = texte_de(rubrique, liste) if liste else ''
+                liste.append((' '.join(rng.choice(vocabulaire) for _ in range(22)).capitalize(), ot['id']))
+                changements.append({'page': cle.split(':')[1] if cle.startswith('WP:') else page['id'],
+                                    'version_avant': page['version'], 'cle': cle, 'titre': titre, 'type': type_,
+                                    'creation': not avant, 'rattacheA': '', 'avant': avant,
+                                    'apres': texte_de(rubrique, liste)})
+            page['version'] += 1
+            page['derniere'] = 'WJ-%05d' % rang
+            journal.append(['WJ-%05d' % rang, 'ingestion', ot['id'], ot['date_fin'], 'validée', '0', str(rang),
+                            ';'.join(c['cle'] for c in changements), json.dumps(changements, ensure_ascii=False), '[]', '',
+                            'claude-sonnet-5-5', '1', instant, instant, 'Responsable', instant, ''])
+        lignes_pages = []
+        for eq_id, page in pages.items():
+            lignes_pages.append(ligne_page(page['id'], 'équipement', page['titre'], eq_id, 'En bref', page['en_bref'],
+                                           page['version'], page['derniere']))
+            lignes_pages.append(ligne_page('WP-%04d' % (int(page['id'][3:]) + 1), 'savoir-faire', 'Méthode de '
+                                           + equipements[eq_id]['repere'], eq_id, 'Étapes', page['etapes'],
+                                           page['version'], page['derniere'], rattache=page['id']))
+    dossier.mkdir(parents=True, exist_ok=True)
+    for table, nom, lignes in (('wiki_pages', 'demo_wiki_pages.csv', lignes_pages),
+                               ('wiki_journal', 'demo_wiki_journal.csv', journal)):
+        sortie = io.StringIO()
+        ecrivain = csv.writer(sortie, delimiter=';', lineterminator='\r\n')
+        ecrivain.writerow([champ['nom'] for champ in generateur.CHAMPS[table]])
+        ecrivain.writerows(lignes)
+        (dossier / nom).write_bytes(b'\xef\xbb\xbf' + sortie.getvalue().encode('utf-8'))
+    return len(lignes_pages), len(journal)
 
 
 def executer_generateur(*arguments, delai=120):
@@ -1877,10 +1951,43 @@ class TestAvecNavigateur(CasNavigateur):
             self.assertEqual(texte, octets[3:].decode('utf-8'), table)
             self.assertNotIn('﻿', texte)
 
+    def test_wiki_complet_ecrit_par_morceaux_sous_1_mo_et_identique_aux_csv(self):
+        """§20.12, CS105 : avec un wiki de l'ordre de grandeur d'un wiki complet (en chaînes JSON, js/demo-donnees.js
+        dépasserait 1 Mo), les tables du wiki sont écrites par morceaux : le fichier reste sous 1 Mo et, chargé dans
+        Chromium, chaque table est identique à son CSV, caractère pour caractère ; les autres tables restent des
+        chaînes JSON."""
+        generateur = charger_generateur()
+        with tempfile.TemporaryDirectory() as temporaire:
+            racine = Path(temporaire)
+            nombre_pages, nombre_entrees = ecrire_wiki_fige(racine / 'fige', generateur)
+            processus, _ = executer_generateur('--wiki', racine / 'fige', '--sortie', racine / 'csv',
+                                               '--fichier-js', racine / 'demo.js')
+            self.assertEqual(processus.returncode, 0, processus.stderr.decode('utf-8', 'replace'))
+            self.assertNotIn('Wiki de démo non repris', processus.stdout.decode('utf-8'))
+            textes = {table: (racine / 'csv' / (table + '.csv')).read_bytes()[3:].decode('utf-8') for table in TABLES}
+            self.assertEqual((len(lire_table(racine / 'csv', 'wiki_pages')[1]), len(lire_table(racine / 'csv', 'wiki_journal')[1])),
+                             (nombre_pages, nombre_entrees))
+            self.assertGreater(nombre_entrees, 200)
+            en_chaines = len(FICHIER_JS.read_bytes()) + sum(len(json.dumps(textes[t], ensure_ascii=False).encode('utf-8'))
+                                                           for t in generateur.TABLES_PAR_MORCEAUX)
+            self.assertGreater(en_chaines, generateur.TAILLE_JS_MAX)      # en chaînes JSON : plus de 1 Mo
+            js = (racine / 'demo.js').read_bytes()
+            self.assertLess(len(js), generateur.TAILLE_JS_MAX)
+            # Le journal (texte d'avant et d'après de chaque changement) par morceaux ; toute table hors du wiki en chaîne.
+            lignes_js = {table: next(l for l in js.decode('utf-8').split('\n') if l.startswith('    %s: ' % table))
+                         for table in TABLES}
+            self.assertTrue(lignes_js['wiki_journal'].startswith("    wiki_journal: ((m, s) => s.map((r) => m[r]).join(''))(["))
+            for table in TABLES:
+                if table not in generateur.TABLES_PAR_MORCEAUX:
+                    self.assertTrue(lignes_js[table].startswith('    %s: "' % table), table)
+            charger_scripts(self.page, [str(racine / 'demo.js')])
+            for table in TABLES:
+                self.assertEqual(self.page.evaluate('(nom) => DEMO_DONNEES.tables[nom]', table), textes[table], table)
+
     def test_demo_en_file_chargee_vite_et_controle_de_la_base_sans_probleme(self):
         """13 mois d'historique restent légers en file:// : fichier de moins de 1 Mo, démo prête en
         quelques secondes, aucun problème signalé par « Contrôle de la base »."""
-        self.assertLess(FICHIER_JS.stat().st_size, 1024 * 1024)
+        self.assertLess(FICHIER_JS.stat().st_size, charger_generateur().TAILLE_JS_MAX)          # 1 Mo
         page = self.page
         page.goto(url_fichier('index.html'))
         page.wait_for_function("document.documentElement.dataset.etat === 'demarrage'")
@@ -2036,6 +2143,40 @@ class TestGenerateur(unittest.TestCase):
             self.assertFalse(any(o['id'].startswith('OT-2025-') for o in ot_court))
             self.assertTrue(any(o['id'].startswith('OT-2025-') for o in ot_long))
             self.assertEqual(len(lire_table(sortie, 'equipements')[1]), 31)
+
+    def test_wiki_fige_seulement_pour_la_demo_standard(self):
+        """§20.12, D115 : le wiki figé (fabriqué sur la démo standard, 13 mois) n'est repris que pour elle ; pour une autre
+        durée d'historique, les tables du wiki restent vides, avec un message (ses OT ne sont pas ceux de ce jeu)."""
+        generateur = charger_generateur()
+        with tempfile.TemporaryDirectory() as temporaire:
+            racine = Path(temporaire)
+            ecrire_wiki_fige(racine / 'fige', generateur)
+            processus, _ = executer_generateur('--mois', '6', '--wiki', racine / 'fige', '--sortie', racine / 'court')
+            self.assertEqual(processus.returncode, 0, processus.stderr.decode('utf-8', 'replace'))
+            self.assertIn("Wiki de démo non repris pour 6 mois d'historique : le wiki figé (outils/demo_wiki_pages.csv, "
+                          "demo_wiki_journal.csv) ne vaut que pour la démo standard (13 mois, sans --volume) ; tables du "
+                          "wiki vides.", processus.stdout.decode('utf-8'))
+            for table in ('wiki_pages', 'wiki_journal'):
+                self.assertEqual(lire_table(racine / 'court', table)[1], [], table)
+            # La démo standard, elle, le reprend (même dossier figé).
+            processus, _ = executer_generateur('--wiki', racine / 'fige', '--sortie', racine / 'standard', '--sans-js')
+            self.assertEqual(processus.returncode, 0, processus.stderr.decode('utf-8', 'replace'))
+            self.assertNotIn('Wiki de démo non repris', processus.stdout.decode('utf-8'))
+            self.assertGreater(len(lire_table(racine / 'standard', 'wiki_journal')[1]), 200)
+
+    def test_demo_de_plus_de_1_mo_refusee_sans_rien_ecrire(self):
+        """CS105 : si js/demo-donnees.js dépassait 1 Mo même écrit par morceaux (texte sans répétition), le générateur
+        s'arrête avant d'écrire quoi que ce soit."""
+        generateur = charger_generateur()
+        with tempfile.TemporaryDirectory() as temporaire:
+            racine = Path(temporaire)
+            ecrire_wiki_fige(racine / 'fige', generateur, page_unique=generateur.TAILLE_JS_MAX)
+            processus, _ = executer_generateur('--wiki', racine / 'fige', '--sortie', racine / 'csv',
+                                               '--fichier-js', racine / 'demo.js')
+            self.assertEqual(processus.returncode, 1)
+            self.assertRegex(processus.stderr.decode('utf-8', 'replace'), r'demo\.js : \d+ octets, 1000000 au plus \(CS105')
+            self.assertFalse((racine / 'csv').exists())
+            self.assertFalse((racine / 'demo.js').exists())
 
     def test_volume_sans_sortie_est_refuse(self):
         processus, _ = executer_generateur('--volume', '500,5000')

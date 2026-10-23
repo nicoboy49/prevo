@@ -15,11 +15,24 @@ relancée avec la raison, comme chez un client (§20.5, D106 révisée) : Prévo
 d'origine, réponse refusée, raisons du refus), qui lance un agent neuf de plus, tracé dans la même trace.
 
     py outils/wiki_demo.py fabriquer [--agents 5]   fabrication ; reprend les réponses déjà obtenues (même requête)
+    py outils/wiki_demo.py fabriquer --limite 40     temps 1 (D115) : les 40 premiers OT par date d'intervention ;
+                                                      résultat, état de départ de la suite et page de relecture dans
+                                                      .chantier/wiki-demo/temps-1/ (relecture.html)
+    py outils/wiki_demo.py fabriquer --suite         temps 2 : repart de l'état exact du temps 1 (tables du wiki et
+                                                      journal avant validation) et ne traite que les OT qui n'y sont
+                                                      pas ; validations comme d'un seul tenant ; résultat à figer
     py outils/wiki_demo.py figer                      copie le résultat dans outils/demo_wiki_pages.csv et
                                                       outils/demo_wiki_journal.csv (puis : py outils/generer_demo.py)
     py outils/wiki_demo.py verifier                   traces (Sonnet, un tour), une entrée par OT reliée à la réponse
                                                       acceptée (relance comprise), intégrité
     py outils/wiki_demo.py relecture                  .chantier/wiki-demo/relecture.html (pages par type)
+
+Fabrication en deux temps (D115) : le temps 1 garde, à côté de son résultat, les tables du wiki AVANT les validations
+(etat-avant-validation/) et temps-1.json (OT intégrés, empreinte des données de la démo et de la consigne, bilan,
+coût). --suite charge cet état, met en file les OT clôturés administrativement qui n'y ont pas d'entrée, les traite
+dans le même ordre, puis valide tout comme une fabrication d'un seul tenant : avec un agent, même wiki à l'octet. Elle
+refuse de partir sans temps 1, ou si les données de la démo ou la consigne ont changé depuis (rejouer alors le temps
+1 : les réponses déjà obtenues pour des requêtes identiques sont reprises sans nouvel appel).
 
 Chaque appel laisse une trace dans .chantier/wiki-demo/chaine/<OT>.json : requête (système et utilisateur),
 empreinte, réponse brute, modèle relevé (modelUsage), nombre de tours, jetons, coût, durée ; une réponse reprise
@@ -56,6 +69,10 @@ DOSSIER_DEMO = RACINE / 'donnees' / 'demo'
 DOSSIER_TRAVAIL = RACINE / '.chantier' / 'wiki-demo'
 DOSSIER_TRACES = DOSSIER_TRAVAIL / 'chaine'
 DOSSIER_RESULTAT = DOSSIER_TRAVAIL / 'resultat'
+DOSSIER_TEMPS_1 = DOSSIER_TRAVAIL / 'temps-1'       # résultat du temps 1 (--limite) et départ de --suite (D115)
+FICHIER_TEMPS_1 = 'temps-1.json'                     # OT intégrés, empreintes, bilan et coût du temps 1
+DOSSIER_ETAT = 'etat-avant-validation'               # tables du wiki du temps 1 avant les validations
+RELECTURE_TEMPS_1 = 'relecture.html'
 DOSSIER_FIGE = RACINE / 'outils'
 FICHIERS_FIGES = {'wiki_pages': 'demo_wiki_pages.csv', 'wiki_journal': 'demo_wiki_journal.csv'}
 sys.path.insert(0, str(RACINE / 'outils'))
@@ -86,15 +103,17 @@ TRAITER_JS = """async ({ agents, limite }) => {
   let ids = Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement')
     .sort((a, b) => (a.date_fin < b.date_fin ? -1 : (a.date_fin > b.date_fin ? 1 : (a.id < b.id ? -1 : 1)))).map((o) => o.id);
   if (limite) ids = ids.slice(0, limite);
-  await Wiki.mettreEnFile(ids);
+  // Suite du temps 1 : un OT qui a déjà son entrée (à valider, rien à ajouter) n'est pas remis en file.
+  const ajoutes = await Wiki.mettreEnFile(ids);
   const arret = new AbortController();
   const bilan = await Wiki.traiterFile({ agents, signal: arret.signal,
     appeler: (requete, donnees) => window.appelerClaude(requete, donnees.ot.id),
     surProgres: (etat) => { window.progresFabrication(etat); if (etat.refusees) arret.abort(); } });
   window.dernierBilan = bilan;
   const entrees = Donnees.lignes('wiki_journal').filter((e) => e.nature === 'ingestion');
-  return { ot: ids.length, acceptees: bilan.acceptees, rien: bilan.rien, refusees: bilan.refusees, rejouees: bilan.rejouees,
-    erreur: bilan.erreur ? (bilan.erreur.message || String(bilan.erreur)) : null, enFile: Wiki.file().length,
+  return { ot: ids.length, ids, ajoutes, acceptees: bilan.acceptees, rien: bilan.rien, refusees: bilan.refusees,
+    rejouees: bilan.rejouees, erreur: bilan.erreur ? (bilan.erreur.message || String(bilan.erreur)) : null,
+    enFile: Wiki.file().length,
     refus: entrees.filter((e) => e.statut === 'refusée').map((e) => [e.ot_id, e.raisons]),
     // Acceptées à la relance avec la raison : l'entrée garde les raisons du premier refus.
     relances: entrees.filter((e) => ['à valider', 'rien à ajouter'].includes(e.statut) && e.raisons).map((e) => e.ot_id) };
@@ -127,6 +146,12 @@ VALIDER_JS = """async (limite) => {
     wiki_journal: new TextDecoder().decode(fichiers.wiki_journal) };
   return resultat;
 }"""
+# Tables du wiki telles quelles (temps 1 : avant les validations, départ de --suite).
+TABLES_WIKI_JS = """() => { const fichiers = Donnees.instantane();
+  return { wiki_pages: new TextDecoder().decode(fichiers.wiki_pages), wiki_journal: new TextDecoder().decode(fichiers.wiki_journal) }; }"""
+# OT qui ont déjà une entrée d'ingestion (suite du temps 1 : ils ne repartent pas).
+DEJA_JS = """() => Donnees.lignes('wiki_journal').filter((e) => e.nature === 'ingestion').map((e) => e.ot_id)"""
+CONSIGNE_JS = "() => Ia.PROMPTS.ingestionWiki.systeme"
 
 
 class ErreurFabrication(Exception):
@@ -385,24 +410,89 @@ ENTREES_JS = """() => Donnees.lignes('wiki_journal').filter((e) => e.nature === 
   .map((e) => ({ id: e.id, ot: e.ot_id, statut: e.statut, raisons: e.raisons, motif: e.motif }))"""
 
 
+def empreinte_donnees(tables):
+    """Empreinte des données de la démo dont part une fabrication (toutes les tables, celles du wiki réduites à leur
+    en-tête) : le temps 1 la garde, --suite la compare."""
+    return hashlib.sha256(json.dumps(sorted(tables.items()), ensure_ascii=False).encode('utf-8')).hexdigest()
+
+
+def empreinte_consigne(systeme):
+    """Empreinte de la consigne : options d'un agent et message système d'ingestionWiki (le même pour chaque OT)."""
+    return hashlib.sha256((json.dumps(options_agent(''), ensure_ascii=False) + '\x00' + systeme).encode('utf-8')).hexdigest()
+
+
+def lire_depart(dossier, sortie, donnees):
+    """État du temps 1 dont part --suite → { temps (temps-1.json), tables (wiki_pages, wiki_journal avant les
+    validations) } ; arrêt clair sans résultat de temps 1, ou s'il a été fabriqué sur d'autres données de démo."""
+    if dossier.resolve() == sortie.resolve():
+        raise ErreurFabrication('--suite : --resultat doit être un autre dossier que celui du temps 1 (%s)' % dossier)
+    etat = dossier / DOSSIER_ETAT
+    if not (dossier / FICHIER_TEMPS_1).is_file() or not all((etat / (t + '.csv')).is_file() for t in FICHIERS_FIGES):
+        raise ErreurFabrication('--suite : aucun résultat de temps 1 dans %s (%s et %s/ absents) : lancer d\'abord '
+                                '« py outils/wiki_demo.py fabriquer --limite 40 »' % (dossier, FICHIER_TEMPS_1, DOSSIER_ETAT))
+    temps = json.loads((dossier / FICHIER_TEMPS_1).read_text(encoding='utf-8'))
+    if temps.get('empreinte_donnees') != donnees:
+        raise ErreurFabrication('--suite : le temps 1 de %s a été fabriqué sur d\'autres données de démo que celles-ci '
+                                '(empreinte différente) : rejouer le temps 1 sur ces données' % dossier)
+    return {'temps': temps, 'tables': {t: (etat / (t + '.csv')).read_bytes().decode('utf-8-sig') for t in FICHIERS_FIGES}}
+
+
+def effacer_temps_1(dossier):
+    """Ce qu'écrit un temps 1 (jamais l'estimation ni un autre fichier) : retiré au départ, pour qu'un temps 1 arrêté ne
+    laisse jamais l'état d'un temps 1 précédent à la suite."""
+    for nom in (FICHIER_TEMPS_1, RELECTURE_TEMPS_1):
+        (dossier / nom).unlink(missing_ok=True)
+    shutil.rmtree(dossier / DOSSIER_ETAT, ignore_errors=True)
+
+
+def ecrire_temps_1(dossier, etat, temps):
+    """État de départ de la suite (tables du wiki avant les validations) puis temps-1.json, écrit en dernier."""
+    (dossier / DOSSIER_ETAT).mkdir(parents=True, exist_ok=True)
+    for table, texte in etat.items():
+        (dossier / DOSSIER_ETAT / (table + '.csv')).write_bytes(texte.encode('utf-8'))
+    (dossier / FICHIER_TEMPS_1).write_text(json.dumps(temps, ensure_ascii=False, indent=1), encoding='utf-8')
+
+
 async def fabriquer_async(arguments):
     commande = commande_claude(arguments.claude)
-    fabrique = Fabrique(commande, Path(arguments.traces), arguments.delai_appel, reprise_duree=arguments.reprise_duree,
-                        reprise_seule=arguments.reprise_seule)
     sortie = Path(arguments.resultat)
+    temps_1 = bool(arguments.limite)              # premier temps (D115) : sa suite repartira de son état
+    tables = lire_tables(arguments.demo, sans_wiki=True)
+    donnees = empreinte_donnees(tables)
+    depart = lire_depart(Path(arguments.depart), sortie, donnees) if arguments.suite else None
+    if depart:
+        tables.update(depart['tables'])
     for table in FICHIERS_FIGES:                  # jamais de résultat périmé à figer après une fabrication arrêtée
         (sortie / (table + '.csv')).unlink(missing_ok=True)
+    if temps_1:
+        effacer_temps_1(sortie)
+    fabrique = Fabrique(commande, Path(arguments.traces), arguments.delai_appel, reprise_duree=arguments.reprise_duree,
+                        reprise_seule=arguments.reprise_seule)
     from playwright.async_api import async_playwright
     async with async_playwright() as playwright:
-        navigateur, page, erreurs = await ouvrir_page(playwright, lire_tables(arguments.demo, sans_wiki=True))
+        navigateur, page, erreurs = await ouvrir_page(playwright, tables)
         try:
+            consigne = empreinte_consigne(await page.evaluate(CONSIGNE_JS))
+            deja = set(await page.evaluate(DEJA_JS))
+            if depart:
+                if depart['temps'].get('empreinte_consigne') != consigne:
+                    raise ErreurFabrication('--suite : la consigne (message système d\'ingestionWiki ou options d\'un agent) a '
+                                            'changé depuis le temps 1 de %s : rejouer le temps 1 (les réponses à des requêtes '
+                                            'identiques sont reprises des traces, sans nouvel appel)' % arguments.depart)
+                manquants = [ot for ot in depart['temps'].get('ot', []) if ot not in deja]
+                if manquants:
+                    raise ErreurFabrication('--suite : état du temps 1 incomplet (%s) : OT sans entrée au journal : %s'
+                                            % (arguments.depart, ', '.join(manquants[:10])))
+                ecrire('Suite du temps 1 (%s) : %d OT déjà intégrés, repris tels quels, sans nouvel appel.'
+                       % (arguments.depart, len(deja)))
             await page.expose_function('appelerClaude', fabrique.appeler)
             await page.expose_function('progresFabrication', fabrique.progres)
             ecrire('Fabrication du wiki de démo : %s agent(s), commande %s' % (arguments.agents, ' '.join(commande)))
             bilan = await page.evaluate(TRAITER_JS, {'agents': arguments.agents, 'limite': arguments.limite or 0})
             fabrique.noter_verdicts(await page.evaluate(ENTREES_JS))
-            ecrire('OT : %(ot)s · acceptées %(acceptees)s · rien à ajouter %(rien)s · refusées %(refusees)s · '
-                   'rejouées %(rejouees)s · encore en file %(enFile)s' % bilan)
+            bilan['relances'] = [ot for ot in bilan['relances'] if ot not in deja]
+            ecrire('OT : %(ot)s (%(ajoutes)s mis en file) · acceptées %(acceptees)s · rien à ajouter %(rien)s · refusées '
+                   '%(refusees)s · rejouées %(rejouees)s · encore en file %(enFile)s' % bilan)
             ecrire('Agents lancés : %d · réponses reprises des traces : %d · relances avec la raison : %d · coût : %.2f $'
                    % (fabrique.appels, fabrique.reprises, fabrique.relances, fabrique.cout))
             if bilan['relances']:
@@ -419,6 +509,9 @@ async def fabriquer_async(arguments):
             if bilan['enFile']:
                 ecrire('ARRÊT : %d OT encore en file.' % bilan['enFile'])
                 return 1
+            # Temps 1 : l'état d'où repartira la suite est pris AVANT les validations, que la suite fera toutes à la fin,
+            # comme une fabrication d'un seul tenant (les pages créées gardent leur clé TITRE:… d'ici là).
+            etat = await page.evaluate(TABLES_WIKI_JS) if temps_1 else None
             jours = arguments.a_valider_jours
             if jours is None:
                 jours = await page.evaluate('Wiki.SEUILS.demoAValiderJours')
@@ -439,7 +532,20 @@ async def fabriquer_async(arguments):
             sortie.mkdir(parents=True, exist_ok=True)
             for table, texte in resultat['fichiers'].items():
                 (sortie / (table + '.csv')).write_bytes(texte.encode('utf-8'))
-            ecrire('Intégrité ok. Résultat : %s (puis : py outils/wiki_demo.py figer)' % sortie)
+            if not temps_1:
+                ecrire('Intégrité ok. Résultat : %s (puis : py outils/wiki_demo.py figer)' % sortie)
+                return 0
+            temps = {'temps': 1, 'limite': arguments.limite, 'ot': bilan['ids'], 'empreinte_donnees': donnees,
+                     'empreinte_consigne': consigne, 'fabrique_le': datetime.now().isoformat(timespec='seconds'),
+                     'agents': arguments.agents, 'agents_lances': fabrique.appels, 'reprises': fabrique.reprises,
+                     'relances': fabrique.relances, 'cout_usd': round(fabrique.cout, 4),
+                     'bilan': {cle: bilan[cle] for cle in ('acceptees', 'rien', 'rejouees')},
+                     'acceptees_a_la_relance': bilan['relances']}
+            lu = await page.evaluate(RELECTURE_JS)
+            (sortie / RELECTURE_TEMPS_1).write_text(document_relecture(lu, temps), encoding='utf-8')
+            ecrire_temps_1(sortie, etat, temps)
+            ecrire('Intégrité ok. Temps 1 : %s (relecture : %s ; suite : py outils/wiki_demo.py fabriquer --suite)'
+                   % (sortie, sortie / RELECTURE_TEMPS_1))
             return 0
         finally:
             await navigateur.close()
@@ -564,31 +670,38 @@ def verifier(arguments):
 
 
 RELECTURE_JS = """() => {
-  const types = ['équipement', 'composant', 'mode', 'savoir-faire'];
+  // Refonte 2 (§20.12) : textes d'une machine, d'un article, et savoir-faire ; plus de pages de mode.
+  const types = ['équipement', 'composant', 'savoir-faire'];
+  const entrees = Donnees.lignes('wiki_journal').filter((e) => e.nature === 'ingestion');
+  const entreeDe = new Map(entrees.map((e) => [e.ot_id, e]));
+  const detail = (id) => { const o = Donnees.trouver('ordres_travail', id) || {}; const e = entreeDe.get(id) || {};
+    return { id, date: o.date_fin, titre: o.titre, compteRendu: o.compte_rendu, astuce: o.astuce, statut: e.statut || '',
+      essais: Number(e.essais) || 0, raisons: e.raisons || '', motif: e.motif || '' }; };
   const ids = new Set(Donnees.lignes('wiki_pages').filter((l) => l.statut !== 'archivée' && l.texte)
     .map((l) => Wiki.page(l.id) && Wiki.page(l.id).id).filter(Boolean));
-  const pages = Array.from(ids).map((id) => Wiki.page(id, { responsable: true })).map((p) => {
-    const ot = Array.from(new Set(Wiki.citationsDe(p.texte)));
-    return { id: p.id, type: p.type, titre: p.titre, texte: p.texte, origine: p.origine, modele: p.modele,
-      validePar: p.validePar, valideLe: p.valideLe, phrases: Wiki.phrasesDe(p.texte).length, calcul: p.calcul || null,
-      entete: p.entete || null, retours: p.retours, contradictions: p.contradictions, enAttente: p.enAttente,
-      ot: ot.map((id) => { const o = Donnees.trouver('ordres_travail', id) || {};
-        return { id, date: o.date_fin, titre: o.titre, compteRendu: o.compte_rendu, astuce: o.astuce }; }) };
-  });
+  const pages = Array.from(ids).map((id) => Wiki.page(id, { responsable: true })).filter((p) => types.includes(p.type))
+    .map((p) => ({ id: p.id, type: p.type, titre: p.titre, mere: p.mere ? p.mere.titre : '', origine: p.origine,
+      modele: p.modele, validePar: p.validePar, valideLe: p.valideLe, phrases: Wiki.phrasesDe(p.texte).length,
+      rubriques: Wiki.lireTexte(p.texte).rubriques.map((r) => ({ nom: r.nom, phrases: r.phrases.map((f) => ({
+        texte: f.texte.replace(/\\s*\\[OT-\\d{4}-\\d{4,}\\]/g, '').trim(), ot: f.ot })) })),
+      contradictions: p.contradictions, enAttente: p.enAttente,
+      ot: Array.from(new Set(Wiki.citationsDe(p.texte))).map(detail) }));
   pages.sort((a, b) => types.indexOf(a.type) - types.indexOf(b.type) || b.ot.length - a.ot.length
     || b.phrases - a.phrases || (a.titre < b.titre ? -1 : 1));
   // Propositions laissées « à valider » : elles seront visibles dans la démo (profil responsable), donc relues aussi.
   const lire = (valeur) => { try { return JSON.parse(valeur || '[]') || []; } catch (e) { return []; } };
-  const attente = Donnees.lignes('wiki_journal').filter((e) => e.statut === 'à valider')
-    .sort((a, b) => Number(a.ordre) - Number(b.ordre)).map((e) => {
-      const o = Donnees.trouver('ordres_travail', e.ot_id) || {};
-      return { id: e.id, ot: e.ot_id, date: e.date_intervention, titre: o.titre, compteRendu: o.compte_rendu, astuce: o.astuce,
-        anterieure: e.anterieure === '1', modele: e.modele, contradictions: lire(e.contradictions),
-        changements: lire(e.changements).map((c) => ({ titre: c.titre, type: c.type, creation: Boolean(c.creation),
-          avant: c.avant || '', apres: c.apres || '' })) };
-    });
-  return { pages, attente };
+  const attente = entrees.filter((e) => e.statut === 'à valider').sort((a, b) => Number(a.ordre) - Number(b.ordre)).map((e) =>
+    Object.assign(detail(e.ot_id), { entree: e.id, anterieure: e.anterieure === '1', modele: e.modele,
+      contradictions: lire(e.contradictions), changements: lire(e.changements).map((c) => ({ titre: c.titre, type: c.type,
+        creation: Boolean(c.creation), avant: c.avant || '', apres: c.apres || '' })) }));
+  const parDate = (a, b) => (a.date < b.date ? -1 : (a.date > b.date ? 1 : (a.id < b.id ? -1 : 1)));
+  return { pages, attente,
+    rien: entrees.filter((e) => e.statut === 'rien à ajouter').map((e) => detail(e.ot_id)).sort(parDate),
+    relances: entrees.filter((e) => Number(e.essais) > 1 || e.motif || e.statut === 'refusée').map((e) => detail(e.ot_id))
+      .sort(parDate) };
 }"""
+TITRES_RELECTURE = {'équipement': 'Machines — « En bref » et « Astuces »', 'composant': 'Articles — « À quoi il sert »',
+                    'savoir-faire': 'Savoir-faire'}
 
 
 async def relecture_async(dossier):
@@ -601,23 +714,32 @@ async def relecture_async(dossier):
             await navigateur.close()
 
 
-def resume_calcul(calcul):
-    """Résumé lisible de la couche calculée : valeurs simples et taille des listes."""
-    if not isinstance(calcul, dict):
-        return ''
+def verdict_html(ot):
+    """Refus, relance ou rejeu d'un OT (son entrée du journal), '' s'il est passé du premier coup."""
+    e = html.escape
     morceaux = []
-    for cle, valeur in calcul.items():
-        if isinstance(valeur, list):
-            morceaux.append('%s : %d' % (cle, len(valeur)))
-        elif isinstance(valeur, (str, int, float)) and str(valeur) != '':
-            morceaux.append('%s : %s' % (cle, valeur))
-    return ' · '.join(morceaux)
+    if ot['statut'] == 'refusée':
+        morceaux.append('<b>Refusée</b> (%d essais) : %s' % (ot['essais'], e(ot['raisons'])))
+    elif ot['essais'] > 1 and ot['raisons']:
+        morceaux.append('<b>Relancée avec la raison</b> (%d essais) — premier refus : %s' % (ot['essais'], e(ot['raisons'])))
+    if ot['motif']:
+        morceaux.append('<b>Rejouée</b> : %s' % e(ot['motif']))
+    return '<br><span class="verdict">%s</span>' % '<br>'.join(morceaux) if morceaux else ''
+
+
+def ot_html(ot):
+    e = html.escape
+    return '<li id="%s"><b>%s</b> (%s) %s<br>%s%s%s</li>' % (e(ot['id']), e(ot['id']), e(ot['date'] or ''), e(ot['titre'] or ''),
+                                                            e(ot['compteRendu'] or ''),
+                                                            ('<br><i>Astuce : %s</i>' % e(ot['astuce'])) if ot['astuce'] else '',
+                                                            verdict_html(ot))
 
 
 def page_html(page):
     e = html.escape
-    lignes = ['<section class="page"><h3>%s <small>%s · %d OT · %d phrases</small></h3>'
-              % (e(page['titre']), e(page['type']), len(page['ot']), page['phrases'])]
+    lignes = ['<section class="page"><h3>%s <small>%s · %d OT · %d phrases%s</small></h3>'
+              % (e(page['titre']), e(page['type']), len(page['ot']), page['phrases'],
+                 (' · sous-page de « %s »' % e(page['mere'])) if page['mere'] else '')]
     for contradiction in page['contradictions']:
         lignes.append('<p class="contradiction"><b>À trancher</b> — « %s » ; %s : %s (%s)</p>'
                       % (e(contradiction['phrase']), e(contradiction['libelle']), e(contradiction['observation']),
@@ -626,13 +748,15 @@ def page_html(page):
         lignes.append('<p class="attente">Proposition à valider : %s</p>' % e(', '.join(a['ot'] for a in page['enAttente'])))
     lignes.append('<p class="origine">Origine : %s (%s) — validé par %s le %s</p>'
                   % (e(page['origine'] or '—'), e(page['modele'] or '—'), e(page['validePar'] or '—'), e(page['valideLe'] or '—')))
-    if page['calcul']:
-        lignes.append('<p class="calcul">Couche calculée : %s</p>' % e(resume_calcul(page['calcul'])))
-    lignes.append('<pre>%s</pre>' % e(page['texte']))
-    lignes.append('<details><summary>OT cités (%d)</summary><ul>' % len(page['ot']))
-    for ot in page['ot']:
-        lignes.append('<li><b>%s</b> (%s) %s<br>%s%s</li>' % (e(ot['id']), e(ot['date'] or ''), e(ot['titre'] or ''),
-                      e(ot['compteRendu'] or ''), ('<br><i>Astuce : %s</i>' % e(ot['astuce'])) if ot['astuce'] else ''))
+    for rubrique in page['rubriques']:
+        lignes.append('<h4>%s</h4><ul>' % e(rubrique['nom']))
+        lignes.extend('<li>%s <span class="ot">%s</span></li>' % (e(phrase['texte']), ' '.join(
+            '<a href="#%s">%s</a>' % (e(ot), e(ot)) for ot in phrase['ot'])) for phrase in rubrique['phrases'])
+        lignes.append('</ul>')
+    relances = [ot for ot in page['ot'] if verdict_html(ot)]
+    lignes.append('<details><summary>OT cités (%d)%s</summary><ul>' % (len(page['ot']), (' — dont %d relancé(s) ou rejoué(s)'
+                  % len(relances)) if relances else ''))
+    lignes.extend(ot_html(ot) for ot in page['ot'])
     lignes.append('</ul></details></section>')
     return '\n'.join(lignes)
 
@@ -640,13 +764,13 @@ def page_html(page):
 def attente_html(entree):
     e = html.escape
     lignes = ['<section class="page attente-proposition"><h3>%s — %s <small>%s · intervention du %s%s</small></h3>'
-              % (e(entree['ot']), e(entree['titre'] or ''), e(entree['id']), e(entree['date'] or ''),
+              % (e(entree['id']), e(entree['titre'] or ''), e(entree['entree']), e(entree['date'] or ''),
                  ' · intervention antérieure' if entree['anterieure'] else '')]
     for contradiction in entree['contradictions']:
         lignes.append('<p class="contradiction"><b>Contradiction</b> sur « %s » : « %s » — %s</p>'
                       % (e(contradiction.get('page', '')), e(contradiction.get('phrase', '')), e(contradiction.get('observation', ''))))
-    lignes.append('<p>%s%s</p>' % (e(entree['compteRendu'] or ''),
-                  ('<br><i>Astuce : %s</i>' % e(entree['astuce'])) if entree['astuce'] else ''))
+    lignes.append('<p>%s%s%s</p>' % (e(entree['compteRendu'] or ''),
+                  ('<br><i>Astuce : %s</i>' % e(entree['astuce'])) if entree['astuce'] else '', verdict_html(entree)))
     for changement in entree['changements']:
         lignes.append('<h4>%s « %s » (%s)</h4><pre>%s</pre>' % ('Page créée' if changement['creation'] else 'Page modifiée',
                       e(changement['titre']), e(changement['type']), e(changement['apres'])))
@@ -656,28 +780,49 @@ def attente_html(entree):
     return '\n'.join(lignes)
 
 
-def relecture(arguments):
-    lu = asyncio.run(relecture_async(arguments.demo))
+def document_relecture(lu, temps=None):
+    """Page de relecture : propositions à valider, puis les textes par type (refonte 2), les plus riches d'abord
+    (OT cités distincts, puis phrases), chacun avec ses OT et leurs refus, relances ou rejeux ; puis les OT relancés et
+    ceux « rien à ajouter ». temps : temps-1.json (bilan et coût du temps 1, en tête)."""
+    e = html.escape
     pages = lu['pages']
-    titres = {'équipement': 'Équipements', 'composant': 'Composants', 'mode': 'Modes de défaillance', 'savoir-faire': 'Savoir-faire'}
-    corps = ['<h2>Propositions à valider (%d)</h2><p>Laissées « à valider » dans la démo (les derniers jours '
-             'd\'intervention) : le profil responsable les verra.</p>' % len(lu['attente'])]
+    corps = []
+    if temps:
+        corps.append('<p class="bilan">Temps 1 : %d premiers OT par date d\'intervention · acceptés %d · rien à ajouter %d · '
+                     'rejoués %d · agents lancés %d (dont %d relances avec la raison) · réponses reprises des traces %d · '
+                     'coût %.2f $.</p>' % (len(temps['ot']), temps['bilan']['acceptees'], temps['bilan']['rien'],
+                                          temps['bilan']['rejouees'], temps['agents_lances'], temps['relances'],
+                                          temps['reprises'], temps['cout_usd']))
+    corps.append('<h2>Propositions à valider (%d)</h2><p>Laissées « à valider » dans la démo (les derniers jours '
+                 'd\'intervention) : le profil responsable les verra.</p>' % len(lu['attente']))
     corps.extend(attente_html(entree) for entree in lu['attente'])
-    for type_page, titre in titres.items():
+    for type_page, titre in TITRES_RELECTURE.items():
         du_type = [p for p in pages if p['type'] == type_page]
         corps.append('<h2>%s (%d)</h2>' % (titre, len(du_type)))
         corps.extend(page_html(p) for p in du_type)
-    document = ('<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
-                '<title>Wiki de démo — relecture</title><style>body{font-family:system-ui,sans-serif;max-width:60rem;margin:auto;'
-                'padding:1rem;color:#1b1f24}pre{white-space:pre-wrap;background:#f4f6f8;padding:.6rem}.page{border-top:1px solid #ccd;'
-                'padding:.4rem 0}.contradiction{background:#fff3cd;padding:.4rem}.attente{color:#6b4e00}small{color:#555}</style>'
-                '</head><body><h1>Wiki de démo — relecture</h1><p>Pages par type, les plus riches d\'abord (OT cités distincts, '
-                'puis phrases). Ce qui est refusé se corrige dans la fonction, puis la fabrication est rejouée.</p>'
-                + '\n'.join(corps) + '</body></html>')
+    corps.append('<h2>Refus, relances et rejeux (%d)</h2><ul>' % len(lu['relances']))
+    corps.extend(ot_html(ot) for ot in lu['relances'])
+    corps.append('</ul><h2>Rien à ajouter (%d)</h2><p>OT que l\'IA a jugés sans rien à apprendre : à vérifier aussi.</p><ul>'
+                 % len(lu['rien']))
+    corps.extend(ot_html(ot) for ot in lu['rien'])
+    corps.append('</ul>')
+    titre = 'Wiki de démo — relecture du temps 1' if temps else 'Wiki de démo — relecture'
+    return ('<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+            '<title>%s</title><style>body{font-family:system-ui,sans-serif;max-width:60rem;margin:auto;padding:1rem;'
+            'color:#1b1f24}pre{white-space:pre-wrap;background:#f4f6f8;padding:.6rem}.page{border-top:1px solid #ccd;'
+            'padding:.4rem 0}.contradiction{background:#fff3cd;padding:.4rem}.attente{color:#6b4e00}small,.ot{color:#555}'
+            '.verdict{color:#8a1c1c}.bilan{background:#eef4ff;padding:.6rem}h4{margin:.6rem 0 .2rem}</style></head><body>'
+            '<h1>%s</h1><p>Textes par type, les plus riches d\'abord (OT cités distincts, puis phrases), chacun avec ses OT '
+            'et leurs refus ou relances. Ce qui est refusé se corrige dans la fonction, puis la fabrication est rejouée ; '
+            'aucun texte n\'est retouché à la main.</p>' % (e(titre), e(titre)) + '\n'.join(corps) + '</body></html>')
+
+
+def relecture(arguments):
+    lu = asyncio.run(relecture_async(arguments.demo))
     sortie = Path(arguments.sortie)
     sortie.parent.mkdir(parents=True, exist_ok=True)
-    sortie.write_text(document, encoding='utf-8')
-    ecrire('Relecture : %s (%d pages, %d propositions à valider)' % (sortie, len(pages), len(lu['attente'])))
+    sortie.write_text(document_relecture(lu), encoding='utf-8')
+    ecrire('Relecture : %s (%d pages, %d propositions à valider)' % (sortie, len(lu['pages']), len(lu['attente'])))
     return 0
 
 
@@ -687,12 +832,20 @@ def lire_arguments(argv):
     commun = argparse.ArgumentParser(add_help=False)
     commun.add_argument('--demo', default=str(DOSSIER_DEMO), help='dossier du jeu de démo (défaut : donnees/demo)')
     commun.add_argument('--traces', default=str(DOSSIER_TRACES), help='dossier des traces des agents')
-    commun.add_argument('--resultat', default=str(DOSSIER_RESULTAT), help='dossier du résultat de la fabrication')
+    commun.add_argument('--resultat', default=None,
+                        help='dossier du résultat (défaut : .chantier/wiki-demo/resultat ; fabriquer --limite : '
+                             '.chantier/wiki-demo/temps-1)')
     commun.add_argument('--wiki', default=str(DOSSIER_FIGE), help='dossier des fichiers figés (défaut : outils)')
     fabrication = sous.add_parser('fabriquer', parents=[commun], help='fabrique le wiki de démo')
     fabrication.add_argument('--agents', type=int, default=5, help='agents en même temps (1 à 5, défaut 5)')
     fabrication.add_argument('--claude', default='', help='commande claude (essais : un script .py)')
-    fabrication.add_argument('--limite', type=int, default=0, help='seulement les N premiers OT (essais)')
+    fabrication.add_argument('--limite', type=int, default=0,
+                             help='temps 1 : seulement les N premiers OT par date d\'intervention ; garde aussi l\'état '
+                                  'de départ de la suite et la page de relecture dans le dossier du résultat')
+    fabrication.add_argument('--suite', action='store_true',
+                             help='temps 2 : repart de l\'état du temps 1 (--depart) et ne traite que les OT restants')
+    fabrication.add_argument('--depart', default=str(DOSSIER_TEMPS_1),
+                             help='--suite : dossier du temps 1 (défaut : .chantier/wiki-demo/temps-1)')
     fabrication.add_argument('--a-valider-jours', type=int, default=None,
                              help='jours laissés « à valider » (défaut : Wiki.SEUILS.demoAValiderJours)')
     fabrication.add_argument('--delai-appel', type=int, default=DELAI_APPEL_S, help='délai d\'un agent en secondes')
@@ -708,6 +861,11 @@ def lire_arguments(argv):
     arguments = analyseur.parse_args(argv)
     if arguments.action == 'fabriquer' and not 1 <= arguments.agents <= 5:
         analyseur.error('--agents : de 1 à 5')
+    if arguments.action == 'fabriquer' and arguments.suite and arguments.limite:
+        analyseur.error('--suite et --limite ne vont pas ensemble : la suite traite tous les OT restants')
+    if arguments.resultat is None:
+        temps_1 = arguments.action == 'fabriquer' and arguments.limite
+        arguments.resultat = str(DOSSIER_TEMPS_1 if temps_1 else DOSSIER_RESULTAT)
     return arguments
 
 

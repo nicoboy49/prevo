@@ -2867,10 +2867,15 @@ le document de chaque OT clôturé ; les **pages validées** (titre et texte, `t
   un autre équipement). Le reste du jeu ne change pas, sauf la colonne `astuce` et les numéros d'OT suivants.
   Les tables du wiki viennent des fichiers figés **`outils/demo_wiki_pages.csv`** et
   **`outils/demo_wiki_journal.csv`** (versionnés), copiés dans `donnees/demo/` et `js/demo-donnees.js` sans
-  jamais être régénérés ; contrôle : OT cités et pages liées existants (arrêt sinon) ; deux exécutions
-  donnent des fichiers identiques à l'octet ; le décalage des dates (§11) s'applique aux champs date du
-  journal et des pages.
-- **Fabrication** `py outils/wiki_demo.py fabriquer [--agents 5]` : démo **sans wiki** ouverte dans Chromium
+  jamais être régénérés, **pour la démo standard seulement** (13 mois, sans `--volume` : une autre durée
+  d'historique ou le jeu de charge garde les tables du wiki vides, avec un message, T122) ; contrôle : OT cités et
+  pages liées existants (arrêt sinon) ; deux exécutions donnent des fichiers identiques à l'octet ; le décalage des
+  dates (§11) s'applique aux champs date du journal et des pages. Dans `js/demo-donnees.js`, une table du wiki est
+  écrite **par morceaux** quand c'est plus court (coupée après chaque fin de ligne, `\n` du JSON et `""`, et avant
+  chaque citation ; morceaux distincts écrits une fois, puis leur ordre, recollés au chargement : même texte) ; le
+  générateur s'arrête, sans rien écrire, si le fichier dépasserait 1 Mo (CS105 ; wiki de la passe 6 : 1,32 Mo en
+  chaînes, 0,64 Mo par morceaux).
+- **Fabrication** `py outils/wiki_demo.py fabriquer [--agents 5] [--limite N | --suite]` : démo **sans wiki** ouverte dans Chromium
   (Playwright, horloge à la date de référence) ; les 227 OT clôturés administrativement mis en file
   (`Wiki.mettreEnFile`) ; **`Wiki.traiterFile`** de Prévo avec un `appeler` relié à Python
   (`expose_function`) qui lance, pour chaque requête, **un agent neuf** :
@@ -2890,13 +2895,23 @@ le document de chaque OT clôturé ; les **pages validées** (titre et texte, `t
   laissée (laissée aussi : `Wiki.valider` la refuserait avant elle) ; une réponse refusée est relancée avec la
   raison, comme chez un client (§20.5) : **un agent neuf de plus**, tracé dans la même trace ; **une relance
   refusée arrête la fabrication** : défaut de la fonction, corrigé dans le code, puis la fabrication reprend.
+  **En deux temps** (D115, T122) : `--limite N` (temps 1 : les N premiers OT par date d'intervention) écrit, dans
+  `.chantier/wiki-demo/temps-1/` par défaut, son résultat validé, `etat-avant-validation/` (tables du wiki après le
+  traitement, avant les validations), `temps-1.json` (OT intégrés, empreinte des données de la démo et de la
+  consigne, bilan, agents lancés, coût) et `relecture.html` ; `--suite` (temps 2) charge cet état exact, met en file
+  les OT clôturés administrativement qui n'y ont pas d'entrée (aucune requête pour ceux du temps 1), les traite dans
+  le même ordre puis valide tout comme une fabrication d'un seul tenant (avec un agent : même wiki à l'octet) ; elle
+  refuse de partir sans temps 1, sur d'autres données de démo ou avec une autre consigne (rejouer alors le temps 1 :
+  les réponses à des requêtes identiques sont reprises sans nouvel appel).
   Chaque agent tourne sans mise à jour de Claude Code (`DISABLE_AUTOUPDATER=1`) ; si `claude.exe` manque au
   lancement (mise à jour faite ailleurs), l'agent attend son retour (120 s au plus) puis part une fois. À la fin : `Wiki.verifierIntegrite`
   doit être `ok`, puis `figer` écrit les deux fichiers.
-- `py outils/wiki_demo.py relecture` → `.chantier/wiki-demo/relecture.html` : les pages **par type**
-  (équipement, composant, mode, savoir-faire), **les plus riches d'abord** (nombre d'OT cités distincts,
-  puis nombre de phrases), chacune avec sa couche calculée résumée, ses OT cités en entier (compte rendu et
-  astuce) et ses contradictions en tête. Ce que Nicolas refuse est corrigé dans la fonction, puis la
+- `py outils/wiki_demo.py relecture` → `.chantier/wiki-demo/relecture.html` (et `relecture.html` du temps 1, avec
+  son bilan et son coût) : les textes **par type** de la refonte 2 (§20.12 : machines — « En bref », « Astuces » —,
+  articles — « À quoi il sert » —, savoir-faire), **les plus riches d'abord** (nombre d'OT cités distincts, puis
+  nombre de phrases), chacun avec ses rubriques, ses OT cités en entier (compte rendu, astuce, et leur refus,
+  relance avec la raison ou rejeu) et ses contradictions en tête ; puis les OT relancés ou rejoués et ceux « rien à
+  ajouter ». Ce que Nicolas refuse est corrigé dans la fonction, puis la
   fabrication est rejouée ; aucune page retouchée à la main.
 - **Mention** dans « À propos » et le guide : « Wiki de démo construit par Claude (<modèle>) avec la consigne
   de Prévo, un agent par OT, dans l'ordre des interventions ». La démo en ligne n'appelle aucune IA.
@@ -3033,12 +3048,17 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
   affichage).
 - **Contrôle du wiki** (D108 précisée) : sur les textes rédigés et les savoir-faire ; les pages calculées existent
   toujours (plus de page orpheline à chercher pour elles).
-- **Démo** (D115) : `py outils/wiki_demo.py fabriquer --limite 40` (les 40 premiers OT par date d'intervention), page
-  de relecture de ce premier temps envoyée à Nicolas, puis `fabriquer` sur tous les OT : les 40 premiers repris des
-  traces sans nouvel appel (reprise fidèle) ; **coût estimé donné avant chaque temps**. `generer_demo.py` ne
-  reprend le wiki figé que pour la démo standard (une autre durée d'historique ou une variante → tables du wiki
-  vides, avec un message) ; `js/demo-donnees.js` reste sous 1 Mo (CS105 : chargement rapide).
+- **Démo** (D115) : `py outils/wiki_demo.py fabriquer --limite 40` (les 40 premiers OT par date d'intervention ;
+  résultat, état de départ de la suite et page de relecture dans `.chantier/wiki-demo/temps-1/`), relecture de ce
+  premier temps par Nicolas, puis `fabriquer --suite` : repart du résultat du temps 1 (rejoué s'il a été corrigé),
+  sans aucun appel pour ses OT, validations comme d'un seul tenant (§20.10) ; **coût estimé donné avant chaque
+  temps** (`.chantier/wiki-demo/temps-1/estimation.md`). `generer_demo.py` ne reprend le wiki figé que pour la démo
+  standard (une autre durée d'historique ou le jeu de charge → tables du wiki vides, avec un message) ;
+  `js/demo-donnees.js` reste sous 1 Mo (CS105 : chargement rapide ; tables du wiki écrites par morceaux, arrêt
+  au-delà, §20.10).
 - **Tests** : `test_wiki_entites.py` (faits des six pages contre `calcul_wiki.py`, ordre des interventions,
   visibilité, références) ; `test_wiki_ecrans.py` réécrit pour l'accueil, les listes et les pages (profils, liens,
   petits numéros, 1440 et 375 px, affichage en moins de 500 ms sur le jeu de charge) ; les tests des textes rédigés suivent les nouveaux types et limites ;
-  `test_wiki_demo.py` : fabrication en deux temps.
+  `test_wiki_demo.py` : fabrication en deux temps (même wiki qu'un seul tenant, aucun appel pour le temps 1, refus de
+  la suite), relecture de la refonte 2 ; `test_demo.py` : wiki figé de la seule démo standard, `js/demo-donnees.js`
+  sous 1 Mo avec un wiki complet.

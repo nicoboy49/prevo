@@ -276,7 +276,7 @@ DEFINITION_SCHEMA = {
         'id:id date_heure:date_heure poste:texte profil:texte table:texte id_ligne:texte action:texte'),
     # Format 3 (lot 6 refondu, ARCHITECTURE.md §20.2) : pages et journal du wiki de maintenance.
     'wiki_pages': (
-        'id:id type:choix[équipement|composant|mode|savoir-faire] titre:texte cle:texte '
+        'id:id type:choix[équipement|composant|savoir-faire] titre:texte cle:texte '
         'equipement_id:ref>equipements article_id:ref>articles cause_code:ref>codes_defaillance.code=cause '
         'rattache_a:ref>wiki_pages texte:texte_long ot_cites:texte liens:texte version:entier '
         'origine:choix[IA|manuel|IA et manuel] modele:texte derniere_entree:ref>wiki_journal valide_par:texte '
@@ -419,8 +419,38 @@ def ecrire_scenarios(chemin, scenarios):
     chemin.write_bytes(texte_scenarios(scenarios).encode('utf-8'))
 
 
-def ecrire_js(chemin, textes):
-    """Écrit js/demo-donnees.js : un objet DEMO_DONNEES qui contient le texte CSV de chaque table."""
+# Tables du wiki (le journal surtout : chaque changement porte le texte d'avant et d'après de sa page) : écrites par
+# morceaux dans js/demo-donnees.js, qui reste ainsi sous 1 Mo avec un wiki complet (CS105 : chargement rapide ; wiki
+# de la passe 6 : 1,32 Mo en chaînes JSON). Le texte est coupé après chaque fin de ligne (CRLF, ou « \n » écrit dans le
+# JSON des changements), après chaque « "" » et avant chaque citation « [OT-… » ; chaque morceau distinct est écrit
+# une fois, puis l'ordre des morceaux, et le navigateur les recolle en chargeant le fichier : même texte, caractère
+# pour caractère (test_demo). Seulement quand c'est plus court : sans wiki, le fichier ne change pas.
+TABLES_PAR_MORCEAUX = ('wiki_pages', 'wiki_journal')
+COUPURES_MORCEAUX = re.compile(r'(?<=\\n)|(?<=\r\n)|(?<="")|(?= \[OT-)')
+TAILLE_JS_MAX = 1000000          # octets : js/demo-donnees.js reste sous 1 Mo (CS105, ARCHITECTURE.md §20.12)
+
+
+def litteral_table(table, texte):
+    """Expression JavaScript du texte CSV d'une table : une chaîne JSON ; pour une table du wiki, quand c'est plus
+    court, ses morceaux distincts suivis de leur ordre, recollés au chargement."""
+    chaine = json.dumps(texte, ensure_ascii=False)
+    if table not in TABLES_PAR_MORCEAUX:
+        return chaine
+    rangs, distincts, suite = {}, [], []
+    for morceau in (m for m in COUPURES_MORCEAUX.split(texte) if m):
+        if morceau not in rangs:
+            rangs[morceau] = len(distincts)
+            distincts.append(morceau)
+        suite.append(rangs[morceau])
+    if ''.join(distincts[rang] for rang in suite) != texte:
+        raise ErreurCoherence('%s : découpe en morceaux infidèle' % table)
+    morceaux = "((m, s) => s.map((r) => m[r]).join(''))(%s, %s)" % (json.dumps(distincts, ensure_ascii=False),
+                                                                     json.dumps(suite, separators=(',', ':')))
+    return morceaux if len(morceaux.encode('utf-8')) < len(chaine.encode('utf-8')) else chaine
+
+
+def octets_js(textes):
+    """Octets de js/demo-donnees.js : un objet DEMO_DONNEES qui contient le texte CSV de chaque table (litteral_table)."""
     lignes = [
         "'use strict';",
         "// Fichier généré, ne pas modifier : produit par outils/generer_demo.py (py outils/generer_demo.py).",
@@ -431,10 +461,15 @@ def ecrire_js(chemin, textes):
         "  tables: {",
     ]
     for table in NOMS_TABLES:
-        lignes.append("    %s: %s," % (table, json.dumps(textes[table], ensure_ascii=False)))
+        lignes.append("    %s: %s," % (table, litteral_table(table, textes[table])))
     lignes += ["  },", "};", ""]
+    return '\n'.join(lignes).encode('utf-8')
+
+
+def ecrire_js(chemin, textes, octets=None):
+    """Écrit js/demo-donnees.js (octets déjà calculés par octets_js, ou calculés ici)."""
     chemin.parent.mkdir(parents=True, exist_ok=True)
-    chemin.write_bytes('\n'.join(lignes).encode('utf-8'))
+    chemin.write_bytes(octets if octets is not None else octets_js(textes))
 
 
 # =============================================================================
@@ -1518,6 +1553,7 @@ class Contexte:
         self.ref = jour_depuis_texte(DATE_REFERENCE)
         self.maintenant = instant(self.ref, HEURE_COURANTE)
         self.debut = ajouter_mois(self.ref, -mois)    # premier jour de l'historique
+        self.avis_wiki = ''                           # wiki figé non repris (autre jeu que la démo standard)
         self.base = {table: [] for table in NOMS_TABLES}
         self.numeros = {}                             # compteurs d'identifiants
         self.localisations = {}                       # clé interne -> identifiant
@@ -4633,6 +4669,8 @@ def poser_astuces_lot6(ctx):
 # ---------------------------------------------------------------------------
 
 FICHIERS_WIKI_FIGES = (('wiki_pages', 'demo_wiki_pages.csv'), ('wiki_journal', 'demo_wiki_journal.csv'))
+AVIS_WIKI_VIDE = ('Wiki de démo non repris pour %s : le wiki figé (outils/demo_wiki_pages.csv, demo_wiki_journal.csv) '
+                  'ne vaut que pour la démo standard (%d mois, sans --volume) ; tables du wiki vides.' % ('%s', MOIS_PAR_DEFAUT))
 
 
 def lire_valeur(champ, valeur):
@@ -4718,7 +4756,12 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None, dossier_wiki=None):
         with hasard_du_lot6(ctx):
             generer_journal(ctx, garder=lambda ot: id(ot) in scenario_lot6)
         ctx.base['journal'].sort(key=lambda entree: (entree['date_heure'], entree['id']))
+    # Le wiki figé a été fabriqué sur la démo standard (ses OT, leurs numéros et leurs dates) : une autre durée
+    # d'historique ou le jeu de charge garde les tables du wiki vides (§20.12, D115).
+    if not volume and mois == MOIS_PAR_DEFAUT:
         charger_wiki_fige(ctx, dossier_wiki or DOSSIER_WIKI_FIGE)
+    else:
+        ctx.avis_wiki = AVIS_WIKI_VIDE % ('le jeu de charge' if volume else '%d mois d\'historique' % mois)
     verifier_jeu(ctx)
     if not volume:
         verifier_demo_lot3(ctx)
@@ -4771,11 +4814,16 @@ def principal(argv=None):
     ctx = construire_jeu(arguments.mois, arguments.volume, arguments.wiki)
     textes = {table: serialiser_table(table, ctx.base[table]) for table in NOMS_TABLES}
     dossier = Path(arguments.sortie) if arguments.sortie else DOSSIER_DEMO
+    fichier_js = Path(arguments.fichier_js) if arguments.fichier_js else (
+        FICHIER_JS if not arguments.sans_js and not arguments.sortie else None)
+    octets = octets_js(textes) if fichier_js else None
+    # La démo (pas le jeu de charge) se charge vite : au-delà de 1 Mo, rien n'est écrit (CS105).
+    if octets is not None and not arguments.volume and len(octets) > TAILLE_JS_MAX:
+        raise ErreurCoherence('%s : %d octets, %d au plus (CS105 : chargement rapide de la démo)'
+                              % (fichier_js.name, len(octets), TAILLE_JS_MAX))
     ecrire_csv(dossier, textes)
-    if arguments.fichier_js:
-        ecrire_js(Path(arguments.fichier_js), textes)
-    elif not arguments.sans_js and not arguments.sortie:
-        ecrire_js(FICHIER_JS, textes)
+    if fichier_js:
+        ecrire_js(fichier_js, textes, octets)
     # Les identifiants de scénario ne valent que pour le jeu de démo livré (donnees/demo) : ils sont
     # calculés et vérifiés seulement quand on les écrit.
     if arguments.fichier_scenarios or not arguments.sortie:
@@ -4785,6 +4833,8 @@ def principal(argv=None):
                          scenarios)
     print('Jeu généré en %.1f s (%d mois d\'historique, date de référence %s).'
           % (time.time() - depart, arguments.mois, DATE_REFERENCE))
+    if ctx.avis_wiki:
+        print(ctx.avis_wiki)
     for table in NOMS_TABLES:
         print('  %-26s %6d lignes' % (table, len(ctx.base[table])))
     print('CSV : %s' % dossier)
