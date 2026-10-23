@@ -4,18 +4,25 @@ construite UNIQUEMENT à partir du message envoyé par Prévo (même message →
 
 Il tient les longueurs lues dans l'en-tête de chaque texte reçu (« En bref : 2 phrases sur 5, 34 mots sur 120 » ; un
 savoir-faire entier : « 3 phrases sur 30, 40 mots sur 600 ») : une phrase qui ne tient plus dans sa rubrique ajoute
-seulement l'OT aux citations de la dernière phrase de la rubrique (il la confirme). Un texte qu'il modifie et qui est
-reçu dans d'anciennes rubriques (base de développement) est réécrit dans les siennes : chaque ancienne rubrique devient
-une phrase « <rubrique> : <ses phrases> » de la première rubrique du type, qui cite tous ses OT (chacune y est reprise).
+seulement l'OT aux citations de la dernière phrase de la rubrique (il la confirme). Dans les textes reçus, un lien vers un
+titre absent du catalogue et des pages reçues perd ses crochets (les mots restent), comme le demande la consigne. Un
+texte qu'il modifie et qui est reçu dans d'anciennes rubriques (base de développement) est réécrit dans les siennes :
+chaque ancienne rubrique devient une phrase « <rubrique> : <ses phrases> » de la première rubrique du type, qui cite tous
+ses OT (chacune y est reprise ; ses liens vers des titres connus restent des liens).
 
     faux               « En bref » de la machine reçoit la phrase « <titre de l'OT> : fréquent ici » qui cite l'OT (ou,
                        si une phrase de même texte existe déjà, l'OT s'ajoute à ses citations) ; toutes ses phrases et tous
                        ses OT sont gardés ; si l'OT a une astuce, un savoir-faire « Astuce de l'<OT> » est créé, rattaché à
                        la machine, l'astuce dans ses « Étapes » ;
-    faux-textes        comme « faux », avec tous les textes de la refonte 2 : la phrase d'« En bref » lie la panne de l'OT
-                       (« … : fréquent ici ([[<libellé du symptôme>]]) », si elle est au catalogue) ; l'astuce va aussi
-                       dans les « Astuces » de la machine ; « À quoi il sert » de chaque article reçu reçoit « <titre de
-                       l'OT> (sur <repère>) » : deux OT d'un même article partis ensemble seraient rejoués (D112) ;
+    faux-textes        comme « faux », avec tous les textes de la refonte 2, chaque astuce à un seul endroit : la phrase
+                       d'« En bref » lie la panne de l'OT (« … : fréquent ici ([[<libellé du symptôme>]]) », si elle est
+                       au catalogue) ; une astuce courte (sans « puis ») va dans les « Astuces » de la machine, sans
+                       savoir-faire ; une méthode (« … puis … ») complète le savoir-faire reçu qui la porte déjà (l'OT
+                       s'ajoute à ses citations), sinon crée « Astuce de l'<OT> », et les « Astuces » n'en reçoivent que
+                       le lien (« Méthode : voir [[<savoir-faire>]] ») ; « À quoi il sert » de chaque article reçu ne dit
+                       que ce que l'OT en dit — « A réglé la panne [[<libellé du symptôme>]] sur <repère> » —, et reste
+                       inchangé si sa panne n'est pas au catalogue (préventif, OT sans symptôme) : deux OT d'un même
+                       article partis ensemble seraient rejoués (D112) ;
     faux-rien          « rien à ajouter » ;
     faux-contradiction en plus, une contradiction sur la première phrase de la machine ;
     faux-recent        la nouvelle phrase commence par « Désormais » (refusée pour un OT antérieur) ;
@@ -178,14 +185,26 @@ def ajouter_phrase(page, nom, texte, citees):
         recoit["phrases"].append({"texte": texte, "ot": citees})
 
 
+def retirer_liens_inconnus(pages, catalogue):
+    """Dans les textes reçus, un lien vers un titre absent du catalogue et des pages reçues (ancienne page de mode, base
+    de développement) perd ses crochets : les mots restent (sinon : « lien vers une page inconnue »)."""
+    connus = set(catalogue) | {page["titre"] for page in pages}
+    for page in pages:
+        for rubrique in page["rubriques"]:
+            for phrase in rubrique["phrases"]:
+                phrase["texte"] = MOTIF_LIEN.sub(lambda lien: lien.group(0) if lien.group(1).strip() in connus
+                                                 else lien.group(1), phrase["texte"])
+
+
 def reprendre_anciennes(page):
     """Texte reçu dans d'anciennes rubriques (avant la refonte 2) : chacune devient une phrase « <rubrique> : <ses
-    phrases> » (liens retirés) de la première rubrique du type, qui cite tous ses OT : chaque ancienne phrase est reprise."""
+    phrases> » (liens connus gardés, voir retirer_liens_inconnus) de la première rubrique du type, qui cite tous ses OT :
+    chaque ancienne phrase est reprise."""
     permises = RUBRIQUES[page["type"]]
     anciennes = [r for r in page["rubriques"] if r["rubrique"] not in permises and r["phrases"]]
     page["rubriques"] = [r for r in page["rubriques"] if r["rubrique"] in permises]
     for ancienne in anciennes:
-        texte = ancienne["rubrique"] + " : " + " ; ".join(MOTIF_LIEN.sub(r"\1", p["texte"]) for p in ancienne["phrases"])
+        texte = ancienne["rubrique"] + " : " + " ; ".join(p["texte"] for p in ancienne["phrases"])
         rubrique_de(page, permises[0])["phrases"].append(
             {"texte": texte, "ot": sans_doublon(ot for p in ancienne["phrases"] for ot in p["ot"])})
 
@@ -232,6 +251,7 @@ def reponse_ingestion(message, modele="faux"):
         modele = "faux-invente" if relance else "faux-sans-ot"
     lu = lire_message(message.split(MARQUE_RELANCE, 1)[0])
     ot = lu["ot"]
+    retirer_liens_inconnus(lu["pages"], lu["catalogue"])
     if modele == "faux-rien":
         return {"rien_a_ajouter": True, "pages": [], "contradictions": []}
     equipement = next((page for page in lu["pages"] if page["type"] == "équipement" and not page["mere"]), None)
@@ -253,9 +273,11 @@ def reponse_ingestion(message, modele="faux"):
                 rubrique["phrases"].remove(premiere)
     if cible is equipement:
         reprendre_anciennes(equipement)
-    texte =(lu["titre"].split(" — ", 1)[-1] or "Intervention") + " : fréquent ici"
+    texte = (lu["titre"].split(" — ", 1)[-1] or "Intervention") + " : fréquent ici"
     panne = lu["codes"].split(" / ", 1)[0]
-    if modele == "faux-textes" and panne and lu["types"].get(panne) == "panne":
+    panne = panne if panne and lu["types"].get(panne) == "panne" else ""      # libellé du symptôme, s'il est une panne
+    textes = modele == "faux-textes"
+    if textes and panne:
         texte += " ([[" + panne + "]])"
     citees = [ot]
     if modele == "faux-recent":
@@ -267,19 +289,32 @@ def reponse_ingestion(message, modele="faux"):
     elif modele == "faux-sans-ot":
         citees = []
     ajouter_phrase(cible, rubrique_cible, texte, citees)
-    if modele == "faux-textes" and lu["astuce"]:
-        ajouter_phrase(equipement, RUBRIQUE_ASTUCES, lu["astuce"], [ot])
+    # faux-textes : une astuce courte va dans « Astuces » ; une méthode (« … puis … ») dans un savoir-faire — celui reçu
+    # dont les « Étapes » la portent déjà, sinon un créé — et « Astuces » n'en reçoit que le lien : jamais aux deux endroits.
+    methode = textes and " puis " in lu["astuce"]
+    complete = next((page for page in lu["pages"] if page["type"] == "savoir-faire" and not page["mere"]
+                     and any(phrase["texte"] == lu["astuce"] for rubrique in page["rubriques"]
+                             if rubrique["rubrique"] == RUBRIQUE_SAVOIR_FAIRE for phrase in rubrique["phrases"])),
+                    None) if methode else None
+    titre_astuce = complete["titre"] if complete else "Astuce de l'" + ot
+    if textes and lu["astuce"]:
+        astuce = "Méthode : voir [[" + titre_astuce + "]]" if methode else lu["astuce"]
+        ajouter_phrase(equipement, RUBRIQUE_ASTUCES, astuce, [ot])
     pages = [modifiee(cible)]
-    if modele == "faux-textes":
+    if textes and panne:
+        # « À quoi il sert » : ce que l'OT dit de l'article (la panne qu'il a réglée, où), rien s'il n'en dit pas plus.
         for article in (page for page in lu["pages"] if page["type"] == "composant" and not page["mere"]):
             reprendre_anciennes(article)
-            ajouter_phrase(article, RUBRIQUE_ARTICLE, (lu["titre"].split(" — ", 1)[-1] or "Intervention")
-                           + (" (sur " + lu["repere"] + ")" if lu["repere"] else ""), [ot])
+            ajouter_phrase(article, RUBRIQUE_ARTICLE, "A réglé la panne [[" + panne + "]]"
+                           + (" sur " + lu["repere"] if lu["repere"] else ""), [ot])
             pages.append(modifiee(article))
+    if complete is not None:
+        ajouter_phrase(complete, RUBRIQUE_SAVOIR_FAIRE, lu["astuce"], [ot])     # même texte : l'OT s'ajoute à ses citations
+        pages.append(modifiee(complete))
     if savoir is not None and sous_page is None:
         decouper(pages, savoir)
-    if lu["astuce"]:
-        pages.append({"action": "creer", "titre": "Astuce de l'" + ot, "type": "savoir-faire",
+    if lu["astuce"] and (methode or not textes) and complete is None:
+        pages.append({"action": "creer", "titre": titre_astuce, "type": "savoir-faire",
                       "rattache_a": equipement["titre"],
                       "rubriques": [{"rubrique": "Étapes", "phrases": [{"texte": lu["astuce"], "ot": [ot]}]}]})
     if modele == "faux-cree-commun" and "Usure commune" not in lu["catalogue"]:

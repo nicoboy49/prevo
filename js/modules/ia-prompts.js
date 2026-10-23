@@ -327,13 +327,16 @@ Object.assign(Ia, (() => {
   // Lot 6 (ARCHITECTURE.md §20.5 ; refonte 2, §20.12) : intégrer un OT clôturé au wiki de l'atelier. L'IA ne rédige que
   // les textes reçus — « En bref » et « Astuces » de la machine, « À quoi il sert » de chaque article consommé, les
   // savoir-faire (seule page qui se crée) — ; tout le reste est calculé par Prévo. Données : l'OT (liste blanche, ni
-  // nom ni coût), les textes concernés avec leur contenu actuel, leurs longueurs et leurs limites (par rubrique ; un
-  // savoir-faire entier), la mère d'une sous-page et la date d'intervention des OT qu'ils citent, le catalogue des
-  // titres (machines, articles, pannes, savoir-faire). Un savoir-faire qui dépasserait ses limites se découpe en
-  // sous-pages (§20.4 ; les limites viennent de l'en-tête de chaque texte, jamais du message système, écrit au
-  // chargement avant wiki-regles.js). Réponse lue par Wiki.lireIngestion (mise en forme puis contrôles du §20.6) : une
-  // réponse refusée n'entre jamais dans le wiki ; elle est redemandée une fois, avec ses raisons (donnees.relance :
-  // { reponse, raisons }), par le même message système et le message d'origine suivi de la réponse refusée et des raisons.
+  // nom ni coût), ce qu'il peut créer (`creation` : { pages, phrases, mots }, Wiki.SEUILS.pagesCreeesMax et les limites
+  // d'un savoir-faire de Wiki.LIMITES), les textes concernés avec leur contenu actuel, leurs longueurs et leurs limites
+  // (par rubrique ; un savoir-faire entier), la mère d'une sous-page et la date d'intervention des OT qu'ils citent, le
+  // catalogue des titres (machines, articles, pannes, savoir-faire). Un savoir-faire qui dépasserait ses limites se
+  // découpe en sous-pages (§20.4). Aucun nombre de Wiki.SEUILS ni de Wiki.LIMITES dans le message système (écrit au
+  // chargement, avant wiki-regles.js) : ils viennent du message utilisateur. Le vocabulaire refusé qu'il cite est celui
+  // de Wiki.VOCABULAIRE_SECURITE, entrée par entrée (test_wiki_ingestion le vérifie). Réponse lue par Wiki.lireIngestion
+  // (mise en forme puis contrôles du §20.6) : une réponse refusée n'entre jamais dans le wiki ; elle est redemandée une
+  // fois, avec ses raisons (donnees.relance : { reponse, raisons }), par le même message système et le message d'origine
+  // suivi de la réponse refusée et des raisons.
   const TYPES_PAGES = ['équipement', 'composant', 'savoir-faire'];
   const TYPE_CREE = 'savoir-faire';         // seul type qui se crée (sous-pages comprises, §20.12)
   const RUBRIQUES_PAGES = {
@@ -374,10 +377,21 @@ Object.assign(Ia, (() => {
    */
   function longueurEnTete(l) {
     if (!l || typeof l !== 'object') return '';
-    const motsMax = l.motsMax === null ? null : l.motsMax;
-    if (![l.phrases, l.phrasesMax, l.mots].every(Number.isInteger) || (motsMax !== null && !Number.isInteger(motsMax))) return '';
+    if (![l.phrases, l.phrasesMax, l.mots].every(Number.isInteger) || (l.motsMax !== null && !Number.isInteger(l.motsMax))) return '';
     return (texte(l.rubrique) ? uneLigne(l.rubrique, 60) + ' : ' : '') + nombreDe(l.phrases, 'phrase') + ' sur ' + l.phrasesMax
-      + (motsMax === null ? '' : ', ' + nombreDe(l.mots, 'mot') + ' sur ' + motsMax);
+      + (l.motsMax === null ? '' : ', ' + nombreDe(l.mots, 'mot') + ' sur ' + l.motsMax);
+  }
+
+  /**
+   * Ce que l'OT peut créer (§20.12 : Wiki.SEUILS.pagesCreeesMax, limites d'un savoir-faire entier de Wiki.LIMITES) → la
+   * ligne « Savoir-faire que tu peux créer pour cet OT : 3 au plus, sous-pages comprises ; chacun : 30 phrases et 600
+   * mots au plus (…) » ; '' si ses nombres ne sont pas des entiers (un savoir-faire créé n'a pas d'en-tête).
+   */
+  function ligneCreation(c) {
+    if (!c || typeof c !== 'object' || ![c.pages, c.phrases, c.mots].every(Number.isInteger)) return '';
+    return 'Savoir-faire que tu peux créer pour cet OT : ' + c.pages + ' au plus, sous-pages comprises ; chacun : '
+      + nombreDe(c.phrases, 'phrase') + ' et ' + nombreDe(c.mots, 'mot') + ' au plus (rubriques comprises, citations non '
+      + 'comptées).';
   }
 
   function citationsDuTexte(valeur) {
@@ -417,23 +431,29 @@ Object.assign(Ia, (() => {
         + 'interventions, pièces, stock) ; tu rédiges seulement les textes reçus :\n'
         + '- « En bref » de la machine (type « équipement ») : ce qu\'il faut savoir d\'abord de cette machine, ce qui '
         + 'revient et ce qui a réglé le problème ; une synthèse, pas un historique ;\n'
-        + '- « Astuces » de la machine : les astuces tirées des OT (« Astuce pour la prochaine fois ») ;\n'
-        + '- « À quoi il sert » de chaque article consommé (type « composant ») : son rôle sur les machines où il sert, '
-        + 'ses signes d\'usure ;\n'
-        + '- les savoir-faire : un geste ou une méthode, écrits d\'abord à partir de l\'astuce de l\'OT.\n'
+        + '- « Astuces » de la machine : les astuces courtes des OT (« Astuce pour la prochaine fois ») ; chacune, un conseil '
+        + 'en une phrase propre à cette machine, même s\'il porte sur un article ;\n'
+        + '- « À quoi il sert » de chaque article consommé (type « composant ») : l\'OT ne donne que sa désignation et sa '
+        + 'référence ; écris seulement ce que les OT disent de lui (où il a servi, la défaillance qu\'il a réglée, ses signes '
+        + 'd\'usure ou de casse observés, comment il se change), jamais une ligne d\'historique (« changé sur … le … ») ni '
+        + 'un rôle supposé ; si l\'OT n\'en dit rien de plus que sa consommation, laisse sa page inchangée ;\n'
+        + '- les savoir-faire : une méthode de plusieurs gestes, réutilisable sur cette machine ou avec cet article, tirée '
+        + 'd\'abord de l\'astuce de l\'OT, puis de son travail et de son compte rendu.\n'
+        + 'Une astuce s\'écrit à un seul endroit : un conseil court dans « Astuces », une méthode de plusieurs gestes dans un '
+        + 'savoir-faire (créé ou complété) ; jamais aux deux (dans « Astuces », un lien [[titre du savoir-faire]] suffit).\n'
         + 'Tu reçois ces textes (pages) avec leur contenu actuel, et le catalogue des titres (machines, articles, pannes, '
         + 'savoir-faire) pour les liens.\n'
         + 'Tu peux :\n'
         + '- modifier une page reçue (action « modifier », son titre exact) : rends son texte complet ; garde toutes ses '
         + 'phrases, à l\'identique ou reformulées, et tous les OT qu\'elles citent (sauf une phrase déplacée dans une '
         + 'sous-page, voir le découpage) ; ajoute ce que l\'OT apprend ;\n'
-        + '- créer au plus 3 savoir-faire (action « creer », type « savoir-faire »), sous-pages comprises, rattachés par '
-        + '« rattache_a » au titre exact de la machine ou d\'un article reçus (une sous-page : à son savoir-faire) ; aucune '
-        + 'autre page ne se crée ;\n'
+        + '- créer des savoir-faire (action « creer », type « savoir-faire »), sous-pages comprises, pas plus que ne le dit '
+        + 'la ligne « Savoir-faire que tu peux créer », rattachés par « rattache_a » au titre exact de la machine, ou de '
+        + 'l\'article reçu si la méthode porte sur lui (une sous-page : à son savoir-faire) ; aucune autre page ne se crée ;\n'
         + '- signaler dans « contradictions » une phrase existante que cet OT contredit (la phrase exacte, ton '
         + 'observation, et cet OT seul) : ne modifie pas cette phrase, le responsable tranchera ;\n'
-        + '- répondre « rien_a_ajouter » vrai, sans page ni contradiction, si l\'OT n\'apprend rien (contrôle de routine '
-        + 'sans remarque).\n'
+        + '- répondre « rien_a_ajouter » vrai, sans page ni contradiction, si l\'OT n\'apprend rien (préventif ou contrôle '
+        + 'de routine sans remarque : gamme faite, relevés normaux, usure normale).\n'
         + 'Règles d\'écriture :\n'
         + '- chaque phrase cite au moins un OT (liste « ot ») : cet OT ou un OT déjà cité dans les pages reçues ; jamais '
         + 'une autre page comme preuve ;\n'
@@ -441,15 +461,18 @@ Object.assign(Ia, (() => {
           .join(' ; ') + ' ; un texte reçu dans d\'autres rubriques (ancien wiki) se réécrit dans les siennes en '
           + 'regroupant ses phrases, chaque phrase regroupée citant tous les OT des phrases qu\'elle reprend ;\n'
         + '- un lien vers une autre page s\'écrit [[titre exact]] dans une phrase, vers une page du catalogue ou créée '
-        + 'dans ta réponse ;\n'
+        + 'dans ta réponse ; un lien d\'un texte reçu vers un titre absent du catalogue et des pages reçues perd ses '
+        + 'crochets (les mots restent) ;\n'
         + '- phrases courtes, une par fait utile pour la prochaine intervention ; si l\'OT confirme une phrase existante, '
         + 'ajoute seulement son numéro aux OT de cette phrase ; regroupe en une seule les phrases qui disent la même chose '
         + '(elle cite tous leurs OT) ; n\'écris pas ce qui ne vaut que pour une intervention (durée d\'arrêt, essai après '
-        + 'réparation, personne prévenue) : c\'est dans l\'OT ;\n'
+        + 'réparation, personne prévenue, relevés et mesures d\'un contrôle de routine — pression, température, jeu… — '
+        + 'sauf s\'ils sortent de la normale ou expliquent une panne) : c\'est dans l\'OT ;\n'
         + '- longueurs : l\'en-tête de chaque page reçue donne la taille et la limite de chaque rubrique (pour un '
         + 'savoir-faire, de la page entière, rubriques comprises) : « N phrases sur P, M mots sur Q », citations non '
-        + 'comptées, un lien compte les mots de son titre ; ne dépasse jamais une limite : quand elle est proche, regroupe '
-        + '(voir ci-dessus) ou mets le détail dans un savoir-faire et son lien dans une phrase existante ;\n'
+        + 'comptées, un lien compte les mots de son titre ; celles d\'un savoir-faire créé sont dans la ligne « Savoir-faire '
+        + 'que tu peux créer » ; ne dépasse jamais une limite : quand elle est proche, regroupe (voir ci-dessus) ou, pour '
+        + 'une méthode, mets-la dans un savoir-faire et son lien dans une phrase existante ;\n'
         + '- découpage : un savoir-faire qui dépasserait ses limites se découpe en sous-pages liées. Crée une sous-page '
         + '(action « creer », type « savoir-faire », « rattache_a » = titre exact '
         + 'du savoir-faire, titre « <titre du savoir-faire> — <sujet> », par exemple « Changer la garniture — étapes '
@@ -461,12 +484,16 @@ Object.assign(Ia, (() => {
         + 'nombre qui ne figure pas dans l\'OT ou dans la page ; aucune date, aucun mois, aucune année ;\n'
         + '- dis « fréquent ici », jamais « cause certaine » ;\n'
         + '- aucune consigne de sécurité ou de consignation, aucun équipement de protection, aucune habilitation, aucune '
-        + 'coupure d\'énergie : elles relèvent de la fiche de consignation de l\'équipement ; ces mots sont refusés dans '
-        + 'toute phrase, même pour rapporter un fait de l\'OT : consigne, consignation, cadenas, habilitation, '
-        + 'électrocution, EPI, VAT, gant, hors tension, absence de tension, couper l\'alimentation, le courant, '
-        + 'l\'énergie, l\'air ou la pression, mise en sécurité, règle ou mesure de sécurité ; un arrêt de la machine sur '
-        + 'défaut s\'écrit « arrêt sur défaut », jamais « mise en sécurité » ; une valeur de réglage s\'écrit « valeur '
-        + 'de réglage », jamais « consigne » ;\n'
+        + 'coupure d\'énergie : tout cela relève de la fiche de l\'équipement, en tête de sa page et de ses savoir-faire ; '
+        + 'une étape qui arrête la machine pour intervenir s\'écrit seulement « Mettre la machine à l\'arrêt selon la fiche '
+        + 'en tête de page » ; un arrêt de la machine sur défaut s\'écrit « arrêt sur défaut », jamais « mise en sécurité » ; '
+        + 'une valeur de réglage s\'écrit « valeur de réglage », jamais « consigne » ;\n'
+        + '- mots refusés dans toute phrase, même pour rapporter un fait de l\'OT : tout mot qui commence par consign, '
+        + 'déconsign, cadenas, habilit, électrocut ou lockout (consigne, consignation, cadenasser, habilité…), et LOTO, EPI, '
+        + 'VAT, gant, gants, lunettes de protection, équipement de protection, équipements de protection, hors tension, '
+        + 'absence de tension, couper l\'alimentation, coupez l\'alimentation, couper le courant, coupez le courant, couper '
+        + 'l\'énergie, coupez l\'énergie, dissiper l\'énergie, couper l\'air, couper la pression, mise en sécurité, mettre en '
+        + 'sécurité, règle de sécurité, règles de sécurité, mesure de sécurité, mesures de sécurité, pour votre sécurité ;\n'
         + '- si l\'OT est une intervention antérieure à des faits déjà intégrés, ne présente jamais son information comme '
         + 'la plus récente (ni « désormais », « maintenant », « actuellement », « récemment », « dernier »…).',
       '{"rien_a_ajouter": false, "pages": [{"action": "modifier", "titre": "…", "type": "équipement | composant | '
@@ -482,8 +509,10 @@ Object.assign(Ia, (() => {
       // (« sous-page de « <mère> » »).
       const longueurs = (page) => liste(page.longueurs).map(longueurEnTete).filter(Boolean).map((l) => ' · ' + l).join('');
       const mere = (page) => (texte(page.mere) ? ' · sous-page de « ' + uneLigne(page.mere, 200) + ' »' : '');
+      // Ce que l'OT peut créer (`creation`) : un savoir-faire créé n'a pas d'en-tête qui porterait ses limites.
       const origine = [
         ligneOtIngestion((d && d.ot) || {}) + (d.anterieure ? '\n' + MENTION_ANTERIEURE : ''),
+        ligneCreation(d.creation),
         'Pages concernées (texte actuel) :\n' + (pages.length ? pages.map((page) => '=== Page « ' + uneLigne(page.titre, 200)
           + ' » (' + uneLigne(page.type, 20) + mere(page) + longueurs(page) + ') ===\n'
           + (bloc(page.texte, PAGE_TEXTE_MAX) || '(page vide)')).join('\n') : '(aucune)'),

@@ -510,9 +510,11 @@ class TestReglesPures(CasNavigateur):
                         "phrases d'un même sujet, telles quelles ou regroupées, avec tous leurs OT",
                         "une phrase courte de renvoi [[titre de la sous-page]] qui cite tous leurs OT",
                         "une sous-page (« sous-page de … » dans son en-tête) ne se découpe pas : un seul niveau",
-                        "créer au plus 3 savoir-faire (action « creer », type « savoir-faire »), sous-pages comprises",
+                        "créer des savoir-faire (action « creer », type « savoir-faire »), sous-pages comprises, pas plus que "
+                        "ne le dit la ligne « Savoir-faire que tu peux créer »",
                         "aucune autre page ne se crée"):
             self.assertIn(attendu, systeme)
+        self.assertNotRegex(systeme, r"au plus \d")
         for absent in ("« type » de la page mère", "repère de l'équipement", "sauf comme sous-page", "mode de défaillance"):
             self.assertNotIn(absent, systeme)
         message = resultat["message"]
@@ -526,6 +528,21 @@ class TestReglesPures(CasNavigateur):
                          [("PO-02 — Pompe (A)", "équipement", ""), ("Kit (B)", "composant", ""),
                           ("Changer la garniture (A)", "savoir-faire", ""),
                           ("Changer la garniture (A) — dépose", "savoir-faire", "Changer la garniture (A)")])
+        # Ce que l'OT peut créer (donnees.creation, tiré de Wiki.SEUILS et de Wiki.LIMITES par wiki-ingestion.js) : une ligne
+        # avant les pages ; aucune ligne sans elle ou si un nombre n'est pas un entier.
+        self.assertNotIn("Savoir-faire que tu peux créer", message)
+        creation = self.page.evaluate("""() => {
+          const d = { ot: { id: 'OT-2026-0001', titre: 'PO-02 — Fuite' }, pages: [], catalogue: [] };
+          const avec = (creation) => Ia.PROMPTS.ingestionWiki.utilisateur(Object.assign({ creation }, d));
+          return [avec({ pages: 3, phrases: 30, mots: 600 }), avec({ pages: 1, phrases: 1, mots: 1 }),
+            avec({ pages: '3', phrases: 30, mots: 600 }), avec({ pages: 3, phrases: 30 }), avec(null)];
+        }""")
+        self.assertIn("\n\nSavoir-faire que tu peux créer pour cet OT : 3 au plus, sous-pages comprises ; chacun : 30 phrases et "
+                      "600 mots au plus (rubriques comprises, citations non comptées).\n\nPages concernées (texte actuel) :",
+                      creation[0])
+        self.assertIn("pour cet OT : 1 au plus, sous-pages comprises ; chacun : 1 phrase et 1 mot au plus", creation[1])
+        for sans in creation[2:]:
+            self.assertNotIn("Savoir-faire que tu peux créer", sans)
 
     def test_ingestion_schema_et_textes_demandes(self):
         """Refonte 2 (§20.12) : la consigne ne demande que « En bref », « Astuces », « À quoi il sert » et les savoir-faire ;
@@ -539,9 +556,12 @@ class TestReglesPures(CasNavigateur):
         }""")
         systeme = resultat["systeme"]
         for attendu in ("« En bref » de la machine (type « équipement ») : ce qu'il faut savoir d'abord de cette machine",
-                        "« Astuces » de la machine : les astuces tirées des OT (« Astuce pour la prochaine fois »)",
-                        "« À quoi il sert » de chaque article consommé (type « composant »)",
-                        "les savoir-faire : un geste ou une méthode, écrits d'abord à partir de l'astuce de l'OT",
+                        "« Astuces » de la machine : les astuces courtes des OT (« Astuce pour la prochaine fois »)",
+                        "« À quoi il sert » de chaque article consommé (type « composant ») : l'OT ne donne que sa désignation "
+                        "et sa référence ; écris seulement ce que les OT disent de lui",
+                        "les savoir-faire : une méthode de plusieurs gestes, réutilisable sur cette machine ou avec cet article",
+                        "Une astuce s'écrit à un seul endroit : un conseil court dans « Astuces », une méthode de plusieurs "
+                        "gestes dans un savoir-faire",
                         "rubriques permises : équipement « En bref », « Astuces » ; composant « À quoi il sert » ; savoir-faire "
                         "« Quand le faire », « Étapes », « Pièces et outillage », « Pièges »",
                         '"type": "savoir-faire", "rattache_a": "…"'):

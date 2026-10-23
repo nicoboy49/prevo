@@ -9,9 +9,11 @@
 //    valider) ; plus de clé « CAUSE:<code> » (refonte 2 : une panne est une page calculée, sans texte à réserver) ;
 //  - chaque texte envoyé porte ses longueurs (Wiki.LIMITES) : une par rubrique limitée du texte d'une machine ou d'un
 //    article, une pour un savoir-faire entier ; le modèle ne compte pas, il les lit dans l'en-tête du texte ;
-//  - catalogue envoyé (liens [[…]]) : machines, articles, savoir-faire et pannes (libellé d'un code symptôme qui a au
-//    moins un cas : OT correctif clôturé de ce code, comme la page PANNE-<code>) ; jamais un technicien ni une
-//    intervention ; une ancienne page de mode ou une page libre d'un autre type n'y est plus ;
+//  - catalogue envoyé (liens [[…]]) : machines, articles, savoir-faire et pannes (titres des pages Panne de
+//    Wiki.listeEntites('panne') : un code symptôme qui a au moins un cas, une seule définition) ; jamais un technicien
+//    ni une intervention ; une ancienne page de mode ou une page libre d'un autre type n'y est plus ;
+//  - ce qu'un OT peut créer (`creation`, SEUILS.pagesCreeesMax et Wiki.LIMITES) part dans les données : le message
+//    système de la consigne n'écrit aucun de ces nombres ;
 //  - une page créée par une proposition à valider entre dans l'état proposé sous sa clé TITRE ; une proposition
 //    suivante qui la modifie la retrouve par son titre, avant comme après sa validation ;
 //  - titre d'une page d'article : désignation, sinon référence, sinon identifiant (comme Wiki.catalogue) ;
@@ -40,7 +42,6 @@ Object.assign(Wiki, (() => {
 
   const SEUILS = Wiki.SEUILS;
   const STATUT_CLOTURE_ADMIN = 'Clôturé administrativement';
-  const STATUTS_CLOTURES = ['Clôturé techniquement', STATUT_CLOTURE_ADMIN];
   const STATUTS_FILE = ['en file', 'à refaire'];
   const STATUTS_DEJA = ['en file', 'à refaire', 'à valider', 'validée', 'rien à ajouter', 'refusée'];
   const ESSAIS_COLLISION_MAX = 3;
@@ -316,21 +317,12 @@ Object.assign(Wiki, (() => {
   }
 
   /**
-   * Titres des pannes (§20.12) : libellé de chaque code symptôme qui a au moins un cas — OT correctif clôturé
-   * (techniquement ou administrativement) de ce code, comme la page PANNE-<code> —, par libellé ; un code sans libellé
-   * garde son code. Une panne est une page calculée : on peut la lier, pas l'écrire.
-   */
-  function titresDesPannes() {
-    const codes = new Set(Donnees.lignes('ordres_travail').filter((ot) => /^correctif/.test(texte(ot.type))
-      && STATUTS_CLOTURES.includes(texte(ot.statut)) && texte(ot.symptome_code)).map((ot) => texte(ot.symptome_code)));
-    return Array.from(codes, (code) => libelleCode('symptôme', code)).sort(comparer);
-  }
-
-  /**
    * Catalogue envoyé (§20.12), pour les liens [[…]] → [{ titre, type }] : les savoir-faire créés par des propositions à
-   * valider (jamais coupés par le plafond), les pannes (type « panne »), puis les machines, les articles et les
-   * savoir-faire de Wiki.catalogue ; jamais un technicien ni une intervention, ni une ancienne page de mode ou une page
-   * libre d'un autre type (composant libre, ancienne sous-page). catalogueMax titres au plus.
+   * valider (jamais coupés par le plafond), les pannes (type « panne », par titre : les pages Panne de
+   * Wiki.listeEntites('panne'), seule définition — celle des liens gardés par wiki-journal.js, Wiki.pannesDuWiki), puis
+   * les machines, les articles et les savoir-faire de Wiki.catalogue ; jamais un technicien ni une intervention, ni une
+   * ancienne page de mode ou une page libre d'un autre type (composant libre, ancienne sous-page). catalogueMax titres
+   * au plus.
    */
   function catalogueIngestion(etat) {
     const vus = new Set();
@@ -343,7 +335,8 @@ Object.assign(Wiki, (() => {
     };
     Array.from(etat.values()).filter((page) => !page.pageId && page.cle.startsWith('TITRE:') && page.type === 'savoir-faire')
       .sort((a, b) => comparer(a.titre, b.titre)).forEach((page) => ajouter(page.titre, page.type));
-    titresDesPannes().forEach((titre) => ajouter(titre, 'panne'));
+    (Wiki.listeEntites('panne', { profil: 'responsable' }) || []).map((panne) => panne.titre).sort(comparer)
+      .forEach((titre) => ajouter(titre, 'panne'));
     Wiki.catalogue().filter((page) => page.type === 'savoir-faire'
       || (page.type === 'équipement' && Donnees.trouver('equipements', page.id))
       || (page.type === 'composant' && Donnees.trouver('articles', page.id))).forEach((page) => ajouter(page.titre, page.type));
@@ -391,8 +384,10 @@ Object.assign(Wiki, (() => {
 
   /**
    * Données d'une requête d'ingestion (§20.5, §20.12) : l'OT (liste blanche : jamais les noms des techniciens ou des
-   * demandeurs, les coûts, les documents, les photos), l'antériorité, les pages envoyées (clé, titre, type, mère d'une
-   * sous-page, texte, dates d'intervention des OT qu'elles citent, longueurs et leurs limites) et le catalogue.
+   * demandeurs, les coûts, les documents, les photos), l'antériorité, ce qu'il peut créer (`creation` : { pages,
+   * phrases, mots } — SEUILS.pagesCreeesMax savoir-faire, sous-pages comprises, et les limites d'un savoir-faire entier :
+   * un savoir-faire créé n'a pas d'en-tête), les pages envoyées (clé, titre, type, mère d'une sous-page, texte, dates
+   * d'intervention des OT qu'elles citent, longueurs et leurs limites) et le catalogue.
    */
   function donneesIngestion(otId, etatDonne) {
     const etat = etatDonne || etatPropose();
@@ -405,9 +400,11 @@ Object.assign(Wiki, (() => {
       mere: (mereDe(page, etat) || { titre: '' }).titre, texte: page.texte,
       otDates: Wiki.citationsDe(page.texte).map((id) => ({ id, date: dateIntervention(id) })), longueurs: longueursDe(page) }));
     const plusRecente = pages.flatMap((page) => page.otDates.map((entree) => entree.date)).filter(Boolean).sort().pop() || '';
+    const savoirFaire = Wiki.LIMITES['savoir-faire'].page;
     return {
       ot: donneesOt(ot),
       anterieure: Boolean(plusRecente && texte(ot.date_fin) && texte(ot.date_fin) < plusRecente),
+      creation: { pages: SEUILS.pagesCreeesMax, phrases: savoirFaire.phrases, mots: savoirFaire.mots },
       pages,
       catalogue: catalogueIngestion(etat),
       cles: concernees.cles,

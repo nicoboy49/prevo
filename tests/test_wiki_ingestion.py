@@ -8,7 +8,11 @@
                     consigne sont celles de Wiki.RUBRIQUES ;
     consigne      : (refonte 2) elle ne demande que « En bref » et « Astuces » de la machine, « À quoi il sert » des
                     articles consommés et des savoir-faire (seule page créée) ; aucune limite en dur ; schéma : un
-                    savoir-faire seulement à la création ;
+                    savoir-faire seulement à la création ; (suites de la relecture de T134) une astuce à un seul endroit
+                    (« Astuces » ou un savoir-faire), « À quoi il sert » sans rien d'inventé, relevés d'un préventif
+                    écartés, liens inconnus sans crochets ; ce qu'un OT peut créer est dans le message utilisateur, tiré
+                    de Wiki.SEUILS et de Wiki.LIMITES ; elle cite chaque entrée de Wiki.VOCABULAIRE_SECURITE, et la
+                    tournure qu'elle propose pour arrêter la machine passe les contrôles ;
     pages         : clés et pages envoyées d'un OT dans l'ordre de priorité (sa machine, ses articles consommés, les
                     savoir-faire de la machine puis des articles — par ancrage ou par rattachement —, chacun suivi de
                     ses sous-pages), plus de cause, de mode ni de page liée depuis la machine ; page archivée exclue,
@@ -16,8 +20,9 @@
     longueurs     : l'en-tête de chaque texte donne la mesure de chaque rubrique et sa limite (Wiki.LIMITES), celles
                     d'un savoir-faire entier ; le faux modèle s'y tient (rubrique pleine : l'OT confirme sa dernière
                     phrase) ;
-    catalogue     : machines, articles, savoir-faire et pannes (codes symptôme qui ont un cas) ; ni technicien, ni
-                    intervention, ni ancienne page de mode ou libre ; un lien [[<panne>]] est accepté ;
+    catalogue     : machines, articles, savoir-faire et pannes (codes symptôme qui ont un cas : les pages Panne de
+                    Wiki.listeEntites, seule définition) ; ni technicien, ni intervention, ni ancienne page de mode ou
+                    libre ; un lien [[<panne>]] est accepté ;
     file          : ordre par date d'intervention puis numéro d'OT, quel que soit l'ordre de mise en file ou de
                     clôture (OT importés compris) ; OT non clôturé administrativement, inconnu ou déjà intégré écarté ;
     antériorité   : mention et dates pour un OT plus ancien que les faits de SES pages ; aucune mention si les OT plus
@@ -26,7 +31,8 @@
                     ancienne restée en attente) ;
     traitement    : bout en bout avec le faux fournisseur (requêtes réellement envoyées, état proposé enchaîné,
                     antériorité notée, ordre par page, aucune page dans deux envois à la fois ; tous les textes de la
-                    refonte 2 acceptés ; ancien texte réécrit dans ses rubriques accepté) ; refus → « refusée »
+                    refonte 2 acceptés, chaque astuce à un seul endroit ; ancien texte réécrit dans ses rubriques
+                    accepté, lien connu gardé, lien inconnu sans crochets) ; refus → « refusée »
                     avec ses raisons ; collision → « en file » avec le motif puis acceptée, et « refusée » après trois
                     collisions ; IA injoignable → arrêt, OT laissés en file ;
     relance       : (D106 révisée, CS112) une réponse refusée par les contrôles, ou illisible, est redemandée une fois
@@ -264,6 +270,23 @@ def message_de_relance(origine, reponse, raisons):
             + NL + NL + DEMANDE_RELANCE)
 
 
+# Astuce de plusieurs gestes (« … puis … ») : le faux modèle (faux-textes) en fait un savoir-faire, pas une ligne d'« Astuces ».
+METHODE = "Déposer le moteur, puis nettoyer les faces de la garniture neuve."
+
+
+def endroits_de(changements, astuce):
+    """(titre, rubrique) de chaque phrase des textes proposés dont le texte, citations retirées, est l'astuce."""
+    endroits = []
+    for changement in changements:
+        rubrique = ""
+        for ligne in changement["apres"].split(NL):
+            if ligne.startswith("## "):
+                rubrique = ligne[3:].strip()
+            elif ligne.startswith("- ") and re.sub(r"\s*\[OT-\d{4}-\d{4,}\]", "", ligne[2:]).strip() == astuce:
+                endroits.append((changement["titre"], rubrique))
+    return endroits
+
+
 class CasIngestion(CasNavigateur):
 
     def charger(self, tables=None):
@@ -331,10 +354,29 @@ class TestDonneesEtFile(CasIngestion):
         systeme = requete["messages"][0]["content"]
         for attendu in ("« En bref » de la machine (type « équipement ») : ce qu'il faut savoir d'abord de cette machine, "
                         "ce qui revient et ce qui a réglé le problème ; une synthèse, pas un historique",
-                        "« Astuces » de la machine : les astuces tirées des OT",
-                        "« À quoi il sert » de chaque article consommé (type « composant ») : son rôle sur les machines où il "
-                        "sert, ses signes d'usure", "les savoir-faire : un geste ou une méthode, écrits d'abord à partir de "
-                        "l'astuce de l'OT", "créer au plus 3 savoir-faire (action « creer », type « savoir-faire »)",
+                        # Suites de la relecture de T134 : astuce ou savoir-faire, jamais les deux.
+                        "« Astuces » de la machine : les astuces courtes des OT (« Astuce pour la prochaine fois ») ; chacune, "
+                        "un conseil en une phrase propre à cette machine, même s'il porte sur un article",
+                        "les savoir-faire : une méthode de plusieurs gestes, réutilisable sur cette machine ou avec cet article, "
+                        "tirée d'abord de l'astuce de l'OT, puis de son travail et de son compte rendu",
+                        "Une astuce s'écrit à un seul endroit : un conseil court dans « Astuces », une méthode de plusieurs "
+                        "gestes dans un savoir-faire (créé ou complété) ; jamais aux deux (dans « Astuces », un lien [[titre "
+                        "du savoir-faire]] suffit)",
+                        "au titre exact de la machine, ou de l'article reçu si la méthode porte sur lui",
+                        # « À quoi il sert » n'invente rien.
+                        "« À quoi il sert » de chaque article consommé (type « composant ») : l'OT ne donne que sa désignation "
+                        "et sa référence ; écris seulement ce que les OT disent de lui (où il a servi, la défaillance qu'il a "
+                        "réglée, ses signes d'usure ou de casse observés, comment il se change), jamais une ligne d'historique "
+                        "(« changé sur … le … ») ni un rôle supposé ; si l'OT n'en dit rien de plus que sa consommation, "
+                        "laisse sa page inchangée",
+                        # Relevés d'un préventif ; liens d'un ancien texte.
+                        "personne prévenue, relevés et mesures d'un contrôle de routine — pression, température, jeu… — sauf "
+                        "s'ils sortent de la normale ou expliquent une panne) : c'est dans l'OT",
+                        "si l'OT n'apprend rien (préventif ou contrôle de routine sans remarque : gamme faite, relevés normaux, "
+                        "usure normale)",
+                        "un lien d'un texte reçu vers un titre absent du catalogue et des pages reçues perd ses crochets (les "
+                        "mots restent)",
+                        "créer des savoir-faire (action « creer », type « savoir-faire »)",
                         "aucune autre page ne se crée", "le catalogue des titres (machines, articles, pannes, savoir-faire)",
                         "un texte reçu dans d'autres rubriques (ancien wiki) se réécrit dans les siennes en regroupant ses "
                         "phrases, chaque phrase regroupée citant tous les OT des phrases qu'elle reprend",
@@ -350,6 +392,62 @@ class TestDonneesEtFile(CasIngestion):
         formes = requete["schema"]["properties"]["pages"]["items"]["anyOf"]
         self.assertEqual([(f["properties"]["action"]["enum"], f["properties"]["type"]["enum"]) for f in formes],
                          [(["modifier"], ["équipement", "composant", "savoir-faire"]), (["creer"], ["savoir-faire"])])
+
+    def test_ce_qu_un_ot_peut_creer_vient_de_seuils_et_de_limites(self):
+        """Suites de la relecture de T134 : la ligne « Savoir-faire que tu peux créer » du message utilisateur, avant les
+        pages, tire ses nombres de Wiki.SEUILS.pagesCreeesMax et de Wiki.LIMITES (savoir-faire entier : il n'a pas encore
+        d'en-tête) ; le message système y renvoie et n'écrit aucun de ces nombres (ils ne peuvent plus diverger)."""
+        pages, phrases, mots = self.page.evaluate("""() => [Wiki.SEUILS.pagesCreeesMax,
+          Wiki.LIMITES['savoir-faire'].page.phrases, Wiki.LIMITES['savoir-faire'].page.mots]""")
+        self.assertEqual(self.donnees("OT-2026-0001")["creation"], {"pages": pages, "phrases": phrases, "mots": mots})
+        requete = self.page.evaluate(REQUETE_JS, "OT-2026-0001")
+        systeme, message = requete["messages"][0]["content"], requete["messages"][1]["content"]
+        ligne = ("Savoir-faire que tu peux créer pour cet OT : %d au plus, sous-pages comprises ; chacun : %d phrases et %d "
+                 "mots au plus (rubriques comprises, citations non comptées)." % (pages, phrases, mots))
+        self.assertIn(NL + NL + ligne + NL + NL + "Pages concernées (texte actuel) :" + NL, message)
+        for attendu in ("pas plus que ne le dit la ligne « Savoir-faire que tu peux créer »",
+                        "celles d'un savoir-faire créé sont dans la ligne « Savoir-faire que tu peux créer »"):
+            self.assertIn(attendu, systeme)
+        self.assertNotRegex(systeme, r"au plus \d|\d+ savoir-faire|\b(%d|%d)\b" % (phrases, mots))
+        # Le faux modèle lit toujours l'OT et ses pages (la ligne est hors de ce qu'il analyse).
+        lu = lire_message(message)
+        self.assertEqual((lu["ot"], [p["titre"] for p in lu["pages"]][:2]),
+                         ("OT-2026-0001", ["PO-01 — Pompe de process A", "Kit garniture HC 50"]))
+
+    def test_consigne_cite_tout_le_vocabulaire_de_securite(self):
+        """Suites de la relecture de T134 : chaque entrée de Wiki.VOCABULAIRE_SECURITE (refusée par les contrôles) est citée
+        par la ligne des mots refusés de la consigne — une entrée « racine* » par un mot qui commence par la racine, une
+        autre telle quelle (forme comparable) — : les deux listes ne divergent plus. La tournure qu'elle propose pour
+        arrêter la machine dans des « Étapes » passe les contrôles, « selon sa fiche de consignation » non."""
+        resultat = self.page.evaluate("""() => {
+          const ligne = Ia.PROMPTS.ingestionWiki.systeme.split('\\n').find((l) => l.startsWith('- mots refusés dans toute phrase'))
+            || '';
+          const forme = ' ' + Wiki.comparable(ligne) + ' ';
+          const mots = forme.trim().split(' ');
+          return { ligne, entrees: Wiki.VOCABULAIRE_SECURITE.length, manquantes: Wiki.VOCABULAIRE_SECURITE.filter((entree) =>
+            (entree.endsWith('*') ? !mots.some((mot) => mot.startsWith(entree.slice(0, -1))) : !forme.includes(' ' + entree + ' '))) };
+        }""")
+        self.assertTrue(resultat["ligne"].startswith("- mots refusés dans toute phrase, même pour rapporter un fait de l'OT : "))
+        self.assertGreater(resultat["entrees"], 30)
+        self.assertEqual(resultat["manquantes"], [])
+        systeme = self.page.evaluate(REQUETE_JS, "OT-2026-0001")["messages"][0]["content"]
+        tournure = "Mettre la machine à l'arrêt selon la fiche en tête de page"
+        self.assertIn("une étape qui arrête la machine pour intervenir s'écrit seulement « " + tournure + " »", systeme)
+        self.assertEqual(self.page.evaluate("(t) => t.map((x) => Wiki.termesDeSecurite(x))", [
+            tournure, "Arrêter la machine selon sa fiche de consignation"]), [[], ["consignation"]])
+
+        def savoir_faire(etape):
+            reponse = {"rien_a_ajouter": False, "contradictions": [], "pages": [{
+                "action": "creer", "titre": "Changer la garniture sans fuite", "type": "savoir-faire",
+                "rattache_a": "PO-01 — Pompe de process A", "rubriques": [{"rubrique": "Étapes", "phrases": [
+                    {"texte": etape, "ot": ["OT-2026-0001"]}, {"texte": "Changer la garniture", "ot": ["OT-2026-0001"]}]}]}]}
+            return self.page.evaluate(LIRE_JS, ["OT-2026-0001", json.dumps(reponse, ensure_ascii=False)])
+
+        self.assertTrue(savoir_faire(tournure)["ok"], savoir_faire(tournure))
+        refus = savoir_faire("Arrêter la machine selon sa fiche de consignation")
+        self.assertFalse(refus["ok"])
+        self.assertTrue(any("consigne de sécurité" in raison and "consignation" in raison for raison in refus["raisons"]),
+                        refus)
 
     def test_entete_de_chaque_texte_mesure_par_rubrique_et_limites(self):
         """§20.12 : chaque texte envoyé porte sa mesure par rubrique et la limite de Wiki.LIMITES (une machine est limitée
@@ -417,6 +515,24 @@ class TestDonneesEtFile(CasIngestion):
                 self.assertFalse(refus["ok"])
                 self.assertIn("Page « PO-01 — Pompe de process A » : lien vers une page inconnue « %s »." % inconnu,
                               refus["raisons"])
+
+        # Une seule définition des pannes (suites de la relecture de T134) : celle des pages Panne, Wiki.listeEntites
+        # (wiki-entites.js) — un préventif clôturé de code S03, un correctif S03 encore en cours n'en font pas une ; un
+        # correctif S03 clôturé techniquement, si.
+        def pannes():
+            return self.page.evaluate("""() => [Wiki.donneesIngestion('OT-2026-0001').catalogue.filter((p) => p.type === 'panne')
+              .map((p) => p.titre), Wiki.listeEntites('panne', { profil: 'responsable' }).map((p) => p.titre).sort()]""")
+
+        ajouter_ot = """(ot) => Donnees.modifier('ordres_travail', (lignes) => { lignes.push(Object.assign({ equipement_id: 'EQ-0002',
+          priorite: 'P2', date_creation: '2026-05-09 08:00', date_fin: '2026-05-10 08:00', symptome_code: 'S03' }, ot)); })"""
+        self.page.evaluate(ajouter_ot, {"id": "OT-2026-0050", "type": "préventif systématique", "statut": "Clôturé administrativement",
+                                        "titre": "CP-01 — Contrôle"})
+        self.page.evaluate(ajouter_ot, {"id": "OT-2026-0051", "type": "correctif différé", "statut": "En cours",
+                                        "titre": "CP-01 — Vibration", "date_fin": ""})
+        self.assertEqual(pannes(), [["Bruit anormal", "Fuite"]] * 2)
+        self.page.evaluate(ajouter_ot, {"id": "OT-2026-0052", "type": "correctif différé", "statut": "Clôturé techniquement",
+                                        "titre": "CP-01 — Vibration"})
+        self.assertEqual(pannes(), [["Bruit anormal", "Fuite", "Vibration"]] * 2)
 
     def test_pages_concernees_dans_l_ordre_de_priorite(self):
         concernees = self.page.evaluate("(ot) => Wiki.pagesConcernees(ot)", "OT-2026-0001")
@@ -762,8 +878,10 @@ class TestTraitement(CasIngestion):
 
     def test_tous_les_textes_de_la_refonte_2_acceptes_de_bout_en_bout(self):
         """§20.12 : la réponse du faux modèle qui écrit tous les textes (faux-textes) — « En bref » qui lie la panne de
-        l'OT, l'astuce dans « Astuces » et dans un savoir-faire créé, « À quoi il sert » de l'article consommé — passe
-        les contrôles de bout en bout."""
+        l'OT, « Astuces », « À quoi il sert » de l'article consommé (ce que l'OT en dit : la panne réglée, où), un
+        savoir-faire pour une méthode — passe les contrôles de bout en bout. Suites de la relecture de T134 : une astuce
+        est à un seul endroit — courte, dans « Astuces » sans savoir-faire ; une méthode (« … puis … ») dans un savoir-faire,
+        créé puis complété par l'OT suivant qui la porte, et « Astuces » n'en a que le lien."""
         bilan = self.traiter(["OT-2026-0001"], "faux-textes")
         self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["rejouees"], bilan["erreur"]), (1, 0, 0, None))
         entree = self.journal()["OT-2026-0001"]
@@ -773,8 +891,50 @@ class TestTraitement(CasIngestion):
             "PO-01 — Pompe de process A": ("équipement", False, TEXTE_PO01 + NL
                                            + "- Fuite à la garniture : fréquent ici ([[Fuite]]) [OT-2026-0001]" + NL
                                            + "## Astuces" + NL + "- " + ASTUCE + " [OT-2026-0001]"),
-            "Kit garniture HC 50": ("composant", False, TEXTE_KIT + NL + "- Fuite à la garniture (sur PO-01) [OT-2026-0001]"),
-            "Astuce de l'OT-2026-0001": ("savoir-faire", True, "## Étapes" + NL + "- " + ASTUCE + " [OT-2026-0001]")})
+            "Kit garniture HC 50": ("composant", False, TEXTE_KIT + NL + "- A réglé la panne [[Fuite]] sur PO-01 [OT-2026-0001]")})
+        self.assertEqual(endroits_de(json.loads(entree["changements"]), ASTUCE), [("PO-01 — Pompe de process A", "Astuces")])
+        # Une méthode : 0003 (le plus ancien) crée le savoir-faire, 0008 le complète ; « Astuces » n'en a que le lien.
+        self.page.evaluate("""(astuce) => Donnees.modifier('ordres_travail', (lignes) => lignes
+          .filter((o) => ['OT-2026-0003', 'OT-2026-0008'].includes(o.id)).forEach((o) => { o.astuce = astuce; }))""", METHODE)
+        bilan = self.traiter(["OT-2026-0008", "OT-2026-0003"], "faux-textes")
+        self.assertEqual((bilan["acceptees"], bilan["refusees"], bilan["rejouees"], bilan["erreur"]), (2, 0, 0, None))
+        journal = self.journal()
+        savoir = "Astuce de l'OT-2026-0003"
+        lien = "- Méthode : voir [[" + savoir + "]] "
+        attendus = {"OT-2026-0003": ([("PO-01 — Pompe de process A", False), (savoir, True)], "[OT-2026-0003]"),
+                    "OT-2026-0008": ([("PO-01 — Pompe de process A", False), (savoir, False)], "[OT-2026-0003] [OT-2026-0008]")}
+        for ot, (pages, citations) in attendus.items():
+            with self.subTest(ot=ot):
+                changements = json.loads(journal[ot]["changements"])
+                self.assertEqual(journal[ot]["statut"], "à valider")
+                self.assertEqual([(c["titre"], c["creation"]) for c in changements], pages)
+                self.assertEqual(endroits_de(changements, METHODE), [(savoir, "Étapes")])
+                self.assertEqual(changements[1]["apres"], "## Étapes" + NL + "- " + METHODE + " " + citations)
+                self.assertIn(NL + "## Astuces" + NL + "- " + ASTUCE + " [OT-2026-0001]" + NL + lien + citations,
+                              changements[0]["apres"])
+
+    def test_a_quoi_il_sert_seulement_ce_que_dit_l_ot(self):
+        """Suites de la relecture de T134 : faux-textes n'écrit dans « À quoi il sert » que ce que l'OT dit de l'article (la
+        panne qu'il a réglée, sur quelle machine), jamais le titre de l'OT ; un OT sans panne au catalogue (sans code
+        symptôme : préventif…) laisse la page de l'article inchangée, et la réponse passe les contrôles."""
+        self.page.evaluate("""() => Donnees.modifier('ordres_travail', (lignes) => {
+          lignes.find((o) => o.id === 'OT-2026-0002').symptome_code = ''; })""")
+        message = self.message("OT-2026-0002")
+        self.assertIn("Codes : Encrassement / Nettoyage" + NL, message)
+        self.assertIn("=== Page « Filtre à huile » (composant", message)
+        reponse = reponse_ingestion(message, "faux-textes")
+        self.assertEqual([(p["action"], p["titre"]) for p in reponse["pages"]], [("modifier", "CP-01 — Compresseur")])
+        lu = self.page.evaluate(LIRE_JS, ["OT-2026-0002", json.dumps(reponse, ensure_ascii=False)])
+        self.assertTrue(lu["ok"], lu)
+        # Avec sa panne : la phrase de l'article dit la panne réglée et la machine, pas le titre de l'OT (« Filtre encrassé »).
+        message = self.message("OT-2026-0006")
+        avec_panne = reponse_ingestion(message, "faux-textes")
+        articles = [p for p in avec_panne["pages"] if p["type"] == "composant"]
+        self.assertEqual(len(articles), len([p for p in lire_message(message)["pages"] if p["type"] == "composant"]))
+        self.assertGreater(len(articles), 5)
+        self.assertEqual({phrase["texte"] for p in articles for r in p["rubriques"] for phrase in r["phrases"]},
+                         {"A réglé la panne [[Bruit anormal]] sur CV-01"})
+        self.assertTrue(self.page.evaluate(LIRE_JS, ["OT-2026-0006", json.dumps(avec_panne, ensure_ascii=False)])["ok"])
 
     def test_rubrique_pleine_le_faux_modele_s_y_tient(self):
         """« En bref » à sa limite (5 phrases, lue dans l'en-tête) : la réponse du faux modèle ne fait que confirmer la
@@ -792,20 +952,32 @@ class TestTraitement(CasIngestion):
 
     def test_ancien_texte_reecrit_dans_ses_rubriques(self):
         """Base de développement (avant la refonte 2) : un texte de machine aux anciennes rubriques, réécrit dans les
-        siennes en regroupant ses phrases (chaque phrase regroupée cite tous leurs OT, liens retirés), est accepté ; le
-        même texte gardé tel quel est refusé (rubriques inconnues)."""
+        siennes en regroupant ses phrases (chaque phrase regroupée cite tous leurs OT), est accepté ; son lien vers un
+        titre du catalogue reste un lien, celui vers une ancienne page de mode (absente du catalogue) perd ses crochets,
+        comme le dit la consigne — gardé, il est refusé ; le même texte gardé tel quel est refusé (rubriques inconnues)."""
         self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { const NL = String.fromCharCode(10);
           lignes.push({ id: 'WP-0030', type: 'équipement', titre: 'CV-01 — Convoyeur', equipement_id: 'EQ-0003', version: '1',
             statut: 'active', origine: 'IA', texte: ['## Ce qui revient', '- Bande qui patine [OT-2026-0004]',
-              '- Rouleau bruyant [OT-2026-0004]', '## À surveiller', '- Voir [[Desserrage]] [OT-2026-0004]'].join(NL) }); })""")
+              '- Rouleau bruyant [OT-2026-0004]', '## À surveiller', '- Voir [[Desserrage]] [OT-2026-0004]',
+              '- Méthode : [[Nettoyer le filtre de CP-01]] [OT-2026-0004]'].join(NL) }); })""")
         message = self.message("OT-2026-0006")
         self.assertIn("(équipement · En bref : 0 phrase sur 5, 0 mot sur 120 · Astuces : 0 phrase sur 10) ===\n## Ce qui revient",
                       message)
-        lu = self.page.evaluate(LIRE_JS, ["OT-2026-0006", json.dumps(reponse_ingestion(message, "faux"), ensure_ascii=False)])
+        self.assertIn("\n- Nettoyer le filtre de CP-01 (savoir-faire)\n", message)
+        self.assertNotIn("- Desserrage (", message)
+        reponse = reponse_ingestion(message, "faux")
+        lu = self.page.evaluate(LIRE_JS, ["OT-2026-0006", json.dumps(reponse, ensure_ascii=False)])
         self.assertTrue(lu["ok"], lu)
         self.assertEqual(lu["lu"]["changements"][0]["apres"], NL.join([
             "## En bref", "- Ce qui revient : Bande qui patine ; Rouleau bruyant [OT-2026-0004]",
-            "- À surveiller : Voir Desserrage [OT-2026-0004]", "- Rouleaux encrassés : fréquent ici [OT-2026-0006]"]))
+            "- À surveiller : Voir Desserrage ; Méthode : [[Nettoyer le filtre de CP-01]] [OT-2026-0004]",
+            "- Rouleaux encrassés : fréquent ici [OT-2026-0006]"]))
+        # Le lien vers l'ancienne page gardé : refusé (c'est ce que la consigne évite).
+        phrase = reponse["pages"][0]["rubriques"][0]["phrases"][1]
+        phrase["texte"] = phrase["texte"].replace("Voir Desserrage", "Voir [[Desserrage]]")
+        refus = self.page.evaluate(LIRE_JS, ["OT-2026-0006", json.dumps(reponse, ensure_ascii=False)])
+        self.assertFalse(refus["ok"])
+        self.assertEqual(refus["raisons"], ["Page « CV-01 — Convoyeur » : lien vers une page inconnue « Desserrage »."])
         garde = {"rien_a_ajouter": False, "contradictions": [], "pages": [{"action": "modifier", "titre": "CV-01 — Convoyeur",
                  "type": "équipement", "rattache_a": "", "rubriques": [
                      {"rubrique": "Ce qui revient", "phrases": [{"texte": "Bande qui patine", "ot": ["OT-2026-0004"]},
