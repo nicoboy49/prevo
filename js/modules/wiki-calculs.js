@@ -651,6 +651,6 @@ Object.assign(Wiki, (() => {
   return {
     page, pageComposant, pageMode, catalogue, PHRASE_SAVOIR_FAIRE, PHRASE_SOUS_PAGE,
     // Usage interne du wiki (pas une API) : complété par wiki-entites.js (socle de l'encyclopédie).
-    interne: { entiteMachine, entiteArticle, rattachementDe, listeMachines, listeSavoirFaire },
+    interne: { entiteMachine, entiteArticle, rattachementDe, listeMachines, listeSavoirFaire, retoursDe },
   };
 })());

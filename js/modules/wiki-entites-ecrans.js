@@ -1,9 +1,9 @@
 'use strict';
-// Wiki (7 ter/8) — l'encyclopédie de l'atelier à l'écran (refonte 2, ARCHITECTURE.md §20.12 ; D113, D114 ; tâche
-// T136) : l'accueil #/wiki, les listes #/wiki/<liste> des six types et, en attendant les pages de la tâche T137, un
-// rendu minimal des pages Panne, Technicien et Intervention (titre, fiche des faits, « Ouvrir la fiche OT »). Les
-// routes sont dans wiki-ecrans.js (chargé avant) ; ce fichier rend Wiki.afficherEncyclopedie,
-// Wiki.afficherListeEntites et Wiki.rendreEntite.
+// Wiki (7 quater/9) — l'encyclopédie de l'atelier à l'écran (refonte 2, ARCHITECTURE.md §20.12 ; D113, D114 ; tâche
+// T136) : l'accueil #/wiki et les listes #/wiki/<liste> des six types. Les routes sont dans wiki-ecrans.js, la page
+// d'une entité dans wiki-page-ecrans.js et wiki-sections-ecrans.js (T137, chargés avant) ; ce fichier rend
+// Wiki.afficherEncyclopedie et Wiki.afficherListeEntites, et prête aux pages ses outils d'affichage (Wiki.outilsEcrans :
+// types, icônes et couleurs, liens vers les entités, fil d'Ariane, « Voir les n autres »).
 //
 //   Accueil (maquette validée par Nicolas, dans le style de l'accueil « bento » de Prévo : tuiles .bento-tuile,
 //   pastilles d'icône, dégradé de la synthèse, css/modules/accueil.css), grille de 12 colonnes :
@@ -30,11 +30,13 @@
 //  - nombres de la phrase et des briques = Wiki.accueilEncyclopedie().nombres ; « 0 machine », « 1 panne »,
 //    « 2 savoir-faire » (invariable) ; les machines qui ont le plus d'interventions sont nommées par leur repère,
 //    celles sans intervention écartées ;
-//  - dernières interventions : les DERNIERES_MONTREES premières de accueilEncyclopedie().dernieres ; recherche :
-//    ENTITES_MONTREES premières entités par type, le reste derrière « Voir les n autres » ; interventions au
-//    téléphone : CARTES_MONTREES premières cartes, le reste derrière un bouton ;
-//  - page minimale : les faits de Wiki.entite dans l'ordre (date AAAA-MM-JJ → JJ/MM/AAAA, oui / non, nombre à la
-//    française ; un fait vide est omis ; un fait qui porte un lien mène à sa page).
+//  - dernières interventions : les DERNIERES_MONTREES premières de accueilEncyclopedie().dernieres ;
+//  - longues listes (D101, relecture de T136 : 5 006 OT du jeu de charge) : seules les premières lignes sont créées —
+//    recherche : ENTITES_MONTREES par type ; interventions : LIGNES_MONTREES lignes du tableau sur PC,
+//    CARTES_MONTREES cartes au téléphone — ; « Voir les n autres » crée les autres au clic (tableau.mettreAJour
+//    pour le tableau) ;
+//  - lignes des briques : « : » et « · » collés au mot d'avant par une espace insécable (jamais seuls en tête de
+//    ligne) ; textes d'exemple des champs plus courts au téléphone.
 
 Object.assign(Wiki, (() => {
 
@@ -68,13 +70,15 @@ Object.assign(Wiki, (() => {
     'savoir-faire': 'Les gestes qui font gagner du temps, écrits à partir des astuces des techniciens.',
     intervention: 'Toutes les interventions : celles en cours ou à venir en tête, puis de la plus récente à la plus ancienne.',
   };
-  const FICHES = { panne: 'Fiche de la panne', technicien: 'Fiche du technicien', intervention: 'Fiche de l\'intervention' };
   const ETATS_STOCK = { 'en stock': 'ok', 'sous le seuil': 'attention', rupture: 'ko' };
   const OPTIONS_ETAT = [['', 'Tous les états'], ['en stock', 'En stock'], ['sous le seuil', 'Sous le seuil'], ['rupture', 'En rupture']];
 
   const DERNIERES_MONTREES = 6;          // dernières interventions de l'accueil
   const ENTITES_MONTREES = 6;            // par type, dans les résultats de la recherche
+  const LIGNES_MONTREES = 100;           // interventions sur PC (tableau), avant « Voir les n autres »
   const CARTES_MONTREES = 40;            // interventions au téléphone, avant « Voir les n autres »
+  const SEPARATEUR = '\u00a0·';            // « 1 habilitation suivie · 2 échues » : le point reste collé au mot d'avant
+  const DEUX_POINTS = '\u00a0: ';
   const DELAI_RECHERCHE_MS = 300;        // comme Wiki.champRecherche : la recherche part après 300 ms sans frappe
 
   // ===========================================================================================
@@ -96,7 +100,7 @@ Object.assign(Wiki, (() => {
 
   /**
    * Morceaux non vides qu'une ligne ne coupe jamais en leur milieu (« CH-01 », « 1 à renouveler ») : chacun garde
-   * son séparateur à la fin (`marque` : ',' ou ' ·'), la ligne ne se coupe qu'entre deux morceaux.
+   * son séparateur à la fin (`marque` : ',' ou SEPARATEUR), la ligne ne se coupe qu'entre deux morceaux.
    */
   function insecables(parties, marque) {
     const gardees = parties.filter(Boolean);
@@ -128,21 +132,33 @@ Object.assign(Wiki, (() => {
   const etatStock = (article) => UI.html`<span class="badge ${ETATS_STOCK[article.etat] || 'neutre'} wiki-etat-stock">${UI.nombreFr(article.stock)}${article.unite ? ' ' + article.unite : ''} · ${article.etat}</span>`;
   const fil = (morceaux) => UI.html`<nav class="fil" aria-label="Vous êtes ici"><a href="#/wiki">Wiki</a>${morceaux.map((morceau) => UI.html` <span aria-hidden="true">›</span> ${morceau}`)}</nav>`;
 
-  /** Bouton « Voir les n autres » qui montre ou cache les éléments [hidden] d'un bloc, au-delà des `montres` premiers. */
-  function brancherVoirPlus(bloc, selecteur, montres) {
+  /** Bouton « Voir les n autres <nom> » (fragment ; '' s'il ne reste rien). */
+  const boutonAutres = (reste, nom) => (reste > 0 ? UI.html`<button type="button" class="btn btn-fantome wiki-voir-autres">${reste > 1
+    ? 'Voir les ' + reste + ' autres ' + nom : 'Voir l\'autre'}</button>` : '');
+
+  /**
+   * Longue liste (D101) : au clic sur « Voir les n autres » du bloc, `ajouter()` crée le reste (rien n'est créé avant),
+   * puis le bouton disparaît et le premier lien ajouté prend le focus. `ajouter` rend les éléments ajoutés.
+   */
+  function brancherSuite(bloc, ajouter) {
     const bouton = UI.$('.wiki-voir-autres', bloc);
     if (!bouton) return;
-    const texteBouton = bouton.textContent;
     bouton.addEventListener('click', () => {
-      const ouvrir = bouton.getAttribute('aria-expanded') !== 'true';
-      UI.$$(selecteur, bloc).forEach((element, rang) => { element.hidden = !ouvrir && rang >= montres; });
-      bouton.setAttribute('aria-expanded', String(ouvrir));
-      bouton.textContent = ouvrir ? 'Montrer moins' : texteBouton;
+      const ajoutes = ajouter() || [];
+      bouton.remove();
+      const lien = ajoutes.length ? ajoutes[0].querySelector('a[href]') || (ajoutes[0].matches('a[href]') ? ajoutes[0] : null) : null;
+      if (lien) lien.focus();
     });
   }
 
-  const boutonAutres = (reste, nom) => (reste > 0 ? UI.html`<button type="button" class="btn btn-fantome wiki-voir-autres"
-    aria-expanded="false">${reste > 1 ? 'Voir les ' + reste + ' autres ' + nom : 'Voir l\'autre'}</button>` : '');
+  /** Ajoute à `liste` (ul, tbody) les fragments `morceaux` (UI.html), créés d'un seul coup ; rend les éléments ajoutés. */
+  function ajouterA(liste, morceaux) {
+    const tampon = document.createElement(liste.tagName);
+    UI.remplir(tampon, UI.html`${morceaux}`);
+    const ajoutes = Array.from(tampon.children);
+    liste.append(...ajoutes);
+    return ajoutes;
+  }
 
   // ===========================================================================================
   // 2. Accueil #/wiki
@@ -156,8 +172,10 @@ Object.assign(Wiki, (() => {
   }
 
   function tuileSynthese(accueil, profil) {
-    const exemple = profil === 'demandeur' ? 'Chercher une machine, une panne, un article, un savoir-faire…'
-      : 'Chercher une machine, une panne, un article, une intervention…';
+    const telephone = UI.estTelephone();         // au téléphone, un exemple qui tient dans le champ
+    const exemple = profil === 'demandeur'
+      ? (telephone ? 'Machine, panne, article…' : 'Chercher une machine, une panne, un article, un savoir-faire…')
+      : (telephone ? 'Machine, panne, OT…' : 'Chercher une machine, une panne, un article, une intervention…');
     return UI.html`<section class="bento-tuile bento-synthese wiki-synthese" id="wiki-synthese" aria-labelledby="wiki-phrase-resume">
       <span class="bento-lueur" aria-hidden="true"><span class="bento-halo bento-halo-blanc"></span><span class="bento-halo bento-halo-cyan"></span></span>
       <p class="wiki-synthese-pastille">${UI.icone('wiki')}Ce que l'atelier sait</p>
@@ -195,23 +213,23 @@ Object.assign(Wiki, (() => {
   function ligneBrique(type, accueil) {
     if (type === 'machine') {
       const suivies = accueil.machinesPlusDInterventions.filter((machine) => machine.interventions > 0);
-      return suivies.length ? ['Le plus d\'interventions : ', insecables(suivies.map(repere), ',')] : 'Aucune intervention enregistrée';
+      return suivies.length ? ['Le plus d\'interventions' + DEUX_POINTS, insecables(suivies.map(repere), ',')] : 'Aucune intervention enregistrée';
     }
     if (type === 'panne') {
       const panne = accueil.pannePlusFrequente;
-      return panne ? ['La plus fréquente : ' + panne.titre + ' ', insecables(['(' + pluriel(panne.cas, 'cas', 'cas') + ')'], '')]
+      return panne ? ['La plus fréquente' + DEUX_POINTS + panne.titre + ' ', insecables(['(' + pluriel(panne.cas, 'cas', 'cas') + ')'], '')]
         : 'Elles naissent des interventions correctives clôturées';
     }
     if (type === 'article') {
       const parties = [accueil.articles.sousLeSeuil ? accueil.articles.sousLeSeuil + ' sous le seuil' : '',
         accueil.articles.enRupture ? accueil.articles.enRupture + ' en rupture' : ''].filter(Boolean);
-      return parties.length ? insecables(parties, ' ·') : 'Tous en stock, au-dessus du seuil';
+      return parties.length ? insecables(parties, SEPARATEUR) : 'Tous en stock, au-dessus du seuil';
     }
     if (type === 'technicien') {
       const habilitations = accueil.habilitations;
       return insecables([pluriel(habilitations.suivies, 'habilitation suivie', 'habilitations suivies'),
         habilitations.aRenouveler ? habilitations.aRenouveler + ' à renouveler' : '',
-        habilitations.echues ? pluriel(habilitations.echues, 'échue', 'échues') : ''], ' ·');
+        habilitations.echues ? pluriel(habilitations.echues, 'échue', 'échues') : ''], SEPARATEUR);
     }
     return accueil.nombres.savoirFaire ? 'Écrits à partir des astuces des techniciens' : 'Ils naissent des astuces des interventions';
   }
@@ -269,20 +287,22 @@ Object.assign(Wiki, (() => {
     intervention: (e) => [UI.dateFr(e.date), e.statut],
   };
 
-  /** Un groupe de la recherche (« Machines · 3 ») : ses ENTITES_MONTREES premières entités, le reste derrière un bouton. */
+  function entiteTrouvee(type, entite) {
+    const sous = SOUS_TROUVES[type](entite.element).filter(Boolean).join(' · ');
+    return UI.html`<li class="wiki-ligne wiki-entite-trouvee" data-id="${entite.lien || ''}">
+      ${pastille(type)}<span class="wiki-ligne-corps">${lienEntite(entite.lien, (TITRES_TROUVES[type] || ((e) => e.titre))(entite))}
+      ${sous ? UI.html`<span class="wiki-ligne-sous">${sous}</span>` : ''}</span></li>`;
+  }
+
+  /** Un groupe de la recherche (« Machines · 3 ») : ses ENTITES_MONTREES premières entités, les autres créées au clic. */
   function groupeTrouve(groupe) {
     const type = groupe.type;
     const bloc = UI.element(UI.html`<div class="wiki-groupe" data-type="${type}">
       <h3 class="wiki-groupe-titre">${TYPES[type].pluriel} · ${groupe.entites.length}</h3>
-      <ul class="wiki-lignes-entites">${groupe.entites.map((entite, rang) => {
-        const sous = SOUS_TROUVES[type](entite.element).filter(Boolean).join(' · ');
-        return UI.html`<li class="wiki-ligne wiki-entite-trouvee" data-id="${entite.lien || ''}"${rang >= ENTITES_MONTREES ? UI.brut(' hidden') : ''}>
-          ${pastille(type)}<span class="wiki-ligne-corps">${lienEntite(entite.lien, (TITRES_TROUVES[type] || ((e) => e.titre))(entite))}
-          ${sous ? UI.html`<span class="wiki-ligne-sous">${sous}</span>` : ''}</span></li>`;
-      })}</ul>
+      <ul class="wiki-lignes-entites">${groupe.entites.slice(0, ENTITES_MONTREES).map((entite) => entiteTrouvee(type, entite))}</ul>
       ${boutonAutres(groupe.entites.length - ENTITES_MONTREES, TYPES[type].plusieurs)}
     </div>`);
-    brancherVoirPlus(bloc, '.wiki-entite-trouvee', ENTITES_MONTREES);
+    brancherSuite(bloc, () => ajouterA(UI.$('ul', bloc), groupe.entites.slice(ENTITES_MONTREES).map((entite) => entiteTrouvee(type, entite))));
     return bloc;
   }
 
@@ -290,12 +310,12 @@ Object.assign(Wiki, (() => {
   function afficherTrouves(zone, requete, profil) {
     const entites = Wiki.chercherEntites(requete, { profil });
     const blocs = Wiki.blocsRecherche(Wiki.rechercher(requete, {}), {});
-    UI.remplir(zone, UI.html`<h2 class="wiki-trouves-titre">Résultats pour « ${requete} »</h2>`);
-    if (!entites.groupes.length && !blocs.length) {
-      zone.insertAdjacentHTML('beforeend', String(UI.html`<p class="wiki-rien"><b>Rien trouvé pour « ${requete} ».</b></p>
-        <p class="aide">Essayez un repère (CP-01), une panne (fuite), une référence d'article ou un autre mot.</p>`));
+    if (!entites.groupes.length && !blocs.length) {             // un seul titre : rien trouvé
+      UI.remplir(zone, UI.html`<h2 class="wiki-trouves-titre wiki-rien">Rien trouvé pour « ${requete} ».</h2>
+        <p class="aide">Essayez un repère (CP-01), une panne (fuite), une référence d'article ou un autre mot.</p>`);
       return;
     }
+    UI.remplir(zone, UI.html`<h2 class="wiki-trouves-titre">Résultats pour « ${requete} »</h2>`);
     entites.groupes.forEach((groupe) => zone.appendChild(groupeTrouve(groupe)));
     if (!blocs.length) return;
     const plein = UI.element(UI.html`<div class="wiki-groupe wiki-plein-texte" data-type="texte">
@@ -435,7 +455,8 @@ Object.assign(Wiki, (() => {
     const cadre = cadreListe(conteneur, 'article', articles.length, UI.html`
       <form class="filtres wiki-filtres" id="wiki-filtres-articles" data-hors-saisie role="search" aria-label="Filtrer les articles">
         <label class="visuellement-cache" for="wiki-filtre-texte">Filtrer les articles</label>
-        <input type="search" id="wiki-filtre-texte" name="texte" placeholder="Désignation, référence, emplacement" autocomplete="off">
+        <input type="search" id="wiki-filtre-texte" name="texte" placeholder="${UI.estTelephone() ? 'Désignation, référence…'
+          : 'Désignation, référence, emplacement'}" autocomplete="off">
         <label class="visuellement-cache" for="wiki-filtre-etat">État du stock</label>
         <select id="wiki-filtre-etat" name="etat">${OPTIONS_ETAT.map(([valeur, libelle]) => UI.html`<option value="${valeur}">${libelle}</option>`)}</select>
       </form>
@@ -496,20 +517,21 @@ Object.assign(Wiki, (() => {
       : UI.vide('Aucun savoir-faire pour l\'instant', 'Ils naissent des astuces des interventions intégrées au wiki, ou d\'une écriture à la main.', 'cle'));
   }
 
-  function carteIntervention(ot, cache) {
-    return UI.html`<li class="wiki-carte-intervention" data-id="${ot.id}"${cache ? UI.brut(' hidden') : ''}><a href="${adresse(ot.lien)}">
+  function carteIntervention(ot) {
+    return UI.html`<li class="wiki-carte-intervention" data-id="${ot.id}"><a href="${adresse(ot.lien)}">
       <div class="carte-tete"><b>${ot.id}</b>${UI.badgeStatut(ot.statut)}</div>
       <div class="carte-titre">${ot.titre}</div>
       <div class="carte-meta"><span>${UI.dateFr(ot.date)}</span>${ot.machine ? UI.html`<span>${repere(ot.machine)}</span>` : ''}${ot.panne ? UI.html`<span>${ot.panne.libelle}</span>` : ''}</div>
     </a></li>`;
   }
 
+  /** Liste des interventions : LIGNES_MONTREES lignes (PC) ou CARTES_MONTREES cartes (téléphone), les autres au clic (D101). */
   function rendreInterventions(conteneur, interventions) {
     const cadre = cadreListe(conteneur, 'intervention', interventions.length, UI.html`<div class="bento-tuile wiki-tuile-tableau" id="wiki-interventions"></div>`);
     const zone = UI.$('#wiki-interventions', cadre);
     if (!UI.estTelephone()) {
-      zone.appendChild(UI.tableau({
-        libelle: 'Interventions', vide: 'Aucune intervention.', lignes: interventions,
+      const tableau = UI.tableau({
+        libelle: 'Interventions', vide: 'Aucune intervention.', lignes: interventions.slice(0, LIGNES_MONTREES),
         colonnes: [
           { cle: 'date', libelle: 'Date', rendu: (ot) => UI.dateFr(ot.date) },
           { cle: 'id', libelle: 'N°', classe: 'sans-coupure', rendu: (ot) => lienEntite(ot.lien, ot.id) },
@@ -521,12 +543,18 @@ Object.assign(Wiki, (() => {
           { cle: 'techniciens', libelle: 'Technicien', valeurTri: (ot) => ot.techniciens.map((t) => t.nom).join(', '),
             rendu: (ot) => UI.html`${joindre(ot.techniciens.map((t) => lienEntite(t.lien, t.nom)), ', ')}` },
         ],
-      }));
+      });
+      zone.appendChild(tableau);
+      if (interventions.length > LIGNES_MONTREES) zone.appendChild(UI.element(boutonAutres(interventions.length - LIGNES_MONTREES, 'interventions')));
+      brancherSuite(zone, () => {
+        tableau.mettreAJour(interventions);
+        return Array.from(tableau.querySelectorAll('tbody tr')).slice(LIGNES_MONTREES);
+      });
       return;
     }
-    UI.remplir(zone, interventions.length ? UI.html`<ul class="liste-cartes">${interventions.map((ot, rang) => carteIntervention(ot, rang >= CARTES_MONTREES))}</ul>
+    UI.remplir(zone, interventions.length ? UI.html`<ul class="liste-cartes">${interventions.slice(0, CARTES_MONTREES).map(carteIntervention)}</ul>
       ${boutonAutres(interventions.length - CARTES_MONTREES, 'interventions')}` : UI.html`<p class="muted">Aucune intervention.</p>`);
-    brancherVoirPlus(zone, '.wiki-carte-intervention', CARTES_MONTREES);
+    brancherSuite(zone, () => ajouterA(UI.$('.liste-cartes', zone), interventions.slice(CARTES_MONTREES).map(carteIntervention)));
   }
 
   const RENDUS = { machine: rendreMachines, panne: rendrePannes, article: rendreArticles, technicien: rendreTechniciens,
@@ -543,43 +571,9 @@ Object.assign(Wiki, (() => {
     else RENDUS[type](conteneur, NOMS_TRIES[type] ? enFrancais(donnees, NOMS_TRIES[type]) : donnees);
   }
 
-  // ===========================================================================================
-  // 4. Pages Panne, Technicien et Intervention : rendu minimal (titre et faits), en attendant la tâche T137
-  // ===========================================================================================
+  // Outils prêtés aux pages d'une entité (wiki-page-ecrans.js, wiki-sections-ecrans.js), lus à l'appel.
+  const outilsEcrans = { TYPES, adresse, pluriel, joindre, lienEntite, lienMachine, repere, pastille, puce, fil,
+    boutonAutres, brancherSuite, ajouterA };
 
-  /** Valeur d'un fait à l'écran (précisions en tête) ; null si le fait est vide. */
-  function valeurFait(fait) {
-    const valeur = fait.valeur;
-    if (valeur === null || valeur === undefined || valeur === '') return null;
-    if (typeof valeur === 'boolean') return valeur ? 'oui' : 'non';
-    if (typeof valeur === 'number') return UI.nombreFr(valeur);
-    const chaine = String(valeur);
-    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(chaine)) return UI.dateHeureFr(chaine);
-    return /^\d{4}-\d{2}-\d{2}$/.test(chaine) ? UI.dateFr(chaine) : chaine;
-  }
-
-  /** Rend la page d'une panne, d'un technicien ou d'une intervention (Wiki.entite) ; false pour un autre type. */
-  function rendreEntite(conteneur, entite) {
-    const type = entite && entite.type;
-    if (!FICHES[type]) return false;
-    const titre = type === 'intervention' && entite.titre !== entite.id ? entite.id + ' — ' + entite.titre : entite.titre;
-    const faits = entite.faits.map((fait) => [fait, valeurFait(fait)]).filter(([, valeur]) => valeur !== null);
-    const fiche = entite.sections && entite.sections.ficheOT;
-    App.definirTitre(titre);
-    UI.remplir(conteneur, UI.html`<div class="wiki wiki-page wiki-entite" data-page="${entite.id}" data-type="${type}">
-      <div class="entete-page"><div>
-        ${fil([UI.html`<a href="#/wiki/${TYPES[type].liste}">${TYPES[type].pluriel}</a>`])}
-        <p class="wiki-puce-ligne">${puce(type)}</p>
-        <h1>${titre}</h1>
-      </div>${fiche ? UI.html`<a class="btn btn-secondaire" id="wiki-fiche-ot" href="${fiche}">${UI.icone('ordres')}Ouvrir la fiche OT</a>` : ''}</div>
-      <section class="carte wiki-faits" id="wiki-faits" aria-labelledby="wiki-faits-titre">
-        <h2 id="wiki-faits-titre">${FICHES[type]}</h2>
-        <dl class="valeurs">${faits.map(([fait, valeur]) => UI.html`<dt>${fait.libelle}</dt>
-          <dd>${fait.lien ? UI.html`<a href="${adresse(fait.lien)}">${valeur}</a>` : valeur}</dd>`)}</dl>
-      </section>
-    </div>`);
-    return true;
-  }
-
-  return { afficherEncyclopedie, afficherListeEntites, rendreEntite };
+  return { afficherEncyclopedie, afficherListeEntites, outilsEcrans };
 })());

@@ -12,8 +12,9 @@ Python indépendant de tests/calcul_wiki.py (qui relit les CSV) :
       OT, rupture qui dure encore, article jamais sorti, sortie sur un OT inconnu), habilitations (échue, à renouveler le
       jour même et à 90 jours, valide, sans échéance, illisible), sous-ensembles (petit-fils, parent inconnu, cycle),
       intervention en lecture seule (demande d'origine, techniciens, temps, opérations, pièces nettes, « Cité dans le
-      wiki »), savoir-faire (rattachement direct, par la page de la machine, sous-page, libre ; archivé, mode, ancrage
-      disparu → null), textes et références (rubriques remises dans l'ordre du type, « À trancher »), identifiants
+      wiki », motifs d'attente et d'annulation — T137), savoir-faire (rattachement direct, par la page de la machine,
+      sous-page, libre ; archivé, mode, ancrage disparu → null), textes et références (rubriques remises dans l'ordre du
+      type ; « À trancher » numéroté d'abord, en tête de la page — T137), identifiants
       inconnus → null, suivi du wiki (mêmes définitions que Wiki.compteurs) ;
     - pureté : aucune écriture, aucun appel réseau ; durée d'une page sur le jeu de charge (D101 : moins de 500 ms).
 
@@ -123,13 +124,15 @@ HABILITATIONS = table_csv("id;technicien_id;intitule;date_obtention;date_echeanc
 
 ENTETE_OT = ("id;origine;di_id;equipement_id;type;priorite;statut;titre;travail_a_faire;date_creation;date_prevue;technicien_id;"
              "date_debut;date_fin;arret_production;duree_arret_h;symptome_code;cause_code;remede_code;compte_rendu;"
-             "date_cloture_tech;date_cloture_admin;astuce")
+             "date_cloture_tech;date_cloture_admin;astuce;motif_attente;motif_annulation")
 
 
 def ot(id_, equipement, type_, statut, titre, creation, prevue="", technicien="", debut="", fin="", symptome="", cause="",
-       remede="", di="", arret="0", duree="", compte_rendu="", cloture_tech="", cloture_admin="", travail="", astuce=""):
+       remede="", di="", arret="0", duree="", compte_rendu="", cloture_tech="", cloture_admin="", travail="", astuce="",
+       motif_attente="", motif_annulation=""):
     return [id_, "manuel", di, equipement, type_, "P2", statut, titre, travail, creation, prevue, technicien, debut, fin,
-            arret, duree, symptome, cause, remede, compte_rendu, cloture_tech, cloture_admin, astuce]
+            arret, duree, symptome, cause, remede, compte_rendu, cloture_tech, cloture_admin, astuce, motif_attente,
+            motif_annulation]
 
 
 ORDRES = table_csv(ENTETE_OT, [
@@ -152,8 +155,9 @@ ORDRES = table_csv(ENTETE_OT, [
        symptome="S01"),
     ot("OT-2026-0007", "EQ-0001", "correctif immédiat", "Créé", "Pompe bloquée", "2026-10-19 08:00", symptome="S03"),
     ot("OT-2026-0008", "EQ-0001", "correctif différé", "En attente", "Bruit en attente de pièce", "2026-10-12 08:00",
-       "2026-10-20", symptome="S02"),
-    ot("OT-2026-0009", "EQ-0001", "correctif immédiat", "Annulé", "Doublon de la fuite", "2026-09-01 08:00", symptome="S01"),
+       "2026-10-20", symptome="S02", motif_attente="  Pièce : roulement commandé chez Mécaroule "),
+    ot("OT-2026-0009", "EQ-0001", "correctif immédiat", "Annulé", "Doublon de la fuite", "2026-09-01 08:00", symptome="S01",
+       motif_annulation="Doublon de OT-2026-0001"),
     ot("OT-2026-0010", "EQ-0001", "amélioration", "En cours", "Capotage", "2026-10-01 08:00", "2026-10-30",
        debut="2026-10-15 08:00"),
     ot("OT-2026-0011", "EQ-0002", "correctif différé", "Clôturé administrativement", "Roulement moteur", "2026-04-09 08:00",
@@ -620,6 +624,11 @@ class TestBaseEssai(CasEntites):
         self.assertEqual([o["ordre"] for o in self.entite("OT-2026-0004")["sections"]["operations"]], [1, 2, 10])
         self.assertEqual([(p["id"], p["type"]) for p in self.entite("OT-2026-0011")["sections"]["citeDans"]],
                          [("EQ-0001", "machine"), ("ART-0001", "article")])
+        # Motifs d'attente et d'annulation de l'OT (T137) : '' sans motif, espaces retirés.
+        self.assertEqual((sections["motifAttente"], sections["motifAnnulation"]), ("", ""))
+        self.assertEqual(self.entite("OT-2026-0008")["sections"]["motifAttente"], "Pièce : roulement commandé chez Mécaroule")
+        self.assertEqual((self.entite("OT-2026-0009")["sections"]["motifAnnulation"],
+                          self.entite("OT-2026-0009")["sections"]["motifAttente"]), ("Doublon de OT-2026-0001", ""))
 
     def test_savoir_faire_et_identifiants(self):
         self.assertEqual(self.entite("WP-0001"), self.entite("EQ-0001"))           # texte d'une machine : sa page
@@ -651,7 +660,8 @@ class TestBaseEssai(CasEntites):
                                                              "lien": "EQ-0002"})
         self.assertEqual([r["id"] for r in self.entite("WP-0003")["references"]], ["OT-2026-0003", "OT-2026-0001"])
         self.assertEqual([r["lien"] for r in self.entite("EQ-0001", "demandeur")["references"]], [None] * 4)
-        # « À trancher » après les textes : la phrase, puis les OT observés, sinon l'OT de l'entrée.
+        # « À trancher » d'abord (en tête de la page, T137) : la phrase, puis les OT observés, sinon l'OT de l'entrée ;
+        # puis les textes.
         resultat = self.page.evaluate("""() => {
           const recus = [];
           Wiki.contradictionsDe = (reperes, options) => {
@@ -669,7 +679,8 @@ class TestBaseEssai(CasEntites):
           }
         }""")
         self.assertEqual([r["id"] for r in resultat["pompe"]["references"]], [
-            "OT-2026-0001", "OT-2026-0002", "OT-2026-0003", "OT-2026-0011", "OT-2026-0012", "OT-2026-0014", "OT-2026-0015"])
+            "OT-2026-0012", "OT-2026-0014", "OT-2026-0015", "OT-2026-0001", "OT-2026-0002", "OT-2026-0003", "OT-2026-0011"])
+        self.assertEqual([r["numero"] for r in resultat["pompe"]["references"]], list(range(1, 8)))
         self.assertEqual(resultat["pompe"]["enAttente"], [{"page": "EQ-0001"}])
         self.assertEqual((resultat["joint"]["aTrancher"], resultat["joint"]["enAttente"]), ([], []))
         self.assertEqual((resultat["panne"]["aTrancher"], resultat["panne"]["enAttente"]), ([], []))    # page calculée
@@ -680,7 +691,7 @@ class TestBaseEssai(CasEntites):
         textes = {"rubriques": [{"nom": "En bref", "phrases": ["A [OT-2026-0003] [OT-2026-0001]", "B [OT-2026-0003]"]},
                                 {"nom": "Astuces", "phrases": ["C [OT-2026-0002]"]}]}
         a_trancher = [{"phrase": "D [OT-2026-0004]", "ot": [], "otSource": "OT-2026-0001"}, {"phrase": "E", "ot": ["OT-2026-0005"]}]
-        attendu = ["OT-2026-0003", "OT-2026-0001", "OT-2026-0002", "OT-2026-0004", "OT-2026-0005"]
+        attendu = ["OT-2026-0004", "OT-2026-0001", "OT-2026-0005", "OT-2026-0003", "OT-2026-0002"]
         self.assertEqual(self.page.evaluate("([t, a]) => Wiki.references(t, a)", [textes, a_trancher]), attendu)
         from calcul_wiki import references
         self.assertEqual(references(textes, a_trancher), attendu)
@@ -746,23 +757,20 @@ class TestBaseEssai(CasEntites):
         self.assertEqual(self.requetes_reseau(), [])
 
 
-class TestSuiviCommeLesCompteurs(CasEntites):
-    """Le suivi de l'accueil reprend les définitions des compteurs du journal (Wiki.compteurs, wiki-ecrans.js)."""
+class TestSuiviDuWiki(CasEntites):
+    """Suivi du wiki de l'accueil (à valider, à trancher, en échec) : valeurs écrites à la main et calcul Python
+    (relecture de T136 : le test qui le comparait à Wiki.compteurs, retiré par la refonte 2, était toujours sauté)."""
 
-    def test_suivi_egal_aux_compteurs(self):
-        self.charger(BASE, SCRIPTS[:4] + ["js/interface.js"] + SCRIPTS[4:] + ["js/modules/wiki-ecrans.js"])
-        resultat = self.page.evaluate("""() => {
-          if (typeof Wiki.compteurs !== 'function') return null;
-          Wiki.file = () => [];                    // wiki-ingestion.js n'est pas chargé : seuls les trois compteurs comptent ici
-          Wiki.horsDuWiki = () => [];
-          const compteurs = Wiki.compteurs();
-          return { compteurs: { aValider: compteurs.aValider, aTrancher: compteurs.contradictions, enEchec: compteurs.echecs },
-                   suivi: Wiki.accueilEncyclopedie({ profil: 'responsable' }).suivi };
-        }""")
-        if resultat is None:
-            self.skipTest("Wiki.compteurs n'existe plus (écrans du wiki refaits) : comparer au nouveau suivi")
-        self.assertEqual(resultat["suivi"], resultat["compteurs"])
-        self.assertEqual(resultat["suivi"], CalculWiki(BASE).suivi())
+    def test_suivi_egal_au_calcul_python(self):
+        self.charger(BASE)
+        suivi = self.page.evaluate("Wiki.accueilEncyclopedie({ profil: 'responsable', maintenant: '2026-10-19 10:00' }).suivi")
+        # À valider : WJ-00002, WJ-00010 ; à trancher : la contradiction ouverte de WJ-00001 ; en échec : OT-2026-0003
+        # (refusé seulement) et OT-2026-0011 (rejeté puis refusé) — pas OT-2026-0004 (relancé, en file) ni OT-2026-0012
+        # (refusé puis rejeté : sa dernière entrée est rejetée).
+        self.assertEqual(suivi, {"aValider": 2, "aTrancher": 1, "enEchec": 2})
+        self.assertEqual(suivi, CalculWiki(BASE).suivi())
+        for profil in ("demandeur", "technicien"):
+            self.assertIsNone(self.accueil(profil)["suivi"], profil)
 
 
 class TestJeuDeCharge(CasEntites):

@@ -1,9 +1,9 @@
 /* Wiki de maintenance (lot 6 refondu, ARCHITECTURE.md §20.9 ; refonte 2, l'encyclopédie, §20.12) : accueil #/wiki
    (grande tuile « Ce que l'atelier sait » et sa recherche, suivi du wiki, briques, dernières interventions, pannes
-   fréquentes), listes #/wiki/<liste>, pages Panne, Technicien et Intervention (rendu minimal), page #/wiki/<id> des
-   types rédigés (en-tête, en-tête des savoir-faire, couche calculée, texte et origine, sous-pages et mère d'une
-   sous-page, « À trancher », pages qui renvoient ici, propositions en attente), champ de recherche (aussi posé dans
-   l'onglet Préparation de l'OT et dans la saisie d'une DI), liens depuis les fiches équipement et article.
+   fréquentes), listes #/wiki/<liste>, page #/wiki/<id> des six types (T137 : en-tête, consignation et « À trancher »
+   en tête, colonne de lecture — sections, textes rédigés et leur origine, petits numéros, « Références » — et fiche
+   des faits à droite, au-dessus sur téléphone), champ de recherche (aussi posé dans l'onglet Préparation de l'OT et
+   dans la saisie d'une DI), liens depuis les fiches équipement et article.
    Composants communs de css/style.css (cartes, badges, tableaux, valeurs) et tuiles de l'accueil « bento »
    (css/modules/accueil.css : .bento-tuile, .bento-synthese, .bento-pastille-icone, .bento-liste-tete) ; couleurs :
    jetons des deux thèmes. Toutes les feuilles de css/modules/ sont chargées partout : les règles portent sur des
@@ -142,10 +142,6 @@ ul.wiki-tuile-lignes { padding: 6px 18px; }
 .wiki-carte-chiffres { font-size: .875rem; color: var(--texte-2); }
 .wiki-reserve .vide { margin-bottom: 16px; }
 
-/* --- pages Panne, Technicien et Intervention (rendu minimal) --- */
-.wiki-entite .entete-page h1 { overflow-wrap: anywhere; }
-.wiki-faits .valeurs a { font-weight: 600; }
-
 /* --- largeurs : comme la maquette validée (briques sur 3, puis 2, puis 1 colonne) --- */
 @media (max-width: 1180px) {
   .wiki-bento > .wiki-synthese, .wiki-bento > .wiki-suivi { grid-column: span 12; }
@@ -162,60 +158,122 @@ ul.wiki-tuile-lignes { padding: 6px 18px; }
 }
 
 /* =========================================================================================
-   2. Page (#/wiki/<id>) : en-tête, couche calculée, texte, « À trancher », renvois
+   2. Page d'une entité (#/wiki/<id>, §20.12, T137) : en-tête ; consignation et « À trancher » en tête ; colonne de
+      lecture (sections, textes, références) et fiche des faits à droite (au-dessus sous 1 180 px, comme la maquette)
    ========================================================================================= */
 
-.wiki-sous-titre { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem .6rem; overflow-wrap: anywhere; }
 .wiki-page h1 { overflow-wrap: anywhere; }
-.wiki-section > .aide { margin: -.3rem 0 .8rem; }
-.wiki-section h3 { margin: .9rem 0 .3rem; color: var(--fort); }
+.wiki-entete-entite { align-items: flex-start; }
+.wiki-entete-texte { flex: 1 1 30rem; min-width: 0; }
+.wiki-entete-entite h1 { font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2.125rem); font-weight: 800; letter-spacing: -.025em; line-height: 1.2; }
+.wiki-sous-titre { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem .45rem; overflow-wrap: anywhere; }
+.wiki-fil-nom { overflow-wrap: anywhere; }
+.wiki-actions { margin-top: 4px; }
 
-/* Couche calculée (D94) : séparée du texte, sous son étiquette */
-.wiki-couche { margin-bottom: 4px; }
-.wiki-couche-titre {
-  display: flex; align-items: center; gap: .45rem; margin: 0 0 10px; color: var(--texte-2);
-  font-size: .9375rem; font-weight: 700;
+/* En tête : consignation (ambre) et « À trancher » (rouge), avant tout le reste */
+.wiki-alertes { display: flex; flex-direction: column; gap: 16px; margin-bottom: 28px; }
+.wiki-encadre { min-width: 0; padding: 16px 20px; border-radius: 16px; }
+.wiki-encadre > h2 {
+  display: flex; align-items: center; gap: .5rem; margin: 0 0 .55rem; font-size: 1.0625rem; color: var(--fort); overflow-wrap: anywhere;
 }
-.wiki-couche-titre .icone { color: var(--texte-2); }
-
-/* Consignation (page d'équipement, en-tête des savoir-faire) : bord ambre, texte humain tel quel */
-.wiki-consignation {
-  border-color: var(--bord-ambre); border-left: 6px solid var(--ambre);
-  background: linear-gradient(var(--teinte-ambre-faible), var(--teinte-ambre-faible)), var(--carte);
-}
-.wiki-consignation h2 { display: flex; align-items: center; gap: .5rem; color: var(--fort); margin-bottom: .5rem; overflow-wrap: anywhere; }
-.wiki-consignation h2 .icone { color: var(--ambre); width: 1.4em; height: 1.4em; }
-.wiki-consignation .aide { margin-bottom: .5rem; }
+.wiki-encadre > h2 .icone { flex: none; width: 1.3em; height: 1.3em; }
+.wiki-encadre .aide { color: var(--texte-2); }
+.wiki-consignation { background: var(--teinte-ambre); border: 1px solid var(--bord-ambre); }
+.wiki-consignation > h2 .icone { color: var(--ambre); }
+.wiki-consignation .aide { margin-top: .5rem; }
 .wiki-consignation-texte {
   white-space: pre-wrap; color: var(--texte); font-size: 1.0625rem; line-height: 1.6; overflow-wrap: anywhere;
 }
-.wiki-sans-consignation { color: var(--texte-ambre); margin-bottom: .4rem; }
+.wiki-sans-consignation { margin: 0 0 .4rem; color: var(--texte-ambre); }
 .wiki-sans-consignation b { color: var(--texte-ambre); }
 .wiki-consignation-document { margin: .8rem 0 0; color: var(--texte-2); overflow-wrap: anywhere; }
 .wiki-lien-document { display: inline-flex; align-items: center; gap: .35rem; min-height: var(--tactile); font-weight: 600; }
-.wiki-entete-phrase { margin: 0 0 .7rem; padding: .5rem .8rem; border-radius: 10px; background: var(--teinte-ambre); color: var(--texte-ambre); }
+.wiki-entete-phrase { margin: 0 0 .7rem; color: var(--texte-ambre); }
 .wiki-entete-phrase b { color: var(--texte-ambre); }
+.wiki-a-trancher { background: var(--teinte-rouge); border: 1px solid var(--bord-rouge); }
+.wiki-a-trancher > h2 .icone { color: var(--rouge); }
+.wiki-a-trancher > .aide { margin-bottom: .8rem; }
+.wiki-contradictions { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.wiki-contradiction { min-width: 0; padding: 12px 16px; border: 1px solid var(--trait-2); border-radius: 14px; background: var(--carte); }
+.wiki-cotes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; }
+.wiki-cote { min-width: 0; }
+.wiki-cote h3 { margin: 0 0 .3rem; font-size: .9375rem; color: var(--texte-2); }
+.wiki-cote .wiki-phrase, .wiki-observation { display: block; margin: 0; line-height: 1.6; overflow-wrap: anywhere; color: var(--texte); }
+.wiki-depuis { margin-top: .6rem; }
+.wiki-trancher { margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--trait); }
+.wiki-trancher textarea { min-height: 4.5rem; }
 
-/* Pannes habituelles (et même marque et modèle) : un bloc par symptôme */
-.wiki-symptomes { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-.wiki-symptome { border: 1px solid var(--trait); border-radius: 14px; padding: 12px 16px; background: var(--survol); min-width: 0; }
-.wiki-symptome-tete { display: flex; align-items: baseline; flex-wrap: wrap; gap: .25rem .6rem; }
-.wiki-symptome-tete h3 { font-size: 1.0625rem; color: var(--fort); margin: 0; }
-.wiki-periode { color: var(--texte-2); font-size: .9375rem; }
-.wiki-insuffisant, .wiki-sans-cause { margin: .45rem 0 0; color: var(--texte-2); }
-.wiki-piste { margin: .45rem 0 0; color: var(--texte-ambre); }
-.wiki-piste b { color: var(--texte-ambre); }
-.wiki-causes { margin: .5rem 0 0; padding-left: 1.2rem; display: grid; gap: .5rem; }
-.wiki-causes > li { overflow-wrap: anywhere; }
-.wiki-cause b { color: var(--fort); }
-.wiki-remedes, .wiki-remedes-mode { margin: .2rem 0 0; padding-left: 1.2rem; color: var(--texte-2); font-size: .9375rem; }
-.wiki-remede { color: var(--texte); font-weight: 600; }
-.wiki-precision { margin-top: .6rem; }
-.wiki-mention { margin-top: .8rem; }
-.wiki-cause-libelle { margin: 0 0 .2rem; color: var(--fort); overflow-wrap: anywhere; }
-.wiki-cas-mode { margin: 0; color: var(--texte-2); }
+/* Colonne de lecture et fiche des faits */
+.wiki-page-grille { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 28px; align-items: start; }
+.wiki-lecture { min-width: 0; display: flex; flex-direction: column; gap: 32px; }
+.wiki-fiche { position: sticky; top: 16px; min-width: 0; padding: 18px 20px; }
+.wiki-fiche-titre { margin: 0 0 12px; }
+/* Libellés sur 40 % au plus (« Clôture administrative » passe à la ligne) : les dates et les noms gardent la place */
+.wiki-fiche .valeurs { grid-template-columns: minmax(0, 40%) minmax(0, 1fr); gap: .5rem .9rem; font-size: .9375rem; }
+.wiki-fiche .valeurs dt { overflow-wrap: break-word; hyphens: auto; }
+.wiki-fiche .valeurs a { font-weight: 600; }
 
-/* Jumeaux (même marque et modèle), équipements d'un savoir-faire : pastilles vers leur page */
+/* Sections */
+.wiki-section { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.wiki-section > h2 {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: .2rem .6rem; margin: 0; font-size: 1.25rem; color: var(--fort);
+  overflow-wrap: anywhere;
+}
+.wiki-compte { font-size: .875rem; font-weight: 600; color: var(--texte-2); }
+.wiki-section > .aide { margin-top: -6px; color: var(--texte-2); }
+.wiki-sous-section { display: flex; align-items: baseline; gap: .5rem; margin: 4px 0 -6px; font-size: 1rem; color: var(--texte); }
+.wiki-vide { margin: 0; color: var(--texte-2); font-style: italic; }
+.wiki-calcule { display: flex; align-items: center; gap: .5rem; margin: 0; color: var(--texte-2); font-size: .9375rem; font-weight: 600; }
+.wiki-calcule .icone { flex: none; }
+.wiki-lecture > .wiki-recherche { margin-bottom: 0; }
+.wiki-lecture .wiki-lignes-entites .wiki-ligne { padding: 9px 4px; }
+.wiki-barres-page > li { grid-template-columns: minmax(0, 16rem) minmax(0, 1fr) auto; }
+.wiki-barre-nom { min-width: 0; overflow-wrap: anywhere; }
+.wiki-barre-detail { color: var(--texte-2); font-size: .875rem; }
+.wiki-discret { color: var(--texte-2); }
+.wiki-meta { margin: 0; color: var(--texte-2); font-size: .875rem; overflow-wrap: anywhere; }
+.wiki-texte-ot { margin: 0; max-width: 72ch; white-space: pre-line; line-height: 1.65; color: var(--texte); overflow-wrap: anywhere; }
+.wiki-table-interventions td { vertical-align: top; }
+.wiki-table-interventions .badge.statut { margin-top: .3rem; }
+.wiki-ecrire-lien { margin: 0; }
+/* « Pages qui renvoient ici » : section discrète, en fin de page */
+#wiki-retours > h2 { font-size: 1rem; color: var(--texte-2); }
+
+/* Textes rédigés : origine, paragraphe ou liste, liens vers les pages */
+.wiki-textes { display: flex; flex-direction: column; gap: 32px; }
+.wiki-origine { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem .5rem; margin: 0; font-size: .875rem; color: var(--texte-2); overflow-wrap: anywhere; }
+.wiki-origine-ia { padding: 1px 8px; border-radius: 999px; background: var(--teinte-violet); color: var(--texte-violet); font-weight: 700; }
+.wiki-prose { margin: 0; max-width: 72ch; line-height: 1.7; color: var(--texte); overflow-wrap: anywhere; }
+.wiki-phrases { margin: 0; padding-left: 1.2rem; display: grid; gap: .45rem; max-width: 72ch; }
+.wiki-phrase { line-height: 1.65; overflow-wrap: anywhere; color: var(--texte); }
+.wiki-phrase .wiki-lien-page, .wiki-observation .wiki-lien-page { font-weight: 600; }
+.wiki-lien-absent { color: var(--texte-2); text-decoration: underline dotted; text-underline-offset: 3px; }
+.wiki-sans-texte { margin: 0; color: var(--texte); }
+
+/* Petits numéros des OT cités (D113) et « Références » */
+.wiki-ref { margin-left: 2px; font-size: .75rem; font-weight: 700; line-height: 0; }
+.wiki-ref > a, .wiki-ref > span {
+  display: inline-block; min-width: 1.5em; padding: 1px 4px; border-radius: 6px; line-height: 1.35; text-align: center;
+  background: var(--teinte-bleu); color: var(--texte-bleu); text-decoration: none;
+}
+.wiki-ref > a:hover { background: var(--bleu-bouton); color: var(--sur-couleur); }
+.wiki-ref > span { background: var(--teinte-neutre); color: var(--texte-2); }
+.wiki-refs { margin: 0; padding-left: 1.8rem; display: flex; flex-direction: column; gap: 6px; font-size: .9375rem; color: var(--texte-2); }
+.wiki-refs > li { overflow-wrap: anywhere; }
+.wiki-refs > li::marker { color: var(--texte-2); font-weight: 700; }
+
+/* Stock dans le temps d'un article */
+.wiki-chronologie { list-style: none; margin: 0; padding: 0; }
+.wiki-evenement {
+  display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 9px 0;
+  border-top: 1px solid var(--trait);
+}
+.wiki-evenement:first-child { border-top: 0; }
+.wiki-evenement-date { color: var(--texte-2); font-size: .9375rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wiki-evenement-texte { min-width: 0; overflow-wrap: anywhere; }
+.wiki-evenement-droite { color: var(--texte-2); font-size: .9375rem; text-align: right; }
+
+/* Machines d'un savoir-faire rattaché à un article : pastilles vers leur page */
 .wiki-jumeaux { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .wiki-jumeaux a {
   display: inline-flex; align-items: center; min-height: var(--tactile); padding: 0 .9rem; border-radius: 999px;
@@ -224,65 +282,27 @@ ul.wiki-tuile-lignes { padding: 6px 18px; }
 }
 .wiki-jumeaux a:hover, .wiki-jumeaux a:focus-visible { border-color: var(--bleu); background: var(--teinte-bleu-faible); }
 
-/* Lignes : pièces, interventions, montage, consommations, propositions, résultats de recherche */
+/* Lignes : propositions en attente, résultats de recherche */
 .wiki-lignes { list-style: none; margin: 0; padding: 0; }
 .wiki-lignes > li { display: grid; gap: .2rem; padding: 10px 0; border-top: 1px solid var(--trait); min-width: 0; }
 .wiki-lignes > li:first-child { border-top: 0; padding-top: 2px; }
 .wiki-ligne-tete { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem .6rem; min-width: 0; }
 .wiki-ligne-tete > a, .wiki-ligne-tete > b { font-weight: 800; overflow-wrap: anywhere; }
 .wiki-ligne-tete > b { color: var(--fort); }
-.wiki-designation { color: var(--texte); overflow-wrap: anywhere; }
+.wiki-numero-ot { color: var(--fort); }
 .wiki-date { color: var(--texte-2); font-size: .9375rem; white-space: nowrap; }
 .wiki-extrait { margin: 0; color: var(--texte-2); font-size: .9375rem; overflow-wrap: anywhere; }
 .wiki-extrait mark { background: var(--teinte-ambre); color: var(--fort); border-radius: 4px; padding: 0 2px; }
-.wiki-article dd { overflow-wrap: anywhere; }
-
-/* Texte d'une page : origine, rubriques, phrases, liens vers les pages, OT cités */
-.wiki-origine {
-  display: flex; align-items: flex-start; gap: .5rem; margin: 0 0 .9rem; padding: .6rem .8rem; border-radius: 10px;
-  border-left: 4px solid var(--bleu); background: var(--teinte-bleu-faible); color: var(--texte); overflow-wrap: anywhere;
-}
-.wiki-origine .icone { color: var(--texte-bleu); margin-top: .1rem; }
-.wiki-sans-texte { margin: 0 0 .3rem; color: var(--texte); }
-.wiki-rubrique + .wiki-rubrique { margin-top: .9rem; }
-.wiki-rubrique h3 { color: var(--fort); margin-bottom: .3rem; overflow-wrap: anywhere; }
-.wiki-phrases { margin: 0; padding-left: 1.2rem; display: grid; gap: .45rem; }
-.wiki-phrase { line-height: 1.6; overflow-wrap: anywhere; color: var(--texte); }
-.wiki-phrase .wiki-lien-page { font-weight: 600; }
-.wiki-lien-absent { color: var(--texte-2); text-decoration: underline dotted; text-underline-offset: 3px; }
-.wiki-citations { display: inline-flex; flex-wrap: wrap; gap: .2rem .45rem; vertical-align: baseline; font-size: .875rem; }
-.wiki-citations .wiki-lien-ot, .wiki-citations .wiki-numero-ot { font-weight: 700; white-space: nowrap; }
-.wiki-numero-ot { color: var(--fort); }
-.wiki-hors-forme { margin-top: .8rem; }
-
-/* « À trancher » (D107) : ce que dit la page, ce que dit l'OT ; boutons au responsable */
-.wiki-a-trancher { border-color: var(--bord-ambre); border-left: 6px solid var(--ambre); }
-.wiki-a-trancher h2 { display: flex; align-items: center; gap: .5rem; color: var(--fort); margin-bottom: .4rem; }
-.wiki-a-trancher h2 .icone { color: var(--ambre); }
-.wiki-a-trancher > .aide { margin-bottom: .8rem; }
-.wiki-contradictions { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
-.wiki-contradiction { border: 1px solid var(--trait-2); border-radius: 14px; padding: 12px 16px; min-width: 0; background: var(--survol); }
-.wiki-cotes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; }
-.wiki-cote { min-width: 0; }
-.wiki-cote h3 { font-size: .9375rem; color: var(--texte-2); margin-bottom: .3rem; }
-.wiki-cote .wiki-phrases { padding-left: 1rem; }
-.wiki-observation { margin: 0 0 .3rem; color: var(--texte); overflow-wrap: anywhere; line-height: 1.6; }
-.wiki-cote-ot .wiki-citations { display: flex; margin: 0; }
-.wiki-depuis { margin-top: .6rem; color: var(--texte-2); }   /* sur le fond de la carte : AA aussi en thème sombre */
-.wiki-trancher { margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--trait); }
-.wiki-trancher textarea { min-height: 4.5rem; }
-
-/* Pages qui renvoient ici ; sous-pages d'une page mère (§20.4) */
-.wiki-retours, .wiki-sous-pages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
-.wiki-retours > li, .wiki-sous-pages > li { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem .6rem; min-width: 0; }
-.wiki-lien-retour, .wiki-lien-sous-page {
-  display: inline-flex; align-items: center; min-height: var(--tactile); font-weight: 700; overflow-wrap: anywhere; max-width: 100%;
-}
 
 /* Sous-page : « Sous-page de <mère> » sous le titre (lien vers la mère, ou son titre si elle est archivée) */
 .entete-page .wiki-mere { display: flex; align-items: center; flex-wrap: wrap; gap: .2rem .45rem; overflow-wrap: anywhere; }
 .wiki-lien-mere { display: inline-flex; align-items: center; min-height: var(--tactile); font-weight: 700; max-width: 100%; }
 .wiki-mere-archivee { color: var(--fort); }
+
+@media (max-width: 1180px) {
+  .wiki-page-grille { grid-template-columns: minmax(0, 1fr); }
+  .wiki-fiche { position: static; order: -1; }
+}
 
 /* =========================================================================================
    3. Champ de recherche (Wiki.champRecherche)
@@ -317,7 +337,7 @@ ul.wiki-tuile-lignes { padding: 6px 18px; }
   .wiki-bento > .wiki-tuile-liste { padding: 16px 16px 10px; }
   .wiki-phrase-resume { font-size: 1.5rem; line-height: 1.3; }
   .wiki-phrase-resume a { display: inline-block; min-height: 48px; line-height: 48px; }
-  .wiki-ligne-corps > a, .wiki-ligne-sous a, .wiki-barres a, .wiki-faits .valeurs a {
+  .wiki-ligne-corps > a, .wiki-ligne-sous a, .wiki-barres a, .wiki-fiche .valeurs a {
     display: inline-flex; align-items: center; min-height: 48px; max-width: 100%;
   }
   .wiki-ligne-sous { display: flex; flex-wrap: wrap; align-items: center; column-gap: .35rem; }
@@ -328,19 +348,38 @@ ul.wiki-tuile-lignes { padding: 6px 18px; }
   .wiki-jauge { display: none; }
   .wiki-suivi-tuiles { gap: 8px; }
   ul.wiki-tuile-lignes { padding: 4px 14px; }
-  .wiki-consignation { border-left-width: 5px; }
+  /* page d'une entité : liens dans le texte, petits numéros, références, chronologie : 48 px sans agrandir les lignes */
+  .wiki-alertes { gap: 12px; margin-bottom: 22px; }
+  .wiki-encadre { padding: 14px; }
+  .wiki-lecture { gap: 26px; }
+  .wiki-textes { gap: 26px; }
   .wiki-consignation-texte { font-size: 1rem; }
-  .wiki-symptome, .wiki-contradiction { padding: 12px; }
-  .wiki-causes, .wiki-remedes, .wiki-remedes-mode { padding-left: 1rem; }
+  .wiki-contradiction { padding: 12px; }
   .wiki-cotes { grid-template-columns: minmax(0, 1fr); }
-  .wiki-ligne-tete > a, .wiki-lien-page, .wiki-citations a, .wiki-lien-proposition {
+  .wiki-fiche { padding: 16px; }
+  .wiki-ligne-tete > a, .wiki-lien-page, .wiki-lien-proposition, .wiki-refs a, .wiki-evenement-texte a, .wiki-sous-titre a,
+  .wiki-lignes-page .wiki-ligne-corps > a {
     display: inline-flex; align-items: center; min-height: 48px; max-width: 100%;
   }
-  .wiki-phrase .wiki-lien-page { vertical-align: middle; }
-  .wiki-precision summary { min-height: 48px; }
+  .wiki-phrase .wiki-lien-page, .wiki-observation .wiki-lien-page, .wiki-evenement-texte a, .wiki-refs a {
+    margin: -12px 0; vertical-align: middle;
+  }
+  .wiki-ref > a {
+    position: relative; isolation: isolate; display: inline-flex; align-items: center; justify-content: center; min-width: 30px;
+    min-height: 48px; margin: -18px 0; padding: 0 4px; background: none; vertical-align: middle;
+  }
+  .wiki-ref > a::before {
+    content: ""; position: absolute; z-index: -1; left: 2px; right: 2px; top: 50%; height: 1.6em; transform: translateY(-50%);
+    border-radius: 6px; background: var(--teinte-bleu);
+  }
+  .wiki-evenement { grid-template-columns: minmax(0, 1fr) auto; }
+  .wiki-evenement-date { grid-column: 1 / -1; }
+  .wiki-barres-page > li { grid-template-columns: minmax(0, 1fr) auto; }
 }
 
 @media print {
-  .wiki-recherche, .wiki-recherche-demande, #lien-wiki-equipement, #lien-wiki-article, .wiki-trancher, #wiki-modifier,
-  .wiki-recherche-accueil, .wiki-suivi-actions, .wiki-voir-autres, .wiki-filtres { display: none !important; }
+  .wiki-recherche, .wiki-recherche-demande, #lien-wiki-equipement, #lien-wiki-article, .wiki-trancher, .wiki-actions,
+  .wiki-recherche-accueil, .wiki-suivi-actions, .wiki-voir-autres, .wiki-filtres, .wiki-ecrire-lien { display: none !important; }
+  .wiki-page-grille { display: block; }
+  .wiki-fiche { position: static; }
 }

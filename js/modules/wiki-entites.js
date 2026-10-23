@@ -8,7 +8,7 @@
 //
 // API (précision au contrat : Wiki.page garde sa forme tant que les écrans actuels s'en servent) :
 //  - Wiki.entite(id, { profil, maintenant }) → { id, type, titre, faits: [{ libelle, valeur, lien }], sections, textes,
-//    aTrancher, enAttente, references, liens } ou null (identifiant inconnu, page que le profil ne voit pas) ; type :
+//    aTrancher, enAttente, references, retours, liens } ou null (identifiant inconnu, page que le profil ne voit pas) ; type :
 //    machine, panne, article, technicien, intervention, savoir-faire ; textes null pour une page sans texte rédigé ;
 //  - Wiki.listeEntites(type, { profil, maintenant }) (null : type inconnu ou que le profil ne voit pas) ;
 //  - Wiki.accueilEncyclopedie({ profil, maintenant }) ; Wiki.ordreInterventions(ids) ; Wiki.references(textes,
@@ -37,7 +37,14 @@
 //    leur état (« échue », « à renouveler » sous 60 jours (RG8), « pas encore valable », « valide ») ; l'accueil ne
 //    compte que les techniciens actifs ;
 //  - une référence cassée (équipement, article, technicien inconnu) n'entre dans aucune liste ; les tris départagent
-//    par l'ordre des caractères (reproductible par tests/calcul_wiki.py).
+//    par l'ordre des caractères (reproductible par tests/calcul_wiki.py) ;
+//  - références : numérotées dans l'ordre d'apparition sur la page (T137) — « À trancher », en tête, puis les textes ;
+//  - retours (« Pages qui renvoient ici », CS103, T137) d'une machine, d'un article, d'un savoir-faire ou d'une panne :
+//    la règle de Wiki.page (retoursDe de wiki-calculs.js : pages actives dont le champ liens désigne l'identifiant de
+//    l'entité ou le WP-… de son texte, la page elle-même exclue, par titre puis identifiant), réduite aux pages qui
+//    s'affichent (texte d'une machine ou d'un article qui existe, savoir-faire) → [{ id, type, titre, lien }] ; une
+//    proposition « à valider » n'est pas dans wiki_pages : elle n'y entre jamais ; [] pour les autres types ;
+//    intervention : motifAttente et motifAnnulation de l'OT ('' sans motif).
 
 Object.assign(Wiki, (() => {
 
@@ -46,6 +53,7 @@ Object.assign(Wiki, (() => {
   const PROFILS = ['demandeur', 'technicien', 'responsable'];
   const PREFIXE_PANNE = 'PANNE-';
   const MACHINES_ACCUEIL = 3;              // machines qui ont le plus d'interventions, dans leur brique de l'accueil
+  const PANNES_ACCUEIL = 6;                // pannes les plus fréquentes de l'accueil (maquette validée ; relecture de T136)
 
   const texte = (valeur) => (valeur === null || valeur === undefined ? '' : String(valeur).trim());
   const comparer = (a, b) => (a < b ? -1 : (a > b ? 1 : 0));          // ordre des caractères, comme le calcul Python
@@ -295,19 +303,20 @@ Object.assign(Wiki, (() => {
   }
 
   /**
-   * OT cités, sans doublon, dans l'ordre de première apparition : les phrases des textes (rubriques dans leur ordre),
-   * puis « À trancher » (pour chaque contradiction : sa phrase, puis les OT qui l'observent, sinon l'OT de l'entrée).
+   * OT cités, sans doublon, dans l'ordre de première apparition sur la page (D113 : « À trancher » en tête, T137) :
+   * « À trancher » (pour chaque contradiction : sa phrase, puis les OT qui l'observent, sinon l'OT de l'entrée), puis
+   * les phrases des textes (rubriques dans leur ordre).
    */
   function references(textes, aTrancher) {
     const ids = [];
-    ((textes && textes.rubriques) || []).forEach((rubrique) => (rubrique.phrases || []).forEach((phrase) => {
-      ids.push(...Wiki.citations(phrase));
-    }));
     (aTrancher || []).forEach((contradiction) => {
       ids.push(...Wiki.citations(contradiction && contradiction.phrase));
       const ot = ((contradiction && contradiction.ot) || []).map(texte).filter(Boolean);
       ids.push(...(ot.length ? ot : [texte(contradiction && contradiction.otSource)].filter(Boolean)));
     });
+    ((textes && textes.rubriques) || []).forEach((rubrique) => (rubrique.phrases || []).forEach((phrase) => {
+      ids.push(...Wiki.citations(phrase));
+    }));
     return Array.from(new Set(ids));
   }
 
@@ -329,8 +338,19 @@ Object.assign(Wiki, (() => {
     return Object.assign(base, {
       textes, aTrancher: etat.aTrancher, enAttente: etat.enAttente,
       references: references(textes, etat.aTrancher).map((id, rang) => referenceDetaillee(ctx, id, rang + 1)),
-      liens: Object.assign({}, ctx.liens),
+      retours: [], liens: Object.assign({}, ctx.liens),
     });
+  }
+
+  const TYPES_RETOURS = { 'équipement': 'machine', composant: 'article', 'savoir-faire': 'savoir-faire' };
+  const CIBLES_DE_LIENS = ['machine', 'article', 'savoir-faire', 'panne'];
+
+  /** « Pages qui renvoient ici » d'une entité (définition en tête) : la règle de Wiki.page, sur les pages qui s'affichent. */
+  function retoursVers(ctx, resultat) {
+    return Wiki.interne.retoursDe(ctx.pagesActives, resultat.id, resultat.textes ? resultat.textes.pageId : '')
+      .filter((retour) => retour.type === 'savoir-faire' || (retour.type === 'équipement' && refMachine(retour.id))
+        || (retour.type === 'composant' && refArticle(retour.id)))
+      .map((retour) => ({ id: retour.id, type: TYPES_RETOURS[retour.type], titre: retour.titre, lien: retour.id }));
   }
 
   // ===========================================================================================
@@ -473,6 +493,7 @@ Object.assign(Wiki, (() => {
           fait('Clôture technique', texte(ot.date_cloture_tech)), fait('Clôture administrative', texte(ot.date_cloture_admin))]),
       sections: {
         demande, travail: texte(ot.travail_a_faire), compteRendu: texte(ot.compte_rendu), astuce: texte(ot.astuce),
+        motifAttente: texte(ot.motif_attente), motifAnnulation: texte(ot.motif_annulation),
         techniciens: techniciensDe(ctx, ot),
         pieces: Array.from(ctx.pieces.get(id) || new Map()).filter(([articleId, net]) => net > 0 && refArticle(articleId))
           .map(([articleId, net]) => Object.assign(refArticle(articleId), { quantite: arrondi(net) })),
@@ -504,9 +525,14 @@ Object.assign(Wiki, (() => {
 
   /** Page d'une entité (§20.12, D113, D114) — voir l'API en tête. */
   function entite(id, options) {
-    const identifiant = texte(id);
-    if (!identifiant) return null;
     const ctx = contexte(options);
+    const resultat = entiteSansRetours(ctx, texte(id), options);
+    if (resultat && CIBLES_DE_LIENS.includes(resultat.type)) resultat.retours = retoursVers(ctx, resultat);
+    return resultat;
+  }
+
+  function entiteSansRetours(ctx, identifiant, options) {
+    if (!identifiant) return null;
     const trouver = (table, cle) => (texte(cle) ? Donnees.trouver(table, texte(cle)) : null);
     if (identifiant.startsWith(PREFIXE_PANNE)) return entitePanne(ctx, identifiant);
     if (trouver('equipements', identifiant)) return Wiki.interne.entiteMachine(ctx, trouver('equipements', identifiant));
@@ -633,7 +659,7 @@ Object.assign(Wiki, (() => {
       habilitations: habilitations ? { suivies: habilitations.length, aRenouveler: compter(habilitations, 'etat', 'à renouveler'),
         echues: compter(habilitations, 'etat', 'échue') } : null,
       dernieres: clotures.slice(0, Wiki.SEUILS.dernieres).map((ot) => elementOt(ctx, ot)),
-      pannesFrequentes: pannes.slice(0, Wiki.SEUILS.symptomesMax),
+      pannesFrequentes: pannes.slice(0, PANNES_ACCUEIL),
       suivi: ctx.profil === 'responsable' ? suiviDuWiki() : null,
     };
   }

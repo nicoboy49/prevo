@@ -57,7 +57,13 @@ et Wiki.references(textes, aTrancher) :
                    état : pas encore valable (obtention future), échue (échéance passée ou illisible), à renouveler
                    (dans les 60 jours, le jour même compris : RG8), valide ; l'accueil compte les techniciens actifs ;
     visibilité     demandeur : ni page technicien ni page intervention (null), pas de prix, références sans lien ;
-                   technicien : tout sauf le taux horaire ; responsable : tout.
+                   technicien : tout sauf le taux horaire ; responsable : tout ;
+    références     ordre d'apparition sur la page (T137) : « À trancher » (en tête), puis les textes ;
+    intervention   (T137) motifAttente et motifAnnulation de l'OT, '' sans motif ;
+    retours        (T137, « Pages qui renvoient ici ») d'une machine, d'un article, d'un savoir-faire ou d'une panne :
+                   pages actives dont le champ liens (« ; ») désigne l'entité ou la ligne de son texte, rendues sous leur
+                   page (texte d'une machine ou d'un article qui existe : la machine, l'article ; savoir-faire : lui-même ;
+                   les autres n'ont plus de page), sans la page elle-même ni doublon, par titre puis identifiant.
 Les en-têtes, mères et sous-pages d'un savoir-faire sont ceux de Wiki.page (testés par test_wiki_calculs.py) : le
 calcul ne les refait pas.
 """
@@ -111,6 +117,7 @@ TABLES = ("equipements", "ordres_travail", "articles", "codes_defaillance", "dem
 OUVERTS = ("Créé", "Préparé", "Planifié", "En cours", "En attente")
 HORIZON_HABILITATION_JOURS = 60            # « à renouveler » : brief RG8 (module Équipe)
 MACHINES_ACCUEIL = 3
+PANNES_ACCUEIL = 6                         # pannes les plus fréquentes de l'accueil (maquette)
 RUBRIQUES = {"équipement": ["En bref", "Astuces"], "composant": ["À quoi il sert"],
              "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges"]}
 MOTIF_CITATION = re.compile(r"\[(OT-\d{4}-\d{4,})\]")
@@ -742,7 +749,7 @@ class CalculWiki:
     def finir(self, base, textes, a_trancher, en_attente, profil):
         a_trancher = list(a_trancher or [])
         base.update({"textes": textes, "aTrancher": a_trancher, "enAttente": list(en_attente or []),
-                     "references": self.references_detaillees(textes, a_trancher, profil),
+                     "references": self.references_detaillees(textes, a_trancher, profil), "retours": [],
                      "liens": {"machine": True, "panne": True, "article": True, "savoir-faire": True,
                                "technicien": profil != "demandeur", "intervention": profil != "demandeur"}})
         return base
@@ -1018,7 +1025,8 @@ class CalculWiki:
                             key=lambda o: (nombre(o.get("ordre")) or 0, val(o, "id")))
         sections = {
             "demande": demande, "travail": val(ot, "travail_a_faire"), "compteRendu": val(ot, "compte_rendu"),
-            "astuce": val(ot, "astuce"), "techniciens": self.element(ot, profil)["techniciens"],
+            "astuce": val(ot, "astuce"), "motifAttente": val(ot, "motif_attente"), "motifAnnulation": val(ot, "motif_annulation"),
+            "techniciens": self.element(ot, profil)["techniciens"],
             "pieces": [dict(self.article(a), quantite=arrondi(q)) for a, q in self.index()["nets"].get(ot_id, {}).items()
                        if q > 0 and a in self.articles],
             "operations": [{"ordre": nombre(o.get("ordre")), "operation": val(o, "operation"), "valeurAttendue": val(o, "valeur_attendue"),
@@ -1040,9 +1048,36 @@ class CalculWiki:
                 "sections": {"rattachement": r}}
         return self.finir(base, self.textes(ligne, "savoir-faire"), a_trancher, en_attente, profil)
 
+    def retours(self, entite):
+        """« Pages qui renvoient ici » d'une entité (définition en tête)."""
+        cibles = {entite["id"], (entite.get("textes") or {}).get("pageId") or ""} - {""}
+        trouves = {}
+        for ligne in self.index()["actives"]:
+            liens = [x.strip() for x in (ligne.get("liens") or "").split(";") if x.strip()]
+            if not cibles.intersection(liens):
+                continue
+            type_, retour = val(ligne, "type"), None
+            if type_ == "équipement" and self.machine(val(ligne, "equipement_id")):
+                m = self.machine(val(ligne, "equipement_id"))
+                retour = {"id": m["equipementId"], "type": "machine", "titre": m["titre"], "lien": m["lien"]}
+            elif type_ == "composant" and self.article(val(ligne, "article_id")):
+                a = self.article(val(ligne, "article_id"))
+                retour = {"id": a["articleId"], "type": "article", "titre": a["titre"], "lien": a["lien"]}
+            elif type_ == "savoir-faire":
+                retour = {"id": ligne["id"], "type": "savoir-faire", "titre": val(ligne, "titre"), "lien": ligne["id"]}
+            if retour is not None and retour["id"] != entite["id"] and retour["id"] not in trouves:
+                trouves[retour["id"]] = retour
+        return sorted(trouves.values(), key=lambda r: (r["titre"], r["id"]))
+
     def entite(self, identifiant, profil, maintenant, a_trancher=None, en_attente=None):
         """Même forme que Wiki.entite(identifiant, { profil, maintenant }) ; a_trancher, en_attente : ce que rendent
         les crochets de wiki-journal.js (vides sans eux)."""
+        resultat = self.entite_sans_retours(identifiant, profil, maintenant, a_trancher, en_attente)
+        if resultat is not None and resultat["type"] in ("machine", "article", "savoir-faire", "panne"):
+            resultat["retours"] = self.retours(resultat)
+        return resultat
+
+    def entite_sans_retours(self, identifiant, profil, maintenant, a_trancher=None, en_attente=None):
         identifiant = propre(identifiant)
         if not identifiant:
             return None
@@ -1204,7 +1239,7 @@ class CalculWiki:
                          "enRupture": sum(1 for a in articles if a["etat"] == "rupture")},
             "habilitations": habilitations,
             "dernieres": [self.element(ot, profil) for ot in clotures[:NOMBRE_DERNIERES]],
-            "pannesFrequentes": pannes[:SYMPTOMES_MAX],
+            "pannesFrequentes": pannes[:PANNES_ACCUEIL],
             "suivi": self.suivi() if profil == "responsable" else None,
         }
 
@@ -1253,14 +1288,14 @@ def rubriques(texte, type_):
 
 
 def references(textes, a_trancher):
-    """OT cités par les textes (rubriques dans l'ordre), puis par « À trancher » (phrase, puis OT observés, sinon l'OT
-    de l'entrée), sans doublon, dans l'ordre de première apparition."""
+    """OT cités par « À trancher », en tête de la page (phrase, puis OT observés, sinon l'OT de l'entrée), puis par les
+    textes (rubriques dans l'ordre), sans doublon, dans l'ordre de première apparition sur la page (T137)."""
     ids = []
-    for rubrique in (textes or {}).get("rubriques", []):
-        for phrase in rubrique["phrases"]:
-            ids += citations(phrase)
     for contradiction in a_trancher or []:
         ids += citations(contradiction.get("phrase"))
         observes = [propre(o) for o in contradiction.get("ot") or [] if propre(o)]
         ids += observes or ([propre(contradiction.get("otSource"))] if propre(contradiction.get("otSource")) else [])
+    for rubrique in (textes or {}).get("rubriques", []):
+        for phrase in rubrique["phrases"]:
+            ids += citations(phrase)
     return list(dict.fromkeys(ids))

@@ -2917,8 +2917,10 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
 - **Modules** : deux modules nouveaux, chargés dans cet ordre avec les autres (`ORDRE_MODULES`, `index.html`,
   listes de scripts des outils et des tests qui chargent le wiki) : `wiki-entites.js` (après `wiki-calculs.js` :
   calculs des pages Panne, Technicien, Intervention et du stock dans le temps d'un article, ordre des
-  interventions, visibilité, références) et `wiki-entites-ecrans.js` (après `wiki-page-ecrans.js` : accueil,
-  listes, pages Panne, Technicien et Intervention). 700 lignes au plus par fichier, comme partout.
+  interventions, visibilité, références) et `wiki-entites-ecrans.js` (accueil, listes, outils d'affichage communs) ;
+  la page d'une entité des six types (T137) : `wiki-page-ecrans.js` (cadre, en tête, textes et petits numéros,
+  « Références », fiche) puis `wiki-sections-ecrans.js` (sections calculées de chaque type), tous deux avant
+  `wiki-entites-ecrans.js`. 700 lignes au plus par fichier, comme partout.
 - **Textes rédigés** (D96 révisée 2, D100 révisée 2) : `wiki_pages` ne garde que trois types —
   - `équipement` (texte de la machine, ancré sur `equipement_id`) : rubriques « En bref » (**5 phrases et 120 mots**
     au plus) et « Astuces » (**10 phrases**) ;
@@ -2938,11 +2940,16 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
   (d'abord à partir de l'astuce, D110) ; une synthèse, pas un historique ; les longueurs de l'en-tête de chaque
   texte ; toutes les autres règles inchangées. **Seuls les OT clôturés administrativement** entrent dans la file
   (inchangé, §20.5) : l'IA ne rédige qu'à partir d'eux.
-- **Pages et identifiants** (`Wiki.page(id, { profil, maintenant })`, D113) : `EQ-…` machine, `ART-…` article,
+- **Pages et identifiants** (`Wiki.entite(id, { profil, maintenant })`, D113 ; l'écran d'une page ne lit que `Wiki.entite` —
+  `Wiki.page` garde l'ancienne forme pour l'écriture à la main et le journal, et donne à `Wiki.entite` l'en-tête, la mère
+  et les sous-pages d'un savoir-faire) : `EQ-…` machine, `ART-…` article,
   `TEC-…` technicien, `OT-…` intervention, `WP-…` savoir-faire (et texte d'une machine ou d'un article, qui mène à
   leur page), **panne** = `PANNE-<code symptôme>`. Chaque page → `{ id, type, titre, faits, sections, textes,
-  aTrancher, enAttente, liens }` : `faits` = la fiche (paires libellé, valeur ; liens vers les entités), `sections` =
-  les blocs calculés dans leur ordre, `textes` = les rubriques rédigées et leur origine. Calculé, sans IA, sans
+  aTrancher, enAttente, references, retours, liens }` : `faits` = la fiche (paires libellé, valeur ; liens vers les
+  entités), `sections` = les blocs calculés dans leur ordre, `textes` = les rubriques rédigées et leur origine, `retours`
+  = « Pages qui renvoient ici » (CS103, §20.9) d'une machine, d'un article, d'un savoir-faire ou d'une panne — la règle
+  de `Wiki.page` (pages actives dont le champ `liens` désigne l'entité ou la ligne de son texte), réduite aux pages qui
+  s'affichent ; une proposition à valider n'y entre jamais (T137). Calculé, sans IA, sans
   écriture :
   - **Machine** : fiche (repère, lieu, marque et modèle, série, mise en service, criticité, état, habilitation,
     parent, sous-ensembles, nombre d'interventions), consignation (en tête), pannes fréquentes `{ code, cas, derniere
@@ -2961,7 +2968,8 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
     echeance, etat }` (celles qui comptent et leur état selon les règles du module Équipe : une par intitulé, « échue », « à renouveler » sous 60 jours (RG8), « pas encore valable », « valide » ; l'accueil compte les techniciens actifs), interventions (technicien de l'OT ou
     temps pointé), **taux horaire** ; aucun texte ; son nom n'est jamais dans une requête à l'IA (inchangé, CS99).
   - **Intervention** : tout l'OT en lecture seule (machine, technicien(s), type, priorité, statut, dates, arrêt,
-    panne, cause, remède, demande d'origine, travail, compte rendu, astuce, pièces sorties, opérations, temps) ;
+    panne, cause, remède, demande d'origine, travail, compte rendu, astuce, motifs d'attente et d'annulation s'ils sont
+    renseignés, pièces sorties, opérations, temps) ;
     « Cité dans le wiki » (pages dont un texte cite l'OT) ; `ficheOT` = `#/ot/<id>`.
   - **Savoir-faire** : inchangé (§20.3, en-tête de consignation ; une sous-page de savoir-faire reprend celui de
     sa mère).
@@ -2970,11 +2978,11 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
     annulés) du plus récent au plus ancien ; chaque ligne porte son statut.
   - Un calcul Python indépendant (`tests/calcul_wiki.py`, étendu) refait ces faits sur la démo et sur une base
     d'essai (CS114).
-- **Visibilité** (D114) : `Wiki.page` et les listes appliquent le profil — le **demandeur** n'a ni page Technicien
+- **Visibilité** (D114) : `Wiki.entite` et les listes appliquent le profil — le **demandeur** n'a ni page Technicien
   (`null`, nom sans lien ailleurs), ni page Intervention (numéro sans lien), ni prix d'article ; le **taux horaire**
   n'est rendu qu'au responsable ; le **prix** au responsable et au technicien. La recherche suit la même règle.
-- **Références** (D113) : `Wiki.references(textes)` numérote les OT cités par les textes d'une page dans l'ordre
-  d'apparition ; à l'écran, chaque citation est un petit numéro (`<sup class="wiki-ref">`, lien `#/wiki/<OT>`,
+- **Références** (D113) : `Wiki.references(textes, aTrancher)` numérote les OT cités dans l'ordre d'apparition sur la
+  page — « À trancher », en tête, puis les textes (T137) ; à l'écran, chaque citation est un petit numéro (`<sup class="wiki-ref">`, lien `#/wiki/<OT>`,
   bulle « <OT> · <date> · <titre> » ; sans lien pour le demandeur) et la page finit par « Références » (numéro, OT,
   date, machine, titre). Jamais `[OT-…]` affiché ; le balisage stocké ne change pas.
 - **Routes** : `#/wiki` (accueil), `#/wiki/machines`, `#/wiki/pannes`, `#/wiki/articles`, `#/wiki/techniciens`
@@ -2988,10 +2996,13 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
   discrètes à zéro, liens vers `#/wiki-journal?vue=…`), dernières interventions, pannes les plus fréquentes ;
   **listes** : machines par lieu (sous-ensembles sous leur machine), pannes par nombre de cas, articles en tableau
   filtrable avec l'état du stock, techniciens en cartes, savoir-faire, interventions ; **page** : fil d'Ariane,
-  type (icône et couleur), titre, **consignation et « À trancher » en tête**, sections, « Références », et la
+  type (icône et couleur), titre, **consignation et « À trancher » en tête**, sections, « Pages qui renvoient ici »
+  (discrète, absente sans retour ; pas sur une page Intervention, dont « Cité dans le wiki » tient ce rôle),
+  « Références », et la
   **fiche des faits** à droite (au-dessus sur téléphone) ; textes rédigés avec leur bandeau d'origine (§20.9) ;
   « Ouvrir la fiche OT » sur une page Intervention. Style actuel de Prévo (tuiles de l'accueil, Sora, thèmes
   sombre et clair), 1440 et 375 px sans défilement horizontal, zones tactiles ≥ 48 px, contrastes AA (CS106) ;
+  longues listes (D101, jeu de charge) : seuls les premiers éléments sont créés, « Voir les n autres » crée le reste ;
   **aucun appel réseau pour afficher une page** (D101 : le rattrapage du journal ne relit pas `wiki_pages` à chaque
   affichage).
 - **Contrôle du wiki** (D108 précisée) : sur les textes rédigés et les savoir-faire ; les pages calculées existent
@@ -3003,5 +3014,5 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
   vides, avec un message) ; `js/demo-donnees.js` reste sous 1 Mo (CS105 : chargement rapide).
 - **Tests** : `test_wiki_entites.py` (faits des six pages contre `calcul_wiki.py`, ordre des interventions,
   visibilité, références) ; `test_wiki_ecrans.py` réécrit pour l'accueil, les listes et les pages (profils, liens,
-  petits numéros, 1440 et 375 px) ; les tests des textes rédigés suivent les nouveaux types et limites ;
+  petits numéros, 1440 et 375 px, affichage en moins de 500 ms sur le jeu de charge) ; les tests des textes rédigés suivent les nouveaux types et limites ;
   `test_wiki_demo.py` : fabrication en deux temps.

@@ -1,92 +1,88 @@
-"""Écrans de lecture du wiki de maintenance (tâche T100 ; socle du lot 6 refondu, T110 ; réécrits en T119 —
-ARCHITECTURE.md §20.9 ; CS98, CS103, CS106).
+"""Écrans de lecture du wiki de maintenance (tâche T100 ; lot 6 refondu, T110, T119 ; refonte 2, l'encyclopédie, T136 et
+T137 — ARCHITECTURE.md §20.9, §20.12 ; CS98, CS103, CS106, CS114, CS115).
 
 Toujours la démo (index.html en file://, « Essayer avec les données de démo »), horloge du navigateur fixée à la
-date de référence de la démo (2026-10-19 : dates non décalées, pannes des 12 derniers mois stables). Profils :
-responsable, technicien (TEC-0001), demandeur (Lucie Martin). Une base d'essai (BASE_JS) pose sur la démo onze
-lignes de wiki_pages (les quatre types, ancrées ou libres, une archivée, un titre piégé) et quatorze entrées de
-wiki_journal (validées avec contradictions ouvertes, l'une venue d'un OT antérieur, une fermée ; à valider ; en
-file ; refusées suivies ou non d'une relance ; à refaire ; rejetée ; manuelle refusée). Ce qui est vérifié :
-    accueil     #/wiki, l'encyclopédie (refonte 2, §20.12, T136) : « Ce que l'atelier sait », phrase-résumé dont chaque
-                nombre mène à sa liste (sans les techniciens pour le demandeur), « Tiré de N interventions clôturées »,
-                champ de recherche ; briques (icône du type, nombre, ligne utile, lien) ; dernières interventions et
-                pannes les plus fréquentes (liens encodés, PANNE-… compris) — nombres égaux à
-                Wiki.accueilEncyclopedie ET à un calcul fait ici sur les tables ; « Suivi du wiki » au responsable
-                seulement (à valider, à trancher, en échec : nombres recalculés ici, discrets à zéro, liens vers
-                #/wiki-journal?vue=…, « Traiter la file » et le journal) ; titres piégés : du texte ;
-    listes      #/wiki/<liste> des six types pour les trois profils (techniciens et interventions : « réservé » au
-                demandeur) : fil d'Ariane, nombre, chaque élément en lien vers sa page (identifiant encodé), égaux au
-                calcul fait ici ou à Wiki.listeEntites ; machines par lieu (racine commune retirée), sous-ensembles
-                sous leur machine ; pannes par nombre de cas ; articles en tableau filtrable (texte, état du stock),
-                en cartes au téléphone ; interventions ouvertes en tête, statut sur chaque ligne ; pages Panne,
-                Technicien, Intervention (rendu minimal en attendant T137 : titre, faits, « Ouvrir la fiche OT ») ;
-    recherche   de l'accueil : entités groupées par type (Wiki.chercherEntites, machines recalculées ici), selon le
-                profil (jamais un technicien ni une intervention pour le demandeur), puis les résultats plein texte
-                (Wiki.rechercher) ; « Voir les n autres », « Rien trouvé », Entrée ;
-    pages       #/wiki/<id> des quatre types : en-tête (type, titre, lien vers la fiche selon le profil), en-tête
-                des savoir-faire (consignation de la fiche à l'octet, phrase de Prévo), couche calculée séparée
-                du texte (égale à Wiki.page), texte par rubrique, bandeau d'origine (IA, manuel, IA et manuel),
-                « Aucun texte validé pour l'instant. », OT cités en liens (en texte pour le demandeur), liens
-                vers les pages (titre inconnu : texte), « Pages qui renvoient ici » exact, « Modifier » et
-                propositions en attente au responsable seulement ; page d'équipement : contenu égal à
-                Wiki.pageEquipement pour les 28 pages de la démo (pannes, pièces, dernières interventions, même
-                marque et modèle), consignation à l'octet ; page archivée ou inconnue : « Page introuvable » ;
-    trancher    « À trancher » vu par les trois profils (ce que dit la page avec ses OT, ce que dit le nouvel OT,
-                « Observation antérieure aux faits de la page »), note et boutons au responsable seulement ;
-                « L'ancien reste », « Les deux sont vrais » : la contradiction disparaît, une entrée « décision »
-                est écrite ; « Le nouveau remplace » mène à #/wiki-ecrire/<page> ;
-    sous-pages  (T131, base à part) « Sous-page de <mère> » en lien sous le titre, consignation de l'équipement de la
-                mère en tête (à l'octet, phrase de Prévo), aucune couche calculée, fiche de la mère ; sous-pages de
-                composant et de savoir-faire (en-tête de la mère, même rattachée par la page de l'équipement) ; mère
-                archivée nommée sans lien ; la mère liste ses sous-pages après le texte (liens, ordre alphabétique
-                français, archivée exclue) ; liste des savoir-faire (sous-pages et leur mère) ; trois profils ;
-                titres piégés ;
-                « Modifier » ; 1440 et 375 px, zones de 48 px, contrastes AA en thème clair et sombre ;
-    piège       HTML dans un titre, une phrase, une observation, une consignation, un compte rendu, l'adresse :
-                du texte, rien n'est exécuté ;
-    recherche   depuis la page (portées équipement, modèle, parc),
-                l'onglet Préparation d'un OT et la saisie d'une DI (« Déjà vu sur cette machine ? » : liens dans un
-                nouvel onglet, la DI tapée reste) ; résultats = Wiki.rechercher ; hors du wiki, seuls les ajouts ;
-    affichage   1440 et 375 px sans défilement horizontal, zones tactiles ≥ 48 px au téléphone, contrastes AA en
-                thème clair (audit de test_poste) ; aucune requête réseau pour afficher ou chercher ; encyclopédie
-                (accueil, recherche, listes, pages) : trois profils, contrastes AA en clair et en sombre, focus
-                visible, aucune requête /api/ en mode serveur.
+date de référence de la démo (2026-10-19 : dates non décalées). Profils : responsable, technicien (TEC-0001), demandeur
+(Lucie Martin). Une base d'essai (BASE_JS) pose sur la démo treize lignes de wiki_pages de la refonte 2 (texte de PO-02
+et de CP-01, texte d'un article, savoir-faire rattachés à une machine, à un article, à la page d'une machine, libre,
+sous-page, archivé, titre piégé ; une ancienne page de mode et une ancienne sous-page de machine, types retirés) et
+quatorze entrées de wiki_journal (contradictions ouvertes sur PO-02 et sur un savoir-faire — antérieure —, une fermée ;
+à valider ; en file ; refusées ; à refaire ; rejetée). Les valeurs attendues sont écrites à la main ou recalculées ici,
+et les faits des pages comparés au calcul Python indépendant de tests/calcul_wiki.py (CalculWiki, sur les CSV de la
+démo et la base). Ce qui est vérifié :
+    accueil     #/wiki (T136) : « Ce que l'atelier sait », phrase-résumé dont chaque nombre mène à sa liste, « Tiré de
+                N interventions clôturées », recherche ; briques (icône du type, nombre, ligne utile — Articles et
+                Techniciens contre le calcul Python —, lien) ; dernières interventions, six pannes les plus fréquentes ;
+                « Suivi du wiki » au responsable seulement ; titres piégés : du texte ;
+    listes      les six listes pour les trois profils (« réservé » au demandeur pour les techniciens et les
+                interventions), éléments et ordre des interventions contre le calcul Python, état du stock aussi ;
+                interventions : 100 lignes sur PC, 40 cartes au téléphone, les autres créées au clic (D101) ;
+    recherche   de l'accueil : entités groupées par type (les 6 premières créées, les autres au clic), un seul titre
+                quand rien n'est trouvé ;
+    pages       #/wiki/<id> des six types (T137) pour les trois profils : fil d'Ariane, type, titre, consignation et
+                « À trancher » en tête, sections dans leur ordre, textes rédigés et bandeau d'origine, fiche des faits
+                (égale à Wiki.entite ET au calcul Python, un cas par type au moins, et toutes les machines, pannes et
+                techniciens de la démo), à droite à 1440 px et au-dessus à 375 px ; petits numéros (ordre
+                d'apparition, bulle, lien, sans lien pour le demandeur), « Références », jamais [OT-…] à l'écran, le
+                balisage stocké intact ; interventions dans l'ordre du calcul Python avec leur statut ; page
+                Intervention en lecture seule (motifs d'attente et d'annulation), « Ouvrir la fiche OT » ; visibilité
+                (D114 : prix, taux horaire, pages Technicien et Intervention) ; tout lien d'une page mène à une page
+                qui s'affiche ; « Modifier » ; pièges ;
+    trancher    « À trancher » : décisions du responsable (D107), boutons absents pour les autres ;
+    consignation  à l'octet, document, absence ; lien depuis la fiche équipement ;
+    sous-pages  d'un savoir-faire seulement (refonte 2) : mère, consignation reprise, liste, mère archivée ; les
+                anciennes sous-pages et pages de mode ne s'affichent plus ;
+    recherche   depuis la page d'une machine, l'onglet Préparation d'un OT et la saisie d'une DI ;
+    affichage   1440 et 375 px sans défilement horizontal, zones tactiles ≥ 48 px au téléphone, contrastes AA en thème
+                clair et sombre, focus visible ; aucune requête réseau pour afficher ; aucune requête /api/ en mode
+                serveur (les six types) ; jeu de charge (500 machines, 5 000 OT, mode serveur) : accueil, chaque liste
+                et une page de chaque type affichés en moins de 500 ms (D101).
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_wiki_ecrans.py" -v
 """
+import csv
+import io
 import json
-import math
 import re
+import statistics
+import subprocess
+import sys
+import tempfile
 import unicodedata
 import unittest
 import urllib.parse
+from pathlib import Path
 
+from calcul_wiki import TABLES as CALCUL_TABLES, CalculWiki
 from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
 from test_poste import AUDIT_TEXTES_JS
 
 HEURE_FIXE = "2026-10-19T09:00:00"
+MAINTENANT = "2026-10-19 09:00"
 PROFILS = {"demandeur": ("Lucie Martin", ""), "technicien": ("", "TEC-0001"), "responsable": ("", "")}
 MENTION = "Statistique de l'historique, pas un diagnostic"
-MENTION_PISTE = "Peu de cas : à prendre comme une piste."
 SANS_CONSIGNATION = "Aucune consignation saisie pour cet équipement"
 SANS_TEXTE = "Aucun texte validé pour l'instant."
 PHRASE_SAVOIR_FAIRE = "Ce savoir-faire ne remplace pas la consignation de l'équipement"
 PIEGE = '<img src=x onerror="window.__piege = 1"><script>window.__piege = 2</script><b>gras</b>'
 CONSIGNATION_PIEGEE = ("  1. Couper le sectionneur " + PIEGE + "\r\n2. Purger & vérifier « 0 bar »\n\n"
                        "   3. Cadenas personnel\t(clé sur soi)\n")
-COUCHE_EQUIPEMENT = ["wiki-couche-titre", "wiki-consignation", "wiki-recherche", "wiki-pannes", "wiki-pieces", "wiki-dernieres"]
-TYPES = {"équipement": "Équipement", "composant": "Composant", "mode": "Mode de défaillance", "savoir-faire": "Savoir-faire"}
 NOUVEL_ONGLET = "s'ouvre dans un nouvel onglet"
+BUDGET_MS = 500                                    # D101 : un écran du wiki en moins de 500 ms
 
 # ---------------------------------------------------------------------------------------------------
-# Base d'essai posée sur la démo : pages des quatre types et entrées du journal
+# Base d'essai de la refonte 2 posée sur la démo : textes des machines et des articles, savoir-faire, journal
 # ---------------------------------------------------------------------------------------------------
 
 MODELE = "claude-sonnet-5-5"
 VALIDEUR = "Paul Martin"
 TITRE_PO02 = "PO-02 — Pompe centrifuge eau de refroidissement"
+TITRE_CP01 = "CP-01 — Compresseur à vis 30 kW"
 TITRE_KIT = "Kit garniture mécanique PO-02"
+TITRE_SF = "Changer la garniture de PO-02"
+TITRE_ALIGNER = "Aligner l'accouplement de PO-02"
+TITRE_SP_ALIGNER = TITRE_ALIGNER + " — comparateur"
 TITRE_PIEGE = '<img src=x onerror="window.__piege = 3">Régler <b>gras</b>'
 COLONNES_PAGES = ("id;type;titre;cle;equipement_id;article_id;cause_code;rattache_a;texte;ot_cites;liens;version;origine;"
                   "modele;derniere_entree;valide_par;valide_le;cree_le;modifie_le;statut").split(";")
@@ -96,26 +92,20 @@ MOTIF_CITATION = re.compile(r"\[(OT-\d{4}-\d{4,})\]")
 MOTIF_LIEN = re.compile(r"\[\[([^\[\]]+)\]\]")
 
 TEXTE_PO02 = "\n".join([
-    "## Ce qui revient",
+    "## En bref",
     "- La garniture mécanique fuit côté accouplement [OT-2025-0010] [OT-2025-0044]",
+    "- Le remplacement du [[" + TITRE_KIT + "]] arrête la fuite, voir [[" + TITRE_SF + "]] [OT-2026-0026]",
     "- Le raccord de refoulement se desserre [OT-2025-0030]",
-    "## Ce qui a réglé le problème",
-    "- Le remplacement du [[Kit garniture mécanique PO-02]] a arrêté la fuite [OT-2026-0026]",
-    "## À surveiller",
-    "- L'alignement de l'accouplement, voir [[Changer la garniture de PO-02]] et [[Fuite de garniture]] [OT-2026-0214]",
     "## Astuces",
-    "- Une ancienne fiche citait [[Page disparue]] [OT-2026-0098]",
+    "- Repérer l'accouplement avant le démontage, voir [[Fuite]] et [[Page disparue]] [OT-2026-0098] [OT-2025-0010]",
 ])
-TEXTE_MODE = ("## Symptômes\n- Goutte à goutte sous la garniture [OT-2025-0010]\n"
-              "## Équipements concernés\n- Surtout la [[" + TITRE_PO02 + "]] [OT-2026-0133]")
-TEXTE_SF = ("## Étapes\n- Repérer la position de l'accouplement avant le démontage [OT-2026-0098]\n"
-            "## Pièges\n- Ne jamais monter la garniture à sec [OT-2026-0133] [OT-2026-0058]")
-TEXTE_KIT = ("## Défaillances\n- La garniture fuit quand l'accouplement est désaligné [OT-2026-0214]\n"
-             "## Montage et remplacement\n- Suivre [[Changer la garniture de PO-02]] [OT-2026-0098]\n"
-             "- Régler au besoin : voir [[" + TITRE_PIEGE + "]] [OT-2026-0098]")
-TEXTE_JOINT = "## Signes d'usure\n- Le joint durcit et se fissure [OT-2025-0030]"
-TEXTE_DESSERRAGE = ("## Causes\n- Les vibrations desserrent le raccord de la [[" + TITRE_PO02 + "]] [OT-2025-0030] [OT-2026-0082]\n"
-                    "## Remèdes\n- Changer le [[Joint torique de bride]] [OT-2026-0082]")
+TEXTE_CP01 = ("## Ce qui revient\n- Le filtre à air se colmate vite [OT-2026-0171]\n"
+              "## En bref\n- Purger le sécheur chaque semaine [OT-2026-0161]")
+TEXTE_KIT = ("## À quoi il sert\n- Il assure l'étanchéité de l'arbre de la [[" + TITRE_PO02 + "]] [OT-2026-0214]\n"
+             "- Il s'use vite quand l'accouplement est désaligné, voir [[" + TITRE_PIEGE + "]] [OT-2026-0098]")
+TEXTE_SF = ("## Étapes\n- Repérer la position de l'accouplement avant le démontage, voir [[Fuite de garniture]] [OT-2026-0098]\n"
+            "## Pièges\n- Ne jamais monter la garniture à sec [OT-2026-0133] [OT-2026-0058]\n"
+            "## Quand le faire\n- Dès la première goutte sous la garniture [OT-2026-0133]")
 TEXTE_PIEGE = "## Étapes\n- Régler <script>window.__piege = 4</script> la <b>vitesse</b> & « bien » [OT-2026-0098]"
 
 
@@ -138,24 +128,31 @@ def page_wiki(identifiant, type_, titre, texte, origine, liens="", valide_le="20
 
 
 PAGES = [
-    page_wiki("WP-0001", "équipement", TITRE_PO02, TEXTE_PO02, "IA", "ART-0016;WP-0003;WP-0002", "2026-10-14 08:00",
+    page_wiki("WP-0001", "équipement", TITRE_PO02, TEXTE_PO02, "IA", "ART-0016;WP-0003;PANNE-S01", "2026-10-14 08:00",
               equipement_id="EQ-0005"),
-    page_wiki("WP-0002", "mode", "Fuite de garniture", TEXTE_MODE, "manuel", "EQ-0005", "2026-10-16 09:00", cause_code="C01"),
-    page_wiki("WP-0003", "savoir-faire", "Changer la garniture de PO-02", TEXTE_SF, "IA et manuel", "", "2026-10-17 11:15",
-              equipement_id="EQ-0005"),
-    page_wiki("WP-0004", "composant", TITRE_KIT, TEXTE_KIT, "IA", "WP-0003;WP-0011", article_id="ART-0016"),
-    page_wiki("WP-0005", "composant", "Joint torique de bride", TEXTE_JOINT, "IA"),
-    page_wiki("WP-0006", "mode", "Desserrage des raccords", TEXTE_DESSERRAGE, "IA", "EQ-0005;WP-0005"),
-    page_wiki("WP-0007", "savoir-faire", "Remonter le kit de garniture", "## Étapes\n- Graisser légèrement les joints [OT-2026-0058]",
-              "manuel", article_id="ART-0016"),
-    page_wiki("WP-0008", "savoir-faire", "Purger le pressostat", "## Étapes\n- Purger avant de relever la mesure [OT-2026-0098]",
+    page_wiki("WP-0002", "composant", TITRE_KIT, TEXTE_KIT, "IA", "EQ-0005;WP-0006", article_id="ART-0016"),
+    page_wiki("WP-0003", "savoir-faire", TITRE_SF, TEXTE_SF, "IA et manuel", "WP-0010", "2026-10-17 11:15", equipement_id="EQ-0005"),
+    page_wiki("WP-0004", "savoir-faire", "Remonter le kit de garniture",
+              "## Étapes\n- Graisser légèrement les joints, comme dans [[" + TITRE_SF + "]] [OT-2026-0058]", "manuel", "WP-0003",
+              article_id="ART-0016"),
+    page_wiki("WP-0005", "savoir-faire", "Purger le pressostat", "## Étapes\n- Purger avant de relever la mesure [OT-2026-0098]",
               "manuel", equipement_id="EQ-0031"),
-    page_wiki("WP-0009", "mode", "Ancienne page", "## Causes\n- Ancienne page sur la [[" + TITRE_PO02 + "]] [OT-2025-0010]",
-              "IA", "EQ-0005", statut="archivée"),
-    page_wiki("WP-0010", "savoir-faire", "Changer le joint torique", "## Étapes\n- Nettoyer la portée du joint [OT-2025-0030]",
-              "IA", rattache_a="WP-0005"),
-    page_wiki("WP-0011", "savoir-faire", TITRE_PIEGE, TEXTE_PIEGE, "IA", equipement_id="EQ-0005"),
+    page_wiki("WP-0006", "savoir-faire", TITRE_PIEGE, TEXTE_PIEGE, "IA", equipement_id="EQ-0005"),
+    page_wiki("WP-0007", "savoir-faire", TITRE_ALIGNER, "## Étapes\n- Poser le comparateur sur le moyeu, voir [[Fuite]] [OT-2026-0214]",
+              "IA", "PANNE-S01", rattache_a="WP-0001"),
+    page_wiki("WP-0008", "savoir-faire", TITRE_SP_ALIGNER, "## Pièces et outillage\n- Comparateur à cadran [OT-2026-0214]", "IA",
+              valide_le="2026-10-18 10:00", rattache_a="WP-0007"),
+    page_wiki("WP-0009", "savoir-faire", "Ancien geste", "## Étapes\n- Vieux geste sur la [[" + TITRE_PO02 + "]] et son [[" + TITRE_KIT
+              + "]] [OT-2025-0010]", "IA", "EQ-0005;ART-0016;PANNE-S01", equipement_id="EQ-0005", statut="archivée"),
+    page_wiki("WP-0010", "mode", "Fuite de garniture", "## Causes\n- Garniture usée de la [[" + TITRE_PO02 + "]] [OT-2025-0010]",
+              "manuel", "EQ-0005", cause_code="C01"),
+    page_wiki("WP-0011", "équipement", "PO-02 — garniture", "## Astuces\n- Garder un kit d'avance [OT-2025-0044]", "IA",
+              rattache_a="WP-0001"),
+    page_wiki("WP-0012", "savoir-faire", "Règles de l'atelier", "## Étapes\n- Ranger l'outillage après chaque intervention [OT-2026-0001]",
+              "manuel"),
+    page_wiki("WP-0013", "équipement", TITRE_CP01, TEXTE_CP01, "manuel", "", "2026-10-16 09:00", equipement_id="EQ-0001"),
 ]
+SAVOIR_FAIRE_ACTIFS = ["WP-0003", "WP-0004", "WP-0005", "WP-0006", "WP-0007", "WP-0008", "WP-0012"]
 
 OBSERVATION_PIEGEE = "Le raccord était serré <img src=x onerror=\"window.__piege = 5\"> : c'est le joint qui était cuit."
 CONTRADICTIONS_PO02 = [
@@ -165,9 +162,9 @@ CONTRADICTIONS_PO02 = [
     {"page": TITRE_PO02, "pageCle": "EQ:EQ-0005", "phrase": "Le raccord de refoulement se desserre [OT-2025-0030]",
      "observation": OBSERVATION_PIEGEE, "ot": ["OT-2026-0214"], "statut": "ouverte"},
 ]
-CONTRADICTIONS_MODE = [
-    {"page": "Fuite de garniture", "pageCle": "WP:WP-0002", "phrase": "Goutte à goutte sous la garniture",
-     "observation": "La goutte venait du raccord de refoulement, pas de la garniture.", "ot": ["OT-2025-0030"],
+CONTRADICTIONS_SF = [
+    {"page": TITRE_SF, "pageCle": "WP:WP-0003", "phrase": "Ne jamais monter la garniture à sec",
+     "observation": "La garniture avait été montée graissée et elle a fui quand même.", "ot": ["OT-2025-0030"],
      "statut": "ouverte"},
 ]
 CONTRADICTION_FERMEE = [
@@ -191,14 +188,14 @@ def entree(identifiant, statut, ot="", nature="ingestion", ordre="", anterieure=
 JOURNAL = [
     entree("WJ-00001", "validée", "OT-2025-0010", ordre="1", decide_le="2026-10-10 08:00"),
     entree("WJ-00002", "validée", "OT-2026-0214", ordre="2", contradictions=CONTRADICTIONS_PO02, decide_le="2026-10-14 08:00"),
-    entree("WJ-00003", "validée", "OT-2025-0030", ordre="3", anterieure="1", contradictions=CONTRADICTIONS_MODE,
+    entree("WJ-00003", "validée", "OT-2025-0030", ordre="3", anterieure="1", contradictions=CONTRADICTIONS_SF,
            decide_le="2026-10-16 09:00"),
     entree("WJ-00004", "à valider", "OT-2026-0082", ordre="4", changements=[{
         "page": "WP-0001", "cle": "EQ:EQ-0005", "type": "équipement", "titre": TITRE_PO02, "creation": False, "version_avant": 1,
-        "avant": TEXTE_PO02, "apres": TEXTE_PO02 + "\n- Le raccord tient avec un joint neuf [OT-2026-0082]"}]),
+        "avant": TEXTE_PO02, "apres": TEXTE_PO02 + "\n- Le raccord tient avec un joint neuf, voir [[Règles de l'atelier]] [OT-2026-0082]"}]),
     entree("WJ-00005", "à valider", "OT-2026-0058", ordre="5", changements=[{
         "cle": "TITRE:graisser la garniture", "type": "savoir-faire", "titre": "Graisser la garniture", "creation": True,
-        "version_avant": 0, "avant": "", "apres": "## Étapes\n- Graisser la garniture [OT-2026-0058]"}]),
+        "version_avant": 0, "avant": "", "apres": "## Étapes\n- Graisser la garniture du [[" + TITRE_KIT + "]] [OT-2026-0058]"}]),
     entree("WJ-00006", "en file", "OT-2026-0072"),
     entree("WJ-00007", "refusée", "OT-2026-0017", raisons="Page « PO-02 » : phrase sans OT."),
     entree("WJ-00008", "refusée", "OT-2026-0026", raisons="Page « PO-02 » : comptage interdit."),
@@ -210,22 +207,36 @@ JOURNAL = [
     entree("WJ-00014", "refusée", nature="manuel", raisons="La page a été modifiée entre-temps."),
 ]
 
-# Titre → identifiant canonique (liens [[titre]] de la base d'essai) ; « Page disparue » n'existe pas.
-RESOLUTIONS = {TITRE_PO02: "EQ-0005", TITRE_KIT: "ART-0016", "Changer la garniture de PO-02": "WP-0003",
-               "Fuite de garniture": "WP-0002", "Joint torique de bride": "WP-0005", TITRE_PIEGE: "WP-0011"}
-ORIGINE_IA = "Rédigé avec l'IA (claude-sonnet-5-5) à partir des OT cités — validé par Paul Martin le %s"
+# [[titre]] → page qui s'affiche (identifiant) ; « Page disparue », l'ancienne page de mode et l'ancienne sous-page de
+# machine (types retirés) restent du texte.
+RESOLUTIONS = {TITRE_PO02: "EQ-0005", TITRE_KIT: "ART-0016", TITRE_SF: "WP-0003", "Fuite": "PANNE-S01", TITRE_PIEGE: "WP-0006"}
+ORIGINE_IA = "IA Rédigé avec l'IA (claude-sonnet-5-5) à partir des OT cités — validé par Paul Martin le %s"
 ORIGINE_MANUEL = "Écrit par Paul Martin le %s"
-ORIGINE_MIXTE = "Rédigé avec l'IA (claude-sonnet-5-5) à partir des OT cités, puis modifié à la main — validé par Paul Martin le %s"
+ORIGINE_MIXTE = "IA Rédigé avec l'IA (claude-sonnet-5-5) à partir des OT cités, puis modifié à la main — validé par Paul Martin le %s"
 
-# La base remplace le wiki figé de la démo (T122).
+# La base remplace le wiki (vide) de la démo.
 BASE_JS = """async ([pages, journal]) => {
   await Donnees.modifier('wiki_pages', (lignes) => { lignes.splice(0, lignes.length, ...pages); }, { journal: false });
   await Donnees.modifier('wiki_journal', (lignes) => { lignes.splice(0, lignes.length, ...journal); }, { journal: false });
 }"""
 
+
+def table_csv(colonnes, lignes):
+    sortie = io.StringIO()
+    ecrivain = csv.writer(sortie, delimiter=";", lineterminator="\r\n")
+    ecrivain.writerow(colonnes)
+    for ligne in lignes:
+        ecrivain.writerow([ligne.get(c, "") for c in colonnes])
+    return sortie.getvalue()
+
+
+# Tables lues par le calcul Python, relues dans le navigateur (la démo telle qu'affichée : à l'ouverture, Prévo peut y
+# ajouter un OT préventif échu, RG5), puis réécrites en CSV.
+TABLES_JS = """(noms) => Object.fromEntries(noms.map((nom) => [nom, Donnees.lignes(nom)]))"""
+
+
 # --- lectures du DOM ---------------------------------------------------------------------------------
 
-# Encyclopédie (refonte 2, §20.12, T136) : accueil, listes, recherche de l'accueil, pages Panne, Technicien, Intervention
 ACCUEIL_JS = """() => {
   const t = (e) => (e ? e.textContent.replace(/\\s+/g, ' ').trim() : null);
   const lien = (a) => [t(a), a.getAttribute('href')];
@@ -236,13 +247,14 @@ ACCUEIL_JS = """() => {
     phrase: Array.from(document.querySelectorAll('#wiki-phrase-resume a')).map(lien),
     tireDe: t(document.querySelector('#wiki-tire-de')),
     champ: document.querySelectorAll('.wiki-synthese #wiki-champ-accueil.wiki-recherche-champ').length,
+    exemple: document.querySelector('#wiki-champ-accueil').getAttribute('placeholder'),
     suivi: document.querySelectorAll('#wiki-suivi').length,
     minis: Array.from(document.querySelectorAll('#wiki-suivi .wiki-mini')).map((a) => ({ vue: a.dataset.suivi, href: a.getAttribute('href'),
       nombre: t(a.querySelector('.wiki-mini-nombre')), libelle: t(a.querySelector('span')), classe: a.className })),
     actions: Array.from(document.querySelectorAll('#wiki-suivi .wiki-suivi-actions a')).map(lien),
     briques: Array.from(document.querySelectorAll('.wiki-brique')).map((a) => ({ type: a.dataset.type, href: a.getAttribute('href'),
       titre: t(a.querySelector('h2')), nombre: t(a.querySelector('.wiki-brique-nombre')), ligne: t(a.querySelector('.wiki-brique-ligne')),
-      pastille: a.querySelector('.bento-pastille-icone').className })),
+      brut: a.querySelector('.wiki-brique-ligne').textContent, pastille: a.querySelector('.bento-pastille-icone').className })),
     dernieres: Array.from(document.querySelectorAll('#wiki-dernieres li')).map((li) => ({ id: li.dataset.id,
       titre: [tete(li).textContent, tete(li).getAttribute('href'), tete(li).tagName], sous: t(li.querySelector('.wiki-ligne-sous')),
       liens: Array.from(li.querySelectorAll('.wiki-ligne-sous a')).map(lien) })),
@@ -263,7 +275,8 @@ LISTE_JS = """() => {
       const a = e.querySelector('a');
       const href = a.getAttribute('href');
       return [e.dataset.id || decodeURIComponent(href.slice('#/wiki/'.length)), href, a.textContent]; }),
-    liens: Array.from(racine.querySelectorAll('a[href^="#/wiki/"]')).map((a) => a.getAttribute('href')) };
+    liens: Array.from(racine.querySelectorAll('a[href^="#/wiki/"]')).map((a) => a.getAttribute('href')),
+    bouton: t(racine.querySelector('.wiki-voir-autres')) };
 }"""
 
 TROUVES_JS = """() => Array.from(document.querySelectorAll('#wiki-trouves .wiki-groupe:not(.wiki-plein-texte)')).map((g) => ({
@@ -271,7 +284,7 @@ TROUVES_JS = """() => Array.from(document.querySelectorAll('#wiki-trouves .wiki-
   ids: Array.from(g.querySelectorAll('li')).map((li) => li.dataset.id),
   liens: Array.from(g.querySelectorAll('li')).map((li) => { const a = li.querySelector('.wiki-ligne-corps > a'); return a ? a.getAttribute('href') : null; }),
   textes: Array.from(g.querySelectorAll('li')).map((li) => li.querySelector('.wiki-ligne-corps > :first-child').textContent),
-  caches: Array.from(g.querySelectorAll('li')).map((li) => li.hidden),
+  caches: g.querySelectorAll('li[hidden]').length,
   bouton: g.querySelector('.wiki-voir-autres') ? g.querySelector('.wiki-voir-autres').textContent.trim() : null }))"""
 
 ARTICLES_JS = """() => Array.from(document.querySelectorAll('#wiki-articles tbody tr')).filter((tr) => tr.querySelector('a')).map((tr) => {
@@ -290,7 +303,7 @@ INTERVENTIONS_JS = """() => Array.from(document.querySelectorAll('#wiki-interven
 FAITS_JS = """() => Array.from(document.querySelectorAll('#wiki-faits dt')).map((dt) => {
   const dd = dt.nextElementSibling;
   const a = dd.querySelector('a');
-  return [dt.textContent.trim(), dd.textContent.trim(), a ? a.getAttribute('href') : null];
+  return [dt.textContent.trim(), dd.textContent.replace(/\\s+/g, ' ').trim(), a ? a.getAttribute('href') : null];
 })"""
 
 FIL_JS = "() => Array.from(document.querySelectorAll('#contenu .fil a')).map((a) => [a.textContent.trim(), a.getAttribute('href')])"
@@ -306,92 +319,73 @@ PANNE_PIEGEE_JS = """async ([code, libelle]) => {
   return { ancien: premiere.code, cas: premiere.cas };
 }"""
 
-PAGE_WIKI_JS = """() => {
+# Page d'une entité (T137) : tout ce que montre la page, pour la comparer à Wiki.entite et au calcul Python.
+ENTITE_JS = """() => {
   const t = (e) => (e ? e.textContent.replace(/\\s+/g, ' ').trim() : null);
-  const lien = (a) => [t(a), a.getAttribute('href')];
-  const ots = (racine) => Array.from(racine.querySelectorAll('.wiki-citations > *')).map((e) => [e.tagName, t(e), e.getAttribute('href')]);
-  const phrase = (p) => ({ texte: t(p.querySelector('.wiki-phrase-texte')), ot: ots(p),
-    liens: Array.from(p.querySelectorAll('.wiki-phrase-texte > a')).map(lien),
-    absents: Array.from(p.querySelectorAll('.wiki-phrase-texte > .wiki-lien-absent')).map(t) });
-  const racine = document.querySelector('.wiki-page');
-  const entete = document.querySelector('#wiki-entete');
-  const attente = document.querySelector('#wiki-en-attente');
-  const fiche = document.querySelector('#wiki-lien-fiche');
-  const modifier = document.querySelector('#wiki-modifier');
+  const href = (a) => (a ? a.getAttribute('href') : null);
+  const racine = document.querySelector('#contenu .wiki-page');
+  if (!racine || racine.classList.contains('wiki-introuvable')) return { introuvable: true, h1: t(document.querySelector('#contenu h1')) };
+  const sansRefs = (e) => { const copie = e.cloneNode(true); copie.querySelectorAll('sup.wiki-ref').forEach((s) => s.remove()); return t(copie); };
+  const refs = (e) => Array.from(e.querySelectorAll('sup.wiki-ref')).map((s) => {
+    const cible = s.firstElementChild;
+    return [cible.textContent, s.dataset.ot, cible.tagName, href(cible), cible.getAttribute('title')]; });
+  const phrase = (p) => ({ texte: sansRefs(p), refs: refs(p), liens: Array.from(p.querySelectorAll('a.wiki-lien-page')).map((a) => [t(a), href(a)]),
+    absents: Array.from(p.querySelectorAll('.wiki-lien-absent')).map(t) });
+  const rect = (e) => { const r = e.getBoundingClientRect(); return { gauche: r.left, haut: r.top, droite: r.right, bas: r.bottom }; };
+  const grille = racine.querySelector('.wiki-page-grille');
+  const lecture = racine.querySelector('.wiki-lecture');
+  const fiche = racine.querySelector('#wiki-faits');
+  const alertes = racine.querySelector('.wiki-alertes');
+  const consignation = racine.querySelector('#wiki-consignation, #wiki-entete');
+  const mere = racine.querySelector('#wiki-mere');
   return {
-    id: racine.dataset.page, type: racine.dataset.type, h1: t(document.querySelector('#contenu h1')),
-    typeBadge: t(racine.querySelector('.wiki-type')), fiche: fiche ? lien(fiche) : null,
+    id: racine.dataset.page, type: racine.dataset.type, equipement: racine.dataset.equipement, dataMere: racine.dataset.mere,
+    h1: t(racine.querySelector('h1')), h1Brut: racine.querySelector('h1').textContent,
+    fil: Array.from(racine.querySelectorAll('.fil a, .fil .wiki-fil-nom')).map((e) => [t(e), href(e)]),
+    puce: racine.querySelector('.wiki-entete-entite .wiki-puce').className, sousTitre: t(racine.querySelector('.wiki-sous-titre')),
+    mere: mere ? { texte: t(mere), lien: mere.querySelector('a') ? [mere.querySelector('a').textContent, href(mere.querySelector('a'))] : null,
+      archivee: t(mere.querySelector('.wiki-mere-archivee')) } : null,
+    actions: Array.from(racine.querySelectorAll('.wiki-actions a')).map((a) => [a.id, t(a), href(a)]),
     blocs: Array.from(racine.children).map((e) => e.id || e.className),
-    couche: Array.from(document.querySelectorAll('#wiki-couche > *')).map((e) => e.id
-      || Array.from(e.classList).filter((c) => c === 'wiki-recherche' || c === 'wiki-couche-titre').join('.')),
-    origine: t(document.querySelector('#wiki-texte .wiki-origine')),
-    sansTexte: t(document.querySelector('#wiki-texte .wiki-sans-texte')),
-    modifier: modifier ? lien(modifier) : null,
-    rubriques: Array.from(document.querySelectorAll('#wiki-texte .wiki-rubrique')).map((r) => [t(r.querySelector('h3')),
-      Array.from(r.querySelectorAll('.wiki-phrase')).map(phrase)]),
-    retours: Array.from(document.querySelectorAll('#wiki-retours li')).map((li) => [li.dataset.id,
-      ...lien(li.querySelector('a')), t(li.querySelector('.badge'))]),
-    nombreRetours: t(document.querySelector('#wiki-retours h2 .badge')),
-    sansRetour: t(document.querySelector('#wiki-retours .wiki-sans-retour')),
-    contradictions: Array.from(document.querySelectorAll('.wiki-contradiction')).map((c) => ({
-      entree: c.dataset.entree, rang: c.dataset.rang, anterieure: c.dataset.anterieure,
-      page: phrase(c.querySelector('.wiki-cote-page .wiki-phrase')), titreOt: t(c.querySelector('.wiki-cote-ot h3')),
-      observation: c.querySelector('.wiki-observation').textContent, ot: ots(c.querySelector('.wiki-cote-ot')),
+    alertes: alertes ? Array.from(alertes.children).map((e) => e.id) : [],
+    enTete: alertes ? Boolean(alertes.compareDocumentPosition(grille) & Node.DOCUMENT_POSITION_FOLLOWING) : null,
+    sections: Array.from(lecture.children).flatMap((e) => (e.classList.contains('wiki-textes')
+      ? Array.from(e.children).map((s) => 'texte:' + s.dataset.rubrique) : [e.id || e.className])),
+    faits: Array.from(fiche.querySelectorAll('dt')).map((dt) => [dt.textContent.trim(), t(dt.nextElementSibling),
+      href(dt.nextElementSibling.querySelector('a'))]),
+    ficheRect: rect(fiche), lectureRect: rect(lecture), alertesRect: alertes ? rect(alertes) : null,
+    textes: Array.from(racine.querySelectorAll('.wiki-texte')).map((s) => ({ rubrique: s.dataset.rubrique,
+      forme: s.querySelector('.wiki-prose') ? 'prose' : (s.querySelector('.wiki-phrases') ? 'liste' : null),
+      phrases: Array.from(s.querySelectorAll('.wiki-phrase')).map(phrase),
+      origine: t(s.querySelector('.wiki-origine')), sansTexte: t(s.querySelector('.wiki-sans-texte')) })),
+    contradictions: Array.from(racine.querySelectorAll('.wiki-contradiction')).map((c) => ({ entree: c.dataset.entree, rang: c.dataset.rang,
+      anterieure: c.dataset.anterieure, page: phrase(c.querySelector('.wiki-cote-page .wiki-phrase')), titreOt: t(c.querySelector('.wiki-cote-ot h3')),
+      observation: c.querySelector('.wiki-observation-texte').textContent, refs: refs(c.querySelector('.wiki-observation')),
       boutons: Array.from(c.querySelectorAll('button[data-decision]')).map((b) => [b.dataset.decision, t(b)]),
       notes: c.querySelectorAll('textarea').length })),
-    attente: attente ? { lignes: Array.from(attente.querySelectorAll('.wiki-attente > li')).map((li) => [li.dataset.entree,
-      ...lien(li.querySelector('.wiki-lien-proposition')), t(li.querySelector('.wiki-ligne-tete > :nth-child(2)'))]),
-      vide: t(attente.querySelector('.wiki-sans-attente')) } : null,
-    entete: entete ? { titre: t(entete.querySelector('h2')), phrase: t(entete.querySelector('.wiki-entete-phrase')),
-      consignation: entete.querySelector('.wiki-consignation-texte') ? entete.querySelector('.wiki-consignation-texte').textContent : null,
-      absence: t(entete.querySelector('.wiki-sans-consignation')),
-      equipements: Array.from(entete.querySelectorAll('.wiki-entete-equipements a')).map(lien),
-      aide: t(entete.querySelector('p.aide')) } : null,
-  };
-}"""
-
-PAGE_JS = """() => {
-  const t = (e) => (e ? e.textContent.replace(/\\s+/g, ' ').trim() : null);
-  const spans = (e) => (e ? Array.from(e.querySelectorAll(':scope > span')).map(t) : []);
-  const symptomes = (racine) => Array.from(racine.querySelectorAll('.wiki-symptomes > li')).map((li) => ({
-    code: li.dataset.code, suffisant: li.dataset.suffisant, libelle: t(li.querySelector('h3')),
-    cas: t(li.querySelector('.wiki-cas')), periode: t(li.querySelector('.wiki-periode')),
-    insuffisant: t(li.querySelector('.wiki-insuffisant')), piste: t(li.querySelector('.wiki-piste')),
-    sansCause: t(li.querySelector('.wiki-sans-cause')),
-    causes: Array.from(li.querySelectorAll('.wiki-causes > li')).map((c) => ({ code: c.dataset.code,
-      texte: t(c.querySelector('.wiki-cause')),
-      remedes: Array.from(c.querySelectorAll('.wiki-remedes > li')).map((r) => ({ code: r.dataset.code, texte: t(r) })) })),
-    fourchettes: Array.from(li.querySelectorAll('details.causes-precision .causes-fourchettes > div')).map(t),
-    detailFerme: Array.from(li.querySelectorAll('details.causes-precision')).every((d) => !d.open) }));
-  const racine = document.querySelector('.wiki-page');
-  const memeModele = document.querySelector('#wiki-meme-modele');
-  const consignation = document.querySelector('#wiki-consignation');
-  return {
-    h1: t(document.querySelector('#contenu h1')),
-    fiche: document.querySelector('#wiki-lien-fiche').getAttribute('href'),
-    blocs: Array.from(racine.children).map((e) => e.id || e.className),
-    sections: Array.from(document.querySelector('#wiki-couche').children).map((e) => e.id
-      || Array.from(e.classList).filter((c) => c === 'wiki-couche-titre' || c === 'wiki-recherche').join('.')),
-    pannes: symptomes(document.querySelector('#wiki-pannes')),
-    sansPanne: t(document.querySelector('#wiki-pannes .wiki-sans-panne')),
-    mention: t(document.querySelector('#wiki-pannes .wiki-mention')),
-    pieces: Array.from(document.querySelectorAll('#wiki-pieces .wiki-pieces > li')).map((li) => ({
-      article: li.dataset.article, reference: t(li.querySelector('.wiki-ligne-tete > :first-child')),
-      designation: t(li.querySelector('.wiki-designation')), meta: spans(li.querySelector('.carte-meta')) })),
-    dernieres: Array.from(document.querySelectorAll('#wiki-dernieres .wiki-interventions > li')).map((li) => ({
-      id: li.dataset.ot, numero: t(li.querySelector('.wiki-ligne-tete > :first-child')), date: t(li.querySelector('.wiki-date')),
-      titre: t(li.querySelector('.carte-titre')), meta: spans(li.querySelector('.carte-meta')),
-      extrait: li.querySelector('.wiki-extrait') ? li.querySelector('.wiki-extrait').textContent : '' })),
-    voirAutres: document.querySelector('#wiki-voir-autres')
-      ? [document.querySelector('#wiki-voir-autres').getAttribute('href'), t(document.querySelector('#wiki-voir-autres'))] : null,
-    autres: t(document.querySelector('#wiki-autres')),
-    memeModele: memeModele ? { jumeaux: Array.from(memeModele.querySelectorAll('.wiki-jumeaux a')).map((a) => [a.getAttribute('href'), t(a)]),
-      aide: t(memeModele.querySelector('.aide')), pannes: symptomes(memeModele), mention: t(memeModele.querySelector('.wiki-mention')) } : null,
-    consignation: { texte: consignation.querySelector('.wiki-consignation-texte')
-      ? consignation.querySelector('.wiki-consignation-texte').textContent : null,
+    sups: Array.from(racine.querySelectorAll('sup.wiki-ref')).map((s) => [Number(s.textContent.trim()), s.dataset.ot]),
+    references: Array.from(racine.querySelectorAll('#wiki-references li')).map((li) => [li.id, li.dataset.ot, t(li),
+      Array.from(li.querySelectorAll('a')).map(href)]),
+    crochets: (racine.innerText.match(/\\[OT-/g) || []).length,
+    interventions: Array.from(racine.querySelectorAll('#wiki-interventions .wiki-intervention')).map((e) => [e.dataset.id,
+      t(e.querySelector('.badge.statut')), href(e.querySelector(':scope > a, td:nth-child(2) a'))]),
+    voirAutres: t(racine.querySelector('#wiki-interventions .wiki-voir-autres')),
+    attente: Array.from(racine.querySelectorAll('#wiki-en-attente li')).map((li) => [li.dataset.entree, t(li)]),
+    consignation: consignation ? { id: consignation.id, titre: t(consignation.querySelector('h2')),
+      phrase: t(consignation.querySelector('.wiki-entete-phrase')),
+      texte: consignation.querySelector('.wiki-consignation-texte') ? consignation.querySelector('.wiki-consignation-texte').textContent : null,
       absence: t(consignation.querySelector('.wiki-sans-consignation')),
-      modifier: consignation.querySelector('#wiki-modifier-consignation')
-        ? consignation.querySelector('#wiki-modifier-consignation').getAttribute('href') : null },
+      equipements: Array.from(consignation.querySelectorAll('.wiki-entete-equipements a')).map((a) => [t(a), href(a)]),
+      aide: t(consignation.querySelector('p.aide')), modifier: href(consignation.querySelector('#wiki-modifier-consignation')) } : null,
+    sousPages: Array.from(racine.querySelectorAll('#wiki-sous-pages li')).map((li) => [li.dataset.id, t(li.querySelector('a')),
+      href(li.querySelector('a'))]),
+    savoirFaire: Array.from(racine.querySelectorAll('#wiki-savoir-faire li')).map((li) => li.dataset.id),
+    retours: Array.from(racine.querySelectorAll('#wiki-retours li')).map((li) => [li.dataset.id,
+      t(li.querySelector('.wiki-ligne-corps > :first-child')), href(li.querySelector('.wiki-ligne-corps > a'))]),
+    blocsOt: Object.fromEntries(Array.from(lecture.querySelectorAll(':scope > .wiki-section')).map((s) => [s.id,
+      t(s.querySelector('.wiki-texte-ot, .wiki-lignes-page, .wiki-vide'))])),
+    liens: Array.from(new Set(Array.from(racine.querySelectorAll('a[href]')).map(href))),
+    controles: racine.querySelectorAll('input:not([type=search]), select, textarea, form').length,
   };
 }"""
 
@@ -425,6 +419,18 @@ DELAI_JS = """([selecteur, texte]) => new Promise((resoudre) => {
   champ.dispatchEvent(new Event('input', { bubbles: true }));
 })"""
 
+# Durée d'affichage d'un écran : du changement d'adresse à l'apparition de `selecteur`, image suivante comprise.
+MESURE_JS = """([route, selecteur]) => new Promise((resoudre) => {
+  const t0 = performance.now();
+  const fin = () => requestAnimationFrame(() => resoudre({ duree: performance.now() - t0,
+    elements: document.querySelectorAll('#contenu *').length }));
+  const observateur = new MutationObserver(() => {
+    if (document.querySelector(selecteur)) { observateur.disconnect(); fin(); }
+  });
+  observateur.observe(document.getElementById('contenu'), { childList: true, subtree: true });
+  location.hash = route;
+})"""
+
 # Largeur de la page et largeur visible : clientWidth, pas innerWidth — en émulation mobile, un débordement agrandit
 # la fenêtre de mise en page (innerWidth 451 pour 375 px d'écran) et la comparaison avec innerWidth ne voyait rien.
 LARGEUR_JS = "() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]"
@@ -439,6 +445,9 @@ ECRIRE_JS = """async ([table, id, valeurs]) => {
     { action: 'test des écrans du wiki' });
 }"""
 
+TRIER_TITRES_JS = """(pages) => { const fr = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
+  return pages.slice().sort((a, b) => fr.compare(a[1], b[1]) || (a[0] < b[0] ? -1 : 1)).map((p) => p[0]); }"""
+
 
 # --- valeurs attendues, calculées ici ----------------------------------------------------------------
 
@@ -446,81 +455,58 @@ def date_fr(iso):
     return "%s/%s/%s" % (iso[8:10], iso[5:7], iso[0:4]) if iso else ""
 
 
-def periode(debut, fin):
-    if not debut and not fin:
-        return ""
-    if not debut or not fin or debut == fin:
-        return "le " + date_fr(fin or debut)
-    return "du %s au %s" % (date_fr(debut), date_fr(fin))
-
-
-def pourcent(part):
-    return "%d %%" % math.floor(part * 100 + 0.5)
-
-
-def nombre_fr(valeur):
-    texte = ("%.2f" % float(valeur)).rstrip("0").rstrip(".")
-    return texte.replace(".", ",")
-
-
-def pluriel(nombre, singulier, forme_plurielle):
-    return "%d %s" % (nombre, forme_plurielle if nombre > 1 else singulier)
-
-
-def symptomes_attendus(pannes):
-    attendus = []
-    for symptome in pannes:
-        attendu = {"code": symptome["code"], "suffisant": "oui" if symptome["suffisant"] else "non",
-                   "libelle": symptome["libelle"], "cas": "%d cas" % symptome["cas"],
-                   "periode": periode(symptome["debut"], symptome["fin"]), "insuffisant": None, "piste": None,
-                   "sansCause": None, "causes": [], "fourchettes": [], "detailFerme": True}
-        if not symptome["suffisant"]:
-            attendu["insuffisant"] = "Pas encore assez de cas pour ce symptôme (%d sur 5)" % symptome["cas"]
-        elif not symptome["causes"]:
-            attendu["sansCause"] = "Aucune cause n'est renseignée sur ces cas."
-        else:
-            attendu["piste"] = MENTION_PISTE if symptome["peuDeCas"] else None
-            for cause in symptome["causes"]:
-                dernier = " · dernier cas le " + date_fr(cause["dernierCas"]) if cause["dernierCas"] else ""
-                attendu["causes"].append({
-                    "code": cause["code"],
-                    "texte": "%s — %d cas sur %d%s" % (cause["libelle"], cause["nombre"], symptome["casAvecCause"], dernier),
-                    "remedes": [{"code": remede["code"], "texte": "%s : %d fois, %s dans les 30 jours" % (
-                        remede["libelle"], remede["fois"],
-                        pluriel(remede["recidives"], "récidive", "récidives") if remede["recidives"] else "aucune récidive")}
-                        for remede in cause["remedes"]]})
-                attendu["fourchettes"].append("%s : entre %s et %s des cas" % (
-                    cause["libelle"], pourcent(cause["fourchette"]["bas"]), pourcent(cause["fourchette"]["haut"])))
-        attendus.append(attendu)
-    return attendus
+def date_heure_fr(valeur):
+    return date_fr(valeur) + (" " + valeur[11:16] if len(valeur) >= 16 else "")
 
 
 def plat(texte):
     return re.sub(r"\s+", " ", texte or "").strip()
 
 
-def ots_attendus(ots, liens):
-    return [["A", ot, "#/ot/" + ot] if liens else ["B", ot, None] for ot in ots]
+def nombre_fr(valeur, decimales=None):
+    """Nombre à la française comme UI.nombreFr (jusqu'à 2 décimales, milliers séparés)."""
+    arrondi = round(float(valeur), 2)
+    entier, _, fraction = ("%.2f" % abs(arrondi)).partition(".")
+    fraction = fraction if decimales == 2 else fraction.rstrip("0")
+    groupes = []
+    while len(entier) > 3:
+        groupes.insert(0, entier[-3:])
+        entier = entier[:-3]
+    groupes.insert(0, entier)
+    return ("-" if arrondi < 0 else "") + " ".join(groupes) + ("," + fraction if fraction else "")
 
 
-def phrase_attendue(contenu, liens):
-    """Phrase du balisage → ce que l'écran doit montrer : texte sans citations (liens gardés comme texte), OT cités
-    (liens selon le profil), liens vers les pages connues, titres inconnus en texte."""
-    titres = [titre.strip() for titre in MOTIF_LIEN.findall(contenu)]
-    texte = plat(MOTIF_LIEN.sub(lambda m: m.group(1).strip(), MOTIF_CITATION.sub(" ", contenu)))
-    return {"texte": texte, "ot": ots_attendus(citations(contenu), liens),
-            "liens": [[plat(titre), "#/wiki/" + RESOLUTIONS[titre]] for titre in titres if titre in RESOLUTIONS],
-            "absents": [plat(titre) for titre in titres if titre not in RESOLUTIONS]}
+def euro(valeur):
+    return nombre_fr(valeur, 2) + " €"
 
 
-def rubriques_attendues(texte, liens):
-    rubriques = []
-    for ligne in texte.splitlines():
-        if ligne.startswith("## "):
-            rubriques.append([ligne[3:].strip(), []])
-        elif ligne.startswith("- "):
-            rubriques[-1][1].append(phrase_attendue(ligne[2:].strip(), liens))
-    return rubriques
+def pluriel(nombre, singulier, forme_plurielle):
+    return "%d %s" % (nombre, forme_plurielle if nombre > 1 else singulier)
+
+
+def valeur_fait(fait):
+    """Valeur d'un fait à l'écran (précisions de wiki-page-ecrans.js), None si vide."""
+    valeur = fait["valeur"]
+    if valeur is None or valeur == "":
+        return None
+    if isinstance(valeur, bool):
+        return "oui" if valeur else "non"
+    if isinstance(valeur, (int, float)):
+        if fait["libelle"] == "Prix unitaire":
+            return euro(valeur)
+        if fait["libelle"] == "Taux horaire":
+            return euro(valeur) + " / h"
+        return nombre_fr(valeur)
+    texte = str(valeur)
+    if re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}", texte):
+        return date_heure_fr(texte)
+    return date_fr(texte) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", texte) else texte
+
+
+def faits_attendus(faits):
+    """Fiche attendue : [libellé, valeur, lien] des faits non vides, dans l'ordre."""
+    return [[f["libelle"], plat(valeur_fait(f)), "#/wiki/" + encoder(f["lien"]) if f["lien"] else None]
+            for f in faits if valeur_fait(f) is not None]
 
 
 def titre_equipement(ligne):
@@ -534,7 +520,7 @@ def titre_article(ligne):
 LISTES = {"machines": "Machines", "pannes": "Pannes", "articles": "Articles", "techniciens": "Techniciens",
           "savoir-faire": "Savoir-faire", "interventions": "Interventions"}
 LISTE_DU_TYPE = {"machine": "machines", "panne": "pannes", "article": "articles", "technicien": "techniciens",
-                 "savoir-faire": "savoir-faire"}
+                 "savoir-faire": "savoir-faire", "intervention": "interventions"}
 CLES_NOMBRES = {"machines": "machines", "pannes": "pannes", "articles": "articles", "techniciens": "techniciens",
                 "savoir-faire": "savoirFaire"}
 CLOTURES = ("Clôturé techniquement", "Clôturé administrativement")
@@ -544,6 +530,9 @@ LIBELLE_PIEGE = '<img src=x onerror="window.__piege = 7">Fuite <b>vive</b>'
 PIEGE_MACHINE = 'Compresseur <img src=x onerror="window.__piege = 8"><b>vis</b>'
 PIEGE_NOM = 'Moreau <img src=x onerror="window.__piege = 9"><b>gras</b>'
 ERREURS_SERVEUR = [re.compile(r"status of 404.*/api/ping"), re.compile(r"status of 404.*/api/csv/")]
+# Une page de chaque type (base d'essai) ; la page Intervention et la page Technicien ne s'ouvrent pas au demandeur.
+SIX = {"machine": "EQ-0005", "panne": "PANNE-S01", "article": "ART-0016", "technicien": "TEC-0002",
+       "intervention": "OT-2026-0214", "savoir-faire": "WP-0003"}
 
 
 def encoder(valeur):
@@ -597,7 +586,7 @@ def date_de_l_ot(ot):
     return ""
 
 
-def accueil_attendu(tables, profil):
+def accueil_attendu(tables, profil, calcul):
     """Accueil de l'encyclopédie, calculé ici à partir des tables (définitions du contrat §20.12) pour un profil."""
     ordres = tables["ordres_travail"]
     nombres = {"machines": len(tables["equipements"]), "pannes": len(compter_cas(ordres)), "articles": len(tables["articles"]),
@@ -612,10 +601,22 @@ def accueil_attendu(tables, profil):
     machines = sorted(tables["equipements"], key=lambda e: (-par_machine.get(e["id"], 0), titre_equipement(e), e["id"]))
     pannes = pannes_attendues(tables)
     clotures = sorted((o for o in ordres if o["statut"].strip() in CLOTURES), key=lambda o: (date_de_l_ot(o), o["id"]), reverse=True)
+    # Lignes des briques Articles et Techniciens : comptes du calcul Python indépendant (tests/calcul_wiki.py).
+    calcule = calcul.accueil(profil, MAINTENANT)
+    articles = calcule["articles"]
+    ligne_articles = " · ".join(p for p in (
+        "%d sous le seuil" % articles["sousLeSeuil"] if articles["sousLeSeuil"] else "",
+        "%d en rupture" % articles["enRupture"] if articles["enRupture"] else "") if p) or "Tous en stock, au-dessus du seuil"
+    habilitations = calcule["habilitations"]
+    ligne_techniciens = None if habilitations is None else " · ".join(p for p in (
+        pluriel(habilitations["suivies"], "habilitation suivie", "habilitations suivies"),
+        "%d à renouveler" % habilitations["aRenouveler"] if habilitations["aRenouveler"] else "",
+        pluriel(habilitations["echues"], "échue", "échues") if habilitations["echues"] else "") if p)
     return {"nombres": nombres, "liens": liens, "phrase": ", ".join(l[0] for l in liens[:-1]) + " et " + liens[-1][0],
             "cloturees": len(clotures), "reperes": [e["repere"] for e in machines[:3] if par_machine.get(e["id"], 0) > 0],
             "premiere_panne": (pannes[0][2], pluriel(pannes[0][3], "cas", "cas")), "dernieres": [o["id"] for o in clotures[:6]],
-            "pannes": [(p[0], [p[2], p[1]], pluriel(p[3], "cas", "cas")) for p in pannes[:5]]}
+            "pannes": [(p[0], [p[2], p[1]], pluriel(p[3], "cas", "cas")) for p in pannes[:6]],
+            "ligne_articles": ligne_articles, "ligne_techniciens": ligne_techniciens}
 
 
 def compteurs_attendus(journal, ordres):
@@ -630,15 +631,34 @@ def compteurs_attendus(journal, ordres):
             if e["ot_id"] not in dernieres or numero(e) > numero(dernieres[e["ot_id"]]):
                 dernieres[e["ot_id"]] = e
     echecs = [ot for ot, e in dernieres.items() if e["statut"] == "refusée"]
-    vus = {e["ot_id"] for e in journal if e["nature"] == "ingestion"}
     return {
         "a-valider": sum(1 for e in journal if e["statut"] == "à valider"),
         "contradictions": sum(1 for e in journal if e["statut"] == "validée"
                               for c in json.loads(e["contradictions"] or "[]") if c.get("statut") == "ouverte"),
         "file": sum(1 for e in ingestions if e["statut"] in ("en file", "à refaire")),
         "echecs": len(echecs),
-        "hors": sum(1 for o in ordres if o["statut"] == "Clôturé administrativement" and o["id"] not in vus),
     }
+
+
+def phrase_attendue(contenu):
+    """Phrase du balisage → ce que l'écran montre : texte sans citations, liens vers les pages qui s'affichent, titres
+    inconnus en texte, OT cités (petits numéros dans l'ordre de la phrase, sans doublon)."""
+    titres = [titre.strip() for titre in MOTIF_LIEN.findall(contenu)]
+    texte = plat(MOTIF_LIEN.sub(lambda m: m.group(1).strip(), MOTIF_CITATION.sub(" ", contenu)))
+    return {"texte": texte, "ot": citations(contenu),
+            "liens": [[plat(titre), "#/wiki/" + encoder(RESOLUTIONS[titre])] for titre in titres if titre in RESOLUTIONS],
+            "absents": [plat(titre) for titre in titres if titre not in RESOLUTIONS]}
+
+
+def rubriques_du_texte(texte):
+    """[(rubrique, [phrases])] du balisage stocké, dans l'ordre du texte."""
+    rubriques = []
+    for ligne in texte.splitlines():
+        if ligne.startswith("## "):
+            rubriques.append((ligne[3:].strip(), []))
+        elif ligne.startswith("- "):
+            rubriques[-1][1].append(ligne[2:].strip())
+    return rubriques
 
 
 class CasWiki(CasNavigateur):
@@ -675,10 +695,21 @@ class CasWiki(CasNavigateur):
         self.page.wait_for_selector(attendre, state="attached")
 
     def aller_page(self, equipement):
-        self.aller("#/wiki/" + equipement, '.wiki-page[data-equipement="%s"] #wiki-dernieres' % equipement)
+        self.aller("#/wiki/" + equipement, '.wiki-page[data-equipement="%s"] #wiki-interventions' % equipement)
 
-    def aller_wiki(self, identifiant):
-        self.aller("#/wiki/" + identifiant, '.wiki-page[data-page="%s"] #wiki-retours' % identifiant)
+    def aller_entite(self, identifiant):
+        """Va à la page d'une entité et attend qu'elle s'affiche, ou « Page introuvable » pour cet identifiant."""
+        self.page.evaluate("(route) => { location.hash = route; }", "#/wiki/" + encoder(identifiant))
+        self.page.wait_for_function("""(id) => document.querySelector('.wiki-page[data-page="' + CSS.escape(id) + '"] .wiki-page-grille')
+          || Array.from(document.querySelectorAll('.wiki-introuvable .vide')).some((e) => e.textContent.includes('« ' + id + ' »'))""",
+                                    arg=identifiant)
+
+    def lire(self, identifiant):
+        self.aller_entite(identifiant)
+        return self.page.evaluate(ENTITE_JS)
+
+    def entite(self, identifiant, profil):
+        return self.page.evaluate("([id, p]) => Wiki.entite(id, { profil: p })", [identifiant, profil])
 
     def aller_accueil(self):
         self.aller("#/wiki", "#wiki-accueil")
@@ -688,16 +719,6 @@ class CasWiki(CasNavigateur):
         self.page.evaluate("() => { const z = document.querySelector('#wiki-trouves'); z.textContent = ''; z.hidden = true; }")
         self.page.fill("#wiki-champ-accueil", texte)
         self.page.wait_for_selector("#wiki-trouves:not([hidden]) .wiki-trouves-titre")
-
-    def lire_page(self, identifiant):
-        self.aller_wiki(identifiant)
-        return self.page.evaluate(PAGE_WIKI_JS)
-
-    def wiki_page(self, equipement):
-        return self.page.evaluate("(id) => Wiki.pageEquipement(id)", equipement)
-
-    def wiki(self, identifiant):
-        return self.page.evaluate("(id) => Wiki.page(id, { responsable: App.estResponsable() })", identifiant)
 
     def attendre_resultats(self, racine):
         self.page.wait_for_selector("%s .wiki-portee, %s .wiki-rien" % (racine, racine))
@@ -729,6 +750,16 @@ class CasWiki(CasNavigateur):
         self.assertEqual(self.page.locator("#contenu img, #contenu script").count(), 0)
         self.assertIsNone(self.page.evaluate("window.__piege === undefined ? null : window.__piege"))
 
+    def tables(self):
+        return self.page.evaluate("""() => Object.fromEntries(['equipements', 'articles', 'techniciens', 'ordres_travail',
+          'codes_defaillance', 'wiki_pages', 'wiki_journal', 'localisations'].map((t) => [t, Donnees.lignes(t)]))""")
+
+    def calcul(self):
+        """Calcul Python indépendant (tests/calcul_wiki.py) sur les tables affichées, réécrites en CSV."""
+        tables = self.page.evaluate(TABLES_JS, list(CALCUL_TABLES))
+        return CalculWiki({nom: table_csv(sorted({c for ligne in lignes for c in ligne}), lignes) if lignes else ""
+                           for nom, lignes in tables.items()})
+
 
 # ---------------------------------------------------------------------------
 # #/wiki : accueil de l'encyclopédie (refonte 2, §20.12, T136)
@@ -743,7 +774,7 @@ class TestAccueil(CasWiki):
                 self.aller_accueil()
                 lu = page.evaluate(ACCUEIL_JS)
                 tables = self.tables()
-                attendu = accueil_attendu(tables, profil)
+                attendu = accueil_attendu(tables, profil, self.calcul())
                 donnees = page.evaluate("(p) => Wiki.accueilEncyclopedie({ profil: p })", profil)
                 # Grande tuile : pastille, phrase-résumé (le titre de l'écran), chaque nombre en lien vers sa liste
                 self.assertEqual(lu["pastille"], "Ce que l'atelier sait")
@@ -766,6 +797,16 @@ class TestAccueil(CasWiki):
                 lignes = {b["type"]: b["ligne"] for b in lu["briques"]}
                 self.assertEqual(lignes["machine"], "Le plus d'interventions : " + ", ".join(attendu["reperes"]))
                 self.assertEqual(lignes["panne"], "La plus fréquente : %s (%s)" % attendu["premiere_panne"])
+                # Articles et Techniciens : comptes du calcul Python (relecture de T136, m5)
+                self.assertEqual(lignes["article"], attendu["ligne_articles"])
+                self.assertEqual(lignes.get("technicien"), attendu["ligne_techniciens"])
+                # « : » et « · » collés au mot d'avant par une espace insécable (relecture de T136, m1 et m2)
+                bruts = {b["type"]: b["brut"] for b in lu["briques"]}
+                self.assertIn("interventions\u00a0: ", bruts["machine"])
+                self.assertIn("fréquente\u00a0: ", bruts["panne"])
+                if profil != "demandeur":
+                    self.assertNotIn(" ·", bruts["technicien"])
+                    self.assertIn("\u00a0·", bruts["technicien"])
                 # Suivi du wiki : responsable seulement
                 self.assertEqual(lu["suivi"], 1 if profil == "responsable" else 0)
                 self.assertEqual(page.locator('#contenu a[href^="#/wiki-journal"]').count(), 5 if profil == "responsable" else 0)
@@ -780,10 +821,33 @@ class TestAccueil(CasWiki):
                     self.assertEqual(ligne["liens"][0][1], "#/wiki/" + encoder(ot["equipement_id"]))
                 self.assertEqual(lu["toutes"], ([] if profil == "demandeur" else [["Toutes", "#/wiki/interventions"]])
                                  + [["Toutes", "#/wiki/pannes"]])
-                # Pannes les plus fréquentes : cinq, par nombre de cas, liens encodés
+                # Pannes les plus fréquentes : six (maquette, relecture de T136), par nombre de cas, liens encodés
+                self.assertEqual(len(lu["pannes"]), 6)
                 self.assertEqual([(p["id"], p["lien"], p["cas"]) for p in lu["pannes"]], attendu["pannes"])
                 self.assertEqual(lu["pannes"][0]["largeur"], "100%")
                 self.verifier_sans_piege()
+
+    def test_texte_d_exemple_court_au_telephone(self):
+        """Relecture de T136 (m9) : à 375 px, le texte d'exemple tient dans son champ (accueil, filtre des articles)."""
+        for profil, attendu in (("demandeur", "Machine, panne, article…"), ("technicien", "Machine, panne, OT…")):
+            with self.subTest(profil=profil):
+                page = self.ouvrir(profil, largeur=375, hauteur=812, telephone=True)
+                for selecteur in ("#wiki-champ-accueil", "#wiki-filtre-texte"):
+                    if selecteur == "#wiki-champ-accueil":
+                        self.aller_accueil()
+                        self.assertEqual(page.evaluate(ACCUEIL_JS)["exemple"], attendu)
+                    else:
+                        self.aller("#/wiki/articles", "#wiki-filtre-texte")
+                        self.assertEqual(page.get_attribute("#wiki-filtre-texte", "placeholder"), "Désignation, référence…")
+                    tient = page.evaluate("""(s) => { const champ = document.querySelector(s);
+                      const mesure = document.createElement('span'); const style = getComputedStyle(champ);
+                      mesure.style.font = style.font; mesure.style.whiteSpace = 'pre'; mesure.textContent = champ.placeholder;
+                      document.body.appendChild(mesure); const largeur = mesure.getBoundingClientRect().width; mesure.remove();
+                      return largeur <= champ.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight); }""", selecteur)
+                    self.assertTrue(tient, selecteur)
+        page = self.ouvrir("technicien", largeur=1440, hauteur=900)
+        self.aller_accueil()
+        self.assertEqual(page.evaluate(ACCUEIL_JS)["exemple"], "Chercher une machine, une panne, un article, une intervention…")
 
     def test_suivi_du_wiki_au_responsable(self):
         page = self.ouvrir("responsable", base=True)
@@ -799,6 +863,7 @@ class TestAccueil(CasWiki):
             ("echecs", "en échec", "#/wiki-journal?vue=echecs", "1")])
         self.assertEqual(page.evaluate("Wiki.accueilEncyclopedie({ profil: 'responsable' }).suivi"),
                          {"aValider": 2, "aTrancher": 3, "enEchec": 1})
+        self.assertEqual(self.calcul().suivi(), {"aValider": 2, "aTrancher": 3, "enEchec": 1})
         # Seules les actions en attente ressortent : à valider en ambre, à trancher et en échec en rouge
         self.assertEqual([m["classe"] for m in lu["minis"]], ["wiki-mini attente", "wiki-mini urgent", "wiki-mini urgent"])
         # « Traiter la file » et le journal restent au responsable, depuis le suivi
@@ -858,6 +923,8 @@ class TestAccueil(CasWiki):
         faits = page.evaluate(FAITS_JS)
         self.assertEqual(faits[0], ["Code", CODE_PIEGE, None])
         self.assertEqual(faits[1][:2], ["Cas", str(code["cas"])])
+        # Les interventions de la page mènent à la même panne (identifiant encodé, jamais le code brut)
+        self.assertIn(lien_panne(CODE_PIEGE), page.evaluate("Array.from(document.querySelectorAll('#wiki-interventions a')).map((a) => a.getAttribute('href'))"))
         self.verifier_sans_piege()
         self.aller("#/wiki/pannes", ".wiki-liste-entites[data-liste=pannes]")
         self.assertEqual(page.evaluate("""() => { const a = document.querySelector('.wiki-ligne .wiki-ligne-corps > a');
@@ -891,17 +958,13 @@ class TestAccueil(CasWiki):
         self.assertTrue(nom.endswith(PIEGE_NOM))
         for route, selecteur, attendu in (("#/wiki/machines", 'li[data-id="EQ-0001"] .wiki-ligne-corps > a', "CP-01 — " + PIEGE_MACHINE),
                                           ("#/wiki/techniciens", 'li[data-id="TEC-0001"] h2', nom),
-                                          ("#/wiki/savoir-faire", 'li[data-id="WP-0011"] .wiki-ligne-corps > a', TITRE_PIEGE),
+                                          ("#/wiki/savoir-faire", 'li[data-id="WP-0006"] .wiki-ligne-corps > a', TITRE_PIEGE),
                                           ("#/wiki/pannes", ".wiki-ligne .wiki-ligne-corps > a", LIBELLE_PIEGE),
-                                          ("#/wiki/TEC-0001", "#contenu h1", nom)):
+                                          ("#/wiki/TEC-0001", "#contenu h1", nom), ("#/wiki/EQ-0001", "#contenu h1", "CP-01 — " + PIEGE_MACHINE)):
             with self.subTest(route=route):
                 self.aller(route, selecteur)
                 self.assertEqual(page.evaluate("(s) => document.querySelector(s).textContent", selecteur), attendu)
                 self.verifier_sans_piege()
-
-    def tables(self):
-        return self.page.evaluate("""() => Object.fromEntries(['equipements', 'articles', 'techniciens', 'ordres_travail',
-          'codes_defaillance', 'wiki_pages', 'wiki_journal', 'localisations'].map((t) => [t, Donnees.lignes(t)]))""")
 
 
 # ---------------------------------------------------------------------------
@@ -910,15 +973,17 @@ class TestAccueil(CasWiki):
 
 class TestListes(CasWiki):
 
-    tables = TestAccueil.tables
-
-    def lire(self, liste):
+    def lire_liste(self, liste, tout=False):
         self.aller("#/wiki/" + liste, '.wiki-liste-entites[data-liste="%s"]' % liste)
+        if tout and self.page.locator(".wiki-liste-entites .wiki-voir-autres").count():
+            self.page.click(".wiki-liste-entites .wiki-voir-autres")
+            self.page.wait_for_selector(".wiki-liste-entites .wiki-voir-autres", state="detached")
         return self.page.evaluate(LISTE_JS)
 
     def test_six_listes_pour_les_trois_profils(self):
         for profil in ("demandeur", "technicien", "responsable"):
             page = self.ouvrir(profil, base=True)
+            calcul = self.calcul()
             tables = self.tables()
             francais = lambda paires: page.evaluate(TRIER_TITRES_JS, paires)  # noqa: E731
             attendus = {
@@ -928,12 +993,13 @@ class TestListes(CasWiki):
                 "techniciens": francais([[t["id"], (t["prenom"] + " " + t["nom"]).strip()] for t in tables["techniciens"]]),
                 "savoir-faire": francais([[p["id"], p["titre"]] for p in tables["wiki_pages"]
                                           if p["type"] == "savoir-faire" and p["statut"] != "archivée"]),
-                "interventions": page.evaluate("Wiki.listeEntites('intervention', { profil: 'responsable' }).map((o) => o.id)"),
+                # Ordre des interventions : celui du calcul Python indépendant (relecture de T136, m5)
+                "interventions": [e["id"] for e in calcul.liste_entites("intervention", "responsable", MAINTENANT)],
             }
-            self.assertEqual(len(attendus["savoir-faire"]), 5)
+            self.assertEqual(sorted(attendus["savoir-faire"]), SAVOIR_FAIRE_ACTIFS)
             for liste, ids in attendus.items():
                 with self.subTest(profil=profil, liste=liste):
-                    lu = self.lire(liste)
+                    lu = self.lire_liste(liste, tout=True)
                     self.assertEqual(lu["titre"], LISTES[liste])
                     self.assertEqual(lu["fil"], [["Wiki", "#/wiki"], [LISTES[liste], None]])
                     if profil == "demandeur" and liste in ("techniciens", "interventions"):
@@ -955,7 +1021,7 @@ class TestListes(CasWiki):
 
     def test_machines_par_lieu_et_sous_ensembles(self):
         page = self.ouvrir("demandeur")
-        lu = self.lire("machines")
+        lu = self.lire_liste("machines")
         tables = self.tables()
         equipements = {e["id"]: e for e in tables["equipements"]}
         lieux = {l["id"]: l for l in tables["localisations"]}
@@ -991,7 +1057,7 @@ class TestListes(CasWiki):
 
     def test_pannes_par_nombre_de_cas(self):
         page = self.ouvrir("technicien")
-        lu = self.lire("pannes")
+        lu = self.lire_liste("pannes")
         attendues = pannes_attendues(self.tables())
         self.assertEqual([l[:3] for l in lu["lignes"]], [[i, lien, libelle] for i, lien, libelle, _ in attendues])
         self.assertEqual(page.evaluate("Array.from(document.querySelectorAll('.wiki-ligne-droite')).map((e) => e.textContent)"),
@@ -999,14 +1065,16 @@ class TestListes(CasWiki):
 
     def test_articles_filtrables_avec_l_etat_du_stock(self):
         page = self.ouvrir("technicien")
-        self.lire("articles")
-        articles = {a["articleId"]: a for a in page.evaluate("Wiki.listeEntites('article', { profil: 'technicien' })")}
+        self.lire_liste("articles")
+        # État et stock : ceux du calcul Python indépendant, qui rejoue les mouvements (relecture de T136, m5)
+        articles = {a["articleId"]: a for a in self.calcul().liste_entites("article", "technicien", MAINTENANT)}
         lignes = page.evaluate(ARTICLES_JS)
         self.assertEqual(len(lignes), 52)
         classes = {"en stock": "ok", "sous le seuil": "attention", "rupture": "ko"}
         for ident, _, etat, classe, nombre in lignes:
             article = articles[ident]
-            self.assertEqual(etat, page.evaluate("(a) => UI.nombreFr(a.stock) + ' ' + a.unite + ' · ' + a.etat", article))
+            self.assertEqual(plat(etat), plat("%s%s · %s" % (nombre_fr(article["stock"]), " " + article["unite"] if article["unite"] else "",
+                                                              article["etat"])), ident)
             self.assertIn(classes[article["etat"]], classe.split())
             self.assertEqual(nombre, str(article["interventions"]))
         self.assertGreater(sum(1 for a in articles.values() if a["etat"] != "en stock"), 0)
@@ -1024,80 +1092,59 @@ class TestListes(CasWiki):
         self.assertEqual(sorted(l[0] for l in page.evaluate(ARTICLES_JS)), attendus)
 
     def test_articles_et_interventions_en_cartes_au_telephone(self):
+        """Au téléphone : articles en cartes ; interventions, seules les 40 premières cartes créées, les autres au clic."""
         page = self.ouvrir("technicien", largeur=375, hauteur=812, telephone=True)
-        self.lire("articles")
+        self.lire_liste("articles")
         self.assertEqual(page.locator("#wiki-articles .liste-cartes > li > a").count(), 52)
         page.fill("#wiki-filtre-texte", "courroie")
         page.wait_for_function("document.querySelectorAll('#wiki-articles .liste-cartes > li').length < 52")
         self.assertTrue(all("ourroie" in t for t in page.eval_on_selector_all("#wiki-articles .carte-titre", "e => e.map((x) => x.textContent)")))
-        self.lire("interventions")
-        total = page.evaluate("Wiki.listeEntites('intervention').length")
-        caches = page.eval_on_selector_all(".wiki-carte-intervention", "e => e.map((x) => x.hidden)")
-        self.assertEqual(caches, [rang >= 40 for rang in range(total)])
+        self.lire_liste("interventions")
+        ordre = [e["id"] for e in self.calcul().liste_entites("intervention", "technicien", MAINTENANT)]
+        total = len(ordre)
+        self.assertGreater(total, 40)
+        cartes = lambda: page.eval_on_selector_all(".wiki-carte-intervention", "e => e.map((x) => x.dataset.id)")  # noqa: E731
+        self.assertEqual(cartes(), ordre[:40])                               # créées : les 40 premières seulement
+        self.assertEqual(page.locator(".wiki-carte-intervention[hidden]").count(), 0)
         bouton = page.locator(".wiki-voir-autres")
         self.assertEqual(bouton.inner_text().strip(), "Voir les %d autres interventions" % (total - 40))
         bouton.click()
-        self.assertEqual(page.eval_on_selector_all(".wiki-carte-intervention[hidden]", "e => e.length"), 0)
+        self.assertEqual(cartes(), ordre)
+        self.assertEqual(page.locator(".wiki-voir-autres").count(), 0)
 
     def test_interventions_ouvertes_en_tete_avec_leur_statut(self):
+        """PC : les 100 premières lignes, « Voir les n autres » ajoute les autres ; ordre et statut du calcul Python."""
         page = self.ouvrir("responsable")
-        self.lire("interventions")
+        lu = self.lire_liste("interventions")
+        attendues = self.calcul().liste_entites("intervention", "responsable", MAINTENANT)
+        total = len(attendues)
+        self.assertGreater(total, 100)
         lignes = page.evaluate(INTERVENTIONS_JS)
-        tables = self.tables()
-        ordres = {o["id"]: o for o in tables["ordres_travail"]}
-        self.assertEqual(len(lignes), len(ordres))
-        self.assertEqual([l["id"] for l in lignes], page.evaluate("Wiki.listeEntites('intervention').map((o) => o.id)"))
+        self.assertEqual([l["id"] for l in lignes], [e["id"] for e in attendues[:100]])
+        self.assertEqual(lu["nombre"], str(total))
+        self.assertEqual(lu["bouton"], "Voir les %d autres interventions" % (total - 100))
+        page.click(".wiki-liste-entites .wiki-voir-autres")
+        page.wait_for_function("(n) => document.querySelectorAll('#wiki-interventions tbody tr').length === n", arg=total)
+        lignes = page.evaluate(INTERVENTIONS_JS)
+        self.assertEqual([l["id"] for l in lignes], [e["id"] for e in attendues])
+        self.assertEqual(page.locator(".wiki-liste-entites .wiki-voir-autres").count(), 0)
         statuts = [l["statut"] for l in lignes]
-        self.assertEqual(statuts, [ordres[l["id"]]["statut"] for l in lignes])          # le statut sur chaque ligne
+        self.assertEqual(statuts, [e["statut"] for e in attendues])                     # le statut sur chaque ligne
         ouverts = [s in OUVERTS for s in statuts]
         self.assertTrue(any(ouverts) and not all(ouverts))
         self.assertEqual(ouverts, sorted(ouverts, reverse=True))                         # les ouverts en tête
         self.assertEqual(statuts[0], "En cours")
+        tables = self.tables()
+        ordres = {o["id"]: o for o in tables["ordres_travail"]}
         fermes = [l["id"] for l in lignes if l["statut"] not in OUVERTS]
         self.assertEqual(fermes, sorted(fermes, key=lambda i: (date_de_l_ot(ordres[i]), i), reverse=True))
-        cas = {code for code, _ in compter_cas(tables["ordres_travail"]).items()}
+        cas = set(compter_cas(tables["ordres_travail"]))
         for ligne in lignes:
             ot = ordres[ligne["id"]]
             self.assertEqual(ligne["lien"], "#/wiki/" + encoder(ot["id"]))
             self.assertEqual(ligne["machine"], "#/wiki/" + encoder(ot["equipement_id"]))
             code = ot["symptome_code"].strip()
             self.assertEqual(ligne["panne"], lien_panne(code) if code in cas else None, ot["id"])
-
-    def test_pages_panne_technicien_intervention(self):
-        """Rendu minimal (T136, en attendant T137) : titre, fiche des faits, liens ; rien pour le demandeur qui ne les voit pas."""
-        for profil in ("demandeur", "technicien", "responsable"):
-            with self.subTest(profil=profil):
-                page = self.ouvrir(profil)
-                tables = self.tables()
-                code, libelle, cas = sorted(((c, l, n) for c, n in compter_cas(tables["ordres_travail"]).items()
-                                             for l in [libelle_symptome(tables, c)]), key=lambda x: (-x[2], x[0]))[0]
-                self.lire("pannes")
-                page.click(".wiki-ligne .wiki-ligne-corps > a")
-                page.wait_for_selector('.wiki-entite[data-type="panne"]')
-                self.assertEqual(page.inner_text("#contenu h1").strip(), libelle)
-                self.assertEqual(page.evaluate(FIL_JS), [["Wiki", "#/wiki"], ["Pannes", "#/wiki/pannes"]])
-                faits = page.evaluate(FAITS_JS)
-                self.assertEqual([f[:2] for f in faits[:3]], [["Code", code], ["Cas", str(cas)],
-                                                               ["Machines touchées", str(len({o["equipement_id"] for o in tables["ordres_travail"] if est_un_cas(o) and o["symptome_code"].strip() == code}))]])
-                ot = [o for o in tables["ordres_travail"] if est_un_cas(o)][0]
-                if profil == "demandeur":
-                    for ident in ("TEC-0001", ot["id"]):
-                        self.aller("#/wiki/" + ident, ".wiki-introuvable")
-                    continue
-                self.aller("#/wiki/TEC-0001", '.wiki-entite[data-page="TEC-0001"]')
-                technicien = [t for t in tables["techniciens"] if t["id"] == "TEC-0001"][0]
-                self.assertEqual(page.inner_text("#contenu h1").strip(), (technicien["prenom"] + " " + technicien["nom"]).strip())
-                libelles = [f[0] for f in page.evaluate(FAITS_JS)]
-                self.assertEqual("Taux horaire" in libelles, profil == "responsable")
-                self.aller("#/wiki/" + ot["id"], '.wiki-entite[data-page="%s"]' % ot["id"])
-                self.assertEqual(page.inner_text("#contenu h1").strip(), ot["id"] + " — " + ot["titre"])
-                self.assertEqual(page.get_attribute("#wiki-fiche-ot", "href"), "#/ot/" + ot["id"])
-                faits = {f[0]: f for f in page.evaluate(FAITS_JS)}
-                self.assertEqual(faits["Machine"][2], "#/wiki/" + ot["equipement_id"])
-                self.assertEqual(faits["Panne"][2], lien_panne(ot["symptome_code"].strip()))
-                self.assertEqual(faits["Statut"][1], ot["statut"])
-                page.click("#wiki-fiche-ot")
-                page.wait_for_function("(id) => location.hash === '#/ot/' + id", arg=ot["id"])
 
 
 # ---------------------------------------------------------------------------
@@ -1115,17 +1162,18 @@ class TestRechercheAccueil(CasWiki):
                 lus = page.evaluate(TROUVES_JS)
                 attendus = page.evaluate("""([t, p]) => Wiki.chercherEntites(t, { profil: p }).groupes.map((g) => ({ type: g.type,
                   ids: g.entites.map((e) => e.lien) }))""", ["pompe", profil])
-                self.assertEqual([(l["type"], l["ids"]) for l in lus], [(a["type"], a["ids"]) for a in attendus])
+                # Seules les 6 premières entités d'un groupe sont créées (D101)
+                self.assertEqual([(l["type"], l["ids"]) for l in lus], [(a["type"], a["ids"][:6]) for a in attendus])
                 self.assertEqual([l["type"] for l in lus], ["machine"] + ([] if profil == "demandeur" else ["intervention"]))
                 # Machines : calcul fait ici (un mot du nom commence par « pompe »), par titre
                 equipements = page.evaluate("Donnees.lignes('equipements')")
                 machines = sorted((titre_equipement(e), e["id"]) for e in equipements
                                   if any(m.startswith("pompe") for m in mots_comparables(titre_equipement(e))))
-                self.assertEqual(lus[0]["ids"], [i for _, i in machines])
+                self.assertEqual(lus[0]["ids"], [i for _, i in machines][:6])
                 self.assertEqual(lus[0]["titre"], "Machines · %d" % len(machines))
                 for groupe in lus:
                     self.assertEqual(groupe["liens"], ["#/wiki/" + encoder(i) for i in groupe["ids"]])
-                    self.assertEqual(groupe["caches"], [rang >= 6 for rang in range(len(groupe["ids"]))])
+                    self.assertEqual(groupe["caches"], 0)
                 # Puis les interventions clôturées et les textes du wiki : Wiki.rechercher, numéros d'OT sans lien au demandeur
                 plein = page.evaluate(RESULTATS_JS, "#wiki-trouves")
                 attendu = page.evaluate(ATTENDU_RECHERCHE_JS, ["pompe", ""])
@@ -1158,11 +1206,16 @@ class TestRechercheAccueil(CasWiki):
         self.chercher_accueil("ot")
         groupe = [g for g in page.evaluate(TROUVES_JS) if g["type"] == "intervention"][0]
         total = page.evaluate("Donnees.lignes('ordres_travail').length")
-        self.assertEqual(len(groupe["ids"]), total)
+        attendus = page.evaluate("() => Wiki.chercherEntites('ot', { profil: 'technicien' }).groupes.find((g) => g.type === 'intervention').entites.map((e) => e.lien)")
+        self.assertEqual(len(attendus), total)
+        self.assertEqual(groupe["ids"], attendus[:6])                      # les 6 premières créées, rien de caché
         self.assertEqual(groupe["bouton"], "Voir les %d autres interventions" % (total - 6))
         page.click('#wiki-trouves .wiki-groupe[data-type="intervention"] .wiki-voir-autres')
-        self.assertEqual(page.eval_on_selector_all('#wiki-trouves .wiki-groupe[data-type="intervention"] li[hidden]', "e => e.length"), 0)
+        groupe = [g for g in page.evaluate(TROUVES_JS) if g["type"] == "intervention"][0]
+        self.assertEqual((groupe["ids"], groupe["bouton"]), (attendus, None))
+        # Rien trouvé : un seul titre (relecture de T136, m8)
         self.chercher_accueil("zzqxw")
+        self.assertEqual(page.eval_on_selector_all("#wiki-trouves h2", "e => e.map((x) => x.textContent.trim())"), ["Rien trouvé pour « zzqxw »."])
         self.assertEqual(page.inner_text("#wiki-trouves .wiki-rien").strip(), "Rien trouvé pour « zzqxw ».")
         # Effacer le champ cache les résultats ; Entrée cherche tout de suite (sans attendre 300 ms)
         page.fill("#wiki-champ-accueil", "")
@@ -1174,351 +1227,436 @@ class TestRechercheAccueil(CasWiki):
 
 
 # ---------------------------------------------------------------------------
-# Encyclopédie : 1440 et 375 px, zones tactiles, contrastes, réseau
+# #/wiki/<id> : la page d'une entité, six types, trois profils (refonte 2, §20.12, T137)
 # ---------------------------------------------------------------------------
 
-class TestAffichageEncyclopedie(CasWiki):
-
-    def parcourir(self, verifier, profil):
-        """Accueil, recherche (tout ouvert), six listes, pages Panne, Technicien et Intervention."""
-        page = self.page
-        self.aller_accueil()
-        verifier("#contenu", "accueil")
-        self.chercher_accueil("pompe")
-        for bouton in page.locator("#wiki-trouves .wiki-voir-autres, #wiki-trouves .wiki-voir-plus").all():
-            bouton.click()
-        verifier("#contenu", "accueil, recherche")
-        for liste in LISTES:
-            self.aller("#/wiki/" + liste, '.wiki-liste-entites[data-liste="%s"]' % liste)
-            verifier("#contenu", "liste " + liste)
-        idents = [page.evaluate("Wiki.listeEntites('panne')[0].id")]
-        if profil != "demandeur":
-            idents += ["TEC-0001", page.evaluate("Wiki.listeEntites('intervention')[0].id")]
-        for ident in idents:
-            self.aller("#/wiki/" + encoder(ident), '.wiki-entite[data-page="%s"]' % ident)
-            verifier("#contenu", "page " + ident)
-
-    def verifier_largeur(self, ou):
-        largeur, ecran = self.page.evaluate(LARGEUR_JS)
-        self.assertLessEqual(largeur, ecran, "%s : page plus large que l'écran (%s > %s)" % (ou, largeur, ecran))
-
-    def test_1440_et_375_px_sans_defilement_horizontal_et_zones_de_48_px(self):
-        for largeur, hauteur, telephone in ((1440, 900, False), (375, 812, True)):
-            for profil in ("responsable", "technicien", "demandeur"):
-                with self.subTest(largeur=largeur, profil=profil):
-                    self.ouvrir(profil, largeur=largeur, hauteur=hauteur, telephone=telephone, base=True)
-
-                    def verifier(racine, ou):
-                        self.verifier_largeur(ou)
-                        if telephone:
-                            zones = self.page.evaluate(ZONES_JS, racine)
-                            self.assertGreater(len(zones), 0, ou)
-                            self.assertEqual([z for z in zones if z[2] < 47.5], [], "%s : zones de moins de 48 px" % ou)
-                    self.parcourir(verifier, profil)
-
-    def test_contrastes_aa_en_theme_clair_et_sombre(self):
-        for theme in ("clair", None):
-            for profil, largeur, hauteur, telephone in (("responsable", 1440, 900, False), ("demandeur", 375, 812, True)):
-                with self.subTest(theme=theme or "sombre", profil=profil):
-                    page = self.ouvrir(profil, largeur=largeur, hauteur=hauteur, theme=theme, telephone=telephone, base=True)
-                    self.assertEqual(page.evaluate("document.documentElement.dataset.theme || null"), theme)
-
-                    def verifier(racine, ou):
-                        page.wait_for_timeout(100)
-                        self.assertEqual(page.evaluate(AUDIT_TEXTES_JS, racine), [], ou)
-                    self.parcourir(verifier, profil)
-
-    def test_focus_visible_sur_la_recherche_et_les_briques(self):
-        page = self.ouvrir("responsable", largeur=1440, hauteur=900)
-        self.aller_accueil()
-        for selecteur in ("#wiki-champ-accueil", '#wiki-phrase-resume a[data-liste="machines"]', ".wiki-brique", ".wiki-mini"):
-            with self.subTest(selecteur=selecteur):
-                page.focus(selecteur)
-                page.keyboard.press("Shift+Tab")
-                page.keyboard.press("Tab")
-                style = page.evaluate("""(s) => { const e = document.activeElement; const c = getComputedStyle(e);
-                  return [e.matches(s), e.matches(':focus-visible'), c.outlineStyle, parseFloat(c.outlineWidth)]; }""", selecteur)
-                self.assertEqual(style[:3], [True, True, "solid"])
-                self.assertGreaterEqual(style[3], 2)
-
-    def test_aucun_appel_reseau_pour_afficher_ou_chercher(self):
-        page = self.ouvrir("responsable", base=True)
-        requetes = []
-        page.on("request", lambda requete: requetes.append(requete.url))
-        page.evaluate("""() => { window.__appels = [];
-            const noter = (nom) => function () { window.__appels.push(nom); throw new Error('appel réseau interdit : ' + nom); };
-            window.fetch = noter('fetch'); XMLHttpRequest.prototype.open = noter('xhr');
-            navigator.sendBeacon = noter('beacon'); window.WebSocket = noter('websocket'); window.EventSource = noter('eventsource'); }""")
-        self.parcourir(lambda racine, ou: None, "responsable")
-        self.assertEqual(page.evaluate("window.__appels"), [])
-        self.assertEqual([u for u in requetes if not u.startswith(("blob:", "data:"))], [])
-
-    def test_aucune_requete_api_en_mode_serveur(self):
-        """Mode serveur : afficher l'accueil, les listes, les pages et chercher ne fait aucune requête /api/ (la surveillance
-        des autres postes, /api/versions toutes les 20 s, n'est pas un affichage)."""
-        for motif in ERREURS_SERVEUR:
-            self.autoriser_erreur(motif)
-        with ServeurPrevo() as serveur:
-            self.contexte.close()
-            self.contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1440, "height": 900})
-            preregler_profil(self.contexte, "responsable")
-            self.page = self.contexte.new_page()
-            self.surveiller(self.page)
-            self.page.goto(serveur.url + "/")
-            attendre_pret(self.page, 30000)
-            self.assertEqual(self.page.evaluate("App.mode"), "serveur")
-            requetes = []
-            self.page.on("request", lambda requete: requetes.append(requete.url))
-            self.parcourir(lambda racine, ou: self.assertEqual(
-                [u for u in requetes if "/api/" in u and "/api/versions" not in u], [], ou), "responsable")
+REFERENCES_PO02 = ["OT-2026-0214", "OT-2025-0030", "OT-2025-0010", "OT-2025-0044", "OT-2026-0026", "OT-2026-0098"]
+REFERENCES_SF = ["OT-2025-0030", "OT-2026-0133", "OT-2026-0098", "OT-2026-0058"]
+REFERENCES_CP01 = ["OT-2026-0161", "OT-2026-0171"]
+SECTIONS = {
+    "machine": ["texte:En bref", "wiki-pannes", "wiki-interventions", "carte wiki-recherche", "wiki-articles", "wiki-savoir-faire",
+                "texte:Astuces", "wiki-preventif"],
+    "panne": ["wiki-calcule", "wiki-panne-machines", "wiki-causes", "wiki-remedes", "wiki-articles-changes", "wiki-interventions"],
+    "article": ["texte:À quoi il sert", "wiki-stock", "wiki-montee", "wiki-consomme-sur", "wiki-interventions", "wiki-savoir-faire"],
+    "technicien": ["wiki-calcule", "wiki-habilitations", "wiki-interventions"],
+    "intervention": ["wiki-demande", "wiki-travail", "wiki-compte-rendu", "wiki-astuce", "wiki-pieces", "wiki-temps", "wiki-cite-dans"],
+    "savoir-faire": ["texte:Quand le faire", "texte:Étapes", "texte:Pièges"],
+}
+TYPES_ENTITES = {"machine": ("Machine", "Machines"), "panne": ("Panne", "Pannes"), "article": ("Article", "Articles"),
+                 "technicien": ("Technicien", "Techniciens"), "intervention": ("Intervention", "Interventions"),
+                 "savoir-faire": ("Savoir-faire", "Savoir-faire")}
+LIENS_HORS_WIKI = re.compile(r"^#/(wiki|wiki-journal\?entree=WJ-\d+|wiki-ecrire/.+|equipement/[^/]+(/modifier)?|magasin/article/[^/]+|ot/[^/]+)$")
 
 
-# ---------------------------------------------------------------------------
-# #/wiki/<id> : les quatre types (base d'essai)
-# ---------------------------------------------------------------------------
+class TestPagesEntites(CasWiki):
+    """Page d'une entité : en-tête, en tête de page, sections, fiche des faits, textes, références, visibilité, liens."""
 
-class TestPagesDuWiki(CasWiki):
+    def verifier_entete(self, lu, type_, entite):
+        libelle, liste = TYPES_ENTITES[type_]
+        self.assertEqual((lu["id"], lu["type"]), (entite["id"], type_))
+        self.assertEqual(lu["fil"][:2], [["Wiki", "#/wiki"], [liste, "#/wiki/" + LISTE_DU_TYPE[type_]]])
+        self.assertIn("wiki-t-" + type_, lu["puce"])
+        titre = entite["id"] + " — " + entite["titre"] if type_ == "intervention" else entite["titre"]
+        self.assertEqual(lu["h1Brut"], titre)
 
-    def verifier_texte(self, lu, texte, liens, origine):
-        self.assertEqual(lu["origine"], origine)
-        self.assertIsNone(lu["sansTexte"])
-        self.assertEqual(lu["rubriques"], rubriques_attendues(texte, liens))
+    def test_six_types_pour_les_trois_profils(self):
+        for profil in ("demandeur", "technicien", "responsable"):
+            page = self.ouvrir(profil, base=True)
+            calcul = self.calcul()
+            for type_, identifiant in SIX.items():
+                with self.subTest(profil=profil, type=type_):
+                    lu = self.lire(identifiant)
+                    if profil == "demandeur" and type_ in ("technicien", "intervention"):      # D114 : pas de page pour lui
+                        self.assertEqual((lu.get("introuvable"), lu["h1"]), (True, "Page introuvable"))
+                        self.assertIsNone(self.entite(identifiant, profil))
+                        continue
+                    entite = self.entite(identifiant, profil)
+                    self.verifier_entete(lu, type_, entite)
+                    # Fiche des faits : Wiki.entite ET le calcul Python indépendant (faits vides omis, valeurs à la française)
+                    self.assertEqual(lu["faits"][:len(faits_attendus(entite["faits"]))] if type_ != "machine"
+                                     else [f for f in lu["faits"] if f[0] != "Sous-ensembles"], faits_attendus(entite["faits"]))
+                    self.assertEqual(faits_attendus(entite["faits"]), faits_attendus(calcul.entite(identifiant, profil, MAINTENANT)["faits"]))
+                    # Sections dans l'ordre du type ; consignation et « À trancher » en tête de page
+                    self.assertEqual([s for s in lu["sections"] if s not in ("wiki-en-attente", "wiki-retours", "wiki-references")],
+                                     SECTIONS[type_])
+                    self.assertEqual(lu["blocs"][0], "entete-page wiki-entete-entite")
+                    self.assertEqual(lu["blocs"][-1], "wiki-page-grille")
+                    if lu["alertes"]:
+                        self.assertEqual((lu["blocs"][1], lu["enTete"]), ("wiki-alertes", True))
+                    attendues = {"machine": ["wiki-consignation", "wiki-a-trancher"], "savoir-faire": ["wiki-entete", "wiki-a-trancher"]}
+                    self.assertEqual(lu["alertes"], attendues.get(type_, []))
+                    # Références à la fin, jamais [OT-…] à l'écran
+                    self.assertEqual(lu["crochets"], 0)
+                    if lu["references"]:
+                        self.assertEqual(lu["sections"][-1], "wiki-references")
+                    # Interventions de la page : dans l'ordre de Wiki.entite (= calcul Python), avec leur statut
+                    if "wiki-interventions" in SECTIONS[type_]:
+                        ordre = calcul.entite(identifiant, profil, MAINTENANT)["sections"]["interventions"]
+                        self.assertEqual([i[0] for i in lu["interventions"]], [o["id"] for o in ordre][:10])
+                        self.assertEqual([i[1] for i in lu["interventions"]], [o["statut"] for o in ordre][:10])
+                        self.assertEqual([i[2] for i in lu["interventions"]],
+                                         [None if profil == "demandeur" else "#/wiki/" + o["id"] for o in ordre][:10])
+                    # Visibilité (D114) : prix au technicien et au responsable, taux horaire au responsable seul
+                    libelles = [f[0] for f in lu["faits"]]
+                    if type_ == "article":
+                        self.assertEqual("Prix unitaire" in libelles, profil != "demandeur")
+                        self.assertEqual("€" in page.inner_text("#contenu"), profil != "demandeur")
+                    if type_ == "technicien":
+                        self.assertEqual("Taux horaire" in libelles, profil == "responsable")
+                    if profil == "demandeur":
+                        self.assertEqual([h for h in lu["liens"] if h.startswith(("#/wiki/TEC-", "#/wiki/OT-", "#/ot", "#/magasin"))], [])
+                        self.assertEqual(page.locator("#contenu sup.wiki-ref a").count(), 0)
+                    # Actions : fiche de l'équipement, de l'article (pas au demandeur), de l'OT ; « Modifier » au responsable
+                    actions = {a[0]: a[2] for a in lu["actions"]}
+                    if type_ == "machine":
+                        self.assertEqual(actions.get("wiki-lien-fiche"), "#/equipement/EQ-0005")
+                    if type_ == "article":
+                        self.assertEqual(actions.get("wiki-lien-fiche"), None if profil == "demandeur" else "#/magasin/article/ART-0016")
+                    if type_ == "intervention":
+                        self.assertEqual(actions.get("wiki-fiche-ot"), "#/ot/OT-2026-0214")
+                    self.assertEqual(actions.get("wiki-modifier"), "#/wiki-ecrire/" + identifiant
+                                     if profil == "responsable" and type_ in ("machine", "article", "savoir-faire") else None)
+                    self.verifier_sans_piege()
 
-    def verifier_retours(self, lu, identifiant, attendus):
-        self.assertEqual([r[0] for r in lu["retours"]], [r[0] for r in attendus])
-        self.assertEqual(lu["retours"], [[i, plat(titre), "#/wiki/" + i, TYPES[type_]] for i, titre, type_ in attendus])
-        self.assertEqual(lu["nombreRetours"], str(len(attendus)))
-        self.assertEqual(lu["sansRetour"], None if attendus else "Aucune page ne renvoie ici pour l'instant.")
-        calcules = self.wiki(identifiant)["retours"]
-        self.assertEqual([[r["id"], r["titre"], r["type"]] for r in calcules], [list(r) for r in attendus])
+    def test_petits_numeros_et_references(self):
+        for profil in ("technicien", "demandeur"):
+            page = self.ouvrir(profil, base=True)
+            for identifiant, attendus in (("EQ-0005", REFERENCES_PO02), ("WP-0003", REFERENCES_SF), ("EQ-0001", REFERENCES_CP01)):
+                with self.subTest(profil=profil, page=identifiant):
+                    lu = self.lire(identifiant)
+                    entite = self.entite(identifiant, profil)
+                    # Numérotés dans l'ordre d'apparition sur la page (« À trancher » en tête, puis les textes), un OT garde
+                    # son numéro ; égaux à Wiki.entite().references
+                    premiers = []
+                    for numero, ot in lu["sups"]:
+                        if ot not in premiers:
+                            premiers.append(ot)
+                    self.assertEqual(premiers, attendus)
+                    self.assertEqual([r["id"] for r in entite["references"]], attendus)
+                    self.assertEqual({ot: numero for numero, ot in lu["sups"]}, {ot: rang + 1 for rang, ot in enumerate(attendus)})
+                    ordres = {o["id"]: o for o in page.evaluate("Donnees.lignes('ordres_travail')")}
+                    for ref in entite["references"]:
+                        ot = ordres[ref["id"]]
+                        self.assertEqual(ref["date"], date_de_l_ot(ot)[:10])
+                    # Bulle « <OT> · <date> · <titre> » ; lien vers la page de l'OT, sans lien pour le demandeur
+                    sups = page.evaluate("""() => Array.from(document.querySelectorAll('#contenu sup.wiki-ref')).map((s) => [s.dataset.ot,
+                      s.firstElementChild.tagName, s.firstElementChild.getAttribute('href'), s.firstElementChild.getAttribute('title')])""")
+                    for ot, balise, lien, bulle in sups:
+                        self.assertEqual(bulle, "%s · %s · %s" % (ot, date_fr(date_de_l_ot(ordres[ot])[:10]), ordres[ot]["titre"]))
+                        self.assertEqual((balise, lien), ("SPAN", None) if profil == "demandeur" else ("A", "#/wiki/" + ot))
+                    # « Références » : numéro, OT, date, machine, titre — dans l'ordre des numéros
+                    self.assertEqual([r[:2] for r in lu["references"]], [["wiki-ref-%d" % (rang + 1), ot] for rang, ot in enumerate(attendus)])
+                    for (_, ot, texte, liens) in lu["references"]:
+                        o = ordres[ot]
+                        repere = page.evaluate("(id) => Donnees.trouver('equipements', id).repere", o["equipement_id"])
+                        self.assertEqual(texte, plat("%s · %s · %s · %s" % (ot, date_fr(date_de_l_ot(o)[:10]), repere, o["titre"])))
+                        self.assertEqual(liens, (["#/wiki/" + o["equipement_id"]] if profil == "demandeur"
+                                                 else ["#/wiki/" + ot, "#/wiki/" + o["equipement_id"]]))
+                    # Jamais [OT-…] à l'écran ; le balisage stocké ne change pas
+                    self.assertEqual(lu["crochets"], 0)
+                    self.assertNotIn("[OT-", page.inner_text("#contenu"))
+            stockes = {p["id"]: p["texte"] for p in page.evaluate("Donnees.lignes('wiki_pages')")}
+            self.assertEqual(stockes, {p["id"]: p["texte"] for p in PAGES})
+        # Le petit numéro mène à la page de l'intervention
+        page = self.ouvrir("technicien", base=True)
+        self.lire("EQ-0005")
+        page.click('#wiki-texte sup.wiki-ref[data-ot="OT-2025-0044"] a')
+        page.wait_for_selector('.wiki-page[data-page="OT-2025-0044"] .wiki-page-grille')
 
-    def test_page_d_equipement_pour_les_trois_profils(self):
+    def test_textes_rubriques_liens_et_origine(self):
+        page = self.ouvrir("technicien", base=True)
+        # Machine : « En bref » en paragraphe, « Astuces » en liste, plus loin ; liens [[titre]] vers les pages qui s'affichent
+        lu = self.lire("EQ-0005")
+        textes = {t["rubrique"]: t for t in lu["textes"]}
+        self.assertEqual([t["rubrique"] for t in lu["textes"]], ["En bref", "Astuces"])
+        self.assertEqual((textes["En bref"]["forme"], textes["Astuces"]["forme"]), ("prose", "liste"))
+        self.assertEqual(textes["En bref"]["origine"], ORIGINE_IA % "14/10/2026")
+        self.assertEqual(textes["Astuces"]["origine"], ORIGINE_IA % "14/10/2026")     # un bandeau par groupe de textes
+        for rubrique, phrases in rubriques_du_texte(TEXTE_PO02):
+            self.assertEqual([{"texte": p["texte"], "ot": [r[1] for r in p["refs"]], "liens": p["liens"], "absents": p["absents"]}
+                              for p in textes[rubrique]["phrases"]], [phrase_attendue(p) for p in phrases], rubrique)
+        self.assertIn(["Fuite", "#/wiki/PANNE-S01"], textes["Astuces"]["phrases"][0]["liens"])    # [[Fuite]] → sa page de panne
+        self.assertEqual(textes["Astuces"]["phrases"][0]["absents"], ["Page disparue"])
+        # Une ancienne rubrique (avant la refonte 2) vient après celles du type ; une rubrique vide n'est pas montrée
+        lu = self.lire("EQ-0001")
+        self.assertEqual([t["rubrique"] for t in lu["textes"]], ["En bref", "Ce qui revient"])
+        self.assertEqual(lu["sections"].index("texte:Ce qui revient") - lu["sections"].index("wiki-savoir-faire"), 1)
+        self.assertEqual(lu["textes"][0]["origine"], ORIGINE_MANUEL % "16/10/2026")
+        # Article : « À quoi il sert » ; un lien vers un savoir-faire au titre piégé
+        lu = self.lire("ART-0016")
+        self.assertEqual([(t["rubrique"], t["forme"], t["origine"]) for t in lu["textes"]], [("À quoi il sert", "prose", ORIGINE_IA % "15/10/2026")])
+        self.assertEqual([p["liens"] for p in lu["textes"][0]["phrases"]], [[[TITRE_PO02, "#/wiki/EQ-0005"]], [[plat(TITRE_PIEGE), "#/wiki/WP-0006"]]])
+        # Savoir-faire : rubriques dans l'ordre du type ; un lien vers une ancienne page de mode reste du texte
+        lu = self.lire("WP-0003")
+        self.assertEqual([(t["rubrique"], t["forme"]) for t in lu["textes"]], [("Quand le faire", "liste"), ("Étapes", "liste"), ("Pièges", "liste")])
+        self.assertEqual(lu["textes"][0]["origine"], ORIGINE_MIXTE % "17/10/2026")
+        self.assertEqual(lu["textes"][1]["phrases"][0]["absents"], ["Fuite de garniture"])
+        self.assertEqual(self.lire("WP-0004")["textes"][0]["origine"], ORIGINE_MANUEL % "15/10/2026")
+        # Sans texte : « Aucun texte validé pour l'instant. », pas de bandeau ; « Astuces » absente
+        for identifiant, rubrique in (("ART-0001", "À quoi il sert"), ("EQ-0031", "En bref")):
+            lu = self.lire(identifiant)
+            self.assertEqual([(t["rubrique"], t["sansTexte"], t["origine"]) for t in lu["textes"]], [(rubrique, SANS_TEXTE, None)])
+            self.assertEqual(lu["references"], [])
+            self.assertNotIn("wiki-references", lu["sections"])
+
+    def test_pages_qui_renvoient_ici(self):
+        """CS103 : « Pages qui renvoient ici » exact — la règle de Wiki.page (champ liens des pages actives) — sur une machine,
+        un article, deux savoir-faire et une panne, contre le calcul Python indépendant et des valeurs écrites à la main ;
+        ni la page archivée, ni l'ancienne page de mode (type retiré, sans page), ni les propositions à valider ; section
+        absente sans retour et sur une intervention ; chaque lien mène à une page qui s'affiche, aussi pour le demandeur."""
+        attendus = {
+            "EQ-0005": [("ART-0016", "article", TITRE_KIT)],                        # texte de l'article ; ni WP-0009 ni WP-0010
+            "ART-0016": [("EQ-0005", "machine", TITRE_PO02)],                       # texte de PO-02 ; ni WP-0009 ni WJ-00005
+            "WP-0003": [("EQ-0005", "machine", TITRE_PO02), ("WP-0004", "savoir-faire", "Remonter le kit de garniture")],
+            "WP-0006": [("ART-0016", "article", TITRE_KIT)],
+            "PANNE-S01": [("WP-0007", "savoir-faire", TITRE_ALIGNER), ("EQ-0005", "machine", TITRE_PO02)],   # par titre
+            "WP-0012": [],                                                          # seul WJ-00004, à valider, y renvoie
+            "EQ-0001": [],
+        }
+        for profil in ("demandeur", "technicien", "responsable"):
+            page = self.ouvrir(profil, base=True)
+            calcul = self.calcul()
+            # Les liens qui ne comptent pas existent bien : page archivée, ancienne page de mode, propositions à valider
+            self.assertIn("[[Règles de l'atelier]]", page.evaluate("Donnees.trouver('wiki_journal', 'WJ-00004').changements"))
+            self.assertIn("[[" + TITRE_KIT + "]]", page.evaluate("Donnees.trouver('wiki_journal', 'WJ-00005').changements"))
+            for identifiant, retours in attendus.items():
+                with self.subTest(profil=profil, page=identifiant):
+                    lu = self.lire(identifiant)
+                    calcules = calcul.entite(identifiant, profil, MAINTENANT)["retours"]
+                    self.assertEqual([(r["id"], r["type"], r["titre"]) for r in calcules], retours)
+                    self.assertEqual(self.entite(identifiant, profil)["retours"], calcules)
+                    self.assertEqual(lu["retours"], [[i, plat(t), "#/wiki/" + i] for i, _, t in retours])
+                    self.assertEqual("wiki-retours" in lu["sections"], bool(retours))
+                    if retours:                          # en fin de page, avant « Références »
+                        self.assertEqual([s for s in lu["sections"] if s not in ("wiki-en-attente", "wiki-references")][-1], "wiki-retours")
+            if profil != "demandeur":
+                self.assertNotIn("wiki-retours", self.lire("OT-2026-0214")["sections"])         # « Cité dans le wiki » le fait
+            # Chaque lien mène à la page de celle qui renvoie
+            self.lire("PANNE-S01")
+            page.click('#wiki-retours a[href="#/wiki/WP-0007"]')
+            page.wait_for_selector('.wiki-page[data-page="WP-0007"] .wiki-page-grille')
+            self.lire("ART-0016")
+            page.click('#wiki-retours a[href="#/wiki/EQ-0005"]')
+            page.wait_for_selector('.wiki-page[data-page="EQ-0005"] .wiki-page-grille')
+            self.verifier_sans_piege()
+
+    def test_consignation_et_a_trancher_en_tete(self):
         for profil in ("demandeur", "technicien", "responsable"):
             with self.subTest(profil=profil):
                 page = self.ouvrir(profil, base=True)
-                liens = profil != "demandeur"
                 responsable = profil == "responsable"
-                lu = self.lire_page("EQ-0005")
-                calcul = self.wiki_page("EQ-0005")
-                self.assertEqual((lu["id"], lu["type"], lu["h1"], lu["typeBadge"]), ("EQ-0005", "équipement", TITRE_PO02, "Équipement"))
-                self.assertEqual(lu["fiche"], ["Fiche de l'équipement", "#/equipement/EQ-0005"])
-                # De haut en bas : en-tête, couche calculée, texte, « À trancher », renvois, propositions (responsable)
-                self.assertEqual(lu["blocs"], ["entete-page", "wiki-couche", "wiki-texte", "wiki-a-trancher", "wiki-retours"]
-                                 + (["wiki-en-attente"] if responsable else []))
-                self.assertEqual(lu["couche"], COUCHE_EQUIPEMENT + (["wiki-meme-modele"] if calcul["memeModele"] else []))
-                self.verifier_texte(lu, TEXTE_PO02, liens, ORIGINE_IA % "14/10/2026")
-                self.assertEqual(lu["rubriques"][3][1][0]["absents"], ["Page disparue"])
-                self.verifier_retours(lu, "EQ-0005", [("WP-0006", "Desserrage des raccords", "mode"),
-                                                     ("WP-0002", "Fuite de garniture", "mode")])
+                consignation = page.evaluate("Donnees.trouver('equipements', 'EQ-0005').consignation")
+                self.assertGreater(consignation.count("\n"), 2)
+                lu = self.lire("EQ-0005")
+                self.assertEqual(lu["alertes"], ["wiki-consignation", "wiki-a-trancher"])
+                self.assertEqual((lu["consignation"]["titre"], lu["consignation"]["texte"]), ("Consignation de PO-02", consignation))
+                self.assertEqual(lu["consignation"]["texte"], self.entite("EQ-0005", profil)["sections"]["consignation"]["texte"])
+                self.assertEqual(page.locator("#wiki-consignation .wiki-consignation-texte *").count(), 0)
                 # « À trancher » : vu par tous ; note et boutons au responsable
                 self.assertEqual([(c["entree"], c["rang"], c["anterieure"]) for c in lu["contradictions"]],
                                  [("WJ-00002", "0", "non"), ("WJ-00002", "1", "non")])
                 premiere, seconde = lu["contradictions"]
-                self.assertEqual(premiere["page"], phrase_attendue(TEXTE_PO02.splitlines()[1][2:], liens))
-                self.assertEqual(seconde["page"], phrase_attendue(TEXTE_PO02.splitlines()[2][2:], liens))
-                self.assertEqual((premiere["titreOt"], premiere["observation"]), ("Ce que dit le nouvel OT", CONTRADICTIONS_PO02[0]["observation"]))
+                self.assertEqual((premiere["page"]["texte"], premiere["titreOt"], premiere["observation"]),
+                                 (CONTRADICTIONS_PO02[0]["phrase"], "Ce que dit le nouvel OT", CONTRADICTIONS_PO02[0]["observation"]))
+                self.assertEqual(seconde["page"]["texte"], "Le raccord de refoulement se desserre")
+                self.assertEqual([r[1] for r in seconde["page"]["refs"]], ["OT-2025-0030"])
                 self.assertEqual(seconde["observation"], OBSERVATION_PIEGEE)
-                self.assertEqual(premiere["ot"], ots_attendus(["OT-2026-0214"], liens))
+                self.assertEqual([r[:2] for r in premiere["refs"]], [["1", "OT-2026-0214"]])
                 for contradiction in lu["contradictions"]:
                     self.assertEqual(contradiction["boutons"], [["ancien", "L'ancien reste"], ["nouveau", "Le nouveau remplace"],
                                                                 ["les deux", "Les deux sont vrais"]] if responsable else [])
                     self.assertEqual(contradiction["notes"], 1 if responsable else 0)
-                # Au responsable : « Modifier » et les propositions en attente sur la page
-                self.assertEqual(lu["modifier"], ["Modifier", "#/wiki-ecrire/EQ-0005"] if responsable else None)
-                if responsable:
-                    self.assertEqual(lu["attente"], {"lignes": [["WJ-00004", "Proposition WJ-00004", "#/wiki-journal?entree=WJ-00004",
-                                                                 "OT-2026-0082"]], "vide": None})
-                else:
-                    self.assertIsNone(lu["attente"])
+                # Propositions en attente : au responsable seulement
+                self.assertEqual(lu["attente"], [["WJ-00004", "Proposition WJ-00004 OT-2026-0082"]] if responsable else [])
+                if not responsable:
                     self.assertNotIn("WJ-00004", page.inner_text("#contenu"))
-                if not liens:
-                    self.assertEqual(page.locator('#contenu a[href^="#/ot"], #contenu a[href^="#/magasin"]').count(), 0)
+                # Savoir-faire rattaché à la machine : sa consignation telle quelle, la phrase de Prévo ; contradiction antérieure
+                lu = self.lire("WP-0003")
+                self.assertEqual(lu["alertes"], ["wiki-entete", "wiki-a-trancher"])
+                self.assertEqual((lu["consignation"]["titre"], lu["consignation"]["phrase"], lu["consignation"]["texte"]),
+                                 ("Consignation de PO-02", PHRASE_SAVOIR_FAIRE, consignation))
+                self.assertEqual(lu["consignation"]["phrase"], page.evaluate("Wiki.PHRASE_SAVOIR_FAIRE"))
+                self.assertEqual([(c["entree"], c["anterieure"], c["titreOt"]) for c in lu["contradictions"]],
+                                 [("WJ-00003", "oui", "Observation antérieure aux faits de la page")])
+                # Rattaché à un article : les machines où il est monté, en liens ; machine sans consignation ; libre
+                lu = self.lire("WP-0004")
+                self.assertEqual((lu["alertes"], lu["consignation"]["phrase"], lu["consignation"]["texte"]), (["wiki-entete"], PHRASE_SAVOIR_FAIRE, None))
+                self.assertEqual(lu["consignation"]["equipements"], [[e["repere"], "#/wiki/" + e["equipementId"]]
+                                                                     for e in self.entite("WP-0004", profil)["sections"]["entete"]["equipements"]])
+                self.assertIn(["PO-02", "#/wiki/EQ-0005"], lu["consignation"]["equipements"])
+                lu = self.lire("WP-0005")
+                self.assertEqual((lu["consignation"]["titre"], lu["consignation"]["absence"], lu["consignation"]["modifier"]),
+                                 ("Consignation de PE-01", SANS_CONSIGNATION, None))
+                lu = self.lire("WP-0012")
+                self.assertEqual((lu["sousTitre"], lu["consignation"]["equipements"]), ("Sans rattachement", []))
+                self.assertIn("Aucune machine connue", lu["consignation"]["aide"])
+                # Les autres types n'ont rien en tête
+                for identifiant in ("PANNE-S01", "ART-0001"):
+                    self.assertEqual(self.lire(identifiant)["alertes"], [])
                 self.verifier_sans_piege()
 
-    def test_pages_de_composant_ancre_libre_et_sans_texte(self):
-        for profil in ("technicien", "demandeur"):
+    def test_page_intervention_en_lecture_seule(self):
+        for profil in ("technicien", "responsable"):
             with self.subTest(profil=profil):
                 page = self.ouvrir(profil, base=True)
-                liens = profil == "technicien"
-                lu = self.lire_page("ART-0016")
-                calcul = self.wiki("ART-0016")["calcul"]
-                self.assertEqual((lu["h1"], lu["typeBadge"]), (TITRE_KIT, "Composant"))
-                self.assertEqual(lu["fiche"], ["Fiche de l'article", "#/magasin/article/ART-0016"] if liens else None)
-                self.assertEqual(lu["blocs"], ["entete-page", "wiki-couche", "wiki-texte", "wiki-retours"])
-                self.assertEqual(lu["couche"], ["wiki-couche-titre", "wiki-article", "wiki-montage", "wiki-remplacements",
-                                                "wiki-consommations"])
-                article = page.evaluate("""() => Array.from(document.querySelectorAll('#wiki-article dd')).map((d) =>
-                    [d.textContent.trim(), d.querySelector('a') ? d.querySelector('a').getAttribute('href') : null])""")
-                a = calcul["article"]
-                self.assertEqual([d[0] for d in article[:5]], [a["reference"], a["designation"], a["fabricant"] or "–",
-                                                               a["refFabricant"] or "–", a["emplacement"] or "–"])
-                self.assertTrue(article[5][0].startswith(nombre_fr(a["stock"])), article[5])
-                self.assertEqual(article[0][1], "#/magasin/article/ART-0016" if liens else None)
-                montage = page.evaluate("""() => Array.from(document.querySelectorAll('#wiki-montage .wiki-montage > li')).map((li) =>
-                    [li.dataset.equipement, li.querySelector('a').getAttribute('href'), li.querySelector('.carte-meta').textContent.replace(/\\s+/g, ' ').trim()])""")
-                sources = {"liste": "dans la liste des pièces", "consommation": "consommé en intervention",
-                           "les deux": "dans la liste des pièces et consommé en intervention"}
-                self.assertEqual(montage, [[m["equipementId"], "#/wiki/" + m["equipementId"], plat(sources[m["source"]] + (
-                    " Quantité montée : " + nombre_fr(m["quantite"]) if m["quantite"] else ""))] for m in calcul["montage"]])
-                remplacements = page.evaluate("""() => Array.from(document.querySelectorAll('#wiki-remplacements li')).map((li) =>
-                    [li.dataset.equipement, Array.from(li.querySelectorAll('.carte-meta span')).map((s) => s.textContent)])""")
+                lu = self.lire("OT-2026-0214")
+                entite = self.entite("OT-2026-0214", profil)
+                ot = page.evaluate("Donnees.trouver('ordres_travail', 'OT-2026-0214')")
+                self.assertEqual(lu["h1Brut"], "OT-2026-0214 — " + ot["titre"])
+                self.assertEqual(lu["sousTitre"], date_fr(ot["date_fin"]) + " · " + TITRE_PO02)
+                blocs = lu["blocsOt"]
+                self.assertEqual(blocs["wiki-travail"], plat(ot["travail_a_faire"]))
+                self.assertEqual(blocs["wiki-compte-rendu"], plat(ot["compte_rendu"]))
+                self.assertEqual(blocs["wiki-astuce"], plat(ot["astuce"]))
+                self.assertIn(plat(entite["sections"]["demande"]["symptome"]), page.inner_text("#wiki-demande"))
+                self.assertNotIn("wiki-motif-attente", lu["sections"])
+                self.assertNotIn("wiki-motif-annulation", lu["sections"])
+                # « Cité dans le wiki » : les pages dont un texte cite l'OT (Wiki.entite)
+                cites = page.evaluate("Array.from(document.querySelectorAll('#wiki-cite-dans li')).map((li) => li.dataset.id)")
+                self.assertEqual(cites, [p["id"] for p in entite["sections"]["citeDans"]])
+                self.assertEqual(sorted(cites), ["ART-0016", "WP-0007", "WP-0008"])      # le texte de PO-02 ne la cite pas
+                self.assertEqual(page.evaluate("Array.from(document.querySelectorAll('#wiki-temps li')).map((li) => li.dataset.id)"),
+                                 [t["id"] for t in entite["sections"]["temps"]])
+                # Lecture seule : aucun champ ni bouton d'écriture, « Modifier » absent ; « Ouvrir la fiche OT » mène à la fiche
+                self.assertEqual(lu["controles"], 0)
+                self.assertEqual(page.locator("#contenu .wiki-page button").count(), 0)
+                self.assertEqual([a[0] for a in lu["actions"]], ["wiki-fiche-ot"])
+                self.assertEqual(lu["actions"][0][1:], ["Ouvrir la fiche OT", "#/ot/OT-2026-0214"])
+                page.click("#wiki-fiche-ot")
+                page.wait_for_function("location.hash === '#/ot/OT-2026-0214'")
+                page.wait_for_selector(".ot-onglets")
+        # Motifs d'attente et d'annulation de l'OT, quand ils sont renseignés (relecture de T135)
+        for identifiant, section, champ in (("OT-2026-0192", "wiki-motif-attente", "motif_attente"),
+                                            ("OT-2026-0167", "wiki-motif-annulation", "motif_annulation")):
+            lu = self.lire(identifiant)
+            ot = page.evaluate("(id) => Donnees.trouver('ordres_travail', id)", identifiant)
+            self.assertTrue(ot[champ].strip())
+            self.assertEqual(lu["blocsOt"][section], plat(ot[champ]))
+            self.assertEqual(self.entite(identifiant, "responsable")["sections"]["motifAttente" if champ == "motif_attente" else "motifAnnulation"],
+                             ot[champ].strip())
 
-                def intervalle(r):
-                    if r["intervalleMedianJours"] is None:
-                        return "un seul : pas d'intervalle" if r["nombre"] < 2 else "intervalle inconnu"
-                    return "intervalle médian : %s %s" % (nombre_fr(r["intervalleMedianJours"]),
-                                                          "jours" if r["intervalleMedianJours"] >= 2 else "jour")
-                self.assertEqual(remplacements, [[r["equipementId"], [pluriel(r["nombre"], "remplacement", "remplacements"),
-                                                                     intervalle(r)]] for r in calcul["remplacements"]])
-                consommations = page.evaluate("""() => Array.from(document.querySelectorAll('#wiki-consommations .wiki-consommations > li'))
-                    .map((li) => [li.dataset.ot, li.querySelector('.wiki-ligne-tete > :first-child').tagName])""")
-                self.assertEqual(consommations, [[c["otId"], "A" if liens else "B"] for c in calcul["consommations"][:10]])
-                self.assertGreater(len(consommations), 0)
-                self.verifier_texte(lu, TEXTE_KIT, liens, ORIGINE_IA % "15/10/2026")
-                self.verifier_retours(lu, "ART-0016", [("EQ-0005", TITRE_PO02, "équipement")])
-                self.assertIsNone(lu["modifier"])
-                # Composant libre : « Pas d'article au magasin »
-                lu = self.lire_page("WP-0005")
-                self.assertEqual((lu["h1"], lu["typeBadge"], lu["fiche"]), ("Joint torique de bride", "Composant", None))
-                self.assertEqual(lu["couche"], ["wiki-couche-titre", "wiki-sans-article"])
-                self.assertEqual(page.inner_text("#wiki-sans-article .wiki-pas-d-article").strip(), "Pas d'article au magasin")
-                self.verifier_texte(lu, TEXTE_JOINT, liens, ORIGINE_IA % "15/10/2026")
-                self.verifier_retours(lu, "WP-0005", [("WP-0006", "Desserrage des raccords", "mode")])
-                # Article sans texte validé : un message clair, pas d'origine
-                lu = self.lire_page("ART-0001")
-                self.assertEqual((lu["sansTexte"], lu["origine"], lu["rubriques"]), (SANS_TEXTE, None, []))
-                self.assertEqual(lu["retours"], [])
+    def test_listes_d_interventions_dans_l_ordre_avec_leur_statut(self):
+        """Une page ne crée que ses 10 premières interventions (D101) ; « Voir les n autres interventions » crée les autres ;
+        ordre et statuts du calcul Python, les ouvertes en tête (D113)."""
+        for largeur, telephone in ((1440, False), (375, True)):
+            with self.subTest(largeur=largeur):
+                page = self.ouvrir("technicien", largeur=largeur, hauteur=900, telephone=telephone, base=True)
+                calcul = self.calcul()
+                for identifiant in ("TEC-0002", "EQ-0001", "PANNE-S01"):
+                    attendues = calcul.entite(identifiant, "technicien", MAINTENANT)["sections"]["interventions"]
+                    lu = self.lire(identifiant)
+                    self.assertEqual([i[:2] for i in lu["interventions"]], [[o["id"], o["statut"]] for o in attendues[:10]], identifiant)
+                    self.assertEqual(page.locator("#wiki-interventions .wiki-intervention[hidden]").count(), 0)
+                    self.assertEqual(lu["voirAutres"], "Voir les %d autres interventions" % (len(attendues) - 10))
+                    page.click("#wiki-interventions .wiki-voir-autres")
+                    lu = page.evaluate(ENTITE_JS)
+                    self.assertEqual([i[:2] for i in lu["interventions"]], [[o["id"], o["statut"]] for o in attendues], identifiant)
+                    self.assertIsNone(lu["voirAutres"])
+                ouverts = [o["statut"] in OUVERTS for o in calcul.entite("EQ-0001", "technicien", MAINTENANT)["sections"]["interventions"]]
+                self.assertEqual(ouverts[0], True)
+                self.assertEqual(ouverts, sorted(ouverts, reverse=True))
 
-    def test_pages_de_mode_ancre_et_libre(self):
-        page = self.ouvrir("technicien", base=True)
-        lu = self.lire_page("WP-0002")
-        calcul = self.wiki("WP-0002")["calcul"]
-        self.assertEqual((lu["h1"], lu["typeBadge"], lu["fiche"]), ("Fuite de garniture", "Mode de défaillance", None))
-        self.assertEqual(lu["blocs"], ["entete-page", "wiki-couche", "wiki-texte", "wiki-a-trancher", "wiki-retours"])
-        self.assertEqual(lu["couche"], ["wiki-couche-titre", "wiki-cause"])
-        cause = page.evaluate("""() => ({ code: document.querySelector('#wiki-cause h2 .badge').textContent,
-            libelle: document.querySelector('#wiki-cause .wiki-cause-libelle').textContent.trim(),
-            cas: document.querySelector('#wiki-cause .wiki-cas-mode').textContent.trim(),
-            equipements: Array.from(document.querySelectorAll('#wiki-cause .wiki-equipements-touches > li')).map((li) =>
-              [li.dataset.equipement, li.querySelector('a').getAttribute('href'), li.querySelector('.wiki-designation').textContent]),
-            remedes: Array.from(document.querySelectorAll('#wiki-cause .wiki-remedes-mode > li')).map((li) =>
-              [li.dataset.code, li.textContent.replace(/\\s+/g, ' ').trim()]),
-            mention: document.querySelector('#wiki-cause .wiki-mention').textContent })""")
-        self.assertEqual((cause["code"], cause["libelle"]), ("C01", calcul["cause"]["libelle"]))
-        self.assertEqual(cause["libelle"], "Garniture usée")
-        self.assertEqual(cause["cas"], "%s de cette cause" % pluriel(calcul["cas"], "intervention corrective clôturée",
-                                                                      "interventions correctives clôturées"))
-        self.assertEqual(cause["equipements"], [[e["equipementId"], "#/wiki/" + e["equipementId"], "%d cas" % e["cas"]]
-                                                for e in calcul["equipements"]])
-        self.assertEqual(cause["remedes"], [[r["code"], "%s : %d fois" % (r["libelle"], r["fois"])] for r in calcul["remedes"]])
-        self.assertEqual(cause["mention"], MENTION)
-        self.verifier_texte(lu, TEXTE_MODE, True, ORIGINE_MANUEL % "16/10/2026")
-        self.verifier_retours(lu, "WP-0002", [("EQ-0005", TITRE_PO02, "équipement")])
-        # Contradiction venue d'un OT antérieur aux faits de la page
-        self.assertEqual(len(lu["contradictions"]), 1)
-        contradiction = lu["contradictions"][0]
-        self.assertEqual((contradiction["entree"], contradiction["anterieure"], contradiction["titreOt"]),
-                         ("WJ-00003", "oui", "Observation antérieure aux faits de la page"))
-        self.assertEqual(contradiction["page"], phrase_attendue("Goutte à goutte sous la garniture [OT-2025-0010]", True))
-        self.assertEqual(contradiction["ot"], ots_attendus(["OT-2025-0030"], True))
-        self.assertEqual(contradiction["boutons"], [])
-        # Mode libre : rien de calculé
-        lu = self.lire_page("WP-0006")
-        self.assertEqual(lu["couche"], ["wiki-couche-titre", "wiki-sans-cause"])
-        self.assertEqual(page.inner_text("#wiki-sans-cause .wiki-pas-de-cause").strip(), "Pas de code cause associé")
-        self.verifier_texte(lu, TEXTE_DESSERRAGE, True, ORIGINE_IA % "15/10/2026")
-        self.assertEqual([lien for _, phrases in lu["rubriques"] for p in phrases for lien in p["liens"]],
-                         [[TITRE_PO02, "#/wiki/EQ-0005"], ["Joint torique de bride", "#/wiki/WP-0005"]])
-        self.verifier_retours(lu, "WP-0006", [])
-        self.assertNotIn("wiki-a-trancher", lu["blocs"])
+    def test_tous_les_liens_menent_a_une_page_qui_s_affiche(self):
+        """Chaque lien #/wiki/<id> d'une page de chaque type mène à une page que le profil voit (aucune « Page
+        introuvable ») ; les autres liens vont vers des écrans connus ; quelques-uns sont suivis pour de bon."""
+        for profil in ("demandeur", "technicien", "responsable"):
+            page = self.ouvrir(profil, base=True)
+            pages = [i for t, i in SIX.items() if profil != "demandeur" or t not in ("technicien", "intervention")]
+            for identifiant in pages + ["WP-0008", "EQ-0001"]:
+                with self.subTest(profil=profil, page=identifiant):
+                    self.lire(identifiant)
+                    for bouton in page.locator("#contenu .wiki-voir-autres").all():
+                        bouton.click()
+                    liens = page.evaluate("Array.from(new Set(Array.from(document.querySelectorAll('#contenu .wiki-page a[href]')).map((a) => a.getAttribute('href'))))")
+                    vers_wiki = [l for l in liens if l.startswith("#/wiki/") and l[7:] not in LISTES]
+                    self.assertTrue(vers_wiki)
+                    introuvables = page.evaluate("""([liens, profil]) => liens.filter((lien) =>
+                      !Wiki.entite(decodeURIComponent(lien.slice('#/wiki/'.length)), { profil }))""", [vers_wiki, profil])
+                    self.assertEqual(introuvables, [])
+                    autres = [l for l in liens if l not in vers_wiki and not (l.startswith("#/wiki/") and l[7:] in LISTES)]
+                    self.assertEqual([l for l in autres if not LIENS_HORS_WIKI.match(l)], [])
+                    if profil == "demandeur":
+                        self.assertEqual([l for l in autres if l.startswith(("#/ot/", "#/magasin/"))], [])
+            # Suivis pour de bon : un lien de chaque type de cible depuis la page de PO-02
+            self.lire("EQ-0005")
+            cibles = page.evaluate("""() => { const vus = new Map();
+              Array.from(document.querySelectorAll('#contenu .wiki-lecture a[href^="#/wiki/"]')).forEach((a) => {
+                const id = decodeURIComponent(a.getAttribute('href').slice('#/wiki/'.length)); const type = id.replace(/-.*/, '');
+                if (!vus.has(type)) vus.set(type, id); });
+              return Array.from(vus.values()); }""")
+            self.assertGreaterEqual(len(cibles), 4 if profil == "demandeur" else 5)
+            for identifiant in cibles:
+                with self.subTest(profil=profil, suivi=identifiant):
+                    self.aller_entite(identifiant)
+                    self.assertEqual(page.locator("#contenu .wiki-introuvable").count(), 0, identifiant)
 
-    def test_pages_de_savoir_faire_et_leur_en_tete(self):
-        for profil in ("technicien", "demandeur"):
-            with self.subTest(profil=profil):
-                page = self.ouvrir(profil, base=True)
-                liens = profil == "technicien"
-                # Rattaché à un équipement : sa consignation telle quelle, puis la phrase de Prévo
-                lu = self.lire_page("WP-0003")
-                consignation = page.evaluate("Donnees.trouver('equipements', 'EQ-0005').consignation")
-                self.assertGreater(consignation.count("\n"), 2)
-                self.assertEqual((lu["h1"], lu["typeBadge"]), ("Changer la garniture de PO-02", "Savoir-faire"))
-                self.assertEqual(lu["fiche"], ["Fiche de l'équipement", "#/equipement/EQ-0005"])
-                self.assertEqual(lu["blocs"], ["entete-page", "wiki-entete", "wiki-texte", "wiki-retours"])
-                self.assertEqual(lu["entete"]["titre"], "Consignation de PO-02")
-                self.assertEqual(lu["entete"]["phrase"], PHRASE_SAVOIR_FAIRE)
-                self.assertEqual(lu["entete"]["phrase"], page.evaluate("Wiki.PHRASE_SAVOIR_FAIRE"))
-                self.assertEqual(lu["entete"]["consignation"], consignation)
-                self.assertEqual(lu["entete"]["consignation"], self.wiki("WP-0003")["entete"]["consignation"]["texte"])
-                self.assertEqual(page.locator("#wiki-entete .wiki-consignation-texte *").count(), 0)
-                self.verifier_texte(lu, TEXTE_SF, liens, ORIGINE_MIXTE % "17/10/2026")
-                self.verifier_retours(lu, "WP-0003", [("ART-0016", TITRE_KIT, "composant"), ("EQ-0005", TITRE_PO02, "équipement")])
-                # Rattaché à un article : les équipements où il est monté, en liens vers leur page
-                lu = self.lire_page("WP-0007")
-                self.assertEqual(lu["fiche"], ["Fiche de l'article", "#/magasin/article/ART-0016"] if liens else None)
-                self.assertEqual(lu["entete"]["phrase"], PHRASE_SAVOIR_FAIRE)
-                self.assertIsNone(lu["entete"]["consignation"])
-                self.assertEqual(lu["entete"]["equipements"], [[e["repere"], "#/wiki/" + e["equipementId"]]
-                                                               for e in self.wiki("WP-0007")["entete"]["equipements"]])
-                self.assertIn(["PO-02", "#/wiki/EQ-0005"], lu["entete"]["equipements"])
-                self.verifier_texte(lu, "## Étapes\n- Graisser légèrement les joints [OT-2026-0058]", liens, ORIGINE_MANUEL % "15/10/2026")
-                # Équipement sans consignation : le message de la page d'équipement
-                lu = self.lire_page("WP-0008")
-                self.assertEqual((lu["entete"]["titre"], lu["entete"]["absence"], lu["entete"]["consignation"]),
-                                 ("Consignation de PE-01", SANS_CONSIGNATION, None))
-                self.assertEqual(lu["entete"]["phrase"], PHRASE_SAVOIR_FAIRE)
-                # Rattaché à une page de composant libre : lien vers elle, aucun équipement connu
-                lu = self.lire_page("WP-0010")
-                self.assertEqual(lu["fiche"], ["Page du composant", "#/wiki/WP-0005"])
-                self.assertEqual((lu["entete"]["equipements"], lu["entete"]["phrase"]), ([], PHRASE_SAVOIR_FAIRE))
-                self.assertIn("Aucun équipement connu", lu["entete"]["aide"])
+    def test_fiche_a_droite_sur_pc_et_au_dessus_sur_telephone(self):
+        for largeur, hauteur, telephone in ((1440, 900, False), (375, 812, True)):
+            with self.subTest(largeur=largeur):
+                self.ouvrir("responsable", largeur=largeur, hauteur=hauteur, telephone=telephone, base=True)
+                for identifiant in ("EQ-0005", "OT-2026-0214"):
+                    lu = self.lire(identifiant)
+                    fiche, lecture = lu["ficheRect"], lu["lectureRect"]
+                    if telephone:
+                        self.assertLessEqual(fiche["bas"], lecture["haut"] + 1, identifiant)          # au-dessus
+                        if lu["alertesRect"]:
+                            self.assertLessEqual(lu["alertesRect"]["bas"], fiche["haut"] + 1)         # sous la consignation
+                    else:
+                        self.assertGreaterEqual(fiche["gauche"], lecture["droite"], identifiant)      # à droite
+                        self.assertLess(fiche["haut"], lecture["bas"])
 
-    def test_page_archivee_inconnue_et_identifiant_piege(self):
-        page = self.ouvrir("technicien", base=True)
-        for identifiant in ("WP-0009", "EQ-9999"):
-            with self.subTest(identifiant=identifiant):
-                self.aller("#/wiki/" + identifiant, ".wiki-introuvable")
-                self.assertEqual(page.inner_text("#contenu h1").strip(), "Page introuvable")
-                self.assertIn(identifiant, page.inner_text("#contenu .vide"))
-                self.assertEqual(page.get_attribute('#contenu a.btn[href="#/wiki"]', "href"), "#/wiki")
-                self.aller_accueil()
-        self.aller("#/wiki/%3Cimg%20src%3Dx%20onerror%3D%22window.__piege%3D1%22%3E", ".wiki-introuvable")
-        self.assertIn('<img src=x onerror="window.__piege=1">', page.inner_text("#contenu .vide"))
-        self.verifier_sans_piege()
+    def test_machines_pannes_et_techniciens_de_la_demo_comme_le_calcul_python(self):
+        """Toutes les machines, pannes et techniciens de la démo et dix articles : fiche et interventions de la page égales au
+        calcul Python indépendant ; aucune erreur à l'affichage."""
+        page = self.ouvrir("responsable")
+        calcul = self.calcul()
+        identifiants = (sorted(calcul.par_id) + [p["id"] for p in calcul.liste_pannes()] + sorted(calcul.articles)[:10]
+                        + sorted(t["id"] for t in calcul.tables["techniciens"]))
+        self.assertGreater(len(identifiants), 50)
+        for identifiant in identifiants:
+            with self.subTest(entite=identifiant):
+                lu = self.lire(identifiant)
+                attendue = calcul.entite(identifiant, "responsable", MAINTENANT)
+                self.assertEqual([f for f in lu["faits"] if f[0] != "Sous-ensembles"], faits_attendus(attendue["faits"]))
+                if "interventions" in attendue["sections"]:
+                    self.assertEqual([i[0] for i in lu["interventions"]], [o["id"] for o in attendue["sections"]["interventions"]][:10])
+                if attendue["type"] == "machine" and attendue["sections"]["sousEnsembles"]:
+                    sous = [f for f in lu["faits"] if f[0] == "Sous-ensembles"][0]
+                    self.assertEqual(sous[1], ", ".join(page.evaluate("(id) => Donnees.trouver('equipements', id).repere", m["equipementId"])
+                                                        for m in attendue["sections"]["sousEnsembles"]))
+                self.assertEqual(lu["crochets"], 0)
 
-    def test_page_d_un_equipement_disparu(self):
-        """Relecture de T119 : une page d'équipement dont l'équipement n'existe plus s'affiche (sans couche calculée)."""
-        page = self.ouvrir("responsable", base=True)
-        page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-0090', type: 'équipement',
-          titre: 'XX-99 — Machine retirée', equipement_id: 'EQ-0999', texte: '## Ce qui revient\\n- Fuite [OT-2026-0001]',
-          version: '1', statut: 'active', origine: 'manuel', valide_par: 'Responsable', valide_le: '2026-10-01 10:00' }); })""")
-        self.aller("#/wiki/WP-0090", ".wiki-page #wiki-sans-equipement")
-        self.assertIn("Équipement introuvable", page.inner_text("#wiki-sans-equipement"))
-        self.assertIn("Fuite", page.inner_text("#contenu"))
-
-    def test_titre_phrase_observation_et_consignation_piegees_restent_du_texte(self):
+    def test_pieges_restent_du_texte(self):
         page = self.ouvrir("responsable", base=True)
         page.evaluate(ECRIRE_JS, ["equipements", "EQ-0005", {"consignation": CONSIGNATION_PIEGEE}])
-        lu = self.lire_page("WP-0003")
-        self.assertEqual(lu["entete"]["consignation"], CONSIGNATION_PIEGEE)       # au caractère près
+        page.evaluate(ECRIRE_JS, ["ordres_travail", "OT-2026-0098", {"titre": "<b>Titre</b> piégé " + PIEGE}])
+        lu = self.lire("WP-0003")
+        self.assertEqual(lu["consignation"]["texte"], CONSIGNATION_PIEGEE)       # au caractère près
         self.assertEqual(page.locator("#wiki-entete img, #wiki-entete script, #wiki-entete .wiki-consignation-texte *").count(), 0)
+        # Le titre piégé d'un OT cité : dans la bulle du petit numéro et dans « Références », du texte
+        bulle = page.get_attribute('#contenu sup.wiki-ref[data-ot="OT-2026-0098"] a', "title")
+        self.assertIn("<b>Titre</b> piégé " + PIEGE, bulle)
+        self.assertIn("<b>Titre</b> piégé", page.inner_text("#wiki-references"))
         self.verifier_sans_piege()
-        # Titre et phrase piégés
-        lu = self.lire_page("WP-0011")
-        self.assertEqual(lu["h1"], plat(TITRE_PIEGE))
-        self.assertEqual(page.evaluate("document.querySelector('#contenu h1').textContent"), TITRE_PIEGE)
-        self.assertEqual(lu["rubriques"], rubriques_attendues(TEXTE_PIEGE, True))
-        self.assertIn("<script>window.__piege = 4</script>", lu["rubriques"][0][1][0]["texte"])
-        self.assertEqual(page.locator("#wiki-texte .wiki-phrase-texte *").count(), 0)
-        self.verifier_retours(lu, "WP-0011", [("ART-0016", TITRE_KIT, "composant")])
+        # Titre et phrase piégés d'un savoir-faire
+        lu = self.lire("WP-0006")
+        self.assertEqual(lu["h1Brut"], TITRE_PIEGE)
+        self.assertIn("<script>window.__piege = 4</script>", lu["textes"][0]["phrases"][0]["texte"])
+        self.assertEqual(page.locator("#contenu .wiki-phrase *:not(sup):not(sup *)").count(), 0)
         self.verifier_sans_piege()
-        # Lien vers la page au titre piégé, depuis une autre page et depuis la liste des savoir-faire
-        lu = self.lire_page("ART-0016")
-        self.assertIn([plat(TITRE_PIEGE), "#/wiki/WP-0011"], [l for _, phrases in lu["rubriques"] for p in phrases for l in p["liens"]])
-        self.aller("#/wiki/savoir-faire", '.wiki-liste-entites li[data-id="WP-0011"]')
-        self.assertEqual(page.evaluate("document.querySelector('li[data-id=\"WP-0011\"] .wiki-ligne-corps > a').textContent"), TITRE_PIEGE)
-        # Observation piégée dans « À trancher »
-        lu = self.lire_page("EQ-0005")
+        # Observation piégée dans « À trancher », titre piégé dans un lien
+        lu = self.lire("EQ-0005")
         self.assertEqual(lu["contradictions"][1]["observation"], OBSERVATION_PIEGEE)
+        self.assertIn([plat(TITRE_PIEGE), "#/wiki/WP-0006"], [l for t in self.lire("ART-0016")["textes"] for p in t["phrases"] for l in p["liens"]])
+        self.verifier_sans_piege()
+        # Identifiant piégé dans l'adresse ; page archivée, inconnue, d'un type retiré : « Page introuvable »
+        self.aller("#/wiki/%3Cimg%20src%3Dx%20onerror%3D%22window.__piege%3D1%22%3E", ".wiki-introuvable")
+        self.assertIn('<img src=x onerror="window.__piege=1">', page.inner_text("#contenu .vide"))
+        for identifiant in ("WP-0009", "WP-0010", "WP-0011", "EQ-9999", "PANNE-S00"):
+            with self.subTest(identifiant=identifiant):
+                lu = self.lire(identifiant)
+                self.assertEqual((lu.get("introuvable"), lu["h1"]), (True, "Page introuvable"))
+                self.assertEqual(page.get_attribute('#contenu a.btn[href="#/wiki"]', "href"), "#/wiki")
         self.verifier_sans_piege()
 
 
@@ -1533,7 +1671,7 @@ class TestTrancher(CasWiki):
 
     def test_l_ancien_reste_puis_les_deux_sont_vrais_puis_le_nouveau_remplace(self):
         page = self.ouvrir("responsable", base=True)
-        self.lire_page("EQ-0005")
+        self.lire("EQ-0005")
         # « L'ancien reste », avec une note
         premiere = page.locator('.wiki-contradiction[data-rang="0"]')
         premiere.locator("textarea").fill("Vu avec le fournisseur")
@@ -1549,20 +1687,23 @@ class TestTrancher(CasWiki):
                          ("appliquée", "OT-2026-0214", "Vu avec le fournisseur"))
         trace = json.loads(decisions[0]["contradictions"])[0]
         self.assertEqual((trace["entree"], trace["rang"], trace["decision"]), ("WJ-00002", 0, "ancien"))
+        # Les petits numéros suivent : la contradiction restante cite OT-2025-0030 en premier
+        self.assertEqual(page.evaluate(ENTITE_JS)["sups"][0], [1, "OT-2025-0030"])
         # « Les deux sont vrais », sans note : l'encadré disparaît (après le repos qui suit une décision)
         page.wait_for_selector(".wiki-page:not([data-occupe])")
         page.click('.wiki-contradiction[data-rang="1"] button[data-decision="les deux"]')
         page.wait_for_function("!document.querySelector('#wiki-a-trancher')")
         self.assertEqual([json.loads(d["contradictions"])[0]["decision"] for d in self.decisions()], ["ancien", "les deux"])
-        self.assertEqual(page.evaluate("Wiki.page('EQ-0005').contradictions"), [])
+        self.assertEqual(self.entite("EQ-0005", "responsable")["aTrancher"], [])
+        self.assertEqual(page.evaluate(ENTITE_JS)["alertes"], ["wiki-consignation"])
         # Le texte de la page n'a pas changé (une contradiction n'écrase rien)
         self.assertEqual(page.evaluate("Donnees.trouver('wiki_pages', 'WP-0001').texte"), TEXTE_PO02)
         # « Le nouveau remplace » : décision écrite, puis l'écriture à la main de la page
-        self.lire_page("WP-0002")
+        self.lire("WP-0003")
         page.evaluate("""() => { window.__routes = [];
             window.addEventListener('hashchange', (e) => window.__routes.push(new URL(e.newURL).hash)); }""")
         page.click('.wiki-contradiction button[data-decision="nouveau"]')
-        page.wait_for_function("window.__routes.includes('#/wiki-ecrire/WP-0002')")
+        page.wait_for_function("window.__routes.includes('#/wiki-ecrire/WP-0003')")
         self.assertEqual(json.loads(page.evaluate("Donnees.trouver('wiki_journal', 'WJ-00003')")["contradictions"])[0]["decision"],
                          "nouveau")
         self.assertEqual(len(self.decisions()), 3)
@@ -1574,123 +1715,32 @@ class TestTrancher(CasWiki):
         """Relecture de T119 : un clic sur une décision, puis aussitôt un autre (double clic, ou carte arrivée sous le
         pointeur après le réaffichage) : une seule contradiction est tranchée."""
         page = self.ouvrir("responsable", base=True)
-        self.lire_page("EQ-0005")
+        self.lire("EQ-0005")
         self.assertEqual(page.locator(".wiki-contradiction").count(), 2)
         page.locator('.wiki-contradiction[data-rang="0"] button[data-decision="ancien"]').click()
         page.locator('.wiki-contradiction button[data-decision="ancien"]').last.click()
         page.wait_for_selector(".wiki-page:not([data-occupe])")
         self.assertEqual(len(self.decisions()), 1)
-        self.assertEqual(len(page.evaluate("Wiki.page('EQ-0005').contradictions")), 1)
+        self.assertEqual(len(self.entite("EQ-0005", "responsable")["aTrancher"]), 1)
 
-    def test_propositions_en_attente_et_boutons_absents_hors_responsable(self):
-        page = self.ouvrir("responsable", base=True)
-        lu = self.lire_page("WP-0003")
-        self.assertEqual(lu["attente"], {"lignes": [], "vide": "Aucune proposition en attente sur cette page."})
-        self.assertEqual(lu["modifier"], ["Modifier", "#/wiki-ecrire/WP-0003"])
+    def test_boutons_absents_hors_responsable(self):
         for profil in ("technicien", "demandeur"):
             with self.subTest(profil=profil):
                 page = self.ouvrir(profil, base=True)
-                for identifiant in ("EQ-0005", "WP-0002"):
-                    lu = self.lire_page(identifiant)
+                for identifiant in ("EQ-0005", "WP-0003"):
+                    lu = self.lire(identifiant)
                     self.assertGreater(len(lu["contradictions"]), 0)
                     self.assertEqual(page.locator("#contenu .wiki-trancher, #contenu button[data-decision], #contenu textarea").count(), 0)
-                    self.assertIsNone(lu["attente"])
-                    self.assertIsNone(lu["modifier"])
+                    self.assertEqual(lu["attente"], [])
+                    self.assertNotIn("wiki-modifier", [a[0] for a in lu["actions"]])
+                    self.assertEqual(page.locator("#wiki-ecrire-savoir-faire").count(), 0)
 
 
 # ---------------------------------------------------------------------------
-# #/wiki/<équipement> : couche calculée égale à Wiki.pageEquipement, consignation, pièges, liens
+# Consignation de la page d'une machine (CS98) ; lien depuis la fiche équipement
 # ---------------------------------------------------------------------------
 
-class TestPageEquipement(CasWiki):
-
-    def verifier_page(self, equipement, profil):
-        attendu = self.wiki_page(equipement)
-        self.aller_page(equipement)
-        lu = self.page.evaluate(PAGE_JS)
-        eq = attendu["equipement"]
-        liens = profil != "demandeur"
-        self.assertEqual(lu["h1"], plat("%s — %s" % (eq["repere"], eq["designation"])))
-        self.assertEqual(lu["fiche"], "#/equipement/" + equipement)
-        self.assertEqual(lu["blocs"], ["entete-page", "wiki-couche", "wiki-texte", "wiki-retours"]
-                         + (["wiki-en-attente"] if profil == "responsable" else []))
-        self.assertEqual(lu["sections"], COUCHE_EQUIPEMENT + (["wiki-meme-modele"] if attendu["memeModele"] else []))
-        # Pannes habituelles
-        self.assertEqual(lu["pannes"], symptomes_attendus(attendu["pannes"]))
-        self.assertEqual(lu["mention"], MENTION if attendu["pannes"] else None)
-        self.assertEqual(lu["sansPanne"] is None, bool(attendu["pannes"]))
-        # Pièces consommées
-        self.assertEqual([(p["article"], p["reference"], p["designation"]) for p in lu["pieces"]],
-                         [(p["articleId"], p["reference"], p["designation"]) for p in attendu["pieces"]])
-        for piece, element in zip(attendu["pieces"], lu["pieces"]):
-            self.assertTrue(element["meta"][0].startswith("Quantité : %s" % nombre_fr(piece["quantite"])), element)
-            self.assertEqual(element["meta"][1], pluriel(piece["nombreOt"], "intervention", "interventions"))
-            self.assertEqual(element["meta"][2:], ["dernière sortie le " + date_fr(piece["derniereDate"])] if piece["derniereDate"] else [])
-        # Dernières interventions
-        self.assertEqual([d["id"] for d in lu["dernieres"]], [d["id"] for d in attendu["dernieres"]])
-        for ot, element in zip(attendu["dernieres"], lu["dernieres"]):
-            self.assertEqual(element["numero"], ot["id"])
-            self.assertEqual(element["titre"], plat(ot["titre"]))
-            self.assertEqual(element["date"], date_fr(ot["date"]) or None)
-            self.assertEqual(element["extrait"], ot["extrait"])
-            meta = ["%s : %s" % (nom, ot["codes"][cle]) for nom, cle in (("Symptôme", "symptome"), ("Cause", "cause"),
-                                                                       ("Remède", "remede")) if ot["codes"][cle]]
-            if ot["dureeArret"] is not None:
-                meta.append("Arrêt : %s h" % nombre_fr(ot["dureeArret"]))
-            self.assertEqual(element["meta"], [plat(m) for m in meta])
-        reste = attendu["total"] - len(attendu["dernieres"])
-        if reste > 0 and liens:
-            self.assertEqual(lu["voirAutres"], ["#/ot?equipement=%s&etat=clotures" % equipement,
-                                                "Voir les %d autres interventions" % reste if reste > 1 else "Voir l'autre intervention"])
-        else:
-            self.assertIsNone(lu["voirAutres"])
-        self.assertEqual(lu["autres"], ("Et %s." % pluriel(reste, "intervention plus ancienne", "interventions plus anciennes"))
-                         if reste > 0 and not liens else None)
-        # Même marque et modèle
-        if attendu["memeModele"]:
-            self.assertEqual(lu["memeModele"]["jumeaux"],
-                             [["#/wiki/" + j["id"], j["repere"]] for j in attendu["memeModele"]["equipements"]])
-            self.assertIn("%s %s" % (eq["marque"], eq["modele"]), lu["memeModele"]["aide"])
-            self.assertEqual(lu["memeModele"]["pannes"], symptomes_attendus(attendu["memeModele"]["pannes"]))
-            self.assertEqual(lu["memeModele"]["mention"], MENTION if attendu["memeModele"]["pannes"] else None)
-        else:
-            self.assertIsNone(lu["memeModele"])
-        # Consignation
-        consignation = attendu["consignation"]
-        if consignation and consignation["texte"].strip():
-            self.assertEqual(lu["consignation"]["texte"], consignation["texte"])
-            self.assertIsNone(lu["consignation"]["absence"])
-        else:
-            self.assertIsNone(lu["consignation"]["texte"])
-            self.assertEqual(lu["consignation"]["absence"], SANS_CONSIGNATION)
-        # Sans ligne au wiki : pas de texte, un message clair
-        self.assertEqual(self.page.inner_text("#wiki-texte .wiki-sans-texte").strip(), SANS_TEXTE)
-        return attendu, lu
-
-    def test_les_28_pages_de_la_demo_conformes_a_Wiki_pageEquipement(self):
-        page = self.ouvrir("technicien")
-        ids = page.evaluate("() => Wiki.listePages().map((p) => p.equipementId)")
-        self.assertEqual(len(ids), 28)
-        vus = {"suffisant": 0, "insuffisant": 0, "piste": 0, "recidive": 0, "memeModele": 0, "voirAutres": 0, "sansPiece": 0}
-        for equipement in ids:
-            with self.subTest(equipement=equipement):
-                attendu, lu = self.verifier_page(equipement, "technicien")
-                vus["suffisant"] += sum(1 for s in attendu["pannes"] if s["suffisant"])
-                vus["insuffisant"] += sum(1 for s in attendu["pannes"] if not s["suffisant"])
-                vus["piste"] += sum(1 for s in attendu["pannes"] if s["peuDeCas"])
-                vus["recidive"] += sum(1 for s in attendu["pannes"] for c in s["causes"] for r in c["remedes"] if r["recidives"])
-                vus["memeModele"] += 1 if attendu["memeModele"] else 0
-                vus["voirAutres"] += 1 if lu["voirAutres"] else 0
-                vus["sansPiece"] += 0 if attendu["pieces"] else 1
-        # La démo couvre bien chaque cas d'affichage
-        self.assertTrue(all(vus.values()), vus)
-
-    def test_pages_du_demandeur_et_du_responsable(self):
-        for profil in ("demandeur", "responsable"):
-            with self.subTest(profil=profil):
-                self.ouvrir(profil)
-                for equipement in ("EQ-0001", "EQ-0023", "EQ-0018", "EQ-0031"):
-                    self.verifier_page(equipement, profil)
+class TestConsignation(CasWiki):
 
     def test_consignation_identique_au_champ_de_la_fiche(self):
         page = self.ouvrir("technicien")
@@ -1756,70 +1806,6 @@ class TestPageEquipement(CasWiki):
                 self.assertEqual(page.locator("#wiki-modifier-consignation").count(), 0)
                 self.assertEqual(page.locator('#contenu a[href$="/modifier"]').count(), 0)
 
-    def test_texte_piege_dans_un_compte_rendu_et_un_titre_reste_du_texte(self):
-        page = self.ouvrir("technicien")
-        ot = page.evaluate("(id) => Wiki.pageEquipement(id).dernieres[0].id", "EQ-0001")
-        compte_rendu = "Fuite au palier " + PIEGE + " & « guillemets » \"doubles\" 'simples'"
-        page.evaluate(ECRIRE_JS, ["ordres_travail", ot, {"compte_rendu": compte_rendu, "titre": "<b>Titre</b> piégé " + PIEGE}])
-        self.aller_page("EQ-0001")
-        ligne = page.locator('#wiki-dernieres li[data-ot="%s"]' % ot)
-        self.assertEqual(ligne.locator(".wiki-extrait").text_content(), self.wiki_page("EQ-0001")["dernieres"][0]["extrait"])
-        self.assertIn("<img src=x", ligne.locator(".wiki-extrait").text_content())
-        self.assertEqual(plat(ligne.locator(".carte-titre").text_content()), plat("<b>Titre</b> piégé " + PIEGE))
-        self.assertEqual(ligne.locator("img, script, b:not(.wiki-numero-ot)").count(), 0)
-        # Dans les résultats de la recherche (extrait surligné par Wiki.surligner)
-        self.chercher(".wiki-page .wiki-recherche", "palier")
-        trouve = page.locator('.wiki-page .wiki-trouve[data-id="%s"]' % ot)
-        self.assertEqual(trouve.count(), 1)
-        self.assertIn("<img src=x", trouve.locator(".wiki-extrait").text_content())
-        self.assertGreater(trouve.locator(".wiki-extrait mark").count(), 0)
-        self.assertEqual(trouve.locator("img, script, .carte-titre b").count(), 0)
-        self.verifier_sans_piege()
-
-    def test_liens_selon_le_profil(self):
-        for profil in ("demandeur", "technicien", "responsable"):
-            with self.subTest(profil=profil):
-                page = self.ouvrir(profil)
-                attendu = self.wiki_page("EQ-0001")
-                self.aller_page("EQ-0001")
-                self.chercher(".wiki-page .wiki-recherche", "filtre colmaté")
-                liens_ot = page.eval_on_selector_all('#contenu a[href^="#/ot"]', "(l) => l.map((a) => a.getAttribute('href'))")
-                liens_magasin = page.locator('#contenu a[href^="#/magasin"]').count()
-                numeros = page.eval_on_selector_all("#wiki-dernieres .wiki-ligne-tete > :first-child",
-                                                    "(l) => l.map((e) => [e.tagName, e.textContent])")
-                self.assertEqual([n[1] for n in numeros], [d["id"] for d in attendu["dernieres"]])
-                if profil == "demandeur":
-                    self.assertEqual(liens_ot, [])
-                    self.assertEqual(liens_magasin, 0)
-                    self.assertEqual({n[0] for n in numeros}, {"B"})
-                    self.assertGreater(page.locator(".wiki-trouve .wiki-numero-ot").count(), 0)
-                    self.assertEqual(page.locator("#wiki-pieces .wiki-pieces b").count(), len(attendu["pieces"]))
-                else:
-                    self.assertEqual({n[0] for n in numeros}, {"A"})
-                    for ot in attendu["dernieres"]:
-                        self.assertIn("#/ot/" + ot["id"], liens_ot)
-                    self.assertIn("#/ot?equipement=EQ-0001&etat=clotures", liens_ot)
-                    self.assertEqual(page.eval_on_selector_all("#wiki-pieces .wiki-lien-article", "(l) => l.map((a) => a.getAttribute('href'))"),
-                                     ["#/magasin/article/" + p["articleId"] for p in attendu["pieces"]])
-                    self.assertGreater(page.locator('.wiki-trouve a.wiki-lien-ot[href^="#/ot/OT-"]').count(), 0)
-                    # Les liens mènent aux écrans
-                    page.click('#wiki-dernieres a[href="#/ot/%s"]' % attendu["dernieres"][0]["id"])
-                    page.wait_for_selector(".ot-onglets")
-                    self.aller_page("EQ-0001")
-                    page.click("#wiki-voir-autres")
-                    # La liste reprend les filtres de l'adresse puis la réécrit en « #/ot » (ordres-liste.js) : on attend
-                    # la liste et son filtre « Clôturés », jamais l'adresse passagère (course sous charge).
-                    page.wait_for_function("() => (document.querySelector('#contenu h1') || {}).textContent === 'Ordres de travail'"
-                                           " && (document.querySelector('#ot-filtre-etat') || {}).value === 'clotures'")
-                # Même marque et modèle : lien vers la page du jumeau, pour tous
-                self.aller_page("EQ-0023")
-                page.click('#wiki-meme-modele a[href="#/wiki/EQ-0025"]')
-                page.wait_for_selector('.wiki-page[data-equipement="EQ-0025"]')
-                self.aller_page("EQ-0001")
-                page.click("#wiki-lien-fiche")
-                page.wait_for_function("location.hash === '#/equipement/EQ-0001'")
-                page.wait_for_selector("#lien-wiki-equipement")
-
     def test_lien_wiki_de_la_fiche_equipement(self):
         for profil in ("demandeur", "technicien", "responsable"):
             with self.subTest(profil=profil):
@@ -1838,6 +1824,9 @@ class TestPageEquipement(CasWiki):
                     ["lien-wiki-equipement"])
                 lien.click()
                 page.wait_for_selector('.wiki-page[data-equipement="EQ-0005"]')
+                page.click("#wiki-lien-fiche")
+                page.wait_for_function("location.hash === '#/equipement/EQ-0005'")
+                page.wait_for_selector("#lien-wiki-equipement")
 
 
 # ---------------------------------------------------------------------------
@@ -2038,327 +2027,227 @@ class TestRecherche(CasWiki):
 
 
 # ---------------------------------------------------------------------------
-# Sous-pages (§20.4, §20.9 ; T131) : base d'essai = PAGES, la page de PO-02 avec ses renvois, et des sous-pages
+# Sous-pages (§20.4 ; refonte 2 : celles d'un savoir-faire seulement)
 # ---------------------------------------------------------------------------
 
-PHRASE_SOUS_PAGE = "Cette page ne remplace pas la consignation de l'équipement"
-TITRE_SP_GARNITURE = "PO-02 — garniture"
-TITRE_SP_ETANCHEITE = "PO-02 — Étanchéité"
-TITRE_SP_PIEGE = 'PO-02 — <img src=x onerror="window.__piege = 6">Régler <b>gras</b>'
-TITRE_SP_KIT = TITRE_KIT + " — usure"
-TITRE_SP_REGLAGE = TITRE_PIEGE + " — réglage fin"
-TITRE_SF_ALIGNER = "Aligner l'accouplement de PO-02"
-TITRE_SP_ALIGNER = TITRE_SF_ALIGNER + " — comparateur"
-TEXTE_SP_GARNITURE = ("## Ce qui revient\n- La garniture fuit au démarrage [OT-2025-0010]\n"
-                      "## Astuces\n- Garder un kit d'avance au magasin [OT-2025-0044]")
-TEXTE_SP_KIT = "## Signes d'usure\n- La face se raye [OT-2026-0214]"
-RENVOI_PO02 = "- Le détail est dans [[%s]], [[%s]] et [[%s]] [OT-2025-0010] [OT-2026-0214]" % (
-    TITRE_SP_GARNITURE, TITRE_SP_ETANCHEITE, TITRE_SP_PIEGE)
-SOUS_PAGES = [
-    page_wiki("WP-0012", "équipement", TITRE_SP_GARNITURE, TEXTE_SP_GARNITURE, "IA", "", "2026-10-18 10:00", rattache_a="WP-0001"),
-    page_wiki("WP-0013", "équipement", TITRE_SP_ETANCHEITE, "## À surveiller\n- Le joint de corps suinte [OT-2026-0214]",
-              "manuel", rattache_a="WP-0001"),
-    page_wiki("WP-0014", "équipement", TITRE_SP_PIEGE, "## Astuces\n- Régler sans forcer [OT-2026-0098]", "IA", rattache_a="WP-0001"),
-    page_wiki("WP-0015", "équipement", "PO-02 — accouplement", "## Astuces\n- Aligner à froid [OT-2026-0214]", "IA",
-              rattache_a="WP-0001", statut="archivée"),
-    page_wiki("WP-0016", "composant", TITRE_SP_KIT, TEXTE_SP_KIT, "IA", rattache_a="WP-0004"),
-    page_wiki("WP-0017", "savoir-faire", TITRE_SP_REGLAGE, "## Étapes\n- Reprendre le réglage à froid [OT-2026-0098]", "IA",
-              rattache_a="WP-0011"),
-    # Savoir-faire rattaché à la page de PO-02 par rattache_a (pas une sous-page : autre type), et sa sous-page
-    # (relecture de T130, CS98 : la consignation remonte deux rattachements).
-    page_wiki("WP-0018", "savoir-faire", TITRE_SF_ALIGNER, "## Étapes\n- Poser le comparateur sur le moyeu [OT-2026-0214]", "IA",
-              rattache_a="WP-0001"),
-    page_wiki("WP-0019", "savoir-faire", TITRE_SP_ALIGNER, "## Pièces et outillage\n- Comparateur à cadran [OT-2026-0214]", "IA",
-              rattache_a="WP-0018"),
-]
-PAGES_SOUS_PAGES = [dict(p, texte=p["texte"] + "\n" + RENVOI_PO02, liens=p["liens"] + ";WP-0012;WP-0013;WP-0014")
-                    if p["id"] == "WP-0001" else p for p in PAGES] + SOUS_PAGES
-
-SOUS_PAGE_JS = """() => {
-  const t = (e) => (e ? e.textContent.replace(/\\s+/g, ' ').trim() : null);
-  const racine = document.querySelector('.wiki-page');
-  const mere = document.querySelector('#wiki-mere');
-  const lien = mere ? mere.querySelector('a') : null;
-  const liste = document.querySelector('#wiki-sous-pages');
-  return { dataMere: racine.dataset.mere, dataEquipement: racine.dataset.equipement, mere: t(mere),
-    mereLien: lien ? [lien.textContent, lien.getAttribute('href')] : null,
-    mereArchivee: mere ? t(mere.querySelector('.wiki-mere-archivee')) : null,
-    sousPages: liste ? Array.from(liste.querySelectorAll('li')).map((li) => [li.dataset.id, li.querySelector('a').textContent,
-      li.querySelector('a').getAttribute('href')]) : null,
-    nombre: liste ? t(liste.querySelector('h2 .badge')) : null,
-    recherche: document.querySelectorAll('.wiki-page .wiki-recherche').length,
-    calcule: document.querySelectorAll('#wiki-couche, #wiki-sans-equipement, #wiki-sans-article, #wiki-sans-cause').length };
-}"""
-TRIER_TITRES_JS = """(pages) => { const fr = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
-  return pages.slice().sort((a, b) => fr.compare(a[1], b[1]) || (a[0] < b[0] ? -1 : 1)).map((p) => p[0]); }"""
-SOUS_PAGES_PARCOURUES = ("EQ-0005", "WP-0012", "WP-0014", "ART-0016", "WP-0016", "WP-0011", "WP-0017", "WP-0019")
-
-
 class TestSousPages(CasWiki):
-    """Sous-pages : « Sous-page de <mère> » (lien), consignation de l'équipement de la mère en tête, aucune couche
-    calculée ; la mère liste ses sous-pages après le texte ; la liste des savoir-faire montre ceux des sous-pages (les
-    sous-pages de machine et d'article, retirées par la refonte 2, n'y sont pas) ; trois profils ; titres piégés ;
-    « Modifier » ; 1440 et 375 px, zones de 48 px, contrastes AA en thème clair et sombre."""
+    """Sous-page d'un savoir-faire : « Sous-page de <mère> » (lien), consignation reprise de sa mère (deux rattachements :
+    sous-page → savoir-faire → texte de PO-02), la mère liste ses sous-pages ; mère archivée nommée sans lien ; les
+    anciennes sous-pages de machine et pages de mode (types retirés) ne s'affichent plus et s'archivent."""
 
-    verifier_texte = TestPagesDuWiki.verifier_texte
-    verifier_retours = TestPagesDuWiki.verifier_retours
-
-    def poser_base(self):
-        self.page.evaluate(BASE_JS, [PAGES_SOUS_PAGES, JOURNAL])
-
-    def lire(self, identifiant):
-        lu = self.lire_page(identifiant)
-        lu.update(self.page.evaluate(SOUS_PAGE_JS))
-        return lu
-
-    def consignation_po02(self):
-        """Consignation de la fiche de PO-02, telle quelle, et celle de sa page d'équipement (Wiki.pageEquipement)."""
-        fiche = self.page.evaluate("Donnees.trouver('equipements', 'EQ-0005').consignation")
-        self.assertGreater(fiche.count("\n"), 2)
-        self.assertEqual(self.wiki_page("EQ-0005")["consignation"]["texte"], fiche)
-        return fiche
-
-    def test_sous_page_d_equipement_pour_les_trois_profils(self):
+    def test_sous_page_d_un_savoir_faire_pour_les_trois_profils(self):
         for profil in ("demandeur", "technicien", "responsable"):
             with self.subTest(profil=profil):
                 page = self.ouvrir(profil, base=True)
-                liens = profil != "demandeur"
-                responsable = profil == "responsable"
-                lu = self.lire("WP-0012")
-                self.assertEqual((lu["id"], lu["type"], lu["h1"], lu["typeBadge"]),
-                                 ("WP-0012", "équipement", TITRE_SP_GARNITURE, "Équipement"))
-                # Sous le titre, « Sous-page de <mère> » en lien vers la mère ; la fiche est celle de l'équipement de la mère.
-                self.assertEqual(lu["mere"], "Sous-page de " + TITRE_PO02)
-                self.assertEqual(lu["mereLien"], [TITRE_PO02, "#/wiki/EQ-0005"])
+                consignation = page.evaluate("Donnees.trouver('equipements', 'EQ-0005').consignation")
+                lu = self.lire("WP-0008")
+                self.assertEqual((lu["type"], lu["h1Brut"], lu["dataMere"]), ("savoir-faire", TITRE_SP_ALIGNER, "WP-0007"))
+                self.assertEqual(lu["mere"], {"texte": "Sous-page de " + TITRE_ALIGNER, "lien": [TITRE_ALIGNER, "#/wiki/WP-0007"],
+                                              "archivee": None})
                 self.assertEqual(page.evaluate("document.querySelector('#wiki-mere').previousElementSibling.tagName"), "H1")
-                self.assertEqual((lu["dataMere"], lu["dataEquipement"]), ("EQ-0005", ""))
-                self.assertEqual(lu["fiche"], ["Fiche de l'équipement", "#/equipement/EQ-0005"])
-                # En tête, la consignation de l'équipement de sa mère, à l'octet ; aucune couche calculée.
-                self.assertEqual(lu["blocs"], ["entete-page", "wiki-entete", "wiki-texte", "wiki-retours"]
-                                 + (["wiki-en-attente"] if responsable else []))
-                self.assertEqual((lu["couche"], lu["calcule"], lu["recherche"]), ([], 0, 0))
-                self.assertEqual(lu["entete"]["titre"], "Consignation de PO-02")
-                self.assertEqual(lu["entete"]["phrase"], PHRASE_SOUS_PAGE)
-                self.assertEqual(lu["entete"]["phrase"], page.evaluate("Wiki.PHRASE_SOUS_PAGE"))
-                self.assertEqual(lu["entete"]["consignation"], self.consignation_po02())
-                self.assertEqual(page.locator("#wiki-entete .wiki-consignation-texte *, #wiki-modifier-consignation").count(), 0)
-                self.assertIsNone(self.wiki("WP-0012")["calcul"])
-                # Le texte, son origine, les OT cités (sans lien pour le demandeur), la mère dans « Pages qui renvoient ici ».
-                self.verifier_texte(lu, TEXTE_SP_GARNITURE, liens, ORIGINE_IA % "18/10/2026")
-                self.verifier_retours(lu, "WP-0012", [("EQ-0005", TITRE_PO02, "équipement")])
-                self.assertIsNone(lu["sousPages"])
-                self.assertEqual(lu["modifier"], ["Modifier", "#/wiki-ecrire/WP-0012"] if responsable else None)
-                if not liens:
-                    self.assertEqual(page.locator('#contenu a[href^="#/ot"], #contenu a[href^="#/magasin"]').count(), 0)
-                self.verifier_sans_piege()
-
-    def test_la_mere_liste_ses_sous_pages_apres_le_texte(self):
-        for profil in ("demandeur", "technicien", "responsable"):
-            with self.subTest(profil=profil):
-                page = self.ouvrir(profil, base=True)
-                responsable = profil == "responsable"
-                lu = self.lire("EQ-0005")
-                # Par titre, dans l'ordre alphabétique français (« Étanchéité » avant « garniture ») ; l'archivée n'y est pas.
-                titres = {"WP-0012": TITRE_SP_GARNITURE, "WP-0013": TITRE_SP_ETANCHEITE, "WP-0014": TITRE_SP_PIEGE}
-                ordre = page.evaluate(TRIER_TITRES_JS, list(titres.items()))
-                self.assertLess(ordre.index("WP-0013"), ordre.index("WP-0012"))
-                self.assertEqual(lu["sousPages"], [[i, titres[i], "#/wiki/" + i] for i in ordre])
-                self.assertEqual([[s["id"], s["titre"]] for s in self.wiki("EQ-0005")["sousPages"]], [[i, titres[i]] for i in ordre])
-                self.assertEqual(lu["nombre"], "3")
-                self.assertEqual(lu["blocs"], ["entete-page", "wiki-couche", "wiki-texte", "wiki-sous-pages", "wiki-a-trancher",
-                                               "wiki-retours"] + (["wiki-en-attente"] if responsable else []))
+                self.assertEqual(lu["alertes"], ["wiki-entete"])
+                self.assertEqual((lu["consignation"]["titre"], lu["consignation"]["phrase"], lu["consignation"]["texte"]),
+                                 ("Consignation de PO-02", PHRASE_SAVOIR_FAIRE, consignation))
+                self.assertEqual(lu["faits"], [["Rattaché à", TITRE_PO02, "#/wiki/EQ-0005"],
+                                               ["Sous-page de", TITRE_ALIGNER, "#/wiki/WP-0007"]])
+                self.assertEqual(faits_attendus(self.entite("WP-0008", profil)["faits"]),
+                                 faits_attendus(self.calcul().entite("WP-0008", profil, MAINTENANT)["faits"]))
+                self.assertEqual([(t["rubrique"], t["origine"]) for t in lu["textes"]], [("Pièces et outillage", ORIGINE_IA % "18/10/2026")])
+                self.assertEqual(lu["sousPages"], [])
+                self.assertEqual([a[0] for a in lu["actions"]], ["wiki-modifier"] if profil == "responsable" else [])
+                # La mère liste ses sous-pages ; un savoir-faire sans sous-page n'a pas la section
+                lu = self.lire("WP-0007")
                 self.assertIsNone(lu["mere"])
-                self.assertEqual(lu["dataMere"], "")
-                # La phrase de renvoi de la mère mène à ses sous-pages.
-                self.assertEqual(lu["rubriques"][3][1][-1]["liens"], [[TITRE_SP_GARNITURE, "#/wiki/WP-0012"],
-                                                                      [TITRE_SP_ETANCHEITE, "#/wiki/WP-0013"],
-                                                                      [plat(TITRE_SP_PIEGE), "#/wiki/WP-0014"]])
-                # Mère d'un autre type : composant, savoir-faire ; une page sans sous-page n'a pas la section.
-                self.assertEqual(self.lire("ART-0016")["sousPages"], [["WP-0016", TITRE_SP_KIT, "#/wiki/WP-0016"]])
-                self.assertEqual(self.lire("WP-0011")["sousPages"], [["WP-0017", TITRE_SP_REGLAGE, "#/wiki/WP-0017"]])
-                self.assertEqual(self.lire("WP-0018")["sousPages"], [["WP-0019", TITRE_SP_ALIGNER, "#/wiki/WP-0019"]])
-                for identifiant in ("WP-0002", "WP-0003", "WP-0012"):
-                    self.assertIsNone(self.lire(identifiant)["sousPages"], identifiant)
+                self.assertEqual(lu["sousPages"], [["WP-0008", TITRE_SP_ALIGNER, "#/wiki/WP-0008"]])
+                self.assertEqual(self.lire("WP-0003")["sousPages"], [])
+                # Rattaché à la page de PO-02 : dans les savoir-faire de la machine, pas sa sous-page
+                self.assertEqual(sorted(self.lire("EQ-0005")["savoirFaire"]), ["WP-0003", "WP-0006", "WP-0007"])
                 self.verifier_sans_piege()
-        # On va de la mère à la sous-page, puis de la sous-page à la mère.
-        self.aller_wiki("EQ-0005")
-        page.click('#wiki-sous-pages a[href="#/wiki/WP-0013"]')
-        page.wait_for_selector('.wiki-page[data-page="WP-0013"] #wiki-mere')
+        # De la mère à la sous-page, puis de la sous-page à la mère
+        self.lire("WP-0007")
+        page.click('#wiki-sous-pages a[href="#/wiki/WP-0008"]')
+        page.wait_for_selector('.wiki-page[data-page="WP-0008"] #wiki-mere')
         page.click("#wiki-mere a")
-        page.wait_for_selector('.wiki-page[data-page="EQ-0005"] #wiki-sous-pages')
+        page.wait_for_selector('.wiki-page[data-page="WP-0007"] #wiki-sous-pages')
 
-    def test_sous_pages_de_composant_et_de_savoir_faire_et_mere_archivee(self):
-        for profil in ("technicien", "demandeur"):
-            with self.subTest(profil=profil):
-                page = self.ouvrir(profil, base=True)
-                liens = profil == "technicien"
-                # Composant : la mère, la fiche de l'article de la mère (pas de magasin pour le demandeur), rien de calculé.
-                lu = self.lire("WP-0016")
-                self.assertEqual((lu["h1"], lu["typeBadge"], lu["mere"], lu["mereLien"]),
-                                 (TITRE_SP_KIT, "Composant", "Sous-page de " + TITRE_KIT, [TITRE_KIT, "#/wiki/ART-0016"]))
-                self.assertEqual(lu["fiche"], ["Fiche de l'article", "#/magasin/article/ART-0016"] if liens else None)
-                self.assertEqual(lu["blocs"], ["entete-page", "wiki-texte", "wiki-retours"])
-                self.assertEqual((lu["entete"], lu["calcule"]), (None, 0))
-                self.assertNotIn("Pas d'article au magasin", page.inner_text("#contenu"))
-                self.verifier_texte(lu, TEXTE_SP_KIT, liens, ORIGINE_IA % "15/10/2026")
-                # Savoir-faire : l'en-tête de sa mère — consignation de la fiche, telle quelle, et la phrase des savoir-faire —,
-                # que la mère soit rattachée à l'équipement (WP-0011) ou à la page de l'équipement (WP-0018).
-                consignation = self.consignation_po02()
-                for identifiant, mere, titre_mere in (("WP-0017", "WP-0011", TITRE_PIEGE), ("WP-0019", "WP-0018", TITRE_SF_ALIGNER)):
-                    lu = self.lire(identifiant)
-                    self.assertEqual(lu["mereLien"], [titre_mere, "#/wiki/" + mere], identifiant)
-                    self.assertEqual(lu["blocs"], ["entete-page", "wiki-entete", "wiki-texte", "wiki-retours"], identifiant)
-                    self.assertEqual((lu["entete"]["titre"], lu["entete"]["phrase"], lu["entete"]["consignation"]),
-                                     ("Consignation de PO-02", PHRASE_SAVOIR_FAIRE, consignation), identifiant)
-                    self.assertEqual(lu["fiche"], ["Fiche de l'équipement", "#/equipement/EQ-0005"], identifiant)
-                    self.assertEqual(self.lire(mere)["entete"]["consignation"], consignation, mere)
-                self.assertIsNone(self.lire("WP-0018")["mere"])               # rattaché à une page d'un autre type
-                self.verifier_sans_piege()
-        # Mère archivée : nommée sans lien, « page archivée » ; la sous-page garde sa consignation.
-        page.evaluate(ECRIRE_JS, ["wiki_pages", "WP-0018", {"statut": "archivée"}])
-        lu = self.lire("WP-0019")
-        self.assertEqual((lu["mere"], lu["mereLien"], lu["mereArchivee"]),
-                         ("Sous-page de " + TITRE_SF_ALIGNER + " page archivée", None, TITRE_SF_ALIGNER))
-        self.assertEqual(lu["entete"]["consignation"], consignation)
-
-    def test_liste_des_savoir_faire_et_leurs_sous_pages(self):
-        for profil in ("demandeur", "technicien", "responsable"):
-            with self.subTest(profil=profil):
-                page = self.ouvrir(profil, base=True)
-                self.aller("#/wiki/savoir-faire", ".wiki-liste-entites[data-liste=savoir-faire] li")
-                lignes = page.evaluate("""() => Array.from(document.querySelectorAll('.wiki-liste-entites li')).map((li) => [li.dataset.id,
-                  li.querySelector('.wiki-ligne-corps > a').textContent, Array.from(li.querySelectorAll('.wiki-ligne-sous a'))
-                  .map((a) => [a.textContent, a.getAttribute('href')])])""")
-                savoir = [[p["id"], p["titre"]] for p in PAGES_SOUS_PAGES if p["type"] == "savoir-faire" and p["statut"] != "archivée"]
-                # Base de TestPagesDuWiki (5 savoir-faire) : deux sous-pages de savoir-faire (WP-0017, WP-0019) et WP-0018
-                self.assertEqual(len(savoir), 8)
-                self.assertEqual([l[0] for l in lignes], page.evaluate(TRIER_TITRES_JS, savoir))
-                sous = {l[0]: l for l in lignes}
-                self.assertEqual(sous["WP-0017"][1], TITRE_SP_REGLAGE)
-                self.assertEqual(sous["WP-0017"][2][-1], [TITRE_PIEGE, "#/wiki/WP-0011"])          # « sous-page de » sa mère
-                self.assertEqual(sous["WP-0019"][2][-1], [TITRE_SF_ALIGNER, "#/wiki/WP-0018"])
-                self.assertEqual(sous["WP-0018"][2], [[TITRE_PO02, "#/wiki/EQ-0005"]])            # rattaché à la machine
-                # Les sous-pages de machine et d'article (types retirés) ne sont dans aucune liste ; l'archivée nulle part
-                for liste in ("machines", "articles", "savoir-faire"):
-                    self.aller("#/wiki/" + liste, '.wiki-liste-entites[data-liste="%s"]' % liste)
-                    for ident in ("WP-0012", "WP-0013", "WP-0014", "WP-0015", "WP-0016"):
-                        self.assertEqual(page.locator('#contenu [data-id="%s"], #contenu a[href="#/wiki/%s"]' % (ident, ident)).count(), 0)
-                self.verifier_sans_piege()
-
-    def test_titres_pieges_de_sous_page_restent_du_texte(self):
+    def test_mere_archivee_et_types_retires(self):
         page = self.ouvrir("responsable", base=True)
-        lu = self.lire("WP-0014")
-        self.assertEqual(page.evaluate("document.querySelector('#contenu h1').textContent"), TITRE_SP_PIEGE)
-        self.assertEqual(lu["mereLien"], [TITRE_PO02, "#/wiki/EQ-0005"])
-        self.verifier_sans_piege()
-        # Sous-page d'une mère au titre piégé : « Sous-page de » reste du texte.
-        lu = self.lire("WP-0017")
-        self.assertEqual(lu["mereLien"], [TITRE_PIEGE, "#/wiki/WP-0011"])
-        self.assertEqual(page.evaluate("document.querySelector('#contenu h1').textContent"), TITRE_SP_REGLAGE)
-        self.verifier_sans_piege()
-        # Liste des sous-pages de la mère et index.
-        self.assertIn(["WP-0014", TITRE_SP_PIEGE, "#/wiki/WP-0014"], self.lire("EQ-0005")["sousPages"])
-        self.assertEqual(page.locator("#wiki-sous-pages *:not(h2):not(.badge):not(ul):not(li):not(a):not(p)").count(), 0)
-        self.verifier_sans_piege()
-        # Sous-page de savoir-faire au titre piégé, dans la liste des savoir-faire
-        self.aller("#/wiki/savoir-faire", '.wiki-liste-entites li[data-id="WP-0017"]')
-        self.assertEqual(page.evaluate("document.querySelector('li[data-id=\"WP-0017\"] .wiki-ligne-corps > a').textContent"), TITRE_SP_REGLAGE)
-        self.verifier_sans_piege()
+        consignation = page.evaluate("Donnees.trouver('equipements', 'EQ-0005').consignation")
+        # Liste des savoir-faire : la sous-page et sa mère ; les types retirés et l'archivée n'y sont pas
+        self.aller("#/wiki/savoir-faire", ".wiki-liste-entites[data-liste=savoir-faire] li")
+        lignes = page.evaluate("""() => Array.from(document.querySelectorAll('.wiki-liste-entites li')).map((li) => [li.dataset.id,
+          Array.from(li.querySelectorAll('.wiki-ligne-sous a')).map((a) => [a.textContent, a.getAttribute('href')])])""")
+        self.assertEqual(sorted(l[0] for l in lignes), SAVOIR_FAIRE_ACTIFS)
+        self.assertEqual(dict(lignes)["WP-0008"][-1], [TITRE_ALIGNER, "#/wiki/WP-0007"])
+        # Anciennes sous-page de machine et page de mode : plus de page ; leur écriture dit « type de page retiré »
+        for identifiant in ("WP-0010", "WP-0011"):
+            with self.subTest(identifiant=identifiant):
+                self.assertEqual(self.lire(identifiant).get("introuvable"), True)
+                self.aller("#/wiki-ecrire/" + identifiant, '.wj-ecrire[data-page="%s"] .wj-type-retire' % identifiant)
+        # Mère archivée : nommée sans lien, « page archivée » ; la sous-page garde sa consignation
+        page.evaluate(ECRIRE_JS, ["wiki_pages", "WP-0007", {"statut": "archivée"}])
+        lu = self.lire("WP-0008")
+        self.assertEqual(lu["mere"], {"texte": "Sous-page de " + TITRE_ALIGNER + " page archivée", "lien": None, "archivee": TITRE_ALIGNER})
+        self.assertEqual(lu["consignation"]["texte"], consignation)
+        self.assertEqual(self.lire("WP-0007").get("introuvable"), True)
 
     def test_modifier_une_sous_page(self):
-        """Refonte 2 (T138) : une sous-page de machine (type retiré) ne s'écrit plus, elle s'archive ; une sous-page de
-        savoir-faire se modifie et garde sa mère et la consignation de PO-02 (deux rattachements)."""
         page = self.ouvrir("responsable", base=True)
-        self.lire("WP-0012")
+        self.lire("WP-0008")
         page.click("#wiki-modifier")
-        page.wait_for_selector('.wj-ecrire[data-page="WP-0012"] .wj-type-retire')
-        page.fill("#wj-texte", TEXTE_SP_GARNITURE + "\n- La garniture tient après le rodage [OT-2025-0010]")
-        page.click(".wj-enregistrer")
-        page.wait_for_function("document.querySelector('.wj-annonce').textContent.includes('type de page retiré')")
-        self.assertEqual(page.evaluate("location.hash"), "#/wiki-ecrire/WP-0012")
-        ligne = page.evaluate("Donnees.trouver('wiki_pages', 'WP-0012')")
-        self.assertEqual((ligne["texte"], ligne["version"]), (TEXTE_SP_GARNITURE, "1"))
-
-        self.lire("WP-0019")
-        page.click("#wiki-modifier")
-        page.wait_for_selector('.wj-ecrire[data-page="WP-0019"]')
+        page.wait_for_selector('.wj-ecrire[data-page="WP-0008"]')
         self.assertEqual(page.query_selector_all(".wj-type-retire"), [])
         avant = page.input_value("#wj-texte")
         apres = avant + "\n- Serrer le comparateur sans forcer [OT-2026-0214]"
         page.fill("#wj-texte", apres)
         page.click(".wj-enregistrer")
-        page.wait_for_function("location.hash === '#/wiki/WP-0019'")
-        ligne = page.evaluate("Donnees.trouver('wiki_pages', 'WP-0019')")
+        page.wait_for_function("location.hash === '#/wiki/WP-0008'")
+        page.wait_for_selector('.wiki-page[data-page="WP-0008"] .wiki-page-grille')
+        ligne = page.evaluate("Donnees.trouver('wiki_pages', 'WP-0008')")
         self.assertEqual((ligne["texte"], ligne["version"], ligne["rattache_a"], ligne["equipement_id"], ligne["statut"]),
-                         (apres, "2", "WP-0018", "", "active"))
-        lu = self.lire("WP-0019")
-        self.assertEqual(lu["mereLien"], [TITRE_SF_ALIGNER, "#/wiki/WP-0018"])
+                         (apres, "2", "WP-0007", "", "active"))
+        lu = page.evaluate(ENTITE_JS)
+        self.assertEqual(lu["mere"]["lien"], [TITRE_ALIGNER, "#/wiki/WP-0007"])
         self.assertIn("Serrer le comparateur sans forcer", page.inner_text("#wiki-texte"))
-        self.assertIn(", puis modifié à la main — validé par", lu["origine"])
-        self.assertEqual((lu["entete"]["titre"], lu["entete"]["consignation"]), ("Consignation de PO-02", self.consignation_po02()))
+        self.assertIn(", puis modifié à la main — validé par", lu["textes"][0]["origine"])
+        self.assertEqual(lu["consignation"]["titre"], "Consignation de PO-02")
 
-    def parcourir(self, verifier):
-        """Accueil, liste des savoir-faire, mères et sous-pages des trois types."""
+
+# ---------------------------------------------------------------------------
+# Encyclopédie : 1440 et 375 px, zones tactiles, contrastes, réseau
+# ---------------------------------------------------------------------------
+
+class TestAffichageEncyclopedie(CasWiki):
+
+    def pages_parcourues(self, profil):
+        """Une page de chaque type (celles du profil), plus une sous-page et une page sans contradiction si la base est posée."""
+        ids = self.page.evaluate("""(profil) => {
+          const premier = (type) => { const liste = Wiki.listeEntites(type, { profil: 'responsable' }) || [];
+            return liste.length ? (liste[0].lien || liste[0].id) : null; };
+          return [premier('panne'), 'EQ-0005', 'ART-0016', premier('savoir-faire')].concat(profil === 'demandeur' ? []
+            : ['TEC-0001', Wiki.listeEntites('intervention', { profil: 'responsable' })[0].id, 'OT-2026-0214']); }""", profil)
+        if self.page.evaluate("Boolean(Donnees.trouver('wiki_pages', 'WP-0008'))"):
+            ids += ["WP-0008", "EQ-0001", "WP-0003"]
+        return [i for i in ids if i]
+
+    def parcourir(self, verifier, profil):
+        """Accueil, recherche (tout ouvert), six listes, pages des six types (« Voir les n autres » ouverts)."""
+        page = self.page
         self.aller_accueil()
         verifier("#contenu", "accueil")
-        self.aller("#/wiki/savoir-faire", ".wiki-liste-entites[data-liste=savoir-faire] li")
-        verifier("#contenu", "liste des savoir-faire")
-        for identifiant in SOUS_PAGES_PARCOURUES:
-            self.aller_wiki(identifiant)
-            verifier("#contenu", "page " + identifiant)
+        self.chercher_accueil("pompe")
+        for bouton in page.locator("#wiki-trouves .wiki-voir-autres, #wiki-trouves .wiki-voir-plus").all():
+            bouton.click()
+        verifier("#contenu", "accueil, recherche")
+        for liste in LISTES:
+            self.aller("#/wiki/" + liste, '.wiki-liste-entites[data-liste="%s"]' % liste)
+            verifier("#contenu", "liste " + liste)
+        for ident in self.pages_parcourues(profil):
+            self.aller_entite(ident)
+            verifier("#contenu", "page " + ident)
+            boutons = page.locator("#contenu .wiki-page .wiki-voir-autres").all()
+            for bouton in boutons:
+                bouton.click()
+            if boutons:
+                verifier("#contenu", "page " + ident + ", listes ouvertes")
+
+    def verifier_largeur(self, ou):
+        largeur, ecran = self.page.evaluate(LARGEUR_JS)
+        self.assertLessEqual(largeur, ecran, "%s : page plus large que l'écran (%s > %s)" % (ou, largeur, ecran))
 
     def test_1440_et_375_px_sans_defilement_horizontal_et_zones_de_48_px(self):
         for largeur, hauteur, telephone in ((1440, 900, False), (375, 812, True)):
-            for profil in ("responsable", "demandeur"):
+            for profil in ("responsable", "technicien", "demandeur"):
                 with self.subTest(largeur=largeur, profil=profil):
                     self.ouvrir(profil, largeur=largeur, hauteur=hauteur, telephone=telephone, base=True)
 
                     def verifier(racine, ou):
-                        largeur_page, ecran = self.page.evaluate(LARGEUR_JS)
-                        self.assertLessEqual(largeur_page, ecran, "%s : page plus large que l'écran (%s > %s)" % (ou, largeur_page, ecran))
+                        self.verifier_largeur(ou)
                         if telephone:
                             zones = self.page.evaluate(ZONES_JS, racine)
+                            self.assertGreater(len(zones), 0, ou)
                             self.assertEqual([z for z in zones if z[2] < 47.5], [], "%s : zones de moins de 48 px" % ou)
-                    self.parcourir(verifier)
+                    self.parcourir(verifier, profil)
 
     def test_contrastes_aa_en_theme_clair_et_sombre(self):
         for theme in ("clair", None):
-            with self.subTest(theme=theme or "sombre"):
-                page = self.ouvrir("technicien", largeur=1440, hauteur=900, theme=theme, base=True)
-                self.assertEqual(page.evaluate("document.documentElement.dataset.theme || null"), theme)
+            for profil, largeur, hauteur, telephone in (("responsable", 1440, 900, False), ("demandeur", 375, 812, True)):
+                with self.subTest(theme=theme or "sombre", profil=profil):
+                    page = self.ouvrir(profil, largeur=largeur, hauteur=hauteur, theme=theme, telephone=telephone, base=True)
+                    self.assertEqual(page.evaluate("document.documentElement.dataset.theme || null"), theme)
 
-                def verifier(racine, ou):
-                    page.wait_for_timeout(100)
-                    self.assertEqual(page.evaluate(AUDIT_TEXTES_JS, racine), [], ou)
-                self.parcourir(verifier)
+                    def verifier(racine, ou):
+                        page.wait_for_timeout(100)
+                        self.assertEqual(page.evaluate(AUDIT_TEXTES_JS, racine), [], ou)
+                    self.parcourir(verifier, profil)
+
+    def test_focus_visible_sur_la_recherche_et_les_briques(self):
+        page = self.ouvrir("responsable", largeur=1440, hauteur=900)
+        self.aller_accueil()
+        for selecteur in ("#wiki-champ-accueil", '#wiki-phrase-resume a[data-liste="machines"]', ".wiki-brique", ".wiki-mini"):
+            with self.subTest(selecteur=selecteur):
+                page.focus(selecteur)
+                page.keyboard.press("Shift+Tab")
+                page.keyboard.press("Tab")
+                style = page.evaluate("""(s) => { const e = document.activeElement; const c = getComputedStyle(e);
+                  return [e.matches(s), e.matches(':focus-visible'), c.outlineStyle, parseFloat(c.outlineWidth)]; }""", selecteur)
+                self.assertEqual(style[:3], [True, True, "solid"])
+                self.assertGreaterEqual(style[3], 2)
+
+    def test_aucun_appel_reseau_pour_afficher_ou_chercher(self):
+        page = self.ouvrir("responsable", base=True)
+        requetes = []
+        page.on("request", lambda requete: requetes.append(requete.url))
+        page.evaluate("""() => { window.__appels = [];
+            const noter = (nom) => function () { window.__appels.push(nom); throw new Error('appel réseau interdit : ' + nom); };
+            window.fetch = noter('fetch'); XMLHttpRequest.prototype.open = noter('xhr');
+            navigator.sendBeacon = noter('beacon'); window.WebSocket = noter('websocket'); window.EventSource = noter('eventsource'); }""")
+        self.parcourir(lambda racine, ou: None, "responsable")
+        self.assertEqual(page.evaluate("window.__appels"), [])
+        self.assertEqual([u for u in requetes if not u.startswith(("blob:", "data:"))], [])
+
+    def test_aucune_requete_api_en_mode_serveur(self):
+        """Mode serveur : afficher l'accueil, les listes et les pages des six types et chercher ne fait aucune requête /api/
+        (la surveillance des autres postes, /api/versions toutes les 20 s, n'est pas un affichage)."""
+        for motif in ERREURS_SERVEUR:
+            self.autoriser_erreur(motif)
+        with ServeurPrevo() as serveur:
+            self.contexte.close()
+            self.contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1440, "height": 900})
+            preregler_profil(self.contexte, "responsable")
+            self.page = self.contexte.new_page()
+            self.surveiller(self.page)
+            self.page.goto(serveur.url + "/")
+            attendre_pret(self.page, 30000)
+            self.assertEqual(self.page.evaluate("App.mode"), "serveur")
+            # Un savoir-faire, écrit avant de compter (le wiki de la démo est vide) : la sixième page
+            self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-0001', type: 'savoir-faire',
+              titre: 'Changer la garniture de PO-02', equipement_id: 'EQ-0005', texte: '## Étapes\\n- Repérer l\\'accouplement [OT-2026-0098]',
+              version: '1', origine: 'manuel', valide_par: 'Paul Martin', valide_le: '2026-10-15 10:00', statut: 'active' }); return true; },
+              { action: 'test des écrans du wiki' })""")
+            self.assertEqual(self.page.evaluate("Wiki.entite('WP-0001', { profil: 'responsable' }).type"), "savoir-faire")
+            requetes = []
+            self.page.on("request", lambda requete: requetes.append(requete.url))
+            self.parcourir(lambda racine, ou: self.assertEqual(
+                [u for u in requetes if "/api/" in u and "/api/versions" not in u], [], ou), "responsable")
+            self.assertIn("WP-0001", self.pages_parcourues("responsable"))
 
 
 # ---------------------------------------------------------------------------
-# Affichage : 1440 et 375 px, zones tactiles, contrastes, réseau
+# Affichage des champs de recherche : page d'une machine, fiche équipement, DI, OT
 # ---------------------------------------------------------------------------
-
-PAGES_PARCOURUES = ("EQ-0005", "ART-0016", "WP-0002", "WP-0003", "WP-0005", "WP-0006", "WP-0007", "WP-0010", "WP-0011")
-
 
 class TestAffichage(CasWiki):
 
     def parcourir(self, verifier, profil):
-        """Accueil (suivi, recherche, résultats ouverts), pages des quatre types (base d'essai), pages d'équipement de la
-        démo (résultats et détails ouverts), fiche équipement ; puis DI et OT (blocs wiki)."""
+        """Pages de machines de la démo (résultats de recherche ouverts), fiche équipement ; puis DI et OT (blocs wiki)."""
         page = self.page
         self.poser_base()
-        self.aller_accueil()
-        self.chercher_accueil("fuite garniture")
-        for bouton in page.locator("#wiki-trouves .wiki-voir-plus, #wiki-trouves .wiki-voir-autres").all():
-            bouton.click()
-        verifier("#contenu", "accueil")
-        for identifiant in PAGES_PARCOURUES:
-            self.aller_wiki(identifiant)
-            verifier("#contenu", "page " + identifiant)
         for equipement in ("EQ-0001", "EQ-0023", "EQ-0031"):
             self.aller_page(equipement)
             self.chercher(".wiki-page .wiki-recherche", "capteur filtre")
-            page.evaluate("() => document.querySelectorAll('.wiki-page details').forEach((d) => { d.open = true; })")
+            for bouton in page.locator(".wiki-page .wiki-voir-plus").all():
+                bouton.click()
             verifier("#contenu", "page " + equipement)
         self.aller("#/equipement/EQ-0001", "#lien-wiki-equipement")
         verifier("p:has(> #lien-wiki-equipement)", "fiche équipement")
@@ -2367,7 +2256,7 @@ class TestAffichage(CasWiki):
         self.attendre_resultats(".wiki-recherche-demande")
         verifier(".wiki-recherche-demande", "saisie d'une DI")
         if profil != "demandeur":
-            ot = page.evaluate("() => Wiki.pageEquipement('EQ-0001').dernieres[1].id")
+            ot = page.evaluate("() => Wiki.entite('EQ-0001', { profil: 'technicien' }).sections.interventions[2].id")
             self.aller("#/ot/" + ot, ".ot-onglets")
             page.click(".onglet[data-onglet='preparation']")
             self.attendre_resultats("#contenu .wiki-recherche")
@@ -2427,6 +2316,81 @@ class TestAffichage(CasWiki):
             page.evaluate("(t) => Wiki.rechercher(t, {})", texte)
         self.assertEqual(page.evaluate("window.__appels"), [])
         self.assertEqual([u for u in requetes if not u.startswith(("blob:", "data:"))], [])
+
+
+# ---------------------------------------------------------------------------
+# Jeu de charge (D101 ; relecture de T136, C1) : afficher, pas seulement calculer
+# ---------------------------------------------------------------------------
+
+class TestJeuDeCharge(CasWiki):
+    """Jeu de charge (outils/generer_demo.py --volume 500,5000 : 500 machines, 5 000 OT), mode serveur, responsable, PC et
+    téléphone : l'accueil, chaque liste et une page de chaque type s'affichent en moins de 500 ms (médiane de trois
+    affichages, de l'adresse à l'image suivante), sans créer des dizaines de milliers d'éléments (avant : 63 065 pour la
+    liste des interventions, 5 s)."""
+
+    ELEMENTS_MAX = 5000
+
+    def test_accueil_listes_et_pages_en_moins_de_500_ms(self):
+        for motif in ERREURS_SERVEUR:
+            self.autoriser_erreur(motif)
+        with tempfile.TemporaryDirectory() as dossier:
+            resultat = subprocess.run([sys.executable, str(RACINE / "outils" / "generer_demo.py"), "--volume", "500,5000",
+                                       "--sortie", dossier, "--sans-js"], capture_output=True, cwd=RACINE)
+            self.assertEqual(resultat.returncode, 0, resultat.stdout.decode("utf-8", "replace"))
+            with ServeurPrevo(source=dossier) as serveur:
+                for largeur, hauteur, telephone in ((1440, 900, False), (375, 812, True)):
+                    with self.subTest(largeur=largeur):
+                        self.mesurer(serveur, largeur, hauteur, telephone)
+
+    def mesurer(self, serveur, largeur, hauteur, telephone):
+        self.contexte.close()
+        options = {"locale": "fr-FR", "viewport": {"width": largeur, "height": hauteur}}
+        if telephone:
+            options.update(is_mobile=True, has_touch=True)
+        self.contexte = self.navigateur.new_context(**options)
+        preregler_profil(self.contexte, "responsable")
+        page = self.page = self.contexte.new_page()
+        self.surveiller(page)
+        page.goto(serveur.url + "/")
+        attendre_pret(page, 60000)
+        self.assertEqual(page.evaluate("App.mode"), "serveur")
+        total = page.evaluate("Donnees.lignes('ordres_travail').length")       # 5 000, plus les préventifs échus créés à l'ouverture
+        self.assertGreaterEqual(total, 5000)
+        if not page.evaluate("Boolean(Donnees.trouver('wiki_pages', 'WP-9001'))"):
+            page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-9001', type: 'savoir-faire',
+              titre: 'Geste de charge', equipement_id: Donnees.lignes('equipements')[0].id, texte: '## Étapes\\n- Un geste [' +
+              Donnees.lignes('ordres_travail')[0].id + ']', version: '1', origine: 'manuel', valide_par: 'Responsable',
+              valide_le: '2026-10-15 10:00', statut: 'active' }); return true; }, { action: 'test de charge du wiki' })""")
+        ids = page.evaluate("""() => {
+          const plus = (champ) => { const nombres = new Map();
+            Donnees.lignes('ordres_travail').forEach((ot) => nombres.set(ot[champ], (nombres.get(ot[champ]) || 0) + 1));
+            return Array.from(nombres).filter(([cle]) => cle).sort((a, b) => b[1] - a[1])[0][0]; };
+          return [plus('equipement_id'), Wiki.idPanne(plus('symptome_code')), Donnees.lignes('articles')[0].id, plus('technicien_id'),
+            Donnees.lignes('ordres_travail')[0].id, 'WP-9001']; }""")
+        routes = [("#/wiki", "#wiki-accueil")]
+        routes += [("#/wiki/" + liste, '.wiki-liste-entites[data-liste="%s"]' % liste) for liste in LISTES]
+        routes += [("#/wiki/" + encoder(i), '.wiki-page[data-page="%s"] .wiki-page-grille' % i) for i in ids]
+        bilan = []
+        for route, selecteur in routes:
+            durees = []
+            for _ in range(3):
+                page.evaluate("location.hash = '#/apropos'")
+                page.wait_for_function("() => !document.querySelector('#contenu .wiki')")
+                page.wait_for_timeout(100)
+                mesure = page.evaluate(MESURE_JS, [route, selecteur])
+                durees.append(mesure["duree"])
+            bilan.append("%s %.0f" % (route, statistics.median(durees)))
+            with self.subTest(largeur=largeur, route=route):
+                self.assertLess(statistics.median(durees), BUDGET_MS, durees)
+                self.assertLess(mesure["elements"], self.ELEMENTS_MAX, route)
+        sys.stderr.write("\n  [charge %d px] %s\n" % (largeur, ", ".join(bilan)))
+        # « Voir les n autres » de la liste des interventions crée les autres au clic
+        page.evaluate("location.hash = '#/wiki/interventions'")
+        page.wait_for_selector(".wiki-liste-entites[data-liste=interventions] .wiki-voir-autres")
+        selecteur = ".wiki-carte-intervention" if telephone else "#wiki-interventions tbody tr"
+        self.assertEqual(page.locator(selecteur).count(), 40 if telephone else 100)
+        page.click(".wiki-liste-entites .wiki-voir-autres")
+        page.wait_for_function("([s, n]) => document.querySelectorAll(s).length === n", arg=[selecteur, total])
 
 
 if __name__ == "__main__":
