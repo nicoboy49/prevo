@@ -56,8 +56,9 @@ class TestWikiSocle(CasNavigateur):
         self.assertEqual(lien.get_attribute("href"), "#/wiki")
         self.assertEqual(lien.locator("svg.icone").count(), 1)
         page.evaluate("location.hash = '#/wiki'")
-        page.wait_for_selector(".wiki-liste", state="attached")
-        self.assertEqual(page.inner_text("#contenu h1").strip(), "Wiki de maintenance")
+        page.wait_for_selector(".wiki-accueil", state="attached")
+        # Accueil de l'encyclopédie (refonte 2, T136) : la phrase-résumé est le titre de l'écran.
+        self.assertRegex(page.inner_text("#contenu h1").strip(), r"^\d+ machines?, \d+ pannes?, \d+ articles?")
         page.evaluate("location.hash = '#/wiki/EQ-0001'")
         page.wait_for_selector(".wiki-page", state="attached")
         self.assertEqual(lien.get_attribute("aria-current"), "page")

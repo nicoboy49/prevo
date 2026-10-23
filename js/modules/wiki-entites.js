@@ -579,7 +579,7 @@ Object.assign(Wiki, (() => {
   }
 
   /**
-   * Suivi du wiki (responsable), mêmes définitions que les compteurs du journal (Wiki.compteurs, wiki-ecrans.js) : à
+   * Suivi du wiki (responsable), mêmes définitions que les vues du journal où il mène (wiki-journal-ecrans.js) : à
    * valider ; à trancher (contradictions ouvertes des entrées validées) ; en échec (OT dont la dernière entrée
    * d'ingestion est refusée et qui n'a aucune autre entrée que rejetée ou refusée).
    */

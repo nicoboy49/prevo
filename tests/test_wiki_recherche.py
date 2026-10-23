@@ -28,7 +28,12 @@ Couvert :
     - extrait (160 caractères au plus, autour du premier mot trouvé) et Wiki.surligner (<mark>, tout le
       reste échappé : le <script> d'un compte rendu reste du texte) ;
     - aucune requête réseau pendant les recherches ;
-    - mesure indicative sur 5 000 OT fabriqués (la vraie mesure, D101, est celle de test_performance.py).
+    - mesure indicative sur 5 000 OT fabriqués (la vraie mesure, D101, est celle de test_performance.py) ;
+    - entités par leur nom (refonte 2, §20.12, T136 : Wiki.chercherEntites, recherche de l'accueil) sur le corpus et deux
+      techniciens : chaque requête égale à un CALCUL PYTHON INDÉPENDANT pour les trois profils (préfixe de mot, accents,
+      pluriels, mots vides, codes et références ; ni technicien ni intervention pour le demandeur, profil par défaut le
+      plus restreint), réponses écrites à la main, élément de Wiki.listeEntites, entrées refaites quand une table change
+      (écriture ou relecture), aucune requête réseau.
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_wiki_recherche.py" -v
@@ -41,6 +46,7 @@ import random
 import re
 import statistics
 import sys
+import unicodedata
 import unittest
 
 from commun import RACINE, CasNavigateur, charger_scripts
@@ -190,11 +196,13 @@ ECRIRE_JS = """async ({ table, lignes }) => {
 
 class CasRecherche(CasNavigateur):
 
+    SCRIPTS = SCRIPTS
+
     def setUp(self):
         super().setUp()
         self.requetes_reseau = []
         self.page.on("request", lambda requete: self.requetes_reseau.append(requete.url))
-        charger_scripts(self.page, SCRIPTS)
+        charger_scripts(self.page, self.SCRIPTS)
         self.charger(CORPUS["tables"])
 
     def charger(self, tables):
@@ -825,6 +833,176 @@ class TestMesureIndicative(CasRecherche):
         # Indicatif : budget D101 de 300 ms par recherche ; large marge pour la première (index construit).
         self.assertLess(mediane, 300)
         self.assertLess(mesure["dureePremiere"], 3000)
+
+
+# ---------------------------------------------------------------------------
+# Entités par leur nom (refonte 2, §20.12, D113 et D114 ; tâche T136 : Wiki.chercherEntites, recherche de l'accueil)
+# ---------------------------------------------------------------------------
+
+# Deux techniciens ajoutés au corpus : l'un porte un nom qui commence comme une machine (« Pompidou », « pomp… »).
+TECHNICIENS_CORPUS = [
+    {"id": "TEC-0001", "nom": "Pompidou", "prenom": "Julie", "metier": "Mécanicienne", "taux_horaire": "38",
+     "capacite_h_semaine": "35", "actif": "1"},
+    {"id": "TEC-0002", "nom": "Lefèvre", "prenom": "Marc", "metier": "Électricien", "taux_horaire": "40",
+     "capacite_h_semaine": "35", "actif": "0"},
+]
+REQUETES_ENTITES = ["presse", "PR-01", "pr 02", "pompe", "pomp", "Pompes", "fuite", "FUITES", "joint", "JT-25", "jt",
+                    "flexible", "hydrau", "ÉCHAUFFEMENT", "vibrations", "OT-2026-0012", "2026 0012", "julie", "lefevre",
+                    "changer un flexible", "convoyeur à bande", "accumulateur", "zzz", "de la"]
+CHERCHER_ENTITES_JS = """([texte, profil]) => Wiki.chercherEntites(texte, profil ? { profil } : {}).groupes.map((g) => ({
+  type: g.type, liens: g.entites.map((e) => e.lien), titres: g.entites.map((e) => e.titre) }))"""
+
+
+def mots_d_un_nom(texte):
+    """Mots d'un nom, refaits ici : minuscules, sans accents, tout ce qui n'est ni lettre ni chiffre sépare."""
+    sans = "".join(c for c in unicodedata.normalize("NFD", texte) if not unicodedata.combining(c)).lower()
+    return re.sub(r"[^a-z0-9]+", " ", sans.replace("œ", "oe").replace("æ", "ae")).split()
+
+
+def mots_de_la_requete(requete, mots_vides):
+    """Mots d'une requête : ceux d'un nom, sans les mots vides ni ceux d'une lettre, pluriel simple retiré (§20.8)."""
+    resultat = []
+    for mot in mots_d_un_nom(requete):
+        if len(mot) < 2 or mot in mots_vides:
+            continue
+        if len(mot) > 3 and mot[-1] in "sx":
+            mot = mot[:-1]
+        if mot not in resultat:
+            resultat.append(mot)
+    return resultat
+
+
+def entites_attendues(tables, requete, profil, mots_vides):
+    """Groupes attendus, calculés ici sur les tables du corpus : [(type, [lien])] ; interventions : ensemble des liens."""
+    mots = mots_de_la_requete(requete, mots_vides)
+    if not mots:
+        return []
+
+    def correspond(*noms):
+        du_nom = mots_d_un_nom(" ".join(noms))
+        return all(any(m.startswith(mot) for m in du_nom) for mot in mots)
+    clos = ("Clôturé techniquement", "Clôturé administrativement")
+    cas = {}
+    for ot in tables["ordres_travail"]:
+        if ot["type"].startswith("correctif") and ot["statut"] in clos and ot["symptome_code"]:
+            cas[ot["symptome_code"]] = cas.get(ot["symptome_code"], 0) + 1
+    libelles = {c["code"]: c["libelle"] for c in reversed(tables["codes_defaillance"]) if c["famille"] == "symptôme"}
+    titre_machine = lambda e: " — ".join(x for x in (e["repere"], e["designation"]) if x)  # noqa: E731
+    titre_article = lambda a: a.get("designation") or a.get("reference") or a["id"]       # noqa: E731
+    nom = lambda t: (t["prenom"] + " " + t["nom"]).strip() or t["id"]                      # noqa: E731
+    groupes = [
+        ("machine", [e["id"] for e in sorted(tables["equipements"], key=lambda e: (titre_machine(e), e["id"]))
+                     if correspond(titre_machine(e))]),
+        ("panne", ["PANNE-" + code for code, _ in sorted(cas.items(), key=lambda e: (-e[1], e[0]))
+                   if correspond(libelles.get(code, code), code)]),
+        ("article", [a["id"] for a in sorted(tables["articles"], key=lambda a: (titre_article(a), a["id"]))
+                     if correspond(titre_article(a), a.get("reference", ""))]),
+        ("technicien", [t["id"] for t in sorted(tables.get("techniciens", []), key=lambda t: (nom(t), t["id"]))
+                        if profil != "demandeur" and correspond(nom(t))]),
+        ("savoir-faire", [p["id"] for p in sorted(tables["wiki_pages"], key=lambda p: (p["titre"], p["id"]))
+                          if p["type"] == "savoir-faire" and p["statut"] != "archivée" and correspond(p["titre"])]),
+        ("intervention", sorted(o["id"] for o in tables["ordres_travail"] if profil != "demandeur" and correspond(o["id"], o["titre"]))),
+    ]
+    return [(type_, liens) for type_, liens in groupes if liens]
+
+
+class TestEntites(CasRecherche):
+
+    SCRIPTS = SCRIPTS + ["js/modules/equipe-regles.js"]       # habilitations d'un technicien (Wiki.listeEntites)
+
+    def setUp(self):
+        super().setUp()
+        self.tables = dict(CORPUS["tables"], techniciens=TECHNICIENS_CORPUS)
+        self.charger(self.tables)
+
+    def chercher_entites(self, texte, profil=None):
+        return self.page.evaluate(CHERCHER_ENTITES_JS, [texte, profil])
+
+    def test_chaque_requete_egale_au_calcul_python_pour_les_trois_profils(self):
+        mots_vides = set(self.page.evaluate("Wiki.MOTS_VIDES"))
+        trouves = 0
+        for profil in ("demandeur", "technicien", "responsable"):
+            for requete in REQUETES_ENTITES:
+                with self.subTest(profil=profil, requete=requete):
+                    lus = self.chercher_entites(requete, profil)
+                    attendus = entites_attendues(self.tables, requete, profil, mots_vides)
+                    obtenus = [(g["type"], sorted(g["liens"]) if g["type"] == "intervention" else g["liens"]) for g in lus]
+                    self.assertEqual(obtenus, attendus)
+                    # Interventions : dans l'ordre des listes (ouvertes en tête, puis de la plus récente)
+                    for groupe in lus:
+                        if groupe["type"] == "intervention":
+                            self.assertEqual(groupe["liens"], self.page.evaluate("(ids) => Wiki.ordreInterventions(ids)", groupe["liens"]))
+                    trouves += sum(len(g["liens"]) for g in lus)
+        self.assertGreater(trouves, 60)
+
+    def test_cas_attendus(self):
+        """Quelques réponses écrites à la main (le calcul Python pourrait se tromper comme le code)."""
+        groupes = lambda texte, profil="responsable": {g["type"]: g["liens"] for g in self.chercher_entites(texte, profil)}  # noqa: E731
+        self.assertEqual(groupes("presse"), {"machine": ["EQ-0001", "EQ-0002", "EQ-0006"]})
+        self.assertEqual(groupes("PR-01")["machine"], ["EQ-0001"])                     # ni PR-02, ni OT-2026-0010
+        self.assertNotIn("OT-2026-0010", groupes("PR-01").get("intervention", []))
+        # « pompes » : pluriel retiré ; l'OT en cours (OT-2026-0008) avant le clôturé (ordre des interventions)
+        self.assertEqual(groupes("Pompes"), {"machine": ["EQ-0004"], "intervention": ["OT-2026-0008", "OT-2026-0006"]})
+        self.assertEqual(groupes("pomp"), {"machine": ["EQ-0004"], "technicien": ["TEC-0001"],
+                                           "intervention": ["OT-2026-0008", "OT-2026-0006"]})
+        self.assertEqual(groupes("pomp", "demandeur"), {"machine": ["EQ-0004"]})        # ni technicien ni intervention
+        self.assertEqual(groupes("FUITES")["panne"], ["PANNE-FUI"])                    # libellé du code symptôme
+        self.assertEqual(groupes("FUI")["panne"], ["PANNE-FUI"])                       # son code
+        self.assertEqual(groupes("ÉCHAUFFEMENT"), {"panne": ["PANNE-ECH"]})
+        self.assertEqual(groupes("JT-25"), {"article": ["ART-0001"]})
+        self.assertEqual(groupes("changer un flexible"), {"savoir-faire": ["WP-0002"]})
+        self.assertEqual(groupes("accumulateur", "technicien"), {"intervention": ["OT-2026-0013"]})   # archivée : WP-0004 absente
+        self.assertEqual(groupes("lefevre")["technicien"], ["TEC-0002"])               # inactif : toujours une page
+        titres = {g["type"]: g["titres"] for g in self.chercher_entites("julie", "technicien")}
+        self.assertEqual(titres, {"technicien": ["Julie Pompidou"]})
+
+    def test_profil_par_defaut_le_plus_restreint(self):
+        """Sans profil donné ni App : le demandeur (même règle que Wiki.entite)."""
+        self.assertIsNone(self.page.evaluate("typeof App === 'undefined' ? null : App"))
+        self.assertEqual([g["type"] for g in self.chercher_entites("pomp")], ["machine"])
+        self.assertEqual([g["type"] for g in self.chercher_entites("pomp", "responsable")], ["machine", "technicien", "intervention"])
+
+    def test_rien_sans_mot_utile(self):
+        for texte in ("", "   ", "de la", "a", "- / !", None):
+            with self.subTest(texte=texte):
+                reponse = self.page.evaluate("(t) => Wiki.chercherEntites(t, { profil: 'responsable' })", texte)
+                self.assertEqual((reponse["mots"], reponse["groupes"]), ([], []))
+
+    def test_element_de_la_liste_et_lien_de_la_page(self):
+        reponse = self.page.evaluate("Wiki.chercherEntites('fuite presse joint', { profil: 'responsable' })")
+        self.assertEqual(reponse["groupes"], [])                     # chaque mot doit commencer un mot du nom
+        machine = self.page.evaluate("""() => { const g = Wiki.chercherEntites('PR-03', { profil: 'technicien' }).groupes[0];
+          const liste = Wiki.listeEntites('machine', { profil: 'technicien' }).flatMap((l) => l.machines);
+          return [g.entites[0], liste.find((m) => m.equipementId === 'EQ-0006')]; }""")
+        self.assertEqual(machine[0]["element"], machine[1])
+        self.assertEqual((machine[0]["type"], machine[0]["lien"], machine[0]["titre"]), ("machine", "EQ-0006", "PR-03 — Presse plieuse"))
+        article = self.page.evaluate("Wiki.chercherEntites('joint de tige', { profil: 'demandeur' }).groupes[0].entites[0]")
+        self.assertEqual((article["type"], article["lien"], article["element"]["reference"]), ("article", "ART-0001", "JT-25"))
+
+    def test_entrees_refaites_quand_une_table_change(self):
+        self.assertEqual(self.chercher_entites("rouleaux", "technicien"), [])
+        self.ecrire("equipements", {"id": "EQ-0007", "repere": "CV-02", "designation": "Convoyeur à rouleaux", "actif": "1"})
+        self.assertEqual([(g["type"], g["liens"]) for g in self.chercher_entites("rouleaux", "technicien")], [("machine", ["EQ-0007"])])
+        # Une panne sans cas clôturé disparaît (OT-2026-0004 rouvert : son seul cas) ; un savoir-faire archivé aussi
+        self.assertEqual(self.chercher_entites("ÉCHAUFFEMENT", "technicien"), [{"type": "panne", "liens": ["PANNE-ECH"], "titres": ["échauffement"]}])
+        self.ecrire("ordres_travail", {"id": "OT-2026-0004", "statut": "En cours"})
+        self.assertEqual(self.chercher_entites("ÉCHAUFFEMENT", "technicien"), [])
+        self.ecrire("wiki_pages", {"id": "WP-0002", "statut": "archivée"})
+        self.assertNotIn("savoir-faire", [g["type"] for g in self.chercher_entites("flexible", "technicien")])
+        # Même résultat si Donnees relit les tables sans événement (nouveaux tableaux)
+        self.charger(dict(self.tables, techniciens=TECHNICIENS_CORPUS[:1]))
+        self.assertEqual([g["liens"] for g in self.chercher_entites("lefevre", "technicien")], [])
+
+    def test_aucune_requete_reseau(self):
+        self.page.evaluate("""() => { window.appelsReseau = [];
+          const interdit = (nom) => function () { window.appelsReseau.push(nom); throw new Error('réseau interdit : ' + nom); };
+          window.fetch = interdit('fetch'); XMLHttpRequest.prototype.open = interdit('XMLHttpRequest'); }""")
+        avant = len(self.requetes_reseau)
+        for profil in ("demandeur", "technicien", "responsable"):
+            for requete in REQUETES_ENTITES:
+                self.chercher_entites(requete, profil)
+        self.assertEqual(self.requetes_reseau[avant:], [])
+        self.assertEqual(self.page.evaluate("window.appelsReseau"), [])
 
 
 if __name__ == "__main__":

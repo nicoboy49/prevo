@@ -33,6 +33,18 @@
 //    équipements actifs ou non, l'équipement lui-même exclu ; marque ou modèle vide → portée vide ;
 //  - une expression du lexique (« ne demarre pas », « manque de pression ») est reconnue mot à mot,
 //    avant le retrait des mots vides, et compte comme un mot de plus dans le document.
+//
+// Entités par leur nom (refonte 2, §20.12, D113 et D114 ; tâche T136) : Wiki.chercherEntites, posée avant les
+// résultats plein texte sur l'accueil de l'encyclopédie. Précisions au contrat :
+//  - entités cherchées = celles des listes (Wiki.listeEntites) du profil : machines (sous-ensembles compris),
+//    pannes, articles, techniciens, savoir-faire, interventions ; rien de ce que le profil ne voit pas (le
+//    demandeur n'a ni techniciens ni interventions : listeEntites rend null) ;
+//  - nom cherché : repère et désignation d'une machine, libellé et code d'une panne, désignation et référence
+//    d'un article, nom d'un technicien, titre d'un savoir-faire, numéro et titre d'une intervention ;
+//  - une entité correspond si chaque mot de la requête (forme comparable, mots vides et pluriels retirés comme
+//    pour l'index) commence un mot de son nom (« pomp » trouve « Pompe centrifuge », « PR-01 » ne trouve pas
+//    « PR-02 » ni l'OT-2026-0010) ; groupes dans l'ordre des types, entités dans l'ordre de leur liste
+//    (machines par titre) ; les entrées sont refaites quand le profil ou une table qu'elles lisent change.
 
 Object.assign(Wiki, (() => {
 
@@ -180,6 +192,14 @@ Object.assign(Wiki, (() => {
 
   let index = null;          // { sources, documents, postings, longueurMoyenne } ou null (à construire)
   let constructions = 0;     // nombre d'index construits depuis l'ouverture (suivi, tests)
+  let entites = null;        // entrées de la recherche des entités : { profil, sources, parType } ou null
+
+  // Types des groupes de la recherche des entités, dans l'ordre de l'accueil, et tables lues par leurs listes
+  // (wiki-entites.js, wiki-calculs.js) : les entrées sont refaites quand l'une d'elles change.
+  const TYPES_ENTITES = ['machine', 'panne', 'article', 'technicien', 'savoir-faire', 'intervention'];
+  const TABLES_ENTITES = ['equipements', 'localisations', 'ordres_travail', 'codes_defaillance', 'articles',
+    'mouvements_stock', 'techniciens', 'habilitations', 'ot_temps', 'wiki_pages'];
+  const PROFILS = ['demandeur', 'technicien', 'responsable'];
 
   /** Date d'un OT (AAAA-MM-JJ) : fin des travaux, sinon clôture technique, sinon création. */
   function dateOt(ot) {
@@ -336,10 +356,12 @@ Object.assign(Wiki, (() => {
     return index;
   }
 
-  // Une table indexée change (ici ou sur un autre poste) : l'index sera refait à la prochaine recherche.
+  // Une table indexée change (ici ou sur un autre poste) : l'index sera refait à la prochaine recherche ; de même
+  // pour les entrées de la recherche des entités.
   Donnees.evenements.addEventListener('changement', (evenement) => {
     const tables = evenement.detail && evenement.detail.tables;
     if (!Array.isArray(tables) || tables.some((nom) => TABLES_INDEXEES.includes(nom))) index = null;
+    if (!Array.isArray(tables) || tables.some((nom) => TABLES_ENTITES.includes(nom))) entites = null;
   });
 
   // ===========================================================================================
@@ -564,6 +586,76 @@ Object.assign(Wiki, (() => {
     };
   }
 
+  // ===========================================================================================
+  // Entités par leur nom (refonte 2 ; précisions en tête de fichier)
+  // ===========================================================================================
+
+  /** Profil d'un appel, même règle que Wiki.entite : options.profil, sinon celui d'App, sinon demandeur. */
+  function profilDe(options) {
+    const demande = texte(options && options.profil);
+    if (PROFILS.includes(demande)) return demande;
+    const deLApp = typeof App !== 'undefined' && App && App.profil ? texte(App.profil.type) : '';
+    return PROFILS.includes(deLApp) ? deLApp : 'demandeur';
+  }
+
+  // Nom cherché de chaque type (précisions en tête de fichier) et titre montré.
+  const NOMS_ENTITES = {
+    machine: (e) => [e.titre], panne: (e) => [e.titre, e.code], article: (e) => [e.titre, e.reference],
+    technicien: (e) => [e.nom], 'savoir-faire': (e) => [e.titre], intervention: (e) => [e.id, e.titre],
+  };
+
+  /** Machines de la liste par lieu, sous-ensembles compris, par titre puis identifiant. */
+  function machinesAPlat(groupes) {
+    const aPlat = (machines) => machines.flatMap((machine) => [machine].concat(aPlat(machine.sousEnsembles || [])));
+    return aPlat(groupes.flatMap((groupe) => groupe.machines))
+      .sort((a, b) => (a.titre < b.titre ? -1 : (a.titre > b.titre ? 1 : 0)) || (a.equipementId < b.equipementId ? -1 : 1));
+  }
+
+  /** Entrées d'un profil : Map(type → [{ type, lien, titre, mots, element }]) ; un type que le profil ne voit pas manque. */
+  function entreesDesEntites(profil) {
+    const parType = new Map();
+    TYPES_ENTITES.forEach((type) => {
+      const liste = Wiki.listeEntites(type, { profil });
+      if (!liste) return;
+      parType.set(type, (type === 'machine' ? machinesAPlat(liste) : liste).map((element) => ({
+        type, lien: element.lien, titre: type === 'technicien' ? element.nom : element.titre,
+        mots: comparable(NOMS_ENTITES[type](element).join(' ')).split(' ').filter(Boolean), element,
+      })));
+    });
+    return parType;
+  }
+
+  /** Les entrées du profil, refaites si le profil ou une table lue a changé (même règle que l'index). */
+  function entitesAJour(profil) {
+    const aJour = entites !== null && entites.profil === profil
+      && TABLES_ENTITES.every((nom) => memeTable(entites.sources[nom], Donnees.lignes(nom)));
+    if (!aJour) {
+      const sources = {};
+      TABLES_ENTITES.forEach((nom) => { sources[nom] = Donnees.lignes(nom); });
+      entites = { profil, sources, parType: entreesDesEntites(profil) };
+    }
+    return entites.parType;
+  }
+
+  /**
+   * Entités dont le nom correspond à la requête (précisions en tête de fichier) ; options { profil }. →
+   * { requete, mots, groupes: [{ type, entites: [{ type, lien, titre, element }] }] } : groupes non vides, dans l'ordre
+   * des types ; `element` = l'élément de Wiki.listeEntites. Rien n'est cherché sans mot utile.
+   */
+  function chercherEntites(texteRecherche, options) {
+    const requete = texte(texteRecherche);
+    const mots = Array.from(new Set(comparable(requete).split(' ').map(formeDuMot).filter(Boolean)));
+    const groupes = [];
+    if (!mots.length) return { requete, mots, groupes };
+    entitesAJour(profilDe(options)).forEach((entrees, type) => {
+      const trouvees = entrees.filter((entree) => mots.every((mot) => entree.mots.some((motDuNom) => motDuNom.startsWith(mot))));
+      if (trouvees.length) {
+        groupes.push({ type, entites: trouvees.map((entree) => ({ type, lien: entree.lien, titre: entree.titre, element: entree.element })) });
+      }
+    });
+    return { requete, mots, groupes };
+  }
+
   /** État de l'index (suivi et tests) : { construit, documents (OT et pages), constructions }. */
   function etatRecherche() {
     return { construit: index !== null, documents: index ? index.documents.length : 0, constructions };
@@ -571,7 +663,7 @@ Object.assign(Wiki, (() => {
 
   return {
     RECHERCHE, MOTS_VIDES, LEXIQUE,
-    rechercher, surligner, etatRecherche,
+    rechercher, surligner, etatRecherche, chercherEntites,
     motsRecherche: (valeur) => termes(valeur),
   };
 })());

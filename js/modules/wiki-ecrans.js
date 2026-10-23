@@ -1,61 +1,48 @@
 'use strict';
-// Wiki (7/8) — écrans de lecture du wiki de maintenance (lot 6 refondu, ARCHITECTURE.md §20.9 ; tâche T119), pour
-// les trois profils : #/wiki (compteurs du responsable, recherche sur tout le parc, pages par type) et la route
-// #/wiki/<id> (Wiki.page, puis le rendu de wiki-page-ecrans.js, chargé juste après ce fichier : en-tête, pour un
-// savoir-faire l'en-tête posé par Prévo — consignation et « Ce savoir-faire ne remplace pas la consignation de
-// l'équipement » —, couche calculée, texte et origine, « À trancher », « Pages qui renvoient ici », propositions en
-// attente) ; champ de recherche réutilisable (Wiki.champRecherche, posé dans l'onglet Préparation de l'OT ;
-// Wiki.poserRechercheDemande, dans la saisie d'une DI) ; enregistrement des écrans auprès d'App.
+// Wiki (7/8) — routes et recherche des écrans du wiki de maintenance (lot 6 refondu, ARCHITECTURE.md §20.9 ; tâche
+// T119 ; refonte 2, §20.12, tâche T136), pour les trois profils : #/wiki (accueil de l'encyclopédie) et
+// #/wiki/<liste> (machines, pannes, articles, techniciens, savoir-faire, interventions), rendus par
+// wiki-entites-ecrans.js ; #/wiki/<id> (Wiki.page, puis le rendu de wiki-page-ecrans.js, chargé juste après ce
+// fichier : en-tête, pour un savoir-faire l'en-tête posé par Prévo — consignation et « Ce savoir-faire ne remplace
+// pas la consignation de l'équipement » —, couche calculée, texte et origine, « À trancher », « Pages qui renvoient
+// ici », propositions en attente ; une page Panne, Technicien ou Intervention, que Wiki.page ne connaît pas, est
+// rendue par wiki-entites-ecrans.js d'après Wiki.entite) ; champ de recherche réutilisable (Wiki.champRecherche,
+// posé dans l'onglet Préparation de l'OT et sur la page d'un équipement ; Wiki.poserRechercheDemande, dans la saisie
+// d'une DI) et blocs de résultats (Wiki.blocsRecherche, repris par l'accueil) ; enregistrement des écrans auprès d'App.
 //
-// Lecture seule, sauf le rattrapage du journal (Wiki.rattraper, §20.7) au responsable avant d'afficher ; aucun
-// appel réseau. Toute donnée insérée passe par UI.html (échappement). Le demandeur n'a accès ni aux écrans des OT
-// ni au magasin : il voit les numéros d'OT en texte, sans lien.
+// Lecture seule, sauf le rattrapage du journal (Wiki.rattraper, §20.7) au responsable avant d'afficher l'accueil ou
+// une page ; aucun appel réseau. Toute donnée insérée passe par UI.html (échappement). Le demandeur n'a accès ni
+// aux écrans des OT ni au magasin : il voit les numéros d'OT en texte, sans lien.
 //
-// Précisions au contrat (§20.9) :
-//  - index : une page par équipement et par article (pages calculées, toujours présentes), plus les pages actives
-//    de wiki_pages (composants libres, modes, savoir-faire, et les sous-pages dans la section de leur type, comptées
-//    comme une page de plus) ; dans chaque section, les pages qui ont un texte
-//    validé d'abord, puis par titre (ordre alphabétique français) et identifiant ; nombre d'OT cités = citations
-//    distinctes du texte validé ; PAGES_MONTREES premières, le reste derrière « Tout afficher » ;
-//  - compteurs du responsable (Wiki.compteurs) : « À valider » = entrées « à valider » ; « Contradictions
-//    ouvertes » = contradictions « ouverte » des entrées « validée » ; « En file » = Wiki.file() ; « En échec » =
-//    OT distincts dont une entrée d'ingestion « refusée » n'est suivie d'aucune entrée plus récente (numéro WJ
-//    plus grand) en file, à refaire, à valider, validée ou rien à ajouter ; « Hors du wiki » = Wiki.horsDuWiki() ;
-//    « Contrôle du wiki » = Wiki.controleDuWiki().length quand la fonction existe (sinon pas de nombre) ; chacun
-//    mène à #/wiki-journal?vue=<a-valider | contradictions | file | echecs | hors | controle> ;
+// Précisions au contrat (§20.9, §20.12) :
+//  - index des pages (Wiki.indexDesPages, lu par wiki-page-ecrans.js pour les liens [[titre]]) : une page par
+//    équipement et par article, plus les pages actives de wiki_pages ; l'écran d'index qui les montrait est
+//    remplacé par l'accueil de l'encyclopédie (T136) ;
+//  - les routes des listes passent avant celle d'une page (une liste n'est jamais lue comme un identifiant) ;
+//    l'identifiant d'une page est décodé une fois par la route (les liens l'encodent : PANNE-… en particulier) ;
 //  - « Déjà vu sur cette machine ? » (saisie d'une DI) : les liens des résultats s'ouvrent dans un nouvel onglet,
 //    pour ne jamais faire perdre la demande en cours.
 
 Object.assign(Wiki, (() => {
 
-  // Tables lues par les écrans : réaffichés si l'une change sur un autre poste.
-  const TABLES = ['equipements', 'ordres_travail', 'demandes', 'codes_defaillance', 'mouvements_stock',
-    'articles', 'article_equipement', 'wiki_pages', 'wiki_journal'];
+  // Tables lues par les écrans (accueil, listes, pages) : réaffichés si l'une change sur un autre poste.
+  const TABLES = ['equipements', 'localisations', 'ordres_travail', 'ot_temps', 'demandes', 'codes_defaillance',
+    'mouvements_stock', 'articles', 'article_equipement', 'techniciens', 'habilitations', 'wiki_pages', 'wiki_journal'];
   const PROFILS = ['demandeur', 'technicien', 'responsable'];
+  // Routes des listes de l'encyclopédie (#/wiki/<liste>, §20.12) : passent avant celle d'une page.
+  const MOTIF_LISTES = 'machines|pannes|articles|techniciens|savoir-faire|interventions';
 
   const DELAI_RECHERCHE_MS = 300;                       // la recherche part après 300 ms sans frappe
   const RESULTATS_MONTRES = 5;                          // par portée, avant « Voir les n autres résultats »
   const RESULTATS_MONTRES_DEMANDE = 3;                  // saisie d'une DI (téléphone) : formulaire plus court
-  const PAGES_MONTREES = 24;                            // par section de l'index, avant « Tout afficher »
   const TITRE_RECHERCHE_DEMANDE = 'Déjà vu sur cette machine ?';
   const NOUVEL_ONGLET = 's\'ouvre dans un nouvel onglet';
 
   const SECTIONS = [
-    { type: 'équipement', cle: 'equipement', libelle: 'Équipements', vide: 'Aucun équipement dans le parc.' },
-    { type: 'composant', cle: 'composant', libelle: 'Composants', vide: 'Aucun article au magasin ni page de composant.' },
-    { type: 'mode', cle: 'mode', libelle: 'Modes de défaillance',
-      vide: 'Aucune page pour l\'instant : elles naissent des OT intégrés au wiki ou d\'une écriture à la main.' },
-    { type: 'savoir-faire', cle: 'savoir-faire', libelle: 'Savoir-faire',
-      vide: 'Aucune page pour l\'instant : elles naissent surtout des astuces des OT intégrés au wiki.' },
-  ];
-
-  const COMPTEURS = [
-    { vue: 'a-valider', champ: 'aValider', libelle: 'À valider', comp: 'propositions de l\'IA' },
-    { vue: 'contradictions', champ: 'contradictions', libelle: 'Contradictions ouvertes', comp: 'à trancher' },
-    { vue: 'file', champ: 'file', libelle: 'En file', comp: 'OT à intégrer', bouton: 'Traiter la file' },
-    { vue: 'echecs', champ: 'echecs', libelle: 'En échec', comp: 'OT refusés au contrôle' },
-    { vue: 'hors', champ: 'hors', libelle: 'Hors du wiki', comp: 'OT clôturés jamais mis en file', bouton: 'Ajouter à la file' },
-    { vue: 'controle', champ: 'controle', libelle: 'Contrôle du wiki', comp: 'liens, pages, titres' },
+    { type: 'équipement', cle: 'equipement', libelle: 'Équipements' },
+    { type: 'composant', cle: 'composant', libelle: 'Composants' },
+    { type: 'mode', cle: 'mode', libelle: 'Modes de défaillance' },
+    { type: 'savoir-faire', cle: 'savoir-faire', libelle: 'Savoir-faire' },
   ];
 
   // ===========================================================================================
@@ -64,10 +51,6 @@ Object.assign(Wiki, (() => {
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
-  }
-
-  function json(valeur) {
-    try { return JSON.parse(valeur) || []; } catch (erreur) { return []; }
   }
 
   function comparer(a, b) {
@@ -90,11 +73,6 @@ Object.assign(Wiki, (() => {
   function lienOt(otId, liens, nouvelOnglet) {
     return liens ? UI.html`<a class="wiki-lien-ot" href="#/ot/${encodeURIComponent(otId)}"${attributsOnglet(nouvelOnglet, otId)}>${otId}</a>`
       : UI.html`<b class="wiki-numero-ot">${otId}</b>`;
-  }
-
-  function nombreOt(nombre) {
-    if (!nombre) return 'Aucun OT cité';
-    return nombre + (nombre > 1 ? ' OT cités' : ' OT cité');
   }
 
   /** Rattrapage du journal (§20.7) au responsable avant d'afficher ; une erreur n'empêche pas l'affichage. */
@@ -156,19 +134,27 @@ Object.assign(Wiki, (() => {
     return bloc;
   }
 
+  /**
+   * Blocs des portées non vides d'un résultat de Wiki.rechercher ([] s'il n'y en a aucune) ; `reglages` : { montres
+   * (5 par défaut), nouvelOnglet } ; liens des OT selon le profil. Repris par l'accueil de l'encyclopédie.
+   */
+  function blocsRecherche(resultat, reglages) {
+    const complet = Object.assign({ liens: avecLiens(), montres: RESULTATS_MONTRES, nouvelOnglet: false }, reglages);
+    return resultat.portees.filter((portee) => portee.resultats.length).map((portee) => blocPortee(portee, complet));
+  }
+
   function afficherResultats(zone, resultat, reglages) {
     if (!resultat.requete) {
       zone.textContent = '';
       return;
     }
-    const portees = resultat.portees.filter((portee) => portee.resultats.length);
-    if (!portees.length) {
+    const blocs = blocsRecherche(resultat, reglages);
+    if (!blocs.length) {
       UI.remplir(zone, UI.html`<p class="wiki-rien"><b>Rien trouvé pour « ${resultat.requete} ».</b></p>
         <p class="aide">Essayez un autre mot : fuite, bruit, chauffe, ne démarre pas…</p>`);
       return;
     }
-    const complet = Object.assign({ liens: avecLiens() }, reglages);
-    UI.remplir(zone, portees.map((portee) => blocPortee(portee, complet)));
+    UI.remplir(zone, blocs);
   }
 
   /**
@@ -280,7 +266,7 @@ Object.assign(Wiki, (() => {
   }
 
   // ===========================================================================================
-  // 3. Pages par type et compteurs (index)
+  // 3. Index des pages (liens [[titre]] des pages, wiki-page-ecrans.js)
   // ===========================================================================================
 
   function titreEquipement(ligne) {
@@ -329,109 +315,23 @@ Object.assign(Wiki, (() => {
     }));
   }
 
-  /** Numéro d'une entrée du journal (WJ-00012 → 12), pour dire laquelle est la plus récente. */
-  function rangJournal(entree) {
-    return Number(texte(entree.id).replace(/\D/g, '')) || 0;
-  }
-
-  /** Compteurs du responsable (voir les précisions en tête) → { aValider, contradictions, file, echecs, hors, controle }. */
-  function compteurs() {
-    const journal = Donnees.lignes('wiki_journal');
-    const contradictions = journal.filter((entree) => texte(entree.statut) === 'validée')
-      .reduce((total, entree) => total + json(entree.contradictions)
-        .filter((contradiction) => contradiction && texte(contradiction.statut) === 'ouverte').length, 0);
-    const ingestions = journal.filter((entree) => texte(entree.nature) === 'ingestion' && texte(entree.ot_id));
-    // « En échec » = la vue où mène le compteur (wiki-journal-ecrans.js) : OT sans autre entrée que rejetée ou refusée,
-    // dont la dernière entrée est « refusée ».
-    const echoue = (entree) => ['rejetée', 'refusée'].includes(texte(entree.statut));
-    const vivants = new Set(ingestions.filter((entree) => !echoue(entree)).map((entree) => texte(entree.ot_id)));
-    const dernieres = new Map();
-    ingestions.filter((entree) => echoue(entree) && !vivants.has(texte(entree.ot_id))).forEach((entree) => {
-      const avant = dernieres.get(texte(entree.ot_id));
-      if (!avant || rangJournal(avant) < rangJournal(entree)) dernieres.set(texte(entree.ot_id), entree);
-    });
-    const echecs = Array.from(dernieres.values()).filter((entree) => texte(entree.statut) === 'refusée');
-    let controle = null;
-    if (typeof Wiki.controleDuWiki === 'function') {
-      const resultat = Wiki.controleDuWiki();
-      controle = resultat && Number.isInteger(resultat.length) ? resultat.length : null;
-    }
-    return {
-      aValider: journal.filter((entree) => texte(entree.statut) === 'à valider').length,
-      contradictions, file: Wiki.file().length, echecs: echecs.length, hors: Wiki.horsDuWiki().length, controle,
-    };
-  }
-
   // ===========================================================================================
-  // 4. Écran #/wiki : compteurs du responsable, recherche, pages par type
+  // 4. Écrans #/wiki (accueil) et #/wiki/<liste> : rendus par wiki-entites-ecrans.js
   // ===========================================================================================
 
-  function blocCompteurs(valeurs) {
-    return UI.html`<section class="carte wiki-suivi" id="wiki-suivi" aria-labelledby="wiki-titre-suivi">
-      <h2 id="wiki-titre-suivi">Suivi du wiki</h2>
-      <div class="instruments wiki-compteurs">${COMPTEURS.map((compteur) => {
-        const adresse = '#/wiki-journal?vue=' + compteur.vue;
-        const nombre = valeurs[compteur.champ];
-        return UI.html`<div class="wiki-compteur" data-compteur="${compteur.vue}">
-          <a class="wiki-compteur-lien" href="${adresse}"><span class="lib">${compteur.libelle}</span>
-            ${nombre === null ? '' : UI.html`<span class="chiffre">${nombre}</span>`}<span class="comp">${compteur.comp}</span></a>
-          ${compteur.bouton ? UI.html`<a class="btn btn-secondaire wiki-compteur-action" href="${adresse}">${compteur.bouton}</a>` : ''}
-        </div>`;
-      })}</div>
-    </section>`;
-  }
-
-  function ligneIndexHtml(page) {
-    return UI.html`<li data-id="${page.id}" data-texte="${page.avecTexte ? 'oui' : 'non'}">
-      <a href="#/wiki/${encodeURIComponent(page.id)}"><span class="wiki-index-titre">${page.titre || page.id}</span>
-        <span class="wiki-index-ot">${nombreOt(page.ot)}</span></a></li>`;
-  }
-
-  function sectionIndex(section) {
-    const element = UI.element(UI.html`<section class="carte wiki-index-section" id="wiki-section-${section.cle}"
-        data-type="${section.type}" aria-labelledby="wiki-titre-${section.cle}">
-      <h2 id="wiki-titre-${section.cle}">${section.libelle} <span class="badge wiki-nombre">${section.pages.length}</span></h2>
-      ${section.pages.length ? UI.html`<ul class="wiki-index-liste"></ul>` : UI.html`<p class="muted wiki-index-vide">${section.vide}</p>`}
-    </section>`);
-    const liste = UI.$('.wiki-index-liste', element);
-    if (!liste) return element;
-    UI.remplir(liste, section.pages.slice(0, PAGES_MONTREES).map(ligneIndexHtml));
-    if (section.pages.length > PAGES_MONTREES) {
-      const bouton = UI.element(UI.html`<button type="button" class="btn btn-secondaire wiki-tout-afficher">Tout afficher (${section.pages.length})</button>`);
-      bouton.addEventListener('click', () => {
-        UI.remplir(liste, section.pages.map(ligneIndexHtml));
-        bouton.remove();
-        const suivant = liste.children[PAGES_MONTREES] && UI.$('a', liste.children[PAGES_MONTREES]);
-        if (suivant) suivant.focus();
-      });
-      element.appendChild(bouton);
-    }
-    return element;
-  }
-
-  async function afficherIndex(conteneur) {
-    const responsable = App.estResponsable();
+  async function afficherAccueil(conteneur) {
     const route = location.hash;
     await rattraper();
     if (location.hash !== route) return;          // parti ailleurs pendant le rattrapage : on n'écrase pas l'écran suivant
-    App.definirTitre('Wiki');
-    UI.remplir(conteneur, UI.html`
-      <div class="wiki wiki-liste">
-        <div class="entete-page"><div>
-          <h1>Wiki de maintenance</h1>
-          <p>Ce que l'atelier sait de ses équipements, composants, modes de défaillance et savoir-faire : ce que Prévo
-            calcule à partir des OT, et ce que l'atelier en a retenu.</p>
-        </div></div>
-        ${responsable ? blocCompteurs(compteurs()) : ''}
-        <div class="wiki-zone-recherche"></div>
-        <div class="wiki-zone-sections"></div>
-      </div>`);
-    UI.$('.wiki-zone-recherche', conteneur).replaceWith(champRecherche({ titre: 'Chercher dans le wiki et l\'historique du parc' }));
-    UI.$('.wiki-zone-sections', conteneur).replaceWith(...indexDesPages().map(sectionIndex));
+    Wiki.afficherEncyclopedie(conteneur);
+  }
+
+  function afficherListe(conteneur, parametres) {
+    Wiki.afficherListeEntites(conteneur, texte(parametres.liste));
   }
 
   // ===========================================================================================
-  // 5. Écran #/wiki/<id> : Wiki.page, puis le rendu de wiki-page-ecrans.js
+  // 5. Écran #/wiki/<id> : Wiki.page, puis le rendu de wiki-page-ecrans.js (ou de wiki-entites-ecrans.js)
   // ===========================================================================================
 
   function afficherIntrouvable(conteneur, id) {
@@ -442,7 +342,7 @@ Object.assign(Wiki, (() => {
         <h1>Page introuvable</h1>
       </div></div>
       ${UI.vide('Aucune page du wiki ne porte l\'identifiant « ' + id + ' »',
-        'Elle a peut-être été archivée ou saisie sur un autre poste. L\'index du wiki montre les pages connues.', 'wiki')}
+        'Elle a peut-être été archivée ou saisie sur un autre poste. Les listes du wiki montrent les pages connues.', 'wiki')}
       <p><a class="btn btn-secondaire" href="#/wiki">Retour au wiki</a></p>
     </div>`);
   }
@@ -453,12 +353,17 @@ Object.assign(Wiki, (() => {
     const route = location.hash;
     await rattraper();
     if (location.hash !== route) return;
-    const page = Wiki.page(id, { profil: App.profil ? App.profil.type : '', responsable });
-    if (!page) {
-      afficherIntrouvable(conteneur, id);
+    const profil = App.profil ? App.profil.type : '';
+    const page = Wiki.page(id, { profil, responsable });
+    if (page) {
+      Wiki.rendrePage(conteneur, page, { liens: avecLiens(), responsable, index: indexDesPages() });
       return;
     }
-    Wiki.rendrePage(conteneur, page, { liens: avecLiens(), responsable, index: indexDesPages() });
+    // Panne, technicien, intervention : pages de l'encyclopédie que Wiki.page ne connaît pas (null : profil qui ne
+    // la voit pas, D114).
+    const entite = Wiki.entite(id, { profil });
+    if (entite && Wiki.rendreEntite(conteneur, entite)) return;
+    afficherIntrouvable(conteneur, id);
   }
 
   // ===========================================================================================
@@ -473,11 +378,20 @@ Object.assign(Wiki, (() => {
       menu: { libelle: 'Wiki', icone: 'wiki', ordre: 42 },
       profils: PROFILS,
       tables: TABLES,
-      afficher: afficherIndex,
+      afficher: afficherAccueil,
+    });
+    App.ecran({
+      id: 'wiki-liste',
+      route: new RegExp('^#\\/wiki\\/(?<liste>' + MOTIF_LISTES + ')$'),
+      titre: 'Wiki',
+      parent: 'wiki',
+      profils: PROFILS,
+      tables: TABLES,
+      afficher: afficherListe,
     });
     App.ecran({
       id: 'wiki-page',
-      route: /^#\/wiki\/(?<id>[^/?]+)$/,
+      route: new RegExp('^#\\/wiki\\/(?!(?:' + MOTIF_LISTES + ')$)(?<id>[^/?]+)$'),
       titre: 'Page du wiki',
       parent: 'wiki',
       profils: PROFILS,
@@ -486,5 +400,5 @@ Object.assign(Wiki, (() => {
     });
   });
 
-  return { champRecherche, poserRechercheDemande, indexDesPages, compteurs };
+  return { champRecherche, poserRechercheDemande, blocsRecherche, indexDesPages };
 })());
