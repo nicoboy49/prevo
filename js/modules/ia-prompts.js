@@ -402,7 +402,12 @@ Object.assign(Ia, (() => {
         + 'nombre qui ne figure pas dans l\'OT ou dans la page ; aucune date, aucun mois, aucune année ;\n'
         + '- dis « fréquent ici », jamais « cause certaine » ;\n'
         + '- aucune consigne de sécurité ou de consignation, aucun équipement de protection, aucune habilitation, aucune '
-        + 'coupure d\'énergie : elles relèvent de la fiche de consignation de l\'équipement ;\n'
+        + 'coupure d\'énergie : elles relèvent de la fiche de consignation de l\'équipement ; ces mots sont refusés dans '
+        + 'toute phrase, même pour rapporter un fait de l\'OT : consigne, consignation, cadenas, habilitation, '
+        + 'électrocution, EPI, VAT, gant, hors tension, absence de tension, couper l\'alimentation, le courant, '
+        + 'l\'énergie, l\'air ou la pression, mise en sécurité, règle ou mesure de sécurité ; un arrêt de la machine sur '
+        + 'défaut s\'écrit « arrêt sur défaut », jamais « mise en sécurité » ; une valeur de réglage s\'écrit « valeur '
+        + 'de réglage », jamais « consigne » ;\n'
         + '- si l\'OT est une intervention antérieure à des faits déjà intégrés, ne présente jamais son information comme '
         + 'la plus récente (ni « désormais », « maintenant », « actuellement », « récemment », « dernier »…).',
       '{"rien_a_ajouter": false, "pages": [{"action": "modifier | creer", "titre": "…", "type": "équipement | composant '
