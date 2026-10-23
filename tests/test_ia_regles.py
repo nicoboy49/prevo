@@ -545,7 +545,8 @@ class TestReglesPures(CasNavigateur):
             self.assertNotIn("Savoir-faire que tu peux créer", sans)
 
     def test_ingestion_schema_et_textes_demandes(self):
-        """Refonte 2 (§20.12) : la consigne ne demande que « En bref », « Astuces », « À quoi il sert » et les savoir-faire ;
+        """Refonte 2 (§20.12) : la consigne ne demande que « En bref », « Astuces », « À quoi il sert » (ce que les OT observent
+        de l'article, sans historique — T140) et les savoir-faire, avec la règle des nombres du contrôle (T140) ;
         le schéma (listes fermées) n'accepte une création que d'un savoir-faire, avec ses rubriques ; une modification, l'un
         des trois types et leurs rubriques ; les OT permis sont l'OT ingéré et ceux des pages reçues."""
         resultat = self.page.evaluate("""() => {
@@ -558,10 +559,13 @@ class TestReglesPures(CasNavigateur):
         for attendu in ("« En bref » de la machine (type « équipement ») : ce qu'il faut savoir d'abord de cette machine",
                         "« Astuces » de la machine : les astuces courtes des OT (« Astuce pour la prochaine fois »)",
                         "« À quoi il sert » de chaque article consommé (type « composant ») : l'OT ne donne que sa désignation "
-                        "et sa référence ; écris seulement ce que les OT disent de lui",
+                        "et sa référence ; écris seulement ce que les OT observent de lui",
+                        "jamais où ni quand il a été changé, ni la panne qu'il a réglée (Prévo les calcule)",
                         "les savoir-faire : une méthode de plusieurs gestes, réutilisable sur cette machine ou avec cet article",
-                        "Une astuce s'écrit à un seul endroit : un conseil court dans « Astuces », une méthode de plusieurs "
-                        "gestes dans un savoir-faire",
+                        "Une astuce s'écrit à un seul endroit : dans « Astuces » ou dans un savoir-faire (créé ou complété), "
+                        "jamais aux deux ni dans « À quoi il sert »",
+                        # T140 : la règle des nombres est celle du contrôle (OT à intégrer, texte d'avant de la page écrite)
+                        "aucun nombre qui ne figure pas dans l'OT à intégrer ou dans le texte actuel de la page que tu écris",
                         "rubriques permises : équipement « En bref », « Astuces » ; composant « À quoi il sert » ; savoir-faire "
                         "« Quand le faire », « Étapes », « Pièces et outillage », « Pièges »",
                         '"type": "savoir-faire", "rattache_a": "…"'):

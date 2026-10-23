@@ -10,7 +10,10 @@ ARCHITECTURE.md §20.4, §20.6, §20.12 ; D96 et D100 révisées 2, D97, D106, D
     contrôles   : une proposition conforme passe ; UN DÉFAUT INJECTÉ PAR MOTIF du §20.6 est refusé avec sa raison, qui
                   nomme la page (forme, citations, non-retrait, nombres, comptage, dates, nouveauté pour un OT antérieur,
                   sécurité, longueurs, liens, titres, contradictions) ; écriture à la main : retrait permis, le reste
-                  contrôlé, message de sécurité propre ;
+                  contrôlé, message de sécurité propre ; (T140) le refus d'un nombre dit où il a été cherché : page
+                  modifiée « absent de l'OT intégré et du texte d'avant de cette page », page créée « … seule source des
+                  nombres d'une page créée » (même cité, l'OT d'une autre page reçue n'en donne pas), sous-page « … du
+                  texte et du titre de sa page mère », à la main « absent des OT cités » ;
     refonte 2   : chaque rubrique à sa limite (5/6 phrases et 120/121 mots pour « En bref », 10/11 phrases pour
                   « Astuces », 3/4 phrases et 80/81 mots pour « À quoi il sert », 30/31 phrases et 600/601 mots pour un
                   savoir-faire) ; seul un savoir-faire se crée (équipement, composant libre, mode refusés ; type mode
@@ -357,7 +360,10 @@ class TestControles(CasControles):
         self.assertFalse(any("OT cité retiré de la page" in r for r in raisons), raisons)
 
     def test_nombres_comptage_et_dates(self):
-        self.refus(ajouter_phrase(VALABLE, "Pression relevée à 7 bar [OT-2026-0042]"), "nombre « 7 » absent des OT cités")
+        # T140 (C1) : la raison dit où le nombre a été cherché (page modifiée : l'OT intégré et son texte d'avant).
+        self.refus(ajouter_phrase(VALABLE, "Pression relevée à 7 bar [OT-2026-0042]"),
+                   "Page « PO-02 — Pompe centrifuge » : nombre « 7 » absent de l'OT intégré et du texte d'avant de cette page "
+                   "— « Pression relevée à 7 bar ».")
         self.refus(ajouter_phrase(VALABLE, "Garniture changée 3 fois [OT-2026-0042]"), "comptage interdit")
         raisons = self.refus(ajouter_phrase(VALABLE, "Garniture changée trois fois [OT-2026-0042]"), "comptage interdit")
         self.assertFalse(any("nombre «" in r for r in raisons), raisons)
@@ -369,7 +375,8 @@ class TestControles(CasControles):
         self.refus(ajouter_phrase(VALABLE, "Le kit posé avant 2025 a tenu [OT-2026-0042]"), "aucune date dans le wiki")
         self.refus(ajouter_phrase(VALABLE, "Garniture changée trente fois [OT-2026-0042]"), "comptage interdit")
         # Un numéro d'OT n'est pas un nombre connu : « 2026 » ne vient que des citations.
-        raisons = self.refus(ajouter_phrase(VALABLE, "Compteur à 2026 heures [OT-2026-0042]"), "nombre « 2026 » absent des OT cités")
+        raisons = self.refus(ajouter_phrase(VALABLE, "Compteur à 2026 heures [OT-2026-0042]"),
+                             "nombre « 2026 » absent de l'OT intégré et du texte d'avant de cette page")
         self.assertFalse(any("aucune date" in r for r in raisons), raisons)
         # Un numéro d'OT écrit dans la phrase n'est pas un nombre de la phrase.
         rappel = ajouter_phrase(VALABLE, "Même cause que OT-2026-0010 [OT-2026-0042]")
@@ -384,13 +391,23 @@ class TestControles(CasControles):
         roulement["catalogue"].append({"titre": "Roulement 6204", "type": "composant"})
         lien = ajouter_phrase(VALABLE, "Voir aussi [[Roulement 6204]] [OT-2026-0042]")
         self.assertTrue(self.controler(lien, roulement)["ok"], self.controler(lien, roulement)["raisons"])
-        self.refus(ajouter_phrase(VALABLE, "Roulement 6204 à surveiller [OT-2026-0042]"), "nombre « 6204 » absent des OT cités", roulement)
+        self.refus(ajouter_phrase(VALABLE, "Roulement 6204 à surveiller [OT-2026-0042]"),
+                   "nombre « 6204 » absent de l'OT intégré et du texte d'avant de cette page", roulement)
         # Permis : un nombre de l'OT (« 0,4 » écrit « 0.4 »), « une fois », le titre d'une page dans un lien.
         permis = ajouter_phrase(VALABLE, "Une fois réaligné à 0.4 mm près, voir [[Kit garniture mécanique PO-02]] [OT-2026-0042]")
         self.assertTrue(self.controler(permis)["ok"], self.controler(permis)["raisons"])
         titre = copy.deepcopy(VALABLE)
         titre["pages"][1]["titre"] = "Contrôler l'alignement de PO-07"
-        self.refus(titre, "nombre « 07 » du titre absent des OT")
+        self.refus(titre, "Page « Contrôler l'alignement de PO-07 » : nombre « 07 » du titre absent de l'OT intégré, seule "
+                   "source des nombres d'une page créée.")
+        # T140 (C1) : la raison dit où le nombre a été cherché. Une page créée ne prend ses nombres que dans l'OT intégré,
+        # jamais dans une autre page reçue — même si la phrase cite l'OT de cette page (cas de la relecture de 884cedf).
+        autre = copy.deepcopy(CONTEXTE)
+        autre["pagesEnvoyees"][1]["texte"] = "## À quoi il sert\n- Étanche après 15 minutes de marche [OT-2026-0020]"
+        reprise = copy.deepcopy(VALABLE)
+        reprise["pages"][1]["texte"] += "\n- Vérifier l'étanchéité 15 minutes en marche [OT-2026-0020]"
+        self.refus(reprise, "Page « Contrôler l'alignement de PO-02 » : nombre « 15 » absent de l'OT intégré, seule source des "
+                   "nombres d'une page créée — « Vérifier l'étanchéité 15 minutes en marche ».", autre)
 
     def test_nouveaute_pour_un_ot_anterieur(self):
         phrase = "Désormais l'accouplement est réaligné [OT-2026-0042]"
@@ -479,7 +496,8 @@ class TestControles(CasControles):
         self.refus(hors, "OT cité hors des OT permis : OT-2026-0099", contexte)
         nombre = copy.deepcopy(retrait)
         nombre["pages"][0]["texte"] += "\n- Pression à 7 bar [OT-2026-0010]"
-        self.refus(nombre, "nombre « 7 » absent des OT cités", contexte)
+        # À la main, le texte de référence est celui des OT cités : le message le dit (inchangé par T140).
+        self.refus(nombre, "Page « PO-02 — Pompe centrifuge » : nombre « 7 » absent des OT cités — « Pression à 7 bar ».", contexte)
         # Les limites et la création valent aussi à la main.
         self.refus(modification(EQUIPEMENT, balisage(("En bref", phrases(6)))),
                    "Page « PO-02 — Pompe centrifuge » : « En bref » : 6 phrases, 5 au plus.", contexte)
@@ -561,7 +579,8 @@ class TestSousPages(CasControles):
         # Les phrases nouvelles d'une sous-page restent contrôlées (nombre absent de l'OT et de la mère).
         nombre = copy.deepcopy(DECOUPE)
         nombre["pages"][0]["texte"] += "\n- Jeu de 0,7 mm à revoir [OT-2026-0042]"
-        self.refus(nombre, "Page « %s » : nombre « 0.7 » absent des OT cités" % SOUS_PAGE, CONTEXTE_DECOUPE)
+        self.refus(nombre, "Page « %s » : nombre « 0.7 » absent de l'OT intégré, du texte et du titre de sa page mère — « Jeu de "
+                   "0,7 mm à revoir »." % SOUS_PAGE, CONTEXTE_DECOUPE)
 
     def test_sous_page_d_equipement_ou_de_composant_refusee(self):
         """Une page d'équipement ou de composant ne se découpe plus : sa sous-page est refusée, pour cette seule raison,

@@ -20,8 +20,9 @@ ses OT (chacune y est reprise ; ses liens vers des titres connus restent des lie
                        savoir-faire ; une méthode (« … puis … ») complète le savoir-faire reçu qui la porte déjà (l'OT
                        s'ajoute à ses citations), sinon crée « Astuce de l'<OT> », et les « Astuces » n'en reçoivent que
                        le lien (« Méthode : voir [[<savoir-faire>]] ») ; « À quoi il sert » de chaque article reçu ne dit
-                       que ce que l'OT en dit — « A réglé la panne [[<libellé du symptôme>]] sur <repère> » —, et reste
-                       inchangé si sa panne n'est pas au catalogue (préventif, OT sans symptôme) : deux OT d'un même
+                       que ce que l'OT observe de lui — « Défaut constaté : <libellé de la cause> » —, jamais où ni quand il
+                       a été changé ni la panne qu'il a réglée (T140) ; sa page n'est pas renvoyée si l'OT n'en dit rien de
+                       plus (sans panne au catalogue — préventif, OT sans symptôme — ou sans cause) : deux OT d'un même
                        article partis ensemble seraient rejoués (D112) ;
     faux-rien          « rien à ajouter » ;
     faux-contradiction en plus, une contradiction sur la première phrase de la machine ;
@@ -301,12 +302,14 @@ def reponse_ingestion(message, modele="faux"):
         astuce = "Méthode : voir [[" + titre_astuce + "]]" if methode else lu["astuce"]
         ajouter_phrase(equipement, RUBRIQUE_ASTUCES, astuce, [ot])
     pages = [modifiee(cible)]
-    if textes and panne:
-        # « À quoi il sert » : ce que l'OT dit de l'article (la panne qu'il a réglée, où), rien s'il n'en dit pas plus.
+    codes = lu["codes"].split(" / ")
+    defaut = codes[1] if panne and len(codes) == 3 else ""         # la cause (symptôme / cause / remède) : ce que l'OT a vu
+    if textes and defaut:
+        # « À quoi il sert » : ce que l'OT observe de l'article (le défaut constaté), jamais où ni quand il a été changé ni
+        # la panne qu'il a réglée ; s'il n'en dit rien de plus, sa page n'est pas renvoyée (T140).
         for article in (page for page in lu["pages"] if page["type"] == "composant" and not page["mere"]):
             reprendre_anciennes(article)
-            ajouter_phrase(article, RUBRIQUE_ARTICLE, "A réglé la panne [[" + panne + "]]"
-                           + (" sur " + lu["repere"] if lu["repere"] else ""), [ot])
+            ajouter_phrase(article, RUBRIQUE_ARTICLE, "Défaut constaté : " + defaut, [ot])
             pages.append(modifiee(article))
     if complete is not None:
         ajouter_phrase(complete, RUBRIQUE_SAVOIR_FAIRE, lu["astuce"], [ot])     # même texte : l'OT s'ajoute à ses citations
