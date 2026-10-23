@@ -27,7 +27,8 @@ alors renvoyée. La fabrication s'arrête (code retour 1) sur un modèle autre
 que Sonnet, plus d'un tour, une réponse en erreur, une réponse refusée par les contrôles de Prévo (défaut de la
 fonction : on corrige le code, puis on relance — les réponses déjà obtenues sont reprises sans nouvel appel), une
 IA injoignable ou une intégrité en défaut. Les propositions acceptées sont validées au nom du responsable, sauf
-celles des demoAValiderJours derniers jours d'intervention, laissées « à valider ».
+celles des demoAValiderJours derniers jours d'intervention, laissées « à valider ». Un agent ne met jamais Claude
+Code à jour ; si claude.exe disparaît un instant (mise à jour faite ailleurs), l'agent attend qu'il revienne.
 """
 import argparse
 import asyncio
@@ -55,6 +56,7 @@ sys.path.insert(0, str(RACINE / 'outils'))
 from generer_demo import DATE_REFERENCE  # noqa: E402  (« aujourd'hui » du jeu de démo)
 HEURE_REFERENCE = 9                     # il est 9 h à la date de référence
 DELAI_APPEL_S = 300
+ATTENTE_COMMANDE_S = 120     # claude.exe absent au lancement (mise à jour de Claude Code en cours) : attente maximale
 SCRIPTS = [
     'js/lib/papaparse.min.js', 'js/schema.js', 'js/donnees.js', 'js/stockage-demo.js',
     'js/modules/causes-frequentes.js', 'js/modules/indicateurs-regles.js', 'js/modules/ia.js', 'js/modules/ia-prompts.js',
@@ -184,11 +186,12 @@ def options_agent(systeme):
 
 def environnement_agent():
     """Environnement d'un agent : sans les variables de la session Claude Code qui le lance ni ce qui changerait le
-    modèle ou l'adresse de l'API ; CLAUDE.md et mémoire automatique désactivés."""
+    modèle ou l'adresse de l'API ; CLAUDE.md et mémoire automatique désactivés ; jamais de mise à jour de Claude Code
+    (elle remplace claude.exe pendant que les autres agents le lancent)."""
     retirees = ('CLAUDECODE', 'CLAUDE_EFFORT', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL')
     env = {cle: valeur for cle, valeur in os.environ.items()
            if not cle.startswith(('CLAUDE_CODE_', 'ANTHROPIC_DEFAULT_')) and cle not in retirees}
-    env.update({'CLAUDE_CODE_DISABLE_CLAUDE_MDS': '1', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY': '1'})
+    env.update({'CLAUDE_CODE_DISABLE_CLAUDE_MDS': '1', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY': '1', 'DISABLE_AUTOUPDATER': '1'})
     return env
 
 
@@ -231,10 +234,11 @@ def controler_reponse(donnees):
 class Fabrique:
     """Pont entre Wiki.traiterFile (page) et les agents Claude (Python)."""
 
-    def __init__(self, commande, traces, delai=DELAI_APPEL_S):
+    def __init__(self, commande, traces, delai=DELAI_APPEL_S, attente_commande=ATTENTE_COMMANDE_S):
         self.commande = commande
         self.traces = traces
         self.delai = delai
+        self.attente_commande = attente_commande
         self.appels = 0
         self.reprises = 0
         self.cout = 0.0
@@ -262,6 +266,23 @@ class Fabrique:
             self.arret = self.arret or '%s : %s' % (ot, erreur)
             raise
 
+    async def lancer_agent(self, systeme):
+        """Processus d'un agent. Commande introuvable (claude.exe retiré par une mise à jour de Claude Code faite hors
+        de l'outil) : on attend qu'elle revienne, attente_commande secondes au plus, et on relance une fois — aucun appel
+        n'a encore été fait."""
+        arguments = self.commande + options_agent(systeme)
+        for essai in (1, 2):
+            try:
+                return await asyncio.create_subprocess_exec(
+                    *arguments, cwd=str(self.dossier_neutre), env=environnement_agent(),
+                    stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            except FileNotFoundError:
+                if essai == 2:
+                    raise
+                fin = time.time() + self.attente_commande
+                while not Path(arguments[0]).is_file() and time.time() < fin:
+                    await asyncio.sleep(1)
+
     async def appeler_agent(self, ot, systeme, utilisateur, cle, trace):
         depart = time.time()
         appel = {'empreinte': cle, 'reprise': False, 'date': datetime.now().isoformat(timespec='seconds'),
@@ -269,9 +290,7 @@ class Fabrique:
         trace['appels'].append(appel)
         self.appels += 1                          # tout agent lancé compte, même arrêté ensuite
         try:
-            processus = await asyncio.create_subprocess_exec(
-                *(self.commande + options_agent(systeme)), cwd=str(self.dossier_neutre), env=environnement_agent(),
-                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            processus = await self.lancer_agent(systeme)
         except OSError as erreur:
             appel['erreur'] = 'agent injoignable : %s' % erreur
             ecrire_trace(self.traces, trace)

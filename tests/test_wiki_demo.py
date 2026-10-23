@@ -15,7 +15,9 @@ Toujours avec un faux `claude` (tests/fixtures/wiki/faux_claude.py), jamais un v
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_wiki_demo.py" -v
 """
+import asyncio
 import csv
+import importlib.util
 import io
 import json
 import os
@@ -23,6 +25,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -35,6 +39,14 @@ FAUX = RACINE / 'tests' / 'fixtures' / 'wiki' / 'faux_claude.py'
 DEMO = RACINE / 'donnees' / 'demo'
 OPTIONS_AGENT = ['-p', '--model', 'sonnet', '--tools', '', '--system-prompt', None, '--setting-sources', '',
                  '--strict-mcp-config', '--no-session-persistence', '--disable-slash-commands', '--output-format', 'json']
+
+
+def charger_outil():
+    """Module outils/wiki_demo.py, pour essayer une fonction seule."""
+    spec = importlib.util.spec_from_file_location('wiki_demo_essai', OUTIL)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def lancer(script, arguments, environnement=None, delai=900):
@@ -115,13 +127,15 @@ class TestFabrication(unittest.TestCase):
             self.assertIn('cout_usd', appel)
             # Verdict de Prévo gardé dans la trace (CS105).
             self.assertIn(trace['verdict']['statut'], ('validée', 'à valider'), ot)
-        # Environnement de chaque agent : sans les variables de la session qui lance, CLAUDE.md et mémoire désactivés.
+        # Environnement de chaque agent : sans les variables de la session qui lance, CLAUDE.md et mémoire désactivés,
+        # jamais de mise à jour de Claude Code (elle retirerait claude.exe aux autres agents).
         for recu in recus:
             env = recu['environnement']
             self.assertNotIn('CLAUDECODE', env)
             self.assertNotIn('CLAUDE_CODE_SESSION_ID', env)
             self.assertNotIn('ANTHROPIC_BASE_URL', env)
-            self.assertEqual((env.get('CLAUDE_CODE_DISABLE_CLAUDE_MDS'), env.get('CLAUDE_CODE_DISABLE_AUTO_MEMORY')), ('1', '1'))
+            self.assertEqual((env.get('CLAUDE_CODE_DISABLE_CLAUDE_MDS'), env.get('CLAUDE_CODE_DISABLE_AUTO_MEMORY'),
+                              env.get('DISABLE_AUTOUPDATER')), ('1', '1', '1'))
 
     def test_reprise_sans_nouvel_appel(self):
         # Un seul agent : les requêtes d'une fabrication à l'autre sont identiques à l'octet (avec plusieurs agents,
@@ -303,10 +317,7 @@ class TestArrets(unittest.TestCase):
         self.assertIn('réponse de claude-opus-5-5 en 1 tour(s)', sortie.stdout)
 
     def test_jamais_de_repli_sur_cmd(self):
-        import importlib.util
-        spec = importlib.util.spec_from_file_location('wiki_demo_essai', OUTIL)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        module = charger_outil()
         dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-cmd-'))
         self.addCleanup(shutil.rmtree, dossier, True)
         (dossier / 'claude.cmd').write_text('@echo off\n', encoding='utf-8')
@@ -319,6 +330,27 @@ class TestArrets(unittest.TestCase):
             module.shutil.which = original
         self.assertIn('claude.exe introuvable', str(erreur.exception))
 
+    def test_claude_exe_retire_puis_revenu(self):
+        """Une mise à jour de Claude Code faite hors de l'outil retire claude.exe un instant : l'agent attend qu'il
+        revienne, puis part ; s'il ne revient pas dans l'attente permise, il est injoignable (aucun appel fait)."""
+        module = charger_outil()
+        dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-maj-'))
+        self.addCleanup(shutil.rmtree, dossier, True)
+        commande = dossier / 'claude.exe'
+        minuteur = threading.Timer(2, shutil.copyfile, (shutil.which('whoami'), commande))
+        minuteur.start()
+        self.addCleanup(minuteur.cancel)
+
+        async def lancer_agent(fabrique):
+            processus = await fabrique.lancer_agent('essai')
+            await processus.communicate()
+
+        depart = time.time()
+        asyncio.run(lancer_agent(module.Fabrique([str(commande)], dossier, attente_commande=30)))
+        self.assertGreater(time.time() - depart, 1.5)
+        with self.assertRaises(FileNotFoundError):
+            asyncio.run(lancer_agent(module.Fabrique([str(dossier / 'jamais.exe')], dossier, attente_commande=2)))
+
 
 class TestAPropos(CasNavigateur):
 
@@ -327,7 +359,7 @@ class TestAPropos(CasNavigateur):
         self.page.goto(url_fichier('index.html'))
         self.page.click('#btn-demo')
         attendre_pret(self.page)
-        self.page.evaluate("""() => Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00001',
+        self.page.evaluate("""() => Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-99001',
           nature: 'ingestion', ot_id: '', statut: 'validée', modele: 'claude-sonnet-5-5' }); }, { journal: false })""")
         self.page.goto(url_fichier('index.html') + '#/apropos')
         self.page.wait_for_selector('.apropos-liste')
