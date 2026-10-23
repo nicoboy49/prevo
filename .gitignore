@@ -11,6 +11,15 @@ verrou.txt
 reference-design/
 LISEZMOI.md
 
+# --- Site commercial, marketing et études : dans « SIte gmao » (dossier à part), jamais ici
+xxx/
+lancement/
+marketing/
+etudes/
+etudes-site/
+BRIEF_finition_lancement.md
+*.mp4
+
 # --- Python
 __pycache__/
 *.pyc
