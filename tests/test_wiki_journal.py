@@ -186,6 +186,22 @@ class TestValidation(CasJournal):
         self.assertIn("OT-2026-0001", self.page.evaluate("Wiki.file().map((e) => e.ot_id)"))
         self.assertEqual(apres["OT-2026-0002"]["statut"], "à valider")
 
+    def test_lien_vers_une_page_seulement_modifiee_ne_lie_pas(self):
+        """Un lien vers une page qu'une proposition plus ancienne modifie sans la créer n'en fait pas dépendre : rejetée,
+        elle laisserait la page en place (fabrication de la démo, 2026-10-23 : un lien vers la page d'un équipement liait
+        toute proposition à la dernière qui changeait cet équipement, et bloquait sa validation)."""
+        entrees = self.entrees()
+        id_0001 = entrees["OT-2026-0001"]["id"]
+        self.assertIn("EQ:EQ-0001", [c["cle"] for c in json.loads(entrees["OT-2026-0001"]["changements"])])
+        titre = self.ligne("WP-0001")["titre"]
+        self.page.evaluate("""(titre) => Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00098',
+          nature: 'ingestion', ot_id: 'OT-2026-0002', statut: 'à valider', ordre: '98', pages: 'WP:WP-0006',
+          contradictions: '[]', changements: JSON.stringify([{ page: 'WP-0006', cle: 'WP:WP-0006', version_avant: 1,
+            avant: '', creation: false, apres: '## Symptômes\\n- Voir [[' + titre + ']] [OT-2026-0007]' }]) }); },
+          { journal: false })""", titre)
+        self.assertNotIn("WJ-00098", self.ok("rejeter", id_0001, "Essai")["aRefaire"])
+        self.assertEqual(self.ok("valider", ["WJ-00098"])["validees"], ["WJ-00098"])
+
     def test_rejet_motif_cascade_et_relance(self):
         entrees = self.entrees()
         self.refus("motif du rejet est obligatoire", "rejeter", entrees["OT-2026-0003"]["id"], "  ")

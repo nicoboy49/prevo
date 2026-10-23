@@ -112,30 +112,30 @@ Object.assign(Wiki, (() => {
     return ligne ? cleDeLigne(ligne) : texte(cle);
   }
 
-  /** Pages que change une entrée (ses changements), en clés normalisées. */
-  function changeesDe(entree, lignesPages) {
-    return new Set(changementsDe(entree).map((changement) => {
+  /** Pages que change une entrée et, parmi elles, celles qu'elle crée → { changees, creees }, en clés normalisées. */
+  function pagesDe(entree, lignesPages) {
+    const pages = { changees: new Set(), creees: new Set() };
+    changementsDe(entree).forEach((changement) => {
       const ligne = ligneDeCle(lignesPages, changement.cle, changement.page);
-      return ligne ? cleDeLigne(ligne) : normaliser(changement.cle, lignesPages);
-    }));
+      const cle = ligne ? cleDeLigne(ligne) : normaliser(changement.cle, lignesPages);
+      pages.changees.add(cle);
+      if (changement.creation) pages.creees.add(cle);
+    });
+    return pages;
   }
 
   /**
-   * Pages sur lesquelles une entrée a été construite : ses pages concernées (sans la cause), celles qu'elle change,
-   * et les pages vers lesquelles ses textes font un lien (une page créée par une autre proposition).
+   * B dépend de A (plus ancienne) si A change une page sur laquelle B a été construite (ses pages concernées, sans la
+   * cause, et celles qu'elle change), ou crée une page vers laquelle B fait un lien (A rejetée, elle disparaîtrait). Un
+   * lien vers une page que A ne fait que modifier n'en dépend pas (démo, 2026-10-23 : un lien vers un équipement liait
+   * toute proposition à la dernière qui changeait cet équipement).
    */
-  function luesDe(entree, lignesPages) {
-    const cles = texte(entree.pages).split(';').map(texte).filter((cle) => cle && !cle.startsWith('CAUSE:'));
-    changementsDe(entree).forEach((changement) => Wiki.liensDe(changement.apres || '')
-      .forEach((titre) => cles.push('TITRE:' + Wiki.comparable(titre))));
-    const lues = new Set(cles.map((cle) => normaliser(cle, lignesPages)));
-    changeesDe(entree, lignesPages).forEach((cle) => lues.add(cle));
-    return lues;
-  }
-
-  /** B dépend de A (plus ancienne) si A change une page sur laquelle B a été construite. */
-  function depend(b, changeesParA, lignesPages) {
-    return Array.from(luesDe(b, lignesPages)).some((cle) => changeesParA.has(cle));
+  function depend(b, pagesA, lignesPages) {
+    const lues = texte(b.pages).split(';').map(texte).filter((cle) => cle && !cle.startsWith('CAUSE:'))
+      .map((cle) => normaliser(cle, lignesPages)).concat(Array.from(pagesDe(b, lignesPages).changees));
+    const liens = changementsDe(b).flatMap((changement) => Wiki.liensDe(changement.apres || ''))
+      .map((titre) => normaliser('TITRE:' + Wiki.comparable(titre), lignesPages));
+    return lues.some((cle) => pagesA.changees.has(cle)) || liens.some((cle) => pagesA.creees.has(cle));
   }
 
   /** Titre comparable → identifiant canonique (équipements, articles, pages actives), pour le champ `liens`. */
@@ -203,20 +203,22 @@ Object.assign(Wiki, (() => {
   // ===========================================================================================
 
   /**
-   * Fait passer « à refaire » les entrées à valider de rang supérieur à `apres` construites sur une page de `cles`
-   * (pages dont le texte n'est plus celui qu'elles ont lu), en ajoutant à `cles` les pages qu'elles changeaient.
-   * Renvoie leurs identifiants. Dans une fonction de Donnees.modifier.
+   * Fait passer « à refaire » les entrées à valider de rang supérieur à `apres` qui dépendent des pages `cles` (texte
+   * perdu) ou `creees` (jamais créées), en y ajoutant les pages qu'elles changeaient et créaient. Renvoie leurs
+   * identifiants. Dans une fonction de Donnees.modifier.
    */
-  function cascade(lignesJournal, cles, apres, motif, maintenant) {
+  function cascade(lignesJournal, cles, apres, motif, maintenant, creees) {
     const lignesPages = Donnees.lignes('wiki_pages');
-    const perdues = new Set(Array.from(cles).map((cle) => normaliser(cle, lignesPages)));
+    const normalisees = (liste) => new Set(Array.from(liste || []).map((cle) => normaliser(cle, lignesPages)));
+    const perdues = { changees: normalisees(cles), creees: normalisees(creees) };
     const marquees = [];
     lignesJournal.filter((entree) => texte(entree.statut) === 'à valider' && rang(entree) > apres).sort(parRang)
       .forEach((entree) => {
         const deja = appliqueeDans(entree, lignesPages);        // validée sur un autre poste : rien à refaire
         if (deja) { marquerValidee(entree, deja, ''); return; }
         if (!depend(entree, perdues, lignesPages)) return;
-        changeesDe(entree, lignesPages).forEach((cle) => perdues.add(cle));
+        const siennes = pagesDe(entree, lignesPages);
+        ['changees', 'creees'].forEach((nom) => siennes[nom].forEach((cle) => perdues[nom].add(cle)));
         Object.assign(entree, { statut: 'à refaire', motif, changements: '', contradictions: '', ordre: '', traite_le: maintenant });
         marquees.push(entree.id);
       });
@@ -330,7 +332,7 @@ Object.assign(Wiki, (() => {
     const lignesPages = Donnees.lignes('wiki_pages');
     entrees.forEach((entree) => {
       const avant = journal.filter((e) => texte(e.statut) === 'à valider' && !choisis.includes(e.id) && rang(e) < rang(entree)
-        && depend(entree, changeesDe(e, lignesPages), lignesPages));
+        && depend(entree, pagesDe(e, lignesPages), lignesPages));
       if (avant.length) {
         throw ErreurValidation('Validez d\'abord ' + avant.map((e) => e.id).join(', ') + ' : ' + entree.id + ' a été construite sur '
           + (avant.length > 1 ? 'leurs changements' : 'ses changements') + ' (propositions enchaînées).');
@@ -350,10 +352,10 @@ Object.assign(Wiki, (() => {
           if (!ligne || texte(ligne.statut) !== 'à valider') return { aRefaire: [] };
           const deja = appliqueeDans(ligne, lignesFraiches);          // validée entre-temps sur un autre poste
           if (deja) { marquerValidee(ligne, deja, ''); return { validee: true, aRefaire: [] }; }
-          const cles = changeesDe(ligne, lignesFraiches);
+          const { changees, creees } = pagesDe(ligne, lignesFraiches);
           const motif = 'à refaire : une page a changé depuis la proposition';
           Object.assign(ligne, { statut: 'à refaire', motif, changements: '', contradictions: '', ordre: '', traite_le: outils.maintenant() });
-          return { aRefaire: [ligne.id].concat(cascade(lignes, cles, rang(entree), 'à refaire : suit ' + ligne.id, outils.maintenant())) };
+          return { aRefaire: [ligne.id].concat(cascade(lignes, changees, rang(entree), 'à refaire : suit ' + ligne.id, outils.maintenant(), creees)) };
         }, { journal: false });
         if (issue.validee) bilan.validees.push(entree.id);
         bilan.aRefaire.push(...issue.aRefaire);
@@ -393,9 +395,9 @@ Object.assign(Wiki, (() => {
       const deja = appliqueeDans(ligne, lignesPages);
       if (deja) { marquerValidee(ligne, deja, ''); return { dejaValidee: true }; }
       const maintenant = outils.maintenant();
-      const cles = changeesDe(ligne, lignesPages);
+      const { changees, creees } = pagesDe(ligne, lignesPages);
       Object.assign(ligne, { statut: 'rejetée', motif: texte(motif), decide_par: par, decide_le: maintenant });
-      return { rejetee: ligne.id, aRefaire: cascade(lignes, cles, rang(ligne), 'à refaire : ' + ligne.id + ' rejetée', maintenant) };
+      return { rejetee: ligne.id, aRefaire: cascade(lignes, changees, rang(ligne), 'à refaire : ' + ligne.id + ' rejetée', maintenant, creees) };
     }, { journal: false });
     if (resultat.dejaValidee) {
       throw ErreurValidation('La proposition ' + texte(id) + ' vient d\'être validée (sans doute sur un autre poste) : son texte '

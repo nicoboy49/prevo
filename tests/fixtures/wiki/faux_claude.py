@@ -8,6 +8,8 @@ Variables d'environnement :
                          phrase sans OT — puis, à la relance avec la raison, une réponse valable) | erreur (réponse en
                          erreur) | lent (répond après 8 s)
     FAUX_CLAUDE_RELANCE  mode relance : OT concernés, séparés par des virgules (défaut : tous)
+    FAUX_CLAUDE_DELAIS   1 : chaque réponse attend de 0 à 1,6 s selon le numéro de l'OT (réponses dans le désordre,
+                         comme le vrai modèle)
     FAUX_CLAUDE_TRACES   dossier : chaque appel y écrit appel-<identifiant>.json (arguments, entrée standard et
                          variables CLAUDE*/ANTHROPIC* reçus)
 """
@@ -43,6 +45,9 @@ def principal():
             json.dumps({'arguments': arguments, 'entree': entree, 'environnement': {cle: valeur for cle, valeur in os.environ.items()
                         if cle.startswith(('CLAUDE', 'ANTHROPIC', 'DISABLE_AUTOUPDATER'))}}, ensure_ascii=False), encoding='utf-8')
     mode = os.environ.get('FAUX_CLAUDE_MODE', 'sonnet')
+    if os.environ.get('FAUX_CLAUDE_DELAIS') == '1':
+        trouve = MOTIF_OT_INGERE.search(entree)
+        time.sleep(((int(trouve.group(1)[-4:]) * 7) % 5) * 0.4 if trouve else 0)
     if mode == 'lent':                            # répond après 8 s ; « fini » prouve qu'on ne l'a pas coupé
         time.sleep(8)
         if dossier:

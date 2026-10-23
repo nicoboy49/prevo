@@ -189,6 +189,31 @@ class TestFabrication(unittest.TestCase):
         trace = json.loads(next(traces.glob('*.json')).read_text(encoding='utf-8'))
         self.assertEqual([a['reprise'] for a in trace['appels']], [False, True])
 
+    def test_reprise_fidele_avec_cinq_agents(self):
+        """Cinq agents, réponses dans le désordre : rendues après leur durée d'origine, les réponses reprises arrivent
+        dans le même ordre, les mêmes requêtes partent et tout est repris sans agent (--reprise-seule), même wiki ;
+        rendues tout de suite (--reprise-duree 0), l'ordre change, une requête manque aux traces et rien n'est appelé."""
+        traces = self.dossier / 'chaine-5'
+
+        def fabriquer(numero, *options):
+            resultat = self.dossier / ('resultat-5-agents-%d' % numero)
+            sortie = lancer(OUTIL, ['fabriquer', '--agents', 5, '--limite', 30, '--claude', FAUX, '--traces', traces,
+                                    '--resultat', resultat] + list(options), {'FAUX_CLAUDE_DELAIS': '1'})
+            return sortie, resultat
+
+        premiere, resultat_1 = fabriquer(1)
+        self.assertEqual(premiere.returncode, 0, premiere.stdout + premiere.stderr)
+        self.assertIn('Agents lancés : 30 · réponses reprises des traces : 0', premiere.stdout)
+        seconde, resultat_2 = fabriquer(2, '--reprise-seule')
+        self.assertEqual(seconde.returncode, 0, seconde.stdout + seconde.stderr)
+        self.assertIn('Agents lancés : 0 · réponses reprises des traces : 30', seconde.stdout)
+        self.assertEqual(wiki_de(resultat_2), wiki_de(resultat_1))
+        self.assertEqual((resultat_2 / 'wiki_pages.csv').read_bytes(), (resultat_1 / 'wiki_pages.csv').read_bytes())
+        troisieme, _ = fabriquer(3, '--reprise-seule', '--reprise-duree', 0)
+        self.assertEqual(troisieme.returncode, 1, troisieme.stdout)
+        self.assertIn('requête absente des traces (reprise seule : aucun agent lancé)', troisieme.stdout)
+        self.assertIn('Agents lancés : 0 ·', troisieme.stdout)
+
     def test_figer_generer_verifier_et_relecture(self):
         fige = self.dossier / 'fige'
         sortie = lancer(OUTIL, ['figer', '--resultat', self.resultat, '--wiki', fige])

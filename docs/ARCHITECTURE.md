@@ -2781,7 +2781,9 @@ OT clôturés ; pour les nombres, le texte de référence est celui des OT cité
 Toutes les écritures par `Donnees.modifier` (contrôle de version, journal général), **responsable
 seulement** (même refus que les écrans réservés) :
 - **`Wiki.valider(ids)`** : dans l'ordre de `ordre` ; refusé si une entrée « à valider » plus ancienne touche
-  une même page. Pour chacune : (1) **une** écriture de `wiki_pages` — chaque page du changement doit avoir
+  une même page (elle change une page sur laquelle l'entrée a été construite, ou crée une page vers laquelle
+  l'entrée fait un lien — précision du 2026-10-23 : un lien vers une page qu'elle ne fait que modifier ne compte
+  pas, la page reste si elle est rejetée ; même règle pour la cascade « à refaire »). Pour chacune : (1) **une** écriture de `wiki_pages` — chaque page du changement doit avoir
   `version` = `version_avant` (sinon l'entrée passe « à refaire ») ; texte, `ot_cites`, `liens`, `version` +
   1, `origine`, `modele`, `derniere_entree`, `valide_par`, `valide_le` ; une sous-page créée reçoit
   `rattache_a` = l'identifiant de la ligne de sa mère (créée d'abord si la mère n'en avait pas), jamais
@@ -2868,9 +2870,13 @@ le document de chaque OT clôturé ; les **pages validées** (titre et texte, `t
   (`.chantier/wiki-demo/chaine/<OT>.json`) garde la requête, la réponse brute, le modèle relevé
   (`modelUsage`), le nombre de tours, les jetons, le coût et la durée ; **un modèle autre que Sonnet ou plus
   d'un tour arrête la fabrication**. Une réponse déjà obtenue pour une requête identique à l'octet est
-  reprise de la trace (reprise après correction, sans nouvel appel ; marqué dans la trace). Chaque
-  proposition acceptée est validée au nom du responsable fictif, sauf si sa date d'intervention est dans les
-  `demoAValiderJours` derniers jours (laissée « à valider ») ; une réponse refusée est relancée avec la
+  reprise de la trace (reprise après correction, sans nouvel appel ; marqué dans la trace), **après sa durée
+  d'origine** (`--reprise-duree`, 1 par défaut) : les réponses arrivent dans le même ordre, donc, même avec 5
+  agents, les mêmes requêtes partent et tout est repris (le catalogue d'une requête dépend des OT déjà finis) ;
+  `--reprise-seule` ne lance jamais d'agent (une requête absente des traces arrête la fabrication, aucun coût
+  imprévu). Chaque proposition acceptée est validée au nom du responsable fictif, sauf si sa date d'intervention
+  est dans les `demoAValiderJours` derniers jours (laissée « à valider »), et sauf si elle dépend d'une proposition
+  laissée (laissée aussi : `Wiki.valider` la refuserait avant elle) ; une réponse refusée est relancée avec la
   raison, comme chez un client (§20.5) : **un agent neuf de plus**, tracé dans la même trace ; **une relance
   refusée arrête la fabrication** : défaut de la fonction, corrigé dans le code, puis la fabrication reprend.
   Chaque agent tourne sans mise à jour de Claude Code (`DISABLE_AUTOUPDATER=1`) ; si `claude.exe` manque au

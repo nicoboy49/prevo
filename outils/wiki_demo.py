@@ -23,14 +23,17 @@ d'origine, réponse refusée, raisons du refus), qui lance un agent neuf de plus
 
 Chaque appel laisse une trace dans .chantier/wiki-demo/chaine/<OT>.json : requête (système et utilisateur),
 empreinte, réponse brute, modèle relevé (modelUsage), nombre de tours, jetons, coût, durée ; une réponse reprise
-d'une trace (requête identique à l'octet) y est marquée. Avec un seul agent, une nouvelle fabrication envoie les
-mêmes requêtes et reprend tout ; avec plusieurs, le catalogue d'une requête peut différer d'une fabrication à
-l'autre (pages créées par des OT traités en même temps sur d'autres pages, déjà finis ou non) : cette requête est
-alors renvoyée ; une requête de relance identique à l'octet est reprise de même. La fabrication s'arrête (code
+d'une trace (requête identique à l'octet) y est marquée. Une réponse reprise est rendue après sa durée d'origine
+(--reprise-duree, 1 par défaut ; 0 : tout de suite) : les réponses arrivent dans le même ordre, donc, même avec
+plusieurs agents, les mêmes requêtes partent (le catalogue d'une requête dépend des OT déjà finis ailleurs) et tout
+est repris ; à deux réponses très proches près (quelques millisecondes), l'ordre peut s'inverser : la requête qui
+suit est alors renvoyée. --reprise-seule n'appelle jamais Claude : une requête absente des traces arrête la
+fabrication (aucun coût imprévu). Une requête de relance identique à l'octet est reprise de même. La fabrication s'arrête (code
 retour 1) sur un modèle autre que Sonnet, plus d'un tour, une réponse en erreur, une relance refusée par les contrôles
 de Prévo (défaut de la fonction : on corrige le code, puis on relance — les réponses déjà obtenues sont reprises sans
 nouvel appel), une IA injoignable ou une intégrité en défaut. Les propositions acceptées sont validées au nom du
-responsable, sauf celles des demoAValiderJours derniers jours d'intervention, laissées « à valider ». Un agent ne met jamais Claude
+responsable, sauf celles des demoAValiderJours derniers jours d'intervention, laissées « à valider », et celles
+qui dépendent d'une proposition laissée (Wiki.valider les refuserait avant elle). Un agent ne met jamais Claude
 Code à jour ; si claude.exe disparaît un instant (mise à jour faite ailleurs), l'agent attend qu'il revienne.
 """
 import argparse
@@ -99,13 +102,23 @@ VALIDER_JS = """async (limite) => {
   const resultat = { validees: 0, laissees: [], bloquees: [] };
   const entrees = Donnees.lignes('wiki_journal').filter((e) => e.statut === 'à valider')
     .sort((a, b) => Number(a.ordre) - Number(b.ordre));
+  const laissees = [];                        // identifiants des entrées laissées « à valider »
   for (const entree of entrees) {
-    if (String(entree.date_intervention).slice(0, 10) > limite) { resultat.laissees.push(entree.ot_id); continue; }
+    if (String(entree.date_intervention).slice(0, 10) > limite) {
+      laissees.push(entree.id);
+      resultat.laissees.push(entree.ot_id);
+      continue;
+    }
     try {
       const bilan = await Wiki.valider([entree.id]);
       resultat.validees += bilan.validees.length;
       bilan.aRefaire.forEach((id) => resultat.bloquees.push([entree.ot_id, 'à refaire : ' + id]));
-    } catch (erreur) { resultat.bloquees.push([entree.ot_id, erreur.message]); }
+    } catch (erreur) {
+      // Construite sur une proposition laissée « à valider » : laissée aussi (Wiki.valider la refuse avant elle).
+      const dependante = /^Validez d'abord /.test(erreur.message) && laissees.some((id) => erreur.message.includes(id));
+      if (dependante) { laissees.push(entree.id); resultat.laissees.push(entree.ot_id + ' (suit une proposition laissée)'); }
+      else resultat.bloquees.push([entree.ot_id, erreur.message]);
+    }
   }
   resultat.integrite = Wiki.verifierIntegrite({ envois: (window.dernierBilan || {}).envois || [] });
   const fichiers = Donnees.instantane();
@@ -243,10 +256,13 @@ def controler_reponse(donnees):
 class Fabrique:
     """Pont entre Wiki.traiterFile (page) et les agents Claude (Python)."""
 
-    def __init__(self, commande, traces, delai=DELAI_APPEL_S, attente_commande=ATTENTE_COMMANDE_S):
+    def __init__(self, commande, traces, delai=DELAI_APPEL_S, attente_commande=ATTENTE_COMMANDE_S, reprise_duree=1.0,
+                 reprise_seule=False):
         self.commande = commande
         self.traces = traces
         self.delai = delai
+        self.reprise_duree = reprise_duree        # fraction de la durée d'origine d'une réponse reprise
+        self.reprise_seule = reprise_seule        # jamais d'agent : une requête absente des traces arrête tout
         self.attente_commande = attente_commande
         self.appels = 0
         self.reprises = 0
@@ -272,7 +288,13 @@ class Fabrique:
             trace['appels'].append({'empreinte': cle, 'reprise': True, 'relance': relance,
                                     'date': datetime.now().isoformat(timespec='seconds')})
             ecrire_trace(self.traces, trace)
+            # Rendue après sa durée d'origine : les réponses arrivent dans le même ordre, les mêmes requêtes suivent.
+            if self.reprise_duree > 0:
+                await asyncio.sleep(float(deja.get('duree_s') or 0) * self.reprise_duree)
             return {'contenu': deja['contenu'], 'modele': deja['modele']}
+        if self.reprise_seule:
+            self.arret = self.arret or '%s : requête absente des traces (reprise seule : aucun agent lancé)' % ot
+            raise ErreurFabrication(self.arret)
         try:
             return await self.appeler_agent(ot, systeme, utilisateur, cle, trace)
         except ErreurFabrication as erreur:
@@ -364,7 +386,8 @@ ENTREES_JS = """() => Donnees.lignes('wiki_journal').filter((e) => e.nature === 
 
 async def fabriquer_async(arguments):
     commande = commande_claude(arguments.claude)
-    fabrique = Fabrique(commande, Path(arguments.traces), arguments.delai_appel)
+    fabrique = Fabrique(commande, Path(arguments.traces), arguments.delai_appel, reprise_duree=arguments.reprise_duree,
+                        reprise_seule=arguments.reprise_seule)
     sortie = Path(arguments.resultat)
     for table in FICHIERS_FIGES:                  # jamais de résultat périmé à figer après une fabrication arrêtée
         (sortie / (table + '.csv')).unlink(missing_ok=True)
@@ -672,6 +695,11 @@ def lire_arguments(argv):
     fabrication.add_argument('--a-valider-jours', type=int, default=None,
                              help='jours laissés « à valider » (défaut : Wiki.SEUILS.demoAValiderJours)')
     fabrication.add_argument('--delai-appel', type=int, default=DELAI_APPEL_S, help='délai d\'un agent en secondes')
+    fabrication.add_argument('--reprise-duree', type=float, default=1.0,
+                             help='réponse reprise rendue après cette fraction de sa durée d\'origine (défaut 1 : même '
+                                  'ordre d\'arrivée, mêmes requêtes avec plusieurs agents ; 0 : tout de suite)')
+    fabrication.add_argument('--reprise-seule', action='store_true',
+                             help='jamais d\'agent : une requête absente des traces arrête la fabrication')
     sous.add_parser('figer', parents=[commun], help='copie le résultat dans les fichiers figés')
     sous.add_parser('verifier', parents=[commun], help='vérifie traces, journal figé et intégrité')
     lecture = sous.add_parser('relecture', parents=[commun], help='page de relecture du wiki de démo')
