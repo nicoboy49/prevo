@@ -2544,10 +2544,11 @@ Version de clôture `v1.2.0`.
 - **Routes**, ouvertes aux trois profils sauf mention : `#/wiki` (index), `#/wiki/<id>` (une page ; `id` =
   identifiant d'équipement `EQ-…`, d'article `ART-…` ou de page `WP-…`), `#/wiki-journal` (**responsable
   seulement**). Entrée de menu et icône `wiki` inchangées (ordre 42).
-- **Constantes** `Wiki.SEUILS` (D100), documentées dans le guide : `{ pagesCreeesMax: 3, phrasesMax: 12,
-  motsMax: 250, pagesEnvoyeesMax: 8, catalogueMax: 400, agentsSimultanes: 5, astuceMax: 500, otMinimum: 5,
-  recidiveJours: 30, dernieres: 10, symptomesMax: 5, contradictionAncienneJours: 30,
-  demoAValiderJours: 14 }`.
+- **Constantes** `Wiki.SEUILS` (D100), documentées dans le guide : `{ pagesCreeesMax: 3, phrasesMax: 30,
+  motsMax: 600, relancesMax: 1, pagesEnvoyeesMax: 8, catalogueMax: 400, agentsSimultanes: 5, astuceMax: 500,
+  otMinimum: 5, recidiveJours: 30, dernieres: 10, symptomesMax: 5, contradictionAncienneJours: 30,
+  demoAValiderJours: 14 }` (**révision de Nicolas du 2026-10-23** : 30 phrases et 600 mots au lieu de 12 et
+  250, une relance avec la raison du refus, sous-pages au-delà — §20.4, §20.5, §20.6).
 - **Ajouts hors du wiki** (interface gelée, CDC point 11) : le lien « Wiki de cet équipement »
   (`#lien-wiki-equipement`, déjà là) ; un lien « Wiki de cet article » (`#lien-wiki-article`) en tête de la
   fiche article ; le champ « Astuce pour la prochaine fois » (§20.2, §20.9) ; à la clôture administrative,
@@ -2576,7 +2577,7 @@ Version de clôture `v1.2.0`.
   | `equipement_id` | `ref` → `equipements` | page d'équipement, ou savoir-faire rattaché à un équipement |
   | `article_id` | `ref` → `articles` | composant ancré, ou savoir-faire rattaché à un article |
   | `cause_code` | code cause | mode ancré (facultatif) |
-  | `rattache_a` | `ref` → `wiki_pages` | savoir-faire rattaché à une page de composant libre |
+  | `rattache_a` | `ref` → `wiki_pages` | savoir-faire rattaché à une page de composant libre ; **sous-page** : sa page mère, de même type (§20.4) |
   | `texte` | `texte_long` | balisage du §20.4, contrôlé (§20.6) |
   | `ot_cites` | texte | identifiants séparés par « ; », tirés du texte |
   | `liens` | texte | identifiants des pages liées, séparés par « ; », tirés du texte |
@@ -2641,8 +2642,13 @@ Version de clôture `v1.2.0`.
 - **Savoir-faire** : `entete` posé par Prévo — la consignation de l'équipement rattaché, telle quelle (ou,
   pour un composant, les liens vers les équipements où il est monté) et la phrase fixe « Ce savoir-faire ne
   remplace pas la consignation de l'équipement ». Jamais de texte d'IA dans `entete`.
-- **Catalogue** `Wiki.catalogue()` → `[{ id, titre, type }]` de toutes les pages actives et des pages
-  calculées d'équipement et d'article, `catalogueMax` au plus (les pages qui ont un texte d'abord).
+- **Sous-page** (§20.4) : `calcul` = `null` ; `mere` = `{ id, titre }` ; pour une sous-page d'équipement,
+  `entete` = la consignation de l'équipement de sa mère, telle quelle, et la phrase fixe « Cette page ne
+  remplace pas la consignation de l'équipement » (comme un savoir-faire, CS98). Une page mère porte
+  `sousPages` = `[{ id, titre }]` (actives, par titre).
+- **Catalogue** `Wiki.catalogue()` → `[{ id, titre, type }]` de toutes les pages actives (sous-pages
+  comprises) et des pages calculées d'équipement et d'article, `catalogueMax` au plus (les pages qui ont un
+  texte d'abord).
 - Un calcul Python indépendant (`tests/calcul_wiki.py`, étendu) refait `montage`, `consommations`,
   `remplacements`, `cas`, `equipements` et `remedes` sur la démo et sur une base d'essai (CS97).
 
@@ -2658,6 +2664,18 @@ Version de clôture `v1.2.0`.
   `Wiki.ecrireTexte(rubriques, type)` → le balisage. Affichage par `textContent` (liens et OT cités en
   éléments construits), jamais en HTML.
 - **Identité d'une phrase** : forme comparable de son texte sans citations ni crochets de lien.
+- **Taille d'une page** `Wiki.mesurerTexte(texte)` → `{ phrases, mots }` : mots des phrases sans citations
+  et des noms de rubriques ; la mesure des contrôles (§20.6) et de l'en-tête des pages envoyées (§20.5).
+- **Sous-pages** (D96, D100, Nicolas, 2026-10-23). Une page qui dépasserait `phrasesMax` phrases ou
+  `motsMax` mots est découpée en sous-pages liées. Une sous-page a le **type de sa page mère** et ses
+  rubriques ; `rattache_a` = l'identifiant de la ligne de sa mère ; **aucun ancrage propre**
+  (`equipement_id`, `article_id`, `cause_code` vides : sa clé est `WP:<id>`, jamais celle de sa mère) ; un
+  seul niveau (la mère n'est pas une sous-page). Une page est une sous-page si et seulement si `rattache_a`
+  désigne une page **de même type** (un savoir-faire rattaché à un équipement ou à un composant n'en est pas
+  une). Titre « <repère de l'équipement, ou titre de la mère> — <sujet> » (ex. « PO-02 — garniture »).
+  L'IA y déplace les phrases d'un même sujet, telles quelles ou regroupées avec tous leurs OT ; la mère garde
+  une phrase de renvoi `[[titre de la sous-page]]` qui cite les OT des phrases déplacées : chaque phrase
+  déplacée y est « reprise » (§20.6), rien n'est retiré.
 
 ### 20.5 Ingestion (`wiki-ingestion.js`, D104, D111, D112)
 - **File** : `Wiki.mettreEnFile(otIds)` crée une entrée `ingestion` « en file » par OT **clôturé
@@ -2673,15 +2691,20 @@ Version de clôture `v1.2.0`.
 - **Pages concernées** `Wiki.pagesConcernees(otId, etat)` (D112) → `{ cles, envoyees }` : `cles` = `EQ:<id>`
   de son équipement, `ART:<id>` de chaque article consommé, `CAUSE:<code>` de sa cause, `WP:<id>` des
   savoir-faire rattachés à cet équipement ou à ces articles, des modes ancrés sur sa cause et des pages liées
-  depuis la page de l'équipement ; `envoyees` = ces pages (texte de l'état proposé, vide si aucun), dans cet
-  ordre de priorité, `pagesEnvoyeesMax` au plus.
+  depuis la page de l'équipement, et **les sous-pages de chacune de ces pages, juste après leur mère**
+  (2026-10-23) ; `envoyees` = ces pages (texte de l'état proposé, vide si aucun), dans cet ordre de priorité,
+  `pagesEnvoyeesMax` au plus. Dans l'état proposé, une sous-page a `rattacheA` = la clé de sa mère et ni
+  `equipementId` ni `articleId`.
 - **Antériorité** (D111) : `anterieure` = la date d'intervention de l'OT est plus ancienne que celle d'au
   moins un OT cité dans ses pages envoyées (état proposé).
 - **Données** `Wiki.donneesIngestion(otId, etat)` (liste blanche, CS99) : `{ ot: { id, dateIntervention, type,
   equipement: { repere, designation, marque, modele }, titre, travail, symptome, cause, remede (libellés),
   compteRendu, astuce, pieces: [{ designation, reference, quantite }], dureeArret, symptomeDI },
-  anterieure, pages: [{ titre, type, texte, otDates: [{ id, date }] }], catalogue: [{ titre, type }] }` ;
-  **jamais** les noms des techniciens ou des demandeurs, les coûts, les documents, les photos.
+  anterieure, pages: [{ titre, type, texte, otDates: [{ id, date }], phrases, mots }], limites: { phrases,
+  mots }, catalogue: [{ titre, type }] }` ; **jamais** les noms des techniciens ou des demandeurs, les coûts,
+  les documents, les photos. `phrases` et `mots` = `Wiki.mesurerTexte` de la page, `limites` = `phrasesMax`
+  et `motsMax` (précision du 2026-10-23 : le modèle ne compte pas ; l'en-tête de chaque page envoyée dit
+  « === Page « <titre> » (<type> · N phrases sur P, M mots sur Q) === »).
 - **Consigne** `Ia.PROMPTS.ingestionWiki` (`ia-prompts.js`) : première ligne « Fonction : ingestionWiki » ;
   règles communes ; tâche : intégrer cet OT aux pages fournies — modifier une page envoyée en rendant son
   texte complet, ou créer au plus `pagesCreeesMax` pages (mode, savoir-faire, composant sans article) ;
@@ -2691,7 +2714,17 @@ Version de clôture `v1.2.0`.
   pages ; « fréquent ici », jamais « cause certaine » ; **les pages savoir-faire s'écrivent d'abord à partir
   de l'astuce** ; aucune consigne de sécurité ; si `anterieure` : « intervention antérieure à des faits déjà
   intégrés », ne jamais présenter cette information comme la plus récente ; « rien à ajouter » si l'OT
-  n'apprend rien.
+  n'apprend rien. Une page est une synthèse, pas un historique ; ses limites sont celles de son en-tête ;
+  **une page qui les dépasserait se découpe** : sous-page créée (`action` « creer », `type` de la mère,
+  `rattache_a` = titre exact de la mère, titre « <repère ou titre de la mère> — <sujet> »), phrases d'un même
+  sujet déplacées, phrase de renvoi dans la mère qui cite leurs OT (§20.4).
+- **Relance avec la raison** (D106, Nicolas, 2026-10-23) : une réponse refusée par `Wiki.lireIngestion`
+  (§20.6) est redemandée **une fois** (`relancesMax`), par une **requête neuve** : même message système ;
+  message utilisateur = le message d'origine, puis « Ta réponse précédente : » et la réponse refusée telle
+  quelle, puis « Elle a été refusée par les contrôles de Prévo : » et chaque raison sur sa ligne, puis la
+  demande d'une réponse complète corrigée ; rien d'autre (liste blanche, CS99, CS112). Les données de la
+  requête portent `relance: { reponse, raisons }`. Une collision (page créée ou changée pendant l'envoi,
+  D112) n'est jamais relancée : elle est rejouée.
 - **Réponse attendue** (schéma de `Ia.requete`) : `{ rien_a_ajouter, pages: [{ action: 'modifier' | 'creer',
   titre, type, rattache_a, rubriques: [{ rubrique, phrases: [{ texte, ot: [identifiant] }] }] }],
   contradictions: [{ page, phrase, observation, ot: [identifiant] }] }` ; `ot` : `enum` des identifiants
@@ -2707,7 +2740,9 @@ Version de clôture `v1.2.0`.
   })` : boucle jusqu'à file vide ou arrêt ; `appeler(requete, donnees, signal)` → `{ contenu, modele }`,
   par défaut `Ia.envoyerRequete` (l'outil de la démo en donne un autre, §20.10). Résultat : acceptée → entrée « à
   valider » (`changements`, `contradictions`, `modele`, `anterieure`, `ordre` suivant, `traite_le`) ;
-  « rien à ajouter » → statut du même nom ; refusée → « refusée » avec `raisons`, `essais` + 1 ; collision
+  « rien à ajouter » → statut du même nom ; refusée → **relance avec la raison** (une fois) : acceptée → « à
+  valider », `essais` 2, `raisons` = celles du premier refus ; encore refusée → « refusée » avec les `raisons`
+  du second refus, `essais` 2 ; collision
   (page libre créée entre-temps, D112) → « en file » à nouveau, `motif` « rejoué : page créée entre-temps » ;
   IA injoignable → arrêt, l'OT reste « en file ».
 
@@ -2715,7 +2750,11 @@ Version de clôture `v1.2.0`.
 `Wiki.controlerProposition(proposition, contexte)` → `{ ok, raisons: [texte] }` ; chaque raison nomme la
 page. Refus si :
 - forme : rubrique hors de `Wiki.RUBRIQUES` du type ; page modifiée qui n'était pas envoyée ; création d'un
-  type interdit (équipement, ou composant d'un article) ; savoir-faire sans rattachement à une page envoyée ;
+  type interdit (équipement, ou composant d'un article), **sauf comme sous-page** ; savoir-faire sans
+  rattachement à une page envoyée ;
+- **sous-page** créée (`rattache_a` = une page envoyée de même type) : sa mère est une sous-page ; sa mère
+  n'est pas modifiée par la même proposition, ou ne renvoie pas à elle (`[[titre]]`) ; son titre ne commence
+  pas par « <repère de l'équipement de la mère, ou titre de la mère> — » suivi d'un sujet ;
 - citations : phrase sans OT ; OT cité hors des OT permis ;
 - **non-retrait** : un OT cité avant disparaît de la page ; une phrase existante n'est ni identique ni
   **reprise** (une phrase nouvelle la reprend si elle cite tous ses OT) ;
@@ -2728,8 +2767,8 @@ page. Refus si :
   maintenant, actuellement, à présent, aujourd'hui, récemment, dernièrement, depuis peu, le plus récent,
   la plus récente, dernier, dernière, derniers, dernières) ;
 - sécurité : un terme de `Wiki.VOCABULAIRE_SECURITE` (liste et règle de la première version) ;
-- longueurs : plus de `phrasesMax` phrases ou de `motsMax` mots (citations exclues) dans une page ; plus de
-  `pagesCreeesMax` pages créées ;
+- longueurs : plus de `phrasesMax` phrases ou de `motsMax` mots (`Wiki.mesurerTexte`) dans une page ; plus
+  de `pagesCreeesMax` pages créées (sous-pages comprises) ;
 - liens : `[[titre]]` qui n'est ni au catalogue ni créé par la proposition ;
 - titres : titre créé dont la forme de recherche (mots vides retirés, pluriel simple, §20.8) égale celle
   d'une page existante (« titre trop proche ») ;
@@ -2744,7 +2783,9 @@ seulement** (même refus que les écrans réservés) :
 - **`Wiki.valider(ids)`** : dans l'ordre de `ordre` ; refusé si une entrée « à valider » plus ancienne touche
   une même page. Pour chacune : (1) **une** écriture de `wiki_pages` — chaque page du changement doit avoir
   `version` = `version_avant` (sinon l'entrée passe « à refaire ») ; texte, `ot_cites`, `liens`, `version` +
-  1, `origine`, `modele`, `derniere_entree`, `valide_par`, `valide_le` ; (2) l'entrée passe « validée »
+  1, `origine`, `modele`, `derniere_entree`, `valide_par`, `valide_le` ; une sous-page créée reçoit
+  `rattache_a` = l'identifiant de la ligne de sa mère (créée d'abord si la mère n'en avait pas), jamais
+  `equipement_id` ni `article_id` ; (2) l'entrée passe « validée »
   (`decide_par`, `decide_le`). Si (2) échoue, **rattrapage** au prochain affichage : une entrée « à valider »
   dont l'identifiant est le `derniere_entree` de ses pages est marquée « validée ».
 - **`Wiki.rejeter(id, motif)`** : « rejetée » ; les entrées « à valider » suivantes qui touchent une même page
@@ -2774,7 +2815,8 @@ le document de chaque OT clôturé ; les **pages validées** (titre et texte, `t
 
 ### 20.9 Écrans (`wiki-ecrans.js`, `wiki-journal-ecrans.js`)
 - **`#/wiki`** : recherche (portée parc) ; quatre sections — Équipements, Composants, Modes de défaillance,
-  Savoir-faire — avec leur nombre de pages, chaque page avec son titre et son nombre d'OT cités. Au
+  Savoir-faire — avec leur nombre de pages, chaque page avec son titre et son nombre d'OT cités ; une
+  sous-page est dans la section de son type, comme une page. Au
   responsable, en tête : « À valider », « Contradictions ouvertes », « En file » (bouton « Traiter la
   file »), « En échec », « Hors du wiki » (bouton « Ajouter à la file »), « Contrôle du wiki » (D108), chacun
   avec son nombre et son lien.
@@ -2783,17 +2825,21 @@ le document de chaque OT clôturé ; les **pages validées** (titre et texte, `t
   le demandeur ; liens vers les pages), précédé du bandeau d'origine « Rédigé avec l'IA (<modèle>) à partir
   des OT cités — validé par <nom> le <date> » ou « Écrit par <nom> le <date> » ; l'encadré **« À
   trancher »** ; **« Pages qui renvoient ici »** ; au responsable : « Modifier », propositions en attente sur
-  cette page.
+  cette page. **Sous-page** : sous le titre, « Sous-page de <mère> » (lien) ; pour un équipement, l'`entete`
+  (consignation) en tête ; pas de couche calculée. **Page mère** : « Sous-pages » (liens), après le texte.
 - **`#/wiki-journal`** (responsable) : les entrées par statut (à valider d'abord, puis refusées, puis
   toutes) ; pour une proposition : OT (lien), date d'intervention, « intervention antérieure » s'il y a lieu,
-  modèle ; **contradictions en tête** ; par page, les **changements** : phrases identiques repliées, phrases
+  modèle, « Acceptée à la relance, après le refus : <raisons> » s'il y a lieu (D106) ; **contradictions en
+  tête** ; par page, les **changements** : phrases identiques repliées, phrases
   nouvelles surlignées, phrases reprises avec l'ancienne forme barrée ; pages créées en entier ; boutons
   **Valider**, **Rejeter** (motif), cases à cocher et « Valider les propositions sélectionnées » (sans
   contradiction). « Traiter la file » : progression (en cours, au plus `agentsSimultanes` ; restants ;
   refusées), **Arrêter** (les envois en cours finissent, rien d'autre ne part) ; version web : message du lot
   4. Écriture à la main : zone de texte du balisage, aide, contrôles à l'enregistrement. **Contrôle du
   wiki** (D108) : liens cassés, pages orphelines, pages sans OT cité, titres trop proches, pages trop
-  longues, contradictions anciennes, ancrages disparus — calculé à l'ouverture, rien corrigé tout seul.
+  longues, contradictions anciennes, ancrages disparus (dont la mère d'une sous-page archivée ou absente ;
+  une sous-page n'a pas d'ancrage propre et n'est pas « disparue » pour autant) — calculé à l'ouverture,
+  rien corrigé tout seul.
 - **OT** : champ « Astuce pour la prochaine fois » dans l'onglet Compte rendu, sous le compte rendu, mêmes
   règles d'édition que lui (aide : « Ce qui vous aurait fait gagner du temps. Les consignes de sécurité
   restent dans la consignation de l'équipement. ») ; montré sur l'OT clôturé ; jamais exigé (RG4 inchangée).
@@ -2824,8 +2870,11 @@ le document de chaque OT clôturé ; les **pages validées** (titre et texte, `t
   d'un tour arrête la fabrication**. Une réponse déjà obtenue pour une requête identique à l'octet est
   reprise de la trace (reprise après correction, sans nouvel appel ; marqué dans la trace). Chaque
   proposition acceptée est validée au nom du responsable fictif, sauf si sa date d'intervention est dans les
-  `demoAValiderJours` derniers jours (laissée « à valider ») ; **une réponse refusée arrête la fabrication** :
-  défaut de la fonction, corrigé dans le code, puis la fabrication reprend. À la fin : `Wiki.verifierIntegrite`
+  `demoAValiderJours` derniers jours (laissée « à valider ») ; une réponse refusée est relancée avec la
+  raison, comme chez un client (§20.5) : **un agent neuf de plus**, tracé dans la même trace ; **une relance
+  refusée arrête la fabrication** : défaut de la fonction, corrigé dans le code, puis la fabrication reprend.
+  Chaque agent tourne sans mise à jour de Claude Code (`DISABLE_AUTOUPDATER=1`) ; si `claude.exe` manque au
+  lancement (mise à jour faite ailleurs), l'agent attend son retour (120 s au plus) puis part une fois. À la fin : `Wiki.verifierIntegrite`
   doit être `ok`, puis `figer` écrit les deux fichiers.
 - `py outils/wiki_demo.py relecture` → `.chantier/wiki-demo/relecture.html` : les pages **par type**
   (équipement, composant, mode, savoir-faire), **les plus riches d'abord** (nombre d'OT cités distincts,
@@ -2847,6 +2896,9 @@ jamais plus de 5, CS111) ; `test_wiki_recherche.py` (astuce et pages, CS104) ; `
 `test_wiki_journal_ecrans.py` (écrans, 1440 et 375 px, contrastes, origine, liens, CS103, CS106) ;
 `test_wiki_astuce.py` (champ, aide, export, CS109) ; `test_wiki_demo.py` (fichiers figés, citations,
 intégrité du journal de démo, traces : Sonnet, un tour, régénération à l'octet, mention, CS105, CS111) ;
-`test_performance.py` (D101) ; `test_recette_lot6.py` (parcours complet). Le faux fournisseur
+`test_performance.py` (D101) ; `test_recette_lot6.py` (parcours complet). Révision du 2026-10-23 :
+relance avec la raison dans `test_wiki_ingestion.py` (CS112) ; sous-pages dans `test_wiki_controles.py`
+(chaque motif), `test_wiki_ingestion.py` (pages concernées), `test_wiki_journal.py` (découpage validé d'un
+bloc, intégrité) et `test_wiki_ecrans.py` (mère, consignation, liste des sous-pages) (CS113). Le faux fournisseur
 (`tests/faux_fournisseur_ia.py`) rend pour `ingestionWiki` une réponse valable construite sur les données
 reçues, et sur demande une réponse piégée par motif du §20.6.
