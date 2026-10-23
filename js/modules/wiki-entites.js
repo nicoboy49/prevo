@@ -32,8 +32,10 @@
 //    quantité, une entrée ou un retour ajoute, une sortie retire) ; une rupture commence au mouvement qui laisse le
 //    stock à 0 ou moins, finit à celui qui le remonte (fin '' : elle dure encore) ; état : « rupture » (stock ≤ 0),
 //    « sous le seuil » (stock ≤ point de commande renseigné), « en stock » ;
-//  - habilitations (toutes les lignes du technicien) : « échue » (échéance passée ou illisible), « à renouveler »
-//    (échéance dans les 90 jours, le jour même compris), « valide » (plus loin, ou sans échéance) ;
+//  - habilitations : les règles du module Équipe, les mêmes que son écran et que l'alerte de l'accueil — celles qui
+//    comptent (une par intitulé : la plus lointaine ; un renouvellement laisse l'ancienne ligne pour l'historique) et
+//    leur état (« échue », « à renouveler » sous 60 jours (RG8), « pas encore valable », « valide ») ; l'accueil ne
+//    compte que les techniciens actifs ;
 //  - une référence cassée (équipement, article, technicien inconnu) n'entre dans aucune liste ; les tris départagent
 //    par l'ordre des caractères (reproductible par tests/calcul_wiki.py).
 
@@ -43,9 +45,7 @@ Object.assign(Wiki, (() => {
   const STATUTS_OUVERTS = ['Créé', 'Préparé', 'Planifié', 'En cours', 'En attente'];
   const PROFILS = ['demandeur', 'technicien', 'responsable'];
   const PREFIXE_PANNE = 'PANNE-';
-  const HORIZON_HABILITATION_JOURS = 90;   // « à renouveler » (§20.12)
   const MACHINES_ACCUEIL = 3;              // machines qui ont le plus d'interventions, dans leur brique de l'accueil
-  const MILLISECONDES_PAR_JOUR = 86400000;
 
   const texte = (valeur) => (valeur === null || valeur === undefined ? '' : String(valeur).trim());
   const comparer = (a, b) => (a < b ? -1 : (a > b ? 1 : 0));          // ordre des caractères, comme le calcul Python
@@ -67,15 +67,6 @@ Object.assign(Wiki, (() => {
     const groupes = new Map();
     lignes.forEach((ligne) => ajouter(groupes, cleDe(ligne), ligne));
     return groupes;
-  }
-
-  /** 'AAAA-MM-JJ' + n jours ; '' si ce n'est pas une date du calendrier. */
-  function jourPlus(jourIso, jours) {
-    const morceaux = /^(\d{4})-(\d{2})-(\d{2})$/.exec(jourIso);
-    if (!morceaux) return '';
-    const instant = Date.UTC(Number(morceaux[1]), Number(morceaux[2]) - 1, Number(morceaux[3]));
-    if (new Date(instant).toISOString().slice(0, 10) !== jourIso) return '';
-    return new Date(instant + jours * MILLISECONDES_PAR_JOUR).toISOString().slice(0, 10);
   }
 
   // ===========================================================================================
@@ -416,17 +407,12 @@ Object.assign(Wiki, (() => {
   }
 
   /** Habilitations d'un technicien : [{ id, intitule, obtention, echeance, etat }], par intitulé, échéance décroissante. */
+  // Habilitations qui comptent et leur état : celles du module Équipe (Equipe.habilitationsQuiComptent, triées par
+  // intitulé, et Equipe.etatHabilitation), pour que le wiki, l'écran Équipe et l'accueil disent la même chose.
   function habilitationsDe(ctx, technicienId) {
-    const limite = jourPlus(ctx.aujourdhui, HORIZON_HABILITATION_JOURS);
-    const etat = (echeance) => {
-      if (!echeance) return 'valide';
-      if (jourPlus(echeance, 0) !== echeance || echeance < ctx.aujourdhui) return 'échue';
-      return echeance <= limite ? 'à renouveler' : 'valide';
-    };
-    return Donnees.lignes('habilitations').filter((ligne) => texte(ligne.technicien_id) === technicienId)
-      .map((ligne) => ({ id: texte(ligne.id), intitule: texte(ligne.intitule), obtention: jour(ligne.date_obtention),
-        echeance: jour(ligne.date_echeance), etat: etat(jour(ligne.date_echeance)) }))
-      .sort((a, b) => comparer(a.intitule, b.intitule) || comparer(b.echeance, a.echeance) || comparer(a.id, b.id));
+    return Equipe.habilitationsQuiComptent(technicienId).map((ligne) => ({ id: texte(ligne.id), intitule: texte(ligne.intitule),
+      obtention: jour(ligne.date_obtention), echeance: jour(ligne.date_echeance),
+      etat: Equipe.etatHabilitation(ligne, ctx.aujourdhui).statut }));
   }
 
   const heuresDe = (technicienId) => arrondi(Donnees.lignes('ot_temps').filter((ligne) => texte(ligne.technicien_id) === technicienId)
@@ -628,8 +614,8 @@ Object.assign(Wiki, (() => {
     const ctx = contexte(options);
     const pannes = listePannes(ctx);
     const articles = listeArticles(ctx);
-    const habilitations = ctx.liens.technicien
-      ? Donnees.lignes('techniciens').flatMap((technicien) => habilitationsDe(ctx, texte(technicien.id))) : null;
+    const habilitations = ctx.liens.technicien ? Donnees.lignes('techniciens').filter((technicien) => texte(technicien.actif) !== '0')
+      .flatMap((technicien) => habilitationsDe(ctx, texte(technicien.id))) : null;
     const clotures = ctx.ordres.filter(estCloture).sort(comparerInterventions);
     const compter = (liste, champ, valeur) => liste.filter((element) => element[champ] === valeur).length;
     return {

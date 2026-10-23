@@ -2958,7 +2958,7 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
     un inventaire fixe la quantité, une entrée ou un retour ajoute, une sortie retire — est à 0 ou moins) ; où il
     est monté, consommé sur (machine, nombre d'OT), interventions où il a servi, savoir-faire ; texte « À quoi il sert ».
   - **Technicien** : métier, capacité, heures pointées (`ot_temps`), habilitations `{ intitule, obtention,
-    echeance, etat }` (« échue », « à renouveler » sous 90 jours, « valide »), interventions (technicien de l'OT ou
+    echeance, etat }` (celles qui comptent et leur état selon les règles du module Équipe : une par intitulé, « échue », « à renouveler » sous 60 jours (RG8), « pas encore valable », « valide » ; l'accueil compte les techniciens actifs), interventions (technicien de l'OT ou
     temps pointé), **taux horaire** ; aucun texte ; son nom n'est jamais dans une requête à l'IA (inchangé, CS99).
   - **Intervention** : tout l'OT en lecture seule (machine, technicien(s), type, priorité, statut, dates, arrêt,
     panne, cause, remède, demande d'origine, travail, compte rendu, astuce, pièces sorties, opérations, temps) ;

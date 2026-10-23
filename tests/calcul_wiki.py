@@ -52,7 +52,10 @@ et Wiki.references(textes, aTrancher) :
     pièces nettes  sorties − retours d'un article liés à un OT (positives) ; consommé : OT clôturé ;
     stock          mouvements par date puis identifiant : inventaire = quantité fixée, entrée et retour ajoutent,
                    sortie retire ; rupture : du mouvement qui laisse 0 ou moins à celui qui remonte au-dessus ;
-    habilitation   échue (échéance passée ou illisible), à renouveler (dans les 90 jours), valide ;
+    habilitation   celles qui comptent : une par intitulé (casse et espaces ignorés), l'échéance la plus lointaine (vide :
+                   sans limite ; illisible : la plus faible), puis l'obtention la plus récente, puis l'identifiant ;
+                   état : pas encore valable (obtention future), échue (échéance passée ou illisible), à renouveler
+                   (dans les 60 jours, le jour même compris : RG8), valide ; l'accueil compte les techniciens actifs ;
     visibilité     demandeur : ni page technicien ni page intervention (null), pas de prix, références sans lien ;
                    technicien : tout sauf le taux horaire ; responsable : tout.
 Les en-têtes, mères et sous-pages d'un savoir-faire sont ceux de Wiki.page (testés par test_wiki_calculs.py) : le
@@ -106,7 +109,7 @@ TABLES = ("equipements", "ordres_travail", "articles", "codes_defaillance", "dem
 
 # Encyclopédie (T135)
 OUVERTS = ("Créé", "Préparé", "Planifié", "En cours", "En attente")
-HORIZON_HABILITATION_JOURS = 90
+HORIZON_HABILITATION_JOURS = 60            # « à renouveler » : brief RG8 (module Équipe)
 MACHINES_ACCUEIL = 3
 RUBRIQUES = {"équipement": ["En bref", "Astuces"], "composant": ["À quoi il sert"],
              "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges"]}
@@ -908,20 +911,37 @@ class CalculWiki:
     def habilitations(self, technicien_id, maintenant):
         aujourdhui = maintenant[:10]
         limite = jour_suivant(aujourdhui, HORIZON_HABILITATION_JOURS)
-        resultat = []
-        for h in self.tables["habilitations"]:
-            if val(h, "technicien_id") != technicien_id:
-                continue
+
+        def rang_echeance(h):
             echeance = jour(h.get("date_echeance"))
             if not echeance:
-                etat = "valide"
-            elif self.jour_lisible(echeance) is None or echeance < aujourdhui:
+                return "9999-12-31"                                  # sans limite : la plus lointaine
+            return echeance if self.jour_lisible(echeance) else "0000-00-00"   # illisible : la plus faible
+
+        retenues = {}
+        for h in self.tables["habilitations"]:
+            cle = re.sub(r"\s+", "", val(h, "intitule").lower())
+            if val(h, "technicien_id") != technicien_id or not cle:
+                continue
+            obtention = jour(h.get("date_obtention"))
+            rang = (rang_echeance(h), obtention if self.jour_lisible(obtention) else "", h["id"])
+            if cle not in retenues or rang > retenues[cle][0]:
+                retenues[cle] = (rang, h)
+        resultat = []
+        for _, h in retenues.values():
+            echeance, obtention = jour(h.get("date_echeance")), jour(h.get("date_obtention"))
+            if echeance and self.jour_lisible(echeance) is None:
                 etat = "échue"
+            elif self.jour_lisible(obtention) and obtention > aujourdhui:
+                etat = "pas encore valable"
+            elif echeance and echeance < aujourdhui:
+                etat = "échue"
+            elif echeance and echeance <= limite:
+                etat = "à renouveler"
             else:
-                etat = "à renouveler" if echeance <= limite else "valide"
-            resultat.append({"id": h["id"], "intitule": val(h, "intitule"), "obtention": jour(h.get("date_obtention")),
-                             "echeance": echeance, "etat": etat})
-        resultat.sort(key=selon((lambda h: h["intitule"], False), (lambda h: h["echeance"], True), (lambda h: h["id"], False)))
+                etat = "valide"
+            resultat.append({"id": h["id"], "intitule": val(h, "intitule"), "obtention": obtention, "echeance": echeance, "etat": etat})
+        resultat.sort(key=lambda h: (h["intitule"].casefold(), h["id"]))
         return resultat
 
     def ordres_du_technicien(self, technicien_id):
@@ -1170,7 +1190,7 @@ class CalculWiki:
                           key=selon((lambda m: m["interventions"], True), (lambda m: m["titre"], False), (lambda m: m["equipementId"], False)))
         habilitations = None
         if profil != "demandeur":
-            liste = [h for x in self.tables["techniciens"] for h in self.habilitations(x["id"], maintenant)]
+            liste = [h for x in self.tables["techniciens"] if val(x, "actif") != "0" for h in self.habilitations(x["id"], maintenant)]
             habilitations = {"suivies": len(liste), "aRenouveler": sum(1 for h in liste if h["etat"] == "à renouveler"),
                              "echues": sum(1 for h in liste if h["etat"] == "échue")}
         return {

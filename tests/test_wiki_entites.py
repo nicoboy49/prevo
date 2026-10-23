@@ -35,8 +35,8 @@ RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
 SCRIPTS = [
     "js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/stockage-demo.js",
-    "js/modules/causes-frequentes.js", "js/modules/indicateurs-regles.js", "js/modules/wiki-regles.js",
-    "js/modules/wiki-calculs.js", "js/modules/wiki-entites.js",
+    "js/modules/causes-frequentes.js", "js/modules/indicateurs-regles.js", "js/modules/equipe-regles.js",
+    "js/modules/wiki-regles.js", "js/modules/wiki-calculs.js", "js/modules/wiki-entites.js",
 ]
 MAINTENANT = "2026-10-19 10:00"
 PROFILS = ("demandeur", "technicien", "responsable")
@@ -110,13 +110,15 @@ TECHNICIENS = table_csv("id;nom;prenom;metier;taux_horaire;capacite_h_semaine;ac
     "TEC-0003;Petit;Jean;Polyvalent;38;35;0"])
 
 HABILITATIONS = table_csv("id;technicien_id;intitule;date_obtention;date_echeance", [
-    "HAB-0001;TEC-0001;BR;2024-01-10;2026-10-01",        # échue
-    "HAB-0002;TEC-0001;B1V;2024-01-10;2027-01-17",       # aujourd'hui + 90 jours : à renouveler
-    "HAB-0003;TEC-0001;H0V;2024-01-10;2027-01-18",       # aujourd'hui + 91 jours : valide
-    "HAB-0004;TEC-0001;BR;2026-10-02;2029-10-02",        # renouvelée : valide
+    "HAB-0001;TEC-0001;BR;2024-01-10;2026-10-01",        # échue, mais renouvelée par HAB-0004 : ne compte plus
+    "HAB-0002;TEC-0001;B1V;2024-01-10;2026-12-18",       # aujourd'hui + 60 jours : à renouveler (RG8)
+    "HAB-0003;TEC-0001;H0V;2024-01-10;2026-12-19",       # aujourd'hui + 61 jours : valide
+    "HAB-0004;TEC-0001;br ;2026-10-02;2029-10-02",       # renouvellement (même intitulé, casse et espaces ignorés) : valide
     "HAB-0005;TEC-0002;CACES;2025-01-01;",               # sans échéance : valide
     "HAB-0006;TEC-0002;H0V;2025-01-01;2026-02-30",       # échéance illisible : échue
     "HAB-0007;TEC-0002;B2V;2025-01-01;2026-10-19",       # le jour même : à renouveler
+    "HAB-0008;TEC-0002;SST;2026-11-02;2028-11-02",       # obtention future : pas encore valable
+    "HAB-0009;TEC-0003;BR;2024-01-10;2026-01-10",        # échue, technicien inactif : hors de l'accueil
 ])
 
 ENTETE_OT = ("id;origine;di_id;equipement_id;type;priorite;statut;titre;travail_a_faire;date_creation;date_prevue;technicien_id;"
@@ -578,15 +580,20 @@ class TestBaseEssai(CasEntites):
         self.assertEqual((paul["titre"], faits(paul)), ("Paul Martin", {
             "Métier": "Mécanicien", "Capacité (h par semaine)": 35, "Heures pointées": 6.25, "Interventions": 5, "Actif": True,
             "Taux horaire": 40}))
+        # Les règles du module Équipe : une habilitation par intitulé (le renouvellement compte, l'ancienne ligne reste
+        # pour l'historique), « à renouveler » sous 60 jours (RG8), « pas encore valable » ; l'accueil, comme l'alerte
+        # « à renouveler » de Prévo, ne compte que les techniciens actifs.
         self.assertEqual(paul["sections"]["habilitations"], [
-            {"id": "HAB-0002", "intitule": "B1V", "obtention": "2024-01-10", "echeance": "2027-01-17", "etat": "à renouveler"},
-            {"id": "HAB-0004", "intitule": "BR", "obtention": "2026-10-02", "echeance": "2029-10-02", "etat": "valide"},
-            {"id": "HAB-0001", "intitule": "BR", "obtention": "2024-01-10", "echeance": "2026-10-01", "etat": "échue"},
-            {"id": "HAB-0003", "intitule": "H0V", "obtention": "2024-01-10", "echeance": "2027-01-18", "etat": "valide"}])
+            {"id": "HAB-0002", "intitule": "B1V", "obtention": "2024-01-10", "echeance": "2026-12-18", "etat": "à renouveler"},
+            {"id": "HAB-0004", "intitule": "br", "obtention": "2026-10-02", "echeance": "2029-10-02", "etat": "valide"},
+            {"id": "HAB-0003", "intitule": "H0V", "obtention": "2024-01-10", "echeance": "2026-12-19", "etat": "valide"}])
         lea = self.entite("TEC-0002", "technicien")
         self.assertEqual([(h["intitule"], h["etat"]) for h in lea["sections"]["habilitations"]],
-                         [("B2V", "à renouveler"), ("CACES", "valide"), ("H0V", "échue")])
-        self.assertEqual(self.accueil("responsable")["habilitations"], {"suivies": 7, "aRenouveler": 2, "echues": 2})
+                         [("B2V", "à renouveler"), ("CACES", "valide"), ("H0V", "échue"), ("SST", "pas encore valable")])
+        self.assertEqual([h["etat"] for h in self.entite("TEC-0003")["sections"]["habilitations"]], ["échue"])
+        self.assertEqual(self.accueil("responsable")["habilitations"], {"suivies": 7, "aRenouveler": 2, "echues": 1})
+        alerte = self.page.evaluate("(jour) => Equipe.aRenouveler(jour).map((x) => x.etat.statut)", MAINTENANT)
+        self.assertEqual(sorted(alerte), ["à renouveler", "à renouveler", "échue"])        # même compte que l'accueil de Prévo
 
     def test_intervention_en_lecture_seule(self):
         intervention = self.entite("OT-2026-0001", "technicien")
