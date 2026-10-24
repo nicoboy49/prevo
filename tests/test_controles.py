@@ -49,7 +49,7 @@ APPEL_JS = """async ([fonction, arguments_]) => {
   try { return 'accepté:' + JSON.stringify(await Controles[fonction](...arguments_)); }
   catch (erreur) { return (erreur instanceof Donnees.ErreurValidation ? 'refus:' : 'erreur:') + erreur.message; }
 }"""
-PDF = {"name": "rapport-vgp.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-1.4\n% rapport de test Prévo\n"}
+PDF = {"name": "rapport-vgp.pdf", "mimeType": "application/pdf", "buffer": "%PDF-1.4\n% rapport de test Prévo\n".encode("utf-8")}
 # Image PNG 1 × 1 (rouge), lisible par le navigateur.
 PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
                     "53de0000000c4944415408d763f8cfc000000301010018dd8db00000000049454e44ae426082")

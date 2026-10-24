@@ -1,7 +1,7 @@
 """Performance sur un jeu de charge (tâches T18 et T35, brief CS20).
 
 Jeu de charge : 500 équipements, 5 000 OT (outils/generer_demo.py --volume 500,5000 --sans-js, avec
-gammes, relevés, mouvements de stock et achats en proportion), servi par serveur.py (ServeurPrevo),
+gammes, relevés, mouvements de stock et achats en proportion), servi par serveur.py (ServeurPrévo),
 profil responsable préréglé. Le générateur crée l'OT de chaque gamme déjà échue à sa date de
 référence : pour que l'ouverture ait du travail, VIEILLISSEMENT du jeu, comme après des congés :
 les 20 gammes à date sans OT ouvert les plus proches de leur échéance sont rendues échues (échéance
@@ -55,7 +55,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
+from commun import RACINE, CasNavigateur, ServeurPrévo, attendre_pret, preregler_profil, url_fichier
 from test_controles import date_reference
 
 BUDGET_CHARGEMENT_MS = 2000
@@ -277,7 +277,7 @@ class TestPerformance(CasNavigateur):
         cls.debut_horloge_ms = int(datetime.datetime.combine(cls.aujourdhui, datetime.time(9, 30)).timestamp() * 1000)
         cls.gammes_vieillies = vieillir(cls.source, cls.aujourdhui, GAMMES_VIEILLIES)
         # Serveur partagé par les mesures d'actions (DI, sortie) ; le chargement a le sien (premier chargement).
-        cls.serveur = ServeurPrevo(source=cls.source)
+        cls.serveur = ServeurPrévo(source=cls.source)
         cls.serveur.demarrer()
         cls.addClassCleanup(cls.serveur.arreter)
 
@@ -317,7 +317,7 @@ class TestPerformance(CasNavigateur):
         echues = gammes_echues_sans_ot(self.source, self.aujourdhui)
         self.assertEqual(sorted(echues), self.gammes_vieillies)
         self.assertEqual(len(echues), GAMMES_VIEILLIES)
-        with ServeurPrevo(source=self.source) as serveur:
+        with ServeurPrévo(source=self.source) as serveur:
             ordres = serveur.dossier / "ordres_travail.csv"
             nombre = len(lire_lignes(ordres)[1])
             mesures, crees, octets, demandes = [], [], None, []
@@ -549,7 +549,7 @@ class TestPerformance(CasNavigateur):
     def test_import_5000_articles_et_5000_ot_apercu_sous_3_s_ecriture_sous_5_s(self):
         """D89 : sur une copie du jeu de charge, 5 000 lignes d'articles puis 5 000 OT d'historique : lecture et
         aperçu (Import.preparer) < 3 s, écriture (Import.importer) < 5 s, chacun mesuré dans la page."""
-        with ServeurPrevo(source=self.source) as serveur:
+        with ServeurPrévo(source=self.source) as serveur:
             page = self.nouvelle_page()
             page.goto(serveur.url + "/")
             attendre_pret(page, 30000)

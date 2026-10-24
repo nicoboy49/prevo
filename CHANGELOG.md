@@ -7,6 +7,13 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Modifié
+
+- Le logiciel s'appelle désormais **Prévo** (« Prévo » est le nom d'une autre GMAO). Le nom change
+  partout : écrans, guide, documents, en-tête `X-Prevo`, variables `PREVO_*`, fichiers produits
+  (`prevo-export-…`, `prevo-v…`). Les réglages gardés sur le poste sous l'ancien préfixe sont repris
+  automatiquement au premier chargement ; le dossier de données est à choisir de nouveau une fois.
+
 ## [1.1.0] - 2026-10-22
 
 Le lot 5 : reprendre ses données existantes (le détail est dans [docs/PILOTAGE.md](docs/PILOTAGE.md)).

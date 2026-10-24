@@ -20,6 +20,23 @@
       prechargement.crossOrigin = 'anonymous';
       document.head.appendChild(prechargement);
     })();
+    // Renommage Prévo → Prévo (octobre 2026) : les réglages gardés sur le poste sous l'ancien
+    // préfixe « prevo. » (profil, poste, thème, IA, dictée…) sont repris une fois sous « prevo. »,
+    // avant toute lecture par l'application ; le stockage peut être refusé (navigation privée).
+    (function () {
+      try {
+        const anciennes = [];
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const cle = localStorage.key(i);
+          if (cle && cle.indexOf('prevo.') === 0) anciennes.push(cle);
+        }
+        anciennes.forEach(function (cle) {
+          const nouvelle = 'prevo.' + cle.slice('prevo.'.length);
+          if (localStorage.getItem(nouvelle) === null) localStorage.setItem(nouvelle, localStorage.getItem(cle));
+          localStorage.removeItem(cle);
+        });
+      } catch (erreur) { /* sans stockage : rien à reprendre */ }
+    })();
   </script>
   <!-- Charte commune, puis la mise en page propre à chaque module (ARCHITECTURE.md §9) -->
   <link rel="stylesheet" href="css/style.css">

@@ -1,6 +1,6 @@
 # Mettre en ligne la démo de Prévo
 
-Adresse de la démo : **https://prevo.pro**
+Adresse de la démo : **https://demo.prevo.pro**
 
 But : permettre d'essayer Prévo dans le navigateur avant de le télécharger. La démo en ligne est un
 **site statique** : une copie de l'application (pages, styles, scripts) que le navigateur du visiteur
@@ -15,7 +15,7 @@ rien : il affiche un message qui renvoie au guide.
 
 Ce qu'il faut avant de commencer :
 
-- l'accès à l'espace client OVH (zone DNS de `selectis.eu`) ;
+- l'accès à l'espace client OVH (zone DNS de `prevo.pro`) ;
 - un accès SSH au VPS avec les droits `sudo`, nginx et certbot installés ;
 - sur le PC : Python 3 et une copie du dépôt Prévo.
 
@@ -61,15 +61,15 @@ vérification.
 
 ## 2. Enregistrement DNS chez OVH
 
-1. Espace client OVH > **Web Cloud** > **Noms de domaine** > `selectis.eu` > onglet **Zone DNS**.
+1. Espace client OVH > **Web Cloud** > **Noms de domaine** > `prevo.pro` > onglet **Zone DNS**.
 2. **Ajouter une entrée** > type **A**.
-3. Sous-domaine : `prevo` ; cible : `<IP du VPS>` ; TTL : laisser la valeur par défaut. Valider.
-4. Si le VPS a une adresse IPv6 que nginx écoute, ajoutez de même une entrée **AAAA** (`prevo` vers
+3. Sous-domaine : `demo` ; cible : `<IP du VPS>` ; TTL : laisser la valeur par défaut. Valider.
+4. Si le VPS a une adresse IPv6 que nginx écoute, ajoutez de même une entrée **AAAA** (`demo` vers
    l'adresse IPv6). Sinon, n'en mettez pas : une entrée AAAA fausse ferait échouer le certificat.
 5. Attendez la propagation (de quelques minutes à quelques heures), puis vérifiez depuis le PC :
 
 ```
-nslookup prevo.pro
+nslookup demo.prevo.pro
 ```
 
 La réponse doit donner `<IP du VPS>`. Ne passez à l'étape 4 (certificat) qu'à ce moment-là.
@@ -91,7 +91,7 @@ Créez le fichier `/etc/nginx/sites-available/prevo-demo` (par exemple avec `sud
 server {
     listen 80;
     listen [::]:80;
-    server_name prevo.pro;
+    server_name demo.prevo.pro;
 
     root /var/www/prevo-demo;
     index index.html;
@@ -132,7 +132,7 @@ sudo systemctl reload nginx
 Une fois le DNS propagé (étape 2) :
 
 ```
-sudo certbot --nginx -d prevo.pro
+sudo certbot --nginx -d demo.prevo.pro
 ```
 
 certbot obtient le certificat, ajoute la partie https au fichier `prevo-demo` et, s'il vous le
@@ -180,18 +180,18 @@ ssh <utilisateur>@<IP du VPS> "chmod -R a+rX /var/www/prevo-demo"
 Depuis le PC :
 
 ```
-curl -I https://prevo.pro/
-curl -I http://prevo.pro/
-curl -I https://prevo.pro/serveur.py
-curl -I https://prevo.pro/api/ping
-curl -s https://prevo.pro/js/app.js | findstr VERSION_WEB
+curl -I https://demo.prevo.pro/
+curl -I http://demo.prevo.pro/
+curl -I https://demo.prevo.pro/serveur.py
+curl -I https://demo.prevo.pro/api/ping
+curl -s https://demo.prevo.pro/js/app.js | findstr VERSION_WEB
 ```
 
 (sous Mac ou Linux, `grep` à la place de `findstr`.) Attendu, dans l'ordre : `200` ; une redirection
 (`301`) vers https ; `404` (serveur.py n'est pas en ligne) ; `404` (aucune API) ;
 `const VERSION_WEB = true;`.
 
-Puis dans un navigateur, sur https://prevo.pro :
+Puis dans un navigateur, sur https://demo.prevo.pro :
 
 1. Le cadenas est affiché. L'écran de démarrage ne propose que **« Essayer avec les données de démo »**
    et **« Télécharger Prévo »** (ni dossier, ni dépôt de fichiers CSV, ni mention du mode serveur).
@@ -204,7 +204,7 @@ Puis dans un navigateur, sur https://prevo.pro :
    (« Tester la connexion »), le message « L'assistant IA n'est pas proposé dans cette démo en
    ligne… » s'affiche.
 5. Outils de développement du navigateur (F12) > onglet **Réseau**, page rechargée : toutes les
-   requêtes vont vers `prevo.pro`, et aucune vers `/api/`.
+   requêtes vont vers `demo.prevo.pro`, et aucune vers `/api/`.
 
 ## Mettre à jour la démo
 
@@ -220,5 +220,5 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 puis, si vous le souhaitez : supprimer `/var/www/prevo-demo`, révoquer le certificat
-(`sudo certbot delete --cert-name prevo.pro`) et supprimer l'entrée `prevo` dans la zone DNS
+(`sudo certbot delete --cert-name demo.prevo.pro`) et supprimer l'entrée `demo` dans la zone DNS
 chez OVH.

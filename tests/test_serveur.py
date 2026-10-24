@@ -886,7 +886,7 @@ class TestCopieApplication(unittest.TestCase):
     """serveur.py copié avec une fausse application : on maîtrise index.html, .git, donnees/."""
 
     FICHIERS = {
-        'index.html': b'<!doctype html><title>Prévo</title>',
+        'index.html': '<!doctype html><title>Prévo</title>'.encode('utf-8'),
         'css/style.css': b'body{}',
         'js/app.js': b"'use strict';",
         'favicon.svg': b'<svg xmlns="http://www.w3.org/2000/svg"/>',
