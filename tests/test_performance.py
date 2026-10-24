@@ -1,7 +1,7 @@
 """Performance sur un jeu de charge (tâches T18 et T35, brief CS20).
 
 Jeu de charge : 500 équipements, 5 000 OT (outils/generer_demo.py --volume 500,5000 --sans-js, avec
-gammes, relevés, mouvements de stock et achats en proportion), servi par serveur.py (ServeurPrévo),
+gammes, relevés, mouvements de stock et achats en proportion), servi par serveur.py (ServeurPrevo),
 profil responsable préréglé. Le générateur crée l'OT de chaque gamme déjà échue à sa date de
 référence : pour que l'ouverture ait du travail, VIEILLISSEMENT du jeu, comme après des congés :
 les 20 gammes à date sans OT ouvert les plus proches de leur échéance sont rendues échues (échéance
@@ -32,6 +32,10 @@ passée à hier). Trois budgets, médiane de trois mesures, toutes affichées :
                          une copie du jeu de charge : lecture et aperçu (Import.lire, Import.correspondance,
                          Import.preparer) < 3 000 ms ; écriture (Import.importer : aperçu recalculé sur les
                          données fraîches, sauvegarde « avant-import », tables et journal) < 5 000 ms.
+    wiki (lot 6, D101) : page wiki de l'équipement qui a le plus d'OT affichée < 500 ms (première et médiane) ; une
+                         recherche sur tout le parc < 300 ms, la première (qui construit l'index) comprise ; une requête
+                         d'ingestion (Wiki.donneesIngestion puis Ia.requete('ingestionWiki', …)) construite < 1 000 ms
+                         pour l'OT clôturé administrativement qui concerne le plus de pages ; aucun appel réseau.
 Les chronomètres des actions sont posés dans la page (performance.now()).
 
 Horloge : le navigateur vit à la date de référence du jeu de charge (DATE_REFERENCE de outils/generer_demo.py,
@@ -55,7 +59,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from commun import RACINE, CasNavigateur, ServeurPrévo, attendre_pret, preregler_profil, url_fichier
+from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
 from test_controles import date_reference
 
 BUDGET_CHARGEMENT_MS = 2000
@@ -67,6 +71,9 @@ BUDGET_RAPPORT_MS = 5000            # lot 3 (CS49) : rapport figé (calcul, page
 BUDGET_SUGGESTIONS_MS = 1000        # lot 3 bis (CS62) : onglet Suggestions du Préventif affiché
 BUDGET_APERCU_IMPORT_MS = 3000      # lot 5 (D89) : lecture et aperçu d'un fichier de 5 000 lignes
 BUDGET_ECRITURE_IMPORT_MS = 5000    # lot 5 (D89) : écriture de l'import (sauvegarde et journal compris)
+BUDGET_PAGE_WIKI_MS = 500           # lot 6 (D101) : page wiki d'un équipement affichée
+BUDGET_RECHERCHE_WIKI_MS = 300      # lot 6 (D101) : une recherche (la première construit l'index)
+BUDGET_REQUETE_INGESTION_MS = 1000  # lot 6 (D101) : une requête d'ingestion construite (données et message au modèle)
 LIGNES_IMPORT = 5000
 SHEETJS = "js/lib/xlsx.full.min.js"
 MESURES = 3
@@ -277,7 +284,7 @@ class TestPerformance(CasNavigateur):
         cls.debut_horloge_ms = int(datetime.datetime.combine(cls.aujourdhui, datetime.time(9, 30)).timestamp() * 1000)
         cls.gammes_vieillies = vieillir(cls.source, cls.aujourdhui, GAMMES_VIEILLIES)
         # Serveur partagé par les mesures d'actions (DI, sortie) ; le chargement a le sien (premier chargement).
-        cls.serveur = ServeurPrévo(source=cls.source)
+        cls.serveur = ServeurPrevo(source=cls.source)
         cls.serveur.demarrer()
         cls.addClassCleanup(cls.serveur.arreter)
 
@@ -317,7 +324,7 @@ class TestPerformance(CasNavigateur):
         echues = gammes_echues_sans_ot(self.source, self.aujourdhui)
         self.assertEqual(sorted(echues), self.gammes_vieillies)
         self.assertEqual(len(echues), GAMMES_VIEILLIES)
-        with ServeurPrévo(source=self.source) as serveur:
+        with ServeurPrevo(source=self.source) as serveur:
             ordres = serveur.dossier / "ordres_travail.csv"
             nombre = len(lire_lignes(ordres)[1])
             mesures, crees, octets, demandes = [], [], None, []
@@ -549,7 +556,7 @@ class TestPerformance(CasNavigateur):
     def test_import_5000_articles_et_5000_ot_apercu_sous_3_s_ecriture_sous_5_s(self):
         """D89 : sur une copie du jeu de charge, 5 000 lignes d'articles puis 5 000 OT d'historique : lecture et
         aperçu (Import.preparer) < 3 s, écriture (Import.importer) < 5 s, chacun mesuré dans la page."""
-        with ServeurPrévo(source=self.source) as serveur:
+        with ServeurPrevo(source=self.source) as serveur:
             page = self.nouvelle_page()
             page.goto(serveur.url + "/")
             attendre_pret(page, 30000)
@@ -574,6 +581,83 @@ class TestPerformance(CasNavigateur):
                     self.assertLess(mesure["ecriture"], BUDGET_ECRITURE_IMPORT_MS, "écriture")
             apres = page.evaluate("['articles', 'mouvements_stock', 'ordres_travail', 'ot_temps'].map((t) => Donnees.lignes(t).length)")
             self.assertEqual([b - a for a, b in zip(avant, apres)], [LIGNES_IMPORT] * 4)
+
+    def test_wiki_page_sous_500_ms_et_recherche_sous_300_ms_sans_appel_reseau(self):
+        """Lot 6 (D101) : la page wiki de l'équipement qui a le plus d'OT s'affiche en moins de 500 ms (médiane et
+        première fois) ; une recherche sur tout le parc prend moins de 300 ms, la première (qui construit l'index)
+        comprise ; ni l'une ni l'autre ne fait d'appel réseau."""
+        page = self.ouvrir()
+        requetes = []
+        page.on("request", lambda requete: requetes.append(requete.url))
+        equipement = page.evaluate("""() => { const compte = new Map();
+            Donnees.lignes('ordres_travail').forEach((o) => compte.set(o.equipement_id, (compte.get(o.equipement_id) || 0) + 1));
+            return Array.from(compte.entries()).sort((a, b) => b[1] - a[1])[0][0]; }""")
+        mesures_page = []
+        for _ in range(MESURES):
+            page.evaluate("location.hash = '#/accueil'")
+            page.wait_for_selector("#contenu .accueil-instruments")
+            mesures_page.append(page.evaluate("""(id) => new Promise((resoudre) => {
+                const t0 = performance.now();
+                const observateur = new MutationObserver(() => {
+                  if (document.querySelector('#contenu #wiki-consignation')) {
+                    observateur.disconnect(); requestAnimationFrame(() => resoudre(performance.now() - t0)); }
+                });
+                observateur.observe(document.getElementById('contenu'), { childList: true, subtree: true });
+                location.hash = '#/wiki/' + id;
+            })""", equipement))
+        mesures_recherche = page.evaluate("""() => ['bruit au palier', 'fuite garniture', 'arret intempestif capteur',
+            'surchauffe moteur', 'courroie qui claque'].map((texte) => {
+              const t0 = performance.now();
+              const resultat = Wiki.rechercher(texte, {});
+              return { duree: performance.now() - t0, trouves: resultat.portees.reduce((n, p) => n + p.resultats.length, 0) };
+            })""")
+        durees = [m["duree"] for m in mesures_recherche]
+        print("\n  [performance] page wiki (%s) : %s ms -> médiane %.0f ms (budget %d) ; recherches : %s ms (budget %d)"
+              % (equipement, ", ".join("%.0f" % m for m in mesures_page), statistics.median(mesures_page),
+                 BUDGET_PAGE_WIKI_MS, ", ".join("%.0f" % d for d in durees), BUDGET_RECHERCHE_WIKI_MS))
+        self.assertLess(mesures_page[0], BUDGET_PAGE_WIKI_MS, "première page wiki")
+        self.assertLess(statistics.median(mesures_page), BUDGET_PAGE_WIKI_MS)
+        self.assertLess(max(durees), BUDGET_RECHERCHE_WIKI_MS, "recherche (index compris)")
+        self.assertTrue(all(m["trouves"] > 0 for m in mesures_recherche), mesures_recherche)
+        self.assertEqual([u for u in requetes if "/api/" in u and "/api/ping" not in u and "/api/versions" not in u], [])
+
+    def test_wiki_requete_d_ingestion_construite_sous_1_seconde_sans_appel_reseau(self):
+        """Lot 6 (D101) : une requête d'ingestion — Wiki.donneesIngestion(otId) (état proposé recalculé, pages
+        concernées, textes, catalogue) puis le message au modèle (Ia.requete('ingestionWiki', …)) — se construit en moins
+        de 1 s sur le jeu de charge, pour l'OT clôturé administrativement qui concerne le plus de pages ; première mesure et
+        médiane de trois ; aucun appel réseau."""
+        page = self.ouvrir()
+        requetes = []
+        page.on("request", lambda requete: requetes.append(requete.url))
+        choix = page.evaluate("""() => { const etat = Wiki.etatPropose();
+            const clotures = Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement');
+            let meilleur = null;
+            clotures.forEach((o) => { const n = Wiki.pagesConcernees(o.id, etat).cles.length;
+              if (!meilleur || n > meilleur.pages) meilleur = { ot: o.id, pages: n }; });
+            return Object.assign(meilleur, { clotures: clotures.length, pagesWiki: Donnees.lignes('wiki_pages').length }); }""")
+        self.assertGreater(choix["clotures"], 1000, "le jeu de charge doit avoir des OT clôturés administrativement")
+        mesures = page.evaluate("""([ot, n]) => { const mesures = [];
+            for (let i = 0; i < n; i += 1) {
+              const t0 = performance.now();
+              const donnees = Wiki.donneesIngestion(ot);              // comme un envoi : l'état proposé est recalculé
+              const requete = Ia.requete('ingestionWiki', donnees);
+              mesures.push({ duree: performance.now() - t0, pages: donnees.pages.length, catalogue: donnees.catalogue.length,
+                caracteres: requete.messages.reduce((total, m) => total + m.content.length, 0),
+                entete: requete.messages[1].content.slice(0, 40) });
+            }
+            return mesures; }""", [choix["ot"], MESURES])
+        durees = [m["duree"] for m in mesures]
+        print("\n  [performance] requête d'ingestion de %s (%d pages concernées sur %d OT clôturés et %d pages du wiki ; "
+              "%d pages envoyées, catalogue de %d, %d caractères) : %s ms -> médiane %.0f ms (budget %d)"
+              % (choix["ot"], choix["pages"], choix["clotures"], choix["pagesWiki"], mesures[0]["pages"], mesures[0]["catalogue"],
+                 mesures[0]["caracteres"], ", ".join("%.0f" % d for d in durees), statistics.median(durees),
+                 BUDGET_REQUETE_INGESTION_MS))
+        self.assertTrue(all(m["entete"].startswith("OT à intégrer : " + choix["ot"]) for m in mesures), mesures[0]["entete"])
+        self.assertEqual(mesures[0]["pages"], choix["pages"] if choix["pages"] <= page.evaluate("Wiki.SEUILS.pagesEnvoyeesMax")
+                         else page.evaluate("Wiki.SEUILS.pagesEnvoyeesMax"))
+        self.assertLess(durees[0], BUDGET_REQUETE_INGESTION_MS, "première requête d'ingestion")
+        self.assertLess(statistics.median(durees), BUDGET_REQUETE_INGESTION_MS)
+        self.assertEqual([u for u in requetes if "/api/" in u and "/api/ping" not in u and "/api/versions" not in u], [])
 
 
 if __name__ == "__main__":
