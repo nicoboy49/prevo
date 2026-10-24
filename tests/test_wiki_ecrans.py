@@ -2038,6 +2038,33 @@ class TestConsignation(CasWiki):
         page.wait_for_selector("#wiki-consignation .wiki-lien-document")
         self.assertEqual(page.inner_text("#wiki-consignation .wiki-sans-consignation").strip(), SANS_CONSIGNATION)
 
+    def test_en_tete_d_un_savoir_faire_commun_a_plusieurs_machines(self):
+        """D116 (T141, point 6) : un savoir-faire rattaché à une machine et lié dans son texte à une autre montre en tête la
+        liste de ces machines, chacune avec un lien vers sa page (où est sa consignation), sans consignation recopiée ;
+        rattaché à sa seule machine (même liée dans son texte), sa consignation comme avant."""
+        page = self.ouvrir("technicien")
+        page.evaluate("""async () => { const NL = String.fromCharCode(10);
+          const titre = (id) => { const e = Donnees.trouver('equipements', id); return e.repere + ' — ' + e.designation; };
+          await Donnees.modifier('wiki_pages', (lignes) => {
+            lignes.push({ id: 'WP-0901', type: 'savoir-faire', titre: 'Remplacer une garniture mécanique', equipement_id: 'EQ-0001',
+              texte: '## Particularités par machine' + NL + '- [[' + titre('EQ-0001') + ']] : accès direct [OT-2025-0001]' + NL
+                + '- [[' + titre('EQ-0026') + ']] : accès par le dessus [OT-2025-0006]', liens: 'EQ-0001;EQ-0026', version: '1',
+              statut: 'active', origine: 'IA' });
+            lignes.push({ id: 'WP-0902', type: 'savoir-faire', titre: 'Purger la machine', equipement_id: 'EQ-0001',
+              texte: '## Étapes' + NL + '- Purger [OT-2025-0001]', liens: 'EQ-0001', version: '1', statut: 'active', origine: 'IA' });
+          }); }""")
+        reperes = page.evaluate("() => ['EQ-0001', 'EQ-0026'].map((id) => Donnees.trouver('equipements', id).repere)")
+        lu = self.lire("WP-0901")
+        self.assertEqual(lu["alertes"][0], "wiki-entete")
+        self.assertEqual((lu["consignation"]["titre"], lu["consignation"]["phrase"], lu["consignation"]["texte"]),
+                         ("Consignation des équipements", PHRASE_SAVOIR_FAIRE, None))
+        self.assertEqual(lu["consignation"]["equipements"], [[reperes[0], "#/wiki/EQ-0001"], [reperes[1], "#/wiki/EQ-0026"]])
+        self.assertIn("Ce savoir-faire sert sur ces machines ; la consignation de chacune est en tête de sa page :",
+                      page.inner_text("#wiki-entete"))
+        seul = self.lire("WP-0902")
+        self.assertEqual((seul["consignation"]["titre"], seul["consignation"]["texte"]),
+                         ("Consignation de " + reperes[0], page.evaluate("Donnees.trouver('equipements', 'EQ-0001').consignation")))
+
     def test_absence_de_consignation_sans_lien_pour_technicien_et_demandeur(self):
         for profil in ("technicien", "demandeur"):
             with self.subTest(profil=profil):

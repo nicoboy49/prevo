@@ -757,6 +757,55 @@ class TestBaseEssai(CasEntites):
         self.assertEqual(self.requetes_reseau(), [])
 
 
+def lie(ligne, liens):
+    """Une ligne de wiki_pages (page_wiki) avec son champ `liens` (« ; »)."""
+    return ligne[:10] + [liens] + ligne[11:]
+
+
+# Savoir-faire communs (D116, T141) : liés par leur texte à une machine ou à un article — par l'EQ-… ou l'ART-…, ou par la
+# ligne de son texte (WP-0001 : PO-01 ; WP-0002 : le roulement ART-0001) —, aussi par une sous-page ; rattaché ET lié (une fois).
+SAVOIR_FAIRE_LIES = [
+    lie(page_wiki("WP-0011", "savoir-faire", "Remonter une garniture", "## Étapes" + NL + "- Remonter [OT-2026-0001]",
+                  equipement="EQ-0004"), "EQ-0001;ART-0001"),
+    lie(page_wiki("WP-0012", "savoir-faire", "Changer un joint", "## Étapes" + NL + "- Changer [OT-2026-0002]", article="ART-0002"),
+        "WP-0001"),
+    lie(page_wiki("WP-0013", "savoir-faire", "Vérifier un palier", "## Étapes" + NL + "- Vérifier [OT-2026-0003]",
+                  equipement="EQ-0001"), "EQ-0001"),
+    page_wiki("WP-0014", "savoir-faire", "Aligner un moteur", "## Étapes" + NL + "- Aligner [OT-2026-0003]", equipement="EQ-0004"),
+    lie(page_wiki("WP-0015", "savoir-faire", "Aligner un moteur — cales", "## Étapes" + NL + "- Caler [OT-2026-0003]",
+                  rattache="WP-0014"), "WP-0002;EQ-0002"),
+    lie(page_wiki("WP-0016", "savoir-faire", "Ancien lien", "## Étapes" + NL + "- Vieux [OT-2026-0001]", equipement="EQ-0004",
+                  statut="archivée"), "EQ-0001"),
+]
+
+
+class TestSavoirFaireLies(CasEntites):
+    """D116 (T141, point 5) : la section « Savoir-faire » d'une machine et d'un article liste les savoir-faire rattachés ET
+    ceux dont le texte a un lien vers elle (son identifiant ou la ligne de son texte ; un lien d'une sous-page amène sa
+    mère), une fois chacun, par titre, sans sous-page ni page archivée ; toutes les entités et listes = calcul Python."""
+
+    def setUp(self):
+        super().setUp()
+        self.base = dict(BASE, wiki_pages=table_csv(ENTETE_WIKI, list(csv.reader(io.StringIO(WIKI_PAGES), delimiter=";"))[1:]
+                                                    + SAVOIR_FAIRE_LIES))
+        self.charger(self.base)
+
+    def test_sections_savoir_faire_et_calcul_python(self):
+        sections = {identifiant: ids(self.entite(identifiant)["sections"]["savoirFaire"])
+                    for identifiant in ("EQ-0001", "EQ-0002", "EQ-0004", "ART-0001", "ART-0002")}
+        self.assertEqual(sections, {
+            "EQ-0001": ["WP-0003", "WP-0012", "WP-0005", "WP-0011", "WP-0013"],     # rattachés, liés (WP-0013 : une fois)
+            "EQ-0002": ["WP-0014"],                                                  # par sa sous-page WP-0015
+            "EQ-0004": ["WP-0014", "WP-0011"],
+            "ART-0001": ["WP-0014", "WP-0004", "WP-0011"],                         # liés par ART-0001 et par WP-0002
+            "ART-0002": ["WP-0012"]})
+        calcul = CalculWiki(self.base)
+        identifiants = (["EQ-%04d" % n for n in range(1, 8)] + ["ART-%04d" % n for n in range(1, 6)]
+                        + ["WP-%04d" % n for n in range(1, 17)])
+        for profil in PROFILS:
+            self.verifier_comme_le_calcul(calcul, identifiants, profil)
+
+
 class TestSuiviDuWiki(CasEntites):
     """Suivi du wiki de l'accueil (à valider, à trancher, en échec) : valeurs écrites à la main et calcul Python
     (relecture de T136 : le test qui le comparait à Wiki.compteurs, retiré par la refonte 2, était toujours sauté)."""

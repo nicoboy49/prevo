@@ -2,24 +2,32 @@
 construite UNIQUEMENT à partir du message envoyé par Prévo (même message → même réponse). Sert au faux fournisseur
 (tests/faux_fournisseur_ia.py) et au faux `claude` de la fabrication de la démo (tests/fixtures/wiki/faux_claude.py).
 
-Il tient les longueurs lues dans l'en-tête de chaque texte reçu (« En bref : 2 phrases sur 5, 34 mots sur 120 » ; un
-savoir-faire entier : « 3 phrases sur 30, 40 mots sur 600 ») : une phrase qui ne tient plus dans sa rubrique ajoute
-seulement l'OT aux citations de la dernière phrase de la rubrique (il la confirme). Dans les textes reçus, un lien vers un
-titre absent du catalogue et des pages reçues perd ses crochets (les mots restent), comme le demande la consigne. Un
-texte qu'il modifie et qui est reçu dans d'anciennes rubriques (base de développement) est réécrit dans les siennes :
-chaque ancienne rubrique devient une phrase « <rubrique> : <ses phrases> » de la première rubrique du type, qui cite tous
-ses OT (chacune y est reprise ; ses liens vers des titres connus restent des liens).
+Il tient les longueurs lues dans l'en-tête de chaque texte reçu (« En bref : 2 phrases sur 3, 34 mots sur 60, à réécrire
+en entier » ; un savoir-faire entier : « 3 phrases sur 30, 40 mots sur 600 ») : une phrase qui ne tient plus dans sa
+rubrique ajoute seulement l'OT aux citations de la dernière phrase de la rubrique (il la confirme), sauf dans « En bref »,
+réécrit en entier (D117, T142) : ses phrases (une phrase de même texte que celle de l'OT reçoit seulement l'OT), puis
+celle de l'OT, les plus anciennes retirées au-delà des limites de l'en-tête (une phrase par panne, 3 au plus). Dans les
+textes reçus, un lien vers un titre absent du catalogue et des pages reçues perd ses crochets (les mots restent), comme le
+demande la consigne. Un texte qu'il modifie et qui est reçu dans d'anciennes rubriques (base de développement) est réécrit
+dans les siennes : chaque ancienne rubrique devient une phrase « <rubrique> : <ses phrases> » de la première rubrique du
+type, qui cite tous ses OT (chacune y est reprise ; ses liens vers des titres connus restent des liens).
+
+Savoir-faire commun (D116, T141) : un seul par geste, titré par le premier geste de l'astuce (jusqu'à « puis », « : »,
+« ; » ou la fin de sa première phrase), sans repère ; créé, il porte l'astuce dans ses « Étapes », chaque article reçu
+(« Pièce : [[<article>]] ») dans « Pièces et outillage » et la phrase de sa machine (« [[<machine>]] : <titre de l'OT,
+sans le repère> ») dans « Particularités par machine » ; reçu (même titre, ou ses « Étapes » portent déjà l'astuce), il
+est complété au lieu d'être recréé (l'OT s'ajoute aux phrases de même texte ; la phrase de cette machine reçoit l'OT, ou
+s'ajoute) ; au catalogue mais non reçu, il n'est ni créé ni modifié (seul le lien des « Astuces » le nomme).
 
     faux               « En bref » de la machine reçoit la phrase « <titre de l'OT, sans le repère> » (la panne, sans
                        fréquence ni comptage : T140) qui cite l'OT (ou, si une phrase de même texte existe déjà, l'OT
-                       s'ajoute à ses citations) ; toutes ses phrases et tous ses OT sont gardés ; si l'OT a une astuce,
-                       un savoir-faire « Astuce de l'<OT> » est créé, rattaché à la machine, l'astuce dans ses « Étapes » ;
+                       s'ajoute à ses citations), réécrit en entier ; si l'OT a une astuce, son savoir-faire commun est
+                       créé ou complété, rattaché à la machine ;
     faux-textes        comme « faux », avec tous les textes de la refonte 2, chaque astuce à un seul endroit : la phrase
                        d'« En bref » lie la panne de l'OT (« <titre> ([[<libellé du symptôme>]]) », si elle est au
                        catalogue) ; une astuce courte (sans « puis ») va dans les « Astuces » de la machine, sans
-                       savoir-faire ; une méthode (« … puis … ») complète le savoir-faire reçu qui la porte déjà (l'OT
-                       s'ajoute à ses citations), sinon crée « Astuce de l'<OT> », et les « Astuces » n'en reçoivent que
-                       le lien (« Méthode : voir [[<savoir-faire>]] ») ; « À quoi il sert » de chaque article reçu ne dit
+                       savoir-faire ; une méthode (« … puis … ») crée ou complète son savoir-faire commun, et les
+                       « Astuces » n'en reçoivent que le lien (« Méthode : voir [[<savoir-faire>]] ») ; « À quoi il sert » de chaque article reçu ne dit
                        que ce que l'OT observe de lui — « Défaut constaté : <libellé de la cause> » —, jamais où ni quand il
                        a été changé ni la panne qu'il a réglée (T140) ; sa page n'est pas renvoyée si l'OT n'en dit rien de
                        plus (sans panne au catalogue — préventif, OT sans symptôme — ou sans cause) : deux OT d'un même
@@ -28,7 +36,7 @@ ses OT (chacune y est reprise ; ses liens vers des titres connus restent des lie
     faux-contradiction en plus, une contradiction sur la première phrase de la machine ;
     faux-recent        la nouvelle phrase commence par « Désormais » (refusée pour un OT antérieur) ;
     faux-invente       la nouvelle phrase cite aussi OT-1999-9999 ;
-    faux-retire        la première phrase de la machine disparaît ;
+    faux-retire        la première phrase de la machine hors d'« En bref » (réécrit en entier) disparaît ;
     faux-consigne      la nouvelle phrase est une consigne de sécurité ;
     faux-sans-ot       la nouvelle phrase ne cite aucun OT ;
     faux-cree-commun   en plus, un savoir-faire « Usure commune », rattaché à la machine, est créé s'il n'est pas déjà au
@@ -60,14 +68,18 @@ MOTIF_EQUIPEMENT = re.compile(r"^Équipement : (.*)$", re.M)
 # 0 phrase sur 10 » ; un savoir-faire entier : « · 3 phrases sur 30, 40 mots sur 600 »).
 MOTIF_ENTETE_PAGE = re.compile(r"^=== Page « (.+?) » \((équipement|composant|savoir-faire)"
                                r"(?: · sous-page de « (.+?) »)?((?: · [^·\n]+?)*)\) ===$", re.M)
-MOTIF_LONGUEUR = re.compile(r"^(?:(.+?) : )?(\d+) phrases? sur (\d+)(?:, (\d+) mots? sur (\d+))?$")
+MOTIF_LONGUEUR = re.compile(r"^(?:(.+?) : )?(\d+) phrases? sur (\d+)(?:, (\d+) mots? sur (\d+))?(, à réécrire en entier)?$")
 RUBRIQUES = {"équipement": ["En bref", "Astuces"], "composant": ["À quoi il sert"],
-             "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges"]}     # = Wiki.RUBRIQUES
+             "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges",
+                              "Particularités par machine"]}     # = Wiki.RUBRIQUES
 SUJET_DECOUPE = "étapes détaillées"
-RUBRIQUE_EQUIPEMENT = "En bref"           # §20.12 : ce qu'il faut savoir d'abord de la machine
+RUBRIQUE_EQUIPEMENT = "En bref"           # §20.12 : ce qu'il faut savoir d'abord de la machine, réécrit en entier (D117)
+LIMITE_EN_BREF = {"phrases_max": 3, "mots_max": 60}     # si l'en-tête ne la donne pas (= Wiki.LIMITES)
 RUBRIQUE_ASTUCES = "Astuces"
 RUBRIQUE_ARTICLE = "À quoi il sert"
 RUBRIQUE_SAVOIR_FAIRE = "Étapes"
+RUBRIQUE_PIECES = "Pièces et outillage"
+RUBRIQUE_PARTICULARITES = "Particularités par machine"    # D116 : une phrase par machine, avec son lien
 MOTIF_CITATION = re.compile(r"\[(OT-\d{4}-\d{4,})\]")
 MOTIF_LIEN = re.compile(r"\[\[([^\[\]]+)\]\]")
 FIN_DES_PAGES = re.compile(r"\n\n(?:Date d'intervention des OT déjà cités|Catalogue des pages)")
@@ -88,7 +100,8 @@ def lire_page(texte):
 
 
 def lire_longueurs(texte):
-    """Longueurs de l'en-tête → {rubrique ('' pour un savoir-faire entier): {"phrases", "mots", "phrases_max", "mots_max"}}."""
+    """Longueurs de l'en-tête → {rubrique ('' pour un savoir-faire entier): {"phrases", "mots", "phrases_max", "mots_max",
+    "reecrite"}} (reecrite : « à réécrire en entier », D117)."""
     longueurs = {}
     for morceau in texte.split(" · ")[1:]:
         trouve = MOTIF_LONGUEUR.match(morceau.strip())
@@ -96,7 +109,7 @@ def lire_longueurs(texte):
             longueurs[trouve.group(1) or ""] = {
                 "phrases": int(trouve.group(2)), "phrases_max": int(trouve.group(3)),
                 "mots": int(trouve.group(4)) if trouve.group(4) else None,
-                "mots_max": int(trouve.group(5)) if trouve.group(5) else None}
+                "mots_max": int(trouve.group(5)) if trouve.group(5) else None, "reecrite": bool(trouve.group(6))}
     return longueurs
 
 
@@ -186,6 +199,48 @@ def ajouter_phrase(page, nom, texte, citees):
         recoit["phrases"].append({"texte": texte, "ot": citees})
 
 
+def reecrire_en_bref(page, texte, citees):
+    """« En bref » réécrit en entier (D117) : ses phrases (une phrase de même texte reçoit seulement les OT), puis celle de
+    l'OT ; au-delà des limites de l'en-tête, les plus anciennes partent (une synthèse, pas un historique)."""
+    phrases = rubrique_de(page, RUBRIQUE_EQUIPEMENT)["phrases"]
+    meme = next((phrase for phrase in phrases if phrase["texte"] == texte), None)
+    if meme is not None:
+        meme["ot"] = sans_doublon(meme["ot"] + citees)
+    else:
+        phrases.append({"texte": texte, "ot": citees})
+    limite = page["longueurs"].get(RUBRIQUE_EQUIPEMENT) or LIMITE_EN_BREF
+    while len(phrases) > 1 and (len(phrases) > limite["phrases_max"] or (
+            limite["mots_max"] is not None and sum(mots(phrase["texte"]) for phrase in phrases) > limite["mots_max"])):
+        phrases.pop(0)
+
+
+def geste_de(astuce):
+    """Titre du savoir-faire commun d'une astuce (D116) : son premier geste, sans repère — l'astuce jusqu'à « puis »,
+    « : », « ; » ou la fin de sa première phrase."""
+    geste = re.split(r",? puis | : |; |\. ", astuce.strip(), maxsplit=1)[0].strip(" .,;:")
+    return geste[:1].upper() + geste[1:]
+
+
+def particularite(equipement, lu):
+    """Phrase de la machine dans « Particularités par machine » (D116) : son lien, puis le titre de l'OT sans le repère."""
+    return "[[" + equipement["titre"] + "]] : " + (lu["titre"].split(" — ", 1)[-1] or "intervention")
+
+
+def completer_savoir_faire(savoir, equipement, articles, lu, ot):
+    """Savoir-faire commun reçu, complété (D116) : l'astuce dans ses « Étapes », les articles reçus dans « Pièces et
+    outillage » (même texte : l'OT s'ajoute) ; la phrase de cette machine reçoit l'OT, ou s'ajoute."""
+    ajouter_phrase(savoir, RUBRIQUE_SAVOIR_FAIRE, lu["astuce"], [ot])
+    for article in articles:
+        ajouter_phrase(savoir, RUBRIQUE_PIECES, "Pièce : [[" + article["titre"] + "]]", [ot])
+    lien = "[[" + equipement["titre"] + "]]"
+    machine = next((phrase for phrase in rubrique_de(savoir, RUBRIQUE_PARTICULARITES)["phrases"]
+                    if phrase["texte"].startswith(lien)), None)
+    if machine is not None:
+        machine["ot"] = sans_doublon(machine["ot"] + [ot])
+    else:
+        ajouter_phrase(savoir, RUBRIQUE_PARTICULARITES, particularite(equipement, lu), [ot])
+
+
 def retirer_liens_inconnus(pages, catalogue):
     """Dans les textes reçus, un lien vers un titre absent du catalogue et des pages reçues (ancienne page de mode, base
     de développement) perd ses crochets : les mots restent (sinon : « lien vers une page inconnue »)."""
@@ -268,10 +323,11 @@ def reponse_ingestion(message, modele="faux"):
     if modele == "faux-contradiction" and premiere:
         contradictions.append({"page": equipement["titre"], "phrase": premiere["texte"],
                                "observation": "Cet OT trouve une autre cause.", "ot": [ot]})
-    if modele == "faux-retire" and premiere:
-        for rubrique in cible["rubriques"]:
-            if premiere in rubrique["phrases"]:
-                rubrique["phrases"].remove(premiere)
+    # faux-retire : la première phrase hors d'« En bref » (réécrit en entier, D117 : le retrait y est permis).
+    gardee = next((rubrique for rubrique in cible["rubriques"] if rubrique["rubrique"] != RUBRIQUE_EQUIPEMENT
+                   and rubrique["phrases"]), None)
+    if modele == "faux-retire" and gardee:
+        gardee["phrases"].pop(0)
     if cible is equipement:
         reprendre_anciennes(equipement)
     texte = lu["titre"].split(" — ", 1)[-1] or "Intervention"      # la panne de l'OT, jamais sa fréquence (T140)
@@ -289,15 +345,22 @@ def reponse_ingestion(message, modele="faux"):
         citees = [ot, "OT-1999-9999"]
     elif modele == "faux-sans-ot":
         citees = []
-    ajouter_phrase(cible, rubrique_cible, texte, citees)
-    # faux-textes : une astuce courte va dans « Astuces » ; une méthode (« … puis … ») dans un savoir-faire — celui reçu
-    # dont les « Étapes » la portent déjà, sinon un créé — et « Astuces » n'en reçoit que le lien : jamais aux deux endroits.
+    if cible is equipement:
+        reecrire_en_bref(equipement, texte, citees)
+    else:
+        ajouter_phrase(cible, rubrique_cible, texte, citees)
+    # faux-textes : une astuce courte va dans « Astuces » ; une méthode (« … puis … ») dans son savoir-faire commun — reçu
+    # (même titre, ou ses « Étapes » la portent déjà) : complété ; au catalogue seulement : ni créé ni modifié ; sinon créé —
+    # et « Astuces » n'en reçoit que le lien : jamais aux deux endroits. faux : toute astuce a son savoir-faire commun.
     methode = textes and " puis " in lu["astuce"]
+    commun = bool(lu["astuce"]) and (methode or not textes)
+    geste = geste_de(lu["astuce"]) if commun else ""
     complete = next((page for page in lu["pages"] if page["type"] == "savoir-faire" and not page["mere"]
-                     and any(phrase["texte"] == lu["astuce"] for rubrique in page["rubriques"]
-                             if rubrique["rubrique"] == RUBRIQUE_SAVOIR_FAIRE for phrase in rubrique["phrases"])),
-                    None) if methode else None
-    titre_astuce = complete["titre"] if complete else "Astuce de l'" + ot
+                     and (page["titre"] == geste or any(phrase["texte"] == lu["astuce"] for rubrique in page["rubriques"]
+                                                        if rubrique["rubrique"] == RUBRIQUE_SAVOIR_FAIRE
+                                                        for phrase in rubrique["phrases"]))), None) if commun else None
+    titre_astuce = complete["titre"] if complete else geste
+    articles = [page for page in lu["pages"] if page["type"] == "composant" and not page["mere"]]
     if textes and lu["astuce"]:
         astuce = "Méthode : voir [[" + titre_astuce + "]]" if methode else lu["astuce"]
         ajouter_phrase(equipement, RUBRIQUE_ASTUCES, astuce, [ot])
@@ -307,19 +370,23 @@ def reponse_ingestion(message, modele="faux"):
     if textes and defaut:
         # « À quoi il sert » : ce que l'OT observe de l'article (le défaut constaté), jamais où ni quand il a été changé ni
         # la panne qu'il a réglée ; s'il n'en dit rien de plus, sa page n'est pas renvoyée (T140).
-        for article in (page for page in lu["pages"] if page["type"] == "composant" and not page["mere"]):
+        for article in articles:
             reprendre_anciennes(article)
             ajouter_phrase(article, RUBRIQUE_ARTICLE, "Défaut constaté : " + defaut, [ot])
             pages.append(modifiee(article))
-    if complete is not None:
-        ajouter_phrase(complete, RUBRIQUE_SAVOIR_FAIRE, lu["astuce"], [ot])     # même texte : l'OT s'ajoute à ses citations
+    if complete is not None and complete is not savoir:
+        completer_savoir_faire(complete, equipement, articles, lu, ot)
         pages.append(modifiee(complete))
     if savoir is not None and sous_page is None:
         decouper(pages, savoir)
-    if lu["astuce"] and (methode or not textes) and complete is None:
-        pages.append({"action": "creer", "titre": titre_astuce, "type": "savoir-faire",
-                      "rattache_a": equipement["titre"],
-                      "rubriques": [{"rubrique": "Étapes", "phrases": [{"texte": lu["astuce"], "ot": [ot]}]}]})
+    if commun and complete is None and geste not in lu["catalogue"]:
+        rubriques = [{"rubrique": RUBRIQUE_SAVOIR_FAIRE, "phrases": [{"texte": lu["astuce"], "ot": [ot]}]}]
+        if articles:
+            rubriques.append({"rubrique": RUBRIQUE_PIECES, "phrases": [{"texte": "Pièce : [[" + article["titre"] + "]]",
+                                                                        "ot": [ot]} for article in articles]})
+        rubriques.append({"rubrique": RUBRIQUE_PARTICULARITES, "phrases": [{"texte": particularite(equipement, lu), "ot": [ot]}]})
+        pages.append({"action": "creer", "titre": geste, "type": "savoir-faire", "rattache_a": equipement["titre"],
+                      "rubriques": rubriques})
     if modele == "faux-cree-commun" and "Usure commune" not in lu["catalogue"]:
         pages.append({"action": "creer", "titre": "Usure commune", "type": "savoir-faire", "rattache_a": equipement["titre"],
                       "rubriques": [{"rubrique": "Quand le faire", "phrases": [{"texte": "Usure normale des pièces",

@@ -612,8 +612,9 @@ class TestEcritureALaMain(CasEcrans):
         # Le texte d'une machine (§20.12) : ses rubriques, leur rôle et leurs limites (Wiki.LIMITES).
         aide = self.texte(".wj-aide-balisage")
         self.assertIn("Pour le texte d'une machine : « En bref », « Astuces », dans cet ordre.", aide)
-        self.assertIn("« En bref » : ce qu'il faut savoir d'abord de cette machine", aide)
-        self.assertIn("Longueurs : « En bref » 5 phrases et 120 mots au plus, « Astuces » 10 phrases au plus", aide)
+        self.assertIn("« En bref » : ce qu'il faut savoir d'abord de cette machine, ses pannes et ce qui les a réglées (une "
+                      "synthèse, réécrite en entier à chaque intervention, pas un historique)", aide)          # D117
+        self.assertIn("Longueurs : « En bref » 3 phrases et 60 mots au plus, « Astuces » 10 phrases au plus", aide)
         self.assertIn("Aucune consigne de sécurité", aide)
         self.assertIn("[[Titre d'une page]]", aide)
         self.assertEqual(self.page.get_attribute("#wj-texte", "placeholder").split(NL)[0], "## En bref")
@@ -684,7 +685,9 @@ class TestEcritureALaMain(CasEcrans):
         self.assertEqual([g[0] for g in groupes], ["Machines", "Articles", "Savoir-faire (pour une sous-page)"])
         self.assertEqual(sorted(groupes[2][1]), ["WP-0002", "WP-0004", "WP-0008", "WP-0010", "WP-0011"])   # ni mode ni composant
         aide = self.texte(".wj-aide-balisage")
-        self.assertIn("« Quand le faire », « Étapes », « Pièces et outillage », « Pièges »", aide)
+        self.assertIn("« Quand le faire », « Étapes », « Pièces et outillage », « Pièges », « Particularités par machine »", aide)
+        self.assertIn("Un geste ou une méthode, commun aux machines (titre sans repère), écrit d'abord à partir des astuces des "
+                      "OT ; « Particularités par machine » : une phrase par machine, avec son lien", aide)   # D116
         self.assertIn("Longueur : 30 phrases et 600 mots au plus, noms des rubriques compris", aide)
         self.assertNotIn("mode", aide)
         self.assertEqual(self.page.locator(".wj-archiver").count(), 0)
@@ -750,7 +753,7 @@ class TestEcritureALaMain(CasEcrans):
 # Contrôle du wiki (D108)
 # ---------------------------------------------------------------------------------------------------
 
-# Textes trop longs (Wiki.LIMITES, §20.12) : « En bref » de PO-01 à 6 phrases (5 au plus) ; un savoir-faire de 31
+# Textes trop longs (Wiki.LIMITES, §20.12) : « En bref » de PO-01 à 6 phrases (3 au plus, D117) ; un savoir-faire de 31
 # phrases (30 au plus).
 EN_BREF_TROP_LONG = "## En bref" + NL + NL.join("- Fuite constatée %s [OT-2026-0007]" % lettre for lettre in "abcdef")
 TROP_DE_PHRASES = NL.join(["- Constat numéro %d [OT-2026-0007]" % numero for numero in range(1, 32)])
@@ -821,7 +824,7 @@ class TestControleDuWiki(CasEcrans):
                         ("lien-casse", "WP-0004", "lien vers PANNE-S03, page inexistante"),
                         ("lien-casse", "WP-0010", "lien vers WP-0099, page inexistante"),
                         ("lien-casse", "WP-0010", "lien vers « Ancien geste » (WP-0009), page archivée"),
-                        ("trop-longue", "EQ-0001", "« En bref » : 6 phrases et 18 mots (au plus 5 phrases et 120 mots)"),
+                        ("trop-longue", "EQ-0001", "« En bref » : 6 phrases et 18 mots (au plus 3 phrases et 60 mots)"),
                         ("trop-longue", "WP-0014", "31 phrases et 94 mots (au plus 30 phrases et 600 mots)"),
                         ("anciennes-rubriques", "ART-0002", "« Défaillances » : à réécrire dans ses rubriques (« À quoi il sert »)"),
                         ("type-retire", "WP-0005", "type de page retiré (mode) : archivez-la"),
@@ -850,7 +853,7 @@ class TestControleDuWiki(CasEcrans):
         self.assertEqual(self.texte('.wj-vue[data-vue="controle"] .badge'), str(len(problemes)))
         # Les aides disent les limites de la refonte 2 (Wiki.LIMITES), plus celles d'avant (« Plus de 30 phrases »).
         aides = {t: self.texte('.wj-controle-type[data-type="%s"] .aide' % t) for t in ATTENDU_CONTROLE}
-        self.assertEqual(aides["trop-longue"], "Au plus « En bref » 5 phrases et 120 mots, « Astuces » 10 phrases, « À quoi il "
+        self.assertEqual(aides["trop-longue"], "Au plus « En bref » 3 phrases et 60 mots, « Astuces » 10 phrases, « À quoi il "
                          "sert » 3 phrases et 80 mots, un savoir-faire 30 phrases et 600 mots (au-delà, en sous-pages).")
         self.assertIn("Savoir-faire sans machine, article ni rattachement", aides["orpheline"])
         self.assertIn("ni panne", aides["lien-casse"])

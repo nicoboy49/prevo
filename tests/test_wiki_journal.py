@@ -193,15 +193,40 @@ class TestValidation(CasJournal):
         po01 = self.ligne("WP-0001")
         self.assertEqual(po01["version"], "4")
         self.assertEqual(po01["derniere_entree"], entrees["OT-2026-0008"]["id"])
-        astuce = self.page.evaluate("Donnees.lignes('wiki_pages').find((l) => l.titre === \"Astuce de l'OT-2026-0001\")")
+        astuce = self.page.evaluate("(titre) => Donnees.lignes('wiki_pages').find((l) => l.titre === titre)", ingestion.GESTE)
         # La validation inscrit la page de chaque changement, y compris celle qu'elle a créée.
         self.assertEqual([c["page"] for c in json.loads(self.entrees()["OT-2026-0001"]["changements"])], ["WP-0001", astuce["id"]])
         self.assertEqual((astuce["type"], astuce["equipement_id"], astuce["version"], astuce["origine"], astuce["cle"]),
-                         ("savoir-faire", "EQ-0001", "1", "IA", "astuce de l ot 2026 0001"))
+                         ("savoir-faire", "EQ-0001", "1", "IA", "aligner l accouplement au repere avant la depose"))
         self.assertEqual(astuce["ot_cites"], "OT-2026-0001")
         # L'état proposé de PO-01 est maintenant l'état validé ; le wiki est intègre.
         self.assertEqual(self.page.evaluate("Wiki.etatPropose().get('EQ:EQ-0001').texte"), po01["texte"])
         self.assertEqual(self.integrite(self.bilan["envois"]), {"ok": True, "ecarts": []})
+
+    def test_en_bref_reecrit_valide_enchaine_et_en_cascade(self):
+        """T142 (D117) : « En bref » réécrit à chaque OT par le faux modèle (3 phrases au plus : les plus anciennes partent,
+        avec leurs OT et leur lien) — les propositions enchaînées de PO-01 se valident dans l'ordre, la ligne garde le
+        dernier texte, ses OT cités et ses liens recalculés (OT-2026-0007 et [[Éviter la cavitation]] partis), l'intégrité
+        tient, le journal montre les phrases retirées ; rejetée, la première fait passer les suivantes « à refaire »."""
+        entrees = self.entrees()
+        chaine = [entrees[ot]["id"] for ot in ("OT-2026-0003", "OT-2026-0001", "OT-2026-0008")]
+        dernier = [c for c in json.loads(entrees["OT-2026-0008"]["changements"]) if c["cle"] == "EQ:EQ-0001"][0]
+        self.assertEqual(dernier["apres"], NL.join(["## En bref", "- Bruit au démarrage [OT-2026-0003]",
+                                                    "- Fuite à la garniture [OT-2026-0001]", "- Fuite encore [OT-2026-0008]"]))
+        self.assertEqual([p["propre"] for p in self.page.evaluate("([a, b]) => Wiki.comparerTextes(a, b).retirees",
+                                                                  [dernier["avant"], dernier["apres"]])],
+                         ["Voir Éviter la cavitation"])
+        # Rejet de la première : les deux suivantes (même page) passent « à refaire » ; retraitées, elles se revalident.
+        self.assertEqual(self.ok("rejeter", chaine[0], "Essai")["aRefaire"], chaine[1:])
+        self.ok("remettreEnFile", chaine[0])
+        self.traiter([])
+        entrees = self.entrees()
+        chaine = [entrees[ot]["id"] for ot in ("OT-2026-0003", "OT-2026-0001", "OT-2026-0008")]
+        self.assertEqual(self.ok("valider", chaine)["validees"], chaine)
+        po01 = self.ligne("WP-0001")
+        self.assertEqual((po01["texte"], po01["ot_cites"], po01["liens"], po01["version"]),
+                         (dernier["apres"], "OT-2026-0003;OT-2026-0001;OT-2026-0008", "", "4"))
+        self.assertEqual(self.integrite(), {"ok": True, "ecarts": []})
 
     def test_page_changee_entree_a_refaire_et_rien_d_ecrit(self):
         entrees = self.entrees()
@@ -243,7 +268,8 @@ class TestValidation(CasJournal):
         self.page.evaluate("""() => Donnees.modifier('wiki_journal', (lignes) => { lignes.push({ id: 'WJ-00099', nature: 'ingestion',
           ot_id: 'OT-2026-0002', statut: 'à valider', ordre: '99', pages: 'WP:WP-0006', contradictions: '[]',
           changements: JSON.stringify([{ page: 'WP-0006', cle: 'WP:WP-0006', version_avant: 1, avant: '', creation: false,
-            apres: "## Pièges\\n- Voir [[Astuce de l'OT-2026-0001]] [OT-2026-0007]" }]) }); }, { journal: false })""")
+            apres: "## Pièges\\n- Voir [[Aligner l'accouplement au repère avant la dépose]] [OT-2026-0007]" }]) }); },
+          { journal: false })""")
         resultat = self.ok("rejeter", entrees["OT-2026-0003"]["id"], "Phrase mal tournée")
         self.assertEqual(resultat, {"rejetee": entrees["OT-2026-0003"]["id"],
                                     "aRefaire": [entrees["OT-2026-0001"]["id"], entrees["OT-2026-0008"]["id"], "WJ-00099"]})
@@ -476,9 +502,9 @@ class TestEcritureALaMain(CasJournal):
             ("OT cité hors des OT permis : OT-2026-0005", self.TEXTE + "\n- Bruit [OT-2026-0005]", None),  # pas clôturé administrativement
             ("nombre « 7 » absent des OT cités", self.TEXTE + "\n- Pression à 7 bar [OT-2026-0001]", None),
             ("phrase sans OT cité", self.TEXTE + "\n- Bruit au démarrage", None),
-            # Les limites des textes rédigés (§20.12) valent aussi à la main.
-            ("Page « PO-01 — Pompe de process A » : « En bref » : 6 phrases, 5 au plus.",
-             "## En bref\n" + "\n".join("- Constat %s [OT-2026-0001]" % ("x" * n) for n in range(1, 7)), None),
+            # Les limites des textes rédigés (§20.12 ; « En bref » : 3 phrases, D117) valent aussi à la main.
+            ("Page « PO-01 — Pompe de process A » : « En bref » : 4 phrases, 3 au plus.",
+             "## En bref\n" + "\n".join("- Constat %s [OT-2026-0001]" % ("x" * n) for n in range(1, 5)), None),
             ("rubrique « Ce qui revient » inconnue pour une page équipement",
              "## Ce qui revient\n- Fuite de garniture au démarrage [OT-2026-0007]", None),
             ("La page a été modifiée entre-temps", self.TEXTE, {"version": 0}),
@@ -624,7 +650,7 @@ class TestEcritureALaMain(CasJournal):
 # « <titre> — étapes détaillées ».
 MERE_SF = "Changer la garniture de PO-01"
 SOUS_PAGE_SF = MERE_SF + " — étapes détaillées"
-ASTUCE_0001 = "Astuce de l'OT-2026-0001"
+ASTUCE_0001 = ingestion.GESTE           # savoir-faire commun créé par le faux modèle pour l'astuce de OT-2026-0001 (T141)
 CLES_JS = """() => Array.from(Wiki.etatPropose().values()).filter((p) => p.titre.startsWith('Changer la garniture de PO-01'))
   .map((p) => [p.cle, p.titre, p.rattacheA, p.equipementId]).sort()"""
 PROBLEMES_WIKI_JS = """(ids) => Donnees.problemes().filter((p) => p.table === 'wiki_pages' && ids.includes(p.id))
@@ -693,7 +719,7 @@ class TestDecoupage(CasJournal):
         self.assertIn("[[" + SOUS_PAGE_SF + "]]", mere["texte"])
         actives = [l["cle"] for l in lignes.values() if l["statut"] == "active" and l["cle"]]    # posées à l'écriture
         self.assertEqual(len(actives), len(set(actives)))                     # clés uniques
-        self.assertEqual(sorted(actives), ["astuce de l ot 2026 0001", "changer la garniture de po 01",
+        self.assertEqual(sorted(actives), ["aligner l accouplement au repere avant la depose", "changer la garniture de po 01",
                                            "changer la garniture de po 01 etapes detaillees", "po 01 pompe de process a"])
         # La mère garde sa clé et son ancrage ; la sous-page a sa clé (WP:), rattachée à celle de sa mère, sans ancrage.
         self.assertEqual(self.page.evaluate(CLES_JS), [

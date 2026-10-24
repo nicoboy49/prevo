@@ -326,7 +326,8 @@ Object.assign(Ia, (() => {
 
   // Lot 6 (ARCHITECTURE.md §20.5 ; refonte 2, §20.12) : intégrer un OT clôturé au wiki de l'atelier. L'IA ne rédige que
   // les textes reçus — « En bref » et « Astuces » de la machine, « À quoi il sert » de chaque article consommé, les
-  // savoir-faire (seule page qui se crée) — ; tout le reste est calculé par Prévo. Données : l'OT (liste blanche, ni
+  // savoir-faire (seule page qui se crée ; un seul par geste, commun aux machines, D116) — ; « En bref » se réécrit en
+  // entier à chaque OT (D117) ; tout le reste est calculé par Prévo. Données : l'OT (liste blanche, ni
   // nom ni coût), ce qu'il peut créer (`creation` : { pages, phrases, mots }, Wiki.SEUILS.pagesCreeesMax et les limites
   // d'un savoir-faire de Wiki.LIMITES), les textes concernés avec leur contenu actuel, leurs longueurs et leurs limites
   // (par rubrique ; un savoir-faire entier), la mère d'une sous-page et la date d'intervention des OT qu'ils citent, le
@@ -342,7 +343,7 @@ Object.assign(Ia, (() => {
   const RUBRIQUES_PAGES = {
     'équipement': ['En bref', 'Astuces'],
     'composant': ['À quoi il sert'],
-    'savoir-faire': ['Quand le faire', 'Étapes', 'Pièces et outillage', 'Pièges'],
+    'savoir-faire': ['Quand le faire', 'Étapes', 'Pièces et outillage', 'Pièges', 'Particularités par machine'],
   };   // = Wiki.RUBRIQUES (wiki-regles.js), recopié ici : les consignes ne dépendent pas du module Wiki
   const MENTION_ANTERIEURE = 'Intervention antérieure à des faits déjà intégrés : ne présente jamais son information '
     + 'comme la plus récente.';
@@ -366,20 +367,24 @@ Object.assign(Ia, (() => {
     ].join('\n\n');
   }
 
+  // Fin de la longueur d'une rubrique réécrite en entier à chaque OT (D117 : « En bref »).
+  const REECRITE = ', à réécrire en entier';
+
   // « 2 phrases », « 1 phrase », « 0 mot ».
   function nombreDe(valeur, nom) {
     return valeur + ' ' + nom + (valeur > 1 ? 's' : '');
   }
 
   /**
-   * Une longueur d'un texte envoyé (§20.12) → « En bref : 2 phrases sur 5, 34 mots sur 120 » (sans rubrique : le
-   * savoir-faire entier ; motsMax null : les phrases seules) ; '' si ses nombres ne sont pas des entiers.
+   * Une longueur d'un texte envoyé (§20.12) → « En bref : 2 phrases sur 3, 34 mots sur 60, à réécrire en entier » (sans
+   * rubrique : le savoir-faire entier ; motsMax null : les phrases seules ; la fin pour une rubrique réécrite en entier,
+   * `reecrite`, D117) ; '' si ses nombres ne sont pas des entiers.
    */
   function longueurEnTete(l) {
     if (!l || typeof l !== 'object') return '';
     if (![l.phrases, l.phrasesMax, l.mots].every(Number.isInteger) || (l.motsMax !== null && !Number.isInteger(l.motsMax))) return '';
     return (texte(l.rubrique) ? uneLigne(l.rubrique, 60) + ' : ' : '') + nombreDe(l.phrases, 'phrase') + ' sur ' + l.phrasesMax
-      + (l.motsMax === null ? '' : ', ' + nombreDe(l.mots, 'mot') + ' sur ' + l.motsMax);
+      + (l.motsMax === null ? '' : ', ' + nombreDe(l.mots, 'mot') + ' sur ' + l.motsMax) + (l.reecrite === true ? REECRITE : '');
   }
 
   /**
@@ -430,7 +435,8 @@ Object.assign(Ia, (() => {
       'intègre l\'ordre de travail (OT) ci-dessous au wiki de l\'atelier. Prévo calcule les faits (pannes, '
         + 'interventions, pièces, stock) ; tu rédiges seulement les textes reçus :\n'
         + '- « En bref » de la machine (type « équipement ») : ce qu\'il faut savoir d\'abord de cette machine, ses '
-        + 'pannes et ce qui les a réglées ; une synthèse, pas un historique ;\n'
+        + 'pannes et ce qui les a réglées ; une synthèse, pas un historique, réécrite en entier à chaque OT (jamais une '
+        + 'phrase ajoutée à la suite), chaque phrase avec les OT qui la fondent ;\n'
         + '- « Astuces » de la machine : les astuces courtes des OT (« Astuce pour la prochaine fois ») ; chacune, un conseil '
         + 'en une phrase propre à cette machine, même s\'il porte sur un article ;\n'
         + '- « À quoi il sert » de chaque article consommé (type « composant ») : l\'OT ne donne que sa désignation et sa '
@@ -438,22 +444,27 @@ Object.assign(Ia, (() => {
         + 'signes d\'usure ou de casse, ce qui l\'use, comment il se monte ou se change) ; jamais où ni quand il a été changé, '
         + 'ni la panne qu\'il a réglée (Prévo les calcule), ni un rôle supposé ; si l\'OT n\'en dit rien de plus que sa '
         + 'consommation, ne renvoie pas sa page ;\n'
-        + '- les savoir-faire : une méthode de plusieurs gestes, réutilisable sur cette machine ou avec cet article, tirée '
-        + 'd\'abord de l\'astuce de l\'OT, puis de son travail et de son compte rendu ; n\'en crée un qu\'avec au moins deux '
-        + 'gestes que l\'astuce ou le compte rendu décrivent (le travail demandé seul ne suffit pas) ; son titre dit le geste '
-        + 'et le repère de la machine, ou l\'article (« Serrer la bride de <repère> », jamais « Serrer une bride » seul).\n'
+        + '- les savoir-faire : une méthode de plusieurs gestes, un seul par geste, commun aux machines, tirée d\'abord de '
+        + 'l\'astuce de l\'OT, puis de son travail et de son compte rendu ; n\'en crée un qu\'avec au moins deux gestes que '
+        + 'l\'astuce ou le compte rendu décrivent (le travail demandé seul ne suffit pas) ; son titre dit le geste et '
+        + 'l\'organe, sans repère de machine (« Remplacer une garniture mécanique ») ; il relie ses machines dans '
+        + '« Particularités par machine » (une phrase par machine : [[sa machine]] et ce qui change pour elle : pièce, '
+        + 'réglage, accès) et ses articles dans « Pièces et outillage ». Un geste qui a déjà son savoir-faire ne se recrée '
+        + 'jamais : reçu, complète-le (sa phrase pour cette machine dans « Particularités par machine », ses étapes si l\'OT '
+        + 'en apprend) ; au catalogue seulement, un lien [[titre]] suffit.\n'
         + 'Une astuce s\'écrit à un seul endroit : dans « Astuces » ou dans un savoir-faire (créé ou complété), jamais aux '
         + 'deux ni dans « À quoi il sert » ; dans « Astuces », un lien [[titre du savoir-faire]] suffit ; dans une astuce, '
         + 'dis l\'ordre des vérifications ou le geste, sans adverbe de fréquence (« toujours », « plus vite »).\n'
-        + 'Tu reçois ces textes (pages) avec leur contenu actuel, et le catalogue des titres (machines, articles, pannes, '
-        + 'savoir-faire) pour les liens.\n'
+        + 'Tu reçois ces textes et le catalogue des titres (machines, articles, pannes, savoir-faire) pour les liens.\n'
         + 'Tu peux :\n'
-        + '- modifier une page reçue (action « modifier », son titre exact) : rends son texte complet ; garde toutes ses '
-        + 'phrases, à l\'identique ou reformulées, et tous les OT qu\'elles citent (sauf une phrase déplacée dans une '
-        + 'sous-page, voir le découpage) ; ajoute ce que l\'OT apprend ; une page que tu ne changes pas ne se renvoie pas ;\n'
+        + '- modifier une page reçue (action « modifier », son titre exact) : rends son texte complet ; hors « En bref », '
+        + 'garde toutes ses phrases, à l\'identique ou reformulées, et tous les OT qu\'elles citent (sauf une phrase '
+        + 'déplacée dans une sous-page, voir le découpage) ; ajoute ce que l\'OT apprend ; une page que tu ne changes pas '
+        + 'ne se renvoie pas ;\n'
         + '- créer des savoir-faire (action « creer », type « savoir-faire »), sous-pages comprises, pas plus que ne le dit '
-        + 'la ligne « Savoir-faire que tu peux créer », rattachés par « rattache_a » au titre exact de la machine, ou de '
-        + 'l\'article reçu si la méthode porte sur lui (une sous-page : à son savoir-faire) ; aucune autre page ne se crée ;\n'
+        + 'la ligne « Savoir-faire que tu peux créer », rattachés par « rattache_a » au titre exact de l\'article reçu '
+        + 'principal du geste s\'il y en a un, sinon de la machine (une sous-page : à son savoir-faire) ; aucune autre page '
+        + 'ne se crée ;\n'
         + '- signaler dans « contradictions » une phrase existante que cet OT contredit (la phrase exacte, ton '
         + 'observation, et cet OT seul) : ne modifie pas cette phrase, le responsable tranchera ;\n'
         + '- répondre « rien_a_ajouter » vrai, sans page ni contradiction, si l\'OT n\'apprend rien (préventif ou contrôle '
@@ -474,13 +485,12 @@ Object.assign(Ia, (() => {
         + 'réparation, personne prévenue, relevés et mesures d\'un contrôle de routine — pression, température, jeu… — '
         + 'sauf si l\'OT les dit anormaux ou s\'ils expliquent la panne) : c\'est dans l\'OT ;\n'
         + '- longueurs : l\'en-tête de chaque page reçue donne la taille et la limite de chaque rubrique (pour un '
-        + 'savoir-faire, de la page entière, rubriques comprises) : « N phrases sur P, M mots sur Q », citations non '
-        + 'comptées, un lien compte les mots de son titre ; celles d\'un savoir-faire créé sont dans la ligne « Savoir-faire '
-        + 'que tu peux créer » ; ne dépasse jamais une limite ; si la rubrique est pleine, ajoute l\'OT à la phrase qu\'il '
-        + 'confirme, ou regroupe deux phrases en gardant tous leurs OT, ou n\'y écris rien (Prévo calcule déjà les pannes) ; '
-        + 'une méthode va dans un savoir-faire, son lien dans une phrase existante ;\n'
+        + 'savoir-faire, de la page entière, rubriques comprises), citations non comptées, un lien compte les mots de son '
+        + 'titre ; celles d\'un savoir-faire créé sont dans la ligne « Savoir-faire que tu peux créer » ; ne dépasse jamais '
+        + 'une limite ; une rubrique pleine autre que « En bref » : confirme ou regroupe ainsi, ou n\'y écris rien (Prévo '
+        + 'calcule déjà les pannes) ;\n'
         + '- découpage : un savoir-faire qui dépasserait ses limites se découpe en sous-pages liées. Crée une sous-page '
-        + '(action « creer », type « savoir-faire », « rattache_a » = titre exact '
+        + '(type « savoir-faire », « rattache_a » = titre exact '
         + 'du savoir-faire, titre « <titre du savoir-faire> — <sujet> », par exemple « Changer la garniture — étapes '
         + 'détaillées ») ; déplace-y les phrases d\'un même sujet, telles quelles ou regroupées, avec tous leurs OT ; '
         + 'modifie la mère dans la même réponse : à la place des phrases déplacées, une phrase courte de renvoi [[titre '
@@ -493,8 +503,7 @@ Object.assign(Ia, (() => {
         + 'créée, titre compris : dans l\'OT à intégrer seulement ; une sous-page créée : aussi dans le texte et le titre '
         + 'de sa mère) ; un nombre lu sur une autre page reçue ne se recopie pas ; le titre d\'un lien [[…]] ne compte pas ; '
         + 'aucune date, aucun mois, aucune année ;\n'
-        + '- aucune consigne de sécurité ou de consignation, aucun équipement de protection, aucune habilitation, aucune '
-        + 'coupure d\'énergie : tout cela relève de la fiche de l\'équipement, en tête de sa page et de ses savoir-faire ; '
+        + '- la sécurité relève de la fiche de l\'équipement, en tête de sa page et de ses savoir-faire ; '
         + 'une étape qui arrête la machine pour intervenir s\'écrit seulement « Mettre la machine à l\'arrêt selon la fiche '
         + 'en tête de sa page » ; un arrêt de la machine sur défaut s\'écrit « arrêt sur défaut », jamais « mise en sécurité » ; '
         + 'une valeur de réglage s\'écrit « valeur de réglage », jamais « consigne » ;\n'

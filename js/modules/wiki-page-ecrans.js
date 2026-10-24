@@ -396,7 +396,9 @@ Object.assign(Wiki, (() => {
     if (entite.type !== 'savoir-faire') return null;
     const entete = entite.sections.entete || { consignation: null, equipements: [], phrase: PHRASE_SAVOIR_FAIRE };
     const rattachement = entite.sections.rattachement;
-    if (rattachement && rattachement.type === 'machine') {
+    // Savoir-faire commun à plusieurs machines (D116) : la liste de ces machines, comme pour un article.
+    const commun = !(rattachement && rattachement.type === 'article') && entete.equipements.length > 1;
+    if (rattachement && rattachement.type === 'machine' && !commun) {
       const fiche = Donnees.trouver('equipements', rattachement.id);
       const repere = (entete.equipements[0] && entete.equipements[0].repere) || texte(fiche && fiche.repere) || rattachement.titre;
       return blocConsignation(entete.consignation, { id: 'wiki-entete', titre: 'Consignation de ' + repere,
@@ -405,7 +407,7 @@ Object.assign(Wiki, (() => {
     return UI.element(UI.html`<section class="wiki-encadre wiki-consignation wiki-entete-sf" id="wiki-entete" aria-labelledby="wiki-entete-titre">
       <h2 id="wiki-entete-titre">${UI.icone('alerte')} Consignation des équipements</h2>
       <p class="wiki-entete-phrase"><b>${entete.phrase || PHRASE_SAVOIR_FAIRE}</b></p>
-      ${entete.equipements.length ? UI.html`<p>Cet article est monté sur ces machines ; la consignation de chacune est en tête de sa page :</p>
+      ${entete.equipements.length ? UI.html`<p>${commun ? 'Ce savoir-faire sert sur ces machines' : 'Cet article est monté sur ces machines'} ; la consignation de chacune est en tête de sa page :</p>
         <ul class="wiki-jumeaux wiki-entete-equipements">${entete.equipements.map((monte) => UI.html`<li><a class="wiki-lien-page"
           href="${outils().adresse(monte.equipementId)}">${monte.repere || monte.equipementId}</a></li>`)}</ul>`
         : UI.html`<p class="aide">Aucune machine connue pour ce savoir-faire : voir la consignation de la machine sur sa fiche.</p>`}

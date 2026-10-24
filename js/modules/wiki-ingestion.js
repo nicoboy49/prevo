@@ -8,7 +8,10 @@
 //    « WP:<page> » (pages libres validées), « TITRE:<titre comparable> » (page créée par une proposition encore à
 //    valider) ; plus de clé « CAUSE:<code> » (refonte 2 : une panne est une page calculée, sans texte à réserver) ;
 //  - chaque texte envoyé porte ses longueurs (Wiki.LIMITES) : une par rubrique limitée du texte d'une machine ou d'un
-//    article, une pour un savoir-faire entier ; le modèle ne compte pas, il les lit dans l'en-tête du texte ;
+//    article (`reecrite` : réécrite en entier, D117), une pour un savoir-faire entier ; le modèle les lit dans l'en-tête ;
+//  - savoir-faire concernés (D116) : liens d'un texte résolus par les titres de l'état et des pages calculées (un lien
+//    d'une sous-page amène sa mère) ; même geste : Wiki.memeGeste sur le titre, le remède, le travail, le compte rendu et
+//    l'astuce de l'OT, parmi les savoir-faire (sauf sous-pages) pas encore concernés ;
 //  - catalogue envoyé (liens [[…]]) : machines, articles, savoir-faire et pannes (titres des pages Panne de
 //    Wiki.listeEntites('panne') : un code symptôme qui a au moins un cas, une seule définition) ; jamais un technicien
 //    ni une intervention ; une ancienne page de mode ou une page libre d'un autre type n'y est plus ;
@@ -29,12 +32,11 @@
 //    garde les raisons du premier refus ; encore refusée : « refusée », raisons du dernier refus une par ligne ; une
 //    relance compte pour un essai ; « Arrêter » avant une relance : elle ne part pas, l'OT reste en file ;
 //  - le résultat accepté est écrit dans la section critique de Donnees.modifier, sur le journal frais : une page
-//    concernée changée pendant l'envoi (motif « rejoué : pages changées pendant l'envoi ») ou une page créée
-//    entre-temps sous le même titre ou un titre trop proche (motif « rejoué : page créée entre-temps ») remet l'entrée
-//    « en file » sans relance, tant que ses essais ne dépassent pas trois, puis « refusée » ; le motif reste sur
-//    l'entrée acceptée ensuite ;
-//  - le catalogue envoyé commence par les savoir-faire créés par des propositions à valider (jamais coupés), puis les
-//    pannes ;
+//    concernée changée pendant l'envoi, ou un savoir-faire créé pendant l'envoi et concerné sur le nouvel état (D116 ; motif
+//    « rejoué : pages changées pendant l'envoi ») ou une page créée entre-temps sous le même titre ou un titre trop proche
+//    (motif « rejoué : page créée entre-temps ») remet l'entrée « en file » sans relance, tant que ses essais ne dépassent
+//    pas trois, puis « refusée » ; le motif reste sur l'entrée acceptée ensuite ;
+//  - catalogue envoyé : d'abord les savoir-faire créés par des propositions à valider (jamais coupés), puis les pannes ;
 //  - toute autre erreur de l'IA (injoignable, délai, refus D67) arrête le traitement : l'OT reste en file, l'erreur est
 //    rendue dans le bilan ; « Arrêter » (signal) laisse finir les envois partis, `annuler` les coupe.
 
@@ -260,12 +262,20 @@ Object.assign(Wiki, (() => {
     return mere && mere.type === page.type ? mere : null;
   }
 
+  // Index des titres d'un état proposé (liens des savoir-faire, D116), calculé une fois par état (ordonnanceur).
+  const titresParEtat = new WeakMap();
+
+  /** Texte d'un OT où se cherche le même geste (D116) : titre, remède, travail, compte rendu, astuce. */
+  function texteDuGeste(ot) {
+    return [ot.titre, libelleCode('remède', ot.remede_code), ot.travail_a_faire, ot.compte_rendu, ot.astuce].map(texte).join('\n');
+  }
+
   /**
-   * Pages concernées par un OT, calculées avant l'envoi (D112 révisée, §20.12) → { cles, envoyees } : clés et pages dans
-   * l'ordre de priorité — le texte de sa machine, ceux des articles qu'il a consommés, les savoir-faire de la machine
-   * (ancrés ou rattachés) puis ceux des articles, chacun suivi de ses sous-pages, par titre —, pagesEnvoyeesMax pages
-   * envoyées au plus (toutes les clés sont gardées : elles réservent les pages pour l'ordonnanceur et l'antériorité).
-   * Ni cause, ni page de mode, ni page liée depuis la machine.
+   * Pages concernées par un OT, calculées avant l'envoi (D112 révisée, §20.12 ; D116) → { cles, envoyees } : clés et pages
+   * dans l'ordre de priorité — le texte de sa machine, ceux des articles qu'il a consommés, les savoir-faire de la machine
+   * (ancrés ou rattachés) puis ceux des articles, ceux dont le texte a un lien vers la machine, ceux du même geste
+   * (Wiki.memeGeste), ceux dont le texte a un lien vers ses articles, chacun suivi de ses sous-pages, par titre —,
+   * pagesEnvoyeesMax envoyées au plus (toutes les clés réservent les pages : ordonnanceur, antériorité). Ni cause, ni mode.
    */
   function pagesConcernees(otId, etatDonne) {
     const etat = etatDonne || etatPropose();
@@ -274,6 +284,10 @@ Object.assign(Wiki, (() => {
     const equipementId = texte(ot.equipement_id);
     const articles = articlesConsommes(texte(ot.id)).map((article) => article.articleId);
     const savoirs = parTitre(etat).filter((page) => page.type === 'savoir-faire');
+    if (!titresParEtat.has(etat)) titresParEtat.set(etat, indexDesTitres(Array.from(etat.values())));
+    const titres = titresParEtat.get(etat);
+    const liesA = (cibles) => savoirs.filter((page) => Wiki.liensDe(page.texte)
+      .some((titre) => cibles.includes(titres.get(Wiki.comparable(titre))))).map((page) => mereDe(page, etat) || page);
     const cles = [];
     const envoyees = [];
     const ajouter = (cle) => {
@@ -291,6 +305,10 @@ Object.assign(Wiki, (() => {
     savoirs.filter((page) => !page.equipementId
       && (articles.includes(page.articleId) || articles.some((articleId) => page.rattacheA === 'ART:' + articleId)))
       .forEach((page) => ajouter(page.cle));
+    liesA(['EQ:' + equipementId]).forEach((page) => ajouter(page.cle));
+    Wiki.memeGeste(texteDuGeste(ot), savoirs.filter((page) => !mereDe(page, etat) && !cles.includes(page.cle)))
+      .forEach((page) => ajouter(page.cle));
+    liesA(articles.map((articleId) => 'ART:' + articleId)).forEach((page) => ajouter(page.cle));
     return { cles, envoyees };
   }
 
@@ -344,10 +362,11 @@ Object.assign(Wiki, (() => {
   }
 
   /**
-   * Longueurs d'un texte envoyé (§20.12, Wiki.LIMITES) → [{ rubrique, phrases, mots, phrasesMax, motsMax }] : une par
-   * rubrique limitée du texte d'une machine ou d'un article (Wiki.mesurerRubriques : mots sans le nom de la rubrique ;
-   * motsMax null : pas de limite de mots) ; une seule, rubrique vide, pour un savoir-faire entier (Wiki.mesurerTexte :
-   * noms des rubriques compris). Le modèle ne compte pas : il lit ces nombres dans l'en-tête du texte.
+   * Longueurs d'un texte envoyé (§20.12, Wiki.LIMITES) → [{ rubrique, phrases, mots, phrasesMax, motsMax, reecrite }] :
+   * une par rubrique limitée du texte d'une machine ou d'un article (Wiki.mesurerRubriques : mots sans le nom de la
+   * rubrique ; motsMax null : pas de limite de mots ; reecrite : rubrique réécrite en entier, Wiki.RUBRIQUES_REECRITES,
+   * D117) ; une seule, rubrique vide, pour un savoir-faire entier (Wiki.mesurerTexte : noms des rubriques compris). Le
+   * modèle ne compte pas : il lit ces nombres dans l'en-tête du texte.
    */
   function longueursDe(page) {
     const limites = Wiki.LIMITES[page.type];
@@ -355,14 +374,16 @@ Object.assign(Wiki, (() => {
     if (limites.page) {
       const mesure = Wiki.mesurerTexte(page.texte);
       return [{ rubrique: '', phrases: mesure.phrases, mots: mesure.mots, phrasesMax: limites.page.phrases,
-        motsMax: limites.page.mots }];
+        motsMax: limites.page.mots, reecrite: false }];
     }
     const mesures = Object.entries(Wiki.mesurerRubriques(page.texte));
+    const reecrites = Wiki.RUBRIQUES_REECRITES[page.type] || [];
     return Object.keys(limites.rubriques).map((rubrique) => {
       const trouvee = mesures.find(([nom]) => Wiki.comparable(nom) === Wiki.comparable(rubrique));
       const mesure = trouvee ? trouvee[1] : { phrases: 0, mots: 0 };
       const limite = limites.rubriques[rubrique];
-      return { rubrique, phrases: mesure.phrases, mots: mesure.mots, phrasesMax: limite.phrases, motsMax: limite.mots };
+      return { rubrique, phrases: mesure.phrases, mots: mesure.mots, phrasesMax: limite.phrases, motsMax: limite.mots,
+        reecrite: reecrites.includes(rubrique) };
     });
   }
 
@@ -549,8 +570,11 @@ Object.assign(Wiki, (() => {
         .flatMap((page) => [Wiki.comparable(page.titre), Wiki.formeDuTitre(page.titre)]));
       const collision = lu.changements.some((changement) => changement.creation
         && (nouveaux.has(Wiki.comparable(changement.titre)) || nouveaux.has(Wiki.formeDuTitre(changement.titre))));
+      // Une page créée pendant l'envoi et concernée sur le nouvel état (D116 : savoir-faire du même geste ou lié) : rejouée.
+      const apparues = pagesConcernees(texte(entree.ot_id), frais).cles.map((cle) => pageDeCle(frais, cle))
+        .some((page) => page && page.type === 'savoir-faire' && !anciens.has(Wiki.comparable(page.titre)));
       Object.assign(ligne, { modele, essais, traite_le: outils.maintenant() });
-      if (changees.length || collision) {
+      if (changees.length || collision || apparues) {
         const motif = collision ? MOTIF_COLLISION : MOTIF_PAGES_CHANGEES;
         if (Number(essais) > ESSAIS_COLLISION_MAX) {
           Object.assign(ligne, { statut: 'refusée', raisons: (collision ? 'Page créée en même temps par un autre OT'

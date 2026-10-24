@@ -15,7 +15,9 @@ Trois familles :
       tabulation, caractères spéciaux) ; retours ; crochets de wiki-journal.js ; catalogue (ordre, plafond) ;
       sous-pages (T131) : mère, sous-pages de la mère (actives, ordre alphabétique français), pas de couche
       calculée, en-tête d'une sous-page d'équipement = consignation de la fiche de l'équipement de sa mère,
-      sous-page de savoir-faire = en-tête de sa mère, mère archivée, absente, sans équipement ; catalogue ;
+      sous-page de savoir-faire = en-tête de sa mère, mère archivée, absente, sans équipement ; catalogue ; savoir-faire
+      communs (D116, T141) : en-tête d'un savoir-faire de plusieurs machines (rattachement et machines liées : la liste,
+      sans consignation), section « Savoir-faire » d'une machine et d'un article (rattachés et liés) = calcul Python ;
     - pureté : aucune écriture (tables identiques, Donnees.modifier jamais appelé), aucun appel réseau.
 
 Lancer depuis la racine du projet :
@@ -673,6 +675,70 @@ class TestSousPages(CasCalculs):
             with self.subTest(page=ligne[0]):
                 self.assertEqual(catalogue.get(ligne[0]), None if ligne[-1] == "archivée" else (ligne[2], ligne[1]))
         self.assertEqual(self.requetes_reseau(), [])
+
+
+# Savoir-faire communs (D116, T141) : liens (champ `liens`) vers des machines — par leur EQ-… ou par la ligne du texte d'une
+# machine (WP-0001, PO-01) — ou vers la ligne du texte d'un article (WP-0002, ART-0001), ajoutés à la base pour leurs seuls tests.
+COMMUNS = [
+    page_wiki("WP-0040", "savoir-faire", "Remplacer une garniture mécanique", "## Particularités par machine" + NL
+              + "- [[PO-01 — Pompe de process A]] : kit de 35 mm [OT-2026-0001]" + NL
+              + "- [[PO-02 — Pompe de process B]] : accès par le dessus [OT-2026-0030]", "EQ-0001;EQ-0002", equipement="EQ-0001"),
+    page_wiki("WP-0041", "savoir-faire", "Graisser un palier", "## Étapes" + NL + "- Graisser [OT-2026-0030]", "WP-0001;EQ-0003",
+              equipement="EQ-0002"),
+    page_wiki("WP-0042", "savoir-faire", "Monter une garniture de 35 mm", "## Étapes" + NL + "- Monter [OT-2026-0010]", "EQ-0005",
+              article="ART-0002"),
+    page_wiki("WP-0043", "savoir-faire", "Remplacer une garniture mécanique — accès", "## Étapes" + NL + "- Ouvrir [OT-2026-0001]",
+              rattache="WP-0040"),
+    page_wiki("WP-0044", "savoir-faire", "Purger un roulement", "## Étapes" + NL + "- Purger [OT-2026-0020]", "WP-0002",
+              equipement="EQ-0003"),
+]
+
+
+class TestSavoirFaireCommun(CasCalculs):
+    """D116 (T141, points 5 et 6) : la section « Savoir-faire » d'une machine et d'un article liste aussi les savoir-faire
+    dont le texte a un lien vers elle (son EQ-… ou son ART-…, ou la ligne de son texte), une fois chacun, par titre, égale au
+    calcul Python ; l'en-tête d'un savoir-faire commun à plusieurs machines (rattachement et machines liées) est la liste de
+    ces machines, sans consignation, celle du rattachement d'abord ; une sous-page reprend celui de sa mère."""
+
+    def setUp(self):
+        super().setUp()
+        self.base = dict(BASE, wiki_pages=table_csv(ENTETE_WIKI, LIGNES_WIKI + COMMUNS))
+        self.charger(self.base)
+
+    def test_entete_d_un_savoir_faire_commun(self):
+        machines = lambda *reperes: [{"equipementId": e, "repere": r} for e, r in reperes]  # noqa: E731
+        po01, po02, cv01, br01 = ("EQ-0001", "PO-01"), ("EQ-0002", "PO-02"), ("EQ-0003", "CV-01"), ("EQ-0005", "BR-01")
+        attendus = {
+            "WP-0040": machines(po01, po02),            # rattaché à PO-01, PO-02 liée : la liste, sans consignation
+            "WP-0043": machines(po01, po02),            # sa sous-page : l'en-tête de sa mère
+            "WP-0041": machines(po02, po01, cv01),      # PO-01 liée par la ligne de son texte (WP-0001)
+            "WP-0042": machines(po01, po02, br01),      # article : où il est monté, puis la machine liée
+        }
+        for identifiant, equipements in attendus.items():
+            with self.subTest(page=identifiant):
+                self.assertEqual(self.page_wiki(identifiant)["entete"],
+                                 {"consignation": None, "equipements": equipements, "phrase": PHRASE})
+        # Rattaché à sa seule machine (même liée dans son texte, WP-0006 → EQ-0001) : sa consignation, comme avant.
+        self.assertEqual(self.page_wiki("WP-0006")["entete"], {"consignation": {"texte": CONSIGNATION, "document": DOCUMENT},
+                                                               "equipements": machines(po01), "phrase": PHRASE})
+        # Une machine liée par un savoir-faire n'en fait pas un savoir-faire commun quand c'est un article ou un mode.
+        self.assertEqual(self.page_wiki("WP-0007")["entete"]["consignation"], None)
+
+    def test_section_savoir_faire_des_machines_et_des_articles(self):
+        calcul = CalculWiki(self.base)
+        ids = ["EQ-0001", "EQ-0002", "EQ-0003", "EQ-0004", "EQ-0005", "ART-0001", "ART-0002", "ART-0003", "ART-0004"]
+        obtenues = self.page.evaluate("""([ids, maintenant]) => ids.map((id) => Wiki.entite(id, { profil: 'responsable',
+          maintenant }).sections.savoirFaire.map((s) => s.id))""", [ids, MAINTENANT])
+        attendus = {"EQ-0001": ["WP-0006", "WP-0041", "WP-0040"],      # rattachés (WP-0006 aussi liée : une fois), liée
+                    "EQ-0002": ["WP-0011", "WP-0041", "WP-0040"],      # rattachés, liée par son EQ-…
+                    "EQ-0003": ["WP-0041", "WP-0044"], "EQ-0004": [], "EQ-0005": ["WP-0042"],
+                    "ART-0001": ["WP-0009", "WP-0007", "WP-0044"],     # rattachés, liée par la ligne de son texte (WP-0002)
+                    "ART-0002": ["WP-0042"], "ART-0003": [], "ART-0004": []}
+        self.assertEqual(dict(zip(ids, obtenues)), attendus)
+        for identifiant in ids:
+            with self.subTest(entite=identifiant):
+                self.assertEqual([s["id"] for s in calcul.entite(identifiant, "responsable", MAINTENANT)["sections"]["savoirFaire"]],
+                                 attendus[identifiant])
 
 
 class TestCatalogueAuPlafond(CasCalculs):

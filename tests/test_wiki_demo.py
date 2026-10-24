@@ -303,7 +303,13 @@ class TestFabrication(unittest.TestCase):
         self.assertIn('<b>%s</b>' % self.relance, relances)
         self.assertIn('Relancée avec la raison</b> (2 essais) — premier refus : ', relances)
         self.assertIn(REFUS_SANS_OT, relances)
-        self.assertIn('dont 1 relancé(s) ou rejoué(s)', texte[positions[0]:])
+        # Sous un texte, la mention suit les OT qu'il cite : « En bref » réécrit en entier (D117) peut ne plus citer l'OT
+        # relancé ; la mention est là si et seulement si une page le cite encore.
+        pages = texte[positions[0]:]
+        if '<a href="#%s">' % self.relance in pages:
+            self.assertIn('dont 1 relancé(s) ou rejoué(s)', pages)
+        else:
+            self.assertNotIn('relancé(s) ou rejoué(s)', pages)
         # Vérification en échec : une entrée du journal figé retirée.
         abime = self.dossier / 'fige-abime'
         shutil.copytree(fige, abime)

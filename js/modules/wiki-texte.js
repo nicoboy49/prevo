@@ -40,7 +40,14 @@
 //    l'autre n'est exigé) ; son titre commence par « <préfixe> — » suivi d'un mot (préfixe : le repère, titre avant
 //    « — », d'une page d'équipement ancrée, sinon le titre entier de la mère) ; ses phrases se comparent au texte
 //    d'avant de sa mère (une phrase déplacée telle quelle n'est pas recontrôlée ; les nombres d'une phrase nouvelle ou
-//    reprise sont cherchés aussi dans le texte et le titre de la mère).
+//    reprise sont cherchés aussi dans le texte et le titre de la mère) ;
+//  - rubrique réécrite en entier (D117, Wiki.RUBRIQUES_REECRITES : « En bref ») d'une page modifiée par l'IA : ni « phrase
+//    retirée », ni « OT retiré », ni reprise — ses phrases d'avant ne comptent pas, ni ses phrases d'après pour garder
+//    celles d'une autre rubrique du type (une astuce reste dans « Astuces ») ; une phrase d'une ancienne rubrique (hors
+//    du type) peut s'y réécrire ; toutes ses phrases sont contrôlées comme nouvelles (citations, nombres, comptage, dates,
+//    nouveauté, sécurité, liens, longueurs) ; à la main, rien ne change ;
+//  - même geste (D116, Wiki.memeGeste) : un savoir-faire dont au moins MEME_GESTE.motsMin mots du titre, et au moins
+//    MEME_GESTE.partMin de ses mots (forme de la recherche, Wiki.motsRecherche), sont dans le texte de l'OT.
 
 Object.assign(Wiki, (() => {
 
@@ -64,6 +71,8 @@ Object.assign(Wiki, (() => {
   const MOTIF_DATE_CHIFFRES = /(?:^|[^\d/.-])(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{2,4}|\d{2}[/.]\d{2})(?![\d/.])/;
   const MOTIF_NUMERO_OT = /\bOT-\d{4}-\d{4,}\b/g;
   const MESSAGE_SECURITE = { ia: Wiki.MESSAGE_SECURITE_IA, manuel: Wiki.MESSAGE_SECURITE_MAIN };
+  // Même geste (D116) : savoir-faire envoyés avec un OT parce que leur titre (le geste et l'organe) est dans son texte.
+  const MEME_GESTE = Object.freeze({ motsMin: 2, partMin: 0.6, pagesMax: 2 });
   // Où un nombre d'une proposition de l'IA a été cherché, dit dans son refus (texte de référence, précisions en tête).
   const SOURCE_DES_NOMBRES = {
     modifiee: 'de l\'OT intégré et du texte d\'avant de cette page',
@@ -252,10 +261,60 @@ Object.assign(Wiki, (() => {
     return Array.from(String(valeur || '').matchAll(MOTIF_NOMBRE), (m) => m[0].replace(/,/g, '.'));
   }
 
+  /** Mots de recherche d'un texte (mots vides retirés, pluriel simple : Wiki.motsRecherche), sans doublon. */
+  function motsDe(valeur) {
+    const mots = typeof Wiki.motsRecherche === 'function' ? Wiki.motsRecherche(valeur) : Wiki.comparable(valeur).split(' ');
+    return sansDoublon(mots.filter(Boolean));
+  }
+
   /** Forme de recherche d'un titre (mots vides retirés, pluriel simple, ordre indifférent). */
   function formeDuTitre(titre) {
-    const mots = typeof Wiki.motsRecherche === 'function' ? Wiki.motsRecherche(titre) : Wiki.comparable(titre).split(' ');
-    return sansDoublon(mots.filter(Boolean)).sort().join(' ');
+    return motsDe(titre).sort().join(' ');
+  }
+
+  /**
+   * Savoir-faire du même geste qu'un texte (D116, §20.5) : parmi `pages` ([{ titre, cle }]), au plus MEME_GESTE.pagesMax
+   * dont au moins motsMin mots du titre, et au moins partMin de ses mots, sont dans le texte ; la plus grande part
+   * d'abord, puis le plus de mots trouvés, puis le titre et la clé (ordre des caractères : déterministe).
+   */
+  function memeGeste(valeur, pages) {
+    const mots = new Set(motsDe(valeur));
+    const ordre = (a, b) => (a < b ? -1 : (a > b ? 1 : 0));
+    return (pages || []).map((page) => {
+      const titre = motsDe(page.titre);
+      const trouves = titre.filter((mot) => mots.has(mot)).length;
+      return { page, trouves, part: titre.length ? trouves / titre.length : 0 };
+    }).filter((x) => x.trouves >= MEME_GESTE.motsMin && x.part >= MEME_GESTE.partMin)
+      .sort((a, b) => b.part - a.part || b.trouves - a.trouves || ordre(texte(a.page.titre), texte(b.page.titre))
+        || ordre(texte(a.page.cle), texte(b.page.cle)))
+      .slice(0, MEME_GESTE.pagesMax).map((x) => x.page);
+  }
+
+  /** Le texte réduit aux rubriques que `garder(nom en forme comparable)` retient (leur ligne « ## » et leurs phrases). */
+  function filtrerRubriques(valeur, garder) {
+    let gardee = true;
+    return String(valeur || '').replace(/\r\n?/g, '\n').split('\n').filter((ligne) => {
+      const titre = MOTIF_RUBRIQUE.exec(ligne.trim());
+      if (titre) gardee = garder(Wiki.comparable(titre[1]));
+      return gardee;
+    }).join('\n');
+  }
+
+  /**
+   * Non-retrait (D106) des phrases d'`avant` dans `apres`, pour une page modifiée par l'IA → { perdus (OT d'avant absents
+   * d'après), retirees (phrases ni gardées ni reprises), manquants: [{ ancienne, ot }] (OT d'une phrase gardée telle quelle
+   * qu'elle ne cite plus) }.
+   */
+  function nonRetrait(avant, apres) {
+    const restants = new Set(citationsDe(apres));
+    const phrases = phrasesDe(lireTexte(apres));
+    const manquants = [];
+    phrasesDe(lireTexte(avant)).forEach((ancienne) => {
+      const memes = phrases.filter((phrase) => identitePhrase(phrase.texte) === identitePhrase(ancienne.texte));
+      const ot = memes.length ? ancienne.ot.filter((id) => !memes.some((phrase) => phrase.ot.includes(id))) : [];
+      if (ot.length) manquants.push({ ancienne, ot });
+    });
+    return { perdus: citationsDe(avant).filter((id) => !restants.has(id)), retirees: comparerTextes(avant, apres).retirees, manquants };
   }
 
   function contientUnMot(valeur, liste) {
@@ -480,23 +539,27 @@ Object.assign(Wiki, (() => {
         .forEach((lien) => raisons.push(nom + ' : lien vers une page inconnue « ' + lien + ' ».'));
     });
     // Non-retrait (D106) : seulement pour l'IA ; le responsable peut retirer. Sous-page créée : ses phrases se comparent
-    // au texte d'avant de sa mère (une phrase déplacée telle quelle y est « identique »).
+    // au texte d'avant de sa mère (une phrase déplacée telle quelle y est « identique »). Rubrique réécrite en entier
+    // (D117, Wiki.RUBRIQUES_REECRITES) : hors du non-retrait, des deux côtés (précisions en tête) ; une ancienne rubrique
+    // (hors du type) se compare à tout le texte d'après, où elle se réécrit.
+    const reecrites = ctx.manuel ? [] : (Wiki.RUBRIQUES_REECRITES[type] || []).map(Wiki.comparable);
     const changements = comparerTextes(origine, page.texte);
     if (!ctx.manuel && page.action === 'modifier') {
-      const apres = new Set(citationsDe(page.texte));
-      const perdus = citationsDe(avant).filter((id) => !apres.has(id));
+      const horsReecrites = (rubrique) => !reecrites.includes(rubrique);
+      const gardees = nonRetrait(filtrerRubriques(avant, (rubrique) => rubriquesDuType.includes(rubrique) && horsReecrites(rubrique)),
+        filtrerRubriques(page.texte, horsReecrites));
+      const anciennes = nonRetrait(filtrerRubriques(avant, (rubrique) => !rubriquesDuType.includes(rubrique)), page.texte);
+      const perdus = sansDoublon(gardees.perdus.concat(anciennes.perdus));
       if (perdus.length) raisons.push(nom + ' : OT cité retiré de la page : ' + perdus.join(', ') + '.');
-      changements.retirees.forEach((phrase) => raisons.push(nom + ' : phrase retirée — « ' + court(phrase.propre) + ' ».'));
-      phrasesDe(lireTexte(avant)).forEach((ancienne) => {
-        const memes = phrases.filter((phrase) => identitePhrase(phrase.texte) === identitePhrase(ancienne.texte));
-        const manquants = memes.length ? ancienne.ot.filter((id) => !memes.some((phrase) => phrase.ot.includes(id))) : [];
-        if (manquants.length) {
-          raisons.push(nom + ' : OT retiré de la phrase « ' + court(ancienne.propre) + ' » : ' + manquants.join(', ') + '.');
-        }
-      });
+      gardees.retirees.concat(anciennes.retirees)
+        .forEach((phrase) => raisons.push(nom + ' : phrase retirée — « ' + court(phrase.propre) + ' ».'));
+      gardees.manquants.concat(anciennes.manquants).forEach(({ ancienne, ot }) =>
+        raisons.push(nom + ' : OT retiré de la phrase « ' + court(ancienne.propre) + ' » : ' + ot.join(', ') + '.'));
     }
-    // Phrases à contrôler en entier : nouvelles et reprises (une phrase identique à avant a déjà été contrôlée).
-    const aControler = changements.nouvelles.concat(changements.reprises.map((reprise) => reprise.phrase));
+    // Phrases à contrôler en entier : nouvelles et reprises (une phrase identique à avant a déjà été contrôlée), et toutes
+    // celles d'une rubrique réécrite (D117).
+    const aControler = changements.nouvelles.concat(changements.reprises.map((reprise) => reprise.phrase),
+      changements.identiques.filter((phrase) => reecrites.includes(Wiki.comparable(phrase.rubrique))));
     const reference = (ctx.manuel
       ? Array.from(new Set(phrases.flatMap((phrase) => phrase.ot))).map((id) => ctx.sources[id] || '').join('\n')
       : (ctx.otIngere && ctx.otIngere.sourceTexte) || '') + '\n' + origine + '\n' + titreMere;
@@ -527,7 +590,7 @@ Object.assign(Wiki, (() => {
   }
 
   return {
-    lireTexte, ecrireTexte, comparerTextes, controlerProposition, formeDuTitre, prefixeSousPage,
+    lireTexte, ecrireTexte, comparerTextes, controlerProposition, formeDuTitre, prefixeSousPage, memeGeste, MEME_GESTE,
     identitePhrase, citationsDe, liensDe, phrasesDe: (valeur) => phrasesDe(lireTexte(valeur)),
     mesurerTexte: (valeur) => mesureDe(lireTexte(valeur)),
     // { <rubrique>: { phrases, mots } } (mots sans le nom de la rubrique), pour les limites de Wiki.LIMITES (§20.12).

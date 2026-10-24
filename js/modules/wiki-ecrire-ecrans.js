@@ -35,10 +35,11 @@ Object.assign(Wiki, (() => {
   const POUR = { 'équipement': 'le texte d\'une machine', composant: 'le texte d\'un article', 'savoir-faire': 'un savoir-faire' };
   // Ce qu'on écrit dans chaque texte rédigé (§20.12 ; mêmes mots que la consigne de l'IA).
   const ROLES = {
-    'équipement': '« En bref » : ce qu\'il faut savoir d\'abord de cette machine, ce qui revient et ce qui a réglé le '
-      + 'problème (une synthèse, pas un historique) ; « Astuces » : les astuces tirées des OT.',
+    'équipement': '« En bref » : ce qu\'il faut savoir d\'abord de cette machine, ses pannes et ce qui les a réglées (une '
+      + 'synthèse, réécrite en entier à chaque intervention, pas un historique) ; « Astuces » : les astuces tirées des OT.',
     composant: '« À quoi il sert » : son rôle sur les machines où il sert, ses signes d\'usure.',
-    'savoir-faire': 'Un geste ou une méthode, écrit d\'abord à partir des astuces des OT.',
+    'savoir-faire': 'Un geste ou une méthode, commun aux machines (titre sans repère), écrit d\'abord à partir des astuces '
+      + 'des OT ; « Particularités par machine » : une phrase par machine, avec son lien, pour ce qui change pour elle.',
   };
   const S = Wiki.SEUILS;
 

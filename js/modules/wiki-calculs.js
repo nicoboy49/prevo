@@ -255,10 +255,24 @@ Object.assign(Wiki, (() => {
   }
 
   /**
+   * Machines liées par le texte d'une ligne (champ `liens` : un EQ-…, ou la ligne du texte d'une machine), dans l'ordre
+   * des liens, sans doublon → [{ equipementId, repere }] (machines existantes seulement).
+   */
+  function machinesLiees(ligne) {
+    const ids = liensDe(ligne).map((lien) => {
+      const page = equipement(lien) ? null : Donnees.trouver('wiki_pages', lien);
+      return page && texte(page.type) === 'équipement' ? texte(page.equipement_id) : lien;
+    }).filter((id) => equipement(id));
+    return Array.from(new Set(ids), (id) => ({ equipementId: id, repere: texte(equipement(id).repere) }));
+  }
+
+  /**
    * En-tête d'un savoir-faire : { consignation, equipements: [{ equipementId, repere }], phrase }.
-   * Rattaché à un équipement (equipement_id, ou page rattachée qui en a un) : sa consignation telle quelle
-   * et cet équipement ; à un article (article_id, ou page de composant rattachée qui en a un) : pas de
-   * consignation, les équipements où l'article est monté ; sinon : ni l'une ni les autres.
+   * Rattaché à un équipement (equipement_id, ou page rattachée qui en a un) et sans autre machine liée dans son texte :
+   * sa consignation telle quelle et cet équipement ; commun à plusieurs machines (D116 : rattachement et machines liées)
+   * : pas de consignation, ces machines (celle du rattachement d'abord) ; rattaché à un article (article_id, ou page de
+   * composant rattachée qui en a un) : pas de consignation, les équipements où l'article est monté puis les machines
+   * liées ; sinon : les machines liées.
    */
   function enteteSavoirFaire(ligne) {
     let cible = ligne;
@@ -267,17 +281,15 @@ Object.assign(Wiki, (() => {
     }
     const equipementId = texte(cible.equipement_id);
     const fiche = equipement(equipementId);
-    if (fiche) {
-      return {
-        consignation: consignationDe(fiche),
-        equipements: [{ equipementId, repere: texte(fiche.repere) }],
-        phrase: PHRASE_SAVOIR_FAIRE,
-      };
-    }
     const articleId = texte(cible.article_id);
-    const equipements = articleId && Donnees.trouver('articles', articleId)
+    const premieres = fiche ? [{ equipementId, repere: texte(fiche.repere) }] : (articleId && Donnees.trouver('articles', articleId)
       ? montageDe(articleId, consommationsDe(articleId)).map((monte) => ({ equipementId: monte.equipementId, repere: monte.repere }))
-      : [];
+      : []);
+    const equipements = premieres.concat(machinesLiees(ligne)
+      .filter((liee) => !premieres.some((machine) => machine.equipementId === liee.equipementId)));
+    if (fiche && equipements.length === 1) {
+      return { consignation: consignationDe(fiche), equipements, phrase: PHRASE_SAVOIR_FAIRE };
+    }
     return { consignation: null, equipements, phrase: PHRASE_SAVOIR_FAIRE };
   }
 
@@ -481,12 +493,21 @@ Object.assign(Wiki, (() => {
     return article ? { type: 'article', id: article.articleId, titre: article.titre, lien: article.lien } : null;
   }
 
-  /** Savoir-faire actifs rattachés à une machine ou à un article, sans les sous-pages (que leur mère liste) ; par titre. */
+  /**
+   * Savoir-faire actifs d'une machine ou d'un article, sans les sous-pages (que leur mère liste) ; par titre : ceux qui y
+   * sont rattachés et ceux dont le champ `liens` (le leur, ou celui de l'une de leurs sous-pages) désigne l'entité ou la
+   * ligne de son texte (D116), une fois chacun.
+   */
   function savoirFaireDe(ctx, type, id) {
+    const texteAncre = type === 'machine' ? Wiki.interne.ligneAncree(ctx, 'équipement', 'equipement_id', id)
+      : Wiki.interne.ligneAncree(ctx, 'composant', 'article_id', id);
+    const cibles = [id, texteAncre ? texte(texteAncre.id) : ''].filter(Boolean);
+    const lies = new Set(ctx.pagesActives.filter((ligne) => texte(ligne.type) === 'savoir-faire'
+      && liensDe(ligne).some((lien) => cibles.includes(lien))).map((ligne) => texte((ligneMere(ligne) || ligne).id)));
     return ctx.pagesActives.filter((ligne) => texte(ligne.type) === 'savoir-faire' && !ligneMere(ligne))
       .filter((ligne) => {
         const rattachement = rattachementDe(ligne);
-        return rattachement !== null && rattachement.type === type && rattachement.id === id;
+        return (rattachement !== null && rattachement.type === type && rattachement.id === id) || lies.has(texte(ligne.id));
       })
       .map((ligne) => ({ id: texte(ligne.id), titre: texte(ligne.titre), lien: texte(ligne.id) }))
       .sort(Wiki.interne.parTitre('id'));

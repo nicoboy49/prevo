@@ -520,6 +520,16 @@ class TestReglesPures(CasNavigateur):
         message = resultat["message"]
         self.assertIn("=== Page « PO-02 — Pompe (A) » (équipement · En bref : 1 phrase sur 5, 1 mot sur 120 · Astuces : "
                       "0 phrase sur 10) ===", message)
+        # Une rubrique réécrite en entier (D117, `reecrite` vrai : « En bref ») le dit à la fin de sa longueur ; seulement si
+        # `reecrite` est vrai.
+        reecrite = self.page.evaluate("""() => [true, 'oui', false].map((reecrite) => Ia.PROMPTS.ingestionWiki.utilisateur({
+          ot: { id: 'OT-2026-0001' }, catalogue: [], pages: [{ titre: 'PO-02 — Pompe', type: 'équipement', texte: '', otDates: [],
+            longueurs: [{ rubrique: 'En bref', phrases: 2, mots: 34, phrasesMax: 3, motsMax: 60, reecrite }] }] })
+          .split('\\n').find((l) => l.startsWith('=== Page')))""")
+        self.assertEqual(reecrite, [
+            "=== Page « PO-02 — Pompe » (équipement · En bref : 2 phrases sur 3, 34 mots sur 60, à réécrire en entier) ===",
+            "=== Page « PO-02 — Pompe » (équipement · En bref : 2 phrases sur 3, 34 mots sur 60) ===",
+            "=== Page « PO-02 — Pompe » (équipement · En bref : 2 phrases sur 3, 34 mots sur 60) ==="])
         self.assertIn("=== Page « Kit (B) » (composant) ===\n(page vide)", message)
         self.assertIn("=== Page « Changer la garniture (A) » (savoir-faire · 1 phrase sur 30, 2 mots sur 600) ===", message)
         self.assertIn("=== Page « Changer la garniture (A) — dépose » (savoir-faire · sous-page de « Changer la garniture (A) » "
@@ -561,13 +571,16 @@ class TestReglesPures(CasNavigateur):
                         "« À quoi il sert » de chaque article consommé (type « composant ») : l'OT ne donne que sa désignation "
                         "et sa référence ; écris seulement ce que les OT observent de lui",
                         "jamais où ni quand il a été changé, ni la panne qu'il a réglée (Prévo les calcule)",
-                        "les savoir-faire : une méthode de plusieurs gestes, réutilisable sur cette machine ou avec cet article",
+                        "les savoir-faire : une méthode de plusieurs gestes, un seul par geste, commun aux machines",
+                        # T141 (D116) : complété, jamais recréé ; T142 (D117) : « En bref » réécrit en entier
+                        "Un geste qui a déjà son savoir-faire ne se recrée jamais : reçu, complète-le",
+                        "réécrite en entier à chaque OT (jamais une phrase ajoutée à la suite)",
                         "Une astuce s'écrit à un seul endroit : dans « Astuces » ou dans un savoir-faire (créé ou complété), "
                         "jamais aux deux ni dans « À quoi il sert »",
                         # T140 : la règle des nombres est celle du contrôle (OT à intégrer, texte d'avant de la page écrite)
                         "aucun nombre qui ne figure pas dans l'OT à intégrer ou dans le texte actuel de la page que tu écris",
                         "rubriques permises : équipement « En bref », « Astuces » ; composant « À quoi il sert » ; savoir-faire "
-                        "« Quand le faire », « Étapes », « Pièces et outillage », « Pièges »",
+                        "« Quand le faire », « Étapes », « Pièces et outillage », « Pièges », « Particularités par machine »",
                         '"type": "savoir-faire", "rattache_a": "…"'):
             self.assertIn(attendu, systeme)
         self.assertNotRegex(systeme, r"\bmodes?\b")
@@ -585,8 +598,9 @@ class TestReglesPures(CasNavigateur):
                          (["creer"], ["savoir-faire"]))
         rubrique = lambda forme: forme["properties"]["rubriques"]["items"]["properties"]["rubrique"]["enum"]  # noqa: E731
         self.assertEqual(rubrique(modifier), ["En bref", "Astuces", "À quoi il sert", "Quand le faire", "Étapes",
-                                              "Pièces et outillage", "Pièges"])
-        self.assertEqual(rubrique(creer), ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges"])
+                                              "Pièces et outillage", "Pièges", "Particularités par machine"])
+        self.assertEqual(rubrique(creer), ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges",
+                                           "Particularités par machine"])
         phrases = creer["properties"]["rubriques"]["items"]["properties"]["phrases"]["items"]
         self.assertEqual(phrases["properties"]["ot"]["items"]["enum"], ["OT-2026-0001", "OT-2026-0007"])
 

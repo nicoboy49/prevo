@@ -8,16 +8,21 @@ const Wiki = (() => {
 
   // Rubriques des textes rédigés, par type (§20.4 ; refonte 2, D96 révisée 2, §20.12), dans l'ordre où elles
   // s'écrivent : le texte d'une machine (« En bref », « Astuces »), celui d'un article (« À quoi il sert ») et les
-  // savoir-faire. Le type « mode » est retiré (une panne est une page calculée) : il n'a plus de rubrique.
+  // savoir-faire, communs aux machines (D116 : « Particularités par machine », une phrase par machine, avec son lien,
+  // pour ce qui change d'une machine à l'autre). Le type « mode » est retiré (une panne est une page calculée).
   const RUBRIQUES = Object.freeze({
     'équipement': Object.freeze(['En bref', 'Astuces']),
     'composant': Object.freeze(['À quoi il sert']),
-    'savoir-faire': Object.freeze(['Quand le faire', 'Étapes', 'Pièces et outillage', 'Pièges']),
+    'savoir-faire': Object.freeze(['Quand le faire', 'Étapes', 'Pièces et outillage', 'Pièges', 'Particularités par machine']),
   });
 
-  // Longueurs des textes rédigés (D100 révisée 2, §20.12 ; réponse 2 de Nicolas du 2026-10-23), par type, lues par
-  // les contrôles (wiki-texte.js) et par l'en-tête des textes envoyés à l'IA. Les mots se comptent comme
-  // Wiki.mesurerTexte : mots des phrases, citations exclues (liens comptés comme leur titre).
+  // Rubriques réécrites en entier à chaque OT (D117) : le non-retrait (D106) ne s'y applique pas, toutes leurs phrases
+  // sont contrôlées comme nouvelles (wiki-texte.js) et l'en-tête de leurs longueurs le dit (wiki-ingestion.js).
+  const RUBRIQUES_REECRITES = Object.freeze({ 'équipement': Object.freeze(['En bref']) });
+
+  // Longueurs des textes rédigés (D100 révisée 2, §20.12 ; réponse 2 de Nicolas du 2026-10-23 ; « En bref » : D100
+  // révisée 3, D117), par type, lues par les contrôles (wiki-texte.js) et par l'en-tête des textes envoyés à l'IA. Les
+  // mots se comptent comme Wiki.mesurerTexte : mots des phrases, citations exclues (liens comptés comme leur titre).
   //  - rubriques[<rubrique>] = { phrases, mots } au plus pour une rubrique d'un texte d'équipement ou de composant :
   //    ses phrases, et les mots de ses phrases sans le nom de la rubrique (Wiki.mesurerRubriques) ; mots null : pas de
   //    limite de mots ;
@@ -25,7 +30,7 @@ const Wiki = (() => {
   //    découpé en sous-pages au-delà (§20.4) ; null pour un texte limité rubrique par rubrique.
   const LIMITES = Object.freeze({
     'équipement': Object.freeze({ page: null, rubriques: Object.freeze({
-      'En bref': Object.freeze({ phrases: 5, mots: 120 }),
+      'En bref': Object.freeze({ phrases: 3, mots: 60 }),
       'Astuces': Object.freeze({ phrases: 10, mots: null }),
     }) }),
     'composant': Object.freeze({ page: null, rubriques: Object.freeze({
@@ -137,7 +142,7 @@ const Wiki = (() => {
   }
 
   return {
-    SEUILS, RUBRIQUES, LIMITES, VOCABULAIRE_SECURITE, VOCABULAIRE_NOUVEAUTE, MESSAGE_SECURITE_IA, MESSAGE_SECURITE_MAIN,
+    SEUILS, RUBRIQUES, RUBRIQUES_REECRITES, LIMITES, VOCABULAIRE_SECURITE, VOCABULAIRE_NOUVEAUTE, MESSAGE_SECURITE_IA, MESSAGE_SECURITE_MAIN,
     comparable, citations, sansCitations, nombreDeMots, termesDeSecurite,
   };
 })();

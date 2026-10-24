@@ -2659,7 +2659,10 @@ Version de clôture `v1.2.0`.
   - équipement : « Ce qui revient », « Ce qui a réglé le problème », « À surveiller », « Astuces » ;
   - composant : « Défaillances », « Signes d'usure », « Montage et remplacement », « Équivalences » ;
   - mode : « Symptômes », « Causes », « Remèdes », « Équipements concernés » ;
-  - savoir-faire : « Quand le faire », « Étapes », « Pièces et outillage », « Pièges ».
+  - savoir-faire : « Quand le faire », « Étapes », « Pièces et outillage », « Pièges », « Particularités par machine »
+    (D116, T141 : une phrase par machine, avec son lien `[[repère — nom]]`, pour ce qui change pour elle).
+  Rubrique **réécrite en entier** à chaque OT (D117, T142) : `Wiki.RUBRIQUES_REECRITES` = `{ équipement: ['En bref'] }`
+  (§20.6 : hors du non-retrait).
 - `Wiki.lireTexte(texte)` → `{ rubriques: [{ nom, phrases: [{ texte, ot, liens }] }], erreurs }` ;
   `Wiki.ecrireTexte(rubriques, type)` → le balisage. Affichage par `textContent` (liens et OT cités en
   éléments construits), jamais en HTML.
@@ -2694,7 +2697,7 @@ Version de clôture `v1.2.0`.
   depuis la page de l'équipement, et **les sous-pages de chacune de ces pages, juste après leur mère**
   (2026-10-23) ; `envoyees` = ces pages (texte de l'état proposé, vide si aucun), dans cet ordre de priorité,
   `pagesEnvoyeesMax` au plus. Dans l'état proposé, une sous-page a `rattacheA` = la clé de sa mère et ni
-  `equipementId` ni `articleId`.
+  `equipementId` ni `articleId`. Savoir-faire communs (D116, T141) : voir §20.12.
 - **Antériorité** (D111) : `anterieure` = la date d'intervention de l'OT est plus ancienne que celle d'au
   moins un OT cité dans ses pages envoyées (état proposé).
 - **Données** `Wiki.donneesIngestion(otId, etat)` (liste blanche, CS99) : `{ ot: { id, dateIntervention, type,
@@ -2709,7 +2712,7 @@ Version de clôture `v1.2.0`.
   règles communes ; tâche : intégrer cet OT aux pages fournies — modifier une page envoyée en rendant son
   texte complet, ou créer au plus `pagesCreeesMax` pages (mode, savoir-faire, composant sans article) ;
   chaque phrase cite au moins un OT (cet OT ou un OT déjà cité dans les pages) ; ne jamais retirer une
-  phrase ni un OT cité (une phrase reformulée garde tous ses OT) ; ce qui contredit une phrase existante va
+  phrase ni un OT cité (une phrase reformulée garde tous ses OT), hors « En bref », réécrit en entier (D117, §20.12) ; ce qui contredit une phrase existante va
   dans `contradictions`, la phrase reste ; aucune date, aucun nombre absent de l'OT à intégrer ou du texte
   actuel de la page écrite (§20.6) ; aucune fréquence ni aucun comptage ; jamais « cause certaine » ; **les pages savoir-faire s'écrivent d'abord à partir
   de l'astuce** ; aucune consigne de sécurité ; si `anterieure` : « intervention antérieure à des faits déjà
@@ -2745,7 +2748,8 @@ Version de clôture `v1.2.0`.
   « rien à ajouter » → statut du même nom ; refusée → **relance avec la raison** (une fois) : acceptée → « à
   valider », `essais` 2, `raisons` = celles du premier refus ; encore refusée → « refusée » avec les `raisons`
   du second refus, `essais` 2 ; collision
-  (page libre créée entre-temps, D112) → « en file » à nouveau, `motif` « rejoué : page créée entre-temps » ;
+  (page libre créée entre-temps, D112) → « en file » à nouveau, `motif` « rejoué : page créée entre-temps » ; savoir-faire
+  créé pendant l'envoi et concerné sur le nouvel état (D116) → de même, `motif` « rejoué : pages changées pendant l'envoi » ;
   IA injoignable → arrêt, l'OT reste « en file ».
 
 ### 20.6 Contrôles d'une proposition (`wiki-texte.js`, D97, D106, D111)
@@ -2759,7 +2763,12 @@ page. Refus si :
   pas par « <repère de l'équipement de la mère, ou titre de la mère> — » suivi d'un sujet ;
 - citations : phrase sans OT ; OT cité hors des OT permis ;
 - **non-retrait** : un OT cité avant disparaît de la page ; une phrase existante n'est ni identique ni
-  **reprise** (une phrase nouvelle la reprend si elle cite tous ses OT) ;
+  **reprise** (une phrase nouvelle la reprend si elle cite tous ses OT) ; **sauf dans une rubrique réécrite en entier**
+  (D117, T142, `Wiki.RUBRIQUES_REECRITES` : « En bref ») : ses phrases et ses OT d'avant peuvent partir, et ses phrases
+  d'après ne gardent pas celles d'une autre rubrique du type (une phrase d'« Astuces » passée dans « En bref » est
+  retirée) ; une phrase d'une ancienne rubrique (hors du type) peut s'y réécrire ; **toutes** ses phrases sont contrôlées
+  comme nouvelles (citations, nombres, comptage, dates, nouveauté, sécurité, liens, longueurs) ; une contradiction peut
+  viser l'une de ses phrases ;
 - **nombres** : un nombre (chiffres, virgule ou point) d'une phrase nouvelle ou reprise, ou du titre d'une page
   créée, absent du texte de référence — le texte de l'OT ingéré (tous les champs envoyés, sauf sa date) et le texte
   précédent de la page (rien pour une page créée ; le texte et le titre de sa mère pour une sous-page créée) ; les
@@ -2784,7 +2793,8 @@ page. Refus si :
 
 Une page que l'IA renvoie inchangée n'est pas contrôlée : `Wiki.lireIngestion` la retire avant (§20.5, lecture).
 
-Écriture à la main (`contexte.manuel`) : mêmes contrôles, sauf le non-retrait ; les OT permis sont tous les
+Écriture à la main (`contexte.manuel`) : mêmes contrôles, sauf le non-retrait (rubrique réécrite comprise : rien ne change,
+une phrase gardée telle quelle n'est pas recontrôlée) ; les OT permis sont tous les
 OT clôturés ; pour les nombres, le texte de référence est celui des OT cités, plus le texte précédent de la page
 (et, pour une sous-page, le texte et le titre de sa mère).
 
@@ -2893,8 +2903,22 @@ le document de chaque OT clôturé ; les **pages validées** (titre et texte, `t
   imprévu). Chaque proposition acceptée est validée au nom du responsable fictif, sauf si sa date d'intervention
   est dans les `demoAValiderJours` derniers jours (laissée « à valider »), et sauf si elle dépend d'une proposition
   laissée (laissée aussi : `Wiki.valider` la refuserait avant elle) ; une réponse refusée est relancée avec la
-  raison, comme chez un client (§20.5) : **un agent neuf de plus**, tracé dans la même trace ; **une relance
-  refusée arrête la fabrication** : défaut de la fonction, corrigé dans le code, puis la fabrication reprend.
+  raison, comme chez un client (§20.5) : **un agent neuf de plus**, tracé dans la même trace ; une relance encore
+  refusée **n'arrête plus la fabrication** (D119) : l'OT reste « refusée » au journal, la fabrication continue et le
+  bilan le compte.
+  **Garde-fous** (D119, T144) : `fabriquer --budget D` (dollars ; absent : aucun plafond) compte les appels réels de
+  cette commande (`cout_usd` des traces ; une réponse reprise des traces est gratuite) : avant chaque agent (relance
+  comprise), si le coût dépensé plus le coût prévu des appels en cours et de celui-ci dépasserait D, aucun nouvel
+  agent n'est lancé (coût prévu : l'appel le plus cher déjà fait, sinon 0,05 $) ; code retour 3, « ARRÊT : budget
+  atteint — X $ dépensés sur Y $ ; N OT traités, M restants ». `--refus-max P` (défaut 10 ; 0 : aucun seuil) : chaque
+  réponse lue par Prévo (`Ia.lireReponse`, première comme relance) est comptée ; à partir de 20 réponses, plus de P %
+  de réponses refusées → aucun nouvel agent ; code retour 4, avec les raisons de refus regroupées. Dans les deux cas,
+  les appels en cours finissent, les validations de fin se font sur ce qui a été traité, et les tables du wiki et
+  `bilan.json` sont écrits ; les OT restants restent « en file » ; relancer la même commande reprend sans coût les
+  réponses obtenues ; un temps 1 arrêté n'écrit ni `temps-1.json` ni `etat-avant-validation/`. **Bilan** de toute
+  fabrication (affiché et `bilan.json`) : coût, coût par OT, réponses refusées et leur part, relances, OT refusés,
+  causes ; après `--limite` : extrapolation = coût par OT × OT restants × `FACTEUR_CROISSANCE_SUITE` (1,578, passe 6).
+  `verifier` compte et signale les OT refusés du journal figé, en échec au-delà de `--refus-max` %.
   **En deux temps** (D115, T122) : `--limite N` (temps 1 : les N premiers OT par date d'intervention) écrit, dans
   `.chantier/wiki-demo/temps-1/` par défaut, son résultat validé, `etat-avant-validation/` (tables du wiki après le
   traitement, avant les validations), `temps-1.json` (OT intégrés, empreinte des données de la démo et de la
@@ -2938,7 +2962,8 @@ reçues, et sur demande une réponse piégée par motif du §20.6.
 ### 20.12 Refonte 2 — l'encyclopédie de l'atelier (CDC D113 à D115, validés par Nicolas le 2026-10-23)
 Écrite avant le code de la refonte 2, d'après la maquette validée (`.chantier/maquette-wiki/`). Elle **prime** sur
 §20.1 à §20.11 là où elle diffère ; ce qu'elle ne dit pas reste valable (journal, validation, contradictions,
-relance, parallélisme, contrôles des citations, des nombres, des dates et de la sécurité).
+relance, parallélisme, contrôles des citations, des nombres, des dates et de la sécurité). Corrections de Nicolas après
+le temps 1 (2026-10-24) : **D116** savoir-faire communs (T141) et **D117** « En bref » réécrit (T142), intégrées ci-dessous.
 
 - **Modules** : deux modules nouveaux, chargés dans cet ordre avec les autres (`ORDRE_MODULES`, `index.html`,
   listes de scripts des outils et des tests qui chargent le wiki) : `wiki-entites.js` (après `wiki-calculs.js` :
@@ -2948,28 +2973,40 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
   « Références », fiche) puis `wiki-sections-ecrans.js` (sections calculées de chaque type), tous deux avant
   `wiki-entites-ecrans.js`. 700 lignes au plus par fichier, comme partout.
 - **Textes rédigés** (D96 révisée 2, D100 révisée 2) : `wiki_pages` ne garde que trois types —
-  - `équipement` (texte de la machine, ancré sur `equipement_id`) : rubriques « En bref » (**5 phrases et 120 mots**
-    au plus) et « Astuces » (**10 phrases**) ;
+  - `équipement` (texte de la machine, ancré sur `equipement_id`) : rubriques « En bref » (**3 phrases et 60 mots** au
+    plus, D117 : réécrit en entier à chaque OT, §20.6 ; avant : 5 et 120) et « Astuces » (**10 phrases**) ;
   - `composant` (texte de l'article, ancré sur `article_id`) : rubrique « À quoi il sert » (**3 phrases et 80 mots**) ;
-  - `savoir-faire` : rubriques inchangées (« Quand le faire », « Étapes », « Pièces et outillage », « Pièges »),
-    **30 phrases et 600 mots**, sous-pages au-delà (§20.4) — **les seules sous-pages** ;
+  - `savoir-faire` : « Quand le faire », « Étapes », « Pièces et outillage », « Pièges », « Particularités par machine »
+    (D116), **30 phrases et 600 mots**, sous-pages au-delà (§20.4) — **les seules sous-pages** ; **un seul par geste**,
+    commun aux machines (D116, T141) ;
   - `mode` disparaît (choix du schéma, `Wiki.RUBRIQUES`, consigne, contrôles, écrans) : une panne est calculée.
   Les limites sont des constantes nommées par type et par rubrique (`Wiki.LIMITES`), lues par les contrôles
   (§20.6 : « <rubrique> : N phrases, P au plus ») et par l'en-tête des pages envoyées. Un composant libre (sans
   article) ne se crée plus ; seul un savoir-faire se crée (`pagesCreeesMax` 3).
-- **Pages concernées** d'un OT (D112 révisée) : `EQ:<sa machine>`, `ART:<chaque article consommé>`, les
-  savoir-faire rattachés à cette machine ou à ces articles et leurs sous-pages ; plus de clé `CAUSE:`, plus de pages
-  liées depuis la machine ; 8 envoyées au plus.
+- **Pages concernées** d'un OT (D112 révisée ; D116, T141) : `EQ:<sa machine>`, `ART:<chaque article consommé>`, les
+  savoir-faire rattachés à cette machine puis à ces articles, ceux dont le texte a un lien vers la machine (titres résolus
+  dans l'état proposé ; le lien d'une sous-page amène sa mère), ceux **du même geste** (`Wiki.memeGeste`, `wiki-texte.js` :
+  au moins 2 mots du titre et 60 % de ses mots — mots de la recherche, `Wiki.motsRecherche` — dans le titre, le remède, le
+  travail, le compte rendu et l'astuce de l'OT ; 2 au plus, plus grande part puis titre), puis ceux dont le texte a un lien
+  vers ses articles ; chacun suivi de ses sous-pages ; plus de clé `CAUSE:`, plus de pages liées depuis la machine ; 8
+  envoyées au plus, toutes les clés réservées. Un savoir-faire créé pendant l'envoi et concerné sur le nouvel état fait
+  rejouer l'OT (motif « rejoué : pages changées pendant l'envoi », §20.5). Limite connue : un OT parti en même temps qu'un
+  autre qui crée le même geste ne le voit pas s'il finit le premier (le contrôle « titre trop proche » reste la défense).
 - **Consigne `ingestionWiki`** : l'IA met à jour seulement « En bref » (ce qu'il faut savoir d'abord de cette
-  machine : ses pannes et ce qui les a réglées), « Astuces » (une astuce courte d'un OT, en une phrase qui dit l'ordre
+  machine : ses pannes et ce qui les a réglées ; D117, T142 : une synthèse **réécrite en entier** à chaque OT, jamais une
+  phrase ajoutée à la suite, chaque phrase avec les OT qui la fondent ; l'en-tête de ses longueurs le dit : « …, à réécrire
+  en entier » ; « garde toutes ses phrases » et la rubrique pleine valent hors « En bref »), « Astuces » (une astuce courte d'un OT, en une phrase qui dit l'ordre
   des vérifications ou le geste, sans adverbe de fréquence : ni « toujours », ni « plus vite »),
   « À quoi il sert » de chaque article consommé — seulement ce que les OT observent de lui (son rôle sur la machine
   si l'OT le dit, ses signes d'usure ou de casse, ce qui l'use, comment il se monte ou se change), jamais où ni quand
   il a été changé, ni la panne qu'il a réglée, ni un rôle supposé ; sinon la page n'est pas renvoyée (une page
   concernée non renvoyée reste inchangée ; renvoyée inchangée, elle compte comme non renvoyée, §20.5) —, et crée ou
   modifie des savoir-faire (d'abord à partir de l'astuce, D110 ; créé seulement avec au moins deux gestes que
-  l'astuce ou le compte rendu décrivent, le travail demandé seul ne suffit pas ; titre = le geste et le repère de la
-  machine, ou l'article) ; une astuce à un seul endroit (« Astuces » ou un savoir-faire, jamais aux deux ni dans
+  l'astuce ou le compte rendu décrivent, le travail demandé seul ne suffit pas ; D116, T141 : un seul par geste, commun
+  aux machines, titre = le geste et l'organe **sans repère** ; reçu, il se complète — sa phrase de « Particularités par
+  machine » pour cette machine, ses étapes —, jamais recréé ; au catalogue seulement, un lien `[[titre]]` suffit ; créé,
+  il relie ses machines dans « Particularités par machine » et ses articles dans « Pièces et outillage » ; `rattache_a` :
+  l'article principal du geste s'il y en a un, sinon la machine) ; une astuce à un seul endroit (« Astuces » ou un savoir-faire, jamais aux deux ni dans
   « À quoi il sert ») ; une synthèse, pas un historique ; les longueurs de l'en-tête de chaque texte — rubrique
   pleine : ajouter l'OT à la phrase qu'il confirme, regrouper deux phrases en gardant tous leurs OT, ou n'y rien
   écrire ; relevés d'un contrôle de routine non écrits sauf si l'OT les dit anormaux ou s'ils expliquent la panne ;
@@ -3014,7 +3051,13 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
     y ont pointé du temps : « Techniciens » s'ils sont plusieurs) ;
     « Cité dans le wiki » (pages dont un texte cite l'OT) ; `ficheOT` = `#/ot/<id>`.
   - **Savoir-faire** : inchangé (§20.3, en-tête de consignation ; une sous-page de savoir-faire reprend celui de
-    sa mère).
+    sa mère) ; D116 (T141) : commun à plusieurs machines (sa machine de rattachement et les machines liées par son champ
+    `liens` : EQ-…, ou ligne du texte d'une machine), son en-tête est la liste de ces machines, celle du rattachement
+    d'abord, chacune avec un lien vers sa page où est sa consignation, sans consignation recopiée (« Ce savoir-faire sert
+    sur ces machines ») ; rattaché à un article : où il est monté, puis les machines liées.
+  - **Section « Savoir-faire »** d'une machine et d'un article (D116, T141) : les savoir-faire rattachés **et** ceux dont
+    le champ `liens` (le leur, ou celui d'une de leurs sous-pages) désigne l'entité ou la ligne de son texte ; une fois
+    chacun, sans sous-page, par titre.
   - **Ordre des interventions** dans toutes les listes (D113, réponse 5) : d'abord les OT **ouverts** (Créé,
     Planifié, Préparé, En cours, En attente : « En cours » d'abord, puis par date prévue), puis les autres (clôturés,
     annulés) du plus récent au plus ancien ; chaque ligne porte son statut.
@@ -3058,10 +3101,12 @@ relance, parallélisme, contrôles des citations, des nombres, des dates et de l
   temps** (`.chantier/wiki-demo/temps-1/estimation.md`). `generer_demo.py` ne reprend le wiki figé que pour la démo
   standard (une autre durée d'historique ou le jeu de charge → tables du wiki vides, avec un message) ;
   `js/demo-donnees.js` reste sous 1 Mo (CS105 : chargement rapide ; tables du wiki écrites par morceaux, arrêt
-  au-delà, §20.10).
+  au-delà, §20.10). Nuit du 2026-10-24 (D119) : chaque commande reçoit `--budget` = ce qui reste des 15 $ (moins une
+  marge de 0,25 $), et `--refus-max 10` (§20.10).
 - **Tests** : `test_wiki_entites.py` (faits des six pages contre `calcul_wiki.py`, ordre des interventions,
   visibilité, références) ; `test_wiki_ecrans.py` réécrit pour l'accueil, les listes et les pages (profils, liens,
   petits numéros, 1440 et 375 px, affichage en moins de 500 ms sur le jeu de charge) ; les tests des textes rédigés suivent les nouveaux types et limites ;
   `test_wiki_demo.py` : fabrication en deux temps (même wiki qu'un seul tenant, aucun appel pour le temps 1, refus de
-  la suite), relecture de la refonte 2 ; `test_demo.py` : wiki figé de la seule démo standard, `js/demo-donnees.js`
+  la suite), relecture de la refonte 2, garde-fous (budget atteint, appels en cours et relances comptés, reprises
+  gratuites, plus de 10 % de réponses refusées, refus isolé, extrapolation) ; `test_demo.py` : wiki figé de la seule démo standard, `js/demo-donnees.js`
   sous 1 Mo avec un wiki complet.

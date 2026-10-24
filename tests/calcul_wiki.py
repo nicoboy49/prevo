@@ -63,7 +63,10 @@ et Wiki.references(textes, aTrancher) :
     retours        (T137, « Pages qui renvoient ici ») d'une machine, d'un article, d'un savoir-faire ou d'une panne :
                    pages actives dont le champ liens (« ; ») désigne l'entité ou la ligne de son texte, rendues sous leur
                    page (texte d'une machine ou d'un article qui existe : la machine, l'article ; savoir-faire : lui-même ;
-                   les autres n'ont plus de page), sans la page elle-même ni doublon, par titre puis identifiant.
+                   les autres n'ont plus de page), sans la page elle-même ni doublon, par titre puis identifiant ;
+    savoir-faire   d'une machine ou d'un article (D116, T141) : rattachés à elle, ou dont le champ liens (le leur ou celui
+                   d'une de leurs sous-pages) désigne l'entité ou la ligne de son texte ; sans les sous-pages, une fois
+                   chacun, par titre puis identifiant.
 Les en-têtes, mères et sous-pages d'un savoir-faire sont ceux de Wiki.page (testés par test_wiki_calculs.py) : le
 calcul ne les refait pas.
 """
@@ -119,7 +122,7 @@ HORIZON_HABILITATION_JOURS = 60            # « à renouveler » : brief RG8 (mo
 MACHINES_ACCUEIL = 3
 PANNES_ACCUEIL = 6                         # pannes les plus fréquentes de l'accueil (maquette)
 RUBRIQUES = {"équipement": ["En bref", "Astuces"], "composant": ["À quoi il sert"],
-             "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges"]}
+             "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges", "Particularités par machine"]}
 MOTIF_CITATION = re.compile(r"\[(OT-\d{4}-\d{4,})\]")
 
 FORMES_A_PROTEGER = [re.compile(motif) for motif in (
@@ -734,12 +737,22 @@ class CalculWiki:
         return None
 
     def savoir_faire_de(self, type_, entite_id):
+        """Savoir-faire (sans les sous-pages) rattachés à l'entité, ou dont le champ liens — le leur ou celui de l'une de
+        leurs sous-pages — désigne l'entité ou la ligne de son texte (D116, T141), une fois chacun, par titre."""
+        ancre = (self.texte_ancre("équipement", "equipement_id", entite_id) if type_ == "machine"
+                 else self.texte_ancre("composant", "article_id", entite_id))
+        cibles = {entite_id} | ({ancre["id"]} if ancre is not None else set())
+        lies = set()
+        for ligne in self.index()["actives"]:
+            liens = {x.strip() for x in (ligne.get("liens") or "").split(";") if x.strip()}
+            if val(ligne, "type") == "savoir-faire" and cibles & liens:
+                lies.add((self.mere(ligne) or ligne)["id"])
         trouves = []
         for ligne in self.index()["actives"]:
             if val(ligne, "type") != "savoir-faire" or self.mere(ligne) is not None:
                 continue
             r = self.rattachement(ligne)
-            if r is not None and r["type"] == type_ and r["id"] == entite_id:
+            if (r is not None and r["type"] == type_ and r["id"] == entite_id) or ligne["id"] in lies:
                 trouves.append({"id": ligne["id"], "titre": val(ligne, "titre"), "lien": ligne["id"]})
         return sorted(trouves, key=lambda s: (s["titre"], s["id"]))
 

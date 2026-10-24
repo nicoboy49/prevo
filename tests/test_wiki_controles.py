@@ -14,10 +14,17 @@ ARCHITECTURE.md §20.4, §20.6, §20.12 ; D96 et D100 révisées 2, D97, D106, D
                   modifiée « absent de l'OT intégré et du texte d'avant de cette page », page créée « … seule source des
                   nombres d'une page créée » (même cité, l'OT d'une autre page reçue n'en donne pas), sous-page « … du
                   texte et du titre de sa page mère », à la main « absent des OT cités » ;
-    refonte 2   : chaque rubrique à sa limite (5/6 phrases et 120/121 mots pour « En bref », 10/11 phrases pour
+    refonte 2   : chaque rubrique à sa limite (3/4 phrases et 60/61 mots pour « En bref », D117 ; 10/11 phrases pour
                   « Astuces », 3/4 phrases et 80/81 mots pour « À quoi il sert », 30/31 phrases et 600/601 mots pour un
                   savoir-faire) ; seul un savoir-faire se crée (équipement, composant libre, mode refusés ; type mode
-                  inconnu, même modifié) ; sous-pages pour les savoir-faire seulement.
+                  inconnu, même modifié) ; sous-pages pour les savoir-faire seulement ;
+    T141 (D116) : rubrique « Particularités par machine » d'un savoir-faire commun (liens vers ses machines et ses
+                  articles) ; Wiki.memeGeste (mots du titre dans le texte de l'OT : au moins 2 et 60 %, 2 pages au plus,
+                  ordre déterministe) ;
+    T142 (D117) : « En bref » réécrit en entier — ses phrases et ses OT d'avant peuvent partir, une ancienne rubrique
+                  peut s'y réécrire, une contradiction peut viser l'une de ses phrases ; toutes ses phrases contrôlées
+                  comme nouvelles (citations, comptage, dates) ; « Astuces » garde le non-retrait (même une phrase passée
+                  dans « En bref » est retirée) ; à la main, rien ne change.
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_wiki_controles.py" -v
@@ -75,10 +82,10 @@ VALABLE = {
 RUBRIQUES = {
     "équipement": ["En bref", "Astuces"],
     "composant": ["À quoi il sert"],
-    "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges"],
+    "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges", "Particularités par machine"],
 }
 LIMITES = {
-    "équipement": {"page": None, "rubriques": {"En bref": {"phrases": 5, "mots": 120}, "Astuces": {"phrases": 10, "mots": None}}},
+    "équipement": {"page": None, "rubriques": {"En bref": {"phrases": 3, "mots": 60}, "Astuces": {"phrases": 10, "mots": None}}},
     "composant": {"page": None, "rubriques": {"À quoi il sert": {"phrases": 3, "mots": 80}}},
     "savoir-faire": {"page": {"phrases": 30, "mots": 600}, "rubriques": {}},
 }
@@ -119,6 +126,16 @@ TOUR = "CN-01 — Tour à commande numérique"
 CONTEXTE_TEXTES = copy.deepcopy(CONTEXTE)
 CONTEXTE_TEXTES["pagesEnvoyees"].append({"titre": TOUR, "type": "équipement", "texte": "", "otDates": []})
 CONTEXTE_TEXTES["catalogue"].append({"titre": TOUR, "type": "équipement"})
+# « En bref » réécrit en entier (D117, T142) : ses deux phrases d'avant et leurs OT (0010, 0020) remplacés par une
+# synthèse de l'OT ingéré ; « Astuces » garde le non-retrait (D106).
+EN_BREF_REECRIT = "## En bref\n- Accouplement désaligné de 0,4 mm, réaligné [OT-2026-0042]"
+ASTUCES_AVANT = ("## Astuces\n"
+                 "- Repérer l'accouplement avant la dépose [OT-2026-0010] [OT-2026-0020]\n"
+                 "- Graisser le palier avant le remontage [OT-2026-0010]")
+ASTUCES_APRES = (EN_BREF_REECRIT + "\n" + ASTUCES_AVANT + "\n"
+                 "- Contrôler l'alignement au comparateur avant de remonter la garniture [OT-2026-0042]")
+CONTEXTE_ASTUCES = copy.deepcopy(CONTEXTE)
+CONTEXTE_ASTUCES["pagesEnvoyees"][0]["texte"] = AVANT + "\n" + ASTUCES_AVANT
 
 
 def decoupe(titre=SOUS_PAGE):
@@ -218,6 +235,10 @@ class TestVocabulaireDeSecurite(CasControles):
         self.assertEqual(self.page.evaluate("Wiki.RUBRIQUES"), RUBRIQUES)                 # plus de type « mode »
         self.assertEqual(self.page.evaluate("Wiki.LIMITES"), LIMITES)
         self.assertTrue(self.page.evaluate("Object.isFrozen(Wiki.RUBRIQUES) && Object.isFrozen(Wiki.VOCABULAIRE_NOUVEAUTE)"))
+        # D117 : « En bref », seule rubrique réécrite en entier (gelée).
+        self.assertEqual(self.page.evaluate("Wiki.RUBRIQUES_REECRITES"), {"équipement": ["En bref"]})
+        self.assertTrue(self.page.evaluate("Object.isFrozen(Wiki.RUBRIQUES_REECRITES) "
+                                           "&& Object.isFrozen(Wiki.RUBRIQUES_REECRITES['équipement'])"))
         # LIMITES gelée à tous les niveaux ; une limite par rubrique rédigée d'un équipement ou d'un composant.
         self.assertTrue(self.page.evaluate("""() => { const gele = (o) => o === null || typeof o !== 'object'
           || (Object.isFrozen(o) && Object.values(o).every(gele)); return gele(Wiki.LIMITES); }"""))
@@ -339,24 +360,37 @@ class TestControles(CasControles):
         self.refus(ajouter_phrase(VALABLE, "[OT-2026-0042]"), "phrase vide (réduite à ses citations)")
 
     def test_non_retrait(self):
-        sans_ot = avec_texte(APRES.replace(" [OT-2026-0020]", ""))
-        raisons = self.refus(sans_ot, "OT cité retiré de la page : OT-2026-0020")
+        """D106 : « Astuces » (et toute rubrique qui n'est pas réécrite en entier) garde ses phrases et ses OT, même quand
+        « En bref » est réécrit (T142) ; mêmes cas qu'avant la refonte de « En bref »."""
+        sans_ot = modification(EQUIPEMENT, ASTUCES_APRES.replace(" [OT-2026-0020]", ""))
+        raisons = self.refus(sans_ot, "OT cité retiré de la page : OT-2026-0020", CONTEXTE_ASTUCES)
         self.assertFalse(any("phrase retirée" in r for r in raisons), raisons)       # la phrase est restée
-        sans_phrase = avec_texte(APRES.replace("- Remplacement de la garniture par un kit neuf [OT-2026-0010]\n", ""))
-        self.refus(sans_phrase, "phrase retirée — « Remplacement de la garniture par un kit neuf »")
-        oubli = avec_texte(APRES.replace("Fuite à la garniture mécanique, fréquent ici [OT-2026-0010] [OT-2026-0020] [OT-2026-0042]",
-                                         "Fuites répétées de la garniture [OT-2026-0010] [OT-2026-0042]"))
-        self.refus(oubli, "phrase retirée — « Fuite à la garniture mécanique, fréquent ici »")
+        sans_phrase = modification(EQUIPEMENT, ASTUCES_APRES.replace("- Graisser le palier avant le remontage [OT-2026-0010]\n", ""))
+        self.refus_seul(sans_phrase, "Page « PO-02 — Pompe centrifuge » : phrase retirée — « Graisser le palier avant le "
+                                     "remontage ».", CONTEXTE_ASTUCES)
+        # Passée dans « En bref » (réécrit à chaque OT), elle serait perdue au suivant : retirée quand même.
+        vers_en_bref = modification(EQUIPEMENT, ASTUCES_APRES.replace("- Graisser le palier avant le remontage [OT-2026-0010]\n", "")
+                                    .replace("## Astuces", "- Graisser le palier avant le remontage [OT-2026-0010]\n## Astuces"))
+        self.refus_seul(vers_en_bref, "Page « PO-02 — Pompe centrifuge » : phrase retirée — « Graisser le palier avant le "
+                                      "remontage ».", CONTEXTE_ASTUCES)
+        oubli = modification(EQUIPEMENT, ASTUCES_APRES.replace(
+            "Repérer l'accouplement avant la dépose [OT-2026-0010] [OT-2026-0020]", "Repérer l'accouplement [OT-2026-0010]"))
+        self.refus(oubli, "phrase retirée — « Repérer l'accouplement avant la dépose »", CONTEXTE_ASTUCES)
         # Une reprise qui cite tous les OT de l'ancienne phrase est permise (reformulation).
-        reprise = avec_texte(APRES.replace("Fuite à la garniture mécanique, fréquent ici", "Fuites répétées de la garniture, fréquentes ici"))
-        self.assertTrue(self.controler(reprise)["ok"], self.controler(reprise)["raisons"])
+        reprise = modification(EQUIPEMENT, ASTUCES_APRES.replace("Repérer l'accouplement avant la dépose",
+                                                                 "Repérer la position de l'accouplement avant de le déposer"))
+        self.assertEqual(self.controler(reprise, CONTEXTE_ASTUCES), self.OK)
         # Une phrase vidée de son texte ne reprend rien : l'ancienne est retirée.
-        videe = avec_texte(APRES.replace("Remplacement de la garniture par un kit neuf [OT-2026-0010]", "[OT-2026-0010]"))
-        raisons = self.refus(videe, "phrase vide (réduite à ses citations)")
-        self.assertTrue(any("phrase retirée — « Remplacement de la garniture par un kit neuf »" in r for r in raisons), raisons)
+        videe = modification(EQUIPEMENT, ASTUCES_APRES.replace("Graisser le palier avant le remontage [OT-2026-0010]",
+                                                               "[OT-2026-0010]"))
+        raisons = self.refus(videe, "phrase vide (réduite à ses citations)", CONTEXTE_ASTUCES)
+        self.assertTrue(any("phrase retirée — « Graisser le palier avant le remontage »" in r for r in raisons), raisons)
         # Une phrase gardée telle quelle garde tous ses OT, même si l'OT reste cité ailleurs sur la page.
-        perdu = avec_texte(APRES.replace("fréquent ici [OT-2026-0010] [OT-2026-0020]", "fréquent ici [OT-2026-0020]"))
-        raisons = self.refus(perdu, "OT retiré de la phrase « Fuite à la garniture mécanique, fréquent ici » : OT-2026-0010")
+        perdu = modification(EQUIPEMENT, ASTUCES_APRES.replace(
+            "avant la dépose [OT-2026-0010] [OT-2026-0020]", "avant la dépose [OT-2026-0010]").replace(
+            "avant le remontage [OT-2026-0010]", "avant le remontage [OT-2026-0010] [OT-2026-0020]"))
+        raisons = self.refus(perdu, "OT retiré de la phrase « Repérer l'accouplement avant la dépose » : OT-2026-0020",
+                             CONTEXTE_ASTUCES)
         self.assertFalse(any("OT cité retiré de la page" in r for r in raisons), raisons)
 
     def test_nombres_comptage_et_dates(self):
@@ -499,8 +533,8 @@ class TestControles(CasControles):
         # À la main, le texte de référence est celui des OT cités : le message le dit (inchangé par T140).
         self.refus(nombre, "Page « PO-02 — Pompe centrifuge » : nombre « 7 » absent des OT cités — « Pression à 7 bar ».", contexte)
         # Les limites et la création valent aussi à la main.
-        self.refus(modification(EQUIPEMENT, balisage(("En bref", phrases(6)))),
-                   "Page « PO-02 — Pompe centrifuge » : « En bref » : 6 phrases, 5 au plus.", contexte)
+        self.refus(modification(EQUIPEMENT, balisage(("En bref", phrases(4)))),
+                   "Page « PO-02 — Pompe centrifuge » : « En bref » : 4 phrases, 3 au plus.", contexte)
         self.refus_seul(creation("Corrosion des brides", "mode", "## Causes\n- Eau [OT-2026-0042]"),
                         "Page « Corrosion des brides » : type « mode » inconnu (équipement, composant, savoir-faire).", contexte)
         self.refus(creation("Joint de bride", "composant", "## À quoi il sert\n- Étanchéité [OT-2026-0042]"),
@@ -512,17 +546,19 @@ class TestLimitesDesTextes(CasControles):
     raison qui nomme la page et la rubrique ; les mots d'une rubrique sans son nom ; pas de limite de mots pour
     « Astuces » ; une rubrique écrite deux fois compte en une."""
 
-    def test_en_bref_5_phrases_et_120_mots(self):
-        self.assertEqual(self.controler(modification(TOUR, balisage(("En bref", phrases(5)))), CONTEXTE_TEXTES), self.OK)
-        self.refus_seul(modification(TOUR, balisage(("En bref", phrases(6)))),
-                        "Page « CN-01 — Tour à commande numérique » : « En bref » : 6 phrases, 5 au plus.", CONTEXTE_TEXTES)
-        # 120 mots : le nom de la rubrique (« En bref ») et les citations ne comptent pas.
-        self.assertEqual(self.controler(modification(TOUR, balisage(("En bref", mots(120)))), CONTEXTE_TEXTES), self.OK)
-        self.refus_seul(modification(TOUR, balisage(("En bref", mots(121)))),
-                        "Page « CN-01 — Tour à commande numérique » : « En bref » : 121 mots, 120 au plus (citations non "
+    def test_en_bref_3_phrases_et_60_mots(self):
+        """D117 (D100 révisée 3) : « En bref » 3 phrases et 60 mots au plus ; une 4e phrase, ou un 61e mot, refusés avec
+        leur raison."""
+        self.assertEqual(self.controler(modification(TOUR, balisage(("En bref", phrases(3)))), CONTEXTE_TEXTES), self.OK)
+        self.refus_seul(modification(TOUR, balisage(("En bref", phrases(4)))),
+                        "Page « CN-01 — Tour à commande numérique » : « En bref » : 4 phrases, 3 au plus.", CONTEXTE_TEXTES)
+        # 60 mots : le nom de la rubrique (« En bref ») et les citations ne comptent pas.
+        self.assertEqual(self.controler(modification(TOUR, balisage(("En bref", mots(60)))), CONTEXTE_TEXTES), self.OK)
+        self.refus_seul(modification(TOUR, balisage(("En bref", mots(61)))),
+                        "Page « CN-01 — Tour à commande numérique » : « En bref » : 61 mots, 60 au plus (citations non "
                         "comptées).", CONTEXTE_TEXTES)
         # Réparti sur deux phrases, de même.
-        self.refus(modification(TOUR, balisage(("En bref", mots(60) + mots(61)))), "« En bref » : 121 mots, 120 au plus",
+        self.refus(modification(TOUR, balisage(("En bref", mots(30) + mots(31)))), "« En bref » : 61 mots, 60 au plus",
                    CONTEXTE_TEXTES)
 
     def test_astuces_10_phrases_sans_limite_de_mots(self):
@@ -541,17 +577,17 @@ class TestLimitesDesTextes(CasControles):
                         "comptées).")
 
     def test_chaque_rubrique_a_sa_limite(self):
-        # 5 + 10 phrases : chaque rubrique à sa borne, la page passe (pas de limite de page pour un équipement).
-        self.assertEqual(self.controler(modification(TOUR, balisage(("En bref", phrases(5)), ("Astuces", phrases(10)))),
+        # 3 + 10 phrases : chaque rubrique à sa borne, la page passe (pas de limite de page pour un équipement).
+        self.assertEqual(self.controler(modification(TOUR, balisage(("En bref", phrases(3)), ("Astuces", phrases(10)))),
                                         CONTEXTE_TEXTES), self.OK)
         # Les deux rubriques au-delà : deux raisons, une par rubrique.
-        resultat = self.controler(modification(TOUR, balisage(("En bref", phrases(6)), ("Astuces", phrases(11)))), CONTEXTE_TEXTES)
+        resultat = self.controler(modification(TOUR, balisage(("En bref", phrases(4)), ("Astuces", phrases(11)))), CONTEXTE_TEXTES)
         self.assertEqual(resultat["raisons"], [
-            "Page « CN-01 — Tour à commande numérique » : « En bref » : 6 phrases, 5 au plus.",
+            "Page « CN-01 — Tour à commande numérique » : « En bref » : 4 phrases, 3 au plus.",
             "Page « CN-01 — Tour à commande numérique » : « Astuces » : 11 phrases, 10 au plus."])
         # Une rubrique écrite deux fois compte en une.
-        self.refus_seul(modification(TOUR, balisage(("En bref", phrases(3)), ("Astuces", phrases(1)), ("En bref", phrases(3)))),
-                        "Page « CN-01 — Tour à commande numérique » : « En bref » : 6 phrases, 5 au plus.", CONTEXTE_TEXTES)
+        self.refus_seul(modification(TOUR, balisage(("En bref", phrases(2)), ("Astuces", phrases(1)), ("En bref", phrases(2)))),
+                        "Page « CN-01 — Tour à commande numérique » : « En bref » : 4 phrases, 3 au plus.", CONTEXTE_TEXTES)
 
     def test_un_savoir_faire_30_phrases_et_600_mots(self):
         cree = lambda texte: creation("Graisser le palier de PO-02", "savoir-faire", texte, EQUIPEMENT)  # noqa: E731
@@ -563,6 +599,101 @@ class TestLimitesDesTextes(CasControles):
         self.refus_seul(cree(balisage(("Étapes", mots(600)))),
                         "Page « Graisser le palier de PO-02 » : 601 mots, 600 au plus (rubriques comprises, citations non "
                         "comptées ; au-delà, la page se découpe en sous-pages).")
+
+
+class TestEnBrefReecrit(CasControles):
+    """D117 (T142) : « En bref » se réécrit en entier à chaque OT — le non-retrait ne s'y applique pas, toutes ses phrases
+    sont contrôlées comme nouvelles ; « Astuces » garde le non-retrait (TestControles.test_non_retrait) ; à la main, rien ne
+    change."""
+
+    def test_reecrit_en_retirant_ses_phrases_et_ses_ot_accepte(self):
+        # Ses deux phrases d'avant et leurs OT (0010, 0020) disparaissent de la page : accepté.
+        self.assertEqual(self.controler(modification(EQUIPEMENT, EN_BREF_REECRIT)), self.OK)
+        # Avec « Astuces » gardée, et une contradiction qui vise une phrase d'avant de « En bref ».
+        avec = modification(EQUIPEMENT, ASTUCES_APRES)
+        avec["contradictions"] = copy.deepcopy(VALABLE["contradictions"])
+        self.assertEqual(self.controler(avec, CONTEXTE_ASTUCES), self.OK)
+        # Une phrase reprise (citations changées) ou gardée sans l'un de ses OT : accepté aussi.
+        regroupee = modification(EQUIPEMENT, "## En bref\n- Fuite à la garniture mécanique, fréquent ici [OT-2026-0010] "
+                                             "[OT-2026-0042]\n- Accouplement désaligné de 0,4 mm, réaligné [OT-2026-0042]")
+        self.assertEqual(self.controler(regroupee), self.OK)
+
+    def test_chaque_phrase_cite_un_ot_permis(self):
+        self.refus_seul(modification(EQUIPEMENT, "## En bref\n- Accouplement désaligné de 0,4 mm, réaligné"),
+                        "Page « PO-02 — Pompe centrifuge » : phrase sans OT cité — « Accouplement désaligné de 0,4 mm, "
+                        "réaligné ».")
+        self.refus_seul(modification(EQUIPEMENT, "## En bref\n- Accouplement désaligné [OT-1999-9999]"),
+                        "Page « PO-02 — Pompe centrifuge » : OT cité hors des OT permis : OT-1999-9999.")
+
+    def test_toutes_ses_phrases_controlees_comme_nouvelles(self):
+        """Une phrase d'avant gardée telle quelle dans « En bref » est recontrôlée (comptage, date) ; la même, gardée dans
+        « Astuces », ne l'est pas (non-retrait : elle a déjà été contrôlée)."""
+        contexte = copy.deepcopy(CONTEXTE)
+        contexte["pagesEnvoyees"][0]["texte"] = ("## En bref\n- Garniture changée 3 fois [OT-2026-0010]\n"
+                                                  "- Fuite constatée en juin [OT-2026-0020]\n"
+                                                  "## Astuces\n- Joint changé 3 fois [OT-2026-0010]")
+        gardee = "## En bref\n- Garniture changée 3 fois [OT-2026-0010]\n## Astuces\n- Joint changé 3 fois [OT-2026-0010]"
+        self.refus_seul(modification(EQUIPEMENT, gardee), "Page « PO-02 — Pompe centrifuge » : comptage interdit (les nombres "
+                        "de cas sont calculés par Prévo) — « Garniture changée 3 fois ».", contexte)
+        date = "## En bref\n- Fuite constatée en juin [OT-2026-0020]\n## Astuces\n- Joint changé 3 fois [OT-2026-0010]"
+        self.refus_seul(modification(EQUIPEMENT, date), "Page « PO-02 — Pompe centrifuge » : aucune date dans le wiki (les OT "
+                        "cités portent les leurs) — « Fuite constatée en juin ».", contexte)
+        self.assertEqual(self.controler(modification(EQUIPEMENT, EN_BREF_REECRIT + "\n## Astuces\n- Joint changé 3 fois "
+                                                     "[OT-2026-0010]"), contexte), self.OK)
+        # À la main, rien ne change : une phrase gardée telle quelle n'est pas recontrôlée, le retrait est permis.
+        manuel = {"manuel": True, "pagesEnvoyees": contexte["pagesEnvoyees"][:1], "catalogue": CONTEXTE["catalogue"],
+                  "otPermis": ["OT-2026-0010", "OT-2026-0020", "OT-2026-0042"], "sources": {"OT-2026-0010": "Garniture."}}
+        self.assertEqual(self.controler(modification(EQUIPEMENT, "## En bref\n- Garniture changée 3 fois [OT-2026-0010]"),
+                                        manuel), self.OK)
+
+    def test_ancienne_rubrique_reecrite_dans_en_bref(self):
+        """Une phrase d'une ancienne rubrique (hors du type, base d'avant la refonte 2) peut se réécrire dans « En bref »
+        (reprise : elle cite tous ses OT) ; perdue, elle est retirée."""
+        contexte = copy.deepcopy(CONTEXTE)
+        contexte["pagesEnvoyees"][0]["texte"] = "## Ce qui revient\n- Bande qui patine [OT-2026-0010]"
+        self.assertEqual(self.controler(modification(EQUIPEMENT, "## En bref\n- Bande qui patine, retendue [OT-2026-0010] "
+                                                                 "[OT-2026-0042]"), contexte), self.OK)
+        self.refus(modification(EQUIPEMENT, EN_BREF_REECRIT), "phrase retirée — « Bande qui patine »", contexte)
+
+
+class TestSavoirFaireCommun(CasControles):
+    """D116 (T141) : un savoir-faire commun aux machines — rubrique « Particularités par machine » (une phrase par machine,
+    avec son lien) et « Pièces et outillage » (ses articles) ; « titre trop proche » empêche un doublon ; même geste
+    (Wiki.memeGeste) : les savoir-faire dont le titre est dans le texte de l'OT."""
+
+    def test_particularites_par_machine_et_titre_trop_proche(self):
+        texte = ("## Étapes\n- Contrôler l'alignement au comparateur avant de remonter la garniture [OT-2026-0042]\n"
+                 "## Pièces et outillage\n- Pièce : [[Kit garniture mécanique PO-02]] [OT-2026-0042]\n"
+                 "## Particularités par machine\n- [[PO-02 — Pompe centrifuge]] : accouplement désaligné de 0,4 mm [OT-2026-0042]")
+        commun = creation("Remplacer une garniture mécanique", "savoir-faire", texte, KIT)
+        self.assertEqual(self.controler(commun), self.OK)
+        doublon = copy.deepcopy(CONTEXTE)
+        doublon["catalogue"].append({"titre": "Remplacer les garnitures mécaniques", "type": "savoir-faire"})
+        self.refus_seul(commun, "Page « Remplacer une garniture mécanique » : titre trop proche de « Remplacer les "
+                                "garnitures mécaniques ».", doublon)
+        # Une rubrique hors de la liste reste refusée.
+        self.refus(creation("Remplacer une garniture mécanique", "savoir-faire", texte.replace(
+            "Particularités par machine", "Machines"), KIT), "rubrique « Machines » inconnue pour une page savoir-faire")
+
+    def test_meme_geste(self):
+        self.assertEqual(self.page.evaluate("Wiki.MEME_GESTE"), {"motsMin": 2, "partMin": 0.6, "pagesMax": 2})
+        self.assertTrue(self.page.evaluate("Object.isFrozen(Wiki.MEME_GESTE)"))
+        pages = [{"titre": "Remplacer une garniture mécanique", "cle": "WP:WP-0001"},      # 2 mots sur 3
+                 {"titre": "Nettoyer un capteur de présence", "cle": "WP:WP-0002"},        # aucun
+                 {"titre": "Garniture mécanique : faces", "cle": "WP:WP-0003"},            # 2 sur 3
+                 {"titre": "Changer la garniture mécanique de PO-02", "cle": "WP:WP-0004"},  # 3 sur 5 (« po ») : 60 %
+                 {"titre": "Garniture", "cle": "WP:WP-0005"},                             # 1 mot : jamais
+                 {"titre": "Fuites de garnitures mécaniques", "cle": "WP:WP-0006"}]       # 3 sur 3 (pluriels)
+        texte = "PO-01 — Fuite à la garniture mécanique · Garniture mécanique remplacée après dépose du moteur."
+        trouves = self.page.evaluate("([t, p]) => Wiki.memeGeste(t, p).map((page) => page.cle)", [texte, pages])
+        # La plus grande part d'abord, puis le titre (ordre des caractères) ; au plus 2.
+        self.assertEqual(trouves, ["WP:WP-0006", "WP:WP-0003"])
+        self.assertEqual(self.page.evaluate("([t, p]) => Wiki.memeGeste(t, p).map((page) => page.cle)", [texte, pages[:2]]),
+                         ["WP:WP-0001"])
+        # Déterministe : même résultat quel que soit l'ordre des pages.
+        self.assertEqual(self.page.evaluate("([t, p]) => Wiki.memeGeste(t, p.slice().reverse()).map((page) => page.cle)",
+                                            [texte, pages]), trouves)
+        self.assertEqual(self.page.evaluate("([t, p]) => Wiki.memeGeste(t, p)", ["", pages]), [])
 
 
 class TestSousPages(CasControles):
