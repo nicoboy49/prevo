@@ -54,7 +54,7 @@ passent par le circuit normal, sans relance), puis les validations de fin se fon
     --budget D        plafond en dollars des appels réels de CETTE commande (coût relevé dans les traces ; une réponse
                       reprise des traces est gratuite) : avant chaque agent, si le coût dépensé plus le coût prévu des
                       appels en cours et de celui-ci dépasserait D, l'outil s'arrête (code retour 3) ; coût prévu d'un
-                      appel : moyenne des appels faits, sinon COUT_PREVU_USD ;
+                      appel : le plus cher des appels faits (le coût par OT monte avec le wiki), sinon COUT_PREVU_USD ;
     --refus-max P     après chaque réponse lue par Prévo (première comme relance), à partir de REFUS_REPONSES_MIN
                       réponses : plus de P % de réponses refusées par le contrôle arrête l'outil (code retour 4), avec
                       les raisons de refus les plus fréquentes, regroupées (défaut 10 ; 0 : pas de seuil).
@@ -363,7 +363,8 @@ class Fabrique:
         self.reprises = 0
         self.relances = 0
         self.cout = 0.0                           # coût des appels réels de cette commande (jamais des reprises)
-        self.couts_connus = 0                     # appels réels dont le coût est relevé (moyenne du coût prévu)
+        self.couts_connus = 0                     # appels réels dont le coût est relevé
+        self.cout_max = 0.0                       # le plus cher d'entre eux : coût prévu d'un appel (--budget)
         self.cout_reprises = 0.0                  # coût d'origine des réponses reprises (gratuites ici ; bilan)
         self.en_cours = 0                         # agents lancés qui n'ont pas encore répondu
         self.arret_budget = False                 # budget atteint : plus aucun agent lancé
@@ -378,12 +379,12 @@ class Fabrique:
         systeme, utilisateur = messages[0]['content'], messages[1]['content']
         cle = empreinte(systeme, utilisateur)
         relance = MARQUE_RELANCE in utilisateur        # relance avec la raison : une requête de plus pour le même OT
-        self.relances += relance
         trace = lire_trace(self.traces, ot)
         deja = next((a for a in reversed(trace['appels']) if a.get('empreinte') == cle and not a.get('reprise')
                      and a.get('contenu') and reponse_valable(a)), None)
         if deja:
             self.reprises += 1
+            self.relances += relance
             self.cout_reprises += float(deja.get('cout_usd') or 0)
             trace['appels'].append({'empreinte': cle, 'reprise': True, 'relance': relance,
                                     'date': datetime.now().isoformat(timespec='seconds')})
@@ -398,6 +399,7 @@ class Fabrique:
         if self.arret_budget or self.depasserait_budget():
             self.arret_budget = True               # aucun agent lancé, ni maintenant ni ensuite (D119)
             return {'arret': 'budget'}
+        self.relances += relance                   # comptée seulement si elle part (pas une relance bloquée)
         self.en_cours += 1
         try:
             return await self.appeler_agent(ot, systeme, utilisateur, cle, trace)
@@ -408,8 +410,9 @@ class Fabrique:
             self.en_cours -= 1
 
     def cout_prevu(self):
-        """Coût prévu d'un appel : moyenne des appels réels de cette commande, sinon COUT_PREVU_USD."""
-        return self.cout / self.couts_connus if self.couts_connus else COUT_PREVU_USD
+        """Coût prévu d'un appel : le plus cher des appels réels de cette commande (le coût par OT monte avec le wiki :
+        la moyenne laisserait dépasser le budget par les appels en cours), sinon COUT_PREVU_USD."""
+        return self.cout_max if self.couts_connus else COUT_PREVU_USD
 
     def depasserait_budget(self):
         """Avant de lancer un agent (D119) : le coût dépensé plus le coût prévu des appels en cours et de celui-ci
@@ -465,6 +468,7 @@ class Fabrique:
                           'cout_usd': donnees.get('total_cost_usd'), 'duree_api_ms': donnees.get('duration_api_ms')})
             if donnees.get('total_cost_usd') is not None:
                 self.cout += float(donnees['total_cost_usd'])
+                self.cout_max = max(self.cout_max, float(donnees['total_cost_usd']))
                 self.couts_connus += 1
             modeles = controler_reponse(donnees)
         except ValueError:

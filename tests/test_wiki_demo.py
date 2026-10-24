@@ -538,6 +538,13 @@ class TestGardeFous(unittest.TestCase):
         cls.refus = fabriquer('refus', env=refus)
         cls.sans_seuil = fabriquer('sans-seuil', ['--refus-max', 0], env=refus)
         cls.isole = fabriquer('isole', env={'FAUX_CLAUDE_MODE': 'refus-part', 'FAUX_CLAUDE_REFUSES': cls.ordre[20]})
+        # Relecture de T144 : trois agents (réponses retardées : les trois premiers OT partent ensemble) — le 2e contrôle
+        # compte l'appel en cours (0 + 2 × 0,05 > 0,06) ; une relance passe aussi par le contrôle du budget.
+        cls.concurrents = lancer(OUTIL, ['fabriquer', '--agents', 3, '--claude', FAUX, '--demo', cls.demo, '--reprise-duree', 0,
+                                         '--traces', d / 'chaine-concurrents', '--resultat', d / 'concurrents', '--budget', 0.06],
+                                 {'FAUX_CLAUDE_TRACES': str(d / 'appels-concurrents'), 'FAUX_CLAUDE_DELAIS': '1'})
+        cls.relance_bloquee = fabriquer('relance-bloquee', ['--budget', 0.05],
+                                        env={'FAUX_CLAUDE_MODE': 'refus-part', 'FAUX_CLAUDE_REFUSES': cls.ordre[3]})
 
     def journal(self, nom):
         return {e['ot_id']: e for e in lignes_csv(self.dossier / nom / 'wiki_journal.csv')}
@@ -552,6 +559,21 @@ class TestGardeFous(unittest.TestCase):
         for table in ('wiki_pages', 'wiki_journal'):
             shutil.copyfile(self.dossier / nom / (table + '.csv'), cible / (table + '.csv'))
         return cible
+
+    def test_budget_compte_les_appels_en_cours(self):
+        sortie = self.concurrents
+        self.assertEqual(sortie.returncode, 3, sortie.stdout + sortie.stderr)
+        self.assertIn('Agents lancés : 1 · réponses reprises des traces : 0 ·', sortie.stdout)
+        self.assertEqual(len(list((self.dossier / 'appels-concurrents').glob('*.json'))), 1)
+
+    def test_relance_soumise_au_budget(self):
+        sortie = self.relance_bloquee
+        self.assertEqual(sortie.returncode, 3, sortie.stdout + sortie.stderr)
+        # 4 OT à 0,0123 $ (0,0492 $) ; la relance du 4e dépasserait : bloquée, ni lancée ni comptée.
+        self.assertIn('Agents lancés : 4 · réponses reprises des traces : 0 · relances avec la raison : 0 ·', sortie.stdout)
+        trace = json.loads((self.dossier / 'chaine-relance-bloquee' / (self.ordre[3] + '.json')).read_text(encoding='utf-8'))
+        self.assertEqual(len(trace['appels']), 1)
+        self.assertEqual(self.journal('relance-bloquee')[self.ordre[3]]['statut'], 'en file')
 
     def test_budget_atteint_arret_propre(self):
         sortie = self.budget
