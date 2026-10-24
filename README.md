@@ -127,11 +127,23 @@ quotidiennes (`donnees/sauvegardes/`) et les documents joints.
 - **Assistant IA** (facultatif, désactivé par défaut) : Ollama sur un PC de l'atelier (modèle conseillé
   `qwen2.5:7b`) ou une API compatible OpenAI. Il propose un symptôme et un impact pour une demande, un
   compte rendu structuré, des codes de défaillance pris **uniquement** dans la liste existante, une
-  check-list de gamme, un résumé de l'historique d'un équipement et un commentaire du rapport mensuel.
+  check-list de gamme, un commentaire du rapport mensuel et les textes du wiki de maintenance (ci-dessous).
   L'IA propose, l'humain valide (« Utiliser », « Modifier », « Ignorer ») : rien n'est écrit sans clic.
   Une mention permanente dit où vont les textes (« reste sur ce PC »… « données envoyées à … ») ; les
   fournisseurs en ligne ne sont utilisables que si le responsable les autorise ; la clé d'accès reste
   dans le navigateur du poste. En mode serveur, les appels passent par le serveur de Prévo.
+- **Wiki de maintenance** : l'encyclopédie de l'atelier (menu « Wiki ») : une page par machine, panne,
+  article, technicien, intervention et savoir-faire, toutes reliées. Les faits (pannes, interventions,
+  pièces, stock, habilitations) sont calculés par Prévo sans IA, et la recherche n'utilise pas l'IA.
+  Avec l'assistant IA, chaque OT clôturé administrativement entre dans une file que le responsable
+  traite quand il le veut (« Traiter la file ») : l'IA propose des textes courts (« En bref » et
+  « Astuces » d'une machine, « À quoi il sert » d'un article, savoir-faire tirés d'abord de l'« Astuce
+  pour la prochaine fois » saisie à la clôture technique), Prévo les contrôle (chaque phrase cite un OT,
+  aucun nombre ni date hors de l'OT, aucun comptage, aucune consigne de sécurité, longueurs) et le
+  responsable valide, rejette ou relance ; une contradiction est signalée sur la page (« À trancher »),
+  jamais écrasée. Coût mesuré sur la démo avec Claude Sonnet (`claude-sonnet-5-5`) : 227 OT intégrés
+  pour 5,16 $, soit 0,026 $ par OT (environ 2,5 centimes) ; cela dépend du fournisseur et de la longueur
+  des comptes rendus ; rien n'est facturé avec Ollama.
 - **Dictée vocale** : bouton micro sur les champs de texte longs, texte ajouté à la fin du champ,
   avertissement à la première utilisation (la voix est transcrite par Google ou Microsoft), désactivable
   par poste ; sur téléphone sans https, Prévo rappelle le micro du clavier.
@@ -140,12 +152,16 @@ quotidiennes (`donnees/sauvegardes/`) et les documents joints.
 - **https en option** : `serveur.py --certificat … --cle …` avec un certificat que vous fournissez (le
   guide explique mkcert et l'installation sur Android et iPhone), pour avoir le micro et la caméra dans
   la page sur les téléphones. Les étiquettes QR imprimées en http sont alors à réimprimer.
+- **Mise à jour signalée** (responsable, désactivée par défaut) : Paramètres, « Me signaler les nouvelles
+  versions de Prévo » ; Prévo lit alors `https://prevo.pro/version.json` au plus une fois par jour et par
+  poste et dit, sur l'accueil du responsable et dans « À propos », qu'une version plus récente existe, avec
+  le lien de téléchargement. Rien ne s'installe tout seul ; sans accord, aucun appel.
 - **Guide et fiche technique** : [GUIDE.html](GUIDE.html) (autonome, imprimable, avec captures) et
   [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md), générée depuis le schéma.
 
 ## Format des données
 
-Les données sont 22 fichiers CSV (format v2 depuis le lot 2) : séparateur `;`, UTF-8 avec BOM,
+Les données sont 24 fichiers CSV (format 3 depuis le lot 6) : séparateur `;`, UTF-8 avec BOM,
 fins de ligne CRLF. Ils s'ouvrent et se modifient dans Excel. Comme Excel abîme certaines valeurs
 (zéros de tête, formules, fractions prises pour des dates), Prévo les protège par une apostrophe
 en tête de cellule et la retire à la lecture. À la lecture, il accepte aussi les dates écrites
@@ -191,6 +207,11 @@ Pour lancer les tests ou contribuer : voir CONTRIBUTING.md.
   Un modèle local est lent sans carte graphique (plus d'une minute par réponse est possible). En modes
   dossier et démo, Ollama doit autoriser les pages ouvertes depuis le disque (`OLLAMA_ORIGINS`, voir
   le guide) ; un fournisseur en ligne reçoit les textes envoyés.
+- **Wiki de maintenance.** Il ne se fabrique qu'à partir des OT clôturés administrativement ; ses textes
+  rédigés sont contrôlés et validés, mais restent à relire. Les textes du wiki de la démo ont été écrits
+  par Claude Sonnet (un agent par OT, avec la consigne de Prévo) puis relus : ils décrivent un atelier
+  fictif. Le coût par OT n'a été mesuré qu'avec ce fournisseur ; avec une IA locale (Ollama), rien n'est
+  facturé, mais la qualité des textes et la durée n'ont pas été mesurées.
 - **Dictée.** Elle dépend du navigateur : Chrome et Edge envoient la voix à Google ou Microsoft, et
   le micro n'est permis que sur une page sécurisée (sur le PC lui-même, ou en https).
 - Sur téléphone en mode serveur sans https, le scan par caméra intégrée à la page et la dictée ne sont

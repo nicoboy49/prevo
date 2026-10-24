@@ -30,14 +30,17 @@ README = RACINE / "README.md"
 DOSSIER_CAPTURES = RACINE / "docs" / "captures"
 CAPTURE_README = "docs/captures/accueil.png"
 BUDGET_CAPTURES = 1500000          # octets de texte base64, toutes images comprises (§17.8)
-CAPTURES = {"accueil", "signaler", "ot", "indicateurs", "planning", "suggestions", "poste", "import"}
+CAPTURES = {"accueil", "signaler", "ot", "indicateurs", "planning", "suggestions", "poste", "import",
+            "wiki", "wiki-page"}
 PREFIXE_JPEG = "data:image/jpeg;base64,"
 
-# Chapitres demandés par §17.8 (identifiants des sections du guide).
-CHAPITRES = ["demarrer", "demo", "mode-dossier", "mode-serveur", "pare-feu", "profils", "modules",
+# Chapitres demandés par §17.8, puis par le lot 6 (§20, T125 : « Le wiki de maintenance ») et §21
+# (mise à jour signalée) : identifiants des sections du guide.
+CHAPITRES = ["demarrer", "demo", "mode-dossier", "mode-serveur", "pare-feu", "mise-a-jour", "profils", "modules",
              "suggestions", "indicateurs", "rapport", "ce-poste", "ia", "ollama-origins", "ia-en-ligne",
-             "ia-mentions", "modele-conseille", "dictee", "https", "https-android", "https-iphone",
-             "sauvegardes", "excel", "limites"]
+             "ia-mentions", "modele-conseille", "dictee", "wiki", "wiki-principe", "wiki-pages", "wiki-astuce",
+             "wiki-file", "wiki-journal", "wiki-contradictions", "wiki-ecrire", "wiki-recherche", "wiki-demo",
+             "https", "https-android", "https-iphone", "sauvegardes", "excel", "limites"]
 
 # Mentions qui doivent figurer dans le guide (faits du code et du contrat).
 MENTIONS = [
@@ -52,6 +55,10 @@ MENTIONS = [
     "Lancer_GMAO.bat", "Réseaux privés", "Essayer avec les données de démo", "Choisir le dossier de données",
     "Sauvegarder maintenant", "Restaurer…", "_avant-restauration", "Exporter en ZIP",
     "Excel", "FICHE_TECHNIQUE_CSV.md", "Contrôle de la base", "Pas d'authentification",
+    # Lot 6 (T125) : le wiki de maintenance et la mise à jour signalée (§21).
+    "Le wiki de maintenance", "ingestion", "Astuce pour la prochaine fois", "OT ajouté à la file du wiki",
+    "Traiter la file", "À trancher", "0,026 $ par OT", "claude-sonnet-5-5",
+    "Me signaler les nouvelles versions de Prévo", "https://prevo.pro/version.json", "Ignorer cette version",
 ]
 
 

@@ -2530,6 +2530,11 @@ autre page** ; **l'IA ajoute et précise, elle ne retire rien** (une contradicti
 Version de clôture `v1.2.0`.
 
 ### 20.1 Socle
+- **Révisé par la refonte 2 (T125)** : la liste et l'ordre des modules (`wiki-entites.js`, `wiki-page-ecrans.js`,
+  `wiki-sections-ecrans.js`, `wiki-entites-ecrans.js` et `wiki-ecrire-ecrans.js` en plus ; `ORDRE_MODULES` et
+  `index.html` font foi), les routes (`#/wiki/<liste>`, `#/wiki/<id>` pour les six types, `#/wiki-ecrire/<id>`) et les
+  longueurs (`Wiki.LIMITES` par type et par rubrique ; `phrasesMax` et `motsMax` sont celles d'un savoir-faire) sont
+  dans §20.12.
 - **Modules** (préfixe `wiki-`, chargés **à la fin** de `js/modules/`, dans cet ordre ; `ORDRE_MODULES`
   suit) : `wiki-regles.js` (1/8, crée `Wiki` : constantes, forme comparable, couche calculée de
   l'équipement — reprise), `wiki-calculs.js` (2/8, couches calculées du composant et du mode, pages
@@ -2557,6 +2562,9 @@ Version de clôture `v1.2.0`.
   §17.5 point 5) sont **retirées** ; le faux fournisseur et les tests du lot 4 suivent.
 
 ### 20.2 Format 3 : `wiki_pages`, `wiki_journal`, `ordres_travail.astuce` (D95, D110)
+- **Révisé par la refonte 2 (T125)** : le type `mode` est retiré (une panne est calculée ; une ligne `mode` restante
+  est signalée « type de page retiré » par le contrôle du wiki et s'archive) ; les sous-pages ne valent que pour les
+  savoir-faire ; `cause_code` ne sert plus à une page nouvelle ; voir §20.12.
 - `Schema.version` = **3** ; **24 tables** : les 22 du format 2 puis `wiki_pages` et `wiki_journal`
   (attribut `depuisVersion: 3`, fichiers absents = tables vides, créés à la première écriture). La table
   `wiki_syntheses` de la première version disparaît du schéma ; une base de développement qui a encore
@@ -2621,6 +2629,9 @@ Version de clôture `v1.2.0`.
   active sans OT cité, contradiction ouverte depuis plus de `contradictionAncienneJours` (`info`).
 
 ### 20.3 Pages et couches calculées (`wiki-regles.js`, `wiki-calculs.js` ; sans IA, sans écriture)
+- **Révisé par la refonte 2 (T125)** : l'écran d'une page lit `Wiki.entite` (six types, visibilité D114,
+  `wiki-entites.js`) ; `Wiki.page` reste pour l'écriture à la main et le journal ; le mode ancré disparaît ; l'en-tête
+  d'un savoir-faire est la liste de ses machines (D116) ; voir §20.12.
 - **`Wiki.page(id, { maintenant, profil })`** → `{ id, type, titre, calcul, texte, origine, liens, retours,
   contradictions, enAttente }` : `calcul` selon le type (ci-dessous) ; `texte` = la ligne de `wiki_pages`
   (état **validé**) ou vide ; `retours` = pages actives dont `liens` contient cette page ; `contradictions`
@@ -2656,9 +2667,11 @@ Version de clôture `v1.2.0`.
 - Lignes **`## <Rubrique>`** puis **`- <phrase> [OT-AAAA-NNNN] [OT-…]`** ; un lien s'écrit **`[[<titre exact
   d'une page>]]`** dans une phrase ; rien d'autre (une ligne vide est ignorée). Rubriques vides omises,
   ordre fixe par type (`Wiki.RUBRIQUES`) :
-  - équipement : « Ce qui revient », « Ce qui a réglé le problème », « À surveiller », « Astuces » ;
-  - composant : « Défaillances », « Signes d'usure », « Montage et remplacement », « Équivalences » ;
-  - mode : « Symptômes », « Causes », « Remèdes », « Équipements concernés » ;
+  - équipement : « En bref », « Astuces » (refonte 2, D117 ; les anciennes rubriques « Ce qui revient », « Ce qui a
+    réglé le problème », « À surveiller » sont signalées « anciennes rubriques » par le contrôle du wiki) ;
+  - composant : « À quoi il sert » (refonte 2 ; avant : « Défaillances », « Signes d'usure », « Montage et
+    remplacement », « Équivalences ») ;
+  - mode : type retiré par la refonte 2 (§20.12) ;
   - savoir-faire : « Quand le faire », « Étapes », « Pièces et outillage », « Pièges », « Particularités par machine »
     (D116, T141 : une phrase par machine, avec son lien `[[repère — nom]]`, pour ce qui change pour elle).
   Rubrique **réécrite en entier** à chaque OT (D117, T142) : `Wiki.RUBRIQUES_REECRITES` = `{ équipement: ['En bref'] }`
@@ -2669,18 +2682,23 @@ Version de clôture `v1.2.0`.
 - **Identité d'une phrase** : forme comparable de son texte sans citations ni crochets de lien.
 - **Taille d'une page** `Wiki.mesurerTexte(texte)` → `{ phrases, mots }` : mots des phrases sans citations
   et des noms de rubriques ; la mesure des contrôles (§20.6) et de l'en-tête des pages envoyées (§20.5).
-- **Sous-pages** (D96, D100, Nicolas, 2026-10-23). Une page qui dépasserait `phrasesMax` phrases ou
+- **Sous-pages** (D96, D100, Nicolas, 2026-10-23 ; **refonte 2 : pour les savoir-faire seulement**, §20.12). Une page
+  qui dépasserait `phrasesMax` phrases ou
   `motsMax` mots est découpée en sous-pages liées. Une sous-page a le **type de sa page mère** et ses
   rubriques ; `rattache_a` = l'identifiant de la ligne de sa mère ; **aucun ancrage propre**
   (`equipement_id`, `article_id`, `cause_code` vides : sa clé est `WP:<id>`, jamais celle de sa mère) ; un
   seul niveau (la mère n'est pas une sous-page). Une page est une sous-page si et seulement si `rattache_a`
   désigne une page **de même type** (un savoir-faire rattaché à un équipement ou à un composant n'en est pas
-  une). Titre « <repère de l'équipement, ou titre de la mère> — <sujet> » (ex. « PO-02 — garniture »).
+  une). Titre « <repère de l'équipement, ou titre de la mère> — <sujet> » (refonte 2 : « <titre du savoir-faire> — <sujet> »,
+  ex. « Remplacer une garniture mécanique — étapes détaillées »).
   L'IA y déplace les phrases d'un même sujet, telles quelles ou regroupées avec tous leurs OT ; la mère garde
   une phrase de renvoi `[[titre de la sous-page]]` qui cite les OT des phrases déplacées : chaque phrase
   déplacée y est « reprise » (§20.6), rien n'est retiré.
 
 ### 20.5 Ingestion (`wiki-ingestion.js`, D104, D111, D112)
+- **Révisé par la refonte 2 (T125)** : les pages concernées (plus de `CAUSE:` ni de pages liées depuis la machine ;
+  savoir-faire du même geste, D116) et la consigne (« En bref » réécrit en entier, D117 ; seuls des savoir-faire se
+  créent ; la constante `ingestionWiki` de `ia-prompts.js` fait foi) sont dans §20.12, qui prime.
 - **File** : `Wiki.mettreEnFile(otIds)` crée une entrée `ingestion` « en file » par OT **clôturé
   administrativement** qui n'a pas déjà une entrée `en file`, `à valider`, `validée`, `rien à ajouter` ou
   `refusée` ; appelée **après** le passage réussi à « Clôturé administrativement » (`ordres-ecritures.js`,
@@ -2710,7 +2728,8 @@ Version de clôture `v1.2.0`.
   « === Page « <titre> » (<type> · N phrases sur P, M mots sur Q) === »).
 - **Consigne** `Ia.PROMPTS.ingestionWiki` (`ia-prompts.js`) : première ligne « Fonction : ingestionWiki » ;
   règles communes ; tâche : intégrer cet OT aux pages fournies — modifier une page envoyée en rendant son
-  texte complet, ou créer au plus `pagesCreeesMax` pages (mode, savoir-faire, composant sans article) ;
+  texte complet, ou créer au plus `pagesCreeesMax` pages (refonte 2 : des savoir-faire seulement ; avant : mode, savoir-faire,
+  composant sans article) ;
   chaque phrase cite au moins un OT (cet OT ou un OT déjà cité dans les pages) ; ne jamais retirer une
   phrase ni un OT cité (une phrase reformulée garde tous ses OT), hors « En bref », réécrit en entier (D117, §20.12) ; ce qui contredit une phrase existante va
   dans `contradictions`, la phrase reste ; aucune date, aucun nombre absent de l'OT à intégrer ou du texte
@@ -2756,9 +2775,9 @@ Version de clôture `v1.2.0`.
 `Wiki.controlerProposition(proposition, contexte)` → `{ ok, raisons: [texte] }` ; chaque raison nomme la
 page. Refus si :
 - forme : rubrique hors de `Wiki.RUBRIQUES` du type ; page modifiée qui n'était pas envoyée ; création d'un
-  type interdit (équipement, ou composant d'un article), **sauf comme sous-page** ; savoir-faire sans
+  type autre que savoir-faire (refonte 2 ; avant : équipement, ou composant d'un article, sauf comme sous-page) ; savoir-faire sans
   rattachement à une page envoyée ;
-- **sous-page** créée (`rattache_a` = une page envoyée de même type) : sa mère est une sous-page ; sa mère
+- **sous-page** créée (`rattache_a` = une page envoyée de même type ; refonte 2 : un savoir-faire seulement) : sa mère est une sous-page ; sa mère
   n'est pas modifiée par la même proposition, ou ne renvoie pas à elle (`[[titre]]`) ; son titre ne commence
   pas par « <repère de l'équipement de la mère, ou titre de la mère> — » suivi d'un sujet ;
 - citations : phrase sans OT ; OT cité hors des OT permis ;
@@ -2819,7 +2838,7 @@ seulement** (même refus que les écrans réservés) :
   `Wiki.remettreEnFile(id)` relance un OT rejeté ou refusé.
 - **`Wiki.ecrire({ pageId | nouvelle }, texte)`** : contrôles §20.6 (`manuel`) ; page écrite (`origine` mise
   à jour) et entrée `manuel` « appliquée » avec avant et après ; les entrées « à valider » qui touchent la
-  page passent « à refaire ». Créer une page de n'importe quel type et archiver une page passent par là.
+  page passent « à refaire ». Créer une page (refonte 2 : un savoir-faire seulement, sous-page comprise) et archiver une page passent par là.
 - **`Wiki.trancher(entreeId, rang, decision, note)`** : `decision` ∈ `ancien`, `nouveau`, `les deux` ; la
   contradiction est fermée (`decision`, `decide_par`, `decide_le`) et une entrée `décision` « appliquée » la
   trace ; `nouveau` ouvre ensuite l'écriture à la main de la page. Une contradiction venue d'un OT
@@ -2838,8 +2857,16 @@ Comme dans la première version (forme comparable, mots vides, pluriel simple, `
 le document de chaque OT clôturé ; les **pages validées** (titre et texte, `type` = `page`, mènent à la page)
 à la place des synthèses ; index refait quand `ordres_travail`, `demandes`, `codes_defaillance` ou
 `wiki_pages` changent.
+- **Précision (refonte 2, T125)** : la recherche de l'accueil `#/wiki` trouve d'abord les entités par leur nom
+  (`Wiki.chercherEntites`, visibilité D114), puis les OT clôturés et les textes ; le champ « Chercher dans
+  l'historique » reste dans l'onglet Préparation de l'OT et « Déjà vu sur cette machine ? » dans la saisie d'une DI ;
+  la page d'une machine n'a plus de champ de recherche.
 
 ### 20.9 Écrans (`wiki-ecrans.js`, `wiki-journal-ecrans.js`)
+- **Révisé par la refonte 2 (T125)** : l'accueil `#/wiki` et la page `#/wiki/<id>` sont ceux de §20.12 (encyclopédie,
+  petits numéros, fiche des faits) ; l'écriture à la main et le contrôle du wiki sont dans `wiki-ecrire-ecrans.js` ; le
+  contrôle du wiki signale aussi « anciennes rubriques » et « types de page retirés » ; le journal, « Traiter la
+  file » et le champ « Astuce pour la prochaine fois » valent tels quels.
 - **`#/wiki`** : recherche (portée parc) ; quatre sections — Équipements, Composants, Modes de défaillance,
   Savoir-faire — avec leur nombre de pages, chaque page avec son titre et son nombre d'OT cités ; une
   sous-page est dans la section de son type, comme une page. Au
@@ -2942,8 +2969,16 @@ le document de chaque OT clôturé ; les **pages validées** (titre et texte, `t
   fabrication est rejouée ; aucune page retouchée à la main.
 - **Mention** dans « À propos » et le guide : « Wiki de démo construit par Claude (<modèle>) avec la consigne
   de Prévo, un agent par OT, dans l'ordre des interventions ». La démo en ligne n'appelle aucune IA.
+- **Résultat (T139, D119 ; T125)** : 227 OT intégrés par `claude-sonnet-5-5` en un passage, 5,16 $ soit 0,026 $ par OT
+  (15 réponses refusées sur 242, toutes corrigées à la relance ; 137 acceptées, 90 « rien à ajouter », 0 OT refusé) ;
+  42 pages (26 machines, 12 articles, 4 savoir-faire), 2 propositions laissées « à valider ». Le guide (chapitre 7)
+  et le README citent ces chiffres, avec la réserve du fournisseur et de la longueur des comptes rendus.
 
 ### 20.11 Tests du lot 6
+- **Ajouts de la refonte 2 (T125)** : `test_wiki_entites.py`, `test_wiki_ecrans.py` réécrit, `test_wiki_demo.py` étendu
+  (§20.12) ; `test_guide.py` : chapitre « Le wiki de maintenance », section « mise à jour signalée », captures `wiki`
+  et `wiki-page`, mentions clés.
+
 `test_version_schema.py` et `test_schema.py` (format 3, 24 tables, colonne `astuce`, passages depuis 1 et
 2) ; `test_wiki_socle.py` (routes, profils, export ZIP) ; `test_wiki_regles.py` et `test_wiki_calculs.py`
 (couches calculées contre `calcul_wiki.py`, CS97, CS98) ; `test_wiki_controles.py` (chaque motif du §20.6 par

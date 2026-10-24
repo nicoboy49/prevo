@@ -24,6 +24,7 @@ Code de sortie : 0 si tout est fait, 1 si une capture a échoué (son ancienne i
 """
 import argparse
 import base64
+import csv
 import datetime
 import json
 import re
@@ -35,6 +36,7 @@ DOSSIER_CAPTURES = RACINE / "docs" / "captures"
 FICHIER_GUIDE = RACINE / "GUIDE.html"
 FICHIER_SCENARIOS = RACINE / "tests" / "fixtures" / "demo-scenarios.json"   # écrit par outils/generer_demo.py
 FICHIER_PARC = RACINE / "tests" / "fixtures" / "import" / "equipements.xlsx"   # fichier d'essai du lot 5
+FICHIER_EQUIPEMENTS_DEMO = RACINE / "donnees" / "demo" / "equipements.csv"      # écrit par outils/generer_demo.py
 
 BUDGET_GUIDE = 1500000          # octets de texte base64, toutes images du guide comprises (§17.8)
 QUALITES_JPEG = (0.82, 0.76, 0.70, 0.64, 0.58, 0.52, 0.46)
@@ -63,6 +65,15 @@ def scenario(role):
     return json.loads(FICHIER_SCENARIOS.read_text(encoding="utf-8"))[role]
 
 
+def equipement_demo(repere):
+    """Identifiant d'un équipement du jeu de démo d'après son repère (lot 6 : page du wiki d'une machine)."""
+    with open(FICHIER_EQUIPEMENTS_DEMO, encoding="utf-8-sig", newline="") as fichier:
+        for ligne in csv.DictReader(fichier, delimiter=";"):
+            if (ligne.get("repere") or "").lstrip("'") == repere:     # apostrophe de protection Excel
+                return ligne["id"]
+    raise KeyError("équipement de démo introuvable : " + repere)
+
+
 # Chaque capture : appareil, profil, route, élément attendu avant la photo, préparation éventuelle.
 CAPTURES = [
     {"nom": "accueil", "appareil": "bureau", "profil": "responsable", "route": "#/accueil",
@@ -82,6 +93,13 @@ CAPTURES = [
      "attendre": "#contenu #carte-ia"},
     {"nom": "import", "appareil": "bureau", "profil": "responsable", "route": "#/import",
      "attendre": '#contenu .import-etape[data-etape="1"]', "preparer": "import"},
+    # Lot 6 (T125) : l'accueil du wiki (responsable : « Suivi du wiki » affiché) et la page d'une machine de la
+    # démo dont le texte « En bref » a des petits numéros de référence (CP-01, compresseur).
+    {"nom": "wiki", "appareil": "bureau", "profil": "responsable", "route": "#/wiki",
+     "attendre": "#contenu .wiki-accueil #wiki-suivi"},
+    {"nom": "wiki-page", "appareil": "bureau", "profil": "responsable",
+     "route": lambda: "#/wiki/" + equipement_demo("CP-01"),
+     "attendre": "#contenu .wiki-page[data-type=machine] .wiki-ref"},
 ]
 
 # Avant le chargement : profil et nom du poste mémorisés (le choix du profil est sauté).
