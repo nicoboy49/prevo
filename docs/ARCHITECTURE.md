@@ -966,7 +966,7 @@ module » du brief §2). Règles :
 Ordre exact dans `index.html` (après `js/interface.js`), recopié dans `ORDRE_MODULES` de
 `tests/test_depot.py` (le contrat et ce test changent ensemble) :
 ```
-apropos.js  accueil.js  causes-frequentes.js
+apropos.js  mise-a-jour.js  accueil.js  causes-frequentes.js
 parc-regles.js  parc-arbre.js  parc-formulaires.js  parc-fiche.js
 demandes-regles.js  demandes-ecritures.js  demandes-signaler.js  demandes-liste.js  demandes-fiche.js
 ordres-regles.js  ordres-ecritures.js  ordres-liste.js  ordres-fiche.js  ordres-onglets.js  ordres-pieces.js  ordres-impression.js
@@ -1265,7 +1265,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
 - **Ordre de chargement** (remplace celui du §14.2 ; `ORDRE_MODULES` de `tests/test_depot.py` change
   avec lui) :
   ```
-  apropos.js  accueil.js  causes-frequentes.js
+  apropos.js  mise-a-jour.js  accueil.js  causes-frequentes.js
   parc-regles.js  parc-arbre.js  parc-formulaires.js  parc-etiquettes.js  parc-fiche.js
   demandes-regles.js  demandes-ecritures.js  demandes-signaler.js  demandes-liste.js  demandes-fiche.js
   ordres-regles.js  ordres-ecritures.js  ordres-liste.js  ordres-fiche.js  ordres-onglets.js  ordres-pieces.js  ordres-impression.js
@@ -3116,3 +3116,33 @@ le temps 1 (2026-10-24) : **D116** savoir-faire communs (T141) et **D117** « En
   la suite), relecture de la refonte 2, garde-fous (budget atteint, appels en cours et relances comptés, reprises
   gratuites, plus de 10 % de réponses refusées, refus isolé, extrapolation) ; `test_demo.py` : wiki figé de la seule démo standard, `js/demo-donnees.js`
   sous 1 Mo avec un wiki complet.
+
+## 21. Mise à jour signalée (D120, CS118 ; T147)
+
+Les utilisateurs ne surveillent pas GitHub : Prévo leur dit lui-même qu'une version plus récente existe, sans rien
+installer.
+
+- **Fichier** : `https://prevo.pro/version.json`, écrit par `outils/construire_release.py` dans `dist/` à côté du zip
+  (`{"version": "1.2.0", "date": "AAAA-MM-JJ", "adresse": "<release GitHub>", "nouveautes": [≤ 2 puces du CHANGELOG]}`,
+  UTF-8, LF) et publié à la racine du site à chaque release, servi avec `Access-Control-Allow-Origin: *` (lecture
+  depuis le poste, autre origine ; docs/RELEASE.md).
+- **Lecture** (`js/modules/mise-a-jour.js`, `MiseAJour`, chargé juste après `apropos.js`) : seulement si le paramètre
+  `maj_signalee` vaut `1` (Paramètres, responsable, section « Mises à jour », `0` par défaut), sur le poste du
+  responsable, jamais en version web (`App.versionWeb`) ; `App` appelle `MiseAJour.verifier()` une fois l'application
+  prête (après la marque `prevo:pret`). Au plus une lecture par jour et par poste : `prevo.majLecture` (localStorage)
+  garde la date et le résultat, un échec comptant pour la lecture du jour ; `fetch` sans cache, délai 5 s ; le fichier
+  est vérifié (version `x.y.z`, adresse `https://`, date `AAAA-MM-JJ` facultative, nouveautés : 3 au plus, 200
+  caractères chacune) sinon ignoré ; absent, injoignable ou mal formé : rien, aucune erreur montrée. L'adresse peut
+  être forcée par `window.PREVO_ADRESSE_VERSION` (tests : faux serveur local).
+- **Affichage** : version plus récente que `App.version` (comparaison numérique des trois nombres) et non ignorée →
+  bandeau `#maj-bandeau` (`UI.bandeau('info')`) dans `#maj-zone`, juste sous l'en-tête de l'accueil du responsable
+  (version, date, nouveautés, « Télécharger » vers l'adresse dans un nouvel onglet, « Ignorer cette version » :
+  `prevo.majIgnoree`, une version plus récente encore sera signalée) ; ligne « Mise à jour » de À propos
+  (`#apropos-maj` : disponible avec le lien / à jour, vérifié le … / injoignable aujourd'hui / non vérifiée, à
+  autoriser dans Paramètres / démo en ligne : aucune vérification). Le technicien et le demandeur ne voient rien et
+  aucune requête ne part pour eux. Aucune installation automatique.
+- **Tests** : `test_mise_a_jour.py` — faux serveur local (compte les requêtes) : avec l'accord et une version plus
+  récente, bandeau et ligne de À propos ; sans accord, technicien ou version web : aucune requête ; une seule lecture
+  par jour (rechargements) ; « Ignorer » tient au rechargement ; version égale ou plus ancienne, fichier mal formé,
+  absent (404) ou serveur injoignable : rien et aucune erreur JavaScript ; `version.json` de la release (champs,
+  nouveautés tirées du CHANGELOG, sans Markdown) ; `test_depot.py` : ordre des modules.

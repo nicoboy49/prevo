@@ -305,7 +305,7 @@ Object.assign(Accueil, (() => {
     if (!choix) classes.push('sans-premier');
     if (animerChiffres) classes.push('bento-anime');
     animerChiffres = false;
-    UI.remplir(conteneur, UI.html`${entete(aujourdhui)}${alerteControle()}${carteBaseVide()}
+    UI.remplir(conteneur, UI.html`${entete(aujourdhui)}<div id="maj-zone"></div>${alerteControle()}${carteBaseVide()}
       <div class="${classes.join(' ')}" id="bento">
         ${tuileSynthese(compteurs, momentDeLaJournee(new Date().getHours()))}${tuilePremier(choix, aujourdhui)}
         ${compteurs4(compteurs, aujourdhui)}
@@ -317,6 +317,8 @@ Object.assign(Accueil, (() => {
     const derniersCompteurs = conteneur.querySelectorAll('#bento .bento-compteur');
     if (tuileRapport && derniersCompteurs.length) derniersCompteurs[derniersCompteurs.length - 1].after(tuileRapport);
     conteneur.querySelector('#btn-export-accueil').addEventListener('click', () => App.exporterZip());
+    // Mise à jour signalée (D120) : bandeau si une version plus récente est connue sur ce poste.
+    if (typeof MiseAJour !== 'undefined') MiseAJour.afficherSiPossible();
     App.definirTitreMobile('Bonjour', dateEnLettres(aujourdhui, false));
   }
 

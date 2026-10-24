@@ -25,5 +25,20 @@ git worktree remove ../prevo-v1.1.0
 
 Joignez ensuite ce zip à la release GitHub créée à partir de la même étiquette.
 
+## Signaler la nouvelle version (version.json)
+
+Le script écrit aussi `dist/version.json` à côté du zip : le numéro, la date, l'adresse de la release GitHub et
+les deux premières nouveautés du CHANGELOG de cette version. Prévo le lit (si le responsable l'a autorisé dans
+Paramètres, au plus une fois par jour et par poste, ARCHITECTURE.md §21) pour signaler la nouvelle version sur
+l'accueil du responsable et dans « À propos ». À chaque release :
+
+1. publier `dist/version.json` à la racine du site, à l'adresse exacte `https://prevo.pro/version.json` ;
+2. le servir avec l'en-tête `Access-Control-Allow-Origin: *` (nginx : `add_header Access-Control-Allow-Origin *;`
+   dans le `location = /version.json`) : sans cet en-tête, le navigateur refuse la lecture depuis le poste et
+   Prévo ne signale rien ;
+3. vérifier : `curl -I https://prevo.pro/version.json` montre `200`, `application/json` et l'en-tête.
+
+Rien ne s'installe tout seul : le bandeau mène à la page de la release, l'installation reste celle du guide.
+
 La démo en ligne se construit de la même façon, depuis la même copie : voir
 [DEPLOIEMENT_DEMO.md](DEPLOIEMENT_DEMO.md), étape 1.

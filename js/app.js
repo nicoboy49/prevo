@@ -609,6 +609,8 @@ const App = (() => {
     if (!pretDejaMarque) {
       pretDejaMarque = true;
       if (window.performance && typeof performance.mark === 'function') performance.mark('prevo:pret');
+      // Mise à jour signalée (D120) : une lecture par jour et par poste, seulement si le responsable l'a autorisée.
+      if (typeof MiseAJour !== 'undefined') MiseAJour.verifier();
     }
   }
 

@@ -28,6 +28,7 @@ Bibliothèque standard seulement. Lancer depuis la racine du projet :
     py outils/construire_release.py [--source COPIE_DU_DEPOT] [--sortie DOSSIER]
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -107,6 +108,47 @@ def ecrire_zip(source, chemin_zip, prefixe, date, fichiers):
             temporaire.unlink()
 
 
+# Mise à jour signalée (ARCHITECTURE.md §21, D120) : version.json publié à la racine de prevo.pro avec chaque release.
+ADRESSE_RELEASE = "https://github.com/nicoboy49/prevo/releases/tag/v%s"
+NOUVEAUTES_MAX = 2
+MOTIF_LIEN = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+
+
+def texte_simple(puce):
+    """Une puce du CHANGELOG sans sa mise en forme Markdown (liens, gras, code), espaces réduits, 200 caractères au plus."""
+    puce = MOTIF_LIEN.sub(r"\1", puce).replace("**", "").replace("`", "")
+    return re.sub(r"\s+", " ", puce).strip()[:200]
+
+
+def nouveautes_du_changelog(source, version, nombre=NOUVEAUTES_MAX):
+    """Les premières puces de la section « ## [version] » de CHANGELOG.md (lignes de suite jointes) ; [] sans section."""
+    chemin = Path(source) / "CHANGELOG.md"
+    if not chemin.is_file():
+        return []
+    lignes = chemin.read_text(encoding="utf-8").splitlines()
+    debut = next((i for i, l in enumerate(lignes) if l.startswith("## [%s]" % version)), None)
+    if debut is None:
+        return []
+    puces = []
+    for ligne in lignes[debut + 1:]:
+        if ligne.startswith("## "):
+            break
+        if ligne.startswith("- "):
+            puces.append(ligne[2:].strip())
+        elif ligne.startswith("  ") and ligne.strip() and puces:
+            puces[-1] += " " + ligne.strip()
+    return [texte_simple(p) for p in puces[:nombre]]
+
+
+def ecrire_version_json(source, sortie, version, date):
+    """Écrit sortie/version.json ({version, date, adresse, nouveautes}, UTF-8, LF) ; renvoie son chemin."""
+    contenu = {"version": version, "date": "%04d-%02d-%02d" % tuple(date[:3]), "adresse": ADRESSE_RELEASE % version,
+               "nouveautes": nouveautes_du_changelog(source, version)}
+    chemin = Path(sortie) / "version.json"
+    chemin.write_bytes((json.dumps(contenu, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    return chemin
+
+
 def construire(source, sortie):
     """Construit prevo-<version>.zip dans `sortie` ; renvoie (chemin du zip, nombre de fichiers)."""
     source = Path(source).resolve()
@@ -116,6 +158,7 @@ def construire(source, sortie):
     sortie.mkdir(parents=True, exist_ok=True)
     chemin_zip = sortie / ("prevo-%s.zip" % version)
     ecrire_zip(source, chemin_zip, "prevo-%s/" % version, date, fichiers)
+    ecrire_version_json(source, sortie, version, date)
     return chemin_zip, len(fichiers)
 
 
@@ -132,6 +175,8 @@ def main(arguments=None):
         return 1
     print("Release construite : %s (%d fichiers, %d octets)." % (chemin_zip, nombre, chemin_zip.stat().st_size))
     print("À joindre à la release GitHub (Releases > Draft a new release, depuis l'étiquette).")
+    print("Mise à jour signalée : %s à publier à la racine de prevo.pro (https://prevo.pro/version.json), servi avec "
+          "l'en-tête Access-Control-Allow-Origin: * (docs/RELEASE.md)." % (chemin_zip.parent / "version.json"))
     return 0
 
 

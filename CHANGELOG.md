@@ -7,6 +7,13 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Ajouté
+
+- Signalement des nouvelles versions (responsable, Paramètres > « Me signaler les nouvelles versions de Prévo »,
+  désactivé par défaut) : Prévo lit `https://prevo.pro/version.json` au plus une fois par jour et par poste et,
+  quand une version plus récente existe, le dit sur l'accueil du responsable et dans « À propos », avec le lien
+  de téléchargement et les nouveautés. Rien ne s'installe tout seul.
+
 ### Modifié
 
 - Le logiciel s'appelle désormais **Prévo** (l'ancien nom était déjà celui d'une autre GMAO). Le nom

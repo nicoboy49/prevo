@@ -47,6 +47,7 @@ const Apropos = (() => {
             <dt>Application</dt><dd>Prévo — GMAO</dd>
             <dt>Version</dt><dd>${App.version}</dd>
             <dt>Date</dt><dd>${UI.dateFr(App.dateVersion)}</dd>
+            <dt>Mise à jour</dt><dd id="apropos-maj">${typeof MiseAJour !== 'undefined' ? MiseAJour.ligneApropos() : ''}</dd>
             <dt>Contenu</dt><dd>Lots 1 à 4 : parc, demandes, ordres de travail, préventif et préventif suggéré, magasin, planning, contrôles réglementaires, équipe, indicateurs et rapport mensuel, assistant IA, dictée</dd>
             <dt>Stockage actuel</dt><dd>${libelleStockage || MODES[mode] || '—'}</dd>
           </dl>

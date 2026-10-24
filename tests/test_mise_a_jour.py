@@ -1,0 +1,298 @@
+"""Mise à jour signalée (ARCHITECTURE.md §21 ; D120, CS118 ; tâche T147).
+
+Prévo lit https://prevo.pro/version.json (ici un faux serveur local, adresse forcée par window.PREVO_ADRESSE_VERSION)
+au plus une fois par jour et par poste, seulement si le responsable l'a autorisé dans Paramètres (maj_signalee), et
+signale une version plus récente sur l'accueil du responsable et dans « À propos ». Ce qui est vérifié :
+    accord       version plus récente : bandeau #maj-bandeau (version, date, nouveautés, « Télécharger » vers l'adresse
+                 de la release, « Ignorer cette version ») et ligne « Mise à jour » de À propos avec le lien ;
+    une par jour deux rechargements : une seule requête ; « Ignorer » tient au rechargement, sans nouvelle requête ;
+    rien         sans accord, technicien, version web : aucune requête ; version égale, fichier mal formé, absent
+                 (404), serveur injoignable : pas de bandeau, aucune erreur JavaScript, ligne de À propos adaptée ;
+    fichier      vérification du contenu (numéro, adresse https, nouveautés bornées), comparaison des versions ;
+    release      outils/construire_release.py écrit dist/version.json (numéro, date, adresse de la release,
+                 nouveautés tirées du CHANGELOG sans Markdown).
+
+Lancer depuis la racine du projet :
+    py -m unittest discover -s tests -p "test_mise_a_jour.py" -v
+"""
+import http.server
+import importlib.util
+import json
+import re
+import tempfile
+import threading
+import unittest
+from pathlib import Path
+
+from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil
+from test_version_web import lancer, version_et_date
+
+SCRIPT_RELEASE = RACINE / "outils" / "construire_release.py"
+TECHNICIEN = "TEC-0001"
+PANNE_RESEAU = r"ERR_CONNECTION_REFUSED|Failed to fetch|net::ERR"
+
+
+def version_suivante(version):
+    """1.1.0 → 1.1.1 (version plus récente que celle de l'application)."""
+    nombres = [int(n) for n in version.split(".")]
+    nombres[2] += 1
+    return ".".join(str(n) for n in nombres)
+
+
+def fichier_version(version, **champs):
+    contenu = {"version": version, "date": "2026-11-02", "adresse": "https://github.com/nicoboy49/prevo/releases/tag/v" + version,
+               "nouveautes": ["Mise à jour signalée sur l'accueil.", "Wiki de maintenance : pages de machines."]}
+    contenu.update(champs)
+    return json.dumps(contenu, ensure_ascii=False).encode("utf-8")
+
+
+class FauxSite:
+    """Faux prevo.pro : sert /version.json (corps et statut donnés), compte les requêtes, en-tête CORS comme le vrai."""
+
+    def __init__(self, corps=b"", statut=200):
+        self.corps, self.statut, self.requetes = corps, statut, []
+
+    def __enter__(self):
+        site = self
+
+        class Gestionnaire(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                site.requetes.append(self.path)
+                self.send_response(site.statut)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(site.corps)))
+                self.end_headers()
+                self.wfile.write(site.corps)
+
+            def log_message(self, *arguments):
+                pass
+
+        self.serveur = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Gestionnaire)
+        self.fil = threading.Thread(target=self.serveur.serve_forever, daemon=True)
+        self.fil.start()
+        return self
+
+    def __exit__(self, *exception):
+        self.serveur.shutdown()
+        self.serveur.server_close()
+
+    @property
+    def url(self):
+        return "http://127.0.0.1:%d/version.json" % self.serveur.server_address[1]
+
+
+class CasMiseAJour(CasNavigateur):
+
+    def setUp(self):
+        super().setUp()
+        self.version = version_et_date()[0]
+        self.nouvelle = version_suivante(self.version)
+
+    def ouvrir(self, serveur, adresse, profil="responsable", accord=True, **options):
+        """Page du responsable (ou d'un autre profil) en mode serveur, adresse du faux site forcée ; l'accord est écrit
+        dans parametres.csv (serveur) avant le rechargement qui déclenche la lecture."""
+        self.contexte.close()
+        self.contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1440, "height": 900})
+        self.contexte.add_init_script("window.PREVO_ADRESSE_VERSION = %s;" % json.dumps(adresse))
+        preregler_profil(self.contexte, profil, **options)
+        self.page = self.contexte.new_page()
+        self.surveiller(self.page)
+        self.page.goto(serveur.url + "/")
+        attendre_pret(self.page, 30000)
+        if accord:
+            self.page.evaluate("""() => Donnees.modifier('parametres', (lignes) => {
+                const ligne = lignes.find((l) => l.cle === 'maj_signalee');
+                if (ligne) ligne.valeur = '1'; else lignes.push({ cle: 'maj_signalee', valeur: '1' });
+                return true; }, { action: 'test de la mise à jour signalée' })""")
+            self.page.reload()
+            attendre_pret(self.page, 30000)
+        return self.page
+
+    def attendre_lecture(self):
+        self.page.wait_for_function("localStorage.getItem('prevo.majLecture') !== null", timeout=10000)
+        return json.loads(self.page.evaluate("localStorage.getItem('prevo.majLecture')"))
+
+    def ligne_apropos(self):
+        self.page.evaluate("location.hash = '#/apropos'")
+        self.page.wait_for_selector("#apropos-maj")
+        return self.page.evaluate("document.querySelector('#apropos-maj').textContent.replace(/\\s+/g, ' ').trim()")
+
+
+class TestSignalement(CasMiseAJour):
+
+    def test_version_plus_recente_bandeau_lien_et_ligne_de_a_propos(self):
+        with ServeurPrevo() as serveur, FauxSite(fichier_version(self.nouvelle)) as site:
+            page = self.ouvrir(serveur, site.url)
+            page.wait_for_selector("#maj-zone #maj-bandeau", timeout=10000)
+            texte = page.evaluate("document.querySelector('#maj-bandeau').textContent.replace(/\\s+/g, ' ').trim()")
+            self.assertIn("Prévo %s est disponible" % self.nouvelle, texte)
+            self.assertIn("(02/11/2026)", texte)
+            self.assertIn("Mise à jour signalée sur l'accueil. · Wiki de maintenance : pages de machines.", texte)
+            lien = page.locator("#maj-bandeau a.maj-telecharger")
+            self.assertEqual(lien.get_attribute("href"), "https://github.com/nicoboy49/prevo/releases/tag/v" + self.nouvelle)
+            self.assertEqual(lien.get_attribute("target"), "_blank")
+            self.assertEqual(page.evaluate("document.querySelector('#maj-bandeau').getAttribute('role')"), "status")
+            self.assertEqual(site.requetes, ["/version.json"])
+            # Toujours à sa place après un retour sur l'accueil, sans nouvelle requête.
+            page.evaluate("location.hash = '#/parc'")
+            page.wait_for_selector("#contenu h1")
+            page.evaluate("location.hash = '#/accueil'")
+            page.wait_for_selector("#maj-zone #maj-bandeau")
+            self.assertEqual(len(site.requetes), 1)
+            ligne = self.ligne_apropos()
+            self.assertIn("Prévo %s est disponible" % self.nouvelle, ligne)
+            self.assertEqual(page.get_attribute("#apropos-maj a", "href"), "https://github.com/nicoboy49/prevo/releases/tag/v" + self.nouvelle)
+
+    def test_une_lecture_par_jour_et_ignorer_tient_au_rechargement(self):
+        with ServeurPrevo() as serveur, FauxSite(fichier_version(self.nouvelle)) as site:
+            page = self.ouvrir(serveur, site.url)
+            page.wait_for_selector("#maj-bandeau", timeout=10000)
+            for _ in range(2):
+                page.reload()
+                attendre_pret(page, 30000)
+                page.wait_for_selector("#maj-bandeau")
+            self.assertEqual(site.requetes, ["/version.json"], "une seule lecture par jour et par poste")
+            page.click("#maj-bandeau .maj-ignorer")
+            page.wait_for_selector("#maj-bandeau", state="detached")
+            self.assertEqual(page.evaluate("localStorage.getItem('prevo.majIgnoree')"), self.nouvelle)
+            page.reload()
+            attendre_pret(page, 30000)
+            page.wait_for_selector("#contenu .accueil-instruments")
+            self.assertIsNone(page.query_selector("#maj-bandeau"))
+            self.assertEqual(len(site.requetes), 1)
+            self.assertIn("Prévo est à jour", self.ligne_apropos())
+            # Une version plus récente encore est signalée malgré la version ignorée.
+            self.assertTrue(page.evaluate("""(v) => { localStorage.setItem('prevo.majLecture', JSON.stringify({ date: JSON.parse(localStorage.getItem('prevo.majLecture')).date,
+                fichier: { version: v, date: '2026-12-01', adresse: 'https://prevo.pro/', nouveautes: [] } })); return Boolean(MiseAJour.disponible()); }""",
+                                          version_suivante(self.nouvelle)))
+
+    def test_sans_accord_technicien_et_version_web_aucune_requete(self):
+        with ServeurPrevo() as serveur, FauxSite(fichier_version(self.nouvelle)) as site:
+            page = self.ouvrir(serveur, site.url, accord=False)
+            page.wait_for_selector("#contenu .accueil-instruments")
+            page.wait_for_timeout(500)
+            self.assertEqual(site.requetes, [])
+            self.assertIsNone(page.evaluate("localStorage.getItem('prevo.majLecture')"))
+            self.assertIsNone(page.query_selector("#maj-bandeau"))
+            self.assertIn("Non vérifiée", self.ligne_apropos())
+            self.assertIn("Paramètres", self.ligne_apropos())
+            # Technicien, même avec l'accord : rien ne part, rien n'est montré.
+            page = self.ouvrir(serveur, site.url, profil="technicien", technicien_id=TECHNICIEN)
+            page.wait_for_selector("#contenu h1")
+            page.wait_for_timeout(500)
+            self.assertEqual(site.requetes, [])
+            self.assertIsNone(page.evaluate("localStorage.getItem('prevo.majLecture')"))
+            self.assertIsNone(page.query_selector("#maj-bandeau"))
+            self.assertNotIn("disponible", self.ligne_apropos())
+            # Version web (démo en ligne) : la vérification refuse avant toute requête.
+            page = self.ouvrir(serveur, site.url)
+            page.wait_for_selector("#maj-bandeau", timeout=10000)
+            self.assertEqual(len(site.requetes), 1)
+            resultat = page.evaluate("""async () => { localStorage.removeItem('prevo.majLecture'); App.versionWeb = true;
+                const r = await MiseAJour.verifier(); return [r, localStorage.getItem('prevo.majLecture'), MiseAJour.disponible()]; }""")
+            self.assertEqual(resultat, [None, None, None])
+            self.assertEqual(len(site.requetes), 1)
+            self.assertIn("Démo en ligne", self.ligne_apropos())
+
+    def test_version_egale_fichier_mal_forme_absent_ou_injoignable_rien_et_aucune_erreur(self):
+        with ServeurPrevo() as serveur:
+            with FauxSite(fichier_version(self.version)) as site:          # même version : à jour
+                page = self.ouvrir(serveur, site.url)
+                lecture = self.attendre_lecture()
+                self.assertEqual(lecture["fichier"]["version"], self.version)
+                page.wait_for_selector("#contenu .accueil-instruments")
+                self.assertIsNone(page.query_selector("#maj-bandeau"))
+                self.assertIn("Prévo est à jour", self.ligne_apropos())
+            with FauxSite(b"pas du JSON {") as site:                        # mal formé
+                page = self.ouvrir(serveur, site.url)
+                self.assertIsNone(self.attendre_lecture()["fichier"])
+                self.assertIsNone(page.query_selector("#maj-bandeau"))
+                self.assertIn("Vérification impossible aujourd'hui", self.ligne_apropos())
+            with FauxSite(fichier_version(self.nouvelle, adresse="http://pas-https.exemple/")) as site:   # adresse refusée
+                page = self.ouvrir(serveur, site.url)
+                self.assertIsNone(self.attendre_lecture()["fichier"])
+                self.assertIsNone(page.query_selector("#maj-bandeau"))
+            self.autoriser_erreur(re.compile(r"status of 404.*version\.json"))
+            with FauxSite(b"", statut=404) as site:                        # absent
+                page = self.ouvrir(serveur, site.url)
+                self.assertIsNone(self.attendre_lecture()["fichier"])
+                self.assertIsNone(page.query_selector("#maj-bandeau"))
+            self.autoriser_erreur(re.compile(PANNE_RESEAU))
+            with FauxSite(b"") as site:                                    # injoignable : le port est fermé
+                adresse = site.url
+            page = self.ouvrir(serveur, adresse)
+            self.assertIsNone(self.attendre_lecture()["fichier"])
+            self.assertIsNone(page.query_selector("#maj-bandeau"))
+            self.assertIn("Vérification impossible aujourd'hui", self.ligne_apropos())
+
+    def test_lecture_du_fichier_et_comparaison_des_versions(self):
+        with ServeurPrevo() as serveur, FauxSite(fichier_version(self.nouvelle)) as site:
+            page = self.ouvrir(serveur, site.url, accord=False)
+            resultat = page.evaluate("""() => ({
+              nombres: [MiseAJour.nombres('1.2.0'), MiseAJour.nombres(' 10.0.3 '), MiseAJour.nombres('1.2'), MiseAJour.nombres('v1.2.0'), MiseAJour.nombres(12)],
+              plusRecente: [MiseAJour.plusRecente([1, 2, 0], [1, 1, 9]), MiseAJour.plusRecente([1, 10, 0], [1, 9, 0]),
+                            MiseAJour.plusRecente([1, 1, 0], [1, 1, 0]), MiseAJour.plusRecente([1, 0, 9], [1, 1, 0]), MiseAJour.plusRecente(null, [1, 0, 0])],
+              fichier: MiseAJour.lireFichier({ version: '1.3.0', date: '2026-12-24', adresse: 'https://prevo.pro/x',
+                nouveautes: ['  un  ', '', 'deux', 'trois', 'quatre', 7, 'x'.repeat(300)] }),
+              refuses: [MiseAJour.lireFichier(null), MiseAJour.lireFichier({ version: '1.3.0' }), MiseAJour.lireFichier({ version: '1.3', adresse: 'https://a' }),
+                        MiseAJour.lireFichier({ version: '1.3.0', adresse: 'ftp://a' })],
+              dateIgnoree: MiseAJour.lireFichier({ version: '1.3.0', adresse: 'https://a', date: 'hier' }).date,
+            })""")
+            self.assertEqual(resultat["nombres"], [[1, 2, 0], [10, 0, 3], None, None, None])
+            self.assertEqual(resultat["plusRecente"], [True, True, False, False, False])
+            fichier = resultat["fichier"]
+            self.assertEqual((fichier["version"], fichier["date"], fichier["adresse"]), ("1.3.0", "2026-12-24", "https://prevo.pro/x"))
+            self.assertEqual(fichier["nouveautes"][:2], ["un", "deux"])
+            self.assertEqual(len(fichier["nouveautes"]), 3)
+            self.assertEqual(resultat["refuses"], [None, None, None, None])
+            self.assertEqual(resultat["dateIgnoree"], "")
+
+
+class TestVersionJsonDeLaRelease(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        specification = importlib.util.spec_from_file_location("construire_release_test", SCRIPT_RELEASE)
+        cls.module = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(cls.module)
+        cls.version, cls.date = version_et_date()
+
+    def test_version_json_ecrit_avec_le_zip(self):
+        with tempfile.TemporaryDirectory(prefix="prevo-maj-") as sortie:
+            resultat = lancer(SCRIPT_RELEASE, "--sortie", sortie)
+            self.assertEqual(resultat.returncode, 0, resultat.stderr)
+            self.assertIn("version.json", resultat.stdout)
+            self.assertIn("Access-Control-Allow-Origin", resultat.stdout)
+            octets = (Path(sortie) / "version.json").read_bytes()
+            self.assertNotIn(b"\r\n", octets)
+            self.assertTrue(octets.endswith(b"\n"))
+            contenu = json.loads(octets.decode("utf-8"))
+            self.assertEqual(sorted(contenu), ["adresse", "date", "nouveautes", "version"])
+            self.assertEqual(contenu["version"], self.version)
+            self.assertEqual(contenu["date"], "%04d-%02d-%02d" % self.date)
+            self.assertEqual(contenu["adresse"], "https://github.com/nicoboy49/prevo/releases/tag/v" + self.version)
+            self.assertEqual(contenu["nouveautes"], self.module.nouveautes_du_changelog(RACINE, self.version))
+            self.assertLessEqual(len(contenu["nouveautes"]), 2)
+            for nouveaute in contenu["nouveautes"]:
+                self.assertTrue(nouveaute and len(nouveaute) <= 200, nouveaute)
+                self.assertFalse(re.search(r"\*\*|`|\]\(", nouveaute), nouveaute)
+
+    def test_nouveautes_du_changelog(self):
+        with tempfile.TemporaryDirectory(prefix="prevo-maj-") as dossier:
+            changelog = Path(dossier) / "CHANGELOG.md"
+            changelog.write_text("# Journal\n\n## [Non publié]\n\n- pas celle-là\n\n## [2.0.0] - 2027-01-01\n\n### Ajouté\n\n"
+                                 "- Première **nouveauté** avec un [lien](docs/X.md) et du `code`,\n  sur deux   lignes.\n"
+                                 "- Deuxième nouveauté.\n- Troisième, ignorée.\n\n## [1.9.0] - 2026-12-01\n\n- ancienne\n",
+                                 encoding="utf-8")
+            self.assertEqual(self.module.nouveautes_du_changelog(dossier, "2.0.0"),
+                             ["Première nouveauté avec un lien et du code, sur deux lignes.", "Deuxième nouveauté."])
+            self.assertEqual(self.module.nouveautes_du_changelog(dossier, "1.9.0"), ["ancienne"])
+            self.assertEqual(self.module.nouveautes_du_changelog(dossier, "3.0.0"), [])
+            changelog.unlink()
+            self.assertEqual(self.module.nouveautes_du_changelog(dossier, "2.0.0"), [])
+
+
+if __name__ == "__main__":
+    unittest.main()
