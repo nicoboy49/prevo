@@ -1,1 +1,215 @@
 ﻿id;type;titre;cle;equipement_id;article_id;cause_code;rattache_a;texte;ot_cites;liens;version;origine;modele;derniere_entree;valide_par;valide_le;cree_le;modifie_le;statut
+WP-0001;équipement;CV-02 — Convoyeur à rouleaux motorisé;cv 02 convoyeur a rouleaux motorise;EQ-0023;;;;"## En bref
+- Arrêt intempestif : le tapis stoppe et le voyant de défaut capteur clignote, à cause d'un capteur de présence ou d'une cellule de fin de course encrassé (par exemple de résidus de film sur la cellule d'entrée) ou mal aligné, réglé par le nettoyage et le réalignement des capteurs. [OT-2025-0002] [OT-2025-0013] [OT-2025-0029] [OT-2025-0047] [OT-2026-0014] [OT-2026-0029] [OT-2026-0046] [OT-2026-0062] [OT-2026-0084] [OT-2026-0102] [OT-2026-0122] [OT-2026-0137] [OT-2026-0158] [OT-2026-0169]
+## Astuces
+- Nettoyer la face du capteur au chiffon sec puis au nettoyant contacts : l'eau laisse un film qui fausse la détection. [OT-2025-0029]
+- Après le nettoyage, contrôler la distance de détection avec une pièce de la production, pas avec la main. [OT-2026-0014] [OT-2026-0102] [OT-2026-0158]
+- En cas d'arrêt intempestif, regarder d'abord le capteur d'entrée, qui s'encrasse plus que les autres. [OT-2026-0084] [OT-2026-0122]";"OT-2025-0002;OT-2025-0013;OT-2025-0029;OT-2025-0047;OT-2026-0014;OT-2026-0029;OT-2026-0046;OT-2026-0062;OT-2026-0084;OT-2026-0102;OT-2026-0122;OT-2026-0137;OT-2026-0158;OT-2026-0169";;14;IA;claude-sonnet-5-5;WJ-00222;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0002;équipement;CP-01 — Compresseur à vis 30 kW;cp 01 compresseur a vis 30 kw;EQ-0001;;;;"## En bref
+- [[Échauffement]] : la température monte, niveau d'huile bas, réglé en complétant l'huile. [OT-2025-0004] [OT-2026-0012] [OT-2026-0076] [OT-2026-0138]
+- [[Échauffement]] : arrêt sur température haute, filtre à huile colmaté, réglé en changeant la [[Cartouche filtre à huile CP-01]] ; avec un filtre neuf, radiateur d'huile colmaté, réglé en le nettoyant. [OT-2025-0023] [OT-2025-0043] [OT-2026-0030] [OT-2026-0048] [OT-2026-0094] [OT-2026-0118] [OT-2026-0161] [OT-2026-0213]
+- Sonde PT100 au refoulement : alerte à 90 °C, arrêt à 100 °C. [OT-2026-0143]
+## Astuces
+- Écrire la date de pose au marqueur sur la cartouche neuve du filtre à huile pour voir depuis quand elle est en place. [OT-2025-0023]
+- Faire l'appoint avec la même huile que celle en place : un mélange mousse et fait remonter la température. [OT-2026-0012]
+- Quand le compresseur chauffe, regarder le radiateur d'huile avant de changer le filtre : s'il est gras, c'est lui. [OT-2026-0213]";"OT-2025-0004;OT-2026-0012;OT-2026-0076;OT-2026-0138;OT-2025-0023;OT-2025-0043;OT-2026-0030;OT-2026-0048;OT-2026-0094;OT-2026-0118;OT-2026-0161;OT-2026-0213;OT-2026-0143";"PANNE-S04;ART-0021";13;IA;claude-sonnet-5-5;WJ-00221;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0003;équipement;EM-01 — Fardeleuse sous film rétractable;em 01 fardeleuse sous film retractable;EQ-0026;;;;"## En bref
+- Arrêt intempestif : capteur ou cellule souillé de résidus de film, réglé par nettoyage, réalignement ou réglage de sa sensibilité. [OT-2025-0006] [OT-2025-0032] [OT-2026-0063] [OT-2026-0101] [OT-2026-0107]
+- Ne démarre pas : contacteur de puissance défectueux, réglé par son remplacement. [OT-2026-0096]
+- Défaut de qualité de soudure : température dérivée, réajustée ; bruit de courroie : courroie détendue, retendue. [OT-2025-0014] [OT-2026-0034]
+## Astuces
+- Faire valider la température de soudure sur dix colis témoins avant de relancer la ligne. [OT-2025-0014]
+- Pour retendre la courroie, voir [[Retendre une courroie d'entraînement]]. [OT-2026-0034]
+- Nettoyer le réflecteur en même temps que la cellule : son oubli laisse revenir le défaut. [OT-2026-0101] [OT-2026-0107]";"OT-2025-0006;OT-2025-0032;OT-2026-0063;OT-2026-0101;OT-2026-0107;OT-2026-0096;OT-2025-0014;OT-2026-0034";WP-0030;8;IA;claude-sonnet-5-5;WJ-00159;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0004;équipement;CP-01.SEC — Sécheur d'air par réfrigération;cp 01 sec secheur d air par refrigeration;EQ-0002;;;;"## En bref
+- Alarme température avec montée de la température de départ : le condenseur était encrassé, et son nettoyage à l'air et au produit adapté a réglé la panne. [OT-2025-0012] [OT-2025-0039]";"OT-2025-0012;OT-2025-0039";;2;IA;claude-sonnet-5-5;WJ-00037;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0005;équipement;PO-02 — Pompe centrifuge eau de refroidissement;po 02 pompe centrifuge eau de refroidissement;EQ-0005;;;;"## En bref
+- Fuite à l'arbre due à une garniture mécanique usée, réglée par le remplacement de la garniture. [OT-2025-0010] [OT-2025-0044] [OT-2026-0026] [OT-2026-0058] [OT-2026-0098] [OT-2026-0133]
+- Petite fuite en sortie due à la bride de refoulement desserrée par les vibrations, réglée par le resserrage des boulons au couple en croix. [OT-2025-0030] [OT-2026-0082]
+## Astuces
+- Pour changer la garniture : [[Remplacer une garniture mécanique]]. [OT-2025-0010]
+- Pour resserrer une bride : [[Resserrer une bride de tuyauterie]]. [OT-2025-0030] [OT-2026-0082]";"OT-2025-0010;OT-2025-0044;OT-2026-0026;OT-2026-0058;OT-2026-0098;OT-2026-0133;OT-2025-0030;OT-2026-0082";"WP-0006;WP-0018";8;IA;claude-sonnet-5-5;WJ-00184;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0006;savoir-faire;Remplacer une garniture mécanique;remplacer une garniture mecanique;;ART-0016;;;"## Quand le faire
+- Quand la garniture mécanique est usée et que la pompe fuit côté accouplement. [OT-2025-0010] [OT-2025-0019] [OT-2025-0044] [OT-2026-0026] [OT-2026-0035] [OT-2026-0058] [OT-2026-0098]
+## Étapes
+- Mettre la machine à l'arrêt selon la fiche en tête de sa page. [OT-2025-0010]
+- Déposer le moteur pour accéder à la garniture. [OT-2025-0010] [OT-2025-0019]
+- Nettoyer les faces de frottement de la garniture neuve juste avant le montage : une poussière suffit à la faire fuir. [OT-2025-0010]
+- Changer les joints toriques en même temps que la garniture. [OT-2025-0044] [OT-2026-0026] [OT-2026-0035] [OT-2026-0133]
+- Monter la garniture neuve, puis recentrer l'accouplement. [OT-2025-0010] [OT-2025-0019]
+- Contrôler l'alignement après le montage. [OT-2025-0037] [OT-2026-0058] [OT-2026-0098]
+- Vérifier l'étanchéité en marche. [OT-2025-0010] [OT-2025-0019] [OT-2025-0037] [OT-2026-0058] [OT-2026-0098]
+## Pièces et outillage
+- Kit garniture mécanique : [[Kit garniture mécanique PO-02]]. [OT-2025-0010] [OT-2025-0044] [OT-2026-0026] [OT-2026-0058] [OT-2026-0098] [OT-2026-0133]
+- Kit garniture mécanique : [[Kit garniture mécanique PO-01]]. [OT-2025-0019] [OT-2026-0035]
+- Kit garniture mécanique : [[Kit garniture mécanique universelle Ø25]]. [OT-2025-0037]
+## Particularités par machine
+- [[PO-02 — Pompe centrifuge eau de refroidissement]] : le moteur se dépose pour atteindre la garniture. [OT-2025-0010]
+- [[PO-01 — Pompe de circulation d'eau glacée]] : le moteur se dépose pour atteindre la garniture. [OT-2025-0019]
+- [[PO-03 — Pompe de relevage des eaux pluviales]] : la garniture se remplace par le [[Kit garniture mécanique universelle Ø25]]. [OT-2025-0037]";"OT-2025-0010;OT-2025-0019;OT-2025-0044;OT-2026-0026;OT-2026-0035;OT-2026-0058;OT-2026-0098;OT-2026-0133;OT-2025-0037";"ART-0016;ART-0017;ART-0018;EQ-0005;EQ-0004;EQ-0006";9;IA;claude-sonnet-5-5;WJ-00184;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0007;équipement;CU-01 — Centre d'usinage 3 axes;cu 01 centre d usinage 3 axes;EQ-0016;;;;"## En bref
+- [[Défaut qualité]] : cotes qui dérivent, par dérive du zéro pièce ou jeu de compensation d'outil, réglée en recalant outils et compensations. [OT-2025-0015] [OT-2026-0007] [OT-2026-0147]
+- [[Fuite]] : liquide de coupe, par flexible d'arrosage fendu, réglée en remplaçant le flexible. [OT-2025-0045]
+- [[Arrêt intempestif]] : alarme course dépassée, par fausse manœuvre, réglé en réarmant et réinitialisant les axes. [OT-2026-0128] [OT-2026-0165]
+## Astuces
+- Contrôler le zéro pièce avant de toucher aux correcteurs d'outil. [OT-2025-0015]
+- Faire refaire le référencement des axes par le conducteur avec vous. [OT-2026-0128]";"OT-2025-0015;OT-2026-0007;OT-2026-0147;OT-2025-0045;OT-2026-0128;OT-2026-0165";"PANNE-S07;PANNE-S01;PANNE-S05";6;IA;claude-sonnet-5-5;WJ-00216;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0008;équipement;CH-01 — Chariot élévateur électrique 2 t;ch 01 chariot elevateur electrique 2 t;EQ-0030;;;;"## En bref
+- Palan sans montée et claquement : contacteur de puissance hors service, réglé par son remplacement. [OT-2025-0018] [OT-2026-0004] [OT-2026-0168]
+- Arrêt en mouvement : fin de course encrassé, réglé par nettoyage et contrôle du réglage. [OT-2025-0049] [OT-2026-0002] [OT-2026-0011] [OT-2026-0155]
+- Grincement : galets et chaîne secs, réglé par graissage ; vibrations ou chariot tirant d'un côté : galet cassé, réglé par changement de roue et contrôle de l'axe. [OT-2026-0040] [OT-2026-0057] [OT-2026-0119] [OT-2026-0136] [OT-2026-0141] [OT-2026-0156]
+## Astuces
+- Vérifier d'abord la bobine au multimètre ; si elle est bonne, chercher des contacts collés. [OT-2025-0018] [OT-2026-0168]
+- Garder un contacteur de rechange au magasin : la panne du contacteur immobilise longtemps le chariot. [OT-2026-0004]
+- Graisser la chaîne sur toute sa longueur en déplaçant le chariot, car les maillons du milieu restent secs. [OT-2026-0040] [OT-2026-0119] [OT-2026-0156]
+- Contrôler l'axe du galet en même temps que son remplacement : un axe usé casse le galet neuf. [OT-2026-0141]
+- Après nettoyage d'un fin de course, faire un cycle complet à vide : un fin de course mal réglé ne se voit qu'en fin de course. [OT-2026-0155]";"OT-2025-0018;OT-2026-0004;OT-2026-0168;OT-2025-0049;OT-2026-0002;OT-2026-0011;OT-2026-0155;OT-2026-0040;OT-2026-0057;OT-2026-0119;OT-2026-0136;OT-2026-0141;OT-2026-0156";;13;IA;claude-sonnet-5-5;WJ-00220;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0009;composant;Contacteur tripolaire 40 A bobine 230 V;contacteur tripolaire 40 a bobine 230 v;;ART-0033;;;"## À quoi il sert
+- C'est le contacteur de puissance du chariot. [OT-2025-0018]
+- Ses contacts peuvent coller, puis il devient défectueux : on entend alors un claquement sans démarrage. [OT-2025-0018]";OT-2025-0018;;1;IA;claude-sonnet-5-5;WJ-00016;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0010;équipement;GF-01 — Groupe froid 80 kW;gf 01 groupe froid 80 kw;EQ-0007;;;;"## En bref
+- Alarme température, départ qui monte : condenseur encrassé, et son nettoyage a réglé l'[[Échauffement]]. [OT-2025-0021]
+- Cycles courts, arrêts répétés : thermostat dérivé, ou valeur de réglage et différentiel déréglés, et le recalage ou la remise aux valeurs nominales a réglé l'[[Arrêt intempestif]]. [OT-2025-0027] [OT-2026-0065]
+- Perte de performance : tuyauterie corrodée, et le remplacement du tronçon et la recharge ont réglé la [[Fuite]]. [OT-2026-0010]
+## Astuces
+- Nettoyer le condenseur de l'intérieur vers l'extérieur : la poussière ne s'enfonce pas dans les ailettes. [OT-2025-0021]";"OT-2025-0021;OT-2025-0027;OT-2026-0065;OT-2026-0010";"PANNE-S04;PANNE-S05;PANNE-S01";4;IA;claude-sonnet-5-5;WJ-00118;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0011;équipement;PO-01 — Pompe de circulation d'eau glacée;po 01 pompe de circulation d eau glacee;EQ-0004;;;;"## En bref
+- [[Fuite]] importante à l'arbre côté accouplement, causée par une garniture mécanique usée, réglée par le remplacement de la garniture et des joints toriques. [OT-2025-0019] [OT-2026-0035]
+- [[Bruit anormal]] puis arrêt, moteur calé, causé par des roulements grippés et un bobinage échauffé, réglé par le remplacement du moteur. [OT-2026-0159]";"OT-2025-0019;OT-2026-0035;OT-2026-0159";"PANNE-S01;PANNE-S02";3;IA;claude-sonnet-5-5;WJ-00212;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0012;composant;Kit garniture mécanique PO-01;kit garniture mecanique po 01;;ART-0017;;;"## À quoi il sert
+- Le remplacement de la garniture demande la dépose du moteur, puis le recentrage de l'accouplement. [OT-2025-0019]
+- Les joints toriques se changent en même temps que la garniture. [OT-2026-0035]";"OT-2025-0019;OT-2026-0035";;2;IA;claude-sonnet-5-5;WJ-00089;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0013;équipement;PO-03 — Pompe de relevage des eaux pluviales;po 03 pompe de relevage des eaux pluviales;EQ-0006;;;;"## En bref
+- Bruit de ferraille ou sifflement, dû à un roulement hors service, réglé par son remplacement. [OT-2025-0022] [OT-2026-0088]
+- Fuite à la garniture mécanique, due à une garniture usée, réglée par un kit neuf, voir [[Remplacer une garniture mécanique]]. [OT-2025-0037]
+- Vibrations et tuyau qui tremble, dues à des vis d'accouplement desserrées, réglées par leur resserrage au couple. [OT-2026-0042]
+## Astuces
+- Noter le relevé de vibrations avant et après le remplacement d'un roulement : il sert de référence au contrôle suivant. [OT-2026-0088]";"OT-2025-0022;OT-2026-0088;OT-2025-0037;OT-2026-0042";WP-0006;4;IA;claude-sonnet-5-5;WJ-00148;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0014;équipement;SC-01 — Scie à ruban;sc 01 scie a ruban;EQ-0019;;;;"## En bref
+- Machine en défaut, axes immobiles : fausse manœuvre du conducteur, réglée par le réarmement et la réinitialisation des axes. [OT-2025-0036]
+- Fuite de liquide de coupe : raccord d'arrosage fissuré ou flexible fendu, réglée par leur remplacement. [OT-2026-0086] [OT-2026-0104]
+- Pièces hors tolérance : dérive du zéro pièce, réglée par le recalage des outils et la correction d'usure. [OT-2026-0105]
+## Astuces
+- Remplacer le raccord en même temps que le flexible d'arrosage : le vieux raccord fuit au remontage. [OT-2026-0104]";"OT-2025-0036;OT-2026-0086;OT-2026-0104;OT-2026-0105";;4;IA;claude-sonnet-5-5;WJ-00164;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0015;composant;Kit garniture mécanique universelle Ø25;kit garniture mecanique universelle 25;;ART-0018;;;"## À quoi il sert
+- Une garniture usée présente des faces rayées. [OT-2025-0037]";OT-2025-0037;;1;IA;claude-sonnet-5-5;WJ-00032;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0016;équipement;VE-02 — Extracteur des fumées de soudage;ve 02 extracteur des fumees de soudage;EQ-0009;;;;"## En bref
+- Quand l'aspiration est faible, les filtres sont colmatés par les poussières et la perte de charge est élevée ; leur remplacement a rétabli le débit. [OT-2025-0031] [OT-2026-0129]
+- Quand le ventilateur vibre et fait du bruit, ses roulements sont hors service ; leur remplacement a ramené les vibrations à la normale. [OT-2026-0044]";"OT-2025-0031;OT-2026-0129;OT-2026-0044";;3;IA;claude-sonnet-5-5;WJ-00185;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0017;composant;Filtre à air G4 592x592;filtre a air g4 592x592;;ART-0028;;;"## À quoi il sert
+- Il se colmate par les poussières, ce qui fait monter la perte de charge. [OT-2025-0031] [OT-2026-0129]";"OT-2025-0031;OT-2026-0129";;2;IA;claude-sonnet-5-5;WJ-00185;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0018;savoir-faire;Resserrer une bride de tuyauterie;resserrer une bride de tuyauterie;EQ-0005;;;;"## Quand le faire
+- Quand une bride de tuyauterie fuit parce que ses boulons se sont desserrés sous les vibrations. [OT-2025-0030] [OT-2026-0082]
+## Étapes
+- Mettre la machine à l'arrêt selon la fiche en tête de sa page. [OT-2025-0030]
+- Serrer les boulons de la bride au couple, en croix, en trois passes. [OT-2025-0030] [OT-2026-0082]
+- Poser un trait de vernis témoin pour voir tout de suite si la bride bouge. [OT-2025-0030] [OT-2026-0082]
+## Particularités par machine
+- [[PO-02 — Pompe centrifuge eau de refroidissement]] : la bride de refoulement se resserre au couple. [OT-2025-0030] [OT-2026-0082]";"OT-2025-0030;OT-2026-0082";EQ-0005;2;IA;claude-sonnet-5-5;WJ-00138;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0019;équipement;AE-02 — Armoire de distribution de l'atelier Usinage;ae 02 armoire de distribution de l atelier usinage;EQ-0011;;;;"## En bref
+- Disjoncteur déclenché, plus de courant sur la machine : surcharge moteur due à un pic de charge, réglée par le réarmement, avec une intensité correcte ensuite. [OT-2025-0041]
+- Le moteur ne démarre pas alors que l'armoire est sous tension : le contacteur est hors service, réglé par son remplacement. [OT-2026-0071]
+## Astuces
+- Regarder le fusible de commande avant de démonter le contacteur. [OT-2026-0071]";"OT-2025-0041;OT-2026-0071";;2;IA;claude-sonnet-5-5;WJ-00123;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0020;composant;Cartouche filtre à huile CP-01;cartouche filtre a huile cp 01;;ART-0021;;;"## À quoi il sert
+- La cartouche se colmate et restreint alors le circuit d'huile du compresseur. [OT-2025-0043]";OT-2025-0043;;1;IA;claude-sonnet-5-5;WJ-00040;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0021;équipement;AE-03 — Armoire de commande de la ligne de conditionnement;ae 03 armoire de commande de la ligne de conditionnement;EQ-0012;;;;"## En bref
+- Un déclenchement ([[Déclenchement disjoncteur]]) venait d'une surcharge moteur ponctuelle, réglé par le réarmement. [OT-2025-0046]
+- Des déclenchements ([[Déclenchement disjoncteur]]) venaient d'une connexion desserrée (jeu de barres ou borne du départ moteur), réglés par le resserrage. [OT-2026-0028] [OT-2026-0108]
+- Une odeur de brûlé ([[Odeur de brûlé]]) venait d'un contacteur en fin de vie, à contacts soudés, réglée par son remplacement. [OT-2026-0051] [OT-2026-0067]
+## Astuces
+- Resserrer toutes les bornes du départ en même temps que le contacteur. [OT-2026-0067]";"OT-2025-0046;OT-2026-0028;OT-2026-0108;OT-2026-0051;OT-2026-0067";"PANNE-S09;PANNE-S10";5;IA;claude-sonnet-5-5;WJ-00160;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0022;équipement;AE-04 — Armoire de distribution de l'atelier Assemblage;ae 04 armoire de distribution de l atelier assemblage;EQ-0013;;;;"## En bref
+- Le disjoncteur déclenche de façon intermittente, sans raison apparente, à cause d'une connexion desserrée (borne du départ moteur en échauffement, jeu de barres), et le resserrage au couple de toutes les bornes l'a réglé. [OT-2025-0054] [OT-2025-0051]
+## Astuces
+- Faire une thermographie de l'armoire en marche pour repérer la borne qui chauffe. [OT-2025-0054]";"OT-2025-0054;OT-2025-0051";;2;IA;claude-sonnet-5-5;WJ-00052;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0023;équipement;CN-01 — Tour à commande numérique;cn 01 tour a commande numerique;EQ-0014;;;;"## En bref
+- Bruit de broche à haute vitesse, roulements hors service : broche reconditionnée, bruit revenu. [OT-2025-0052] [OT-2026-0009] [OT-2026-0027] [OT-2026-0097]
+- Alarme course dépassée, fausse manœuvre : axes réarmés et réinitialisés. [OT-2026-0056]
+- Fuite de liquide de coupe, flexible fendu : flexible remplacé ; cotes qui dérivent, jeu de compensation d'outil ou zéro pièce dérivé : compensation réglée, outils recalés et usure corrigée. [OT-2026-0064] [OT-2026-0070] [OT-2026-0123] [OT-2026-0153]
+## Astuces
+- Contrôler le zéro pièce avant de toucher aux correcteurs d'outil. [OT-2026-0123]";"OT-2025-0052;OT-2026-0009;OT-2026-0027;OT-2026-0097;OT-2026-0056;OT-2026-0064;OT-2026-0070;OT-2026-0123;OT-2026-0153";;9;IA;claude-sonnet-5-5;WJ-00204;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0024;équipement;ET-01 — Étiqueteuse automatique;et 01 etiqueteuse automatique;EQ-0027;;;;"## En bref
+- Étiquettes de travers ou colis mal soudés ([[Défaut qualité]]) : dérive de réglage, corrigée sur soudure, capteur de bord ou vitesse d'applique. [OT-2025-0055] [OT-2026-0066]
+- Bruit de courroie ([[Bruit anormal]]) : courroie crantée détendue, tension réglée ; arrêt sans cause visible ([[Arrêt intempestif]]) : cellule encrassée, nettoyée et réalignée. [OT-2025-0056] [OT-2026-0150] [OT-2026-0019] [OT-2026-0151]
+- Manque d'air ([[Pression ou débit bas]]) : flexible percé, remplacé. [OT-2026-0092]
+## Astuces
+- Nettoyer le réflecteur en même temps que la cellule, sinon le défaut revient. [OT-2026-0151]";"OT-2025-0055;OT-2026-0066;OT-2025-0056;OT-2026-0150;OT-2026-0019;OT-2026-0151;OT-2026-0092";"PANNE-S07;PANNE-S02;PANNE-S05;PANNE-S08";7;IA;claude-sonnet-5-5;WJ-00209;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0025;équipement;PR-01.GH — Groupe hydraulique de la presse PR-01;pr 01 gh groupe hydraulique de la presse pr 01;EQ-0021;;;;"## En bref
+- [[Fuite]] : de l'huile coule sous la presse, à cause d'un flexible hydraulique percé par frottement, réglée par le remplacement du flexible et un complément d'huile. [OT-2026-0021] [OT-2026-0083]
+- [[Pression ou débit bas]] : la presse manque de pression et monte lentement, à cause d'un filtre hydraulique colmaté, réglée par le remplacement de la cartouche. [OT-2026-0059]
+## Astuces
+- Changer la cartouche du [[Filtre hydraulique presse PR-01]] avant que l'indicateur de colmatage soit au rouge, pour ménager la pompe. [OT-2026-0059]
+- Mesurer la longueur du flexible sur l'ancien avant de le jeter, car le magasin a deux longueurs proches. [OT-2026-0083]";"OT-2026-0021;OT-2026-0083;OT-2026-0059";"PANNE-S01;PANNE-S08;ART-0024";3;IA;claude-sonnet-5-5;WJ-00135;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0026;composant;Flexible hydraulique DN10 serti (1 m);flexible hydraulique dn10 serti 1 m;;ART-0044;;;"## À quoi il sert
+- Ce flexible peut se percer. [OT-2026-0021] [OT-2026-0037] [OT-2026-0043] [OT-2026-0050] [OT-2026-0073] [OT-2026-0078] [OT-2026-0083] [OT-2026-0132]
+- Il s'use par frottement jusqu'à se percer. [OT-2026-0073] [OT-2026-0078] [OT-2026-0083]
+- Une gaine de protection se pose sur le flexible. [OT-2026-0083]";"OT-2026-0021;OT-2026-0037;OT-2026-0043;OT-2026-0050;OT-2026-0073;OT-2026-0078;OT-2026-0083;OT-2026-0132";;8;IA;claude-sonnet-5-5;WJ-00182;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0027;équipement;RB-01 — Robot de palettisation;rb 01 robot de palettisation;EQ-0028;;;;"## En bref
+- Arrêt intempestif avec défaut cellule : cellule ou capteur encrassé par des résidus de film, réglé par nettoyage, réalignement et réglage de sensibilité. [OT-2026-0016] [OT-2026-0079]
+- Bruit de courroie : courroie crantée détendue, réglée en la retendant. [OT-2026-0100]
+- Manque de pression d'air, vérins mous : flexible usé percé, réglé par son remplacement. [OT-2026-0112] [OT-2026-0148]
+## Astuces
+- Nettoyer le réflecteur en même temps que la cellule : il est oublié et le défaut revient. [OT-2026-0016]
+- Changer le raccord avec le flexible : l'air peut fuir à la sertissure. [OT-2026-0148]";"OT-2026-0016;OT-2026-0079;OT-2026-0100;OT-2026-0112;OT-2026-0148";;5;IA;claude-sonnet-5-5;WJ-00200;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0028;équipement;AE-01 — Armoire électrique générale basse tension (TGBT);ae 01 armoire electrique generale basse tension tgbt;EQ-0010;;;;"## En bref
+- Le disjoncteur moteur déclenche sur surcharge, par pic de charge, et le réarmement a réglé le déclenchement. [OT-2026-0023]";OT-2026-0023;;1;IA;claude-sonnet-5-5;WJ-00076;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0029;équipement;CV-03 — Convoyeur de sortie de ligne;cv 03 convoyeur de sortie de ligne;EQ-0025;;;;"## En bref
+- Le tapis avance par à-coups quand la courroie est détendue ; la retendre au tensiomètre l'a réglé, voir [[Retendre une courroie d'entraînement]]. [OT-2026-0018]
+- Le convoyeur ne démarre pas quand le contacteur de puissance est défectueux ; le remplacer l'a réglé. [OT-2026-0033]
+- Des arrêts intempestifs viennent d'un capteur de présence encrassé par la poussière ; le nettoyer l'a réglé. [OT-2026-0113]";"OT-2026-0018;OT-2026-0033;OT-2026-0113";WP-0030;3;IA;claude-sonnet-5-5;WJ-00170;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0030;savoir-faire;Retendre une courroie d'entraînement;retendre une courroie d entrainement;EQ-0025;;;;"## Quand le faire
+- L'entraînement glisse et le tapis avance par à-coups, courroie détendue. [OT-2026-0018]
+- Un bruit anormal de courroie signale une courroie détendue. [OT-2026-0034] [OT-2026-0100] [OT-2026-0150]
+## Étapes
+- Régler la tension de la courroie au tensiomètre. [OT-2026-0018]
+- Vérifier l'alignement des poulies. [OT-2026-0018]
+- Repérer la tension sur le carter après le réglage pour éviter de retendre à l'oreille. [OT-2026-0034] [OT-2026-0100]
+## Pièces et outillage
+- Un tensiomètre sert à régler la tension. [OT-2026-0018]
+## Particularités par machine
+- [[CV-03 — Convoyeur de sortie de ligne]] : tension réglée au tensiomètre, alignement des poulies vérifié. [OT-2026-0018]
+- [[EM-01 — Fardeleuse sous film rétractable]] : courroie crantée retendue, tension repérée sur le carter après réglage. [OT-2026-0034]
+- [[RB-01 — Robot de palettisation]] : courroie crantée retendue, tension à repérer sur le carter après réglage. [OT-2026-0100]
+- [[ET-01 — Étiqueteuse automatique]] : courroie crantée retendue, tension réglée, alignement contrôlé. [OT-2026-0150]";"OT-2026-0018;OT-2026-0034;OT-2026-0100;OT-2026-0150";"EQ-0025;EQ-0026;EQ-0028;EQ-0027";4;IA;claude-sonnet-5-5;WJ-00205;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0031;équipement;PR-01 — Presse hydraulique 100 t;pr 01 presse hydraulique 100 t;EQ-0020;;;;"## En bref
+- Fuite d'huile le long du vérin ou au sol : flexible percé, réglée par son remplacement avec un complément d'huile. [OT-2026-0037] [OT-2026-0043] [OT-2026-0050] [OT-2026-0073] [OT-2026-0074] [OT-2026-0078] [OT-2026-0132]
+- Défaut de profondeur : dérive du réglage de course, réglée par le réglage de la butée. [OT-2026-0091]
+- Pression basse, montée lente : filtre hydraulique colmaté, réglée par le remplacement de la cartouche. [OT-2026-0099]
+## Astuces
+- Poser une gaine de protection sur le flexible neuf là où il frotte. [OT-2026-0037] [OT-2026-0073] [OT-2026-0078]
+- Mesurer la longueur du flexible sur l'ancien avant de le jeter, car le magasin a deux longueurs proches. [OT-2026-0050]
+- Valider le réglage de la course sur trois pièces témoins de la même série, pas sur une seule. [OT-2026-0091]
+- Changer la cartouche du filtre hydraulique avant que l'indicateur de colmatage soit au rouge : la pompe souffre moins. [OT-2026-0099]";"OT-2026-0037;OT-2026-0043;OT-2026-0050;OT-2026-0073;OT-2026-0074;OT-2026-0078;OT-2026-0132;OT-2026-0091;OT-2026-0099";;9;IA;claude-sonnet-5-5;WJ-00182;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0032;savoir-faire;Resserrer les vis d'un accouplement;resserrer les vis d un accouplement;EQ-0006;;;;"## Quand le faire
+- Quand la machine vibre fortement et que les vis de l'accouplement sont desserrées. [OT-2026-0042]
+## Étapes
+- Resserrer les vis de l'accouplement au couple. [OT-2026-0042]
+- Marquer les vis au vernis témoin après le resserrage. [OT-2026-0042]
+## Particularités par machine
+- [[PO-03 — Pompe de relevage des eaux pluviales]] : les vis de l'accouplement se resserrent au couple, puis se marquent au vernis témoin. [OT-2026-0042]";OT-2026-0042;EQ-0006;1;IA;claude-sonnet-5-5;WJ-00100;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0033;composant;Contacteur tripolaire 25 A bobine 24 V;contacteur tripolaire 25 a bobine 24 v;;ART-0032;;;"## À quoi il sert
+- En fin de vie, sa bobine et ses contacts brûlent : le contacteur chauffe fortement et dégage une odeur de brûlé. [OT-2026-0051]
+- Brûlé, ses contacts peuvent être soudés. [OT-2026-0067]
+- Un contacteur moteur peut coller puis tomber hors service ; au montage, ses bornes sont resserrées. [OT-2026-0145]";"OT-2026-0051;OT-2026-0067;OT-2026-0145";;3;IA;claude-sonnet-5-5;WJ-00198;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0034;équipement;CN-01.BR — Broche du tour CN-01;cn 01 br broche du tour cn 01;EQ-0015;;;;"## En bref
+- Le [[Bruit anormal]] de la broche venait de roulements de broche hors service ; la broche déposée, reconditionnée chez le fabricant puis remontée avec contrôle du faux-rond l'a réglé. [OT-2026-0077]";OT-2026-0077;PANNE-S02;1;IA;claude-sonnet-5-5;WJ-00127;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0035;équipement;CV-01 — Convoyeur à bande d'entrée de ligne;cv 01 convoyeur a bande d entree de ligne;EQ-0022;;;;"## En bref
+- Bruit de frottement sous le tapis : paliers peu graissés, réglé par le graissage de la ligne d'arbre. [OT-2026-0080]
+- Arrêts intempestifs à réarmer : cellule de fin de course souillée, réglés par son nettoyage et le contrôle du câblage. [OT-2026-0110]
+- Ne démarre pas : contacteur moteur collé puis hors service, réglé par son remplacement et le resserrage des bornes. [OT-2026-0145]";"OT-2026-0080;OT-2026-0110;OT-2026-0145";;3;IA;claude-sonnet-5-5;WJ-00198;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0036;composant;Raccord rapide pneumatique G1/4;raccord rapide pneumatique g1 4;;ART-0046;;;"## À quoi il sert
+- Il peut se fissurer, ce qui provoque une fuite. [OT-2026-0086]";OT-2026-0086;;1;IA;claude-sonnet-5-5;WJ-00141;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0037;composant;Flexible air comprimé DN13 (au mètre);flexible air comprime dn13 au metre;;ART-0045;;;"## À quoi il sert
+- Il s'use et peut se percer, ce qui fait fuir l'air et baisser la pression d'air. [OT-2026-0092] [OT-2026-0112] [OT-2026-0148]";"OT-2026-0092;OT-2026-0112;OT-2026-0148";;3;IA;claude-sonnet-5-5;WJ-00200;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0038;composant;Roulement à billes 6305-2RS;roulement a billes 6305 2rs;;ART-0004;;;"## À quoi il sert
+- Un roulement usé siffle, le bruit augmente et l'arbre présente du jeu. [OT-2026-0088]";OT-2026-0088;;1;IA;claude-sonnet-5-5;WJ-00148;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0039;composant;Filtre hydraulique presse PR-01;filtre hydraulique presse pr 01;;ART-0024;;;"## À quoi il sert
+- Sa cartouche s'encrasse jusqu'au colmatage, que montre un indicateur de colmatage. [OT-2026-0099]";OT-2026-0099;;1;IA;claude-sonnet-5-5;WJ-00151;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0040;composant;Kit garniture mécanique PO-02;kit garniture mecanique po 02;;ART-0016;;;"## À quoi il sert
+- La garniture usée présente des faces rayées. [OT-2026-0098]";OT-2026-0098;;1;IA;claude-sonnet-5-5;WJ-00153;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0041;équipement;BA-01 — Balance de contrôle pondéral;ba 01 balance de controle ponderal;EQ-0029;;;;"## En bref
+- Quand la balance rejette des colis conformes et que le poids affiché dérive, la cause est une dérive du zéro, réglée par un retarage avec la masse étalon. [OT-2026-0134]";OT-2026-0134;;1;IA;claude-sonnet-5-5;WJ-00190;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active
+WP-0042;équipement;RA-01 — Réservoir d'air comprimé 1000 L;ra 01 reservoir d air comprime 1000 l;EQ-0003;;;;"## En bref
+- Le purgeur automatique ne purge plus et beaucoup d'eau sort à la purge manuelle : son filtre est colmaté par des boues, et le nettoyage du filtre et du clapet rend une purge franche. [OT-2026-0166]
+- Le purgeur est en fin de vie et est à remplacer, d'après une observation du contrôle réglementaire. [OT-2026-0166]";OT-2026-0166;;2;IA;claude-sonnet-5-5;WJ-00218;Responsable;2026-10-19 09:00;2026-10-19 09:00;2026-10-19 09:00;active

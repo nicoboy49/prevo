@@ -1822,7 +1822,9 @@ class TestDemoLot6(unittest.TestCase):
         generateur.ajouter_ot_de_scenario_lot6 = sans_scenario
         generateur.poser_astuces_lot6 = lambda ctx: None
         try:
-            sans_lot6 = generateur.construire_jeu().base
+            # Le wiki figé est un ajout du lot 6 et cite les OT de scénario : le jeu sans lot 6 se construit sans lui.
+            with tempfile.TemporaryDirectory() as sans_wiki:
+                sans_lot6 = generateur.construire_jeu(dossier_wiki=sans_wiki).base
         finally:
             generateur.ajouter_ot_de_scenario_lot6, generateur.poser_astuces_lot6 = originaux
         ot_scenario = {o['id'] for o in normal['ordres_travail'] if o['titre'].endswith('cause trouvée')}
@@ -1838,6 +1840,9 @@ class TestDemoLot6(unittest.TestCase):
         retirees = 0
         for table in TABLES:
             with self.subTest(table=table):
+                if table.startswith('wiki_'):                      # lot 6 : le wiki figé, absent du jeu sans lot 6
+                    self.assertEqual(sans_lot6[table], [])
+                    continue
                 filtre = a_retirer.get(table, lambda l: False)
                 gardees = [dict(l, astuce='') if table == 'ordres_travail' else l for l in normal[table] if not filtre(l)]
                 retirees += len(normal[table]) - len(gardees)
