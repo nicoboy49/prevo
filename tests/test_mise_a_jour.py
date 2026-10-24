@@ -33,7 +33,7 @@ PANNE_RESEAU = r"ERR_CONNECTION_REFUSED|Failed to fetch|net::ERR"
 
 
 def version_suivante(version):
-    """1.1.0 → 1.1.1 (version plus récente que celle de l'application)."""
+    """x.y.z → x.y.(z+1) : une version plus récente que celle de l'application."""
     nombres = [int(n) for n in version.split(".")]
     nombres[2] += 1
     return ".".join(str(n) for n in nombres)

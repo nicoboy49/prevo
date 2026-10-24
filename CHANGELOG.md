@@ -7,12 +7,35 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [1.2.0] - 2026-10-24
+
+Le lot 6 : le wiki de maintenance, l'encyclopédie de l'atelier (le détail est dans
+[docs/PILOTAGE.md](docs/PILOTAGE.md)). Le logiciel prend le nom **Prévo**.
+
 ### Ajouté
 
-- Signalement des nouvelles versions (responsable, Paramètres > « Me signaler les nouvelles versions de Prévo »,
-  désactivé par défaut) : Prévo lit `https://prevo.pro/version.json` au plus une fois par jour et par poste et,
-  quand une version plus récente existe, le dit sur l'accueil du responsable et dans « À propos », avec le lien
-  de téléchargement et les nouveautés. Rien ne s'installe tout seul.
+- **Wiki de maintenance** (menu « Wiki ») : une page par machine, par panne, par article, par technicien, par
+  intervention et par savoir-faire, calculée à partir des données de l'atelier (pannes et ce qui les a réglées,
+  interventions, pièces consommées, stock, consignation en tête de page, petits numéros vers les ordres de travail
+  cités) et complétée par des textes courts (« En bref » et « Astuces » d'une machine, « À quoi il sert » d'un
+  article, savoir-faire communs aux machines) ; recherche sans IA sur les noms, les interventions et les textes ;
+  accueil « Ce que l'atelier sait » ; ce que voit chaque profil est borné (le demandeur ne voit ni les techniciens
+  ni les interventions, les prix restent au responsable).
+- **Astuce pour la prochaine fois** : une phrase courte saisie à la clôture technique d'un ordre de travail,
+  cherchée avec les pages du wiki.
+- **Ingestion par l'assistant IA** : à la clôture administrative, l'ordre de travail entre dans la file du wiki ;
+  le responsable la traite depuis le journal du wiki (« Traiter la file ») sur un poste où l'IA est réglée ; le
+  modèle propose, Prévo contrôle (rien d'inventé, chaque phrase cite un ordre de travail, aucune consigne de
+  sécurité, longueurs, un seul savoir-faire par geste, relance avec la raison du refus), le responsable valide,
+  rejette ou relance ; les contradictions se tranchent ; l'écriture à la main et le contrôle du wiki restent
+  possibles. Coût mesuré sur la démo avec Claude Sonnet : 0,026 $ par ordre de travail.
+- **Signalement des nouvelles versions** (responsable, Paramètres > « Me signaler les nouvelles versions de
+  Prévo », désactivé par défaut) : Prévo lit `https://prevo.pro/version.json` au plus une fois par jour et par
+  poste et, quand une version plus récente existe, le dit sur l'accueil du responsable et dans « À propos », avec
+  le lien de téléchargement et les nouveautés. Rien ne s'installe tout seul.
+- Démo : son wiki a été rédigé par Claude Sonnet avec la consigne de Prévo (227 interventions, 42 pages), relu
+  par un relecteur indépendant ; chapitre « Le wiki de maintenance » du guide ; outil de release qui écrit
+  `version.json`.
 
 ### Modifié
 
@@ -20,6 +43,11 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
   change partout : écrans, guide, documents, en-tête `X-Prevo`, variables `PREVO_*`, fichiers produits
   (`prevo-export-…`, `prevo-v…`). Sur chaque poste, le profil, le thème, les réglages de l'assistant
   et le dossier de données sont à choisir de nouveau une fois.
+- Format des données en **version 3** : deux tables de plus (`wiki_pages.csv`, `wiki_journal.csv`, 24 fichiers)
+  et la colonne `astuce` des ordres de travail, ajoutées au premier enregistrement après une sauvegarde
+  « avant-format-v3 » ; les fichiers des versions 1 et 2 restent lus.
+- La carte « Résumer l'historique » de la fiche d'un équipement (assistant IA du lot 4) est remplacée par le
+  lien vers la page du wiki de la machine.
 
 ## [1.1.0] - 2026-10-22
 
@@ -72,6 +100,7 @@ Première version, qui réunit les lots 1 à 4 du cahier des charges (le détail
   option, guide d'utilisation imprimable, fiche technique des fichiers CSV.
 - Données dans 22 fichiers CSV lisibles dans Excel ; 907 tests automatisés.
 
-[Non publié]: https://github.com/nicoboy49/prevo/compare/v1.1.0...HEAD
+[Non publié]: https://github.com/nicoboy49/prevo/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/nicoboy49/prevo/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/nicoboy49/prevo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/nicoboy49/prevo/releases/tag/v1.0.0

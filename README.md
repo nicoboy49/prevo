@@ -2,7 +2,7 @@
 
 **La GMAO libre et gratuite des PME industrielles.**
 
-> **Version 1.1.0 — en test sur le terrain.** Prévo est utilisé dans de premières
+> **Version 1.2.0 — en test sur le terrain.** Prévo est utilisé dans de premières
 > entreprises pilotes. Sauvegardez régulièrement votre dossier de données, et
 > signalez tout problème dans l'onglet *Issues*.
 
@@ -28,7 +28,7 @@ embarquées et aucun appel vers Internet (sauf l'assistant IA en ligne, s'il est
 - **Guide d'utilisation** : [GUIDE.html](GUIDE.html), à ouvrir dans le navigateur (imprimable).
 - **Format des fichiers** : [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md).
 
-Cette version, la **1.1.0**, contient les **lots 1 à 5** du cahier des charges, dont la reprise des données
+Cette version, la **1.2.0**, contient les **lots 1 à 6** du cahier des charges, dont le wiki de maintenance et la reprise des données
 existantes (lot 5) ; les nouveautés de chaque version sont dans [CHANGELOG.md](CHANGELOG.md).
 
 ## Essayer en 30 secondes
