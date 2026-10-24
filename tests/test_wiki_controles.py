@@ -683,6 +683,16 @@ class TestSavoirFaireCommun(CasControles):
                 self.refus_seul(creation(titre, "savoir-faire", texte, KIT), "Page « %s » : même geste que le savoir-faire "
                                 "« Remplacer une garniture mécanique » (un seul par geste) : mets un lien [[Remplacer une "
                                 "garniture mécanique]] au lieu d'en créer un." % titre, meme_geste)
+        # « Particularités par machine » : chaque phrase relie sa machine (lien vers une page d'équipement), pour l'IA.
+        sans_lien = texte.replace("[[PO-02 — Pompe centrifuge]] : accouplement", "PO-02 : accouplement")
+        self.refus_seul(creation("Remplacer une garniture mécanique", "savoir-faire", sans_lien, KIT),
+                        "Page « Remplacer une garniture mécanique » : « Particularités par machine » : phrase sans lien [[…]] "
+                        "vers sa machine (titre exact du catalogue) — « PO-02 : accouplement désaligné de 0,4 mm ».")
+        vers_article = texte.replace("[[PO-02 — Pompe centrifuge]] : accouplement", "[[Kit garniture mécanique PO-02]] : accouplement")
+        self.refus(creation("Remplacer une garniture mécanique", "savoir-faire", vers_article, KIT), "phrase sans lien [[…]] vers sa machine")
+        manuel = dict(copy.deepcopy(CONTEXTE), manuel=True, otPermis=["OT-2026-0042"])
+        self.assertNotIn("Particularités par machine", " ".join(self.controler(creation(
+            "Remplacer une garniture mécanique", "savoir-faire", sans_lien, KIT), manuel)["raisons"]))
         # Un autre organe, ou un organe d'un seul mot, passe ; une sous-page du savoir-faire aussi.
         self.assertEqual(self.controler(creation("Changer un joint de corps", "savoir-faire", texte, KIT), meme_geste), self.OK)
 

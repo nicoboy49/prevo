@@ -53,6 +53,7 @@ Object.assign(Wiki, (() => {
 
   const SEUILS = Wiki.SEUILS;
   const TYPES = Object.keys(Wiki.RUBRIQUES);
+  const PARTICULARITES = Wiki.comparable('Particularités par machine');   // rubrique des savoir-faire (D116)
   const MOTIF_RUBRIQUE = /^##\s+(.+?)\s*$/;
   const MOTIF_PHRASE = /^-\s+(.*)$/;
   const MOTIF_CITATION = /\[(OT-\d{4}-\d{4,})\]/g;
@@ -553,6 +554,17 @@ Object.assign(Wiki, (() => {
       phrase.liens.filter((lien) => !ctx.titresConnus.has(Wiki.comparable(lien)))
         .forEach((lien) => raisons.push(nom + ' : lien vers une page inconnue « ' + lien + ' ».'));
     });
+    // « Particularités par machine » (D116) : chaque phrase relie sa machine ([[repère — nom]]), sans quoi le savoir-faire
+    // n'est ni envoyé avec les OT de cette machine ni listé sur sa page. Pour l'IA seulement.
+    if (type === 'savoir-faire' && !ctx.manuel) {
+      lu.rubriques.filter((rubrique) => Wiki.comparable(rubrique.nom) === PARTICULARITES).forEach((rubrique) => {
+        rubrique.phrases.filter((phrase) => !phrase.liens.some((lien) => {
+          const cible = ctx.connuesDe.get(Wiki.comparable(lien));
+          return cible && texte(cible.type) === 'équipement';
+        })).forEach((phrase) => raisons.push(nom + ' : « Particularités par machine » : phrase sans lien [[…]] vers sa '
+          + 'machine (titre exact du catalogue) — « ' + court(phrase.propre) + ' ».'));
+      });
+    }
     // Non-retrait (D106) : seulement pour l'IA ; le responsable peut retirer. Sous-page créée : ses phrases se comparent
     // au texte d'avant de sa mère (une phrase déplacée telle quelle y est « identique »). Rubrique réécrite en entier
     // (D117, Wiki.RUBRIQUES_REECRITES) : hors du non-retrait, des deux côtés (précisions en tête) ; une ancienne rubrique
