@@ -479,7 +479,7 @@ class TestDonneesEtFile(CasIngestion):
                        "deux gestes réutilisables"):
             self.assertNotIn(absent, systeme)
         self.assertEqual((systeme.count("une méthode de plusieurs gestes"), systeme.count("un conseil")), (1, 1))
-        self.assertLessEqual(len(systeme), 9200)                        # 8 730 avant T141 et T142, 8 948 après, 9 05x avec les suites
+        self.assertLessEqual(len(systeme), 9400)                        # 8 730 avant T141 et T142, 9 05x après, 9 239 avec T145
         # « deux fois » dans une étape : refusé comme comptage (le contrôle que la consigne annonce).
         reponse = {"rien_a_ajouter": False, "contradictions": [], "pages": [{
             "action": "creer", "titre": "Changer la garniture sans fuite", "type": "savoir-faire",
@@ -493,7 +493,7 @@ class TestDonneesEtFile(CasIngestion):
     def test_consigne_regles_de_t141_et_t142(self):
         """T141 (D116) et T142 (D117), corrections de Nicolas après le temps 1 : chaque règle nouvelle ou changée est dans
         la consigne, mot pour mot ; les anciennes formulations n'y sont plus ; aucune limite en dur (elles sont dans
-        l'en-tête, qui dit « à réécrire en entier » pour « En bref ») ; message système sous 9 200 caractères."""
+        l'en-tête, qui dit « à réécrire en entier » pour « En bref ») ; message système sous 9 400 caractères."""
         systeme = self.page.evaluate(REQUETE_JS, "OT-2026-0001")["messages"][0]["content"]
         for attendu in (
                 # T142 : « En bref » réécrit en entier, jamais une phrase ajoutée ; chaque phrase avec ses OT
@@ -510,7 +510,11 @@ class TestDonneesEtFile(CasIngestion):
                 "son titre dit le geste et l'organe, sans repère de machine (« Remplacer une garniture mécanique ») ;",
                 # T141 : créé, il relie sa machine et ses articles
                 "il relie ses machines dans « Particularités par machine » (une phrase par machine : [[sa machine]] et ce qui "
-                "change pour elle : pièce, réglage, accès) et ses articles dans « Pièces et outillage ».",
+                "change pour elle seule : pièce, réglage, accès ; une étape commune reste dans « Étapes ») et ses articles dans "
+                "« Pièces et outillage ».",
+                # T145 (relecture du tour 1) : « En bref » sans les faits d'une seule intervention, citations fidèles
+                "surveillance demandée ou « à surveiller au prochain préventif », contrôle sans anomalie,",
+                "et seulement un OT dont le texte dit lui-même ce que la phrase affirme ;",
                 # T141 : complété, jamais recréé ; lien s'il n'est qu'au catalogue
                 "Un geste qui a déjà son savoir-faire ne se recrée jamais : reçu, complète-le (sa phrase pour cette machine "
                 "dans « Particularités par machine », ses étapes si l'OT en apprend) ; au catalogue seulement, un lien "
@@ -527,7 +531,7 @@ class TestDonneesEtFile(CasIngestion):
                        "rends son texte complet ; garde toutes ses phrases"):
             self.assertNotIn(absent, systeme)
         self.assertNotRegex(systeme, r"\b(3|60) (phrases|mots)\b|au plus \d")
-        self.assertLessEqual(len(systeme), 9200)
+        self.assertLessEqual(len(systeme), 9400)
         # L'en-tête : « à réécrire en entier » pour « En bref » seulement ; le faux modèle le lit.
         message = self.message("OT-2026-0001")
         self.assertIn("(équipement · En bref : 2 phrases sur 3, 13 mots sur 60, à réécrire en entier en 45 mots environ · Astuces : 0 phrase sur "
