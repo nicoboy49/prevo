@@ -6,8 +6,11 @@ Variables d'environnement :
     FAUX_CLAUDE_MODE     sonnet (défaut) | opus (un autre modèle) | deux-tours | refus (réponse que Prévo refuse :
                          un OT cité hors de la liste, relance comprise) | relance (réponse que Prévo refuse — une
                          phrase sans OT — puis, à la relance avec la raison, une réponse valable) | erreur (réponse en
-                         erreur) | lent (répond après 8 s)
+                         erreur) | lent (répond après 8 s) | refus-part (une part des réponses refusée : celles des OT
+                         de FAUX_CLAUDE_REFUSES, relance comprise, comme en mode refus ; les autres comme sonnet)
     FAUX_CLAUDE_RELANCE  mode relance : OT concernés, séparés par des virgules (défaut : tous)
+    FAUX_CLAUDE_REFUSES  mode refus-part : OT dont les réponses sont refusées, séparés par des virgules
+    FAUX_CLAUDE_COUT     coût d'un appel en dollars (total_cost_usd ; défaut 0.0123)
     FAUX_CLAUDE_DELAIS   1 : chaque réponse attend de 0 à 1,6 s selon le numéro de l'OT (réponses dans le désordre,
                          comme le vrai modèle)
     FAUX_CLAUDE_TRACES   dossier : chaque appel y écrit appel-<identifiant>.json (arguments, entrée standard et
@@ -24,12 +27,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))       # tests/
 from faux_wiki import MOTIF_OT_INGERE, est_relance, reponse_ingestion  # noqa: E402
 
 
+def liste_ot(variable):
+    return [ot.strip() for ot in os.environ.get(variable, '').split(',') if ot.strip()]
+
+
 def variante(mode, entree):
     """Variante du faux modèle (tests/faux_wiki.py) selon le mode et le message reçu."""
     if mode == 'refus':
         return 'faux-invente'
+    if mode == 'refus-part':
+        trouve = MOTIF_OT_INGERE.search(entree)
+        return 'faux-invente' if trouve and trouve.group(1) in liste_ot('FAUX_CLAUDE_REFUSES') else 'faux-textes'
     if mode == 'relance' and not est_relance(entree):
-        concernes = [ot.strip() for ot in os.environ.get('FAUX_CLAUDE_RELANCE', '').split(',') if ot.strip()]
+        concernes = liste_ot('FAUX_CLAUDE_RELANCE')
         if not concernes or MOTIF_OT_INGERE.search(entree).group(1) in concernes:
             return 'faux-sans-ot'
     return 'faux-textes'
@@ -54,12 +64,13 @@ def principal():
             (Path(dossier) / ('fini-%s' % uuid.uuid4().hex)).write_text('fini', encoding='utf-8')
     modele = 'claude-opus-5-5' if mode == 'opus' else 'claude-sonnet-5-5'
     reponse = reponse_ingestion(entree, variante(mode, entree))
+    cout = float(os.environ.get('FAUX_CLAUDE_COUT') or 0.0123)
     sortie = {
         'type': 'result', 'subtype': 'error_during_execution' if mode == 'erreur' else 'success',
         'is_error': mode == 'erreur', 'num_turns': 2 if mode == 'deux-tours' else 1,
-        'result': json.dumps(reponse, ensure_ascii=False), 'total_cost_usd': 0.0123, 'duration_ms': 12,
+        'result': json.dumps(reponse, ensure_ascii=False), 'total_cost_usd': cout, 'duration_ms': 12,
         'duration_api_ms': 10, 'usage': {'input_tokens': len(entree) // 4, 'output_tokens': 200},
-        'modelUsage': {modele: {'inputTokens': len(entree) // 4, 'outputTokens': 200, 'costUSD': 0.0123}},
+        'modelUsage': {modele: {'inputTokens': len(entree) // 4, 'outputTokens': 200, 'costUSD': cout}},
     }
     sys.stdout.buffer.write(json.dumps(sortie, ensure_ascii=False).encode('utf-8'))
 

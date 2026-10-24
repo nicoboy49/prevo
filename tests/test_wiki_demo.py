@@ -8,7 +8,14 @@ Toujours avec un faux `claude` (tests/fixtures/wiki/faux_claude.py), jamais un v
     reprise     : une requête identique à l'octet reprend la réponse de la trace, sans nouvel appel (relance comprise) ;
     relance     : (D106 révisée, §20.10) une réponse refusée par Prévo est relancée avec la raison : un agent neuf
                   de plus, dans la même trace, et la fabrication continue ; une relance refusée l'arrête ;
-    arrêts      : modèle autre que Sonnet, plus d'un tour, réponse en erreur, réponse refusée par Prévo deux fois ;
+    arrêts      : modèle autre que Sonnet, plus d'un tour, réponse en erreur ; une réponse refusée par Prévo deux fois
+                  (à l'envoi puis à sa relance) n'arrête plus la fabrication (D119) : l'OT reste « refusée » au journal ;
+    garde-fous  : (D119) --budget : budget atteint → aucun nouvel agent, appels en cours finis, état écrit (tables du
+                  wiki validées, bilan.json), code retour 3, à figer et relire tel quel ; les réponses reprises des traces
+                  sont gratuites ; --refus-max : plus de 10 % de réponses refusées (à partir de 20) → code retour 4, causes
+                  regroupées ; 0 : pas de seuil ; une réponse refusée isolée → fabrication jusqu'au bout, verifier compte
+                  et signale l'OT refusé ; bilan (coût, coût par OT, refus et leur part, relances) et, après --limite,
+                  extrapolation à tous les OT ;
     deux temps  : (D115) --limite N garde l'état de départ de la suite (avant validations), temps-1.json (OT,
                   empreintes, bilan, coût) et sa page de relecture ; --suite donne le même wiki à l'octet qu'une
                   fabrication d'un seul tenant, sans aucun appel pour les N premiers, dans le même ordre ; refusée sans
@@ -143,6 +150,15 @@ class TestFabrication(unittest.TestCase):
         self.assertEqual((entree['statut'], entree['essais'], entree['modele']), ('validée', '2', 'claude-sonnet-5-5'))
         self.assertIn(REFUS_SANS_OT, entree['raisons'])
         self.assertEqual(traces[self.relance]['verdict']['statut'], 'validée')
+        # Bilan (D119) : chaque réponse lue par Prévo compte (227 envois et une relance), la première de l'OT relancé
+        # refusée ; aucun garde-fou atteint.
+        self.assertIn('Bilan : réponses refusées par le contrôle 1 sur %d (0.4 %%) · relances avec la raison 1 · OT refusés 0'
+                      % (len(traces) + 1), self.sortie.stdout)
+        bilan = json.loads((self.resultat / 'bilan.json').read_text(encoding='utf-8'))
+        self.assertEqual((bilan['commande'], bilan['arret'], bilan['ot']['traites'], bilan['ot']['restants']),
+                         ('complète', None, len(traces), 0))
+        self.assertEqual(bilan['causes'], [[REFUS_SANS_OT, 1]])
+        self.assertNotIn('extrapolation', bilan)
 
     def test_requete_octet_pour_octet_et_options_d_un_agent_sans_outil(self):
         recus = [json.loads(p.read_text(encoding='utf-8')) for p in self.appels.glob('*.json')]
@@ -431,6 +447,29 @@ class TestDeuxTemps(unittest.TestCase):
         for ot in self.ordre[:self.LIMITE]:
             self.assertIn('<li id="%s"><b>%s</b>' % (ot, ot), texte)
         self.assertIn('Temps 1 : ', self.temps_1.stdout)
+        # Bilan et extrapolation à tous les OT (D119) : coût par OT du temps 1 × OT restants × croissance mesurée sur la
+        # passe 6 (constante nommée de l'outil), affichés, dans temps-1.json, bilan.json et la page de relecture.
+        facteur = charger_outil().FACTEUR_CROISSANCE_SUITE
+        self.assertEqual(facteur, 1.578)
+        restants = self.GARDES - self.LIMITE
+        extrapolation = {'cout_par_ot_usd': 0.0123, 'ot_restants': restants, 'facteur': facteur,
+                         'cout_usd': round(0.0123 * restants * facteur, 4)}
+        self.assertEqual(temps['extrapolation'], extrapolation)
+        self.assertEqual(temps['reponses'], {'recues': self.LIMITE, 'refusees': 0, 'part_pct': 0.0})
+        bilan = json.loads((dossier / 'bilan.json').read_text(encoding='utf-8'))
+        self.assertEqual((bilan['commande'], bilan['cout_usd'], bilan['cout_par_ot_usd'], bilan['extrapolation']),
+                         ('temps 1', round(0.0123 * self.LIMITE, 4), 0.0123, extrapolation))
+        self.assertIn('Bilan : coût %.4f $ · coût par OT 0.0123 $ · OT traités %d, restants en file 0\n'
+                      'Bilan : réponses refusées par le contrôle 0 sur %d (0.0 %%) · relances avec la raison 0 · OT refusés 0\n'
+                      'Extrapolation à tous les OT : 0.0123 $ par OT × %d OT restants × 1.578 (croissance mesurée sur la '
+                      'passe 6) = %.2f $' % (0.0123 * self.LIMITE, self.LIMITE, self.LIMITE, restants,
+                                             extrapolation['cout_usd']), self.temps_1.stdout)
+        self.assertIn('Extrapolation à tous les OT : 0.0123 $ par OT × %d OT restants × 1.578' % restants, texte)
+        # Sans --limite, pas d'extrapolation ; la suite donne son coût, avec celui du temps 1, et l'estimation du temps 1.
+        self.assertNotIn('Extrapolation', self.seul.stdout + self.suite.stdout)
+        self.assertIn('Estimation de la suite par le temps 1 : %.2f $\n' % extrapolation['cout_usd'], self.suite.stdout)
+        self.assertIn('Bilan : coût %.4f $ (avec le temps 1 : %.4f $)' % (0.0123 * restants, 0.0123 * self.GARDES),
+                      self.suite.stdout)
 
     def test_suite_refusee_sans_temps_1_ou_sur_d_autres_donnees(self):
         d = self.dossier
@@ -470,6 +509,163 @@ class TestDeuxTemps(unittest.TestCase):
         self.assertIn('--suite et --limite ne vont pas ensemble', ensemble.stderr)
 
 
+class TestGardeFous(unittest.TestCase):
+    """Garde-fous de la fabrication (D119), sur une démo réduite à ses 24 premiers OT clôturés administrativement, un
+    agent (ordre des réponses fixe), faux modèle à 0,0123 $ l'appel :
+        budget 0,05 $ : 4 agents (0,0492 $ ; le 5e dépasserait : 0,0492 + 0,0123 > 0,05), code 3, état écrit ;
+        même budget, mêmes traces : les 4 réponses reprises sont gratuites, 4 agents de plus (8 OT traités) ;
+        3 OT refusés (2e, 4e, 6e) : 6 réponses refusées sur les 20 premières → arrêt après la 20e (code 4) ;
+        les mêmes avec --refus-max 0 : fabrication jusqu'au bout ;
+        1 OT refusé (le 21e) : 2 réponses refusées sur 25 (8 %) → fabrication jusqu'au bout, OT « refusée »."""
+    GARDES = 24
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dossier = d = Path(tempfile.mkdtemp(prefix='prevo-wiki-garde-fous-'))
+        cls.addClassCleanup(shutil.rmtree, d, True)
+        cls.demo = d / 'demo'
+        cls.ordre = demo_reduite(cls.demo, cls.GARDES)
+        commun = ['fabriquer', '--agents', 1, '--claude', FAUX, '--demo', cls.demo, '--reprise-duree', 0]
+
+        def fabriquer(nom, options=(), env=None, traces=None):
+            return lancer(OUTIL, commun + ['--traces', d / (traces or 'chaine-' + nom), '--resultat', d / nom] + list(options),
+                          dict({'FAUX_CLAUDE_TRACES': str(d / ('appels-' + nom))}, **(env or {})))
+        cls.budget = fabriquer('budget', ['--budget', 0.05])
+        cls.traces_budget = sorted(p.stem for p in (d / 'chaine-budget').glob('*.json'))   # avant la reprise
+        cls.reprise = fabriquer('reprise', ['--budget', 0.05], traces='chaine-budget')
+        cls.refuses = [cls.ordre[1], cls.ordre[3], cls.ordre[5]]
+        refus = {'FAUX_CLAUDE_MODE': 'refus-part', 'FAUX_CLAUDE_REFUSES': ','.join(cls.refuses)}
+        cls.refus = fabriquer('refus', env=refus)
+        cls.sans_seuil = fabriquer('sans-seuil', ['--refus-max', 0], env=refus)
+        cls.isole = fabriquer('isole', env={'FAUX_CLAUDE_MODE': 'refus-part', 'FAUX_CLAUDE_REFUSES': cls.ordre[20]})
+
+    def journal(self, nom):
+        return {e['ot_id']: e for e in lignes_csv(self.dossier / nom / 'wiki_journal.csv')}
+
+    def bilan(self, nom):
+        return json.loads((self.dossier / nom / 'bilan.json').read_text(encoding='utf-8'))
+
+    def avec_wiki(self, nom):
+        """Copie de la démo réduite avec les tables du wiki du résultat `nom` (pour verifier et relecture)."""
+        cible = self.dossier / ('demo-' + nom)
+        shutil.copytree(self.demo, cible)
+        for table in ('wiki_pages', 'wiki_journal'):
+            shutil.copyfile(self.dossier / nom / (table + '.csv'), cible / (table + '.csv'))
+        return cible
+
+    def test_budget_atteint_arret_propre(self):
+        sortie = self.budget
+        self.assertEqual(sortie.returncode, 3, sortie.stdout + sortie.stderr)
+        self.assertIn('Garde-fous : budget 0.0500 $ · arrêt au-delà de 10 % de réponses refusées (à partir de 20 réponses)',
+                      sortie.stdout)
+        self.assertIn('ARRÊT : budget atteint — 0.0492 $ dépensés sur 0.0500 $ ; 4 OT traités, 20 restants\n', sortie.stdout)
+        self.assertIn('Agents lancés : 4 · réponses reprises des traces : 0 ·', sortie.stdout)
+        # Les OT restants ne sont pas lancés : ni agent, ni trace.
+        self.assertEqual(len(list((self.dossier / 'appels-budget').glob('*.json'))), 4)
+        self.assertEqual(self.traces_budget, sorted(self.ordre[:4]))
+        # État écrit : traités validés, restants « en file » au journal ; bilan (coût dépensé, OT traités et restants).
+        journal = self.journal('budget')
+        self.assertEqual({ot: e['statut'] for ot, e in journal.items()},
+                         dict([(ot, 'validée') for ot in self.ordre[:4]] + [(ot, 'en file') for ot in self.ordre[4:]]))
+        bilan = self.bilan('budget')
+        self.assertEqual((bilan['arret'], bilan['budget_usd'], bilan['cout_usd'], bilan['ot']['traites'],
+                          bilan['ot']['restants'], bilan['ot_restants'], bilan['agents_lances']),
+                         ('budget', 0.05, 0.0492, 4, 20, self.ordre[4:], 4))
+        self.assertTrue(bilan['message'].startswith('ARRÊT : budget atteint — 0.0492 $ dépensés sur 0.0500 $'))
+        self.assertFalse((self.dossier / 'budget' / 'temps-1.json').exists())
+        # Le résultat se fige, se génère et se relit tel quel ; verifier le dit incomplet.
+        fige = self.dossier / 'fige-budget'
+        sortie = lancer(OUTIL, ['figer', '--resultat', self.dossier / 'budget', '--wiki', fige])
+        self.assertEqual(sortie.returncode, 0, sortie.stdout + sortie.stderr)
+        self.assertEqual((fige / 'demo_wiki_journal.csv').read_bytes(), (self.dossier / 'budget' / 'wiki_journal.csv').read_bytes())
+        generation = self.dossier / 'generation-budget'
+        sortie = lancer(GENERATEUR, ['--wiki', fige, '--sortie', generation, '--sans-js'])
+        self.assertEqual(sortie.returncode, 0, sortie.stdout + sortie.stderr)
+        relecture = self.dossier / 'relecture-budget.html'
+        sortie = lancer(OUTIL, ['relecture', '--demo', generation, '--sortie', relecture])
+        self.assertEqual(sortie.returncode, 0, sortie.stdout + sortie.stderr)
+        texte = relecture.read_text(encoding='utf-8')
+        for ot in self.ordre[:4]:
+            self.assertIn('<li id="%s"><b>%s</b>' % (ot, ot), texte)
+        self.assertNotIn('<li id="%s">' % self.ordre[4], texte)
+        sortie = lancer(OUTIL, ['verifier', '--demo', self.avec_wiki('budget'), '--wiki', fige, '--traces',
+                                self.dossier / 'chaine-budget'])
+        self.assertEqual(sortie.returncode, 1, sortie.stdout)
+        self.assertIn('DÉFAUT : OT encore en file au journal figé (fabrication arrêtée avant eux) : '
+                      + ', '.join(sorted(self.ordre[4:])), sortie.stdout)
+
+    def test_reponses_reprises_gratuites_hors_budget(self):
+        """Mêmes traces : les 4 premières réponses sont reprises (aucun coût) ; le budget part de zéro pour les appels
+        réels de cette commande : 4 agents de plus, 8 OT traités."""
+        sortie = self.reprise
+        self.assertEqual(sortie.returncode, 3, sortie.stdout + sortie.stderr)
+        self.assertIn('Agents lancés : 4 · réponses reprises des traces : 4 ·', sortie.stdout)
+        self.assertIn('ARRÊT : budget atteint — 0.0492 $ dépensés sur 0.0500 $ ; 8 OT traités, 16 restants\n', sortie.stdout)
+        self.assertEqual(len(list((self.dossier / 'appels-reprise').glob('*.json'))), 4)
+        bilan = self.bilan('reprise')
+        self.assertEqual((bilan['cout_usd'], bilan['cout_reprises_usd'], bilan['reprises'], bilan['cout_par_ot_usd']),
+                         (0.0492, 0.0492, 4, 0.0123))
+        self.assertEqual(sorted(ot for ot, e in self.journal('reprise').items() if e['statut'] == 'validée'),
+                         sorted(self.ordre[:8]))
+
+    def test_plus_de_10_pour_cent_de_reponses_refusees(self):
+        """Les réponses (première et relance) des 2e, 4e et 6e OT sont refusées : à la 20e réponse (celle du 17e OT),
+        6 sur 20 (30 %) : aucun nouvel agent, état écrit, code 4, causes regroupées."""
+        sortie = self.refus
+        self.assertEqual(sortie.returncode, 4, sortie.stdout + sortie.stderr)
+        self.assertIn('ARRÊT : 6 réponses refusées sur 20 (30.0 %) au-delà de 10 % ; causes : OT cité hors des OT permis : '
+                      'OT-… (6) ; 17 OT traités, 7 restants', sortie.stdout)
+        self.assertIn('Causes des refus (raisons regroupées, les plus fréquentes) :\n'
+                      '    6 réponse(s) : OT cité hors des OT permis : OT-…\n', sortie.stdout)
+        self.assertIn('Agents lancés : 20 ·', sortie.stdout)
+        self.assertEqual(sorted(p.stem for p in (self.dossier / 'chaine-refus').glob('*.json')), sorted(self.ordre[:17]))
+        journal = self.journal('refus')
+        attendu = {ot: 'validée' for ot in self.ordre[:17]}
+        attendu.update({ot: 'refusée' for ot in self.refuses})
+        attendu.update({ot: 'en file' for ot in self.ordre[17:]})
+        self.assertEqual({ot: e['statut'] for ot, e in journal.items()}, attendu)
+        bilan = self.bilan('refus')
+        self.assertEqual((bilan['arret'], bilan['reponses'], bilan['causes'], [ot for ot, _ in bilan['ot_refuses']]),
+                         ('refus', {'recues': 20, 'refusees': 6, 'part_pct': 30.0}, [['OT cité hors des OT permis : OT-…', 6]],
+                          sorted(self.refuses)))
+        # Le seuil se retire pour un essai (--refus-max 0) : fabrication jusqu'au bout, mêmes OT refusés.
+        sortie = self.sans_seuil
+        self.assertEqual(sortie.returncode, 0, sortie.stdout + sortie.stderr)
+        self.assertIn('Garde-fous : aucun budget · aucun seuil de réponses refusées\n', sortie.stdout)
+        self.assertIn('Bilan : réponses refusées par le contrôle 6 sur 27 (22.2 %) · relances avec la raison 3 · OT refusés 3',
+                      sortie.stdout)
+        self.assertEqual(sorted(ot for ot, e in self.journal('sans-seuil').items() if e['statut'] == 'refusée'),
+                         sorted(self.refuses))
+
+    def test_reponse_refusee_isolee_la_fabrication_continue(self):
+        sortie = self.isole
+        refusee = self.ordre[20]
+        self.assertEqual(sortie.returncode, 0, sortie.stdout + sortie.stderr)
+        self.assertNotIn('ARRÊT', sortie.stdout)
+        self.assertIn('REFUSÉE %s :' % refusee, sortie.stdout)
+        self.assertIn('Bilan : réponses refusées par le contrôle 2 sur 25 (8.0 %) · relances avec la raison 1 · OT refusés 1',
+                      sortie.stdout)
+        journal = self.journal('isole')
+        self.assertEqual({ot: e['statut'] for ot, e in journal.items()},
+                         {ot: 'refusée' if ot == refusee else 'validée' for ot in self.ordre})
+        self.assertEqual(journal[refusee]['essais'], '2')
+        self.assertIn('OT cité hors des OT permis : OT-1999-9999', journal[refusee]['raisons'])
+        trace = json.loads((self.dossier / 'chaine-isole' / (refusee + '.json')).read_text(encoding='utf-8'))
+        self.assertEqual(([a['relance'] for a in trace['appels']], trace['verdict']['statut']), ([False, True], 'refusée'))
+        # verifier compte et signale l'OT refusé sans échouer sous le seuil ; au-delà (--refus-max 4), il échoue.
+        fige = self.dossier / 'fige-isole'
+        self.assertEqual(lancer(OUTIL, ['figer', '--resultat', self.dossier / 'isole', '--wiki', fige]).returncode, 0)
+        demo = self.avec_wiki('isole')
+        sortie = lancer(OUTIL, ['verifier', '--demo', demo, '--wiki', fige, '--traces', self.dossier / 'chaine-isole'])
+        self.assertEqual(sortie.returncode, 0, sortie.stdout + sortie.stderr)
+        self.assertIn('OT refusés au journal figé : 1 sur 24 (4.2 %%, seuil 10 %%) : %s\n' % refusee, sortie.stdout)
+        self.assertIn('Vérification : OK', sortie.stdout)
+        sortie = lancer(OUTIL, ['verifier', '--demo', demo, '--wiki', fige, '--traces', self.dossier / 'chaine-isole',
+                                '--refus-max', 4])
+        self.assertEqual(sortie.returncode, 1, sortie.stdout)
+        self.assertIn('DÉFAUT : OT refusés : 4.2 % des entrées, au-delà de 4 %', sortie.stdout)
+
+
 class TestArrets(unittest.TestCase):
 
     def arreter(self, mode, attendu):
@@ -491,29 +687,35 @@ class TestArrets(unittest.TestCase):
     def test_reponse_en_erreur(self):
         self.arreter('erreur', 'réponse en erreur')
 
-    def test_reponse_refusee_par_prevo(self):
-        sortie = self.arreter('refus', 'ARRÊT : réponse refusée par les contrôles de Prévo, même à sa relance avec la raison')
-        self.assertIn('OT cité hors des OT permis : OT-1999-9999', sortie)
-
-    def test_relance_refusee_arrete_et_trace_ses_deux_appels(self):
-        """Refusée deux fois (à l'envoi puis à la relance avec la raison) : la fabrication s'arrête ; la trace de l'OT
-        porte ses deux appels, la relance citant la réponse refusée et sa raison."""
+    def test_relance_refusee_n_arrete_plus_la_fabrication(self):
+        """D119 : refusée deux fois (à l'envoi puis à sa relance avec la raison), la réponse n'arrête plus la
+        fabrication : l'OT reste « refusée » au journal, les OT suivants sont traités et validés ; la trace de l'OT porte
+        ses deux appels, la relance citant la réponse refusée et sa raison."""
         dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-arret-'))
         self.addCleanup(shutil.rmtree, dossier, True)
-        sortie = self.lancer_petit(dossier, 'refus', ['--agents', 1])
-        self.assertEqual(sortie.returncode, 1, sortie.stdout)
-        self.assertIn('ARRÊT : réponse refusée par les contrôles de Prévo', sortie.stdout)
-        # Une seule relance, et aucun envoi ne part après le refus : deux agents en tout (l'envoi et sa relance).
-        self.assertIn('relances avec la raison : 1 ·', sortie.stdout)
-        self.assertIn('Agents lancés : 2 ·', sortie.stdout)
-        traces = [json.loads(p.read_text(encoding='utf-8')) for p in (dossier / 'chaine').glob('*.json')]
-        refusees = [t for t in traces if (t.get('verdict') or {}).get('statut') == 'refusée']
-        self.assertEqual(len(refusees), 1)
-        origine, relance = refusees[0]['appels']
+        premiers = [ot for _, ot in sorted((o['date_fin'], o['id']) for o in lignes_csv(DEMO / 'ordres_travail.csv')
+                                           if o['statut'] == 'Clôturé administrativement')][:3]
+        sortie = lancer(OUTIL, ['fabriquer', '--agents', 1, '--limite', 3, '--claude', FAUX, '--traces', dossier / 'chaine',
+                                '--resultat', dossier / 'resultat'],
+                        {'FAUX_CLAUDE_MODE': 'refus-part', 'FAUX_CLAUDE_REFUSES': premiers[0]})
+        self.assertEqual(sortie.returncode, 0, sortie.stdout + sortie.stderr)
+        self.assertNotIn('ARRÊT', sortie.stdout)
+        self.assertIn('REFUSÉE %s :\n    Page « ' % premiers[0], sortie.stdout)
+        # Une seule relance pour l'OT refusé, puis les deux suivants : quatre agents en tout.
+        self.assertIn('Agents lancés : 4 · réponses reprises des traces : 0 · relances avec la raison : 1 ·', sortie.stdout)
+        self.assertIn('Bilan : réponses refusées par le contrôle 2 sur 4 (50.0 %) · relances avec la raison 1 · OT refusés 1',
+                      sortie.stdout)
+        journal = {e['ot_id']: e for e in lignes_csv(dossier / 'resultat' / 'wiki_journal.csv')}
+        self.assertEqual({ot: (e['statut'], e['essais']) for ot, e in journal.items()},
+                         {premiers[0]: ('refusée', '2'), premiers[1]: ('validée', '1'), premiers[2]: ('validée', '1')})
+        self.assertIn('OT cité hors des OT permis : OT-1999-9999', journal[premiers[0]]['raisons'])
+        trace = json.loads((dossier / 'chaine' / (premiers[0] + '.json')).read_text(encoding='utf-8'))
+        self.assertEqual(trace['verdict']['statut'], 'refusée')
+        origine, relance = trace['appels']
         self.assertEqual((origine['relance'], relance['relance']), (False, True))
         self.assertTrue(relance['utilisateur'].startswith(origine['utilisateur'] + MARQUE_RELANCE + origine['contenu']))
         self.assertIn('OT cité hors des OT permis : OT-1999-9999', relance['utilisateur'])
-        self.assertIn('OT cité hors des OT permis : OT-1999-9999', refusees[0]['verdict']['raisons'])
+        self.assertIn('OT cité hors des OT permis : OT-1999-9999', trace['verdict']['raisons'])
 
     def test_relance_acceptee_reprise_par_empreinte(self):
         """Chaque OT refusé une fois puis accepté à la relance : la fabrication réussit ; une seconde fabrication
@@ -546,9 +748,12 @@ class TestArrets(unittest.TestCase):
     def test_traces_d_un_arret_verdict_cout_et_resultat_perime(self):
         dossier = Path(tempfile.mkdtemp(prefix='prevo-wiki-arret-'))
         self.addCleanup(shutil.rmtree, dossier, True)
-        # Refus : le verdict de Prévo est dans la trace de l'OT refusé.
+        # Refus (tous les OT, moins de 20 réponses : pas de part qui arrête, D119) : le verdict de Prévo est dans la
+        # trace de chaque OT refusé.
         sortie = self.lancer_petit(dossier / 'refus', 'refus')
-        self.assertEqual(sortie.returncode, 1)
+        self.assertEqual(sortie.returncode, 0, sortie.stdout + sortie.stderr)
+        self.assertIn('Bilan : réponses refusées par le contrôle 6 sur 6 (100.0 %) · relances avec la raison 3 · OT refusés 3',
+                      sortie.stdout)
         verdicts = [json.loads(p.read_text(encoding='utf-8')).get('verdict') for p in (dossier / 'refus' / 'chaine').glob('*.json')]
         self.assertTrue(any(v and v['statut'] == 'refusée' and 'OT-1999-9999' in v['raisons'] for v in verdicts), verdicts)
         # Une fabrication réussie, puis une autre arrêtée sur Opus : le résultat de la première ne reste pas à figer ;

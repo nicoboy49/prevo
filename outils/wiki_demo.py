@@ -14,7 +14,8 @@ modèle local. Ce que l'agent répond passe les contrôles de Prévo (Ia.lireRep
 relancée avec la raison, comme chez un client (§20.5, D106 révisée) : Prévo envoie une requête neuve (message
 d'origine, réponse refusée, raisons du refus), qui lance un agent neuf de plus, tracé dans la même trace.
 
-    py outils/wiki_demo.py fabriquer [--agents 5]   fabrication ; reprend les réponses déjà obtenues (même requête)
+    py outils/wiki_demo.py fabriquer [--agents 5] [--budget 15] [--refus-max 10]
+                                                      fabrication ; reprend les réponses déjà obtenues (même requête)
     py outils/wiki_demo.py fabriquer --limite 40     temps 1 (D115) : les 40 premiers OT par date d'intervention ;
                                                       résultat, état de départ de la suite et page de relecture dans
                                                       .chantier/wiki-demo/temps-1/ (relecture.html)
@@ -24,7 +25,8 @@ d'origine, réponse refusée, raisons du refus), qui lance un agent neuf de plus
     py outils/wiki_demo.py figer                      copie le résultat dans outils/demo_wiki_pages.csv et
                                                       outils/demo_wiki_journal.csv (puis : py outils/generer_demo.py)
     py outils/wiki_demo.py verifier                   traces (Sonnet, un tour), une entrée par OT reliée à la réponse
-                                                      acceptée (relance comprise), intégrité
+                                                      acceptée (relance comprise), intégrité ; OT refusés comptés et
+                                                      signalés, en échec seulement au-delà de --refus-max % (défaut 10)
     py outils/wiki_demo.py relecture                  .chantier/wiki-demo/relecture.html (pages par type)
 
 Fabrication en deux temps (D115) : le temps 1 garde, à côté de son résultat, les tables du wiki AVANT les validations
@@ -42,9 +44,24 @@ plusieurs agents, les mêmes requêtes partent (le catalogue d'une requête dép
 est repris ; à deux réponses très proches près (quelques millisecondes), l'ordre peut s'inverser : la requête qui
 suit est alors renvoyée. --reprise-seule n'appelle jamais Claude : une requête absente des traces arrête la
 fabrication (aucun coût imprévu). Une requête de relance identique à l'octet est reprise de même. La fabrication s'arrête (code
-retour 1) sur un modèle autre que Sonnet, plus d'un tour, une réponse en erreur, une relance refusée par les contrôles
-de Prévo (défaut de la fonction : on corrige le code, puis on relance — les réponses déjà obtenues sont reprises sans
-nouvel appel), une IA injoignable ou une intégrité en défaut. Les propositions acceptées sont validées au nom du
+retour 1) sur un modèle autre que Sonnet, plus d'un tour, une réponse en erreur, une IA injoignable ou une intégrité en
+défaut. Une réponse encore refusée par les contrôles de Prévo à sa relance avec la raison ne l'arrête plus (D119) :
+l'OT reste « refusée » au journal, la fabrication continue et le bilan le compte.
+
+Garde-fous (D119) ; dans les deux cas, aucun nouvel agent n'est lancé, les appels en cours finissent (leurs réponses
+passent par le circuit normal, sans relance), puis les validations de fin se font sur ce qui a été traité ; le résultat
+(tables du wiki, bilan.json) est écrit, à figer et relire tel quel ; les OT restants restent « en file » au journal :
+    --budget D        plafond en dollars des appels réels de CETTE commande (coût relevé dans les traces ; une réponse
+                      reprise des traces est gratuite) : avant chaque agent, si le coût dépensé plus le coût prévu des
+                      appels en cours et de celui-ci dépasserait D, l'outil s'arrête (code retour 3) ; coût prévu d'un
+                      appel : moyenne des appels faits, sinon COUT_PREVU_USD ;
+    --refus-max P     après chaque réponse lue par Prévo (première comme relance), à partir de REFUS_REPONSES_MIN
+                      réponses : plus de P % de réponses refusées par le contrôle arrête l'outil (code retour 4), avec
+                      les raisons de refus les plus fréquentes, regroupées (défaut 10 ; 0 : pas de seuil).
+Le bilan (affiché, et bilan.json dans le dossier du résultat) donne le coût, le coût par OT, les réponses refusées et
+leur part, les relances ; après --limite, une extrapolation à tous les OT (FACTEUR_CROISSANCE_SUITE). Un temps 1 arrêté
+par un garde-fou n'est pas un départ de --suite : le relancer (les réponses déjà obtenues sont reprises sans coût).
+Les propositions acceptées sont validées au nom du
 responsable, sauf celles des demoAValiderJours derniers jours d'intervention, laissées « à valider », et celles
 qui dépendent d'une proposition laissée (Wiki.valider les refuserait avant elle). Un agent ne met jamais Claude
 Code à jour ; si claude.exe disparaît un instant (mise à jour faite ailleurs), l'agent attend qu'il revienne.
@@ -57,6 +74,7 @@ import html
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -83,6 +101,20 @@ ATTENTE_COMMANDE_S = 120     # claude.exe absent au lancement (mise à jour de C
 # Début de la suite d'un message de relance avec la raison (consigne ingestionWiki, ia-prompts.js) : avant lui, le
 # message d'origine tel quel ; après, la réponse refusée et les raisons du refus.
 MARQUE_RELANCE = '\n\nTa réponse précédente :\n'
+# Garde-fous de la fabrication (D119).
+COUT_PREVU_USD = 0.05        # --budget : coût prévu d'un appel tant que cette commande n'en a fait aucun
+REFUS_MAX_DEFAUT = 10        # --refus-max : part (%) de réponses refusées par le contrôle au-delà de laquelle on s'arrête
+REFUS_REPONSES_MIN = 20      # ... à partir de ce nombre de réponses reçues (avant, une part n'a pas de sens)
+CODE_BUDGET = 3              # code retour : budget atteint (état écrit)
+CODE_REFUS = 4               # code retour : trop de réponses refusées (état écrit)
+FICHIER_BILAN = 'bilan.json'  # bilan de la fabrication, dans le dossier du résultat
+CAUSES_MONTREES = 5          # raisons de refus regroupées données dans le bilan (les plus fréquentes)
+# Extrapolation d'un temps 1 à tous les OT : le coût par OT croît avec le wiki (requêtes plus longues). Facteur mesuré
+# sur la passe 6 (traces .chantier/wiki-demo/chaine/, appels au message système de 5 974 caractères : 227 appels,
+# 8,4139 $ ; même lecture que .chantier/wiki-demo/temps-1/estimation-calcul.py), OT dans l'ordre des dates
+# d'intervention : coût par OT des 187 suivants (7,4096 $ / 187 = 0,03962 $) sur celui des 40 premiers
+# (1,0043 $ / 40 = 0,02511 $) = 1,578.
+FACTEUR_CROISSANCE_SUITE = 1.578
 SCRIPTS = [
     'js/lib/papaparse.min.js', 'js/schema.js', 'js/donnees.js', 'js/stockage-demo.js',
     'js/modules/causes-frequentes.js', 'js/modules/indicateurs-regles.js', 'js/modules/ia.js', 'js/modules/ia-prompts.js',
@@ -99,21 +131,57 @@ CHARGER_JS = """async (tables) => {
   Donnees.initialiser(StockageDemo.creer(tables), { poste: 'Fabrication du wiki de démo', profil: 'Responsable' });
   await Donnees.chargerTout();
 }"""
-TRAITER_JS = """async ({ agents, limite }) => {
-  let ids = Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement')
+TRAITER_JS = """async ({ agents, limite, refusMax, refusMin }) => {
+  const tous = Donnees.lignes('ordres_travail').filter((o) => o.statut === 'Clôturé administrativement')
     .sort((a, b) => (a.date_fin < b.date_fin ? -1 : (a.date_fin > b.date_fin ? 1 : (a.id < b.id ? -1 : 1)))).map((o) => o.id);
-  if (limite) ids = ids.slice(0, limite);
+  const ids = limite ? tous.slice(0, limite) : tous;
   // Suite du temps 1 : un OT qui a déjà son entrée (à valider, rien à ajouter) n'est pas remis en file.
   const ajoutes = await Wiki.mettreEnFile(ids);
   const arret = new AbortController();
-  const bilan = await Wiki.traiterFile({ agents, signal: arret.signal,
-    appeler: (requete, donnees) => window.appelerClaude(requete, donnees.ot.id),
-    surProgres: (etat) => { window.progresFabrication(etat); if (etat.refusees) arret.abort(); } });
+  // Garde-fous (D119). « Arrêter » (signal) : aucun nouvel envoi ni relance, les envois partis finissent. Budget :
+  // Python refuse de lancer l'agent ({ arret: 'budget' }) ; l'envoi échoue sans réponse, son OT reste en file. Part
+  // des réponses refusées : chaque réponse lue par Prévo (première comme relance) est comptée en observant
+  // Ia.lireReponse, sans rien changer à sa lecture ; rétabli à la fin.
+  const garde = { cause: null, recues: 0, refusees: 0, refus: [] };
+  const arreter = (cause) => { garde.cause = garde.cause || cause; arret.abort(); };
+  const lire = Ia.lireReponse;
+  Ia.lireReponse = function (fonction, contenu, donnees) {
+    if (fonction !== 'ingestionWiki') return lire.apply(this, arguments);
+    garde.recues += 1;
+    try {
+      return lire.apply(this, arguments);
+    } catch (erreur) {
+      if (erreur && erreur.name === 'IaReponseInvalide') {
+        garde.refusees += 1;
+        garde.refus.push([(donnees && donnees.ot && donnees.ot.id) || '', erreur.raisons || [erreur.message]]);
+      }
+      throw erreur;
+    } finally {
+      if (refusMax > 0 && garde.recues >= refusMin && garde.refusees * 100 > refusMax * garde.recues) arreter('refus');
+    }
+  };
+  let bilan;
+  try {
+    bilan = await Wiki.traiterFile({ agents, signal: arret.signal,
+      appeler: async (requete, donnees) => {
+        const reponse = await window.appelerClaude(requete, donnees.ot.id);
+        if (reponse && reponse.arret) {
+          arreter(reponse.arret);
+          throw Object.assign(new Error('arrêt de la fabrication : ' + reponse.arret), { name: 'ArretFabrication' });
+        }
+        return reponse;
+      },
+      surProgres: (etat) => window.progresFabrication(etat) });
+  } finally {
+    Ia.lireReponse = lire;
+  }
   window.dernierBilan = bilan;
   const entrees = Donnees.lignes('wiki_journal').filter((e) => e.nature === 'ingestion');
-  return { ot: ids.length, ids, ajoutes, acceptees: bilan.acceptees, rien: bilan.rien, refusees: bilan.refusees,
-    rejouees: bilan.rejouees, erreur: bilan.erreur ? (bilan.erreur.message || String(bilan.erreur)) : null,
-    enFile: Wiki.file().length,
+  const erreur = bilan.erreur && bilan.erreur.name !== 'ArretFabrication' ? (bilan.erreur.message || String(bilan.erreur)) : null;
+  return { total: tous.length, ot: ids.length, ids, ajoutes, acceptees: bilan.acceptees, rien: bilan.rien,
+    refusees: bilan.refusees, rejouees: bilan.rejouees, erreur, enFile: Wiki.file().length,
+    restants: Wiki.file().map((e) => e.ot_id), arret: garde.cause, reponses: garde.recues,
+    reponsesRefusees: garde.refusees, refusLus: garde.refus,
     refus: entrees.filter((e) => e.statut === 'refusée').map((e) => [e.ot_id, e.raisons]),
     // Acceptées à la relance avec la raison : l'entrée garde les raisons du premier refus.
     relances: entrees.filter((e) => ['à valider', 'rien à ajouter'].includes(e.statut) && e.raisons).map((e) => e.ot_id) };
@@ -283,17 +351,22 @@ class Fabrique:
     """Pont entre Wiki.traiterFile (page) et les agents Claude (Python)."""
 
     def __init__(self, commande, traces, delai=DELAI_APPEL_S, attente_commande=ATTENTE_COMMANDE_S, reprise_duree=1.0,
-                 reprise_seule=False):
+                 reprise_seule=False, budget=None):
         self.commande = commande
         self.traces = traces
         self.delai = delai
         self.reprise_duree = reprise_duree        # fraction de la durée d'origine d'une réponse reprise
         self.reprise_seule = reprise_seule        # jamais d'agent : une requête absente des traces arrête tout
         self.attente_commande = attente_commande
+        self.budget = budget                      # dollars des appels réels de cette commande (None : pas de plafond)
         self.appels = 0
         self.reprises = 0
         self.relances = 0
-        self.cout = 0.0
+        self.cout = 0.0                           # coût des appels réels de cette commande (jamais des reprises)
+        self.couts_connus = 0                     # appels réels dont le coût est relevé (moyenne du coût prévu)
+        self.cout_reprises = 0.0                  # coût d'origine des réponses reprises (gratuites ici ; bilan)
+        self.en_cours = 0                         # agents lancés qui n'ont pas encore répondu
+        self.arret_budget = False                 # budget atteint : plus aucun agent lancé
         self.arret = None
         self.dernier = None
         self.dossier_neutre = Path(tempfile.mkdtemp(prefix='prevo-agent-'))
@@ -311,6 +384,7 @@ class Fabrique:
                      and a.get('contenu') and reponse_valable(a)), None)
         if deja:
             self.reprises += 1
+            self.cout_reprises += float(deja.get('cout_usd') or 0)
             trace['appels'].append({'empreinte': cle, 'reprise': True, 'relance': relance,
                                     'date': datetime.now().isoformat(timespec='seconds')})
             ecrire_trace(self.traces, trace)
@@ -321,11 +395,28 @@ class Fabrique:
         if self.reprise_seule:
             self.arret = self.arret or '%s : requête absente des traces (reprise seule : aucun agent lancé)' % ot
             raise ErreurFabrication(self.arret)
+        if self.arret_budget or self.depasserait_budget():
+            self.arret_budget = True               # aucun agent lancé, ni maintenant ni ensuite (D119)
+            return {'arret': 'budget'}
+        self.en_cours += 1
         try:
             return await self.appeler_agent(ot, systeme, utilisateur, cle, trace)
         except ErreurFabrication as erreur:
             self.arret = self.arret or '%s : %s' % (ot, erreur)
             raise
+        finally:
+            self.en_cours -= 1
+
+    def cout_prevu(self):
+        """Coût prévu d'un appel : moyenne des appels réels de cette commande, sinon COUT_PREVU_USD."""
+        return self.cout / self.couts_connus if self.couts_connus else COUT_PREVU_USD
+
+    def depasserait_budget(self):
+        """Avant de lancer un agent (D119) : le coût dépensé plus le coût prévu des appels en cours et de celui-ci
+        dépasserait-il le budget ? Les réponses reprises des traces sont gratuites : elles ne comptent jamais."""
+        if self.budget is None:
+            return False
+        return round(self.cout + (self.en_cours + 1) * self.cout_prevu(), 6) > round(self.budget, 6)
 
     async def lancer_agent(self, systeme):
         """Processus d'un agent. Commande introuvable (claude.exe retiré par une mise à jour de Claude Code faite hors
@@ -372,7 +463,9 @@ class Fabrique:
             appel.update({'modele': ', '.join(sorted((donnees.get('modelUsage') or {}).keys())),
                           'tours': donnees.get('num_turns'), 'jetons': donnees.get('usage'),
                           'cout_usd': donnees.get('total_cost_usd'), 'duree_api_ms': donnees.get('duration_api_ms')})
-            self.cout += float(donnees.get('total_cost_usd') or 0)
+            if donnees.get('total_cost_usd') is not None:
+                self.cout += float(donnees['total_cost_usd'])
+                self.couts_connus += 1
             modeles = controler_reponse(donnees)
         except ValueError:
             appel['erreur'] = 'réponse illisible'
@@ -437,6 +530,95 @@ def lire_depart(dossier, sortie, donnees):
     return {'temps': temps, 'tables': {t: (etat / (t + '.csv')).read_bytes().decode('utf-8-sig') for t in FICHIERS_FIGES}}
 
 
+def part_pct(nombre, total):
+    return round(100.0 * nombre / total, 1) if total else 0.0
+
+
+def cause_de(raison):
+    """Raison de refus réduite à sa forme, pour regrouper les refus : sans le nom de la page, sans l'extrait cité
+    après « — », numéros d'OT et nombres remplacés (« OT cité hors des OT permis : OT-… »)."""
+    texte = ' '.join(str(raison).split())
+    texte = re.sub(r'^(Page|Contradiction sur la page) «[^»]*» : ', '', texte)
+    texte = texte.split(' — «', 1)[0]
+    texte = re.sub(r'OT-\d{4}-\d{4,}', 'OT-…', texte)
+    return re.sub(r'\d+', 'n', texte).rstrip(' .')
+
+
+def causes_regroupees(refus):
+    """[(OT, raisons)] des réponses refusées → [[cause, réponses]], les plus fréquentes d'abord (une réponse compte une
+    fois par cause)."""
+    compte = {}
+    for _ot, raisons in refus:
+        for cause in {cause_de(raison) for raison in raisons if str(raison).strip()}:
+            compte[cause] = compte.get(cause, 0) + 1
+    return [[cause, nombre] for cause, nombre in sorted(compte.items(), key=lambda c: (-c[1], c[0]))]
+
+
+def bilan_fabrication(bilan, fabrique, arguments, depart):
+    """Bilan d'une fabrication (D119), écrit dans bilan.json et affiché : coût des appels réels de cette commande, coût
+    par OT (réponses reprises comptées à leur coût d'origine, pour qu'un rejeu ne le fausse pas), réponses refusées et
+    leur part, relances, OT traités et restants ; après --limite, l'extrapolation à tous les OT."""
+    traites = bilan['ajoutes'] - bilan['enFile']
+    cout_ot = (fabrique.cout + fabrique.cout_reprises) / traites if traites else 0.0
+    resume = {
+        'fabrique_le': datetime.now().isoformat(timespec='seconds'),
+        'commande': 'temps 1' if arguments.limite else ('suite' if arguments.suite else 'complète'),
+        'arret': bilan['arret'], 'budget_usd': arguments.budget, 'refus_max_pct': arguments.refus_max,
+        'cout_usd': round(fabrique.cout, 4), 'cout_reprises_usd': round(fabrique.cout_reprises, 4),
+        'agents_lances': fabrique.appels, 'reprises': fabrique.reprises, 'relances': fabrique.relances,
+        'ot': {'total': bilan['total'], 'vises': bilan['ot'], 'mis_en_file': bilan['ajoutes'], 'traites': traites,
+               'restants': bilan['enFile'], 'acceptees': bilan['acceptees'], 'rien': bilan['rien'],
+               'refusees': bilan['refusees'], 'rejouees': bilan['rejouees']},
+        'cout_par_ot_usd': round(cout_ot, 4),
+        'reponses': {'recues': bilan['reponses'], 'refusees': bilan['reponsesRefusees'],
+                     'part_pct': part_pct(bilan['reponsesRefusees'], bilan['reponses'])},
+        'causes': causes_regroupees(bilan['refusLus'])[:CAUSES_MONTREES],
+        'ot_refuses': bilan['refus'], 'ot_restants': bilan['restants'],
+    }
+    if depart:
+        resume['cout_temps_1_usd'] = depart['temps'].get('cout_usd')
+    if arguments.limite:
+        restants = bilan['total'] - traites
+        resume['extrapolation'] = {'cout_par_ot_usd': round(cout_ot, 4), 'ot_restants': restants,
+                                   'facteur': FACTEUR_CROISSANCE_SUITE,
+                                   'cout_usd': round(cout_ot * restants * FACTEUR_CROISSANCE_SUITE, 4)}
+    return resume
+
+
+def lignes_bilan(resume):
+    o, r = resume['ot'], resume['reponses']
+    cout = 'Bilan : coût %.4f $' % resume['cout_usd']
+    if resume.get('cout_temps_1_usd') is not None:
+        cout += ' (avec le temps 1 : %.4f $)' % (resume['cout_usd'] + resume['cout_temps_1_usd'])
+    lignes = [cout + ' · coût par OT %.4f $%s · OT traités %d, restants en file %d'
+              % (resume['cout_par_ot_usd'], ' (réponses reprises à leur coût d\'origine)' if resume['reprises'] else '',
+                 o['traites'], o['restants']),
+              'Bilan : réponses refusées par le contrôle %d sur %d (%.1f %%) · relances avec la raison %d · OT refusés %d'
+              % (r['refusees'], r['recues'], r['part_pct'], resume['relances'], len(resume['ot_refuses']))]
+    if resume['causes']:
+        lignes.append('Causes des refus (raisons regroupées, les plus fréquentes) :')
+        lignes.extend('    %d réponse(s) : %s' % (nombre, cause) for cause, nombre in resume['causes'])
+    if 'extrapolation' in resume:
+        e = resume['extrapolation']
+        lignes.append('Extrapolation à tous les OT : %.4f $ par OT × %d OT restants × %.3f (croissance mesurée sur la passe '
+                      '6) = %.2f $ (avec ce temps 1 : %.2f $)' % (e['cout_par_ot_usd'], e['ot_restants'], e['facteur'],
+                                                                 e['cout_usd'], e['cout_usd'] + resume['cout_usd']))
+    return lignes
+
+
+def message_arret(resume):
+    """Message d'un garde-fou atteint (D119)."""
+    o, r = resume['ot'], resume['reponses']
+    if resume['arret'] == 'budget':
+        return ('ARRÊT : budget atteint — %.4f $ dépensés sur %.4f $ ; %d OT traités, %d restants'
+                % (resume['cout_usd'], resume['budget_usd'], o['traites'], o['restants']))
+    return ('ARRÊT : %d réponses refusées sur %d (%.1f %%) au-delà de %g %% ; causes : %s ; %d OT traités, %d restants '
+            '(ne pas forcer : corriger la consigne ou le contrôle, puis relancer)'
+            % (r['refusees'], r['recues'], r['part_pct'], resume['refus_max_pct'],
+               ' ; '.join('%s (%d)' % (cause, nombre) for cause, nombre in resume['causes'][:3]), o['traites'],
+               o['restants']))
+
+
 def effacer_temps_1(dossier):
     """Ce qu'écrit un temps 1 (jamais l'estimation ni un autre fichier) : retiré au départ, pour qu'un temps 1 arrêté ne
     laisse jamais l'état d'un temps 1 précédent à la suite."""
@@ -464,10 +646,11 @@ async def fabriquer_async(arguments):
         tables.update(depart['tables'])
     for table in FICHIERS_FIGES:                  # jamais de résultat périmé à figer après une fabrication arrêtée
         (sortie / (table + '.csv')).unlink(missing_ok=True)
+    (sortie / FICHIER_BILAN).unlink(missing_ok=True)
     if temps_1:
         effacer_temps_1(sortie)
     fabrique = Fabrique(commande, Path(arguments.traces), arguments.delai_appel, reprise_duree=arguments.reprise_duree,
-                        reprise_seule=arguments.reprise_seule)
+                        reprise_seule=arguments.reprise_seule, budget=arguments.budget)
     from playwright.async_api import async_playwright
     async with async_playwright() as playwright:
         navigateur, page, erreurs = await ouvrir_page(playwright, tables)
@@ -485,10 +668,20 @@ async def fabriquer_async(arguments):
                                             % (arguments.depart, ', '.join(manquants[:10])))
                 ecrire('Suite du temps 1 (%s) : %d OT déjà intégrés, repris tels quels, sans nouvel appel.'
                        % (arguments.depart, len(deja)))
+                estimation = (depart['temps'].get('extrapolation') or {}).get('cout_usd')
+                if estimation is not None:
+                    ecrire('Estimation de la suite par le temps 1 : %.2f $%s' % (estimation, (' — AU-DELÀ du budget de %.4f $ '
+                           '(le budget arrêtera la suite)' % arguments.budget) if arguments.budget is not None
+                           and estimation > arguments.budget else ''))
             await page.expose_function('appelerClaude', fabrique.appeler)
             await page.expose_function('progresFabrication', fabrique.progres)
             ecrire('Fabrication du wiki de démo : %s agent(s), commande %s' % (arguments.agents, ' '.join(commande)))
-            bilan = await page.evaluate(TRAITER_JS, {'agents': arguments.agents, 'limite': arguments.limite or 0})
+            ecrire('Garde-fous : %s · %s' % ('budget %.4f $' % arguments.budget if arguments.budget is not None else 'aucun budget',
+                                             'arrêt au-delà de %g %% de réponses refusées (à partir de %d réponses)'
+                                             % (arguments.refus_max, REFUS_REPONSES_MIN) if arguments.refus_max
+                                             else 'aucun seuil de réponses refusées'))
+            bilan = await page.evaluate(TRAITER_JS, {'agents': arguments.agents, 'limite': arguments.limite or 0,
+                                                     'refusMax': arguments.refus_max, 'refusMin': REFUS_REPONSES_MIN})
             fabrique.noter_verdicts(await page.evaluate(ENTREES_JS))
             bilan['relances'] = [ot for ot in bilan['relances'] if ot not in deja]
             ecrire('OT : %(ot)s (%(ajoutes)s mis en file) · acceptées %(acceptees)s · rien à ajouter %(rien)s · refusées '
@@ -500,18 +693,18 @@ async def fabriquer_async(arguments):
             if fabrique.arret or bilan['erreur']:
                 ecrire('ARRÊT : %s' % (fabrique.arret or bilan['erreur']))
                 return 1
-            if bilan['refusees']:
-                for ot, raisons in bilan['refus']:
-                    ecrire('REFUSÉE %s :\n    %s' % (ot, '\n    '.join(str(raisons).splitlines())))
-                ecrire('ARRÊT : réponse refusée par les contrôles de Prévo, même à sa relance avec la raison (défaut de la '
-                       'fonction à corriger, puis relancer).')
-                return 1
-            if bilan['enFile']:
+            # D119 : une réponse refusée, même à sa relance avec la raison, n'arrête plus la fabrication ; l'OT reste
+            # « refusée » au journal et le bilan le compte. Seule la part des réponses refusées arrête (--refus-max).
+            for ot, raisons in bilan['refus']:
+                ecrire('REFUSÉE %s :\n    %s' % (ot, '\n    '.join(str(raisons).splitlines())))
+            arret = bilan['arret']                    # garde-fou atteint : 'budget', 'refus' ou None
+            if bilan['enFile'] and not arret:
                 ecrire('ARRÊT : %d OT encore en file.' % bilan['enFile'])
                 return 1
             # Temps 1 : l'état d'où repartira la suite est pris AVANT les validations, que la suite fera toutes à la fin,
-            # comme une fabrication d'un seul tenant (les pages créées gardent leur clé TITRE:… d'ici là).
-            etat = await page.evaluate(TABLES_WIKI_JS) if temps_1 else None
+            # comme une fabrication d'un seul tenant (les pages créées gardent leur clé TITRE:… d'ici là). Un temps 1
+            # arrêté par un garde-fou n'en est pas un départ (OT restants en file) : il se relance.
+            etat = await page.evaluate(TABLES_WIKI_JS) if temps_1 and not arret else None
             jours = arguments.a_valider_jours
             if jours is None:
                 jours = await page.evaluate('Wiki.SEUILS.demoAValiderJours')
@@ -532,18 +725,39 @@ async def fabriquer_async(arguments):
             sortie.mkdir(parents=True, exist_ok=True)
             for table, texte in resultat['fichiers'].items():
                 (sortie / (table + '.csv')).write_bytes(texte.encode('utf-8'))
+            resume = bilan_fabrication(bilan, fabrique, arguments, depart)
+            if arret:
+                resume['message'] = message_arret(resume)
+            (sortie / FICHIER_BILAN).write_text(json.dumps(resume, ensure_ascii=False, indent=1), encoding='utf-8')
+            for ligne in lignes_bilan(resume):
+                ecrire(ligne)
+            code = {'budget': CODE_BUDGET, 'refus': CODE_REFUS}.get(arret, 0)
+            if temps_1:
+                temps = {'temps': 1, 'limite': arguments.limite, 'ot': bilan['ids'], 'empreinte_donnees': donnees,
+                         'empreinte_consigne': consigne, 'fabrique_le': resume['fabrique_le'],
+                         'agents': arguments.agents, 'agents_lances': fabrique.appels, 'reprises': fabrique.reprises,
+                         'relances': fabrique.relances, 'cout_usd': round(fabrique.cout, 4),
+                         'bilan': {cle: bilan[cle] for cle in ('acceptees', 'rien', 'rejouees')},
+                         'acceptees_a_la_relance': bilan['relances'], 'cout_par_ot_usd': resume['cout_par_ot_usd'],
+                         'reponses': resume['reponses'], 'ot_refuses': [ot for ot, _ in bilan['refus']],
+                         'extrapolation': resume['extrapolation']}
+                if arret:
+                    temps['arret'] = resume['message']
+                lu = await page.evaluate(RELECTURE_JS)
+                (sortie / RELECTURE_TEMPS_1).write_text(document_relecture(lu, temps), encoding='utf-8')
+                if not arret:
+                    ecrire_temps_1(sortie, etat, temps)
+            if arret:
+                ecrire(resume['message'])
+                ecrire('État écrit : %s (tables du wiki validées sur ce qui a été traité, %s%s ; OT restants « en file » '
+                       'au journal ; traces : %s). À figer et relire tel quel (py outils/wiki_demo.py figer) ; pour '
+                       'continuer, relancer la même commande : les réponses déjà obtenues sont reprises sans coût%s.'
+                       % (sortie, FICHIER_BILAN, ', ' + RELECTURE_TEMPS_1 if temps_1 else '', arguments.traces,
+                          ' (temps 1 arrêté : pas de départ pour --suite)' if temps_1 else ''))
+                return code
             if not temps_1:
                 ecrire('Intégrité ok. Résultat : %s (puis : py outils/wiki_demo.py figer)' % sortie)
                 return 0
-            temps = {'temps': 1, 'limite': arguments.limite, 'ot': bilan['ids'], 'empreinte_donnees': donnees,
-                     'empreinte_consigne': consigne, 'fabrique_le': datetime.now().isoformat(timespec='seconds'),
-                     'agents': arguments.agents, 'agents_lances': fabrique.appels, 'reprises': fabrique.reprises,
-                     'relances': fabrique.relances, 'cout_usd': round(fabrique.cout, 4),
-                     'bilan': {cle: bilan[cle] for cle in ('acceptees', 'rien', 'rejouees')},
-                     'acceptees_a_la_relance': bilan['relances']}
-            lu = await page.evaluate(RELECTURE_JS)
-            (sortie / RELECTURE_TEMPS_1).write_text(document_relecture(lu, temps), encoding='utf-8')
-            ecrire_temps_1(sortie, etat, temps)
             ecrire('Intégrité ok. Temps 1 : %s (relecture : %s ; suite : py outils/wiki_demo.py fabriquer --suite)'
                    % (sortie, sortie / RELECTURE_TEMPS_1))
             return 0
@@ -631,7 +845,18 @@ def verifier(arguments):
     integres = {ligne['ot_id'] for ligne in entrees}
     # Chaque entrée reliée à la réponse que Prévo a acceptée (relance comprise), du modèle noté sur l'entrée.
     sans_trace = []
+    refusees, en_file = [], []
     for entree in sorted(entrees, key=lambda ligne: ligne['ot_id']):
+        if entree.get('statut') == 'refusée':
+            # D119 : un OT refusé (même à sa relance) est compté et signalé ; il vient de réponses Sonnet tracées.
+            refusees.append(entree['ot_id'])
+            if not any(not a.get('reprise') and a.get('contenu') and reponse_valable(a)
+                       for a in traces.get(entree['ot_id'], [])):
+                defauts.append('%s : refusée, sans réponse Sonnet dans les traces' % entree['ot_id'])
+            continue
+        if entree.get('statut') in ('en file', 'à refaire'):
+            en_file.append(entree['ot_id'])      # fabrication arrêtée par un garde-fou avant lui
+            continue
         appel, defaut = reponse_acceptee(traces.get(entree['ot_id'], []), entree)
         if defaut and not entree.get('raisons'):
             sans_trace.append(entree['ot_id'])
@@ -642,6 +867,11 @@ def verifier(arguments):
                            entree.get('modele') or 'absent', appel.get('modele')))
     if sans_trace:
         defauts.append('entrées du journal figé sans réponse Sonnet dans les traces : %s' % ', '.join(sans_trace))
+    if en_file:
+        defauts.append('OT encore en file au journal figé (fabrication arrêtée avant eux) : %s' % ', '.join(en_file))
+    if arguments.refus_max and len(refusees) * 100 > arguments.refus_max * len(entrees):
+        defauts.append('OT refusés : %.1f %% des entrées, au-delà de %g %%' % (part_pct(len(refusees), len(entrees)),
+                                                                             arguments.refus_max))
     ordres = lignes_csv((Path(arguments.demo) / 'ordres_travail.csv').read_bytes().decode('utf-8'))
     clotures = sorted(o['id'] for o in ordres if o['statut'] == 'Clôturé administrativement')
     manquants = [ot for ot in clotures if ot not in integres]
@@ -663,6 +893,10 @@ def verifier(arguments):
     ecrire('Traces : %d appels d\'agents (%d sans réponse) · modèles du journal figé : %s · OT clôturés administrativement : '
            '%d, intégrés : %d' % (appels, sans_reponse, ', '.join(modeles) or 'aucun', len(clotures),
                                   len([ot for ot in clotures if ot in integres])))
+    if refusees:
+        ecrire('OT refusés au journal figé : %d sur %d (%.1f %%, seuil %g %%) : %s'
+               % (len(refusees), len(entrees), part_pct(len(refusees), len(entrees)), arguments.refus_max,
+                  ', '.join(refusees)))
     for defaut in defauts:
         ecrire('DÉFAUT : ' + defaut)
     ecrire('Vérification : ' + ('OK' if not defauts else 'ÉCHEC'))
@@ -793,6 +1027,18 @@ def document_relecture(lu, temps=None):
                      'coût %.2f $.</p>' % (len(temps['ot']), temps['bilan']['acceptees'], temps['bilan']['rien'],
                                           temps['bilan']['rejouees'], temps['agents_lances'], temps['relances'],
                                           temps['reprises'], temps['cout_usd']))
+        if temps.get('reponses'):
+            corps.append('<p class="bilan">Réponses refusées par le contrôle : %d sur %d (%.1f %%) · OT refusés : %d%s.</p>'
+                         % (temps['reponses']['refusees'], temps['reponses']['recues'], temps['reponses']['part_pct'],
+                            len(temps.get('ot_refuses') or []), (' (' + e(', '.join(temps['ot_refuses'])) + ')')
+                            if temps.get('ot_refuses') else ''))
+        if temps.get('extrapolation'):
+            x = temps['extrapolation']
+            corps.append('<p class="bilan">Extrapolation à tous les OT : %.4f $ par OT × %d OT restants × %.3f (croissance '
+                         'mesurée sur la passe 6) = %.2f $.</p>' % (x['cout_par_ot_usd'], x['ot_restants'], x['facteur'],
+                                                                   x['cout_usd']))
+        if temps.get('arret'):
+            corps.append('<p class="bilan"><b>%s</b></p>' % e(temps['arret']))
     corps.append('<h2>Propositions à valider (%d)</h2><p>Laissées « à valider » dans la démo (les derniers jours '
                  'd\'intervention) : le profil responsable les verra.</p>' % len(lu['attente']))
     corps.extend(attente_html(entree) for entree in lu['attente'])
@@ -854,8 +1100,18 @@ def lire_arguments(argv):
                                   'ordre d\'arrivée, mêmes requêtes avec plusieurs agents ; 0 : tout de suite)')
     fabrication.add_argument('--reprise-seule', action='store_true',
                              help='jamais d\'agent : une requête absente des traces arrête la fabrication')
+    fabrication.add_argument('--budget', type=float, default=None,
+                             help='plafond en dollars des appels réels de cette commande (réponses reprises gratuites) ; '
+                                  'atteint : aucun nouvel agent, état écrit, code retour %d (défaut : aucun)' % CODE_BUDGET)
+    fabrication.add_argument('--refus-max', type=float, default=REFUS_MAX_DEFAUT,
+                             help='part (%%%%) de réponses refusées par le contrôle au-delà de laquelle la fabrication '
+                                  's\'arrête, à partir de %d réponses : état écrit, code retour %d (défaut %d ; 0 : '
+                                  'aucune)' % (REFUS_REPONSES_MIN, CODE_REFUS, REFUS_MAX_DEFAUT))
     sous.add_parser('figer', parents=[commun], help='copie le résultat dans les fichiers figés')
-    sous.add_parser('verifier', parents=[commun], help='vérifie traces, journal figé et intégrité')
+    verification = sous.add_parser('verifier', parents=[commun], help='vérifie traces, journal figé et intégrité')
+    verification.add_argument('--refus-max', type=float, default=REFUS_MAX_DEFAUT,
+                              help='part (%%%%) d\'OT refusés au journal figé au-delà de laquelle la vérification échoue '
+                                   '(défaut %d ; 0 : aucune)' % REFUS_MAX_DEFAUT)
     lecture = sous.add_parser('relecture', parents=[commun], help='page de relecture du wiki de démo')
     lecture.add_argument('--sortie', default=str(DOSSIER_TRAVAIL / 'relecture.html'))
     arguments = analyseur.parse_args(argv)
@@ -863,6 +1119,10 @@ def lire_arguments(argv):
         analyseur.error('--agents : de 1 à 5')
     if arguments.action == 'fabriquer' and arguments.suite and arguments.limite:
         analyseur.error('--suite et --limite ne vont pas ensemble : la suite traite tous les OT restants')
+    if arguments.action == 'fabriquer' and arguments.budget is not None and arguments.budget < 0:
+        analyseur.error('--budget : un montant positif en dollars')
+    if arguments.action in ('fabriquer', 'verifier') and not 0 <= arguments.refus_max <= 100:
+        analyseur.error('--refus-max : de 0 à 100 (%)')
     if arguments.resultat is None:
         temps_1 = arguments.action == 'fabriquer' and arguments.limite
         arguments.resultat = str(DOSSIER_TEMPS_1 if temps_1 else DOSSIER_RESULTAT)
