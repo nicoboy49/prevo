@@ -665,7 +665,135 @@ bibliothèques de `js/lib/` sont celles du lot 4, inchangées ; seule SheetJS s'
 (accord de Nicolas, comme au lot 4) ; les étiquettes internes du chantier restent sur le poste. Le
 passage en public suivra une dernière vérification de tout l'historique, validée par Nicolas.
 
-## 12. À retenir pour piloter une IA
+## 12. Lot 6 : wiki de maintenance, version 1.2.0
+
+Le lot 6 ajoute l'**encyclopédie de l'atelier** : une page par machine, par panne, par article, par
+technicien, par intervention et par savoir-faire, calculée à partir des données (pannes et ce qui les a
+réglées, interventions, pièces, stock, consignation en tête) et complétée par des textes courts
+(« En bref » et « Astuces » d'une machine, « À quoi il sert » d'un article, savoir-faire communs aux
+machines). Les textes viennent de l'**astuce** saisie à la clôture technique et de l'**ingestion** par
+l'assistant IA : à la clôture administrative, l'ordre de travail entre dans une file que le responsable
+traite depuis le journal du wiki ; le modèle propose, Prévo contrôle, le responsable valide. Le lot
+renomme aussi le logiciel (**Prévo**, l'ancien nom appartenant à une autre GMAO), recrée le dépôt sans
+trace de l'ancien nom, et ajoute le **signalement des nouvelles versions**. Même méthode qu'aux lots
+précédents : contrat écrit avant le code, tâches vérifiées sur preuve, relecteurs indépendants ; le lot a
+connu une **refonte** en cours de route (voir plus bas), validée sur maquette.
+
+### Les décisions de Nicolas
+
+Le cahier des charges compte **28 décisions** (D93 à D120) et **23 critères de succès** (CS96 à CS118).
+Règle de fond : **deux couches, toujours** (D94) — la couche calculée est complète et utile sans IA ; le
+texte rédigé ne s'y substitue jamais, et chaque phrase cite l'ordre de travail qui la fonde. Les points
+tranchés par Nicolas :
+
+- **Qui rédige la démo** (D98) : Claude Sonnet, par l'outil en ligne de commande de Claude Code, un agent
+  par ordre de travail, avec la consigne de Prévo ; la passe de comparaison avec un modèle local (D102)
+  est supprimée, le modèle local restant possible pour les clients.
+- **Quand ingérer** (D104) : à la clôture administrative, dans une file que le responsable traite
+  lui-même (« Traiter la file »), sur son poste, où l'IA est réglée : la dépense reste sous son contrôle.
+- **L'astuce** (D110, son ajout à la validation) : une phrase courte à la clôture technique, cherchée avec
+  les pages du wiki.
+- **Les contradictions dans la démo** (D109) et l'**ordre d'ingestion** (D111 : par date d'intervention,
+  un ordre de travail antérieur aux faits de la page ne se présente jamais comme le plus récent).
+- **La relance** (D106 révisée) : une réponse refusée par les contrôles repart une fois vers le modèle
+  avec la raison du refus, au lieu d'arrêter la fabrication.
+- **La refonte 2** (D113 à D115, 23 octobre) : après une première version centrée sur la machine et ses
+  synthèses, Nicolas a demandé que le wiki devienne l'encyclopédie complète, avec une maquette validée
+  (« c'est ce que je veux »), la visibilité par profil (le demandeur ne voit ni les techniciens ni les
+  interventions, les prix restent au responsable) et une fabrication de la démo en deux temps, le coût
+  estimé étant donné avant chaque temps.
+- **Après le temps 1** (D116 à D119) : un seul savoir-faire par geste, commun aux machines ; « En bref »
+  en trois phrases et soixante mots, réécrit en entier à chaque intervention ; les ordres de travail des
+  pièces consommées en petits numéros ; une nuit autonome avec un relecteur indépendant, un budget de
+  15 $ et l'arrêt au-delà de 10 % de réponses refusées.
+- **Le signalement des nouvelles versions** (D120) : lecture d'un fichier sur prevo.pro, au plus une
+  fois par jour et par poste, seulement avec l'accord du responsable ; rien ne s'installe tout seul.
+
+### Les chiffres
+
+- **44 tâches** (T95 à T147) en **29 vagues**, chacune validée par l'outil de vérification ; les sept
+  tâches de la première version (T95 à T101) sont gardées pour l'historique, la refonte en a redéfini
+  36, et cinq se sont ajoutées après le temps 1 de la fabrication et pour la mise à jour signalée.
+- **85 commits** depuis la version 1.1.0, le renommage compris ; **115 fichiers** touchés, environ
+  **28 800 lignes ajoutées** : 7 760 lignes de code pour le wiki et la mise à jour (treize fichiers
+  `wiki-*.js`, `mise-a-jour.js`) et 13 100 lignes de tests pour eux ; aucune bibliothèque nouvelle.
+- **1 443 tests** dans la suite (1 070 à la fin du lot 5), jouée d'un trait en 36 minutes avant la
+  clôture, puis une dernière fois par la vérification de chaque vague.
+- **La démo** : 227 ordres de travail clôturés intégrés par Claude Sonnet, 137 propositions acceptées,
+  90 sans rien à ajouter, 0 refusée ; 42 pages (13 machines, 4 articles, 6 savoir-faire au temps 1,
+  puis le reste) ; 15 réponses refusées par les contrôles sur 242, toutes corrigées à la relance
+  (6,2 %) ; **0,026 $ par ordre de travail** (5,16 $ le passage final). En tout, la fabrication de la démo
+  a coûté environ **33 $** d'appels : cinq passes arrêtées sur refus pendant la mise au point de la
+  consigne (14,25 $), une passe complète de l'ancienne version (8,41 $), le temps 1 (0,90 $), puis les
+  trois passages de la nuit (9,46 $, dont deux arrêtés par le garde-fou des 10 %).
+- **Performance** sur le jeu de charge (500 équipements, 5 000 ordres de travail) : page du wiki de la
+  machine la plus chargée 15 ms (budget 500), recherche 168 ms la première fois (construction de
+  l'index) puis 1 ms (budget 300), requête d'ingestion construite en 14 ms (budget 1 s) ; aucune requête
+  réseau pour afficher ou chercher.
+- **Durée** : du contrat du lot (22 octobre 2026, 10 h 49) à la clôture (24 octobre au soir), deux
+  nuits comprises ; la journée du 24 a aussi porté le renommage, la recréation du dépôt et la mise à
+  jour signalée.
+
+### Ce que les relectures et la recette ont trouvé
+
+Chaque tâche a été relue par un relecteur qui n'avait pas écrit le code ; le journal du chantier compte
+une cinquantaine de défauts classés critiques, tous corrigés avant la vague suivante. Les plus
+instructifs :
+
+- une **fuite de visibilité** : les habilitations de tous les techniciens étaient visibles de tous les
+  profils sur la page d'un technicien ; corrigée par les règles du module Équipe ;
+- un **budget dépassable** : le garde-fou de la fabrication comptait les appels en cours à leur coût
+  moyen, si bien qu'un dernier appel pouvait franchir le plafond ; il compte désormais l'appel le plus
+  cher ;
+- des **savoir-faire en double** (« Changer » et « Remplacer une garniture mécanique ») et des « En bref »
+  qui s'allongeaient au fil des interventions : d'où les décisions D116 et D117, et une règle du « même
+  geste » dans les contrôles ;
+- la **fabrication réelle** elle-même a été la meilleure relecture de la consigne : cinq arrêts sur refus
+  (une page de seize phrases, un vocabulaire de sécurité, un mot de trop) ont chacun donné une phrase de
+  consigne ou un contrôle, puis la relance avec la raison du refus a rendu les arrêts inutiles ; dans la
+  nuit, le garde-fou des 10 % s'est déclenché deux fois pour des défauts de forme corrigés à la relance
+  (quatre phrases dans « En bref », rubrique « Astuces » omise), chacun réglé par une phrase de consigne ;
+- un relecteur indépendant a relu le temps 1 avec la grille de Nicolas (doublons, « En bref » qui
+  s'allonge, phrases mécaniques, liens manquants, nombres non tirés des ordres de travail) : aucun nombre
+  inventé, deux ordres de travail cités sur une phrase qu'ils ne disaient pas, sept « En bref » qui
+  dépensaient une phrase sur un fait d'une seule intervention ; trois phrases de consigne en sont sorties.
+
+### Les preuves propres au lot 6
+
+- **Faux modèle déterministe** (`tests/faux_wiki.py`) : une réponse construite seulement à partir du
+  message envoyé, pour que les tests soient rapides et reproductibles, avec un mode qui contredit la page
+  pour tester les contradictions ; le vrai modèle n'entre jamais dans la suite de tests.
+- **Calcul indépendant** (`tests/calcul_wiki.py`) : les pages, les listes et l'accueil du wiki de la démo
+  sont recalculés en Python et comparés à l'écran.
+- **Traces de chaque appel** : modèle, nombre de tours, jetons, coût, réponse brute ; la vérification de
+  la démo exige un seul tour, aucun outil, et l'intégrité du journal figé ; une fabrication relancée
+  reprend ses réponses sans rappeler le modèle.
+- **Parallélisme** : le même wiki avec un ou cinq agents, jamais deux envois pour le même ordre de
+  travail.
+- **Garde-fous** : budget en dollars (arrêt propre avant de dépasser), part de réponses refusées, relance
+  une fois avec la raison ; chacun testé avec un défaut réintroduit.
+- **Rien ne part sans accord** : aucune requête réseau pour afficher ou chercher ; le nom du technicien
+  ne figure jamais dans un message envoyé au modèle ; la mise à jour signalée ne lit rien sans le
+  réglage du responsable.
+- **Recette** (`tests/test_recette_lot6.py`) en mode serveur : clôture technique avec astuce, clôture
+  administrative, file, « Traiter la file » avec le faux fournisseur par le relais du serveur,
+  validation, page de la machine avec ses petits numéros, savoir-faire créé, recherche, contradiction
+  tranchée, le tout vérifié sur le disque.
+
+### La clôture
+
+La suite complète (1 443 tests) a été jouée d'un trait, puis vérifiée par vagues ; les étiquettes `lot-6`
+et **`v1.2.0`** sont posées sur le même commit à la clôture. Sont sautés, en le disant, les essais qui
+demandent le vrai Excel (`PREVO_TEST_EXCEL=1`) ou un vrai modèle d'IA (`PREVO_TEST_IA=1`). Les
+bibliothèques de `js/lib/` sont celles du lot 5, inchangées.
+
+### La publication
+
+Le dépôt a été **recréé** le 24 octobre sous le nouveau nom (`nicoboy49/prevo`, privé), avec l'historique
+réécrit pour ne plus porter l'ancien nom ; `main` et les étiquettes publiques y sont envoyées à la
+clôture avec l'accord de Nicolas, les étiquettes internes du chantier restant sur le poste.
+
+## 13. À retenir pour piloter une IA
 
 1. Faire écrire et valider le cahier des charges et ses critères de succès avant le code.
 2. Écrire le contrat entre les morceaux avant de distribuer le travail.
@@ -676,3 +804,8 @@ passage en public suivra une dernière vérification de tout l'historique, valid
 7. Mesurer un modèle d'IA sur ses propres données plutôt que de le choisir sur réputation, et ne
    jamais laisser un vrai modèle dans la suite de tests : un faux fournisseur rend les tests
    rapides, reproductibles, et capables de simuler les pannes.
+8. Avant une fabrication payante, faire relire un premier échantillon par un relecteur indépendant
+   avec la grille du client ; pendant la fabrication, poser des garde-fous (budget, part de refus,
+   relance avec la raison) et garder les réponses pour qu'une relance ne coûte rien.
+9. Laisser l'humain fixer les seuils qui engagent l'argent et le ton (nombre de phrases, budget,
+   taux d'arrêt), et noter au journal chaque décision prise sans lui.
