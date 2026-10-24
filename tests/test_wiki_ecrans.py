@@ -1004,13 +1004,19 @@ class TestAccueil(CasWiki):
         page.wait_for_selector(".wiki-journal", state="attached")
 
     def test_suivi_discret_a_zero_sur_la_demo(self):
+        """Le wiki figé de la démo (T139) laisse des propositions « à valider », aucune contradiction ni échec : seule la
+        tuile à valider ressort (ton « attente »), les tuiles à zéro restent discrètes."""
         page = self.ouvrir("responsable")
-        self.assertEqual(page.evaluate("Donnees.lignes('wiki_journal').length"), 0)
+        journal = page.evaluate("Donnees.lignes('wiki_journal').map((e) => e.statut)")
+        a_valider = journal.count("à valider")
+        self.assertGreater(len(journal), 0)
+        self.assertGreater(a_valider, 0)
         self.aller_accueil()
         lu = page.evaluate(ACCUEIL_JS)
         self.assertEqual([(m["vue"], m["nombre"], m["classe"]) for m in lu["minis"]],
-                         [("a-valider", "0", "wiki-mini"), ("contradictions", "0", "wiki-mini"), ("echecs", "0", "wiki-mini")])
-        couleurs = page.evaluate("""() => ['.wiki-mini-nombre', '.wiki-brique-nombre'].map((s) => getComputedStyle(document.querySelector(s)).color)""")
+                         [("a-valider", str(a_valider), "wiki-mini attente"), ("contradictions", "0", "wiki-mini"), ("echecs", "0", "wiki-mini")])
+        couleurs = page.evaluate("""() => ['[data-suivi="contradictions"] .wiki-mini-nombre', '.wiki-brique-nombre']
+          .map((s) => getComputedStyle(document.querySelector(s)).color)""")
         self.assertNotEqual(couleurs[0], couleurs[1])         # à zéro, le nombre est discret (pas la couleur forte)
 
     def test_chaque_nombre_et_chaque_brique_mene_a_sa_liste(self):
@@ -2532,7 +2538,8 @@ class TestAffichageEncyclopedie(CasWiki):
             return liste.length ? (liste[0].lien || liste[0].id) : null; };
           return [premier('panne'), 'EQ-0005', 'ART-0016', premier('savoir-faire')].concat(profil === 'demandeur' ? []
             : ['TEC-0001', Wiki.listeEntites('intervention', { profil: 'responsable' })[0].id, 'OT-2026-0214']); }""", profil)
-        if self.page.evaluate("Boolean(Donnees.trouver('wiki_pages', 'WP-0008'))"):
+        # Base d'essai posée (et non le wiki figé de la démo, où WP-0008 est une page de machine) : sa sous-page et son savoir-faire
+        if self.page.evaluate("(Donnees.trouver('wiki_pages', 'WP-0008') || {}).type === 'savoir-faire'"):
             ids += ["WP-0008", "EQ-0001", "WP-0003"]
         return [i for i in ids if i]
 
@@ -2626,17 +2633,17 @@ class TestAffichageEncyclopedie(CasWiki):
             self.page.goto(serveur.url + "/")
             attendre_pret(self.page, 30000)
             self.assertEqual(self.page.evaluate("App.mode"), "serveur")
-            # Un savoir-faire, écrit avant de compter (le wiki de la démo est vide) : la sixième page
-            self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-0001', type: 'savoir-faire',
+            # Un savoir-faire écrit avant de compter, en plus du wiki figé de la démo (identifiant libre)
+            self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { lignes.push({ id: 'WP-9001', type: 'savoir-faire',
               titre: 'Changer la garniture de PO-02', equipement_id: 'EQ-0005', texte: '## Étapes\\n- Repérer l\\'accouplement [OT-2026-0098]',
               version: '1', origine: 'manuel', valide_par: 'Paul Martin', valide_le: '2026-10-15 10:00', statut: 'active' }); return true; },
               { action: 'test des écrans du wiki' })""")
-            self.assertEqual(self.page.evaluate("Wiki.entite('WP-0001', { profil: 'responsable' }).type"), "savoir-faire")
+            self.assertEqual(self.page.evaluate("Wiki.entite('WP-9001', { profil: 'responsable' }).type"), "savoir-faire")
             requetes = []
             self.page.on("request", lambda requete: requetes.append(requete.url))
             self.parcourir(lambda racine, ou: self.assertEqual(
                 [u for u in requetes if "/api/" in u and "/api/versions" not in u], [], ou), "responsable")
-            self.assertIn("WP-0001", self.pages_parcourues("responsable"))
+            self.assertIn("WP-9001", self.pages_parcourues("responsable"))
 
 
 # ---------------------------------------------------------------------------

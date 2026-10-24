@@ -400,7 +400,7 @@ class TestDemo(CasEntites):
             with self.subTest(accueil=profil):
                 self.assertEqual(comparable(self.accueil(profil)), comparable(self.calcul.accueil(profil, MAINTENANT)))
         listes = self.listes("responsable")
-        self.assertEqual(listes["savoir-faire"], [])          # le wiki de la démo est vide au socle
+        self.assertGreater(len(listes["savoir-faire"]), 0)      # depuis T139, la démo a son wiki figé (comparé au calcul ci-dessus)
         self.assertEqual(len(listes["intervention"]), len(self.calcul.ordres))
         statuts = [e["statut"] for e in listes["intervention"]]
         ouverts = [s for s in statuts if s in ("Créé", "Préparé", "Planifié", "En cours", "En attente")]

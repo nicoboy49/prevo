@@ -1120,7 +1120,7 @@ class TestEntitesInchangees(CasRecherche):
 
     def test_demo(self):
         self.page.evaluate(CHARGER_JS, {f.stem: f.read_bytes().decode("utf-8-sig") for f in DOSSIER_DEMO.glob("*.csv")})
-        self.verifier([t for t in TYPES_ENTITES if t != "savoir-faire"])          # le wiki de la démo est vide au socle
+        self.verifier(TYPES_ENTITES)        # depuis T139, la démo a son wiki figé : des savoir-faire aussi
 
     def test_corpus(self):
         self.charger(dict(CORPUS["tables"], techniciens=TECHNICIENS_CORPUS))

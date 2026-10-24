@@ -36,18 +36,20 @@ from commun import DOSSIER_DEMO, RACINE, CasNavigateur, ServeurPrevo, charger_sc
 DOSSIER_V1 = RACINE / "tests" / "fixtures" / "v1"
 BOM = b"\xef\xbb\xbf"
 
-# Les quatre fichiers de référence et les colonnes que la version 2 ajoute à chacun (§14.1).
+# Les quatre fichiers de référence et les colonnes que les versions 2 et 3 ajoutent à chacun (§14.1 ; lot 6 :
+# la colonne astuce des OT, §20.10), toujours en fin de ligne, dans l'ordre du schéma.
 COLONNES_V2 = {
     "equipements": ["valeur_remplacement"],
     "demandes": ["symptome_code", "ot_origine_id"],
-    "ordres_travail": ["anomalie_constatee"],
+    "ordres_travail": ["anomalie_constatee", "astuce"],
     "parametres": [],
 }
 # Valeur par défaut de chaque nouveau champ (js/schema.js) : anomalie_constatee est un booléen faux.
-DEFAUTS_V2 = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0"}
+DEFAUTS_V2 = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0", "astuce": ""}
 LIBELLES_TABLES = {"equipements": "Équipements", "demandes": "Demandes d'intervention",
                    "ordres_travail": "Ordres de travail"}
-MESSAGE_INFO = "ajoutée par la version 2 du format, écrite au prochain enregistrement"
+MESSAGE_INFO = "ajoutée par la version %d du format, écrite au prochain enregistrement"
+VERSION_COLONNE = {"astuce": 3}   # depuisVersion du schéma (js/schema.js) ; les autres colonnes : version 2
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js"]
 SCRIPTS_SERVEUR = SCRIPTS + ["js/stockage-serveur.js"]
@@ -178,7 +180,7 @@ class TestLectureFichiersV1(CasNavigateur):
                 for probleme, nom in zip(infos, nouvelles):
                     self.assertEqual(probleme["table"], table)
                     self.assertEqual(probleme["message"], "%s : colonne « %s » %s."
-                                     % (LIBELLES_TABLES[table], nom, MESSAGE_INFO))
+                                     % (LIBELLES_TABLES[table], nom, MESSAGE_INFO % VERSION_COLONNE.get(nom, 2)))
                 self.assertEqual(resultat["colonnesInconnues"], [])
                 self.assertEqual(resultat["encodage"], "utf-8")
 
@@ -308,10 +310,12 @@ class TestFormatV2ModeServeur(CasNavigateur):
         self.assertEqual(sorted(avant), sorted([["info", "equipements", "valeur_remplacement"],
                                                 ["info", "demandes", "symptome_code"],
                                                 ["info", "demandes", "ot_origine_id"],
-                                                ["info", "ordres_travail", "anomalie_constatee"]]))
+                                                ["info", "ordres_travail", "anomalie_constatee"],
+                                                ["info", "ordres_travail", "astuce"]]))
         self.assertEqual(sorted(apres), sorted([["info", "demandes", "symptome_code"],
                                                 ["info", "demandes", "ot_origine_id"],
-                                                ["info", "ordres_travail", "anomalie_constatee"]]))
+                                                ["info", "ordres_travail", "anomalie_constatee"],
+                                                ["info", "ordres_travail", "astuce"]]))
         # Sur le disque : format §3.1, valeur_remplacement en dernière colonne, le reste identique au v1.
         verifier_format_ecriture(self, octets, "equipements.csv")
         lignes_ecrites = lire_lignes_csv(octets)
@@ -353,8 +357,8 @@ class TestFormatV2ModeServeur(CasNavigateur):
 
             # 2. Retouche « dans un tableur » : virgule française et espace, oui/x, espaces autour d'un code.
             equipements[1][-1] = "12 500,75"
-            ordres[1][-1] = "non"
-            ordres[2][-1] = "x"
+            ordres[1][-2] = "non"      # anomalie_constatee, avant la colonne astuce (lot 6)
+            ordres[2][-2] = "x"
             demandes[1][-2] = " S02 "
             ecrire_lignes_csv(dossier / "equipements.csv", equipements)
             ecrire_lignes_csv(dossier / "ordres_travail.csv", ordres)

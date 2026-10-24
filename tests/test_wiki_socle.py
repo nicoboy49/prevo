@@ -15,10 +15,12 @@
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_wiki_socle.py" -v
 """
+import csv
+import io
 import unittest
 import zipfile
 
-from commun import CasNavigateur, attendre_pret, preregler_profil, url_fichier
+from commun import DOSSIER_DEMO, CasNavigateur, attendre_pret, preregler_profil, url_fichier
 
 BOM = b"\xef\xbb\xbf"
 ENTETES = {
@@ -119,8 +121,12 @@ class TestWikiSocle(CasNavigateur):
         self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "3")
         self.assertEqual(self.page.evaluate("Schema.version"), 3)
         self.assertEqual(self.page.evaluate("Schema.nomsTables().slice(-2)"), ["wiki_pages", "wiki_journal"])
-        self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_pages').length"), 0)
-        self.assertEqual(self.page.evaluate("Donnees.lignes('wiki_journal').length"), 0)
+        # Depuis T139 (D119), la démo a son wiki figé : autant de lignes que les CSV de donnees/demo.
+        for table in ("wiki_pages", "wiki_journal"):
+            texte = (DOSSIER_DEMO / (table + ".csv")).read_bytes().decode("utf-8-sig")
+            attendu = len(list(csv.reader(io.StringIO(texte, newline=""), delimiter=";"))) - 1   # sans l'en-tête
+            self.assertEqual(self.page.evaluate("Donnees.lignes('%s').length" % table), attendu, table)
+            self.assertGreater(attendu, 0, table)
         self.assertTrue(self.page.evaluate("Donnees.lignes('ordres_travail').every((ot) => 'astuce' in ot)"))
         self.assertEqual(self.page.evaluate(
             "Donnees.problemes().filter((p) => p.gravite !== 'info' && p.table.startsWith('wiki_')).length"), 0)
@@ -132,7 +138,12 @@ class TestWikiSocle(CasNavigateur):
             self.assertNotIn("wiki_syntheses.csv", noms)
             for nom, entete in ENTETES.items():
                 with self.subTest(fichier=nom):
-                    self.assertEqual(archive.read(nom), BOM + entete)
+                    # L'export porte l'en-tête du schéma puis les lignes du wiki figé de la démo (T139).
+                    contenu = archive.read(nom)
+                    self.assertTrue(contenu.startswith(BOM + entete), nom)
+                    lignes = list(csv.reader(io.StringIO(contenu.decode("utf-8-sig"), newline=""), delimiter=";"))
+                    attendu = (DOSSIER_DEMO / nom).read_bytes().decode("utf-8-sig")
+                    self.assertEqual(len(lignes), len(list(csv.reader(io.StringIO(attendu, newline=""), delimiter=";"))))
             ordres = archive.read("ordres_travail.csv")
             self.assertTrue(ordres.split(b"\r\n", 1)[0].endswith(b";anomalie_constatee;astuce"))
 

@@ -457,7 +457,7 @@ Pages du wiki de maintenance (format 3) : équipements, composants, modes de dé
 | Colonne | Libellé | Type | Obligatoire | Valeurs ou référence | Défaut | Remarques |
 | --- | --- | --- | --- | --- | --- | --- |
 | `id` | Identifiant | `id` |  |  |  |  |
-| `type` | Type | `choix` | oui | `équipement`, `composant`, `mode`, `savoir-faire` |  |  |
+| `type` | Type | `choix` | oui | `équipement`, `composant`, `savoir-faire` |  |  |
 | `titre` | Titre | `texte` | oui |  |  |  |
 | `cle` | Clé (titre comparable) | `texte` |  |  |  |  |
 | `equipement_id` | Équipement | `ref` |  | réf. `equipements.csv` |  |  |

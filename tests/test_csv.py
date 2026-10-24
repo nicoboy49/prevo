@@ -6,7 +6,7 @@ Couvre :
     (c) lecture tolérante (dates, nombres, booléens, choix, colonnes, séparateur, encodage…) ;
     (d) fichiers réellement réenregistrés par Excel (tests/fixtures/excel/) ;
     (e) aller-retour Excel à la volée si Excel est installé (sinon test ignoré) ;
-    (f) performance : 5 000 lignes × 31 colonnes (ordres_travail, format v2) analysées en moins de 300 ms.
+    (f) performance : 5 000 lignes × 32 colonnes (ordres_travail, format v3) analysées en moins de 300 ms.
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_csv.py" -v
@@ -715,8 +715,8 @@ class TestPerformance(CasCsv):
                    problemes: resultat.problemes.length, mediane: durees[1], durees: durees,
                    octets: octets.length };
         }""")
-        # 30 colonnes du brief + anomalie_constatee (version 2 du format) : seuil inchangé.
-        self.assertEqual(mesure["colonnes"], 31)
+        # 30 colonnes du brief + anomalie_constatee (version 2) + astuce (version 3, lot 6) : seuil inchangé.
+        self.assertEqual(mesure["colonnes"], 32)
         self.assertEqual(mesure["lignes"], 5000)
         self.assertEqual(mesure["problemes"], 0)
         print("\n    analyse de 5 000 lignes × %d colonnes (%d Ko) : médiane %.0f ms (essais : %s)"
