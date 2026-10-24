@@ -14,7 +14,7 @@ Python indépendant de tests/calcul_wiki.py (qui relit les CSV) :
       intervention en lecture seule (demande d'origine, techniciens, temps, opérations, pièces nettes, « Cité dans le
       wiki », motifs d'attente et d'annulation — T137), savoir-faire (rattachement direct, par la page de la machine,
       sous-page, libre ; archivé, mode, ancrage disparu → null), textes et références (rubriques remises dans l'ordre du
-      type ; « À trancher » numéroté d'abord, en tête de la page — T137), identifiants
+      type ; « À trancher » d'abord, en tête de la page — T137 ; sans numéro : la page numérote, D118 — T143), identifiants
       inconnus → null, suivi du wiki (mêmes définitions que Wiki.compteurs) ;
     - pureté : aucune écriture, aucun appel réseau ; durée d'une page sur le jeu de charge (D101 : moins de 500 ms).
 
@@ -653,9 +653,12 @@ class TestBaseEssai(CasEntites):
         self.assertEqual([(r["nom"], len(r["phrases"])) for r in pompe["textes"]["rubriques"]],
                          [("En bref", 2), ("Astuces", 1), ("Ce qui revient", 1)])
         self.assertEqual((pompe["textes"]["pageId"], pompe["textes"]["origine"]), ("WP-0001", "IA"))
-        self.assertEqual([(r["numero"], r["id"], r["date"], r["lien"]) for r in pompe["references"]], [
-            (1, "OT-2026-0001", "2026-01-10", "OT-2026-0001"), (2, "OT-2026-0002", "2026-03-05", "OT-2026-0002"),
-            (3, "OT-2026-0003", "2026-03-05", "OT-2026-0003"), (4, "OT-2026-0011", "2026-04-10", "OT-2026-0011")])
+        # Les OT cités, dans l'ordre, avec leurs détails, sans numéro : la page numérote seule, avec les OT de ses sections
+        # (articles consommés et changés, D118 : wiki-page-ecrans.js, test_wiki_ecrans.py)
+        self.assertEqual([(r["id"], r["date"], r["lien"]) for r in pompe["references"]], [
+            ("OT-2026-0001", "2026-01-10", "OT-2026-0001"), ("OT-2026-0002", "2026-03-05", "OT-2026-0002"),
+            ("OT-2026-0003", "2026-03-05", "OT-2026-0003"), ("OT-2026-0011", "2026-04-10", "OT-2026-0011")])
+        self.assertEqual({tuple(sorted(r)) for r in pompe["references"]}, {("date", "id", "lien", "machine", "titre")})
         self.assertEqual(pompe["references"][3]["machine"], {"equipementId": "EQ-0002", "titre": "PO-01.M — Moteur de PO-01",
                                                              "lien": "EQ-0002"})
         self.assertEqual([r["id"] for r in self.entite("WP-0003")["references"]], ["OT-2026-0003", "OT-2026-0001"])
@@ -680,7 +683,7 @@ class TestBaseEssai(CasEntites):
         }""")
         self.assertEqual([r["id"] for r in resultat["pompe"]["references"]], [
             "OT-2026-0012", "OT-2026-0014", "OT-2026-0015", "OT-2026-0001", "OT-2026-0002", "OT-2026-0003", "OT-2026-0011"])
-        self.assertEqual([r["numero"] for r in resultat["pompe"]["references"]], list(range(1, 8)))
+        self.assertTrue(all("numero" not in r for r in resultat["pompe"]["references"]))
         self.assertEqual(resultat["pompe"]["enAttente"], [{"page": "EQ-0001"}])
         self.assertEqual((resultat["joint"]["aTrancher"], resultat["joint"]["enAttente"]), ([], []))
         self.assertEqual((resultat["panne"]["aTrancher"], resultat["panne"]["enAttente"]), ([], []))    # page calculée

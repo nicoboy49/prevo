@@ -58,7 +58,11 @@ et Wiki.references(textes, aTrancher) :
                    (dans les 60 jours, le jour même compris : RG8), valide ; l'accueil compte les techniciens actifs ;
     visibilité     demandeur : ni page technicien ni page intervention (null), pas de prix, références sans lien ;
                    technicien : tout sauf le taux horaire ; responsable : tout ;
-    références     ordre d'apparition sur la page (T137) : « À trancher » (en tête), puis les textes ;
+    références     ordre d'apparition sur la page (T137) : « À trancher » (en tête), puis les textes ; sans numéro (la page
+                   numérote, avec les OT de ses sections : D118, T143) ;
+    petits numéros des articles (D118, T143 : CalculWiki.ot_des_articles) : par article consommé (machine) ou changé
+                   (panne), les OT clôturés de la page où ses pièces nettes sont positives, du plus récent au plus ancien
+                   (date de l'OT, puis identifiant), les 10 premiers et le nombre des autres ;
     intervention   (T137) motifAttente et motifAnnulation de l'OT, '' sans motif ;
     retours        (T137, « Pages qui renvoient ici ») d'une machine, d'un article, d'un savoir-faire ou d'une panne :
                    pages actives dont le champ liens (« ; ») désigne l'entité ou la ligne de son texte, rendues sous leur
@@ -679,6 +683,36 @@ class CalculWiki:
         resultat.sort(key=selon((lambda p: p["quantite"], True), (lambda p: p["articleId"], False)))
         return resultat
 
+    def ot_des_articles(self, identifiant, montres=10):
+        """Petits numéros des articles d'une page (D118, T143), recalculés ici sans pieces_nettes : [{ articleId, ot,
+        autres }] des articles consommés d'une machine ou changés d'une panne, dans l'ordre de la page (quantité nette
+        décroissante, puis article) ; ot : les `montres` plus récents (date de l'OT, puis identifiant, décroissants) des OT
+        clôturés de la machine, ou des cas de la panne, où les pièces nettes de l'article (sorties − retours liés à l'OT)
+        sont positives ; autres : le nombre des suivants."""
+        if identifiant.startswith("PANNE-"):
+            code = urllib.parse.unquote(identifiant[len("PANNE-"):])
+            ordres = [ot for ot in self.ordres if self.est_un_cas(ot) and val(ot, "symptome_code") == code]
+        else:
+            ordres = [ot for ot in self.ordres if val(ot, "equipement_id") == identifiant and self.est_cloture(ot)]
+        nets = {}                                    # OT -> {article: sorties - retours}
+        for m in self.mouvements:
+            if val(m, "ot_id") and val(m, "type") in ("sortie", "retour"):
+                signe = 1 if val(m, "type") == "sortie" else -1
+                par_article = nets.setdefault(val(m, "ot_id"), {})
+                par_article[val(m, "article_id")] = par_article.get(val(m, "article_id"), 0) + signe * (nombre(m.get("quantite")) or 0)
+        quantites, ots = {}, {}
+        for ot in ordres:
+            for article_id, net in nets.get(ot["id"], {}).items():
+                if net > 0 and article_id in self.articles:
+                    quantites[article_id] = quantites.get(article_id, 0) + net
+                    ots.setdefault(article_id, []).append(ot)
+        resultat = []
+        for article_id in sorted(quantites, key=lambda a: (-round(quantites[a], 6), a)):
+            recents = sorted(ots[article_id], key=lambda o: (self.date_ot(o), o["id"]), reverse=True)
+            resultat.append({"articleId": article_id, "ot": [o["id"] for o in recents[:montres]],
+                             "autres": max(0, len(recents) - montres)})
+        return resultat
+
     def pannes_frequentes(self, ordres):
         par_code = {}
         for ot in ordres:
@@ -712,9 +746,9 @@ class CalculWiki:
 
     def references_detaillees(self, textes, a_trancher, profil):
         resultat = []
-        for numero, ot_id in enumerate(references(textes, a_trancher), start=1):
+        for ot_id in references(textes, a_trancher):
             ot = self.ordre_par_id.get(ot_id)
-            resultat.append({"numero": numero, "id": ot_id, "date": self.date_ot(ot)[:10] if ot else "",
+            resultat.append({"id": ot_id, "date": self.date_ot(ot)[:10] if ot else "",
                              "titre": val(ot, "titre") if ot else "", "machine": self.machine(val(ot, "equipement_id")) if ot else None,
                              "lien": ot_id if ot is not None and profil != "demandeur" else None})
         return resultat

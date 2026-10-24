@@ -38,7 +38,9 @@
 //    compte que les techniciens actifs ;
 //  - une référence cassée (équipement, article, technicien inconnu) n'entre dans aucune liste ; les tris départagent
 //    par l'ordre des caractères (reproductible par tests/calcul_wiki.py) ;
-//  - références : numérotées dans l'ordre d'apparition sur la page (T137) — « À trancher », en tête, puis les textes ;
+//  - références : les OT cités dans l'ordre d'apparition sur la page (T137) — « À trancher », en tête, puis les textes —,
+//    avec leurs détails, sans numéro : la page les numérote elle-même, avec ceux de ses sections (articles consommés et
+//    changés, D118 : wiki-page-ecrans.js, la seule règle de numérotation) ;
 //  - retours (« Pages qui renvoient ici », CS103, T137) d'une machine, d'un article, d'un savoir-faire ou d'une panne :
 //    la règle de Wiki.page (retoursDe de wiki-calculs.js : pages actives dont le champ liens désigne l'identifiant de
 //    l'entité ou le WP-… de son texte, la page elle-même exclue, par titre puis identifiant), réduite aux pages qui
@@ -320,10 +322,10 @@ Object.assign(Wiki, (() => {
     return Array.from(new Set(ids));
   }
 
-  /** Une ligne de « Références » : { numero, id, date, titre, machine, lien } (OT inconnu : date, titre, machine vides). */
-  function referenceDetaillee(ctx, id, numero) {
+  /** Détails d'un OT cité : { id, date, titre, machine, lien } (OT inconnu : date, titre, machine vides). */
+  function referenceDetaillee(ctx, id) {
     const ot = Donnees.trouver('ordres_travail', id);
-    return { numero, id, date: ot ? jour(dateDeLOt(ot)) : '', titre: ot ? texte(ot.titre) : '',
+    return { id, date: ot ? jour(dateDeLOt(ot)) : '', titre: ot ? texte(ot.titre) : '',
       machine: ot ? refMachine(texte(ot.equipement_id)) : null, lien: ot && ctx.liens.intervention ? id : null };
   }
 
@@ -337,7 +339,7 @@ Object.assign(Wiki, (() => {
     const etat = suivi || { aTrancher: crochet('contradictionsDe'), enAttente: crochet('enAttenteDe') };
     return Object.assign(base, {
       textes, aTrancher: etat.aTrancher, enAttente: etat.enAttente,
-      references: references(textes, etat.aTrancher).map((id, rang) => referenceDetaillee(ctx, id, rang + 1)),
+      references: references(textes, etat.aTrancher).map((id) => referenceDetaillee(ctx, id)),
       retours: [], liens: Object.assign({}, ctx.liens),
     });
   }

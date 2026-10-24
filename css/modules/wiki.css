@@ -266,6 +266,8 @@ ul.wiki-tuile-lignes { padding: 6px 18px; }
   box-shadow: 0 8px 24px var(--ombre); font-size: .8125rem; font-weight: 600; line-height: 1.45; text-align: left;
   white-space: normal; overflow-wrap: anywhere; letter-spacing: normal;
 }
+/* « … et n autres » après les petits numéros d'un article consommé ou changé (D118) */
+.wiki-ref-autres { white-space: nowrap; }
 .wiki-refs { margin: 0; padding-left: 1.8rem; display: flex; flex-direction: column; gap: 6px; font-size: .9375rem; color: var(--texte-2); }
 .wiki-refs > li { overflow-wrap: anywhere; }
 .wiki-refs > li::marker { color: var(--texte-2); font-weight: 700; }
@@ -382,6 +384,10 @@ ul.wiki-tuile-lignes { padding: 6px 18px; }
   }
   .wiki-ref > .wiki-ref-numero::before { background: var(--teinte-neutre); }
   .wiki-ref-bulle { top: calc(100% + 16px); }
+  /* petits numéros d'un article consommé ou changé (D118), en rangées : chacun occupe ses 48 px, sans marge négative,
+     pour qu'aucune zone tactile ne recouvre un numéro de la rangée voisine */
+  .wiki-ligne-sous .wiki-ref > a, .wiki-ligne-sous .wiki-ref > .wiki-ref-numero { margin: 0; }
+  .wiki-ligne-sous .wiki-ref-bulle { top: calc(100% + 4px); }
   .wiki-evenement { grid-template-columns: minmax(0, 1fr) auto; }
   .wiki-evenement-date { grid-column: 1 / -1; }
   .wiki-barres-page > li { grid-template-columns: minmax(0, 1fr) auto; }

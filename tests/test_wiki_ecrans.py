@@ -28,8 +28,12 @@ démo et la base). Ce qui est vérifié :
                 techniciens de la démo), à droite à 1440 px et au-dessus à 375 px ; petits numéros (ordre
                 d'apparition, un seul pour un OT cité deux fois dans une phrase, bulle, nom accessible, lien ; pour le
                 demandeur, un bouton sans lien dont la bulle s'ouvre au toucher, dans l'écran), « Références », jamais
-                [OT-…] à l'écran, le balisage stocké intact ; interventions dans l'ordre du calcul Python avec leur
-                statut ; page Intervention en lecture seule (motifs d'attente et d'annulation, tous ses techniciens,
+                [OT-…] à l'écran, le balisage stocké intact ; petits numéros des articles consommés (page Machine) et
+                changés (page Panne) — D118, T143 : les 10 OT les plus récents de chaque article, puis « … et n autres »,
+                égaux au calcul Python indépendant (CalculWiki.ot_des_articles), quantité gardée —, un seul jeu de numéros
+                par page dans l'ordre d'apparition, sans trou ni doublon, tous dans « Références » ; interventions dans
+                l'ordre du calcul Python avec leur statut ; page Intervention en lecture seule (motifs d'attente et
+                d'annulation, tous ses techniciens,
                 textes piégés restés du texte), « Ouvrir la fiche OT » ; visibilité
                 (D114 : prix, taux horaire, pages Technicien et Intervention) ; tout lien d'une page mène à une page
                 qui s'affiche ; « Modifier » ; pièges ;
@@ -419,6 +423,26 @@ ENTITE_JS = """() => {
   };
 }"""
 
+# Articles consommés (page Machine : la liste sous « Consommés ») ou changés (page Panne) : chaque ligne et ses petits
+# numéros (D118, T143).
+LIGNES_ARTICLES_JS = """(type) => {
+  const section = document.querySelector(type === 'panne' ? '#wiki-articles-changes' : '#wiki-articles');
+  const titre = Array.from(section.querySelectorAll('h3')).find((h) => h.textContent.trim().startsWith('Consommés'));
+  const bloc = type === 'panne' ? section : titre.nextElementSibling;
+  return Array.from(bloc.querySelectorAll('li.wiki-ligne')).map((li) => {
+    const sous = li.querySelector('.wiki-ligne-sous');
+    const sups = Array.from(sous.querySelectorAll('sup.wiki-ref'));
+    const copie = sous.cloneNode(true);
+    copie.querySelectorAll('sup, .wiki-ref-autres').forEach((e) => e.remove());
+    const autres = sous.querySelector('.wiki-ref-autres');
+    return { id: li.dataset.id, ot: sups.map((s) => s.dataset.ot), numeros: sups.map((s) => Number(s.firstElementChild.textContent)),
+      balises: sups.map((s) => s.firstElementChild.tagName), liens: sups.map((s) => s.firstElementChild.getAttribute('href')),
+      bulles: sups.map((s) => s.firstElementChild.getAttribute('title')), noms: sups.map((s) => s.firstElementChild.getAttribute('aria-label')),
+      autres: autres ? autres.textContent.trim() : null, texte: copie.textContent.replace(/\\s+/g, ' ').trim(),
+      droite: li.querySelector('.wiki-ligne-droite').textContent.trim() };
+  });
+}"""
+
 RESULTATS_JS = """(racine) => Array.from(document.querySelectorAll(racine + ' .wiki-portee')).map((bloc) => ({
   portee: bloc.dataset.portee, libelle: bloc.querySelector('h3').firstChild.textContent.trim(),
   ids: Array.from(bloc.querySelectorAll('.wiki-trouve')).map((li) => li.dataset.id),
@@ -718,6 +742,37 @@ def phrase_attendue(contenu):
     return {"texte": texte, "ot": citations(contenu),
             "liens": [[plat(titre), "#/wiki/" + encoder(RESOLUTIONS[titre])] for titre in titres if titre in RESOLUTIONS],
             "absents": [plat(titre) for titre in titres if titre not in RESOLUTIONS]}
+
+
+def ordre_des_numeros(entite, articles):
+    """OT dans l'ordre attendu de leurs petits numéros sur la page (D113, D118 : un seul jeu, l'ordre d'apparition, un OT
+    à sa première place), recalculé ici : « À trancher » (la phrase, puis les OT qui l'observent, sinon l'OT de l'entrée),
+    les textes d'avant les articles (« En bref » d'une machine ; tous ceux d'une page sans articles), les OT montrés des
+    articles consommés ou changés (`articles` : CalculWiki.ot_des_articles, dans l'ordre de la page), puis les autres
+    textes. `entite` : Wiki.entite (ses contradictions)."""
+    vus = []
+
+    def voir(ots):
+        for ot in ots:
+            if ot not in vus:
+                vus.append(ot)
+
+    for contradiction in entite["aTrancher"]:
+        voir(citations(contradiction.get("phrase")))
+        observes = [ot for ot in (contradiction.get("ot") or []) if ot]
+        voir(observes or [o for o in [contradiction.get("otSource")] if o])
+    rubriques = (entite.get("textes") or {}).get("rubriques") or []
+    avant = [r for r in rubriques if r["nom"] == "En bref" or entite["type"] != "machine"]
+    for rubrique in avant:
+        for phrase in rubrique["phrases"]:
+            voir(citations(phrase))
+    for article in articles:
+        voir(article["ot"])
+    for rubrique in rubriques:
+        if rubrique not in avant:
+            for phrase in rubrique["phrases"]:
+                voir(citations(phrase))
+    return vus
 
 
 def rubriques_du_texte(texte):
@@ -1336,9 +1391,20 @@ class TestRechercheAccueil(CasWiki):
 # #/wiki/<id> : la page d'une entité, six types, trois profils (refonte 2, §20.12, T137)
 # ---------------------------------------------------------------------------
 
+# OT cités par « À trancher » et les textes (Wiki.entite().references, sans numéro), dans leur ordre
 REFERENCES_PO02 = ["OT-2026-0214", "OT-2025-0030", "OT-2025-0010", "OT-2025-0044", "OT-2026-0026", "OT-2026-0098"]
 REFERENCES_SF = ["OT-2025-0030", "OT-2026-0133", "OT-2026-0098", "OT-2026-0058"]
 REFERENCES_CP01 = ["OT-2026-0161", "OT-2026-0171"]
+# Petits numéros de la page, un seul jeu dans l'ordre d'apparition (D118, T143), écrits à la main : « À trancher », « En
+# bref », les articles consommés — un OT déjà numéroté garde son numéro, les autres prennent les suivants —, puis
+# « Astuces » (PO-02 : déjà numérotés) ou l'ancienne rubrique « Ce qui revient » (CP-01 : le dernier numéro).
+NUMEROS_PO02 = ["OT-2026-0214", "OT-2025-0030", "OT-2025-0010", "OT-2025-0044", "OT-2026-0026",
+                "OT-2026-0175", "OT-2026-0133", "OT-2026-0098", "OT-2026-0058",           # kit garniture PO-02
+                "OT-2026-0126", "OT-2026-0072", "OT-2026-0017", "OT-2025-0017",           # graisse EP2
+                "OT-2026-0082"]                                                           # joints toriques
+NUMEROS_CP01 = ["OT-2026-0161", "OT-2026-0117", "OT-2026-0118", "OT-2026-0094", "OT-2026-0048", "OT-2026-0030",
+                "OT-2026-0013", "OT-2025-0043", "OT-2025-0023", "OT-2026-0138", "OT-2026-0076", "OT-2026-0012",
+                "OT-2025-0004", "OT-2026-0061", "OT-2026-0171"]
 SECTIONS = {
     "machine": ["texte:En bref", "wiki-pannes", "wiki-interventions", "carte wiki-recherche", "wiki-articles", "wiki-savoir-faire",
                 "texte:Astuces", "wiki-preventif"],
@@ -1429,18 +1495,24 @@ class TestPagesEntites(CasWiki):
     def test_petits_numeros_et_references(self):
         for profil in ("technicien", "demandeur"):
             page = self.ouvrir(profil, base=True)
-            for identifiant, attendus in (("EQ-0005", REFERENCES_PO02), ("WP-0003", REFERENCES_SF), ("EQ-0001", REFERENCES_CP01)):
+            calcul = self.calcul()
+            for identifiant, cites, attendus in (("EQ-0005", REFERENCES_PO02, NUMEROS_PO02), ("WP-0003", REFERENCES_SF, REFERENCES_SF),
+                                                 ("EQ-0001", REFERENCES_CP01, NUMEROS_CP01)):
                 with self.subTest(profil=profil, page=identifiant):
                     lu = self.lire(identifiant)
                     entite = self.entite(identifiant, profil)
-                    # Numérotés dans l'ordre d'apparition sur la page (« À trancher » en tête, puis les textes), un OT garde
-                    # son numéro ; égaux à Wiki.entite().references
+                    # Un seul jeu de numéros, dans l'ordre d'apparition sur la page (« À trancher » en tête, puis les textes
+                    # et les articles consommés à leur place : D118) ; un OT garde son numéro ; Wiki.entite().references
+                    # donne les OT cités par les textes, sans numéro (la page numérote seule)
                     premiers = []
                     for numero, ot in lu["sups"]:
                         if ot not in premiers:
                             premiers.append(ot)
                     self.assertEqual(premiers, attendus)
-                    self.assertEqual([r["id"] for r in entite["references"]], attendus)
+                    articles = calcul.ot_des_articles(identifiant) if entite["type"] == "machine" else []
+                    self.assertEqual(premiers, ordre_des_numeros(entite, articles))
+                    self.assertEqual([r["id"] for r in entite["references"]], cites)
+                    self.assertEqual({tuple(sorted(r)) for r in entite["references"]}, {("date", "id", "lien", "machine", "titre")})
                     self.assertEqual({ot: numero for numero, ot in lu["sups"]}, {ot: rang + 1 for rang, ot in enumerate(attendus)})
                     ordres = {o["id"]: o for o in page.evaluate("Donnees.lignes('ordres_travail')")}
                     for ref in entite["references"]:
@@ -1473,6 +1545,72 @@ class TestPagesEntites(CasWiki):
         self.lire("EQ-0005")
         page.click('#wiki-texte sup.wiki-ref[data-ot="OT-2025-0044"] a')
         page.wait_for_selector('.wiki-page[data-page="OT-2025-0044"] .wiki-page-grille')
+
+    def test_petits_numeros_des_articles_consommes_et_changes(self):
+        """D118 (T143) : sur la page d'une machine (articles consommés) et d'une panne (articles changés), chaque article
+        montre, après son nombre d'interventions, les OT où il a servi en petits numéros — les 10 plus récents, puis « … et
+        n autres » —, égaux au calcul Python indépendant (CalculWiki.ot_des_articles), et garde sa quantité ; un seul jeu
+        de numéros par page, dans l'ordre d'apparition, sans trou ni doublon (un OT déjà numéroté par un texte garde son
+        numéro) ; « Références » les contient tous ; bulle « OT · date · titre » ; pour le demandeur, un bouton sans lien
+        qui l'ouvre ; jamais [OT-…] à l'écran."""
+        for profil in ("technicien", "demandeur"):
+            page = self.ouvrir(profil, base=True)
+            calcul = self.calcul()
+            ordres = {o["id"]: o for o in page.evaluate("Donnees.lignes('ordres_travail')")}
+            bulle = lambda ot: "%s · %s · %s" % (ot, date_fr(date_de_l_ot(ordres[ot])[:10]), ordres[ot]["titre"])  # noqa: E731
+            plus_de_dix = 0
+            for identifiant in ("EQ-0005", "EQ-0001", "EQ-0022", "PANNE-S01", "PANNE-S05"):
+                with self.subTest(profil=profil, page=identifiant):
+                    lu = self.lire(identifiant)
+                    calcule = calcul.entite(identifiant, profil, MAINTENANT)
+                    panne = calcule["type"] == "panne"
+                    articles = calcul.ot_des_articles(identifiant)
+                    self.assertTrue(articles)
+                    plus_de_dix += sum(1 for a in articles if a["autres"])
+                    lignes = page.evaluate(LIGNES_ARTICLES_JS, calcule["type"])
+                    # Chaque article : ses OT (les 10 plus récents) en petits numéros, « … et n autres », sa quantité
+                    self.assertEqual([(l["id"], l["ot"]) for l in lignes], [(a["articleId"], a["ot"]) for a in articles])
+                    noms = ("intervention", "interventions") if panne else ("intervention clôturée", "interventions clôturées")
+                    quantites = calcule["sections"]["articles" if panne else "articlesConsommes"]
+                    self.assertEqual([(l["texte"], l["autres"], l["droite"]) for l in lignes], [
+                        (pluriel(len(a["ot"]) + a["autres"], *noms),
+                         ("… et %d autres" % a["autres"] if a["autres"] > 1 else "… et 1 autre") if a["autres"] else None,
+                         "quantité " + nombre_fr(q["quantite"])) for a, q in zip(articles, quantites)])
+                    self.assertEqual([q["articleId"] for q in quantites], [a["articleId"] for a in articles])
+                    # Un seul jeu de numéros, dans l'ordre d'apparition sur la page, sans trou ni doublon
+                    premiers = []
+                    for _, ot in lu["sups"]:
+                        if ot not in premiers:
+                            premiers.append(ot)
+                    self.assertEqual(premiers, ordre_des_numeros(self.entite(identifiant, profil), articles))
+                    self.assertEqual([numero for numero, _ in lu["sups"]], [premiers.index(ot) + 1 for _, ot in lu["sups"]])
+                    self.assertEqual(sorted({numero for numero, _ in lu["sups"]}), list(range(1, len(premiers) + 1)))
+                    self.assertEqual([n for l in lignes for n in l["numeros"]], [premiers.index(ot) + 1 for l in lignes for ot in l["ot"]])
+                    # « Références » : tous les OT numérotés, dans l'ordre des numéros, avec leur date et leur titre
+                    self.assertEqual([r[:2] for r in lu["references"]], [["wiki-ref-%d" % (rang + 1), ot] for rang, ot in enumerate(premiers)])
+                    self.assertTrue({ot for l in lignes for ot in l["ot"]} <= {r[1] for r in lu["references"]})
+                    for (_, ot, texte, _) in lu["references"]:
+                        self.assertTrue(texte.startswith(ot + " · " + date_fr(date_de_l_ot(ordres[ot])[:10]) + " · "), texte)
+                        self.assertTrue(texte.endswith(plat(ordres[ot]["titre"])), texte)
+                    # Bulle et nom ; lien vers la page de l'OT, ou bouton sans lien pour le demandeur
+                    for l in lignes:
+                        self.assertEqual(l["bulles"], [bulle(ot) for ot in l["ot"]])
+                        self.assertEqual(l["noms"], ["Référence %d : %s" % (n, bulle(ot)) for n, ot in zip(l["numeros"], l["ot"])])
+                        self.assertEqual((l["balises"], l["liens"]), (["BUTTON"] * len(l["ot"]), [None] * len(l["ot"])) if profil == "demandeur"
+                                         else (["A"] * len(l["ot"]), ["#/wiki/" + ot for ot in l["ot"]]))
+                    self.assertEqual(lu["crochets"], 0)
+                    self.assertNotIn("[OT-", page.inner_text("#contenu"))
+            self.assertGreaterEqual(plus_de_dix, 2)                  # des articles à plus de 10 OT : « … et n autres »
+            # Pour le demandeur, le numéro d'un article ouvre sa bulle ; pour le technicien, il mène à la page de l'OT
+            self.lire("PANNE-S05")
+            numero = page.locator("#wiki-articles-changes sup.wiki-ref").first
+            ot = numero.get_attribute("data-ot")
+            numero.locator(":scope > *").click()
+            if profil == "demandeur":
+                self.assertEqual(page.locator("#contenu .wiki-ref-bulle").all_inner_texts(), [bulle(ot)])
+            else:
+                page.wait_for_selector('.wiki-page[data-page="%s"] .wiki-page-grille' % ot)
+            self.verifier_sans_piege()
 
     def test_textes_rubriques_liens_et_origine(self):
         page = self.ouvrir("technicien", base=True)

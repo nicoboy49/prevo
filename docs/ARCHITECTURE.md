@@ -2788,7 +2788,10 @@ page. Refus si :
   de `pagesCreeesMax` pages créées (sous-pages comprises) ;
 - liens : `[[titre]]` qui n'est ni au catalogue ni créé par la proposition ;
 - titres : titre créé dont la forme de recherche (mots vides retirés, pluriel simple, §20.8) égale celle
-  d'une page existante (« titre trop proche ») ;
+  d'une page existante (« titre trop proche ») ; **même geste** (D116) : savoir-faire créé (hors sous-page) dont le
+  titre contient tout l'organe d'un savoir-faire connu (catalogue ou envoyé, hors sous-pages : son titre sans le premier
+  mot, 2 mots au moins) — la raison dit « complète-le » s'il est envoyé, sinon « mets un lien [[…]] » ; l'en-tête
+  d'une rubrique réécrite donne une cible sous sa limite (« à réécrire en entier en 45 mots environ » pour 60) ;
 - contradictions : `phrase` qui n'est pas une phrase existante de la page ; `ot` autre que l'OT ingéré.
 
 Une page que l'IA renvoie inchangée n'est pas contrôlée : `Wiki.lireIngestion` la retire avant (§20.5, lecture).
@@ -3066,11 +3069,14 @@ le temps 1 (2026-10-24) : **D116** savoir-faire communs (T141) et **D117** « En
 - **Visibilité** (D114) : `Wiki.entite` et les listes appliquent le profil — le **demandeur** n'a ni page Technicien
   (`null`, nom sans lien ailleurs), ni page Intervention (numéro sans lien), ni prix d'article ; le **taux horaire**
   n'est rendu qu'au responsable ; le **prix** au responsable et au technicien. La recherche suit la même règle.
-- **Références** (D113) : `Wiki.references(textes, aTrancher)` numérote les OT cités dans l'ordre d'apparition sur la
+- **Références** (D113) : `Wiki.references(textes, aTrancher)` donne les OT cités dans l'ordre d'apparition sur la
   page — « À trancher », en tête, puis les textes (T137) ; à l'écran, chaque citation est un petit numéro (`<sup class="wiki-ref">`, lien `#/wiki/<OT>`,
   bulle « <OT> · <date> · <titre> » ; pour le demandeur, un bouton sans lien qui ouvre cette bulle au toucher, au clic
   ou au clavier ; `aria-label` « Référence n : <OT> · <date> · <titre> ») et la page finit par « Références » (numéro, OT,
-  date, machine, titre). Jamais `[OT-…]` affiché ; le balisage stocké ne change pas.
+  date, machine, titre). Jamais `[OT-…]` affiché ; le balisage stocké ne change pas. Les OT des articles consommés (page
+  Machine) et des articles changés (page Panne) sont aussi des petits numéros, les 10 plus récents de chaque article puis
+  « … et n autres », et sont dans « Références » : la page numérote tous ses OT en un seul jeu, dans l'ordre où elle les
+  montre, un OT déjà numéroté gardant son numéro (D118).
 - **Routes** : `#/wiki` (accueil), `#/wiki/machines`, `#/wiki/pannes`, `#/wiki/articles`, `#/wiki/techniciens`
   (pas pour le demandeur), `#/wiki/savoir-faire`, `#/wiki/interventions` (pas pour le demandeur) — les listes —, et
   `#/wiki/<id>` (une page). `#/wiki-journal` et `#/wiki-ecrire/<id>` inchangés (écriture à la main : textes d'une

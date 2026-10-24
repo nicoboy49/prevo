@@ -1,12 +1,15 @@
 'use strict';
 // Wiki (7 ter/9) — les sections calculées de la page d'une entité (refonte 2, ARCHITECTURE.md §20.12 ; D113, D114 ;
-// tâche T137) : Wiki.sectionsEntite(entite, contexte) rend les morceaux de la colonne de lecture, dans l'ordre de la
-// page de chaque type (maquette validée), que wiki-page-ecrans.js (chargé juste avant) pose ; un morceau { textes,
-// reste, toujours, titreVide } y marque la place d'un groupe de textes rédigés, posé là-bas avec ses petits numéros.
+// tâche T137 ; D118, T143) : Wiki.sectionsEntite(entite, contexte) rend les morceaux de la colonne de lecture, dans
+// l'ordre de la page de chaque type (maquette validée), que wiki-page-ecrans.js (chargé juste avant) pose ; un morceau
+// { textes, reste, toujours, titreVide } y marque la place d'un groupe de textes rédigés, posé là-bas avec ses petits
+// numéros. Chaque type rend ses morceaux un à un (fonction génératrice) : une section n'est créée qu'à son tour, après
+// les textes d'avant, pour que ses petits numéros suivent l'ordre de la page (registre contexte.refs, wiki-page-ecrans.js).
 //   machine       « En bref », pannes fréquentes, interventions, recherche dans son historique (§20.9), articles
-//                 (montés, consommés), savoir-faire, « Astuces » (et les rubriques d'avant la refonte), préventif et
-//                 contrôles ;
-//   panne         machines touchées, causes, remèdes, articles changés, interventions (aucun texte) ;
+//                 (montés, consommés avec leurs OT en petits numéros), savoir-faire, « Astuces » (et les rubriques
+//                 d'avant la refonte), préventif et contrôles ;
+//   panne         machines touchées, causes, remèdes, articles changés (leurs OT en petits numéros), interventions
+//                 (aucun texte) ;
 //   article       « À quoi il sert », stock dans le temps (commandes, sorties, ruptures), où il est monté, consommé
 //                 sur, interventions où il a servi, savoir-faire ;
 //   technicien    habilitations, interventions (aucun texte ; le taux horaire est dans la fiche, au responsable) ;
@@ -28,6 +31,9 @@
 //  - stock dans le temps : commandes, sorties et retours imputés à un OT (stock restant), ruptures (début, fin), du plus
 //    récent au plus ancien (à date égale : commandes, mouvements, ruptures) ; le prix d'une commande seulement s'il est
 //    rendu (technicien, responsable : D114) ;
+//  - articles consommés (machine) et changés (panne), D118 : après le nombre d'interventions, les OT de l'article en
+//    petits numéros — les OT_MONTRES plus récents, puis « … et n autres » —, la quantité à droite ; les lignes de toute
+//    la liste sont faites d'un coup, dans son ordre (même celles créées au clic) : leurs numéros sont à leur place ;
 //  - « Écrire un savoir-faire » (responsable) : #/wiki-ecrire/nouvelle?rattache=<machine ou article> ;
 //  - une liste vide garde sa section, avec une phrase qui le dit ; préventif et contrôles, astuce, motifs, opérations,
 //    temps passés et sous-pages n'apparaissent que s'ils ont un contenu.
@@ -37,6 +43,7 @@ Object.assign(Wiki, (() => {
   const INTERVENTIONS_MONTREES = 10;
   const EVENEMENTS_MONTRES = 14;
   const LIGNES_MONTREES = 20;
+  const OT_MONTRES = 10;                                        // OT d'un article consommé ou changé, en petits numéros
   const TONS_HABILITATION = { 'pas encore valable': 'info' };     // les autres états ont leur ton dans UI.badgeStatut
 
   const texte = (valeur) => (valeur === null || valeur === undefined ? '' : String(valeur).trim());
@@ -154,17 +161,33 @@ Object.assign(Wiki, (() => {
 
   const calcule = (phrase) => UI.html`<p class="wiki-calcule">${UI.icone('indicateurs')}<span>${phrase}</span></p>`;
 
+  /**
+   * Lignes (voir `ligne`) des articles consommés ou changés (D118) : nom, nombre d'interventions (`noms` : singulier,
+   * pluriel) suivi des OT_MONTRES plus récents de `article.ot` (ordre des interventions : les plus récents d'abord) en
+   * petits numéros, puis « … et n autres » ; quantité à droite. Les fragments de toute la liste sont faits ici, dans son
+   * ordre, même pour les lignes créées au clic : chaque OT prend son numéro à sa place (précisions en tête).
+   */
+  function lignesArticles(articles, contexte, noms) {
+    return articles.map((article) => {
+      const numeros = article.ot.slice(0, OT_MONTRES).map((ot) => contexte.refs.fragment(ot));
+      const autres = article.ot.length - OT_MONTRES;
+      return { id: article.articleId, type: 'article', nom: o().lienEntite(article.lien, article.titre),
+        sous: UI.html`${o().pluriel(article.ot.length, noms[0], noms[1])}${numeros}${autres > 0
+          ? UI.html` <span class="wiki-ref-autres">… et ${autres} ${autres > 1 ? 'autres' : 'autre'}</span>` : ''}`,
+        droite: 'quantité ' + UI.nombreFr(article.quantite) };
+    });
+  }
+
   // ===========================================================================================
   // 2. Machine
   // ===========================================================================================
 
-  function blocArticles(sections) {
+  function blocArticles(sections, contexte) {
     const montes = sousListe(sections.articlesMontes.map((article) => ({ id: article.articleId, type: 'article',
       nom: o().lienEntite(article.lien, article.titre), droite: article.quantite === null ? '' : '× ' + UI.nombreFr(article.quantite) })),
     { nom: 'articles', vide: 'Aucun article dans la nomenclature de cette machine.' });
-    const consommes = sousListe(sections.articlesConsommes.map((article) => ({ id: article.articleId, type: 'article',
-      nom: o().lienEntite(article.lien, article.titre), sous: o().pluriel(article.ot.length, 'intervention clôturée', 'interventions clôturées'),
-      droite: 'quantité ' + UI.nombreFr(article.quantite) })), { nom: 'articles', vide: 'Aucune pièce sortie pour une intervention clôturée.' });
+    const consommes = sousListe(lignesArticles(sections.articlesConsommes, contexte, ['intervention clôturée', 'interventions clôturées']),
+      { nom: 'articles', vide: 'Aucune pièce sortie pour une intervention clôturée.' });
     return creerSection('wiki-articles', 'Articles', null, UI.html`
       <h3 class="wiki-sous-section">Montés <span class="wiki-compte">${sections.articlesMontes.length}</span></h3>${montes.fragment}
       <h3 class="wiki-sous-section">Consommés <span class="wiki-compte">${sections.articlesConsommes.length}</span></h3>${consommes.fragment}`,
@@ -184,25 +207,23 @@ Object.assign(Wiki, (() => {
       { aide: 'Gammes actives et contrôles réglementaires, la prochaine échéance d\'abord.' });
   }
 
-  function machine(entite, contexte) {
+  function* machine(entite, contexte) {
     const sections = entite.sections;
     const total = sections.pannes.reduce((somme, panne) => somme + panne.cas, 0);
-    return [
-      { textes: ['En bref'], toujours: true },
-      sectionBarres('wiki-pannes', 'Pannes fréquentes', total ? o().pluriel(total, 'cas', 'cas') : null,
-        sections.pannes.map((panne) => ({ id: panne.lien, nom: o().lienEntite(panne.lien, panne.libelle),
-          detail: panne.derniere ? '· dernière le ' + UI.dateFr(panne.derniere) : '', cas: panne.cas })),
-        { aide: 'Interventions correctives clôturées, par code symptôme.', nom: 'pannes',
-          vide: 'Aucune panne : elles naissent des interventions correctives clôturées.' }),
-      blocInterventions('wiki-interventions', 'Interventions', sections.interventions, contexte, { sansMachine: true,
-        vide: 'Aucune intervention sur cette machine.' }),
-      Wiki.champRecherche({ equipementId: entite.id, titre: 'Chercher dans l\'historique de cette machine' }),
-      blocArticles(sections),
-      blocSavoirFaire(entite, contexte, 'Pas encore de savoir-faire pour cette machine.'),
-      { textes: ['Astuces'], reste: true },
-      blocPreventif(sections),
-      blocRetours(entite),
-    ];
+    yield { textes: ['En bref'], toujours: true };
+    yield sectionBarres('wiki-pannes', 'Pannes fréquentes', total ? o().pluriel(total, 'cas', 'cas') : null,
+      sections.pannes.map((panne) => ({ id: panne.lien, nom: o().lienEntite(panne.lien, panne.libelle),
+        detail: panne.derniere ? '· dernière le ' + UI.dateFr(panne.derniere) : '', cas: panne.cas })),
+      { aide: 'Interventions correctives clôturées, par code symptôme.', nom: 'pannes',
+        vide: 'Aucune panne : elles naissent des interventions correctives clôturées.' });
+    yield blocInterventions('wiki-interventions', 'Interventions', sections.interventions, contexte, { sansMachine: true,
+      vide: 'Aucune intervention sur cette machine.' });
+    yield Wiki.champRecherche({ equipementId: entite.id, titre: 'Chercher dans l\'historique de cette machine' });
+    yield blocArticles(sections, contexte);
+    yield blocSavoirFaire(entite, contexte, 'Pas encore de savoir-faire pour cette machine.');
+    yield { textes: ['Astuces'], reste: true };
+    yield blocPreventif(sections);
+    yield blocRetours(entite);
   }
 
   // ===========================================================================================
@@ -217,26 +238,23 @@ Object.assign(Wiki, (() => {
     return creerSection(id, titre, compte, UI.html`${longue.fragment}${elements.length && r.apres ? r.apres : ''}`, r.aide, [longue.suite]);
   }
 
-  function panne(entite, contexte) {
+  function* panne(entite, contexte) {
     const sections = entite.sections;
     const codes = (lignes) => lignes.map((ligne) => ({ id: ligne.code, nom: nom(ligne.libelle), cas: ligne.cas }));
-    return [
-      calcule('Calculé par Prévo à partir des interventions correctives clôturées de ce code symptôme, sans IA.'),
-      sectionBarres('wiki-panne-machines', 'Machines touchées', sections.machines.length, sections.machines.map((touchee) => ({
-        id: touchee.equipementId, nom: o().lienEntite(touchee.lien, touchee.titre), cas: touchee.cas })),
-      { nom: 'machines', vide: 'Aucune machine connue.' }),
-      sectionBarres('wiki-causes', 'Causes', sections.causes.length, codes(sections.causes), { nom: 'causes',
-        vide: 'Aucune cause renseignée sur ces cas.', apres: UI.html`<p class="note wiki-mention">${Wiki.MENTION_STATISTIQUE}</p>` }),
-      sectionBarres('wiki-remedes', 'Remèdes', sections.remedes.length, codes(sections.remedes), { nom: 'remèdes',
-        vide: 'Aucun remède renseigné sur ces cas.' }),
-      sectionListe('wiki-articles-changes', 'Articles changés', sections.articles.length, sections.articles.map((article) => ({
-        id: article.articleId, type: 'article', nom: o().lienEntite(article.lien, article.titre),
-        sous: o().pluriel(article.ot.length, 'intervention', 'interventions'), droite: 'quantité ' + UI.nombreFr(article.quantite) })),
-      { nom: 'articles', vide: 'Aucune pièce sortie pour cette panne.' }),
-      blocInterventions('wiki-interventions', 'Interventions', sections.interventions, contexte,
-        { aide: 'Toutes les interventions de ce code, les ouvertes en tête.' }),
-      blocRetours(entite),
-    ];
+    yield calcule('Calculé par Prévo à partir des interventions correctives clôturées de ce code symptôme, sans IA.');
+    yield sectionBarres('wiki-panne-machines', 'Machines touchées', sections.machines.length, sections.machines.map((touchee) => ({
+      id: touchee.equipementId, nom: o().lienEntite(touchee.lien, touchee.titre), cas: touchee.cas })),
+    { nom: 'machines', vide: 'Aucune machine connue.' });
+    yield sectionBarres('wiki-causes', 'Causes', sections.causes.length, codes(sections.causes), { nom: 'causes',
+      vide: 'Aucune cause renseignée sur ces cas.', apres: UI.html`<p class="note wiki-mention">${Wiki.MENTION_STATISTIQUE}</p>` });
+    yield sectionBarres('wiki-remedes', 'Remèdes', sections.remedes.length, codes(sections.remedes), { nom: 'remèdes',
+      vide: 'Aucun remède renseigné sur ces cas.' });
+    yield sectionListe('wiki-articles-changes', 'Articles changés', sections.articles.length,
+      lignesArticles(sections.articles, contexte, ['intervention', 'interventions']),
+      { nom: 'articles', vide: 'Aucune pièce sortie pour cette panne.' });
+    yield blocInterventions('wiki-interventions', 'Interventions', sections.interventions, contexte,
+      { aide: 'Toutes les interventions de ce code, les ouvertes en tête.' });
+    yield blocRetours(entite);
   }
 
   // ===========================================================================================
@@ -266,45 +284,41 @@ Object.assign(Wiki, (() => {
       'Commandes, sorties pour une intervention et ruptures, de la plus récente à la plus ancienne.', [longue.suite]);
   }
 
-  function article(entite, contexte) {
+  function* article(entite, contexte) {
     const sections = entite.sections;
     const unite = texte(faitDe(entite, 'Unité'));
-    return [
-      { textes: ['À quoi il sert'], reste: true, toujours: true },
-      blocStock(sections, unite),
-      sectionListe('wiki-montee', 'Où il est monté', sections.montee.length, sections.montee.map((monte) => ({ id: monte.equipementId,
-        type: 'machine', nom: o().lienEntite(monte.lien, monte.titre), droite: monte.quantite === null ? '' : '× ' + UI.nombreFr(monte.quantite) })),
-      { nom: 'machines', vide: 'Monté sur aucune machine de la nomenclature.' }),
-      sectionListe('wiki-consomme-sur', 'Consommé sur', sections.consommeSur.length, sections.consommeSur.map((sur) => ({ id: sur.equipementId,
-        type: 'machine', nom: o().lienEntite(sur.lien, sur.titre), sous: o().pluriel(sur.nombreOt, 'intervention clôturée', 'interventions clôturées'),
-        droite: 'quantité ' + UI.nombreFr(sur.quantite) + (unite ? ' ' + unite : '') })),
-      { nom: 'machines', vide: 'Jamais consommé dans une intervention clôturée.' }),
-      blocInterventions('wiki-interventions', 'Interventions où il a servi', sections.interventions, contexte,
-        { vide: 'Il n\'a servi à aucune intervention.' }),
-      blocSavoirFaire(entite, contexte, 'Pas encore de savoir-faire pour cet article.'),
-      blocRetours(entite),
-    ];
+    yield { textes: ['À quoi il sert'], reste: true, toujours: true };
+    yield blocStock(sections, unite);
+    yield sectionListe('wiki-montee', 'Où il est monté', sections.montee.length, sections.montee.map((monte) => ({ id: monte.equipementId,
+      type: 'machine', nom: o().lienEntite(monte.lien, monte.titre), droite: monte.quantite === null ? '' : '× ' + UI.nombreFr(monte.quantite) })),
+    { nom: 'machines', vide: 'Monté sur aucune machine de la nomenclature.' });
+    yield sectionListe('wiki-consomme-sur', 'Consommé sur', sections.consommeSur.length, sections.consommeSur.map((sur) => ({ id: sur.equipementId,
+      type: 'machine', nom: o().lienEntite(sur.lien, sur.titre), sous: o().pluriel(sur.nombreOt, 'intervention clôturée', 'interventions clôturées'),
+      droite: 'quantité ' + UI.nombreFr(sur.quantite) + (unite ? ' ' + unite : '') })),
+    { nom: 'machines', vide: 'Jamais consommé dans une intervention clôturée.' });
+    yield blocInterventions('wiki-interventions', 'Interventions où il a servi', sections.interventions, contexte,
+      { vide: 'Il n\'a servi à aucune intervention.' });
+    yield blocSavoirFaire(entite, contexte, 'Pas encore de savoir-faire pour cet article.');
+    yield blocRetours(entite);
   }
 
   // ===========================================================================================
   // 5. Technicien, intervention, savoir-faire
   // ===========================================================================================
 
-  function technicien(entite, contexte) {
+  function* technicien(entite, contexte) {
     const habilitations = entite.sections.habilitations;
-    return [
-      calcule('Calculé par Prévo : ses interventions et ses habilitations. Le nom d\'un technicien n\'est jamais envoyé à l\'IA.'),
-      sectionListe('wiki-habilitations', 'Habilitations', habilitations.length, habilitations.map((habilitation) => ({
-        id: habilitation.id, nom: nom(habilitation.intitule), sous: habilitation.obtention ? 'obtenue le ' + UI.dateFr(habilitation.obtention) : '',
-        droite: [habilitation.echeance ? 'jusqu\'au ' + UI.dateFr(habilitation.echeance) : 'sans échéance', ' ',
-          UI.badgeStatut(habilitation.etat, TONS_HABILITATION[habilitation.etat])] })),
-      { nom: 'habilitations', vide: 'Aucune habilitation enregistrée.' }),
-      blocInterventions('wiki-interventions', 'Interventions', entite.sections.interventions, contexte,
-        { aide: 'Celles dont il est le technicien ou où il a pointé du temps.' }),
-    ];
+    yield calcule('Calculé par Prévo : ses interventions et ses habilitations. Le nom d\'un technicien n\'est jamais envoyé à l\'IA.');
+    yield sectionListe('wiki-habilitations', 'Habilitations', habilitations.length, habilitations.map((habilitation) => ({
+      id: habilitation.id, nom: nom(habilitation.intitule), sous: habilitation.obtention ? 'obtenue le ' + UI.dateFr(habilitation.obtention) : '',
+      droite: [habilitation.echeance ? 'jusqu\'au ' + UI.dateFr(habilitation.echeance) : 'sans échéance', ' ',
+        UI.badgeStatut(habilitation.etat, TONS_HABILITATION[habilitation.etat])] })),
+    { nom: 'habilitations', vide: 'Aucune habilitation enregistrée.' });
+    yield blocInterventions('wiki-interventions', 'Interventions', entite.sections.interventions, contexte,
+      { aide: 'Celles dont il est le technicien ou où il a pointé du temps.' });
   }
 
-  function intervention(entite) {
+  function* intervention(entite) {
     const sections = entite.sections;
     const lien = o();
     const ecrit = (id, titre, valeur, absent) => {
@@ -314,50 +328,49 @@ Object.assign(Wiki, (() => {
     const demande = sections.demande;
     const heures = sections.temps.reduce((somme, temps) => somme + (temps.heures || 0), 0);
     const unite = (articleId) => texte((Donnees.trouver('articles', articleId) || {}).unite);
-    return [
-      demande ? section('wiki-demande', 'Demande d\'origine', null, UI.html`<p class="wiki-texte-ot">« ${demande.symptome} »</p>
-        ${demande.description ? UI.html`<p class="wiki-texte-ot">${demande.description}</p>` : ''}
-        <p class="wiki-meta">${lien.joindre([demande.id, UI.dateHeureFr(demande.date), demande.demandeur ? 'par ' + demande.demandeur : '',
-          demande.statut], ' · ')}</p>`) : null,
-      ecrit('wiki-travail', 'Travail demandé', sections.travail, 'Aucun travail décrit.'),
-      ecrit('wiki-compte-rendu', 'Compte rendu', sections.compteRendu, 'Pas encore de compte rendu.'),
-      sections.astuce ? section('wiki-astuce', 'Astuce pour la prochaine fois', null, UI.html`<p class="wiki-texte-ot">${sections.astuce}</p>
-        <p class="wiki-meta">Écrite par le technicien dans l'OT.</p>`) : null,
-      ecrit('wiki-motif-attente', 'Motif d\'attente', sections.motifAttente),
-      ecrit('wiki-motif-annulation', 'Motif d\'annulation', sections.motifAnnulation),
-      sectionListe('wiki-pieces', 'Pièces sorties', sections.pieces.length, sections.pieces.map((piece) => ({ id: piece.articleId,
-        type: 'article', nom: lien.lienEntite(piece.lien, piece.titre),
-        droite: '× ' + UI.nombreFr(piece.quantite) + (unite(piece.articleId) ? ' ' + unite(piece.articleId) : '') })),
-      { nom: 'pièces', vide: 'Aucune pièce sortie pour cette intervention.', aide: 'Sorties du magasin, retours déduits.' }),
-      sections.operations.length ? sectionListe('wiki-operations', 'Opérations', sections.operations.length,
-        sections.operations.map((operation, rang) => ({ id: 'operation-' + (rang + 1),
-          nom: nom((operation.ordre === null ? '' : UI.nombreFr(operation.ordre) + '. ') + operation.operation),
-          sous: lien.joindre([operation.valeurAttendue ? 'attendu : ' + operation.valeurAttendue : '',
-            operation.valeurMesuree ? 'mesuré : ' + operation.valeurMesuree : ''], ' · '),
-          droite: UI.badgeStatut(operation.fait ? 'fait' : 'non fait', operation.fait ? 'ok' : 'neutre') })), { nom: 'opérations' }) : null,
-      sections.temps.length ? sectionListe('wiki-temps', 'Temps passés', UI.heures(heures), sections.temps.map((temps) => ({
-        id: temps.id, type: 'technicien', nom: lien.lienEntite(temps.lien, temps.nom || temps.technicienId),
-        sous: UI.dateFr(temps.date), droite: UI.heures(temps.heures) })), { nom: 'pointages' }) : null,
-      sectionListe('wiki-cite-dans', 'Cité dans le wiki', sections.citeDans.length, sections.citeDans.map((page) => ({ id: page.id,
-        type: page.type, nom: lien.lienEntite(page.lien, page.titre) })),
-      { nom: 'pages', vide: 'Pas encore cité par une page du wiki.', aide: 'Les pages dont un texte cite cette intervention.' }),
-    ];
+    yield demande ? section('wiki-demande', 'Demande d\'origine', null, UI.html`<p class="wiki-texte-ot">« ${demande.symptome} »</p>
+      ${demande.description ? UI.html`<p class="wiki-texte-ot">${demande.description}</p>` : ''}
+      <p class="wiki-meta">${lien.joindre([demande.id, UI.dateHeureFr(demande.date), demande.demandeur ? 'par ' + demande.demandeur : '',
+        demande.statut], ' · ')}</p>`) : null;
+    yield ecrit('wiki-travail', 'Travail demandé', sections.travail, 'Aucun travail décrit.');
+    yield ecrit('wiki-compte-rendu', 'Compte rendu', sections.compteRendu, 'Pas encore de compte rendu.');
+    yield sections.astuce ? section('wiki-astuce', 'Astuce pour la prochaine fois', null, UI.html`<p class="wiki-texte-ot">${sections.astuce}</p>
+      <p class="wiki-meta">Écrite par le technicien dans l'OT.</p>`) : null;
+    yield ecrit('wiki-motif-attente', 'Motif d\'attente', sections.motifAttente);
+    yield ecrit('wiki-motif-annulation', 'Motif d\'annulation', sections.motifAnnulation);
+    yield sectionListe('wiki-pieces', 'Pièces sorties', sections.pieces.length, sections.pieces.map((piece) => ({ id: piece.articleId,
+      type: 'article', nom: lien.lienEntite(piece.lien, piece.titre),
+      droite: '× ' + UI.nombreFr(piece.quantite) + (unite(piece.articleId) ? ' ' + unite(piece.articleId) : '') })),
+    { nom: 'pièces', vide: 'Aucune pièce sortie pour cette intervention.', aide: 'Sorties du magasin, retours déduits.' });
+    yield sections.operations.length ? sectionListe('wiki-operations', 'Opérations', sections.operations.length,
+      sections.operations.map((operation, rang) => ({ id: 'operation-' + (rang + 1),
+        nom: nom((operation.ordre === null ? '' : UI.nombreFr(operation.ordre) + '. ') + operation.operation),
+        sous: lien.joindre([operation.valeurAttendue ? 'attendu : ' + operation.valeurAttendue : '',
+          operation.valeurMesuree ? 'mesuré : ' + operation.valeurMesuree : ''], ' · '),
+        droite: UI.badgeStatut(operation.fait ? 'fait' : 'non fait', operation.fait ? 'ok' : 'neutre') })), { nom: 'opérations' }) : null;
+    yield sections.temps.length ? sectionListe('wiki-temps', 'Temps passés', UI.heures(heures), sections.temps.map((temps) => ({
+      id: temps.id, type: 'technicien', nom: lien.lienEntite(temps.lien, temps.nom || temps.technicienId),
+      sous: UI.dateFr(temps.date), droite: UI.heures(temps.heures) })), { nom: 'pointages' }) : null;
+    yield sectionListe('wiki-cite-dans', 'Cité dans le wiki', sections.citeDans.length, sections.citeDans.map((page) => ({ id: page.id,
+      type: page.type, nom: lien.lienEntite(page.lien, page.titre) })),
+    { nom: 'pages', vide: 'Pas encore cité par une page du wiki.', aide: 'Les pages dont un texte cite cette intervention.' });
   }
 
-  function savoirFaire(entite) {
+  function* savoirFaire(entite) {
     const sousPages = entite.sections.sousPages || [];
-    return [
-      { textes: Wiki.RUBRIQUES['savoir-faire'] || [], reste: true, toujours: true, titreVide: 'Le savoir-faire' },
-      sousPages.length ? sectionListe('wiki-sous-pages', 'Sous-pages', sousPages.length, sousPages.map((sousPage) => ({
-        id: sousPage.id, type: 'savoir-faire', nom: o().lienEntite(sousPage.id, sousPage.titre) })),
-      { nom: 'sous-pages', aide: 'Le savoir-faire est découpé en pages liées : chacune reprend un sujet, avec ses OT cités.' }) : null,
-      blocRetours(entite),
-    ];
+    yield { textes: Wiki.RUBRIQUES['savoir-faire'] || [], reste: true, toujours: true, titreVide: 'Le savoir-faire' };
+    yield sousPages.length ? sectionListe('wiki-sous-pages', 'Sous-pages', sousPages.length, sousPages.map((sousPage) => ({
+      id: sousPage.id, type: 'savoir-faire', nom: o().lienEntite(sousPage.id, sousPage.titre) })),
+    { nom: 'sous-pages', aide: 'Le savoir-faire est découpé en pages liées : chacune reprend un sujet, avec ses OT cités.' }) : null;
+    yield blocRetours(entite);
   }
 
   const SECTIONS = { machine, panne, article, technicien, intervention, 'savoir-faire': savoirFaire };
 
-  /** Morceaux de la colonne de lecture d'une page (voir l'en-tête), dans leur ordre ; null : rien à montrer. */
+  /**
+   * Morceaux de la colonne de lecture d'une page (voir l'en-tête), dans leur ordre, rendus un à un (chacun créé quand
+   * on le demande) ; null : rien à montrer.
+   */
   function sectionsEntite(entite, contexte) {
     return SECTIONS[entite.type] ? SECTIONS[entite.type](entite, contexte) : [];
   }

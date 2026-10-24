@@ -18,12 +18,17 @@
 //
 // Précisions au contrat (§20.12) :
 //  - petits numéros : chaque citation [OT-…] d'une phrase devient, à sa place (l'espace qui la précède retirée ; répétée
-//    dans la même phrase, montrée une fois), <sup class="wiki-ref"> ; un OT garde son numéro sur toute la page ;
-//    numérotés dans l'ordre d'apparition (« À trancher », puis les textes : l'ordre de Wiki.entite().references) ; lien
-//    #/wiki/<OT>, bulle « <OT> · <date> · <titre> » (title), nom « Référence n : <bulle> » (aria-label) ; pour le
-//    demandeur, sans lien : un bouton (même nom, même bulle) qui montre la bulle au clic ou au toucher, gardée dans
-//    l'écran, refermée par un autre clic ou Échap (relecture de T137, m6 : un title seul est invisible au toucher) ;
-//  - « Références » : numéro, OT (lien, sauf pour le demandeur), date, machine (lien), titre, dans l'ordre des numéros ;
+//    dans la même phrase, montrée une fois), <sup class="wiki-ref"> ; les OT des articles consommés (page Machine) et
+//    des articles changés (page Panne) aussi (D118, T143 : wiki-sections-ecrans.js) ; lien #/wiki/<OT>, bulle « <OT> ·
+//    <date> · <titre> » (title), nom « Référence n : <bulle> » (aria-label) ; pour le demandeur, sans lien : un bouton
+//    (même nom, même bulle) qui montre la bulle au clic ou au toucher, gardée dans l'écran, refermée par un autre clic
+//    ou Échap (relecture de T137, m6 : un title seul est invisible au toucher) ;
+//  - numérotation (une seule règle, creerReferences) : un seul jeu de numéros par page, dans l'ordre d'apparition — un
+//    OT prend son numéro la première fois que la page le montre et le garde partout ; la page se construit dans son
+//    ordre (« À trancher » en tête, puis les morceaux de Wiki.sectionsEntite un à un : textes et sections) ; une liste
+//    longue numérote d'abord tous ses éléments, même ceux créés au clic, à leur place ;
+//  - « Références » : tous les OT numérotés — numéro, OT (lien, sauf pour le demandeur), date, machine (lien), titre —,
+//    dans l'ordre des numéros ;
 //  - [[titre]] → une page qui s'affiche (même index que le champ liens, wiki-journal.js) : panne, machine, article,
 //    savoir-faire actif, texte d'une machine ou d'un article (sa page) ; sinon le titre reste du texte ;
 //  - fiche : les faits de Wiki.entite dans l'ordre, un fait vide omis ; AAAA-MM-JJ → JJ/MM/AAAA, avec l'heure →
@@ -113,27 +118,39 @@ Object.assign(Wiki, (() => {
   // 2. Petits numéros et « Références » (D113)
   // ===========================================================================================
 
-  /** Registre des références d'une page : un numéro par OT, dans l'ordre où la page les montre. */
+  /**
+   * Registre des références d'une page, la seule règle de numérotation (précisions en tête) : un OT prend son numéro
+   * la première fois que la page le montre (numero), dans l'ordre où elle se construit, et le garde partout. Détails
+   * d'un OT (bulle, « Références ») : Wiki.entite().references (textes, « À trancher »), sinon sa ligne parmi les
+   * interventions de la page (les OT des articles consommés ou changés en sont tous).
+   */
   function creerReferences(entite) {
-    const details = new Map((entite.references || []).map((reference) => [reference.id, reference]));
+    const details = new Map(((entite.sections && entite.sections.interventions) || []).map((ot) => [ot.id, ot]));
+    (entite.references || []).forEach((reference) => details.set(reference.id, reference));
     const numeros = new Map();
     const detail = (ot) => details.get(ot) || { id: ot, date: '', titre: '', machine: null, lien: null };
     const bulle = (ot) => [ot, UI.dateFr(detail(ot).date), detail(ot).titre].filter(Boolean).join(' · ');
 
-    /**
-     * Petit numéro d'un OT cité : <sup class="wiki-ref">, lien vers sa page ; pour le demandeur, un bouton qui montre la
-     * bulle (basculerBulle). Même nom accessible dans les deux cas.
-     */
-    function element(ot) {
+    function numero(ot) {
       if (!numeros.has(ot)) numeros.set(ot, numeros.size + 1);
-      const numero = numeros.get(ot);
-      const lien = detail(ot).lien;
-      const nom = 'Référence ' + numero + ' : ' + bulle(ot);
-      return UI.element(lien
-        ? UI.html`<sup class="wiki-ref" data-ot="${ot}"><a href="${outils().adresse(lien)}" title="${bulle(ot)}" aria-label="${nom}">${numero}</a></sup>`
-        : UI.html`<sup class="wiki-ref" data-ot="${ot}"><button type="button" class="wiki-ref-numero" title="${bulle(ot)}"
-            aria-label="${nom}">${numero}</button></sup>`);
+      return numeros.get(ot);
     }
+
+    /**
+     * Petit numéro d'un OT (fragment UI.html) : <sup class="wiki-ref">, lien vers sa page ; pour le demandeur, un bouton
+     * qui montre la bulle (basculerBulle). Même nom accessible dans les deux cas.
+     */
+    function fragment(ot) {
+      const n = numero(ot);
+      const lien = detail(ot).lien;
+      const nom = 'Référence ' + n + ' : ' + bulle(ot);
+      return lien
+        ? UI.html`<sup class="wiki-ref" data-ot="${ot}"><a href="${outils().adresse(lien)}" title="${bulle(ot)}" aria-label="${nom}">${n}</a></sup>`
+        : UI.html`<sup class="wiki-ref" data-ot="${ot}"><button type="button" class="wiki-ref-numero" title="${bulle(ot)}"
+            aria-label="${nom}">${n}</button></sup>`;
+    }
+
+    const element = (ot) => UI.element(fragment(ot));
 
     /** Section « Références » : numéro, OT, date, machine, titre. */
     function section() {
@@ -147,7 +164,7 @@ Object.assign(Wiki, (() => {
         })}</ol></section>`);
     }
 
-    return { element, section, nombre: () => numeros.size };
+    return { fragment, element, section, nombre: () => numeros.size };
   }
 
   const MARGE_BULLE = 8;                         // px gardés entre la bulle et le bord de l'écran
@@ -557,11 +574,13 @@ Object.assign(Wiki, (() => {
     if (entite.aTrancher.length) alertes.appendChild(blocContradictions(entite, contexte));
     if (!alertes.children.length) alertes.remove();
     const lecture = UI.$('.wiki-lecture', conteneur);
-    Wiki.sectionsEntite(entite, contexte).forEach((morceau) => {
-      if (!morceau) return;
+    // Les morceaux un à un, dans l'ordre de la page : chacun est créé à son tour (Wiki.sectionsEntite les rend un à un),
+    // donc ses petits numéros suivent ceux des morceaux d'avant.
+    for (const morceau of Wiki.sectionsEntite(entite, contexte)) {
+      if (!morceau) continue;
       const element = morceau.textes ? blocTextes(entite, morceau, contexte) : (morceau instanceof Node ? morceau : UI.element(morceau));
       if (element) lecture.appendChild(element);
-    });
+    }
     if (contexte.responsable && entite.enAttente.length) lecture.appendChild(blocEnAttente(entite));
     if (contexte.refs.nombre()) lecture.appendChild(contexte.refs.section());
   }
