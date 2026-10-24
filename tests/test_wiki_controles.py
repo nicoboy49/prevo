@@ -667,6 +667,8 @@ class TestSavoirFaireCommun(CasControles):
                  "## Particularités par machine\n- [[PO-02 — Pompe centrifuge]] : accouplement désaligné de 0,4 mm [OT-2026-0042]")
         commun = creation("Remplacer une garniture mécanique", "savoir-faire", texte, KIT)
         self.assertEqual(self.controler(commun), self.OK)
+        meme_geste = copy.deepcopy(CONTEXTE)
+        meme_geste["catalogue"].append({"titre": "Remplacer une garniture mécanique", "type": "savoir-faire"})
         doublon = copy.deepcopy(CONTEXTE)
         doublon["catalogue"].append({"titre": "Remplacer les garnitures mécaniques", "type": "savoir-faire"})
         self.refus_seul(commun, "Page « Remplacer une garniture mécanique » : titre trop proche de « Remplacer les "
@@ -674,6 +676,15 @@ class TestSavoirFaireCommun(CasControles):
         # Une rubrique hors de la liste reste refusée.
         self.refus(creation("Remplacer une garniture mécanique", "savoir-faire", texte.replace(
             "Particularités par machine", "Machines"), KIT), "rubrique « Machines » inconnue pour une page savoir-faire")
+        # Même geste (relecture de T141) : l'organe d'un savoir-faire connu (son titre sans le premier mot, 2 mots au
+        # moins) tout entier dans le titre créé → refusé, avec l'issue : un lien s'il est au catalogue seulement.
+        for titre in ("Changer une garniture mécanique", "Remplacer la garniture mécanique d'une pompe"):
+            with self.subTest(titre=titre):
+                self.refus_seul(creation(titre, "savoir-faire", texte, KIT), "Page « %s » : même geste que le savoir-faire "
+                                "« Remplacer une garniture mécanique » (un seul par geste) : mets un lien [[Remplacer une "
+                                "garniture mécanique]] au lieu d'en créer un." % titre, meme_geste)
+        # Un autre organe, ou un organe d'un seul mot, passe ; une sous-page du savoir-faire aussi.
+        self.assertEqual(self.controler(creation("Changer un joint de corps", "savoir-faire", texte, KIT), meme_geste), self.OK)
 
     def test_meme_geste(self):
         self.assertEqual(self.page.evaluate("Wiki.MEME_GESTE"), {"motsMin": 2, "partMin": 0.6, "pagesMax": 2})

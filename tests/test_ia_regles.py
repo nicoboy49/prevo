@@ -506,7 +506,7 @@ class TestReglesPures(CasNavigateur):
                         "savoir-faire, de la page entière, rubriques comprises)", "ne dépasse jamais une limite",
                         "découpage : un savoir-faire qui dépasserait ses limites se découpe en sous-pages liées",
                         "type « savoir-faire », « rattache_a » = titre exact du savoir-faire",
-                        "titre « <titre du savoir-faire> — <sujet> »", "« Changer la garniture — étapes détaillées »",
+                        "titre « <titre du savoir-faire> — <sujet> »", "« Remplacer une garniture mécanique — étapes détaillées »",
                         "phrases d'un même sujet, telles quelles ou regroupées, avec tous leurs OT",
                         "une phrase courte de renvoi [[titre de la sous-page]] qui cite tous leurs OT",
                         "une sous-page (« sous-page de … » dans son en-tête) ne se découpe pas : un seul niveau",
@@ -527,7 +527,7 @@ class TestReglesPures(CasNavigateur):
             longueurs: [{ rubrique: 'En bref', phrases: 2, mots: 34, phrasesMax: 3, motsMax: 60, reecrite }] }] })
           .split('\\n').find((l) => l.startsWith('=== Page')))""")
         self.assertEqual(reecrite, [
-            "=== Page « PO-02 — Pompe » (équipement · En bref : 2 phrases sur 3, 34 mots sur 60, à réécrire en entier) ===",
+            "=== Page « PO-02 — Pompe » (équipement · En bref : 2 phrases sur 3, 34 mots sur 60, à réécrire en entier en 45 mots environ) ===",
             "=== Page « PO-02 — Pompe » (équipement · En bref : 2 phrases sur 3, 34 mots sur 60) ===",
             "=== Page « PO-02 — Pompe » (équipement · En bref : 2 phrases sur 3, 34 mots sur 60) ==="])
         self.assertIn("=== Page « Kit (B) » (composant) ===\n(page vide)", message)

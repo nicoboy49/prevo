@@ -444,8 +444,11 @@ Object.assign(Wiki, (() => {
     // Pages qu'un rattachement peut viser (type d'une sous-page) et pages modifiées (renvoi de la mère).
     const connuesDe = new Map(creees.concat(ctx.catalogue || [], envoyees).map((page) => [Wiki.comparable(page.titre), page]));
     const modifiees = new Map(pages.filter((page) => page.action === 'modifier').map((page) => [Wiki.comparable(page.titre), page]));
+    // Savoir-faire connus (hors sous-pages) : un seul par geste (D116, relecture de T141).
+    const savoirFaire = (ctx.catalogue || []).concat(envoyees)
+      .filter((page) => texte(page.type) === 'savoir-faire' && !texte(page.mere)).map((page) => texte(page.titre));
     pages.forEach((page) => controlerPage(page, {
-      manuel, envoyeeDe, connuesDe, modifiees, otIngere, dates, permis, titresExistants, titresConnus, formes,
+      manuel, envoyeeDe, connuesDe, modifiees, otIngere, dates, permis, titresExistants, titresConnus, formes, savoirFaire,
       sources: ctx.sources || {}, anterieure: Boolean(ctx.anterieure),
     }, raisons));
     contradictions.forEach((contradiction) => {
@@ -513,6 +516,18 @@ Object.assign(Wiki, (() => {
         raisons.push(nom + ' : une page de ce titre existe déjà.');
       } else if (ctx.formes.has(formeDuTitre(titre))) {
         raisons.push(nom + ' : titre trop proche de « ' + ctx.formes.get(formeDuTitre(titre)) + ' ».');
+      } else if (!sousPage) {
+        // Même geste (D116) : l'organe d'un savoir-faire connu (son titre sans son premier mot, 2 mots au moins) est
+        // tout entier dans le titre créé (« Changer une garniture mécanique » face à « Remplacer une garniture mécanique »).
+        const mots = new Set(motsDe(titre));
+        const meme = (ctx.savoirFaire || []).find((connu) => {
+          const organe = motsDe(connu).slice(1);
+          return organe.length >= 2 && organe.every((mot) => mots.has(mot));
+        });
+        if (meme) {
+          raisons.push(nom + ' : même geste que le savoir-faire « ' + meme + ' » (un seul par geste) : '
+            + (ctx.envoyeeDe.has(Wiki.comparable(meme)) ? 'complète-le' : 'mets un lien [[' + meme + ']]') + ' au lieu d\'en créer un.');
+        }
       }
       ctx.formes.set(formeDuTitre(titre), titre);
     } else {

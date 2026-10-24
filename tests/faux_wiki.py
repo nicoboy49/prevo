@@ -68,7 +68,7 @@ MOTIF_EQUIPEMENT = re.compile(r"^Équipement : (.*)$", re.M)
 # 0 phrase sur 10 » ; un savoir-faire entier : « · 3 phrases sur 30, 40 mots sur 600 »).
 MOTIF_ENTETE_PAGE = re.compile(r"^=== Page « (.+?) » \((équipement|composant|savoir-faire)"
                                r"(?: · sous-page de « (.+?) »)?((?: · [^·\n]+?)*)\) ===$", re.M)
-MOTIF_LONGUEUR = re.compile(r"^(?:(.+?) : )?(\d+) phrases? sur (\d+)(?:, (\d+) mots? sur (\d+))?(, à réécrire en entier)?$")
+MOTIF_LONGUEUR = re.compile(r"^(?:(.+?) : )?(\d+) phrases? sur (\d+)(?:, (\d+) mots? sur (\d+))?(, à réécrire en entier(?: en \d+ mots environ)?)?$")
 RUBRIQUES = {"équipement": ["En bref", "Astuces"], "composant": ["À quoi il sert"],
              "savoir-faire": ["Quand le faire", "Étapes", "Pièces et outillage", "Pièges",
                               "Particularités par machine"]}     # = Wiki.RUBRIQUES

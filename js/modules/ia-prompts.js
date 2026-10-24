@@ -376,7 +376,7 @@ Object.assign(Ia, (() => {
   }
 
   /**
-   * Une longueur d'un texte envoyé (§20.12) → « En bref : 2 phrases sur 3, 34 mots sur 60, à réécrire en entier » (sans
+   * Une longueur d'un texte envoyé (§20.12) → « En bref : 2 phrases sur 3, 34 mots sur 60, à réécrire en entier en 45 mots environ » (sans
    * rubrique : le savoir-faire entier ; motsMax null : les phrases seules ; la fin pour une rubrique réécrite en entier,
    * `reecrite`, D117) ; '' si ses nombres ne sont pas des entiers.
    */
@@ -384,7 +384,9 @@ Object.assign(Ia, (() => {
     if (!l || typeof l !== 'object') return '';
     if (![l.phrases, l.phrasesMax, l.mots].every(Number.isInteger) || (l.motsMax !== null && !Number.isInteger(l.motsMax))) return '';
     return (texte(l.rubrique) ? uneLigne(l.rubrique, 60) + ' : ' : '') + nombreDe(l.phrases, 'phrase') + ' sur ' + l.phrasesMax
-      + (l.motsMax === null ? '' : ', ' + nombreDe(l.mots, 'mot') + ' sur ' + l.motsMax) + (l.reecrite === true ? REECRITE : '');
+      + (l.motsMax === null ? '' : ', ' + nombreDe(l.mots, 'mot') + ' sur ' + l.motsMax)
+      // Cible sous la limite (relecture de T141 : au temps 1, 11 « En bref » réécrits sur 23 dépassaient 60 mots).
+      + (l.reecrite === true ? REECRITE + (Number.isInteger(l.motsMax) ? ' en ' + Math.floor(l.motsMax * 3 / 4) + ' mots environ' : '') : '');
   }
 
   /**
@@ -491,7 +493,7 @@ Object.assign(Ia, (() => {
         + 'calcule déjà les pannes) ;\n'
         + '- découpage : un savoir-faire qui dépasserait ses limites se découpe en sous-pages liées. Crée une sous-page '
         + '(type « savoir-faire », « rattache_a » = titre exact '
-        + 'du savoir-faire, titre « <titre du savoir-faire> — <sujet> », par exemple « Changer la garniture — étapes '
+        + 'du savoir-faire, titre « <titre du savoir-faire> — <sujet> », par exemple « Remplacer une garniture mécanique — étapes '
         + 'détaillées ») ; déplace-y les phrases d\'un même sujet, telles quelles ou regroupées, avec tous leurs OT ; '
         + 'modifie la mère dans la même réponse : à la place des phrases déplacées, une phrase courte de renvoi [[titre '
         + 'de la sous-page]] qui cite tous leurs OT ; une sous-page (« sous-page de … » dans son en-tête) ne se découpe '

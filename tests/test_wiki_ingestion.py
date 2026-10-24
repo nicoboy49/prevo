@@ -375,7 +375,7 @@ class TestDonneesEtFile(CasIngestion):
                         "Compte rendu : Garniture usée remplacée, fuite stoppée.", "Astuce pour la prochaine fois : " + ASTUCE,
                         "Pièces consommées : Kit garniture HC 50 (réf. KG-50) × 1", "Durée d'arrêt : 2.5 h",
                         "=== Page « PO-01 — Pompe de process A » (équipement · En bref : 2 phrases sur 3, 13 mots sur 60, "
-                        "à réécrire en entier · Astuces : 0 phrase sur 10) ===\n" + TEXTE_PO01,
+                        "à réécrire en entier en 45 mots environ · Astuces : 0 phrase sur 10) ===\n" + TEXTE_PO01,
                         "=== Page « Kit garniture HC 50 » (composant · À quoi il sert : 1 phrase sur 3, 6 mots sur 80) ===\n"
                         + TEXTE_KIT,
                         "Catalogue des pages :", "- Fuite (panne)", "- Roulement 6205 (composant)"):
@@ -529,7 +529,7 @@ class TestDonneesEtFile(CasIngestion):
         self.assertLessEqual(len(systeme), 9000)
         # L'en-tête : « à réécrire en entier » pour « En bref » seulement ; le faux modèle le lit.
         message = self.message("OT-2026-0001")
-        self.assertIn("(équipement · En bref : 2 phrases sur 3, 13 mots sur 60, à réécrire en entier · Astuces : 0 phrase sur "
+        self.assertIn("(équipement · En bref : 2 phrases sur 3, 13 mots sur 60, à réécrire en entier en 45 mots environ · Astuces : 0 phrase sur "
                       "10) ===", message)
         self.assertEqual(message.count("à réécrire en entier"), 1)
         self.assertEqual([p["longueurs"]["En bref"]["reecrite"] for p in lire_message(message)["pages"][:1]], [True])
@@ -604,7 +604,7 @@ class TestDonneesEtFile(CasIngestion):
         self.page.evaluate("""(phrases) => Donnees.modifier('wiki_pages', (lignes) => { const NL = String.fromCharCode(10);
           lignes.find((l) => l.id === 'WP-0001').texte += NL + '## Astuces' + NL
             + phrases.map((p) => '- ' + p + ' [OT-2026-0007]').join(NL); })""", anciennes)
-        self.assertIn("(équipement · En bref : 2 phrases sur 3, 13 mots sur 60, à réécrire en entier · Astuces : 10 phrases "
+        self.assertIn("(équipement · En bref : 2 phrases sur 3, 13 mots sur 60, à réécrire en entier en 45 mots environ · Astuces : 10 phrases "
                       "sur 10)", self.message("OT-2026-0001"))
         avant = [(texte, ["OT-2026-0007"]) for texte in anciennes]
         en_bref = {"rubrique": "En bref", "phrases": [{"texte": "Fuite à la garniture : garniture usée remplacée",
@@ -744,7 +744,7 @@ class TestDonneesEtFile(CasIngestion):
         # Textes vides : machine, article (page calculée sans ligne) et savoir-faire.
         vide = self.message("OT-2026-0002")
         for attendu in ("=== Page « CP-01 — Compresseur » (équipement · En bref : 0 phrase sur 3, 0 mot sur 60, à réécrire en "
-                        "entier · Astuces : 0 phrase sur 10) ===\n(page vide)",
+                        "entier en 45 mots environ · Astuces : 0 phrase sur 10) ===\n(page vide)",
                         "=== Page « Filtre à huile » (composant · À quoi il sert : 0 phrase sur 3, 0 mot sur 80) ===\n(page vide)",
                         "=== Page « Nettoyer le filtre de CP-01 » (savoir-faire · 0 phrase sur 30, 0 mot sur 600) ===\n"
                         "(page vide)"):
@@ -1386,7 +1386,7 @@ class TestTraitement(CasIngestion):
         self.page.evaluate("""() => Donnees.modifier('wiki_pages', (lignes) => { const NL = String.fromCharCode(10);
           lignes.find((l) => l.id === 'WP-0001').texte += ['', '- Bruit de palier [OT-2026-0007]', '- Joint sec [OT-2026-0007]',
             '- Garniture neuve [OT-2026-0007]'].join(NL); })""")
-        self.assertIn("(équipement · En bref : 5 phrases sur 3, 20 mots sur 60, à réécrire en entier · Astuces : 0 phrase sur 10)",
+        self.assertIn("(équipement · En bref : 5 phrases sur 3, 20 mots sur 60, à réécrire en entier en 45 mots environ · Astuces : 0 phrase sur 10)",
                       self.message("OT-2026-0008"))
         bilan = self.traiter(["OT-2026-0008"], "faux")
         self.assertEqual((bilan["acceptees"], bilan["refusees"]), (1, 0))
@@ -1405,7 +1405,7 @@ class TestTraitement(CasIngestion):
               '- Rouleau bruyant [OT-2026-0004]', '## À surveiller', '- Voir [[Desserrage]] [OT-2026-0004]',
               '- Méthode : [[Nettoyer le filtre de CP-01]] [OT-2026-0004]'].join(NL) }); })""")
         message = self.message("OT-2026-0006")
-        self.assertIn("(équipement · En bref : 0 phrase sur 3, 0 mot sur 60, à réécrire en entier · Astuces : 0 phrase sur 10) "
+        self.assertIn("(équipement · En bref : 0 phrase sur 3, 0 mot sur 60, à réécrire en entier en 45 mots environ · Astuces : 0 phrase sur 10) "
                       "===\n## Ce qui revient", message)
         self.assertIn("\n- Nettoyer le filtre de CP-01 (savoir-faire)\n", message)
         self.assertNotIn("- Desserrage (", message)
