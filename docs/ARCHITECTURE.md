@@ -3181,3 +3181,28 @@ installer.
   par jour (rechargements) ; « Ignorer » tient au rechargement ; version égale ou plus ancienne, fichier mal formé,
   absent (404) ou serveur injoignable : rien et aucune erreur JavaScript ; `version.json` de la release (champs,
   nouveautés tirées du CHANGELOG, sans Markdown) ; `test_depot.py` : ordre des modules.
+
+## 23. Aide à l'écran (décision de Nicolas du 2026-10-25, avant le lot 7)
+
+Un encart d'explication à la première visite de chaque écran, dans la démo comme dans la version installée.
+
+- **Modules** : `js/modules/aide-ecrans-textes.js` (objet `AideEcransTextes`, une entrée par identifiant d'écran
+  d'`App.ecran` : `titre`, `ancre` de `GUIDE.html`, `texte` et `essayez`, ou `profils` { responsable, technicien,
+  demandeur } ; `demo` = phrase de la version web) et `js/modules/aide-ecrans.js` (objet `AideEcrans`). Textes
+  validés par Nicolas (dossier de conception du site, `AIDE-ECRANS.md` § 2), produits par un script ; à modifier à la
+  source.
+- **Branchement** : `App.rendre`, après un affichage réussi d'un écran nouveau (pas sur une erreur d'affichage),
+  appelle `AideEcrans.apresAffichage(ecran, conteneur)` ; l'encart (`UI.bandeau('info')`, `#aide-ecran`,
+  `role="status"`, titre en `h2`) se place après `.entete-page` s'il existe, sinon en tête de `#contenu` ; il ne
+  bloque rien et ne s'imprime pas.
+- **Choix du texte** : l'entrée de l'écran, sinon celle de son `parent` (formulaires) ; À propos n'en a pas ; variante
+  du profil (`App.profil.type`) ; version web (`App.versionWeb`) : phrase `demo` en tête de l'accueil, avant le geste
+  ailleurs.
+- **Mémoire du poste** : `prevo.aideVue` (liste JSON d'identifiants, ajoutée à « Compris » seulement) et
+  `prevo.aideActive` (`'0'` = coupée) ; `localStorage` refusé : l'encart s'affiche, rien n'est retenu. Échap ferme sans
+  retenir (focus dans l'encart, ou hors d'un champ et sans fenêtre ouverte).
+- **Commandes** : `#btn-explications` (menu latéral) et `#btn-explications-mobile` (en-tête du téléphone) appellent
+  `AideEcrans.rouvrir()` (encart de l'écran courant, même vu ; `App.ecranCourant`). Ce poste, carte « Aide à
+  l'écran » : case `#poste-aide-active`, bouton `#btn-revoir-aide`.
+- **Tests** : `tests/test_aide_ecrans.py`. Les autres tests coupent l'aide (`CasNavigateur.AIDE_ECRANS = False` :
+  `prevo.aideActive = '0'` posé avant le chargement de chaque contexte), comme `outils/generer_captures.py`.

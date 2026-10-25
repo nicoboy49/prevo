@@ -827,6 +827,11 @@ const App = (() => {
       signalerErreur(erreur, 'affichage de « ' + ecranAAfficher.titre + ' »');
     }
     if (numero !== numeroAffichage) return;
+    // Aide à l'écran (§23) : encart de la première visite, après un affichage réussi d'un écran nouveau.
+    if (nouvelEcran && typeof AideEcrans !== 'undefined' && conteneur.childElementCount
+        && !conteneur.querySelector(':scope > .entete-page + .alerte.important')) {
+      try { AideEcrans.apresAffichage(ecranAAfficher, conteneur); } catch (erreur) { console.warn('Prévo : aide à l\'écran non affichée.', erreur); }
+    }
     if (garderDefilement) window.scrollTo(0, defilement);
     else window.scrollTo(0, 0);
     if (nouvelEcran && !garderDefilement && document.activeElement !== conteneur
@@ -1009,6 +1014,9 @@ const App = (() => {
     UI.$('#btn-replier').addEventListener('click', basculerRepli);
     UI.$('#etat-poste').addEventListener('click', () => changerProfil());
     UI.$('#btn-profil-mobile').addEventListener('click', () => changerProfil());
+    ['#btn-explications', '#btn-explications-mobile'].forEach((selecteur) => {
+      UI.$(selecteur).addEventListener('click', () => { if (typeof AideEcrans !== 'undefined') AideEcrans.rouvrir(); });
+    });
     UI.$('#btn-export-demo').addEventListener('click', () => exporterZip());
     UI.$('#btn-actualiser').addEventListener('click', () => reafficher());
     UI.$('#contenu').addEventListener('input', surSaisie);
@@ -1041,6 +1049,7 @@ const App = (() => {
     get adaptateur() { return adaptateur; },
     get profil() { return profil ? Object.assign({}, profil) : null; },
     get poste() { return poste; },
+    get ecranCourant() { return ecranCourant; },
     ecran,
     naviguer,
     reafficher,

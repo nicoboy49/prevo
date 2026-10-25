@@ -167,6 +167,8 @@ def prendre_capture(navigateur, capture):
     appareil = APPAREILS[capture["appareil"]]
     contexte = navigateur.new_context(locale="fr-FR", **appareil["contexte"])
     contexte.set_default_timeout(DELAI_MS)
+    # Aide à l'écran coupée : les captures du guide montrent l'écran lui-même.
+    contexte.add_init_script("try { localStorage.setItem('prevo.aideActive', '0'); } catch (e) {}")
     contexte.clock.set_fixed_time(datetime.date.today().isoformat() + "T" + HEURE_CAPTURES)
     try:
         profil = PROFILS[capture["profil"]]

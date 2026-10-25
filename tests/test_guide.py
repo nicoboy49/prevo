@@ -56,6 +56,8 @@ MENTIONS = [
     "Sauvegarder maintenant", "Restaurer…", "_avant-restauration", "Exporter en ZIP",
     "Excel", "FICHE_TECHNIQUE_CSV.md", "Contrôle de la base", "Pas d'authentification",
     # Lot 6 (T125) : le wiki de maintenance et la mise à jour signalée (§21).
+    # Aide à l'écran (§23).
+    "Aide à l'écran", "Revoir toutes les explications", "Afficher l'explication à la première visite de chaque écran",
     "Le wiki de maintenance", "ingestion", "Astuce pour la prochaine fois", "OT ajouté à la file du wiki",
     "Traiter la file", "À trancher", "0,026 $ par OT", "claude-sonnet-5-5",
     "Me signaler les nouvelles versions de Prévo", "https://prevo.pro/version.json", "Ignorer cette version",

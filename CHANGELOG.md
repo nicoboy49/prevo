@@ -7,6 +7,14 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Ajouté
+
+- **Aide à l'écran** : à la première ouverture de chaque écran, un encart en haut de la page dit ce qu'il contient,
+  ce qu'on y fait et propose un geste à essayer, avec un lien vers la partie du guide ; il ne bloque rien,
+  « Compris » le ferme pour de bon sur ce poste. Les textes suivent le profil (accueil, demandes, ordres de travail,
+  page du wiki) ; dans la démo en ligne, l'accueil rappelle qu'on peut tout essayer. Lien « Explications » dans le
+  menu ; dans Ce poste, la case pour la couper et « Revoir toutes les explications ».
+
 ## [1.2.0] - 2026-10-24
 
 Le lot 6 : le wiki de maintenance, l'encyclopédie de l'atelier (le détail est dans

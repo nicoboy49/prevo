@@ -58,6 +58,16 @@ button.etat-poste:hover { background: var(--carte-2); color: var(--texte); borde
 /* Le contenu reçoit le focus à chaque changement d'écran (lecteurs d'écran) : pas de cadre */
 .contenu:focus { outline: none; }
 
+/* --- aide à l'écran (§23) : encart de la première visite, dans un bandeau d'information --- */
+.aide-ecran { margin: 0 0 1rem; }
+.aide-ecran .aide-ecran-titre { font-size: 1.0625rem; margin: 0 0 .3rem; color: inherit; }
+.aide-ecran .aide-ecran-demo { font-weight: 700; margin: 0 0 .4rem; }
+.aide-ecran .aide-ecran-texte, .aide-ecran .aide-ecran-essayez { margin: 0 0 .5rem; color: var(--texte); }
+.aide-ecran .aide-ecran-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
+.aide-ecran .aide-ecran-guide { color: var(--texte-bleu); font-weight: 600; }
+button.lien-explications { margin-top: 8px; }
+@media print { .aide-ecran { display: none; } }
+
 /* --- À propos --- */
 .apropos-liste { margin: 0 0 .75rem; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .5rem; color: var(--texte-2); }
 .apropos-liste b { color: var(--texte); }

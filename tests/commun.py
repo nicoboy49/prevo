@@ -308,6 +308,14 @@ class ServeurStatique:
 # Navigateur (Playwright)
 # ---------------------------------------------------------------------------
 
+SCRIPT_SANS_AIDE = """
+(() => {
+  try { if (localStorage.getItem('prevo.aideActive') === null) localStorage.setItem('prevo.aideActive', '0'); }
+  catch (erreur) { /* page sans stockage : rien à faire */ }
+})();
+"""
+
+
 class CasNavigateur(unittest.TestCase):
     """Base des tests qui ouvrent un navigateur.
 
@@ -322,6 +330,10 @@ class CasNavigateur(unittest.TestCase):
 
     DELAI_PAR_DEFAUT_MS = 15000
     navigateur = None
+    # Aide à l'écran (§23) : coupée dans les contextes des tests (prevo.aideActive = '0' posé avant le chargement,
+    # sauf valeur déjà présente), pour que les écrans des lots 1 à 6 restent ceux qu'ils vérifient. Une classe qui
+    # teste l'aide met AIDE_ECRANS = True.
+    AIDE_ECRANS = False
 
     @classmethod
     def setUpClass(cls):
@@ -332,6 +344,15 @@ class CasNavigateur(unittest.TestCase):
         cls.addClassCleanup(cls._playwright.stop)
         cls.navigateur = cls._playwright.chromium.launch(headless=True)
         cls.addClassCleanup(cls.navigateur.close)
+        if not cls.AIDE_ECRANS:
+            nouveau_contexte = cls.navigateur.new_context
+
+            def contexte_sans_aide(*arguments, **options):
+                contexte = nouveau_contexte(*arguments, **options)
+                contexte.add_init_script(SCRIPT_SANS_AIDE)
+                return contexte
+
+            cls.navigateur.new_context = contexte_sans_aide
 
     def setUp(self):
         super().setUp()

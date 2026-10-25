@@ -497,6 +497,30 @@ const Poste = (() => {
     });
   }
 
+  // Carte « Aide à l'écran » (AideEcrans, §23) : explication à la première visite de chaque écran.
+  function carteAide() {
+    if (typeof AideEcrans === 'undefined') return '';
+    return UI.html`<article class="carte" id="carte-aide" data-hors-saisie>
+      <div class="entete-carte"><h2>Aide à l'écran</h2></div>
+      <label class="case"><input type="checkbox" id="poste-aide-active"><span>Afficher l'explication à la première visite de chaque écran</span></label>
+      <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-revoir-aide">Revoir toutes les explications</button></div>
+      <p class="note" id="poste-aide-note">Le lien « Explications » du menu rouvre celle de l'écran affiché.</p>
+    </article>`;
+  }
+
+  function brancherAide(conteneur) {
+    const caseActive = UI.$('#poste-aide-active', conteneur);
+    if (!caseActive) return;
+    caseActive.checked = AideEcrans.active();
+    caseActive.addEventListener('change', () => AideEcrans.activer(caseActive.checked));
+    UI.$('#btn-revoir-aide', conteneur).addEventListener('click', () => {
+      AideEcrans.revoirTout();
+      AideEcrans.activer(true);
+      caseActive.checked = true;
+      UI.remplir(UI.$('#poste-aide-note', conteneur), 'Les explications reviendront à la prochaine visite de chaque écran.');
+    });
+  }
+
   // ===========================================================================================
   // 7. Écran et enregistrement
   // ===========================================================================================
@@ -509,12 +533,13 @@ const Poste = (() => {
       </div></div>
       <div class="grille poste">
         <div class="c7 poste-colonne" id="poste-colonne-principale">${carteIdentite()}</div>
-        <div class="c5 poste-colonne">${carteDictee()}${carteAffichage()}</div>
+        <div class="c5 poste-colonne">${carteDictee()}${carteAffichage()}${carteAide()}</div>
       </div>`);
     UI.$('#poste-colonne-principale', conteneur).appendChild(carteIa());
     UI.$('#btn-changer-profil', conteneur).addEventListener('click', () => { App.changerProfil(); });
     brancherDictee(conteneur);
     brancherAffichage(conteneur);
+    brancherAide(conteneur);
   }
 
   // L'état de l'IA change (test, réglages) : badge de la carte à jour. L'autorisation du responsable

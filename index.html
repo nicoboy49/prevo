@@ -209,6 +209,10 @@
       <span data-icone="utilisateur"></span>
       <span class="libelle"><span id="libelle-profil"></span> <span class="changer">changer</span></span>
     </button>
+    <button type="button" class="etat-poste lien-explications" id="btn-explications" title="Revoir l'explication de cet écran">
+      <span data-icone="apropos"></span>
+      <span class="libelle">Explications</span>
+    </button>
     <a class="signature" href="#/apropos" title="À propos">
       <span data-icone="apropos"></span>
       <span class="libelle">Développé par <b>Claude (Anthropic)</b> à la demande de <b>Nicolas Briand — SELECTIS</b></span>
@@ -220,6 +224,7 @@
     <header class="entete-mobile">
       <span data-ui="logo"></span>
       <span class="titre" id="titre-mobile">Prévo</span>
+      <button type="button" class="btn btn-fantome btn-icone" id="btn-explications-mobile" aria-label="Explications de cet écran"><span data-icone="apropos"></span></button>
       <button type="button" class="btn btn-fantome btn-icone" id="btn-profil-mobile" aria-label="Changer de profil"><span data-icone="utilisateur"></span></button>
     </header>
 
@@ -262,6 +267,8 @@
 <!-- Modules : un module = un préfixe de fichiers, dans l'ordre exact de ARCHITECTURE.md §14.2 -->
 <script src="js/modules/apropos.js"></script>
 <script src="js/modules/mise-a-jour.js"></script>
+<script src="js/modules/aide-ecrans-textes.js"></script>
+<script src="js/modules/aide-ecrans.js"></script>
 <script src="js/modules/accueil.js"></script>
 <script src="js/modules/accueil-bento.js"></script>
 <script src="js/modules/causes-frequentes.js"></script>
