@@ -232,6 +232,17 @@ def afficher(texte):
 # ---------------------------------------------------------------------------
 
 NOM_FICHIER_CONFIGURATION = 'prevo.config.json'
+# En-têtes de sécurité des fichiers de l'application (audit F1, §22.13) ; les documents gardent « sandbox ».
+ADRESSE_VERSION_PUBLIEE = 'https://prevo.pro'       # mise à jour signalée (§21) : seule origine extérieure lue
+POLITIQUE_CONTENU = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                     "img-src 'self' data: blob:; connect-src 'self' %s; frame-ancestors 'none'; base-uri 'none'; "
+                     "form-action 'self'; object-src 'none'")
+ENTETES_SECURITE = {
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=()',
+}
+DUREE_HSTS_S = 180 * 24 * 3600
 CODE_SORTIE_REGLES = 2          # démarrage refusé : règle de portée non respectée (§22.1)
 TAILLE_JOURNAL_SERVEUR = 1024 * 1024
 NOMBRE_JOURNAUX_SERVEUR = 5
@@ -1468,7 +1479,23 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         octets = lire_octets(chemin)
         if octets is None:
             raise ErreurHttp(404, 'Fichier introuvable.')
-        self.envoyer(200, octets, TYPES_STATIQUES.get(extension(chemin), TYPE_PAR_DEFAUT))
+        entetes = None if morceaux[0].lower() == 'tests' else self.entetes_securite()
+        self.envoyer(200, octets, TYPES_STATIQUES.get(extension(chemin), TYPE_PAR_DEFAUT), entetes)
+
+    def entetes_securite(self):
+        """En-têtes des fichiers de l'application (§22.13). Avec --servir-tests, la politique laisse aussi passer les
+        faux services des tests sur ce PC (faux prevo.pro, faux fournisseur) : jamais en usage normal."""
+        origines = ADRESSE_VERSION_PUBLIEE
+        if self.config.servir_tests:
+            origines += ' http://127.0.0.1:* http://localhost:*'
+        entetes = dict(ENTETES_SECURITE)
+        entetes['Content-Security-Policy'] = POLITIQUE_CONTENU % origines
+        # HSTS seulement pour un nom déclaré (jamais une adresse IP : un retour en http serait bloqué), en https.
+        hote = extraire_nom_hote(self.headers.get('Host', ''))
+        if (self.config.contexte_ssl is not None and hote and not est_une_adresse_ip(hote)
+                and hote in self.config.hotes_supplementaires):
+            entetes['Strict-Transport-Security'] = 'max-age=%d' % DUREE_HSTS_S
+        return entetes
 
     # --- Envoi des réponses ------------------------------------------------
 

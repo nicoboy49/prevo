@@ -337,6 +337,10 @@ class CasNavigateur(unittest.TestCase):
     # sauf valeur déjà présente), pour que les écrans des lots 1 à 6 restent ceux qu'ils vérifient. Une classe qui
     # teste l'aide met AIDE_ECRANS = True.
     AIDE_ECRANS = False
+    # Politique de sécurité du contenu (lot 7, §22.13) : Playwright évalue ses attentes (wait_for_function) par eval,
+    # que script-src 'self' interdit ; les contextes des tests la contournent donc (bypass_csp). La classe qui teste
+    # la politique elle-même met CSP_REELLE = True et attend sans eval.
+    CSP_REELLE = False
 
     @classmethod
     def setUpClass(cls):
@@ -347,15 +351,17 @@ class CasNavigateur(unittest.TestCase):
         cls.addClassCleanup(cls._playwright.stop)
         cls.navigateur = cls._playwright.chromium.launch(headless=True)
         cls.addClassCleanup(cls.navigateur.close)
-        if not cls.AIDE_ECRANS:
-            nouveau_contexte = cls.navigateur.new_context
+        nouveau_contexte = cls.navigateur.new_context
 
-            def contexte_sans_aide(*arguments, **options):
-                contexte = nouveau_contexte(*arguments, **options)
+        def contexte_des_tests(*arguments, **options):
+            if not cls.CSP_REELLE:
+                options.setdefault("bypass_csp", True)
+            contexte = nouveau_contexte(*arguments, **options)
+            if not cls.AIDE_ECRANS:
                 contexte.add_init_script(SCRIPT_SANS_AIDE)
-                return contexte
+            return contexte
 
-            cls.navigateur.new_context = contexte_sans_aide
+        cls.navigateur.new_context = contexte_des_tests
 
     def setUp(self):
         super().setUp()
