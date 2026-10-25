@@ -785,8 +785,8 @@ instructifs :
 La suite complète (1 443 tests) a été jouée d'un trait en 36 minutes (`.chantier/suite-complete-2026-10-24-ok.log`),
 puis vérifiée par vagues : `test_[a-h]` avec le guide, `test_[i-o]`, `test_[p-r]`, `test_[s-z]`. Les longues passes ont
 montré deux pièges de l'environnement, notés pour la suite : Claude Code arrête les commandes de fond quand la mémoire
-du poste baisse (d'où des vérifications lancées en processus détaché), et un dossier synchronisé par pCloud ralentit
-le disque pendant les tests (client quitté pour les dernières vagues). Les étiquettes `lot-6` et **`v1.2.0`** sont
+du poste baisse (d'où des vérifications lancées en processus détaché), et un dossier synchronisé en ligne ralentit
+le disque pendant les tests (synchronisation suspendue pour les dernières vagues). Les étiquettes `lot-6` et **`v1.2.0`** sont
 posées sur le même commit à la clôture. Sont sautés, en le disant, les essais qui
 demandent le vrai Excel (`PREVO_TEST_EXCEL=1`) ou un vrai modèle d'IA (`PREVO_TEST_IA=1`). Les
 bibliothèques de `js/lib/` sont celles du lot 5, inchangées.
