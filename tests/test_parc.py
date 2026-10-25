@@ -30,6 +30,13 @@ DOSSIER_DEMO = RACINE / "donnees" / "demo"
 SCENARIOS = scenarios_demo()
 # La démo décale ses dates du nombre de semaines entières écoulées depuis sa date de référence (§11).
 JOUR_REFERENCE_DEMO = date(2026, 10, 19)
+
+
+def date_demo_decalee(texte):
+    """Date d'un fichier de la démo telle que l'écran la montre : la démo décale ses dates d'un nombre entier de
+    semaines depuis JOUR_REFERENCE_DEMO, pour rester actuelle (un test qui attend la date brute ne passe que la
+    semaine de référence)."""
+    return date.fromisoformat(texte[:10]) + timedelta(weeks=(date.today() - JOUR_REFERENCE_DEMO).days // 7)
 BOM = b"\xef\xbb\xbf"
 LIBELLE_PO02 = "PO-02 — Pompe centrifuge eau de refroidissement"
 RAPPEL_CONSIGNATION = "Cocher une case ne consigne rien : appliquez la procédure."
@@ -201,7 +208,8 @@ class TestParcDemo(CasParc):
         self.assertIn("Isoler la partie concernée du circuit d'eau et la vidanger.", consignation)
         # Fiche : libellés, dates en français, chemin de localisation
         fiche = self.texte(".valeurs")
-        for attendu in ("Identifiant", "EQ-0005", "Hydronel", "HC 50-160", "HY-50-17-2987", "18/09/2017",
+        for attendu in ("Identifiant", "EQ-0005", "Hydronel", "HC 50-160", "HY-50-17-2987",
+                        date_demo_decalee("2017-09-18").strftime("%d/%m/%Y"),
                         "Site des Trois Vallées › Atelier Utilités"):
             self.assertIn(attendu, fiche)
         # Historique : tous les OT et toutes les DI de PO-02 (moins de 20 chacun : tout est affiché), avec des liens
@@ -250,7 +258,7 @@ class TestParcDemo(CasParc):
         lignes, _ = lire_csv(DOSSIER_DEMO, "releves.csv")
         releves = sorted((r for r in lignes if r["compteur_id"] == "CPT-0001"), key=lambda r: (r["date"], r["id"]))
         dernier = releves[-1]
-        jour = "%s/%s/%s" % (dernier["date"][8:10], dernier["date"][5:7], dernier["date"][:4])
+        jour = date_demo_decalee(dernier["date"]).strftime("%d/%m/%Y")
         compteurs = self.texte(".parc-compteurs")
         self.assertIn("Compteur horaire de marche", compteurs)
         self.assertIn(jour, compteurs)
@@ -308,7 +316,7 @@ class TestParcDemo(CasParc):
         page = self.page
         self.assertEqual(page.input_value("#parc-formulaire [name=repere]"), "PO-02")
         self.assertEqual(page.input_value("#parc-formulaire [name=localisation_id]"), "LOC-0004")
-        self.assertEqual(page.input_value("#parc-formulaire [name=date_mes]"), "2017-09-18")
+        self.assertEqual(page.input_value("#parc-formulaire [name=date_mes]"), date_demo_decalee("2017-09-18").isoformat())
         self.assertEqual(page.input_value("#parc-formulaire [name=criticite]"), "B")
         self.assertEqual(page.input_value("#parc-formulaire [name=heures_fonct_jour]"), "16")
         # L'équipement ne se propose pas comme son propre parent

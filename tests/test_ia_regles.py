@@ -254,7 +254,8 @@ class TestReglesPures(CasNavigateur):
         self.assertEqual(resultat["partiels"], dict(defauts, actif=True, delaiS=1))
         self.assertEqual(resultat["relus"], resultat["partiels"])
         self.assertTrue(resultat["active"])
-        self.assertEqual(resultat["cles"], ["prevo.ia"])
+        # prevo.aideActive : réglage de l'aide à l'écran posé par la base des tests (commun.py), pas par l'IA.
+        self.assertEqual([cle for cle in resultat["cles"] if cle != "prevo.aideActive"], ["prevo.ia"])
         self.assertEqual(resultat["session"], [])
 
     def test_fournisseur_en_ligne_refuse_sans_autorisation(self):
