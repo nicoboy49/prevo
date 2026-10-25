@@ -429,6 +429,7 @@ Les contrôles du lot 1 restent en place avant elle : chemin dont un segment com
 Le serveur parle HTTP/1.1 avec connexions persistantes (`protocol_version = 'HTTP/1.1'` : un
 navigateur réutilise ses connexions au lieu d'en ouvrir une par requête), avec une file d'attente
 d'écoute de 128 connexions (`request_queue_size = 128`) et un fil par connexion.
+**Lot 7 (§22)** : quand les comptes sont exigés, toute route `/api/` répond **401** sans session ni appareil enrôlé et **403** hors du rôle (table `ROLES_PAR_ROUTE`, §22.5) ; routes `/api/connexion`, `/api/session`, `/api/acces/…` (§22.4), `/api/installation/…` (loopback, §22.10) ; fichiers publics `/acces/…` de la porte d'entrée (§22.6).
 Lancement : `py serveur.py [--port 8080] [--donnees CHEMIN] [--sans-navigateur] [--hote NOM]
 [--servir-tests]` ; port suivant si occupé (jusqu'à +20) ; affiche l'adresse locale et les adresses
 réseau ; ouvre le navigateur. `--servir-tests` n'est utile qu'aux tests automatiques.
@@ -3181,6 +3182,227 @@ installer.
   par jour (rechargements) ; « Ignorer » tient au rechargement ; version égale ou plus ancienne, fichier mal formé,
   absent (404) ou serveur injoignable : rien et aucune erreur JavaScript ; `version.json` de la release (champs,
   nouveautés tirées du CHANGELOG, sans Markdown) ; `test_depot.py` : ordre des modules.
+
+## 22. Contrat du lot 7 — accès et installation (CDC validé le 2026-10-26 : D121–D140, CS119–CS137)
+
+Le lot rend Prévo joignable au-delà du PC sans ouvrir de port sur la box, avec des comptes vérifiés par le
+serveur et le https partout au-delà du PC. Ce paragraphe est le contrat des tâches T149 à T181 ; une tâche qui
+s'en écarte le dit dans son commit et le corrige ici. Prévo devient **2.0.0**. Bibliothèque standard seulement ;
+deux binaires tiers livrés dans le zip de release, jamais dans le dépôt : Python embeddable et mkcert.
+
+### 22.1 Portées et axes du serveur (D122)
+
+| Portée (assistant, Paramètres) | `ecoute` | `comptes` | `https` | `mandataire` |
+| --- | --- | --- | --- | --- |
+| « ce PC » (défaut, tests) | `127.0.0.1` | non (profils de 1.2) | non | non |
+| « le Wi-Fi de l'atelier » | toutes les interfaces | oui | certificat local (§22.6) | non |
+| « aussi hors de l'atelier » | toutes les interfaces | oui | certificat local | oui pour 127.0.0.1 (`tailscale serve`) |
+| Intranet derrière un mandataire | `127.0.0.1` | oui | non (porté par le mandataire) | oui |
+
+Règles vérifiées au démarrage par `verifier_regles_portee(config)`, avant toute écoute : écoute hors de
+127.0.0.1 ⇒ `comptes` vrai **et** (`https` ou `mandataire`) ; `mandataire` ⇒ `comptes` ; `comptes` vrai et aucun
+compte responsable actif ⇒ démarrage en portée « ce PC » avec l'assistant (jamais d'écoute réseau). Écart ⇒
+message en français sur la console et dans `journal-serveur.log`, code de sortie **2**. Il n'existe aucune option
+qui contourne ces règles.
+
+### 22.2 Configuration (`prevo.config.json`, D123)
+
+Fichier à côté de `serveur.py` (jamais dans `donnees/`, jamais sauvegardé ni exporté), JSON UTF-8, écrit de façon
+atomique ; priorité : ligne de commande > fichier > défauts. `serveur.py --aide` imprime chaque clé, sa valeur par
+défaut et son texte d'aide (le même que `js/modules/acces-textes.js`).
+
+| Clé | Type, défaut | Rôle |
+| --- | --- | --- |
+| `portee` | `ce-pc` \| `atelier` \| `dehors` ; `ce-pc` | résumé lisible ; fixe les quatre axes |
+| `ecoute` | `127.0.0.1` \| `0.0.0.0` | axe d'écoute |
+| `port_http` | 8080 | porte d'entrée (et application en portée « ce PC ») |
+| `port_https` | 8443 | application en https |
+| `noms` | liste, `[]` | noms acceptés en plus de l'IP, `localhost`, nom du PC (Tailscale, DNS interne) |
+| `certificat`, `cle` | chemins, `""` | PEM ; vide en portée « ce PC » |
+| `certificat_auto` | booléen, vrai | certificat local fabriqué par mkcert (§22.6) |
+| `mandataire` | booléen, faux | confiance à `X-Forwarded-*` venant de 127.0.0.1 (§22.7) |
+| `comptes` | booléen | exigés ou non |
+| `demandeurs_avec_compte` | booléen, faux (vrai en Intranet) | désactive l'enrôlement d'appareils |
+| `session_heures`, `session_longue_jours` | 12, 30 | durées de session |
+| `invitation_heures` | 24 | durée d'une invitation (1 à 168) |
+| `demarrage` | `aucun` \| `systeme` \| `session` | tâche planifiée (§22.9) |
+| `veille_desactivee` | booléen | réglages `powercfg` appliqués |
+| `copie_sauvegardes` | chemin, `""` | copie externe nocturne (§22.11) |
+| `quota_documents_mo` | 2048 | plafond du dossier `documents/` |
+| `ia_url`, `ia_cle`, `ia_en_ligne` | `http://localhost:11434`, `""`, faux | fournisseur d'IA côté serveur (§22.12) |
+| `_aide` | texte | commentaire d'en-tête pour qui ouvre le fichier |
+
+### 22.3 Comptes, sessions, appareils (D124, D125)
+
+Dossier `donnees/acces/`, lu et écrit par le serveur seul (jamais servi par `/api/csv`, jamais restauré par
+`/api/restauration`, copié dans les sauvegardes et l'export ZIP) :
+
+- `comptes.json` : `{ "version": 1, "comptes": [ { "identifiant": "prenom.nom", "prenom", "nom", "role":
+  "responsable"|"technicien"|"demandeur", "technicien_id", "actif": true, "algo": "scrypt-n15-r8-p3"|
+  "pbkdf2-sha256-600000", "sel": base64, "empreinte": base64, "a_changer": bool, "cree_le", "modifie_le",
+  "mot_de_passe_le" } ] }`.
+- `sessions.json` : `{ "<sha256 du jeton>": { "identifiant", "cree_le", "vu_le", "longue": bool, "agent" } }` —
+  seul l'empreinte du jeton est gardée.
+- `appareils.json` : `{ "invitations": [ { "id", "empreinte", "cree_le", "expire_le", "revoquee" } ], "appareils":
+  [ { "id", "empreinte", "libelle", "nom_demandeur", "cree_le", "vu_le", "revoque": bool } ] }`.
+- `journal-acces.csv` (`;`, UTF-8 avec BOM, apostrophe de protection) : `date;qui;adresse;agent;resultat;tailscale`,
+  `resultat` ∈ `connexion`, `echec`, `bloque`, `deconnexion`, `appareil`, `invitation`, `revocation`,
+  `reinitialisation` ; lignes de plus de 12 mois purgées à la première écriture du jour.
+
+Mot de passe : 12 à 256 caractères, aucune règle de composition ; échec : délai `min(2^(n-5), 8)` s dès le 5e échec
+consécutif, blocage 15 min au 10e (par compte), ralentissement de 1 s par adresse IP au-delà de 20 échecs par heure ;
+réponse 401 `{"erreur": "Identifiant ou mot de passe incorrect."}` identique dans tous les cas, 429 pendant le blocage
+avec le temps restant. Cookie `id=<jeton>; Path=/; HttpOnly; SameSite=Lax[; Secure][; Max-Age=…]` ; jeton
+d'appareil : cookie `appareil=<jeton>`, mêmes attributs, 1 an glissant. L'horloge du serveur est injectable
+(`config.horloge`) pour les tests.
+
+Ligne de commande : `serveur.py --reinitialiser IDENTIFIANT` (écrit un mot de passe provisoire de 16 caractères,
+l'affiche une fois, marque `a_changer`, journalise ; refusée si `comptes.json` est absent). `Reinitialiser_mot_de_passe.bat`
+demande l'identifiant et appelle cette commande.
+
+### 22.4 API d'accès (`/api/connexion` et suivantes)
+
+| Méthode et chemin | Qui | Réponse |
+| --- | --- | --- |
+| `GET /api/session` | tous | `{"comptes": bool, "session": null \| {"identifiant", "role", "prenom", "nom", "technicien_id", "a_changer", "appareil": bool}}` |
+| `POST /api/connexion` | tous | corps `{"identifiant", "mot_de_passe", "rester": bool}` → 200 + cookie, 401, 429 |
+| `POST /api/deconnexion` | session | 200, cookie effacé |
+| `POST /api/mot-de-passe` | session | `{"actuel", "nouveau"}` → 200 ; 400 si trop court |
+| `POST /api/enroler` | tous | `{"invitation", "nom"}` → 200 + cookie d'appareil ; 401 invitation inconnue, expirée ou révoquée |
+| `GET/POST /api/acces/comptes`, `/api/acces/comptes/<id>` | responsable | liste, création, modification, réinitialisation, désactivation |
+| `GET/POST /api/acces/invitations`, `/api/acces/appareils/<id>/revoquer`, `/api/acces/appareils/revoquer-tous` | responsable | invitations et appareils |
+| `POST /api/acces/deconnecter-partout` | responsable (ou soi-même) | sessions supprimées |
+| `GET /api/acces/journal` | responsable | CSV du journal |
+
+Toutes les écritures gardent l'en-tête `X-Prevo: 1` (anti-CSRF) en plus de la session.
+
+### 22.5 Rôles par route (D126)
+
+`ROLES_PAR_ROUTE` dans `serveur.py` (et son test case par case) : quand `comptes` est vrai, toute route `/api/`
+exige une session ou un appareil (401), puis le rôle (403). Résumé :
+
+| Route | demandeur (compte ou appareil) | technicien | responsable |
+| --- | --- | --- | --- |
+| `GET /api/ping`, `/api/session` | oui | oui | oui |
+| `GET /api/info`, `/api/versions` | oui | oui | oui |
+| `GET /api/csv/<table>` | `equipements`, `localisations`, `demandes`, `parametres`, `codes_defaillance`, `wiki_pages` (sans les pages Technicien et Intervention, D114) | toutes ; `techniciens` sans `taux_horaire`, `articles` sans `prix` | toutes |
+| `PUT /api/csv/<table>` | refusé | toutes sauf `parametres`, `techniciens`, `fournisseurs` | toutes |
+| `POST /api/csv/<table>/ajout` | `demandes`, `journal` | oui | oui |
+| `GET /api/documents/<nom>` | photos de ses demandes et documents des équipements | oui | oui |
+| `PUT /api/documents/<nom>` | photos de demandes | oui | oui |
+| `POST /api/sauvegarde`, `GET /api/sauvegardes`, `POST /api/restauration` | non | non | oui |
+| `POST /api/ia` | non | oui | oui |
+| `/api/acces/…` | non | non | oui |
+
+Les colonnes retirées le sont dans les octets renvoyés (réécriture du CSV), avec une `X-Version` calculée sur le
+fichier entier pour que les écritures restent possibles ; un `PUT` d'un technicien sur une table dont il ne voit pas
+toutes les colonnes est refusé (403). `App.profil` est déduit de `/api/session` ; l'écran de profil de 1.2 ne sert
+qu'en portée « ce PC » et en modes dossier et démo.
+
+### 22.6 Porte d'entrée et certificat local (D127, CS125, CS126, CS137)
+
+- **Deux écouteurs** hors de la portée « ce PC » : `port_http` (la porte) et `port_https` (l'application).
+- **Porte**, pour un client qui n'est ni 127.0.0.1 ni mandaté : sert seulement `/` et toute route d'application
+  (la page `acces/porte.html`, autonome, charte de Prévo, sans donnée), `/acces/porte.js`, `/acces/porte.css`,
+  `/acces/captures/*`, `/acces/ca.crt` (certificat de l'autorité locale, `application/x-x509-ca-cert`) ; toute
+  autre route, `/api/` comprise, répond par la page de porte (200) sans rien lire. `porte.js` interroge
+  `https://<même hôte>:<port_https>/api/ping` (2 s) : réponse ⇒ redirection vers la même route en https
+  (`location.replace`, la route `#/…` gardée) ; échec ⇒ étapes « Faites confiance au PC atelier » du système
+  reconnu (`navigator.userAgent` : Android, iPhone/iPad, sinon les deux au choix), numérotées, une par écran du
+  téléphone, captures, bouton « Réessayer ».
+- **Adresses données par Prévo** (QR d'accueil, étiquettes, fiche d'accès, guide, `/api/info`) : toujours la porte
+  (`http://<adresse>:<port_http>/`) ; l'adresse https n'est jamais affichée.
+- **Certificat local** : `outils-tiers/mkcert.exe` (ou `mkcert` sur Linux/macOS) dont l'empreinte SHA-256 est
+  comparée à `outils/empreintes-tiers.json` avant toute exécution (écart ⇒ refus) ; `CAROOT` =
+  `donnees/acces/autorite/` ; `mkcert -install` dans l'élévation (§22.9) ; certificat dans
+  `donnees/acces/certificat.pem` et `cle.pem` pour l'IP courante, `<nom>.local`, `<nom>`, `localhost`, 127.0.0.1 et
+  les `noms` ; régénéré au démarrage si l'IP ou les noms ont changé. `rootCA-key.pem` n'est jamais lu ni servi par
+  Prévo.
+- **En-têtes** (§22.13) sur l'application ; HSTS seulement pour un nom de la liste `noms`.
+
+### 22.7 Derrière un mandataire (D129, CS128)
+
+`origine_mandatee(gestionnaire)` : si `mandataire` est vrai et que la connexion vient de 127.0.0.1 ou ::1 avec
+`X-Forwarded-Proto` et `X-Forwarded-Host`, le protocole et l'hôte d'origine valent ceux des en-têtes (cookie
+`Secure`, adresses, QR) et l'hôte doit être dans `noms` ; sinon la requête est un client direct et les en-têtes
+sont ignorés. La porte sert alors l'application en http sur 127.0.0.1. Exemples de configuration dans
+`docs/INSTALLATION.md` (`tailscale serve`, Caddy, nginx, IIS, Cloudflare Tunnel).
+
+### 22.8 Tailscale (D128, CS127)
+
+`detecter_tailscale()` lance `tailscale version` et `tailscale status --json` (chemin standard de chaque système,
+délai 5 s) : absent ⇒ `{"present": false}` ; présent ⇒ nom `Self.DNSName` sans le point final, état connecté,
+expiration de clé (`Self.KeyExpiry`). L'assistant propose alors : ajouter le nom à `noms`, `tailscale serve --bg
+--https=443 http://127.0.0.1:<port_http>`, vérifié par `tailscale serve status --json`, `mandataire` vrai,
+`tailscale set --unattended=true` (Windows, sur clic), et affiche les deux rappels (expiration de clé dans la
+console, veille). L'accueil du responsable signale un Tailscale déconnecté ou une clé qui expire sous 14 jours.
+Aucune installation, aucune requête réseau de Prévo vers Tailscale ; les commandes sont injectables pour les tests
+(`tests/faux_tailscale.py`).
+
+### 22.9 Démarrer avec la machine (D130, CS129)
+
+`produire_scripts_demarrage(config)` écrit, sans les exécuter, à côté de `serveur.py` :
+`Installer_demarrage.ps1` (tâche `Prevo` `/sc onstart /delay 0000:30 /ru System /rl HIGHEST`, action
+`python\pythonw.exe serveur.py --sans-navigateur` dans le dossier de Prévo ; règle `netsh advfirewall` entrante
+`Prevo`, profil privé, `remoteip=localsubnet`, programme `pythonw.exe`, ports `port_http` et `port_https` ;
+`mkcert -install` ; si `veille_desactivee`, `powercfg /change standby-timeout-ac 0`, `hibernate-timeout-ac 0`,
+`monitor-timeout-ac 15`), `Retirer_demarrage.ps1` (l'inverse, et `powercfg` remis aux valeurs lues avant), et le
+repli `onlogon` (tâche de l'utilisateur, sans droits). L'assistant lance `Installer_demarrage.ps1` par
+`Start-Process powershell -Verb RunAs` après avoir affiché son contenu ; refus de l'élévation ⇒ repli proposé.
+Linux : `prevo.service` (utilisateur `prevo`, `Restart=on-failure`, `ProtectSystem=full`, `ProtectHome=yes`,
+`ReadWritePaths=<donnees>`) et les commandes à copier ; macOS : `pro.prevo.serveur.plist` (agent, `RunAtLoad`,
+`KeepAlive`). Sans console, le serveur écrit `donnees/journal-serveur.log` (rotation 5 × 1 Mo) et expose son état
+à `/api/installation/etat` (loopback).
+
+### 22.10 Assistant d'installation (D131, CS130)
+
+Sans `prevo.config.json`, `serveur.py` démarre en portée « ce PC » et ouvre `http://127.0.0.1:<port>/#/installation`.
+Routes `/api/installation/<étape>` servies **seulement** à un client 127.0.0.1 non mandaté (404 sinon), écritures
+avec `X-Prevo` : `etat`, `situation` (`seul` \| `equipe` \| `informaticien`), `portee`, `compte`, `certificat`,
+`tailscale`, `demarrage`, `sauvegardes`, `deplacer` (copie vers `C:\Prevo`, vérification de chaque fichier, puis
+relance depuis la nouvelle place), `terminer` (écrit la configuration, puis le serveur se relance avec elle). Écran
+`installation-ecrans.js` (huit étapes, quatre textes chacune, « Régler autrement »), vue informaticien sur une page ;
+fiche d'accès imprimable. Paramètres › Accès et installation (`parametres-acces.js`) refait chaque étape depuis le PC
+serveur seulement. Migration 1.2 : CSV gardés ; profils mémorisés ignorés quand `comptes` est vrai.
+
+### 22.11 Mode Solo et sauvegardes (D132, D133)
+
+`parametres.csv` gagne `mode_solo` (0/1) et `cloture_une_etape` (0/1, posé à 1 avec `mode_solo`). Mode Solo : menu
+avec « Plus » (Équipe, Planning), accueil « Nouvel OT » en premier, fiche équipement « Créer un OT » en premier,
+technicien du compte pré-rempli. Clôture en une étape : `Ordres.clore(ot, valeurs)` fait la clôture technique puis
+l'administrative dans la même écriture de la table, deux dates égales, deux lignes de journal, entrée dans la file du
+wiki. Sauvegardes : copie externe à la première écriture après 2 h du matin (ou au démarrage), 30 copies ; échec
+noté dans `journal-serveur.log` et rendu par `/api/info` (`copie_externe`) pour l'accueil du responsable ;
+`POST /api/sauvegarde/tester` ; 429 pour une deuxième sauvegarde manuelle dans la minute ; purge au-delà de 60
+manuelles.
+
+### 22.12 Corrections de l'audit (D134, CS134)
+
+E2 `verifier_contenu_csv(table, octets)` avant `enregistrer_csv` et `ajouter_au_csv` (`COLONNES_PAR_TABLE` recopié
+de `js/schema.js`, test de cohérence) ; M1/M3 `POST /api/ia` ne lit que `chemin`, `methode`, `corps` (toute autre
+clé ⇒ 400), adresse et clé lues dans la configuration, `Authorization` posé par le serveur, délai fixé à 120 s ; M2
+fournisseur distant autorisé par `ia_en_ligne` seulement ; F2 `BoundedSemaphore(32)` dans `process_request`, corps
+lu après la session ; F4 `.doc`/`.xls` retirés, `Content-Disposition: attachment` hors images et PDF, nom
+`<préfixe>_<horodatage>_<4 car.>.<ext>` imposé, signature JPEG (`FF D8 FF`) et PNG vérifiée ; I2 `repr` du chemin ;
+I3 `ecrireValeur` pour les colonnes inconnues ; I4 masquage `[téléphone]` et `[courriel]` dans les textes envoyés à
+l'IA ; G3 plage ARCEP ; G5 `.example`.
+
+### 22.13 En-têtes de sécurité (F1)
+
+Sur `index.html`, `GUIDE.html`, la porte et les fichiers de l'application : `Content-Security-Policy: default-src
+'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self';
+frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'` (la porte ajoute à `connect-src`
+l'origine https du même hôte), `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy:
+camera=(self), microphone=(self), geolocation=()`. Les documents gardent `Content-Security-Policy: sandbox`. Le
+script en ligne d'`index.html` passe dans `js/prechargement.js`.
+
+### 22.14 Distribution et version (D131, D137)
+
+`construire_release.py` télécharge `python-3.12.x-embed-amd64.zip` et `mkcert-v1.4.4-windows-amd64.exe`, vérifie
+leurs empreintes (`outils/empreintes-tiers.json`), les place dans `python/` et `outils-tiers/` du zip avec leurs
+licences ; `Lancer_GMAO.bat` cherche `python\python.exe`, puis `py -3` ou `python` ≥ 3.11 ; `lancer.sh` ≥ 3.11. Le
+dépôt ignore `python/` et `outils-tiers/`. Version **2.0.0** partout (`VERSION`, `VERSION_APPLICATION`,
+CHANGELOG, `version.json`) ; la démo web reste sans compte.
 
 ## 23. Aide à l'écran (décision de Nicolas du 2026-10-25, avant le lot 7)
 
