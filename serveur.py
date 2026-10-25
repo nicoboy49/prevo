@@ -213,6 +213,8 @@ def preparer_console():
 
 def afficher(texte):
     """Affiche une ligne tout de suite (flush) : les tests lisent la console en direct."""
+    if JOURNAL_SERVEUR is not None:
+        JOURNAL_SERVEUR.ecrire(texte)
     if sys.stdout is None:          # lancé sans console (pythonw)
         return
     try:
@@ -225,6 +227,213 @@ def afficher(texte):
 # Configuration
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Configuration du serveur : prevo.config.json (lot 7, ARCHITECTURE.md §22.1 et §22.2)
+# ---------------------------------------------------------------------------
+
+NOM_FICHIER_CONFIGURATION = 'prevo.config.json'
+CODE_SORTIE_REGLES = 2          # démarrage refusé : règle de portée non respectée (§22.1)
+TAILLE_JOURNAL_SERVEUR = 1024 * 1024
+NOMBRE_JOURNAUX_SERVEUR = 5
+PORT_HTTPS_PAR_DEFAUT = 8443
+PORTEES = ('ce-pc', 'atelier', 'dehors')
+ECOUTES = ('127.0.0.1', '0.0.0.0')
+
+# (clé, type, défaut, texte d'aide) : la même liste sert à lire le fichier, à --aide et au contrat.
+CLES_CONFIGURATION = [
+    ('portee', 'choix:ce-pc|atelier|dehors', 'ce-pc',
+     "D'où Prévo peut être ouvert : ce PC seulement, le Wi-Fi de l'atelier, ou aussi hors de l'atelier. "
+     "Au-delà de ce PC, mot de passe et https sont obligatoires."),
+    ('ecoute', 'choix:127.0.0.1|0.0.0.0', '127.0.0.1',
+     "Adresse d'écoute : 127.0.0.1 (ce PC seulement) ou 0.0.0.0 (le réseau)."),
+    ('port_http', 'entier', PORT_PAR_DEFAUT,
+     "Port de l'application sur ce PC et de la porte d'entrée sur le réseau. Changer de port rend les étiquettes "
+     "imprimées caduques."),
+    ('port_https', 'entier', PORT_HTTPS_PAR_DEFAUT, "Port de l'application en https sur le réseau."),
+    ('noms', 'liste', [],
+     "Noms par lesquels on appelle ce PC, en plus de son adresse et de son nom Windows (nom Tailscale, nom du "
+     "réseau de l'entreprise). Un nom inconnu est refusé, par sécurité."),
+    ('certificat', 'texte', '', "Certificat https du serveur (fichier PEM), avec sa clé."),
+    ('cle', 'texte', '', "Clé privée du certificat (fichier PEM)."),
+    ('certificat_auto', 'booleen', True,
+     "Certificat fabriqué par Prévo pour l'atelier, à faire reconnaître une fois par appareil."),
+    ('mandataire', 'booleen', False,
+     "Prévo est derrière un mandataire (tailscale serve, Caddy, nginx, IIS) qui porte le https : les en-têtes "
+     "X-Forwarded-Proto et X-Forwarded-Host venus de ce PC sont crus."),
+    ('comptes', 'booleen', False,
+     "Connexion obligatoire : chaque personne a son compte, ou son appareil enrôlé pour les demandeurs."),
+    ('demandeurs_avec_compte', 'booleen', False,
+     "Non : un demandeur donne son nom sur un appareil enrôlé par QR. Oui : chaque demandeur a un mot de passe."),
+    ('session_heures', 'entier', 12,
+     "Au bout de ce temps sans activité, il faut se reconnecter."),
+    ('session_longue_jours', 'entier', 30, "Durée de « rester connecté sur cet appareil »."),
+    ('invitation_heures', 'entier', 24, "Durée de validité d'une invitation d'appareils (1 à 168 heures)."),
+    ('demarrage', 'choix:aucun|systeme|session', 'aucun',
+     "Prévo démarre avec le PC (systeme), à l'ouverture de session (session), ou à la main (aucun)."),
+    ('veille_desactivee', 'booleen', False, "Le PC ne se met plus en veille quand il est sur secteur."),
+    ('copie_sauvegardes', 'texte', '',
+     "Dossier où la sauvegarde du jour est copiée chaque nuit (clé USB, NAS, dossier synchronisé) ; vide : aucune copie."),
+    ('quota_documents_mo', 'entier', 2048, "Place maximale des documents joints, en mégaoctets."),
+    ('ia_url', 'texte', 'http://localhost:11434',
+     "Adresse du service d'IA que tous les postes utilisent. Réglée ici seulement, jamais sur un téléphone."),
+    ('ia_cle', 'texte', '', "Clé du service d'IA, gardée sur ce PC, jamais envoyée aux navigateurs."),
+    ('ia_en_ligne', 'booleen', False,
+     "Autoriser un service d'IA en ligne : les textes envoyés partent chez ce fournisseur."),
+]
+CLES_CONNUES = {cle for cle, _, _, _ in CLES_CONFIGURATION}
+BORNES_ENTIERS = {'port_http': (1, 65535), 'port_https': (1, 65535), 'session_heures': (1, 720),
+                  'session_longue_jours': (1, 365), 'invitation_heures': (1, 168), 'quota_documents_mo': (1, 1048576)}
+
+
+class ErreurConfiguration(Exception):
+    """Configuration illisible ou règle de portée non respectée : le serveur ne démarre pas (code 2)."""
+
+
+def reglages_par_defaut():
+    return {cle: (list(defaut) if isinstance(defaut, list) else defaut) for cle, _, defaut, _ in CLES_CONFIGURATION}
+
+
+def valeur_valide(cle, genre, valeur):
+    """Contrôle une valeur lue dans le fichier ; ErreurConfiguration avec la clé fautive sinon."""
+    if genre == 'booleen':
+        if isinstance(valeur, bool):
+            return valeur
+    elif genre == 'entier':
+        if isinstance(valeur, int) and not isinstance(valeur, bool):
+            minimum, maximum = BORNES_ENTIERS.get(cle, (0, 10 ** 9))
+            if minimum <= valeur <= maximum:
+                return valeur
+    elif genre == 'texte':
+        if isinstance(valeur, str):
+            return valeur.strip()
+    elif genre == 'liste':
+        if isinstance(valeur, list) and all(isinstance(element, str) for element in valeur):
+            return [element.lower().strip() for element in valeur if element.strip()]
+    elif genre.startswith('choix:'):
+        if valeur in genre[len('choix:'):].split('|'):
+            return valeur
+    raise ErreurConfiguration('Configuration : la valeur de « %s » est invalide (%r).' % (cle, valeur))
+
+
+def lire_configuration(chemin):
+    """Réglages du fichier fusionnés aux défauts ; fichier absent : défauts. Clé inconnue : ignorée et signalée."""
+    reglages = reglages_par_defaut()
+    reglages['_fichier'] = chemin
+    reglages['_present'] = False
+    reglages['_inconnues'] = []
+    if not chemin or not os.path.isfile(chemin):
+        return reglages
+    try:
+        with open(chemin, 'rb') as fichier:
+            contenu = json.loads(fichier.read().decode('utf-8-sig'))
+    except (OSError, UnicodeDecodeError, ValueError) as erreur:
+        raise ErreurConfiguration('Configuration illisible (%s) : %s. Corrigez le fichier ou supprimez-le pour '
+                                  'repartir des réglages par défaut.' % (chemin, erreur))
+    if not isinstance(contenu, dict):
+        raise ErreurConfiguration('Configuration illisible (%s) : un objet JSON est attendu.' % chemin)
+    genres = {cle: genre for cle, genre, _, _ in CLES_CONFIGURATION}
+    for cle, valeur in contenu.items():
+        if cle.startswith('_'):
+            continue
+        if cle not in CLES_CONNUES:
+            reglages['_inconnues'].append(cle)
+            continue
+        reglages[cle] = valeur_valide(cle, genres[cle], valeur)
+    reglages['_present'] = True
+    return reglages
+
+
+def ecrire_configuration(chemin, reglages):
+    """Écrit le fichier de configuration (atomique), avec un commentaire d'en-tête « _aide »."""
+    contenu = {'_aide': 'Configuration de Prévo. Chaque clé est décrite par « serveur.py --aide ». '
+                        'Le CDC et docs/ARCHITECTURE.md §22 en donnent les règles.'}
+    for cle, _, _, _ in CLES_CONFIGURATION:
+        contenu[cle] = reglages.get(cle)
+    ecrire_atomique(chemin, (json.dumps(contenu, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+
+
+def texte_aide_configuration():
+    lignes = ['Configuration de %s (fichier %s à côté de serveur.py ; la ligne de commande passe avant) :'
+              % (NOM_APPLICATION, NOM_FICHIER_CONFIGURATION), '']
+    for cle, genre, defaut, aide in CLES_CONFIGURATION:
+        lignes.append('  %s  (%s ; défaut : %s)' % (cle, genre.replace('choix:', 'un parmi ').replace('|', ', '),
+                                                    json.dumps(defaut, ensure_ascii=False)))
+        lignes.append('      ' + aide)
+    return '\n'.join(lignes)
+
+
+def il_existe_un_responsable(config):
+    """Vrai si un compte responsable actif existe (comptes du lot 7 : T150) ; faux tant qu'il n'y en a aucun."""
+    fonction = globals().get('responsable_actif_existe')
+    return bool(fonction and fonction(config))
+
+
+def verifier_regles_portee(reglages, responsable_existe):
+    """Règles de §22.1 : rend la liste des avertissements ; ErreurConfiguration (code 2) si une règle est violée.
+
+    Écoute hors de ce PC ⇒ comptes exigés et (https ou mandataire) ; mandataire ⇒ comptes exigés ; comptes exigés
+    sans aucun compte responsable ⇒ repli sur ce PC (l'assistant crée le compte), jamais d'écoute réseau.
+    """
+    avertissements = []
+    https = bool(reglages.get('certificat') and reglages.get('cle')) or bool(reglages.get('_https_auto'))
+    if bool(reglages.get('certificat')) != bool(reglages.get('cle')):
+        raise ErreurConfiguration('Certificat et clé vont ensemble : donnez les deux fichiers PEM, ou aucun.')
+    if reglages['ecoute'] != '127.0.0.1':
+        if not reglages['comptes']:
+            raise ErreurConfiguration(
+                'Prévo refuse d\'écouter sur le réseau sans mot de passe. Activez les comptes (« comptes »: true) '
+                'ou revenez à « ecoute »: "127.0.0.1" ; l\'assistant d\'installation fait les deux (ouvrez Prévo sur ce PC).')
+        if not https and not reglages['mandataire']:
+            raise ErreurConfiguration(
+                'Prévo refuse d\'écouter sur le réseau sans https. Donnez un certificat (« certificat » et « cle »), '
+                'laissez Prévo fabriquer le sien (« certificat_auto ») ou placez-le derrière un mandataire ; '
+                'l\'assistant d\'installation le fait pour vous.')
+    if reglages['mandataire'] and not reglages['comptes']:
+        raise ErreurConfiguration(
+            'Derrière un mandataire, les comptes sont obligatoires (« comptes »: true) : le mandataire rend Prévo '
+            'joignable au-delà de ce PC.')
+    if reglages['comptes'] and not responsable_existe and reglages['ecoute'] != '127.0.0.1':
+        reglages['ecoute'] = '127.0.0.1'
+        avertissements.append('Aucun compte responsable : Prévo n\'écoute que sur ce PC tant que l\'installation '
+                              'n\'est pas terminée.')
+    for cle in reglages.get('_inconnues', []):
+        avertissements.append('Configuration : clé inconnue « %s » ignorée.' % cle)
+    return avertissements
+
+
+class JournalServeur:
+    """Journal du serveur sans console (pythonw) : donnees/journal-serveur.log, 5 fichiers de 1 Mo au plus."""
+
+    def __init__(self, chemin):
+        self.chemin = chemin
+        self.verrou = threading.Lock()
+
+    def ecrire(self, texte):
+        with self.verrou:
+            try:
+                if os.path.exists(self.chemin) and os.path.getsize(self.chemin) >= TAILLE_JOURNAL_SERVEUR:
+                    self.tourner()
+                horodatage = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                with open(self.chemin, 'a', encoding='utf-8', newline='\n') as fichier:
+                    fichier.write('%s %s\n' % (horodatage, texte))
+            except OSError:
+                pass
+
+    def tourner(self):
+        for numero in range(NOMBRE_JOURNAUX_SERVEUR - 1, 0, -1):
+            ancien = '%s.%d' % (self.chemin, numero)
+            suivant = '%s.%d' % (self.chemin, numero + 1)
+            if os.path.exists(ancien):
+                if numero + 1 >= NOMBRE_JOURNAUX_SERVEUR:
+                    os.remove(ancien)
+                else:
+                    os.replace(ancien, suivant)
+        os.replace(self.chemin, self.chemin + '.1')
+
+
+JOURNAL_SERVEUR = None          # JournalServeur quand le serveur tourne sans console ou avec --journal
+
+
 class Configuration:
     """Réglages du serveur, calculés une fois au démarrage."""
 
@@ -236,6 +445,9 @@ class Configuration:
         self.hotes_supplementaires = [hote.lower().strip() for hote in hotes_supplementaires]
         self.servir_tests = servir_tests    # --servir-tests : tests/fixtures/ servi en plus
         self.port = None            # renseigné quand le port est trouvé
+        # Lot 7 (§22.1) : axes du serveur, posés par main() d'après la configuration et la ligne de commande.
+        self.reglages = reglages_par_defaut()
+        self.ecoute = '127.0.0.1'
         self.contexte_ssl = None    # lot 4 : https en option (--certificat, --cle)
         # Dossiers jamais servis en statique : le dossier de données choisi et donnees/
         # à côté de serveur.py (même si --donnees pointe ailleurs).
@@ -1333,20 +1545,37 @@ class ServeurPrevo(http.server.ThreadingHTTPServer):
         self.server_port = self.server_address[1]
 
 
+def port_pris_ailleurs(port):
+    """Vrai si un autre programme écoute déjà sur ce port, toutes interfaces : sous Windows, écouter sur 127.0.0.1
+    réussit même dans ce cas (adresse plus précise), et Prévo partagerait le port sans le dire (lot 7, §22.1)."""
+    sonde = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if os.name == 'nt' and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            sonde.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        sonde.bind(('0.0.0.0', port))
+        return False
+    except OSError:
+        return True
+    finally:
+        sonde.close()
+
+
 def demarrer_serveur(port_demande, config):
     """Ouvre le premier port libre à partir de port_demande (jusqu'à +20)."""
     derniere_erreur = None
     port_maximum = min(port_demande + NOMBRE_PORTS_SUPPLEMENTAIRES, 65535)
     for port in range(port_demande, port_maximum + 1):
         try:
-            return ServeurPrevo(('0.0.0.0', port), config), port
+            if config.ecoute != '0.0.0.0' and port_pris_ailleurs(port):
+                raise OSError('port %d déjà utilisé par un autre programme' % port)
+            return ServeurPrevo((config.ecoute, port), config), port
         except OSError as erreur:
             derniere_erreur = erreur
     raise SystemExit('Impossible d\'ouvrir un port entre %d et %d (%s).'
                      % (port_demande, port_maximum, derniere_erreur))
 
 
-def afficher_accueil(config, port_demande):
+def afficher_accueil(config, port_demande, avertissements=()):
     afficher('%s %s - serveur local de GMAO' % (NOM_APPLICATION, VERSION_APPLICATION))
     if config.port != port_demande:
         afficher('  Le port %d est occupé : port %d utilisé.' % (port_demande, config.port))
@@ -1358,15 +1587,20 @@ def afficher_accueil(config, port_demande):
     else:
         afficher('  Sur le réseau    : aucune adresse trouvée (PC non connecté ?)')
     afficher('  Données          : %s' % config.dossier_donnees)
+    if config.ecoute == '127.0.0.1':
+        afficher('  Écoute           : ce PC seulement (127.0.0.1) ; les autres appareils ne joignent pas Prévo.')
+    else:
+        afficher('  Écoute           : le réseau (%s), comptes exigés.' % config.ecoute)
+    for avertissement in avertissements:
+        afficher('  ' + avertissement)
     afficher('  Ctrl+C pour arrêter.')
-    afficher('  Attention : usage réseau local uniquement, aucune authentification.')
 
 
 def lire_arguments(arguments=None):
     analyseur = argparse.ArgumentParser(
         description='Serveur local de la GMAO Prévo. Sert index.html, favicon.svg, '
                     'GUIDE.html, css/ et js/ ; tout autre fichier répond 404.')
-    analyseur.add_argument('--port', type=int, default=PORT_PAR_DEFAUT,
+    analyseur.add_argument('--port', type=int, default=None,
                            help='port d\'écoute (défaut 8080 ; le suivant si occupé)')
     analyseur.add_argument('--donnees', default=os.path.join(DOSSIER_APPLICATION, 'donnees'),
                            help='dossier des données (défaut : donnees/ à côté de serveur.py)')
@@ -1378,11 +1612,20 @@ def lire_arguments(arguments=None):
                            help='https en option : certificat du serveur (PEM), avec --cle')
     analyseur.add_argument('--cle', metavar='FICHIER',
                            help='https en option : clé privée du certificat (PEM), avec --certificat')
+    analyseur.add_argument('--ecoute', choices=ECOUTES,
+                           help='adresse d\'écoute : 127.0.0.1 (défaut, ce PC seulement) ou 0.0.0.0 (le réseau, '
+                                'comptes et https exigés)')
+    analyseur.add_argument('--config', metavar='FICHIER',
+                           help='fichier de configuration (défaut : %s à côté de serveur.py)' % NOM_FICHIER_CONFIGURATION)
+    analyseur.add_argument('--aide', action='store_true',
+                           help='afficher chaque clé de la configuration avec son aide, puis quitter')
+    analyseur.add_argument('--journal', action='store_true',
+                           help='écrire aussi la console dans donnees/journal-serveur.log (automatique sans console)')
     analyseur.add_argument('--servir-tests', action='store_true',
                            help='servir aussi tests/fixtures/ (pages des tests automatiques ; '
                                 'inutile en usage normal)')
     options = analyseur.parse_args(arguments)
-    if not 1 <= options.port <= 65535:
+    if options.port is not None and not 1 <= options.port <= 65535:
         analyseur.error('le port doit être compris entre 1 et 65535')
     if bool(options.certificat) != bool(options.cle):
         analyseur.error('--certificat et --cle vont ensemble : donnez les deux fichiers PEM '
@@ -1390,15 +1633,44 @@ def lire_arguments(arguments=None):
     return options
 
 
+def reglages_du_lancement(options):
+    """Réglages effectifs : défauts < fichier de configuration < ligne de commande (§22.2)."""
+    chemin = options.config or os.path.join(DOSSIER_APPLICATION, NOM_FICHIER_CONFIGURATION)
+    reglages = lire_configuration(chemin)
+    if options.port is not None:
+        reglages['port_http'] = options.port
+    if options.ecoute:
+        reglages['ecoute'] = options.ecoute
+    if options.hote:
+        reglages['noms'] = reglages['noms'] + [hote.lower().strip() for hote in options.hote]
+    if options.certificat:
+        reglages['certificat'], reglages['cle'] = options.certificat, options.cle
+    return reglages
+
+
 def main(arguments=None):
+    global JOURNAL_SERVEUR
     preparer_console()
     options = lire_arguments(arguments)
-    config = Configuration(options.donnees, options.hote, options.servir_tests)
-    if options.certificat:
-        config.contexte_ssl = creer_contexte_ssl(options.certificat, options.cle)
-    creer_dossiers(config)
-    serveur, config.port = demarrer_serveur(options.port, config)
-    afficher_accueil(config, options.port)
+    if options.aide:
+        afficher(texte_aide_configuration())
+        return
+    try:
+        reglages = reglages_du_lancement(options)
+        config = Configuration(options.donnees, reglages['noms'], options.servir_tests)
+        config.reglages = reglages
+        creer_dossiers(config)
+        if options.journal or sys.stdout is None:
+            JOURNAL_SERVEUR = JournalServeur(os.path.join(config.dossier_donnees, 'journal-serveur.log'))
+        avertissements = verifier_regles_portee(reglages, il_existe_un_responsable(config))
+    except ErreurConfiguration as erreur:
+        afficher('Démarrage refusé. %s' % erreur)
+        sys.exit(CODE_SORTIE_REGLES)
+    config.ecoute = reglages['ecoute']
+    if reglages['certificat']:
+        config.contexte_ssl = creer_contexte_ssl(reglages['certificat'], reglages['cle'])
+    serveur, config.port = demarrer_serveur(reglages['port_http'], config)
+    afficher_accueil(config, reglages['port_http'], avertissements)
     if not options.sans_navigateur:
         webbrowser.open(config.adresse_locale())
     try:

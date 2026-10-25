@@ -167,8 +167,11 @@ class ServeurPrevo:
         environnement = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
         # --servir-tests : les pages de tests/fixtures/ (ex. page-stockage-serveur.html) sont
         # servies par serveur.py, qui sinon ne sert que l'application (liste blanche, §14.7).
+        # --config : un fichier absent de la copie temporaire, pour que les réglages par défaut s'appliquent
+        # (portée « ce PC ») quel que soit le prevo.config.json d'une installation dans le dossier du dépôt.
         commande = [sys.executable, str(script), "--sans-navigateur", "--servir-tests",
-                    "--port", str(self.port), "--donnees", str(self.dossier)] + self.arguments
+                    "--port", str(self.port), "--donnees", str(self.dossier),
+                    "--config", str(self._racine_temporaire / "prevo.config.json")] + self.arguments
         self._processus = subprocess.Popen(
             commande, cwd=str(RACINE), env=environnement,
             stdin=subprocess.DEVNULL, stdout=self._fichier_journal, stderr=subprocess.STDOUT)

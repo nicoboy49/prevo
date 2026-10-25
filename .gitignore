@@ -5,6 +5,8 @@ donnees/*
 donnees/sauvegardes/
 donnees/documents/
 verrou.txt
+# --- Configuration d'une installation (lot 7) : propre à chaque poste, jamais dans le dépôt
+prevo.config.json
 
 # --- Fichiers de travail, hors dépôt
 .chantier/

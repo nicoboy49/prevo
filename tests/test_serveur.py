@@ -95,6 +95,9 @@ class ServeurLance:
                     '--port', str(self.port_demande)] + self.options
         if self.dossier_donnees:
             commande += ['--donnees', self.dossier_donnees]
+        if '--config' not in self.options:
+            # Lot 7 : réglages par défaut, quel que soit le prevo.config.json d'une installation à côté du script.
+            commande += ['--config', os.path.join(tempfile.gettempdir(), 'prevo-tests-sans-configuration.json')]
         environnement = dict(os.environ, PYTHONIOENCODING='utf-8')
         self.processus = subprocess.Popen(
             commande, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -723,7 +726,8 @@ class TestApiServeur(CasAvecServeur):
         self.assertIn('http://localhost:%d/' % self.serveur.port, console)
         self.assertIn(self.donnees, console)
         self.assertIn('Ctrl+C', console)
-        self.assertIn('aucune authentification', console)
+        # Lot 7 (§22.1) : la console dit où le serveur écoute ; sans configuration, ce PC seulement.
+        self.assertIn('ce PC seulement (127.0.0.1)', console)
 
 
 # ---------------------------------------------------------------------------
