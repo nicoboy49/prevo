@@ -69,6 +69,26 @@ def lire_tables_du_serveur():
 TABLES = lire_tables_du_serveur()
 
 
+def lire_colonnes_du_serveur():
+    """Le dictionnaire COLONNES_PAR_TABLE de serveur.py, lu sans importer le module."""
+    with open(SCRIPT_SERVEUR, encoding='utf-8') as fichier:
+        arbre = ast.parse(fichier.read())
+    for noeud in arbre.body:
+        if isinstance(noeud, ast.Assign) and getattr(noeud.targets[0], 'id', '') == 'COLONNES_PAR_TABLE':
+            return ast.literal_eval(noeud.value)
+    raise AssertionError('COLONNES_PAR_TABLE introuvable dans serveur.py')
+
+
+COLONNES_PAR_TABLE = lire_colonnes_du_serveur()
+
+
+def entete(table, *en_plus):
+    """Ligne d'en-tête du schéma de la table (octets, sans fin de ligne), suivie des colonnes en plus.
+
+    Le serveur refuse un CSV dont l'en-tête ne commence pas par les colonnes du schéma (audit E2)."""
+    return ';'.join(list(COLONNES_PAR_TABLE[table]) + list(en_plus)).encode('utf-8')
+
+
 class Reponse:
     def __init__(self, statut, entetes, corps):
         self.statut = statut
@@ -352,7 +372,7 @@ class TestApiServeur(CasAvecServeur):
         self.assertEqual(self.requete('GET', '/api/csv/achats').statut, 404)
 
     def test_csv_put_puis_get(self):
-        contenu = BOM + 'id;nom;prenom\r\nTEC-0001;Dupré;Élodie\r\n'.encode('utf-8')
+        contenu = BOM + entete('techniciens') + '\r\nTEC-0001;Dupré;Élodie\r\n'.encode('utf-8')
         reponse = self.mettre_csv('techniciens', contenu)
         self.assertEqual(reponse.statut, 200)
         version = reponse.json()['version']
@@ -370,16 +390,16 @@ class TestApiServeur(CasAvecServeur):
         self.assertEqual(reponse.json()['version'], empreinte(suite))
 
     def test_csv_put_aucune_sur_fichier_existant_conflit(self):
-        contenu = BOM + b'id;nom\r\n'
+        contenu = BOM + entete('fournisseurs') + b'\r\n'
         self.assertEqual(self.mettre_csv('fournisseurs', contenu).statut, 200)
-        reponse = self.mettre_csv('fournisseurs', BOM + b'autre\r\n', 'aucune')
+        reponse = self.mettre_csv('fournisseurs', BOM + entete('fournisseurs') + b'\r\nFOU-0001\r\n', 'aucune')
         self.assertEqual(reponse.statut, 409)
         self.assertEqual(reponse.json()['version_actuelle'], empreinte(contenu))
         self.assertIn('erreur', reponse.json())
         self.assertEqual(self.lire_fichier(self.chemin_donnee('fournisseurs.csv')), contenu)
 
     def test_csv_put_version_perimee_conflit(self):
-        premier = BOM + b'id;libelle\r\nCPT-0001;Heures\r\n'
+        premier = BOM + entete('compteurs') + b'\r\nCPT-0001;Heures\r\n'
         version_1 = self.mettre_csv('compteurs', premier).json()['version']
         second = premier + b'CPT-0002;Coups\r\n'
         self.assertEqual(self.mettre_csv('compteurs', second, version_1).statut, 200)
@@ -390,12 +410,12 @@ class TestApiServeur(CasAvecServeur):
         self.assertEqual(self.lire_fichier(self.chemin_donnee('compteurs.csv')), second)
 
     def test_csv_put_version_sur_fichier_absent_conflit(self):
-        reponse = self.mettre_csv('releves', BOM + b'id\r\n', '0123456789abcdef')
+        reponse = self.mettre_csv('releves', BOM + entete('releves') + b'\r\n', '0123456789abcdef')
         self.assertEqual(reponse.statut, 409)
         self.assertIsNone(reponse.json()['version_actuelle'])
 
     def test_csv_put_sans_version_attendue_400(self):
-        reponse = self.requete('PUT', '/api/csv/gammes', BOM + b'id\r\n')
+        reponse = self.requete('PUT', '/api/csv/gammes', BOM + entete('gammes') + b'\r\n')
         self.assertEqual(reponse.statut, 400)
         self.assertFalse(os.path.exists(self.chemin_donnee('gammes.csv')))
 
@@ -409,7 +429,7 @@ class TestApiServeur(CasAvecServeur):
     # --- CSV : ajout (journal) ------------------------------------------
 
     def test_ajout_creation_avec_bom(self):
-        corps = b'id;action\r\nJ-1;creation\r\n'
+        corps = entete('journal') + b'\r\nJ-1;creation\r\n'
         reponse = self.requete('POST', '/api/csv/journal/ajout', corps)
         self.assertEqual(reponse.statut, 200)
         self.assertEqual(self.lire_fichier(self.chemin_donnee('journal.csv')), BOM + corps)
@@ -417,27 +437,30 @@ class TestApiServeur(CasAvecServeur):
 
     def test_ajout_ajoute_les_lignes(self):
         # Fichier existant SANS fin de ligne finale : le serveur doit en ajouter une.
-        existant = BOM + 'id;libelle\r\nHAB-0001;Électrique'.encode('utf-8')
+        existant = BOM + entete('habilitations') + '\r\nHAB-0001;Électrique'.encode('utf-8')
         self.ecrire_fichier(self.chemin_donnee('habilitations.csv'), existant)
         reponse = self.requete('POST', '/api/csv/habilitations/ajout',
-                               b'id;libelle\r\nHAB-0002;H0V\r\nHAB-0003;BR\r\n')
+                               entete('habilitations') + b'\r\nHAB-0002;H0V\r\nHAB-0003;BR\r\n')
         self.assertEqual(reponse.statut, 200)
         attendu = existant + b'\r\nHAB-0002;H0V\r\nHAB-0003;BR\r\n'
         self.assertEqual(self.lire_fichier(self.chemin_donnee('habilitations.csv')), attendu)
         self.assertEqual(reponse.json()['version'], empreinte(attendu))
 
     def test_ajout_entete_different_conflit(self):
-        existant = BOM + b'id;libelle\r\nA;B\r\n'
+        # Fichier existant : en-tête du schéma plus une colonne ajoutée dans Excel ;
+        # corps : en-tête du schéma seul.
+        existant = BOM + entete('ot_temps', 'autre') + b'\r\nA;B\r\n'
         self.ecrire_fichier(self.chemin_donnee('ot_temps.csv'), existant)
-        reponse = self.requete('POST', '/api/csv/ot_temps/ajout', b'id;autre\r\nC;D\r\n')
+        reponse = self.requete('POST', '/api/csv/ot_temps/ajout', entete('ot_temps') + b'\r\nC;D\r\n')
         self.assertEqual(reponse.statut, 409)
         self.assertEqual(reponse.json()['version_actuelle'], empreinte(existant))
         self.assertEqual(self.lire_fichier(self.chemin_donnee('ot_temps.csv')), existant)
 
     def test_ajout_fichier_windows1252_conflit(self):
-        existant = 'id;libelle\r\nX;Réparé\r\n'.encode('cp1252')     # réenregistré par Excel
+        # Réenregistré par Excel en Windows-1252 ; le corps envoyé, lui, est en UTF-8 correct.
+        existant = (entete('ot_pieces').decode('utf-8') + '\r\nX;Réparé\r\n').encode('cp1252')
         self.ecrire_fichier(self.chemin_donnee('ot_pieces.csv'), existant)
-        reponse = self.requete('POST', '/api/csv/ot_pieces/ajout', b'id;libelle\r\nY;Z\r\n')
+        reponse = self.requete('POST', '/api/csv/ot_pieces/ajout', entete('ot_pieces') + b'\r\nY;Z\r\n')
         self.assertEqual(reponse.statut, 409)
         self.assertEqual(self.lire_fichier(self.chemin_donnee('ot_pieces.csv')), existant)
 
@@ -542,7 +565,7 @@ class TestApiServeur(CasAvecServeur):
         self.assertEqual(self.requete('POST', '/api/sauvegarde').statut, 411)
 
     def test_sans_x_prevo_403(self):
-        reponse = self.requete('PUT', '/api/csv/achats', b'id\r\n',
+        reponse = self.requete('PUT', '/api/csv/achats', entete('achats') + b'\r\n',
                                {'X-Version-Attendue': 'aucune'}, avec_prevo=False)
         self.assertEqual(reponse.statut, 403)
         reponse = self.requete('POST', '/api/sauvegarde', b'', {'X-Prevo': '0'}, avec_prevo=False)
@@ -556,7 +579,7 @@ class TestApiServeur(CasAvecServeur):
                      '%s.attacker.example' % nom_pc, '%s.attacker.example:%d' % (nom_pc, self.serveur.port)):
             with self.subTest(hote=hote):
                 self.assertEqual(self.requete('GET', '/api/ping', hote=hote).statut, 403)
-        reponse = self.requete('PUT', '/api/csv/achats', b'id\r\n',
+        reponse = self.requete('PUT', '/api/csv/achats', entete('achats') + b'\r\n',
                                {'X-Version-Attendue': 'aucune'}, hote='evil.example')
         self.assertEqual(reponse.statut, 403)
         self.assertFalse(os.path.exists(self.chemin_donnee('achats.csv')))
@@ -581,20 +604,20 @@ class TestApiServeur(CasAvecServeur):
         self.assertEqual(self.requete('GET', '/api/documents/rep.pdf').statut, 404)
 
     def test_aucun_fichier_temporaire_apres_ecriture(self):
-        version = self.mettre_csv('articles', BOM + b'id\r\n').json()['version']
+        version = self.mettre_csv('articles', BOM + entete('articles') + b'\r\n').json()['version']
         for numero in range(5):
-            contenu = BOM + b'id\r\nART-000%d\r\n' % numero
+            contenu = BOM + entete('articles') + b'\r\nART-000%d\r\n' % numero
             version = self.mettre_csv('articles', contenu, version).json()['version']
-        self.requete('POST', '/api/csv/mouvements_stock/ajout', b'id\r\nMVT-1\r\n')
-        self.requete('POST', '/api/csv/mouvements_stock/ajout', b'id\r\nMVT-2\r\n')
+        self.requete('POST', '/api/csv/mouvements_stock/ajout', entete('mouvements_stock') + b'\r\nMVT-1\r\n')
+        self.requete('POST', '/api/csv/mouvements_stock/ajout', entete('mouvements_stock') + b'\r\nMVT-2\r\n')
         self.requete('PUT', '/api/documents/temp-test.png', b'png')
         self.assertEqual(self.fichiers_temporaires_restants(), [])
 
     # --- Sauvegardes ----------------------------------------------------------
 
     def test_sauvegarde_manuelle_liste_et_restauration(self):
-        etat_a = BOM + b'id;nom\r\nFOU-A;Avant\r\n'
-        etat_b = BOM + b'id;nom\r\nFOU-B;Apres\r\n'
+        etat_a = BOM + entete('codes_defaillance') + b'\r\nFOU-A;Avant\r\n'
+        etat_b = BOM + entete('codes_defaillance') + b'\r\nFOU-B;Apres\r\n'
         chemin = self.chemin_donnee('codes_defaillance.csv')
         version = self.mettre_csv('codes_defaillance', etat_a).json()['version']
         # Sauvegarde manuelle.
@@ -736,7 +759,7 @@ class TestApiServeur(CasAvecServeur):
 
 class TestSauvegardeQuotidienne(CasAvecServeur):
 
-    ETAT_AVANT = BOM + b'id;nom\r\nTEC-0001;Avant\r\n'
+    ETAT_AVANT = BOM + entete('techniciens') + b'\r\nTEC-0001;Avant\r\n'
 
     def preparer_donnees(cls, dossier_donnees):
         os.makedirs(dossier_donnees)
@@ -750,7 +773,7 @@ class TestSauvegardeQuotidienne(CasAvecServeur):
         self.requete('GET', '/api/versions')
         self.assertFalse(os.path.exists(dossier_du_jour))     # une lecture ne sauvegarde pas
         version = empreinte(self.ETAT_AVANT)
-        etat_apres = BOM + b'id;nom\r\nTEC-0001;Apres\r\n'
+        etat_apres = BOM + entete('techniciens') + b'\r\nTEC-0001;Apres\r\n'
         self.assertEqual(self.mettre_csv('techniciens', etat_apres, version).statut, 200)
         self.assertEqual(os.listdir(dossier_du_jour), ['techniciens.csv'])
         self.assertEqual(self.lire_fichier(os.path.join(dossier_du_jour, 'techniciens.csv')),
@@ -825,22 +848,22 @@ class TestFichierVerrouille(CasAvecServeur):
     def preparer_donnees(cls, dossier_donnees):
         os.makedirs(dossier_donnees)
         with open(os.path.join(dossier_donnees, 'achats.csv'), 'wb') as fichier:
-            fichier.write(BOM + b'id\r\n')
+            fichier.write(BOM + entete('achats') + b'\r\n')
 
     def test_fichier_ouvert_ailleurs_423(self):
         chemin = self.chemin_donnee('achats.csv')
-        version = empreinte(BOM + b'id\r\n')
+        version = empreinte(BOM + entete('achats') + b'\r\n')
         with open(chemin, 'r+b'):              # comme Excel : le fichier reste ouvert
             debut = time.time()
-            reponse = self.mettre_csv('achats', BOM + b'id\r\nACH-0001\r\n', version)
+            reponse = self.mettre_csv('achats', BOM + entete('achats') + b'\r\nACH-0001\r\n', version)
             duree = time.time() - debut
         self.assertEqual(reponse.statut, 423)
         self.assertIn('Excel', reponse.json()['erreur'])
         self.assertGreaterEqual(duree, 0.2)    # 3 essais espacés de 100 ms
-        self.assertEqual(self.lire_fichier(chemin), BOM + b'id\r\n')
+        self.assertEqual(self.lire_fichier(chemin), BOM + entete('achats') + b'\r\n')
         self.assertEqual(self.fichiers_temporaires_restants(), [])
         # Fichier fermé : l'écriture passe.
-        reponse = self.mettre_csv('achats', BOM + b'id\r\nACH-0001\r\n', version)
+        reponse = self.mettre_csv('achats', BOM + entete('achats') + b'\r\nACH-0001\r\n', version)
         self.assertEqual(reponse.statut, 200)
 
     def test_restauration_interrompue_donne_la_copie_de_securite(self):
@@ -991,7 +1014,7 @@ class TestCopieApplication(unittest.TestCase):
         donnees = os.path.join(self.dossier_application, 'donnees')
         self.assertTrue(os.path.isdir(os.path.join(donnees, 'documents')))
         self.assertTrue(os.path.isdir(os.path.join(donnees, 'sauvegardes')))
-        reponse = self.serveur.requete('PUT', '/api/csv/equipements', BOM + b'id\r\n',
+        reponse = self.serveur.requete('PUT', '/api/csv/equipements', BOM + entete('equipements') + b'\r\n',
                                        {'X-Version-Attendue': 'aucune'})
         self.assertEqual(reponse.statut, 200)
         self.assertTrue(os.path.isfile(os.path.join(donnees, 'equipements.csv')))

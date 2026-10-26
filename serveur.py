@@ -114,6 +114,67 @@ TABLES = (
     'wiki_journal',
 )
 
+# Colonnes de chaque table, dans l'ordre où Prévo les écrit (recopie de js/schema.js, version 3 ; cohérence
+# vérifiée par tests/test_audit_csv.py). Le serveur exige qu'un CSV reçu commence par ces colonnes (audit E2) ;
+# les colonnes ajoutées à la main dans Excel restent permises après elles (lecture tolérante, §3.3).
+COLONNES_PAR_TABLE = {
+    'localisations': ('id', 'libelle', 'parent_id', 'type'),
+    'equipements': (
+        'id', 'repere', 'designation', 'localisation_id', 'parent_id', 'marque', 'modele', 'num_serie', 'date_mes',
+        'criticite', 'statut', 'heures_fonct_jour', 'habilitation_requise', 'consignation', 'document', 'actif',
+        'valeur_remplacement',
+    ),
+    'demandes': (
+        'id', 'date_heure', 'demandeur', 'equipement_id', 'symptome', 'impact', 'description', 'photo', 'statut',
+        'motif_decision', 'date_decision', 'ot_id', 'symptome_code', 'ot_origine_id',
+    ),
+    'ordres_travail': (
+        'id', 'origine', 'di_id', 'gamme_id', 'equipement_id', 'type', 'priorite', 'statut', 'motif_attente',
+        'titre', 'travail_a_faire', 'consignes', 'date_creation', 'date_prevue', 'technicien_id', 'temps_prevu_h',
+        'date_debut', 'date_fin', 'arret_production', 'duree_arret_h', 'symptome_code', 'cause_code', 'remede_code',
+        'compte_rendu', 'remise_service', 'cout_soustraitance', 'date_cloture_tech', 'date_cloture_admin',
+        'motif_annulation', 'ot_lie_id', 'anomalie_constatee', 'astuce',
+    ),
+    'ot_operations': ('id', 'ot_id', 'ordre', 'operation', 'valeur_attendue', 'fait', 'valeur_mesuree'),
+    'ot_pieces': ('id', 'ot_id', 'article_id', 'quantite_prevue'),
+    'ot_temps': ('id', 'ot_id', 'technicien_id', 'date', 'heures'),
+    'gammes': (
+        'id', 'equipement_id', 'libelle', 'declencheur', 'periodicite_jours', 'compteur_id', 'periodicite_unites',
+        'seuil', 'avance_jours', 'derniere_realisation', 'releve_derniere_realisation', 'prochaine_echeance',
+        'temps_prevu_h', 'consignes', 'actif',
+    ),
+    'gamme_operations': ('id', 'gamme_id', 'ordre', 'operation', 'valeur_attendue'),
+    'articles': (
+        'id', 'reference', 'designation', 'fabricant', 'ref_fabricant', 'emplacement', 'unite', 'stock',
+        'stock_securite', 'point_commande', 'qte_commande', 'delai_jours', 'prix_unitaire', 'fournisseur_id',
+        'critique', 'actif',
+    ),
+    'article_equipement': ('id', 'article_id', 'equipement_id', 'quantite'),
+    'mouvements_stock': ('id', 'date', 'article_id', 'type', 'quantite', 'ot_id', 'utilisateur', 'commentaire'),
+    'techniciens': ('id', 'nom', 'prenom', 'metier', 'taux_horaire', 'capacite_h_semaine', 'actif'),
+    'habilitations': ('id', 'technicien_id', 'intitule', 'date_obtention', 'date_echeance'),
+    'compteurs': ('id', 'equipement_id', 'libelle', 'unite'),
+    'releves': ('id', 'compteur_id', 'date', 'valeur', 'utilisateur'),
+    'controles_reglementaires': (
+        'id', 'equipement_id', 'nature', 'texte_reference', 'periodicite_mois', 'organisme', 'derniere_date',
+        'prochaine_date', 'rapport', 'observations', 'observations_levees',
+    ),
+    'codes_defaillance': ('id', 'famille', 'code', 'libelle'),
+    'fournisseurs': ('id', 'nom', 'contact', 'telephone', 'email'),
+    'achats': ('id', 'date', 'article_id', 'fournisseur_id', 'quantite', 'prix_unitaire', 'statut', 'date_reception'),
+    'parametres': ('cle', 'valeur'),
+    'journal': ('id', 'date_heure', 'poste', 'profil', 'table', 'id_ligne', 'action'),
+    'wiki_pages': (
+        'id', 'type', 'titre', 'cle', 'equipement_id', 'article_id', 'cause_code', 'rattache_a', 'texte', 'ot_cites',
+        'liens', 'version', 'origine', 'modele', 'derniere_entree', 'valide_par', 'valide_le', 'cree_le',
+        'modifie_le', 'statut',
+    ),
+    'wiki_journal': (
+        'id', 'nature', 'ot_id', 'date_intervention', 'statut', 'anterieure', 'ordre', 'pages', 'changements',
+        'contradictions', 'raisons', 'modele', 'essais', 'cree_le', 'traite_le', 'decide_par', 'decide_le', 'motif',
+    ),
+}
+
 # Noms autorisés (re.ASCII : \d et \w ne reconnaissent que les caractères ASCII).
 MOTIF_NOM_DOCUMENT = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', re.ASCII)
 # Nom d'une sauvegarde (mêmes règles que js/stockage-dossier.js) :
@@ -1774,8 +1835,39 @@ def versions_des_tables(config):
     return resultat
 
 
+# Cellule qu'Excel exécuterait à l'ouverture d'un CSV (audit E2) : =, +, @, tabulation, retour chariot, ou un tiret qui
+# n'introduit pas un nombre. Prévo protège ces valeurs par une apostrophe à l'écriture (§3.2) ; le serveur refuse ce
+# qu'un autre client enverrait sans elle. Un texte qui commence par une espace n'est pas une formule pour Excel.
+MOTIF_CELLULE_DANGEREUSE = re.compile(r'^(?:[=+@\t\r]|-(?![0-9.,]))')
+
+
+def verifier_contenu_csv(table, octets, corps_d_ajout=False):
+    """UTF-8, en-tête qui commence par les colonnes du schéma, aucune cellule dangereuse sans apostrophe ; 400 sinon."""
+    if not est_utf8(octets):
+        raise ErreurHttp(400, 'Le fichier %s.csv doit être encodé en UTF-8.' % table)
+    texte = octets.decode('utf-8')
+    if texte.startswith('﻿'):
+        texte = texte[1:]
+    try:
+        lignes = list(csv.reader(io.StringIO(texte, newline=''), delimiter=';'))
+    except csv.Error as erreur:
+        raise ErreurHttp(400, 'Le fichier %s.csv est illisible (%s).' % (table, erreur))
+    if not lignes:
+        raise ErreurHttp(400, 'Le fichier %s.csv est vide : la ligne d\'en-tête manque.' % table)
+    attendues = list(COLONNES_PAR_TABLE.get(table, ()))
+    recues = [nom.strip() for nom in lignes[0]]
+    if recues[:len(attendues)] != attendues:
+        raise ErreurHttp(400, 'En-tête de %s.csv inattendu : il doit commencer par %s.' % (table, ';'.join(attendues)))
+    for numero, ligne in enumerate(lignes[1:], 2):
+        for cellule in ligne:
+            if MOTIF_CELLULE_DANGEREUSE.match(cellule):
+                raise ErreurHttp(400, 'Ligne %d de %s.csv : une cellule commence par un caractère de formule '
+                                      '(« %s ») ; Prévo la protège par une apostrophe.' % (numero, table, cellule[:1]))
+
+
 def enregistrer_csv(config, table, octets, version_attendue):
-    """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit)."""
+    """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit). Contenu vérifié d'abord (E2)."""
+    verifier_contenu_csv(table, octets)
     chemin = chemin_table(config, table)
     actuel = lire_octets(chemin)
     version_actuelle = empreinte(actuel) if actuel is not None else None
@@ -1808,6 +1900,7 @@ def decouper_corps_ajout(corps):
 def ajouter_au_csv(config, table, corps):
     """Ajoute des lignes en fin de fichier (journal) ; 409 si en-tête ou encodage différent."""
     chemin = chemin_table(config, table)
+    verifier_contenu_csv(table, corps, corps_d_ajout=True)
     corps, entete, lignes = decouper_corps_ajout(corps)
     actuel = lire_octets(chemin)
     if actuel is None or not actuel.replace(BOM_UTF8, b'', 1).strip():

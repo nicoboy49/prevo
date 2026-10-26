@@ -21,13 +21,19 @@ from commun import CasNavigateur, ServeurPrevo, ServeurStatique, RACINE  # noqa:
 
 CHEMIN_PAGE = "/tests/fixtures/page-stockage-serveur.html"
 BOM = b"\xef\xbb\xbf"
+# Le serveur refuse un CSV dont l'en-tête ne commence pas par les colonnes du schéma (audit E2, §22.12) :
+# les CSV de ces tests portent le vrai en-tête ; les lignes de données peuvent être plus courtes.
+ENTETE_EQUIPEMENTS = (
+    "id;repere;designation;localisation_id;parent_id;marque;modele;num_serie;date_mes;criticite;statut;"
+    "heures_fonct_jour;habilitation_requise;consignation;document;actif;valeur_remplacement")
+ENTETE_JOURNAL = "id;date_heure;poste;profil;table;id_ligne;action"
 CSV_EQUIPEMENTS = BOM + (
-    "id;nom;localisation_id\r\n"
-    "EQ-0001;Pompe d'alimentation;LOC-0001\r\n"
-    "EQ-0002;Compresseur d'atelier;LOC-0002\r\n").encode("utf-8")
+    ENTETE_EQUIPEMENTS + "\r\n"
+    "EQ-0001;;Pompe d'alimentation;LOC-0001\r\n"
+    "EQ-0002;;Compresseur d'atelier;LOC-0002\r\n").encode("utf-8")
 CSV_EQUIPEMENTS_V2 = BOM + (
-    "id;nom;localisation_id\r\n"
-    "EQ-0001;Pompe modifiée;LOC-0001\r\n").encode("utf-8")
+    ENTETE_EQUIPEMENTS + "\r\n"
+    "EQ-0001;;Pompe modifiée;LOC-0001\r\n").encode("utf-8")
 # Image PNG de 1 pixel : sert à vérifier qu'un document s'affiche dans une <img>.
 PNG_UN_PIXEL = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
@@ -223,7 +229,8 @@ class TestCsv(CasStockageServeur):
             resultat = self.executer_ok(
                 "const lu = await stockage.charger('equipements');"
                 "const essais = [1, 2].map((n) => stockage.enregistrer("
-                "  'equipements', new TextEncoder().encode('id;nom\\r\\nEQ-000' + n + ';n\\r\\n'), lu.version));"
+                "  'equipements', new TextEncoder().encode('" + ENTETE_EQUIPEMENTS + "\\r\\nEQ-000' + n + ';;n\\r\\n'),"
+                "  lu.version));"
                 "const issues = await Promise.allSettled(essais);"
                 "return issues.map((i) => i.status === 'fulfilled' ? 'ok'"
                 "  : (i.reason instanceof Donnees.ErreurConflit ? 'conflit' : 'autre:' + i.reason));")
@@ -233,25 +240,28 @@ class TestCsv(CasStockageServeur):
         with ServeurPrevo(source=None) as serveur:
             self.ouvrir(serveur)
             script = "return await stockage.ajouter('journal', new TextEncoder().encode(argument));"
-            entete = "horodatage;table;action\r\n"
-            premiere = self.executer_ok(script, entete + "2026-10-19 08:00;equipements;création\r\n")
+            entete = ENTETE_JOURNAL + "\r\n"
+            premiere = self.executer_ok(script, entete + "JRN-1;2026-10-19 08:00;;;equipements;;création\r\n")
             contenu = (serveur.dossier / "journal.csv").read_bytes()
             self.assertEqual(premiere["version"], empreinte(contenu))
             self.assertTrue(contenu.startswith(BOM))
-            seconde = self.executer_ok(script, entete + "2026-10-19 08:05;equipements;modification\r\n")
+            seconde = self.executer_ok(script, entete + "JRN-2;2026-10-19 08:05;;;equipements;;modification\r\n")
             contenu = (serveur.dossier / "journal.csv").read_bytes()
             self.assertEqual(seconde["version"], empreinte(contenu))
             self.assertEqual(
                 contenu.decode("utf-8-sig"),
-                entete + "2026-10-19 08:00;equipements;création\r\n"
-                + "2026-10-19 08:05;equipements;modification\r\n")
+                entete + "JRN-1;2026-10-19 08:00;;;equipements;;création\r\n"
+                + "JRN-2;2026-10-19 08:05;;;equipements;;modification\r\n")
 
     def test_ajouter_avec_un_autre_en_tete_donne_un_conflit(self):
         with ServeurPrevo(source=None) as serveur:
-            (serveur.dossier / "journal.csv").write_bytes(BOM + b"horodatage;table;action\r\n")
+            # Fichier existant : en-tête du schéma plus une colonne ajoutée dans Excel ;
+            # corps : en-tête du schéma seul.
+            (serveur.dossier / "journal.csv").write_bytes(BOM + (ENTETE_JOURNAL + ";colonne_excel\r\n").encode("utf-8"))
             self.ouvrir(serveur)
             erreur = self.executer_erreur(
-                "return await stockage.ajouter('journal', new TextEncoder().encode('autre;en-tete\\r\\n1;2\\r\\n'));")
+                "return await stockage.ajouter('journal', new TextEncoder().encode('"
+                + ENTETE_JOURNAL + "\\r\\n1;2\\r\\n'));")
             self.assertTrue(erreur["estConflit"], erreur)
 
     def test_lister_versions_donne_les_22_tables(self):
