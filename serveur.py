@@ -16,7 +16,8 @@ Contraintes : Python 3.8 minimum, bibliothèque standard seulement, un seul fich
 
 Lancement :
     py serveur.py [--port 8080] [--donnees CHEMIN] [--sans-navigateur] [--hote NOM]...
-                  [--servir-tests]
+                  [--ia-url URL] [--ia-fournisseur ollama|openai] [--ia-en-ligne] [--servir-tests]
+    (clé du fournisseur d'IA : « ia_cle » de prevo.config.json ou variable PREVO_IA_CLE, jamais une option)
 
 ATTENTION : aucune authentification. Usage sur un réseau local de confiance uniquement.
 """
@@ -32,7 +33,6 @@ import http.server
 import io
 import ipaddress
 import json
-import math
 import os
 import platform
 import re
@@ -69,12 +69,15 @@ ESSAIS_SI_VERROUILLE = 3                   # fichier ouvert dans Excel : 3 essai
 PAUSE_ENTRE_ESSAIS_S = 0.1                 # … espacés de 100 ms
 # Relais vers le fournisseur d'IA (lot 4, ARCHITECTURE.md §17.2) : liste fermée des chemins (Ollama :
 # api/chat, api/tags ; API compatible OpenAI : chat/completions, models), délai et taille plafonnés.
+# Audit M1, M3 (§22.12) : le fournisseur, son adresse et sa clé sont réglés sur le PC serveur (ia_fournisseur,
+# ia_url, ia_cle ou PREVO_IA_CLE), jamais par la requête ; le délai est fixé ici (DELAI_IA_S).
 # Limite connue : le délai s'applique à CHAQUE opération réseau (connexion, envoi, chaque lecture), pas à
 # la durée totale de l'appel ; un fournisseur qui envoie sa réponse goutte à goutte peut donc le dépasser.
 CHEMINS_IA = ('api/chat', 'api/tags', 'chat/completions', 'models')
-DELAI_IA_PAR_DEFAUT_S = 120
-DELAI_IA_MAX_S = 300
+CLES_DEMANDE_IA = ('chemin', 'methode', 'corps')     # seules clés acceptées dans le corps de POST /api/ia
+DELAI_IA_S = 120
 TAILLE_MAX_REPONSE_IA = 2 * 1024 * 1024    # 2 Mo
+VARIABLE_CLE_IA = 'PREVO_IA_CLE'           # clé du fournisseur : passe avant « ia_cle » du fichier, jamais en option
 
 # Dossier où se trouve serveur.py : c'est la racine des fichiers statiques.
 DOSSIER_APPLICATION = os.path.dirname(os.path.abspath(__file__))
@@ -352,9 +355,12 @@ CLES_CONFIGURATION = [
     ('copie_sauvegardes', 'texte', '',
      "Dossier où la sauvegarde du jour est copiée chaque nuit (clé USB, NAS, dossier synchronisé) ; vide : aucune copie."),
     ('quota_documents_mo', 'entier', 2048, "Place maximale des documents joints, en mégaoctets."),
+    ('ia_fournisseur', 'choix:ollama|openai', 'ollama',
+     "Type du service d'IA : ollama (Ollama) ou openai (toute API compatible OpenAI : LM Studio, Mistral…)."),
     ('ia_url', 'texte', 'http://localhost:11434',
      "Adresse du service d'IA que tous les postes utilisent. Réglée ici seulement, jamais sur un téléphone."),
-    ('ia_cle', 'texte', '', "Clé du service d'IA, gardée sur ce PC, jamais envoyée aux navigateurs."),
+    ('ia_cle', 'texte', '', "Clé du service d'IA, gardée sur ce PC, jamais envoyée aux navigateurs. La variable "
+                            "d'environnement PREVO_IA_CLE passe avant ; jamais en ligne de commande."),
     ('ia_en_ligne', 'booleen', False,
      "Autoriser un service d'IA en ligne : les textes envoyés partent chez ce fournisseur."),
 ]
@@ -1180,7 +1186,10 @@ RESEAUX_ATELIER = tuple(ipaddress.ip_network(reseau) for reseau in (
     '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16',      # adresses privées IPv4
     'fc00::/7', 'fe80::/10'))                                               # adresses privées IPv6
 MOTIF_NOM_LOCAL = re.compile(r'[a-z0-9_-]+(\.[a-z0-9_-]+)*\.local', re.ASCII)     # mDNS : pc-atelier.local
-MESSAGE_DISTANT_REFUSE = 'Le responsable n\'a pas autorisé les fournisseurs en ligne.'
+MESSAGE_DISTANT_REFUSE = 'Les fournisseurs d\'IA en ligne ne sont pas autorisés sur le PC serveur.'
+MESSAGE_REGLE_SUR_LE_SERVEUR = ('Demande refusée : seuls « chemin », « methode » et « corps » sont acceptés ; '
+                                'l\'adresse et la clé du fournisseur sont réglées sur le PC serveur.')
+LIBELLES_FOURNISSEURS_IA = {'ollama': 'Ollama', 'openai': 'API compatible OpenAI'}
 
 
 def adresse_fournisseur(url):
@@ -1204,14 +1213,32 @@ def adresse_fournisseur(url):
     return texte.rstrip('/')
 
 
-def lire_demande_ia(corps):
-    """Demande de relais vérifiée : { cible, methode, octets, entetes, delai }. ErreurHttp(400) sinon."""
+def cle_ia(reglages):
+    """Clé du fournisseur d'IA du PC serveur : PREVO_IA_CLE lue au démarrage (« _ia_cle »), sinon « ia_cle » du
+    fichier ; '' sans clé. Jamais écrite dans un fichier, une réponse, un message ou la console."""
+    return reglages.get('_ia_cle', reglages.get('ia_cle', '')) or ''
+
+
+def cle_ia_lisible(cle):
+    """Caractères ASCII visibles (et espace) seulement : l'en-tête HTTP ne sait pas en porter d'autres."""
+    return all(' ' <= caractere <= '~' for caractere in cle)
+
+
+def lire_demande_ia(corps, reglages):
+    """Demande de relais vérifiée : { cible, methode, octets, entetes, delai }. ErreurHttp(400) sinon.
+
+    Audit M1, M3 (§22.12) : le corps ne porte que chemin, methode et corps (toute autre clé, « url », « cle » ou
+    « delai » compris → 400) ; l'adresse vient de « ia_url », la clé du PC serveur (cle_ia) est la seule mise dans
+    « Authorization » et le délai est DELAI_IA_S. Aucun message ne reprend l'adresse ni la clé.
+    """
     try:
         demande = json.loads(corps.decode('utf-8'))
     except (UnicodeDecodeError, ValueError):
         raise ErreurHttp(400, 'Demande illisible (JSON attendu).')
     if not isinstance(demande, dict):
         raise ErreurHttp(400, 'Demande illisible (objet JSON attendu).')
+    if any(nom not in CLES_DEMANDE_IA for nom in demande):
+        raise ErreurHttp(400, MESSAGE_REGLE_SUR_LE_SERVEUR)
     chemin = demande.get('chemin')
     if chemin not in CHEMINS_IA:
         raise ErreurHttp(400, 'Chemin non autorisé pour l\'IA (' + ', '.join(CHEMINS_IA) + ').')
@@ -1223,21 +1250,13 @@ def lire_demande_ia(corps):
     if methode == 'POST':
         octets = json.dumps(demande.get('corps') or {}, ensure_ascii=False).encode('utf-8')
         entetes['Content-Type'] = 'application/json'
-    cle = demande.get('cle')
+    cle = cle_ia(reglages)
     if cle:
-        # Caractères ASCII visibles (et espace) seulement : l'en-tête HTTP ne sait pas en porter d'autres.
-        if not isinstance(cle, str) or not all(' ' <= caractere <= '~' for caractere in cle):
-            raise ErreurHttp(400, 'Clé du fournisseur d\'IA illisible.')
+        if not cle_ia_lisible(cle):
+            raise ErreurHttp(400, 'Clé du fournisseur d\'IA illisible (réglage du PC serveur : caractères ASCII seulement).')
         entetes['Authorization'] = 'Bearer ' + cle
-    delai = demande.get('delai', DELAI_IA_PAR_DEFAUT_S)
-    if isinstance(delai, float) and not math.isfinite(delai):      # 1e999, -Infinity, NaN
-        raise ErreurHttp(400, 'Délai de l\'IA invalide (un nombre de secondes est attendu).')
-    try:
-        delai = int(delai)
-    except (TypeError, ValueError):
-        delai = DELAI_IA_PAR_DEFAUT_S
-    return {'cible': adresse_fournisseur(demande.get('url')) + '/' + chemin, 'methode': methode, 'octets': octets,
-            'entetes': entetes, 'delai': min(max(delai, 1), DELAI_IA_MAX_S)}
+    return {'cible': adresse_fournisseur(reglages.get('ia_url')) + '/' + chemin, 'methode': methode, 'octets': octets,
+            'entetes': entetes, 'delai': DELAI_IA_S}
 
 
 def fournisseur_distant(adresse):
@@ -1258,43 +1277,64 @@ def fournisseur_distant(adresse):
     return not any(ip in reseau for reseau in RESEAUX_ATELIER)
 
 
-def valeur_parametre(octets, cle):
-    """Valeur de `cle` dans le contenu de parametres.csv, ou '' (fichier, colonne ou clé absents).
-
-    Première ligne qui porte la clé, comme Donnees.parametre. Lecture tolérante (§3.3) : BOM retiré,
-    UTF-8 sinon windows-1252, séparateur « ; » (« , » si l'en-tête n'a aucun « ; »), guillemets,
-    colonnes « cle » et « valeur » trouvées par leur nom, espaces de fin retirés, apostrophe de
-    protection retirée (§3.2 : « '1 » → « 1 » ; « ''1 » → « '1 »).
-    """
-    if octets.startswith(BOM_UTF8):
-        octets = octets[len(BOM_UTF8):]
+def portee_fournisseur(adresse):
+    """Où vont les textes (même classement que fournisseur_distant et Ia.portee en mode serveur) :
+    'pc-atelier' (boucle locale : le PC serveur), 'atelier' (adresse privée, nom en .local) ou 'distant'."""
+    if fournisseur_distant(adresse):
+        return 'distant'
+    hote = urlsplit(adresse).hostname or ''
     try:
-        texte = octets.decode('utf-8')
-    except UnicodeDecodeError:
-        texte = octets.decode('cp1252', 'replace')
-    entete = texte.split('\n', 1)[0]
-    separateur = ',' if ';' not in entete and ',' in entete else ';'
-    try:
-        lignes = list(csv.reader(io.StringIO(texte, newline=''), delimiter=separateur))
-    except csv.Error:
-        return ''
-    noms = [nom.strip().lower() for nom in lignes[0]] if lignes else []
-    if 'cle' not in noms or 'valeur' not in noms:
-        return ''
-    colonne_cle, colonne_valeur = noms.index('cle'), noms.index('valeur')
-    for ligne in lignes[1:]:
-        if len(ligne) > colonne_cle and ligne[colonne_cle].strip() == cle:
-            valeur = ligne[colonne_valeur].rstrip() if len(ligne) > colonne_valeur else ''
-            return valeur[1:] if valeur.startswith("'") else valeur
-    return ''
+        ip = ipaddress.ip_address(hote)
+    except ValueError:
+        return 'pc-atelier' if hote == 'localhost' else 'atelier'
+    if getattr(ip, 'ipv4_mapped', None) is not None:
+        ip = ip.ipv4_mapped
+    return 'pc-atelier' if ip.is_loopback else 'atelier'
 
 
 def distant_autorise(config):
-    """Réglage partagé du responsable (D67) : fournisseurs en ligne autorisés si ia_distant_autorise
-    vaut 1 dans parametres.csv. Défaut : non (fichier, clé ou valeur absents ou illisibles)."""
-    with VERROU_ECRITURE:
-        octets = lire_octets(chemin_table(config, 'parametres'))
-    return valeur_parametre(octets or b'', 'ia_distant_autorise') == '1'
+    """Fournisseurs d'IA en ligne autorisés (D67) : décision du PC serveur seulement, « ia_en_ligne » de la
+    configuration ou --ia-en-ligne (audit M2, §22.12). parametres.csv n'y est plus pour rien : tout appareil du
+    réseau peut l'écrire. Défaut : non."""
+    return config.reglages.get('ia_en_ligne') is True
+
+
+def adresse_ia_configuree(reglages):
+    """Adresse du fournisseur réglée sur le PC serveur, contrôlée par adresse_fournisseur ; '' si elle est
+    invalide (jamais l'adresse brute : elle pourrait porter un identifiant)."""
+    try:
+        return adresse_fournisseur(reglages.get('ia_url'))
+    except ErreurHttp:
+        return ''
+
+
+def reglages_ia_publics(config):
+    """GET /api/ia/reglages (audit M1, M2, M3 ; §22.12) : ce que les postes affichent, jamais la clé."""
+    reglages = config.reglages
+    url = adresse_ia_configuree(reglages)
+    return {'fournisseur': reglages.get('ia_fournisseur') or 'ollama', 'url': url,
+            'cle_reglee': bool(cle_ia(reglages)), 'en_ligne': distant_autorise(config),
+            'portee': portee_fournisseur(url) if url else 'distant'}
+
+
+def sans_la_cle(octets, cle):
+    """Réponse du fournisseur sans la clé du PC serveur : un fournisseur qui la recopierait ne la fait pas sortir.
+    Clés de 8 caractères ou plus (une vraie clé en a bien plus ; masquer un mot court abîmerait la réponse)."""
+    if len(cle) < 8 or not cle_ia_lisible(cle):
+        return octets
+    return octets.replace(cle.encode('ascii'), b'[cle masquee]')
+
+
+def resume_ia(config):
+    """Ligne « Assistant IA » de la console au démarrage : fournisseur, adresse, état de la clé, IA en ligne."""
+    reglages = config.reglages
+    url = adresse_ia_configuree(reglages)
+    cle = cle_ia(reglages)
+    etat_cle = ('clé illisible (caractères ASCII attendus)' if cle and not cle_ia_lisible(cle)
+                else 'clé réglée' if cle else 'sans clé')
+    return '%s, %s ; %s ; fournisseurs en ligne %s.' % (
+        LIBELLES_FOURNISSEURS_IA.get(reglages.get('ia_fournisseur'), 'Ollama'),
+        url or 'adresse invalide (« ia_url »)', etat_cle, 'autorisés' if distant_autorise(config) else 'refusés')
 
 
 def lire_reponse_fournisseur(reponse):
@@ -2044,6 +2084,10 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                 return fonction()
             if morceaux[0] in {nom for (_, nom) in routes_simples}:
                 raise ErreurHttp(405, 'Méthode non autorisée.')
+        elif len(morceaux) == 2 and morceaux[0] == 'ia' and morceaux[1] == 'reglages':
+            if methode != 'GET':
+                raise ErreurHttp(405, 'Méthode non autorisée.')
+            return self.api_ia_reglages()
         elif len(morceaux) == 2 and morceaux[0] == 'csv':
             return self.api_csv(methode, morceaux[1], corps)
         elif len(morceaux) == 3 and morceaux[0] == 'csv' and morceaux[2] == 'ajout':
@@ -2092,20 +2136,25 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                 'adresses_reseau': self.config.adresses_reseau()})
 
     def api_ia(self, corps):
-        """Relais vers le fournisseur d'IA choisi sur le poste (lot 4, ARCHITECTURE.md §17.2).
+        """Relais vers le fournisseur d'IA réglé sur le PC serveur (lot 4, §17.2 ; audit M1, M2, M3, §22.12).
 
-        Rend { statut, corps } : le statut et le corps (JSON, sinon texte) du fournisseur. La clé
-        éventuelle est transmise au fournisseur et oubliée : jamais écrite, affichée ni renvoyée.
-        Demande invalide → 400 ; fournisseur en ligne sans l'accord du responsable (D67) → 403, avant
-        tout appel sortant ; échec réseau ou réponse coupée → 502 ; délai dépassé → 504.
+        Rend { statut, corps } : le statut et le corps (JSON, sinon texte) du fournisseur, sans la clé.
+        Demande invalide (une adresse, une clé ou un délai dans le corps compris) → 400 ; fournisseur en
+        ligne sans « ia_en_ligne » (D67) → 403, avant tout appel sortant ; échec réseau ou réponse coupée
+        → 502 ; délai dépassé → 504. La clé ne quitte le PC serveur que vers le fournisseur.
         """
-        demande = lire_demande_ia(corps)
+        demande = lire_demande_ia(corps, self.config.reglages)
         if fournisseur_distant(demande['cible']) and not distant_autorise(self.config):
             raise ErreurHttp(403, MESSAGE_DISTANT_REFUSE)
         statut, octets = appeler_fournisseur(demande)
         if len(octets) > TAILLE_MAX_REPONSE_IA:
             raise ErreurHttp(502, 'Réponse du fournisseur d\'IA trop grande (2 Mo au maximum).')
+        octets = sans_la_cle(octets, cle_ia(self.config.reglages))
         self.envoyer_json(200, {'statut': statut, 'corps': corps_lisible(octets)})
+
+    def api_ia_reglages(self):
+        """GET /api/ia/reglages : fournisseur, adresse, clé réglée ou non, IA en ligne, portée (jamais la clé)."""
+        self.envoyer_json(200, reglages_ia_publics(self.config))
 
     def api_versions(self):
         with VERROU_ECRITURE:
@@ -2335,6 +2384,7 @@ def afficher_accueil(config, port_demande, avertissements=()):
         afficher('  Écoute           : ce PC seulement (127.0.0.1) ; les autres appareils ne joignent pas Prévo.')
     else:
         afficher('  Écoute           : le réseau (%s), comptes exigés.' % config.ecoute)
+    afficher('  Assistant IA     : %s' % resume_ia(config))
     for avertissement in avertissements:
         afficher('  ' + avertissement)
     afficher('  Ctrl+C pour arrêter.')
@@ -2359,6 +2409,13 @@ def lire_arguments(arguments=None):
     analyseur.add_argument('--ecoute', choices=ECOUTES,
                            help='adresse d\'écoute : 127.0.0.1 (défaut, ce PC seulement) ou 0.0.0.0 (le réseau, '
                                 'comptes et https exigés)')
+    analyseur.add_argument('--ia-url', metavar='URL',
+                           help='adresse du service d\'IA de tous les postes (défaut http://localhost:11434) ; '
+                                'la clé, elle, vient de « ia_cle » ou de la variable PREVO_IA_CLE, jamais d\'une option')
+    analyseur.add_argument('--ia-fournisseur', choices=tuple(LIBELLES_FOURNISSEURS_IA),
+                           help='type du service d\'IA : ollama (défaut) ou openai (API compatible OpenAI)')
+    analyseur.add_argument('--ia-en-ligne', action='store_true',
+                           help='autoriser un service d\'IA en ligne (les textes envoyés quittent l\'atelier)')
     analyseur.add_argument('--config', metavar='FICHIER',
                            help='fichier de configuration (défaut : %s à côté de serveur.py)' % NOM_FICHIER_CONFIGURATION)
     analyseur.add_argument('--aide', action='store_true',
@@ -2391,6 +2448,15 @@ def reglages_du_lancement(options):
         reglages['noms'] = reglages['noms'] + [hote.lower().strip() for hote in options.hote]
     if options.certificat:
         reglages['certificat'], reglages['cle'] = options.certificat, options.cle
+    if options.ia_url is not None:
+        reglages['ia_url'] = options.ia_url.strip()
+    if options.ia_fournisseur:
+        reglages['ia_fournisseur'] = options.ia_fournisseur
+    if options.ia_en_ligne:
+        reglages['ia_en_ligne'] = True
+    # Clé du fournisseur (audit M3) : la variable d'environnement passe avant le fichier ; gardée à part
+    # (« _ia_cle ») pour qu'une réécriture du fichier de configuration ne la recopie jamais.
+    reglages['_ia_cle'] = os.environ.get(VARIABLE_CLE_IA, '').strip() or reglages['ia_cle']
     return reglages
 
 

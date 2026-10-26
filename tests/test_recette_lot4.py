@@ -7,11 +7,14 @@ Familles (le nom du test le dit) :
                  « Rédiger le compte rendu » puis « Proposer les codes » (Utiliser), rien d'écrit avant
                  « Enregistrer le compte rendu » ; ensuite ordres_travail.csv porte le texte et les codes,
                  le statut n'a pas bougé, le journal trace les quatre champs venus de l'IA ;
-    responsable : deux postes sur le même serveur — le technicien ne peut pas activer un fournisseur en
-                 ligne ; le responsable l'autorise dans Paramètres → le technicien l'active après
-                 l'avertissement (mention « données envoyées à … ») ; le responsable retire
-                 l'autorisation → l'IA du technicien s'arrête (plus de bouton ni de mention). Le relais
-                 du serveur est intercepté par le test : rien ne quitte le poste ;
+    responsable : l'accord pour un fournisseur en ligne est décidé sur le PC serveur (audit M2, §22.12) —
+                 sans --ia-en-ligne, la case de Paramètres montre « non » sans pouvoir la changer, un
+                 parametres.csv qui dit 1 n'autorise rien et le technicien ne peut pas l'activer ; avec
+                 --ia-en-ligne, la case montre « oui » et le technicien l'active après l'avertissement
+                 (mention « données envoyées à … ») ; l'accord retiré sur le PC serveur (ses réponses
+                 simulées : réglages relus, relais refusé) → l'IA du technicien s'arrête sans recharger
+                 (plus de bouton ni de mention). Le relais du serveur est intercepté par le test : rien ne
+                 quitte le poste ;
     poste      : « Ce poste » ouvert aux trois profils par le menu ; thème clair choisi sur un poste,
                  gardé au rechargement, sans effet sur un autre navigateur ;
     https      : serveur.py --certificat --cle (certificat de test fabriqué à l'exécution) : Signaler
@@ -38,7 +41,7 @@ from test_https import fabriquer_certificat
 from test_ia_fonctions import (CHAMP_CR, LIBELLE_CODES, LIBELLE_CR, LIBELLE_DI, MENTION, NOTES, SCENARIOS,
                                VALEURS_DI_JS, CasIaFonctions, ligne_demo, lire_csv, premiers_codes, traces)
 from test_ia_regles import regler_ia
-from test_poste import AVERTISSEMENT, HOTE_EN_LIGNE, REFUS_DISTANT, URL_EN_LIGNE
+from test_poste import AVERTISSEMENT, HOTE_EN_LIGNE, URL_EN_LIGNE
 from test_recette_lot3bis import DEBORDEMENT_JS, PETITES_ZONES_JS
 
 DOSSIER_CAPTURES = RACINE / "tests" / "resultats" / "recette-lot4"
@@ -49,8 +52,13 @@ DICTE_DI = "de l'huile coule sous la pompe depuis ce matin"
 
 class CasRecette(CasIaFonctions):
 
-    def serveur_neuf(self, arguments=None):
-        serveur = ServeurPrevo(arguments=arguments)
+    def serveur_neuf(self, arguments=None, environnement=None):
+        """Serveur sur une copie neuve de la démo ; son fournisseur d'IA (audit M1, §22.12) est le faux fournisseur,
+        sauf si `arguments` en donne un autre (--ia-url)."""
+        arguments = list(arguments or [])
+        if "--ia-url" not in arguments:
+            arguments += ["--ia-url", self.faux.url]
+        serveur = ServeurPrevo(arguments=arguments, environnement=environnement)
         serveur.demarrer()
         self.addCleanup(serveur.arreter)
         return serveur
@@ -84,7 +92,7 @@ class TestRecetteTechnicien(CasRecette):
     def test_technicien_serveur_dicter_rediger_codes_puis_enregistrer(self):
         serveur = self.serveur_neuf()
         self.contexte.add_init_script(RECONNAISSANCE_SIMULEE_JS)
-        regler_ia(self.contexte, url=self.faux.url)
+        regler_ia(self.contexte)
         ot_id = SCENARIOS["ot_statut_en_cours"]
         ot = ligne_demo("ordres_travail", ot_id)
         technicien = ligne_demo("techniciens", ot["technicien_id"])
@@ -124,6 +132,9 @@ class TestRecetteTechnicien(CasRecette):
 
 class TestRecetteResponsable(CasRecette):
 
+    REFUS = "pas autorisés sur le PC serveur"
+    CASE = "#form-parametres [name=ia_distant_autorise]"
+
     def intercepter_relais(self, contexte, serveur):
         """Relais /api/ia du poste du technicien remplacé par une réponse « fournisseur en ligne » : le
         serveur ne contacte jamais l'adresse en ligne. Rend la liste des demandes reçues."""
@@ -138,44 +149,54 @@ class TestRecetteResponsable(CasRecette):
         contexte.route(serveur.url + "/api/ia", repondre)
         return demandes
 
-    def regler_autorisation(self, page, autorise):
-        self.aller("#/parametres", "#form-parametres")
-        case = "#form-parametres [name=ia_distant_autorise]"
-        if autorise:
-            page.check(case)
-        else:
-            page.uncheck(case)
-        page.click("#form-parametres button[type=submit]")
-        page.wait_for_function("(v) => Donnees.parametre('ia_distant_autorise', '0') === v", arg="1" if autorise else "0")
+    def serveur_en_ligne(self, *options):
+        """PC serveur réglé sur le fournisseur en ligne (adresse et clé sur le serveur), avec ou sans --ia-en-ligne."""
+        return self.serveur_neuf(["--ia-url", URL_EN_LIGNE, "--ia-fournisseur", "openai", *options],
+                                 {"PREVO_IA_CLE": "cle-en-ligne"})
 
-    def relire(self, page):
-        """Surveillance du poste : le retour sur l'onglet lance le rafraîchissement des 20 s."""
-        page.evaluate("() => document.dispatchEvent(new Event('visibilitychange'))")
-
-    def test_responsable_autorise_puis_retire_un_fournisseur_en_ligne(self):
-        serveur = self.serveur_neuf()
-        parametres = serveur.dossier / "parametres.csv"
-        # Poste du responsable (ce test) et poste du technicien (autre navigateur)
-        page = self.ouvrir("#/parametres", "#form-parametres", serveur=serveur, attendre_ia=False)
+    def poste_technicien(self, serveur):
+        """Poste du technicien (autre navigateur) sur « Ce poste », relais intercepté ; rend (contexte, page, demandes)."""
         contexte, autre = self.nouveau_contexte_technicien()
         demandes = self.intercepter_relais(contexte, serveur)
         autre.goto(serveur.url + "/#/poste")
         attendre_pret(autre)
-        autre.wait_for_selector("#carte-ia")
+        autre.wait_for_selector("#poste-ia-serveur-cle")
+        self.assertEqual(autre.inner_text("#poste-ia-serveur-url").strip(), URL_EN_LIGNE)
+        self.assertEqual(autre.locator("#poste-ia-url, #poste-ia-cle").count(), 0, "adresse et clé : sur le PC serveur")
+        autre.fill("#poste-ia-modele", "modele-en-ligne")
+        return contexte, autre, demandes
 
-        # 1. Sans autorisation : activation refusée, rien n'est gardé, aucune demande
-        self.remplir_en_ligne(autre)
+    def case_du_responsable(self, serveur):
+        page = self.ouvrir("#/parametres", "#form-parametres", serveur=serveur, attendre_ia=False)
+        self.assertTrue(page.is_disabled(self.CASE), "décidé sur le PC serveur : la case ne se change pas ici")
+        self.assertIn("Décidé sur le PC serveur (Paramètres › Accès et installation).", page.inner_text("#form-parametres"))
+        return page.is_checked(self.CASE)
+
+    def test_responsable_ia_en_ligne_decidee_sur_le_pc_serveur(self):
+        # 1. PC serveur sans --ia-en-ligne : « non » dans Paramètres, et un parametres.csv qui dit 1 (étape 2 de
+        #    l'audit, écrit ici par le poste du responsable) n'autorise rien ; le technicien ne peut pas l'activer
+        serveur = self.serveur_en_ligne()
+        self.assertFalse(self.case_du_responsable(serveur))
+        self.page.evaluate("""() => Donnees.modifier('parametres', (lignes) => {
+          const ligne = lignes.find((l) => l.cle === 'ia_distant_autorise');
+          if (ligne) ligne.valeur = '1'; else lignes.push({ cle: 'ia_distant_autorise', valeur: '1' });
+        })""")
+        self.assertIn("ia_distant_autorise;'1", (serveur.dossier / "parametres.csv").read_text(encoding="utf-8-sig"))
+        _, autre, demandes = self.poste_technicien(serveur)
+        self.assertIn(self.REFUS, autre.inner_text("#poste-ia-portee"))
         autre.check("#poste-ia-actif")
         autre.click("#btn-enregistrer-ia")
-        autre.wait_for_function("(t) => (window.__toasts || []).some((x) => x.includes(t))", arg=REFUS_DISTANT)
+        autre.wait_for_function("(t) => (window.__toasts || []).some((x) => x.includes(t))", arg=self.REFUS)
         self.assertFalse(autre.evaluate("Ia.active()"))
         self.assertEqual(demandes, [])
 
-        # 2. Le responsable autorise (parametres.csv) ; le poste du technicien l'apprend à sa relecture
-        self.regler_autorisation(page, True)
-        self.assertIn("ia_distant_autorise;'1", parametres.read_text(encoding="utf-8-sig"))
-        self.relire(autre)
-        autre.wait_for_function("() => document.querySelector('#poste-ia-portee').innerText.includes('autorisé par le responsable')")
+        # 2. PC serveur avec --ia-en-ligne : « oui » dans Paramètres (toujours sans la changer) ; le technicien
+        #    l'active après l'avertissement, mention « données envoyées à … », bouton IA dans Signaler
+        serveur = self.serveur_en_ligne("--ia-en-ligne")
+        self.assertTrue(self.case_du_responsable(serveur))
+        contexte, autre, demandes = self.poste_technicien(serveur)
+        autre.wait_for_function("() => document.querySelector('#poste-ia-portee').innerText.includes('autorisé sur le PC serveur')")
+        autre.check("#poste-ia-actif")
         autre.click("#btn-enregistrer-ia")
         autre.wait_for_selector("dialog[open] .poste-avertissement-distant")
         self.assertIn(AVERTISSEMENT, " ".join(autre.inner_text("dialog[open]").split()))
@@ -184,13 +205,24 @@ class TestRecetteResponsable(CasRecette):
         autre.wait_for_selector("#ia-mention.distant", state="visible")
         self.assertEqual(autre.inner_text("#ia-mention").strip(), "IA : données envoyées à " + HOTE_EN_LIGNE)
         self.assertTrue(demandes, "le test de connexion passe par le relais du serveur")
-        # Le bouton IA apparaît dans Signaler
+        for corps in demandes:
+            self.assertLessEqual(set(json.loads(corps)), {"chemin", "methode", "corps"}, "ni adresse ni clé du poste")
         autre.evaluate("() => { location.hash = '#/di/nouvelle'; }")
         autre.wait_for_selector('.di-ia .ia-bouton:has-text("%s")' % LIBELLE_DI)
 
-        # 3. Le responsable retire l'autorisation : l'IA du technicien s'arrête, sans recharger
-        self.regler_autorisation(page, False)
-        self.relire(autre)
+        # 3. L'accord est retiré sur le PC serveur (relancé sans --ia-en-ligne derrière la même adresse : ses réponses
+        #    sont simulées, réglages relus « en_ligne » faux et relais refusé 403) : à la demande suivante, le poste
+        #    relit les réglages et l'IA du technicien s'arrête, sans recharger
+        self.autoriser_erreur("status of 403")
+        refus = {"erreur": "Les fournisseurs d'IA en ligne ne sont pas autorisés sur le PC serveur."}
+        reglages = {"fournisseur": "openai", "url": URL_EN_LIGNE, "cle_reglee": True, "en_ligne": False, "portee": "distant"}
+        contexte.unroute(serveur.url + "/api/ia")
+        contexte.route(serveur.url + "/api/ia", lambda route: route.fulfill(
+            status=403, headers={"Content-Type": "application/json"}, body=json.dumps(refus)))
+        contexte.route(serveur.url + "/api/ia/reglages", lambda route: route.fulfill(
+            status=200, headers={"Content-Type": "application/json"}, body=json.dumps(reglages)))
+        issue = autre.evaluate("() => Ia.demander('reformulerDI', { symptome: 'fuite' }).then(() => 'ok', (e) => e.name)")
+        self.assertEqual(issue, "IaIndisponible")
         autre.wait_for_function("() => !Ia.active()")
         autre.wait_for_selector("#ia-mention", state="hidden")
         autre.wait_for_selector(".di-ia .ia-bouton", state="detached")
@@ -207,13 +239,6 @@ class TestRecetteResponsable(CasRecette):
         page = contexte.new_page()
         self.surveiller(page)
         return contexte, page
-
-    def remplir_en_ligne(self, page):
-        page.select_option("#poste-ia-fournisseur", "openai")
-        page.fill("#poste-ia-url", URL_EN_LIGNE)
-        page.fill("#poste-ia-modele", "modele-en-ligne")
-        page.wait_for_selector("#poste-ia-cle", state="visible")
-        page.fill("#poste-ia-cle", "cle-en-ligne")
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +298,7 @@ class TestRecetteHttps(CasRecette):
         self.page = self.contexte.new_page()
         self.surveiller(self.page)
         self.preparer_page()
-        regler_ia(self.contexte, url=self.faux.url)
+        regler_ia(self.contexte)
         demandeur = ligne_demo("demandes", SCENARIOS["di_statut_nouvelle"])["demandeur"]
         page = self.ouvrir_signaler(serveur=serveur, profil="demandeur", nom=demandeur)
         self.assertTrue(page.evaluate("location.protocol") == "https:")
@@ -342,7 +367,7 @@ class TestRecetteDesign(CasRecette):
             self.passer_au_telephone()
         else:
             self.page.set_viewport_size({"width": 1440, "height": 900})
-        regler_ia(self.contexte, url=self.faux.url)
+        regler_ia(self.contexte)
         ot_id = SCENARIOS["ot_statut_en_cours"]
         technicien_id = ligne_demo("ordres_travail", ot_id)["technicien_id"]
         page = self.ouvrir("#/poste", "#carte-affichage", serveur=serveur, profil="technicien", nom="Technicien essai",

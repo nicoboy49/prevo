@@ -4,11 +4,15 @@ Toujours avec le faux fournisseur d'IA (tests/faux_fournisseur_ia.py), jamais un
 « en ligne » https://api.exemple.fr/v1 est interceptée par le test : rien ne quitte le poste.
     - écran #/poste ouvert aux trois profils, entrée « Ce poste » du menu (groupe « Administration ») ;
     - identité : nom du poste, profil, stockage, « Changer de profil ou de nom de poste… » ;
-    - assistant IA, mode serveur (relais) : « Tester la connexion » remplit la liste des modèles, mention
-      « reste sur le PC atelier » ; clé de l'API compatible OpenAI transmise mais jamais écrite (CSV,
-      journal, console du serveur, console du navigateur, page) ni réaffichée ;
+    - assistant IA, mode serveur (relais ; audit M1, M3, §22.12) : fournisseur, adresse et état de la clé du PC
+      serveur (--ia-url, --ia-fournisseur, PREVO_IA_CLE) affichés sans champ de saisie (« réglé sur le PC
+      serveur », « réglée sur le serveur » ou « aucune clé ») ; « Tester la connexion » remplit la liste des
+      modèles, mention « reste sur le PC atelier » ; la clé du PC serveur est transmise au fournisseur mais
+      jamais au poste (stockage, page, CSV, journal, console du serveur, console du navigateur) ;
     - assistant IA, démo (appel direct) : mention « reste sur ce PC » ; fournisseur en ligne refusé tant
       que le responsable ne l'autorise pas, puis avertissement explicite et mention « données envoyées à » ;
+      clé gardée seulement pour la même adresse ;
+    - assistant IA, mode dossier : carte inchangée (fournisseur, adresse, clé), avec la mention I5 ;
     - dictée : état détecté ; désactivée → aucun bouton micro sur le formulaire « Signaler » ;
     - thème clair appliqué tout de suite, gardé après rechargement et posé avant le premier écran ;
       contrastes AA du thème clair calculés dans la page ; impression inchangée (PDF, fond blanc) ;
@@ -23,11 +27,16 @@ import re
 import unittest
 
 import test_dictee   # reconnaissance vocale simulée et relevé des toasts (module seul : ses tests ne sont pas repris)
-from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, scenarios_demo, url_fichier
+from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule,
+                    preregler_profil, scenarios_demo, url_fichier)
 from faux_fournisseur_ia import FauxFournisseur
 
 CLE = "sk-test-cle-poste-prevo-8d41b2"
 REFUS_DISTANT = "Le responsable n'a pas autorisé les fournisseurs en ligne"
+# Audit I5 : sans serveur, la clé reste dans le navigateur ; « Ce poste » le dit.
+MENTION_I5 = "En mode dossier, la clé reste dans ce navigateur ; le mode serveur la garde sur le PC serveur."
+# Mode dossier servi par un petit serveur de fichiers : Prévo y cherche d'abord un serveur (404 attendus).
+ERREURS_SERVEUR_STATIQUE = [re.compile(r"status of 404.*/api/ping"), re.compile(r"status of 404.*/api/csv/")]
 HOTE_EN_LIGNE = "api.exemple.fr"
 URL_EN_LIGNE = "https://api.exemple.fr/v1"
 AVERTISSEMENT = ("Les textes envoyés — descriptions, comptes rendus, désignations — partent chez "
@@ -206,17 +215,25 @@ class CasPoste(CasNavigateur):
 # Mode serveur (relais /api/ia)
 # ---------------------------------------------------------------------------
 
-class TestCePosteServeur(CasPoste):
+class CasPosteServeur(CasPoste):
+    """Mode serveur : le fournisseur d'IA est réglé sur le PC serveur (options_ia, audit M1, M3, §22.12), lancé ici
+    sur le faux fournisseur ; le poste ne règle que l'activation, le modèle et le délai."""
+
+    @classmethod
+    def options_ia(cls, faux):
+        """(arguments de serveur.py, variables d'environnement) qui règlent le fournisseur du PC serveur."""
+        raise NotImplementedError
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.serveur = ServeurPrevo()
-        cls.serveur.demarrer()
-        cls.addClassCleanup(cls.serveur.arreter)
         cls.faux = FauxFournisseur(cle_attendue=CLE)
         cls.faux.demarrer()
         cls.addClassCleanup(cls.faux.arreter)
+        arguments, environnement = cls.options_ia(cls.faux)
+        cls.serveur = ServeurPrevo(arguments=arguments, environnement=environnement)
+        cls.serveur.demarrer()
+        cls.addClassCleanup(cls.serveur.arreter)
 
     def setUp(self):
         super().setUp()
@@ -229,6 +246,22 @@ class TestCePosteServeur(CasPoste):
         if route == "#/poste":
             self.attendre_ecran_poste()
         return self.page
+
+    def attendre_reglages_du_serveur(self):
+        """« Ce poste » relit les réglages du PC serveur à son ouverture : la zone sans champ est alors remplie."""
+        self.page.wait_for_selector("#poste-ia-serveur-cle")
+        self.assertIn("réglé sur le PC serveur", self.page.inner_text("#poste-ia-serveur"))
+        self.assertEqual(self.page.locator("#poste-ia-url, #poste-ia-fournisseur, #poste-ia-cle, #poste-ia-zone-cle, "
+                                           "#carte-ia input[type=password]").count(), 0, "aucun champ du PC serveur")
+        return self.page
+
+
+class TestCePosteServeur(CasPosteServeur):
+    """PC serveur réglé sur Ollama (--ia-url), sans clé."""
+
+    @classmethod
+    def options_ia(cls, faux):
+        return ["--ia-url", faux.url], None
 
     def test_ecran_et_entree_du_menu_pour_les_trois_profils(self):
         technicien = premier_technicien_actif(self.serveur.dossier)
@@ -282,13 +315,14 @@ class TestCePosteServeur(CasPoste):
     def test_ia_ollama_par_le_relais_liste_des_modeles_et_reste_sur_le_pc_atelier(self):
         page = self.ouvrir()
         self.assertFalse(page.is_checked("#poste-ia-actif"))
-        self.assertEqual(page.input_value("#poste-ia-url"), "http://localhost:11434")
+        # Fournisseur et adresse du PC serveur (--ia-url), affichés sans champ ; aucune clé pour Ollama
+        self.attendre_reglages_du_serveur()
+        self.assertEqual(page.inner_text("#poste-ia-serveur-fournisseur").strip(), "Ollama")
+        self.assertEqual(page.inner_text("#poste-ia-serveur-url").strip(), self.faux.url)
+        self.assertEqual(page.inner_text("#poste-ia-serveur-cle").strip(), "aucune clé")
         self.assertIn("reste sur le PC atelier", page.inner_text("#poste-ia-mention"))
-        self.assertTrue(page.is_hidden("#poste-ia-zone-cle"), "pas de clé pour Ollama")
         self.assertEqual(self.faux.requetes, [], "aucun appel tant que l'IA n'est pas activée")
 
-        self.remplir_ia(url=self.faux.url)
-        self.assertIn("reste sur le PC atelier", page.inner_text("#poste-ia-mention"))
         modeles = self.choisir_apres_test_de_connexion("faux")
         self.assertIn("faux-lent", modeles)
         self.assertIsNone(page.evaluate("localStorage.getItem('prevo.ia')"), "tester n'enregistre rien")
@@ -298,6 +332,8 @@ class TestCePosteServeur(CasPoste):
         reglages = page.evaluate("Ia.reglages()")
         self.assertEqual((reglages["actif"], reglages["fournisseur"], reglages["url"], reglages["modele"]),
                          (True, "ollama", self.faux.url, "faux"))
+        self.assertEqual(json.loads(page.evaluate("localStorage.getItem('prevo.ia')")),
+                         {"actif": True, "modele": "faux", "delaiS": 120}, "ni fournisseur, ni adresse, ni clé sur le poste")
         page.wait_for_selector("#ia-mention", state="visible")
         self.assertEqual(page.inner_text("#ia-mention").strip(), "IA : reste sur le PC atelier")
         self.assertIn("reste sur le PC atelier", page.inner_text("#poste-ia-mention"))
@@ -305,65 +341,10 @@ class TestCePosteServeur(CasPoste):
         # Mode serveur : tout passe par le relais du serveur, rien ne part du navigateur vers le fournisseur
         self.assertGreaterEqual(len(self.faux.requetes), 2)
         self.assertEqual({r["chemin"] for r in self.faux.requetes}, {"/api/tags"})
-        self.assertFalse([a for a in self.adresses if a.startswith(self.faux.url)])
+        self.assertFalse([a for a in self.adresses if a.startswith(self.faux.url + "/")])
         self.assertTrue([a for a in self.adresses if a == self.serveur.url + "/api/ia"])
-
-    def test_cle_transmise_jamais_ecrite_ni_reaffichee(self):
-        page = self.ouvrir()
-        self.remplir_ia(fournisseur="openai", url=self.faux.url + "/v1", modele="faux", cle=CLE)
-        self.assertEqual(page.get_attribute("#poste-ia-cle", "type"), "password")
-        self.choisir_apres_test_de_connexion("faux")
-        page.check("#poste-ia-actif")
-        page.click("#btn-enregistrer-ia")
-        page.wait_for_function("Ia.etat() === 'ok'")
-        self.assertEqual(page.evaluate("Ia.reglages().cle"), CLE)
-        self.assertTrue(self.faux.requetes)
-        for requete in self.faux.requetes:
-            with self.subTest(chemin=requete["chemin"]):
-                self.assertEqual(requete["entetes"]["authorization"], "Bearer " + CLE)
-        # Jamais réaffichée : champ vide, « clé enregistrée » annoncée, aucune trace dans la page
-        page.wait_for_function("document.querySelector('#poste-ia-cle').value === ''")
-        self.assertIn("enregistrée", page.get_attribute("#poste-ia-cle", "placeholder"))
-        dans_la_page = page.evaluate("""() => document.documentElement.outerHTML
-            + [...document.querySelectorAll('input, textarea, select')].map((e) => e.value).join('|')""")
-        self.assertNotIn(CLE, dans_la_page)
-        # Une écriture du poste (journal) après l'enregistrement : la clé n'y est pas
-        page.evaluate("Ia.tracerUtilisation('parametres', 'ia_distant_autorise', 'essai', 'faux')")
-        page.reload()
-        attendre_pret(page)
-        self.attendre_ecran_poste()
-        self.assertEqual(page.input_value("#poste-ia-cle"), "")
-        self.assertEqual(page.evaluate("Ia.reglages().cle"), CLE, "la clé reste sur le poste (localStorage)")
-        autres = page.evaluate("""() => JSON.stringify(Object.entries(sessionStorage))
-            + JSON.stringify(Object.entries(localStorage).filter(([cle]) => cle !== 'prevo.ia'))""")
-        self.assertNotIn(CLE, autres)
-        self.assertIn("proposition IA utilisée (faux) : essai",
-                      (self.serveur.dossier / "journal.csv").read_text(encoding="utf-8-sig"))
-        octets_cle = CLE.encode("utf-8")
-        fichiers = [f for f in sorted(self.serveur.dossier.rglob("*")) if f.is_file()]
-        self.assertTrue([f for f in fichiers if f.suffix == ".csv"])
-        for fichier in fichiers:
-            with self.subTest(fichier=fichier.name):
-                self.assertNotIn(octets_cle, fichier.read_bytes())
-        self.assertNotIn(CLE, self.serveur.sortie_console())
-        self.assertFalse([m for m in self.console if CLE in m])
-
-    def test_cle_jamais_gardee_pour_une_autre_adresse(self):
-        """Ajout de l'orchestrateur (défaut injecté) : la clé enregistrée n'est gardée que pour la même
-        adresse ; changer d'adresse sans saisir de clé l'abandonne (jamais envoyée à un autre service)."""
-        page = self.ouvrir()
-        self.remplir_ia(fournisseur="openai", url=self.faux.url + "/v1", modele="faux", cle=CLE)
-        self.choisir_apres_test_de_connexion("faux")
-        page.check("#poste-ia-actif")
-        page.click("#btn-enregistrer-ia")
-        page.wait_for_function("Ia.etat() === 'ok'")
-        self.assertEqual(page.evaluate("Ia.reglages().cle"), CLE)
-        autre = self.faux.url.replace("127.0.0.1", "localhost") + "/v1"
-        self.assertNotEqual(autre, self.faux.url + "/v1")
-        self.remplir_ia(url=autre)
-        page.click("#btn-enregistrer-ia")
-        page.wait_for_function("(url) => Ia.reglages().url === url", arg=autre)
-        self.assertEqual(page.evaluate("Ia.reglages().cle"), "")
+        self.assertTrue([a for a in self.adresses if a == self.serveur.url + "/api/ia/reglages"],
+                        "réglages relus à l'ouverture de « Ce poste »")
 
     def test_dictee_desactivee_aucun_micro_sur_le_formulaire_signaler(self):
         self.contexte.add_init_script(test_dictee.RECONNAISSANCE_SIMULEE_JS)
@@ -506,10 +487,60 @@ class TestCePosteServeur(CasPoste):
         self.assertTrue(pdf.startswith(b"%PDF"))
         self.assertGreater(len(pdf), 1000)
 
+
+class TestCePosteServeurCle(CasPosteServeur):
+    """PC serveur réglé sur l'API compatible OpenAI du faux fournisseur, avec sa clé (PREVO_IA_CLE) : la clé est sur
+    le PC serveur, jamais sur le poste."""
+
+    @classmethod
+    def options_ia(cls, faux):
+        return ["--ia-url", faux.url + "/v1", "--ia-fournisseur", "openai"], {"PREVO_IA_CLE": CLE}
+
+    def test_cle_transmise_jamais_ecrite_ni_reaffichee(self):
+        page = self.ouvrir()
+        self.attendre_reglages_du_serveur()
+        self.assertEqual(page.inner_text("#poste-ia-serveur-fournisseur").strip(), "API compatible OpenAI")
+        self.assertEqual(page.inner_text("#poste-ia-serveur-url").strip(), self.faux.url + "/v1")
+        self.assertEqual(page.inner_text("#poste-ia-serveur-cle").strip(), "réglée sur le serveur")
+        self.choisir_apres_test_de_connexion("faux")
+        page.check("#poste-ia-actif")
+        page.click("#btn-enregistrer-ia")
+        page.wait_for_function("Ia.etat() === 'ok'")
+        self.assertEqual(page.evaluate("Ia.reglages().cle"), "", "aucune clé sur le poste")
+        self.assertTrue(self.faux.requetes)
+        for requete in self.faux.requetes:
+            with self.subTest(chemin=requete["chemin"]):
+                self.assertEqual(requete["entetes"]["authorization"], "Bearer " + CLE)
+        # Jamais affichée : seulement « réglée sur le serveur », aucune trace dans la page
+        dans_la_page = page.evaluate("""() => document.documentElement.outerHTML
+            + [...document.querySelectorAll('input, textarea, select')].map((e) => e.value).join('|')""")
+        self.assertNotIn(CLE, dans_la_page)
+        # Une écriture du poste (journal) après l'enregistrement : la clé n'y est pas
+        page.evaluate("Ia.tracerUtilisation('parametres', 'ia_distant_autorise', 'essai', 'faux')")
+        page.reload()
+        attendre_pret(page)
+        self.attendre_ecran_poste()
+        self.attendre_reglages_du_serveur()
+        self.assertEqual(page.inner_text("#poste-ia-serveur-cle").strip(), "réglée sur le serveur")
+        self.assertEqual(page.evaluate("Ia.reglages().cle"), "", "la clé reste sur le PC serveur")
+        stockage = page.evaluate("""() => JSON.stringify(Object.entries(sessionStorage))
+            + JSON.stringify(Object.entries(localStorage))""")
+        self.assertNotIn(CLE, stockage)
+        self.assertIn("proposition IA utilisée (faux) : essai",
+                      (self.serveur.dossier / "journal.csv").read_text(encoding="utf-8-sig"))
+        octets_cle = CLE.encode("utf-8")
+        fichiers = [f for f in sorted(self.serveur.dossier.rglob("*")) if f.is_file()]
+        self.assertTrue([f for f in fichiers if f.suffix == ".csv"])
+        for fichier in fichiers:
+            with self.subTest(fichier=fichier.name):
+                self.assertNotIn(octets_cle, fichier.read_bytes())
+        self.assertNotIn(CLE, self.serveur.sortie_console())
+        self.assertFalse([m for m in self.console if CLE in m])
+
     def test_telephone_375px_sans_defilement_et_zones_de_48px(self):
         self.page.set_viewport_size({"width": 375, "height": 812})
         page = self.ouvrir()
-        self.remplir_ia(fournisseur="openai", url=self.faux.url + "/v1", modele="faux", cle=CLE)
+        self.attendre_reglages_du_serveur()
         self.choisir_apres_test_de_connexion("faux")
         largeurs = page.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
         self.assertLessEqual(largeurs[0], largeurs[1], "défilement horizontal : %r" % (largeurs,))
@@ -632,6 +663,56 @@ class TestCePosteDemo(CasPoste):
         page.click("#btn-enregistrer-ia")
         page.wait_for_function("Ia.reglages().delaiS === 60")
         self.assertEqual(page.locator("dialog[open]").count(), 0)
+
+    def test_cle_jamais_gardee_pour_une_autre_adresse(self):
+        """Ajout de l'orchestrateur (défaut injecté) ; joué en démo depuis T158 (appel direct : seul cas où le poste
+        garde une clé, le mode serveur n'en garde plus) : la clé enregistrée n'est gardée que pour la même adresse ;
+        changer d'adresse sans saisir de clé l'abandonne (jamais envoyée à un autre service)."""
+        page = self.ouvrir_demo()
+        self.remplir_ia(fournisseur="openai", url=self.faux.url + "/v1", modele="faux", cle=CLE)
+        self.assertIn(MENTION_I5, page.inner_text("#poste-ia-zone-cle"))
+        self.choisir_apres_test_de_connexion("faux")
+        page.check("#poste-ia-actif")
+        page.click("#btn-enregistrer-ia")
+        page.wait_for_function("Ia.etat() === 'ok'")
+        self.assertEqual(page.evaluate("Ia.reglages().cle"), CLE)
+        autre = self.faux.url.replace("127.0.0.1", "localhost") + "/v1"
+        self.assertNotEqual(autre, self.faux.url + "/v1")
+        self.remplir_ia(url=autre)
+        page.click("#btn-enregistrer-ia")
+        page.wait_for_function("(url) => Ia.reglages().url === url", arg=autre)
+        self.assertEqual(page.evaluate("Ia.reglages().cle"), "")
+
+
+# ---------------------------------------------------------------------------
+# Mode dossier (page servie en http://127.0.0.1, dossier simulé) : carte inchangée, mention I5
+# ---------------------------------------------------------------------------
+
+class TestCePosteDossier(CasPoste):
+
+    def test_mode_dossier_carte_inchangee_avec_la_mention_i5(self):
+        for motif in ERREURS_SERVEUR_STATIQUE:
+            self.autoriser_erreur(motif)
+        installer_dossier_simule(self.contexte, "donnees-poste-i5")
+        preregler_profil(self.contexte, "responsable")
+        with ServeurStatique(RACINE) as statique:
+            page = self.page
+            page.goto(statique.url + "/index.html")
+            page.click("#btn-dossier")
+            page.wait_for_selector("#btn-base-demo", state="visible")
+            page.click("#btn-base-demo")
+            attendre_pret(page, 30000)
+            self.assertEqual(page.evaluate("App.mode"), "dossier")
+            self.aller("#/poste")
+            for champ in ("#poste-ia-fournisseur", "#poste-ia-url", "#poste-ia-modele", "#poste-ia-delai"):
+                self.assertTrue(page.is_visible(champ), champ)
+            self.assertEqual(page.locator("#poste-ia-serveur").count(), 0)
+            self.assertNotIn(MENTION_I5, page.inner_text("#carte-ia"), "pas de clé pour Ollama : pas de mention")
+            page.select_option("#poste-ia-fournisseur", "openai")
+            page.wait_for_selector("#poste-ia-cle", state="visible")
+            self.assertEqual(page.get_attribute("#poste-ia-cle", "type"), "password")
+            self.assertIn(MENTION_I5, page.inner_text("#poste-ia-zone-cle"))
+            self.assertFalse([a for a in self.adresses if "/api/ia" in a])
 
 
 if __name__ == "__main__":

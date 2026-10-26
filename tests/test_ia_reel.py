@@ -90,10 +90,10 @@ class TestIaReelle(CasNavigateur):
 
     def setUp(self):
         super().setUp()
-        self.serveur = ServeurPrevo()
+        self.serveur = ServeurPrevo(arguments=["--ia-url", URL])     # fournisseur réglé sur le PC serveur (§22.12)
         self.serveur.demarrer()
         self.addCleanup(self.serveur.arreter)
-        regler_ia(self.contexte, url=URL, modele=MODELE, delaiS=DELAI_S)
+        regler_ia(self.contexte, modele=MODELE, delaiS=DELAI_S)
         preregler_profil(self.contexte, "responsable", "Responsable")
         self.page.goto(self.serveur.url + "/")
         attendre_pret(self.page)

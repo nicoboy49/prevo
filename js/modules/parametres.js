@@ -44,8 +44,10 @@ const Parametres = (() => {
       aide: 'Visites de suite sans anomalie ni panne (criticité B ou C seulement).' },
     { cle: 'suggestion_fenetre_mois', type: 'entier', libelle: 'Période observée (mois)', defaut: '12', min: 3, max: 24,
       aide: 'Les pannes comptées sont celles de ces derniers mois.' },
-    // Lot 4 (ARCHITECTURE.md §17.1, D67) : le responsable autorise ou non les fournisseurs d'IA en ligne.
+    // Lot 4 (ARCHITECTURE.md §17.1, D67) : le responsable autorise ou non les fournisseurs d'IA en ligne ; en mode
+    // serveur (audit M2, §22.12), la décision est celle du PC serveur : la case la montre sans la changer.
     { cle: 'ia_distant_autorise', type: 'booleen', valeurs: ['0', '1'], defaut: '0', large: true, section: 'Assistant IA',
+      decideeParLeServeur: true,
       libelle: 'Autoriser les fournisseurs d\'IA en ligne (OpenAI, Mistral, Groq…)',
       aide: 'Les textes envoyés (descriptions, comptes rendus, désignations) quittent alors l\'atelier. L\'IA locale (Ollama) reste toujours possible.' },
     // Mise à jour signalée (ARCHITECTURE.md §21, D120) : le responsable autorise la lecture de prevo.pro/version.json.
@@ -75,6 +77,8 @@ const Parametres = (() => {
   // absente si ce fichier n'est pas chargé. Elle lit les réglages mode_solo et solo_technicien_id ci-dessus.
   const carteSolo = () => (Parametres.interne.carteSolo ? Parametres.interne.carteSolo(REGLAGES) : '');
   const brancherSolo = (conteneur) => { if (Parametres.interne.brancherSolo) Parametres.interne.brancherSolo(conteneur, pendant); };
+
+  const NOTE_DECIDE_SUR_LE_SERVEUR = 'Décidé sur le PC serveur (Paramètres › Accès et installation).';
 
   const LIBELLES_TYPE_PROBLEME = {
     reference: 'Référence cassée', valeur: 'Valeur illisible', excel: 'Abîmé par Excel', colonne: 'Colonne',
@@ -274,12 +278,34 @@ const Parametres = (() => {
     return REGLAGES.filter((reglage) => !reglage.horsFormulaire);
   }
 
+  // Mode serveur (audit M2) : réglage montré tel que le PC serveur l'a décidé, jamais écrit par ce formulaire.
+  function decideSurLeServeur(reglage) {
+    return Boolean(reglage.decideeParLeServeur) && App.mode === 'serveur';
+  }
+
+  function reglagesEnregistres() {
+    return reglagesDuFormulaire().filter((reglage) => !decideSurLeServeur(reglage));
+  }
+
+  function valeurAffichee(reglage) {
+    if (!decideSurLeServeur(reglage)) return Donnees.parametre(reglage.cle, reglage.defaut);
+    const serveur = typeof Ia !== 'undefined' && Ia.reglagesServeur ? Ia.reglagesServeur() : null;
+    return serveur && serveur.enLigne ? '1' : '0';
+  }
+
+  // Décision du PC serveur relue à chaque affichage de l'écran (GET /api/ia/reglages), en mode serveur seulement.
+  function lireDecisionsDuServeur() {
+    return App.mode === 'serveur' && typeof Ia !== 'undefined' && Ia.lireReglagesServeur ? Ia.lireReglagesServeur() : null;
+  }
+
   function formulaireReglages() {
     const formulaire = UI.element(UI.html`<form id="form-parametres" class="form-grille" novalidate></form>`);
     reglagesDuFormulaire().forEach((reglage) => {
       if (reglage.section) formulaire.appendChild(UI.element(UI.html`<h3 class="large parametres-section">${reglage.section}</h3>`));
+      const surServeur = decideSurLeServeur(reglage);
       const bloc = UI.champ({ nom: reglage.cle, type: reglage.type, libelle: reglage.libelle, valeurs: reglage.valeurs },
-        Donnees.parametre(reglage.cle, reglage.defaut), { aide: reglage.aide });
+        valeurAffichee(reglage), { aide: surServeur ? NOTE_DECIDE_SUR_LE_SERVEUR + ' ' + reglage.aide : reglage.aide,
+          lectureSeule: surServeur });
       if (reglage.large) bloc.classList.add('large');
       formulaire.appendChild(bloc);
     });
@@ -309,7 +335,7 @@ const Parametres = (() => {
     const syntaxe = UI.verifierFormulaire(formulaire);
     const valeurs = UI.lireFormulaire(formulaire);
     let erreurs = syntaxe.length;
-    reglagesDuFormulaire().forEach((reglage) => {
+    reglagesEnregistres().forEach((reglage) => {
       if (syntaxe.some((e) => e.nom === reglage.cle)) return;
       const message = erreurReglage(reglage, valeurs[reglage.cle]);
       if (message) {
@@ -325,7 +351,7 @@ const Parametres = (() => {
     }
     await pendant(bouton, 'enregistrement des paramètres', async () => {
       await Donnees.modifier('parametres', (lignes) => {
-        reglagesDuFormulaire().forEach((reglage) => {
+        reglagesEnregistres().forEach((reglage) => {
           const nombre = reglage.type === 'entier' || reglage.type === 'decimal';
           const valeur = nombre ? String(Donnees.nombre(valeurs[reglage.cle])) : valeurs[reglage.cle];
           const ligne = lignes.find((l) => l.cle === reglage.cle);
@@ -352,7 +378,7 @@ const Parametres = (() => {
   }
 
   async function afficherParametres(conteneur) {
-    const sauvegardes = await lireSauvegardes();
+    const [sauvegardes] = await Promise.all([lireSauvegardes(), lireDecisionsDuServeur()]);
     // Si l'utilisateur est parti ailleurs pendant l'attente, on n'écrase pas son nouvel écran.
     if (!/^#\/parametres/.test(location.hash)) return;
 

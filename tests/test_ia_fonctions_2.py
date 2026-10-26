@@ -1,5 +1,6 @@
 """Fonctions IA de la gamme, de la fiche équipement et du rapport (lot 4, ARCHITECTURE.md §17.5,
-points 4 à 6 ; CDC D65, D69, D71 ; CS66, CS68). Faux fournisseur seulement, mode serveur.
+points 4 à 6 ; CDC D65, D69, D71 ; CS66, CS68). Faux fournisseur seulement, mode serveur : le fournisseur est
+réglé sur le PC serveur (--ia-url, audit M1, §22.12), le poste ne règle que l'activation et le modèle.
 
     - check-list (fiche gamme, responsable) : opérations cochables ; RIEN n'est écrit avant « Ajouter
       les opérations cochées », puis seules les cochées s'ajoutent (journal habituel + trace IA) ;
@@ -67,14 +68,14 @@ class CasFonctions(CasNavigateur):
     def setUp(self):
         super().setUp()
         self.faux.requetes.clear()
-        self.serveur = ServeurPrevo()
+        self.serveur = ServeurPrevo(arguments=["--ia-url", self.faux.url])
         self.serveur.demarrer()
         self.addCleanup(self.serveur.arreter)
         self.contexte.add_init_script(NOTER_TOASTS_JS)
 
     def ouvrir(self, route, profil="responsable", nom="Responsable", technicien_id="", ia=True, modele="faux"):
         if ia:
-            regler_ia(self.contexte, url=self.faux.url, modele=modele)
+            regler_ia(self.contexte, modele=modele)
         preregler_profil(self.contexte, profil, nom, technicien_id)
         self.page.goto(self.serveur.url + "/")
         attendre_pret(self.page)
@@ -161,7 +162,7 @@ class TestCheckListe(CasFonctions):
         technicien = next(t for t in lire_csv(self.serveur.dossier, "techniciens.csv") if t["actif"] != "0")
         contexte = self.navigateur.new_context(locale="fr-FR")
         self.addCleanup(contexte.close)
-        regler_ia(contexte, url=self.faux.url)
+        regler_ia(contexte)
         preregler_profil(contexte, "technicien", technicien["prenom"] + " " + technicien["nom"], technicien["id"])
         autre = contexte.new_page()
         self.surveiller(autre)
@@ -195,7 +196,7 @@ class TestSansResume(CasFonctions):
         """Fiche ouverte AVANT la fin du test du fournisseur (relais retardé) : le bouton apparaît ensuite de
         lui-même, sans réafficher la fiche (ajout de l'orchestrateur au lot 4, reporté sur la check-list)."""
         gamme = self.gamme()
-        regler_ia(self.contexte, url=self.faux.url, modele="faux")
+        regler_ia(self.contexte, modele="faux")
         preregler_profil(self.contexte, "responsable", "Responsable")
         # Le test d'ouverture (relais /api/ia) est RETENU jusqu'à ce que la fiche soit vérifiée, puis libéré.
         retenues = []

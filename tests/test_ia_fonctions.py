@@ -15,7 +15,9 @@ Toujours avec le faux fournisseur (tests/faux_fournisseur_ia.py), jamais un vrai
       changé sans « Enregistrer le compte rendu » ; après l'enregistrement, le journal trace chaque
       champ venu de l'IA (une seule fois) ; aucun bouton sur un OT verrouillé ni pour le demandeur ;
     - mode serveur : mêmes fonctions par le relais /api/ia (CSV comparés à l'octet), et téléphone
-      375 px : boutons et encadré sans défilement horizontal, zones ≥ 48 px, proposition par le relais.
+      375 px : boutons et encadré sans défilement horizontal, zones ≥ 48 px, proposition par le relais ;
+      le fournisseur est réglé sur le PC serveur (--ia-url, audit M1, §22.12), le poste ne règle que
+      l'activation, le modèle et le délai.
 Données envoyées au faux fournisseur : jamais un nom de technicien ni de demandeur du jeu de démo.
 Aucun identifiant du jeu de démo écrit en dur : rôles de scenarios_demo() et fichiers de la démo.
 
@@ -261,19 +263,20 @@ class TestSansIa(CasIaFonctions):
         self.assertEqual(self.faux.requetes, [])
 
     def test_serveur_ia_inactive_puis_fournisseur_injoignable(self):
-        with ServeurPrevo() as serveur:
-            regler_ia(self.contexte, actif=False, url=self.faux.url)
+        # Fournisseur réglé sur le PC serveur (--ia-url, audit M1) : ici un fournisseur éteint
+        with FauxFournisseur() as eteint:
+            adresse = eteint.url
+        with ServeurPrevo(arguments=["--ia-url", adresse]) as serveur:
+            regler_ia(self.contexte, actif=False)
             page = self.ouvrir_signaler(serveur=serveur, attendre_ia=False)
             time.sleep(1)
             self.verifier_ecrans_sans_bouton()
             self.assertEqual(self.faux.requetes, [])
-            self.assertFalse([a for a in self.adresses if a.endswith("/api/ia")])
+            self.assertFalse([a for a in self.adresses if "/api/ia" in a], "ni relais, ni lecture des réglages du serveur")
 
-            # IA activée sur le poste, fournisseur éteint : le relais répond 502 au test d'ouverture
+            # IA activée sur le poste, fournisseur du PC serveur éteint : le relais répond 502 au test d'ouverture
             self.autoriser_erreur(ERREUR_502)
-            with FauxFournisseur() as eteint:
-                adresse = eteint.url
-            page.evaluate("(url) => Ia.enregistrerReglages({ actif: true, url })", adresse)
+            page.evaluate("Ia.enregistrerReglages({ actif: true })")
             page.evaluate("(route) => { location.hash = route; }", "#/di/nouvelle?equipement=" + SCENARIOS["causes_equipement"])
             page.reload()                                   # nouvelle ouverture : un seul test du fournisseur
             attendre_pret(page)
@@ -566,8 +569,8 @@ class TestParLeRelais(CasIaFonctions):
 
     def test_signaler_par_le_relais_csv_identiques_puis_envoi(self):
         demandeur = ligne_demo("demandes", SCENARIOS["di_statut_nouvelle"])["demandeur"]
-        with ServeurPrevo() as serveur:
-            regler_ia(self.contexte, url=self.faux.url)
+        with ServeurPrevo(arguments=["--ia-url", self.faux.url]) as serveur:
+            regler_ia(self.contexte)
             page = self.ouvrir_signaler(serveur=serveur, profil="demandeur", nom=demandeur, attendre_ia=False)
             page.wait_for_selector('.di-ia .ia-bouton:has-text("%s")' % LIBELLE_DI)   # posé dès le test réussi
             page.fill("input[name=symptome]", "ça fuit")
@@ -593,8 +596,8 @@ class TestParLeRelais(CasIaFonctions):
         ot_demo = ligne_demo("ordres_travail", ot_id)
         technicien = ligne_demo("techniciens", ot_demo["technicien_id"])
         attendus = premiers_codes()
-        with ServeurPrevo() as serveur:
-            regler_ia(self.contexte, url=self.faux.url)
+        with ServeurPrevo(arguments=["--ia-url", self.faux.url]) as serveur:
+            regler_ia(self.contexte)
             page = self.ouvrir_compte_rendu(ot_id, serveur=serveur, profil="technicien",
                                             nom=technicien["prenom"] + " " + technicien["nom"],
                                             technicien_id=ot_demo["technicien_id"])
@@ -621,8 +624,8 @@ class TestParLeRelais(CasIaFonctions):
         ot_id = SCENARIOS["ot_statut_en_cours"]
         technicien_id = ligne_demo("ordres_travail", ot_id)["technicien_id"]
         self.passer_au_telephone()
-        with ServeurPrevo() as serveur:
-            regler_ia(self.contexte, url=self.faux.url)
+        with ServeurPrevo(arguments=["--ia-url", self.faux.url]) as serveur:
+            regler_ia(self.contexte)
             page = self.ouvrir_signaler(serveur=serveur, profil="technicien", nom="Technicien essai",
                                         technicien_id=technicien_id)
             page.wait_for_selector(".di-ia .ia-bouton")

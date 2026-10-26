@@ -757,30 +757,50 @@ class TestReglagesEtCodes(CasParametres):
             self.assertEqual(page.evaluate("Donnees.parametre('suggestion_fenetre_mois', '')"), "24")
 
     def test_reglage_fournisseurs_ia_distant_non_par_defaut_puis_enregistre(self):
-        """Lot 4 (ARCHITECTURE.md §17.1, D67) : le responsable autorise ou non les IA en ligne (défaut : non)."""
+        """Lot 4 (ARCHITECTURE.md §17.1, D67) : le responsable autorise ou non les IA en ligne (défaut : non). Depuis
+        T158 (audit M2, §22.12), en mode serveur la décision est celle du PC serveur (--ia-en-ligne) : la case la
+        montre, désactivée, avec la note, et « Enregistrer » n'y touche pas (parametres.csv) ; dans la démo (sans
+        serveur, comme en mode dossier), la case s'enregistre comme avant."""
+        note = "Décidé sur le PC serveur (Paramètres › Accès et installation)."
+        case = "#form-parametres [name=ia_distant_autorise]"
+        # Mode serveur sans --ia-en-ligne : « non », sans pouvoir la changer ; Enregistrer laisse la clé hors du fichier
         with ServeurPrevo() as serveur:
             chemin = serveur.dossier / "parametres.csv"
             page = self.ouvrir(serveur, route="#/parametres")
             self.attendre_ecran("Paramètres")
-            case = "#form-parametres [name=ia_distant_autorise]"
             self.assertIn("Assistant IA", page.inner_text("#form-parametres"))
-            self.assertFalse(page.is_checked(case))                     # clé absente de la démo : « non »
-            self.assertEqual(page.evaluate("Donnees.parametre('ia_distant_autorise', '0')"), "0")
-            page.check(case)
+            self.assertFalse(page.is_checked(case))
+            self.assertTrue(page.is_disabled(case))
+            self.assertIn(note, page.inner_text("#form-parametres"))
             page.click("#form-parametres button[type=submit]")
             self.attendre_toast("Paramètres enregistrés")
             _, lignes = lire_csv(chemin)
-            valeurs = {ligne["cle"]: sans_apostrophe(ligne["valeur"]) for ligne in lignes}
-            self.assertEqual(valeurs["ia_distant_autorise"], "1")
-            page.reload()
-            attendre_pret(page)
+            self.assertNotIn("ia_distant_autorise", {ligne["cle"] for ligne in lignes}, "clé absente de la démo : jamais écrite")
+        # Mode serveur avec --ia-en-ligne : « oui », toujours sans pouvoir la changer
+        with ServeurPrevo(arguments=["--ia-en-ligne"]) as serveur:
+            page = self.ouvrir(serveur, route="#/parametres")
             self.attendre_ecran("Paramètres")
-            self.assertTrue(page.is_checked(case))
-            page.uncheck(case)
-            page.click("#form-parametres button[type=submit]")
-            self.attendre_toast("Paramètres enregistrés")
-            _, lignes = lire_csv(chemin)
-            self.assertEqual({l["cle"]: sans_apostrophe(l["valeur"]) for l in lignes}["ia_distant_autorise"], "0")
+            page.wait_for_function("(s) => document.querySelector(s) && document.querySelector(s).checked", arg=case)
+            self.assertTrue(page.is_disabled(case))
+            self.assertIn(note, page.inner_text("#form-parametres"))
+        # Démo (sans serveur) : la case s'enregistre, défaut « non »
+        page = self.page
+        page.goto(url_fichier("index.html"))
+        page.click("#btn-demo")
+        attendre_pret(page)
+        self.aller_a("#/parametres")
+        self.attendre_ecran("Paramètres")
+        self.assertFalse(page.is_checked(case))
+        self.assertFalse(page.is_disabled(case))
+        self.assertNotIn(note, page.inner_text("#form-parametres"))
+        self.assertEqual(page.evaluate("Donnees.parametre('ia_distant_autorise', '0')"), "0")
+        page.check(case)
+        page.click("#form-parametres button[type=submit]")
+        self.attendre_toast("Paramètres enregistrés")
+        self.assertEqual(page.evaluate("Donnees.parametre('ia_distant_autorise', '0')"), "1")
+        page.uncheck(case)
+        page.click("#form-parametres button[type=submit]")
+        page.wait_for_function("Donnees.parametre('ia_distant_autorise', '0') === '0'")
 
     def test_codes_ajout_visible_dans_la_fiche_ot_libelle_modifie_et_doublons_refuses(self):
         with ServeurPrevo() as serveur:

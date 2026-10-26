@@ -2,8 +2,8 @@
 D104 a, D105, D107, D110 ; CS96, CS107). Faux fournisseur seulement (tests/faux_fournisseur_ia.py, qui répond à
 `ingestionWiki` grâce à tests/faux_wiki.py), joint par le relais /api/ia de serveur.py : jamais un vrai modèle.
 
-Le parcours, sur une copie du jeu de démo (serveur.py, ServeurPrevo), avec le profil responsable, sur un poste où l'IA
-est activée vers le faux fournisseur :
+Le parcours, sur une copie du jeu de démo (serveur.py, ServeurPrevo, dont le fournisseur d'IA est le faux fournisseur :
+--ia-url, audit M1, §22.12), avec le profil responsable, sur un poste où l'IA est activée :
     1. clôture technique AVEC une astuce : temps passé, date de fin, codes, compte rendu, « Astuce pour la prochaine
        fois », « Clôturer techniquement » (onglets Exécution et Compte rendu de la fiche de l'OT EM-01 en cours) ;
     2. clôture administrative (confirmation dans la fenêtre) : l'OT entre dans la file du wiki (D104 a), le message le
@@ -109,7 +109,7 @@ class CasRecetteLot6(CasNavigateur):
         self.contexte.clock.set_fixed_time(HEURE_FIXE)
         self.contexte.add_init_script(NOTER_TOASTS_JS)
         preregler_profil(self.contexte, "responsable")
-        regler_ia(self.contexte, url=self.faux.url)
+        regler_ia(self.contexte)                  # le fournisseur est réglé sur le PC serveur (--ia-url)
         self.page.on("request", lambda requete: self.requetes.append(requete.url))
 
     # -- écran --------------------------------------------------------------------------------------
@@ -198,7 +198,7 @@ class CasRecetteLot6(CasNavigateur):
 class TestRecetteWiki(CasRecetteLot6):
 
     def test_cloture_file_traitement_validation_page_recherche_puis_contradiction_tranchee(self):
-        with ServeurPrevo() as serveur:
+        with ServeurPrevo(arguments=["--ia-url", self.faux.url]) as serveur:
             page = self.page
             page.goto(serveur.url + "/")
             attendre_pret(page)

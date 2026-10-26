@@ -8,9 +8,13 @@ Toujours avec le faux fournisseur (tests/faux_fournisseur_ia.py), jamais un vrai
       envoyées par fonction (aucun nom de technicien ni de demandeur), repli json_object, délai,
       annulation, réponse illisible, code inventé, chiffre en clair, aucune requête quand l'IA est
       inactive, fournisseur en ligne refusé puis autorisé par le responsable ;
-    - relais du serveur (mode serveur, /api/ia) : Ollama, API compatible OpenAI avec clé (jamais dans
-      les CSV, le journal, la console du serveur ni celle du navigateur), repli, délai, aucune requête
-      sans IA ;
+    - relais du serveur (mode serveur, /api/ia ; audit M1, M3, §22.12) : fournisseur, adresse et clé réglés
+      sur le PC serveur (--ia-url, --ia-fournisseur, PREVO_IA_CLE ; l'adresse du réglage du poste est
+      ignorée) : Ollama, API compatible OpenAI avec la clé du serveur (jamais dans les CSV, le journal, la
+      console du serveur ni le navigateur), repli, délai du poste et 504 du relais, aucune requête sans IA ;
+    - règles du mode serveur (page vide, App et fetch simulés) : réglages lus sur le serveur, seuls
+      l'activation, le modèle et le délai mémorisés, ancien réglage du poste effacé, relais sans adresse ni
+      clé, accord « en ligne » du PC serveur seulement ;
     - encadré : bouton, progression, Annuler, Utiliser / Modifier / Ignorer, boutons propres, erreur,
       un seul encadré par élément, mention permanente dans la coque (ordinateur et téléphone).
 
@@ -31,7 +35,7 @@ from faux_wiki import lire_message
 
 CLE = "sk-test-cle-ia-prevo-5f3a9c"
 SCRIPTS_REGLES = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/interface.js",
-                  "js/modules/ia.js", "js/modules/ia-prompts.js", "js/modules/ia-encadre.js"]
+                  "js/modules/ia.js", "js/modules/ia-prompts.js", "js/modules/ia-encadre.js", "js/modules/ia-serveur.js"]
 FONCTIONS = ["reformulerDI", "compteRendu", "codes", "checkList", "commentaireRapport"]
 # Valeurs « interdites » glissées dans les données passées à Ia.demander : elles ne doivent jamais partir.
 MARQUEURS_INTERDITS = ["77.77", "987.65", "photo-secrete.jpg", "notice-secrete.pdf"]
@@ -270,6 +274,62 @@ class TestReglesPures(CasNavigateur):
         self.assertFalse(resultat["active"])
         self.assertEqual(resultat["refus"]["nom"], "IaRefusee")
         self.assertIn(REFUS_DISTANT, resultat["refus"]["message"])
+
+    def test_mode_serveur_reglages_du_pc_serveur_et_aucune_cle_gardee(self):
+        """Audit M1, M2, M3 (§22.12), App et fetch simulés : à l'ouverture en mode serveur, l'ancien réglage du poste
+        est réécrit sans fournisseur, adresse ni clé ; fournisseur et adresse viennent de GET /api/ia/reglages ; seuls
+        l'activation, le modèle et le délai sont mémorisés ; le relais ne reçoit que chemin, methode et corps ; l'IA
+        en ligne n'est permise que par le PC serveur (parametres.csv n'y est pour rien)."""
+        resultat = self.page.evaluate("""async () => {
+          const appels = [];
+          let enLigne = false;
+          window.fetch = async (adresse, options) => {
+            appels.push({ adresse: String(adresse), corps: options && options.body ? JSON.parse(options.body) : null });
+            const corps = String(adresse) === '/api/ia/reglages'
+              ? { fournisseur: 'openai', url: 'https://api.exemple.fr/v1', cle_reglee: true, en_ligne: enLigne, portee: 'distant' }
+              : { statut: 200, corps: { data: [{ id: 'faux' }],
+                  choices: [{ message: { role: 'assistant', content: '{"texte": "Constat : fuite."}' } }] } };
+            return new Response(JSON.stringify(corps), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          };
+          localStorage.setItem('prevo.ia', JSON.stringify({ actif: true, fournisseur: 'ollama', url: 'http://localhost:11434',
+            modele: 'faux', cle: 'sk-ancienne-cle', delaiS: 30 }));
+          window.App = { mode: 'serveur', versionWeb: false };
+          const etatOuverture = await Ia.verifierAuDemarrage();
+          const ouverture = { memorise: JSON.parse(localStorage.getItem('prevo.ia')), reglages: Ia.reglages(),
+            serveur: Ia.reglagesServeur(), autorise: Ia.distantAutorise(), active: Ia.active(), appels: appels.slice() };
+          let refus = null;
+          try { Ia.enregistrerReglages({ actif: true }); } catch (erreur) { refus = { nom: erreur.name, message: erreur.message }; }
+          const enregistres = Ia.enregistrerReglages({ actif: false, fournisseur: 'ollama', url: 'http://192.168.1.20:11434',
+            cle: 'sk-nouvelle-cle', modele: 'faux-2', delaiS: 45 });
+          const memorise = JSON.parse(localStorage.getItem('prevo.ia'));
+          enLigne = true;                                   // relancé avec --ia-en-ligne : relu à l'ouverture de « Ce poste »
+          await Ia.lireReglagesServeur();
+          Ia.enregistrerReglages({ actif: true });
+          const test = await Ia.tester();
+          const reponse = await Ia.demander('compteRendu', { notes: 'fuite' });
+          return { etatOuverture, ouverture, refus, enregistres, memorise, active: Ia.active(), etat: Ia.etat(),
+                   test, texte: reponse.resultat.texte, appels };
+        }""")
+        ouverture = resultat["ouverture"]
+        self.assertEqual(resultat["etatOuverture"], "inconnu")
+        self.assertEqual(ouverture["memorise"], {"actif": True, "modele": "faux", "delaiS": 30})
+        self.assertEqual(ouverture["reglages"], {"actif": True, "fournisseur": "openai", "url": "https://api.exemple.fr/v1",
+                                                 "modele": "faux", "cle": "", "delaiS": 30})
+        self.assertEqual(ouverture["serveur"], {"fournisseur": "openai", "url": "https://api.exemple.fr/v1", "cleReglee": True,
+                                                "enLigne": False, "portee": "distant"})
+        self.assertEqual((ouverture["autorise"], ouverture["active"]), (False, False))
+        self.assertEqual(ouverture["appels"], [{"adresse": "/api/ia/reglages", "corps": None}], "aucun appel refusé")
+        self.assertEqual(resultat["refus"]["nom"], "IaRefusee")
+        self.assertIn("pas autorisés sur le PC serveur", resultat["refus"]["message"])
+        self.assertEqual(resultat["enregistres"], {"actif": False, "fournisseur": "openai", "url": "https://api.exemple.fr/v1",
+                                                   "modele": "faux-2", "cle": "", "delaiS": 45})
+        self.assertEqual(resultat["memorise"], {"actif": False, "modele": "faux-2", "delaiS": 45})
+        self.assertEqual((resultat["active"], resultat["etat"], resultat["test"]["ok"]), (True, "ok", True))
+        self.assertIn("Constat", resultat["texte"])
+        relais = [appel["corps"] for appel in resultat["appels"] if appel["adresse"] == "/api/ia"]
+        self.assertEqual([sorted(corps) for corps in relais],
+                         [["chemin", "methode"], ["chemin", "corps", "methode"]], "liste des modèles, puis compte rendu")
+        self.assertNotIn("sk-", json.dumps(resultat["appels"]))
 
     def test_erreurs_nommees_en_francais(self):
         erreurs = self.page.evaluate("""() => ['IaIndisponible', 'IaDelai', 'IaAnnulee', 'IaReponseInvalide', 'IaRefusee']
@@ -901,18 +961,29 @@ class TestDemanderDirect(CasDemoIa):
 # Relais du serveur (mode serveur, /api/ia)
 # ---------------------------------------------------------------------------
 
-class TestDemanderRelais(CasNavigateur):
+class CasRelais(CasNavigateur):
+    """Mode serveur (audit M1, M3, §22.12) : le fournisseur, son adresse et sa clé sont réglés sur le PC serveur,
+    lancé ici sur le faux fournisseur (options_ia) ; le poste ne règle que l'activation, le modèle et le délai.
+    Le réglage du poste porte exprès une AUTRE adresse (ADRESSE_DU_POSTE, d'avant la version 2) : elle est ignorée."""
+
+    ADRESSE_DU_POSTE = "http://127.0.0.1:9"      # port fermé (discard)
+
+    @classmethod
+    def options_ia(cls, faux):
+        """(arguments de serveur.py, variables d'environnement) qui règlent le fournisseur du PC serveur."""
+        raise NotImplementedError
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.serveur = ServeurPrevo()
-        cls.serveur.demarrer()
-        cls.addClassCleanup(cls.serveur.arreter)
         cls.faux = FauxFournisseur(lenteur_s=4, cle_attendue=CLE)
         cls.faux.demarrer()
         cls.addClassCleanup(cls.faux.arreter)
         taire_coupures(cls.faux)
+        arguments, environnement = cls.options_ia(cls.faux)
+        cls.serveur = ServeurPrevo(arguments=arguments, environnement=environnement)
+        cls.serveur.demarrer()
+        cls.addClassCleanup(cls.serveur.arreter)
 
     def setUp(self):
         super().setUp()
@@ -934,10 +1005,20 @@ class TestDemanderRelais(CasNavigateur):
     def demander(self, fonction, donnees, **options):
         return self.page.evaluate(DEMANDER_JS, [fonction, donnees, options or None])
 
+
+class TestDemanderRelais(CasRelais):
+    """PC serveur réglé sur Ollama (--ia-url), sans clé."""
+
+    @classmethod
+    def options_ia(cls, faux):
+        return ["--ia-url", faux.url], None
+
     def test_relais_ollama_portee_pc_atelier_et_codes_du_fichier(self):
-        regler_ia(self.contexte, url=self.faux.url)
+        regler_ia(self.contexte, url=self.ADRESSE_DU_POSTE)
         page = self.ouvrir()
         self.assertEqual(page.evaluate("Ia.etat()"), "ok")
+        # L'adresse est celle du PC serveur, pas celle du réglage du poste
+        self.assertEqual(page.evaluate("Ia.reglages().url"), self.faux.url)
         self.assertEqual(page.evaluate("Ia.portee(Ia.reglages().url)"), "pc-atelier")
         self.assertEqual(page.inner_text("#ia-mention").strip(), "IA : reste sur le PC atelier")
         reponse = self.demander("codes", {"compteRendu": "garniture changée", "titre": "Fuite pompe", "symptomeDI": "fuite"})
@@ -951,13 +1032,31 @@ class TestDemanderRelais(CasNavigateur):
             with self.subTest(champ=champ):
                 self.assertEqual(proprietes[champ]["enum"], [l["code"] for l in lignes if l["famille"] == famille] + [""])
         # Mode serveur : tout passe par le relais, rien ne part du navigateur vers le fournisseur
-        self.assertFalse([a for a in self.adresses if a.startswith(self.faux.url)])
+        self.assertFalse([a for a in self.adresses if a.startswith((self.faux.url + "/", self.ADRESSE_DU_POSTE + "/"))])
         self.assertEqual(len([a for a in self.adresses if a == self.serveur.url + "/api/ia"]), 2)
 
+    def test_relais_aucune_requete_quand_l_ia_est_inactive(self):
+        regler_ia(self.contexte, actif=False)
+        page = self.ouvrir(attendre_etat=False)
+        time.sleep(1.5)
+        self.assertEqual(self.faux.requetes, [])
+        self.assertFalse([a for a in self.adresses if "/api/ia" in a], "ni relais, ni lecture des réglages du serveur")
+        self.assertEqual(page.evaluate("Ia.etat()"), "inconnu")
+
+
+class TestDemanderRelaisCle(CasRelais):
+    """PC serveur réglé sur l'API compatible OpenAI du faux fournisseur, avec sa clé (PREVO_IA_CLE)."""
+
+    @classmethod
+    def options_ia(cls, faux):
+        return ["--ia-url", faux.url + "/v1", "--ia-fournisseur", "openai"], {"PREVO_IA_CLE": CLE}
+
     def test_relais_openai_cle_transmise_jamais_dans_les_fichiers_ni_les_consoles(self):
-        regler_ia(self.contexte, fournisseur="openai", url=self.faux.url + "/v1", cle=CLE)
+        regler_ia(self.contexte)
         page = self.ouvrir()
         self.assertEqual(page.evaluate("Ia.etat()"), "ok")
+        self.assertEqual(page.evaluate("[Ia.reglages().fournisseur, Ia.reglages().url, Ia.reglages().cle]"),
+                         ["openai", self.faux.url + "/v1", ""])
         reponse = self.demander("compteRendu", {"notes": "garniture changée", "titre": "Fuite"})
         self.assertTrue(reponse["ok"], reponse)
         self.assertIn("Constat", reponse["resultat"]["texte"])
@@ -974,28 +1073,31 @@ class TestDemanderRelais(CasNavigateur):
                     self.assertNotIn(octets_cle, fichier.read_bytes())
         self.assertNotIn(CLE, self.serveur.sortie_console())
         self.assertFalse([m for m in self.console if CLE in m])
+        # M3 : la clé n'est jamais dans le navigateur (stockage, page)
+        self.assertNotIn(CLE, json.dumps(page.evaluate("[Object.entries(localStorage), Object.entries(sessionStorage)]")))
+        self.assertNotIn(CLE, page.content())
 
     def test_relais_repli_json_object_et_delai(self):
-        regler_ia(self.contexte, fournisseur="openai", url=self.faux.url + "/v1", cle=CLE, modele="faux-schema")
+        regler_ia(self.contexte, modele="faux-schema")
         page = self.ouvrir()
         reponse = self.demander("compteRendu", {"notes": "fuite"})
         self.assertTrue(reponse["ok"], reponse)
         formats = [r["corps"]["response_format"]["type"] for r in self.faux.requetes_vers("/v1/chat/completions")]
         self.assertEqual(formats, ["json_schema", "json_object"])
-        # Délai dépassé : le serveur coupe (504) et l'erreur est nommée IaDelai
-        self.autoriser_erreur(ERREUR_504)
+        # Délai dépassé : le relais a un délai fixe (120 s, PC serveur) ; le navigateur coupe à celui du poste
         page.evaluate("Ia.enregistrerReglages({ modele: 'faux-lent', delaiS: 1 })")
         delai = self.demander("compteRendu", {"notes": "fuite"})
         self.assertEqual((delai["ok"], delai["nom"]), (False, "IaDelai"))
         self.assertLess(delai["duree"], 3900)
-
-    def test_relais_aucune_requete_quand_l_ia_est_inactive(self):
-        regler_ia(self.contexte, actif=False, url=self.faux.url)
-        page = self.ouvrir(attendre_etat=False)
-        time.sleep(1.5)
-        self.assertEqual(self.faux.requetes, [])
-        self.assertFalse([a for a in self.adresses if a.endswith("/api/ia")])
-        self.assertEqual(page.evaluate("Ia.etat()"), "inconnu")
+        # Le relais qui coupe (504) donne la même erreur nommée
+        self.autoriser_erreur(ERREUR_504)
+        self.contexte.route(self.serveur.url + "/api/ia", lambda route: route.fulfill(
+            status=504, headers={"Content-Type": "application/json"},
+            body=json.dumps({"erreur": "Le fournisseur d'IA n'a pas répondu dans le délai."})))
+        page.evaluate("Ia.enregistrerReglages({ delaiS: 30 })")
+        coupe = self.demander("compteRendu", {"notes": "fuite"})
+        self.assertEqual((coupe["ok"], coupe["nom"]), (False, "IaDelai"))
+        self.assertIn("délai", coupe["message"])
 
 
 # ---------------------------------------------------------------------------

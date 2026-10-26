@@ -1,16 +1,18 @@
 'use strict';
-// Ia (1/3) — assistant IA optionnel (ARCHITECTURE.md §17 ; brief §10 ; CDC du lot 4, D65 à D72) :
-// réglages du poste, portée du fournisseur (ce PC, PC atelier, atelier, en ligne), appel direct ou par
-// le relais /api/ia du serveur, délai et annulation, validation des réponses. L'IA propose, l'humain
-// valide : rien n'est appelé tant que l'IA n'est pas activée sur le poste, rien n'est écrit sans clic.
+// Ia (1/4) — assistant IA optionnel (ARCHITECTURE.md §17 ; brief §10 ; CDC du lot 4, D65 à D72) :
+// réglages du poste, portée du fournisseur (ce PC, PC atelier, atelier, en ligne), appel direct (modes
+// dossier et démo), délai et annulation, validation des réponses. L'IA propose, l'humain valide : rien
+// n'est appelé tant que l'IA n'est pas activée sur le poste, rien n'est écrit sans clic.
 // Fichiers du module : ia.js (crée l'objet Ia), ia-prompts.js (consignes), ia-encadre.js (boutons et
-// encadré Utiliser / Modifier / Ignorer).
+// encadré Utiliser / Modifier / Ignorer), ia-serveur.js (mode serveur : réglages du PC serveur, relais).
 //
 // API (utilisée par « Ce poste » et par les écrans des fonctions IA) :
-//   Ia.reglages() → { actif, fournisseur: 'ollama' | 'openai', url, modele, cle, delaiS }
+//   Ia.reglages() → { actif, fournisseur: 'ollama' | 'openai', url, modele, cle, delaiS } ; en mode serveur
+//     (audit M1, M3, §22.12), fournisseur et url sont ceux du PC serveur (Ia.reglagesServeur) et cle est vide
 //   Ia.enregistrerReglages(modifications) → réglages complets enregistrés (lève IaRefusee si l'on
-//     active un fournisseur en ligne sans l'autorisation du responsable)
-//   Ia.distantAutorise() ; Ia.portee(url[, mode]) → 'poste' | 'pc-atelier' | 'atelier' | 'distant' ;
+//     active un fournisseur en ligne sans autorisation) ; en mode serveur, seuls actif, modele et delaiS
+//   Ia.distantAutorise() (mode serveur : décision du PC serveur, M2) ; Ia.portee(url[, mode]) → 'poste' |
+//     'pc-atelier' | 'atelier' | 'distant' ;
 //   Ia.mention(portee, url) → « reste sur ce PC »… ; Ia.urlValide(url) ; Ia.active() ;
 //   Ia.etat() → 'inconnu' | 'ok' | 'injoignable' ; Ia.verifierAuDemarrage() (appelé par js/app.js) ;
 //   Ia.tester([reglagesEssai]) → { ok, modeles, message } ;
@@ -23,7 +25,8 @@
 //     Ia.MESSAGE_VERSION_WEB ; les boutons restent visibles (ia-encadre.js).
 // Erreurs nommées (Ia.IaIndisponible, Ia.IaDelai, Ia.IaAnnulee, Ia.IaReponseInvalide, Ia.IaRefusee,
 // toutes filles de Ia.ErreurIa) : message en français, jamais la clé.
-// La clé du fournisseur n'est écrite que dans localStorage (prevo.ia) : ni CSV, ni journal, ni console.
+// Modes dossier et démo : la clé n'est écrite que dans localStorage (prevo.ia) : ni CSV, ni journal, ni
+// console. Mode serveur : elle reste sur le PC serveur, le navigateur n'en garde aucune.
 
 const Ia = (() => {
 
@@ -38,10 +41,10 @@ const Ia = (() => {
     actif: false, fournisseur: 'ollama', url: 'http://localhost:11434', modele: 'qwen2.5:7b', cle: '', delaiS: 120,
   });
   const DELAI_MIN_S = 1;
-  const DELAI_MAX_S = 300;            // plafond du relais du serveur (§17.2)
+  const DELAI_MAX_S = 300;            // délai du poste au plus (le relais du serveur garde le sien : 120 s)
   const DELAI_TEST_S = 10;            // test de connexion (ouverture, « Tester la connexion »)
-  const MARGE_RELAIS_S = 5;           // mode serveur : le serveur coupe d'abord (504), le navigateur ensuite
-  const ADRESSE_RELAIS = '/api/ia';
+  const DELAI_RELAIS_S = 120;         // mode serveur : délai du relais, fixé par le PC serveur (§22.12)
+  const MARGE_RELAIS_S = 5;           // au-delà, le serveur coupe d'abord (504), le navigateur ensuite
   const TEMPERATURE = 0.2;
   const TEXTE_MAX = 4000;             // tout texte proposé par l'IA
   const IMPACTS = Object.freeze(['gêne', 'dégradé', 'arrêt', 'sécurité']);
@@ -53,6 +56,8 @@ const Ia = (() => {
   };
   const MESSAGE_DISTANT_REFUSE = 'Le responsable n\'a pas autorisé les fournisseurs en ligne (Paramètres, '
     + '« Assistant IA »). L\'IA locale reste possible.';
+  const MESSAGE_DISTANT_REFUSE_SERVEUR = 'Les fournisseurs d\'IA en ligne ne sont pas autorisés sur le PC serveur '
+    + '(Paramètres › Accès et installation). L\'IA locale reste possible.';
   const MENTIONS = { poste: 'reste sur ce PC', 'pc-atelier': 'reste sur le PC atelier', atelier: 'reste dans l\'atelier' };
   // Version web (démo en ligne, App.versionWeb) : l'assistant reste visible mais n'appelle rien ; tout
   // appel rend ce message (texte du brief de lancement, point 7, mot pour mot ; la section du guide est
@@ -80,11 +85,11 @@ const Ia = (() => {
     }
   }
 
-  // Fabrique une erreur nommée (name = son nom) avec son message par défaut, en français.
+  // Fabrique une erreur nommée (name = son nom) avec son message par défaut (texte, ou fonction qui le rend).
   function erreurNommee(nom, messageParDefaut) {
     const Classe = class extends ErreurIa {
       constructor(message, cause) {
-        super(message || messageParDefaut, cause);
+        super(message || (typeof messageParDefaut === 'function' ? messageParDefaut() : messageParDefaut), cause);
         this.name = nom;
       }
     };
@@ -100,8 +105,9 @@ const Ia = (() => {
   const IaAnnulee = erreurNommee('IaAnnulee', 'Demande à l\'IA annulée.');
   // Réponse illisible (pas du JSON) ou hors du schéma attendu : aucune proposition.
   const IaReponseInvalide = erreurNommee('IaReponseInvalide', 'Réponse de l\'IA illisible : aucune proposition.');
-  // Portée non autorisée : fournisseur en ligne sans l'accord du responsable (D67).
-  const IaRefusee = erreurNommee('IaRefusee', MESSAGE_DISTANT_REFUSE);
+  // Portée non autorisée : fournisseur en ligne sans l'accord du responsable (D67), ou du PC serveur (M2).
+  const IaRefusee = erreurNommee('IaRefusee',
+    () => (modeCourant() === 'serveur' ? MESSAGE_DISTANT_REFUSE_SERVEUR : MESSAGE_DISTANT_REFUSE));
 
   // Fournisseur qu'on n'atteint pas (réseau, serveur arrêté) : l'état passe à « injoignable ».
   function erreurReseau(message, cause) {
@@ -178,7 +184,24 @@ const Ia = (() => {
   function reglages() {
     let lus = null;
     try { lus = JSON.parse(lireMemoire() || 'null'); } catch (erreur) { lus = null; }
-    return normaliser(lus);
+    return selonLeServeur(normaliser(lus));
+  }
+
+  // Mode serveur (audit M1, M3) : fournisseur et adresse du PC serveur (ia-serveur.js), aucune clé dans le navigateur.
+  function selonLeServeur(r) {
+    if (modeCourant() !== 'serveur') return r;
+    const serveur = (Ia.reglagesServeur && Ia.reglagesServeur()) || DEFAUTS;
+    return Object.assign(r, { fournisseur: serveur.fournisseur, url: serveur.url, cle: '' });
+  }
+
+  // Ce que le poste mémorise : tout ; en mode serveur, seulement l'activation, le modèle et le délai.
+  function aMemoriser(r) {
+    return modeCourant() === 'serveur' ? { actif: r.actif, modele: r.modele, delaiS: r.delaiS } : r;
+  }
+
+  // Mode serveur : réglages du PC serveur lus (ia-serveur.js) avant tout test ou appel.
+  function reglagesServeurLus() {
+    return modeCourant() === 'serveur' && Ia.reglagesServeur && !Ia.reglagesServeur() ? Ia.lireReglagesServeur() : null;
   }
 
   /**
@@ -202,10 +225,10 @@ const Ia = (() => {
 
   function enregistrerReglages(modifications) {
     const anciens = reglages();
-    const nouveaux = normaliser(avecCle(anciens, modifications));
+    const nouveaux = selonLeServeur(normaliser(avecCle(anciens, modifications)));
     if (nouveaux.actif && versionWeb()) throw new IaRefusee(MESSAGE_VERSION_WEB);
     if (nouveaux.actif && !porteeAutorisee(nouveaux.url)) throw new IaRefusee();
-    if (!ecrireMemoire(JSON.stringify(nouveaux))) {
+    if (!ecrireMemoire(JSON.stringify(aMemoriser(nouveaux)))) {
       console.warn('Prévo : réglages de l\'assistant IA non mémorisés (stockage du navigateur refusé).');
     }
     if (anciens.fournisseur !== nouveaux.fournisseur || anciens.url !== nouveaux.url || anciens.cle !== nouveaux.cle) {
@@ -217,6 +240,7 @@ const Ia = (() => {
 
   /** Réglage partagé du responsable (parametres.csv) : fournisseurs en ligne autorisés ? (D67) */
   function distantAutorise() {
+    if (modeCourant() === 'serveur') return Boolean(Ia.reglagesServeur && (Ia.reglagesServeur() || {}).enLigne);  // M2
     try {
       return typeof Donnees !== 'undefined' && String(Donnees.parametre('ia_distant_autorise', '0')) === '1';
     } catch (erreur) {
@@ -398,43 +422,18 @@ const Ia = (() => {
     return { statut: reponse.status, corps: await lireCorps(reponse, signal) };
   }
 
-  // Mode serveur : toujours par le relais du serveur (§17.2), téléphones compris.
-  async function appelRelais(r, chemin, methode, corps, signal) {
-    const demande = { url: r.url.replace(/\/+$/, ''), chemin, methode, delai: r.delaiS };
-    if (methode === 'POST') demande.corps = corps;
-    if (r.cle) demande.cle = r.cle;
-    let reponse;
-    try {
-      reponse = await fetch(ADRESSE_RELAIS, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Prevo': '1' },
-        body: JSON.stringify(demande), signal, cache: 'no-store',
-      });
-    } catch (erreur) {
-      if (signal.aborted) throw erreur;
-      throw erreurReseau('Le serveur Prévo ne répond pas : l\'IA est injoignable pour l\'instant.', erreur);
-    }
-    const donnees = await lireCorps(reponse, signal);
-    if (reponse.status === 504) throw messageDelai(r.delaiS);
-    if (reponse.status === 502) {
-      throw erreurReseau('Le PC atelier ne joint pas le fournisseur d\'IA (' + (hoteAffiche(r.url) || 'adresse inconnue') + ').');
-    }
-    if (reponse.status !== 200 || !donnees || typeof donnees !== 'object') {
-      const detail = donnees && typeof donnees === 'object' && donnees.erreur ? ' : ' + donnees.erreur : ' (code ' + reponse.status + ').';
-      throw new IaIndisponible('Le serveur Prévo a refusé la demande à l\'IA' + detail);
-    }
-    return { statut: Number(donnees.statut) || 0, corps: donnees.corps };
-  }
-
-  // Seul point de sortie vers le fournisseur (direct ou relais) : en version web, aucune requête.
+  // Seul point de sortie vers le fournisseur : appel direct, ou relais du serveur en mode serveur (toujours,
+  // téléphones compris : ia-serveur.js, §17.2 et §22.12) ; en version web, aucune requête.
   function envoyer(r, chemin, methode, corps, signal) {
     if (versionWeb()) return Promise.reject(new IaIndisponible(MESSAGE_VERSION_WEB));
-    return modeCourant() === 'serveur' ? appelRelais(r, chemin, methode, corps, signal)
+    return modeCourant() === 'serveur' ? interne.appelRelais(r, chemin, methode, corps, signal)
       : appelDirect(r, chemin, methode, corps, signal);
   }
 
-  // Délai du navigateur : en mode serveur, un peu plus que celui du relais (qui rend 504 le premier).
+  // Délai du navigateur : celui du poste ; en mode serveur, à partir du délai du relais (120 s), un peu plus
+  // (le relais rend 504 le premier).
   function delaiNavigateur(delaiS) {
-    return delaiS + (modeCourant() === 'serveur' ? MARGE_RELAIS_S : 0);
+    return delaiS + (modeCourant() === 'serveur' && delaiS >= DELAI_RELAIS_S ? MARGE_RELAIS_S : 0);
   }
 
   // Message d'un code HTTP du fournisseur (jamais le texte du fournisseur : il pourrait citer la clé).
@@ -481,7 +480,7 @@ const Ia = (() => {
     if (!urlValide(r.url)) {
       return { ok: false, modeles: [], message: 'Adresse du fournisseur invalide : http://… ou https://… attendu.' };
     }
-    if (!porteeAutorisee(r.url)) return { ok: false, modeles: [], message: MESSAGE_DISTANT_REFUSE };
+    if (!porteeAutorisee(r.url)) return { ok: false, modeles: [], message: new IaRefusee().message };
     const delaiS = Math.min(r.delaiS, DELAI_TEST_S);
     const essai = Object.assign({}, r, { delaiS });
     try {
@@ -503,8 +502,9 @@ const Ia = (() => {
   async function tester(reglagesEssai) {
     // Version web : rien n'est appelé (ni liste des modèles, ni détection d'Ollama), l'état ne change pas.
     if (versionWeb()) return { ok: false, modeles: [], message: MESSAGE_VERSION_WEB };
+    await reglagesServeurLus();
     const pourLePoste = !reglagesEssai;
-    const r = pourLePoste ? reglages() : normaliser(avecCle(reglages(), reglagesEssai));
+    const r = pourLePoste ? reglages() : selonLeServeur(normaliser(avecCle(reglages(), reglagesEssai)));
     const resultat = await testerAvec(r);
     // Adresse invalide ou portée refusée : rien n'a été appelé, l'état reste ce qu'il était.
     if (pourLePoste && urlValide(r.url) && porteeAutorisee(r.url)) definirEtat(resultat.ok ? 'ok' : 'injoignable');
@@ -624,6 +624,7 @@ const Ia = (() => {
    */
   async function demander(fonction, donnees, options) {
     consigneDe(fonction, 'Ia.demander');
+    await reglagesServeurLus();
     reglagesUtilisables();                        // refus (version web, IA inactive, portée D67) avant tout
     const envoi = await envoyerRequete(requete(fonction, donnees), options && options.signal);
     return { resultat: lireReponse(fonction, envoi.contenu, donnees), modele: envoi.modele, fournisseur: envoi.fournisseur };
@@ -632,6 +633,7 @@ const Ia = (() => {
   // Lot 6 (§20.5) : la partie réseau de Ia.demander, qui l'appelle ; envoie une requête construite par Ia.requete →
   // { contenu (texte brut), modele, fournisseur } ; la réponse est lue par l'appelant (Ia.lireReponse).
   async function envoyerRequete(requeteConstruite, signal) {
+    await reglagesServeurLus();
     const r = reglagesUtilisables();
     const { fonction, messages, schema } = requeteConstruite || {};
     try {
@@ -681,12 +683,16 @@ const Ia = (() => {
     });
   }
 
+  // Pour ia-serveur.js (mode serveur : relais, réglages du PC serveur, ancien réglage du poste effacé).
+  const interne = { CLE_REGLAGES, DELAI_RELAIS_S, erreurReseau, lireCorps, messageDelai, hoteAffiche, signaler,
+    memoriser: () => ecrireMemoire(JSON.stringify(aMemoriser(reglages()))), oublierEtat: () => { etatCourant = 'inconnu'; } };
+
   return {
     FOURNISSEURS, DEFAUTS, IMPACTS, FAMILLES_CODES, TEXTE_MAX, MESSAGE_VERSION_WEB,
     ErreurIa, IaIndisponible, IaDelai, IaAnnulee, IaReponseInvalide, IaRefusee,
     evenements,
     reglages, enregistrerReglages, distantAutorise, urlValide, portee, mention, active, etat, versionWeb,
     verifierAuDemarrage, tester, demander, envoyerRequete, requete, lireReponse,
-    tracerUtilisation,
+    tracerUtilisation, interne,
   };
 })();

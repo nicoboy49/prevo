@@ -201,13 +201,18 @@ const AccesTextes = {
       "defaut": 2048,
       "genre": "entier"
     },
+    "ia_fournisseur": {
+      "aide": "Type du service d'IA : ollama (Ollama) ou openai (toute API compatible OpenAI : LM Studio, Mistral…).",
+      "defaut": "ollama",
+      "genre": "choix:ollama|openai"
+    },
     "ia_url": {
       "aide": "Adresse du service d'IA que tous les postes utilisent. Réglée ici seulement, jamais sur un téléphone.",
       "defaut": "http://localhost:11434",
       "genre": "texte"
     },
     "ia_cle": {
-      "aide": "Clé du service d'IA, gardée sur ce PC, jamais envoyée aux navigateurs.",
+      "aide": "Clé du service d'IA, gardée sur ce PC, jamais envoyée aux navigateurs. La variable d'environnement PREVO_IA_CLE passe avant ; jamais en ligne de commande.",
       "defaut": "",
       "genre": "texte"
     },

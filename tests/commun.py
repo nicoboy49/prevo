@@ -115,15 +115,21 @@ class ServeurPrevo:
 
     source : SOURCE_AUTO (défaut) = copie de donnees/demo s'il existe, sinon dossier vide ;
              None = dossier vide ; un chemin = copie de ce dossier.
-    arguments : options ajoutées à la ligne de commande de serveur.py (lot 4 : --certificat, --cle) ;
+    arguments : options ajoutées à la ligne de commande de serveur.py (lot 4 : --certificat, --cle ;
+             lot 7 : --ia-url, --ia-fournisseur, --ia-en-ligne) ;
              avec --certificat, l'adresse est en https (certificat de test non vérifié pour le ping).
+    environnement : variables d'environnement ajoutées pour serveur.py (lot 7 : PREVO_IA_CLE, la clé du
+             fournisseur d'IA, qui ne passe jamais par la ligne de commande) ; une valeur None retire la variable.
+             PREVO_IA_CLE n'est jamais héritée du poste qui lance les tests : seulement si le test la donne.
     Ne touche jamais au dossier donnees/ réel : seul le dossier temporaire est passé à --donnees.
     """
 
     DELAI_DEMARRAGE_S = 15
+    VARIABLES_JAMAIS_HERITEES = ("PREVO_IA_CLE",)
 
-    def __init__(self, source=SOURCE_AUTO, arguments=None):
+    def __init__(self, source=SOURCE_AUTO, arguments=None, environnement=None):
         self.arguments = list(arguments or [])
+        self.environnement = dict(environnement or {})
         self.https = "--certificat" in self.arguments
         if source == SOURCE_AUTO:
             source = DOSSIER_DEMO if DOSSIER_DEMO.is_dir() else None
@@ -165,6 +171,13 @@ class ServeurPrevo:
         self._fichier_journal = open(self._chemin_journal, "wb")
 
         environnement = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
+        for nom in self.VARIABLES_JAMAIS_HERITEES:
+            environnement.pop(nom, None)
+        for nom, valeur in self.environnement.items():
+            if valeur is None:
+                environnement.pop(nom, None)
+            else:
+                environnement[nom] = valeur
         # --servir-tests : les pages de tests/fixtures/ (ex. page-stockage-serveur.html) sont
         # servies par serveur.py, qui sinon ne sert que l'application (liste blanche, §14.7).
         # --config : un fichier absent de la copie temporaire, pour que les réglages par défaut s'appliquent

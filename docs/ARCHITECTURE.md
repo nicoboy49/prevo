@@ -57,7 +57,9 @@ tests/                     tests automatisés (unittest + Playwright) ; tests/fi
 `suggestions-ecrans.js` juste après `preventif-calendrier.js`, §16.1 ; le lot 4 insère `ia.js`,
 `ia-prompts.js`, `ia-encadre.js`, `dictee.js`, `poste.js` juste après `causes-frequentes.js`, §17.1 ;
 le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-codes.js`, §18.1, et
-`accueil-bento.js` juste après `accueil.js`, §19), `js/app.js` (en dernier).
+`accueil-bento.js` juste après `accueil.js`, §19 ; le lot 7 insère `aide-ecrans-textes.js`, `aide-ecrans.js` et
+`acces-textes.js` juste après `mise-a-jour.js` (§23, §22.2), `ia-serveur.js` juste après `ia-encadre.js` (§22.12) et
+`parametres-solo.js` juste après `parametres-codes.js` (§22.11)), `js/app.js` (en dernier).
 `js/demo-donnees.js` n'est **pas** chargé au démarrage : `App` l'injecte (balise `<script>`
 créée dynamiquement, compatible `file://`) quand on choisit la démo ou la copie du jeu de démo.
 ECharts (`js/lib/echarts.min.js`, version 5.5.1) n'est pas non plus chargé au démarrage :
@@ -1862,19 +1864,24 @@ en ligne, défaut non), **D72 (a)** (`qwen2.5:7b` conseillé, mesuré sur le PC)
   `prevo.dictee` = `{ active, avertie }` (défaut : active, non avertie ; `avertie` = `local` ou `nuage`,
   le lieu de transcription annoncé, §17.11) ; `prevo.theme` = `sombre` |
   `clair` (défaut sombre). **La clé n'est écrite nulle part ailleurs** (ni CSV, ni journal, ni
-  `sessionStorage`, ni réponse ou console du serveur).
+  `sessionStorage`, ni réponse ou console du serveur). Lot 7 (§22.12, audit M1 et M3) : en mode serveur,
+  `prevo.ia` ne garde que `{ actif, modele, delaiS }` ; fournisseur, adresse et clé sont ceux du PC serveur.
 - **Fichiers** : `ia.js` (crée `Ia` : réglages, portée, appel du fournisseur direct ou par relais,
   délai et annulation, validations), `ia-prompts.js` (complète `Ia` : `Ia.PROMPTS`, textes en français,
   un par fonction, faciles à modifier), `ia-encadre.js` (complète `Ia` : boutons « avec l'IA »,
   encadré Utiliser / Modifier / Ignorer, mention de portée), `dictee.js` (objet `Dictee`), `poste.js`
   (objet `Poste` : écran « Ce poste », thème), chargés **juste après `causes-frequentes.js`** ; feuilles
   `css/modules/ia.css` et `css/modules/poste.css` (après `accueil.css`). `ORDRE_MODULES` suit.
-  700 lignes au plus par fichier ; aucune nouvelle bibliothèque.
+  700 lignes au plus par fichier ; aucune nouvelle bibliothèque. Lot 7 : `ia-serveur.js` (complète `Ia` en mode
+  serveur : `Ia.reglagesServeur`, `Ia.lireReglagesServeur`, relais) juste après `ia-encadre.js` (§22.12).
 - **Route** `#/poste` « Ce poste » : **tous les profils**, menu (ordre 92, icône `utilisateur`, groupe
   « Administration », visible du demandeur et du technicien). La carte « Ce poste » de Paramètres y
   renvoie (le bouton « Changer de profil » passe dans « Ce poste »).
 
 ### 17.2 Serveur (`serveur.py`)
+Lot 7 (§22.12, audit M1 à M3) : le corps de `POST /api/ia` ne porte plus que `{ chemin, methode, corps }` ;
+l'adresse, la clé et le délai (120 s) viennent de la configuration du PC serveur, et le 403 dépend de `ia_en_ligne`,
+plus de `parametres.csv`. Le texte ci-dessous est celui du lot 4.
 - **`POST /api/ia`** (en-tête Prévo des écritures, §7) — corps JSON `{ url, chemin, methode, corps,
   cle }` : `url` = adresse de base du fournisseur (`http://localhost:11434`, `https://api.mistral.ai/v1`…),
   `http` ou `https`, sans identifiant, requête ni fragment ; `chemin` ∈ **liste fermée** `api/chat`,
@@ -3229,7 +3236,7 @@ défaut et son texte d'aide (le même que `js/modules/acces-textes.js`).
 | `veille_desactivee` | booléen | réglages `powercfg` appliqués |
 | `copie_sauvegardes` | chemin, `""` | copie externe nocturne (§22.11) |
 | `quota_documents_mo` | 2048 | plafond du dossier `documents/` |
-| `ia_url`, `ia_cle`, `ia_en_ligne` | `http://localhost:11434`, `""`, faux | fournisseur d'IA côté serveur (§22.12) |
+| `ia_fournisseur`, `ia_url`, `ia_cle`, `ia_en_ligne` | `ollama` \| `openai`, `http://localhost:11434`, `""`, faux | fournisseur d'IA côté serveur (§22.12) ; la variable `PREVO_IA_CLE` passe avant `ia_cle` |
 | `_aide` | texte | commentaire d'en-tête pour qui ouvre le fichier |
 
 ### 22.3 Comptes, sessions, appareils (D124, D125)
@@ -3274,6 +3281,7 @@ demande l'identifiant et appelle cette commande.
 | `GET/POST /api/acces/invitations`, `/api/acces/appareils/<id>/revoquer`, `/api/acces/appareils/revoquer-tous` | responsable | invitations et appareils |
 | `POST /api/acces/deconnecter-partout` | responsable (ou soi-même) | sessions supprimées |
 | `GET /api/acces/journal` | responsable | CSV du journal |
+| `GET /api/ia/reglages` | tous (session ou appareil) | `{"fournisseur", "url", "cle_reglee": bool, "en_ligne": bool, "portee"}`, jamais la clé (§22.12) |
 
 Toutes les écritures gardent l'en-tête `X-Prevo: 1` (anti-CSRF) en plus de la session.
 
@@ -3292,13 +3300,15 @@ exige une session ou un appareil (401), puis le rôle (403). Résumé :
 | `GET /api/documents/<nom>` | photos de ses demandes et documents des équipements | oui | oui |
 | `PUT /api/documents/<nom>` | photos de demandes | oui | oui |
 | `POST /api/sauvegarde`, `GET /api/sauvegardes`, `POST /api/restauration` | non | non | oui |
-| `POST /api/ia` | non | oui | oui |
+| `POST /api/ia`, `GET /api/ia/reglages` | oui (« Proposer avec l'IA » de Signaler, lot 4) | oui | oui |
 | `/api/acces/…` | non | non | oui |
 
 Les colonnes retirées le sont dans les octets renvoyés (réécriture du CSV), avec une `X-Version` calculée sur le
 fichier entier pour que les écritures restent possibles ; un `PUT` d'un technicien sur une table dont il ne voit pas
 toutes les colonnes est refusé (403). `App.profil` est déduit de `/api/session` ; l'écran de profil de 1.2 ne sert
-qu'en portée « ce PC » et en modes dossier et démo.
+qu'en portée « ce PC » et en modes dossier et démo. L'IA reste ouverte au demandeur (précisé à T158) : l'écran
+Signaler s'en sert pour reformuler la demande (lot 4), le relais n'appelle que le fournisseur réglé sur le PC serveur
+et un fournisseur en ligne reste soumis à `ia_en_ligne`.
 
 ### 22.6 Porte d'entrée et certificat local (D127, CS125, CS126, CS137)
 

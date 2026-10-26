@@ -12,6 +12,9 @@
 .poste-ia .champ .case { align-self: flex-start; }
 .poste-ia-zone-cle { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
 .poste-ia-zone-cle[hidden] { display: none; }
+/* Mode serveur : fournisseur, adresse et état de la clé du PC serveur, sans champ */
+.poste-ia-serveur { display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+.poste-ia-serveur .aide { margin: 0; color: var(--texte-2); }
 
 /* Portée : « Où vont les textes : reste sur ce PC » ; en ambre quand les textes partent en ligne */
 .poste-ia-portee {

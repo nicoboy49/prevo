@@ -2,7 +2,8 @@
 // Poste — écran « Ce poste » (#/poste, tous les profils ; ARCHITECTURE.md §17.7) : identité du poste
 // et profil, assistant IA, dictée, affichage (thème sombre ou clair). Les réglages propres au poste
 // restent dans son navigateur (localStorage : prevo.ia, prevo.dictee, prevo.theme) ; le réglage
-// partagé « fournisseurs d'IA en ligne autorisés » est dans Paramètres (responsable).
+// partagé « fournisseurs d'IA en ligne autorisés » est dans Paramètres (responsable ; en mode serveur, il
+// est décidé sur le PC serveur, comme le fournisseur, son adresse et sa clé).
 //
 // API :
 //   Poste.THEMES                → { sombre: 'Sombre', clair: 'Clair' }
@@ -11,9 +12,12 @@
 //                                 appelé par js/app.js dès sa lecture, donc avant le premier écran
 //   Poste.choisirTheme(theme)   → mémorise le choix sur ce poste et l'applique tout de suite
 //
-// Règles de l'assistant IA (§17.3) : l'IA propose, l'humain valide. La clé du fournisseur n'est écrite
-// que dans localStorage (Ia.enregistrerReglages) : jamais dans un fichier, le journal ou la console,
-// et jamais réaffichée (le champ reste vide ; laissé vide, il garde la clé enregistrée).
+// Règles de l'assistant IA (§17.3) : l'IA propose, l'humain valide. Modes dossier et démo : la clé du
+// fournisseur n'est écrite que dans localStorage (Ia.enregistrerReglages) : jamais dans un fichier, le journal
+// ou la console, et jamais réaffichée (le champ reste vide ; laissé vide, il garde la clé enregistrée), avec la
+// mention I5. Mode serveur (audit M1, M3, §22.12) : fournisseur, adresse et clé sont réglés sur le PC serveur
+// et affichés sans champ (Ia.reglagesServeur, relus à l'ouverture de l'écran) ; le poste règle l'activation,
+// le modèle et le délai.
 //
 // Sommaire : 1 thème · 2 petits outils · 3 carte Identité · 4 carte Assistant IA · 5 carte Dictée ·
 // 6 carte Affichage · 7 écran et enregistrement.
@@ -24,7 +28,7 @@ const Poste = (() => {
   const THEME_DEFAUT = 'sombre';
   const CLE_THEME = 'prevo.theme';
   const DELAI_MIN_S = 1;
-  const DELAI_MAX_S = 300;            // plafond du relais du serveur (§17.2), comme dans ia.js
+  const DELAI_MAX_S = 300;            // délai du poste au plus, comme dans ia.js (le relais garde le sien : 120 s)
   // Explication affichée sous la mention de portée (Ia.portee → Ia.mention).
   const EXPLICATIONS_PORTEE = {
     poste: 'Le fournisseur tourne sur ce PC : les textes ne quittent pas l\'ordinateur.',
@@ -32,6 +36,14 @@ const Poste = (() => {
       + 'les textes ne quittent pas ce PC.',
     atelier: 'Le fournisseur est sur un autre PC du réseau de l\'atelier : les textes ne sortent pas de l\'atelier.',
   };
+  // Audit I5 : sans serveur, la clé vit dans le navigateur (origine « fichier local »).
+  const MENTION_CLE_DOSSIER = 'En mode dossier, la clé reste dans ce navigateur ; le mode serveur la garde sur le PC serveur.';
+  const ADRESSE_SERVEUR_INVALIDE = 'L\'adresse du fournisseur réglée sur le PC serveur est absente ou invalide '
+    + '(« ia_url ») : l\'assistant IA ne peut pas être activé.';
+
+  function modeServeur() {
+    return App.mode === 'serveur';
+  }
 
   // ===========================================================================================
   // 1. Thème (sombre par défaut, clair au choix du poste)
@@ -136,12 +148,15 @@ const Poste = (() => {
     zone.textContent = etat.texte;
   }
 
-  // Valeurs saisies dans la carte (chaînes, sauf les deux cases à cocher).
+  // Valeurs saisies dans la carte (chaînes, sauf les deux cases à cocher). Mode serveur : fournisseur et
+  // adresse du PC serveur, jamais de clé.
   function lireIa(formulaire) {
     const lu = UI.lireFormulaire(formulaire);
+    const serveur = modeServeur() ? Ia.reglages() : null;
     return {
-      actif: lu.actif === '1', fournisseur: lu.fournisseur, url: lu.url, modele: lu.modele,
-      cleSaisie: lu.cle || '', effacerCle: lu.effacer_cle === '1', delaiS: lu.delaiS,
+      actif: lu.actif === '1', fournisseur: serveur ? serveur.fournisseur : lu.fournisseur,
+      url: serveur ? serveur.url : lu.url, modele: lu.modele,
+      cleSaisie: serveur ? '' : lu.cle || '', effacerCle: lu.effacer_cle === '1', delaiS: lu.delaiS,
     };
   }
 
@@ -180,16 +195,18 @@ const Poste = (() => {
     if (!Ia.urlValide(valeurs.url)) {
       zone.classList.add('invalide');
       UI.remplir(zone, UI.html`<p class="poste-ia-ou">Où vont les textes : <b id="poste-ia-mention">adresse invalide</b></p>
-        <p class="aide">Adresse attendue : http://… ou https://… (sans identifiant, paramètres ni #).</p>`);
+        <p class="aide">${modeServeur() ? ADRESSE_SERVEUR_INVALIDE
+          : 'Adresse attendue : http://… ou https://… (sans identifiant, paramètres ni #).'}</p>`);
       return;
     }
     const portee = Ia.portee(valeurs.url);
     let explication = EXPLICATIONS_PORTEE[portee];
     if (portee === 'distant') {
       zone.classList.add('distant');
+      const lien = App.estResponsable() && !modeServeur() ? UI.html` <a href="#/parametres">Ouvrir les Paramètres</a>` : '';
       explication = Ia.distantAutorise()
-        ? UI.html`Fournisseur en ligne, <b>autorisé par le responsable</b> : les textes envoyés quittent l'atelier.`
-        : UI.html`${new Ia.IaRefusee().message}${App.estResponsable() ? UI.html` <a href="#/parametres">Ouvrir les Paramètres</a>` : ''}`;
+        ? UI.html`Fournisseur en ligne, <b>autorisé ${modeServeur() ? 'sur le PC serveur' : 'par le responsable'}</b> : les textes envoyés quittent l'atelier.`
+        : UI.html`${new Ia.IaRefusee().message}${lien}`;
     }
     UI.remplir(zone, UI.html`<p class="poste-ia-ou">Où vont les textes : <b id="poste-ia-mention">${Ia.mention(portee, valeurs.url)}</b></p>
       <p class="aide">${explication}</p>`);
@@ -223,9 +240,14 @@ const Poste = (() => {
     afficherResultat(formulaire, resultat.ok ? 'succes' : 'attention', resultat.message);
   }
 
-  // Contrôle des champs avant d'activer l'IA ; erreurs affichées sous les champs.
+  // Contrôle des champs avant d'activer l'IA ; erreurs affichées sous les champs (mode serveur : l'adresse
+  // n'est pas un champ du poste, son refus s'affiche sous la carte).
   function verifierIa(formulaire, valeurs) {
     const erreurs = [];
+    if (modeServeur() && !Ia.urlValide(valeurs.url)) {
+      afficherResultat(formulaire, 'important', ADRESSE_SERVEUR_INVALIDE);
+      return false;
+    }
     if (!Ia.urlValide(valeurs.url)) erreurs.push(['url', 'Adresse invalide : http://… ou https://… attendu (ex. ' + Ia.DEFAUTS.url + ').']);
     if (!valeurs.modele) erreurs.push(['modele', 'Indiquez le modèle (ex. ' + Ia.DEFAUTS.modele + ').']);
     const delai = Number(valeurs.delaiS);
@@ -312,26 +334,19 @@ const Poste = (() => {
   }
 
   function aideAdresse() {
-    const reseau = App.mode === 'serveur'
-      ? ' En réseau, « localhost » désigne le PC qui fait tourner le serveur Prévo (le PC atelier).' : '';
     return 'Ollama : ' + Ia.DEFAUTS.url + '. API compatible OpenAI : adresse de base, souvent terminée par /v1 '
-      + '(LM Studio : http://localhost:1234/v1).' + reseau;
+      + '(LM Studio : http://localhost:1234/v1).';
   }
 
-  // Champs de la carte, construits par UI.champ (libellé, aide, erreur sous le champ).
+  // Champs de la carte, construits par UI.champ (libellé, aide, erreur sous le champ). Mode serveur : ni
+  // fournisseur, ni adresse, ni clé à saisir (zoneServeur les montre).
   function champsIa(r) {
     const sansCorrection = { autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' };
     const actif = UI.champ({ nom: 'actif', type: 'booleen', libelle: 'Activer l\'assistant IA sur ce poste' },
       r.actif ? '1' : '0', { id: 'poste-ia-actif' });
-    const fournisseur = UI.champ({ nom: 'fournisseur', type: 'ref', libelle: 'Fournisseur' }, r.fournisseur, {
-      id: 'poste-ia-fournisseur', aide: 'Ollama : modèle installé sur un PC. API compatible OpenAI : LM Studio, Mistral, Groq…',
-      liste: Object.keys(Ia.FOURNISSEURS).map((cle) => ({ valeur: cle, libelle: Ia.FOURNISSEURS[cle] })) });
-    UI.$('option[value=""]', fournisseur).remove();          // toujours un fournisseur choisi
     const delai = UI.champ({ nom: 'delaiS', type: 'entier', libelle: 'Délai de réponse (secondes)' }, String(r.delaiS), {
-      id: 'poste-ia-delai', aide: 'De ' + DELAI_MIN_S + ' à ' + DELAI_MAX_S + ' s. Sans carte graphique, une réponse peut prendre plus d\'une minute.' });
-    const adresse = UI.champ({ nom: 'url', type: 'texte', libelle: 'Adresse du fournisseur' }, r.url, {
-      id: 'poste-ia-url', placeholder: Ia.DEFAUTS.url, aide: aideAdresse(),
-      attributs: Object.assign({ inputmode: 'url' }, sansCorrection) });
+      id: 'poste-ia-delai', aide: 'De ' + DELAI_MIN_S + ' à ' + DELAI_MAX_S + ' s. Sans carte graphique, une réponse peut prendre plus d\'une minute.'
+        + (modeServeur() ? ' Le relais du PC serveur attend 120 s au plus.' : '') });
     const modele = UI.champ({ nom: 'modele', type: 'texte', libelle: 'Modèle' }, r.modele, {
       id: 'poste-ia-modele', placeholder: Ia.DEFAUTS.modele, attributs: sansCorrection,
       aide: 'Conseillé avec Ollama : ' + Ia.DEFAUTS.modele + '. « Tester la connexion » liste les modèles disponibles.' });
@@ -340,15 +355,48 @@ const Poste = (() => {
       <select id="poste-ia-liste-modeles"></select>
       <p class="aide">Choisir un modèle le recopie dans le champ « Modèle ».</p>
     </div>`);
+    if (modeServeur()) return { actif, delai, modele, trouves, zoneServeur: zoneServeur() };
+    const fournisseur = UI.champ({ nom: 'fournisseur', type: 'ref', libelle: 'Fournisseur' }, r.fournisseur, {
+      id: 'poste-ia-fournisseur', aide: 'Ollama : modèle installé sur un PC. API compatible OpenAI : LM Studio, Mistral, Groq…',
+      liste: Object.keys(Ia.FOURNISSEURS).map((cle) => ({ valeur: cle, libelle: Ia.FOURNISSEURS[cle] })) });
+    UI.$('option[value=""]', fournisseur).remove();          // toujours un fournisseur choisi
+    const adresse = UI.champ({ nom: 'url', type: 'texte', libelle: 'Adresse du fournisseur' }, r.url, {
+      id: 'poste-ia-url', placeholder: Ia.DEFAUTS.url, aide: aideAdresse(),
+      attributs: Object.assign({ inputmode: 'url' }, sansCorrection) });
     return { actif, fournisseur, delai, adresse, modele, trouves, zoneCle: zoneCle(r) };
   }
 
-  // Clé de l'API compatible OpenAI : champ mot de passe toujours vide (jamais réaffichée).
+  // Mode serveur : fournisseur, adresse et état de la clé du PC serveur, affichés sans champ (jamais la clé).
+  function zoneServeur() {
+    const zone = UI.element(UI.html`<div class="poste-ia-serveur" id="poste-ia-serveur" aria-live="polite"></div>`);
+    remplirServeur(zone);
+    return zone;
+  }
+
+  // `lu` : une lecture des réglages du PC serveur vient de finir (événement 'serveur'), réussie ou non.
+  function remplirServeur(zone, lu) {
+    const serveur = Ia.reglagesServeur();
+    if (!serveur) {
+      UI.remplir(zone, UI.html`<p class="aide">${lu ? 'Réglages de l\'IA du PC serveur illisibles : rouvrez « Ce poste » pour réessayer.'
+        : 'Lecture des réglages du PC serveur (fournisseur, adresse, clé)…'}</p>`);
+      return;
+    }
+    UI.remplir(zone, UI.html`<dl class="valeurs">
+        <dt>Fournisseur</dt><dd id="poste-ia-serveur-fournisseur">${Ia.FOURNISSEURS[serveur.fournisseur]}</dd>
+        <dt>Adresse</dt><dd id="poste-ia-serveur-url">${serveur.url || 'adresse invalide'}</dd>
+        <dt>Clé d'accès</dt><dd id="poste-ia-serveur-cle">${serveur.cleReglee ? 'réglée sur le serveur' : 'aucune clé'}</dd>
+      </dl>
+      <p class="aide">Fournisseur, adresse et clé : le tout est réglé sur le PC serveur (Paramètres › Accès et
+        installation), pour tous les postes ; la clé ne quitte jamais le PC serveur. Ce poste choisit l'activation,
+        le modèle et le délai.</p>`);
+  }
+
+  // Clé de l'API compatible OpenAI (modes dossier et démo) : champ mot de passe toujours vide (jamais réaffichée).
   function zoneCle(r) {
     const zone = UI.element(UI.html`<div class="poste-ia-zone-cle large" id="poste-ia-zone-cle"></div>`);
     const cle = UI.champ({ nom: 'cle', type: 'texte', libelle: 'Clé d\'accès (API compatible OpenAI)' }, '', {
       id: 'poste-ia-cle', placeholder: r.cle ? 'Clé enregistrée : laisser vide pour la garder' : 'Clé fournie par le service',
-      aide: 'Gardée dans ce navigateur seulement (jamais dans les fichiers ni le journal) et jamais réaffichée.',
+      aide: 'Jamais écrite dans les fichiers ni le journal, jamais réaffichée. ' + MENTION_CLE_DOSSIER,
       attributs: { autocomplete: 'new-password', autocapitalize: 'off', spellcheck: 'false' } });
     UI.$('input', cle).type = 'password';
     zone.appendChild(cle);
@@ -390,8 +438,9 @@ const Poste = (() => {
     </article>`);
     const formulaire = UI.$('#form-ia', carte);
     const champs = champsIa(r);
-    [champs.actif, champs.adresse, champs.zoneCle].forEach((bloc) => bloc.classList.add('large'));
-    [champs.actif, champs.fournisseur, champs.delai, champs.adresse, champs.modele, champs.trouves, champs.zoneCle]
+    [champs.actif, champs.adresse, champs.zoneCle, champs.zoneServeur].filter(Boolean).forEach((bloc) => bloc.classList.add('large'));
+    (modeServeur() ? [champs.actif, champs.zoneServeur, champs.delai, champs.modele, champs.trouves]
+      : [champs.actif, champs.fournisseur, champs.delai, champs.adresse, champs.modele, champs.trouves, champs.zoneCle])
       .forEach((bloc) => formulaire.appendChild(bloc));
     formulaire.appendChild(UI.element(UI.html`<div class="poste-ia-portee large" id="poste-ia-portee" aria-live="polite"></div>`));
     formulaire.appendChild(UI.element(UI.html`<div class="actions">
@@ -536,18 +585,23 @@ const Poste = (() => {
         <div class="c5 poste-colonne">${carteDictee()}${carteAffichage()}${carteAide()}</div>
       </div>`);
     UI.$('#poste-colonne-principale', conteneur).appendChild(carteIa());
+    if (modeServeur()) Ia.lireReglagesServeur();          // relus à chaque ouverture ; la carte suit (événement 'serveur')
     UI.$('#btn-changer-profil', conteneur).addEventListener('click', () => { App.changerProfil(); });
     brancherDictee(conteneur);
     brancherAffichage(conteneur);
     brancherAide(conteneur);
   }
 
-  // L'état de l'IA change (test, réglages) : badge de la carte à jour. L'autorisation du responsable
-  // change (parametres.csv) : portée à jour, sans toucher à la saisie en cours.
+  // L'état de l'IA change (test, réglages) : badge de la carte à jour. Réglages du PC serveur relus, ou
+  // autorisation du responsable changée (parametres.csv) : portée à jour, sans toucher à la saisie en cours.
   if (typeof Ia !== 'undefined') {
-    Ia.evenements.addEventListener('changement', () => {
+    Ia.evenements.addEventListener('changement', (evenement) => {
       const zone = document.getElementById('poste-ia-etat');
       if (zone) remplirEtat(zone);
+      const serveur = document.getElementById('poste-ia-serveur');
+      if (!serveur || !evenement.detail || evenement.detail.raison !== 'serveur') return;
+      remplirServeur(serveur, true);
+      afficherPortee(document.getElementById('form-ia'));
     });
   }
   if (typeof Donnees !== 'undefined' && Donnees.evenements) {
