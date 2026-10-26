@@ -22,9 +22,11 @@ ATTENTION : aucune authentification. Usage sur un réseau local de confiance uni
 """
 
 import argparse
+import base64
 import csv
 import datetime
 import hashlib
+import hmac
 import http.client
 import http.server
 import io
@@ -33,6 +35,7 @@ import json
 import math
 import os
 import re
+import secrets
 import shutil
 import socket
 import socketserver
@@ -42,6 +45,7 @@ import tempfile
 import threading
 import time
 import traceback
+import unicodedata
 import urllib.error
 import urllib.request
 import webbrowser
@@ -443,6 +447,265 @@ class JournalServeur:
 
 
 JOURNAL_SERVEUR = None          # JournalServeur quand le serveur tourne sans console ou avec --journal
+
+
+# ---------------------------------------------------------------------------
+# Comptes (lot 7, ARCHITECTURE.md §22.3 ; D124) : donnees/acces/, lu et écrit par le serveur seul
+# ---------------------------------------------------------------------------
+
+LONGUEUR_MIN_MOT_DE_PASSE = 12
+LONGUEUR_MAX_MOT_DE_PASSE = 256
+ROLES_COMPTES = ('responsable', 'technicien', 'demandeur')
+ALGO_SCRYPT = 'scrypt-n15-r8-p3'                 # OWASP : N = 2^15, r = 8, p = 3 (tenable sur un Raspberry Pi)
+ALGO_PBKDF2 = 'pbkdf2-sha256-600000'             # repli si hashlib.scrypt manque (OpenSSL ancien)
+SCRYPT_MEMOIRE_MAX = 64 * 1024 * 1024
+LONGUEUR_PROVISOIRE = 16
+ALPHABET_PROVISOIRE = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # sans 0/O, 1/l/I
+COLONNES_JOURNAL_ACCES = ['date', 'qui', 'adresse', 'agent', 'resultat', 'tailscale']
+RESULTATS_JOURNAL_ACCES = ('connexion', 'echec', 'bloque', 'deconnexion', 'appareil', 'invitation', 'revocation',
+                           'reinitialisation', 'creation', 'modification')
+DUREE_JOURNAL_ACCES_JOURS = 366
+FICHIERS_ACCES_NON_SAUVEGARDES = ('sessions.json',)     # une session ne se restaure jamais
+VERROU_ACCES = threading.Lock()
+
+
+class ErreurCompte(Exception):
+    """Compte introuvable, mot de passe refusé, identifiant pris… (message en français pour l'utilisateur)."""
+
+
+def dossier_acces(config):
+    return os.path.join(config.dossier_donnees, 'acces')
+
+
+def chemin_comptes(config):
+    return os.path.join(dossier_acces(config), 'comptes.json')
+
+
+def maintenant_iso(config=None):
+    horloge = getattr(config, 'horloge', None) if config is not None else None
+    instant = horloge() if horloge else time.time()
+    return datetime.datetime.fromtimestamp(instant).strftime('%Y-%m-%dT%H:%M:%S')
+
+
+def hacher_mot_de_passe(mot_de_passe, sel=None, algo=None):
+    """(algo, sel en base64, empreinte en base64). scrypt si disponible, sinon PBKDF2-SHA256 600 000."""
+    sel = sel if sel is not None else os.urandom(16)
+    if algo is None:
+        algo = ALGO_SCRYPT if hasattr(hashlib, 'scrypt') else ALGO_PBKDF2
+    octets = mot_de_passe.encode('utf-8')
+    if algo == ALGO_SCRYPT:
+        empreinte = hashlib.scrypt(octets, salt=sel, n=2 ** 15, r=8, p=3, maxmem=SCRYPT_MEMOIRE_MAX, dklen=32)
+    elif algo == ALGO_PBKDF2:
+        empreinte = hashlib.pbkdf2_hmac('sha256', octets, sel, 600000, dklen=32)
+    else:
+        raise ErreurCompte('Algorithme de mot de passe inconnu : %s.' % algo)
+    return algo, base64.b64encode(sel).decode('ascii'), base64.b64encode(empreinte).decode('ascii')
+
+
+def mot_de_passe_juste(compte, mot_de_passe):
+    """Comparaison à temps constant ; faux pour un compte sans mot de passe ou un algorithme inconnu."""
+    if not compte.get('empreinte') or not isinstance(mot_de_passe, str):
+        return False
+    try:
+        _, _, calcule = hacher_mot_de_passe(mot_de_passe, base64.b64decode(compte['sel']), compte['algo'])
+    except (ErreurCompte, ValueError, KeyError):
+        return False
+    return hmac.compare_digest(calcule.encode('ascii'), compte['empreinte'].encode('ascii'))
+
+
+def verifier_mot_de_passe_choisi(mot_de_passe):
+    """12 à 256 caractères, aucune règle de composition (CNIL 2022, ANSSI R21, R22)."""
+    if not isinstance(mot_de_passe, str) or len(mot_de_passe) < LONGUEUR_MIN_MOT_DE_PASSE:
+        raise ErreurCompte('Le mot de passe doit faire au moins %d caractères ; une phrase de quelques mots est le '
+                           'plus simple à retenir.' % LONGUEUR_MIN_MOT_DE_PASSE)
+    if len(mot_de_passe) > LONGUEUR_MAX_MOT_DE_PASSE:
+        raise ErreurCompte('Le mot de passe fait plus de %d caractères.' % LONGUEUR_MAX_MOT_DE_PASSE)
+
+
+def mot_de_passe_provisoire():
+    return ''.join(secrets.choice(ALPHABET_PROVISOIRE) for _ in range(LONGUEUR_PROVISOIRE))
+
+
+def lire_comptes(config):
+    chemin = chemin_comptes(config)
+    if not os.path.isfile(chemin):
+        return []
+    with open(chemin, 'rb') as fichier:
+        contenu = json.loads(fichier.read().decode('utf-8'))
+    return list(contenu.get('comptes', []))
+
+
+def ecrire_comptes(config, comptes):
+    os.makedirs(dossier_acces(config), exist_ok=True)
+    octets = json.dumps({'version': 1, 'comptes': comptes}, ensure_ascii=False, indent=2).encode('utf-8')
+    ecrire_atomique(chemin_comptes(config), octets)
+
+
+def sans_accents(texte):
+    decompose = unicodedata.normalize('NFKD', texte)
+    return ''.join(c for c in decompose if not unicodedata.combining(c))
+
+
+def identifiant_depuis(prenom, nom, pris):
+    """« Élodie Le Gall » → « elodie.le-gall » ; « .2 », « .3 »… si l'identifiant est déjà pris."""
+    def morceau(texte):
+        texte = re.sub(r'[^a-z0-9]+', '-', sans_accents(texte).lower()).strip('-')
+        return texte or 'compte'
+    base = morceau(prenom) + '.' + morceau(nom) if nom.strip() else morceau(prenom)
+    candidat, numero = base, 2
+    while candidat in pris:
+        candidat, numero = '%s.%d' % (base, numero), numero + 1
+    return candidat
+
+
+def trouver_compte(comptes, identifiant):
+    identifiant = (identifiant or '').strip().lower()
+    return next((c for c in comptes if c['identifiant'] == identifiant), None)
+
+
+def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_changer=False, identifiant=None):
+    """Crée un compte (rôle, technicien lié pour un technicien) ; rend le compte créé (sans son empreinte)."""
+    prenom, nom = (prenom or '').strip(), (nom or '').strip()
+    if not prenom:
+        raise ErreurCompte('Le prénom est obligatoire.')
+    if role not in ROLES_COMPTES:
+        raise ErreurCompte('Rôle inconnu : %s.' % role)
+    if role == 'technicien' and not technicien_id:
+        raise ErreurCompte('Un compte de technicien est lié à un technicien de l\'équipe.')
+    verifier_mot_de_passe_choisi(mot_de_passe)
+    with VERROU_ACCES:
+        comptes = lire_comptes(config)
+        pris = {c['identifiant'] for c in comptes}
+        if identifiant:
+            identifiant = identifiant.strip().lower()
+            if identifiant in pris:
+                raise ErreurCompte('L\'identifiant « %s » est déjà pris.' % identifiant)
+        else:
+            identifiant = identifiant_depuis(prenom, nom, pris)
+        algo, sel, empreinte = hacher_mot_de_passe(mot_de_passe)
+        instant = maintenant_iso(config)
+        compte = {'identifiant': identifiant, 'prenom': prenom, 'nom': nom, 'role': role,
+                  'technicien_id': technicien_id or '', 'actif': True, 'algo': algo, 'sel': sel,
+                  'empreinte': empreinte, 'a_changer': bool(a_changer), 'cree_le': instant,
+                  'modifie_le': instant, 'mot_de_passe_le': instant}
+        comptes.append(compte)
+        ecrire_comptes(config, comptes)
+    ecrire_journal_acces(config, identifiant, '', '', 'creation')
+    return compte_public(compte)
+
+
+def compte_public(compte):
+    """Le compte sans son sel ni son empreinte (ce qui peut partir vers un navigateur)."""
+    return {cle: valeur for cle, valeur in compte.items() if cle not in ('sel', 'empreinte', 'algo')}
+
+
+def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal='modification'):
+    verifier_mot_de_passe_choisi(nouveau)
+    with VERROU_ACCES:
+        comptes = lire_comptes(config)
+        compte = trouver_compte(comptes, identifiant)
+        if compte is None:
+            raise ErreurCompte('Compte introuvable : %s.' % identifiant)
+        compte['algo'], compte['sel'], compte['empreinte'] = hacher_mot_de_passe(nouveau)
+        compte['a_changer'] = bool(a_changer)
+        compte['modifie_le'] = compte['mot_de_passe_le'] = maintenant_iso(config)
+        ecrire_comptes(config, comptes)
+    ecrire_journal_acces(config, compte['identifiant'], '', '', journal)
+
+
+def reinitialiser_compte(config, identifiant):
+    """Mot de passe provisoire (16 caractères, à changer à la première connexion) ; rendu une seule fois."""
+    if not os.path.isfile(chemin_comptes(config)):
+        raise ErreurCompte('Aucun compte dans %s : rien à réinitialiser. Terminez d\'abord l\'installation.'
+                           % dossier_acces(config))
+    provisoire = mot_de_passe_provisoire()
+    changer_mot_de_passe(config, identifiant, provisoire, a_changer=True, journal='reinitialisation')
+    return provisoire
+
+
+def modifier_compte(config, identifiant, **champs):
+    """Prénom, nom, rôle, technicien lié ou actif ; jamais l'identifiant ni le mot de passe par cette voie."""
+    permis = {'prenom', 'nom', 'role', 'technicien_id', 'actif'}
+    with VERROU_ACCES:
+        comptes = lire_comptes(config)
+        compte = trouver_compte(comptes, identifiant)
+        if compte is None:
+            raise ErreurCompte('Compte introuvable : %s.' % identifiant)
+        for cle, valeur in champs.items():
+            if cle not in permis:
+                raise ErreurCompte('Champ non modifiable : %s.' % cle)
+            if cle == 'role' and valeur not in ROLES_COMPTES:
+                raise ErreurCompte('Rôle inconnu : %s.' % valeur)
+            compte[cle] = bool(valeur) if cle == 'actif' else valeur
+        if compte['role'] == 'technicien' and not compte.get('technicien_id'):
+            raise ErreurCompte('Un compte de technicien est lié à un technicien de l\'équipe.')
+        if not any(c['role'] == 'responsable' and c.get('actif') for c in comptes):
+            raise ErreurCompte('Il faut garder au moins un compte responsable actif.')
+        compte['modifie_le'] = maintenant_iso(config)
+        ecrire_comptes(config, comptes)
+    ecrire_journal_acces(config, compte['identifiant'], '', '', 'modification')
+    return compte_public(compte)
+
+
+def responsable_actif_existe(config):
+    try:
+        return any(c.get('role') == 'responsable' and c.get('actif') for c in lire_comptes(config))
+    except (OSError, ValueError):
+        return False
+
+
+def cellule_journal(valeur):
+    """Cellule du journal des connexions : texte d'une ligne, apostrophe devant = + - @ (§3.2)."""
+    texte = re.sub(r'[\x00-\x1f\x7f]+', ' ', str(valeur or ''))[:200]
+    if re.match(r'^[=+\-@\t\r]', texte):
+        texte = "'" + texte
+    return texte
+
+
+def ecrire_journal_acces(config, qui, adresse, agent, resultat, tailscale=''):
+    """Une ligne de donnees/acces/journal-acces.csv ; à la première écriture du jour, lignes de plus d'un an purgées."""
+    chemin = os.path.join(dossier_acces(config), 'journal-acces.csv')
+    jour = maintenant_iso(config)[:10]
+    with VERROU_ACCES_JOURNAL:
+        try:
+            os.makedirs(dossier_acces(config), exist_ok=True)
+            if getattr(config, '_purge_journal_acces', None) != jour and os.path.isfile(chemin):
+                limite = (datetime.date.fromisoformat(jour) - datetime.timedelta(days=DUREE_JOURNAL_ACCES_JOURS)).isoformat()
+                with open(chemin, encoding='utf-8-sig', newline='') as fichier:
+                    lignes = list(csv.reader(fichier, delimiter=';'))
+                gardees = [lignes[0]] + [l for l in lignes[1:] if l and l[0][:10] >= limite] if lignes else []
+                if len(gardees) != len(lignes):
+                    tampon = io.StringIO()
+                    csv.writer(tampon, delimiter=';', lineterminator='\r\n').writerows(gardees)
+                    ecrire_atomique(chemin, b'\xef\xbb\xbf' + tampon.getvalue().encode('utf-8'))
+            config._purge_journal_acces = jour
+            nouveau = not os.path.isfile(chemin)
+            tampon = io.StringIO()
+            ecrivain = csv.writer(tampon, delimiter=';', lineterminator='\r\n')
+            if nouveau:
+                ecrivain.writerow(COLONNES_JOURNAL_ACCES)
+            ecrivain.writerow([cellule_journal(v) for v in (maintenant_iso(config), qui, adresse, agent, resultat, tailscale)])
+            with open(chemin, 'ab') as fichier:
+                fichier.write((b'\xef\xbb\xbf' if nouveau else b'') + tampon.getvalue().encode('utf-8'))
+        except OSError:
+            pass
+
+
+VERROU_ACCES_JOURNAL = threading.Lock()
+
+
+def copier_acces_dans_sauvegarde(config, dossier_sauvegarde):
+    """Copie donnees/acces/ (comptes, appareils, journal ; jamais les sessions) dans une sauvegarde. Jamais
+    restauré par /api/restauration : un compte révoqué ne revient pas avec une vieille sauvegarde."""
+    source = dossier_acces(config)
+    if not os.path.isdir(source):
+        return
+    cible = os.path.join(dossier_sauvegarde, 'acces')
+    os.makedirs(cible, exist_ok=True)
+    for nom in os.listdir(source):
+        chemin = os.path.join(source, nom)
+        if os.path.isfile(chemin) and nom not in FICHIERS_ACCES_NON_SAUVEGARDES and not nom.startswith('.'):
+            shutil.copy2(chemin, os.path.join(cible, nom))
 
 
 class Configuration:
@@ -1040,6 +1303,7 @@ def copier_tables_dans_sauvegarde(config, nom_sauvegarde):
                              os.path.join(dossier_temporaire, nom_fichier))
             except PermissionError:
                 raise ErreurHttp(423, MESSAGE_FICHIER_VERROUILLE)
+        copier_acces_dans_sauvegarde(config, dossier_temporaire)      # lot 7 : comptes, appareils, journal
         os.rename(dossier_temporaire, dossier_final)
     finally:
         if os.path.isdir(dossier_temporaire):
@@ -1648,6 +1912,8 @@ def lire_arguments(arguments=None):
                            help='afficher chaque clé de la configuration avec son aide, puis quitter')
     analyseur.add_argument('--journal', action='store_true',
                            help='écrire aussi la console dans donnees/journal-serveur.log (automatique sans console)')
+    analyseur.add_argument('--reinitialiser', metavar='IDENTIFIANT',
+                           help='donner un mot de passe provisoire à un compte (affiché une fois), puis quitter')
     analyseur.add_argument('--servir-tests', action='store_true',
                            help='servir aussi tests/fixtures/ (pages des tests automatiques ; '
                                 'inutile en usage normal)')
@@ -1675,6 +1941,17 @@ def reglages_du_lancement(options):
     return reglages
 
 
+def reinitialiser_en_ligne_de_commande(config, identifiant):
+    """serveur.py --reinitialiser IDENTIFIANT : sur le PC serveur, qui a la main sur le PC a la main sur Prévo."""
+    try:
+        provisoire = reinitialiser_compte(config, identifiant)
+    except (ErreurCompte, OSError, ValueError) as erreur:
+        afficher('Réinitialisation impossible : %s' % erreur)
+        sys.exit(1)
+    afficher('Mot de passe provisoire de « %s » : %s' % (identifiant.strip().lower(), provisoire))
+    afficher('Notez-le : il ne sera plus affiché. Il faudra le changer à la première connexion.')
+
+
 def main(arguments=None):
     global JOURNAL_SERVEUR
     preparer_console()
@@ -1689,6 +1966,9 @@ def main(arguments=None):
         creer_dossiers(config)
         if options.journal or sys.stdout is None:
             JOURNAL_SERVEUR = JournalServeur(os.path.join(config.dossier_donnees, 'journal-serveur.log'))
+        if options.reinitialiser:
+            reinitialiser_en_ligne_de_commande(config, options.reinitialiser)
+            return
         avertissements = verifier_regles_portee(reglages, il_existe_un_responsable(config))
     except ErreurConfiguration as erreur:
         afficher('Démarrage refusé. %s' % erreur)

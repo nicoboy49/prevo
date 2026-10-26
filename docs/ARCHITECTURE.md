@@ -3235,7 +3235,8 @@ défaut et son texte d'aide (le même que `js/modules/acces-textes.js`).
 ### 22.3 Comptes, sessions, appareils (D124, D125)
 
 Dossier `donnees/acces/`, lu et écrit par le serveur seul (jamais servi par `/api/csv`, jamais restauré par
-`/api/restauration`, copié dans les sauvegardes et l'export ZIP) :
+`/api/restauration`, copié dans les sauvegardes du serveur sauf `sessions.json` ; jamais dans l'export ZIP du
+navigateur, qui ne les lit pas : les empreintes ne quittent jamais le serveur) :
 
 - `comptes.json` : `{ "version": 1, "comptes": [ { "identifiant": "prenom.nom", "prenom", "nom", "role":
   "responsable"|"technicien"|"demandeur", "technicien_id", "actif": true, "algo": "scrypt-n15-r8-p3"|
