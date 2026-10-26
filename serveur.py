@@ -846,6 +846,209 @@ def preparer_certificat_local(config, executable, adresses=None, forcer=False):
     return certificat, cle, noms
 
 
+
+# ---------------------------------------------------------------------------
+# Démarrer avec la machine (lot 7, ARCHITECTURE.md §22.9 ; D130) : scripts écrits par Prévo, jamais exécutés ici
+# ---------------------------------------------------------------------------
+
+NOM_TACHE_WINDOWS = 'Prevo'
+NOM_REGLE_PARE_FEU = 'Prevo'
+ECRAN_ETEINT_MINUTES = 15
+
+
+def chaine_powershell(texte):
+    """Littéral PowerShell entre apostrophes (une apostrophe se double)."""
+    return "'" + str(texte).replace("'", "''") + "'"
+
+
+def python_sans_console(dossier_prevo):
+    """pythonw.exe du Python embarqué (zip de release), sinon celui qui fait tourner ce serveur."""
+    embarque = os.path.join(dossier_prevo, 'python', 'pythonw.exe')
+    if os.path.isfile(embarque):
+        return embarque
+    courant = sys.executable
+    voisin = os.path.join(os.path.dirname(courant), 'pythonw.exe')
+    return voisin if os.path.isfile(voisin) else courant
+
+
+def script_installer_windows(dossier_prevo, python, ports, veille, mkcert=None, autorite=None):
+    """Installer_demarrage.ps1 : tâche au démarrage (compte Système), règle du pare-feu (réseau privé, sous-réseau
+    local), autorité mkcert, veille sur secteur ; les réglages de veille d'avant sont gardés pour le retrait."""
+    serveur_py = os.path.join(dossier_prevo, 'serveur.py')
+    sauvegarde_veille = os.path.join(dossier_prevo, 'donnees', 'acces', 'veille-avant.json')
+    ports_texte = ','.join(str(p) for p in ports)
+    lignes = [
+        '# Installer_demarrage.ps1 : écrit par Prévo (assistant d\'installation, ARCHITECTURE.md §22.9).',
+        '# Lancé par l\'assistant avec les droits d\'administrateur (une seule demande). À relire avant de l\'accepter.',
+        '$ErrorActionPreference = \'Stop\'',
+        '',
+        '# 1. Prévo démarre avec le PC, sous le compte Système, sans fenêtre, 30 secondes après le démarrage.',
+        'schtasks.exe --%% /create /tn "%s" /sc onstart /delay 0000:30 /ru System /rl HIGHEST /f /tr "\\"%s\\" \\"%s\\" --sans-navigateur"'
+        % (NOM_TACHE_WINDOWS, python, serveur_py),
+        'if ($LASTEXITCODE -ne 0) { throw "La tâche planifiée n\'a pas été créée (code $LASTEXITCODE)." }',
+        '',
+        '# 2. Pare-feu : les appareils du réseau privé de l\'atelier, et eux seuls, joignent Prévo.',
+        'netsh.exe --%% advfirewall firewall delete rule name="%s"' % NOM_REGLE_PARE_FEU,
+        'netsh.exe --%% advfirewall firewall add rule name="%s" dir=in action=allow protocol=TCP localport=%s profile=private remoteip=localsubnet program="%s"'
+        % (NOM_REGLE_PARE_FEU, ports_texte, python),
+        'if ($LASTEXITCODE -ne 0) { throw "La règle du pare-feu n\'a pas été créée (code $LASTEXITCODE)." }',
+    ]
+    if mkcert:
+        lignes += [
+            '',
+            '# 3. Les navigateurs de ce PC font confiance au certificat de l\'atelier (autorité de Prévo).',
+            '$env:CAROOT = %s' % chaine_powershell(autorite),
+            '& %s -install' % chaine_powershell(mkcert),
+            'if ($LASTEXITCODE -ne 0) { throw "L\'autorité de l\'atelier n\'a pas été installée (code $LASTEXITCODE)." }',
+        ]
+    if veille:
+        lignes += [
+            '',
+            '# 4. Sur secteur, le PC ne se met plus en veille (l\'écran s\'éteint après %d minutes). Les réglages '
+            'd\'avant sont gardés pour le retrait.' % ECRAN_ETEINT_MINUTES,
+            'function Valeur-Secteur($sous, $reglage) {',
+            '  $hex = (powercfg.exe /query SCHEME_CURRENT $sous $reglage | Select-String -Pattern \'0x[0-9a-fA-F]{8}\' -AllMatches).Matches.Value',
+            '  return [Convert]::ToInt32($hex[-2], 16) / 60',
+            '}',
+            '$avant = @{ veille = Valeur-Secteur SUB_SLEEP STANDBYIDLE; veille_prolongee = Valeur-Secteur SUB_SLEEP HIBERNATEIDLE; '
+            'ecran = Valeur-Secteur SUB_VIDEO VIDEOIDLE }',
+            '$avant | ConvertTo-Json | Set-Content -Encoding UTF8 -Path %s' % chaine_powershell(sauvegarde_veille),
+            'powercfg.exe /change standby-timeout-ac 0',
+            'powercfg.exe /change hibernate-timeout-ac 0',
+            'powercfg.exe /change monitor-timeout-ac %d' % ECRAN_ETEINT_MINUTES,
+        ]
+    lignes += ['', 'Write-Output "Prévo démarrera avec ce PC."', '']
+    return '\r\n'.join(lignes)
+
+
+def script_retirer_windows(dossier_prevo):
+    """Retirer_demarrage.ps1 : l'inverse d'Installer_demarrage.ps1 (tâche, règle, réglages de veille d'avant)."""
+    sauvegarde_veille = os.path.join(dossier_prevo, 'donnees', 'acces', 'veille-avant.json')
+    lignes = [
+        '# Retirer_demarrage.ps1 : écrit par Prévo (Paramètres, Accès et installation). Défait Installer_demarrage.ps1.',
+        'schtasks.exe --%% /delete /tn "%s" /f' % NOM_TACHE_WINDOWS,
+        'netsh.exe --%% advfirewall firewall delete rule name="%s"' % NOM_REGLE_PARE_FEU,
+        '$fichier = %s' % chaine_powershell(sauvegarde_veille),
+        'if (Test-Path $fichier) {',
+        '  $avant = Get-Content -Raw -Path $fichier | ConvertFrom-Json',
+        '  powercfg.exe /change standby-timeout-ac $avant.veille',
+        '  powercfg.exe /change hibernate-timeout-ac $avant.veille_prolongee',
+        '  powercfg.exe /change monitor-timeout-ac $avant.ecran',
+        '  Remove-Item -Path $fichier',
+        '}',
+        'Write-Output "Prévo ne démarre plus avec ce PC."',
+        '',
+    ]
+    return '\r\n'.join(lignes)
+
+
+def script_session_windows(dossier_prevo, python):
+    """Repli sans droits d'administrateur : tâche à l'ouverture de session ; sinon lanceur dans le dossier Démarrage."""
+    serveur_py = os.path.join(dossier_prevo, 'serveur.py')
+    lignes = [
+        '# Demarrage_session.ps1 : écrit par Prévo. Sans droits d\'administrateur : Prévo démarre à l\'ouverture de',
+        '# session de cet utilisateur (les téléphones n\'ont Prévo qu\'une fois la session ouverte).',
+        'schtasks.exe --%% /create /tn "%s" /sc onlogon /rl LIMITED /f /tr "\\"%s\\" \\"%s\\" --sans-navigateur"'
+        % (NOM_TACHE_WINDOWS, python, serveur_py),
+        'if ($LASTEXITCODE -ne 0) {',
+        '  $lanceur = Join-Path ([Environment]::GetFolderPath(\'Startup\')) \'Prevo.cmd\'',
+        '  Set-Content -Encoding ASCII -Path $lanceur -Value (\'@start "" "%s" "%s" --sans-navigateur\')'
+        % (python.replace("'", "''"), serveur_py.replace("'", "''")),
+        '}',
+        'Write-Output "Prévo démarrera à l\'ouverture de session."',
+        '',
+    ]
+    return '\r\n'.join(lignes)
+
+
+def unite_systemd(dossier_prevo, dossier_donnees, python='/usr/bin/python3', utilisateur='prevo'):
+    return '\n'.join([
+        '# /etc/systemd/system/prevo.service : écrit par Prévo (ARCHITECTURE.md §22.9).',
+        '[Unit]',
+        'Description=Prévo (GMAO)',
+        'After=network-online.target',
+        'Wants=network-online.target',
+        '',
+        '[Service]',
+        'User=%s' % utilisateur,
+        'Group=%s' % utilisateur,
+        'WorkingDirectory=%s' % dossier_prevo,
+        'ExecStart=%s %s/serveur.py --sans-navigateur' % (python, dossier_prevo.rstrip('/')),
+        'Restart=on-failure',
+        'RestartSec=5',
+        'NoNewPrivileges=yes',
+        'ProtectSystem=full',
+        'ProtectHome=yes',
+        'ReadWritePaths=%s' % dossier_donnees,
+        '',
+        '[Install]',
+        'WantedBy=multi-user.target',
+        '',
+    ])
+
+
+def commandes_systemd(dossier_prevo, utilisateur='prevo'):
+    return [
+        'sudo useradd --system --home %s --shell /usr/sbin/nologin %s' % (dossier_prevo, utilisateur),
+        'sudo chown -R %s:%s %s' % (utilisateur, utilisateur, dossier_prevo),
+        'sudo cp prevo.service /etc/systemd/system/prevo.service',
+        'sudo systemctl daemon-reload',
+        'sudo systemctl enable --now prevo',
+    ]
+
+
+def plist_launchd(dossier_prevo, python='/usr/bin/python3'):
+    serveur_py = dossier_prevo.rstrip('/') + '/serveur.py'
+    journal = dossier_prevo.rstrip('/') + '/donnees/journal-serveur.log'
+    return '\n'.join([
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+        '<plist version="1.0"><dict>',
+        '  <key>Label</key><string>pro.prevo.serveur</string>',
+        '  <key>ProgramArguments</key><array><string>%s</string><string>%s</string><string>--sans-navigateur</string></array>'
+        % (html_texte(python), html_texte(serveur_py)),
+        '  <key>WorkingDirectory</key><string>%s</string>' % html_texte(dossier_prevo),
+        '  <key>RunAtLoad</key><true/>',
+        '  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>',
+        '  <key>StandardOutPath</key><string>%s</string>' % html_texte(journal),
+        '  <key>StandardErrorPath</key><string>%s</string>' % html_texte(journal),
+        '</dict></plist>',
+        '',
+    ])
+
+
+def html_texte(texte):
+    return str(texte).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
+def produire_scripts_demarrage(config, dossier_sortie=None, dossier_prevo=None, python=None, veille=False,
+                               mkcert=None, ports=None, systeme=None):
+    """Écrit les scripts de démarrage du système (sans les exécuter) ; rend { nom de fichier : chemin }."""
+    dossier_prevo = dossier_prevo or DOSSIER_APPLICATION
+    dossier_sortie = dossier_sortie or dossier_prevo
+    ports = ports or (config.reglages.get('port_http', PORT_PAR_DEFAUT), config.reglages.get('port_https', PORT_HTTPS_PAR_DEFAUT))
+    systeme = systeme or sys.platform
+    ecrits = {}
+
+    def ecrire(nom, texte, bom=False):
+        chemin = os.path.join(dossier_sortie, nom)
+        ecrire_atomique(chemin, (b'\xef\xbb\xbf' if bom else b'') + texte.encode('utf-8'))
+        ecrits[nom] = chemin
+
+    if systeme.startswith('win'):
+        python = python or python_sans_console(dossier_prevo)
+        # BOM : PowerShell 5.1 lit un .ps1 sans BOM dans la page de code du système (accents abîmés).
+        ecrire('Installer_demarrage.ps1', script_installer_windows(dossier_prevo, python, ports, veille, mkcert,
+                                                                   dossier_autorite(config)), bom=True)
+        ecrire('Retirer_demarrage.ps1', script_retirer_windows(dossier_prevo), bom=True)
+        ecrire('Demarrage_session.ps1', script_session_windows(dossier_prevo, python), bom=True)
+    elif systeme == 'darwin':
+        ecrire('pro.prevo.serveur.plist', plist_launchd(dossier_prevo, python or '/usr/bin/python3'))
+    else:
+        ecrire('prevo.service', unite_systemd(dossier_prevo, config.dossier_donnees, python or '/usr/bin/python3'))
+    return ecrits
+
+
 def certificat_de_l_autorite(config):
     """Octets du certificat PUBLIC de l'autorité (rootCA.pem), servi aux téléphones ; None s'il n'existe pas."""
     return lire_octets(os.path.join(dossier_autorite(config), 'rootCA.pem'))
