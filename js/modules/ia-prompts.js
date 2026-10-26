@@ -52,14 +52,31 @@ Object.assign(Ia, (() => {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
   }
 
-  // Texte d'une ligne : espaces et sauts de ligne réduits, longueur bornée.
-  function uneLigne(valeur, max) {
-    return texte(valeur).replace(/\s+/g, ' ').slice(0, max || CHAMP_MAX);
+  // Masquage avant l'envoi (audit I4, ARCHITECTURE.md §22.12) : les textes libres d'un atelier (descriptions, comptes
+  // rendus, notes, astuces, pages du wiki) peuvent contenir un numéro de téléphone ou une adresse de courriel ; ils
+  // partent remplacés par « [téléphone] » et « [courriel] ». Numéros français : 0X XX XX XX XX ou +33 X XX XX XX XX
+  // (aussi 0033), groupes collés ou séparés par un même caractère (espace, point ou tiret), « (0) » toléré après +33.
+  // Un même séparateur partout : une date « 05.10.2026 08:30 » ou un OT « OT-2026-0107 » ne ressemble pas à un numéro ;
+  // ni « 15 855 h » ni « 0,58 bar » (pas de 0 suivi de neuf chiffres).
+  const MOTIF_COURRIEL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
+  const MOTIF_TELEPHONE = new RegExp('(?<![\\p{L}\\p{N}])(?:(?:\\+|00)33[ .-]?(?:\\(0\\)[ .-]?)?|0)[1-9]([ .-]?)\\d{2}'
+    + '(?:\\1\\d{2}){3}(?![\\p{L}\\p{N}])', 'gu');
+
+  /** Texte → le même texte, numéros de téléphone et adresses de courriel remplacés (« [téléphone] », « [courriel] »). */
+  function masquer(valeur) {
+    return (valeur === null || valeur === undefined ? '' : String(valeur))
+      .replace(MOTIF_COURRIEL, '[courriel]').replace(MOTIF_TELEPHONE, '[téléphone]');
   }
 
-  // Texte de plusieurs lignes (notes, compte rendu) : fins de ligne normalisées, longueur bornée.
+  // Texte d'une ligne : masqué, espaces et sauts de ligne réduits, longueur bornée. Tout texte d'atelier envoyé à l'IA
+  // passe par uneLigne ou bloc (toutes les fonctions, ingestion du wiki et relance comprises).
+  function uneLigne(valeur, max) {
+    return masquer(texte(valeur)).replace(/\s+/g, ' ').slice(0, max || CHAMP_MAX);
+  }
+
+  // Texte de plusieurs lignes (notes, compte rendu) : masqué, fins de ligne normalisées, longueur bornée.
   function bloc(valeur, max) {
-    return texte(valeur).replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').slice(0, max || CHAMP_MAX);
+    return masquer(texte(valeur)).replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').slice(0, max || CHAMP_MAX);
   }
 
   function ligne(libelle, valeur) {
@@ -670,5 +687,6 @@ Object.assign(Ia, (() => {
     valider: Object.freeze({ codes: codesProposes, impact, checkList: checkListe, commentaire }),
     codesConnus,
     jetonsRapport,
+    masquer,
   };
 })());

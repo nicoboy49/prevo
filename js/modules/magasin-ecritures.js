@@ -382,7 +382,7 @@ Object.assign(Magasin, (() => {
       if (double) erreurs.push({ nom: 'nom', message: 'Un fournisseur porte déjà ce nom (' + double.id + ').' });
     }
     const email = texte(valeurs.email);
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) erreurs.push({ nom: 'email', message: 'Adresse e-mail incomplète (ex. contact@fournisseur.fr).' });
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) erreurs.push({ nom: 'email', message: 'Adresse e-mail incomplète (ex. contact@fournisseur.example).' });
     return erreurs;
   }
 

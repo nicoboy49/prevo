@@ -452,7 +452,7 @@ class TestTextes(unittest.TestCase):
                 self.assertNotIn(";", texte)
         fournisseurs = lire_csv("fournisseurs.tsv", "utf-8", "\t")
         self.assertIn(["Soudure et Métallerie du Guiers", "", "", ""], fournisseurs, "cellules finales vides")
-        self.assertIn("04 79 10 20 30", [ligne[2] for ligne in fournisseurs])
+        self.assertIn("04 65 71 00 30", [ligne[2] for ligne in fournisseurs])
         demo = {(t["nom"], t["prenom"]) for t in lire_demo("techniciens")}
         techniciens = {(ligne[0], ligne[1]) for ligne in lire_csv("techniciens.tsv", "utf-8", "\t")[1:]}
         self.assertLessEqual(demo, techniciens, "les techniciens de la démo sont dans le collage")

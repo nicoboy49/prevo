@@ -288,6 +288,10 @@ const Donnees = (() => {
     return (texte.startsWith("'") && aProteger(champ, texte.slice(1))) ? texte.slice(1) : texte;
   }
 
+  // Colonnes inconnues (hors schéma, conservées) : traitées comme un champ texte, avec la même
+  // protection par apostrophe à l'écriture et la même relecture (audit I3).
+  const CHAMP_INCONNU = Object.freeze({ type: 'texte' });
+
   // --- 3.2 Décodage des octets --------------------------------------------------------------
 
   const decodeurUtf8Strict = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
@@ -358,7 +362,7 @@ const Donnees = (() => {
     for (const ligne of lignes || []) {
       const cellules = [];
       for (const champ of champs) { cellules.push(celluleCsv(ecrireValeur(champ, ligne[champ.nom]))); }
-      for (const nomColonne of inconnues) { cellules.push(celluleCsv(enTexte(ligne[nomColonne]))); }
+      for (const nomColonne of inconnues) { cellules.push(celluleCsv(ecrireValeur(CHAMP_INCONNU, ligne[nomColonne]))); }
       morceaux.push(cellules.join(';'));
     }
 
@@ -638,7 +642,7 @@ const Donnees = (() => {
               + lu.probleme.explication + '.'));
           }
         } else if (colonne.inconnue !== undefined) {
-          ligne[colonne.inconnue] = brut.replace(MOTIF_FIN_PARASITE, '');
+          ligne[colonne.inconnue] = relireValeur(CHAMP_INCONNU, brut).replace(MOTIF_FIN_PARASITE, '');
         }
       }
 

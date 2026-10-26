@@ -928,17 +928,17 @@ def fournisseurs(demo, ids):
                         cle=lub["nom"]))
     for nom in ("Roulements du Vercors", "Pneumatique Savoie Services", "Soudure et Métallerie du Guiers"):
         demo.absent("fournisseurs", nom=nom)
-    lignes.append(Ligne(["Roulements du Vercors", "Lucie Perrin", "0476550123",
+    lignes.append(Ligne(["Roulements du Vercors", "Lucie Perrin", "0465710023",
                          "achats@roulements-vercors-demo.example"], CREER,
-                        ids.nouveau("fournisseurs") + " ; téléphone « 0476550123 » gardé avec son zéro", cle="Roulements du Vercors"))
-    lignes.append(Ligne(["Pneumatique Savoie Services", "Marc Collomb", "04 79 10 20 30",
+                        ids.nouveau("fournisseurs") + " ; téléphone « 0465710023 » gardé avec son zéro", cle="Roulements du Vercors"))
+    lignes.append(Ligne(["Pneumatique Savoie Services", "Marc Collomb", "04 65 71 00 30",
                          "pss@pneumatique-savoie-demo.example"], CREER,
-                        ids.nouveau("fournisseurs") + " ; téléphone « 04 79 10 20 30 » gardé tel quel (champ protégé)",
+                        ids.nouveau("fournisseurs") + " ; téléphone « 04 65 71 00 30 » gardé tel quel (champ protégé)",
                         cle="Pneumatique Savoie Services"))
     lignes.append(Ligne(["Soudure et Métallerie du Guiers", "", "", ""], CREER,
                         ids.nouveau("fournisseurs") + " ; cellules vides en fin de ligne (tabulations finales)",
                         cle="Soudure et Métallerie du Guiers"))
-    lignes.append(Ligne(["", "Paul Girod", "0476990011", ""], REFUSEE,
+    lignes.append(Ligne(["", "Paul Girod", "0465710011", ""], REFUSEE,
                         "raison sociale vide (nom = clé naturelle du fournisseur)", cle=""))
     return Tableau("fournisseurs", "fournisseurs", ENTETES_FOURNISSEURS, lignes)
 

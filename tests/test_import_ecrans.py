@@ -396,8 +396,8 @@ class TestDemo(CasImport):
         self.assertEqual(page.locator("#import-sauvegarde").count(), 0, "démo : pas de sauvegarde sur un disque")
         self.assertEqual(self.resultat_par_table(), {"fournisseurs": [3, 1]})
         telephones = page.evaluate("() => Object.fromEntries(Donnees.lignes('fournisseurs').map((f) => [f.nom, f.telephone]))")
-        self.assertEqual(telephones["Roulements du Vercors"], "0476550123")
-        self.assertEqual(telephones["Pneumatique Savoie Services"], "04 79 10 20 30")
+        self.assertEqual(telephones["Roulements du Vercors"], "0465710023")
+        self.assertEqual(telephones["Pneumatique Savoie Services"], "04 65 71 00 30")
         # Confirmation refusée (« Garder l'import ») : rien n'est annulé
         importe = page.evaluate(INSTANTANE_JS)["fournisseurs"]
         page.click("#import-annuler")

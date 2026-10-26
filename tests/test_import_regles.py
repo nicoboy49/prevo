@@ -731,7 +731,7 @@ E_FOURNISSEURS = ["Société", "Interlocuteur", "Tél", "Courriel"]
 C_FOURNISSEURS = {0: "nom", 1: "contact", 2: "telephone", 3: "email"}
 G_FOURNISSEURS = [
     ["Mécaroule Distribution", "", "0465710001", ""],
-    ["Hydrau Pro", "Luc Martin", "0612345678", "contact@hydrau.example"],
+    ["Hydrau Pro", "Luc Martin", "0639980078", "contact@hydrau.example"],
     ["MECAROULE distribution", "Claire Rousseau", "", ""],
     ["", "Sans nom", "", ""],
     ["Fluidalpes Services", "Bruno Faure", "'0465710099", ""],

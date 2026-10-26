@@ -35,7 +35,7 @@ NON_IGNORES = ["donnees/demo/equipements.csv", "donnees/.gitkeep", "docs/brief-g
 # Ordre exact des scripts js/modules/ dans index.html : RECOPIE de docs/ARCHITECTURE.md §15.1
 # (ordre du lot 3, qui complète celui du §14.2). Le contrat et ce test changent ensemble.
 ORDRE_MODULES = [
-    "apropos.js", "mise-a-jour.js", "aide-ecrans-textes.js", "aide-ecrans.js", "accueil.js", "accueil-bento.js", "causes-frequentes.js",
+    "apropos.js", "mise-a-jour.js", "aide-ecrans-textes.js", "aide-ecrans.js", "acces-textes.js", "accueil.js", "accueil-bento.js", "causes-frequentes.js",
     "ia.js", "ia-prompts.js", "ia-encadre.js", "dictee.js", "poste.js",
     "parc-regles.js", "parc-arbre.js", "parc-formulaires.js", "parc-etiquettes.js", "parc-fiche.js",
     "demandes-regles.js", "demandes-ecritures.js", "demandes-signaler.js", "demandes-liste.js", "demandes-fiche.js",
@@ -196,9 +196,16 @@ class TestModules(unittest.TestCase):
 
 
 # Documents publics du dépôt : aucun chemin ni outil personnel du poste de développement
-# (lettre de lecteur Windows, dossier synchronisé, chemin Git Bash).
+# (lettre de lecteur Windows, dossier d'utilisateur, dossier synchronisé, service de synchronisation,
+# chemin Git Bash). Motifs génériques (audit G5) : le test ne cite aucun dossier réel du poste.
 DOCUMENTS_PUBLICS = ["README.md", "docs/PILOTAGE.md", "GUIDE.html", "FICHE_TECHNIQUE_CSV.md"]
-MOTIF_CHEMIN_PERSONNEL = re.compile(r"\b[A-Za-z]:\\|pcloud|sync[\\/]nicolas|/c/sync", re.IGNORECASE)
+MOTIF_CHEMIN_PERSONNEL = re.compile(
+    r"\b[A-Za-z]:\\"                                        # lecteur Windows : X:\…
+    r"|\b(?:users|home)[\\/]\w"                             # dossier d'utilisateur : Users\<nom>, /home/<nom>
+    r"|\bsync[\\/]\w"                                       # dossier synchronisé : sync\<nom>, sync/<nom>
+    r"|\b\w*cloud\b|\bdropbox\b|\bonedrive\b"               # services de synchronisation (tout « …cloud »)
+    r"|(?:^|(?<=[\s\"'`(]))/[a-z]/\w",                      # chemin Git Bash : /x/<dossier>
+    re.IGNORECASE)
 
 
 def chemins_personnels(texte):
@@ -216,10 +223,13 @@ class TestDocumentsPublics(unittest.TestCase):
 
     def test_pilotage_le_motif_reconnait_les_chemins_personnels(self):
         # Le contrôle doit pouvoir échouer (un ancien contrôle par grep ne voyait pas « C:\ »).
-        for sonde in ("voir C:\\temp\\x", "dossier pCloud", "sync\\nicolas\\sites", "sync/nicolas/x", "cd /c/sync/x"):
+        for sonde in ("voir C:\\temp\\x", "D:\\prenom\\x", "C:\\Users\\prenom", "/home/prenom/x", "dossier MonCloud",
+                      "dossier XCloud\\x", "dans Dropbox", "OneDrive\\x", "sync\\prenom\\sites", "sync/prenom/x",
+                      "cd /d/partage/x", "(/e/sites)", "`/z/dossier`"):
             with self.subTest(sonde=sonde):
                 self.assertTrue(chemins_personnels(sonde), sonde)
-        for propre in ("Remarque : lot C et D.", "https://exemple.org/a:b", "C : la criticité"):
+        for propre in ("Remarque : lot C et D.", "https://exemple.org/a:b", "C : la criticité", "https://exemple.org/a/b",
+                       "docs/a/x", "base64 +/w/Erl6L7", "rsync -a", "nuage de points"):
             with self.subTest(propre=propre):
                 self.assertEqual(chemins_personnels(propre), [], propre)
 

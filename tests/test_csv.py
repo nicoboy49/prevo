@@ -83,7 +83,7 @@ LIGNES_EXEMPLE = [
         actif="1"),
     equipement(
         id="EQ-0003", repere="CMP-03", designation="=Compresseur à vis", localisation_id="LOC-0003",
-        marque="'Atlas Copco", modele="50%", num_serie="0612345678", date_mes="", criticite="C",
+        marque="'Atlas Copco", modele="50%", num_serie="0639980078", date_mes="", criticite="C",
         statut="arrêt", heures_fonct_jour="1.12", actif="1"),
     equipement(
         id="EQ-0004", repere="BR-04", designation='Broche "haute vitesse" ; moteur',
@@ -211,8 +211,8 @@ class TestErreursEtNormalisation(CasCsv):
 
 VALEURS_PIEGEES = [
     "", " ", "  ", "abc", "'", "''", "'abc", "''abc", "'00123", "' espace", "x'y",
-    "00123", "0", "123456789012345", "0612345678", "1e3", "1E+03", "1,23457E+14",
-    "7.5", "7,5", "12.25", "1.12", "-3", "+33 6 12 34 56 78",
+    "00123", "0", "123456789012345", "0639980078", "1e3", "1E+03", "1,23457E+14",
+    "7.5", "7,5", "12.25", "1.12", "-3", "+33 6 39 98 00 78",
     "=1+1", "=SOMME(A1:A2)", "+", "-", "@", "- remplacer joint", "-- x", "@utilisateur",
     "\tTabulation", "\rRetour chariot", "\nSaut de ligne en tête",
     "1/2", "01-12", "2026-10", "2019-03-15", "15/03/2019", "15.03.2019", "2026-03-15 08:30",
@@ -354,7 +354,8 @@ class TestSerialiser(CasCsv):
         self.assertEqual(cellules[5], '"fin "')
         self.assertEqual(cellules[15], "1")
         self.assertEqual(cellules[16], "")       # valeur_remplacement (version 2 du format), vide
-        self.assertEqual(cellules[17:], ['"dit ""urgent"""', '" 42 "'])
+        # Colonnes inconnues protégées comme un champ texte (audit I3) : « 42 » ressemble à un nombre.
+        self.assertEqual(cellules[17:], ['"dit ""urgent"""', '"\' 42 "'])
         self.assertEqual(lignes_texte[2], "")   # le fichier se termine par CRLF
 
     def test_sans_bom_et_champs_manquants(self):
