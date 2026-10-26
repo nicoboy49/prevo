@@ -158,8 +158,10 @@ const StockageServeur = (() => {
 
     async function charger(table) {
       const reponse = await appeler(urlTable(table), { method: 'GET' });
-      // 404 = fichier absent, mais seulement pour une table du schéma (sinon : table inconnue).
-      if (reponse.status === 404 && Schema.nomsTables().indexOf(table) !== -1) {
+      // 404 = fichier absent, mais seulement pour une table du schéma (sinon : table inconnue). 403 (lot 7, D126,
+      // ARCHITECTURE.md §22.5) : table que le rôle de la session ne lit pas (demandeur) : vue comme absente, sans
+      // erreur, pour que le chargement des tables (Donnees.chargerTout) aboutisse ; /api/versions ne la liste pas.
+      if ((reponse.status === 404 || reponse.status === 403) && Schema.nomsTables().indexOf(table) !== -1) {
         return { octets: null, version: null };
       }
       if (reponse.status >= 400) { throw await erreurDepuisReponse(reponse); }

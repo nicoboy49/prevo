@@ -20,7 +20,8 @@ Lancement :
     (clé du fournisseur d'IA : « ia_cle » de prevo.config.json ou variable PREVO_IA_CLE, jamais une option)
 
 Accès : en portée « ce PC » (défaut), écoute sur 127.0.0.1 seulement et aucun compte. Avec « comptes » (lot 7,
-ARCHITECTURE.md §22.3, §22.4), toute route /api/ autre que ping, session et connexion exige une session (cookie « id »).
+ARCHITECTURE.md §22.3, §22.4), toute route /api/ autre que ping, session et connexion exige une session (cookie « id »),
+puis le rôle de son compte (ROLES_PAR_ROUTE, §22.5 : 403 sinon).
 """
 
 import argparse
@@ -639,8 +640,10 @@ def trouver_compte(comptes, identifiant):
     return next((c for c in comptes if c['identifiant'] == identifiant), None)
 
 
-def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_changer=False, identifiant=None):
-    """Crée un compte (rôle, technicien lié pour un technicien) ; rend le compte créé (sans son empreinte)."""
+def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_changer=False, identifiant=None,
+                 origine=('', '', '')):
+    """Crée un compte (rôle, technicien lié pour un technicien) ; rend le compte créé (sans son empreinte).
+    origine : (adresse, agent, Tailscale) de la ligne du journal (T152 : la requête du responsable), vide sinon."""
     prenom, nom = (prenom or '').strip(), (nom or '').strip()
     if not prenom:
         raise ErreurCompte('Le prénom est obligatoire.')
@@ -666,7 +669,7 @@ def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_ch
                   'modifie_le': instant, 'mot_de_passe_le': instant}
         comptes.append(compte)
         ecrire_comptes(config, comptes)
-    ecrire_journal_acces(config, identifiant, '', '', 'creation')
+    ecrire_journal_acces(config, identifiant, origine[0], origine[1], 'creation', origine[2])
     return compte_public(compte)
 
 
@@ -692,17 +695,17 @@ def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal=
     ecrire_journal_acces(config, compte['identifiant'], origine[0], origine[1], journal, origine[2])
 
 
-def reinitialiser_compte(config, identifiant):
+def reinitialiser_compte(config, identifiant, origine=('', '', '')):
     """Mot de passe provisoire (16 caractères, à changer à la première connexion) ; rendu une seule fois."""
     if not os.path.isfile(chemin_comptes(config)):
         raise ErreurCompte('Aucun compte dans %s : rien à réinitialiser. Terminez d\'abord l\'installation.'
                            % dossier_acces(config))
     provisoire = mot_de_passe_provisoire()
-    changer_mot_de_passe(config, identifiant, provisoire, a_changer=True, journal='reinitialisation')
+    changer_mot_de_passe(config, identifiant, provisoire, a_changer=True, journal='reinitialisation', origine=origine)
     return provisoire
 
 
-def modifier_compte(config, identifiant, **champs):
+def modifier_compte(config, identifiant, origine=('', '', ''), **champs):
     """Prénom, nom, rôle, technicien lié ou actif ; jamais l'identifiant ni le mot de passe par cette voie."""
     permis = {'prenom', 'nom', 'role', 'technicien_id', 'actif'}
     with VERROU_ACCES:
@@ -724,7 +727,7 @@ def modifier_compte(config, identifiant, **champs):
         ecrire_comptes(config, comptes)
     if not compte.get('actif'):
         fermer_sessions_apres_changement(config, compte['identifiant'])
-    ecrire_journal_acces(config, compte['identifiant'], '', '', 'modification')
+    ecrire_journal_acces(config, compte['identifiant'], origine[0], origine[1], 'modification', origine[2])
     return compte_public(compte)
 
 
@@ -2610,8 +2613,10 @@ def verifier_contenu_csv(table, octets, corps_d_ajout=False):
                                       '(« %s ») ; Prévo la protège par une apostrophe.' % (numero, table, cellule[:1]))
 
 
-def enregistrer_csv(config, table, octets, version_attendue):
-    """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit). Contenu vérifié d'abord (E2)."""
+def enregistrer_csv(config, table, octets, version_attendue, controle=None):
+    """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit). Contenu vérifié d'abord (E2).
+    controle (lot 7, §22.5) : (octets reçus, octets actuels) → octets à écrire, appelé après le contrôle de version
+    (colonnes cachées remises pour le technicien, demandes en ajout seulement pour le demandeur ; 403 sinon)."""
     verifier_contenu_csv(table, octets)
     chemin = chemin_table(config, table)
     actuel = lire_octets(chemin)
@@ -2625,6 +2630,8 @@ def enregistrer_csv(config, table, octets, version_attendue):
         else:
             message = 'Le fichier %s.csv a été modifié par un autre poste.' % table
         raise ErreurHttp(409, message, version_actuelle=version_actuelle)
+    if controle is not None:
+        octets = controle(octets, actuel)
     faire_sauvegarde_quotidienne(config)
     ecrire_atomique(chemin, octets)
     return empreinte(octets)
@@ -2642,12 +2649,17 @@ def decouper_corps_ajout(corps):
     return corps, entete, lignes
 
 
-def ajouter_au_csv(config, table, corps):
-    """Ajoute des lignes en fin de fichier (journal) ; 409 si en-tête ou encodage différent."""
+def ajouter_au_csv(config, table, corps, controle=None):
+    """Ajoute des lignes en fin de fichier (journal) ; 409 si en-tête ou encodage différent.
+    controle (lot 7, §22.5) : (en-tête, lignes, octets actuels) → lignes à ajouter (colonnes cachées vidées pour le
+    technicien, demandes nouvelles seulement pour le demandeur ; 403 sinon)."""
     chemin = chemin_table(config, table)
     verifier_contenu_csv(table, corps, corps_d_ajout=True)
     corps, entete, lignes = decouper_corps_ajout(corps)
     actuel = lire_octets(chemin)
+    if controle is not None:
+        lignes = controle(entete, lignes, actuel)
+        corps = entete + FIN_DE_LIGNE + lignes
     if actuel is None or not actuel.replace(BOM_UTF8, b'', 1).strip():
         faire_sauvegarde_quotidienne(config)
         nouveau = BOM_UTF8 + corps
@@ -2691,8 +2703,9 @@ def enregistrer_document(config, nom, octets):
 # ---------------------------------------------------------------------------
 
 # (méthode, motif du chemin après /api/) → fonction du gestionnaire, appelée avec (segment, corps). « <table> » (une
-# des 24 tables) et « <nom> » (nom de document) valent un segment. Une route ajoutée ici est aussitôt fermée sans
-# session quand les comptes sont exigés (tests/test_acces_sessions.py parcourt la table).
+# des 24 tables), « <nom> » (nom de document) et « <identifiant> » (identifiant d'un compte) valent un segment. Une
+# route ajoutée ici est aussitôt fermée sans session quand les comptes sont exigés (tests/test_acces_sessions.py
+# parcourt la table) ; elle doit aussi avoir sa ligne dans ROLES_PAR_ROUTE (tests/test_acces_roles.py le vérifie).
 ROUTES_API = {
     ('GET', 'ping'): 'api_ping',
     ('GET', 'info'): 'api_info',
@@ -2702,6 +2715,10 @@ ROUTES_API = {
     ('POST', 'deconnexion'): 'api_deconnexion',
     ('POST', 'mot-de-passe'): 'api_mot_de_passe',
     ('POST', 'acces/deconnecter-partout'): 'api_deconnecter_partout',
+    ('GET', 'acces/comptes'): 'api_comptes',
+    ('POST', 'acces/comptes'): 'api_compte_creer',
+    ('POST', 'acces/comptes/<identifiant>'): 'api_compte_changer',
+    ('GET', 'acces/journal'): 'api_journal_acces',
     ('GET', 'csv/<table>'): 'api_csv_lire',
     ('PUT', 'csv/<table>'): 'api_csv_ecrire',
     ('POST', 'csv/<table>/ajout'): 'api_ajout',
@@ -2730,6 +2747,429 @@ def motif_de_route(morceaux):
                                                 for attendu, morceau in zip(modele, morceaux)):
             return motif
     return None
+
+
+def segment_de_route(motif, morceaux):
+    """Valeur du segment variable du chemin (« <table> », « <nom> », « <identifiant> »), ou None."""
+    for attendu, morceau in zip((motif or '').split('/'), morceaux):
+        if attendu.startswith('<'):
+            return morceau
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Rôles par route (lot 7, ARCHITECTURE.md §22.5 ; D126) : une seule table, appliquée par verifier_role dans
+# controler_acces, après la session et avant la lecture du corps ; recopiée dans le contrat et dans
+# tests/test_acces_roles.py, qui en parcourt chaque case
+# ---------------------------------------------------------------------------
+
+OUI, NON = 'oui', 'non'
+# Colonnes de ROLES_PAR_ROUTE, dans cet ordre. « appareil » : téléphone enrôlé (D125, T153), droits du demandeur.
+ORDRE_DES_ROLES = ('demandeur', 'appareil', 'technicien', 'responsable')
+# Tables lues par le demandeur (liste fermée, D126 : aucune table de coût ni de techniciens) : celles de ses écrans
+# (accueil, Signaler, demandes, parc, fiche d'équipement avec ses compteurs et relevés, wiki, Ce poste).
+TABLES_DU_DEMANDEUR = ('localisations', 'equipements', 'demandes', 'compteurs', 'releves', 'codes_defaillance',
+                       'parametres', 'wiki_pages')
+# Écritures : le demandeur crée des demandes (PUT de demandes.csv en ajout seulement) et la ligne de journal qui va
+# avec ; le technicien écrit tout sauf ces trois tables, qu'il lit (techniciens sans taux horaire).
+TABLES_DU_DEMANDEUR_EN_ECRITURE = ('demandes',)
+TABLES_DU_DEMANDEUR_EN_AJOUT = ('demandes', 'journal')
+TABLES_DU_RESPONSABLE_EN_ECRITURE = ('parametres', 'techniciens', 'fournisseurs')
+TABLES_DU_TECHNICIEN_EN_ECRITURE = tuple(table for table in TABLES if table not in TABLES_DU_RESPONSABLE_EN_ECRITURE)
+# Documents du demandeur : les photos de demandes (nom donné par nomPhoto de js/modules/demandes-ecritures.js) et les
+# documents des équipements (noms de la colonne « document » d'equipements.csv). Le serveur ne sait pas qui a pris
+# une photo (« demandeur » est un nom libre) : le demandeur lit toutes les photos de demandes.
+MOTIF_PHOTO_DE_DEMANDE = re.compile(r'photo-[0-9]{8}-[0-9]{6}-[A-Z0-9]{4}\.(jpg|jpeg|png|gif|webp)', re.ASCII)
+PHOTOS_DE_DEMANDES = 'photos de demandes'
+DOCUMENTS_DU_DEMANDEUR = 'photos de demandes et documents des équipements'
+TOUS = (OUI, OUI, OUI, OUI)
+RESPONSABLE = (NON, NON, NON, OUI)
+
+# Route → règle de chaque rôle (ORDRE_DES_ROLES) : OUI, NON (403), ou ce que le rôle y peut (tables permises, règle
+# des documents). Chaque route de ROUTES_API a sa ligne. Les routes publiques et celles du mot de passe provisoire
+# sont contrôlées avant (controler_acces) ; « déconnecter partout » pour un autre compte : responsable seulement
+# (api_deconnecter_partout).
+ROLES_PAR_ROUTE = {
+    # route                                 demandeur, appareil, technicien, responsable
+    ('GET', 'ping'): TOUS,
+    ('GET', 'session'): TOUS,
+    ('POST', 'connexion'): TOUS,
+    ('POST', 'deconnexion'): TOUS,
+    ('POST', 'mot-de-passe'): TOUS,
+    ('GET', 'info'): TOUS,
+    ('GET', 'versions'): TOUS,
+    ('POST', 'acces/deconnecter-partout'): TOUS,
+    ('GET', 'acces/comptes'): RESPONSABLE,
+    ('POST', 'acces/comptes'): RESPONSABLE,
+    ('POST', 'acces/comptes/<identifiant>'): RESPONSABLE,
+    ('GET', 'acces/journal'): RESPONSABLE,
+    ('GET', 'csv/<table>'): (TABLES_DU_DEMANDEUR, TABLES_DU_DEMANDEUR, OUI, OUI),
+    ('PUT', 'csv/<table>'): (TABLES_DU_DEMANDEUR_EN_ECRITURE, TABLES_DU_DEMANDEUR_EN_ECRITURE,
+                             TABLES_DU_TECHNICIEN_EN_ECRITURE, OUI),
+    ('POST', 'csv/<table>/ajout'): (TABLES_DU_DEMANDEUR_EN_AJOUT, TABLES_DU_DEMANDEUR_EN_AJOUT,
+                                    TABLES_DU_TECHNICIEN_EN_ECRITURE, OUI),
+    ('GET', 'documents/<nom>'): (DOCUMENTS_DU_DEMANDEUR, DOCUMENTS_DU_DEMANDEUR, OUI, OUI),
+    ('PUT', 'documents/<nom>'): (PHOTOS_DE_DEMANDES, PHOTOS_DE_DEMANDES, OUI, OUI),
+    ('POST', 'sauvegarde'): RESPONSABLE,
+    ('POST', 'sauvegarde/tester'): RESPONSABLE,
+    ('GET', 'sauvegardes'): RESPONSABLE,
+    ('POST', 'restauration'): RESPONSABLE,
+    ('POST', 'ia'): TOUS,
+    ('GET', 'ia/reglages'): TOUS,
+}
+
+# Ce qu'un rôle ne reçoit pas d'une table, retiré des octets renvoyés par GET /api/csv/<table> (la version X-Version
+# reste celle du fichier entier). D126 : ni taux horaire ni prix pour le technicien ; à chacun de ses PUT, le serveur
+# remet ces colonnes depuis le fichier actuel (remettre_colonnes_cachees) : il ne peut ni les lire ni les changer.
+COLONNES_CACHEES_PAR_ROLE = {
+    'technicien': {'techniciens': ('taux_horaire',), 'articles': ('prix_unitaire',), 'achats': ('prix_unitaire',)},
+}
+# Lignes retirées : (colonne, valeurs). D114 : ni page Technicien ni page Intervention pour le demandeur.
+LIGNES_CACHEES_PAR_ROLE = {
+    'demandeur': {'wiki_pages': ('type', ('technicien', 'intervention'))},
+}
+# Demande créée par le demandeur : statut « Nouvelle », champs de la décision du responsable vides.
+STATUT_DEMANDE_NOUVELLE = 'Nouvelle'
+CHAMPS_DE_DECISION = ('motif_decision', 'date_decision', 'ot_id')
+MESSAGE_RESERVE_AU_RESPONSABLE = 'Accès refusé : réservé au responsable.'
+MESSAGE_AJOUT_SEULEMENT = ('Accès refusé : le demandeur ne peut qu\'ajouter une demande (statut « Nouvelle », sans '
+                           'décision) ; %s')
+
+
+def role_effectif(identite):
+    """Rôle dont la session a les droits : celui du compte, « demandeur » pour un appareil enrôlé (D125)."""
+    return 'demandeur' if identite.get('appareil') else str(identite.get('role') or '')
+
+
+def regle_du_role(identite, route):
+    """Règle de ROLES_PAR_ROUTE pour la colonne de cette identité (« appareil » pour un téléphone enrôlé) ; NON pour
+    une route absente ou un rôle inconnu (un comptes.json abîmé n'ouvre rien)."""
+    colonne = 'appareil' if identite.get('appareil') else identite.get('role')
+    regles = ROLES_PAR_ROUTE.get(route)
+    if regles is None or colonne not in ORDRE_DES_ROLES:
+        return NON
+    return regles[ORDRE_DES_ROLES.index(colonne)]
+
+
+def tables_lisibles(identite):
+    """Tables que la session lit (GET /api/csv/<table>) : None pour toutes (sans comptes, technicien, responsable)."""
+    if identite is None:
+        return None
+    regle = regle_du_role(identite, ('GET', 'csv/<table>'))
+    if regle == OUI:
+        return None
+    return set(regle) if isinstance(regle, tuple) else set()
+
+
+def documents_des_equipements(config):
+    """Noms de la colonne « document » d'equipements.csv (apostrophe de protection retirée, §3.2)."""
+    with VERROU_ECRITURE:
+        octets = lire_octets(chemin_table(config, 'equipements'))
+    noms = set()
+    for ligne in dictionnaires_csv(octets):
+        nom = ligne.get('document', '').strip()
+        noms.add(nom[1:] if nom.startswith("'") else nom)
+    noms.discard('')
+    return noms
+
+
+def segment_permis(config, regle, segment):
+    """Vrai si la règle d'un rôle (liste de tables, règle des documents) permet ce segment du chemin."""
+    if segment is None:
+        return False
+    if isinstance(regle, tuple):
+        return segment in regle
+    if regle in (PHOTOS_DE_DEMANDES, DOCUMENTS_DU_DEMANDEUR) and MOTIF_PHOTO_DE_DEMANDE.fullmatch(segment):
+        return True
+    return regle == DOCUMENTS_DU_DEMANDEUR and segment in documents_des_equipements(config)
+
+
+def message_refus(identite, route, segment):
+    """Message du 403 d'un rôle refusé : il dit ce qui est réservé, à qui."""
+    role = role_effectif(identite) or 'inconnu'
+    methode, motif = route
+    if ROLES_PAR_ROUTE.get(route) == RESPONSABLE:
+        return MESSAGE_RESERVE_AU_RESPONSABLE
+    if motif == 'csv/<table>' and methode == 'GET':
+        return 'Accès refusé : la table « %s » n\'est pas ouverte au %s.' % (segment, role)
+    if motif.startswith('csv/') and role == 'technicien':
+        return 'Accès refusé : la table « %s » ne se modifie que par le responsable.' % segment
+    if motif.startswith('csv/'):
+        return ('Accès refusé : le %s ne peut que créer une demande (et la ligne du journal qui va avec).' % role)
+    if motif == 'documents/<nom>' and methode == 'PUT':
+        return 'Accès refusé : le %s ne joint que la photo d\'une demande.' % role
+    if motif == 'documents/<nom>':
+        return 'Accès refusé : ce document n\'est pas ouvert au %s.' % role
+    return 'Accès refusé : votre rôle (%s) ne permet pas cette action.' % role
+
+
+def verifier_role(config, identite, route, segment):
+    """Rôle de la session pour cette route (ROLES_PAR_ROUTE, §22.5 ; D126) : 403 {"erreur": …} au message clair si
+    le rôle n'a pas la route, ou pas ce segment (table, document). Une adresse inconnue ou une méthode non prévue
+    passe : l'aiguillage répond 404 ou 405, comme avant. Appelée par controler_acces après la session et le mot de
+    passe provisoire, avant la lecture du corps (audit F2). Le contenu d'une écriture (demandes en ajout seulement,
+    colonnes cachées remises) se contrôle ensuite, corps lu (controle_d_ecriture, controle_d_ajout)."""
+    if route not in ROLES_PAR_ROUTE:
+        return
+    regle = regle_du_role(identite, route)
+    if regle == OUI or (regle != NON and segment_permis(config, regle, segment)):
+        return
+    raise ErreurHttp(403, message_refus(identite, route, segment))
+
+
+# --- CSV d'un rôle : colonnes et lignes retirées à la lecture, remises ou contrôlées à l'écriture -----------------
+
+# Cellule mise entre guillemets, comme celluleCsv de js/donnees.js (§3.1).
+MOTIF_A_GUILLEMETER = re.compile(r'[;"\r\n]|\A[ \t]|[ \t]\Z')
+MOTIF_DATE_AMJ = re.compile(r'([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})(?:[ t]([0-9]{1,2}):([0-9]{2})(?::[0-9]{2})?)?',
+                            re.ASCII)
+MOTIF_DATE_JMA = re.compile(r'([0-9]{1,2})[/.-]([0-9]{1,2})[/.-]([0-9]{4})(?:[ t]([0-9]{1,2}):([0-9]{2})(?::[0-9]{2})?)?',
+                            re.ASCII)
+MOTIF_DECIMAL_VIRGULE = re.compile(r'-?[0-9]+,[0-9]+', re.ASCII)
+
+
+def cellule_csv(texte):
+    """Cellule écrite comme celluleCsv de js/donnees.js : entre guillemets (doublés dedans) si elle contient « ; »,
+    « " », CR ou LF, ou si elle commence ou finit par une espace ou une tabulation."""
+    return '"' + texte.replace('"', '""') + '"' if MOTIF_A_GUILLEMETER.search(texte) else texte
+
+
+def ecrire_tableau_csv(entete, lignes):
+    """Octets d'un CSV au format de Prévo (§3.1) : BOM UTF-8, « ; », CRLF après chaque ligne, la dernière comprise."""
+    texte = ''.join(';'.join(cellule_csv(cellule) for cellule in ligne) + '\r\n' for ligne in [entete] + list(lignes))
+    return BOM_UTF8 + texte.encode('utf-8')
+
+
+def lire_tableau(table, octets):
+    """(en-tête, lignes) d'un CSV, lu comme Donnees.analyser (lire_csv_tolerant) ; 500 au message clair s'il ne se
+    découpe pas ; ([], []) pour un fichier absent."""
+    if octets is None:
+        return [], []
+    try:
+        return lire_csv_tolerant(octets)
+    except csv.Error as erreur:
+        raise ErreurHttp(500, 'Le fichier %s.csv est illisible (%s).' % (table, erreur))
+
+
+def dictionnaires_csv(octets, table=''):
+    """Lignes d'un CSV en dictionnaires {clé d'en-tête (cle_entete) : valeur} ; [] pour un fichier absent."""
+    entete, lignes = lire_tableau(table, octets)
+    cles = [cle_entete(nom) for nom in entete]
+    return [{cle: (ligne[position] if position < len(ligne) else '') for position, cle in enumerate(cles)}
+            for ligne in lignes]
+
+
+def forme_comparable(valeur):
+    """Valeur d'une cellule réduite à ce que Prévo en lit (§3.2, §3.3) : espaces de bord, casse, accents, apostrophe de
+    protection, écriture d'une date ou d'une date-heure (secondes comprises) et virgule décimale ignorées. Sert à
+    reconnaître une ligne inchangée, jamais à écrire."""
+    texte = sans_accents(str(valeur or '')).strip().lower()
+    if texte.startswith("'"):
+        texte = texte[1:].strip()
+    for motif, ordre in ((MOTIF_DATE_AMJ, (0, 1, 2)), (MOTIF_DATE_JMA, (2, 1, 0))):
+        trouve = motif.fullmatch(texte)
+        if trouve:
+            groupes = trouve.groups()
+            annee, mois, jour = (groupes[position] for position in ordre)
+            texte = '%s-%02d-%02d' % (annee, int(mois), int(jour))
+            return texte + (' %02d:%s' % (int(groupes[3]), groupes[4]) if groupes[3] is not None else '')
+    if MOTIF_DECIMAL_VIRGULE.fullmatch(texte):
+        return texte.replace(',', '.')
+    return texte
+
+
+def filtrer_csv_pour(identite, table, octets):
+    """Octets de GET /api/csv/<table> pour cette session : sans les colonnes ni les lignes que son rôle ne reçoit pas
+    (COLONNES_CACHEES_PAR_ROLE, LIGNES_CACHEES_PAR_ROLE ; en-têtes et valeurs comparés comme Prévo les lit), CSV
+    réécrit au format §3.1 ; inchangés sinon (sans comptes, responsable)."""
+    if identite is None:
+        return octets
+    role = role_effectif(identite)
+    cachees = {cle_entete(colonne) for colonne in COLONNES_CACHEES_PAR_ROLE.get(role, {}).get(table, ())}
+    lignes_cachees = LIGNES_CACHEES_PAR_ROLE.get(role, {}).get(table)
+    if not cachees and not lignes_cachees:
+        return octets
+    entete, lignes = lire_tableau(table, octets)
+    cles = [cle_entete(nom) for nom in entete]
+    if lignes_cachees and cle_entete(lignes_cachees[0]) in cles:
+        position = cles.index(cle_entete(lignes_cachees[0]))
+        refusees = {forme_comparable(valeur) for valeur in lignes_cachees[1]}
+        lignes = [ligne for ligne in lignes if position >= len(ligne) or forme_comparable(ligne[position]) not in refusees]
+    retirees = {position for position, cle in enumerate(cles) if cle in cachees}
+    if retirees:
+        entete = [nom for position, nom in enumerate(entete) if position not in retirees]
+        lignes = [[cellule for position, cellule in enumerate(ligne) if position not in retirees] for ligne in lignes]
+    return ecrire_tableau_csv(entete, lignes)
+
+
+def valeurs_actuelles_par_id(table, octets_actuels, colonnes):
+    """{id : {colonne : valeur}} des colonnes données, lues dans le fichier actuel (première ligne d'un id gardée,
+    comme Donnees.indexer ; espaces de fin retirés comme à la lecture tolérante)."""
+    valeurs = {}
+    for ligne in dictionnaires_csv(octets_actuels, table):
+        identifiant = ligne.get('id', '').strip()
+        if identifiant and identifiant not in valeurs:
+            valeurs[identifiant] = {colonne: ligne.get(cle_entete(colonne), '').rstrip(' \t\r') for colonne in colonnes}
+    return valeurs
+
+
+def remettre_colonnes_cachees(table, octets_recus, octets_actuels, colonnes):
+    """PUT d'une table dont le rôle ne reçoit pas toutes les colonnes (technicien : articles, achats ; §22.5, écart
+    voulu au refus : la sortie d'une pièce réécrit articles pour la colonne stock). Chaque colonne cachée reprend la
+    valeur du fichier actuel, ligne par ligne d'après « id » ; vide pour une ligne nouvelle. Rend les octets à écrire."""
+    entete, lignes = lire_tableau(table, octets_recus)
+    cles = [cle_entete(nom) for nom in entete]
+    actuelles = valeurs_actuelles_par_id(table, octets_actuels, colonnes)
+    position_id = cles.index('id') if 'id' in cles else None
+    for colonne in colonnes:
+        if cle_entete(colonne) not in cles:
+            continue
+        position = cles.index(cle_entete(colonne))
+        for ligne in lignes:
+            identifiant = ligne[position_id].strip() if position_id is not None and position_id < len(ligne) else ''
+            ligne.extend([''] * (position + 1 - len(ligne)))
+            ligne[position] = actuelles.get(identifiant, {}).get(colonne, '')
+    return ecrire_tableau_csv(entete, lignes)
+
+
+def refus_ajout_seulement(raison):
+    return ErreurHttp(403, MESSAGE_AJOUT_SEULEMENT % raison)
+
+
+def verifier_demande_nouvelle(ligne, deja_prises):
+    """Ligne nouvelle du demandeur : id présent et pas déjà pris, statut « Nouvelle », champs de décision vides ; 403
+    sinon. deja_prises : ids du fichier et des nouvelles lignes déjà vues (complété ici)."""
+    identifiant = ligne.get('id', '').strip()
+    if not identifiant:
+        raise refus_ajout_seulement('une nouvelle demande doit avoir un numéro.')
+    if identifiant in deja_prises:
+        raise refus_ajout_seulement('le numéro %s est déjà pris.' % identifiant)
+    deja_prises.add(identifiant)
+    if ligne.get('statut', '').strip() != STATUT_DEMANDE_NOUVELLE:
+        raise refus_ajout_seulement('une nouvelle demande a le statut « %s ».' % STATUT_DEMANDE_NOUVELLE)
+    if any(ligne.get(cle_entete(champ), '').strip() for champ in CHAMPS_DE_DECISION):
+        raise refus_ajout_seulement('la décision (motif, date, ordre de travail) revient au responsable.')
+
+
+def garder_les_demandes_actuelles(octets_recus, octets_actuels):
+    """PUT de demandes.csv par le demandeur (§22.5 ; Signaler écrit la demande par Donnees.modifier) : en ajout
+    seulement. Chaque ligne actuelle doit s'y retrouver inchangée (même id, mêmes valeurs à la forme près,
+    forme_comparable) et les seules lignes nouvelles avoir un id absent du fichier, le statut « Nouvelle » et des
+    champs de décision vides ; 403 sinon. Les lignes actuelles sont réécrites telles qu'elles sont dans le fichier
+    (rien d'une ligne existante ne vient du demandeur), dans l'ordre des colonnes reçues, puis les nouvelles."""
+    entete, lignes = lire_tableau('demandes', octets_recus)
+    cles = [cle_entete(nom) for nom in entete]
+    actuelles = dictionnaires_csv(octets_actuels, 'demandes')
+    # Lignes actuelles pas encore retrouvées, par id (un id en double ou vide dans le fichier, abîmé à la main, compte
+    # autant de fois qu'il y est : Prévo réécrit ces lignes telles quelles).
+    restantes = {}
+    for ligne in actuelles:
+        restantes.setdefault(ligne.get('id', '').strip(), []).append(ligne)
+    prises = {identifiant for identifiant in restantes if identifiant}
+
+    def inchangee(ancienne, recue):
+        return all(forme_comparable(ancienne.get(cle, '')) == forme_comparable(recue.get(cle, ''))
+                   for cle in set(ancienne) | set(recue))
+
+    nouvelles = []
+    for brute in lignes:
+        recue = {cle: (brute[position] if position < len(brute) else '') for position, cle in enumerate(cles)}
+        identifiant = recue.get('id', '').strip()
+        candidates = restantes.get(identifiant, [])
+        retrouvee = next((ancienne for ancienne in candidates if inchangee(ancienne, recue)), None)
+        if retrouvee is not None:
+            candidates.remove(retrouvee)
+        elif identifiant in prises:
+            raise refus_ajout_seulement('la demande %s existe déjà : elle ne se modifie pas ici.' % identifiant)
+        else:
+            verifier_demande_nouvelle(recue, prises)
+            nouvelles.append(brute)
+    manquantes = [identifiant or 'sans numéro' for identifiant, reste in restantes.items() if reste]
+    if manquantes:
+        raise refus_ajout_seulement('une demande ne se supprime pas (%s).' % ', '.join(sorted(manquantes)[:5]))
+    gardees = [[ancienne.get(cle, '') for cle in cles] for ancienne in actuelles]
+    return ecrire_tableau_csv(entete, gardees + nouvelles)
+
+
+def controle_d_ecriture(identite, table):
+    """Contrôle d'un PUT /api/csv/<table> propre au rôle (§22.5), appelé par enregistrer_csv après le contrôle de version
+    (un 409 reste un 409) : (octets reçus, octets actuels) → octets à écrire ; None sans contrôle."""
+    if identite is None:
+        return None
+    role = role_effectif(identite)
+    colonnes = COLONNES_CACHEES_PAR_ROLE.get(role, {}).get(table)
+    if colonnes:
+        return lambda recus, actuels: remettre_colonnes_cachees(table, recus, actuels, colonnes)
+    if role == 'demandeur' and table == 'demandes':
+        return garder_les_demandes_actuelles
+    return None
+
+
+def controle_d_ajout(identite, table):
+    """Contrôle d'un POST /api/csv/<table>/ajout propre au rôle, appelé par ajouter_au_csv : (en-tête, lignes, octets
+    actuels) → lignes à ajouter. Technicien : colonnes cachées vides dans les lignes ajoutées ; demandeur, demandes :
+    lignes nouvelles seulement (verifier_demande_nouvelle) ; None sans contrôle."""
+    if identite is None:
+        return None
+    role = role_effectif(identite)
+    colonnes = COLONNES_CACHEES_PAR_ROLE.get(role, {}).get(table)
+    if not colonnes and not (role == 'demandeur' and table == 'demandes'):
+        return None
+
+    def controler(entete, lignes, actuels):
+        cles = [cle_entete(nom) for nom in next(csv.reader(io.StringIO(entete.decode('utf-8')), delimiter=';'), [])]
+        rangees = [rangee for rangee in csv.reader(io.StringIO(lignes.decode('utf-8'), newline=''), delimiter=';')
+                   if any(cellule.strip() for cellule in rangee)]
+        if colonnes:
+            for colonne in colonnes:
+                if cle_entete(colonne) in cles:
+                    position = cles.index(cle_entete(colonne))
+                    for rangee in rangees:
+                        if position < len(rangee):
+                            rangee[position] = ''
+            return ''.join(';'.join(cellule_csv(cellule) for cellule in rangee) + '\r\n'
+                           for rangee in rangees).encode('utf-8')
+        prises = {ligne.get('id', '').strip() for ligne in dictionnaires_csv(actuels, table)}
+        for rangee in rangees:
+            verifier_demande_nouvelle({cle: (rangee[position] if position < len(rangee) else '')
+                                       for position, cle in enumerate(cles)}, prises)
+        return lignes
+    return controler
+
+
+# --- Comptes gérés par le responsable (GET/POST /api/acces/comptes…, §22.4) ----------------------------------------
+
+CHAMPS_COMPTE_MODIFIABLES = ('prenom', 'nom', 'role', 'technicien_id')
+ACTIONS_COMPTE = ('modifier', 'reinitialiser', 'desactiver', 'activer')
+
+
+def technicien_existe(config, technicien_id):
+    """Vrai si techniciens.csv a une ligne de cet identifiant (technicien lié à un compte)."""
+    with VERROU_ECRITURE:
+        octets = lire_octets(chemin_table(config, 'techniciens'))
+    return any(ligne.get('id', '').strip() == technicien_id for ligne in dictionnaires_csv(octets, 'techniciens'))
+
+
+def champs_de_compte(config, demande, obligatoires=()):
+    """Champs d'un compte reçus par /api/acces/comptes (création, modification) : des textes, un rôle connu, un technicien
+    lié présent dans techniciens.csv ; 400 sinon, champ inconnu compris (jamais un mot de passe, un sel ni « actif » par
+    cette voie)."""
+    champs = {}
+    for cle, valeur in demande.items():
+        if cle not in CHAMPS_COMPTE_MODIFIABLES:
+            raise ErreurHttp(400, 'Champ inconnu ou non modifiable ici : « %s » (prenom, nom, role, technicien_id).'
+                             % str(cle)[:60])
+        if not isinstance(valeur, str):
+            raise ErreurHttp(400, '« %s » : un texte est attendu.' % cle)
+        champs[cle] = valeur.strip()
+    for cle in obligatoires:
+        if not champs.get(cle):
+            raise ErreurHttp(400, '« %s » est obligatoire.' % cle)
+    if 'role' in champs and champs['role'] not in ROLES_COMPTES:
+        raise ErreurHttp(400, 'Rôle inconnu : « %s » (responsable, technicien ou demandeur).' % champs['role'][:60])
+    if champs.get('technicien_id') and not technicien_existe(config, champs['technicien_id']):
+        raise ErreurHttp(400, 'Technicien inconnu : « %s » (voir Équipe).' % champs['technicien_id'][:60])
+    return champs
 
 
 # ---------------------------------------------------------------------------
@@ -2832,7 +3272,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         motif = motif_de_route(morceaux)
         if motif is None:
             raise ErreurHttp(404, 'Adresse inconnue dans l\'API.')
-        segment = morceaux[1] if '<' in motif else None
+        segment = segment_de_route(motif, morceaux)
         if '<table>' in motif:
             chemin_table(self.config, segment)
         elif '<nom>' in motif:
@@ -2847,18 +3287,20 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     def controler_acces(self, methode, morceaux):
         """Point unique de vérification de l'accès à l'API (D126), avant la lecture du corps (audit F2). Sans comptes
         exigés : rien (portée « ce PC »). Sinon l'identité de la requête (verifier_session) ; hors des routes
-        publiques, 401 sans elle, 403 avec un mot de passe provisoire hors des trois routes qui servent à le changer.
-        T152 : le rôle (403) se vérifiera ici, après la session."""
+        publiques, 401 sans elle, 403 avec un mot de passe provisoire hors des trois routes qui servent à le changer,
+        puis le rôle (verifier_role, ROLES_PAR_ROUTE : 403 au message clair)."""
         if not self.config.reglages.get('comptes'):
             return None
         identite = verifier_session(self.config, self.headers.get('Cookie'))
-        route = (methode, motif_de_route(morceaux))
+        motif = motif_de_route(morceaux)
+        route = (methode, motif)
         if route in ROUTES_PUBLIQUES:
             return identite
         if identite is None:
             raise ErreurHttp(401, MESSAGE_SESSION_ABSENTE)
         if identite['a_changer'] and route not in ROUTES_MOT_DE_PASSE_PROVISOIRE:
             raise ErreurHttp(403, MESSAGE_MOT_DE_PASSE_PROVISOIRE)
+        verifier_role(self.config, identite, route, segment_de_route(motif, morceaux))
         return identite
 
     def adresse_client(self):
@@ -3004,6 +3446,68 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         entetes = {'Set-Cookie': entete_cookie_session('', self.en_https(), 0)} if soi_meme else None
         self.envoyer_json(200, {'identifiant': cible, 'sessions_fermees': nombre}, entetes)
 
+    def api_comptes(self, segment, corps):
+        """GET /api/acces/comptes (responsable, §22.4) : les comptes par compte_public, jamais d'empreinte ni de sel."""
+        self.exiger_comptes()
+        self.envoyer_json(200, {'comptes': [compte_public(compte) for compte in comptes_du_serveur(self.config)]})
+
+    def api_compte_creer(self, segment, corps):
+        """POST /api/acces/comptes (responsable) {prenom, nom, role, technicien_id} : compte créé avec un mot de passe
+        provisoire de 16 caractères, à changer à la première connexion (a_changer), rendu une seule fois dans la
+        réponse : jamais écrit dans un fichier, le journal ou la console."""
+        self.exiger_comptes()
+        champs = champs_de_compte(self.config, lire_objet_json(corps), obligatoires=('prenom', 'role'))
+        provisoire = mot_de_passe_provisoire()
+        try:
+            compte = creer_compte(self.config, champs['prenom'], champs.get('nom', ''), champs['role'], provisoire,
+                                  technicien_id=champs.get('technicien_id', ''), a_changer=True,
+                                  origine=self.origine())
+        except ErreurCompte as erreur:
+            raise ErreurHttp(400, str(erreur))
+        self.envoyer_json(200, {'compte': compte, 'mot_de_passe_provisoire': provisoire})
+
+    def api_compte_changer(self, identifiant, corps):
+        """POST /api/acces/comptes/<identifiant> (responsable) {"action": "modifier" (prenom, nom, role, technicien_id)
+        | "reinitialiser" | "desactiver" | "activer"} : fonctions de T150 (au moins un responsable actif reste : 400) ;
+        « reinitialiser » rend le mot de passe provisoire une seule fois ; 404 compte inconnu, 400 action inconnue."""
+        self.exiger_comptes()
+        demande = lire_objet_json(corps)
+        action = demande.pop('action', None)
+        if action not in ACTIONS_COMPTE:
+            raise ErreurHttp(400, '« action » attendue : %s.' % ', '.join(ACTIONS_COMPTE))
+        if action != 'modifier' and demande:
+            raise ErreurHttp(400, 'L\'action « %s » ne prend aucun autre champ.' % action)
+        champs = champs_de_compte(self.config, demande) if action == 'modifier' else {}
+        cible = trouver_compte(comptes_du_serveur(self.config), identifiant)
+        if cible is None:
+            raise ErreurHttp(404, 'Compte introuvable : %s.' % identifiant[:LONGUEUR_MAX_IDENTIFIANT])
+        reponse = {}
+        try:
+            if action == 'reinitialiser':
+                reponse['mot_de_passe_provisoire'] = reinitialiser_compte(self.config, cible['identifiant'],
+                                                                          origine=self.origine())
+                compte = compte_public(trouver_compte(comptes_du_serveur(self.config), cible['identifiant']))
+            elif action == 'modifier':
+                compte = modifier_compte(self.config, cible['identifiant'], origine=self.origine(), **champs)
+            else:
+                compte = modifier_compte(self.config, cible['identifiant'], origine=self.origine(),
+                                         actif=(action == 'activer'))
+        except ErreurCompte as erreur:
+            raise ErreurHttp(400, str(erreur))
+        reponse['compte'] = compte
+        self.envoyer_json(200, reponse)
+
+    def api_journal_acces(self, segment, corps):
+        """GET /api/acces/journal (responsable) : le journal des connexions (CSV), en téléchargement ; l'en-tête seul
+        tant qu'il n'existe pas."""
+        self.exiger_comptes()
+        with VERROU_ACCES_JOURNAL:
+            octets = lire_octets(os.path.join(dossier_acces(self.config), 'journal-acces.csv'))
+        if octets is None:
+            octets = BOM_UTF8 + (';'.join(COLONNES_JOURNAL_ACCES) + '\r\n').encode('utf-8')
+        self.envoyer(200, octets, 'text/csv; charset=utf-8',
+                     {'Content-Disposition': 'attachment; filename="journal-acces.csv"'})
+
     def api_ia(self, segment, corps):
         """Relais vers le fournisseur d'IA réglé sur le PC serveur (lot 4, §17.2 ; audit M1, M2, M3, §22.12).
 
@@ -3026,17 +3530,23 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.envoyer_json(200, reglages_ia_publics(self.config))
 
     def api_versions(self, segment, corps):
+        """GET /api/versions : version de chaque table ; pour le demandeur, seulement celles qu'il lit (§22.5)."""
         with VERROU_ECRITURE:
             tables = versions_des_tables(self.config)
+        lisibles = tables_lisibles(self.session)
+        if lisibles is not None:
+            tables = {table: version for table, version in tables.items() if table in lisibles}
         self.envoyer_json(200, {'tables': tables})
 
     def api_csv_lire(self, table, corps):
+        """GET /api/csv/<table> : le fichier, sans les colonnes ni les lignes que le rôle de la session ne reçoit pas
+        (§22.5) ; X-Version est celle du fichier entier, pour que les écritures restent possibles."""
         chemin = chemin_table(self.config, table)            # 404 si table inconnue
         with VERROU_ECRITURE:
             octets = lire_octets(chemin)
         if octets is None:
             raise ErreurHttp(404, 'Le fichier %s.csv n\'existe pas encore.' % table)
-        self.envoyer(200, octets, 'text/csv; charset=utf-8',
+        self.envoyer(200, filtrer_csv_pour(self.session, table, octets), 'text/csv; charset=utf-8',
                      {'X-Version': empreinte(octets)})
 
     def api_csv_ecrire(self, table, corps):
@@ -3044,12 +3554,13 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if not version_attendue:
             raise ErreurHttp(400, 'En-tête X-Version-Attendue manquant.')
         with VERROU_ECRITURE:
-            version = enregistrer_csv(self.config, table, corps, version_attendue.strip())
+            version = enregistrer_csv(self.config, table, corps, version_attendue.strip(),
+                                      controle_d_ecriture(self.session, table))
         self.envoyer_json(200, {'version': version})
 
     def api_ajout(self, table, corps):
         with VERROU_ECRITURE:
-            version = ajouter_au_csv(self.config, table, corps)
+            version = ajouter_au_csv(self.config, table, corps, controle_d_ajout(self.session, table))
         self.envoyer_json(200, {'version': version})
 
     def api_document_lire(self, nom, corps):

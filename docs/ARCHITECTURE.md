@@ -3311,10 +3311,12 @@ demande l'identifiant et appelle cette commande.
 | `POST /api/deconnexion` | session | 200 `{"comptes": true, "session": null}`, cookie effacé (`id=; …; Max-Age=0`) |
 | `POST /api/mot-de-passe` | session | `{"actuel", "nouveau"}` → 200 comme la connexion (session neuve, toutes les autres sessions du compte fermées, « rester » gardé) ; 400 si le nouveau est trop court, trop long ou égal à l'actuel ; 403 si l'actuel est faux (compté comme un échec de connexion) ; 429 pendant un blocage |
 | `POST /api/enroler` | tous | `{"invitation", "nom"}` → 200 + cookie d'appareil ; 401 invitation inconnue, expirée ou révoquée |
-| `GET/POST /api/acces/comptes`, `/api/acces/comptes/<id>` | responsable | liste, création, modification, réinitialisation, désactivation |
+| `GET /api/acces/comptes` | responsable | `{"comptes": [ … ]}` par `compte_public` : jamais d'empreinte, de sel ni d'algorithme |
+| `POST /api/acces/comptes` | responsable | `{"prenom", "nom", "role", "technicien_id"}` → 200 `{"compte", "mot_de_passe_provisoire"}` : 16 caractères, `a_changer` vrai, rendu une seule fois (jamais écrit dans un fichier, le journal ni la console) ; 400 champ inconnu ou manquant, rôle inconnu, technicien absent de `techniciens.csv` |
+| `POST /api/acces/comptes/<identifiant>` | responsable | `{"action": "modifier", "prenom", "nom", "role", "technicien_id"}`, `{"action": "reinitialiser"}` (rend `mot_de_passe_provisoire` une seule fois), `{"action": "desactiver"}` ou `{"action": "activer"}` → 200 `{"compte"}` ; 400 action inconnue ou s'il ne restait plus aucun responsable actif, 404 compte inconnu |
 | `GET/POST /api/acces/invitations`, `/api/acces/appareils/<id>/revoquer`, `/api/acces/appareils/revoquer-tous` | responsable | invitations et appareils |
 | `POST /api/acces/deconnecter-partout` | responsable (ou soi-même) | sans corps ou `{}` : toutes ses propres sessions, la courante comprise (cookie effacé) ; `{"identifiant": X}` pour un autre compte : responsable seulement (403 sinon), 404 compte inconnu ; 200 `{"identifiant", "sessions_fermees"}` |
-| `GET /api/acces/journal` | responsable | CSV du journal |
+| `GET /api/acces/journal` | responsable | `journal-acces.csv` tel quel (`text/csv`, `Content-Disposition: attachment`), l'en-tête seul tant qu'il n'existe pas |
 | `GET /api/ia/reglages` | tous (session ou appareil) | `{"fournisseur", "url", "cle_reglee": bool, "en_ligne": bool, "portee"}`, jamais la clé (§22.12) |
 
 Toutes les écritures gardent l'en-tête `X-Prevo: 1` (anti-CSRF) en plus de la session.
@@ -3335,34 +3337,98 @@ contrôle d'accès et `tests/test_acces_sessions.py` : une route ajoutée est fe
   `POST /api/mot-de-passe` et `POST /api/deconnexion` (`ROUTES_MOT_DE_PASSE_PROVISOIRE`) rend 403 `{"erreur": "Mot de
   passe provisoire : choisissez votre mot de passe d'abord."}` ; le serveur l'impose, l'écran viendra à T155.
 - Sans comptes (portée « ce PC », tous les tests des lots 1 à 6) : aucun contrôle de plus ; connexion, déconnexion,
-  mot de passe et « déconnecter partout » rendent 400 avec un message clair (jamais 500).
+  mot de passe, « déconnecter partout » et les routes des comptes et du journal rendent 400 avec un message clair
+  (jamais 500).
 - Le cookie porte `Secure` quand la requête arrive en https (`en_https()` du gestionnaire, que T164 étendra au
-  mandataire). T152 ajoutera le rôle (403) dans `controler_acces`, T153 le jeton d'appareil dans `verifier_session`.
+  mandataire). Le rôle (403) est vérifié dans `controler_acces` par `verifier_role` (T152, §22.5), après la session et
+  le mot de passe provisoire ; T153 ajoutera le jeton d'appareil dans `verifier_session`.
+- Routes des comptes (T152, pour Équipe › Accès de T156) : `<identifiant>` vaut un segment ; création, modification,
+  réinitialisation et désactivation passent par les fonctions de T150 (`creer_compte`, `modifier_compte`,
+  `reinitialiser_compte`) et vont au journal des connexions (`creation`, `modification`, `reinitialisation`, `qui` = le
+  compte touché, adresse et agent de la requête du responsable). Un rôle changé vaut dès la requête suivante de ses
+  sessions (le compte est relu à chaque requête) ; un compte désactivé perd ses sessions.
 
 ### 22.5 Rôles par route (D126)
 
-`ROLES_PAR_ROUTE` dans `serveur.py` (et son test case par case) : quand `comptes` est vrai, toute route `/api/`
-exige une session ou un appareil (401), puis le rôle (403). Résumé :
+`ROLES_PAR_ROUTE` dans `serveur.py`, appliquée par `verifier_role` dans `controler_acces` (T152) : quand `comptes` est
+vrai, toute route `/api/` exige une session ou un appareil (401), puis le rôle : 403 `{"erreur": "Accès refusé : …"}`,
+au message qui dit ce qui est réservé et à qui, avant `X-Prevo` et la lecture du corps. La table est recopiée ici et
+dans `tests/test_acces_roles.py`, qui en joue chaque case (vraies sessions de demandeur, technicien et responsable ;
+appareil simulé jusqu'à T153) et vérifie que ce tableau dit la même chose : une route ajoutée à `ROUTES_API` sans sa
+ligne fait échouer le test.
 
-| Route | demandeur (compte ou appareil) | technicien | responsable |
-| --- | --- | --- | --- |
-| `GET /api/ping`, `/api/session` | oui | oui | oui |
-| `GET /api/info`, `/api/versions` | oui | oui | oui |
-| `GET /api/csv/<table>` | `equipements`, `localisations`, `demandes`, `parametres`, `codes_defaillance`, `wiki_pages` (sans les pages Technicien et Intervention, D114) | toutes ; `techniciens` sans `taux_horaire`, `articles` sans `prix` | toutes |
-| `PUT /api/csv/<table>` | refusé | toutes sauf `parametres`, `techniciens`, `fournisseurs` | toutes |
-| `POST /api/csv/<table>/ajout` | `demandes`, `journal` | oui | oui |
-| `GET /api/documents/<nom>` | photos de ses demandes et documents des équipements | oui | oui |
-| `PUT /api/documents/<nom>` | photos de demandes | oui | oui |
-| `POST /api/sauvegarde`, `POST /api/sauvegarde/tester`, `GET /api/sauvegardes`, `POST /api/restauration` | non | non | oui |
-| `POST /api/ia`, `GET /api/ia/reglages` | oui (« Proposer avec l'IA » de Signaler, lot 4) | oui | oui |
-| `/api/acces/…` | non | non | oui |
+| Route | demandeur | appareil | technicien | responsable |
+| --- | --- | --- | --- | --- |
+| `GET /api/ping` | oui | oui | oui | oui |
+| `GET /api/session` | oui | oui | oui | oui |
+| `POST /api/connexion` | oui | oui | oui | oui |
+| `POST /api/deconnexion` | oui | oui | oui | oui |
+| `POST /api/mot-de-passe` | oui | oui | oui | oui |
+| `GET /api/info` | oui | oui | oui | oui |
+| `GET /api/versions` | oui (ses tables seulement) | oui (ses tables seulement) | oui | oui |
+| `POST /api/acces/deconnecter-partout` | oui (soi-même) | oui (soi-même) | oui (soi-même) | oui |
+| `GET /api/acces/comptes` | non | non | non | oui |
+| `POST /api/acces/comptes` | non | non | non | oui |
+| `POST /api/acces/comptes/<identifiant>` | non | non | non | oui |
+| `GET /api/acces/journal` | non | non | non | oui |
+| `GET /api/csv/<table>` | tables du demandeur | tables du demandeur | toutes (colonnes retirées) | toutes |
+| `PUT /api/csv/<table>` | `demandes` (ajout seulement) | `demandes` (ajout seulement) | toutes sauf `parametres`, `techniciens`, `fournisseurs` | toutes |
+| `POST /api/csv/<table>/ajout` | `demandes`, `journal` | `demandes`, `journal` | toutes sauf `parametres`, `techniciens`, `fournisseurs` | toutes |
+| `GET /api/documents/<nom>` | photos de demandes, documents des équipements | photos de demandes, documents des équipements | oui | oui |
+| `PUT /api/documents/<nom>` | photos de demandes | photos de demandes | oui | oui |
+| `POST /api/sauvegarde` | non | non | non | oui |
+| `POST /api/sauvegarde/tester` | non | non | non | oui |
+| `GET /api/sauvegardes` | non | non | non | oui |
+| `POST /api/restauration` | non | non | non | oui |
+| `POST /api/ia` | oui | oui | oui | oui |
+| `GET /api/ia/reglages` | oui | oui | oui | oui |
 
-Les colonnes retirées le sont dans les octets renvoyés (réécriture du CSV), avec une `X-Version` calculée sur le
-fichier entier pour que les écritures restent possibles ; un `PUT` d'un technicien sur une table dont il ne voit pas
-toutes les colonnes est refusé (403). `App.profil` est déduit de `/api/session` ; l'écran de profil de 1.2 ne sert
-qu'en portée « ce PC » et en modes dossier et démo. L'IA reste ouverte au demandeur (précisé à T158) : l'écran
-Signaler s'en sert pour reformuler la demande (lot 4), le relais n'appelle que le fournisseur réglé sur le PC serveur
-et un fournisseur en ligne reste soumis à `ia_en_ligne`.
+Tables du demandeur : `localisations`, `equipements`, `demandes`, `compteurs`, `releves`, `codes_defaillance`, `parametres`, `wiki_pages`.
+
+Précisions de T152 :
+
+- **Contrôle** : `verifier_role(config, identite, route, segment)`, après la session et le mot de passe provisoire ; une
+  adresse inconnue ou une méthode non prévue répond 404 ou 405 comme avant ; un rôle inconnu (`comptes.json` abîmé)
+  n'ouvre rien. Colonne « appareil » : téléphone enrôlé (D125, T153), droits du demandeur (`role_effectif`). « Déconnecter
+  partout » pour un autre compte reste réservé au responsable dans la route elle-même (§22.4).
+- **Technicien, lecture** (D126, CS122 « ni taux horaire ni prix ») : `techniciens` sans `taux_horaire`, `articles` et
+  `achats` sans `prix_unitaire` (`COLONNES_CACHEES_PAR_ROLE`) ; `achats` en plus de la consigne, car une demande d'achat
+  y recopie le prix de l'article. Les colonnes sont retirées des octets renvoyés (CSV réécrit au format §3.1, en-tête
+  compris, nom de colonne reconnu comme à la lecture tolérante) ; `X-Version` est celle du fichier entier, pour que les
+  écritures restent possibles.
+- **Technicien, écriture** — écart voulu au refus prévu d'abord : un `PUT` du technicien sur une table dont il ne voit
+  pas toutes les colonnes (`articles`, `achats`) n'est pas refusé ; le serveur remet chaque colonne cachée depuis le
+  fichier actuel, ligne par ligne d'après `id`, vide pour une ligne nouvelle (`remettre_colonnes_cachees`), puis écrit.
+  Raison : la sortie d'une pièce réécrit `articles` pour la colonne `stock` (`Magasin.mettreAJourStocks`, dont l'échec
+  serait rattrapé sans bruit et laisserait vieillir la colonne). Les prix restent intouchables par le technicien : un
+  prix forgé est remplacé par celui du fichier. Un ajout (`POST …/ajout`) a ses colonnes cachées vidées. `PUT` et ajout
+  sont refusés sur `parametres`, `techniciens`, `fournisseurs` (l'ajout aussi, sinon il contournerait le refus du `PUT`).
+- **Demandeur, lecture** : liste fermée `TABLES_DU_DEMANDEUR` (D126 : aucune table de coût ni de techniciens) — les six
+  du CDC, plus `compteurs` et `releves` pour la carte « Compteurs » de la fiche d'équipement ouverte par le QR. `wiki_pages`
+  arrive sans ses lignes de `type` `technicien` ou `intervention` (D114 ; filtre de garde : le format 3 ne range pas ces
+  pages, calculées). `GET /api/versions` ne liste que ses tables. Côté navigateur, `stockage-serveur.js` voit une table
+  refusée (403) comme absente : `Donnees.chargerTout` aboutit et ses écrans montrent ce que ses tables permettent ; sans
+  `ordres_travail` ni `articles` (coûts, techniciens), l'historique des OT de la fiche d'équipement, le statut de l'OT d'une
+  demande, les causes fréquentes, les pièces de rechange et les couches du wiki tirées des OT restent vides.
+- **Demandeur, écriture** : `PUT /api/csv/demandes` en ajout seulement (l'écran Signaler écrit par `Donnees.modifier`) :
+  chaque ligne actuelle doit s'y retrouver inchangée (même `id`, mêmes valeurs à la forme près : casse, accents, espaces
+  de bord, apostrophe de protection, écriture d'une date ou d'une date-heure, virgule décimale, soit ce que la lecture
+  tolérante change), et les seules lignes nouvelles ont un `id` absent du fichier et unique, le statut `Nouvelle` et
+  `motif_decision`, `date_decision`, `ot_id` vides ; sinon 403. Les lignes actuelles sont réécrites telles qu'elles sont
+  dans le fichier (rien d'une ligne existante ne vient du demandeur), puis les nouvelles. Ce contrôle suit celui de la
+  version : une version périmée rend toujours 409. `POST /api/csv/demandes/ajout` suit les mêmes règles pour les lignes
+  ajoutées, `POST /api/csv/journal/ajout` est permis ; tout autre `PUT` ou ajout : 403.
+- **Documents du demandeur** : lecture des photos de demandes (`photo-AAAAMMJJ-HHMMSS-XXXX.<jpg|jpeg|png|gif|webp>`, nom
+  donné par `nomPhoto`, `MOTIF_PHOTO_DE_DEMANDE`) et des documents des équipements (noms de la colonne `document`
+  d'`equipements.csv`, relue à chaque requête) ; envoi des seules photos de demandes. « Ses » demandes : le serveur ne sait
+  pas relier une photo à la personne qui l'a prise (`demandeur` est un nom libre) ; le demandeur lit donc toutes les photos
+  de demandes.
+- **Sans comptes** : rien ne change (aucune colonne ni ligne retirée, toutes les versions, aucune règle d'écriture).
+
+`App.profil` est déduit de `/api/session` ; l'écran de profil de 1.2 ne sert qu'en portée « ce PC » et en modes dossier
+et démo. L'IA reste ouverte au demandeur (précisé à T158) : l'écran Signaler s'en sert pour reformuler la demande
+(lot 4), le relais n'appelle que le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis à
+`ia_en_ligne`.
 
 ### 22.6 Porte d'entrée et certificat local (D127, CS125, CS126, CS137)
 
