@@ -7,6 +7,9 @@ donnees/documents/
 verrou.txt
 # --- Configuration d'une installation (lot 7) : propre à chaque poste, jamais dans le dépôt
 prevo.config.json
+# --- Binaires tiers du zip de release (lot 7 : Python embarqué, mkcert), jamais dans le dépôt
+outils-tiers/
+/python/
 
 # --- Fichiers de travail, hors dépôt
 .chantier/

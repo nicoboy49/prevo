@@ -34,12 +34,14 @@ import ipaddress
 import json
 import math
 import os
+import platform
 import re
 import secrets
 import shutil
 import socket
 import socketserver
 import ssl
+import subprocess
 import sys
 import tempfile
 import threading
@@ -692,6 +694,161 @@ def ecrire_journal_acces(config, qui, adresse, agent, resultat, tailscale=''):
 
 
 VERROU_ACCES_JOURNAL = threading.Lock()
+
+
+
+# ---------------------------------------------------------------------------
+# Certificat local par mkcert (lot 7, ARCHITECTURE.md §22.6 ; D127) : empreinte vérifiée avant toute exécution
+# ---------------------------------------------------------------------------
+
+FICHIER_EMPREINTES_TIERS = os.path.join(DOSSIER_APPLICATION, 'outils', 'empreintes-tiers.json')
+DOSSIER_OUTILS_TIERS = os.path.join(DOSSIER_APPLICATION, 'outils-tiers')
+DELAI_MKCERT_S = 120
+
+
+def nom_binaire_mkcert(version='1.4.4', systeme=None, machine=None):
+    """« mkcert-v1.4.4-windows-amd64.exe », « mkcert-v1.4.4-linux-arm64 »… pour ce système."""
+    systeme = (systeme or sys.platform).lower()
+    machine = (machine or platform.machine()).lower()
+    if systeme.startswith('win'):
+        nom_systeme, suffixe = 'windows', '.exe'
+    elif systeme == 'darwin':
+        nom_systeme, suffixe = 'darwin', ''
+    else:
+        nom_systeme, suffixe = 'linux', ''
+    if machine in ('amd64', 'x86_64', 'x64'):
+        architecture = 'amd64'
+    elif machine in ('arm64', 'aarch64'):
+        architecture = 'arm64'
+    elif machine.startswith('arm'):
+        architecture = 'arm'
+    else:
+        architecture = machine
+    return 'mkcert-v%s-%s-%s%s' % (version, nom_systeme, architecture, suffixe)
+
+
+def lire_empreintes_tiers(chemin=None):
+    with open(chemin or FICHIER_EMPREINTES_TIERS, 'rb') as fichier:
+        return json.loads(fichier.read().decode('utf-8'))
+
+
+def empreinte_fichier(chemin):
+    calcul = hashlib.sha256()
+    with open(chemin, 'rb') as fichier:
+        for morceau in iter(lambda: fichier.read(1024 * 1024), b''):
+            calcul.update(morceau)
+    return calcul.hexdigest()
+
+
+def verifier_empreinte(chemin, attendue):
+    """ErreurConfiguration si le fichier manque ou si son SHA-256 n'est pas celui attendu (rien n'est exécuté)."""
+    if not os.path.isfile(chemin):
+        raise ErreurConfiguration('Outil introuvable : %s.' % chemin)
+    obtenue = empreinte_fichier(chemin)
+    if not hmac.compare_digest(obtenue, (attendue or '').lower()):
+        raise ErreurConfiguration('Empreinte inattendue pour %s : le fichier a été modifié ou n\'est pas celui livré '
+                                  'avec Prévo. Il n\'a pas été exécuté.' % os.path.basename(chemin))
+
+
+def trouver_mkcert(empreintes=None, dossier=None, nom=None):
+    """Chemin de mkcert, empreinte vérifiée : outils-tiers/<nom> (livré dans le zip). ErreurConfiguration sinon."""
+    empreintes = empreintes or lire_empreintes_tiers()
+    nom = nom or nom_binaire_mkcert(empreintes['mkcert']['version'])
+    fiche = empreintes['mkcert']['fichiers'].get(nom)
+    if fiche is None:
+        raise ErreurConfiguration('Aucun mkcert prévu pour ce système (%s).' % nom)
+    chemin = os.path.join(dossier or DOSSIER_OUTILS_TIERS, nom)
+    verifier_empreinte(chemin, fiche['sha256'])
+    return chemin
+
+
+def telecharger_mkcert(empreintes=None, dossier=None, nom=None, adresse=None):
+    """Téléchargement de secours depuis la page des releases ; l'empreinte est vérifiée avant de garder le fichier."""
+    empreintes = empreintes or lire_empreintes_tiers()
+    nom = nom or nom_binaire_mkcert(empreintes['mkcert']['version'])
+    fiche = empreintes['mkcert']['fichiers'].get(nom)
+    if fiche is None:
+        raise ErreurConfiguration('Aucun mkcert prévu pour ce système (%s).' % nom)
+    dossier = dossier or DOSSIER_OUTILS_TIERS
+    os.makedirs(dossier, exist_ok=True)
+    cible = os.path.join(dossier, nom)
+    temporaire = cible + '.telechargement'
+    adresse = adresse or (empreintes['mkcert']['source'] + nom)
+    try:
+        with urllib.request.urlopen(adresse, timeout=60) as reponse, open(temporaire, 'wb') as fichier:
+            shutil.copyfileobj(reponse, fichier)
+        verifier_empreinte(temporaire, fiche['sha256'])
+        os.replace(temporaire, cible)
+    except (OSError, urllib.error.URLError) as erreur:
+        raise ErreurConfiguration('Téléchargement de mkcert impossible (%s) : vérifiez la connexion à Internet, ou '
+                                  'utilisez le zip de Prévo qui le contient.' % erreur)
+    finally:
+        if os.path.exists(temporaire):
+            os.remove(temporaire)
+    if not nom.endswith('.exe'):
+        os.chmod(cible, 0o755)
+    return cible
+
+
+def dossier_autorite(config):
+    return os.path.join(dossier_acces(config), 'autorite')
+
+
+def noms_du_certificat(config, adresses=None):
+    """Noms couverts : adresses IP du PC, <nom>.local, <nom>, localhost, 127.0.0.1, puis les noms acceptés."""
+    noms = list(adresses if adresses is not None else adresses_ip_reseau())
+    noms += [config.nom_pc + '.local', config.nom_pc, 'localhost', '127.0.0.1']
+    noms += list(config.reglages.get('noms', []))
+    vus, uniques = set(), []
+    for nom in noms:
+        if nom and nom not in vus:
+            vus.add(nom)
+            uniques.append(nom)
+    return uniques
+
+
+def lancer_mkcert(executable, arguments, autorite):
+    """Lance mkcert avec CAROOT = l'autorité de Prévo ; rend la sortie ; ErreurConfiguration si l'outil échoue."""
+    environnement = dict(os.environ, CAROOT=autorite)
+    commande = ([sys.executable, executable] if executable.endswith('.py') else [executable]) + list(arguments)
+    try:
+        resultat = subprocess.run(commande, capture_output=True, timeout=DELAI_MKCERT_S, env=environnement)
+    except (OSError, subprocess.TimeoutExpired) as erreur:
+        raise ErreurConfiguration('mkcert n\'a pas pu être lancé (%s).' % erreur)
+    sortie = (resultat.stdout + resultat.stderr).decode('utf-8', 'replace')
+    if resultat.returncode != 0:
+        raise ErreurConfiguration('mkcert a échoué : %s' % sortie.strip()[-400:])
+    return sortie
+
+
+def preparer_certificat_local(config, executable, adresses=None, forcer=False):
+    """Certificat de l'atelier dans donnees/acces/ (certificat.pem, cle.pem, certificat.json) ; refait si les noms
+    ont changé (nouvelle adresse du PC, nouveau nom accepté). L'autorité reste dans donnees/acces/autorite/ ; sa clé
+    (rootCA-key.pem) n'est jamais lue ni copiée par Prévo. Rend (certificat, clé, noms)."""
+    acces = dossier_acces(config)
+    autorite = dossier_autorite(config)
+    os.makedirs(autorite, exist_ok=True)
+    certificat = os.path.join(acces, 'certificat.pem')
+    cle = os.path.join(acces, 'cle.pem')
+    fiche = os.path.join(acces, 'certificat.json')
+    noms = noms_du_certificat(config, adresses)
+    if not forcer and os.path.isfile(certificat) and os.path.isfile(cle) and os.path.isfile(fiche):
+        try:
+            with open(fiche, 'rb') as lecture:
+                if json.loads(lecture.read().decode('utf-8')).get('noms') == noms:
+                    return certificat, cle, noms
+        except ValueError:
+            pass
+    lancer_mkcert(executable, ['-cert-file', certificat, '-key-file', cle] + noms, autorite)
+    if not (os.path.isfile(certificat) and os.path.isfile(cle)):
+        raise ErreurConfiguration('mkcert n\'a pas produit le certificat attendu.')
+    ecrire_atomique(fiche, json.dumps({'noms': noms, 'cree_le': maintenant_iso(config)}, ensure_ascii=False).encode('utf-8'))
+    return certificat, cle, noms
+
+
+def certificat_de_l_autorite(config):
+    """Octets du certificat PUBLIC de l'autorité (rootCA.pem), servi aux téléphones ; None s'il n'existe pas."""
+    return lire_octets(os.path.join(dossier_autorite(config), 'rootCA.pem'))
 
 
 def copier_acces_dans_sauvegarde(config, dossier_sauvegarde):
