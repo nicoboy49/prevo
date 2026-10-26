@@ -3255,7 +3255,9 @@ navigateur, qui ne les lit pas : les empreintes ne quittent jamais le serveur) :
 - `sessions.json` : `{ "<sha256 du jeton>": { "identifiant", "cree_le", "vu_le", "longue": bool, "agent" } }` —
   seule l'empreinte du jeton est gardée (SHA-256 en hexadécimal) ; dates en heure locale `AAAA-MM-JJTHH:MM:SS`.
 - `appareils.json` : `{ "invitations": [ { "id", "empreinte", "cree_le", "expire_le", "revoquee" } ], "appareils":
-  [ { "id", "empreinte", "libelle", "nom_demandeur", "cree_le", "vu_le", "revoque": bool } ] }`.
+  [ { "id", "empreinte", "libelle", "nom_demandeur", "cree_le", "vu_le", "revoque": bool, "invitation" } ] }` —
+  seule l'empreinte SHA-256 du jeton (d'invitation ou d'appareil) est gardée ; `id` = `INV-` ou `AP-` et quatre
+  caractères hexadécimaux tirés au sort, jamais réemployés ; `invitation` = l'id de l'invitation qui a servi.
 - `journal-acces.csv` (`;`, UTF-8 avec BOM, apostrophe de protection) : `date;qui;adresse;agent;resultat;tailscale`,
   `resultat` ∈ `connexion`, `echec`, `bloque`, `deconnexion`, `appareil`, `invitation`, `revocation`,
   `reinitialisation`, `creation`, `modification` ; lignes de plus de 12 mois purgées à la première écriture du jour.
@@ -3302,6 +3304,34 @@ Ligne de commande : `serveur.py --reinitialiser IDENTIFIANT` (écrit un mot de p
 l'affiche une fois, marque `a_changer`, journalise ; refusée si `comptes.json` est absent). `Reinitialiser_mot_de_passe.bat`
 demande l'identifiant et appelle cette commande.
 
+Précisions de T153 (appareils enrôlés, D125, CS123) :
+
+- **Invitation** : créée par le responsable (`creer_invitation`), valable `invitation_heures` (24 h par défaut, 1 à
+  168, ou `heures` dans le corps) ; le jeton (`secrets.token_urlsafe(32)`) est rendu une seule fois avec le chemin
+  `/#/enroler/<jeton>` : le QR et le lien se font côté navigateur (Équipe › Accès, T156) avec l'adresse http de la
+  porte (§22.6), le serveur ne connaît pas son adresse publique. Usage multiple jusqu'à l'expiration ou la
+  révocation.
+- **Enrôlement** (`POST /api/enroler`, route publique) : l'invitation est reconnue par son empreinte, le nom saisi
+  (1 à 60 caractères, espaces réduits) est mémorisé, le libellé vient de la famille du navigateur (iPhone, Android,
+  PC Windows…, jamais la chaîne entière) ; l'appareil reçoit le cookie `appareil=<jeton>; Path=/; HttpOnly;
+  SameSite=Lax[; Secure]; Max-Age=31536000` et la réponse de `GET /api/session` d'un demandeur (`appareil` vrai,
+  `identifiant` = `appareil:<id>`, `nom` = le nom saisi, `prenom` vide). Invitation inconnue, expirée ou révoquée :
+  401 au même message. `demandeurs_avec_compte` vrai : 403 (enrôlement désactivé).
+- **Reconnaissance** (`verifier_appareil`, appelée par `verifier_session` quand aucun cookie `id` ne vaut) : jeton
+  connu, appareil ni révoqué ni expiré (un an glissant depuis `vu_le`, réécrit au plus une fois par minute) ;
+  `GET /api/session` renvoie le cookie avec un `Max-Age` neuf (un an glissant côté navigateur, à chaque ouverture).
+  Quand `demandeurs_avec_compte` est vrai, aucun appareil n'est reconnu, même enrôlé avant.
+- **Refus** : un cookie `appareil` qui ne vaut plus (révoqué, expiré, enrôlement désactivé) rend 401
+  `{"erreur": …, "appareil_refuse": true}` et efface le cookie (`Max-Age=0`) : le navigateur revoit la page
+  d'invitation. La révocation (`revoquer`) relit et réécrit `appareils.json` ; chaque requête le relit : effet
+  immédiat. Un appareil n'a que les droits du demandeur (colonne « appareil » de §22.5, `role_effectif`) ; le mot de
+  passe d'un appareil n'existe pas (`POST /api/mot-de-passe` répond 403 « mot de passe actuel incorrect ») et
+  `POST /api/deconnexion` ne le révoque pas (seul le responsable révoque un appareil).
+- **Oubli** : à chaque écriture, les invitations finies depuis plus de 30 jours et les appareils révoqués ou expirés
+  dont la dernière activité date de plus de 30 jours sont retirés du fichier.
+- **Journal des connexions** : `invitation` (qui = le responsable), `appareil` (qui = `appareil:<id>`, à
+  l'enrôlement), `revocation` (qui = `appareil:<id>` ou `invitation:<id>`, adresse et agent du responsable).
+
 ### 22.4 API d'accès (`/api/connexion` et suivantes)
 
 | Méthode et chemin | Qui | Réponse |
@@ -3310,11 +3340,15 @@ demande l'identifiant et appelle cette commande.
 | `POST /api/connexion` | tous | corps `{"identifiant", "mot_de_passe", "rester": bool}` → 200 `{"comptes": true, "session": {…}}` + cookie, 401, 429 ; 400 corps invalide |
 | `POST /api/deconnexion` | session | 200 `{"comptes": true, "session": null}`, cookie effacé (`id=; …; Max-Age=0`) |
 | `POST /api/mot-de-passe` | session | `{"actuel", "nouveau"}` → 200 comme la connexion (session neuve, toutes les autres sessions du compte fermées, « rester » gardé) ; 400 si le nouveau est trop court, trop long ou égal à l'actuel ; 403 si l'actuel est faux (compté comme un échec de connexion) ; 429 pendant un blocage |
-| `POST /api/enroler` | tous | `{"invitation", "nom"}` → 200 + cookie d'appareil ; 401 invitation inconnue, expirée ou révoquée |
+| `POST /api/enroler` | tous (route publique) | `{"invitation", "nom"}` → 200 `{"comptes": true, "session": {…, "appareil": true}}` + cookie `appareil` (un an) ; 401 invitation inconnue, expirée ou révoquée ; 403 enrôlement désactivé (`demandeurs_avec_compte`) ; 400 corps ou nom invalide |
 | `GET /api/acces/comptes` | responsable | `{"comptes": [ … ]}` par `compte_public` : jamais d'empreinte, de sel ni d'algorithme |
 | `POST /api/acces/comptes` | responsable | `{"prenom", "nom", "role", "technicien_id"}` → 200 `{"compte", "mot_de_passe_provisoire"}` : 16 caractères, `a_changer` vrai, rendu une seule fois (jamais écrit dans un fichier, le journal ni la console) ; 400 champ inconnu ou manquant, rôle inconnu, technicien absent de `techniciens.csv` |
 | `POST /api/acces/comptes/<identifiant>` | responsable | `{"action": "modifier", "prenom", "nom", "role", "technicien_id"}`, `{"action": "reinitialiser"}` (rend `mot_de_passe_provisoire` une seule fois), `{"action": "desactiver"}` ou `{"action": "activer"}` → 200 `{"compte"}` ; 400 action inconnue ou s'il ne restait plus aucun responsable actif, 404 compte inconnu |
-| `GET/POST /api/acces/invitations`, `/api/acces/appareils/<id>/revoquer`, `/api/acces/appareils/revoquer-tous` | responsable | invitations et appareils |
+| `GET /api/acces/invitations` | responsable | `{"invitations": [{"id", "cree_le", "expire_le", "revoquee", "valide"}], "appareils": [{"id", "libelle", "nom_demandeur", "cree_le", "vu_le", "revoque", "valide"}], "enrolement_actif": bool}`, jamais d'empreinte |
+| `POST /api/acces/invitations` | responsable | sans corps, `{}` ou `{"heures": 1..168}` → 200 `{"invitation": {…}, "jeton", "chemin": "/#/enroler/<jeton>"}`, le jeton rendu une seule fois ; 400 heures hors bornes ou champ inconnu |
+| `POST /api/acces/invitations/<id>/revoquer` | responsable | 200 `{"invitation", "revoquee": true}` ; 404 inconnue |
+| `POST /api/acces/appareils/<id>/revoquer` | responsable | 200 `{"appareil", "revoque": true}` : 401 dès la requête suivante de l'appareil ; 404 inconnu |
+| `POST /api/acces/appareils/revoquer-tous` | responsable | 200 `{"appareils_revoques": [ids]}` |
 | `POST /api/acces/deconnecter-partout` | responsable (ou soi-même) | sans corps ou `{}` : toutes ses propres sessions, la courante comprise (cookie effacé) ; `{"identifiant": X}` pour un autre compte : responsable seulement (403 sinon), 404 compte inconnu ; 200 `{"identifiant", "sessions_fermees"}` |
 | `GET /api/acces/journal` | responsable | `journal-acces.csv` tel quel (`text/csv`, `Content-Disposition: attachment`), l'en-tête seul tant qu'il n'existe pas |
 | `GET /api/ia/reglages` | tous (session ou appareil) | `{"fournisseur", "url", "cle_reglee": bool, "en_ligne": bool, "portee"}`, jamais la clé (§22.12) |
@@ -3341,7 +3375,8 @@ contrôle d'accès et `tests/test_acces_sessions.py` : une route ajoutée est fe
   (jamais 500).
 - Le cookie porte `Secure` quand la requête arrive en https (`en_https()` du gestionnaire, que T164 étendra au
   mandataire). Le rôle (403) est vérifié dans `controler_acces` par `verifier_role` (T152, §22.5), après la session et
-  le mot de passe provisoire ; T153 ajoutera le jeton d'appareil dans `verifier_session`.
+  le mot de passe provisoire ; le jeton d'appareil est reconnu dans `verifier_session` (`verifier_appareil`, T153,
+  §22.3).
 - Routes des comptes (T152, pour Équipe › Accès de T156) : `<identifiant>` vaut un segment ; création, modification,
   réinitialisation et désactivation passent par les fonctions de T150 (`creer_compte`, `modifier_compte`,
   `reinitialiser_compte`) et vont au journal des connexions (`creation`, `modification`, `reinitialisation`, `qui` = le
@@ -3354,8 +3389,8 @@ contrôle d'accès et `tests/test_acces_sessions.py` : une route ajoutée est fe
 vrai, toute route `/api/` exige une session ou un appareil (401), puis le rôle : 403 `{"erreur": "Accès refusé : …"}`,
 au message qui dit ce qui est réservé et à qui, avant `X-Prevo` et la lecture du corps. La table est recopiée ici et
 dans `tests/test_acces_roles.py`, qui en joue chaque case (vraies sessions de demandeur, technicien et responsable ;
-appareil simulé jusqu'à T153) et vérifie que ce tableau dit la même chose : une route ajoutée à `ROUTES_API` sans sa
-ligne fait échouer le test.
+appareil simulé dans ce test, appareil réellement enrôlé dans `tests/test_acces_appareils.py`, T153) et vérifie que
+ce tableau dit la même chose : une route ajoutée à `ROUTES_API` sans sa ligne fait échouer le test.
 
 | Route | demandeur | appareil | technicien | responsable |
 | --- | --- | --- | --- | --- |
@@ -3371,6 +3406,12 @@ ligne fait échouer le test.
 | `POST /api/acces/comptes` | non | non | non | oui |
 | `POST /api/acces/comptes/<identifiant>` | non | non | non | oui |
 | `GET /api/acces/journal` | non | non | non | oui |
+| `POST /api/enroler` | oui | oui | oui | oui |
+| `GET /api/acces/invitations` | non | non | non | oui |
+| `POST /api/acces/invitations` | non | non | non | oui |
+| `POST /api/acces/invitations/<id>/revoquer` | non | non | non | oui |
+| `POST /api/acces/appareils/<id>/revoquer` | non | non | non | oui |
+| `POST /api/acces/appareils/revoquer-tous` | non | non | non | oui |
 | `GET /api/csv/<table>` | tables du demandeur | tables du demandeur | toutes (colonnes retirées) | toutes |
 | `PUT /api/csv/<table>` | `demandes` (ajout seulement) | `demandes` (ajout seulement) | toutes sauf `parametres`, `techniciens`, `fournisseurs` | toutes |
 | `POST /api/csv/<table>/ajout` | `demandes`, `journal` | `demandes`, `journal` | toutes sauf `parametres`, `techniciens`, `fournisseurs` | toutes |
@@ -3389,7 +3430,8 @@ Précisions de T152 :
 
 - **Contrôle** : `verifier_role(config, identite, route, segment)`, après la session et le mot de passe provisoire ; une
   adresse inconnue ou une méthode non prévue répond 404 ou 405 comme avant ; un rôle inconnu (`comptes.json` abîmé)
-  n'ouvre rien. Colonne « appareil » : téléphone enrôlé (D125, T153), droits du demandeur (`role_effectif`). « Déconnecter
+  n'ouvre rien. Colonne « appareil » : téléphone enrôlé (D125, T153, §22.3), droits du demandeur (`role_effectif`) ;
+  `POST /api/enroler` est publique (l'invitation décide), les invitations et les révocations sont au responsable. « Déconnecter
   partout » pour un autre compte reste réservé au responsable dans la route elle-même (§22.4).
 - **Technicien, lecture** (D126, CS122 « ni taux horaire ni prix ») : `techniciens` sans `taux_horaire`, `articles` et
   `achats` sans `prix_unitaire` (`COLONNES_CACHEES_PAR_ROLE`) ; `achats` en plus de la consigne, car une demande d'achat

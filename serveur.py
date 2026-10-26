@@ -20,8 +20,8 @@ Lancement :
     (clé du fournisseur d'IA : « ia_cle » de prevo.config.json ou variable PREVO_IA_CLE, jamais une option)
 
 Accès : en portée « ce PC » (défaut), écoute sur 127.0.0.1 seulement et aucun compte. Avec « comptes » (lot 7,
-ARCHITECTURE.md §22.3, §22.4), toute route /api/ autre que ping, session et connexion exige une session (cookie « id »),
-puis le rôle de son compte (ROLES_PAR_ROUTE, §22.5 : 403 sinon).
+ARCHITECTURE.md §22.3, §22.4), toute route /api/ autre que ping, session, connexion et enrôlement exige une session (cookie « id ») ou un
+appareil enrôlé (cookie « appareil », D125, rôle demandeur), puis le rôle (ROLES_PAR_ROUTE, §22.5 : 403 sinon).
 """
 
 import argparse
@@ -953,10 +953,11 @@ def valeurs_cookie(entete, nom):
     return valeurs[:4]
 
 
-def entete_cookie_session(jeton, https, max_age=None):
+def entete_cookie_session(jeton, https, max_age=None, nom=NOM_COOKIE_SESSION):
     """Set-Cookie de la session (§22.3) : id=<jeton>; Path=/; HttpOnly; SameSite=Lax[; Secure][; Max-Age=…] ;
-    jeton vide et Max-Age=0 : le cookie est effacé."""
-    morceaux = ['%s=%s' % (NOM_COOKIE_SESSION, jeton), 'Path=/', 'HttpOnly', 'SameSite=Lax']
+    jeton vide et Max-Age=0 : le cookie est effacé. Le cookie d'appareil (nom « appareil », D125) a les mêmes
+    attributs, avec un Max-Age d'un an."""
+    morceaux = ['%s=%s' % (nom, jeton), 'Path=/', 'HttpOnly', 'SameSite=Lax']
     if https:
         morceaux.append('Secure')
     if max_age is not None:
@@ -966,8 +967,8 @@ def entete_cookie_session(jeton, https, max_age=None):
 
 def verifier_session(config, entete_cookie):
     """Identité de la requête d'après le cookie « id » : jeton connu, session non expirée, compte actif dont le mot de
-    passe n'a pas changé depuis la connexion ; sinon None. T153 : le jeton d'appareil (cookie « appareil », rôle
-    demandeur) s'ajoutera ici."""
+    passe n'a pas changé depuis la connexion ; sinon l'appareil enrôlé du cookie « appareil » (verifier_appareil,
+    D125, rôle demandeur) ; sinon None."""
     for jeton in valeurs_cookie(entete_cookie, NOM_COOKIE_SESSION):
         trouvee = session_du_jeton(config, jeton)
         if trouvee is None:
@@ -982,7 +983,216 @@ def verifier_session(config, entete_cookie):
             fermer_session(config, cle)
             continue
         return identite_du_compte(compte, cle, session.get('longue'))
+    return verifier_appareil(config, entete_cookie)
+
+
+# ---------------------------------------------------------------------------
+# Appareils enrôlés (lot 7, ARCHITECTURE.md §22.3, §22.4 ; D125, CS123) : donnees/acces/appareils.json
+# ---------------------------------------------------------------------------
+
+NOM_COOKIE_APPAREIL = 'appareil'
+DUREE_APPAREIL_JOURS = 365              # jeton d'appareil : 1 an glissant depuis sa dernière activité (vu_le)
+INVITATION_HEURES_MIN, INVITATION_HEURES_MAX = 1, 168
+LONGUEUR_MAX_NOM_DEMANDEUR = 60
+LONGUEUR_MAX_LIBELLE_APPAREIL = 80
+OUBLI_APPAREILS_JOURS = 30              # invitations finies, appareils révoqués ou expirés : oubliés après 30 jours
+PREFIXE_INVITATION, PREFIXE_APPAREIL = 'INV-', 'AP-'
+CHEMIN_ENROLEMENT = '/#/enroler/'       # lien d'une invitation : adresse http de la porte + ce chemin + le jeton
+MESSAGE_INVITATION_REFUSEE = 'Invitation inconnue, expirée ou révoquée : demandez-en une nouvelle au responsable.'
+MESSAGE_ENROLEMENT_DESACTIVE = ('Enrôlement d\'appareils désactivé sur ce serveur (demandeurs_avec_compte) : chaque '
+                                'demandeur se connecte avec son compte.')
+MESSAGE_APPAREIL_REFUSE = ('Cet appareil n\'est plus autorisé (révoqué, expiré ou enrôlement désactivé) : demandez '
+                           'une nouvelle invitation au responsable.')
+VERROU_APPAREILS = threading.Lock()
+
+
+def chemin_appareils(config):
+    return os.path.join(dossier_acces(config), 'appareils.json')
+
+
+def instant_iso(secondes):
+    """Secondes → « AAAA-MM-JJTHH:MM:SS » en heure locale, comme maintenant_iso."""
+    return datetime.datetime.fromtimestamp(secondes).strftime('%Y-%m-%dT%H:%M:%S')
+
+
+def lire_appareils(config):
+    """{'invitations': [...], 'appareils': [...]} ; fichier absent ou illisible : aucune invitation, aucun appareil
+    (chaque appareil se réenrôle avec une invitation neuve)."""
+    try:
+        with open(chemin_appareils(config), 'rb') as fichier:
+            contenu = json.loads(fichier.read().decode('utf-8'))
+    except (OSError, ValueError, RecursionError):
+        contenu = {}
+    resultat = {}
+    for cle in ('invitations', 'appareils'):
+        liste = contenu.get(cle) if isinstance(contenu, dict) else None
+        resultat[cle] = [element for element in liste if isinstance(element, dict)] if isinstance(liste, list) else []
+    return resultat
+
+
+def invitation_valide(invitation, maintenant):
+    """Ni révoquée ni expirée (expire_le, heure locale)."""
+    return not invitation.get('revoquee') and maintenant <= secondes_de(invitation.get('expire_le'))
+
+
+def appareil_valide(appareil, maintenant):
+    """Ni révoqué ni expiré : un an glissant depuis sa dernière activité (vu_le)."""
+    return (not appareil.get('revoque')
+            and maintenant - secondes_de(appareil.get('vu_le')) <= DUREE_APPAREIL_JOURS * 86400)
+
+
+def ecrire_appareils(config, contenu):
+    """Écrit appareils.json (atomique) ; à appeler sous VERROU_APPAREILS. Oubliés : les invitations finies depuis plus
+    de 30 jours et les appareils révoqués ou expirés dont la dernière activité date de plus de 30 jours."""
+    maintenant = maintenant_s(config)
+    oubli = OUBLI_APPAREILS_JOURS * 86400
+    invitations = [invitation for invitation in contenu['invitations']
+                   if invitation_valide(invitation, maintenant)
+                   or maintenant - secondes_de(invitation.get('expire_le')) <= oubli]
+    appareils = [appareil for appareil in contenu['appareils']
+                 if appareil_valide(appareil, maintenant) or maintenant - secondes_de(appareil.get('vu_le')) <= oubli]
+    os.makedirs(dossier_acces(config), exist_ok=True)
+    ecrire_atomique(chemin_appareils(config), json.dumps({'invitations': invitations, 'appareils': appareils},
+                                                          ensure_ascii=False, indent=1).encode('utf-8'))
+
+
+def identifiant_neuf(elements, prefixe):
+    """INV-3F9A, AP-7C21… : quatre caractères hexadécimaux tirés au sort, jamais déjà pris dans la liste (un numéro
+    ne se réemploie pas après l'oubli d'un ancien élément : le journal des connexions le cite)."""
+    pris = {str(element.get('id', '')) for element in elements}
+    while True:
+        identifiant = prefixe + secrets.token_hex(2).upper()
+        if identifiant not in pris:
+            return identifiant
+
+
+def invitation_publique(invitation, maintenant):
+    """Ce que le responsable voit d'une invitation : jamais l'empreinte."""
+    return {'id': str(invitation.get('id', '')), 'cree_le': str(invitation.get('cree_le', '')),
+            'expire_le': str(invitation.get('expire_le', '')), 'revoquee': bool(invitation.get('revoquee')),
+            'valide': invitation_valide(invitation, maintenant)}
+
+
+def appareil_public(appareil, maintenant):
+    """Ce que le responsable voit d'un appareil : jamais l'empreinte."""
+    return {'id': str(appareil.get('id', '')), 'libelle': str(appareil.get('libelle', '')),
+            'nom_demandeur': str(appareil.get('nom_demandeur', '')), 'cree_le': str(appareil.get('cree_le', '')),
+            'vu_le': str(appareil.get('vu_le', '')), 'revoque': bool(appareil.get('revoque')),
+            'valide': appareil_valide(appareil, maintenant)}
+
+
+def libelle_appareil(agent):
+    """Libellé d'un appareil d'après son navigateur (User-Agent) : la famille, jamais la chaîne entière."""
+    agent = str(agent or '')
+    for marque, libelle in (('iPhone', 'iPhone'), ('iPad', 'iPad'), ('Android', 'Téléphone ou tablette Android'),
+                            ('Windows', 'PC Windows'), ('Macintosh', 'Mac'), ('CrOS', 'Chromebook'),
+                            ('Linux', 'PC Linux')):
+        if marque in agent:
+            return libelle
+    return ' '.join(agent.split())[:LONGUEUR_MAX_LIBELLE_APPAREIL] or 'Appareil'
+
+
+def creer_invitation(config, heures=None):
+    """Invitation du responsable (D125) : jeton rendu une seule fois (seule son empreinte est écrite), valable
+    « heures » (1 à 168 ; invitation_heures de la configuration par défaut) ; rend (jeton, invitation publique)."""
+    if heures is None:
+        heures = (getattr(config, 'reglages', None) or {}).get('invitation_heures', 24)
+    if (isinstance(heures, bool) or not isinstance(heures, int)
+            or not INVITATION_HEURES_MIN <= heures <= INVITATION_HEURES_MAX):
+        raise ErreurHttp(400, '« heures » : un entier de %d à %d est attendu.'
+                         % (INVITATION_HEURES_MIN, INVITATION_HEURES_MAX))
+    jeton = secrets.token_urlsafe(32)
+    maintenant = maintenant_s(config)
+    with VERROU_APPAREILS:
+        contenu = lire_appareils(config)
+        invitation = {'id': identifiant_neuf(contenu['invitations'], PREFIXE_INVITATION),
+                      'empreinte': empreinte_jeton(jeton), 'cree_le': instant_iso(maintenant),
+                      'expire_le': instant_iso(maintenant + heures * 3600), 'revoquee': False}
+        contenu['invitations'].append(invitation)
+        ecrire_appareils(config, contenu)
+    return jeton, invitation_publique(invitation, maintenant)
+
+
+def enroler_appareil(config, jeton_invitation, nom, agent):
+    """Téléphone qui ouvre une invitation (D125) : appareil écrit (libellé, nom du demandeur, dates), jeton d'appareil
+    rendu une seule fois (seule son empreinte est écrite) ; 403 enrôlement désactivé (demandeurs_avec_compte), 400
+    nom manquant, 401 au même message pour une invitation inconnue, expirée ou révoquée."""
+    if (getattr(config, 'reglages', None) or {}).get('demandeurs_avec_compte'):
+        raise ErreurHttp(403, MESSAGE_ENROLEMENT_DESACTIVE)
+    nom = ' '.join(str(nom or '').split())
+    if not nom or len(nom) > LONGUEUR_MAX_NOM_DEMANDEUR:
+        raise ErreurHttp(400, 'Votre nom est attendu (%d caractères au plus).' % LONGUEUR_MAX_NOM_DEMANDEUR)
+    if not isinstance(jeton_invitation, str) or not MOTIF_JETON.fullmatch(jeton_invitation):
+        raise ErreurHttp(401, MESSAGE_INVITATION_REFUSEE)
+    cle = empreinte_jeton(jeton_invitation)
+    jeton = secrets.token_urlsafe(32)
+    maintenant = maintenant_s(config)
+    with VERROU_APPAREILS:
+        contenu = lire_appareils(config)
+        invitation = next((i for i in contenu['invitations'] if i.get('empreinte') == cle), None)
+        if invitation is None or not invitation_valide(invitation, maintenant):
+            raise ErreurHttp(401, MESSAGE_INVITATION_REFUSEE)
+        appareil = {'id': identifiant_neuf(contenu['appareils'], PREFIXE_APPAREIL), 'empreinte': empreinte_jeton(jeton),
+                    'libelle': libelle_appareil(agent), 'nom_demandeur': nom, 'cree_le': instant_iso(maintenant),
+                    'vu_le': instant_iso(maintenant), 'revoque': False, 'invitation': str(invitation.get('id', ''))}
+        contenu['appareils'].append(appareil)
+        ecrire_appareils(config, contenu)
+    return jeton, appareil
+
+
+def identite_de_l_appareil(appareil, cle):
+    """Identité d'un appareil enrôlé : rôle demandeur, « appareil » vrai, le nom saisi comme nom (prénom vide),
+    jamais le jeton."""
+    return {'identifiant': 'appareil:' + str(appareil.get('id', '')), 'role': 'demandeur', 'prenom': '',
+            'nom': str(appareil.get('nom_demandeur', '')), 'technicien_id': '', 'a_changer': False, 'appareil': True,
+            'cle': cle, 'longue': True}
+
+
+def verifier_appareil(config, entete_cookie):
+    """Identité de la requête d'après le cookie « appareil » (D125) : jeton connu, appareil ni révoqué ni expiré ;
+    « vu_le » réécrit au plus une fois par minute (un an glissant) ; None sinon, et toujours None quand
+    demandeurs_avec_compte est vrai (enrôlement désactivé : les appareils déjà enrôlés ne comptent plus)."""
+    if (getattr(config, 'reglages', None) or {}).get('demandeurs_avec_compte'):
+        return None
+    for jeton in valeurs_cookie(entete_cookie, NOM_COOKIE_APPAREIL):
+        if not MOTIF_JETON.fullmatch(jeton):
+            continue
+        cle = empreinte_jeton(jeton)
+        maintenant = maintenant_s(config)
+        with VERROU_APPAREILS:
+            contenu = lire_appareils(config)
+            appareil = next((a for a in contenu['appareils'] if a.get('empreinte') == cle), None)
+            if appareil is None or not appareil_valide(appareil, maintenant):
+                continue
+            if maintenant - secondes_de(appareil.get('vu_le')) >= GLISSEMENT_MIN_S:
+                appareil['vu_le'] = instant_iso(maintenant)
+                try:
+                    ecrire_appareils(config, contenu)
+                except (ErreurHttp, OSError):
+                    pass                    # fichier verrouillé : l'appareil reste reconnu, vu_le attendra
+        return identite_de_l_appareil(appareil, cle)
     return None
+
+
+def revoquer(config, genre, identifiant=None):
+    """Révoque une invitation (genre « invitations ») ou un appareil (« appareils ») par son id, ou tous les appareils
+    (identifiant None) ; effet immédiat (chaque requête relit le fichier) ; rend les ids nouvellement révoqués ;
+    404 id inconnu."""
+    champ = 'revoquee' if genre == 'invitations' else 'revoque'
+    trouves, revoques = [], []
+    with VERROU_APPAREILS:
+        contenu = lire_appareils(config)
+        for element in contenu[genre]:
+            if identifiant is None or element.get('id') == identifiant:
+                trouves.append(element)
+                if not element.get(champ):
+                    element[champ] = True
+                    revoques.append(str(element.get('id', '')))
+        if identifiant is not None and not trouves:
+            raise ErreurHttp(404, 'Introuvable : %s.' % str(identifiant)[:40])
+        if revoques:
+            ecrire_appareils(config, contenu)
+    return revoques
 
 
 class CompteursEchecs:
@@ -2703,7 +2913,8 @@ def enregistrer_document(config, nom, octets):
 # ---------------------------------------------------------------------------
 
 # (méthode, motif du chemin après /api/) → fonction du gestionnaire, appelée avec (segment, corps). « <table> » (une
-# des 24 tables), « <nom> » (nom de document) et « <identifiant> » (identifiant d'un compte) valent un segment. Une
+# des 24 tables), « <nom> » (nom de document), « <identifiant> » (identifiant d'un compte) et « <id> » (invitation ou
+# appareil) valent un segment. Une
 # route ajoutée ici est aussitôt fermée sans session quand les comptes sont exigés (tests/test_acces_sessions.py
 # parcourt la table) ; elle doit aussi avoir sa ligne dans ROLES_PAR_ROUTE (tests/test_acces_roles.py le vérifie).
 ROUTES_API = {
@@ -2719,6 +2930,12 @@ ROUTES_API = {
     ('POST', 'acces/comptes'): 'api_compte_creer',
     ('POST', 'acces/comptes/<identifiant>'): 'api_compte_changer',
     ('GET', 'acces/journal'): 'api_journal_acces',
+    ('POST', 'enroler'): 'api_enroler',
+    ('GET', 'acces/invitations'): 'api_invitations',
+    ('POST', 'acces/invitations'): 'api_invitation_creer',
+    ('POST', 'acces/invitations/<id>/revoquer'): 'api_invitation_revoquer',
+    ('POST', 'acces/appareils/<id>/revoquer'): 'api_appareil_revoquer',
+    ('POST', 'acces/appareils/revoquer-tous'): 'api_appareils_revoquer_tous',
     ('GET', 'csv/<table>'): 'api_csv_lire',
     ('PUT', 'csv/<table>'): 'api_csv_ecrire',
     ('POST', 'csv/<table>/ajout'): 'api_ajout',
@@ -2732,7 +2949,7 @@ ROUTES_API = {
     ('GET', 'ia/reglages'): 'api_ia_reglages',
 }
 # Ouvertes sans session : le navigateur détecte le serveur (/api/ping) et demande qui il est avant toute connexion.
-ROUTES_PUBLIQUES = (('GET', 'ping'), ('GET', 'session'), ('POST', 'connexion'))
+ROUTES_PUBLIQUES = (('GET', 'ping'), ('GET', 'session'), ('POST', 'connexion'), ('POST', 'enroler'))
 # Seules routes d'une session au mot de passe provisoire (« a_changer ») : 403 partout ailleurs.
 ROUTES_MOT_DE_PASSE_PROVISOIRE = (('GET', 'session'), ('POST', 'mot-de-passe'), ('POST', 'deconnexion'))
 # Motifs à essayer : les chemins fixes avant ceux qui ont un segment variable.
@@ -2750,7 +2967,7 @@ def motif_de_route(morceaux):
 
 
 def segment_de_route(motif, morceaux):
-    """Valeur du segment variable du chemin (« <table> », « <nom> », « <identifiant> »), ou None."""
+    """Valeur du segment variable du chemin (« <table> », « <nom> », « <identifiant> », « <id> »), ou None."""
     for attendu, morceau in zip((motif or '').split('/'), morceaux):
         if attendu.startswith('<'):
             return morceau
@@ -2803,6 +3020,12 @@ ROLES_PAR_ROUTE = {
     ('POST', 'acces/comptes'): RESPONSABLE,
     ('POST', 'acces/comptes/<identifiant>'): RESPONSABLE,
     ('GET', 'acces/journal'): RESPONSABLE,
+    ('POST', 'enroler'): TOUS,
+    ('GET', 'acces/invitations'): RESPONSABLE,
+    ('POST', 'acces/invitations'): RESPONSABLE,
+    ('POST', 'acces/invitations/<id>/revoquer'): RESPONSABLE,
+    ('POST', 'acces/appareils/<id>/revoquer'): RESPONSABLE,
+    ('POST', 'acces/appareils/revoquer-tous'): RESPONSABLE,
     ('GET', 'csv/<table>'): (TABLES_DU_DEMANDEUR, TABLES_DU_DEMANDEUR, OUI, OUI),
     ('PUT', 'csv/<table>'): (TABLES_DU_DEMANDEUR_EN_ECRITURE, TABLES_DU_DEMANDEUR_EN_ECRITURE,
                              TABLES_DU_TECHNICIEN_EN_ECRITURE, OUI),
@@ -3297,6 +3520,12 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if route in ROUTES_PUBLIQUES:
             return identite
         if identite is None:
+            if valeurs_cookie(self.headers.get('Cookie'), NOM_COOKIE_APPAREIL):
+                # Appareil révoqué, expiré ou enrôlement désactivé (D125) : son cookie est effacé, le navigateur
+                # revoit la page d'invitation.
+                erreur = ErreurHttp(401, MESSAGE_APPAREIL_REFUSE, appareil_refuse=True)
+                erreur.entetes = {'Set-Cookie': entete_cookie_session('', self.en_https(), 0, NOM_COOKIE_APPAREIL)}
+                raise erreur
             raise ErreurHttp(401, MESSAGE_SESSION_ABSENTE)
         if identite['a_changer'] and route not in ROUTES_MOT_DE_PASSE_PROVISOIRE:
             raise ErreurHttp(403, MESSAGE_MOT_DE_PASSE_PROVISOIRE)
@@ -3371,9 +3600,16 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                 'copie_externe': etat_copie_externe_public(self.config)})
 
     def api_session(self, segment, corps):
-        """GET /api/session : comptes exigés ou non, et l'identité de la session (jamais le jeton)."""
+        """GET /api/session : comptes exigés ou non, et l'identité de la session (jamais le jeton). Pour un appareil
+        enrôlé, son cookie repart pour un an (D125 : un an glissant, à chaque ouverture de l'application)."""
+        entetes = None
+        if self.session is not None and self.session.get('appareil'):
+            for jeton in valeurs_cookie(self.headers.get('Cookie'), NOM_COOKIE_APPAREIL):
+                if empreinte_jeton(jeton) == self.session.get('cle'):
+                    entetes = {'Set-Cookie': entete_cookie_session(jeton, self.en_https(), DUREE_APPAREIL_JOURS * 86400,
+                                                                   NOM_COOKIE_APPAREIL)}
         self.envoyer_json(200, {'comptes': bool(self.config.reglages.get('comptes')),
-                                'session': session_publique(self.session)})
+                                'session': session_publique(self.session)}, entetes)
 
     def api_connexion(self, segment, corps):
         """POST /api/connexion {identifiant, mot_de_passe, rester} : 200 et cookie « id » (jeton neuf ; l'ancienne
@@ -3424,6 +3660,23 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             raise ErreurHttp(400, str(erreur))
         compte = trouver_compte(comptes_du_serveur(self.config), identifiant)
         self.repondre_avec_session(compte, self.session['longue'])
+
+    def api_enroler(self, segment, corps):
+        """POST /api/enroler {invitation, nom} (route publique, D125) : l'appareil est enrôlé, reçoit son cookie
+        « appareil » (un an) et l'identité d'un demandeur ; 401 invitation inconnue, expirée ou révoquée ; 403
+        enrôlement désactivé (demandeurs_avec_compte) ; 400 corps ou nom invalide."""
+        self.exiger_comptes()
+        demande = lire_objet_json(corps)
+        invitation, nom = demande.get('invitation'), demande.get('nom')
+        if not (isinstance(invitation, str) and isinstance(nom, str)):
+            raise ErreurHttp(400, 'Enrôlement : « invitation » et « nom » (textes) sont attendus.')
+        jeton, appareil = enroler_appareil(self.config, invitation, nom, self.headers.get('User-Agent', ''))
+        self.session = identite_de_l_appareil(appareil, empreinte_jeton(jeton))
+        adresse, agent, tailscale = self.origine()
+        ecrire_journal_acces(self.config, self.session['identifiant'], adresse, agent, 'appareil', tailscale)
+        self.envoyer_json(200, {'comptes': True, 'session': session_publique(self.session)},
+                          {'Set-Cookie': entete_cookie_session(jeton, self.en_https(), DUREE_APPAREIL_JOURS * 86400,
+                                                               NOM_COOKIE_APPAREIL)})
 
     def api_deconnecter_partout(self, segment, corps):
         """POST /api/acces/deconnecter-partout : sans corps (ou {}), toutes les sessions de la personne connectée, la
@@ -3507,6 +3760,59 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             octets = BOM_UTF8 + (';'.join(COLONNES_JOURNAL_ACCES) + '\r\n').encode('utf-8')
         self.envoyer(200, octets, 'text/csv; charset=utf-8',
                      {'Content-Disposition': 'attachment; filename="journal-acces.csv"'})
+
+    def api_invitations(self, segment, corps):
+        """GET /api/acces/invitations (responsable, §22.4) : invitations et appareils, sans empreinte, et si
+        l'enrôlement est actif (demandeurs_avec_compte faux)."""
+        self.exiger_comptes()
+        maintenant = maintenant_s(self.config)
+        with VERROU_APPAREILS:
+            contenu = lire_appareils(self.config)
+        self.envoyer_json(200, {'invitations': [invitation_publique(i, maintenant) for i in contenu['invitations']],
+                                'appareils': [appareil_public(a, maintenant) for a in contenu['appareils']],
+                                'enrolement_actif': not self.config.reglages.get('demandeurs_avec_compte')})
+
+    def api_invitation_creer(self, segment, corps):
+        """POST /api/acces/invitations {heures} (responsable ; sans corps : invitation_heures) : invitation neuve ;
+        le jeton et le chemin du lien sont rendus une seule fois (le QR et le lien se font côté navigateur, avec
+        l'adresse http de la porte), jamais écrits."""
+        self.exiger_comptes()
+        demande = lire_objet_json(corps) if corps.strip() else {}
+        inconnus = sorted(set(demande) - {'heures'})
+        if inconnus:
+            raise ErreurHttp(400, 'Champ inconnu : « %s » (« heures » seulement).' % str(inconnus[0])[:60])
+        jeton, invitation = creer_invitation(self.config, demande.get('heures'))
+        adresse, agent, tailscale = self.origine()
+        ecrire_journal_acces(self.config, self.session['identifiant'], adresse, agent, 'invitation', tailscale)
+        self.envoyer_json(200, {'invitation': invitation, 'jeton': jeton, 'chemin': CHEMIN_ENROLEMENT + jeton})
+
+    def api_invitation_revoquer(self, identifiant, corps):
+        """POST /api/acces/invitations/<id>/revoquer (responsable) : plus personne ne s'enrôle avec ; 404 inconnue."""
+        self.exiger_comptes()
+        revoquees = revoquer(self.config, 'invitations', identifiant)
+        adresse, agent, tailscale = self.origine()
+        for revoquee in revoquees:
+            ecrire_journal_acces(self.config, 'invitation:' + revoquee, adresse, agent, 'revocation', tailscale)
+        self.envoyer_json(200, {'invitation': identifiant, 'revoquee': True})
+
+    def api_appareil_revoquer(self, identifiant, corps):
+        """POST /api/acces/appareils/<id>/revoquer (responsable) : l'appareil est refusé dès sa requête suivante
+        (401, cookie effacé) ; 404 inconnu."""
+        self.exiger_comptes()
+        revoques = revoquer(self.config, 'appareils', identifiant)
+        adresse, agent, tailscale = self.origine()
+        for revoque in revoques:
+            ecrire_journal_acces(self.config, 'appareil:' + revoque, adresse, agent, 'revocation', tailscale)
+        self.envoyer_json(200, {'appareil': identifiant, 'revoque': True})
+
+    def api_appareils_revoquer_tous(self, segment, corps):
+        """POST /api/acces/appareils/revoquer-tous (responsable) : tous les appareils enrôlés, d'un coup."""
+        self.exiger_comptes()
+        revoques = revoquer(self.config, 'appareils')
+        adresse, agent, tailscale = self.origine()
+        for revoque in revoques:
+            ecrire_journal_acces(self.config, 'appareil:' + revoque, adresse, agent, 'revocation', tailscale)
+        self.envoyer_json(200, {'appareils_revoques': revoques})
 
     def api_ia(self, segment, corps):
         """Relais vers le fournisseur d'IA réglé sur le PC serveur (lot 4, §17.2 ; audit M1, M2, M3, §22.12).

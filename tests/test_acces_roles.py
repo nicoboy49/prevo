@@ -89,6 +89,12 @@ ATTENDU = {
     ("POST", "acces/comptes"): RESPONSABLE,
     ("POST", "acces/comptes/<identifiant>"): RESPONSABLE,
     ("GET", "acces/journal"): RESPONSABLE,
+    ("POST", "enroler"): TOUS,
+    ("GET", "acces/invitations"): RESPONSABLE,
+    ("POST", "acces/invitations"): RESPONSABLE,
+    ("POST", "acces/invitations/<id>/revoquer"): RESPONSABLE,
+    ("POST", "acces/appareils/<id>/revoquer"): RESPONSABLE,
+    ("POST", "acces/appareils/revoquer-tous"): RESPONSABLE,
     ("GET", "csv/<table>"): (TABLES_DU_DEMANDEUR, TABLES_DU_DEMANDEUR, OUI, OUI),
     ("PUT", "csv/<table>"): (frozenset({"demandes"}), frozenset({"demandes"}), ECRITURE_DU_TECHNICIEN, OUI),
     ("POST", "csv/<table>/ajout"): (frozenset({"demandes", "journal"}), frozenset({"demandes", "journal"}),
@@ -394,6 +400,8 @@ class JoueurDeCases:
             return [(None, "photo"), (None, "autre")]
         if motif == "acces/comptes/<identifiant>":
             return [("paul.essai", None)]
+        if "<id>" in motif:
+            return [("INV-0000" if "invitations" in motif else "AP-0000", None)]
         return [(None, None)]
 
     @classmethod
@@ -437,7 +445,7 @@ class JoueurDeCases:
             self.reconnecter(role)
             return reponse, (200,)
         dossier = self.dossier_donnees()
-        chemin = "/api/" + motif.replace("<table>", segment or "").replace("<identifiant>", segment or "")
+        chemin = "/api/" + re.sub(r"<[a-z]+>", segment or "", motif)
         corps, entetes, statuts = None, {}, (200,)
         if motif == "csv/<table>" and methode == "PUT":
             octets = (dossier / (segment + ".csv")).read_bytes()
@@ -462,6 +470,13 @@ class JoueurDeCases:
             corps = {"prenom": "Essai", "nom": "Case %d" % JoueurDeCases.numero, "role": "demandeur"}
         elif route == ("POST", "acces/comptes/<identifiant>"):
             corps = {"action": "modifier", "prenom": "Paul"}
+        elif route == ("POST", "enroler"):
+            # Route publique (T153) : l'invitation décide. Serveur réel, demandeurs_avec_compte vrai : 403 enrôlement
+            # désactivé ; serveur du processus (appareil simulé) : 401 invitation inconnue. Ni l'un ni l'autre n'est
+            # un refus de rôle (« Accès refusé »).
+            corps, statuts = {"invitation": "x" * 43, "nom": "Essai"}, (401, 403)
+        elif "<id>" in motif:
+            statuts = (404,)                    # la route est passée : l'id d'essai est inconnu
         return self.client.requete(methode, chemin, corps, cookie=cookie, entetes=entetes), statuts
 
     def session_jetable(self, role):

@@ -509,7 +509,8 @@ class TestTableDesRoutes(unittest.TestCase):
         for route, fonction in serveur.ROUTES_API.items():
             with self.subTest(route=route):
                 self.assertTrue(callable(getattr(serveur.GestionnaireRequetes, fonction, None)))
-        self.assertEqual(set(serveur.ROUTES_PUBLIQUES), {("GET", "ping"), ("GET", "session"), ("POST", "connexion")})
+        self.assertEqual(set(serveur.ROUTES_PUBLIQUES),
+                         {("GET", "ping"), ("GET", "session"), ("POST", "connexion"), ("POST", "enroler")})
         self.assertEqual(set(serveur.ROUTES_MOT_DE_PASSE_PROVISOIRE),
                          {("GET", "session"), ("POST", "mot-de-passe"), ("POST", "deconnexion")})
         self.assertTrue(set(serveur.ROUTES_PUBLIQUES) | set(serveur.ROUTES_MOT_DE_PASSE_PROVISOIRE)
@@ -579,6 +580,11 @@ class TestServeurReel(CasServeurReel):
             with self.subTest(route=motif):
                 if methode == "GET":
                     reponse = self.client.requete(methode, chemin_de(motif))
+                elif motif == "enroler":    # POST /api/enroler (T153) : ouverte sans session, l'invitation décide
+                    reponse = self.client.requete("POST", "/api/enroler", {"invitation": "x" * 43, "nom": "Essai"})
+                    self.assertEqual((reponse.statut, reponse.json()),
+                                     (401, {"erreur": serveur.MESSAGE_INVITATION_REFUSEE}), reponse.octets)
+                    continue
                 else:                       # POST /api/connexion : ouverte sans session préalable
                     reponse = self.client.connecter("nicolas.briand", MOT_DE_PASSE_RESPONSABLE)
                 self.assertEqual(reponse.statut, 200, reponse.octets)
