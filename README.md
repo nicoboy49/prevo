@@ -23,6 +23,8 @@ Elle tourne sans installation lourde ni abonnement : les données sont des fichi
 Excel, stockés dans un dossier de votre choix. Le code est écrit en français, avec des bibliothèques
 embarquées et aucun appel vers Internet (sauf l'assistant IA en ligne, s'il est autorisé et choisi).
 
+![Une matinée dans l'atelier avec Prévo : odeur de brûlé, signalement au téléphone en 30 secondes, demande traitée au bureau, ordre de travail créé et planifié (extrait de la vidéo de présentation)](docs/captures/prevo-demo.gif)
+
 ![Accueil du responsable sur le jeu de démo : compteurs, demandes à traiter et ordres de travail en retard](docs/captures/accueil.png)
 
 - **Guide d'utilisation** : [GUIDE.html](GUIDE.html), à ouvrir dans le navigateur (imprimable).
