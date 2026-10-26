@@ -3250,12 +3250,12 @@ navigateur, qui ne les lit pas : les empreintes ne quittent jamais le serveur) :
   "pbkdf2-sha256-600000", "sel": base64, "empreinte": base64, "a_changer": bool, "cree_le", "modifie_le",
   "mot_de_passe_le" } ] }`.
 - `sessions.json` : `{ "<sha256 du jeton>": { "identifiant", "cree_le", "vu_le", "longue": bool, "agent" } }` —
-  seul l'empreinte du jeton est gardée.
+  seule l'empreinte du jeton est gardée (SHA-256 en hexadécimal) ; dates en heure locale `AAAA-MM-JJTHH:MM:SS`.
 - `appareils.json` : `{ "invitations": [ { "id", "empreinte", "cree_le", "expire_le", "revoquee" } ], "appareils":
   [ { "id", "empreinte", "libelle", "nom_demandeur", "cree_le", "vu_le", "revoque": bool } ] }`.
 - `journal-acces.csv` (`;`, UTF-8 avec BOM, apostrophe de protection) : `date;qui;adresse;agent;resultat;tailscale`,
   `resultat` ∈ `connexion`, `echec`, `bloque`, `deconnexion`, `appareil`, `invitation`, `revocation`,
-  `reinitialisation` ; lignes de plus de 12 mois purgées à la première écriture du jour.
+  `reinitialisation`, `creation`, `modification` ; lignes de plus de 12 mois purgées à la première écriture du jour.
 
 Mot de passe : 12 à 256 caractères, aucune règle de composition ; échec : délai `min(2^(n-5), 8)` s dès le 5e échec
 consécutif, blocage 15 min au 10e (par compte), ralentissement de 1 s par adresse IP au-delà de 20 échecs par heure ;
@@ -3263,6 +3263,37 @@ réponse 401 `{"erreur": "Identifiant ou mot de passe incorrect."}` identique da
 avec le temps restant. Cookie `id=<jeton>; Path=/; HttpOnly; SameSite=Lax[; Secure][; Max-Age=…]` ; jeton
 d'appareil : cookie `appareil=<jeton>`, mêmes attributs, 1 an glissant. L'horloge du serveur est injectable
 (`config.horloge`) pour les tests.
+
+Précisions de T151 (connexion et sessions) :
+
+- **Échecs**, comptés en mémoire seulement (un redémarrage du serveur les remet à zéro), par identifiant saisi
+  (minuscules, espaces de bord retirés), qu'un compte existe ou non (`CompteursEchecs`, rangé dans `config.echecs`).
+  Identifiant inconnu, compte désactivé et mot de passe faux suivent le même chemin : une empreinte est calculée dans
+  tous les cas (sel factice pour un identifiant inconnu), même code, même message, mêmes en-têtes, même attente. Du 5e
+  au 9e échec consécutif, attente de 1, 2, 4, 8, 8 s avant de répondre ; le 10e répond aussitôt 429 et ouvre le
+  blocage ; pendant le blocage, toute tentative sur cet identifiant rend 429 `{"erreur", "attente_secondes"}` avec
+  l'en-tête `Retry-After`, sans vérifier le mot de passe ; à la fin du blocage le compteur repart de zéro, et une
+  réussite le remet à zéro. Une tentative compte dès son début : des tentatives lancées en même temps ne font jamais
+  plus de 10 vérifications. Adresse : dès 20 échecs dans l'heure écoulée, chaque tentative venue d'elle (même juste)
+  attend 1 s de plus. Attentes par `config.dormir(secondes)` (injectable, défaut `time.sleep`), temps par
+  `config.horloge` (défaut `time.time`). Au-delà de 10 000 identifiants ou adresses suivis, les moins récents sont
+  oubliés (un blocage en cours en dernier).
+- **Sessions** : jeton `secrets.token_urlsafe(32)` neuf à chaque connexion (la session que le navigateur présentait est
+  fermée) ; session courte : 12 h sans activité (`session_heures`, glissantes ; `vu_le` réécrit au plus une fois par
+  minute et par session) ; avec « rester » : 30 jours depuis `cree_le` (`session_longue_jours`), le cookie porte alors
+  `Max-Age` du même temps (sans « rester », cookie de session du navigateur, sans `Max-Age`) ; sessions expirées
+  purgées à chaque écriture du fichier (atomique, sous `VERROU_SESSIONS`). Mot de passe changé ou réinitialisé (ligne
+  de commande comprise) et compte désactivé ⇒ toutes ses sessions supprimées ; chaque requête revérifie en plus le
+  compte (actif, `mot_de_passe_le` pas plus récent que le `cree_le` de la session), ce qui couvre un `comptes.json`
+  réécrit par un autre processus. `sessions.json` illisible : aucune session (chacun se reconnecte) ; `comptes.json`
+  illisible : personne n'est reconnu, `/api/ping` répond toujours, la connexion rend 500 avec un message clair.
+- **Journal** : `connexion`, `echec` (mot de passe faux, ou mot de passe actuel faux au changement), `bloque` (tentative
+  pendant un blocage), `deconnexion` (déconnexion et « déconnecter partout », `qui` étant le compte dont les sessions
+  sont fermées), `modification` (mot de passe changé, avec l'adresse) ; `qui` vaut `(inconnu)` pour un identifiant
+  sans compte (un mot de passe tapé dans la mauvaise case n'y est jamais recopié) ; `adresse` par `adresse_client()` du
+  gestionnaire (T164 : adresse d'origine derrière un mandataire) ; `tailscale` = en-tête `Tailscale-User-Login`
+  seulement si `mandataire` est vrai et que la connexion vient de 127.0.0.1 (ou ::1), vide sinon. Jamais un mot de
+  passe ni un jeton dans le journal, la console, une réponse ou `sessions.json`.
 
 Ligne de commande : `serveur.py --reinitialiser IDENTIFIANT` (écrit un mot de passe provisoire de 16 caractères,
 l'affiche une fois, marque `a_changer`, journalise ; refusée si `comptes.json` est absent). `Reinitialiser_mot_de_passe.bat`
@@ -3272,18 +3303,38 @@ demande l'identifiant et appelle cette commande.
 
 | Méthode et chemin | Qui | Réponse |
 | --- | --- | --- |
-| `GET /api/session` | tous | `{"comptes": bool, "session": null \| {"identifiant", "role", "prenom", "nom", "technicien_id", "a_changer", "appareil": bool}}` |
-| `POST /api/connexion` | tous | corps `{"identifiant", "mot_de_passe", "rester": bool}` → 200 + cookie, 401, 429 |
-| `POST /api/deconnexion` | session | 200, cookie effacé |
-| `POST /api/mot-de-passe` | session | `{"actuel", "nouveau"}` → 200 ; 400 si trop court |
+| `GET /api/session` | tous | `{"comptes": bool, "session": null \| {"identifiant", "role", "prenom", "nom", "technicien_id", "a_changer", "appareil": bool}}` ; sans comptes : `{"comptes": false, "session": null}` |
+| `POST /api/connexion` | tous | corps `{"identifiant", "mot_de_passe", "rester": bool}` → 200 `{"comptes": true, "session": {…}}` + cookie, 401, 429 ; 400 corps invalide |
+| `POST /api/deconnexion` | session | 200 `{"comptes": true, "session": null}`, cookie effacé (`id=; …; Max-Age=0`) |
+| `POST /api/mot-de-passe` | session | `{"actuel", "nouveau"}` → 200 comme la connexion (session neuve, toutes les autres sessions du compte fermées, « rester » gardé) ; 400 si le nouveau est trop court, trop long ou égal à l'actuel ; 403 si l'actuel est faux (compté comme un échec de connexion) ; 429 pendant un blocage |
 | `POST /api/enroler` | tous | `{"invitation", "nom"}` → 200 + cookie d'appareil ; 401 invitation inconnue, expirée ou révoquée |
 | `GET/POST /api/acces/comptes`, `/api/acces/comptes/<id>` | responsable | liste, création, modification, réinitialisation, désactivation |
 | `GET/POST /api/acces/invitations`, `/api/acces/appareils/<id>/revoquer`, `/api/acces/appareils/revoquer-tous` | responsable | invitations et appareils |
-| `POST /api/acces/deconnecter-partout` | responsable (ou soi-même) | sessions supprimées |
+| `POST /api/acces/deconnecter-partout` | responsable (ou soi-même) | sans corps ou `{}` : toutes ses propres sessions, la courante comprise (cookie effacé) ; `{"identifiant": X}` pour un autre compte : responsable seulement (403 sinon), 404 compte inconnu ; 200 `{"identifiant", "sessions_fermees"}` |
 | `GET /api/acces/journal` | responsable | CSV du journal |
 | `GET /api/ia/reglages` | tous (session ou appareil) | `{"fournisseur", "url", "cle_reglee": bool, "en_ligne": bool, "portee"}`, jamais la clé (§22.12) |
 
 Toutes les écritures gardent l'en-tête `X-Prevo: 1` (anti-CSRF) en plus de la session.
+
+Contrôle d'accès (T151) : un point unique, `GestionnaireRequetes.controler_acces`, avant la lecture du corps (audit F2).
+Ordre dans `traiter` : en-tête `Host`, chemin, accès (`verifier_session`, puis 401 ou 403), `X-Prevo` sur toute écriture
+(connexion comprise), lecture du corps, aiguillage. Un refus prononcé avant la lecture lit et jette au plus 64 Ko de
+corps, pour que le navigateur reçoive la réponse ; au-delà, ou sans `Content-Length` lisible, rien n'est lu et la
+connexion est fermée après la réponse. Toutes les routes sont déclarées dans `ROUTES_API` de `serveur.py`
+(`(méthode, motif)` → fonction du gestionnaire ; `<table>` et `<nom>` valent un segment), que lisent l'aiguillage, le
+contrôle d'accès et `tests/test_acces_sessions.py` : une route ajoutée est fermée sans session dès sa déclaration.
+
+- Routes publiques (`ROUTES_PUBLIQUES`) : `GET /api/ping`, `GET /api/session`, `POST /api/connexion` (le navigateur
+  détecte le serveur par `/api/ping` avant toute connexion). Toute autre route `/api/…`, adresse inconnue comprise,
+  rend 401 `{"erreur": "Connexion nécessaire : votre session est absente ou a expiré."}` sans session valide. Les
+  fichiers de l'application restent publics.
+- **Mot de passe provisoire** (`a_changer`) : la session existe, mais toute route autre que `GET /api/session`,
+  `POST /api/mot-de-passe` et `POST /api/deconnexion` (`ROUTES_MOT_DE_PASSE_PROVISOIRE`) rend 403 `{"erreur": "Mot de
+  passe provisoire : choisissez votre mot de passe d'abord."}` ; le serveur l'impose, l'écran viendra à T155.
+- Sans comptes (portée « ce PC », tous les tests des lots 1 à 6) : aucun contrôle de plus ; connexion, déconnexion,
+  mot de passe et « déconnecter partout » rendent 400 avec un message clair (jamais 500).
+- Le cookie porte `Secure` quand la requête arrive en https (`en_https()` du gestionnaire, que T164 étendra au
+  mandataire). T152 ajoutera le rôle (403) dans `controler_acces`, T153 le jeton d'appareil dans `verifier_session`.
 
 ### 22.5 Rôles par route (D126)
 

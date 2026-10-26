@@ -19,7 +19,8 @@ Lancement :
                   [--ia-url URL] [--ia-fournisseur ollama|openai] [--ia-en-ligne] [--servir-tests]
     (clé du fournisseur d'IA : « ia_cle » de prevo.config.json ou variable PREVO_IA_CLE, jamais une option)
 
-ATTENTION : aucune authentification. Usage sur un réseau local de confiance uniquement.
+Accès : en portée « ce PC » (défaut), écoute sur 127.0.0.1 seulement et aucun compte. Avec « comptes » (lot 7,
+ARCHITECTURE.md §22.3, §22.4), toute route /api/ autre que ping, session et connexion exige une session (cookie « id »).
 """
 
 import argparse
@@ -255,6 +256,8 @@ VERROU_ECRITURE = threading.Lock()
 
 class ErreurHttp(Exception):
     """Erreur renvoyée au navigateur sous la forme {"erreur": "message"} + champs en plus."""
+
+    entetes = None          # en-têtes en plus de la réponse (lot 7 : Retry-After d'un 429), posés après coup
 
     def __init__(self, statut, message, **champs_supplementaires):
         super().__init__(message)
@@ -550,10 +553,14 @@ def chemin_comptes(config):
     return os.path.join(dossier_acces(config), 'comptes.json')
 
 
-def maintenant_iso(config=None):
+def maintenant_s(config=None):
+    """Heure du serveur en secondes : config.horloge, injectable pour les tests (blocage, durées de session)."""
     horloge = getattr(config, 'horloge', None) if config is not None else None
-    instant = horloge() if horloge else time.time()
-    return datetime.datetime.fromtimestamp(instant).strftime('%Y-%m-%dT%H:%M:%S')
+    return horloge() if horloge else time.time()
+
+
+def maintenant_iso(config=None):
+    return datetime.datetime.fromtimestamp(maintenant_s(config)).strftime('%Y-%m-%dT%H:%M:%S')
 
 
 def hacher_mot_de_passe(mot_de_passe, sel=None, algo=None):
@@ -668,7 +675,9 @@ def compte_public(compte):
     return {cle: valeur for cle, valeur in compte.items() if cle not in ('sel', 'empreinte', 'algo')}
 
 
-def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal='modification'):
+def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal='modification', origine=('', '', '')):
+    """Nouveau mot de passe (changé ou réinitialisé) : toutes les sessions du compte sont fermées (§22.3).
+    origine : (adresse, agent, Tailscale) de la ligne du journal, vide en ligne de commande."""
     verifier_mot_de_passe_choisi(nouveau)
     with VERROU_ACCES:
         comptes = lire_comptes(config)
@@ -679,7 +688,8 @@ def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal=
         compte['a_changer'] = bool(a_changer)
         compte['modifie_le'] = compte['mot_de_passe_le'] = maintenant_iso(config)
         ecrire_comptes(config, comptes)
-    ecrire_journal_acces(config, compte['identifiant'], '', '', journal)
+    fermer_sessions_apres_changement(config, compte['identifiant'])
+    ecrire_journal_acces(config, compte['identifiant'], origine[0], origine[1], journal, origine[2])
 
 
 def reinitialiser_compte(config, identifiant):
@@ -712,6 +722,8 @@ def modifier_compte(config, identifiant, **champs):
             raise ErreurCompte('Il faut garder au moins un compte responsable actif.')
         compte['modifie_le'] = maintenant_iso(config)
         ecrire_comptes(config, comptes)
+    if not compte.get('actif'):
+        fermer_sessions_apres_changement(config, compte['identifiant'])
     ecrire_journal_acces(config, compte['identifiant'], '', '', 'modification')
     return compte_public(compte)
 
@@ -762,6 +774,338 @@ def ecrire_journal_acces(config, qui, adresse, agent, resultat, tailscale=''):
 
 VERROU_ACCES_JOURNAL = threading.Lock()
 
+
+# ---------------------------------------------------------------------------
+# Sessions et connexion (lot 7, ARCHITECTURE.md §22.3, §22.4 ; D124) : donnees/acces/sessions.json
+# ---------------------------------------------------------------------------
+
+NOM_COOKIE_SESSION = 'id'
+MOTIF_JETON = re.compile(r'[A-Za-z0-9_-]{32,128}', re.ASCII)      # secrets.token_urlsafe(32) : 43 caractères
+LONGUEUR_MAX_IDENTIFIANT = 200
+GLISSEMENT_MIN_S = 60                   # « vu_le » réécrit au plus une fois par minute et par session
+ECHECS_AVANT_ATTENTE = 5                # dès le 5e échec consécutif : min(2^(n-5), 8) s avant de répondre
+ATTENTE_MAX_S = 8
+ECHECS_AVANT_BLOCAGE = 10               # au 10e : blocage de 15 minutes, sans vérifier le mot de passe
+DUREE_BLOCAGE_S = 15 * 60
+ECHECS_PAR_ADRESSE = 20                 # au-delà de 20 échecs dans l'heure pour une adresse : 1 s par tentative
+FENETRE_ADRESSE_S = 3600
+ATTENTE_ADRESSE_S = 1
+COMPTEURS_MAX = 10000                   # identifiants ou adresses suivis en mémoire ; au-delà, les plus anciens oubliés
+TAILLE_MAX_CORPS_JETE = 64 * 1024       # refus avant la lecture du corps : au plus 64 Ko lus et jetés (audit F2)
+QUI_INCONNU = '(inconnu)'               # journal : un identifiant sans compte n'est jamais recopié (un mot de passe
+                                        # tapé dans la mauvaise case y finirait en clair)
+SEL_FACTICE = bytes(16)                 # empreinte factice d'un identifiant inconnu : même calcul, même durée
+CHAMPS_SESSION = ('identifiant', 'role', 'prenom', 'nom', 'technicien_id', 'a_changer', 'appareil')
+MESSAGE_CONNEXION_REFUSEE = 'Identifiant ou mot de passe incorrect.'
+MESSAGE_SESSION_ABSENTE = 'Connexion nécessaire : votre session est absente ou a expiré.'
+MESSAGE_MOT_DE_PASSE_PROVISOIRE = 'Mot de passe provisoire : choisissez votre mot de passe d\'abord.'
+MESSAGE_ACTUEL_FAUX = 'Mot de passe actuel incorrect.'
+MESSAGE_SANS_COMPTES = ('Les comptes ne sont pas activés sur ce serveur (portée « ce PC ») : aucune connexion '
+                        'n\'est nécessaire.')
+MESSAGE_COMPTES_ILLISIBLES = ('Fichier des comptes illisible (donnees/acces/comptes.json) : remettez-le depuis une '
+                              'sauvegarde.')
+VERROU_SESSIONS = threading.Lock()
+
+
+def chemin_sessions(config):
+    return os.path.join(dossier_acces(config), 'sessions.json')
+
+
+def empreinte_jeton(jeton):
+    """Seule l'empreinte SHA-256 du jeton est gardée : sessions.json ne permet d'ouvrir aucune session."""
+    return hashlib.sha256(jeton.encode('ascii')).hexdigest()
+
+
+def secondes_de(texte_iso):
+    """« 2026-10-26T10:00:00 » (heure locale, comme maintenant_iso) → secondes ; 0 si illisible (session expirée)."""
+    try:
+        return datetime.datetime.strptime(texte_iso, '%Y-%m-%dT%H:%M:%S').timestamp()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return 0.0
+
+
+def session_expiree(config, session, maintenant):
+    """12 h sans activité (session_heures, glissantes) ; avec « rester », 30 jours depuis la connexion
+    (session_longue_jours, comme le Max-Age du cookie)."""
+    reglages = getattr(config, 'reglages', None) or {}
+    if session.get('longue'):
+        duree, depuis = reglages.get('session_longue_jours', 30) * 86400, session.get('cree_le')
+    else:
+        duree, depuis = reglages.get('session_heures', 12) * 3600, session.get('vu_le')
+    return maintenant - secondes_de(depuis) > duree
+
+
+def lire_sessions(config):
+    """{empreinte du jeton: session} ; fichier absent ou illisible : aucune session (chacun se reconnecte)."""
+    try:
+        with open(chemin_sessions(config), 'rb') as fichier:
+            contenu = json.loads(fichier.read().decode('utf-8'))
+    except (OSError, ValueError, RecursionError):
+        return {}
+    if not isinstance(contenu, dict):
+        return {}
+    return {cle: session for cle, session in contenu.items() if isinstance(session, dict)}
+
+
+def ecrire_sessions(config, sessions):
+    """Écrit sessions.json (atomique), sessions expirées purgées ; à appeler sous VERROU_SESSIONS."""
+    maintenant = maintenant_s(config)
+    gardees = {cle: session for cle, session in sessions.items() if not session_expiree(config, session, maintenant)}
+    os.makedirs(dossier_acces(config), exist_ok=True)
+    ecrire_atomique(chemin_sessions(config), json.dumps(gardees, ensure_ascii=False, indent=1).encode('utf-8'))
+
+
+def ouvrir_session(config, identifiant, longue, agent):
+    """Nouvelle session : rend le jeton du cookie (secrets.token_urlsafe(32), neuf à chaque connexion), dont seule
+    l'empreinte est écrite."""
+    jeton = secrets.token_urlsafe(32)
+    instant_iso = maintenant_iso(config)
+    with VERROU_SESSIONS:
+        sessions = lire_sessions(config)
+        sessions[empreinte_jeton(jeton)] = {'identifiant': identifiant, 'cree_le': instant_iso, 'vu_le': instant_iso,
+                                            'longue': bool(longue), 'agent': str(agent or '')[:200]}
+        ecrire_sessions(config, sessions)
+    return jeton
+
+
+def session_du_jeton(config, jeton):
+    """(empreinte, session) d'un jeton connu et non expiré, sinon None. Une session expirée est supprimée ; « vu_le »
+    est réécrit au plus une fois par minute (12 h glissantes)."""
+    if not isinstance(jeton, str) or not MOTIF_JETON.fullmatch(jeton):
+        return None
+    cle = empreinte_jeton(jeton)
+    maintenant = maintenant_s(config)
+    with VERROU_SESSIONS:
+        sessions = lire_sessions(config)
+        session = sessions.get(cle)
+        if session is None:
+            return None
+        if session_expiree(config, session, maintenant):
+            del sessions[cle]
+            ecrire_sessions(config, sessions)
+            return None
+        if maintenant - secondes_de(session.get('vu_le')) >= GLISSEMENT_MIN_S:
+            session['vu_le'] = maintenant_iso(config)
+            ecrire_sessions(config, sessions)
+    return cle, session
+
+
+def fermer_session(config, cle):
+    """Supprime une session (déconnexion, nouvelle connexion depuis le même navigateur)."""
+    with VERROU_SESSIONS:
+        sessions = lire_sessions(config)
+        if sessions.pop(cle, None) is not None:
+            ecrire_sessions(config, sessions)
+
+
+def fermer_sessions_de(config, identifiant):
+    """Supprime toutes les sessions d'un compte (déconnecter partout, mot de passe changé ou réinitialisé, compte
+    désactivé) ; rend leur nombre."""
+    identifiant = (identifiant or '').strip().lower()
+    with VERROU_SESSIONS:
+        sessions = lire_sessions(config)
+        restantes = {cle: session for cle, session in sessions.items() if session.get('identifiant') != identifiant}
+        if len(restantes) != len(sessions):
+            ecrire_sessions(config, restantes)
+    return len(sessions) - len(restantes)
+
+
+def fermer_sessions_apres_changement(config, identifiant):
+    """Mot de passe changé, compte désactivé : ses sessions sont fermées. Si sessions.json ne peut pas être réécrit
+    (verrouillé par un autre programme), chaque requête les refuse quand même : verifier_session revérifie le compte."""
+    try:
+        fermer_sessions_de(config, identifiant)
+    except (ErreurHttp, OSError):
+        pass
+
+
+def comptes_du_serveur(config):
+    """Comptes lus sous VERROU_ACCES (une lecture ne croise jamais une écriture) ; 500 au message clair si illisible."""
+    with VERROU_ACCES:
+        try:
+            return lire_comptes(config)
+        except (OSError, ValueError, AttributeError):
+            raise ErreurHttp(500, MESSAGE_COMPTES_ILLISIBLES)
+
+
+def identite_du_compte(compte, cle, longue):
+    """Ce que le serveur sait de la requête : le compte et sa session (empreinte, « rester »), jamais le jeton."""
+    return {'identifiant': compte['identifiant'], 'role': compte.get('role', ''), 'prenom': compte.get('prenom', ''),
+            'nom': compte.get('nom', ''), 'technicien_id': compte.get('technicien_id', ''),
+            'a_changer': bool(compte.get('a_changer')), 'appareil': False, 'cle': cle, 'longue': bool(longue)}
+
+
+def session_publique(identite):
+    """L'identité telle que GET /api/session la rend (§22.4), ou None."""
+    return None if identite is None else {champ: identite[champ] for champ in CHAMPS_SESSION}
+
+
+def valeurs_cookie(entete, nom):
+    """Valeurs du cookie « nom » dans l'en-tête Cookie (4 au plus : un navigateur n'en envoie qu'une)."""
+    valeurs = []
+    for morceau in (entete or '').split(';'):
+        cle, egal, valeur = morceau.strip().partition('=')
+        if egal and cle.strip() == nom:
+            valeurs.append(valeur.strip().strip('"'))
+    return valeurs[:4]
+
+
+def entete_cookie_session(jeton, https, max_age=None):
+    """Set-Cookie de la session (§22.3) : id=<jeton>; Path=/; HttpOnly; SameSite=Lax[; Secure][; Max-Age=…] ;
+    jeton vide et Max-Age=0 : le cookie est effacé."""
+    morceaux = ['%s=%s' % (NOM_COOKIE_SESSION, jeton), 'Path=/', 'HttpOnly', 'SameSite=Lax']
+    if https:
+        morceaux.append('Secure')
+    if max_age is not None:
+        morceaux.append('Max-Age=%d' % max_age)
+    return '; '.join(morceaux)
+
+
+def verifier_session(config, entete_cookie):
+    """Identité de la requête d'après le cookie « id » : jeton connu, session non expirée, compte actif dont le mot de
+    passe n'a pas changé depuis la connexion ; sinon None. T153 : le jeton d'appareil (cookie « appareil », rôle
+    demandeur) s'ajoutera ici."""
+    for jeton in valeurs_cookie(entete_cookie, NOM_COOKIE_SESSION):
+        trouvee = session_du_jeton(config, jeton)
+        if trouvee is None:
+            continue
+        cle, session = trouvee
+        try:
+            compte = trouver_compte(comptes_du_serveur(config), session.get('identifiant'))
+        except ErreurHttp:          # comptes illisibles : personne n'est reconnu ; /api/ping répond toujours,
+            return None             # la connexion dit pourquoi
+        if (compte is None or not compte.get('actif')
+                or str(session.get('cree_le', '')) < str(compte.get('mot_de_passe_le', ''))):
+            fermer_session(config, cle)
+            continue
+        return identite_du_compte(compte, cle, session.get('longue'))
+    return None
+
+
+class CompteursEchecs:
+    """Échecs de connexion, en mémoire seulement (un redémarrage du serveur les remet à zéro) : par identifiant saisi
+    (normalisé, qu'il existe ou non) et par adresse. Une tentative compte dès son début (reserver) : des tentatives
+    lancées en même temps ne dépassent jamais les 10 essais avant le blocage."""
+
+    def __init__(self):
+        self.verrou = threading.Lock()
+        self.par_identifiant = {}       # identifiant → {'echecs', 'dernier', 'bloque_jusqua'}
+        self.par_adresse = {}           # adresse → instants de ses derniers échecs
+
+    def adresse_ralentie(self, adresse, maintenant):
+        """Vrai au-delà de 20 échecs venus de cette adresse dans l'heure écoulée."""
+        with self.verrou:
+            recents = [t for t in self.par_adresse.get(adresse, []) if maintenant - t < FENETRE_ADRESSE_S]
+            if recents:
+                self.par_adresse[adresse] = recents
+            else:
+                self.par_adresse.pop(adresse, None)
+            return len(recents) >= ECHECS_PAR_ADRESSE
+
+    def reserver(self, identifiant, maintenant):
+        """Avant toute vérification : secondes de blocage restantes (refus sans vérifier), sinon 0 et la tentative
+        est comptée."""
+        with self.verrou:
+            entree = self.par_identifiant.get(identifiant)
+            if entree is not None and entree['bloque_jusqua']:
+                if entree['bloque_jusqua'] > maintenant:
+                    return entree['bloque_jusqua'] - maintenant
+                entree = None                       # blocage écoulé : l'identifiant repart de zéro
+            if entree is None:
+                self.oublier_les_plus_anciens()
+                entree = self.par_identifiant[identifiant] = {'echecs': 0, 'dernier': maintenant, 'bloque_jusqua': 0}
+            if entree['echecs'] >= ECHECS_AVANT_BLOCAGE:          # dix essais déjà comptés, en cours en même temps
+                entree['bloque_jusqua'] = maintenant + DUREE_BLOCAGE_S
+                return DUREE_BLOCAGE_S
+            entree['echecs'] += 1
+            entree['dernier'] = maintenant
+            return 0
+
+    def echec(self, identifiant, adresse, maintenant):
+        """Après un mot de passe faux : (échecs consécutifs, bloqué ou non) ; le 10e bloque pour 15 minutes."""
+        with self.verrou:
+            entree = self.par_identifiant.get(identifiant)
+            if entree is None:                      # remis à zéro pendant la vérification (réussite en même temps)
+                self.oublier_les_plus_anciens()
+                entree = self.par_identifiant[identifiant] = {'echecs': 1, 'dernier': maintenant, 'bloque_jusqua': 0}
+            entree['dernier'] = maintenant
+            if entree['echecs'] >= ECHECS_AVANT_BLOCAGE and entree['bloque_jusqua'] <= maintenant:
+                entree['bloque_jusqua'] = maintenant + DUREE_BLOCAGE_S
+            if adresse not in self.par_adresse:
+                self.oublier_les_plus_anciens()
+            instants = self.par_adresse.setdefault(adresse, [])
+            instants.append(maintenant)
+            del instants[:-2 * ECHECS_PAR_ADRESSE]
+            return entree['echecs'], entree['bloque_jusqua'] > maintenant
+
+    def reussite(self, identifiant):
+        """Mot de passe juste : le compteur de cet identifiant repart de zéro."""
+        with self.verrou:
+            self.par_identifiant.pop(identifiant, None)
+
+    def oublier_les_plus_anciens(self):
+        """Au-delà de COMPTEURS_MAX, la moitié la moins récente est oubliée (blocages en dernier) ; sous le verrou."""
+        if len(self.par_identifiant) >= COMPTEURS_MAX:
+            ordre = sorted(self.par_identifiant, key=lambda cle: (self.par_identifiant[cle]['bloque_jusqua'] > 0,
+                                                                   self.par_identifiant[cle]['dernier']))
+            for cle in ordre[:len(ordre) - COMPTEURS_MAX // 2]:
+                del self.par_identifiant[cle]
+        if len(self.par_adresse) >= COMPTEURS_MAX:
+            ordre = sorted(self.par_adresse, key=lambda adresse: max(self.par_adresse[adresse], default=0))
+            for adresse in ordre[:len(ordre) - COMPTEURS_MAX // 2]:
+                del self.par_adresse[adresse]
+
+
+def empreinte_factice(mot_de_passe):
+    """Identifiant inconnu ou compte désactivé : le même calcul qu'une vraie vérification (la durée de la réponse ne
+    dit pas si le compte existe) ; toujours faux."""
+    hacher_mot_de_passe(mot_de_passe, sel=SEL_FACTICE)
+    return False
+
+
+def erreur_blocage(reste):
+    """429 avec le temps restant : champ « attente_secondes » et en-tête Retry-After."""
+    secondes = max(1, int(-(-reste // 1)))
+    erreur = ErreurHttp(429, 'Trop d\'essais : la connexion est bloquée pour cet identifiant. Réessayez dans %d min.'
+                        % -(-secondes // 60), attente_secondes=secondes)
+    erreur.entetes = {'Retry-After': str(secondes)}
+    return erreur
+
+
+def verifier_tentative(config, identifiant, mot_de_passe, origine, refus, journal_reussite='connexion'):
+    """Vérifie un mot de passe saisi (§22.3) : rend le compte, sinon lève « refus » (ErreurHttp), ou 429 pendant un
+    blocage, sans rien vérifier. Identifiant inconnu, compte désactivé et mot de passe faux suivent le même chemin
+    (une empreinte calculée, même attente, même réponse). Dès le 5e échec consécutif, min(2^(n-5), 8) s d'attente
+    avant de répondre ; au 10e, blocage de 15 minutes ; au-delà de 20 échecs dans l'heure pour une adresse, 1 s de
+    plus par tentative. Chaque tentative va au journal des connexions, jamais le mot de passe.
+    origine : (adresse, agent, Tailscale)."""
+    adresse, agent, tailscale = origine
+    cle = (identifiant or '').strip().lower()[:LONGUEUR_MAX_IDENTIFIANT]
+    echecs = config.echecs
+    if echecs.adresse_ralentie(adresse, maintenant_s(config)):
+        config.dormir(ATTENTE_ADRESSE_S)
+    compte = trouver_compte(comptes_du_serveur(config), cle)
+    qui = compte['identifiant'] if compte is not None else QUI_INCONNU
+    reste = echecs.reserver(cle, maintenant_s(config))
+    if reste:
+        ecrire_journal_acces(config, qui, adresse, agent, 'bloque', tailscale)
+        raise erreur_blocage(reste)
+    if compte is not None and compte.get('actif'):
+        juste = mot_de_passe_juste(compte, mot_de_passe)
+    else:
+        juste = empreinte_factice(mot_de_passe)
+    if juste:
+        echecs.reussite(cle)
+        if journal_reussite:
+            ecrire_journal_acces(config, qui, adresse, agent, journal_reussite, tailscale)
+        return compte
+    nombre, bloque = echecs.echec(cle, adresse, maintenant_s(config))
+    ecrire_journal_acces(config, qui, adresse, agent, 'echec', tailscale)
+    if bloque:
+        raise erreur_blocage(DUREE_BLOCAGE_S)
+    if nombre >= ECHECS_AVANT_ATTENTE:
+        config.dormir(min(2 ** (nombre - ECHECS_AVANT_ATTENTE), ATTENTE_MAX_S))
+    raise refus
 
 
 # ---------------------------------------------------------------------------
@@ -1150,6 +1494,11 @@ class Configuration:
         self.reglages = reglages_par_defaut()
         self.ecoute = '127.0.0.1'
         self.contexte_ssl = None    # lot 4 : https en option (--certificat, --cle)
+        # Lot 7 (§22.3) : horloge et attente injectables (tests du blocage et des durées de session) ; échecs de
+        # connexion en mémoire, remis à zéro à chaque démarrage du serveur.
+        self.horloge = time.time
+        self.dormir = time.sleep
+        self.echecs = CompteursEchecs()
         # Dossiers jamais servis en statique : le dossier de données choisi et donnees/
         # à côté de serveur.py (même si --donnees pointe ailleurs).
         self.dossiers_interdits_statique = [
@@ -1981,6 +2330,52 @@ def enregistrer_document(config, nom, octets):
 
 
 # ---------------------------------------------------------------------------
+# Routes de l'API (lot 7, ARCHITECTURE.md §22.4) : une seule table, lue par l'aiguillage, le contrôle d'accès
+# et les tests
+# ---------------------------------------------------------------------------
+
+# (méthode, motif du chemin après /api/) → fonction du gestionnaire, appelée avec (segment, corps). « <table> » (une
+# des 24 tables) et « <nom> » (nom de document) valent un segment. Une route ajoutée ici est aussitôt fermée sans
+# session quand les comptes sont exigés (tests/test_acces_sessions.py parcourt la table).
+ROUTES_API = {
+    ('GET', 'ping'): 'api_ping',
+    ('GET', 'info'): 'api_info',
+    ('GET', 'versions'): 'api_versions',
+    ('GET', 'session'): 'api_session',
+    ('POST', 'connexion'): 'api_connexion',
+    ('POST', 'deconnexion'): 'api_deconnexion',
+    ('POST', 'mot-de-passe'): 'api_mot_de_passe',
+    ('POST', 'acces/deconnecter-partout'): 'api_deconnecter_partout',
+    ('GET', 'csv/<table>'): 'api_csv_lire',
+    ('PUT', 'csv/<table>'): 'api_csv_ecrire',
+    ('POST', 'csv/<table>/ajout'): 'api_ajout',
+    ('GET', 'documents/<nom>'): 'api_document_lire',
+    ('PUT', 'documents/<nom>'): 'api_document_ecrire',
+    ('POST', 'sauvegarde'): 'api_sauvegarde',
+    ('GET', 'sauvegardes'): 'api_sauvegardes',
+    ('POST', 'restauration'): 'api_restauration',
+    ('POST', 'ia'): 'api_ia',
+    ('GET', 'ia/reglages'): 'api_ia_reglages',
+}
+# Ouvertes sans session : le navigateur détecte le serveur (/api/ping) et demande qui il est avant toute connexion.
+ROUTES_PUBLIQUES = (('GET', 'ping'), ('GET', 'session'), ('POST', 'connexion'))
+# Seules routes d'une session au mot de passe provisoire (« a_changer ») : 403 partout ailleurs.
+ROUTES_MOT_DE_PASSE_PROVISOIRE = (('GET', 'session'), ('POST', 'mot-de-passe'), ('POST', 'deconnexion'))
+# Motifs à essayer : les chemins fixes avant ceux qui ont un segment variable.
+MOTIFS_API = sorted({motif for _, motif in ROUTES_API}, key=lambda motif: ('<' in motif, motif))
+
+
+def motif_de_route(morceaux):
+    """Morceaux du chemin après /api/ → motif de ROUTES_API (« csv/<table> »…), ou None : adresse inconnue."""
+    for motif in MOTIFS_API:
+        modele = motif.split('/')
+        if len(modele) == len(morceaux) and all(attendu == morceau or (attendu.startswith('<') and morceau)
+                                                for attendu, morceau in zip(modele, morceaux)):
+            return motif
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Gestionnaire des requêtes HTTP
 # ---------------------------------------------------------------------------
 
@@ -1994,7 +2389,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     # ouvrir une par requête (~45 par chargement en HTTP/1.0). Sous Windows, ce renouvellement
     # incessant de connexions faisait échouer de temps en temps l'ouverture d'une connexion
     # (ERR_NO_BUFFER_SPACE) : l'application retombait alors sur l'écran de démarrage.
-    # Toutes les réponses portent Content-Length (envoyer) ; le corps des requêtes est toujours lu.
+    # Toutes les réponses portent Content-Length (envoyer) ; le corps des requêtes est lu après les contrôles, ou
+    # jeté (64 Ko au plus) avant un refus ; sinon la connexion est fermée après la réponse (traiter).
     protocol_version = 'HTTP/1.1'
 
     # --- Points d'entrée appelés par http.server ---------------------------
@@ -2038,21 +2434,26 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         return chemin == '/api' or chemin.startswith('/api/')
 
     def traiter(self, methode):
-        # Corps de la requête entièrement lu ? Sinon la connexion (persistante) doit être fermée
-        # après la réponse : les octets non lus seraient pris pour la requête suivante.
+        # Ordre des contrôles (audit F2, §22.4) : hôte, chemin, accès à l'API (session quand les comptes sont
+        # exigés), X-Prevo, puis seulement la lecture du corps : un client sans session ne fait jamais lire 10 Mo.
+        # Un refus prononcé avant la lecture jette au plus 64 Ko de corps (envoyer_erreur) pour que le navigateur
+        # reçoive la réponse ; au-delà, la connexion persistante est fermée après la réponse (les octets non lus
+        # seraient pris pour la requête suivante).
         self.corps_lu = methode not in ('PUT', 'POST')
+        self.lecture_commencee = False
+        self.session = None
         try:
-            corps = b''
-            if methode in ('PUT', 'POST'):
-                # Le corps est lu AVANT tout refus : fermer une connexion dont le corps
-                # n'est pas lu ferait perdre la réponse au navigateur (« connexion réinitialisée »).
-                corps = self.lire_corps()
-                self.corps_lu = True
             if not hote_autorise(self.headers.get('Host'), self.config):
                 raise ErreurHttp(403, 'Nom d\'hôte refusé. Utilisez l\'adresse IP du PC.')
+            morceaux = analyser_chemin(self.path)
+            if morceaux[0] == 'api':
+                self.session = self.controler_acces(methode, morceaux[1:])
+            corps = b''
             if methode in ('PUT', 'POST'):
                 self.verifier_entete_prevo()
-            morceaux = analyser_chemin(self.path)
+                self.lecture_commencee = True
+                corps = self.lire_corps()
+                self.corps_lu = True
             if morceaux[0] == 'api':
                 self.traiter_api(methode, morceaux[1:], corps)
             elif methode == 'GET':
@@ -2068,36 +2469,69 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             self.envoyer_erreur(ErreurHttp(500, 'Erreur interne du serveur.'))
 
     def traiter_api(self, methode, morceaux, corps):
-        """Choisit la fonction de l'API d'après la méthode et le chemin (après /api/)."""
-        if len(morceaux) == 1:
-            routes_simples = {
-                ('GET', 'ping'): self.api_ping,
-                ('GET', 'info'): self.api_info,
-                ('GET', 'versions'): self.api_versions,
-                ('GET', 'sauvegardes'): self.api_sauvegardes,
-                ('POST', 'sauvegarde'): lambda: self.api_sauvegarde(corps),
-                ('POST', 'restauration'): lambda: self.api_restauration(corps),
-                ('POST', 'ia'): lambda: self.api_ia(corps),
-            }
-            fonction = routes_simples.get((methode, morceaux[0]))
-            if fonction is not None:
-                return fonction()
-            if morceaux[0] in {nom for (_, nom) in routes_simples}:
-                raise ErreurHttp(405, 'Méthode non autorisée.')
-        elif len(morceaux) == 2 and morceaux[0] == 'ia' and morceaux[1] == 'reglages':
-            if methode != 'GET':
-                raise ErreurHttp(405, 'Méthode non autorisée.')
-            return self.api_ia_reglages()
-        elif len(morceaux) == 2 and morceaux[0] == 'csv':
-            return self.api_csv(methode, morceaux[1], corps)
-        elif len(morceaux) == 3 and morceaux[0] == 'csv' and morceaux[2] == 'ajout':
-            chemin_table(self.config, morceaux[1])          # 404 si table inconnue
-            if methode != 'POST':
-                raise ErreurHttp(405, 'Méthode non autorisée.')
-            return self.api_ajout(morceaux[1], corps)
-        elif len(morceaux) == 2 and morceaux[0] == 'documents':
-            return self.api_document(methode, morceaux[1], corps)
-        raise ErreurHttp(404, 'Adresse inconnue dans l\'API.')
+        """Aiguillage d'après ROUTES_API (chemin après /api/) : 404 adresse inconnue, 405 autre méthode. Le segment
+        variable est contrôlé avant la méthode, comme avant le lot 7 : table inconnue 404, nom de document refusé
+        400."""
+        motif = motif_de_route(morceaux)
+        if motif is None:
+            raise ErreurHttp(404, 'Adresse inconnue dans l\'API.')
+        segment = morceaux[1] if '<' in motif else None
+        if '<table>' in motif:
+            chemin_table(self.config, segment)
+        elif '<nom>' in motif:
+            chemin_document(self.config, segment)
+        fonction = ROUTES_API.get((methode, motif))
+        if fonction is None:
+            raise ErreurHttp(405, 'Méthode non autorisée.')
+        getattr(self, fonction)(segment, corps)
+
+    # --- Accès à l'API (lot 7, §22.3, §22.4) -------------------------------
+
+    def controler_acces(self, methode, morceaux):
+        """Point unique de vérification de l'accès à l'API (D126), avant la lecture du corps (audit F2). Sans comptes
+        exigés : rien (portée « ce PC »). Sinon l'identité de la requête (verifier_session) ; hors des routes
+        publiques, 401 sans elle, 403 avec un mot de passe provisoire hors des trois routes qui servent à le changer.
+        T152 : le rôle (403) se vérifiera ici, après la session."""
+        if not self.config.reglages.get('comptes'):
+            return None
+        identite = verifier_session(self.config, self.headers.get('Cookie'))
+        route = (methode, motif_de_route(morceaux))
+        if route in ROUTES_PUBLIQUES:
+            return identite
+        if identite is None:
+            raise ErreurHttp(401, MESSAGE_SESSION_ABSENTE)
+        if identite['a_changer'] and route not in ROUTES_MOT_DE_PASSE_PROVISOIRE:
+            raise ErreurHttp(403, MESSAGE_MOT_DE_PASSE_PROVISOIRE)
+        return identite
+
+    def adresse_client(self):
+        """Adresse du client pour le journal et le ralentissement (T164 : celle d'origine derrière un mandataire)."""
+        return self.client_address[0]
+
+    def en_https(self):
+        """Requête arrivée en https : cookie Secure (T164 : aussi derrière un mandataire en https)."""
+        return isinstance(self.request, ssl.SSLSocket)
+
+    def origine(self):
+        """(adresse, agent, Tailscale) d'une ligne du journal des connexions. L'en-tête Tailscale-User-Login n'est cru
+        que d'un mandataire sur ce PC (« mandataire » vrai, connexion venue de 127.0.0.1) ; sinon colonne vide."""
+        tailscale = ''
+        if self.config.reglages.get('mandataire') and self.client_address[0] in ('127.0.0.1', '::1'):
+            tailscale = self.headers.get('Tailscale-User-Login', '')
+        return self.adresse_client(), self.headers.get('User-Agent', ''), tailscale
+
+    def exiger_comptes(self):
+        """Connexion, déconnexion, mot de passe : seulement quand les comptes sont exigés (400 clair sinon)."""
+        if not self.config.reglages.get('comptes'):
+            raise ErreurHttp(400, MESSAGE_SANS_COMPTES)
+
+    def repondre_avec_session(self, compte, longue):
+        """Ouvre une session pour ce compte et la rend avec son cookie (Max-Age seulement avec « rester »)."""
+        jeton = ouvrir_session(self.config, compte['identifiant'], longue, self.headers.get('User-Agent', ''))
+        duree = self.config.reglages.get('session_longue_jours', 30) * 86400 if longue else None
+        self.session = identite_du_compte(compte, empreinte_jeton(jeton), longue)
+        self.envoyer_json(200, {'comptes': True, 'session': session_publique(self.session)},
+                          {'Set-Cookie': entete_cookie_session(jeton, self.en_https(), duree)})
 
     # --- Contrôles des requêtes qui écrivent --------------------------------
 
@@ -2124,18 +2558,94 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             raise ErreurHttp(400, 'Corps de la requête incomplet.')
         return corps
 
-    # --- Fonctions de l'API ------------------------------------------------
+    # --- Fonctions de l'API (appelées avec le segment variable du chemin, ou None, et le corps) ------
 
-    def api_ping(self):
+    def api_ping(self, segment, corps):
         self.envoyer_json(200, {'application': NOM_APPLICATION,
                                 'version': VERSION_APPLICATION, 'api': VERSION_API})
 
-    def api_info(self):
+    def api_info(self, segment, corps):
         self.envoyer_json(200, {'port': self.config.port,
                                 'adresse_locale': self.config.adresse_locale(),
                                 'adresses_reseau': self.config.adresses_reseau()})
 
-    def api_ia(self, corps):
+    def api_session(self, segment, corps):
+        """GET /api/session : comptes exigés ou non, et l'identité de la session (jamais le jeton)."""
+        self.envoyer_json(200, {'comptes': bool(self.config.reglages.get('comptes')),
+                                'session': session_publique(self.session)})
+
+    def api_connexion(self, segment, corps):
+        """POST /api/connexion {identifiant, mot_de_passe, rester} : 200 et cookie « id » (jeton neuf ; l'ancienne
+        session de ce navigateur est fermée) ; 401 au message neutre ; 429 pendant un blocage (§22.3)."""
+        self.exiger_comptes()
+        demande = lire_objet_json(corps)
+        identifiant, mot_de_passe = demande.get('identifiant'), demande.get('mot_de_passe')
+        rester = demande.get('rester', False)
+        if not (isinstance(identifiant, str) and isinstance(mot_de_passe, str) and isinstance(rester, bool)):
+            raise ErreurHttp(400, 'Connexion : « identifiant » et « mot_de_passe » (textes) sont attendus, '
+                                  '« rester » vaut vrai ou faux.')
+        compte = verifier_tentative(self.config, identifiant, mot_de_passe, self.origine(),
+                                    ErreurHttp(401, MESSAGE_CONNEXION_REFUSEE))
+        if self.session is not None:
+            fermer_session(self.config, self.session['cle'])
+        self.repondre_avec_session(compte, rester)
+
+    def api_deconnexion(self, segment, corps):
+        """POST /api/deconnexion : la session est supprimée et le cookie effacé."""
+        self.exiger_comptes()
+        fermer_session(self.config, self.session['cle'])
+        adresse, agent, tailscale = self.origine()
+        ecrire_journal_acces(self.config, self.session['identifiant'], adresse, agent, 'deconnexion', tailscale)
+        self.envoyer_json(200, {'comptes': True, 'session': None},
+                          {'Set-Cookie': entete_cookie_session('', self.en_https(), 0)})
+
+    def api_mot_de_passe(self, segment, corps):
+        """POST /api/mot-de-passe {actuel, nouveau} : 200 et une session neuve, toutes les autres sessions du compte
+        fermées ; 400 si le nouveau est refusé (12 à 256 caractères, différent de l'actuel) ; 403 si l'actuel est faux
+        (compté comme un échec de connexion) ; 429 pendant un blocage."""
+        self.exiger_comptes()
+        demande = lire_objet_json(corps)
+        actuel, nouveau = demande.get('actuel'), demande.get('nouveau')
+        if not (isinstance(actuel, str) and isinstance(nouveau, str)):
+            raise ErreurHttp(400, 'Mot de passe : « actuel » et « nouveau » (textes) sont attendus.')
+        try:
+            verifier_mot_de_passe_choisi(nouveau)
+        except ErreurCompte as erreur:
+            raise ErreurHttp(400, str(erreur))
+        if nouveau == actuel:
+            raise ErreurHttp(400, 'Choisissez un mot de passe différent de l\'actuel.')
+        identifiant, origine = self.session['identifiant'], self.origine()
+        verifier_tentative(self.config, identifiant, actuel, origine, ErreurHttp(403, MESSAGE_ACTUEL_FAUX),
+                           journal_reussite=None)
+        try:
+            changer_mot_de_passe(self.config, identifiant, nouveau, origine=origine)
+        except ErreurCompte as erreur:
+            raise ErreurHttp(400, str(erreur))
+        compte = trouver_compte(comptes_du_serveur(self.config), identifiant)
+        self.repondre_avec_session(compte, self.session['longue'])
+
+    def api_deconnecter_partout(self, segment, corps):
+        """POST /api/acces/deconnecter-partout : sans corps (ou {}), toutes les sessions de la personne connectée, la
+        sienne comprise ; {"identifiant": X} pour un autre compte : responsable seulement (403), 404 compte inconnu."""
+        self.exiger_comptes()
+        demande = lire_objet_json(corps) if corps.strip() else {}
+        cible = demande.get('identifiant', self.session['identifiant'])
+        if not isinstance(cible, str) or not cible.strip():
+            raise ErreurHttp(400, '« identifiant » : l\'identifiant d\'un compte est attendu.')
+        cible = cible.strip().lower()
+        soi_meme = cible == self.session['identifiant']
+        if not soi_meme:
+            if self.session['role'] != 'responsable':
+                raise ErreurHttp(403, 'Réservé au responsable : vous ne pouvez fermer que vos propres sessions.')
+            if trouver_compte(comptes_du_serveur(self.config), cible) is None:
+                raise ErreurHttp(404, 'Compte introuvable : %s.' % cible)
+        nombre = fermer_sessions_de(self.config, cible)
+        adresse, agent, tailscale = self.origine()
+        ecrire_journal_acces(self.config, cible, adresse, agent, 'deconnexion', tailscale)
+        entetes = {'Set-Cookie': entete_cookie_session('', self.en_https(), 0)} if soi_meme else None
+        self.envoyer_json(200, {'identifiant': cible, 'sessions_fermees': nombre}, entetes)
+
+    def api_ia(self, segment, corps):
         """Relais vers le fournisseur d'IA réglé sur le PC serveur (lot 4, §17.2 ; audit M1, M2, M3, §22.12).
 
         Rend { statut, corps } : le statut et le corps (JSON, sinon texte) du fournisseur, sans la clé.
@@ -2152,56 +2662,52 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         octets = sans_la_cle(octets, cle_ia(self.config.reglages))
         self.envoyer_json(200, {'statut': statut, 'corps': corps_lisible(octets)})
 
-    def api_ia_reglages(self):
+    def api_ia_reglages(self, segment, corps):
         """GET /api/ia/reglages : fournisseur, adresse, clé réglée ou non, IA en ligne, portée (jamais la clé)."""
         self.envoyer_json(200, reglages_ia_publics(self.config))
 
-    def api_versions(self):
+    def api_versions(self, segment, corps):
         with VERROU_ECRITURE:
             tables = versions_des_tables(self.config)
         self.envoyer_json(200, {'tables': tables})
 
-    def api_csv(self, methode, table, corps):
+    def api_csv_lire(self, table, corps):
         chemin = chemin_table(self.config, table)            # 404 si table inconnue
-        if methode == 'GET':
-            with VERROU_ECRITURE:
-                octets = lire_octets(chemin)
-            if octets is None:
-                raise ErreurHttp(404, 'Le fichier %s.csv n\'existe pas encore.' % table)
-            self.envoyer(200, octets, 'text/csv; charset=utf-8',
-                         {'X-Version': empreinte(octets)})
-        elif methode == 'PUT':
-            version_attendue = self.headers.get('X-Version-Attendue')
-            if not version_attendue:
-                raise ErreurHttp(400, 'En-tête X-Version-Attendue manquant.')
-            with VERROU_ECRITURE:
-                version = enregistrer_csv(self.config, table, corps, version_attendue.strip())
-            self.envoyer_json(200, {'version': version})
-        else:
-            raise ErreurHttp(405, 'Méthode non autorisée.')
+        with VERROU_ECRITURE:
+            octets = lire_octets(chemin)
+        if octets is None:
+            raise ErreurHttp(404, 'Le fichier %s.csv n\'existe pas encore.' % table)
+        self.envoyer(200, octets, 'text/csv; charset=utf-8',
+                     {'X-Version': empreinte(octets)})
+
+    def api_csv_ecrire(self, table, corps):
+        version_attendue = self.headers.get('X-Version-Attendue')
+        if not version_attendue:
+            raise ErreurHttp(400, 'En-tête X-Version-Attendue manquant.')
+        with VERROU_ECRITURE:
+            version = enregistrer_csv(self.config, table, corps, version_attendue.strip())
+        self.envoyer_json(200, {'version': version})
 
     def api_ajout(self, table, corps):
         with VERROU_ECRITURE:
             version = ajouter_au_csv(self.config, table, corps)
         self.envoyer_json(200, {'version': version})
 
-    def api_document(self, methode, nom, corps):
+    def api_document_lire(self, nom, corps):
         chemin = chemin_document(self.config, nom)          # 400 si nom refusé
-        if methode == 'GET':
-            octets = lire_octets(chemin)
-            if octets is None:
-                raise ErreurHttp(404, 'Document introuvable : %s.' % nom)
-            # nosniff + sandbox : un document ne peut jamais s'exécuter comme une page.
-            self.envoyer(200, octets, TYPES_DOCUMENTS[extension(nom)],
-                         {'Content-Security-Policy': 'sandbox'})
-        elif methode == 'PUT':
-            with VERROU_ECRITURE:
-                enregistrer_document(self.config, nom, corps)
-            self.envoyer_json(201, {'nom': nom})
-        else:
-            raise ErreurHttp(405, 'Méthode non autorisée.')
+        octets = lire_octets(chemin)
+        if octets is None:
+            raise ErreurHttp(404, 'Document introuvable : %s.' % nom)
+        # nosniff + sandbox : un document ne peut jamais s'exécuter comme une page.
+        self.envoyer(200, octets, TYPES_DOCUMENTS[extension(nom)],
+                     {'Content-Security-Policy': 'sandbox'})
 
-    def api_sauvegarde(self, corps):
+    def api_document_ecrire(self, nom, corps):
+        with VERROU_ECRITURE:
+            enregistrer_document(self.config, nom, corps)
+        self.envoyer_json(201, {'nom': nom})
+
+    def api_sauvegarde(self, segment, corps):
         """Sauvegarde manuelle (corps vide) ou automatique avec un motif de la liste fermée
         (corps {"motif": "avant-format-v2"} → nom « AAAA-MM-JJ_HHMMSS_avant-format-v2 »)."""
         motif = lire_motif_sauvegarde(corps)            # 400 si motif refusé, avant toute écriture
@@ -2212,10 +2718,10 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             copier_tables_dans_sauvegarde(self.config, nom)
         self.envoyer_json(200, {'sauvegarde': nom})
 
-    def api_sauvegardes(self):
+    def api_sauvegardes(self, segment, corps):
         self.envoyer_json(200, {'sauvegardes': lister_sauvegardes(self.config)})
 
-    def api_restauration(self, corps):
+    def api_restauration(self, segment, corps):
         demande = lire_objet_json(corps)
         with VERROU_ECRITURE:
             resultat = restaurer(self.config, demande.get('sauvegarde'), demande.get('tables'))
@@ -2282,16 +2788,32 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         except (ConnectionError, socket.timeout):
             pass
 
-    def envoyer_json(self, statut, donnees):
+    def envoyer_json(self, statut, donnees, entetes_supplementaires=None):
         octets = json.dumps(donnees, ensure_ascii=False).encode('utf-8')
-        self.envoyer(statut, octets, 'application/json; charset=utf-8')
+        self.envoyer(statut, octets, 'application/json; charset=utf-8', entetes_supplementaires)
 
     def envoyer_erreur(self, erreur):
         donnees = {'erreur': erreur.message}
         donnees.update(erreur.champs_supplementaires)
+        if not getattr(self, 'corps_lu', False) and not getattr(self, 'lecture_commencee', True):
+            self.jeter_le_corps()           # refus avant la lecture du corps (hôte, session, X-Prevo…)
         if not getattr(self, 'corps_lu', False):
             self.close_connection = True     # le corps n'a pas (entièrement) été lu
-        self.envoyer_json(erreur.statut, donnees)
+        self.envoyer_json(erreur.statut, donnees, erreur.entetes)
+
+    def jeter_le_corps(self):
+        """Refus prononcé avant la lecture du corps : le lit et le jette s'il fait au plus 64 Ko, pour que le navigateur
+        reçoive la réponse (sinon « connexion réinitialisée ») ; au-delà, ou sans Content-Length lisible, rien n'est
+        lu et la connexion est fermée après la réponse (audit F2)."""
+        try:
+            longueur = int(self.headers.get('Content-Length', ''))
+        except ValueError:
+            return
+        if 0 <= longueur <= TAILLE_MAX_CORPS_JETE:
+            try:
+                self.corps_lu = len(self.rfile.read(longueur)) == longueur
+            except (OSError, ValueError):
+                pass
 
 
 # ---------------------------------------------------------------------------
