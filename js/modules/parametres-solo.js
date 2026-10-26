@@ -4,8 +4,9 @@
 // quatrième profil (App.modeSolo(), App.technicienSolo() dans js/app.js).
 //   « Passer en mode Solo » : prénom, nom, métier (facultatif) → technicien « moi » créé par les
 //   écritures du module Équipe (Equipe.creerTechnicien ; repris s'il existe déjà, actif, sous le même
-//   nom), puis mode_solo = 1 et solo_technicien_id dans parametres.csv.
-//   « Quitter le mode Solo » : mode_solo = 0, rien n'est supprimé (le technicien reste dans l'équipe).
+//   nom), puis mode_solo = 1, solo_technicien_id et cloture_une_etape = 1 (clôture en une étape) dans parametres.csv.
+//   « Quitter le mode Solo » : mode_solo = 0, rien n'est supprimé (le technicien reste dans l'équipe) ;
+//   cloture_une_etape reste tel quel (réglage « Ordres de travail » du formulaire, désactivable).
 // Les réglages (libellés, aides) sont déclarés dans la liste REGLAGES de parametres.js, qui affiche la
 // carte par un relais (carteSolo, brancherSolo). Complète l'objet Parametres.
 
@@ -72,7 +73,7 @@ Object.assign(Parametres.interne, (() => {
         const existant = technicienExistant(valeurs);
         const technicienId = existant ? existant.id
           : await Equipe.creerTechnicien({ prenom: valeurs.prenom, nom: valeurs.nom, metier: valeurs.metier });
-        await ecrireParametres({ mode_solo: '1', solo_technicien_id: technicienId }, 'passage en mode Solo');
+        await ecrireParametres({ mode_solo: '1', solo_technicien_id: technicienId, cloture_une_etape: '1' }, 'passage en mode Solo');
       },
     });
     if (!fait) return;

@@ -203,11 +203,97 @@ Object.assign(Ordres, (() => {
     }, options);
   }
 
+  // ===========================================================================================
+  // 3 bis. Clôture en une étape (ARCHITECTURE.md §22.11, D132) : réglage cloture_une_etape
+  // ===========================================================================================
+
+  // Champs de la clôture technique saisis dans la fenêtre « Clore » (mêmes champs que les onglets
+  // Exécution et Compte rendu ; temps passé et pièce sortie sont écrits dans leurs tables).
+  const CHAMPS_CLOTURE = ['date_fin', 'arret_production', 'duree_arret_h', 'symptome_code', 'cause_code',
+    'remede_code', 'compte_rendu', 'astuce', 'remise_service'];
+  const ASTUCE_MAX = 500;                     // comme l'onglet Compte rendu (Wiki.SEUILS.astuceMax)
+
+  /** Vrai si « Clore » est proposé : réglage cloture_une_etape = 1 et profil responsable. */
+  function clotureUneEtape() {
+    return Ordres.interne.estResponsable() && texte(Donnees.parametre('cloture_une_etape', '0')) === '1';
+  }
+
+  // Contrôles faits AVANT toute écriture : réglage, passage possible, astuce, RG4 sur l'OT tel qu'il
+  // sera (champs saisis + temps passé ajouté). Lève une ErreurValidation listant tous les manques.
+  function verifierClore(ot, champs, heures) {
+    if (!clotureUneEtape()) throw ErreurValidation('La clôture en une étape n\'est pas activée (réglage cloture_une_etape, responsable).');
+    if (!Ordres.transitionsPossibles(ot).includes('Clôturé techniquement')) {
+      throw ErreurValidation('L\'OT ' + ot.id + ' est « ' + ot.statut + ' » : il ne peut pas être clôturé techniquement.');
+    }
+    const longueur = Array.from(champs.astuce || '').length;
+    if (longueur > ASTUCE_MAX) throw ErreurValidation('Astuce trop longue : ' + longueur + ' caractères, ' + ASTUCE_MAX + ' au plus.');
+    const temps = Ordres.interne.lignesDeLOt('ot_temps', ot.id).concat(heures > 0 ? [{ heures: String(heures) }] : []);
+    const manques = Ordres.verifierCloture(Object.assign({}, ot, champs), { temps });
+    if (manques.length) throw ErreurValidation('Clôture impossible, il manque : ' + manques.join(' ; ') + '.');
+  }
+
+  /**
+   * « Clore » (D132) : clôture technique puis administrative dans une seule écriture de
+   * ordres_travail, deux dates égales, deux lignes de journal, OT mis dans la file du wiki.
+   * valeurs : CHAMPS_CLOTURE, et facultatifs heures + technicien_id + date_temps (temps passé),
+   * article_id + quantite (pièce sortie par Magasin.sortir). Les règles de la clôture technique
+   * (RG4, stock RG6) s'appliquent : tout est contrôlé avant la première écriture, puis revérifié.
+   */
+  async function clore(ot, valeurs) {
+    await Donnees.rechargerTable('ordres_travail');
+    const actuel = ligneOt(Donnees.lignes('ordres_travail'), ot.id, true);
+    const champs = {};
+    CHAMPS_CLOTURE.forEach((nom) => { if (valeurs[nom] !== undefined) champs[nom] = texte(valeurs[nom]); });
+    const heures = Donnees.nombre(valeurs.heures) || 0;
+    const quantite = Donnees.nombre(valeurs.quantite) || 0;
+    if (texte(valeurs.heures) && !(heures > 0 && heures <= 24)) throw ErreurValidation('Temps passé : un nombre d\'heures entre 0 et 24 (ex. 1,5).');
+    if (heures > 0 && !texte(valeurs.technicien_id)) throw ErreurValidation('Temps passé : choisissez le technicien.');
+    if (texte(valeurs.article_id) && !(quantite > 0)) throw ErreurValidation('Pièce sortie : une quantité supérieure à 0.');
+    verifierClore(actuel, champs, heures);
+    const statutAttendu = actuel.statut;
+    if (texte(valeurs.article_id)) await Magasin.sortir(actuel.id, valeurs.article_id, quantite, texte(valeurs.commentaire_piece));
+    if (heures > 0) {
+      await modifierLieeAOt(actuel.id, 'ot_temps', (lignes, outils) => {
+        lignes.push({ id: outils.nouvelId(lignes), ot_id: actuel.id, technicien_id: valeurs.technicien_id,
+          date: texte(valeurs.date_temps) || texte(champs.date_fin).slice(0, 10) || outils.aujourdhui(), heures: String(heures) });
+      }, { action: 'temps passé sur ' + actuel.id });
+    }
+    const saisis = await Donnees.modifier('ordres_travail', (lignes, outils) => {
+      const ligne = ligneOt(lignes, actuel.id, true);
+      if (ligne.statut !== statutAttendu) {
+        throw ErreurValidation('L\'OT ' + actuel.id + ' est passé « ' + ligne.statut + ' » sur un autre poste. Actualisez puis recommencez.');
+      }
+      const changes = Object.keys(champs).filter((nom) => texte(ligne[nom]) !== champs[nom]);
+      changes.forEach((nom) => { ligne[nom] = champs[nom]; });
+      const technique = verifierPassage(ligne, 'Clôturé techniquement');
+      if (!technique.ok) throw ErreurValidation(technique.erreurs.join(' '));
+      const maintenant = outils.maintenant();          // une seule heure : les deux dates sont égales
+      ligne.date_cloture_tech = maintenant;
+      ligne.statut = 'Clôturé techniquement';
+      const administrative = verifierPassage(ligne, 'Clôturé administrativement');
+      if (!administrative.ok) throw ErreurValidation(administrative.erreurs.join(' '));
+      ligne.date_cloture_admin = maintenant;
+      ligne.statut = 'Clôturé administrativement';
+      return changes;
+    }, { journal: false });
+    // Les deux lignes habituelles (celles de deux changerStatut successifs), dans l'ordre, au même format :
+    // Indicateurs lit « statut A → B » après « — » (MOTIF_TRANSITION) ; aucun ajout au texte de l'action.
+    await Donnees.journaliser('ordres_travail', actuel.id, 'modification : ' + saisis.concat(['statut', 'date_cloture_tech']).join(', ')
+      + ' — statut ' + statutAttendu + ' → Clôturé techniquement');
+    await Donnees.journaliser('ordres_travail', actuel.id, 'modification : statut, date_cloture_admin'
+      + ' — statut Clôturé techniquement → Clôturé administrativement');
+    await mettreAJourGamme(actuel.id);                                       // RG5, comme changerStatut
+    if (typeof Wiki !== 'undefined') await Wiki.mettreEnFile([actuel.id], { annoncer: true });   // §20.5, D104
+    return 'Clôturé administrativement';
+  }
+
   // Outils prêtés aux fichiers suivants du module (usage interne).
   Object.assign(Ordres.interne, { modifierOt, modifierLieeAOt, journaliserHabilitation, changerAnomalie, lireAvertissementGamme });
 
   return {
     // écritures (ARCHITECTURE.md §10)
     creer, changerStatut, changerPriorite, creerOtLie,
+    // clôture en une étape (§22.11, D132)
+    clore, clotureUneEtape,
   };
 })());

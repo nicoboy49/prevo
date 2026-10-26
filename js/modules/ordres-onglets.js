@@ -691,8 +691,8 @@ Object.assign(Ordres, (() => {
     UI.$$('.table', panneau).forEach(etiqueterCellules);
   }
 
-  // Onglets affichés par la fiche (ordres-fiche.js) : usage interne au module.
-  Object.assign(Ordres.interne, { afficherPreparation, afficherExecution, afficherCompteRendu, afficherHistorique });
+  // Onglets affichés par la fiche (ordres-fiche.js) et aide de l'astuce (fenêtre « Clore ») : usage interne au module.
+  Object.assign(Ordres.interne, { afficherPreparation, afficherExecution, afficherCompteRendu, afficherHistorique, AIDE_ASTUCE });
 
   return {};
 })());

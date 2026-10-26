@@ -303,9 +303,10 @@ Object.assign(Ordres, (() => {
     const boutons = boutonsTransitions(ot, ['Préparé', 'Planifié', 'En cours', 'Clôturé techniquement', 'Clôturé administrativement', 'En attente', 'Annulé']);
     const lie = estVerrouille(ot) && estResponsable()
       ? UI.html`<button type="button" class="btn btn-primaire" id="ot-lie">${UI.icone('ajouter')}Créer un OT lié</button>` : '';
-    if (!boutons.length && !lie) return '';
+    const clore = boutonClore(ot);                                  // §22.11, D132 : réglage cloture_une_etape
+    if (!boutons.length && !lie && !clore) return '';
     return UI.html`<div class="carte ot-actions sans-impression"><div class="entete-carte"><h2>Actions</h2></div>
-      <div class="actions">${boutons}${lie}</div></div>`;
+      <div class="actions">${clore}${boutons}${lie}</div></div>`;
   }
 
   /** Affiche un message (refus, manques…) au-dessus des onglets et le fait voir. */
@@ -378,6 +379,7 @@ Object.assign(Ordres, (() => {
       if (evenement.target.closest('#ot-imprimer')) imprimerBon(ot.id);
       if (evenement.target.closest('#ot-priorite')) demanderPriorite(ot);
       if (evenement.target.closest('#ot-lie')) lancerOtLie(ot);
+      if (evenement.target.closest('#ot-clore')) demanderClore(ot);
       const attentePiece = evenement.target.closest('button[data-action="attente-piece"]');
       if (attentePiece) mettreEnAttentePiece(ot);
     });
@@ -540,6 +542,67 @@ Object.assign(Ordres, (() => {
     if (!id) return;
     UI.toast('OT lié ' + id + ' créé (reprise de ' + ot.id + ').', 'succes');
     App.naviguer('#/ot/' + encodeURIComponent(id));
+  }
+
+  // --- Clôture en une étape (ARCHITECTURE.md §22.11, D132) : « Clore », réglage cloture_une_etape ---
+
+  /** Bouton « Clore » : réglage actif, profil responsable, OT qui peut recevoir la clôture technique. */
+  function boutonClore(ot) {
+    return Ordres.clotureUneEtape() && transitionsPossibles(ot).includes('Clôturé techniquement')
+      ? UI.html`<button type="button" class="btn btn-primaire" id="ot-clore">${UI.icone('valider')}Clore</button>` : '';
+  }
+
+  // Champs de la fenêtre « Clore » : ceux des onglets Exécution et Compte rendu (mêmes libellés et
+  // aides), le temps passé et une pièce sortie du magasin (facultative, Magasin.sortir).
+  function champsClore(ot) {
+    const { lignesDeLOt, listeCodes, libelleArticle, nombre, AIDE_ASTUCE } = Ordres.interne;
+    const total = lignesDeLOt('ot_temps', ot.id).reduce((somme, ligne) => somme + nombre(ligne.heures), 0);
+    const technicien = App.technicienSolo() || ot.technicien_id || '';
+    const articles = Donnees.lignes('articles').filter((a) => texte(a.actif) !== '0')
+      .map((a) => ({ valeur: a.id, libelle: libelleArticle(a) + ' — stock ' + UI.nombreFr(Donnees.stockArticle(a.id)) }));
+    const fin = champOt('date_fin', texte(ot.date_fin) || Donnees.maintenant().slice(0, 16));
+    UI.$('input', fin).max = Donnees.maintenant().replace(' ', 'T');     // pas de date de fin dans le futur
+    const remise = champOt('remise_service', ot.remise_service, {
+      libelle: 'Équipement remis en service en sécurité (protections remises, consignation levée, production prévenue)',
+    });
+    if (texte((equipementDe(ot) || {}).habilitation_requise)) remise.appendChild(UI.element(UI.html`<p class="aide">${RAPPEL_CONSIGNATION}</p>`));
+    return [
+      fin,
+      champOt('arret_production', ot.arret_production, { libelle: 'Arrêt de production pendant l\'intervention' }),
+      champOt('duree_arret_h', ot.duree_arret_h),
+      UI.champ({ nom: 'heures', type: 'decimal', libelle: 'Temps passé à ajouter (heures)' }, '',
+        { aide: total > 0 ? 'Déjà saisi : ' + UI.heures(total) + '.' : 'Au moins un temps passé est exigé (ex. 1,5).' }),
+      champOt('technicien_id', technicien, { liste: listeTechniciens(technicien), libelle: 'Technicien du temps passé' }),
+      UI.champ({ nom: 'article_id', type: 'ref', libelle: 'Pièce sortie du magasin (facultatif)' }, '', { liste: articles }),
+      UI.champ({ nom: 'quantite', type: 'decimal', libelle: 'Quantité sortie' }, '1'),
+      champOt('symptome_code', ot.symptome_code, { liste: listeCodes('symptôme') }),
+      champOt('cause_code', ot.cause_code, { liste: listeCodes('cause') }),
+      champOt('remede_code', ot.remede_code, { liste: listeCodes('remède') }),
+      champOt('compte_rendu', ot.compte_rendu, {
+        aide: 'Ce qui a été constaté, la cause, ce qui a été fait (10 caractères au moins ; « RAS » refusé sur un correctif).',
+      }),
+      champOt('astuce', ot.astuce, { aide: AIDE_ASTUCE }),
+      remise,
+    ];
+  }
+
+  /** « Clore » : saisies de la fiche enregistrées, puis une seule fenêtre → Ordres.clore (technique + administrative). */
+  async function demanderClore(ot) {
+    viderMessage();
+    const sauvegarde = await enregistrerFormulairesModifies();
+    if (!sauvegarde.ok) return;
+    const actuel = Donnees.trouver('ordres_travail', ot.id) || ot;
+    const fait = await UI.fenetreAction({
+      titre: 'Clore ' + actuel.id, libelleValider: 'Clore et verrouiller', classe: 'ot-fenetre-clore',
+      introduction: UI.html`<p>Clôture technique puis administrative en une fois : l'OT sera verrouillé. Une reprise se fera par un nouvel OT lié.</p>`,
+      champs: champsClore(actuel),
+      verifier: () => [],
+      action: (valeurs, contenu) => Ordres.clore(actuel, UI.lireFormulaire(contenu.closest('form'))),
+    });
+    if (!fait) { if (sauvegarde.enregistres) await apresEnregistrement(); return; }
+    await apresEnregistrement();
+    const avertissementGamme = lireAvertissementGamme(actuel.id);
+    UI.toast(avertissementGamme || actuel.id + ' : clôturé techniquement et administrativement.', avertissementGamme ? 'attention' : 'succes');
   }
 
   /** Avertissement RG8 affichable (texte complet, avec le nom du technicien et l'équipement). */

@@ -60,6 +60,10 @@ const Parametres = (() => {
     { cle: 'solo_technicien_id', type: 'texte', defaut: '', horsFormulaire: true,
       libelle: 'Technicien « moi » du mode Solo',
       aide: 'Identifiant du technicien créé au passage en mode Solo ; il reste dans l\'équipe si vous quittez ce mode.' },
+    // Clôture en une étape (§22.11, D132) : posée à 1 par « Passer en mode Solo », réglable par le responsable hors Solo.
+    { cle: 'cloture_une_etape', type: 'booleen', valeurs: ['0', '1'], defaut: '0', large: true, section: 'Ordres de travail',
+      libelle: 'Clôture en une étape (bouton « Clore » pour le responsable)',
+      aide: 'Une seule fenêtre fait la clôture technique (mêmes champs et contrôles) puis la clôture administrative.' },
     { cle: 'rafraichissement_s', type: 'entier', libelle: 'Rafraîchissement (secondes)', defaut: '20', min: 2, max: 3600,
       section: 'Échanges entre postes', aide: 'Fréquence de lecture des changements faits sur les autres postes.' },
   ];
