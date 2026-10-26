@@ -31,6 +31,7 @@ from pathlib import Path
 from commun import RACINE
 
 SCRIPT_RELEASE = RACINE / "outils" / "construire_release.py"
+BASH_GIT = Path(r"C:\Program Files\Git\bin\bash.exe")
 
 
 def charger(chemin, nom):
@@ -41,6 +42,14 @@ def charger(chemin, nom):
 
 
 release = charger(SCRIPT_RELEASE, "construire_release_lot7")
+
+
+def bash_utilisable():
+    """Git Bash sous Windows, comme tests/test_lanceurs.py (le « bash » de System32 est celui de WSL, souvent sans
+    distribution : il échoue quand la suite est lancée hors de Git Bash) ; bash ailleurs ; None s'il manque."""
+    if os.name == "nt":
+        return str(BASH_GIT) if BASH_GIT.exists() else None
+    return shutil.which("bash")
 
 
 def faux_paquet_python():
@@ -161,9 +170,9 @@ class TestLanceurs(unittest.TestCase):
                          (RACINE / "Lancer_GMAO.bat").read_bytes().count(b"\r\n"), "fins de ligne CRLF")
 
     def test_lancer_sh_refuse_3_10_accepte_3_11(self):
-        bash = shutil.which("bash")
+        bash = bash_utilisable()
         if not bash:
-            self.skipTest("bash introuvable")
+            self.skipTest("bash introuvable (Git Bash sous Windows)")
         for version, attendu_code, attendu_texte in (("3.10", 1, "Python 3.11 ou plus récent est nécessaire"),
                                                      ("3.11", 0, "LANCE serveur.py --sans-navigateur")):
             with self.subTest(version=version), tempfile.TemporaryDirectory(prefix="prevo-lancer-") as dossier:
