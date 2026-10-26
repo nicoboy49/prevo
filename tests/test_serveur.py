@@ -658,7 +658,8 @@ class TestApiServeur(CasAvecServeur):
             with self.subTest(demande=demande):
                 reponse = self.requete('POST', '/api/restauration', json.dumps(demande).encode())
                 self.assertEqual(reponse.statut, statut)
-        nom = self.requete('POST', '/api/sauvegarde', b'').json()['sauvegarde']
+        # Sauvegarde à motif : la manuelle est limitée à une par minute (T175, D133) et ce serveur sert toute la classe.
+        nom = self.requete('POST', '/api/sauvegarde', b'{"motif": "avant-import"}').json()['sauvegarde']
         demande = {'sauvegarde': nom, 'tables': ['../serveur']}
         reponse = self.requete('POST', '/api/restauration', json.dumps(demande).encode())
         self.assertEqual(reponse.statut, 400)

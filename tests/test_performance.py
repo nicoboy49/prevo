@@ -619,7 +619,10 @@ class TestPerformance(CasNavigateur):
         self.assertLess(statistics.median(mesures_page), BUDGET_PAGE_WIKI_MS)
         self.assertLess(max(durees), BUDGET_RECHERCHE_WIKI_MS, "recherche (index compris)")
         self.assertTrue(all(m["trouves"] > 0 for m in mesures_recherche), mesures_recherche)
-        self.assertEqual([u for u in requetes if "/api/" in u and "/api/ping" not in u and "/api/versions" not in u], [])
+        # /api/info : c'est l'accueil du responsable, affiché entre deux mesures, qui lit l'état de la copie externe des
+        # sauvegardes (lot 7, T175) ; la page wiki et la recherche, elles, ne font aucun appel.
+        self.assertEqual([u for u in requetes if "/api/" in u and "/api/ping" not in u and "/api/versions" not in u
+                          and "/api/info" not in u], [])
 
     def test_wiki_requete_d_ingestion_construite_sous_1_seconde_sans_appel_reseau(self):
         """Lot 6 (D101) : une requête d'ingestion — Wiki.donneesIngestion(otId) (état proposé recalculé, pages

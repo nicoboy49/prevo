@@ -1499,6 +1499,10 @@ class Configuration:
         self.horloge = time.time
         self.dormir = time.sleep
         self.echecs = CompteursEchecs()
+        # Lot 7 (D133, §22.11) : jour de la dernière copie externe lancée par une écriture après 2 h du matin, et fil
+        # de la dernière copie lancée (les tests l'attendent).
+        self.copie_externe_jour = None
+        self.fil_copie_externe = None
         # Dossiers jamais servis en statique : le dossier de données choisi et donnees/
         # à côté de serveur.py (même si --donnees pointe ailleurs).
         self.dossiers_interdits_statique = [
@@ -2091,6 +2095,36 @@ def est_utf8(octets):
 # Sauvegardes
 # ---------------------------------------------------------------------------
 
+# Lot 7 (D133, ARCHITECTURE.md §22.11) : une sauvegarde manuelle par minute au plus (429), les 60 dernières gardées ;
+# copie externe de la sauvegarde quotidienne (clé « copie_sauvegardes ») au démarrage et à la première écriture après
+# 2 h du matin, dans un fil à part, les 30 dernières gardées ; « Tester une sauvegarde » relit chaque CSV sans rien
+# écrire. Dates et heures des sauvegardes : horloge de la configuration (config.horloge, injectable pour les tests).
+MOTIF_NOM_QUOTIDIENNE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', re.ASCII)
+MOTIF_NOM_MANUELLE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{6}', re.ASCII)
+DELAI_ENTRE_MANUELLES_S = 60
+MANUELLES_GARDEES = 60
+COPIES_EXTERNES_GARDEES = 30
+HEURE_COPIE_EXTERNE = 2                 # la copie de la nuit part à la première écriture après 2 h du matin
+ESSAIS_NOM_HORODATE = 25                # nom pris : la seconde suivante est attendue (5 s au plus)
+NOM_ETAT_COPIE_EXTERNE = 'copie-externe.json'
+PREFIXE_COPIE_EN_COURS = '.prevo-copie-en-cours-'
+MESSAGE_PLAFOND_MANUELLES = 'Une sauvegarde manuelle par minute au plus : réessayez dans %d s.'
+# Colonnes ajoutées par un format après le premier (depuisVersion de js/schema.js), toujours en fin de table : une
+# sauvegarde faite avant ce format ne les a pas, sans être abîmée (« Tester une sauvegarde »). RENVOI CROISÉ : cohérence
+# avec js/schema.js vérifiée par tests/test_sauvegardes_lot7.py.
+COLONNES_DES_FORMATS_SUIVANTS = {
+    'equipements': ('valeur_remplacement',),
+    'demandes': ('symptome_code', 'ot_origine_id'),
+    'ordres_travail': ('anomalie_constatee', 'astuce'),
+}
+VERROU_COPIE_EXTERNE = threading.Lock()     # jamais deux copies externes à la fois
+
+
+def instant_local(config):
+    """Heure locale du serveur (datetime), lue sur config.horloge : nom du jour, nom horodaté, 2 h du matin."""
+    return datetime.datetime.fromtimestamp(maintenant_s(config))
+
+
 def tables_presentes(dossier):
     """Tables (dans l'ordre du schéma) dont le CSV existe dans « dossier »."""
     return [table for table in TABLES if os.path.isfile(os.path.join(dossier, table + '.csv'))]
@@ -2131,29 +2165,82 @@ def sauvegarde_complete(dossier):
 
 
 def faire_sauvegarde_quotidienne(config):
-    """Avant la première écriture CSV du jour : copie dans sauvegardes/AAAA-MM-JJ/.
-
-    Rien n'est fait si la sauvegarde du jour existe déjà ou s'il n'y a encore aucun CSV.
-    À appeler en tenant VERROU_ECRITURE.
+    """Avant chaque écriture CSV : copie dans sauvegardes/AAAA-MM-JJ/ si la sauvegarde du jour manque (rien s'il n'y
+    a encore aucun CSV), puis, à la première écriture après 2 h du matin, la copie externe du jour, lancée dans son
+    propre fil (D133). Le jour est celui de l'horloge du serveur. À appeler en tenant VERROU_ECRITURE.
     """
-    nom_du_jour = datetime.date.today().strftime('%Y-%m-%d')
+    nom_du_jour = instant_local(config).strftime('%Y-%m-%d')
     dossier_du_jour = os.path.join(config.dossier_sauvegardes, nom_du_jour)
-    if sauvegarde_complete(dossier_du_jour):
-        return
-    if os.path.isdir(dossier_du_jour):          # sauvegarde du jour laissée incomplète : on la refait
-        shutil.rmtree(dossier_du_jour, ignore_errors=True)
-    if not tables_presentes(config.dossier_donnees):
-        return
-    copier_tables_dans_sauvegarde(config, nom_du_jour)
+    if not sauvegarde_complete(dossier_du_jour):
+        if os.path.isdir(dossier_du_jour):      # sauvegarde du jour laissée incomplète : on la refait
+            shutil.rmtree(dossier_du_jour, ignore_errors=True)
+        if tables_presentes(config.dossier_donnees):
+            copier_tables_dans_sauvegarde(config, nom_du_jour)
+    lancer_copie_externe_si_due(config)
 
 
 def nouveau_nom_horodate(config, suffixe=''):
-    """« AAAA-MM-JJ_HHMMSS » + suffixe, en attendant la seconde suivante si le nom est pris."""
-    while True:
-        nom = datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S') + suffixe
+    """« AAAA-MM-JJ_HHMMSS » (horloge du serveur) + suffixe, en attendant la seconde suivante si le nom est pris ;
+    503 si l'horloge n'avance plus (5 s sans nom libre)."""
+    for _ in range(ESSAIS_NOM_HORODATE):
+        nom = instant_local(config).strftime('%Y-%m-%d_%H%M%S') + suffixe
         if not os.path.exists(os.path.join(config.dossier_sauvegardes, nom)):
             return nom
         time.sleep(0.2)
+    raise ErreurHttp(503, 'Sauvegarde impossible : aucun nom horodaté libre (l\'horloge du serveur n\'avance plus ?).')
+
+
+def sauvegardes_manuelles(config):
+    """Noms des sauvegardes manuelles (AAAA-MM-JJ_HHMMSS, sans suffixe), de la plus ancienne à la plus récente."""
+    try:
+        noms = os.listdir(config.dossier_sauvegardes)
+    except OSError:
+        return []
+    return sorted(nom for nom in noms if MOTIF_NOM_MANUELLE.fullmatch(nom)
+                  and os.path.isdir(os.path.join(config.dossier_sauvegardes, nom)))
+
+
+def instant_du_nom(nom):
+    """« AAAA-MM-JJ_HHMMSS… » (heure locale) → secondes ; None si le début du nom n'est pas une date et une heure."""
+    try:
+        return datetime.datetime.strptime(nom[:17], '%Y-%m-%d_%H%M%S').timestamp()
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
+def verifier_plafond_manuelles(config):
+    """Une sauvegarde manuelle par minute au plus (D133) : 429 avec Retry-After quand la dernière date de moins de
+    60 s. La minute se lit sur le nom horodaté de la dernière sauvegarde manuelle, ce qui tient après un redémarrage ;
+    un nom « dans le futur » (horloge reculée, passage à l'heure d'hiver) ne bloque pas. À appeler en tenant
+    VERROU_ECRITURE, avant de créer la sauvegarde."""
+    manuelles = sauvegardes_manuelles(config)
+    instant = instant_du_nom(manuelles[-1]) if manuelles else None
+    if instant is None:
+        return
+    ecoule = maintenant_s(config) - instant
+    if 0 <= ecoule < DELAI_ENTRE_MANUELLES_S:
+        secondes = max(1, int(-(-(DELAI_ENTRE_MANUELLES_S - ecoule) // 1)))
+        erreur = ErreurHttp(429, MESSAGE_PLAFOND_MANUELLES % secondes, attente_secondes=secondes)
+        erreur.entetes = {'Retry-After': str(secondes)}
+        raise erreur
+
+
+def est_un_lien(chemin):
+    """Lien symbolique ou jonction Windows : jamais compté ni supprimé par une purge."""
+    jonction = getattr(os.path, 'isjunction', None)         # Python 3.12 et suivants
+    return os.path.islink(chemin) or bool(jonction and jonction(chemin))
+
+
+def purger_sauvegardes_manuelles(config):
+    """Au-delà de 60 sauvegardes manuelles, supprime les plus anciennes (D133) ; les quotidiennes et les copies de
+    sécurité « …_avant-… » ne sont ni comptées ni touchées. Rend les noms supprimés. À appeler en tenant
+    VERROU_ECRITURE, après chaque sauvegarde manuelle."""
+    manuelles = [nom for nom in sauvegardes_manuelles(config)
+                 if not est_un_lien(os.path.join(config.dossier_sauvegardes, nom))]
+    anciennes = manuelles[:max(0, len(manuelles) - MANUELLES_GARDEES)]
+    for nom in anciennes:
+        shutil.rmtree(os.path.join(config.dossier_sauvegardes, nom), ignore_errors=True)
+    return anciennes
 
 
 def lister_sauvegardes(config):
@@ -2205,6 +2292,275 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
                 restaurees=restaurees, copie_securite=copie_securite)
         restaurees.append(table)
     return {'restaurees': restaurees, 'copie_securite': copie_securite}
+
+
+# --- « Tester une sauvegarde » (D133) : relire chaque CSV, compter les lignes, ne rien écrire ----------------------
+
+MOTIF_PREMIERE_LIGNE_NON_VIDE = re.compile(r'^[^\r\n]*\S[^\r\n]*', re.MULTILINE)
+
+
+def lire_csv_tolerant(octets):
+    """Lecture tolérante d'un CSV, comme Donnees.analyser (§3.3) : BOM retiré, UTF-8 sinon Windows-1252, « ; » (ou
+    « , » si l'en-tête n'a aucun « ; »), lignes entièrement vides ignorées. Rend (en-tête, lignes de données) ;
+    csv.Error si le fichier ne se découpe pas."""
+    if octets.startswith(BOM_UTF8):
+        octets = octets[len(BOM_UTF8):]
+    try:
+        texte = octets.decode('utf-8')
+    except UnicodeDecodeError:
+        texte = octets.decode('cp1252', errors='replace')
+    trouvee = MOTIF_PREMIERE_LIGNE_NON_VIDE.search(texte)
+    entete = trouvee.group(0) if trouvee else ''
+    separateur = ',' if ';' not in entete and ',' in entete else ';'
+    lignes = [ligne for ligne in csv.reader(io.StringIO(texte, newline=''), delimiter=separateur)
+              if any(cellule.strip() for cellule in ligne)]
+    return (lignes[0], lignes[1:]) if lignes else ([], [])
+
+
+def cle_entete(nom):
+    """Nom de colonne → clé de comparaison : casse, accents, espaces et « _ » ignorés (cleEntete de js/donnees.js)."""
+    return re.sub(r'[\s_]+', '', sans_accents(nom).lower())
+
+
+def tester_table_de_sauvegarde(table, chemin):
+    """{"table", "lignes", "erreur"} d'un CSV de sauvegarde : lignes de données comptées (None si illisible) ; erreur
+    (None si tout va bien) quand le fichier est illisible ou vide, ou qu'une colonne du schéma manque à l'en-tête,
+    hors celles d'un format plus récent que la sauvegarde (COLONNES_DES_FORMATS_SUIVANTS)."""
+    resultat = {'table': table, 'lignes': None, 'erreur': None}
+    try:
+        with open(chemin, 'rb') as fichier:
+            entete, lignes = lire_csv_tolerant(fichier.read())
+    except OSError as erreur:
+        resultat['erreur'] = 'Fichier illisible (%s).' % (erreur.strerror or erreur.__class__.__name__)
+        return resultat
+    except csv.Error as erreur:
+        resultat['erreur'] = 'Fichier illisible (%s).' % erreur
+        return resultat
+    if not entete:
+        resultat['erreur'] = 'Fichier vide : la ligne d\'en-tête manque.'
+        return resultat
+    resultat['lignes'] = len(lignes)
+    presentes = {cle_entete(nom) for nom in entete}
+    manquantes = [colonne for colonne in COLONNES_PAR_TABLE[table] if cle_entete(colonne) not in presentes]
+    if not set(manquantes) <= set(COLONNES_DES_FORMATS_SUIVANTS.get(table, ())):
+        resultat['erreur'] = ('Colonne%s du schéma absente%s de l\'en-tête : %s.'
+                              % ('s' if len(manquantes) > 1 else '', 's' if len(manquantes) > 1 else '',
+                                 ', '.join(manquantes)))
+    return resultat
+
+
+def tester_sauvegarde(config, nom):
+    """POST /api/sauvegarde/tester : {"nom", "ok", "tables": [{"table", "lignes", "erreur"}]} pour chaque CSV de la
+    sauvegarde, dans l'ordre du schéma ; ok si elle contient au moins une table et qu'aucune n'a d'erreur. N'écrit
+    rien. 400 nom refusé, 404 sauvegarde introuvable ou incomplète."""
+    verifier_nom_sauvegarde(nom)
+    dossier = chemin_sous(config.dossier_sauvegardes, nom)
+    if not sauvegarde_complete(dossier):
+        raise ErreurHttp(404, 'Sauvegarde introuvable ou incomplète : %s.' % nom)
+    tables = [tester_table_de_sauvegarde(table, os.path.join(dossier, table + '.csv'))
+              for table in tables_presentes(dossier)]
+    return {'nom': nom, 'ok': bool(tables) and all(table['erreur'] is None for table in tables), 'tables': tables}
+
+
+# --- Copie externe (D133) : la sauvegarde du jour copiée vers une clé USB, un NAS, un dossier synchronisé ---------
+
+class ErreurCopieExterne(Exception):
+    """Copie externe impossible. Le message, en français, ne cite que le nom du dossier : /api/info le montre aux
+    autres postes, jamais le chemin complet du disque."""
+
+
+def dossier_copie_externe(config):
+    """Chemin absolu du dossier de copie (clé « copie_sauvegardes » ; relatif : au dossier de Prévo), '' sans copie."""
+    reglage = (config.reglages.get('copie_sauvegardes') or '').strip()
+    if not reglage:
+        return ''
+    return os.path.abspath(os.path.join(DOSSIER_APPLICATION, os.path.expanduser(reglage)))
+
+
+def nom_du_dossier(chemin):
+    """Dernier morceau d'un chemin : « Sauvegardes » pour …\\Sauvegardes, « E: » pour la racine E:\\."""
+    morceaux = [morceau for morceau in re.split(r'[\\/]+', chemin) if morceau]
+    return morceaux[-1] if morceaux else chemin
+
+
+def chemin_etat_copie_externe(config):
+    return os.path.join(config.dossier_donnees, NOM_ETAT_COPIE_EXTERNE)
+
+
+def lire_etat_copie_externe(config):
+    """donnees/copie-externe.json : {"derniere_reussie", "sauvegarde_copiee", "erreur"} ; {} s'il manque ou est
+    illisible (ce n'est qu'un rappel pour l'accueil du responsable, gardé d'un démarrage à l'autre)."""
+    try:
+        with open(chemin_etat_copie_externe(config), 'rb') as fichier:
+            etat = json.loads(fichier.read().decode('utf-8'))
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+        return {}
+    return etat if isinstance(etat, dict) else {}
+
+
+def ecrire_etat_copie_externe(config, etat):
+    try:
+        ecrire_atomique(chemin_etat_copie_externe(config),
+                        (json.dumps(etat, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+    except (OSError, ErreurHttp) as erreur:
+        afficher('Copie externe des sauvegardes : état non enregistré (%s).' % getattr(erreur, 'message', erreur))
+
+
+def noter_au_journal_serveur(config, texte):
+    """Console, et donnees/journal-serveur.log même quand le serveur a une console : un échec de la copie externe doit
+    pouvoir se relire après coup (D133)."""
+    afficher(texte)
+    if JOURNAL_SERVEUR is None:
+        JournalServeur(os.path.join(config.dossier_donnees, 'journal-serveur.log')).ecrire(texte)
+
+
+def est_une_date(nom):
+    """Vrai pour un texte « AAAA-MM-JJ » qui est une vraie date."""
+    if not isinstance(nom, str) or not MOTIF_NOM_QUOTIDIENNE.fullmatch(nom):
+        return False
+    try:
+        datetime.datetime.strptime(nom, '%Y-%m-%d')
+    except ValueError:
+        return False
+    return True
+
+
+def derniere_sauvegarde_quotidienne(config):
+    """Nom (AAAA-MM-JJ) de la sauvegarde quotidienne complète la plus récente, ou None."""
+    try:
+        noms = os.listdir(config.dossier_sauvegardes)
+    except OSError:
+        return None
+    completes = [nom for nom in noms if MOTIF_NOM_QUOTIDIENNE.fullmatch(nom)
+                 and sauvegarde_complete(os.path.join(config.dossier_sauvegardes, nom))]
+    return max(completes) if completes else None
+
+
+def ignorer_dans_la_copie(dossier, noms):
+    """Pour shutil.copytree : jamais sessions.json (§22.3), ni un fichier caché (marque, fichier temporaire)."""
+    return [nom for nom in noms if nom in FICHIERS_ACCES_NON_SAUVEGARDES or nom.startswith('.')]
+
+
+def copier_vers_l_exterieur(config, cible):
+    """Copie la sauvegarde quotidienne la plus récente (acces/ compris, sans sessions.json) vers cible/AAAA-MM-JJ/, par
+    un dossier temporaire renommé à la fin ; rien si cette copie existe déjà. Rend le nom de la sauvegarde présente
+    dans la copie, ou None s'il n'y a encore aucune sauvegarde quotidienne. ErreurCopieExterne sinon."""
+    nom_cible = nom_du_dossier(cible)
+    if est_sous_dossier(os.path.realpath(cible), config.dossier_donnees):
+        raise ErreurCopieExterne('Le dossier de copie « %s » est dans le dossier des données de Prévo : choisissez une '
+                                 'clé USB, un NAS ou un dossier synchronisé.' % nom_cible)
+    if not os.path.isdir(cible):
+        raise ErreurCopieExterne('Dossier de copie « %s » introuvable (clé USB absente ou partage réseau '
+                                 'injoignable ?).' % nom_cible)
+    nom = derniere_sauvegarde_quotidienne(config)
+    if nom is None or os.path.isdir(os.path.join(cible, nom)):
+        return nom
+    temporaire = None
+    try:
+        temporaire = tempfile.mkdtemp(prefix=PREFIXE_COPIE_EN_COURS, dir=cible)
+        shutil.copytree(os.path.join(config.dossier_sauvegardes, nom), temporaire, ignore=ignorer_dans_la_copie,
+                        dirs_exist_ok=True)
+        os.rename(temporaire, os.path.join(cible, nom))
+    except shutil.Error as erreur:
+        raise ErreurCopieExterne('Copie vers « %s » incomplète : %d fichier(s) non copié(s) (disque plein ou fichier '
+                                 'verrouillé ?).' % (nom_cible, len(erreur.args[0]) if erreur.args else 0))
+    except OSError as erreur:
+        raise ErreurCopieExterne('Copie vers « %s » impossible : %s.'
+                                 % (nom_cible, erreur.strerror or erreur.__class__.__name__))
+    finally:
+        if temporaire and os.path.isdir(temporaire):
+            shutil.rmtree(temporaire, ignore_errors=True)
+    return nom
+
+
+def purger_copies_externes(cible):
+    """Garde les 30 copies les plus récentes. Seuls les dossiers dont le nom est une date AAAA-MM-JJ sont comptés et
+    supprimés : jamais un autre fichier ou dossier du dossier choisi par l'utilisateur. Rend les noms supprimés."""
+    copies = sorted(nom for nom in os.listdir(cible) if est_une_date(nom)
+                    and os.path.isdir(os.path.join(cible, nom)) and not est_un_lien(os.path.join(cible, nom)))
+    anciennes = copies[:max(0, len(copies) - COPIES_EXTERNES_GARDEES)]
+    for nom in anciennes:
+        shutil.rmtree(os.path.join(cible, nom))
+    return anciennes
+
+
+def faire_copie_externe(config):
+    """Une copie externe, dans le fil appelant. Rend l'état écrit dans donnees/copie-externe.json, ou None si aucun
+    dossier n'est réglé ou qu'une copie est déjà en cours (jamais deux à la fois). Un échec est noté dans l'état, sur
+    la console et dans journal-serveur.log, jamais levé ; une copie réussie efface l'erreur."""
+    cible = dossier_copie_externe(config)
+    if not cible or not VERROU_COPIE_EXTERNE.acquire(blocking=False):
+        return None
+    try:
+        etat = lire_etat_copie_externe(config)
+        try:
+            nom = copier_vers_l_exterieur(config, cible)
+        except ErreurCopieExterne as erreur:
+            etat['erreur'] = str(erreur)
+            noter_au_journal_serveur(config, 'Copie externe des sauvegardes impossible vers %r : %s' % (cible, erreur))
+        else:
+            etat['erreur'] = None
+            if nom is not None:
+                etat['derniere_reussie'] = instant_local(config).strftime('%Y-%m-%d')
+                etat['sauvegarde_copiee'] = nom
+                afficher('Copie externe des sauvegardes : sauvegarde du %s à jour dans %r.' % (nom, cible))
+                try:
+                    purger_copies_externes(cible)
+                except OSError as erreur:
+                    noter_au_journal_serveur(config, 'Copie externe des sauvegardes : ancienne copie non supprimée '
+                                                     'dans %r (%s).' % (cible, erreur.strerror or erreur))
+        ecrire_etat_copie_externe(config, etat)
+        return etat
+    finally:
+        VERROU_COPIE_EXTERNE.release()
+
+
+def lancer_copie_externe(config):
+    """Lance faire_copie_externe dans un fil à part : une clé USB lente ou un partage réseau ne retient ni le démarrage
+    ni l'écriture. None si aucun dossier n'est réglé ou qu'une copie est en cours. Le fil est gardé dans
+    config.fil_copie_externe (les tests l'attendent)."""
+    if not dossier_copie_externe(config) or VERROU_COPIE_EXTERNE.locked():
+        return None
+    fil = threading.Thread(target=faire_copie_externe, args=(config,), name='copie-externe', daemon=True)
+    config.fil_copie_externe = fil
+    fil.start()
+    return fil
+
+
+def lancer_copie_externe_si_due(config):
+    """Après la sauvegarde du jour, à chaque écriture CSV : la première écriture après 2 h du matin lance la copie
+    externe du jour (une fois par jour ; à l'écriture suivante si une copie était déjà en cours)."""
+    if not dossier_copie_externe(config):
+        return None
+    instant = instant_local(config)
+    jour = instant.strftime('%Y-%m-%d')
+    if instant.hour < HEURE_COPIE_EXTERNE or config.copie_externe_jour == jour:
+        return None
+    fil = lancer_copie_externe(config)
+    if fil is not None:
+        config.copie_externe_jour = jour
+    return fil
+
+
+def etat_copie_externe_public(config):
+    """« copie_externe » de GET /api/info : None sans dossier réglé ; sinon {"derniere_reussie": "AAAA-MM-JJ" | None,
+    "jours_sans_copie": N | None, "erreur": "…" | None}. jours_sans_copie compte les jours depuis la dernière copie
+    réussie quand la dernière tentative a échoué ou qu'une sauvegarde quotidienne plus récente attend sa copie ; 0
+    quand la copie est à jour (ou en cours) ; None sans aucune copie réussie. Jamais un chemin complet du disque."""
+    if not dossier_copie_externe(config):
+        return None
+    etat = lire_etat_copie_externe(config)
+    derniere = etat.get('derniere_reussie') if est_une_date(etat.get('derniere_reussie')) else None
+    erreur = etat.get('erreur') if isinstance(etat.get('erreur'), str) else None
+    jours = None
+    if derniere is not None:
+        copiee = etat.get('sauvegarde_copiee') if isinstance(etat.get('sauvegarde_copiee'), str) else ''
+        en_attente = (derniere_sauvegarde_quotidienne(config) or '') > copiee and not VERROU_COPIE_EXTERNE.locked()
+        jours = 0
+        if erreur or en_attente:
+            depuis = datetime.datetime.strptime(derniere, '%Y-%m-%d').date()
+            jours = max(0, (instant_local(config).date() - depuis).days)
+    return {'derniere_reussie': derniere, 'jours_sans_copie': jours, 'erreur': erreur}
 
 
 # ---------------------------------------------------------------------------
@@ -2352,6 +2708,7 @@ ROUTES_API = {
     ('GET', 'documents/<nom>'): 'api_document_lire',
     ('PUT', 'documents/<nom>'): 'api_document_ecrire',
     ('POST', 'sauvegarde'): 'api_sauvegarde',
+    ('POST', 'sauvegarde/tester'): 'api_sauvegarde_tester',
     ('GET', 'sauvegardes'): 'api_sauvegardes',
     ('POST', 'restauration'): 'api_restauration',
     ('POST', 'ia'): 'api_ia',
@@ -2565,9 +2922,11 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                 'version': VERSION_APPLICATION, 'api': VERSION_API})
 
     def api_info(self, segment, corps):
+        """GET /api/info : port, adresses, et l'état de la copie externe des sauvegardes (D133 ; None sans dossier)."""
         self.envoyer_json(200, {'port': self.config.port,
                                 'adresse_locale': self.config.adresse_locale(),
-                                'adresses_reseau': self.config.adresses_reseau()})
+                                'adresses_reseau': self.config.adresses_reseau(),
+                                'copie_externe': etat_copie_externe_public(self.config)})
 
     def api_session(self, segment, corps):
         """GET /api/session : comptes exigés ou non, et l'identité de la session (jamais le jeton)."""
@@ -2709,14 +3068,26 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
 
     def api_sauvegarde(self, segment, corps):
         """Sauvegarde manuelle (corps vide) ou automatique avec un motif de la liste fermée
-        (corps {"motif": "avant-format-v2"} → nom « AAAA-MM-JJ_HHMMSS_avant-format-v2 »)."""
+        (corps {"motif": "avant-format-v2"} → nom « AAAA-MM-JJ_HHMMSS_avant-format-v2 »).
+        Manuelle (D133) : une par minute au plus (429 et Retry-After), les 60 dernières gardées ; une sauvegarde à
+        motif n'est ni limitée ni comptée."""
         motif = lire_motif_sauvegarde(corps)            # 400 si motif refusé, avant toute écriture
         suffixe = '_' + motif if motif else ''
         with VERROU_ECRITURE:
+            if not motif:
+                verifier_plafond_manuelles(self.config)
             nom = nouveau_nom_horodate(self.config, suffixe)
             verifier_nom_sauvegarde(nom)                # sécurité : le nom reste dans les règles
             copier_tables_dans_sauvegarde(self.config, nom)
+            if not motif:
+                purger_sauvegardes_manuelles(self.config)
         self.envoyer_json(200, {'sauvegarde': nom})
+
+    def api_sauvegarde_tester(self, segment, corps):
+        """POST /api/sauvegarde/tester {"nom"} (D133) : relit chaque CSV de la sauvegarde et compte ses lignes, sans
+        rien écrire ; 400 corps ou nom refusé, 404 sauvegarde introuvable ou incomplète."""
+        demande = lire_objet_json(corps)
+        self.envoyer_json(200, tester_sauvegarde(self.config, demande.get('nom')))
 
     def api_sauvegardes(self, segment, corps):
         self.envoyer_json(200, {'sauvegardes': lister_sauvegardes(self.config)})
@@ -2907,6 +3278,9 @@ def afficher_accueil(config, port_demande, avertissements=()):
     else:
         afficher('  Écoute           : le réseau (%s), comptes exigés.' % config.ecoute)
     afficher('  Assistant IA     : %s' % resume_ia(config))
+    if dossier_copie_externe(config):
+        afficher('  Copie externe    : %s (chaque nuit, %d copies gardées)'
+                 % (dossier_copie_externe(config), COPIES_EXTERNES_GARDEES))
     for avertissement in avertissements:
         afficher('  ' + avertissement)
     afficher('  Ctrl+C pour arrêter.')
@@ -3019,6 +3393,7 @@ def main(arguments=None):
         config.contexte_ssl = creer_contexte_ssl(reglages['certificat'], reglages['cle'])
     serveur, config.port = demarrer_serveur(reglages['port_http'], config)
     afficher_accueil(config, reglages['port_http'], avertissements)
+    lancer_copie_externe(config)        # D133 : copie externe au démarrage, dans son propre fil
     if not options.sans_navigateur:
         webbrowser.open(config.adresse_locale())
     try:

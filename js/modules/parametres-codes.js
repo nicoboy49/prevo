@@ -1,5 +1,5 @@
 'use strict';
-// Parametres (2/2) — carte « Codes de défaillance » de l'écran Paramètres (ARCHITECTURE.md §15.11 ;
+// Parametres (2/4) — carte « Codes de défaillance » de l'écran Paramètres (ARCHITECTURE.md §15.11 ;
 // brief §6 « codes_defaillance », §9 E12) : liste par famille (symptôme, cause, remède), ajout d'un
 // code, modification d'un libellé. Ni désactivation ni suppression : la table n'a pas de champ
 // « actif » et les OT anciens citent leurs codes (corriger un libellé suffit).

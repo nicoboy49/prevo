@@ -1,5 +1,5 @@
 'use strict';
-// Parametres (3/3) — carte « Mode Solo » de l'écran Paramètres (ARCHITECTURE.md §22.11 ; CDC D132).
+// Parametres (3/4) — carte « Mode Solo » de l'écran Paramètres (ARCHITECTURE.md §22.11 ; CDC D132).
 // Le mode Solo est le profil Responsable avec le réglage mode_solo = 1 de parametres.csv, pas un
 // quatrième profil (App.modeSolo(), App.technicienSolo() dans js/app.js).
 //   « Passer en mode Solo » : prénom, nom, métier (facultatif) → technicien « moi » créé par les

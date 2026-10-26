@@ -58,8 +58,9 @@ tests/                     tests automatisés (unittest + Playwright) ; tests/fi
 `ia-prompts.js`, `ia-encadre.js`, `dictee.js`, `poste.js` juste après `causes-frequentes.js`, §17.1 ;
 le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-codes.js`, §18.1, et
 `accueil-bento.js` juste après `accueil.js`, §19 ; le lot 7 insère `aide-ecrans-textes.js`, `aide-ecrans.js` et
-`acces-textes.js` juste après `mise-a-jour.js` (§23, §22.2), `ia-serveur.js` juste après `ia-encadre.js` (§22.12) et
-`parametres-solo.js` juste après `parametres-codes.js` (§22.11)), `js/app.js` (en dernier).
+`acces-textes.js` juste après `mise-a-jour.js` (§23, §22.2), `ia-serveur.js` juste après `ia-encadre.js` (§22.12),
+`parametres-solo.js` juste après `parametres-codes.js` et `parametres-sauvegardes.js` juste après `parametres-solo.js`
+(§22.11)), `js/app.js` (en dernier).
 `js/demo-donnees.js` n'est **pas** chargé au démarrage : `App` l'injecte (balise `<script>`
 créée dynamiquement, compatible `file://`) quand on choisit la démo ou la copie du jeu de démo.
 ECharts (`js/lib/echarts.min.js`, version 5.5.1) n'est pas non plus chargé au démarrage :
@@ -354,7 +355,9 @@ await sauvegarder(motif?)             → nom de la sauvegarde : manuelle sans m
                                       → AAAA-MM-JJ_HHMMSS_avant-format-v2 ; autre motif → ErreurStockage
 await listerSauvegardes()             → [{ nom, tables: [...] }]  (plus récente d'abord)
 await restaurer(nom, tables?)         → { restaurees: [...], copieSecurite: nom }
-await info()                          → { adressesReseau: [...] } (serveur) ou {}
+await testerSauvegarde(nom)           → { nom, ok, tables: [{ table, lignes, erreur }] }  (serveur seulement, §22.11)
+await info()                          → { adressesReseau: [...], port, copieExterne: { derniereReussie, joursSansCopie,
+                                      erreur } | null } (serveur, §22.11) ou {}
 ```
 Version d'un fichier = empreinte SHA-256 du contenu, 16 premiers caractères hexadécimaux
 (décision D7). Sauvegarde quotidienne : avant la **première écriture de la journée**, copie de
@@ -431,7 +434,7 @@ Les contrôles du lot 1 restent en place avant elle : chemin dont un segment com
 Le serveur parle HTTP/1.1 avec connexions persistantes (`protocol_version = 'HTTP/1.1'` : un
 navigateur réutilise ses connexions au lieu d'en ouvrir une par requête), avec une file d'attente
 d'écoute de 128 connexions (`request_queue_size = 128`) et un fil par connexion.
-**Lot 7 (§22)** : quand les comptes sont exigés, toute route `/api/` répond **401** sans session ni appareil enrôlé et **403** hors du rôle (table `ROLES_PAR_ROUTE`, §22.5) ; routes `/api/connexion`, `/api/session`, `/api/acces/…` (§22.4), `/api/installation/…` (loopback, §22.10) ; fichiers publics `/acces/…` de la porte d'entrée (§22.6).
+**Lot 7 (§22)** : quand les comptes sont exigés, toute route `/api/` répond **401** sans session ni appareil enrôlé et **403** hors du rôle (table `ROLES_PAR_ROUTE`, §22.5) ; routes `/api/connexion`, `/api/session`, `/api/acces/…` (§22.4), `/api/installation/…` (loopback, §22.10) ; fichiers publics `/acces/…` de la porte d'entrée (§22.6) ; sauvegardes (§22.11) : `POST /api/sauvegarde` manuelle limitée à une par minute (**429**, `Retry-After`) et purgée au-delà de 60, `POST /api/sauvegarde/tester`, `copie_externe` dans `GET /api/info`.
 Lancement : `py serveur.py [--port 8080] [--donnees CHEMIN] [--sans-navigateur] [--hote NOM]
 [--servir-tests]` ; port suivant si occupé (jusqu'à +20) ; affiche l'adresse locale et les adresses
 réseau ; ouvre le navigateur. `--servir-tests` n'est utile qu'aux tests automatiques.
@@ -3350,7 +3353,7 @@ exige une session ou un appareil (401), puis le rôle (403). Résumé :
 | `POST /api/csv/<table>/ajout` | `demandes`, `journal` | oui | oui |
 | `GET /api/documents/<nom>` | photos de ses demandes et documents des équipements | oui | oui |
 | `PUT /api/documents/<nom>` | photos de demandes | oui | oui |
-| `POST /api/sauvegarde`, `GET /api/sauvegardes`, `POST /api/restauration` | non | non | oui |
+| `POST /api/sauvegarde`, `POST /api/sauvegarde/tester`, `GET /api/sauvegardes`, `POST /api/restauration` | non | non | oui |
 | `POST /api/ia`, `GET /api/ia/reglages` | oui (« Proposer avec l'IA » de Signaler, lot 4) | oui | oui |
 | `/api/acces/…` | non | non | oui |
 
@@ -3437,6 +3440,57 @@ wiki. Sauvegardes : copie externe à la première écriture après 2 h du matin 
 noté dans `journal-serveur.log` et rendu par `/api/info` (`copie_externe`) pour l'accueil du responsable ;
 `POST /api/sauvegarde/tester` ; 429 pour une deuxième sauvegarde manuelle dans la minute ; purge au-delà de 60
 manuelles.
+
+Précisions de T175 (sauvegardes du serveur, `tests/test_sauvegardes_lot7.py`) :
+
+- **Horloge** : nom du jour, nom horodaté, 2 h du matin, minute du plafond et jours sans copie se lisent sur
+  `config.horloge` (défaut `time.time`, injectable comme au §22.3) ; un nom horodaté pris fait attendre la seconde
+  suivante, 503 au bout de 5 s (horloge arrêtée).
+- **Copie externe** (clé `copie_sauvegardes` ; vide = aucune copie, rien d'affiché ; chemin relatif = depuis le dossier
+  de Prévo) : lancée au démarrage (après la console d'accueil, qui affiche la ligne « Copie externe ») et, chaque jour,
+  par la première écriture CSV à partir de 2 h (`faire_sauvegarde_quotidienne`, après la sauvegarde du jour), toujours
+  dans un fil à part (`lancer_copie_externe`, fil gardé dans `config.fil_copie_externe`) ; jamais deux à la fois
+  (`VERROU_COPIE_EXTERNE`, pris sans attendre) ; une écriture qui tombe pendant une copie ne marque pas le jour : la
+  suivante relance. Copiée : la sauvegarde quotidienne complète la plus récente (`acces/` compris, jamais
+  `sessions.json` ni un fichier caché) vers `<copie_sauvegardes>/AAAA-MM-JJ/`, par un dossier temporaire
+  `.prevo-copie-en-cours-…` renommé à la fin ; rien si cette copie existe déjà (réussite quand même). Puis 30 copies
+  gardées : seuls les dossiers dont le nom est une vraie date `AAAA-MM-JJ` sont comptés et supprimés (ni lien ni
+  jonction), jamais un autre fichier ou dossier. Refus : dossier absent (« Dossier de copie « X » introuvable (clé USB
+  absente ou partage réseau injoignable ?). »), dossier rangé dans le dossier des données, erreur de copie.
+- **État** : `donnees/copie-externe.json` `{"derniere_reussie": "AAAA-MM-JJ" | null, "sauvegarde_copiee", "erreur"}`
+  (gardé d'un démarrage à l'autre ; une réussite efface l'erreur) ; chaque échec va sur la console et toujours dans
+  `donnees/journal-serveur.log`, avec le chemin (journal local). `GET /api/info` rend `copie_externe` : `null` sans
+  dossier réglé, sinon `{"derniere_reussie", "jours_sans_copie", "erreur"}` ; `jours_sans_copie` = jours depuis la
+  dernière réussite quand la dernière tentative a échoué ou qu'une sauvegarde quotidienne plus récente attend sa copie,
+  0 quand la copie est à jour ou en cours (un week-end sans écriture n'alerte pas), `null` sans aucune réussite. Les
+  messages ne citent que le nom du dossier, jamais son chemin complet.
+- **Accueil du responsable** (`accueil-bento.js`, mode serveur) : `App.adaptateur.info().copieExterne` lu à chaque
+  affichage, après coup (`#copie-externe-zone`, `data-lu` posé une fois la lecture faite) ; avertissement
+  `#alerte-copie-externe` (`UI.bandeau('attention')`) quand `erreur` ou `jours_sans_copie` > 1 : « Copie externe des
+  sauvegardes : aucune copie depuis N jours. » (ou « la dernière copie a échoué », « aucune copie réussie pour
+  l'instant »), le message du serveur, puis « La copie est refaite au prochain démarrage de Prévo et chaque nuit, à la
+  première modification après 2 h. » ; rien sinon (`Accueil.avertissementCopieExterne(copie)`, fonction pure).
+- **Tester une sauvegarde** : `POST /api/sauvegarde/tester` `{"nom"}` (nom contrôlé par `MOTIF_NOM_SAUVEGARDE` : 400 ;
+  absente ou incomplète : 404 ; corps invalide : 400) relit chaque CSV présent, dans l'ordre du schéma, par une lecture
+  tolérante (`lire_csv_tolerant` : BOM retiré, UTF-8 sinon Windows-1252, « ; » ou « , », lignes vides ignorées ; noms de
+  colonnes comparés sans casse, accents, espaces ni « _ ») et rend `{"nom", "ok", "tables": [{"table", "lignes",
+  "erreur"}]}` sans rien écrire. Erreur d'une table : fichier illisible ou vide, colonne du schéma (`COLONNES_PAR_TABLE`)
+  absente de l'en-tête, sauf celles ajoutées par un format plus récent (`COLONNES_DES_FORMATS_SUIVANTS`, recopie des
+  `depuisVersion` de `js/schema.js`, cohérence testée) ; `ok` : au moins une table et aucune erreur.
+  `App.adaptateur.testerSauvegarde(nom)` (serveur seulement, §6) ; dans Paramètres, mode serveur seulement, bouton
+  « Tester » (`button[data-tester]`) avant « Restaurer… » sur chaque ligne, fenêtre `#resultat-test-sauvegarde`
+  (verdict, lignes par table `[data-lignes]`, erreur `[data-erreur]`) et note `#note-sauvegardes-serveur` ; module
+  `js/modules/parametres-sauvegardes.js` (Parametres 4/4, relais `actionsSauvegarde` et `noteSauvegardes` de
+  `parametres.js`, qui aurait dépassé 700 lignes). Modes dossier et démo : ni bouton ni note.
+- **Plafond et purge** : `POST /api/sauvegarde` sans motif (corps vide ou motif `null`) : 429 `{"erreur": "Une
+  sauvegarde manuelle par minute au plus : réessayez dans N s.", "attente_secondes": N}` avec `Retry-After: N` quand la
+  dernière sauvegarde manuelle (lue sur son nom `AAAA-MM-JJ_HHMMSS`, ce qui tient après un redémarrage) a moins de 60 s ;
+  un nom « dans le futur » (horloge reculée) ne bloque pas ; contrôle et création sous `VERROU_ECRITURE`. L'écran
+  Paramètres affiche le message du serveur (toast d'erreur). Après chaque sauvegarde manuelle,
+  `purger_sauvegardes_manuelles` garde les 60 plus récentes ; quotidiennes et copies `…_avant-…` ni comptées ni
+  touchées. Les sauvegardes à motif (`avant-import`, `avant-format-vN`, `avant-restauration`) ne sont jamais limitées.
+- **`acces/`** : copié par `copier_acces_dans_sauvegarde` (T150) dans toute sauvegarde du serveur sans `sessions.json`,
+  jamais restauré par `restaurer` : une restauration complète laisse `comptes.json` et `sessions.json` tels quels.
 
 ### 22.12 Corrections de l'audit (D134, CS134)
 

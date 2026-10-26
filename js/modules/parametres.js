@@ -5,9 +5,11 @@
 //   Paramètres : entreprise, délais par priorité, préventif et indicateurs (lot 3, §15.11),
 //                rafraîchissement (écrits dans parametres.csv par Donnees.modifier), ce poste (nom,
 //                profil, lien vers l'écran « Ce poste » #/poste du lot 4), sauvegardes (créer,
-//                restaurer), lien vers le contrôle de la base, lien « Importer des données »
-//                (#/import, lot 5), export ZIP ; carte « Codes de défaillance » (parametres-codes.js,
-//                appelée par un relais) ; carte « Mode Solo » (mode_solo, solo_technicien_id : §22.11, D132).
+//                restaurer ; « Tester » en mode serveur : parametres-sauvegardes.js, §22.11, D133), lien vers
+//                le contrôle de la base, lien « Importer des données » (#/import, lot 5), export ZIP ; carte
+//                « Codes de défaillance » (parametres-codes.js, appelée par un relais) ; carte « Mode Solo »
+//                (mode_solo, solo_technicien_id : §22.11, D132).
+//   Fichiers du module : parametres.js, parametres-codes.js, parametres-solo.js, parametres-sauvegardes.js.
 //   Contrôle   : problèmes de Donnees.problemes() groupés par gravité, attribution des identifiants
 //                manquants, relecture des fichiers, liens vers les DI / OT concernés.
 
@@ -77,6 +79,11 @@ const Parametres = (() => {
   // absente si ce fichier n'est pas chargé. Elle lit les réglages mode_solo et solo_technicien_id ci-dessus.
   const carteSolo = () => (Parametres.interne.carteSolo ? Parametres.interne.carteSolo(REGLAGES) : '');
   const brancherSolo = (conteneur) => { if (Parametres.interne.brancherSolo) Parametres.interne.brancherSolo(conteneur, pendant); };
+  // Sauvegardes du PC serveur (§22.11, D133) : bouton « Tester » d'une ligne et note de la carte, dans
+  // parametres-sauvegardes.js, chargé APRÈS ce fichier (même relais) ; sans lui, « Restaurer… » seul.
+  const actionsSauvegarde = (sauvegarde, boutonRestaurer) => (Parametres.interne.actionsSauvegarde
+    ? Parametres.interne.actionsSauvegarde(sauvegarde, boutonRestaurer, pendant) : boutonRestaurer);
+  const noteSauvegardes = () => (Parametres.interne.noteSauvegardes ? Parametres.interne.noteSauvegardes() : '');
 
   const NOTE_DECIDE_SUR_LE_SERVEUR = 'Décidé sur le PC serveur (Paramètres › Accès et installation).';
 
@@ -204,7 +211,7 @@ const Parametres = (() => {
         { cle: 'action', libelle: '', triable: false, rendu: (l) => {
           const bouton = UI.element(UI.html`<button type="button" class="btn btn-secondaire" data-restaurer="${l.nom}">Restaurer…</button>`);
           bouton.addEventListener('click', () => pendant(bouton, 'restauration', () => restaurer(l)));
-          return bouton;
+          return actionsSauvegarde(l, bouton);
         } },
       ],
       lignes: lignes,
@@ -371,6 +378,7 @@ const Parametres = (() => {
       <p class="note sauvegardes-explication">Prévo copie tous les fichiers une fois par jour, avant la première modification de la journée.
         Vous pouvez aussi sauvegarder à la demande, par exemple avant un gros changement.
         Avant de passer les fichiers à un nouveau format, Prévo fait aussi une sauvegarde (« Avant format … »).</p>
+      ${sauvegardes.indisponible ? '' : noteSauvegardes()}
       ${sauvegardes.indisponible
         ? bandeauHtml('info', sauvegardes.indisponible)
         : UI.html`<div id="zone-sauvegardes"></div>`}

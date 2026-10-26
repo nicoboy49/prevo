@@ -129,6 +129,17 @@ const StockageServeur = (() => {
     }
   }
 
+  // « copie_externe » de /api/info (lot 7, D133, §22.11) → { derniereReussie, joursSansCopie, erreur }, ou null quand
+  // le PC serveur n'a aucun dossier de copie externe.
+  function copieExterneLue(copie) {
+    if (!copie || typeof copie !== 'object') return null;
+    return {
+      derniereReussie: typeof copie.derniere_reussie === 'string' ? copie.derniere_reussie : null,
+      joursSansCopie: typeof copie.jours_sans_copie === 'number' ? copie.jours_sans_copie : null,
+      erreur: typeof copie.erreur === 'string' && copie.erreur ? copie.erreur : null,
+    };
+  }
+
   // ===========================================================================
   // Fabrique de l'adaptateur
   // ===========================================================================
@@ -262,10 +273,23 @@ const StockageServeur = (() => {
       return { restaurees: donnees.restaurees, copieSecurite: donnees.copie_securite };
     }
 
+    // « Tester une sauvegarde » (lot 7, D133) : le serveur relit chaque CSV de la sauvegarde et compte ses lignes,
+    // sans rien écrire → { nom, ok, tables: [{ table, lignes, erreur }] } ; nom refusé ou sauvegarde absente →
+    // ErreurStockage. Propre au mode serveur (les autres adaptateurs n'ont pas cette méthode).
+    async function testerSauvegarde(nom) {
+      const reponse = await appelerOuErreur(base + '/api/sauvegarde/tester', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, entetesEcriture),
+        body: JSON.stringify({ nom: nom }),
+      });
+      return lireJson(reponse);
+    }
+
     async function info() {
       const reponse = await appelerOuErreur(base + '/api/info', { method: 'GET' });
       const donnees = await lireJson(reponse);
-      return { adressesReseau: donnees.adresses_reseau || [], port: donnees.port };
+      return { adressesReseau: donnees.adresses_reseau || [], port: donnees.port,
+        copieExterne: copieExterneLue(donnees.copie_externe) };
     }
 
     return {
@@ -281,6 +305,7 @@ const StockageServeur = (() => {
       sauvegarder: sauvegarder,
       listerSauvegardes: listerSauvegardes,
       restaurer: restaurer,
+      testerSauvegarde: testerSauvegarde,
       info: info,
     };
   }

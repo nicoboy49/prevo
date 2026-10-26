@@ -24,6 +24,7 @@ Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_version_schema.py" -v
 """
 import csv
+import datetime
 import io
 import http.client
 import json
@@ -403,7 +404,15 @@ class TestApiMotif(unittest.TestCase):
             statut, reponse = requete(serveur, "POST", "/api/sauvegarde", b"")
             self.assertEqual(statut, 200, reponse)
             self.assertRegex(reponse["sauvegarde"], MOTIF_NOM_MANUEL)
-            # Objet sans motif (ou motif null) : sauvegarde manuelle aussi.
+            # Objet sans motif (ou motif null) : sauvegarde manuelle aussi, donc soumise au plafond d'une par minute
+            # (T175, D133) : 429 tant que la précédente a moins d'une minute ; acceptée une fois la précédente vieillie
+            # de deux minutes (la minute se lit sur son nom).
+            statut, refus = demander_sauvegarde(serveur, {"motif": None})
+            self.assertEqual(statut, 429, refus)
+            premiere = reponse["sauvegarde"]
+            vieillie = (datetime.datetime.strptime(premiere, "%Y-%m-%d_%H%M%S")
+                        - datetime.timedelta(minutes=2)).strftime("%Y-%m-%d_%H%M%S")
+            (dossier / premiere).rename(dossier / vieillie)
             statut, reponse = demander_sauvegarde(serveur, {"motif": None})
             self.assertEqual(statut, 200, reponse)
             self.assertRegex(reponse["sauvegarde"], MOTIF_NOM_MANUEL)

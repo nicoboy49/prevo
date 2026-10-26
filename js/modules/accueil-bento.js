@@ -13,6 +13,8 @@
 //     5. « Demandes à traiter » (pas au téléphone) et « OT en retard » : 5 lignes au plus ;
 //     6. « à surveiller » : articles à commander, contrôles et habilitations, suggestions de préventif.
 //   Puis la carte « Connecter un téléphone » (mode serveur, pas au téléphone : accueil.js).
+//   Mode serveur : avertissement « Copie externe des sauvegardes » (D133, §22.11) quand la copie de la nuit a échoué
+//   ou n'a pas été faite depuis plus d'un jour, avec le nombre de jours ; lu sur /api/info après l'affichage.
 //   Chaque tuile-lien mène à la liste filtrée de l'indicateur d'avant la refonte. Les chiffres défilent
 //   de 0 à leur valeur (propriété CSS --compte) à l'ouverture de l'écran, pas à un réaffichage ;
 //   prefers-reduced-motion coupe tout mouvement (accueil.css). Aucune couleur ici : des classes.
@@ -303,7 +305,50 @@ Object.assign(Accueil, (() => {
   }
 
   // ===========================================================================================
-  // 4. Écran
+  // 4. Copie externe des sauvegardes (mode serveur ; D133, §22.11)
+  // ===========================================================================================
+
+  /**
+   * Texte de l'avertissement (fragment UI.html), ou '' quand tout va bien ou qu'aucun dossier de copie n'est réglé.
+   * `copie` : copieExterne de App.adaptateur.info(), { derniereReussie, joursSansCopie, erreur } ou null. Avertit quand
+   * la dernière copie a échoué ou qu'aucune copie n'a été faite depuis plus d'un jour.
+   */
+  function avertissementCopieExterne(copie) {
+    if (!copie) return '';
+    const jours = typeof copie.joursSansCopie === 'number' ? copie.joursSansCopie : null;
+    if (!copie.erreur && !(jours !== null && jours > 1)) return '';
+    let constat = 'la dernière copie a échoué';
+    if (jours === null) constat = 'aucune copie réussie pour l\'instant';
+    else if (jours >= 1) constat = 'aucune copie depuis ' + pluriel(jours, 'jour');
+    return UI.html`<b>Copie externe des sauvegardes : ${constat}.</b> ${copie.erreur || ''}
+      La copie est refaite au prochain démarrage de Prévo et chaque nuit, à la première modification après 2 h.`;
+  }
+
+  // Lue à chaque affichage (GET /api/info) puis posée dans #copie-externe-zone : l'écran ne l'attend pas. data-lu
+  // marque la lecture faite, avertissement ou non (point d'accroche des tests).
+  async function afficherCopieExterne(conteneur) {
+    const zone = conteneur.querySelector('#copie-externe-zone');
+    if (!zone) return;
+    let copie = null;
+    if (App.mode === 'serveur' && typeof App.adaptateur.info === 'function') {
+      try {
+        copie = (await App.adaptateur.info()).copieExterne || null;
+      } catch (erreur) {
+        console.warn('Prévo : état de la copie externe inconnu (' + (erreur && erreur.message) + ').', erreur);
+      }
+    }
+    const texte = avertissementCopieExterne(copie);
+    if (texte) {
+      const bloc = UI.bandeau('attention', texte);
+      bloc.id = 'alerte-copie-externe';
+      zone.className = 'alertes';
+      zone.replaceChildren(bloc);
+    }
+    zone.dataset.lu = '1';
+  }
+
+  // ===========================================================================================
+  // 5. Écran
   // ===========================================================================================
 
   /** Remplit #contenu avec l'accueil du responsable ; `carteConnexion` : fragment ou '' (accueil.js). */
@@ -315,7 +360,8 @@ Object.assign(Accueil, (() => {
     if (!choix) classes.push('sans-premier');
     if (animerChiffres) classes.push('bento-anime');
     animerChiffres = false;
-    UI.remplir(conteneur, UI.html`${entete(aujourdhui)}<div id="maj-zone"></div>${alerteControle()}${carteBaseVide()}
+    UI.remplir(conteneur, UI.html`${entete(aujourdhui)}<div id="maj-zone"></div>${alerteControle()}
+      <div id="copie-externe-zone"></div>${carteBaseVide()}
       <div class="${classes.join(' ')}" id="bento">
         ${tuileSynthese(compteurs, momentDeLaJournee(new Date().getHours()))}${tuilePremier(choix, aujourdhui)}
         ${compteurs4(compteurs, aujourdhui)}
@@ -329,8 +375,10 @@ Object.assign(Accueil, (() => {
     conteneur.querySelector('#btn-export-accueil').addEventListener('click', () => App.exporterZip());
     // Mise à jour signalée (D120) : bandeau si une version plus récente est connue sur ce poste.
     if (typeof MiseAJour !== 'undefined') MiseAJour.afficherSiPossible();
+    afficherCopieExterne(conteneur);
     App.definirTitreMobile('Bonjour', dateEnLettres(aujourdhui, false));
   }
 
-  return { afficherResponsable, choisirEnPremier, momentDeLaJournee, phraseDemandes, ligneSecondaire };
+  return { afficherResponsable, choisirEnPremier, momentDeLaJournee, phraseDemandes, ligneSecondaire,
+    avertissementCopieExterne };
 })());
