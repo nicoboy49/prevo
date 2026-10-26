@@ -76,7 +76,9 @@ Object.assign(Ordres, (() => {
     placer('type', champOt('type', urgence ? 'correctif immédiat' : typeDemande(requete), { lectureSeule: urgence }));
     placer('priorite', champOt('priorite', priorite, { lectureSeule: urgence }));
     placer('travail_a_faire', champOt('travail_a_faire', ''));
-    placer('technicien_id', champOt('technicien_id', '', { liste: listeTechniciens('') }));
+    // Mode Solo (D132) : le technicien « moi » est pré-rempli (toujours modifiable) ; '' sinon.
+    const technicienParDefaut = App.technicienSolo();
+    placer('technicien_id', champOt('technicien_id', technicienParDefaut, { liste: listeTechniciens(technicienParDefaut) }));
     placer('date_prevue', champOt('date_prevue', datePrevueParDefaut(priorite), { aide: 'Par défaut : création + délai de la priorité (Paramètres).' }));
 
     const selecteur = UI.selecteurEquipement(UI.$('#ot-nouveau-equipement', formulaire), {

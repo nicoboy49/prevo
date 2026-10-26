@@ -7,7 +7,7 @@
 //                profil, lien vers l'écran « Ce poste » #/poste du lot 4), sauvegardes (créer,
 //                restaurer), lien vers le contrôle de la base, lien « Importer des données »
 //                (#/import, lot 5), export ZIP ; carte « Codes de défaillance » (parametres-codes.js,
-//                appelée par un relais).
+//                appelée par un relais) ; carte « Mode Solo » (mode_solo, solo_technicien_id : §22.11, D132).
 //   Contrôle   : problèmes de Donnees.problemes() groupés par gravité, attribution des identifiants
 //                manquants, relecture des fichiers, liens vers les DI / OT concernés.
 
@@ -52,6 +52,14 @@ const Parametres = (() => {
     { cle: 'maj_signalee', type: 'booleen', valeurs: ['0', '1'], defaut: '0', large: true, section: 'Mises à jour',
       libelle: 'Me signaler les nouvelles versions de Prévo',
       aide: 'Prévo lit https://prevo.pro/version.json au plus une fois par jour et par poste (numéro, date, nouveautés) ; rien d\'autre ne part, rien ne s\'installe tout seul.' },
+    // Mode Solo (ARCHITECTURE.md §22.11, D132) : profil Responsable avec un réglage, pas un quatrième profil.
+    // Hors du formulaire (horsFormulaire) : posés par « Passer en mode Solo » / « Quitter le mode Solo » (carte Mode Solo).
+    { cle: 'mode_solo', type: 'booleen', valeurs: ['0', '1'], defaut: '0', large: true, section: 'Mode Solo', horsFormulaire: true,
+      libelle: 'Mode Solo : je fais tout moi-même',
+      aide: 'Menu allégé (Équipe et Planning sous « Plus »), « Nouvel OT » en premier, vous êtes le technicien de vos OT.' },
+    { cle: 'solo_technicien_id', type: 'texte', defaut: '', horsFormulaire: true,
+      libelle: 'Technicien « moi » du mode Solo',
+      aide: 'Identifiant du technicien créé au passage en mode Solo ; il reste dans l\'équipe si vous quittez ce mode.' },
     { cle: 'rafraichissement_s', type: 'entier', libelle: 'Rafraîchissement (secondes)', defaut: '20', min: 2, max: 3600,
       section: 'Échanges entre postes', aide: 'Fréquence de lecture des changements faits sur les autres postes.' },
   ];
@@ -59,6 +67,10 @@ const Parametres = (() => {
   // Carte « Codes de défaillance » : dans parametres-codes.js, chargé APRÈS ce fichier ; la fonction
   // est donc cherchée au moment de l'appel (relais), pas au chargement de ce fichier.
   const afficherCodes = (zone) => Parametres.interne.afficherCodes(zone);
+  // Carte « Mode Solo » (§22.11, D132) : dans parametres-solo.js, chargé APRÈS ce fichier (même relais) ;
+  // absente si ce fichier n'est pas chargé. Elle lit les réglages mode_solo et solo_technicien_id ci-dessus.
+  const carteSolo = () => (Parametres.interne.carteSolo ? Parametres.interne.carteSolo(REGLAGES) : '');
+  const brancherSolo = (conteneur) => { if (Parametres.interne.brancherSolo) Parametres.interne.brancherSolo(conteneur, pendant); };
 
   const LIBELLES_TYPE_PROBLEME = {
     reference: 'Référence cassée', valeur: 'Valeur illisible', excel: 'Abîmé par Excel', colonne: 'Colonne',
@@ -253,9 +265,14 @@ const Parametres = (() => {
   // 3. Écran Paramètres
   // ===========================================================================================
 
+  // Réglages saisis dans le formulaire « Réglages » (ceux du mode Solo ont leur propre carte).
+  function reglagesDuFormulaire() {
+    return REGLAGES.filter((reglage) => !reglage.horsFormulaire);
+  }
+
   function formulaireReglages() {
     const formulaire = UI.element(UI.html`<form id="form-parametres" class="form-grille" novalidate></form>`);
-    REGLAGES.forEach((reglage) => {
+    reglagesDuFormulaire().forEach((reglage) => {
       if (reglage.section) formulaire.appendChild(UI.element(UI.html`<h3 class="large parametres-section">${reglage.section}</h3>`));
       const bloc = UI.champ({ nom: reglage.cle, type: reglage.type, libelle: reglage.libelle, valeurs: reglage.valeurs },
         Donnees.parametre(reglage.cle, reglage.defaut), { aide: reglage.aide });
@@ -288,7 +305,7 @@ const Parametres = (() => {
     const syntaxe = UI.verifierFormulaire(formulaire);
     const valeurs = UI.lireFormulaire(formulaire);
     let erreurs = syntaxe.length;
-    REGLAGES.forEach((reglage) => {
+    reglagesDuFormulaire().forEach((reglage) => {
       if (syntaxe.some((e) => e.nom === reglage.cle)) return;
       const message = erreurReglage(reglage, valeurs[reglage.cle]);
       if (message) {
@@ -304,7 +321,7 @@ const Parametres = (() => {
     }
     await pendant(bouton, 'enregistrement des paramètres', async () => {
       await Donnees.modifier('parametres', (lignes) => {
-        REGLAGES.forEach((reglage) => {
+        reglagesDuFormulaire().forEach((reglage) => {
           const nombre = reglage.type === 'entier' || reglage.type === 'decimal';
           const valeur = nombre ? String(Donnees.nombre(valeurs[reglage.cle])) : valeurs[reglage.cle];
           const ligne = lignes.find((l) => l.cle === reglage.cle);
@@ -357,6 +374,7 @@ const Parametres = (() => {
           ${carteSauvegardes(sauvegardes)}
         </div>
         <div class="c5">
+          ${carteSolo()}
           <article class="carte">
             <div class="entete-carte"><h2>Ce poste</h2></div>
             <dl class="valeurs">
@@ -393,6 +411,7 @@ const Parametres = (() => {
       UI.$('#zone-sauvegardes', conteneur).appendChild(tableauSauvegardes(sauvegardes.liste));
       mettreSurLeBouton(conteneur, '#btn-sauvegarder', (bouton) => pendant(bouton, 'sauvegarde', sauvegarderMaintenant));
     }
+    brancherSolo(conteneur);
     mettreSurLeBouton(conteneur, '#btn-export-zip', (bouton) => pendant(bouton, 'export ZIP', () => App.exporterZip()));
   }
 

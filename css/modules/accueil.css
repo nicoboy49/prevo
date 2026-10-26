@@ -55,6 +55,9 @@
 .bento-salut h1 { font-size: 2rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.15; }
 .bento-date { margin: 4px 0 0; color: var(--texte-2); font-weight: 500; }
 .bento-entete-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Mode Solo (D132) : « Nouvel OT » puis « Signaler un problème », zones de 48 px au moins */
+.bento-solo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bento-solo .btn { min-height: 48px; }
 .bento-demo {
   display: inline-flex; align-items: center; gap: .45rem; min-height: 34px; padding: 4px 14px 4px 12px; border-radius: 999px;
   background: var(--teinte-ambre); color: var(--texte-ambre); font-size: .875rem; font-weight: 700;
@@ -283,6 +286,8 @@ a.bento-tuile:hover { transform: translateY(-4px); border-color: var(--bord-bleu
   .accueil-signaler { max-width: none; }
 
   .bento-entete { margin-bottom: 12px; }
+  .bento-solo { flex: 1 1 100%; }
+  .bento-solo .btn { flex: 1 1 140px; }
   .bento-salut {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
   }

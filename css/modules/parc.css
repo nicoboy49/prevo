@@ -35,7 +35,7 @@
 
 /* Actions : « Signaler un problème » en grand, les actions du responsable à côté */
 .parc-actions { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: stretch; margin-bottom: 18px; }
-.parc-actions .parc-signaler { flex: 1 1 340px; max-width: 520px; width: auto; }
+.parc-actions .parc-signaler, .parc-actions .parc-creer-ot { flex: 1 1 340px; max-width: 520px; width: auto; }
 .parc-actions .actions { flex: 1 1 auto; margin-top: 0; align-items: center; }
 .parc-actions .actions .btn { min-height: 52px; }
 
@@ -122,7 +122,7 @@
   }
   .parc .arbre summary .parc-modifier-localisation { width: 48px; min-width: 48px; min-height: 48px; padding: 0; }
   .parc-filtres .case { flex: 1 1 100%; }
-  .parc-actions .parc-signaler { flex-basis: 100%; max-width: none; }
+  .parc-actions .parc-signaler, .parc-actions .parc-creer-ot { flex-basis: 100%; max-width: none; }
   .parc-actions .actions { flex-basis: 100%; }
   .parc-qr-carte .qr { margin-left: auto; }
   .parc-qr-carte { text-align: center; }

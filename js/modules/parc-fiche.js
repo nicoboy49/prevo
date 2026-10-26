@@ -372,6 +372,8 @@ Object.assign(Parc, (() => {
     }
     App.definirTitre(equipement.repere || equipement.id);
     const responsable = App.estResponsable();
+    // Mode Solo (D132, §22.11) : « Créer un OT » en premier, avant « Signaler un problème ».
+    const solo = App.modeSolo();
     // Le demandeur consulte : pas de saisie de relevé, ni de lien vers les gammes et les OT
     // (écrans qui lui sont fermés), ni de carte Préventif (D27 : il ne voit pas le préventif).
     const intervenant = App.estTechnicien() || responsable;
@@ -393,10 +395,12 @@ Object.assign(Parc, (() => {
         </div>
 
         <div class="parc-actions">
-          <a class="btn btn-primaire btn-gros parc-signaler" href="#/di/nouvelle?equipement=${idUrl}">${UI.icone('alerte')}
+          ${solo ? UI.html`<a class="btn btn-primaire btn-gros parc-creer-ot" id="parc-creer-ot" href="#/ot/nouveau?equipement=${idUrl}">${UI.icone('ordres')}
+            <span>Créer un OT<small>Vous intervenez vous-même : l'OT est à votre nom</small></span></a>` : ''}
+          <a class="btn ${solo ? 'btn-secondaire' : 'btn-primaire'} btn-gros parc-signaler" href="#/di/nouvelle?equipement=${idUrl}">${UI.icone('alerte')}
             <span>Signaler un problème<small>Une panne, une fuite, un bruit anormal : prévenez la maintenance</small></span></a>
           ${responsable ? UI.html`<div class="actions">
-            <a class="btn btn-secondaire" href="#/ot/nouveau?equipement=${idUrl}">${UI.icone('ordres')}Créer un OT</a>
+            ${solo ? '' : UI.html`<a class="btn btn-secondaire" href="#/ot/nouveau?equipement=${idUrl}">${UI.icone('ordres')}Créer un OT</a>`}
             <a class="btn btn-secondaire" href="#/equipement/${idUrl}/modifier">${UI.icone('cle')}Modifier</a>
             <button type="button" class="btn ${actif ? 'btn-danger' : 'btn-secondaire'}" id="parc-activite">${actif ? 'Désactiver' : 'Réactiver'}</button>
           </div>` : ''}

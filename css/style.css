@@ -342,6 +342,23 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
 .menu a .icone { width: 22px; height: 22px; }
 .menu a:hover { background: var(--survol); color: var(--texte); }
 .menu a.actif, .menu a[aria-current="page"] { background: var(--teinte-bleu); color: var(--texte-bleu); font-weight: 700; }
+/* Mode Solo (D132) : groupe « Plus » repliable (Équipe, Planning) en bas du menu latéral */
+.menu-plus { display: flex; flex-direction: column; gap: 2px; }
+.menu-plus-bouton {
+  display: flex; align-items: center; gap: 12px; min-height: var(--tactile); padding: 0 14px; border-radius: 12px; width: 100%;
+  background: none; border: 0; color: var(--texte-2); font: inherit; font-weight: 600; font-size: 1rem; cursor: pointer; text-align: left; position: relative;
+}
+.menu-plus-bouton .icone { width: 22px; height: 22px; }
+.menu-plus-bouton::after {
+  content: ""; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(45deg); transition: transform .15s;
+}
+.menu-plus-bouton[aria-expanded="true"]::after { transform: rotate(225deg); }
+.menu-plus-bouton:hover { background: var(--survol); color: var(--texte); }
+.menu-plus-bouton.actif { color: var(--texte-bleu); }
+.menu-plus-bouton:focus-visible { outline: 2px solid var(--texte-bleu); outline-offset: 2px; }
+.menu-plus-liste { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; }
+.menu-plus-liste[hidden] { display: none; }
 /* Compteur sur une entrée de menu (ex. DI à traiter) */
 .pastille {
   margin-left: auto; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px; display: inline-grid; place-items: center;
@@ -374,6 +391,12 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
 .coque.replie .signature { min-height: 44px; align-items: center; }
 .coque.replie .pastille { position: absolute; top: 3px; right: 6px; min-width: 20px; height: 20px; font-size: .75rem; padding: 0 5px; }
 .coque.replie .menu-replier .icone { transform: rotate(180deg); }
+.coque.replie .menu-plus-bouton { justify-content: center; padding: 0; }
+.coque.replie .menu-plus-liste { padding-left: 0; }
+.coque.replie .menu-plus-bouton::after { display: none; }
+.coque.replie .menu-plus-bouton .libelle {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
 
 /* --- zone principale --- */
 .zone-principale { min-width: 0; display: flex; flex-direction: column; }
@@ -759,6 +782,12 @@ a.vignette img, button.vignette img { width: 100%; height: 100%; object-fit: cov
   .menu-tete .titre, .menu-groupe, .menu-replier { display: none; }
   .menu a, .signature, .etat-poste { justify-content: center; padding: 0; }
   .menu a .libelle, .signature .libelle, .etat-poste .libelle {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .menu-plus-bouton { justify-content: center; padding: 0; }
+  .menu-plus-bouton::after { display: none; }
+  .menu-plus-liste { padding-left: 0; }
+  .menu-plus-bouton .libelle {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
   }
   .signature { min-height: 44px; align-items: center; }

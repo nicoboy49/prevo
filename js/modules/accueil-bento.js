@@ -126,9 +126,19 @@ Object.assign(Accueil, (() => {
   // 3. Tuiles
   // ===========================================================================================
 
+  // Mode Solo (mode_solo = 1, D132, §22.11) : « Nouvel OT » en premier, « Signaler un problème » en second.
+  function actionsSolo() {
+    if (!App.modeSolo()) return '';
+    return UI.html`<div class="bento-solo" id="accueil-solo">
+      <a class="btn btn-primaire" id="accueil-nouvel-ot" href="#/ot/nouveau">${UI.icone('ajouter')}Nouvel OT</a>
+      <a class="btn btn-secondaire" id="accueil-signaler" href="#/di/nouvelle">${UI.icone('alerte')}Signaler un problème</a>
+    </div>`;
+  }
+
   function entete(aujourdhui) {
     return UI.html`<div class="bento-entete">
       <div class="bento-salut"><h1>Bonjour</h1><p class="bento-date">${dateEnLettres(aujourdhui, true)}</p></div>
+      ${actionsSolo()}
       <div class="bento-entete-actions">
         ${App.mode === 'demo' ? UI.html`<span class="bento-demo" id="accueil-demo">${UI.icone('alerte')}Démo — rien n'est enregistré</span>` : ''}
         <button type="button" class="btn btn-fantome bento-zip" id="btn-export-accueil">${UI.icone('export')}Exporter en ZIP</button>
