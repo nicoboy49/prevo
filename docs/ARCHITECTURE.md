@@ -3380,9 +3380,16 @@ manuelles.
 ### 22.12 Corrections de l'audit (D134, CS134)
 
 E2 `verifier_contenu_csv(table, octets)` avant `enregistrer_csv` et `ajouter_au_csv` (`COLONNES_PAR_TABLE` recopié
-de `js/schema.js`, test de cohérence) ; M1/M3 `POST /api/ia` ne lit que `chemin`, `methode`, `corps` (toute autre
-clé ⇒ 400), adresse et clé lues dans la configuration, `Authorization` posé par le serveur, délai fixé à 120 s ; M2
-fournisseur distant autorisé par `ia_en_ligne` seulement ; F2 `BoundedSemaphore(32)` dans `process_request`, corps
+de `js/schema.js`, test de cohérence) ; M1/M3 (précisé à T158) : le fournisseur est réglé sur le serveur seulement —
+clés `ia_fournisseur` (`ollama` | `openai`, défaut `ollama`), `ia_url`, `ia_en_ligne` de la configuration, options
+`--ia-url`, `--ia-fournisseur`, `--ia-en-ligne` (l'informaticien, les tests), clé par `ia_cle` ou la variable
+d'environnement `PREVO_IA_CLE`, jamais en ligne de commande (visible dans la liste des processus) ; `GET /api/ia/reglages`
+rend `{fournisseur, url, cle_reglee, en_ligne, portee}` (jamais la clé) ; `POST /api/ia` ne lit que `chemin`, `methode`,
+`corps` (toute autre clé ⇒ 400, `url` et `cle` compris), adresse et clé lues dans la configuration, `Authorization`
+posé par le serveur, délai fixé à 120 s ; en mode serveur, « Ce poste » montre l'adresse et l'état de la clé sans les
+demander, et le navigateur ne garde aucune clé (I5 : en mode dossier, inchangé, avec la mention) ; M2 fournisseur
+distant autorisé par `ia_en_ligne` seulement, la case « Autoriser les fournisseurs d'IA en ligne » de Paramètres
+affichant en mode serveur la décision du PC serveur sans la changer ; F2 `BoundedSemaphore(32)` dans `process_request`, corps
 lu après la session ; F4 `.doc`/`.xls` retirés, `Content-Disposition: attachment` hors images et PDF, nom
 `<préfixe>_<horodatage>_<4 car.>.<ext>` imposé, signature JPEG (`FF D8 FF`) et PNG vérifiée ; I2 `repr` du chemin ;
 I3 `ecrireValeur` pour les colonnes inconnues ; I4 masquage `[téléphone]` et `[courriel]` dans les textes envoyés à
@@ -3399,9 +3406,11 @@ script en ligne d'`index.html` passe dans `js/prechargement.js`.
 
 ### 22.14 Distribution et version (D131, D137)
 
-`construire_release.py` télécharge `python-3.12.x-embed-amd64.zip` et `mkcert-v1.4.4-windows-amd64.exe`, vérifie
-leurs empreintes (`outils/empreintes-tiers.json`), les place dans `python/` et `outils-tiers/` du zip avec leurs
-licences ; `Lancer_GMAO.bat` cherche `python\python.exe`, puis `py -3` ou `python` ≥ 3.11 ; `lancer.sh` ≥ 3.11. Le
+`construire_release.py` prend dans le cache `dist/tiers/`, ou télécharge, `python-3.14.9-embed-amd64.zip` (Python
+3.14.9 du 2026-10-21 : la branche 3.12 ne reçoit plus de binaires Windows, donc plus d'OpenSSL à jour) et
+`mkcert-v1.4.4-windows-amd64.exe` avec sa licence, vérifie leurs empreintes (`outils/empreintes-tiers.json`, qui entre
+aussi dans le zip pour que `serveur.py` vérifie mkcert), les place dans `python/` et `outils-tiers/` du zip ; `--sans-tiers`
+construit le zip sans eux (développement, tests) ; `Reinitialiser_mot_de_passe.bat` entre dans le zip ; `Lancer_GMAO.bat` cherche `python\python.exe`, puis `py -3` ou `python` ≥ 3.11 ; `lancer.sh` ≥ 3.11. Le
 dépôt ignore `python/` et `outils-tiers/`. Version **2.0.0** partout (`VERSION`, `VERSION_APPLICATION`,
 CHANGELOG, `version.json`) ; la démo web reste sans compte.
 

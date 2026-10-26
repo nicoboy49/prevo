@@ -62,7 +62,10 @@ LISTE_BLANCHE_WEB = ["GUIDE.html", "css", "favicon.svg", "index.html", "js"]
 DRAPEAU_DEPOT = "const VERSION_WEB = false;"
 DRAPEAU_WEB = "const VERSION_WEB = true;"
 CONTENU_RELEASE = ["FICHE_TECHNIQUE_CSV.md", "GUIDE.html", "LICENSE", "Lancer_GMAO.bat", "NOTICE", "README.md",
-                   "css", "favicon.svg", "index.html", "js", "lancer.sh", "serveur.py"]
+                   "Reinitialiser_mot_de_passe.bat", "css", "favicon.svg", "index.html", "js", "lancer.sh", "outils",
+                   "serveur.py"]
+# outils/ : seulement la liste des empreintes des binaires tiers (lot 7, §22.14), que serveur.py lit pour vérifier mkcert.
+FICHIERS_OUTILS_RELEASE = ["outils/empreintes-tiers.json"]
 EXECUTABLES = ["lancer.sh", "serveur.py"]
 
 # Texte du message IA affiché dans l'encadré d'un écran (même mécanisme que les autres erreurs de l'IA).
@@ -417,7 +420,9 @@ class TestRelease(unittest.TestCase):
         cls.temporaire = Path(tempfile.mkdtemp(prefix="prevo-release-"))
         cls.addClassCleanup(shutil.rmtree, cls.temporaire, True)
         cls.version, cls.date = version_et_date()
-        cls.resultat = lancer(SCRIPT_RELEASE, "--sortie", cls.temporaire / "a")
+        # --sans-tiers : le contenu de l'application seul ; le Python embarqué et mkcert sont vérifiés par
+        # tests/test_release_lot7.py (téléchargements simulés), pour ne rien télécharger ici.
+        cls.resultat = lancer(SCRIPT_RELEASE, "--sortie", cls.temporaire / "a", "--sans-tiers")
 
     def chemin_zip(self):
         self.assertEqual(self.resultat.returncode, 0, "construction du zip en échec :\n%s%s"
@@ -434,12 +439,16 @@ class TestRelease(unittest.TestCase):
                 self.assertTrue(nom.startswith(prefixe), nom)
             relatifs = [nom[len(prefixe):] for nom in noms if not nom.endswith("/")]
             self.assertEqual(sorted({r.split("/")[0] for r in relatifs}), sorted(CONTENU_RELEASE))
-            attendus = sorted([n for n in CONTENU_RELEASE if n not in ("css", "js")] + fichiers_du_depot("css", "js"))
+            attendus = sorted([n for n in CONTENU_RELEASE if n not in ("css", "js", "outils")] + fichiers_du_depot("css", "js")
+                              + FICHIERS_OUTILS_RELEASE)
             self.assertEqual(sorted(relatifs), attendus)
             for relatif in relatifs:
                 with self.subTest(fichier=relatif):
                     self.assertEqual(archive.read(prefixe + relatif), (RACINE / relatif).read_bytes())
-            for interdit in ("tests/", "outils/", "docs/", "captures", "donnees/", "__pycache__", ".pyc", "BRIEF",
+            self.assertEqual([n for n in relatifs if n.startswith("outils/")], FICHIERS_OUTILS_RELEASE,
+                             "de outils/, seule la liste des empreintes entre dans le zip")
+            for interdit in ("tests/", "outils/construire", "outils/generer", "docs/", "captures", "donnees/",
+                             "__pycache__", ".pyc", "BRIEF",
                              "brief-gmao", "CONTRIBUTING", "CHANGELOG", ".chantier", ".git", "dist/"):
                 with self.subTest(interdit=interdit):
                     self.assertFalse([n for n in noms if interdit in n], interdit + " ne doit pas être dans le zip")
@@ -448,7 +457,7 @@ class TestRelease(unittest.TestCase):
 
     def test_release_deterministe_dates_fixes_ordre_trie(self):
         premier = self.chemin_zip()
-        second = lancer(SCRIPT_RELEASE, "--sortie", self.temporaire / "b")
+        second = lancer(SCRIPT_RELEASE, "--sortie", self.temporaire / "b", "--sans-tiers")
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual((self.temporaire / "b" / premier.name).read_bytes(), premier.read_bytes())
         with zipfile.ZipFile(premier) as archive:
@@ -504,7 +513,7 @@ class TestRelease(unittest.TestCase):
         (source / "js").mkdir(parents=True)
         shutil.copy2(RACINE / "js" / "app.js", source / "js" / "app.js")
         sortie = self.temporaire / "sortie-incomplete"
-        resultat = lancer(SCRIPT_RELEASE, "--source", source, "--sortie", sortie)
+        resultat = lancer(SCRIPT_RELEASE, "--source", source, "--sortie", sortie, "--sans-tiers")
         self.assertNotEqual(resultat.returncode, 0)
         self.assertIn("NOTICE", resultat.stderr)
         self.assertIn("serveur.py", resultat.stderr)

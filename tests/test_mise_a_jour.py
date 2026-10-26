@@ -261,7 +261,7 @@ class TestVersionJsonDeLaRelease(unittest.TestCase):
 
     def test_version_json_ecrit_avec_le_zip(self):
         with tempfile.TemporaryDirectory(prefix="prevo-maj-") as sortie:
-            resultat = lancer(SCRIPT_RELEASE, "--sortie", sortie)
+            resultat = lancer(SCRIPT_RELEASE, "--sortie", sortie, "--sans-tiers")
             self.assertEqual(resultat.returncode, 0, resultat.stderr)
             self.assertIn("version.json", resultat.stdout)
             self.assertIn("Access-Control-Allow-Origin", resultat.stdout)
