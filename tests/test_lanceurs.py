@@ -87,7 +87,11 @@ class TestBat(LancementMixin, unittest.TestCase):
 
     def test_contenu(self):
         t = self.texte
-        self.assertIn("winget install -e --id Python.Python.3.12 "
+        # Lot 7 (§22.14) : le Python livré dans le zip (dossier « python ») d'abord, puis un Python installé ;
+        # winget propose Python 3.14, la version embarquée.
+        self.assertIn('if exist "%~dp0python\\python.exe"', t)
+        self.assertLess(t.index('if exist "%~dp0python\\python.exe"'), t.index("call py -3"))
+        self.assertIn("winget install -e --id Python.Python.3.14 "
                       "--accept-package-agreements --accept-source-agreements", t)
         self.assertIn("choice /C ON", t)
         self.assertIn("https://www.python.org/downloads/", t)
@@ -127,7 +131,10 @@ class TestBat(LancementMixin, unittest.TestCase):
             shutil.rmtree(dossier, ignore_errors=True)
 
     def test_version_minimale_verifiee(self):
-        self.assertIn("sys.version_info < (3, 8)", self.texte)
+        # Lot 7 (D131) : Python 3.11 au moins, vérifié pour « py » comme pour « python ».
+        self.assertEqual(self.texte.count("sys.version_info < (3, 11)"), 2)
+        self.assertNotIn("(3, 8)", self.texte)
+        self.assertIn("Python 3.11 ou plus récent", self.texte)
 
     def test_lancement(self):
         self.verifier_lancement(["cmd", "/c", ".\\Lancer_GMAO.bat"])
