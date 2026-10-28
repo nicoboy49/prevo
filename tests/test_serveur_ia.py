@@ -235,7 +235,7 @@ class TestRelaisIa(unittest.TestCase):
         relayer(self.openai, {"chemin": "api/pull", "methode": "GET"})
         console = self.openai.sortie_console()
         self.assertNotIn(CLE, console)
-        self.assertIn("POST /api/ia", console)
+        self.assertIn("POST '/api/ia'", console)                                # chemin en repr (audit I2, T159)
         self.assertIn("clé réglée", console)
         for fichier in self.openai.dossier.rglob("*"):
             if fichier.is_file():
