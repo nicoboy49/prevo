@@ -205,7 +205,8 @@ class TestModules(unittest.TestCase):
 # chemin Git Bash). Motifs génériques (audit G5) : le test ne cite aucun dossier réel du poste.
 DOCUMENTS_PUBLICS = ["README.md", "docs/PILOTAGE.md", "GUIDE.html", "FICHE_TECHNIQUE_CSV.md"]
 MOTIF_CHEMIN_PERSONNEL = re.compile(
-    r"\b[A-Za-z]:\\"                                        # lecteur Windows : X:\…
+    r"\b[A-Za-z]:\\(?!Prevo\b)"                            # lecteur Windows : X:\… (sauf C:\Prevo, le dossier
+                                                            # conseillé par l'assistant, D131 : un chemin du produit)
     r"|\b(?:users|home)[\\/]\w"                             # dossier d'utilisateur : Users\<nom>, /home/<nom>
     r"|\bsync[\\/]\w"                                       # dossier synchronisé : sync\<nom>, sync/<nom>
     r"|\b\w*cloud\b|\bdropbox\b|\bonedrive\b"               # services de synchronisation (tout « …cloud »)
