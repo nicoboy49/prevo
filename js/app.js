@@ -10,9 +10,12 @@
 //      ou « Créer une base vide » ; puis passage des fichiers au format courant (version_schema,
 //      sauvegarde « avant-format-v2 » d'abord), avant toute autre écriture ;
 //   3. profil (mémorisé sur le poste) ; la route demandée avant (QR scanné) est gardée ;
+//      mode serveur avec les comptes exigés (lot 7, D126, §22.4) : GET /api/session AVANT la lecture des tables ;
+//      sans session → écran de connexion (Connexion, js/modules/connexion-ecrans.js) ; le profil est déduit de la
+//      session (rôle → type, prénom et nom, technicien lié), jamais l'écran de profil, jamais mémorisé ;
 //   4. technicien ou responsable : génération des OT préventifs échus (RG5) → marque prevo:preventif ;
 //   5. coque (menu, barre du bas, bandeaux) et premier écran → <html data-etat="pret">.
-// États lus par les tests : data-etat = 'chargement' | 'demarrage' | 'profil' | 'pret'.
+// États lus par les tests : data-etat = 'chargement' | 'demarrage' | 'profil' | 'connexion' | 'pret'.
 //
 // Contrat des écrans (les modules de js/modules/ appellent App.ecran) :
 //   App.ecran({
@@ -57,13 +60,16 @@ const App = (() => {
   // Mode Solo (D132, §22.11) : réglage mode_solo de parametres.csv, profil responsable seulement. Ces écrans
   // passent sous « Plus » (repliable dans le menu latéral, feuille « Plus » au téléphone) ; leurs routes restent.
   const ECRANS_SOUS_PLUS_SOLO = ['equipe', 'planning'];
-  const ECRANS_PLEINS = ['ecran-chargement', 'ecran-demarrage', 'ecran-base-vide', 'ecran-profil', 'app'];
+  const ECRANS_PLEINS = ['ecran-chargement', 'ecran-demarrage', 'ecran-base-vide', 'ecran-profil', 'ecran-connexion', 'app'];
   const CHAMPS_DOCUMENTS = [['equipements', 'document'], ['demandes', 'photo'], ['controles_reglementaires', 'rapport']];
 
   // --- État de l'application ----------------------------------------------------------------
   let mode = null;                 // 'serveur' | 'dossier' | 'demo'
   let adaptateur = null;           // adaptateur de stockage (contrat ARCHITECTURE.md §6)
   let profil = null;               // { type, nom, technicienId }
+  let comptesExiges = false;       // mode serveur : les comptes sont exigés (lot 7, D124) ; le profil vient de la session
+  let session = null;              // mode comptes : session du serveur (camelCase, adaptateur.session()), sinon null
+  let promesseConnexion = null;    // écran de connexion en cours (une seule fois à la fois)
   let poste = '';                  // nom du poste (journal, verrou)
   let adressesReseau = [];         // mode serveur : ['http://192.168.1.10:8080/', …]
   const ecrans = [];               // écrans enregistrés par les modules
@@ -337,6 +343,10 @@ const App = (() => {
     adaptateur = nouvelAdaptateur;
     mode = nouvelAdaptateur.mode;
     Donnees.initialiser(adaptateur, { poste, profil: '' });
+    // Lot 7 (§22.4) : comptes exigés → connexion (ou mot de passe à choisir) AVANT toute lecture de table, sinon
+    // chaque table répondrait 401 (ou 403 avec un mot de passe provisoire : la base paraîtrait vide).
+    if (mode === 'serveur') await ouvrirSession();
+    montrer('ecran-chargement', 'chargement');
     await Donnees.chargerTout();
 
     if (mode !== 'demo' && Donnees.baseVide()) {
@@ -357,8 +367,9 @@ const App = (() => {
     }
     if (mode === 'dossier') await verifierVerrouDossier();
 
-    let profilChoisi = lireProfilMemorise();
-    if (!profilValable(profilChoisi)) profilChoisi = await demanderProfil(false);
+    // Comptes exigés : le profil est déduit de la session (D126), l'écran de profil de 1.2 ne s'affiche jamais.
+    let profilChoisi = session ? profilDepuisSession(session) : lireProfilMemorise();
+    if (!session && !profilValable(profilChoisi)) profilChoisi = await demanderProfil(false);
     appliquerProfil(profilChoisi);
     const otPreventifs = await genererPreventifAOuverture(formatAJour);
     Donnees.demarrerSurveillance();
@@ -467,6 +478,118 @@ const App = (() => {
   }
 
   // ===========================================================================================
+  // 3 bis. Comptes et sessions (lot 7, §22.4 : connexion, profil déduit, déconnexion)
+  // ===========================================================================================
+
+  // GET /api/session au démarrage : sans comptes (portée « ce PC »), rien ne change ; avec, il faut une session
+  // utilisable (connexion, enrôlement d'un appareil, mot de passe provisoire changé) avant de lire les tables.
+  async function ouvrirSession() {
+    const etat = await adaptateur.session();
+    comptesExiges = etat.comptes;
+    session = null;
+    if (!comptesExiges) return;
+    if (etat.session && !etat.session.aChanger) {
+      session = etat.session;
+      return;
+    }
+    const options = etat.session ? { sessionProvisoire: etat.session } : await motifSansSession();
+    await demanderConnexion(options);
+  }
+
+  // Sans session, GET /api/session (route publique) ne dit pas si un cookie d'appareil a été refusé : une lecture
+  // protégée le dit (401 appareil_refuse, D125 ; le serveur efface alors le cookie), pour le bandeau de l'écran.
+  async function motifSansSession() {
+    try {
+      await adaptateur.listerVersions();
+    } catch (erreur) {
+      if (erreur && erreur.sessionAbsente) return { appareilRefuse: Boolean(erreur.appareilRefuse) };
+    }
+    return {};
+  }
+
+  // Profil de l'interface tiré de la session : rôle → type, « Prénom Nom » (un appareil enrôlé : le nom saisi),
+  // technicien lié → technicienId. Un rôle inconnu (comptes.json abîmé) donne le profil le plus restreint.
+  function profilDepuisSession(laSession) {
+    const type = TYPES_PROFIL.includes(laSession.role) ? laSession.role : 'demandeur';
+    const nom = ((laSession.prenom || '') + ' ' + (laSession.nom || '')).trim();
+    return { type, nom, technicienId: String(laSession.technicienId || '') };
+  }
+
+  /**
+   * Écran de connexion (mode comptes) : promesse de la session ouverte, mot de passe choisi s'il était provisoire.
+   * options : { sessionProvisoire } | { appareilRefuse, message } (voir Connexion.demander). Un seul écran à la fois :
+   * un second appel pendant l'écran rend la même promesse. La route de la page est gardée (après la connexion, la
+   * coque se rouvre dessus) ; une page ouverte sur #/enroler/<jeton> va à l'accueil une fois l'appareil enrôlé.
+   */
+  function demanderConnexion(options) {
+    if (!promesseConnexion) {
+      montrer('ecran-connexion', 'connexion');
+      promesseConnexion = Connexion.demander(options || {}).then((nouvelle) => {
+        promesseConnexion = null;
+        session = nouvelle;
+        if (Connexion.estRouteEnrolement(location.hash)) remplacerRoute(ROUTE_ACCUEIL);
+        return nouvelle;
+      });
+    }
+    return promesseConnexion;
+  }
+
+  // Session absente pendant l'usage (401 relu par stockage-serveur.js : expirée, fermée ailleurs, appareil révoqué) :
+  // l'écran de connexion par-dessus l'écran courant, puis la coque se rouvre sur la même route. Les tables sont
+  // relues (une autre personne, un autre rôle : d'autres tables lisibles).
+  function surSessionAbsente(evenement) {
+    if (!comptesExiges || !coqueVisible() || promesseConnexion) return;
+    const detail = evenement.detail || {};
+    reconnecter({ appareilRefuse: Boolean(detail.appareilRefuse), message: detail.message });
+  }
+
+  async function reconnecter(options) {
+    await demanderConnexion(options);
+    appliquerProfil(profilDepuisSession(session));
+    montrer('ecran-chargement', 'chargement');
+    try {
+      await Donnees.chargerTout();
+    } catch (erreur) {
+      signalerErreur(erreur, 'lecture des données après la connexion');
+    }
+    await ouvrirCoque();
+  }
+
+  /** Mode comptes : ferme la session sur le serveur (POST /api/deconnexion), puis l'écran de connexion. */
+  async function deconnecter() {
+    if (!comptesExiges || !session || promesseConnexion) return;
+    if (session.appareil) {
+      UI.toast('Cet appareil est enrôlé sans mot de passe : seul le responsable peut le révoquer (Équipe › Accès).', 'attention');
+      return;
+    }
+    try {
+      await Connexion.deconnecter();
+    } catch (erreur) {
+      signalerErreur(erreur, 'déconnexion');
+      return;
+    }
+    session = null;
+    await reconnecter({});
+  }
+
+  // Bouton de profil du menu latéral, bouton de l'en-tête mobile : « changer » de profil sans comptes, « se
+  // déconnecter » avec ; rien pour un appareil enrôlé (seul le responsable le révoque).
+  function mettreAJourBoutonsProfil() {
+    const appareil = comptesExiges && Boolean(session) && session.appareil;
+    const bouton = UI.$('#etat-poste');
+    const changer = UI.$('#etat-poste .changer');
+    changer.textContent = comptesExiges ? 'se déconnecter' : 'changer';
+    changer.hidden = appareil;
+    bouton.disabled = appareil;
+    bouton.title = appareil ? 'Appareil enrôlé : ' + libelleAffiche(profil)
+      : comptesExiges ? 'Connecté : ' + libelleCompte(profil) + '. Cliquer pour se déconnecter.'
+        : 'Profil : ' + libelleAffiche(profil) + ' — poste « ' + poste + ' ». Cliquer pour changer.';
+    const mobile = UI.$('#btn-profil-mobile');
+    mobile.hidden = appareil;
+    mobile.setAttribute('aria-label', comptesExiges ? 'Se déconnecter' : 'Changer de profil');
+  }
+
+  // ===========================================================================================
   // 4. Profils
   // ===========================================================================================
 
@@ -510,17 +633,24 @@ const App = (() => {
     return p.type === 'responsable' ? LIBELLES_TYPE.responsable : LIBELLES_TYPE[p.type] + ' · ' + p.nom;
   }
 
+  // Texte du menu en mode comptes : « Nicolas Briand · Responsable » (le compte fait foi, pas le poste).
+  function libelleCompte(p) {
+    if (!p) return '';
+    return (p.nom ? p.nom + ' · ' : '') + LIBELLES_TYPE[p.type];
+  }
+
   function appliquerProfil(nouveau) {
     profil = nouveau;
     if (profil.type === 'technicien') {
       const technicien = Donnees.trouver('techniciens', profil.technicienId);
       if (technicien) profil.nom = nomTechnicien(technicien);
     }
-    ecrireMemoire(CLE_PROFIL, JSON.stringify(profil));
+    // Mode comptes : le profil n'est plus mémorisé sur le poste (la session fait foi) ; le nom du poste, si.
+    if (!comptesExiges) ecrireMemoire(CLE_PROFIL, JSON.stringify(profil));
     ecrireMemoire(CLE_POSTE, poste);
     Donnees.definirIdentite({ poste, profil: libelleJournal(profil) });
-    UI.$('#libelle-profil').textContent = libelleAffiche(profil) + ' · ' + poste;
-    UI.$('#etat-poste').title = 'Profil : ' + libelleAffiche(profil) + ' — poste « ' + poste + ' ». Cliquer pour changer.';
+    UI.$('#libelle-profil').textContent = comptesExiges ? libelleCompte(profil) : libelleAffiche(profil) + ' · ' + poste;
+    mettreAJourBoutonsProfil();
   }
 
   // Affiche l'écran de profil. Renvoie une promesse : le profil choisi, ou null si « Annuler ».
@@ -582,9 +712,13 @@ const App = (() => {
     terminerProfil({ type: 'demandeur', nom, technicienId: '' });
   }
 
-  /** Change de profil sans recharger la page (en démo, recharger ferait tout perdre). */
+  /** Change de profil sans recharger la page (en démo, recharger ferait tout perdre). Mode comptes : se déconnecter. */
   async function changerProfil() {
     if (!adaptateur || !profil || resoudreProfil) return;
+    if (comptesExiges) {
+      await deconnecter();
+      return;
+    }
     const nouveau = await demanderProfil(true);
     if (nouveau) {
       appliquerProfil(nouveau);
@@ -619,7 +753,8 @@ const App = (() => {
     afficherAlertesCoque();
     appliquerRepli(lireMemoire(CLE_MENU_REPLIE) === '1');
     mettreAJourEntreprise();
-    if (!location.hash || location.hash === '#' || location.hash === '#/') remplacerRoute(ROUTE_ACCUEIL);
+    if (!location.hash || location.hash === '#' || location.hash === '#/'
+        || (typeof Connexion !== 'undefined' && Connexion.estRouteEnrolement(location.hash))) remplacerRoute(ROUTE_ACCUEIL);
     construireMenus();
     await afficherRoute(false);
     document.documentElement.dataset.etat = 'pret';
@@ -765,9 +900,11 @@ const App = (() => {
     const idActif = ecranCourant ? (ecranCourant.parent || ecranCourant.id) : '';
     const { principales, sousPlus } = partagerEntrees();
     const reste = principales.slice(ENTREES_BARRE_BAS).concat(sousPlus);
+    // Mode comptes : « Se déconnecter » à la place de « Changer de profil » ; rien pour un appareil enrôlé.
+    const appareil = comptesExiges && Boolean(session) && session.appareil;
     const contenu = UI.element(UI.html`<ul class="liste-plus">
       ${reste.map((ecran) => UI.html`<li><a href="${lienEntree(ecran)}" class="${ecran.id === idActif ? 'actif' : ''}">${UI.icone(ecran.menu.icone || 'chevron')}${ecran.menu.libelle}</a></li>`)}
-      <li><a href="#" data-action="profil">${UI.icone('utilisateur')}Changer de profil (${libelleAffiche(profil)})</a></li>
+      ${appareil ? '' : UI.html`<li><a href="#" data-action="profil">${UI.icone('utilisateur')}${comptesExiges ? 'Se déconnecter (' + libelleCompte(profil) + ')' : 'Changer de profil (' + libelleAffiche(profil) + ')'}</a></li>`}
       ${mode === 'demo' ? UI.html`<li><a href="#" data-action="zip">${UI.icone('export')}Exporter en ZIP</a></li>` : ''}
     </ul>`);
     UI.fenetre({
@@ -1085,6 +1222,10 @@ const App = (() => {
     UI.$('#contenu').addEventListener('change', surSaisie);
     window.addEventListener('hashchange', () => { afficherRoute(false); });
     Donnees.evenements.addEventListener('changement', surChangement);
+    // Lot 7 (§22.4) : session absente ou appareil refusé pendant l'usage (401) → écran de connexion.
+    if (typeof StockageServeur !== 'undefined') {
+      document.addEventListener(StockageServeur.EVENEMENT_SESSION_ABSENTE, surSessionAbsente);
+    }
 
     // Erreurs de Donnees non attrapées par un module : message clair plutôt qu'une erreur console.
     window.addEventListener('unhandledrejection', (evenement) => {
@@ -1110,6 +1251,7 @@ const App = (() => {
     get mode() { return mode; },
     get adaptateur() { return adaptateur; },
     get profil() { return profil ? Object.assign({}, profil) : null; },
+    get session() { return session ? Object.assign({}, session) : null; },
     get poste() { return poste; },
     get ecranCourant() { return ecranCourant; },
     ecran,
@@ -1130,6 +1272,9 @@ const App = (() => {
     chargerEcharts,
     chargerSheetJS,
     changerProfil,
+    comptesExiges: () => comptesExiges,
+    demanderConnexion,
+    deconnecter,
     exporterZip,
     signalerErreur,
   };

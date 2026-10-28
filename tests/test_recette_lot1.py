@@ -15,7 +15,7 @@ Scénarios :
     conflit       deux navigateurs valident une DI au même instant → deux DI distinctes, aucune perte ;
     telephone     (lot 7, T161 : serveur en portée « atelier », tests/atelier.py) QR de la fiche relu par
                   jsQR = adresse de la porte → téléphone 375 px qui fait confiance au PC atelier → porte →
-                  application en https, route gardée → appareil enrôlé → profil → DI avec photo →
+                  application en https, route gardée → appareil enrôlé (profil déduit, T155) → DI avec photo →
                   visible sur le PC (client 127.0.0.1, responsable), sans rechargement, en moins de 30 s ;
     habilitation  OT sur AE-03 (BR) affecté au technicien dont la BR est échue → avertissement affiché et tracé ;
     sauvegarde    sauvegarde, ligne supprimée sur le disque, restauration par les Paramètres ;
@@ -548,7 +548,8 @@ class TestRecetteTelephone(CasRecette):
         pc.set_viewport_size({"width": 1440, "height": 900})
         preregler_profil(self.contexte, "responsable")
         with ServeurAtelier() as serveur:
-            # PC : le responsable est connecté (cookie de session ; l'écran de connexion vient à T155)
+            # PC : le responsable est connecté (cookie de session posé d'avance ; l'écran de connexion est testé par
+            # tests/test_acces_ecrans.py, T155)
             cookie = connecter(serveur.url_pc, "nicolas.briand").cookie
             self.contexte.add_cookies([{"name": "id", "value": cookie.split("=", 1)[1], "url": serveur.url_pc,
                                         "httpOnly": True, "sameSite": "Lax"}])
@@ -577,9 +578,10 @@ class TestRecetteTelephone(CasRecette):
             tel.goto(url_qr)                                      # la porte, en http…
             tel.wait_for_url(serveur.url_https + "/#/equipement/" + POMPE)   # … puis l'application en https, même fiche
             self.assertTrue(tel.evaluate("window.isSecureContext"))
-            self.attendre_etat("profil", tel)
-            self.sans_defilement_horizontal("écran de profil", tel)
-            self.choisir_profil("demandeur", "Karim Benali", page=tel)
+            # Appareil enrôlé (T155) : le profil vient de la session, jamais l'écran de profil ; la route est gardée.
+            attendre_pret(tel)
+            self.assertEqual(tel.evaluate("App.profil"), {"type": "demandeur", "nom": "Karim Benali", "technicienId": ""})
+            self.assertTrue(tel.evaluate("App.session.appareil"))
             self.assertEqual(tel.evaluate("location.hash"), "#/equipement/" + POMPE)
             tel.wait_for_function("(r) => document.querySelector('#contenu h1') && document.querySelector('#contenu h1').textContent.includes(r)",
                                   arg=REPERE_POMPE)

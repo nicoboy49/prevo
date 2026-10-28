@@ -10,6 +10,7 @@
   <!-- Charte commune, puis la mise en page propre à chaque module (ARCHITECTURE.md §9) -->
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/modules/app.css">
+  <link rel="stylesheet" href="css/modules/connexion.css">
   <link rel="stylesheet" href="css/modules/accueil.css">
   <link rel="stylesheet" href="css/modules/ia.css">
   <link rel="stylesheet" href="css/modules/poste.css">
@@ -31,7 +32,7 @@
 </head>
 <body>
 
-<!-- Page unique de Prévo. Quatre écrans « plein écran » (chargement, démarrage, base vide, profil)
+<!-- Page unique de Prévo. Cinq écrans « plein écran » (chargement, démarrage, base vide, profil, connexion)
      puis la coque de l'application (#app). js/app.js montre l'un d'eux à la fois.
      Les <span data-icone="…"> et <span data-ui="logo"> sont remplacés par les dessins de UI. -->
 
@@ -178,6 +179,92 @@
   </div>
 </div>
 
+<!-- ===================================================== connexion (lot 7 : comptes exigés, jamais l'écran de profil) -->
+<div id="ecran-connexion" class="ecran-plein" hidden>
+  <div class="boite-demarrage">
+    <div class="marque">
+      <span data-ui="logo" data-classe="grand"></span>
+      <div>
+        <h1 id="connexion-titre">Connexion</h1>
+        <p id="connexion-sous-titre">Chaque personne a son compte ; le serveur vérifie les droits.</p>
+      </div>
+    </div>
+
+    <div id="connexion-alertes" hidden></div>
+
+    <!-- Compte : identifiant, mot de passe, « rester connecté sur cet appareil » (POST /api/connexion) -->
+    <form id="connexion-formulaire" class="carte form-colonne connexion-panneau" novalidate hidden>
+      <div class="champ">
+        <label class="libelle" for="connexion-identifiant">Identifiant</label>
+        <input type="text" id="connexion-identifiant" name="identifiant" autocomplete="username" autocapitalize="none"
+          spellcheck="false" maxlength="80" required aria-required="true">
+        <p class="aide">De la forme prenom.nom, donné par le responsable.</p>
+      </div>
+      <div class="champ">
+        <label class="libelle" for="connexion-mot-de-passe">Mot de passe</label>
+        <input type="password" id="connexion-mot-de-passe" name="mot_de_passe" autocomplete="current-password"
+          maxlength="256" required aria-required="true">
+      </div>
+      <div class="champ">
+        <label class="case" for="connexion-rester">
+          <input type="checkbox" id="connexion-rester" name="rester">
+          <span>Rester connecté sur cet appareil</span>
+        </label>
+        <p class="aide" id="connexion-rester-aide"></p>
+      </div>
+      <p class="erreur-champ" id="connexion-erreur" role="alert" hidden></p>
+      <div class="actions">
+        <button type="submit" class="btn btn-primaire" id="connexion-valider">Se connecter</button>
+      </div>
+    </form>
+
+    <!-- Appareil enrôlé (page ouverte sur #/enroler/<jeton>) : « Entrez votre nom » (POST /api/enroler) -->
+    <form id="connexion-enrolement" class="carte form-colonne connexion-panneau" novalidate hidden>
+      <h2>Entrez votre nom</h2>
+      <p class="note">Votre nom est inscrit sur vos demandes ; cet appareil restera reconnu sans mot de passe.</p>
+      <div class="champ">
+        <label class="libelle" for="connexion-nom">Votre nom <span class="requis" aria-hidden="true">*</span></label>
+        <input type="text" id="connexion-nom" name="nom" autocomplete="name" maxlength="60" required aria-required="true"
+          aria-describedby="connexion-enrolement-erreur">
+      </div>
+      <p class="erreur-champ" id="connexion-enrolement-erreur" role="alert" hidden></p>
+      <div class="actions">
+        <button type="submit" class="btn btn-primaire" id="connexion-enroler">Continuer</button>
+        <button type="button" class="btn btn-fantome" id="connexion-avec-compte">J'ai un compte</button>
+      </div>
+    </form>
+
+    <!-- Mot de passe provisoire : à choisir avant tout (POST /api/mot-de-passe) -->
+    <form id="connexion-mot-de-passe-panneau" class="carte form-colonne connexion-panneau" novalidate hidden>
+      <p class="note connexion-regles">12 caractères au moins, 256 au plus, aucune règle de composition : une phrase de
+        passe de plusieurs mots est conseillée.</p>
+      <div class="champ">
+        <label class="libelle" for="connexion-actuel">Mot de passe actuel (provisoire)</label>
+        <input type="password" id="connexion-actuel" name="actuel" autocomplete="current-password" maxlength="256"
+          required aria-required="true">
+      </div>
+      <div class="champ">
+        <label class="libelle" for="connexion-nouveau">Nouveau mot de passe</label>
+        <input type="password" id="connexion-nouveau" name="nouveau" autocomplete="new-password" minlength="12"
+          maxlength="256" required aria-required="true" aria-describedby="connexion-force">
+        <p class="aide" id="connexion-force" aria-live="polite"></p>
+      </div>
+      <div class="champ">
+        <label class="libelle" for="connexion-confirmation">Confirmation</label>
+        <input type="password" id="connexion-confirmation" name="confirmation" autocomplete="new-password"
+          maxlength="256" required aria-required="true">
+      </div>
+      <p class="erreur-champ" id="connexion-mdp-erreur" role="alert" hidden></p>
+      <div class="actions">
+        <button type="submit" class="btn btn-primaire" id="connexion-changer">Enregistrer et continuer</button>
+        <button type="button" class="btn btn-fantome" id="connexion-mdp-deconnexion">Se déconnecter</button>
+      </div>
+    </form>
+
+    <p class="demarrage-pied">Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS</p>
+  </div>
+</div>
+
 <!-- ===================================================== coque de l'application -->
 <div class="coque" id="app" hidden>
 
@@ -256,6 +343,7 @@
 <script src="js/modules/aide-ecrans-textes.js"></script>
 <script src="js/modules/aide-ecrans.js"></script>
 <script src="js/modules/acces-textes.js"></script>
+<script src="js/modules/connexion-ecrans.js"></script>
 <script src="js/modules/accueil.js"></script>
 <script src="js/modules/accueil-bento.js"></script>
 <script src="js/modules/causes-frequentes.js"></script>

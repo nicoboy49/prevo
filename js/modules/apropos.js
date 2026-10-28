@@ -33,6 +33,9 @@ const Apropos = (() => {
   function afficher(conteneur) {
     const mode = App.mode;
     const libelleStockage = App.adaptateur ? App.adaptateur.libelle : '';
+    // Lot 7 (D126) : avec les comptes exigés, le profil vient du compte et le serveur vérifie les droits ; la limite
+    // « ce n'est pas une sécurité » ne vaut que sans comptes (portée « ce PC », modes dossier et démo).
+    const comptesExiges = typeof App.comptesExiges === 'function' && App.comptesExiges();
     UI.remplir(conteneur, UI.html`
       <div class="entete-page">
         <div>
@@ -69,8 +72,11 @@ const Apropos = (() => {
         <article class="carte c6">
           <h2>Limites à connaître</h2>
           <ul class="apropos-liste">
+            ${comptesExiges ? UI.html`
+            <li>Chaque personne a son compte et son rôle ; le serveur vérifie les droits : un écran ou une donnée réservés à un autre rôle lui sont refusés.</li>
+            <li>Usage sur le réseau local ou par un réseau privé (Tailscale, VPN de l'entreprise) : ne jamais exposer le serveur directement sur Internet.</li>` : UI.html`
             <li>Les profils adaptent les écrans, ce n'est pas une sécurité : n'importe qui peut choisir le profil Responsable.</li>
-            <li>Usage sur réseau local uniquement, sans authentification : ne jamais exposer le serveur sur Internet.</li>
+            <li>Usage sur réseau local uniquement, sans authentification : ne jamais exposer le serveur sur Internet.</li>`}
             <li>Assistant IA (facultatif, réglé dans « Ce poste ») : l'IA propose, vous validez ; rien n'est enregistré sans vous. Un fournisseur en ligne reçoit les textes envoyés : il faut l'autorisation du responsable.</li>
             <li>Dictée : dans Chrome et Edge, la voix est en général transcrite par les serveurs de Google ou de Microsoft.</li>
           </ul>

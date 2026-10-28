@@ -1,0 +1,36 @@
+/* Prévo — écran de connexion (js/modules/connexion-ecrans.js, ARCHITECTURE.md §22.4 ; lot 7, CS124).
+   Même boîte centrée que les autres écrans pleins (css/modules/app.css). Uniquement des variables de la charte
+   (css/style.css) : aucune couleur codée en dur.
+   Sommaire : 1 écran · 2 panneaux et champs (48 px, PC et téléphone) · 3 bouton de profil du menu. */
+
+/* =========================================================================================
+   1. Écran : bandeaux au-dessus du panneau
+   ========================================================================================= */
+
+#connexion-alertes { display: flex; flex-direction: column; gap: 8px; }
+#connexion-alertes .alerte { margin: 0; }
+
+/* =========================================================================================
+   2. Panneaux : champs tactiles de 48 px à toutes les largeurs, bouton principal sur toute la ligne
+   ========================================================================================= */
+
+.connexion-panneau h2 { margin: 0 0 .2rem; }
+.connexion-panneau .note { margin: 0; }
+.connexion-panneau .champ input[type="text"], .connexion-panneau .champ input[type="password"] {
+  min-height: 48px; font-size: 1rem;
+}
+.connexion-panneau label.case { min-height: 48px; }
+.connexion-panneau label.case input { width: 24px; height: 24px; flex-shrink: 0; }
+.connexion-panneau .actions { margin-top: .2rem; }
+.connexion-panneau .btn { min-height: 48px; }
+.connexion-panneau .btn-primaire { flex: 1 1 100%; font-size: 1.0625rem; }
+.connexion-panneau .erreur-champ[hidden] { display: none; }
+#connexion-force { min-height: 1.25em; }
+.connexion-regles { color: var(--texte-2); }
+
+/* =========================================================================================
+   3. Bouton de profil du menu (mode comptes) : un appareil enrôlé n'a rien à changer ni à fermer
+   ========================================================================================= */
+
+button.etat-poste:disabled { cursor: default; }
+button.etat-poste:disabled:hover { background: var(--carte); color: var(--texte-2); border-color: var(--trait); }

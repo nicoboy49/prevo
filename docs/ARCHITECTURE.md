@@ -462,7 +462,7 @@ Suite du démarrage (lot 2), dans cet ordre, **avant le premier écran** :
    toute autre écriture ; en cas d'échec (sauvegarde impossible), l'erreur est signalée, un bandeau
    « Les fichiers n'ont pas pu passer au format 2 » s'affiche dans la coque, et l'application reste
    utilisable ;
-2. profil (mémorisé ou demandé) ;
+2. profil (mémorisé ou demandé ; comptes exigés : déduit de la session, voir ci-dessous et §22.4) ;
 3. technicien ou responsable : `Preventif.genererOTEchus()` (RG5, §14.3) ; toast « n OT préventifs
    générés » si n > 0 ; erreur → `App.signalerErreur`, l'application reste utilisable. **Pas de
    génération automatique si l'étape 1 a échoué** (elle écrirait des fichiers au format 2 sans
@@ -475,10 +475,22 @@ Suite du démarrage (lot 2), dans cet ordre, **avant le premier écran** :
 nom, technicienId}` ; `prevo.poste` = nom du poste). Si aucun profil n'est mémorisé, l'écran de
 profil s'affiche, puis l'application revient à la route demandée (cas du QR scanné).
 
+**Comptes exigés** (lot 7, D126, T155 ; mode serveur avec `comptes` vrai) : avant la lecture des tables,
+`GET /api/session` (`adaptateur.session()`) ; sans session, l'écran de connexion (`#ecran-connexion`, module
+`Connexion` de `js/modules/connexion-ecrans.js`, état `'connexion'`) ; le profil est **déduit de la session** (`role` →
+`type`, `prenom` + `nom` → `nom`, `technicien_id` → `technicienId` ; un appareil enrôlé : le nom saisi, type
+`demandeur`), l'écran de profil de 1.2 ne s'affiche jamais et `prevo.profil` n'est plus écrit (`prevo.poste` reste).
+Un mot de passe provisoire (`a_changer`) est changé avant tout. Pendant l'usage, l'événement `prevo:session-absente`
+(401 relu par `stockage-serveur.js`) ramène l'écran de connexion par-dessus l'écran courant, sans changer la route :
+après la connexion, les tables sont relues et la coque se rouvre sur la même route. Le bouton de profil du menu et
+l'entrée « Plus » du téléphone deviennent « se déconnecter » (`POST /api/deconnexion`, puis l'écran de connexion) ;
+`App.changerProfil()` fait de même ; un appareil enrôlé n'a aucun bouton (seul le responsable le révoque). Le menu
+affiche « Prénom Nom · Rôle ». Sans comptes (portée « ce PC »), en modes dossier et démo : rien ne change.
+
 **État prêt** : quand les tables sont chargées et le premier écran affiché,
 `document.documentElement.dataset.etat = 'pret'` et `performance.mark('prevo:pret')` (lus par
 les tests). Pendant le chargement : `'chargement'` ; écran de démarrage : `'demarrage'` ; écran
-de profil : `'profil'`.
+de profil : `'profil'` ; écran de connexion (comptes exigés) : `'connexion'`.
 
 **Navigation** : routes en `#/…`. Les modules s'enregistrent :
 ```js
@@ -1289,7 +1301,9 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   parametres.js  parametres-codes.js  (puis js/app.js)
   ```
   Écart retenu (T43) : `indicateurs-series.js` (séries des graphiques) s'insère après
-  `indicateurs-regles.js`, qui aurait dépassé 700 lignes.
+  `indicateurs-regles.js`, qui aurait dépassé 700 lignes. Lot 7 (T155) : `connexion-ecrans.js` (objet `Connexion`,
+  écran de connexion, §22.4) se charge après `acces-textes.js` (ses textes) et avant `accueil.js` ; feuille
+  `css/modules/connexion.css`.
   Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
   fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
   `Parametres`. Un seul écouteur `DOMContentLoaded` par module, dans son dernier fichier
@@ -3373,7 +3387,8 @@ contrôle d'accès et `tests/test_acces_sessions.py` : une route ajoutée est fe
   fichiers de l'application restent publics.
 - **Mot de passe provisoire** (`a_changer`) : la session existe, mais toute route autre que `GET /api/session`,
   `POST /api/mot-de-passe` et `POST /api/deconnexion` (`ROUTES_MOT_DE_PASSE_PROVISOIRE`) rend 403 `{"erreur": "Mot de
-  passe provisoire : choisissez votre mot de passe d'abord."}` ; le serveur l'impose, l'écran viendra à T155.
+  passe provisoire : choisissez votre mot de passe d'abord."}` ; le serveur l'impose, l'écran de connexion (T155,
+  ci-dessous) le fait choisir avant toute lecture de table.
 - Sans comptes (portée « ce PC », tous les tests des lots 1 à 6) : aucun contrôle de plus ; connexion, déconnexion,
   mot de passe, « déconnecter partout » et les routes des comptes et du journal rendent 400 avec un message clair
   (jamais 500).
@@ -3391,12 +3406,42 @@ Côté navigateur (`js/stockage-serveur.js`, T154) : toute réponse ≥ 400 autr
 `Donnees.ErreurStockage` portant `codeHttp` ; un **401** (session absente ou expirée, appareil refusé) porte aussi
 `sessionAbsente` et `appareilRefuse`, et l'adaptateur émet sur `document` l'événement `prevo:session-absente`
 (`StockageServeur.EVENEMENT_SESSION_ABSENTE`, `detail: { message, appareilRefuse }`, au plus un par seconde) que
-l'écran de connexion (T155) écoute ; un **403** garde le message du serveur (« Accès refusé : … »). `adaptateur.session()`
+`App` écoute (écran de connexion, T155) ; un **403** garde le message du serveur (« Accès refusé : … »). `adaptateur.session()`
 rend `GET /api/session` en camelCase (`technicienId`, `aChanger`). Tests (`tests/commun.py`, CS119) :
 `ServeurPrevo(comptes=True, reglages={…})` écrit les trois comptes de `COMPTES_DE_TEST` (nicolas.briand responsable,
 julien.moreau technicien lié à TEC-0001, lea.martin demandeur) dans la copie et `--config` à « comptes » ;
 `serveur.session(role)` rend le cookie d'une session, `serveur.poser_session(contexte, role)` le pose dans un
 contexte Playwright ; l'usage par défaut (`ServeurPrevo()`, portée « ce PC ») ne change pas.
+
+**Écran de connexion** (`#ecran-connexion` d'`index.html`, `js/modules/connexion-ecrans.js`, objet `Connexion`,
+`css/modules/connexion.css`, T155, CS124) : en mode serveur avec les comptes exigés, `App.ouvrirAvec` lit
+`adaptateur.session()` avant `Donnees.chargerTout()` (sinon chaque table répondrait 401, ou 403 avec un mot de passe
+provisoire et la base paraîtrait vide). Sans session → `App.demanderConnexion(options)` montre l'écran (état
+`'connexion'`) et attend la promesse de `Connexion.demander(options)` : la session en camelCase, une fois la personne
+connectée **et** son mot de passe choisi s'il était provisoire. Trois panneaux, un seul visible :
+
+- **Connexion** : identifiant, mot de passe, case « Rester connecté sur cet appareil » (aide = `AccesTextes.options.
+  session_longue_jours.aide`, T169), « Se connecter » (`POST /api/connexion`) ; le nom du poste n'est plus demandé.
+  Message du serveur tel quel : 401 « Identifiant ou mot de passe incorrect. », 429 avec le temps restant
+  (`attente_secondes`, sinon `Retry-After`) : bouton désactivé le temps dit, compte à rebours à la suite du message.
+  Le champ du mot de passe est vidé à chaque réponse ; champs tactiles de 48 px à 1280 comme à 375 px.
+- **Enrôlement** (page ouverte sur `#/enroler/<jeton>` sans session, D125, T153) : « Entrez votre nom » →
+  `POST /api/enroler` `{invitation, nom}` ; 200 → demandeur sans mot de passe, route remplacée par `#/accueil` ; 401 →
+  message du serveur ; 403 (enrôlement désactivé) → message et champs de connexion classiques ; « J'ai un compte »
+  revient aux champs classiques. Un appareil enrôlé (cookie `appareil`, `session.appareil` vrai) ne voit jamais
+  l'écran tant que son cookie vaut ; refusé (401 `appareil_refuse`, pendant l'usage ou détecté au démarrage par une
+  lecture de `/api/versions` sans session, `GET /api/session` étant publique) → écran de connexion avec le bandeau
+  `#connexion-appareil-refuse` « Cet appareil n'est plus autorisé : demandez une nouvelle invitation ».
+- **Mot de passe** (`a_changer`, au démarrage comme après une connexion) : actuel, nouveau, confirmation, règles du
+  serveur affichées (12 à 256 caractères, aucune règle de composition, phrase de passe conseillée, indication par la
+  longueur) ; `POST /api/mot-de-passe` ; 400, 403 (« Mot de passe actuel incorrect. »), 429 tels quels ; « Se
+  déconnecter » ferme la session provisoire et revient aux champs classiques.
+
+Bandeau `#connexion-motif` quand l'écran revient pendant l'usage (message du 401). `Connexion.deconnecter()` =
+`POST /api/deconnexion`. `App` expose `App.session` (copie, `null` sans comptes), `App.comptesExiges()`,
+`App.demanderConnexion(options)`, `App.deconnecter()`. Test : `tests/test_acces_ecrans.py` (serveur réel en mode
+comptes : connexion à 1280 et 375 px, mauvais mot de passe, « rester », provisoire, technicien, appareil enrôlé puis
+révoqué, enrôlement désactivé, déconnexion et session fermée ailleurs avec la route gardée, sans comptes inchangé).
 
 Écran **Équipe › Accès** (`#/equipe/acces`, `js/modules/equipe-acces.js`, objet `EquipeAcces`, T156, CS124) :
 responsable seulement (`profils: ['responsable']`, renvoyé à l'accueil sinon), en mode serveur ; bouton « Accès »
@@ -3424,7 +3469,7 @@ chacun relu sur le serveur à chaque ouverture :
 
 Les appels passent par `fetch` avec `X-Prevo: 1` (le serveur vérifie session et rôle) ; une erreur du serveur
 s'affiche avec son message. Test : `tests/test_acces_ecrans_equipe.py` (serveur réel en mode comptes, session
-posée en cookie ; l'écran de connexion vient avec T155).
+posée en cookie par `poser_session` ; l'écran de connexion lui-même est testé par `tests/test_acces_ecrans.py`, T155).
 
 ### 22.5 Rôles par route (D126)
 
