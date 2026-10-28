@@ -44,7 +44,7 @@ ORDRE_MODULES = [
     "preventif-regles.js", "preventif-ecritures.js", "preventif-ecrans.js", "preventif-calendrier.js",
     "suggestions-regles.js", "suggestions-ecrans.js",
     "magasin-regles.js", "magasin-ecritures.js", "magasin-articles.js", "magasin-mouvements.js", "magasin-achats.js",
-    "equipe-regles.js", "equipe-ecritures.js", "equipe-ecrans.js",
+    "equipe-regles.js", "equipe-ecritures.js", "equipe-ecrans.js", "equipe-acces.js",
     "controles-regles.js", "controles-ecritures.js", "controles-ecrans.js",
     "planning-regles.js", "planning-ecritures.js", "planning-ecrans.js",
     "indicateurs-regles.js", "indicateurs-series.js", "indicateurs-graphiques.js", "indicateurs-ecrans.js",

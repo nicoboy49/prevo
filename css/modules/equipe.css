@@ -1,6 +1,6 @@
 /* Prévo — écran Équipe : techniciens et habilitations (js/modules/equipe-*.js, ARCHITECTURE.md §15.8).
    Uniquement des variables de la charte (css/style.css) : aucune couleur codée en dur.
-   Sommaire : 1 liste et filtres · 2 habilitations (statuts, puces) · 3 fiche · 4 téléphone. */
+   Sommaire : 1 liste et filtres · 2 habilitations (statuts, puces) · 3 fiche · 4 téléphone · 5 accès (lot 7). */
 
 /* =========================================================================================
    1. Liste et filtres (tableau sur grand écran, cartes sur téléphone)
@@ -57,4 +57,24 @@
   .equipe-tete .equipe-lien { min-height: 48px; display: inline-flex; align-items: center; }
   .equipe-carte-habilitations .entete-carte .btn, .equipe-actions .btn { flex: 1 1 100%; }
   .equipe-statut { align-items: flex-start; }
+}
+
+/* =========================================================================================
+   5. Équipe › Accès (lot 7, equipe-acces.js) : comptes, invitations, appareils, journal
+   ========================================================================================= */
+
+.acces-carte { margin-bottom: 1rem; }
+.acces-compteur { color: var(--texte-2); font-weight: 400; font-size: .9375rem; }
+.acces-actions { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
+.acces-inviter-ligne { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem 1rem; }
+.acces-inviter-ligne .champ { margin: 0; }
+.acces-qr { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.5rem; }
+.acces-qr-image svg { display: block; width: 220px; height: 220px; max-width: 100%; }
+.acces-lien { flex: 1 1 16rem; min-width: 0; }
+.acces-lien input, .acces-mot-de-passe { width: 100%; font-family: ui-monospace, Consolas, monospace; }
+.acces-mot-de-passe { font-size: 1.25rem; letter-spacing: .06em; }
+.acces-agent { color: var(--texte-2); font-size: .875rem; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .acces-actions .btn, .acces-inviter-ligne .btn { flex: 1 1 100%; }
+  .acces-qr-image { margin: 0 auto; }
 }

@@ -5,7 +5,8 @@
 // statut, renouvellement, correction, historique) ; puis l'enregistrement des écrans auprès d'App.
 // Profils : le responsable a tous les boutons ; le technicien consulte, SANS aucun taux horaire (ni
 // à l'écran ni dans le DOM : la valeur n'est jamais écrite dans la page) ; le demandeur n'a pas accès.
-// Complète l'objet Equipe.
+// Lot 7 : le bouton « Accès » (comptes, appareils, journal des connexions) mène à #/equipe/acces,
+// écran de equipe-acces.js, responsable en mode serveur. Complète l'objet Equipe.
 
 Object.assign(Equipe, (() => {
 
@@ -124,7 +125,8 @@ Object.assign(Equipe, (() => {
   function entete(responsable, sousTitre) {
     return UI.html`<div class="entete-page">
       <div><h1>Équipe</h1><p>${sousTitre}</p></div>
-      <div class="actions">${responsable ? UI.html`<a class="btn btn-primaire" id="equipe-nouveau" href="#/equipe/nouveau">${UI.icone('ajouter')}Ajouter un technicien</a>` : ''}</div>
+      <div class="actions">${responsable && App.mode === 'serveur' ? UI.html`<a class="btn btn-secondaire" id="equipe-acces" href="#/equipe/acces">${UI.icone('cle')}Accès</a>` : ''}
+        ${responsable ? UI.html`<a class="btn btn-primaire" id="equipe-nouveau" href="#/equipe/nouveau">${UI.icone('ajouter')}Ajouter un technicien</a>` : ''}</div>
     </div>`;
   }
 
@@ -459,7 +461,8 @@ Object.assign(Equipe, (() => {
       tables: ['techniciens', 'habilitations'],
       afficher: afficherListe,
     });
-    // Les routes les plus précises d'abord : « nouveau » ne doit pas être pris pour un identifiant.
+    // Les routes les plus précises d'abord : « nouveau » et « acces » (equipe-acces.js, enregistré après ce
+    // fichier) ne doivent pas être pris pour un identifiant.
     App.ecran({
       id: 'equipe-nouveau', route: /^#\/equipe\/nouveau$/, titre: 'Nouveau technicien', parent: 'equipe',
       profils: ['responsable'],
@@ -467,7 +470,7 @@ Object.assign(Equipe, (() => {
       afficher: afficherNouveau,
     });
     App.ecran({
-      id: 'equipe-fiche', route: /^#\/equipe\/(?!nouveau$)(?<id>[^/?]+)$/, titre: 'Technicien', parent: 'equipe',
+      id: 'equipe-fiche', route: /^#\/equipe\/(?!nouveau$|acces$)(?<id>[^/?]+)$/, titre: 'Technicien', parent: 'equipe',
       profils: intervenants,
       tables: ['techniciens', 'habilitations', 'ordres_travail'],
       afficher: afficherFiche,

@@ -1279,7 +1279,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   ordres-regles.js  ordres-ecritures.js  ordres-liste.js  ordres-fiche.js  ordres-onglets.js  ordres-pieces.js  ordres-impression.js
   preventif-regles.js  preventif-ecritures.js  preventif-ecrans.js  preventif-calendrier.js
   magasin-regles.js  magasin-ecritures.js  magasin-articles.js  magasin-mouvements.js  magasin-achats.js
-  equipe-regles.js  equipe-ecritures.js  equipe-ecrans.js
+  equipe-regles.js  equipe-ecritures.js  equipe-ecrans.js  equipe-acces.js
   controles-regles.js  controles-ecritures.js  controles-ecrans.js
   planning-regles.js  planning-ecritures.js  planning-ecrans.js
   indicateurs-regles.js  indicateurs-series.js  indicateurs-graphiques.js  indicateurs-ecrans.js
@@ -3395,6 +3395,34 @@ rend `GET /api/session` en camelCase (`technicienId`, `aChanger`). Tests (`tests
 julien.moreau technicien lié à TEC-0001, lea.martin demandeur) dans la copie et `--config` à « comptes » ;
 `serveur.session(role)` rend le cookie d'une session, `serveur.poser_session(contexte, role)` le pose dans un
 contexte Playwright ; l'usage par défaut (`ServeurPrevo()`, portée « ce PC ») ne change pas.
+
+Écran **Équipe › Accès** (`#/equipe/acces`, `js/modules/equipe-acces.js`, objet `EquipeAcces`, T156, CS124) :
+responsable seulement (`profils: ['responsable']`, renvoyé à l'accueil sinon), en mode serveur ; bouton « Accès »
+dans l'en-tête de l'écran Équipe (responsable, mode serveur). Sans comptes exigés (`GET /api/session` →
+`comptes: false`), l'écran dit qu'il n'y a rien à gérer. Trois onglets (`?onglet=comptes|appareils|journal`),
+chacun relu sur le serveur à chaque ouverture :
+
+- **Comptes** : tableau par `GET /api/acces/comptes` (identifiant, personne, rôle, technicien lié, état « Actif » /
+  « Désactivé » / « Mot de passe provisoire ») ; « Créer un compte » (prénom obligatoire, nom, rôle, technicien lié
+  obligatoire pour un technicien et refusé pour un autre rôle, `POST /api/acces/comptes`) ; par ligne « Modifier… »
+  (`action: modifier`), « Réinitialiser… » (confirmation, `action: reinitialiser`), « Désactiver » (confirmation,
+  danger) ou « Activer » ; jamais de désactivation de son propre compte depuis l'écran. Le mot de passe provisoire
+  (création, réinitialisation) est montré une seule fois dans une fenêtre (`#acces-mot-de-passe-provisoire`,
+  champ en lecture seule à noter) et n'est ni mémorisé ni réécrit dans la page.
+- **Appareils** : « Inviter un appareil » avec la durée (1 h, 24 h, 3 jours, 7 jours → `heures` de
+  `POST /api/acces/invitations`) ; la fenêtre montre une seule fois le QR (`UI.qrSvg`) et le lien
+  `<adresse des QR>/#/enroler/<jeton>`, l'adresse étant celle des étiquettes (`App.urlFicheEquipement`, donc
+  `adresse_qr` ou la première adresse de `/api/info`, la porte d'entrée) ; tableaux des invitations (créée, expire,
+  état Valide / Expirée / Révoquée, « Révoquer ») et des appareils (personne, appareil, enrôlé le, dernière
+  activité, état Actif / Révoqué / Expiré, « Révoquer », « Révoquer tous les appareils » avec confirmation) ;
+  bandeau et bouton désactivé quand `enrolement_actif` est faux (demandeurs avec compte).
+- **Journal des connexions** : `GET /api/acces/journal` relu et affiché (300 lignes les plus récentes : date, qui,
+  événement en badge, adresse et colonne Tailscale, navigateur), « Exporter (CSV) » télécharge le fichier tel que
+  le serveur le sert (`UI.telecharger`).
+
+Les appels passent par `fetch` avec `X-Prevo: 1` (le serveur vérifie session et rôle) ; une erreur du serveur
+s'affiche avec son message. Test : `tests/test_acces_ecrans_equipe.py` (serveur réel en mode comptes, session
+posée en cookie ; l'écran de connexion vient avec T155).
 
 ### 22.5 Rôles par route (D126)
 
