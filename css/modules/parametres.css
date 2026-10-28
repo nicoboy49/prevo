@@ -44,8 +44,29 @@
 .codes-libelle { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .codes-modifier { flex: 0 0 auto; min-height: 36px; padding: .25rem .7rem; }
 
+/* Accès et installation (parametres-acces.js, lot 7 §22.10) : état du serveur, sous-sections dépliables, journal */
+#carte-acces .entete-carte .btn { flex: none; }
+.acces-etat dd { overflow-wrap: anywhere; }
+.acces-adresse { display: block; }
+.acces-journal { margin: 0 0 .3rem; max-height: 12rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8125rem; color: var(--texte-2); }
+.acces-intertitre { margin: 1.2rem 0 .2rem; font-size: 1rem; color: var(--texte-2); }
+.acces-sections { display: flex; flex-direction: column; gap: 8px; margin-top: .8rem; }
+.acces-section { border: 1px solid var(--trait-2); border-radius: 12px; padding: 0 14px; min-width: 0; }
+.acces-section > summary { cursor: pointer; min-height: 48px; padding: 8px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; }
+.acces-titre { font-weight: 600; color: var(--texte); }
+.acces-resume { color: var(--texte-2); font-size: .875rem; overflow-wrap: anywhere; }
+.acces-section.sans-objet .acces-titre { color: var(--muted); }
+.acces-corps { padding: 4px 0 14px; display: flex; flex-direction: column; gap: 12px; }
+.acces-corps .note, .acces-corps .aide, .acces-corps .installation-sautee { margin: 0; }
+.acces-corps .actions { margin-top: 0; }
+.acces-corps .actions .espace { flex: 1 1 auto; }
+.acces-attente .alerte-texte p { margin: 0 0 .5rem; }
+.acces-attente .actions { margin-top: 0; }
+.acces-attente .btn { margin-left: 0; }
+
 @media (max-width: 640px) {
   .controle-compteurs { gap: 10px; }
   .restauration-choix .champ { padding-left: 0; }
   .codes-modifier { min-height: 48px; }
+  .acces-corps .btn, .acces-attente .btn { min-height: 48px; }
 }

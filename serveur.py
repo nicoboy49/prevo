@@ -2123,8 +2123,20 @@ NOM_FICHIER_BROUILLON = 'installation.json'
 ROUTE_INSTALLATION = '#/installation'
 SITUATIONS = ('seul', 'equipe', 'informaticien')
 ETAPES_INSTALLATION = ('situation', 'portee', 'compte', 'certificat', 'tailscale', 'demarrage', 'sauvegardes', 'deplacer')
-ETAPES_DE_LECTURE = ('etat', 'fiche')
-ETAPES_D_ECRITURE = ETAPES_INSTALLATION + ('terminer',)
+ETAPES_DE_LECTURE = ('etat', 'fiche', 'journal')
+# Paramètres › Accès et installation (T170, D131 dernier point) : « reprendre » (brouillon repris de la configuration
+# en cours), « reglages » (clés simples), « ia » (fournisseur, adresse, IA en ligne ; jamais la clé) et « annuler »
+# (brouillon jeté) s'ajoutent aux étapes de l'assistant ; mêmes routes, même garde (PC serveur, responsable).
+ETAPES_D_ECRITURE = ETAPES_INSTALLATION + ('terminer', 'reprendre', 'reglages', 'ia', 'annuler')
+ETAPES_SANS_BROUILLON = ('situation', 'reprendre', 'annuler')       # jouables quand le brouillon n'existe pas
+CLES_REGLAGES_SIMPLES = ('demandeurs_avec_compte', 'session_heures', 'session_longue_jours', 'invitation_heures',
+                         'quota_documents_mo')
+CLES_IA_DU_CORPS = {'fournisseur': 'ia_fournisseur', 'url': 'ia_url', 'en_ligne': 'ia_en_ligne'}
+NOM_JOURNAL_SERVEUR = 'journal-serveur.log'
+LIGNES_DU_JOURNAL = 20                  # « journal » : les 20 dernières lignes de donnees/journal-serveur.log
+# Par prudence, aucune ligne contenant « cle » (ia_cle, PREVO_IA_CLE…) ne sort du journal, même si le serveur n'y écrit
+# jamais une clé ni un mot de passe.
+MOTIF_LIGNE_JOURNAL_RETIREE = re.compile(r'cle', re.IGNORECASE)
 ETAT_FAIT, ETAT_A_FAIRE, ETAT_SANS_OBJET = 'fait', 'a_faire', 'sans_objet'
 MODES_CERTIFICAT = ('automatique', 'reseau_prive', 'fichiers', 'mandataire')
 ACTIONS_TAILSCALE = ('detecter', 'appliquer', 'unattended', 'plus_tard')
@@ -2265,6 +2277,48 @@ def brouillon_neuf(config, situation):
     return completer_brouillon(config, brouillon)
 
 
+def valeur_parametre_csv(config, cle):
+    """Valeur d'une clé de parametres.csv (texte, '' si la ligne ou le fichier manque) ; lecture tolérante."""
+    for ligne in dictionnaires_csv(lire_octets(chemin_table(config, 'parametres')), 'parametres'):
+        if str(ligne.get('cle', '')).strip() == cle:
+            return str(ligne.get('valeur', '')).strip()
+    return ''
+
+
+def situation_de_la_configuration(config):
+    """Situation de l'étude (§6.1) d'une installation faite, pour reprendre son brouillon (Paramètres, T170) : « seul »
+    quand parametres.csv dit mode_solo = 1, « informaticien » quand les demandeurs ont un compte, « equipe » sinon."""
+    if valeur_parametre_csv(config, 'mode_solo') == '1':
+        return 'seul'
+    return 'informaticien' if config.reglages.get('demandeurs_avec_compte') else 'equipe'
+
+
+def brouillon_depuis_configuration(config):
+    """POST /api/installation/reprendre (T170) : brouillon repris de la configuration en cours (config.reglages : le
+    fichier et la ligne de commande, ce que « terminer » réécrira clé à clé), toutes les étapes faites sauf
+    « deplacer » ; mode_solo faux (parametres.csv n'est pas touché à « terminer »), base présente (jamais la démo)."""
+    brouillon = {cle: (list(config.reglages[cle]) if isinstance(config.reglages.get(cle), list) else config.reglages.get(cle))
+                 for cle in CLES_DU_BROUILLON}
+    brouillon['situation'] = situation_de_la_configuration(config)
+    brouillon['etapes'] = {etape: ETAT_FAIT for etape in ETAPES_INSTALLATION}
+    brouillon['etapes']['deplacer'] = ETAT_A_FAIRE
+    brouillon['mode_solo'] = False
+    brouillon['base_presente'] = True
+    return completer_brouillon(config, brouillon)
+
+
+def dernieres_lignes_du_journal(config, nombre=LIGNES_DU_JOURNAL):
+    """GET /api/installation/journal (T170, D130 : « Paramètres montre l'état… dernières erreurs ») : les « nombre »
+    dernières lignes de donnees/journal-serveur.log, sans celles qui contiennent « cle » (prudence) ; {"fichier": None,
+    "lignes": []} quand le journal n'existe pas (serveur avec console et sans --journal)."""
+    chemin = os.path.join(config.dossier_donnees, NOM_JOURNAL_SERVEUR)
+    octets = lire_octets(chemin)
+    if octets is None:
+        return {'fichier': None, 'lignes': []}
+    lignes = octets.decode('utf-8', 'replace').splitlines()[-nombre:]
+    return {'fichier': chemin, 'lignes': [ligne for ligne in lignes if not MOTIF_LIGNE_JOURNAL_RETIREE.search(ligne)]}
+
+
 def valeur_du_brouillon(cle, valeur):
     """Valeur d'une clé de configuration reçue par l'assistant, contrôlée comme à la lecture du fichier (bornes de
     CLES_CONFIGURATION) ; ErreurHttp 400 au message clair sinon."""
@@ -2318,6 +2372,11 @@ def etat_installation(config):
     windows = config.systeme.startswith('win')
     tables = tables_presentes(config.dossier_donnees)
     return {'configuration_presente': bool(config.reglages.get('_present')),
+            # T170 : la configuration en cours (jamais ia_cle), pour que Paramètres montre chaque réglage avant tout
+            # brouillon ; None tant que l'installation n'est pas terminée.
+            'configuration': ({cle: (list(config.reglages[cle]) if isinstance(config.reglages.get(cle), list)
+                                     else config.reglages.get(cle)) for cle in CLES_DU_BROUILLON}
+                              if config.reglages.get('_present') else None),
             'portee': reglages.get('portee'),
             'situation': brouillon.get('situation') if brouillon is not None else None,
             'etapes': brouillon['etapes'] if brouillon is not None else {etape: ETAT_A_FAIRE for etape in ETAPES_INSTALLATION},
@@ -2686,6 +2745,9 @@ class Configuration:
         self.horloge = time.time
         self.dormir = time.sleep
         self.echecs = CompteursEchecs()
+        # Lot 7 (D130, T170) : instant du démarrage, rendu par GET /api/info (« actif depuis » de Paramètres › Accès et
+        # installation ; il change quand le serveur s'est relancé).
+        self.actif_depuis = maintenant_iso(self)
         # Lot 7 (D133, §22.11) : jour de la dernière copie externe lancée par une écriture après 2 h du matin, et fil
         # de la dernière copie lancée (les tests l'attendent).
         self.copie_externe_jour = None
@@ -4789,6 +4851,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                 'adresse_locale': adresse_locale,
                                 'adresses_reseau': adresses_reseau,
                                 'porte': self.config.porte and self.mandat is None,
+                                'actif_depuis': self.config.actif_depuis,        # D130, T170 : instant du démarrage
                                 'copie_externe': etat_copie_externe_public(self.config),
                                 'tailscale': etat_tailscale_public(self.config),
                                 # §22.10 : l'écran propose l'assistant tant que prevo.config.json manque (jamais
@@ -5126,24 +5189,28 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         return self.client_address[0] in ADRESSES_DE_CE_PC and self.mandat is None
 
     def api_installation_lire(self, etape, corps):
-        """GET /api/installation/etat et /fiche (§22.10) ; toute autre étape : 404 comme une adresse inconnue."""
+        """GET /api/installation/etat, /fiche et /journal (§22.10) ; toute autre étape : 404 comme une adresse
+        inconnue."""
         if etape == 'etat':
             self.envoyer_json(200, etat_installation(self.config))
         elif etape == 'fiche':
             self.envoyer_json(200, fiche_acces(self.config))
+        elif etape == 'journal':
+            self.envoyer_json(200, dernieres_lignes_du_journal(self.config))
         else:
             raise ErreurHttp(404, MESSAGE_ADRESSE_INCONNUE)
 
     def api_installation_ecrire(self, etape, corps):
         """POST /api/installation/<etape> (situation, portee, compte, certificat, tailscale, demarrage, sauvegardes,
-        deplacer, terminer ; 404 sinon), X-Prevo exigé par traiter : lit le brouillon (400 s'il manque, sauf pour
-        « situation » qui le crée), joue l'étape sous VERROU_INSTALLATION et rend sa réponse."""
+        deplacer, terminer ; Paramètres (T170) : reprendre, reglages, ia, annuler ; 404 sinon), X-Prevo exigé par
+        traiter : lit le brouillon (400 s'il manque, sauf pour « situation » et « reprendre » qui le créent et
+        « annuler » qui le jette), joue l'étape sous VERROU_INSTALLATION et rend sa réponse."""
         if etape not in ETAPES_D_ECRITURE:
             raise ErreurHttp(404, MESSAGE_ADRESSE_INCONNUE)
         demande = lire_objet_json(corps) if corps.strip() else {}
         with VERROU_INSTALLATION:
             brouillon = lire_brouillon(self.config)
-            if brouillon is None and etape != 'situation':
+            if brouillon is None and etape not in ETAPES_SANS_BROUILLON:
                 raise ErreurHttp(400, MESSAGE_SANS_BROUILLON)
             reponse = getattr(self, 'installation_' + etape)(brouillon, demande)
         self.envoyer_json(200, reponse)
@@ -5162,6 +5229,52 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if situation not in SITUATIONS:
             raise ErreurHttp(400, 'Situation inconnue : « seul », « equipe » ou « informaticien ».')
         return self.garder_brouillon(brouillon_neuf(self.config, situation))
+
+    # --- Paramètres › Accès et installation (T170 ; D131 dernier point, CS130) : chaque réglage refaisable -----
+
+    def installation_reprendre(self, brouillon, demande):
+        """{} : brouillon repris de la configuration en cours (brouillon_depuis_configuration), pour refaire un réglage
+        depuis Paramètres sans repasser par les défauts d'une situation ; 400 tant que l'installation n'est pas
+        terminée (l'assistant s'en charge). Un brouillon déjà là est rendu tel quel (« repris » faux) : les
+        modifications en attente ne sont jamais perdues par un rechargement de l'écran."""
+        if brouillon is not None:
+            return {'brouillon': brouillon, 'etapes': brouillon.get('etapes'), 'repris': False}
+        if not self.config.reglages.get('_present'):
+            raise ErreurHttp(400, 'L\'installation n\'est pas terminée : réglez l\'accès par l\'assistant (%s).'
+                             % ROUTE_INSTALLATION)
+        return dict(self.garder_brouillon(brouillon_depuis_configuration(self.config)), repris=True)
+
+    def installation_reglages(self, brouillon, demande):
+        """{"demandeurs_avec_compte"?, "session_heures"?, "session_longue_jours"?, "invitation_heures"?,
+        "quota_documents_mo"?} (CLES_REGLAGES_SIMPLES, une au moins) : chaque valeur contrôlée comme dans le fichier
+        (bornes de CLES_CONFIGURATION ; 400 au message, qui cite les bornes) ; toute autre clé 400."""
+        if not demande:
+            raise ErreurHttp(400, 'Aucun réglage reçu : %s.' % ', '.join(CLES_REGLAGES_SIMPLES))
+        for cle, valeur in demande.items():
+            if cle not in CLES_REGLAGES_SIMPLES:
+                raise ErreurHttp(400, 'Réglage inconnu « %s » : %s.' % (cle, ', '.join(CLES_REGLAGES_SIMPLES)))
+            brouillon[cle] = valeur_du_brouillon(cle, valeur)
+        return self.garder_brouillon(brouillon)
+
+    def installation_ia(self, brouillon, demande):
+        """{"fournisseur": ollama | openai, "url", "en_ligne": bool} (chacune facultative, une au moins) : fournisseur
+        d'IA côté serveur (§22.12). La clé ne passe jamais par l'API (400 si elle est envoyée) : ia_cle du fichier ou
+        PREVO_IA_CLE, comme à T158 ; la réponse dit seulement si une clé est réglée."""
+        if not demande:
+            raise ErreurHttp(400, 'Aucun réglage reçu : fournisseur, url, en_ligne.')
+        for nom, valeur in demande.items():
+            if nom not in CLES_IA_DU_CORPS:
+                raise ErreurHttp(400, 'Réglage inconnu « %s » : fournisseur, url, en_ligne. La clé se règle dans le fichier '
+                                      'de configuration (ia_cle) ou par PREVO_IA_CLE, jamais par l\'API.' % nom)
+            brouillon[CLES_IA_DU_CORPS[nom]] = valeur_du_brouillon(CLES_IA_DU_CORPS[nom], valeur)
+        if not brouillon.get('ia_url'):
+            raise ErreurHttp(400, 'Donnez l\'adresse du service d\'IA (« url »).')
+        return dict(self.garder_brouillon(brouillon), cle_reglee=bool(cle_ia(self.config.reglages)))
+
+    def installation_annuler(self, brouillon, demande):
+        """{} : le brouillon est supprimé, rien d'autre ne change (la configuration en cours reste celle du fichier)."""
+        supprimer_brouillon(self.config)
+        return {'brouillon': None, 'etapes': {etape: ETAT_A_FAIRE for etape in ETAPES_INSTALLATION}}
 
     def installation_portee(self, brouillon, demande):
         """{"portee": ce-pc | atelier | dehors, "port_http"?, "port_https"?, "noms"?} : « ce PC » ⇒ comptes faux et
@@ -5297,9 +5410,11 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         return self.garder_brouillon(brouillon, 'tailscale', ETAT_A_FAIRE)
 
     def installation_demarrage(self, brouillon, demande):
-        """{"demarrage": systeme | session | aucun, "veille_desactivee": bool} : scripts de §22.9 écrits (jamais
-        exécutés ici) puis, sous Windows et si ≠ aucun, une seule élévation (config.lancer_eleve : Installer_demarrage.ps1
-        avec RunAs, ou Demarrage_session.ps1 sans droits) ; ailleurs, les commandes à lancer à la main. Étape faite si
+        """{"demarrage": systeme | session | aucun, "veille_desactivee": bool, "retirer"?: bool} : scripts de §22.9
+        écrits (jamais exécutés ici) puis, sous Windows et si ≠ aucun, une seule élévation (config.lancer_eleve :
+        Installer_demarrage.ps1 avec RunAs, ou Demarrage_session.ps1 sans droits) ; ailleurs, les commandes à lancer à
+        la main. « aucun » avec « retirer » vrai (Paramètres, CS129) : Retirer_demarrage.ps1 lancé avec l'élévation
+        (tâche, règle du pare-feu et réglages de veille défaits) ; hors Windows, la commande de retrait. Étape faite si
         rien n'était à lancer ou si le script a réussi ; à faire si l'élévation a été refusée (repli proposé)."""
         demarrage = demande.get('demarrage')
         if demarrage not in ('systeme', 'session', 'aucun'):
@@ -5307,6 +5422,10 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         veille = demande.get('veille_desactivee', False)
         if not isinstance(veille, bool):
             raise ErreurHttp(400, '« veille_desactivee » : vrai ou faux attendu.')
+        retirer = demande.get('retirer', False)
+        if not isinstance(retirer, bool):
+            raise ErreurHttp(400, '« retirer » : vrai ou faux attendu.')
+        retirer = retirer and demarrage == 'aucun'
         brouillon.update(demarrage=demarrage, veille_desactivee=veille)
         mkcert = None
         if brouillon.get('certificat_auto'):
@@ -5324,12 +5443,17 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                 lance = self.config.lancer_eleve(scripts['Installer_demarrage.ps1'], True)
             elif demarrage == 'session':
                 lance = self.config.lancer_eleve(scripts['Demarrage_session.ps1'], False)
+            elif retirer:
+                lance = self.config.lancer_eleve(scripts['Retirer_demarrage.ps1'], True)
+        elif retirer:
+            commandes = (['launchctl unload -w %s' % scripts['pro.prevo.serveur.plist']] if self.config.systeme == 'darwin'
+                         else ['sudo systemctl disable --now prevo'])
         elif demarrage != 'aucun':
             if self.config.systeme == 'darwin':
                 commandes = ['launchctl load -w %s' % scripts['pro.prevo.serveur.plist']]
             else:
                 commandes = commandes_systemd(dossier)
-        fait = demarrage == 'aucun' or bool(commandes) or bool(lance and lance.get('ok'))
+        fait = (demarrage == 'aucun' and lance is None) or bool(commandes) or bool(lance and lance.get('ok'))
         reponse = self.garder_brouillon(brouillon, 'demarrage', ETAT_FAIT if fait else ETAT_A_FAIRE)
         return dict(reponse, scripts=scripts, lance=lance, commandes=commandes)
 

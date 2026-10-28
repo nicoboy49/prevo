@@ -1307,6 +1307,9 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   huit étapes), `installation-ecrans.js` (objet `Installation`, l'écran plein de l'assistant, §22.10) et
   `installation-fiche.js` (objet `InstallationFiche`, la fiche d'accès et la route `#/installation/fiche` de la coque) se
   chargent dans cet ordre après `connexion-ecrans.js` ; feuille `css/modules/installation.css` (avec `@media print`).
+  Lot 7 (T170) : `parametres-acces.js` (objet `ParametresAcces`, carte « Accès et installation » de Paramètres, §22.10)
+  se charge après `parametres-sauvegardes.js` et se relie à `Parametres.interne` par le même relais (`carteAcces`,
+  `brancherAcces`).
   Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
   fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
   `Parametres`. Un seul écouteur `DOMContentLoaded` par module, dans son dernier fichier
@@ -3729,10 +3732,11 @@ Sans `prevo.config.json`, `serveur.py` démarre en portée « ce PC » et ouvre 
 Routes `/api/installation/<étape>` servies **seulement** à un client 127.0.0.1 non mandaté (404 sinon), écritures
 avec `X-Prevo` : `etat`, `situation` (`seul` \| `equipe` \| `informaticien`), `portee`, `compte`, `certificat`,
 `tailscale`, `demarrage`, `sauvegardes`, `deplacer` (copie vers `C:\Prevo`, vérification de chaque fichier, puis
-relance depuis la nouvelle place), `terminer` (écrit la configuration, puis le serveur se relance avec elle). Écran
+relance depuis la nouvelle place), `terminer` (écrit la configuration, puis le serveur se relance avec elle) ; pour
+Paramètres (T170) : `journal`, `reprendre`, `reglages`, `ia`, `annuler`. Écran
 `installation-ecrans.js` (huit étapes, quatre textes chacune, « Régler autrement »), vue informaticien sur une page ;
 fiche d'accès imprimable. Paramètres › Accès et installation (`parametres-acces.js`) refait chaque étape depuis le PC
-serveur seulement. Migration 1.2 : CSV gardés ; profils mémorisés ignorés quand `comptes` est vrai (paragraphe
+serveur seulement (paragraphe « Paramètres › Accès et installation » ci-dessous). Migration 1.2 : CSV gardés ; profils mémorisés ignorés quand `comptes` est vrai (paragraphe
 « Migration et dossier » ci-dessous, T171).
 
 Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») — T168 (écran) et T170 (Paramètres) sont
@@ -3756,7 +3760,9 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   `sans_objet` (`etapes_du_brouillon`) : `compte` et `certificat` sans objet sur « ce PC » (le compte reste proposé
   en Solo : il crée le technicien « moi »), `tailscale` hors de la portée `dehors`, `deplacer` hors de Windows ou
   déjà dans `C:\Prevo` ; un responsable actif vaut `compte` fait.
-- `GET etat` → `{"configuration_presente", "portee", "situation", "etapes", "brouillon" (null sans brouillon),
+- `GET etat` → `{"configuration_presente", "configuration" (T170 : la configuration en cours, clés de
+  `CLES_DU_BROUILLON` — jamais `ia_cle` — quand l'installation est terminée, null sinon : Paramètres montre chaque
+  réglage avant tout brouillon), "portee", "situation", "etapes", "brouillon" (null sans brouillon),
   "csv_presents" (des CSV dans le dossier des données : migration 1.2), "nombre_csv", "derniere_modification"
   (`AAAA-MM-JJTHH:MM:SS` du CSV le plus récent, null sans CSV), "dossier" (celui de Prévo),
   "dossier_conseille" (`C:\Prevo` sous Windows, null ailleurs), "dans_dossier_conseille", "python_embarque"
@@ -3796,14 +3802,17 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   `{"ok": true, "message", "nom", "adresse"}` ; 503 au message si Tailscale manque, n'est pas connecté ou si serve
   échoue ; unattended → `activer_unattended` (`{"ok", "message"}`, 503 si refusé) ; plus_tard → rien, étape
   `a_faire`. Jamais `up`, jamais d'installation.
-- `POST demarrage` `{"demarrage": "systeme" | "session" | "aucun", "veille_desactivee": bool}` →
+- `POST demarrage` `{"demarrage": "systeme" | "session" | "aucun", "veille_desactivee": bool, "retirer"?: bool}` →
   `produire_scripts_demarrage` dans le dossier de Prévo (ports du brouillon, mkcert si `certificat_auto`, jamais
   exécutés ici) puis, sous Windows et si ≠ aucun, **une seule élévation** : `config.lancer_eleve(script, eleve)` =
   `lancer_script_powershell` (`commande_powershell` : `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
   Installer_demarrage.ps1` lancé par `Start-Process -Verb RunAs -Wait`, code de sortie rendu ; `Demarrage_session.ps1`
   sans élévation pour `session`), injectable et jamais lancée dans les tests ; hors Windows, `commandes` à lancer à
-  la main (systemd, launchctl). Brouillon `demarrage`, `veille_desactivee` ; étape faite si rien n'était à lancer ou
-  si le script a réussi, `a_faire` si l'élévation a été refusée (l'écran propose le repli). Rend `{"scripts": {nom:
+  la main (systemd, launchctl). `aucun` avec `retirer` vrai (Paramètres, T170 ; CS129 : « scripts de retrait ») :
+  `Retirer_demarrage.ps1` lancé avec la même élévation (tâche, règle du pare-feu et réglages de veille défaits) ; hors
+  Windows, la commande de retrait (`systemctl disable --now prevo`, `launchctl unload`). Brouillon `demarrage`,
+  `veille_desactivee` ; étape faite si rien n'était à lancer ou si le script a réussi, `a_faire` si l'élévation a été
+  refusée (l'écran propose le repli ; au retrait, le script reste à lancer à la main). Rend `{"scripts": {nom:
   chemin}, "lance": {"ok", "code", "message"} | null, "commandes", …}`.
 - `POST sauvegardes` `{"dossier": chemin | ""}` → vide = plus tard ; sinon `verifier_dossier_de_copie` : le dossier
   existe, s'écrit (fichier témoin créé puis supprimé) et n'est ni le dossier des données ni un de ses sous-dossiers
@@ -3837,6 +3846,59 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   "autorite_presente", "adresse_confiance" (la porte, qui sert `/acces/ca.crt` : QR « faire confiance »),
   "lanceur" (`Lancer_GMAO.bat` | `lancer.sh`), "demarrage", "dossier", "dossier_donnees", "copie_sauvegardes",
   "reinitialisation" `{"script": Reinitialiser_mot_de_passe.bat, "commande"}`, "responsables" (identifiants)}`.
+- **Paramètres › Accès et installation** (T170 ; D130 « Paramètres montre l'état », D131 dernier point, CS129,
+  CS130) — mêmes routes `installation/<etape>`, même garde (PC serveur, et la session du responsable avec comptes) ;
+  rien de nouveau dans `ROUTES_API` ni `ROLES_PAR_ROUTE` :
+  - `GET journal` → `{"fichier": chemin | null, "lignes": [...]}` : les 20 dernières lignes de
+    `donnees/journal-serveur.log` (`dernieres_lignes_du_journal`, `LIGNES_DU_JOURNAL`), sans celles qui contiennent
+    « cle » (`MOTIF_LIGNE_JOURNAL_RETIREE`, prudence : le journal n'écrit jamais une clé ni un mot de passe) ;
+    `[]` et `null` sans journal (serveur avec console et sans `--journal`).
+  - `POST reprendre` `{}` → brouillon repris de la **configuration en cours** (`brouillon_depuis_configuration` :
+    `config.reglages`, ce que `terminer` réécrira clé à clé ; `situation` déduite par `situation_de_la_configuration`
+    : `seul` si `mode_solo` = 1 dans `parametres.csv`, `informaticien` si `demandeurs_avec_compte`, `equipe` sinon ;
+    toutes les étapes `fait` sauf `deplacer` ; `mode_solo` faux, donc `parametres.csv` n'est pas touché à
+    `terminer` ; `base_presente` vrai, donc jamais la démo), rend `{"brouillon", "etapes", "repris": true}` ; un
+    brouillon déjà là est rendu tel quel (`"repris": false`) : les modifications en attente survivent à un
+    rechargement ; 400 tant que `prevo.config.json` n'existe pas (l'assistant s'en charge). `POST situation`
+    reste celle de l'assistant : elle remettrait les défauts de l'étude.
+  - `POST reglages` `{clé: valeur, …}` pour `CLES_REGLAGES_SIMPLES` (`demandeurs_avec_compte`, `session_heures`,
+    `session_longue_jours`, `invitation_heures`, `quota_documents_mo`), une au moins ; chaque valeur par
+    `valeur_du_brouillon` (bornes de `CLES_CONFIGURATION`, 400 au message qui cite les bornes) ; clé inconnue 400.
+  - `POST ia` `{"fournisseur"?: "ollama" | "openai", "url"?, "en_ligne"?: bool}` (`CLES_IA_DU_CORPS`), une au moins,
+    `url` jamais vide ; la clé ne passe pas par l'API (400 si `cle` ou toute autre clé est envoyée) : `ia_cle` du
+    fichier ou `PREVO_IA_CLE`, comme à T158 ; rend aussi `"cle_reglee"` (une clé est réglée sur ce PC).
+  - `POST annuler` `{}` → brouillon supprimé, rien d'autre ne change ; rend `{"brouillon": null, "etapes"}`.
+  - `GET /api/info` rend `actif_depuis` (`Configuration.actif_depuis`, `maintenant_iso` à la construction) : l'instant
+    du démarrage du serveur, qui change quand il s'est relancé.
+  - *Écran* (`js/modules/parametres-acces.js`, objet `ParametresAcces`, Parametres 5/5, relais `carteAcces` et
+    `brancherAcces` de `parametres.js` ; styles dans `css/modules/parametres.css`) : carte `#carte-acces` dans Paramètres, rendue
+    **seulement** quand `App.mode === 'serveur'`, `App.pcServeur()` et `App.estResponsable()` — depuis un client du
+    réseau, en mode dossier ou démo ou pour un autre profil, ni carte ni mention. En tête, l'état du serveur
+    (`#acces-etat`, bouton « Actualiser ») : actif depuis (`/api/info`), installation terminée ou lien vers
+    l'assistant, portée et adresses (adresse locale, adresses réseau, adresse Tailscale derrière le mandataire),
+    Tailscale (`GET etat`, détecté à chaque lecture), copie externe (`/api/info`, `copie_externe`), journal du
+    serveur (`GET journal`, `pre.acces-journal` ; « Aucune erreur notée. » sinon) ; lien « Voir la fiche d'accès »
+    (`#/installation/fiche`). Puis sept sous-sections `details.acces-section[data-section]` (portée, ports et noms ;
+    certificat ; Tailscale ; démarrage et veille ; copie des sauvegardes ; comptes des demandeurs, durées de session
+    et documents ; IA), chacune avec le résumé des valeurs en cours (`etat.configuration`, ou le brouillon), les
+    formulaires d'`InstallationEtapes.formulaire` pour les étapes de l'assistant (jamais recopiés, « Régler
+    autrement » compris) et des formulaires `UI.champ` pour `reglages` et `ia`, l'aide de chaque réglage prise dans
+    `AccesTextes.options` ; « Sans objet » pour le certificat sur « ce PC » et Tailscale hors de « dehors ».
+    « Enregistrer ce réglage » : `POST reprendre` au premier enregistrement (un brouillon repris pour un
+    enregistrement refusé est jeté par `annuler`), puis `POST <étape>` ; l'erreur du serveur s'affiche telle quelle
+    sous le bouton (`#acces-erreur-<section>`). Le démarrage « à la main » envoie `retirer` quand la configuration en
+    force démarrait Prévo avec le PC (note `#acces-retrait-note` sous Windows). Tailscale : « J'ai installé
+    Tailscale et je suis connecté » → `detecter` puis `appliquer`, rappels, `unattended` sur clic ; « Plus tard »
+    caché. Copie des sauvegardes : « Ne plus copier » envoie un dossier vide. Un brouillon présent est annoncé par
+    `#acces-attente` (« Modifications en attente … Prévo redémarre : les postes connectés se reconnecteront. ») avec
+    « Appliquer et relancer » (`POST terminer`, puis `/api/info` relu toutes les 2 s jusqu'à ce que `actif_depuis`
+    change ou que la session soit à rouvrir — 401 —, et la page se recharge sur Paramètres ; message au bout de
+    60 s) et « Annuler » (`POST annuler`). Testé par `tests/test_parametres_acces.py` (serveur du processus avec
+    configuration et comptes, session du responsable, faux tailscale, élévation et relance notées : carte présente
+    pour le responsable sur le PC serveur avec l'état du serveur et le journal filtré, absente pour un technicien, en
+    démo et pour un client du réseau ; un réglage de chaque sous-section puis « Appliquer et relancer » avec
+    `prevo.config.json` relu clé à clé, `Retirer_demarrage.ps1` écrit et l'élévation notée, relance notée,
+    rechargement quand `actif_depuis` change ; bornes refusées et « Annuler » à 375 px sans défilement horizontal).
 - **Relance** (`relancer_prevo`, `config.relancer`, injectable) : lanceur du dossier visé (`Lancer_GMAO.bat`,
   `lancer.sh`) lancé par un processus détaché qui attend 3 s (le port est rendu), nouvelle console sous Windows ;
   ce serveur s'arrête 2 s après la réponse (`os._exit`). Sans lanceur : faux, le serveur continue. Jamais lancée par

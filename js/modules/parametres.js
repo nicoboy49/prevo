@@ -8,8 +8,10 @@
 //                restaurer ; « Tester » en mode serveur : parametres-sauvegardes.js, §22.11, D133), lien vers
 //                le contrôle de la base, lien « Importer des données » (#/import, lot 5), export ZIP ; carte
 //                « Codes de défaillance » (parametres-codes.js, appelée par un relais) ; carte « Mode Solo »
-//                (mode_solo, solo_technicien_id : §22.11, D132).
-//   Fichiers du module : parametres.js, parametres-codes.js, parametres-solo.js, parametres-sauvegardes.js.
+//                (mode_solo, solo_technicien_id : §22.11, D132) ; carte « Accès et installation » (parametres-acces.js,
+//                §22.10 : PC serveur et responsable seulement).
+//   Fichiers du module : parametres.js, parametres-codes.js, parametres-solo.js, parametres-sauvegardes.js,
+//                parametres-acces.js.
 //   Contrôle   : problèmes de Donnees.problemes() groupés par gravité, attribution des identifiants
 //                manquants, relecture des fichiers, liens vers les DI / OT concernés.
 
@@ -84,6 +86,10 @@ const Parametres = (() => {
   const actionsSauvegarde = (sauvegarde, boutonRestaurer) => (Parametres.interne.actionsSauvegarde
     ? Parametres.interne.actionsSauvegarde(sauvegarde, boutonRestaurer, pendant) : boutonRestaurer);
   const noteSauvegardes = () => (Parametres.interne.noteSauvegardes ? Parametres.interne.noteSauvegardes() : '');
+  // Carte « Accès et installation » (§22.10, D131 dernier point) : dans parametres-acces.js, chargé APRÈS ce fichier
+  // (même relais) ; la carte décide elle-même d'exister (mode serveur, PC serveur, responsable) ; absente sans lui.
+  const carteAcces = () => (Parametres.interne.carteAcces ? Parametres.interne.carteAcces() : '');
+  const brancherAcces = (conteneur) => { if (Parametres.interne.brancherAcces) Parametres.interne.brancherAcces(conteneur, pendant); };
 
   const NOTE_DECIDE_SUR_LE_SERVEUR = 'Décidé sur le PC serveur (Paramètres › Accès et installation).';
 
@@ -410,6 +416,7 @@ const Parametres = (() => {
             <div id="zone-formulaire"></div>
           </article>
           ${carteSauvegardes(sauvegardes)}
+          ${carteAcces()}
         </div>
         <div class="c5">
           ${carteSolo()}
@@ -450,6 +457,7 @@ const Parametres = (() => {
       mettreSurLeBouton(conteneur, '#btn-sauvegarder', (bouton) => pendant(bouton, 'sauvegarde', sauvegarderMaintenant));
     }
     brancherSolo(conteneur);
+    brancherAcces(conteneur);
     mettreSurLeBouton(conteneur, '#btn-export-zip', (bouton) => pendant(bouton, 'export ZIP', () => App.exporterZip()));
   }
 
