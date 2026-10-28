@@ -18,6 +18,8 @@ Lancement :
     py serveur.py [--port 8080] [--donnees CHEMIN] [--sans-navigateur] [--hote NOM]...
                   [--ia-url URL] [--ia-fournisseur ollama|openai] [--ia-en-ligne] [--servir-tests]
     (clé du fournisseur d'IA : « ia_cle » de prevo.config.json ou variable PREVO_IA_CLE, jamais une option)
+    (exécutable Tailscale, §22.8 : chemin standard du système, ou variable PREVO_TAILSCALE — les tests y mettent
+     tests/faux_tailscale.py ; un chemin qui n'existe pas vaut « Tailscale absent » —, jamais une option)
 
 Accès : en portée « ce PC » (défaut), écoute sur 127.0.0.1 seulement et aucun compte. Avec « comptes » (lot 7,
 ARCHITECTURE.md §22.3, §22.4), toute route /api/ autre que ping, session, connexion et enrôlement exige une session (cookie « id ») ou un
@@ -80,6 +82,7 @@ CLES_DEMANDE_IA = ('chemin', 'methode', 'corps')     # seules clés acceptées d
 DELAI_IA_S = 120
 TAILLE_MAX_REPONSE_IA = 2 * 1024 * 1024    # 2 Mo
 VARIABLE_CLE_IA = 'PREVO_IA_CLE'           # clé du fournisseur : passe avant « ia_cle » du fichier, jamais en option
+VARIABLE_TAILSCALE = 'PREVO_TAILSCALE'     # exécutable tailscale (tests : le faux) ; sinon le chemin standard (§22.8)
 
 # Dossier où se trouve serveur.py : c'est la racine des fichiers statiques.
 DOSSIER_APPLICATION = os.path.dirname(os.path.abspath(__file__))
@@ -446,13 +449,32 @@ def lire_configuration(chemin):
     return reglages
 
 
+AIDE_CONFIGURATION = ('Configuration de Prévo. Chaque clé est décrite par « serveur.py --aide ». '
+                      'Le CDC et docs/ARCHITECTURE.md §22 en donnent les règles.')
+
+
 def ecrire_configuration(chemin, reglages):
     """Écrit le fichier de configuration (atomique), avec un commentaire d'en-tête « _aide »."""
-    contenu = {'_aide': 'Configuration de Prévo. Chaque clé est décrite par « serveur.py --aide ». '
-                        'Le CDC et docs/ARCHITECTURE.md §22 en donnent les règles.'}
+    contenu = {'_aide': AIDE_CONFIGURATION}
     for cle, _, _, _ in CLES_CONFIGURATION:
         contenu[cle] = reglages.get(cle)
     ecrire_atomique(chemin, (json.dumps(contenu, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+
+
+def modifier_configuration(chemin, modifications):
+    """Change quelques clés du fichier de configuration sans toucher au reste : les clés inconnues et « _aide » sont
+    gardées telles quelles (fichier absent : créé avec « _aide »). Écriture atomique ; rend le contenu écrit.
+    OSError ou ValueError (fichier illisible) vers l'appelant, qui décide."""
+    contenu = {}
+    if chemin and os.path.isfile(chemin):
+        with open(chemin, 'rb') as fichier:
+            lu = json.loads(fichier.read().decode('utf-8-sig'))
+        if isinstance(lu, dict):
+            contenu = lu
+    contenu.setdefault('_aide', AIDE_CONFIGURATION)
+    contenu.update(modifications)
+    ecrire_atomique(chemin, (json.dumps(contenu, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+    return contenu
 
 
 def texte_aide_configuration():
@@ -1731,6 +1753,285 @@ def copier_acces_dans_sauvegarde(config, dossier_sauvegarde):
             shutil.copy2(chemin, os.path.join(cible, nom))
 
 
+# ---------------------------------------------------------------------------
+# Tailscale (lot 7, ARCHITECTURE.md §22.8 ; D128, CS127) : détecté et guidé, jamais installé ; commandes locales
+# seulement (« tailscale version », « status --json », « serve … », « serve status --json », « set --unattended »
+# sur un clic), jamais une requête réseau de Prévo vers Tailscale, jamais « tailscale up ».
+# ---------------------------------------------------------------------------
+
+DELAI_TAILSCALE_S = 5
+INTERVALLE_TAILSCALE_S = 600            # /api/info rafraîchit la détection au plus une fois par 10 minutes
+JOURS_ALERTE_CLE_TAILSCALE = 14         # l'accueil du responsable signale une clé qui expire sous 14 jours
+LIEN_TELECHARGEMENT_TAILSCALE = 'https://tailscale.com/download'        # montré à l'utilisateur, jamais ouvert ici
+CONSOLE_TAILSCALE = 'https://login.tailscale.com/admin/machines'        # idem : où désactiver l'expiration de clé
+CHEMINS_TAILSCALE = {
+    'win32': [r'C:\Program Files\Tailscale\tailscale.exe'],
+    'darwin': ['/Applications/Tailscale.app/Contents/MacOS/Tailscale'],
+    'linux': ['/usr/bin/tailscale'],
+}
+COMMANDES_TAILSCALE_INTERDITES = ('up', 'down', 'login', 'logout', 'install', 'update')   # jamais lancées par Prévo
+VERROU_TAILSCALE = threading.Lock()     # une détection à la fois ; config.tailscale lu et posé sous ce verrou
+RAPPELS_TAILSCALE = (
+    'Désactivez l\'expiration de clé de ce PC dans la console Tailscale (%s : Machines › ce PC › Disable key expiry) ; '
+    'sinon, au bout de quelques mois, les téléphones ne joignent plus Prévo.' % CONSOLE_TAILSCALE,
+    'Empêchez la veille du PC serveur (Démarrer avec la machine, D130) : un PC en veille ne répond plus, Tailscale '
+    'ou pas.',
+)
+
+
+class ErreurTailscale(Exception):
+    """tailscale n'a pas pu être lancé, a dépassé le délai ou a rendu un code non nul : la raison est lisible."""
+
+
+def executable_tailscale(executable=None):
+    """Chemin de tailscale : celui donné ; sinon PREVO_TAILSCALE (tests : le faux tailscale ; un chemin qui n'existe
+    pas vaut « absent », pour qu'un test ne lance jamais le vrai) ; sinon le chemin standard du système, puis le
+    PATH. None quand rien n'est trouvé."""
+    if executable:
+        return executable
+    variable = os.environ.get(VARIABLE_TAILSCALE, '').strip()
+    if variable:
+        return variable if os.path.isfile(variable) else None
+    systeme = 'win32' if sys.platform.startswith('win') else ('darwin' if sys.platform == 'darwin' else 'linux')
+    for chemin in CHEMINS_TAILSCALE[systeme]:
+        if os.path.isfile(chemin):
+            return chemin
+    return shutil.which('tailscale')
+
+
+def lancer_tailscale(executable, arguments, delai=DELAI_TAILSCALE_S):
+    """Lance tailscale avec ces arguments (jamais par un shell, sans fenêtre sous Windows, jamais une commande de
+    COMMANDES_TAILSCALE_INTERDITES) ; rend sa sortie standard (texte). ErreurTailscale si l'outil manque, dépasse le
+    délai ou rend un code non nul."""
+    arguments = [str(argument) for argument in arguments]
+    if not arguments or arguments[0] in COMMANDES_TAILSCALE_INTERDITES:
+        raise ErreurTailscale('Prévo ne lance jamais « tailscale %s » : c\'est à vous de le faire.' % ' '.join(arguments))
+    commande = ([sys.executable, executable] if executable.endswith('.py') else [executable]) + arguments
+    options = {'creationflags': subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, 'CREATE_NO_WINDOW') else {}
+    try:
+        resultat = subprocess.run(commande, capture_output=True, timeout=delai, **options)
+    except subprocess.TimeoutExpired:
+        raise ErreurTailscale('tailscale %s ne répond pas (délai de %s s dépassé).' % (arguments[0], delai))
+    except OSError as erreur:
+        raise ErreurTailscale('tailscale n\'a pas pu être lancé (%s).' % erreur)
+    if resultat.returncode != 0:
+        sortie = (resultat.stderr or resultat.stdout).decode('utf-8', 'replace').strip()
+        raise ErreurTailscale('tailscale %s a échoué : %s' % (' '.join(arguments),
+                                                              sortie[-300:] or 'code %d' % resultat.returncode))
+    return resultat.stdout.decode('utf-8', 'replace')
+
+
+def lire_json_tailscale(texte):
+    """Objet JSON d'une sortie de tailscale ; None si elle ne s'y lit pas (« No serve config », vide…)."""
+    try:
+        valeur = json.loads(texte)
+    except (TypeError, ValueError):
+        return None
+    return valeur if isinstance(valeur, dict) else None
+
+
+def expiration_cle_tailscale(valeur, maintenant=None):
+    """(« AAAA-MM-JJTHH:MM:SS » en heure locale, jours entiers restants — négatif si la clé a expiré) d'après
+    Self.KeyExpiry (RFC 3339, UTC) ; (None, None) si la valeur manque, est vide, ne se lit pas ou vaut la date zéro de
+    Go (0001-01-01 : expiration désactivée)."""
+    if not isinstance(valeur, str) or not valeur.strip():
+        return None, None
+    texte = valeur.strip()
+    if texte.endswith('Z'):
+        texte = texte[:-1] + '+00:00'
+    try:
+        instant = datetime.datetime.fromisoformat(texte)
+    except ValueError:
+        return None, None
+    if instant.year < 1971:
+        return None, None
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=datetime.timezone.utc)
+    maintenant = maintenant if maintenant is not None else time.time()
+    jours = int((instant.timestamp() - maintenant) // 86400)
+    return instant.astimezone().strftime('%Y-%m-%dT%H:%M:%S'), jours
+
+
+def detecter_tailscale(executable=None, delai=DELAI_TAILSCALE_S, maintenant=None):
+    """État de Tailscale sur ce PC par « tailscale version », « tailscale status --json » puis « tailscale serve status
+    --json » (commandes locales, jamais une requête réseau) : {"present": False, "raison"} quand l'exécutable manque,
+    que « version » échoue ou que le délai est dépassé ; sinon {"present": True, "version", "connecte" (BackendState
+    « Running »), "nom" (Self.DNSName sans le point final, minuscules ; None sans nom), "expiration_cle" (heure
+    locale ; None sans expiration), "jours_avant_expiration" (entier ; None sans expiration), "serve" (sortie de
+    « serve status --json » si elle se lit ; None sinon), "raison" (None, ou pourquoi « status » n'a rien dit)}.
+    Jamais d'exception vers l'appelant (console, /api/info, assistant)."""
+    try:
+        chemin = executable_tailscale(executable)
+        if not chemin:
+            return {'present': False, 'raison': 'Tailscale introuvable sur ce PC'}
+        version = lancer_tailscale(chemin, ['version'], delai).strip().splitlines()
+        resultat = {'present': True, 'version': version[0].strip() if version else '', 'connecte': False, 'nom': None,
+                    'expiration_cle': None, 'jours_avant_expiration': None, 'serve': None, 'raison': None}
+        try:
+            etat = lire_json_tailscale(lancer_tailscale(chemin, ['status', '--json'], delai))
+        except ErreurTailscale as erreur:
+            resultat['raison'] = str(erreur)
+            return resultat
+        if etat is None:
+            resultat['raison'] = 'tailscale status --json : réponse illisible'
+            return resultat
+        soi = etat.get('Self') if isinstance(etat.get('Self'), dict) else {}
+        nom = soi.get('DNSName') if isinstance(soi.get('DNSName'), str) else ''
+        resultat['connecte'] = etat.get('BackendState') == 'Running'
+        resultat['nom'] = nom.strip().rstrip('.').lower() or None
+        resultat['expiration_cle'], resultat['jours_avant_expiration'] = expiration_cle_tailscale(soi.get('KeyExpiry'),
+                                                                                                  maintenant)
+        try:
+            resultat['serve'] = lire_json_tailscale(lancer_tailscale(chemin, ['serve', 'status', '--json'], delai))
+        except ErreurTailscale:
+            resultat['serve'] = None
+        return resultat
+    except ErreurTailscale as erreur:
+        return {'present': False, 'raison': str(erreur).rstrip('.')}
+    except Exception as erreur:         # jamais d'exception vers l'appelant
+        return {'present': False, 'raison': 'détection impossible (%s)' % erreur}
+
+
+def tailscale_attendu(reglages):
+    """Vrai quand la configuration laisse penser que Tailscale sert Prévo : « mandataire » vrai, ou un nom en .ts.net
+    dans « noms ». La détection n'est lancée qu'alors (au démarrage, puis par /api/info), jamais à chaque requête."""
+    return bool(reglages.get('mandataire')) or any(nom.endswith('.ts.net') for nom in reglages.get('noms', []))
+
+
+def detecter_tailscale_pour(config, forcer=False):
+    """Détection gardée dans config.tailscale, refaite au plus une fois par INTERVALLE_TAILSCALE_S (config.horloge),
+    sous VERROU_TAILSCALE (une commande à la fois, dans le fil de l'appelant). Rend config.tailscale."""
+    with VERROU_TAILSCALE:
+        maintenant = maintenant_s(config)
+        if (forcer or config.tailscale is None or config.tailscale_lu_a is None
+                or maintenant - config.tailscale_lu_a >= INTERVALLE_TAILSCALE_S):
+            config.tailscale = detecter_tailscale(maintenant=maintenant)
+            config.tailscale_lu_a = maintenant
+        return config.tailscale
+
+
+def etat_tailscale_public(config):
+    """« tailscale » de GET /api/info : None tant que la détection n'est pas attendue (portée « ce PC » sans mandataire
+    ni nom en .ts.net : aucune commande lancée) ; sinon {"present", "connecte", "nom", "jours_avant_expiration"},
+    rafraîchi au plus une fois par 10 minutes. Jamais la sortie brute de « status » : ni version, ni adresse d'un
+    autre appareil du tailnet."""
+    if config.tailscale is None:
+        return None
+    detection = detecter_tailscale_pour(config)
+    return {'present': bool(detection.get('present')), 'connecte': bool(detection.get('connecte')),
+            'nom': detection.get('nom'), 'jours_avant_expiration': detection.get('jours_avant_expiration')}
+
+
+def resume_tailscale(detection):
+    """Ligne de la console : « prevo.tail1234.ts.net, connecté, clé valable 83 jours », ou « non détecté (raison) »."""
+    if not detection or not detection.get('present'):
+        raison = (detection or {}).get('raison')
+        return 'non détecté' + (' (%s)' % raison if raison else '')
+    morceaux = [detection.get('nom') or 'sans nom', 'connecté' if detection.get('connecte') else 'déconnecté']
+    jours = detection.get('jours_avant_expiration')
+    if jours is None:
+        morceaux.append('clé sans expiration')
+    elif jours < 0:
+        morceaux.append('clé expirée')
+    else:
+        morceaux.append('clé valable %d jour%s' % (jours, '' if jours == 1 else 's'))
+    return ', '.join(morceaux)
+
+
+def commande_serve_tailscale(port_http):
+    """Arguments de « tailscale serve --bg --https=443 http://127.0.0.1:<port_http> » (D128)."""
+    return ['serve', '--bg', '--https=443', 'http://127.0.0.1:%d' % int(port_http)]
+
+
+def cible_serve_tailscale(serve, port_http):
+    """Hôte (« nom:443 ») sous lequel « tailscale serve status --json » relaie vers http://127.0.0.1:<port_http> (ou
+    localhost) ; None si la cible n'y figure pas."""
+    cibles = ('http://127.0.0.1:%d' % int(port_http), 'http://localhost:%d' % int(port_http))
+    web = serve.get('Web') if isinstance(serve, dict) and isinstance(serve.get('Web'), dict) else {}
+    for hote, site in web.items():
+        gestionnaires = site.get('Handlers') if isinstance(site, dict) and isinstance(site.get('Handlers'), dict) else {}
+        for gestionnaire in gestionnaires.values():
+            if isinstance(gestionnaire, dict) and str(gestionnaire.get('Proxy', '')).rstrip('/') in cibles:
+                return hote
+    return None
+
+
+def preparer_tailscale(config, detection, systeme=None):
+    """Ce que l'assistant propose (§22.8, T167) d'après une détection, sans rien lancer ni écrire : {"present": False,
+    "raison", "telechargement" (lien officiel, montré seulement)} quand Tailscale manque ; sinon "present" vrai,
+    "connecte", "nom", "adresse" (https://<nom>/), "noms" (les noms acceptés, le nom ajouté s'il manque),
+    "ajouter_nom", "mandataire" (vrai), "serve" (texte de la commande) et "arguments_serve", "unattended" (« tailscale
+    set --unattended=true », Windows seulement ; None ailleurs), "rappels" (expiration de clé, veille : D130)."""
+    systeme = systeme or sys.platform
+    if not detection or not detection.get('present'):
+        return {'present': False, 'raison': (detection or {}).get('raison'),
+                'telechargement': LIEN_TELECHARGEMENT_TAILSCALE}
+    nom = detection.get('nom')
+    noms = list(config.reglages.get('noms', []))
+    ajouter = bool(nom) and nom not in noms
+    if ajouter:
+        noms.append(nom)
+    arguments = commande_serve_tailscale(config.reglages.get('port_http', PORT_PAR_DEFAUT))
+    return {'present': True, 'connecte': bool(detection.get('connecte')), 'nom': nom,
+            'adresse': 'https://%s/' % nom if nom else None, 'noms': noms, 'ajouter_nom': ajouter, 'mandataire': True,
+            'serve': 'tailscale ' + ' '.join(arguments), 'arguments_serve': arguments,
+            'unattended': 'tailscale set --unattended=true' if systeme.startswith('win') else None,
+            'rappels': list(RAPPELS_TAILSCALE), 'telechargement': None}
+
+
+def appliquer_tailscale(config, executable=None, delai=DELAI_TAILSCALE_S):
+    """Applique la proposition de preparer_tailscale (clic de l'assistant, T167) : écrit « noms » (nom ajouté) et
+    « mandataire » vrai dans le fichier de configuration (modifier_configuration : le reste du fichier est gardé),
+    lance « tailscale serve --bg --https=443 http://127.0.0.1:<port_http> » puis vérifie par « tailscale serve status
+    --json » que la cible y figure. Rend {"ok", "serve" (état lu, ou None), "message", "nom", "adresse"}. Jamais
+    « tailscale up », jamais d'installation, jamais « set --unattended » (activer_unattended, sur un clic à part). Les
+    réglages en mémoire ne changent pas : la configuration écrite vaut au prochain démarrage (l'assistant relance le
+    serveur, §22.10) ; config.tailscale reprend la détection faite ici."""
+    detection = detecter_tailscale(executable, delai, maintenant_s(config))
+    proposition = preparer_tailscale(config, detection)
+    refus = {'ok': False, 'serve': None, 'nom': detection.get('nom'), 'adresse': proposition.get('adresse')}
+    if not proposition['present']:
+        return dict(refus, message='Tailscale non détecté (%s) : installez-le et connectez-vous, puis réessayez.'
+                    % (detection.get('raison') or 'inconnu'))
+    if not detection.get('nom') or not detection.get('connecte'):
+        return dict(refus, message='Tailscale n\'est pas connecté sur ce PC : ouvrez Tailscale, connectez-vous, puis '
+                                   'réessayez.')
+    chemin = config.reglages.get('_fichier') or os.path.join(DOSSIER_APPLICATION, NOM_FICHIER_CONFIGURATION)
+    try:
+        modifier_configuration(chemin, {'noms': proposition['noms'], 'mandataire': True})
+    except (OSError, ValueError) as erreur:
+        return dict(refus, message='Configuration non écrite (%s) : rien n\'a été lancé.' % erreur)
+    port_http = config.reglages.get('port_http', PORT_PAR_DEFAUT)
+    chemin_tailscale = executable_tailscale(executable)
+    try:
+        lancer_tailscale(chemin_tailscale, proposition['arguments_serve'], delai)
+        serve = lire_json_tailscale(lancer_tailscale(chemin_tailscale, ['serve', 'status', '--json'], delai))
+    except ErreurTailscale as erreur:
+        return dict(refus, message=str(erreur))
+    detection['serve'] = serve
+    with VERROU_TAILSCALE:
+        config.tailscale, config.tailscale_lu_a = detection, maintenant_s(config)
+    resultat = dict(refus, serve=serve)
+    if cible_serve_tailscale(serve, port_http) is None:
+        return dict(resultat, message='« tailscale serve status » ne montre pas http://127.0.0.1:%d : vérifiez la '
+                                      'commande « %s » sur ce PC.' % (port_http, proposition['serve']))
+    return dict(resultat, ok=True, message='Tailscale relaie %s vers http://127.0.0.1:%d ; la configuration vaut au '
+                                           'prochain démarrage de Prévo.' % (proposition['adresse'], port_http))
+
+
+def activer_unattended(executable=None, delai=DELAI_TAILSCALE_S):
+    """« tailscale set --unattended=true » (Windows : Tailscale reste connecté sans session ouverte), lancé seulement
+    sur ce clic explicite de l'assistant, jamais par appliquer_tailscale. Rend {"ok", "message"}."""
+    chemin = executable_tailscale(executable)
+    if not chemin:
+        return {'ok': False, 'message': 'Tailscale introuvable sur ce PC.'}
+    try:
+        lancer_tailscale(chemin, ['set', '--unattended=true'], delai)
+    except ErreurTailscale as erreur:
+        return {'ok': False, 'message': str(erreur)}
+    return {'ok': True, 'message': 'Tailscale reste connecté même sans session Windows ouverte (« Run unattended »).'}
+
+
 class Configuration:
     """Réglages du serveur, calculés une fois au démarrage."""
 
@@ -1759,6 +2060,10 @@ class Configuration:
         # de la dernière copie lancée (les tests l'attendent).
         self.copie_externe_jour = None
         self.fil_copie_externe = None
+        # Lot 7 (§22.8) : détection de Tailscale (detecter_tailscale) faite au démarrage quand elle est attendue
+        # (tailscale_attendu), puis rafraîchie par /api/info au plus une fois par 10 minutes ; None sinon.
+        self.tailscale = None
+        self.tailscale_lu_a = None
         # Dossiers jamais servis en statique : le dossier de données choisi et donnees/
         # à côté de serveur.py (même si --donnees pointe ailleurs).
         self.dossiers_interdits_statique = [
@@ -3766,14 +4071,15 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     def api_info(self, segment, corps):
         """GET /api/info : port, adresses (celles de la porte hors de « ce PC », §22.6), « porte » vrai quand elle est
         ouverte (la carte « Connecter un téléphone » rappelle alors « Faites confiance au PC atelier »), et l'état de
-        la copie externe des sauvegardes (D133 ; None sans dossier). Jamais le port https : il n'est pas une adresse
-        que Prévo donne (CS137)."""
+        la copie externe des sauvegardes (D133 ; None sans dossier) et de Tailscale (D128, §22.8 ; None quand il n'est
+        pas attendu). Jamais le port https : il n'est pas une adresse que Prévo donne (CS137)."""
         adresse_locale, adresses_reseau = self.adresses_donnees()
         self.envoyer_json(200, {'port': self.config.port,
                                 'adresse_locale': adresse_locale,
                                 'adresses_reseau': adresses_reseau,
                                 'porte': self.config.porte and self.mandat is None,
-                                'copie_externe': etat_copie_externe_public(self.config)})
+                                'copie_externe': etat_copie_externe_public(self.config),
+                                'tailscale': etat_tailscale_public(self.config)})
 
     def api_session(self, segment, corps):
         """GET /api/session : comptes exigés ou non, et l'identité de la session (jamais le jeton). Pour un appareil
@@ -4310,6 +4616,8 @@ def afficher_accueil(config, port_demande, avertissements=()):
     if dossier_copie_externe(config):
         afficher('  Copie externe    : %s (chaque nuit, %d copies gardées)'
                  % (dossier_copie_externe(config), COPIES_EXTERNES_GARDEES))
+    if config.tailscale is not None:
+        afficher('  Tailscale        : %s' % resume_tailscale(config.tailscale))
     for avertissement in avertissements:
         afficher('  ' + avertissement)
     afficher('  Ctrl+C pour arrêter.')
@@ -4427,6 +4735,8 @@ def main(arguments=None):
     if certificat:
         config.contexte_ssl = creer_contexte_ssl(certificat, cle)
     serveurs, config.port = demarrer_serveur(reglages['port_http'], config)
+    if tailscale_attendu(reglages):
+        detecter_tailscale_pour(config)         # §22.8 : commandes locales, une fois au démarrage (ligne de console)
     afficher_accueil(config, reglages['port_http'], avertissements)
     lancer_copie_externe(config)        # D133 : copie externe au démarrage, dans son propre fil
     if not options.sans_navigateur:

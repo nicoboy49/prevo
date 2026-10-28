@@ -3601,6 +3601,53 @@ console, veille). L'accueil du responsable signale un Tailscale déconnecté ou 
 Aucune installation, aucune requête réseau de Prévo vers Tailscale ; les commandes sont injectables pour les tests
 (`tests/faux_tailscale.py`).
 
+Précisions de T165 (`serveur.py`, section « Tailscale ») :
+
+- **Exécutable** : `executable_tailscale(executable)` — celui donné ; sinon la variable d'environnement
+  `PREVO_TAILSCALE` (tests : le faux ; un chemin qui n'existe pas vaut « absent », pour qu'un test ne lance jamais le
+  vrai : `ServeurPrevo` la pose ainsi par défaut) ; sinon le chemin standard du système (`CHEMINS_TAILSCALE` :
+  `C:\Program Files\Tailscale\tailscale.exe`, `/usr/bin/tailscale`, `/Applications/Tailscale.app/Contents/MacOS/Tailscale`),
+  puis le PATH. `lancer_tailscale(executable, arguments, delai)` : `subprocess.run` sans shell, `capture_output`,
+  `timeout` (`DELAI_TAILSCALE_S` = 5), `CREATE_NO_WINDOW` sous Windows ; `ErreurTailscale` (raison lisible) si l'outil
+  manque, dépasse le délai ou rend un code non nul ; refuse avant tout lancement `up`, `down`, `login`, `logout`,
+  `install`, `update` (`COMMANDES_TAILSCALE_INTERDITES`).
+- **`detecter_tailscale(executable=None, delai=5, maintenant=None)`** → `{"present": False, "raison"}` quand l'exécutable
+  manque, que `tailscale version` échoue ou que le délai est dépassé ; sinon `{"present": True, "version", "connecte"
+  (BackendState « Running »), "nom" (Self.DNSName sans le point final, minuscules ; None sans nom), "expiration_cle"
+  (Self.KeyExpiry en heure locale `AAAA-MM-JJTHH:MM:SS` ; None si absente, vide, illisible ou date zéro de Go),
+  "jours_avant_expiration" (entier, négatif si expirée ; None sans expiration), "serve" (`tailscale serve status
+  --json` lu, None sinon), "raison"}`. Jamais d'exception vers l'appelant. `tailscale_attendu(reglages)` : `mandataire`
+  vrai ou un nom en `.ts.net` dans `noms`.
+- **Serveur** : `Configuration.tailscale` (None tant que la détection n'est pas attendue) et `tailscale_lu_a` ;
+  `main` détecte une fois au démarrage quand `tailscale_attendu` (console : « Tailscale : <nom>, connecté, clé valable
+  N jours » ou « non détecté (raison) », `resume_tailscale`) ; `GET /api/info` rend `tailscale` : `null` sans détection,
+  sinon `{"present", "connecte", "nom", "jours_avant_expiration"}` seulement (jamais la sortie brute de `status`, ni la
+  version, ni l'adresse d'un autre appareil), rafraîchi par `detecter_tailscale_pour` au plus une fois par
+  `INTERVALLE_TAILSCALE_S` (10 minutes), dans le fil de la requête, sous `VERROU_TAILSCALE`.
+- **Assistant (API Python pour T167)** : `preparer_tailscale(config, detection, systeme=None)` ne lance ni n'écrit
+  rien → sans Tailscale `{"present": False, "raison", "telechargement"}` (lien officiel, montré seulement) ; sinon
+  `{"present", "connecte", "nom", "adresse" (https://<nom>/), "noms" (nom ajouté s'il manque), "ajouter_nom",
+  "mandataire": True, "serve" (texte) et "arguments_serve" (`serve --bg --https=443 http://127.0.0.1:<port_http>`),
+  "unattended" (`tailscale set --unattended=true`, Windows seulement), "rappels" (expiration de clé dans la console,
+  veille : D130)}`. `appliquer_tailscale(config, executable=None)` : détection, refus (`ok` faux, message) sans
+  Tailscale ou sans connexion ; `modifier_configuration(chemin, {"noms", "mandataire": True})` (fichier de
+  `reglages["_fichier"]` ; clés inconnues et `_aide` gardées, écriture atomique) ; puis `serve --bg …` lancée et
+  vérifiée par `serve status --json` (`cible_serve_tailscale` : un `Handlers.*.Proxy` vers `http://127.0.0.1:<port>`
+  ou `localhost`) → `{"ok", "serve", "message", "nom", "adresse"}` ; les réglages en mémoire ne changent pas (la
+  configuration vaut au prochain démarrage), `config.tailscale` reprend la détection. Jamais `up`, jamais
+  d'installation ; `activer_unattended(executable=None)` à part, sur un clic.
+- **Accueil du responsable** (`accueil-bento.js`, mode serveur) : `afficherEtatServeur` lit `App.adaptateur.info()` une
+  fois et pose `#alerte-copie-externe` (§22.11) et `#alerte-tailscale` (`UI.bandeau('attention')`, zone
+  `#tailscale-zone` marquée `data-lu`) ; `Accueil.avertissementTailscale(tailscale)` (fonction pure) : « Tailscale est
+  déconnecté : les téléphones hors de l'atelier ne joignent plus Prévo. » quand `present` et non `connecte`, sinon « La
+  clé Tailscale expire dans N jours (aujourd'hui / a expiré) : désactivez l'expiration de clé dans la console Tailscale
+  (Machines › <nom> › Disable key expiry)… » quand `joursAvantExpiration` ≤ 14 ; rien sinon. `stockage-serveur.js`
+  `info().tailscale` = `{present, connecte, nom, joursAvantExpiration}` ou `null` (`tailscaleLu`).
+- **Tests** : `tests/faux_tailscale.py` (`version`, `status --json`, `serve --bg --https=443 http://…` notée dans
+  `FAUX_TAILSCALE_DOSSIER/serve.json`, `serve status --json`, `set --unattended=true` ; `up`/`install`… : code 1 ;
+  variables `FAUX_TAILSCALE_ETAT` Running|Stopped|absent, `FAUX_TAILSCALE_NOM`, `FAUX_TAILSCALE_EXPIRATION`,
+  `FAUX_TAILSCALE_ATTENTE` ; chaque lancement compté dans `lancements.txt`), `tests/test_acces_tailscale.py`.
+
 ### 22.9 Démarrer avec la machine (D130, CS129)
 
 `produire_scripts_demarrage(config)` écrit, sans les exécuter, à côté de `serveur.py` :

@@ -14,7 +14,8 @@
 //     6. « à surveiller » : articles à commander, contrôles et habilitations, suggestions de préventif.
 //   Puis la carte « Connecter un téléphone » (mode serveur, pas au téléphone : accueil.js).
 //   Mode serveur : avertissement « Copie externe des sauvegardes » (D133, §22.11) quand la copie de la nuit a échoué
-//   ou n'a pas été faite depuis plus d'un jour, avec le nombre de jours ; lu sur /api/info après l'affichage.
+//   ou n'a pas été faite depuis plus d'un jour, avec le nombre de jours ; avertissement Tailscale (D128, §22.8) quand
+//   Tailscale est déconnecté ou que sa clé expire sous 14 jours ; les deux lus sur /api/info après l'affichage.
 //   Chaque tuile-lien mène à la liste filtrée de l'indicateur d'avant la refonte. Les chiffres défilent
 //   de 0 à leur valeur (propriété CSS --compte) à l'ouverture de l'écran, pas à un réaffichage ;
 //   prefers-reduced-motion coupe tout mouvement (accueil.css). Aucune couleur ici : des classes.
@@ -305,8 +306,10 @@ Object.assign(Accueil, (() => {
   }
 
   // ===========================================================================================
-  // 4. Copie externe des sauvegardes (mode serveur ; D133, §22.11)
+  // 4. État du PC serveur : copie externe des sauvegardes (D133, §22.11) et Tailscale (D128, §22.8)
   // ===========================================================================================
+
+  const JOURS_ALERTE_CLE_TAILSCALE = 14;        // même seuil que serveur.py (JOURS_ALERTE_CLE_TAILSCALE)
 
   /**
    * Texte de l'avertissement (fragment UI.html), ou '' quand tout va bien ou qu'aucun dossier de copie n'est réglé.
@@ -324,27 +327,55 @@ Object.assign(Accueil, (() => {
       La copie est refaite au prochain démarrage de Prévo et chaque nuit, à la première modification après 2 h.`;
   }
 
-  // Lue à chaque affichage (GET /api/info) puis posée dans #copie-externe-zone : l'écran ne l'attend pas. data-lu
-  // marque la lecture faite, avertissement ou non (point d'accroche des tests).
-  async function afficherCopieExterne(conteneur) {
-    const zone = conteneur.querySelector('#copie-externe-zone');
-    if (!zone) return;
-    let copie = null;
-    if (App.mode === 'serveur' && typeof App.adaptateur.info === 'function') {
-      try {
-        copie = (await App.adaptateur.info()).copieExterne || null;
-      } catch (erreur) {
-        console.warn('Prévo : état de la copie externe inconnu (' + (erreur && erreur.message) + ').', erreur);
-      }
+  /**
+   * Texte de l'avertissement Tailscale (fragment UI.html), ou '' quand Tailscale va bien, manque ou n'est pas attendu.
+   * `tailscale` : tailscale de App.adaptateur.info(), { present, connecte, nom, joursAvantExpiration } ou null. Avertit
+   * quand Tailscale est déconnecté (les téléphones hors de l'atelier ne joignent plus Prévo), sinon quand la clé expire
+   * sous 14 jours, aujourd'hui, ou a expiré.
+   */
+  function avertissementTailscale(tailscale) {
+    if (!tailscale || !tailscale.present) return '';
+    if (!tailscale.connecte) {
+      return UI.html`<b>Tailscale est déconnecté :</b> les téléphones hors de l'atelier ne joignent plus Prévo.
+        Ouvrez Tailscale sur ce PC et connectez-vous.`;
     }
-    const texte = avertissementCopieExterne(copie);
+    const jours = tailscale.joursAvantExpiration;
+    if (jours === null || jours > JOURS_ALERTE_CLE_TAILSCALE) return '';
+    let echeance = 'expire dans ' + pluriel(jours, 'jour');
+    if (jours === 0) echeance = 'expire aujourd\'hui';
+    else if (jours < 0) echeance = 'a expiré';
+    return UI.html`<b>La clé Tailscale ${echeance} :</b> désactivez l'expiration de clé dans la console Tailscale
+      (Machines › ${tailscale.nom || 'ce PC'} › Disable key expiry), sinon les téléphones hors de l'atelier ne joignent plus Prévo.`;
+  }
+
+  // Pose l'avertissement (ou rien) dans sa zone ; data-lu marque la lecture faite, avertissement ou non (point
+  // d'accroche des tests).
+  function poserAvertissement(zone, id, texte) {
     if (texte) {
       const bloc = UI.bandeau('attention', texte);
-      bloc.id = 'alerte-copie-externe';
+      bloc.id = id;
       zone.className = 'alertes';
       zone.replaceChildren(bloc);
     }
     zone.dataset.lu = '1';
+  }
+
+  // État du PC serveur lu à chaque affichage (une seule lecture de GET /api/info) puis posé dans #copie-externe-zone et
+  // #tailscale-zone : l'écran ne l'attend pas.
+  async function afficherEtatServeur(conteneur) {
+    const zoneCopie = conteneur.querySelector('#copie-externe-zone');
+    const zoneTailscale = conteneur.querySelector('#tailscale-zone');
+    if (!zoneCopie || !zoneTailscale) return;
+    let info = null;
+    if (App.mode === 'serveur' && typeof App.adaptateur.info === 'function') {
+      try {
+        info = await App.adaptateur.info();
+      } catch (erreur) {
+        console.warn('Prévo : état du PC serveur inconnu (' + (erreur && erreur.message) + ').', erreur);
+      }
+    }
+    poserAvertissement(zoneCopie, 'alerte-copie-externe', avertissementCopieExterne(info ? info.copieExterne : null));
+    poserAvertissement(zoneTailscale, 'alerte-tailscale', avertissementTailscale(info ? info.tailscale : null));
   }
 
   // ===========================================================================================
@@ -361,7 +392,7 @@ Object.assign(Accueil, (() => {
     if (animerChiffres) classes.push('bento-anime');
     animerChiffres = false;
     UI.remplir(conteneur, UI.html`${entete(aujourdhui)}<div id="maj-zone"></div>${alerteControle()}
-      <div id="copie-externe-zone"></div>${carteBaseVide()}
+      <div id="copie-externe-zone"></div><div id="tailscale-zone"></div>${carteBaseVide()}
       <div class="${classes.join(' ')}" id="bento">
         ${tuileSynthese(compteurs, momentDeLaJournee(new Date().getHours()))}${tuilePremier(choix, aujourdhui)}
         ${compteurs4(compteurs, aujourdhui)}
@@ -375,10 +406,10 @@ Object.assign(Accueil, (() => {
     conteneur.querySelector('#btn-export-accueil').addEventListener('click', () => App.exporterZip());
     // Mise à jour signalée (D120) : bandeau si une version plus récente est connue sur ce poste.
     if (typeof MiseAJour !== 'undefined') MiseAJour.afficherSiPossible();
-    afficherCopieExterne(conteneur);
+    afficherEtatServeur(conteneur);
     App.definirTitreMobile('Bonjour', dateEnLettres(aujourdhui, false));
   }
 
   return { afficherResponsable, choisirEnPremier, momentDeLaJournee, phraseDemandes, ligneSecondaire,
-    avertissementCopieExterne };
+    avertissementCopieExterne, avertissementTailscale };
 })());

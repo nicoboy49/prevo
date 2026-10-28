@@ -168,6 +168,18 @@ const StockageServeur = (() => {
     };
   }
 
+  // « tailscale » de /api/info (lot 7, D128, §22.8) → { present, connecte, nom, joursAvantExpiration }, ou null quand
+  // le PC serveur n'attend pas Tailscale (portée « ce PC » sans mandataire ni nom en .ts.net : rien n'est détecté).
+  function tailscaleLu(tailscale) {
+    if (!tailscale || typeof tailscale !== 'object') return null;
+    return {
+      present: tailscale.present === true,
+      connecte: tailscale.connecte === true,
+      nom: typeof tailscale.nom === 'string' && tailscale.nom ? tailscale.nom : null,
+      joursAvantExpiration: typeof tailscale.jours_avant_expiration === 'number' ? tailscale.jours_avant_expiration : null,
+    };
+  }
+
   // ===========================================================================
   // Fabrique de l'adaptateur
   // ===========================================================================
@@ -337,7 +349,7 @@ const StockageServeur = (() => {
       const donnees = await lireJson(reponse);
       // Lot 7 (§22.6) : hors de « ce PC », les adresses sont celles de la porte d'entrée et « porte » est vrai.
       return { adressesReseau: donnees.adresses_reseau || [], port: donnees.port, porte: donnees.porte === true,
-        copieExterne: copieExterneLue(donnees.copie_externe) };
+        copieExterne: copieExterneLue(donnees.copie_externe), tailscale: tailscaleLu(donnees.tailscale) };
     }
 
     return {

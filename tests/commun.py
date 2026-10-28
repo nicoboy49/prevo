@@ -162,7 +162,11 @@ class ServeurPrevo:
     """
 
     DELAI_DEMARRAGE_S = 15
-    VARIABLES_JAMAIS_HERITEES = ("PREVO_IA_CLE",)
+    VARIABLES_JAMAIS_HERITEES = ("PREVO_IA_CLE", "PREVO_TAILSCALE")
+    # Lot 7 (§22.8, T165) : jamais le vrai tailscale pendant un test. serveur.py lit PREVO_TAILSCALE avant les chemins
+    # standard et tient un chemin qui n'existe pas pour « Tailscale absent » ; un test qui simule Tailscale donne
+    # tests/faux_tailscale.py dans « environnement ».
+    AUCUN_TAILSCALE = str(RACINE / "tests" / "aucun-tailscale")
 
     def __init__(self, source=SOURCE_AUTO, arguments=None, environnement=None, comptes=False, reglages=None):
         self.arguments = list(arguments or [])
@@ -224,6 +228,8 @@ class ServeurPrevo:
                 environnement.pop(nom, None)
             else:
                 environnement[nom] = valeur
+        if "PREVO_TAILSCALE" not in self.environnement:
+            environnement["PREVO_TAILSCALE"] = self.AUCUN_TAILSCALE
         # --servir-tests : les pages de tests/fixtures/ (ex. page-stockage-serveur.html) sont
         # servies par serveur.py, qui sinon ne sert que l'application (liste blanche, §14.7).
         # --config : un fichier absent de la copie temporaire, pour que les réglages par défaut s'appliquent
