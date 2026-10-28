@@ -162,7 +162,7 @@ class ServeurPrevo:
     """
 
     DELAI_DEMARRAGE_S = 15
-    VARIABLES_JAMAIS_HERITEES = ("PREVO_IA_CLE", "PREVO_TAILSCALE")
+    VARIABLES_JAMAIS_HERITEES = ("PREVO_IA_CLE", "PREVO_TAILSCALE", "PREVO_MKCERT")
     # Lot 7 (§22.8, T165) : jamais le vrai tailscale pendant un test. serveur.py lit PREVO_TAILSCALE avant les chemins
     # standard et tient un chemin qui n'existe pas pour « Tailscale absent » ; un test qui simule Tailscale donne
     # tests/faux_tailscale.py dans « environnement ».

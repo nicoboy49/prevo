@@ -86,6 +86,7 @@ DELAI_IA_S = 120
 TAILLE_MAX_REPONSE_IA = 2 * 1024 * 1024    # 2 Mo
 VARIABLE_CLE_IA = 'PREVO_IA_CLE'           # clé du fournisseur : passe avant « ia_cle » du fichier, jamais en option
 VARIABLE_TAILSCALE = 'PREVO_TAILSCALE'     # exécutable tailscale (tests : le faux) ; sinon le chemin standard (§22.8)
+VARIABLE_MKCERT = 'PREVO_MKCERT'           # exécutable mkcert (tests : le faux) ; sinon outils-tiers/, empreinte vérifiée (§22.6)
 
 # Dossier où se trouve serveur.py : c'est la racine des fichiers statiques.
 DOSSIER_APPLICATION = os.path.dirname(os.path.abspath(__file__))
@@ -1446,6 +1447,18 @@ def trouver_mkcert(empreintes=None, dossier=None, nom=None):
     return chemin
 
 
+def executable_mkcert():
+    """Chemin de mkcert pour l'assistant et le démarrage (§22.6, §22.10) : la variable d'environnement PREVO_MKCERT
+    quand elle est posée (tests : tests/faux_mkcert.py ; un chemin qui n'existe pas vaut « absent », pour qu'un test ne
+    lance jamais le vrai), sinon trouver_mkcert (outils-tiers/, empreinte vérifiée). ErreurConfiguration s'il manque."""
+    variable = os.environ.get(VARIABLE_MKCERT, '').strip()
+    if variable:
+        if os.path.isfile(variable):
+            return variable
+        raise ErreurConfiguration('mkcert introuvable (%s = %s).' % (VARIABLE_MKCERT, variable))
+    return trouver_mkcert()
+
+
 def telecharger_mkcert(empreintes=None, dossier=None, nom=None, adresse=None):
     """Téléchargement de secours depuis la page des releases ; l'empreinte est vérifiée avant de garder le fichier."""
     empreintes = empreintes or lire_empreintes_tiers()
@@ -1478,11 +1491,12 @@ def dossier_autorite(config):
     return os.path.join(dossier_acces(config), 'autorite')
 
 
-def noms_du_certificat(config, adresses=None):
-    """Noms couverts : adresses IP du PC, <nom>.local, <nom>, localhost, 127.0.0.1, puis les noms acceptés."""
+def noms_du_certificat(config, adresses=None, noms_acceptes=None):
+    """Noms couverts : adresses IP du PC, <nom>.local, <nom>, localhost, 127.0.0.1, puis les noms acceptés (ceux de
+    la configuration, ou « noms_acceptes » : le brouillon de l'assistant, §22.10)."""
     noms = list(adresses if adresses is not None else adresses_ip_reseau())
     noms += [config.nom_pc + '.local', config.nom_pc, 'localhost', '127.0.0.1']
-    noms += list(config.reglages.get('noms', []))
+    noms += list(noms_acceptes if noms_acceptes is not None else config.reglages.get('noms', []))
     vus, uniques = set(), []
     for nom in noms:
         if nom and nom not in vus:
@@ -1505,17 +1519,18 @@ def lancer_mkcert(executable, arguments, autorite):
     return sortie
 
 
-def preparer_certificat_local(config, executable, adresses=None, forcer=False):
+def preparer_certificat_local(config, executable, adresses=None, forcer=False, noms_acceptes=None):
     """Certificat de l'atelier dans donnees/acces/ (certificat.pem, cle.pem, certificat.json) ; refait si les noms
     ont changé (nouvelle adresse du PC, nouveau nom accepté). L'autorité reste dans donnees/acces/autorite/ ; sa clé
-    (rootCA-key.pem) n'est jamais lue ni copiée par Prévo. Rend (certificat, clé, noms)."""
+    (rootCA-key.pem) n'est jamais lue ni copiée par Prévo. Rend (certificat, clé, noms). « noms_acceptes » : les noms
+    du brouillon de l'assistant (§22.10) à la place de ceux de la configuration."""
     acces = dossier_acces(config)
     autorite = dossier_autorite(config)
     os.makedirs(autorite, exist_ok=True)
     certificat = os.path.join(acces, 'certificat.pem')
     cle = os.path.join(acces, 'cle.pem')
     fiche = os.path.join(acces, 'certificat.json')
-    noms = noms_du_certificat(config, adresses)
+    noms = noms_du_certificat(config, adresses, noms_acceptes)
     if not forcer and os.path.isfile(certificat) and os.path.isfile(cle) and os.path.isfile(fiche):
         try:
             with open(fiche, 'rb') as lecture:
@@ -1545,7 +1560,7 @@ def certificat_du_serveur(config, reglages, mkcert=None):
             'Prévo refuse d\'écouter sur le réseau sans https. Donnez un certificat (« certificat » et « cle ») ou '
             'laissez Prévo fabriquer le sien (« certificat_auto »: true).')
     try:
-        certificat, cle, _ = preparer_certificat_local(config, mkcert or trouver_mkcert())
+        certificat, cle, _ = preparer_certificat_local(config, mkcert or executable_mkcert())
     except ErreurConfiguration as erreur:
         raise ErreurConfiguration(
             'Certificat de l\'atelier impossible (%s). Prévo n\'écoute pas sur le réseau sans https : remettez mkcert '
@@ -1755,6 +1770,41 @@ def produire_scripts_demarrage(config, dossier_sortie=None, dossier_prevo=None, 
     else:
         ecrire('prevo.service', unite_systemd(dossier_prevo, config.dossier_donnees, python or '/usr/bin/python3'))
     return ecrits
+
+
+DELAI_ELEVATION_S = 600                 # l'invite UAC puis le script : dix minutes au plus
+
+
+def commande_powershell(script, eleve=True):
+    """Ligne de commande qui lance un script PowerShell écrit par Prévo (§22.9, §22.10) : avec « eleve », une seule
+    invite UAC (Start-Process -Verb RunAs, attendu, code de sortie rendu) ; sinon le script tel quel (repli à
+    l'ouverture de session, sans droits)."""
+    if not eleve:
+        return ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script]
+    arguments = ','.join(chaine_powershell(a) for a in ('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script))
+    return ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+            '$p = Start-Process -FilePath powershell.exe -ArgumentList @(%s) -Verb RunAs -Wait -PassThru; '
+            'exit $p.ExitCode' % arguments]
+
+
+def lancer_script_powershell(script, eleve=True):
+    """Lance Installer_demarrage.ps1 avec les droits d'administrateur (une seule élévation, sur le clic de
+    l'assistant) ou Demarrage_session.ps1 sans eux ; rend {"ok", "code", "message"}. Jamais appelée par les tests
+    (config.lancer_eleve y est remplacée) : elle demande l'élévation et change le système."""
+    if not sys.platform.startswith('win'):
+        return {'ok': False, 'code': None, 'message': 'Scripts PowerShell : Windows seulement.'}
+    try:
+        resultat = subprocess.run(commande_powershell(script, eleve), capture_output=True, timeout=DELAI_ELEVATION_S)
+    except (OSError, subprocess.TimeoutExpired) as erreur:
+        return {'ok': False, 'code': None, 'message': 'PowerShell n\'a pas pu lancer %s (%s).'
+                                                     % (os.path.basename(script), erreur)}
+    sortie = (resultat.stdout + resultat.stderr).decode('utf-8', 'replace').strip()
+    if resultat.returncode != 0:
+        return {'ok': False, 'code': resultat.returncode,
+                'message': ('Élévation refusée ou script en échec (%s, code %d) : rien n\'a été installé. Vous pouvez '
+                            'relancer, ou choisir « à l\'ouverture de session » (sans droits d\'administrateur).'
+                            % (os.path.basename(script), resultat.returncode)) + ('\n' + sortie[-300:] if sortie else '')}
+    return {'ok': True, 'code': 0, 'message': sortie[-300:] or 'Script exécuté.'}
 
 
 def certificat_de_l_autorite(config):
@@ -1979,22 +2029,24 @@ def cible_serve_tailscale(serve, port_http):
     return None
 
 
-def preparer_tailscale(config, detection, systeme=None):
+def preparer_tailscale(config, detection, systeme=None, reglages=None):
     """Ce que l'assistant propose (§22.8, T167) d'après une détection, sans rien lancer ni écrire : {"present": False,
     "raison", "telechargement" (lien officiel, montré seulement)} quand Tailscale manque ; sinon "present" vrai,
     "connecte", "nom", "adresse" (https://<nom>/), "noms" (les noms acceptés, le nom ajouté s'il manque),
     "ajouter_nom", "mandataire" (vrai), "serve" (texte de la commande) et "arguments_serve", "unattended" (« tailscale
-    set --unattended=true », Windows seulement ; None ailleurs), "rappels" (expiration de clé, veille : D130)."""
+    set --unattended=true », Windows seulement ; None ailleurs), "rappels" (expiration de clé, veille : D130).
+    « reglages » : ceux à lire (noms, port_http) à la place de config.reglages — le brouillon de l'assistant (§22.10)."""
     systeme = systeme or sys.platform
+    reglages = reglages if reglages is not None else config.reglages
     if not detection or not detection.get('present'):
         return {'present': False, 'raison': (detection or {}).get('raison'),
                 'telechargement': LIEN_TELECHARGEMENT_TAILSCALE}
     nom = detection.get('nom')
-    noms = list(config.reglages.get('noms', []))
+    noms = list(reglages.get('noms', []))
     ajouter = bool(nom) and nom not in noms
     if ajouter:
         noms.append(nom)
-    arguments = commande_serve_tailscale(config.reglages.get('port_http', PORT_PAR_DEFAUT))
+    arguments = commande_serve_tailscale(reglages.get('port_http', PORT_PAR_DEFAUT))
     return {'present': True, 'connecte': bool(detection.get('connecte')), 'nom': nom,
             'adresse': 'https://%s/' % nom if nom else None, 'noms': noms, 'ajouter_nom': ajouter, 'mandataire': True,
             'serve': 'tailscale ' + ' '.join(arguments), 'arguments_serve': arguments,
@@ -2002,29 +2054,34 @@ def preparer_tailscale(config, detection, systeme=None):
             'rappels': list(RAPPELS_TAILSCALE), 'telechargement': None}
 
 
-def appliquer_tailscale(config, executable=None, delai=DELAI_TAILSCALE_S):
+def appliquer_tailscale(config, executable=None, delai=DELAI_TAILSCALE_S, reglages=None, ecrire=True):
     """Applique la proposition de preparer_tailscale (clic de l'assistant, T167) : écrit « noms » (nom ajouté) et
     « mandataire » vrai dans le fichier de configuration (modifier_configuration : le reste du fichier est gardé),
     lance « tailscale serve --bg --https=443 http://127.0.0.1:<port_http> » puis vérifie par « tailscale serve status
-    --json » que la cible y figure. Rend {"ok", "serve" (état lu, ou None), "message", "nom", "adresse"}. Jamais
+    --json » que la cible y figure. Rend {"ok", "serve" (état lu, ou None), "message", "nom", "adresse", "noms"}. Jamais
     « tailscale up », jamais d'installation, jamais « set --unattended » (activer_unattended, sur un clic à part). Les
     réglages en mémoire ne changent pas : la configuration écrite vaut au prochain démarrage (l'assistant relance le
-    serveur, §22.10) ; config.tailscale reprend la détection faite ici."""
+    serveur, §22.10) ; config.tailscale reprend la détection faite ici. « reglages » : le brouillon de l'assistant à
+    lire à la place de config.reglages ; « ecrire » faux : le fichier de configuration n'est pas touché (l'assistant
+    ne l'écrit qu'à « terminer »), l'appelant reprend « noms » et « mandataire » de la réponse."""
+    reglages = reglages if reglages is not None else config.reglages
     detection = detecter_tailscale(executable, delai, maintenant_s(config))
-    proposition = preparer_tailscale(config, detection)
-    refus = {'ok': False, 'serve': None, 'nom': detection.get('nom'), 'adresse': proposition.get('adresse')}
+    proposition = preparer_tailscale(config, detection, reglages=reglages)
+    refus = {'ok': False, 'serve': None, 'nom': detection.get('nom'), 'adresse': proposition.get('adresse'),
+             'noms': proposition.get('noms')}
     if not proposition['present']:
         return dict(refus, message='Tailscale non détecté (%s) : installez-le et connectez-vous, puis réessayez.'
                     % (detection.get('raison') or 'inconnu'))
     if not detection.get('nom') or not detection.get('connecte'):
         return dict(refus, message='Tailscale n\'est pas connecté sur ce PC : ouvrez Tailscale, connectez-vous, puis '
                                    'réessayez.')
-    chemin = config.reglages.get('_fichier') or os.path.join(DOSSIER_APPLICATION, NOM_FICHIER_CONFIGURATION)
-    try:
-        modifier_configuration(chemin, {'noms': proposition['noms'], 'mandataire': True})
-    except (OSError, ValueError) as erreur:
-        return dict(refus, message='Configuration non écrite (%s) : rien n\'a été lancé.' % erreur)
-    port_http = config.reglages.get('port_http', PORT_PAR_DEFAUT)
+    if ecrire:
+        chemin = config.reglages.get('_fichier') or os.path.join(DOSSIER_APPLICATION, NOM_FICHIER_CONFIGURATION)
+        try:
+            modifier_configuration(chemin, {'noms': proposition['noms'], 'mandataire': True})
+        except (OSError, ValueError) as erreur:
+            return dict(refus, message='Configuration non écrite (%s) : rien n\'a été lancé.' % erreur)
+    port_http = reglages.get('port_http', PORT_PAR_DEFAUT)
     chemin_tailscale = executable_tailscale(executable)
     try:
         lancer_tailscale(chemin_tailscale, proposition['arguments_serve'], delai)
@@ -2053,6 +2110,422 @@ def activer_unattended(executable=None, delai=DELAI_TAILSCALE_S):
     except ErreurTailscale as erreur:
         return {'ok': False, 'message': str(erreur)}
     return {'ok': True, 'message': 'Tailscale reste connecté même sans session Windows ouverte (« Run unattended »).'}
+
+
+# ---------------------------------------------------------------------------
+# Assistant d'installation (lot 7, ARCHITECTURE.md §22.10 ; D131, D132, CS130) : routes /api/installation/<etape>
+# servies au PC serveur seulement (404 au réseau et au mandataire, comme une adresse inconnue) ; brouillon dans
+# donnees/installation.json ; prevo.config.json écrit à « terminer », jamais avant ; mot de passe jamais dans le
+# brouillon (comptes.json, haché, dès l'étape « compte »).
+# ---------------------------------------------------------------------------
+
+NOM_FICHIER_BROUILLON = 'installation.json'
+ROUTE_INSTALLATION = '#/installation'
+SITUATIONS = ('seul', 'equipe', 'informaticien')
+ETAPES_INSTALLATION = ('situation', 'portee', 'compte', 'certificat', 'tailscale', 'demarrage', 'sauvegardes', 'deplacer')
+ETAPES_DE_LECTURE = ('etat', 'fiche')
+ETAPES_D_ECRITURE = ETAPES_INSTALLATION + ('terminer',)
+ETAT_FAIT, ETAT_A_FAIRE, ETAT_SANS_OBJET = 'fait', 'a_faire', 'sans_objet'
+MODES_CERTIFICAT = ('automatique', 'reseau_prive', 'fichiers', 'mandataire')
+ACTIONS_TAILSCALE = ('detecter', 'appliquer', 'unattended', 'plus_tard')
+DOSSIER_CONSEILLE_WINDOWS = 'C:\\Prevo'
+DOSSIERS_JAMAIS_COPIES = ('.git', '__pycache__')
+NOM_LANCEUR_WINDOWS, NOM_LANCEUR_AUTRE = 'Lancer_GMAO.bat', 'lancer.sh'
+NOM_SCRIPT_REINITIALISATION = 'Reinitialiser_mot_de_passe.bat'
+VERSION_SCHEMA_CSV = 3                  # « version » de js/schema.js (§14.1) : posée dans un parametres.csv créé ici
+DELAI_RELANCE_S = 2                     # le serveur s'arrête 2 s après la réponse de « terminer » ou « deplacer »
+ATTENTE_AVANT_RELANCE_S = 3             # le lanceur repart 3 s plus tard, une fois le port rendu
+MESSAGE_ADRESSE_INCONNUE = 'Adresse inconnue dans l\'API.'
+MESSAGE_SANS_BROUILLON = 'Commencez par dire qui utilise Prévo (étape « situation »).'
+# Clés du brouillon = celles de la configuration, sauf la clé du fournisseur d'IA (un secret : jamais ici).
+CLES_DU_BROUILLON = tuple(cle for cle, _, _, _ in CLES_CONFIGURATION if cle != 'ia_cle')
+VERROU_INSTALLATION = threading.Lock()  # une étape à la fois (mkcert, Tailscale, copie : le brouillon reste cohérent)
+
+# Défauts de l'étude §6.1 par situation (ce qui diffère des défauts de CLES_CONFIGURATION) ; « mode_solo » en plus
+# (D132 : parametres.csv à « terminer »). Solo : « ce PC » tant qu'aucun téléphone n'est voulu, certificat par le réseau
+# privé (Tailscale) ; Atelier : le Wi-Fi, certificat automatique, démarre avec le PC sans veille ; Intranet : comptes
+# pour tous, certificat et démarrage de l'entreprise, le serveur ne se met pas en veille de lui-même.
+DEFAUTS_PAR_SITUATION = {
+    'seul': {'portee': 'ce-pc', 'comptes': False, 'demandeurs_avec_compte': False, 'certificat_auto': False,
+             'demarrage': 'aucun', 'veille_desactivee': False, 'mode_solo': True},
+    'equipe': {'portee': 'atelier', 'comptes': True, 'demandeurs_avec_compte': False, 'certificat_auto': True,
+               'demarrage': 'systeme', 'veille_desactivee': True, 'mode_solo': False},
+    'informaticien': {'portee': 'atelier', 'comptes': True, 'demandeurs_avec_compte': True, 'certificat_auto': False,
+                      'demarrage': 'systeme', 'veille_desactivee': False, 'mode_solo': False},
+}
+
+
+def chemin_brouillon(config):
+    return os.path.join(config.dossier_donnees, NOM_FICHIER_BROUILLON)
+
+
+def lire_brouillon(config):
+    """Le brouillon de l'assistant (dict), ou None s'il n'existe pas ; un fichier illisible vaut None (l'assistant
+    repart de la situation, rien n'est perdu d'autre)."""
+    octets = lire_octets(chemin_brouillon(config))
+    if octets is None:
+        return None
+    try:
+        brouillon = json.loads(octets.decode('utf-8'))
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if not isinstance(brouillon, dict) or brouillon.get('situation') not in SITUATIONS:
+        return None
+    return brouillon
+
+
+def ecrire_brouillon(config, brouillon):
+    """Écriture atomique de donnees/installation.json (un rechargement ou un redémarrage avant « terminer » ne perd
+    rien) ; sous VERROU_INSTALLATION par l'appelant."""
+    os.makedirs(config.dossier_donnees, exist_ok=True)
+    ecrire_atomique(chemin_brouillon(config), (json.dumps(brouillon, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+
+
+def supprimer_brouillon(config):
+    try:
+        os.remove(chemin_brouillon(config))
+    except FileNotFoundError:
+        pass
+
+
+def dans_dossier_conseille(config):
+    """Vrai quand Prévo tourne déjà dans C:\\Prevo (Windows) ; faux ailleurs et sur les autres systèmes."""
+    return (config.systeme.startswith('win')
+            and chemins_egaux(os.path.abspath(config.dossier_application), DOSSIER_CONSEILLE_WINDOWS))
+
+
+def ecoute_du_brouillon(brouillon):
+    """Axe d'écoute déduit du brouillon (§22.1) : 127.0.0.1 en portée « ce PC », et quand un mandataire sur ce PC porte
+    seul le https (réseau privé Tailscale sans certificat local, mandataire de l'entreprise) ; 0.0.0.0 sinon."""
+    if brouillon.get('portee') == 'ce-pc':
+        return '127.0.0.1'
+    if brouillon.get('mandataire') and not brouillon.get('certificat_auto') and not brouillon.get('certificat'):
+        return '127.0.0.1'
+    return '0.0.0.0'
+
+
+def etapes_du_brouillon(config, brouillon):
+    """État de chaque étape (fait, a_faire, sans_objet) : celui noté dans le brouillon, corrigé par ce qui n'a pas
+    d'objet — compte et certificat sur « ce PC » (le compte reste proposé en Solo : il crée le technicien « moi »),
+    « hors de l'atelier » hors de la portée « dehors », le dossier conseillé hors de Windows ou déjà dedans — et par
+    les faits : un responsable actif vaut l'étape « compte » faite."""
+    etapes = dict(brouillon.get('etapes') or {})
+    for etape in ETAPES_INSTALLATION:
+        etapes.setdefault(etape, ETAT_A_FAIRE)
+    ce_pc = brouillon.get('portee') == 'ce-pc'
+
+    def poser(etape, sans_objet):
+        if sans_objet:
+            etapes[etape] = ETAT_SANS_OBJET
+        elif etapes[etape] == ETAT_SANS_OBJET:
+            etapes[etape] = ETAT_A_FAIRE
+
+    poser('compte', ce_pc and not brouillon.get('mode_solo'))
+    poser('certificat', ce_pc)
+    poser('tailscale', brouillon.get('portee') != 'dehors')
+    poser('deplacer', not config.systeme.startswith('win') or dans_dossier_conseille(config))
+    if etapes['compte'] != ETAT_SANS_OBJET and responsable_actif_existe(config):
+        etapes['compte'] = ETAT_FAIT
+    return etapes
+
+
+def completer_brouillon(config, brouillon):
+    """Clés dérivées avant chaque écriture du brouillon : « ecoute » et les états des étapes."""
+    brouillon['ecoute'] = ecoute_du_brouillon(brouillon)
+    brouillon['etapes'] = etapes_du_brouillon(config, brouillon)
+    return brouillon
+
+
+def brouillon_neuf(config, situation):
+    """Brouillon réinitialisé aux défauts de l'étude §6.1 pour cette situation (clé à clé) ; étape « situation » faite."""
+    brouillon = {cle: valeur for cle, valeur in reglages_par_defaut().items() if cle in CLES_DU_BROUILLON}
+    brouillon.update(DEFAUTS_PAR_SITUATION[situation])
+    brouillon['situation'] = situation
+    brouillon['etapes'] = {etape: ETAT_A_FAIRE for etape in ETAPES_INSTALLATION}
+    brouillon['etapes']['situation'] = ETAT_FAIT
+    return completer_brouillon(config, brouillon)
+
+
+def valeur_du_brouillon(cle, valeur):
+    """Valeur d'une clé de configuration reçue par l'assistant, contrôlée comme à la lecture du fichier (bornes de
+    CLES_CONFIGURATION) ; ErreurHttp 400 au message clair sinon."""
+    genres = {nom: genre for nom, genre, _, _ in CLES_CONFIGURATION}
+    try:
+        return valeur_valide(cle, genres[cle], valeur)
+    except ErreurConfiguration as erreur:
+        bornes = BORNES_ENTIERS.get(cle)
+        raise ErreurHttp(400, str(erreur) + (' Bornes : %d à %d.' % bornes if bornes else ''))
+
+
+def mkcert_disponible():
+    """Vrai quand executable_mkcert trouve un mkcert (variable PREVO_MKCERT ou outils-tiers/ à l'empreinte juste)."""
+    try:
+        executable_mkcert()
+        return True
+    except ErreurConfiguration:
+        return False
+
+
+def detection_tailscale_publique(detection):
+    """Sous-ensemble d'une détection rendu par l'assistant : jamais la sortie brute (§22.8)."""
+    return {'present': bool(detection.get('present')), 'connecte': bool(detection.get('connecte')),
+            'nom': detection.get('nom'), 'jours_avant_expiration': detection.get('jours_avant_expiration'),
+            'raison': detection.get('raison')}
+
+
+def etat_installation(config):
+    """GET /api/installation/etat : la configuration est-elle présente, le brouillon et ses étapes, des CSV dans le
+    dossier des données (migration depuis 1.2), le dossier de Prévo, le Python embarqué, un responsable, Tailscale
+    (detecter_tailscale : commandes locales, jamais gardée dans config.tailscale pour ne pas changer /api/info),
+    mkcert disponible, le système et la version."""
+    brouillon = lire_brouillon(config)
+    if brouillon is not None:
+        brouillon = completer_brouillon(config, brouillon)
+    reglages = brouillon if brouillon is not None else config.reglages
+    windows = config.systeme.startswith('win')
+    return {'configuration_presente': bool(config.reglages.get('_present')),
+            'portee': reglages.get('portee'),
+            'situation': brouillon.get('situation') if brouillon is not None else None,
+            'etapes': brouillon['etapes'] if brouillon is not None else {etape: ETAT_A_FAIRE for etape in ETAPES_INSTALLATION},
+            'brouillon': brouillon,
+            'csv_presents': bool(tables_presentes(config.dossier_donnees)),
+            'dossier': os.path.abspath(config.dossier_application),
+            'dossier_conseille': DOSSIER_CONSEILLE_WINDOWS if windows else None,
+            'dans_dossier_conseille': dans_dossier_conseille(config),
+            'python_embarque': os.path.isfile(os.path.join(config.dossier_application, 'python', 'python.exe')),
+            'responsable_existe': responsable_actif_existe(config),
+            'tailscale': detection_tailscale_publique(detecter_tailscale(maintenant=maintenant_s(config))),
+            'mkcert_present': mkcert_disponible(),
+            'systeme': 'windows' if windows else ('macos' if config.systeme == 'darwin' else 'linux'),
+            'version': VERSION_APPLICATION}
+
+
+def fiche_acces(config):
+    """GET /api/installation/fiche : les données de la fiche d'accès imprimable (T168 la met en page), d'après le
+    brouillon s'il existe, sinon la configuration : adresses de la porte (adresses réseau du PC et noms acceptés, en
+    http sur port_http : jamais l'adresse https, §22.6), adresse Tailscale (nom en .ts.net derrière un mandataire),
+    adresses du mandataire (les autres noms), autorité locale présente (QR « faire confiance » = la porte, qui sert
+    /acces/ca.crt), comment arrêter et relancer, le dossier des données, comment réinitialiser un mot de passe. Sans
+    brouillon, la fiche lit le fichier de configuration (ce que « terminer » vient d'écrire, avant la relance) ; sans
+    fichier lisible, les réglages du serveur."""
+    brouillon = lire_brouillon(config)
+    reglages = brouillon
+    if reglages is None:
+        try:
+            reglages = lire_configuration(config.reglages.get('_fichier'))
+        except ErreurConfiguration:
+            reglages = config.reglages
+    port = reglages.get('port_http', PORT_PAR_DEFAUT)
+    noms = list(reglages.get('noms', []))
+    mandataire = bool(reglages.get('mandataire'))
+    reseau = reglages.get('ecoute') == '0.0.0.0' or (reglages.get('portee') != 'ce-pc' and brouillon is not None
+                                                     and ecoute_du_brouillon(brouillon) == '0.0.0.0')
+    adresses = ['http://%s:%d/' % (ip, port) for ip in adresses_ip_reseau()] if reseau else []
+    adresses += ['http://%s:%d/' % (nom, port) for nom in noms if reseau and not nom.endswith('.ts.net')]
+    tailscale = next(('https://%s/' % nom for nom in noms if mandataire and nom.endswith('.ts.net')), None)
+    windows = config.systeme.startswith('win')
+    responsables = [compte['identifiant'] for compte in comptes_du_serveur(config)
+                    if compte.get('role') == 'responsable' and compte.get('actif')]
+    return {'situation': brouillon.get('situation') if brouillon is not None else None,
+            'portee': reglages.get('portee'),
+            'comptes': bool(reglages.get('comptes')),
+            'adresse_locale': 'http://127.0.0.1:%d/' % port,
+            'adresses': adresses,
+            'adresse_tailscale': tailscale,
+            'adresses_mandataire': ['https://%s/' % nom for nom in noms if mandataire and not nom.endswith('.ts.net')],
+            'autorite_presente': certificat_de_l_autorite(config) is not None,
+            'adresse_confiance': adresses[0] if adresses else None,
+            'lanceur': NOM_LANCEUR_WINDOWS if windows else NOM_LANCEUR_AUTRE,
+            'demarrage': reglages.get('demarrage', 'aucun'),
+            'dossier': os.path.abspath(config.dossier_application),
+            'dossier_donnees': config.dossier_donnees,
+            'copie_sauvegardes': reglages.get('copie_sauvegardes', ''),
+            'reinitialisation': {'script': NOM_SCRIPT_REINITIALISATION if windows else None,
+                                 'commande': 'serveur.py --reinitialiser <identifiant>'},
+            'responsables': responsables}
+
+
+def forme_de_nom(texte):
+    """Nom ou prénom réduit pour une comparaison : accents, casse et espaces multiples ignorés."""
+    return ' '.join(sans_accents(texte or '').lower().split())
+
+
+def ecrire_table(config, table, entete, lignes):
+    """Réécrit un CSV entier au format de Prévo, la sauvegarde du jour faite d'abord ; en tenant VERROU_ECRITURE."""
+    faire_sauvegarde_quotidienne(config)
+    ecrire_atomique(chemin_table(config, table), ecrire_tableau_csv(entete, lignes))
+
+
+def technicien_moi(config, prenom, nom):
+    """Technicien de la personne seule (D132, §22.11) : celui de techniciens.csv qui porte déjà ce prénom et ce nom
+    (actif ; casse et accents ignorés), sinon une ligne nouvelle (TEC-nnnn suivant, métier vide, actif), les colonnes
+    du fichier gardées telles quelles. Rend son identifiant. En tenant VERROU_ECRITURE."""
+    octets = lire_octets(chemin_table(config, 'techniciens'))
+    entete, lignes = lire_tableau('techniciens', octets)
+    if not entete:
+        entete, lignes = list(COLONNES_PAR_TABLE['techniciens']), []
+    cles = [cle_entete(colonne) for colonne in entete]
+    colonnes = {}
+    for nom_colonne in ('id', 'nom', 'prenom', 'actif'):
+        if nom_colonne not in cles:
+            raise ErreurHttp(500, 'techniciens.csv sans colonne « %s » : impossible d\'y ajouter votre fiche.' % nom_colonne)
+        colonnes[nom_colonne] = cles.index(nom_colonne)
+    voulu = (forme_de_nom(nom), forme_de_nom(prenom))
+    numero = 0
+    for ligne in lignes:
+        while len(ligne) < len(entete):
+            ligne.append('')
+        identifiant = ligne[colonnes['id']].strip()
+        trouve = re.fullmatch(r'TEC-([0-9]+)', identifiant)
+        if trouve:
+            numero = max(numero, int(trouve.group(1)))
+        if (ligne[colonnes['actif']].strip().lstrip('\'') != '0'
+                and (forme_de_nom(ligne[colonnes['nom']]), forme_de_nom(ligne[colonnes['prenom']])) == voulu):
+            return identifiant
+    identifiant = 'TEC-%04d' % (numero + 1)
+    nouvelle = [''] * len(entete)
+    nouvelle[colonnes['id']], nouvelle[colonnes['nom']], nouvelle[colonnes['prenom']] = identifiant, nom, prenom
+    nouvelle[colonnes['actif']] = '1'
+    ecrire_table(config, 'techniciens', entete, lignes + [nouvelle])
+    return identifiant
+
+
+def poser_mode_solo(config, technicien_id=''):
+    """mode_solo = 1, cloture_une_etape = 1 et, s'il existe, solo_technicien_id dans parametres.csv (D132, §22.11), par
+    une écriture de table normale (sauvegarde du jour d'abord) ; le fichier est créé avec version_schema s'il manque
+    (le premier démarrage ne propose alors plus « démo ou vide » : la base existe). En tenant VERROU_ECRITURE."""
+    octets = lire_octets(chemin_table(config, 'parametres'))
+    entete, lignes = lire_tableau('parametres', octets)
+    if not entete:
+        entete, lignes = list(COLONNES_PAR_TABLE['parametres']), []
+    cles = [cle_entete(colonne) for colonne in entete]
+    if 'cle' not in cles or 'valeur' not in cles:
+        raise ErreurHttp(500, 'parametres.csv sans colonnes « cle » et « valeur » : mode Solo non posé.')
+    position_cle, position_valeur = cles.index('cle'), cles.index('valeur')
+    valeurs = {'mode_solo': '1', 'cloture_une_etape': '1'}
+    if technicien_id:
+        valeurs['solo_technicien_id'] = technicien_id
+    if octets is None:
+        valeurs['version_schema'] = str(VERSION_SCHEMA_CSV)
+    for ligne in lignes:
+        while len(ligne) < len(entete):
+            ligne.append('')
+        cle = ligne[position_cle].strip()
+        if cle in valeurs:
+            ligne[position_valeur] = valeurs.pop(cle)
+    for cle, valeur in valeurs.items():
+        ligne = [''] * len(entete)
+        ligne[position_cle], ligne[position_valeur] = cle, valeur
+        lignes.append(ligne)
+    ecrire_table(config, 'parametres', entete, lignes)
+
+
+def verifier_dossier_de_copie(config, dossier):
+    """Dossier de copie externe choisi dans l'assistant (D133) : il existe, on peut y écrire (un fichier témoin créé
+    puis supprimé) et il n'est ni le dossier des données ni un de ses sous-dossiers (une panne du disque emporterait
+    les deux) ; 400 au message clair sinon, qui ne cite que le nom du dossier. Rend le chemin absolu."""
+    chemin = os.path.abspath(os.path.expanduser(dossier.strip()))
+    nom = nom_du_dossier(chemin)
+    if not os.path.isdir(chemin):
+        raise ErreurHttp(400, 'Dossier de copie « %s » introuvable : branchez la clé ou créez le dossier, puis '
+                              'réessayez.' % nom)
+    if est_sous_dossier(os.path.realpath(chemin), config.dossier_donnees):
+        raise ErreurHttp(400, 'Le dossier de copie ne peut pas être dans le dossier des données de Prévo : une panne '
+                              'du disque emporterait les données et leur copie.')
+    try:
+        descripteur, temoin = tempfile.mkstemp(prefix='.prevo-temoin-', dir=chemin)
+        os.close(descripteur)
+        os.remove(temoin)
+    except OSError as erreur:
+        raise ErreurHttp(400, 'Dossier de copie « %s » : écriture impossible (%s).' % (nom, erreur.strerror or erreur))
+    return chemin
+
+
+def verifier_dossier_cible(source, cible):
+    """Cible de « deplacer » : un chemin absolu qui n'est ni le dossier de Prévo, ni dedans, ni au-dessus, et qui
+    n'existe pas encore ou est vide ; 400 sinon."""
+    if not os.path.isabs(cible):
+        raise ErreurHttp(400, 'Donnez un chemin complet (par exemple %s).' % DOSSIER_CONSEILLE_WINDOWS)
+    source_reelle, cible_reelle = os.path.realpath(source), os.path.realpath(cible)
+    if chemins_egaux(source_reelle, cible_reelle):
+        raise ErreurHttp(400, 'Prévo est déjà dans ce dossier.')
+    if est_sous_dossier(cible_reelle, source_reelle) or est_sous_dossier(source_reelle, cible_reelle):
+        raise ErreurHttp(400, 'Le dossier de destination ne peut être ni dans le dossier de Prévo ni au-dessus.')
+    if os.path.exists(cible) and (not os.path.isdir(cible) or os.listdir(cible)):
+        raise ErreurHttp(400, 'Le dossier « %s » existe déjà et n\'est pas vide : choisissez un dossier vide ou '
+                              'nouveau.' % cible)
+
+
+def copier_prevo(source, cible):
+    """Copie le dossier de Prévo entier (données comprises) vers « cible », sans .git ni __pycache__ ; chaque fichier
+    copié est relu (taille et SHA-256 égaux, sinon ErreurHttp 500 et la copie est retirée). L'ancien dossier n'est
+    jamais touché. Rend le nombre de fichiers copiés."""
+    source = os.path.abspath(source)
+    cree = not os.path.exists(cible)
+    nombre = 0
+    try:
+        for racine, dossiers, fichiers in os.walk(source):
+            dossiers[:] = sorted(d for d in dossiers if d not in DOSSIERS_JAMAIS_COPIES)
+            relatif = os.path.relpath(racine, source)
+            destination = cible if relatif == '.' else os.path.join(cible, relatif)
+            os.makedirs(destination, exist_ok=True)
+            for nom in sorted(fichiers):
+                origine, copie = os.path.join(racine, nom), os.path.join(destination, nom)
+                shutil.copy2(origine, copie)
+                if (os.path.getsize(origine) != os.path.getsize(copie)
+                        or empreinte_fichier(origine) != empreinte_fichier(copie)):
+                    raise ErreurHttp(500, 'Copie incomplète (%s) : l\'ancien dossier est intact, rien n\'a été relancé.'
+                                     % os.path.relpath(origine, source))
+                nombre += 1
+    except OSError as erreur:
+        if cree:
+            shutil.rmtree(cible, ignore_errors=True)
+        raise ErreurHttp(500, 'Copie impossible (%s) : l\'ancien dossier est intact, rien n\'a été relancé.' % erreur)
+    except ErreurHttp:
+        if cree:
+            shutil.rmtree(cible, ignore_errors=True)
+        raise
+    return nombre
+
+
+def lanceur_de(dossier, systeme=None):
+    """Chemin du lanceur de Prévo dans ce dossier : Lancer_GMAO.bat sous Windows, lancer.sh ailleurs."""
+    systeme = systeme or sys.platform
+    return os.path.join(dossier, NOM_LANCEUR_WINDOWS if systeme.startswith('win') else NOM_LANCEUR_AUTRE)
+
+
+def relancer_prevo(config, dossier=None):
+    """Relance Prévo depuis « dossier » (None : le dossier courant) par son lanceur, puis arrête ce serveur
+    DELAI_RELANCE_S après (la réponse en cours est partie). Un processus détaché attend ATTENTE_AVANT_RELANCE_S que ce
+    serveur ait rendu son port, puis lance Lancer_GMAO.bat dans une nouvelle console (Windows) ou lancer.sh : le
+    serveur repart avec la configuration écrite. Rend vrai si la relance est programmée (lanceur présent), faux sinon
+    (le serveur continue, l'utilisateur relance à la main). Jamais appelée par les tests (config.relancer y est
+    remplacée) : elle arrête le processus."""
+    dossier = os.path.abspath(dossier or config.dossier_application)
+    lanceur = lanceur_de(dossier, config.systeme)
+    if not os.path.isfile(lanceur):
+        return False
+    windows = sys.platform.startswith('win')
+    options = {'creationflags': subprocess.CREATE_NEW_CONSOLE} if windows else {'start_new_session': True}
+    code = ('import subprocess, time\n'
+            'time.sleep(%d)\n'
+            'subprocess.Popen(%r, cwd=%r, **%r)\n' % (ATTENTE_AVANT_RELANCE_S, [lanceur], dossier, options))
+    detache = ({'creationflags': subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP} if windows
+               else {'start_new_session': True})
+    try:
+        subprocess.Popen([sys.executable, '-c', code], cwd=dossier, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True, **detache)
+    except OSError as erreur:
+        afficher('Relance impossible (%s) : relancez Prévo à la main par %s.' % (erreur, os.path.basename(lanceur)))
+        return False
+
+    def arreter():
+        time.sleep(DELAI_RELANCE_S)
+        afficher('Prévo se relance depuis %s.' % dossier)
+        os._exit(0)
+
+    threading.Thread(target=arreter, name='relance', daemon=True).start()
+    return True
 
 
 class Configuration:
@@ -2087,6 +2560,13 @@ class Configuration:
         # (tailscale_attendu), puis rafraîchie par /api/info au plus une fois par 10 minutes ; None sinon.
         self.tailscale = None
         self.tailscale_lu_a = None
+        # Lot 7 (§22.10, T167) : assistant d'installation — dossier de Prévo et système injectables (les tests déplacent
+        # une copie et simulent Linux) ; élévation (Installer_demarrage.ps1) et relance remplaçables, jamais lancées
+        # par les tests.
+        self.dossier_application = DOSSIER_APPLICATION
+        self.systeme = sys.platform
+        self.lancer_eleve = lancer_script_powershell
+        self.relancer = lambda dossier=None: relancer_prevo(self, dossier)
         # Dossiers jamais servis en statique : le dossier de données choisi et donnees/
         # à côté de serveur.py (même si --donnees pointe ailleurs).
         self.dossiers_interdits_statique = [
@@ -3424,6 +3904,8 @@ ROUTES_API = {
     ('POST', 'restauration'): 'api_restauration',
     ('POST', 'ia'): 'api_ia',
     ('GET', 'ia/reglages'): 'api_ia_reglages',
+    ('GET', 'installation/<etape>'): 'api_installation_lire',           # §22.10 : PC serveur seulement (traiter)
+    ('POST', 'installation/<etape>'): 'api_installation_ecrire',
 }
 # Ouvertes sans session : le navigateur détecte le serveur (/api/ping) et demande qui il est avant toute connexion.
 ROUTES_PUBLIQUES = (('GET', 'ping'), ('GET', 'session'), ('POST', 'connexion'), ('POST', 'enroler'))
@@ -3518,6 +4000,8 @@ ROLES_PAR_ROUTE = {
     ('POST', 'restauration'): RESPONSABLE,
     ('POST', 'ia'): TOUS,
     ('GET', 'ia/reglages'): TOUS,
+    ('GET', 'installation/<etape>'): RESPONSABLE,
+    ('POST', 'installation/<etape>'): RESPONSABLE,
 }
 
 # Ce qu'un rôle ne reçoit pas d'une table, retiré des octets renvoyés par GET /api/csv/<table> (la version X-Version
@@ -3954,6 +4438,10 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                 self.servir_porte(methode, morceaux)       # client du réseau sur port_http : la porte, rien d'autre
                 return
             if morceaux[0] == 'api':
+                # Assistant d'installation (§22.10) : vu du réseau ou d'un mandataire, il n'existe pas — 404 identique
+                # à une adresse inconnue, avant tout contrôle d'accès et avant l'aiguillage.
+                if len(morceaux) > 1 and morceaux[1] == 'installation' and not self.client_local():
+                    raise ErreurHttp(404, MESSAGE_ADRESSE_INCONNUE)
                 self.session = self.controler_acces(methode, morceaux[1:])
             corps = b''
             if methode in ('PUT', 'POST'):
@@ -3981,7 +4469,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         400."""
         motif = motif_de_route(morceaux)
         if motif is None:
-            raise ErreurHttp(404, 'Adresse inconnue dans l\'API.')
+            raise ErreurHttp(404, MESSAGE_ADRESSE_INCONNUE)
         segment = segment_de_route(motif, morceaux)
         if '<table>' in motif:
             chemin_table(self.config, segment)
@@ -4167,7 +4655,10 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                 'adresses_reseau': adresses_reseau,
                                 'porte': self.config.porte and self.mandat is None,
                                 'copie_externe': etat_copie_externe_public(self.config),
-                                'tailscale': etat_tailscale_public(self.config)})
+                                'tailscale': etat_tailscale_public(self.config),
+                                # §22.10 : l'écran propose l'assistant tant que prevo.config.json manque (jamais
+                                # imposé : les tests des lots 1 à 6 tournent sans configuration).
+                                'installation_a_faire': not self.config.reglages.get('_present')})
 
     def api_session(self, segment, corps):
         """GET /api/session : comptes exigés ou non, et l'identité de la session (jamais le jeton). Pour un appareil
@@ -4493,6 +4984,291 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             resultat = restaurer(self.config, demande.get('sauvegarde'), demande.get('tables'))
         self.envoyer_json(200, resultat)
 
+    # --- Assistant d'installation (lot 7, §22.10 ; D131, CS130) -------------
+
+    def client_local(self):
+        """Le PC serveur lui-même (127.0.0.1, ::1) sans mandataire : seul client des routes /api/installation/…"""
+        return self.client_address[0] in ADRESSES_DE_CE_PC and self.mandat is None
+
+    def api_installation_lire(self, etape, corps):
+        """GET /api/installation/etat et /fiche (§22.10) ; toute autre étape : 404 comme une adresse inconnue."""
+        if etape == 'etat':
+            self.envoyer_json(200, etat_installation(self.config))
+        elif etape == 'fiche':
+            self.envoyer_json(200, fiche_acces(self.config))
+        else:
+            raise ErreurHttp(404, MESSAGE_ADRESSE_INCONNUE)
+
+    def api_installation_ecrire(self, etape, corps):
+        """POST /api/installation/<etape> (situation, portee, compte, certificat, tailscale, demarrage, sauvegardes,
+        deplacer, terminer ; 404 sinon), X-Prevo exigé par traiter : lit le brouillon (400 s'il manque, sauf pour
+        « situation » qui le crée), joue l'étape sous VERROU_INSTALLATION et rend sa réponse."""
+        if etape not in ETAPES_D_ECRITURE:
+            raise ErreurHttp(404, MESSAGE_ADRESSE_INCONNUE)
+        demande = lire_objet_json(corps) if corps.strip() else {}
+        with VERROU_INSTALLATION:
+            brouillon = lire_brouillon(self.config)
+            if brouillon is None and etape != 'situation':
+                raise ErreurHttp(400, MESSAGE_SANS_BROUILLON)
+            reponse = getattr(self, 'installation_' + etape)(brouillon, demande)
+        self.envoyer_json(200, reponse)
+
+    def garder_brouillon(self, brouillon, etape=None, etat=ETAT_FAIT):
+        """Note l'état de l'étape, complète (ecoute, étapes) et écrit le brouillon ; rend {"brouillon", "etapes"}."""
+        if etape:
+            brouillon.setdefault('etapes', {})[etape] = etat
+        completer_brouillon(self.config, brouillon)
+        ecrire_brouillon(self.config, brouillon)
+        return {'brouillon': brouillon, 'etapes': brouillon['etapes']}
+
+    def installation_situation(self, brouillon, demande):
+        """{"situation": seul | equipe | informaticien} : brouillon réinitialisé aux défauts de cette situation."""
+        situation = demande.get('situation')
+        if situation not in SITUATIONS:
+            raise ErreurHttp(400, 'Situation inconnue : « seul », « equipe » ou « informaticien ».')
+        return self.garder_brouillon(brouillon_neuf(self.config, situation))
+
+    def installation_portee(self, brouillon, demande):
+        """{"portee": ce-pc | atelier | dehors, "port_http"?, "port_https"?, "noms"?} : « ce PC » ⇒ comptes faux et
+        aucun mandataire ; au-delà ⇒ comptes exigés ; ports et noms contrôlés comme dans le fichier (400 sinon)."""
+        portee = demande.get('portee')
+        if portee not in PORTEES:
+            raise ErreurHttp(400, 'Portée inconnue : « ce-pc », « atelier » ou « dehors ».')
+        for cle in ('port_http', 'port_https', 'noms'):
+            if cle in demande:
+                brouillon[cle] = valeur_du_brouillon(cle, demande[cle])
+        if brouillon['port_http'] == brouillon['port_https']:
+            raise ErreurHttp(400, 'Les ports http et https doivent être différents.')
+        brouillon['portee'] = portee
+        if portee == 'ce-pc':
+            brouillon['comptes'] = False
+            brouillon['mandataire'] = False
+        else:
+            brouillon['comptes'] = True
+        return self.garder_brouillon(brouillon, 'portee')
+
+    def installation_compte(self, brouillon, demande):
+        """{"prenom", "nom", "mot_de_passe"} : compte responsable créé tout de suite dans comptes.json (12 caractères
+        au moins, règles du serveur ; 409 s'il existe déjà un responsable actif : l'assistant propose de passer) ; en
+        Solo, technicien « moi » créé dans techniciens.csv à partir du prénom et du nom, lié au compte. Sur « ce PC »
+        en Solo : le technicien seul, sans compte ni mot de passe (aucun compte n'y sert) ; 400 ailleurs. Rend le compte
+        public, jamais le mot de passe."""
+        prenom = demande.get('prenom') if isinstance(demande.get('prenom'), str) else ''
+        nom = demande.get('nom') if isinstance(demande.get('nom'), str) else ''
+        prenom, nom = prenom.strip(), nom.strip()
+        if not prenom:
+            raise ErreurHttp(400, 'Le prénom est obligatoire.')
+        solo = bool(brouillon.get('mode_solo'))
+        if brouillon.get('portee') == 'ce-pc':
+            if not solo:
+                raise ErreurHttp(400, 'Sur ce PC seulement, aucun compte n\'est nécessaire : passez cette étape.')
+            with VERROU_ECRITURE:
+                technicien_id = technicien_moi(self.config, prenom, nom)
+            brouillon['solo_technicien_id'] = technicien_id
+            reponse = self.garder_brouillon(brouillon, 'compte')
+            return dict(reponse, compte=None, technicien_id=technicien_id)
+        existant = next((c for c in comptes_du_serveur(self.config) if c.get('role') == 'responsable' and c.get('actif')),
+                        None)
+        if existant is not None:
+            raise ErreurHttp(409, 'Un compte responsable existe déjà (« %s ») : passez cette étape, ou réinitialisez '
+                                  'son mot de passe par %s.' % (existant['identifiant'], NOM_SCRIPT_REINITIALISATION))
+        try:
+            verifier_mot_de_passe_choisi(demande.get('mot_de_passe'))
+        except ErreurCompte as erreur:
+            raise ErreurHttp(400, str(erreur))
+        technicien_id = ''
+        if solo:
+            with VERROU_ECRITURE:
+                technicien_id = technicien_moi(self.config, prenom, nom)
+        try:
+            compte = creer_compte(self.config, prenom, nom, 'responsable', demande['mot_de_passe'],
+                                  technicien_id=technicien_id, origine=self.origine())
+        except ErreurCompte as erreur:
+            raise ErreurHttp(400, str(erreur))
+        brouillon['solo_technicien_id'] = technicien_id
+        reponse = self.garder_brouillon(brouillon, 'compte')
+        return dict(reponse, compte=compte, technicien_id=technicien_id)
+
+    def installation_certificat(self, brouillon, demande):
+        """{"mode": automatique | reseau_prive | fichiers | mandataire, "certificat"?, "cle"?, "noms"?} : automatique ⇒
+        certificat fabriqué tout de suite par mkcert (PREVO_MKCERT ou outils-tiers/ ; 503 au message clair sans lui,
+        brouillon inchangé) ; fichiers ⇒ les deux PEM lus pour vérifier (400 sinon) ; réseau privé ⇒ Tailscale porte le
+        https (mandataire sur ce PC) ; mandataire ⇒ noms obligatoires. Rend ce que la fiche d'accès montrera."""
+        mode = demande.get('mode')
+        if mode not in MODES_CERTIFICAT:
+            raise ErreurHttp(400, 'Mode inconnu : « automatique », « reseau_prive », « fichiers » ou « mandataire ».')
+        if brouillon.get('portee') == 'ce-pc':
+            raise ErreurHttp(400, 'Sur ce PC seulement, Prévo reste en http : aucun certificat à préparer.')
+        noms_certificat = []
+        if mode == 'automatique':
+            try:
+                executable = executable_mkcert()
+            except ErreurConfiguration as erreur:
+                raise ErreurHttp(503, 'Certificat automatique impossible : %s Remettez mkcert dans le dossier '
+                                      'outils-tiers/ (il est dans le zip de Prévo), ou choisissez le réseau privé ou vos '
+                                      'propres fichiers.' % erreur)
+            try:
+                _, _, noms_certificat = preparer_certificat_local(self.config, executable,
+                                                                  noms_acceptes=brouillon.get('noms', []))
+            except ErreurConfiguration as erreur:
+                raise ErreurHttp(503, 'Certificat automatique impossible : %s' % erreur)
+            brouillon.update(certificat_auto=True, certificat='', cle='')
+        elif mode == 'fichiers':
+            certificat, cle = demande.get('certificat'), demande.get('cle')
+            if not (isinstance(certificat, str) and certificat.strip() and isinstance(cle, str) and cle.strip()):
+                raise ErreurHttp(400, 'Donnez les deux fichiers PEM : « certificat » et « cle ».')
+            certificat, cle = os.path.abspath(certificat.strip()), os.path.abspath(cle.strip())
+            try:
+                creer_contexte_ssl(certificat, cle)
+            except SystemExit as erreur:
+                raise ErreurHttp(400, str(erreur))
+            brouillon.update(certificat=certificat, cle=cle, certificat_auto=False, mandataire=False)
+        elif mode == 'reseau_prive':
+            brouillon.update(certificat_auto=False, certificat='', cle='', mandataire=True)
+        else:
+            noms = valeur_du_brouillon('noms', demande['noms']) if 'noms' in demande else brouillon.get('noms', [])
+            if not noms:
+                raise ErreurHttp(400, 'Donnez le nom par lequel le mandataire appelle Prévo (« noms »).')
+            brouillon.update(noms=noms, certificat_auto=False, certificat='', cle='', mandataire=True)
+        reponse = self.garder_brouillon(brouillon, 'certificat')
+        return dict(reponse, mode=mode, noms_certificat=noms_certificat,
+                    autorite_presente=certificat_de_l_autorite(self.config) is not None)
+
+    def installation_tailscale(self, brouillon, demande):
+        """{"action": detecter | appliquer | unattended | plus_tard} : détection et proposition (rien d'écrit) ;
+        appliquer ⇒ « tailscale serve » lancée et vérifiée (§22.8), brouillon : noms + nom Tailscale, mandataire vrai
+        (503 au message si Tailscale manque ou n'est pas connecté) ; unattended ⇒ « tailscale set --unattended=true »
+        (503 si refusé) ; plus tard ⇒ rien, étape à faire. Jamais « up », jamais d'installation (T165)."""
+        action = demande.get('action')
+        if action not in ACTIONS_TAILSCALE:
+            raise ErreurHttp(400, 'Action inconnue : « detecter », « appliquer », « unattended » ou « plus_tard ».')
+        if action == 'detecter':
+            detection = detecter_tailscale(maintenant=maintenant_s(self.config))
+            proposition = preparer_tailscale(self.config, detection, systeme=self.config.systeme, reglages=brouillon)
+            return {'detection': detection_tailscale_publique(detection), 'proposition': proposition,
+                    'brouillon': brouillon, 'etapes': brouillon.get('etapes')}
+        if action == 'appliquer':
+            resultat = appliquer_tailscale(self.config, reglages=brouillon, ecrire=False)
+            if not resultat['ok']:
+                raise ErreurHttp(503, resultat['message'])
+            brouillon.update(noms=resultat['noms'], mandataire=True)
+            reponse = self.garder_brouillon(brouillon, 'tailscale')
+            return dict(reponse, ok=True, message=resultat['message'], nom=resultat['nom'], adresse=resultat['adresse'])
+        if action == 'unattended':
+            resultat = activer_unattended()
+            if not resultat['ok']:
+                raise ErreurHttp(503, resultat['message'])
+            return dict(resultat, brouillon=brouillon, etapes=brouillon.get('etapes'))
+        return self.garder_brouillon(brouillon, 'tailscale', ETAT_A_FAIRE)
+
+    def installation_demarrage(self, brouillon, demande):
+        """{"demarrage": systeme | session | aucun, "veille_desactivee": bool} : scripts de §22.9 écrits (jamais
+        exécutés ici) puis, sous Windows et si ≠ aucun, une seule élévation (config.lancer_eleve : Installer_demarrage.ps1
+        avec RunAs, ou Demarrage_session.ps1 sans droits) ; ailleurs, les commandes à lancer à la main. Étape faite si
+        rien n'était à lancer ou si le script a réussi ; à faire si l'élévation a été refusée (repli proposé)."""
+        demarrage = demande.get('demarrage')
+        if demarrage not in ('systeme', 'session', 'aucun'):
+            raise ErreurHttp(400, 'Démarrage inconnu : « systeme », « session » ou « aucun ».')
+        veille = demande.get('veille_desactivee', False)
+        if not isinstance(veille, bool):
+            raise ErreurHttp(400, '« veille_desactivee » : vrai ou faux attendu.')
+        brouillon.update(demarrage=demarrage, veille_desactivee=veille)
+        mkcert = None
+        if brouillon.get('certificat_auto'):
+            try:
+                mkcert = executable_mkcert()
+            except ErreurConfiguration:
+                mkcert = None
+        dossier = os.path.abspath(self.config.dossier_application)
+        scripts = produire_scripts_demarrage(self.config, dossier_prevo=dossier, veille=veille, mkcert=mkcert,
+                                             ports=(brouillon['port_http'], brouillon['port_https']),
+                                             systeme=self.config.systeme)
+        lance, commandes = None, []
+        if self.config.systeme.startswith('win'):
+            if demarrage == 'systeme':
+                lance = self.config.lancer_eleve(scripts['Installer_demarrage.ps1'], True)
+            elif demarrage == 'session':
+                lance = self.config.lancer_eleve(scripts['Demarrage_session.ps1'], False)
+        elif demarrage != 'aucun':
+            if self.config.systeme == 'darwin':
+                commandes = ['launchctl load -w %s' % scripts['pro.prevo.serveur.plist']]
+            else:
+                commandes = commandes_systemd(dossier)
+        fait = demarrage == 'aucun' or bool(commandes) or bool(lance and lance.get('ok'))
+        reponse = self.garder_brouillon(brouillon, 'demarrage', ETAT_FAIT if fait else ETAT_A_FAIRE)
+        return dict(reponse, scripts=scripts, lance=lance, commandes=commandes)
+
+    def installation_sauvegardes(self, brouillon, demande):
+        """{"dossier": chemin | ""} : vide = plus tard ; sinon le dossier existe, s'écrit (fichier témoin) et n'est pas
+        dans les données (400 sinon) ; brouillon copie_sauvegardes."""
+        dossier = demande.get('dossier', '')
+        if not isinstance(dossier, str):
+            raise ErreurHttp(400, '« dossier » : un chemin (texte) est attendu, vide pour plus tard.')
+        brouillon['copie_sauvegardes'] = verifier_dossier_de_copie(self.config, dossier) if dossier.strip() else ''
+        return self.garder_brouillon(brouillon, 'sauvegardes')
+
+    def installation_deplacer(self, brouillon, demande):
+        """{"vers": chemin} (défaut C:\\Prevo ; Windows seulement, 400 ailleurs) : copie du dossier de Prévo entier
+        (données comprises, .git exclu) vers un dossier nouveau ou vide, chaque fichier vérifié, puis relance depuis
+        la nouvelle place (config.relancer) ; l'ancien dossier n'est jamais supprimé. Rend {copie, vers, relance}."""
+        if not self.config.systeme.startswith('win'):
+            raise ErreurHttp(400, 'Le déplacement vers %s n\'existe que sous Windows.' % DOSSIER_CONSEILLE_WINDOWS)
+        vers = demande.get('vers', DOSSIER_CONSEILLE_WINDOWS)
+        if not isinstance(vers, str) or not vers.strip():
+            vers = DOSSIER_CONSEILLE_WINDOWS
+        source = os.path.abspath(self.config.dossier_application)
+        if not os.path.isabs(vers.strip()):
+            raise ErreurHttp(400, 'Donnez un chemin complet (par exemple %s).' % DOSSIER_CONSEILLE_WINDOWS)
+        cible = os.path.abspath(vers.strip())
+        if not est_sous_dossier(os.path.realpath(self.config.dossier_donnees), source):
+            raise ErreurHttp(400, 'Le dossier des données n\'est pas dans le dossier de Prévo (option --donnees) : '
+                                  'déplacez Prévo à la main.')
+        verifier_dossier_cible(source, cible)
+        self.garder_brouillon(brouillon, 'deplacer')          # noté avant la copie : le brouillon copié le sait
+        try:
+            nombre = copier_prevo(source, cible)
+        except ErreurHttp:
+            self.garder_brouillon(brouillon, 'deplacer', ETAT_A_FAIRE)
+            raise
+        relance = bool(self.config.relancer(cible))
+        return {'copie': nombre, 'vers': cible, 'relance': relance, 'etapes': brouillon['etapes']}
+
+    def installation_terminer(self, brouillon, demande):
+        """Règles de portée sur le brouillon (400 au message : comptes sans responsable, réseau sans https…), puis
+        prevo.config.json écrit (seulement ici : ecrire_configuration, ou modifier_configuration s'il existe déjà,
+        les clés inconnues gardées) ; Solo ⇒ mode_solo dans parametres.csv ; brouillon supprimé ; puis le serveur se
+        relance avec la configuration (config.relancer). Rend {configuration, fichier, relance}."""
+        reglages = reglages_par_defaut()
+        reglages.update({cle: brouillon[cle] for cle in CLES_DU_BROUILLON if cle in brouillon})
+        reglages['ecoute'] = ecoute_du_brouillon(brouillon)
+        reglages['_https_auto'] = bool(reglages['certificat_auto']) and not reglages['certificat']
+        responsable = responsable_actif_existe(self.config)
+        if reglages['comptes'] and not responsable:
+            raise ErreurHttp(400, 'Aucun compte responsable : créez-le (étape « compte ») avant de terminer.')
+        try:
+            verifier_regles_portee(dict(reglages), responsable)
+        except ErreurConfiguration as erreur:
+            raise ErreurHttp(400, str(erreur))
+        if reglages['ecoute'] != '127.0.0.1' and reglages['_https_auto'] and not mkcert_disponible():
+            raise ErreurHttp(400, 'Certificat automatique impossible sans mkcert (outils-tiers/) : Prévo refuserait de '
+                                  'démarrer sur le réseau. Faites l\'étape « certificat » autrement.')
+        chemin = self.config.reglages.get('_fichier') or os.path.join(self.config.dossier_application,
+                                                                      NOM_FICHIER_CONFIGURATION)
+        a_ecrire = {cle: reglages[cle] for cle in CLES_DU_BROUILLON}
+        try:
+            if os.path.isfile(chemin):
+                modifier_configuration(chemin, a_ecrire)
+            else:
+                ecrire_configuration(chemin, reglages)
+        except (OSError, ValueError) as erreur:
+            raise ErreurHttp(500, 'Configuration non écrite (%s) : rien n\'a changé.' % erreur)
+        if brouillon.get('mode_solo'):
+            with VERROU_ECRITURE:
+                poser_mode_solo(self.config, brouillon.get('solo_technicien_id', ''))
+        supprimer_brouillon(self.config)
+        relance = bool(self.config.relancer(None))
+        return {'configuration': a_ecrire, 'fichier': chemin, 'relance': relance}
+
     # --- Fichiers statiques ------------------------------------------------
 
     def servir_statique(self, morceaux, entetes=None):
@@ -4706,6 +5482,9 @@ def afficher_accueil(config, port_demande, avertissements=()):
     else:
         afficher('  Sur le réseau    : aucune adresse trouvée (PC non connecté ?)')
     afficher('  Données          : %s' % config.dossier_donnees)
+    if not config.reglages.get('_present'):
+        afficher('  Installation     : pas encore faite ; l\'assistant est sur %s%s (sur ce PC seulement).'
+                 % (config.adresse_locale(), ROUTE_INSTALLATION))
     if config.ecoute == '127.0.0.1':
         afficher('  Écoute           : ce PC seulement (127.0.0.1) ; les autres appareils ne joignent pas Prévo.')
     else:
@@ -4800,6 +5579,13 @@ def reglages_du_lancement(options):
     return reglages
 
 
+def adresse_de_demarrage(config):
+    """Adresse ouverte dans le navigateur au démarrage : l'application, ou l'assistant d'installation (#/installation)
+    tant que prevo.config.json n'existe pas (§22.10 ; --sans-navigateur respecté par main)."""
+    adresse = config.adresse_locale()
+    return adresse if config.reglages.get('_present') else adresse + ROUTE_INSTALLATION
+
+
 def reinitialiser_en_ligne_de_commande(config, identifiant):
     """serveur.py --reinitialiser IDENTIFIANT : sur le PC serveur, qui a la main sur le PC a la main sur Prévo."""
     try:
@@ -4843,7 +5629,7 @@ def main(arguments=None):
     afficher_accueil(config, reglages['port_http'], avertissements)
     lancer_copie_externe(config)        # D133 : copie externe au démarrage, dans son propre fil
     if not options.sans_navigateur:
-        webbrowser.open(config.adresse_locale())
+        webbrowser.open(adresse_de_demarrage(config))
     # Deux écouteurs (§22.6) : la porte tourne dans son propre fil, l'application dans celui-ci (Ctrl+C).
     for serveur in serveurs[:-1]:
         threading.Thread(target=serveur.serve_forever, name='porte', daemon=True).start()

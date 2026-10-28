@@ -107,6 +107,8 @@ ATTENDU = {
     ("POST", "restauration"): RESPONSABLE,
     ("POST", "ia"): TOUS,
     ("GET", "ia/reglages"): TOUS,
+    ("GET", "installation/<etape>"): RESPONSABLE,       # T167 (§22.10) : et PC serveur seulement, 404 au réseau
+    ("POST", "installation/<etape>"): RESPONSABLE,
 }
 
 
@@ -402,6 +404,8 @@ class JoueurDeCases:
             return [("paul.essai", None)]
         if "<id>" in motif:
             return [("INV-0000" if "invitations" in motif else "AP-0000", None)]
+        if "<etape>" in motif:
+            return [("etat" if methode == "GET" else "situation", None)]
         return [(None, None)]
 
     @classmethod
@@ -470,6 +474,8 @@ class JoueurDeCases:
             corps = {"prenom": "Essai", "nom": "Case %d" % JoueurDeCases.numero, "role": "demandeur"}
         elif route == ("POST", "acces/comptes/<identifiant>"):
             corps = {"action": "modifier", "prenom": "Paul"}
+        elif route == ("POST", "installation/<etape>"):
+            corps = {"situation": "seul"}               # T167 : brouillon réécrit dans la copie, rien d'autre
         elif route == ("POST", "enroler"):
             # Route publique (T153) : l'invitation décide. Serveur réel, demandeurs_avec_compte vrai : 403 enrôlement
             # désactivé ; serveur du processus (appareil simulé) : 401 invitation inconnue. Ni l'un ni l'autre n'est

@@ -3370,6 +3370,8 @@ Précisions de T153 (appareils enrôlés, D125, CS123) :
 | `POST /api/acces/deconnecter-partout` | responsable (ou soi-même) | sans corps ou `{}` : toutes ses propres sessions, la courante comprise (cookie effacé) ; `{"identifiant": X}` pour un autre compte : responsable seulement (403 sinon), 404 compte inconnu ; 200 `{"identifiant", "sessions_fermees"}` |
 | `GET /api/acces/journal` | responsable | `journal-acces.csv` tel quel (`text/csv`, `Content-Disposition: attachment`), l'en-tête seul tant qu'il n'existe pas |
 | `GET /api/ia/reglages` | tous (session ou appareil) | `{"fournisseur", "url", "cle_reglee": bool, "en_ligne": bool, "portee"}`, jamais la clé (§22.12) |
+| `GET /api/installation/<etape>` | responsable, PC serveur seulement | `etat`, `fiche` (§22.10) ; 404 « Adresse inconnue dans l'API. » à tout client qui n'est pas 127.0.0.1 ou qui est mandaté, avant tout contrôle d'accès |
+| `POST /api/installation/<etape>` | responsable, PC serveur seulement | `situation`, `portee`, `compte`, `certificat`, `tailscale`, `demarrage`, `sauvegardes`, `deplacer`, `terminer` (§22.10) ; même 404 vu du réseau |
 
 Toutes les écritures gardent l'en-tête `X-Prevo: 1` (anti-CSRF) en plus de la session.
 
@@ -3511,6 +3513,8 @@ ce tableau dit la même chose : une route ajoutée à `ROUTES_API` sans sa ligne
 | `POST /api/restauration` | non | non | non | oui |
 | `POST /api/ia` | oui | oui | oui | oui |
 | `GET /api/ia/reglages` | oui | oui | oui | oui |
+| `GET /api/installation/<etape>` | non | non | non | oui |
+| `POST /api/installation/<etape>` | non | non | non | oui |
 
 Tables du demandeur : `localisations`, `equipements`, `demandes`, `compteurs`, `releves`, `codes_defaillance`, `parametres`, `wiki_pages`.
 
@@ -3586,7 +3590,9 @@ et démo. L'IA reste ouverte au demandeur (précisé à T158) : l'écran Signale
   (http, ou https avec `certificat`/`cle`, lot 4) ; sinon `ServeurPrevo(porte=True)` sur `port_http` (jamais de TLS)
   et l'application sur `port_https` (le suivant libre jusqu'à +20 pour chacun ; `config.porte`, `config.port_https`),
   la porte dans un fil à part. `certificat_du_serveur` : `certificat`/`cle` donnés, sinon hors de « ce PC »
-  `preparer_certificat_local` avec `trouver_mkcert` (`certificat_auto`, drapeau `_https_auto` posé par
+  `preparer_certificat_local` avec `executable_mkcert` (T167 : la variable d'environnement `PREVO_MKCERT` quand elle
+  est posée — tests, `tests/faux_mkcert.py` ; un chemin qui n'existe pas vaut « absent » —, sinon `trouver_mkcert`)
+  (`certificat_auto`, drapeau `_https_auto` posé par
   `reglages_du_lancement` pour `verifier_regles_portee`) ; mkcert absent, empreinte fausse, échec ou
   `certificat_auto` faux ⇒ « Démarrage refusé », code 2, aucun écouteur ouvert. `GestionnaireRequetes` :
   `client_de_confiance()` (127.0.0.1, ::1 ; T164 y ajoute le mandataire attesté), `sur_la_porte()`, `servir_porte`
@@ -3722,6 +3728,116 @@ relance depuis la nouvelle place), `terminer` (écrit la configuration, puis le 
 `installation-ecrans.js` (huit étapes, quatre textes chacune, « Régler autrement »), vue informaticien sur une page ;
 fiche d'accès imprimable. Paramètres › Accès et installation (`parametres-acces.js`) refait chaque étape depuis le PC
 serveur seulement. Migration 1.2 : CSV gardés ; profils mémorisés ignorés quand `comptes` est vrai.
+
+Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») — T168 (écran) et T170 (Paramètres) sont
+écrits d'après lui :
+
+- **Qui** : dans `traiter`, avant `controler_acces` et avant l'aiguillage, toute requête `/api/installation…` d'un
+  client qui n'est pas 127.0.0.1 ou ::1, ou qui est mandaté (`self.mandat` non nul, §22.7), reçoit 404
+  `{"erreur": "Adresse inconnue dans l'API."}`, identique à une route inconnue (`client_local()`) : l'assistant
+  n'existe pas vu du réseau. La route n'est jamais publique : sans comptes exigés (premier lancement), rien n'est
+  demandé ; avec comptes, la session du responsable est exigée comme partout (401, 403 : Paramètres › Accès et
+  installation, T170). Écritures avec `X-Prevo`. `<etape>` inconnue : 404.
+- **Brouillon** : `donnees/installation.json` (atomique, sous `VERROU_INSTALLATION` : une étape à la fois), clés =
+  celles de `prevo.config.json` sauf `ia_cle` (`CLES_DU_BROUILLON` : jamais un secret) + `situation`, `etapes`,
+  `mode_solo`, `solo_technicien_id` ; relu par `etat` (un rechargement ou un redémarrage avant « terminer » ne perd
+  rien), copié avec Prévo par `deplacer`, supprimé par `terminer` ; illisible ⇒ comme absent. `ecoute` est toujours
+  dérivée (`ecoute_du_brouillon`) : `127.0.0.1` en portée « ce PC » et quand un mandataire sur ce PC porte seul le
+  https (réseau privé Tailscale sans certificat local, mandataire de l'entreprise : `mandataire` vrai sans
+  `certificat_auto` ni fichiers), `0.0.0.0` sinon. Les étapes (`ETAPES_INSTALLATION` : `situation`, `portee`,
+  `compte`, `certificat`, `tailscale`, `demarrage`, `sauvegardes`, `deplacer`) valent `fait`, `a_faire` ou
+  `sans_objet` (`etapes_du_brouillon`) : `compte` et `certificat` sans objet sur « ce PC » (le compte reste proposé
+  en Solo : il crée le technicien « moi »), `tailscale` hors de la portée `dehors`, `deplacer` hors de Windows ou
+  déjà dans `C:\Prevo` ; un responsable actif vaut `compte` fait.
+- `GET etat` → `{"configuration_presente", "portee", "situation", "etapes", "brouillon" (null sans brouillon),
+  "csv_presents" (des CSV dans le dossier des données : migration 1.2), "dossier" (celui de Prévo),
+  "dossier_conseille" (`C:\Prevo` sous Windows, null ailleurs), "dans_dossier_conseille", "python_embarque"
+  (`python/python.exe` présent), "responsable_existe", "tailscale" `{present, connecte, nom, jours_avant_expiration,
+  raison}` (`detecter_tailscale` à chaque appel, jamais gardée dans `config.tailscale` : `/api/info` ne change pas),
+  "mkcert_present", "systeme" (`windows` | `linux` | `macos`), "version"}`.
+- `POST situation` `{"situation": "seul" | "equipe" | "informaticien"}` → brouillon réinitialisé aux défauts de
+  l'étude §6.1 (`DEFAUTS_PAR_SITUATION` sur `reglages_par_defaut`) : Solo `portee` ce-pc, `comptes` faux,
+  `certificat_auto` faux (réseau privé), `demarrage` aucun, `veille_desactivee` faux, `mode_solo` vrai ; Atelier
+  `atelier`, comptes, `certificat_auto` vrai, `demarrage` systeme, veille coupée ; Intranet `atelier`, comptes,
+  `demandeurs_avec_compte` vrai, `certificat_auto` faux, `demarrage` systeme, veille gardée. 400 sinon. Réponse de
+  toute étape qui écrit le brouillon : `{"brouillon", "etapes"}` (plus ce qui suit).
+- `POST portee` `{"portee": "ce-pc" | "atelier" | "dehors", "port_http"?, "port_https"?, "noms"?}` → valeurs
+  contrôlées comme dans le fichier (`valeur_valide`, bornes de `CLES_CONFIGURATION`, noms en minuscules ; 400 au
+  message, ports égaux 400) ; « ce PC » ⇒ `comptes` faux, `mandataire` faux ; au-delà ⇒ `comptes` vrai.
+- `POST compte` `{"prenom", "nom", "mot_de_passe"}` → `creer_compte(… 'responsable' …)` écrit tout de suite
+  `donnees/acces/comptes.json` (règles du serveur : 400 au message, 12 caractères au moins ; journal `creation`) ;
+  409 au message s'il existe déjà un responsable actif (l'assistant propose de passer l'étape ; jamais de
+  remplacement) ; en Solo, technicien « moi » dans `techniciens.csv` (`technicien_moi` : repris s'il existe, actif,
+  même prénom et nom ; sinon `TEC-nnnn` suivant, métier vide, colonnes du fichier gardées, sauvegarde du jour d'abord)
+  et lié au compte (`technicien_id`), identifiant gardé dans le brouillon (`solo_technicien_id`). Sur « ce PC » en
+  Solo : le technicien seul, sans compte ni mot de passe (`compte` null) ; 400 ailleurs. Rend `{"compte"
+  (compte_public, jamais le mot de passe), "technicien_id", …}`.
+- `POST certificat` `{"mode": "automatique" | "reseau_prive" | "fichiers" | "mandataire", "certificat"?, "cle"?,
+  "noms"?}` (400 sur « ce PC ») : automatique ⇒ `preparer_certificat_local` tout de suite avec
+  `executable_mkcert()` (variable d'environnement `PREVO_MKCERT`, documentée comme `PREVO_TAILSCALE` : tests ;
+  sinon `trouver_mkcert`, empreinte vérifiée) pour les adresses du PC et les `noms` du brouillon ; mkcert absent ou
+  en échec ⇒ 503 au message qui dit quoi faire, brouillon inchangé ; sinon `certificat_auto` vrai. Fichiers ⇒ les
+  deux PEM lus par `creer_contexte_ssl` (400 « illisible » sinon), chemins absolus dans `certificat`/`cle`,
+  `certificat_auto` et `mandataire` faux. Réseau privé ⇒ `certificat_auto` faux, `mandataire` vrai (Tailscale à
+  l'étape suivante ; écoute 127.0.0.1). Mandataire ⇒ `mandataire` vrai, `noms` obligatoires (du corps ou du
+  brouillon ; 400 sinon). Rend `{"mode", "noms_certificat", "autorite_presente", …}`.
+- `POST tailscale` `{"action": "detecter" | "appliquer" | "unattended" | "plus_tard"}` : detecter → `{"detection"
+  (sous-ensemble public), "proposition"}` de `preparer_tailscale(…, reglages=brouillon)`, rien d'écrit ; appliquer →
+  `appliquer_tailscale(config, reglages=brouillon, ecrire=False)` (serve lancée et vérifiée, §22.8 ; le fichier de
+  configuration n'est pas touché) puis brouillon `noms` + nom Tailscale et `mandataire` vrai, étape faite, rend aussi
+  `{"ok": true, "message", "nom", "adresse"}` ; 503 au message si Tailscale manque, n'est pas connecté ou si serve
+  échoue ; unattended → `activer_unattended` (`{"ok", "message"}`, 503 si refusé) ; plus_tard → rien, étape
+  `a_faire`. Jamais `up`, jamais d'installation.
+- `POST demarrage` `{"demarrage": "systeme" | "session" | "aucun", "veille_desactivee": bool}` →
+  `produire_scripts_demarrage` dans le dossier de Prévo (ports du brouillon, mkcert si `certificat_auto`, jamais
+  exécutés ici) puis, sous Windows et si ≠ aucun, **une seule élévation** : `config.lancer_eleve(script, eleve)` =
+  `lancer_script_powershell` (`commande_powershell` : `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  Installer_demarrage.ps1` lancé par `Start-Process -Verb RunAs -Wait`, code de sortie rendu ; `Demarrage_session.ps1`
+  sans élévation pour `session`), injectable et jamais lancée dans les tests ; hors Windows, `commandes` à lancer à
+  la main (systemd, launchctl). Brouillon `demarrage`, `veille_desactivee` ; étape faite si rien n'était à lancer ou
+  si le script a réussi, `a_faire` si l'élévation a été refusée (l'écran propose le repli). Rend `{"scripts": {nom:
+  chemin}, "lance": {"ok", "code", "message"} | null, "commandes", …}`.
+- `POST sauvegardes` `{"dossier": chemin | ""}` → vide = plus tard ; sinon `verifier_dossier_de_copie` : le dossier
+  existe, s'écrit (fichier témoin créé puis supprimé) et n'est ni le dossier des données ni un de ses sous-dossiers
+  (400 au message, qui ne cite que le nom du dossier) ; brouillon `copie_sauvegardes` (chemin absolu).
+- `POST deplacer` `{"vers": chemin}` (défaut `C:\Prevo` ; Windows seulement, 400 ailleurs ; chemin complet exigé)
+  → `verifier_dossier_cible` (ni le dossier de Prévo, ni dedans, ni au-dessus ; absent ou vide ; 400) ; les données
+  doivent être dans le dossier de Prévo (400 sinon : `--donnees`) ; étape notée faite dans le brouillon (la copie
+  l'emporte), puis `copier_prevo` : le dossier entier, données comprises, sans `.git` ni `__pycache__`, chaque
+  fichier relu (taille et SHA-256 ; écart ⇒ 500, copie retirée, ancien dossier intact) ; puis
+  `config.relancer(cible)`. Rend `{"copie": nombre de fichiers, "vers", "relance": bool}`. L'ancien dossier n'est
+  jamais supprimé.
+- `POST terminer` → réglages = défauts + brouillon, `ecoute` dérivée, `_https_auto` ; 400 au message si `comptes`
+  sans responsable actif, si `verifier_regles_portee` refuse (réseau sans https ni mandataire…) ou si le réseau
+  compte sur mkcert absent (Prévo refuserait de démarrer) ; puis `prevo.config.json` écrit **seulement ici**
+  (`ecrire_configuration` s'il n'existe pas, `modifier_configuration` sinon : `_aide`, `ia_cle` et les clés inconnues
+  gardés) au chemin de `--config` (défaut : à côté de `serveur.py`) ; Solo ⇒ `poser_mode_solo` : `mode_solo` = 1,
+  `cloture_une_etape` = 1, `solo_technicien_id` dans `parametres.csv` (écriture de table normale, sauvegarde du
+  jour d'abord ; fichier créé avec `version_schema` s'il manque — la base existe alors et le premier démarrage ne
+  propose plus « démo ou vide », à savoir pour T168/T171) ; brouillon supprimé ; `config.relancer(None)`. Rend
+  `{"configuration" (les clés écrites), "fichier", "relance": bool}`.
+- `GET fiche` → données de la fiche d'accès (T168 la met en page), d'après le brouillon, sinon le fichier de
+  configuration (ce que `terminer` vient d'écrire), sinon les réglages du serveur : `{"situation", "portee",
+  "comptes", "adresse_locale", "adresses" (la porte : `http://<adresse IP>:<port_http>/` et les noms acceptés hors
+  `.ts.net`, seulement quand Prévo écoute sur le réseau ; jamais l'adresse https, §22.6), "adresse_tailscale"
+  (`https://<nom .ts.net>/` derrière un mandataire), "adresses_mandataire" (`https://<nom>/` des autres noms),
+  "autorite_presente", "adresse_confiance" (la porte, qui sert `/acces/ca.crt` : QR « faire confiance »),
+  "lanceur" (`Lancer_GMAO.bat` | `lancer.sh`), "demarrage", "dossier", "dossier_donnees", "copie_sauvegardes",
+  "reinitialisation" `{"script": Reinitialiser_mot_de_passe.bat, "commande"}`, "responsables" (identifiants)}`.
+- **Relance** (`relancer_prevo`, `config.relancer`, injectable) : lanceur du dossier visé (`Lancer_GMAO.bat`,
+  `lancer.sh`) lancé par un processus détaché qui attend 3 s (le port est rendu), nouvelle console sous Windows ;
+  ce serveur s'arrête 2 s après la réponse (`os._exit`). Sans lanceur : faux, le serveur continue. Jamais lancée par
+  les tests.
+- **Démarrage** : `main` ouvre `adresse_de_demarrage(config)` = `http://localhost:<port>/#/installation` tant que
+  `prevo.config.json` est absent (`--sans-navigateur` respecté), la console le dit (« Installation : pas encore
+  faite… ») et `GET /api/info` rend `installation_a_faire: true` — pour que l'écran propose l'assistant, jamais
+  pour l'imposer : les tests des lots 1 à 6 tournent sans configuration. Le message « tant que l'installation n'est
+  pas terminée, Prévo n'est joignable que sur ce PC » est un texte d'écran (T168, T169).
+- **Tests** : `tests/test_installation_api.py` (serveur du processus avec `config.lancer_eleve`, `config.relancer`,
+  `dossier_application` et `systeme` injectés ; faux mkcert et faux tailscale par `PREVO_MKCERT` et `PREVO_TAILSCALE`,
+  jamais hérités du poste : `tests/commun.py` ; les quatre parcours comparés clé à clé ; 404 vu du réseau par un
+  serveur sur 0.0.0.0 et par `tests/mandataire_test.py` ; serveur réel au premier lancement) ;
+  `tests/test_acces_roles.py` joue la ligne « responsable » des deux routes.
 
 ### 22.11 Mode Solo et sauvegardes (D132, D133)
 
