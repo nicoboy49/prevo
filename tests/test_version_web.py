@@ -194,7 +194,7 @@ class TestConstructionDemoWeb(OutilsConstruction, unittest.TestCase):
     def test_construction_dist_ignore_par_git(self):
         if shutil.which("git") is None:
             self.skipTest("git absent")
-        for chemin in ("dist/demo-web/index.html", "dist/prevo-1.2.0.zip"):
+        for chemin in ("dist/demo-web/index.html", "dist/prevo-2.0.0.zip"):
             with self.subTest(chemin=chemin):
                 resultat = subprocess.run(["git", "check-ignore", "-q", chemin], cwd=str(RACINE))
                 self.assertEqual(resultat.returncode, 0, chemin + " devrait être ignoré par git")

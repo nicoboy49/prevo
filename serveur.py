@@ -63,7 +63,7 @@ from urllib.parse import unquote, urlsplit
 # ---------------------------------------------------------------------------
 
 NOM_APPLICATION = 'Prévo'
-VERSION_APPLICATION = '1.2.0'
+VERSION_APPLICATION = '2.0.0'
 VERSION_API = 1
 
 PORT_PAR_DEFAUT = 8080

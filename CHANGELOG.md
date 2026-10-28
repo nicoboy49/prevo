@@ -7,13 +7,74 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [2.0.0] - 2026-10-28
+
+Le lot 7 : l'accès et l'installation (le détail est dans [docs/PILOTAGE.md](docs/PILOTAGE.md), l'installation pour
+l'informaticien dans [docs/INSTALLATION.md](docs/INSTALLATION.md)). Version majeure : au-delà de ce PC, la connexion
+devient obligatoire.
+
 ### Ajouté
 
+- **Connexion et rôles** : au-delà de ce PC, chaque personne a son compte et le serveur vérifie les droits de chaque
+  rôle ; un demandeur peut n'avoir qu'un téléphone enrôlé par QR, sans mot de passe.
+- **Assistant d'installation** : trois questions au premier lancement (qui, depuis où, votre compte), le https de
+  l'atelier, Tailscale hors de l'atelier, le démarrage avec le PC et la copie des sauvegardes ; Python est dans le zip.
+- **Trois portées** : ce PC (comme avant, sans mot de passe), le Wi-Fi de l'atelier, aussi hors de l'atelier. Prévo
+  refuse d'écouter le réseau sans comptes ni https.
+- **https sans rien acheter** : une page d'entrée guide chaque téléphone pas à pas pour « faire confiance au PC
+  atelier » (Android, iPhone), puis ouvre la fiche demandée en https ; le certificat de l'atelier est fabriqué par
+  mkcert, livré dans le zip avec son empreinte vérifiée. Les étiquettes QR gardent l'adresse de la page d'entrée.
+- **Équipe › Accès** (responsable) : comptes (rôle, technicien lié, mot de passe provisoire montré une fois,
+  réinitialiser, désactiver), invitations QR pour les téléphones des demandeurs, révocation immédiate, journal des
+  connexions consultable et exportable.
+- **Écran de connexion** : « rester connecté sur cet appareil », changement obligatoire d'un mot de passe provisoire,
+  déconnexion ; mot de passe oublié : `Reinitialiser_mot_de_passe.bat` sur le PC serveur.
+- **Hors de l'atelier** : Tailscale détecté et guidé (jamais installé à votre place), signalé sur l'accueil du
+  responsable s'il est déconnecté ou si sa clé expire ; ou derrière le mandataire inverse de l'entreprise (nginx,
+  Caddy, IIS, Cloudflare Tunnel).
+- **Démarrer avec le PC** : tâche planifiée au démarrage, règle du pare-feu en réseau privé et veille désactivée sur
+  secteur, en une seule invite d'administrateur ; retrait depuis Paramètres.
+- **Mode Solo** : pour une personne seule, menu allégé, technicien « moi », « Nouvel OT » en premier et clôture en une
+  étape.
+- **Sauvegardes** : copie externe chaque nuit (clé USB, NAS, dossier synchronisé ; 30 gardées), « Tester » une
+  sauvegarde, une sauvegarde manuelle par minute au plus (60 gardées).
+- **Paramètres › Accès et installation** : chaque réglage de l'assistant se refait depuis le PC serveur, avec l'état du
+  serveur (actif depuis, adresses, Tailscale, copie externe, dernières lignes du journal).
 - **Aide à l'écran** : à la première ouverture de chaque écran, un encart en haut de la page dit ce qu'il contient,
   ce qu'on y fait et propose un geste à essayer, avec un lien vers la partie du guide ; il ne bloque rien,
   « Compris » le ferme pour de bon sur ce poste. Les textes suivent le profil (accueil, demandes, ordres de travail,
   page du wiki) ; dans la démo en ligne, l'accueil rappelle qu'on peut tout essayer. Lien « Explications » dans le
   menu ; dans Ce poste, la case pour la couper et « Revoir toutes les explications ».
+- **docs/INSTALLATION.md** : la configuration (`prevo.config.json`), les mandataires, les services, les comptes, le
+  journal et les sauvegardes, pour l'informaticien.
+
+### Modifié
+
+- Le zip embarque Python 3.14 (paquet officiel Windows 64 bits) : rien à installer ; ailleurs, un Python 3.11 ou plus
+  récent suffit.
+- Sans configuration, le serveur n'écoute que sur ce PC (127.0.0.1) ; la console et l'accueil disent quand un
+  téléphone ne peut pas joindre Prévo.
+- Le guide : chapitre 2 réécrit autour de l'assistant, chapitre 3 « Les rôles et les profils », nouveau chapitre 8
+  « Accès et installation » (connexion, faire confiance au PC atelier, Tailscale, démarrage, Solo, RGPD, annuaire).
+- En mode serveur, le fournisseur d'IA et sa clé se règlent sur le PC serveur, jamais dans les navigateurs ; avec les
+  comptes, l'assistant IA est réservé aux techniciens et au responsable.
+- Documents joints : le serveur ajoute la date et l'heure devant leur nom ; `.doc` et `.xls` sont refusés ; les
+  fichiers autres que les images, les PDF et les rapports figés s'ouvrent en téléchargement.
+
+### Sécurité
+
+- Corrections de l'audit de la version 1.1 : contrôle des fichiers CSV reçus (E2), clé de l'IA gardée sur le PC
+  serveur (M1 à M3), en-têtes de sécurité (F1), limites de ressources : 32 requêtes à la fois et quota du dossier des
+  documents (F2), documents (F4), chemins notés tels quels dans le journal du serveur (I2), rubrique RGPD du guide (I4).
+- Mots de passe hachés (scrypt), sessions dans un cookie HttpOnly, attente puis blocage après des échecs de
+  connexion, journal des connexions gardé un an ; la clé privée du certificat de l'atelier ne part jamais dans une
+  sauvegarde.
+
+### Migration
+
+- Une installation 1.2 garde ses fichiers CSV : l'assistant les montre et n'y touche pas. Les profils mémorisés ne
+  servent plus quand les comptes sont exigés. Les étiquettes QR imprimées en 1.2 restent valables (même adresse,
+  même port : la page d'entrée). Lancé sans configuration, le serveur reste en portée « ce PC », comme avant.
 
 ## [1.2.0] - 2026-10-24
 

@@ -925,8 +925,8 @@ serveur (§7) en réduisent la fréquence sans l'annuler.
 
 ## 13. Points d'extension (lots suivants)
 
-Les lots 2 à 6 sont réalisés (contrats aux §14 à §21 ; version 1.0.0 au lot 4, 1.1.0 au lot 5, 1.2.0 au
-lot 6). Un module ajouté plus tard suit les mêmes règles : préfixe de fichiers, 700 lignes au plus par
+Les lots 2 à 7 sont réalisés (contrats aux §14 à §22 ; version 1.0.0 au lot 4, 1.1.0 au lot 5, 1.2.0 au
+lot 6, 2.0.0 au lot 7). Un module ajouté plus tard suit les mêmes règles : préfixe de fichiers, 700 lignes au plus par
 fichier, place dans l'ordre du §15.1 complété aux §16.1, §17.1 et §18.1 **et** dans `ORDRE_MODULES` de
 `tests/test_depot.py`. Une table rendue importable demande une entrée dans `Import.TYPES` (et la règle de
 sa clé naturelle), sa place dans `Import.ORDRE_ECRITURE`, puis `py outils/generer_fiche_csv.py`.
