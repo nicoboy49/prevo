@@ -1,0 +1,118 @@
+/* Porte d'entrée de Prévo (lot 7, ARCHITECTURE.md §22.6) : feuille autonome, charte « Cockpit » de css/style.css
+   reprise en réduit (variables, police Sora, boutons, carte, encadré). Rien d'autre n'est chargé : la porte ne sert
+   que ses fichiers, le favicon et les polices (serveur.py, fichier_de_la_porte). Lisible sur un petit écran. */
+
+@font-face {
+  font-family: Sora;
+  src: url(/css/polices/sora-latin-wght-normal.woff2) format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+  --fond: #0B1226; --carte: #121B36; --champ: #0F1730;
+  --texte: #E8EDFF; --texte-2: #B7C1E6; --muted: #7D89B5; --trait-2: rgba(255,255,255,.12);
+  --bleu: #4C7DFF; --cyan: #2BD4F0; --ambre: #F5B544;
+  --fort: #FFFFFF; --sur-couleur: #FFFFFF;
+  --bleu-bouton: #3366E6; --bleu-survol: #2B5AD6;
+  --texte-bleu: #CFDBFF; --texte-ambre: #F7D9A3;
+  --teinte-bleu: rgba(76,125,255,.16); --teinte-bleu-forte: rgba(76,125,255,.26);
+  --teinte-ambre-faible: rgba(245,181,68,.08); --bord-ambre: rgba(245,181,68,.32);
+  --survol: rgba(255,255,255,.04);
+  --halo-1: rgba(76,125,255,.20); --halo-2: rgba(43,212,240,.08);
+  --lueur-logo: rgba(76,125,255,.45); --logo-debut: #2F5BEA; --logo-fin: #22C3E6;
+  --rayon: 20px; --tactile: 48px;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; color: var(--texte);
+  font: 16px/1.5 Sora, system-ui, sans-serif;
+  background: radial-gradient(900px 500px at 85% -10%, var(--halo-1), transparent 60%),
+              radial-gradient(700px 400px at -10% 30%, var(--halo-2), transparent 60%), var(--fond);
+  min-height: 100vh; overflow-wrap: break-word;
+}
+[hidden] { display: none !important; }
+h1, h2, h3 { margin: 0; letter-spacing: -.02em; line-height: 1.25; }
+h1 { font-size: 1.75rem; font-weight: 700; }
+h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: .6rem; }
+h3 { font-size: 1rem; font-weight: 700; }
+p { margin: 0 0 .75rem; }
+a { color: var(--cyan); }
+code { font-family: Consolas, 'Courier New', monospace; font-size: .95em; color: var(--fort); }
+img { max-width: 100%; height: auto; }
+
+.porte { max-width: 560px; margin: 0 auto; padding: 20px 16px calc(24px + env(safe-area-inset-bottom)); }
+
+/* Marque : logo (le favicon) et titre, comme l'écran de démarrage de l'application */
+.marque { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+.logo {
+  width: 56px; height: 56px; border-radius: 16px; flex: none; display: grid; place-items: center; overflow: hidden;
+  background: linear-gradient(135deg, var(--logo-debut), var(--logo-fin)); box-shadow: 0 0 24px var(--lueur-logo);
+}
+.logo img { width: 100%; height: 100%; display: block; }
+.sous-titre { color: var(--texte-2); margin: 0; }
+
+.carte {
+  background: var(--carte); border: 1px solid var(--trait-2); border-radius: var(--rayon);
+  padding: 20px 18px; margin-bottom: 16px;
+}
+.carte.centre { text-align: center; }
+.chargement { color: var(--texte-2); padding: 18px 0; }
+.chargement::before {
+  content: ''; display: block; width: 28px; height: 28px; margin: 0 auto 12px; border-radius: 50%;
+  border: 3px solid var(--trait-2); border-top-color: var(--bleu); animation: tourne 1s linear infinite;
+}
+@keyframes tourne { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .chargement::before { animation: none; } }
+
+/* Boutons : ceux de la charte, zone tactile de 48 px */
+.btn {
+  border: 0; border-radius: 12px; padding: .6rem 1.1rem; min-height: var(--tactile);
+  font: 600 1rem/1.25 Sora, sans-serif; cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  transition: background-color .15s, color .15s;
+}
+.btn-primaire { background: var(--bleu-bouton); color: var(--sur-couleur); }
+.btn-primaire:hover { background: var(--bleu-survol); }
+.btn-secondaire { background: var(--teinte-bleu); color: var(--texte-bleu); }
+.btn-secondaire:hover { background: var(--teinte-bleu-forte); }
+.btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.btn[aria-busy="true"] { opacity: .7; cursor: progress; }
+
+.choix .boutons { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.choix .btn { flex: 1 1 160px; }
+
+/* Étapes : une par écran du téléphone, numérotées en gros, avec leur illustration */
+.etapes { list-style: none; margin: 0; padding: 0; counter-reset: etape; }
+.etapes > li {
+  counter-increment: etape; position: relative; padding: 14px 0 14px 52px; border-top: 1px solid var(--trait-2);
+}
+.etapes > li::before {
+  content: counter(etape); position: absolute; left: 0; top: 14px; width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--bleu-bouton); color: var(--sur-couleur); font-weight: 700;
+}
+.etapes h3 { margin-bottom: .35rem; }
+.etapes figure { margin: .5rem 0 0; }
+.etapes figure img {
+  display: block; width: 100%; max-width: 240px; border-radius: 14px; border: 1px solid var(--trait-2);
+  background: var(--champ);
+}
+.etapes figcaption { color: var(--muted); font-size: .8125rem; margin-top: .3rem; }
+.etapes .btn { margin-top: .25rem; }
+
+.message { padding: 10px 14px; border-radius: 12px; background: var(--teinte-ambre-faible); border: 1px solid var(--bord-ambre); color: var(--texte-ambre); }
+.message.ok { background: var(--teinte-bleu); border-color: var(--teinte-bleu-forte); color: var(--texte-bleu); }
+
+.encadre { margin: 14px 0; border-radius: 14px; padding: 12px 16px; border: 1px solid var(--trait-2); background: var(--survol); color: var(--texte-2); }
+.encadre > :last-child { margin-bottom: 0; }
+.encadre b { color: var(--fort); }
+.note { color: var(--texte-2); font-size: .9375rem; margin: .7rem 0 0; }
+
+@media (max-width: 360px) {
+  .porte { padding-left: 12px; padding-right: 12px; }
+  .carte { padding: 16px 14px; }
+  .etapes > li { padding-left: 46px; }
+}

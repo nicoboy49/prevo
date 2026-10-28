@@ -421,7 +421,8 @@ UTF-8 invalide, JSON invalide, JSON qui n'est pas un objet ou trop imbriqué (`[
 500.
 
 **Fichiers statiques : liste blanche (lot 2, D29).** Seuls sont servis `/` (→ `index.html`),
-`index.html`, `favicon.svg`, `GUIDE.html` s'il existe, et tout ce qui est sous `css/` et `js/`
+`index.html`, `favicon.svg`, `GUIDE.html` s'il existe, et tout ce qui est sous `css/`, `js/` et `acces/` (lot 7,
+porte d'entrée, §22.6)
 (constantes `FICHIERS_PUBLICS`, `DOSSIERS_PUBLICS` de `serveur.py` ; comparaison sans casse, car
 Windows ne distingue pas `Index.html` de `index.html`). **Tout le reste répond 404**, comme un
 fichier absent : `docs/brief-gmao.md`, `README.md`, `docs/`, `tests/`, `outils/`, `reference-design/`,
@@ -1211,8 +1212,9 @@ prochain mouvement de l'article la corrige) :
 
 ### 14.7 Serveur : liste blanche (D29)
 Sont servis : `/` (→ `index.html`), `index.html`, `favicon.svg`, `GUIDE.html` s'il existe,
-`css/**`, `js/**` ; **tout le reste répond 404** (dont `docs/brief-gmao.md`, `README.md`, `docs/`,
-`tests/`, `outils/`, `reference-design/`, `serveur.py`). L'option `--servir-tests` (passée par
+`css/**`, `js/**`, `acces/**` (lot 7, la porte d'entrée, §22.6 ; et `/acces/ca.crt`, le certificat public de
+l'autorité locale, qui n'est pas un fichier du dépôt) ; **tout le reste répond 404** (dont `docs/brief-gmao.md`,
+`README.md`, `docs/`, `tests/`, `outils/`, `reference-design/`, `serveur.py`). L'option `--servir-tests` (passée par
 `tests/commun.py`) sert en plus `tests/fixtures/**`. Les autres règles (§7) sont inchangées.
 Précisions du code : la liste blanche est contrôlée **deux fois**, sur le chemin demandé puis sur
 le chemin résolu (lien ou jonction Windows rangé dans `js/`) ; la comparaison ignore la casse ;
@@ -3492,6 +3494,31 @@ et démo. L'IA reste ouverte au demandeur (précisé à T158) : l'écran Signale
   les `noms` ; régénéré au démarrage si l'IP ou les noms ont changé. `rootCA-key.pem` n'est jamais lu ni servi par
   Prévo.
 - **En-têtes** (§22.13) sur l'application ; HSTS seulement pour un nom de la liste `noms`.
+- **Précisions du code (T161).** `demarrer_serveur` : portée « ce PC » ⇒ un seul écouteur sur `port_http`
+  (http, ou https avec `certificat`/`cle`, lot 4) ; sinon `ServeurPrevo(porte=True)` sur `port_http` (jamais de TLS)
+  et l'application sur `port_https` (le suivant libre jusqu'à +20 pour chacun ; `config.porte`, `config.port_https`),
+  la porte dans un fil à part. `certificat_du_serveur` : `certificat`/`cle` donnés, sinon hors de « ce PC »
+  `preparer_certificat_local` avec `trouver_mkcert` (`certificat_auto`, drapeau `_https_auto` posé par
+  `reglages_du_lancement` pour `verifier_regles_portee`) ; mkcert absent, empreinte fausse, échec ou
+  `certificat_auto` faux ⇒ « Démarrage refusé », code 2, aucun écouteur ouvert. `GestionnaireRequetes` :
+  `client_de_confiance()` (127.0.0.1, ::1 ; T164 y ajoute le mandataire attesté), `sur_la_porte()`, `servir_porte`
+  (après `hote_autorise` et `analyser_chemin`, avant tout contrôle d'accès : `fichier_de_la_porte` — `acces/**` sauf
+  `porte.html`, `favicon.svg`, `css/polices/**`, s'ils existent —, `/acces/ca.crt`, sinon `page_de_porte()` ; un PUT
+  ou POST n'est jamais lu, connexion fermée après la réponse). La page sur le disque porte `data-port-https=""`, rempli
+  au service par `port_https` ; sa politique est `POLITIQUE_PORTE` (`connect-src 'self' https://<hôte de la
+  requête>:<port_https>`, `img-src 'self' data:`), jamais HSTS. `/acces/ca.crt` (porte et application) :
+  `certificat_de_l_autorite`, `Content-Disposition: attachment; filename="prevo-ca.crt"`, 404 `MESSAGE_SANS_AUTORITE`
+  sans autorité locale. `acces/` est dans `DOSSIERS_PUBLICS` (§14.7). `Configuration.schema` vaut `http` dès que la
+  porte est ouverte : `adresse_locale`, `adresses_reseau`, la console et `/api/info` (qui rend aussi `porte` vrai,
+  d'où le rappel « Faites confiance au PC atelier » de la carte « Connecter un téléphone ») donnent la porte ; le port
+  https n'apparaît sur la console que comme un numéro de port. `porte.js` : `fetch` en mode `no-cors` (le serveur
+  n'envoie aucun en-tête CORS : seule compte la réponse du réseau), `AbortController` à 2 s, `location.replace(origine
+  https + pathname + search + hash)` ; système par `navigator.userAgent` (`android` ; `iPhone|iPad|iPod` ou
+  `Macintosh` tactile ⇒ iPhone ; sinon choix) ; sans autorité (`/acces/ca.crt` 404), le bouton de téléchargement est
+  remplacé par l'explication. Illustrations `acces/captures/<systeme>-<n>-<etape>.svg` (schémas, à remplacer par les
+  captures de recette sous le même nom). Tests : `tests/atelier.py` (`ServeurAtelier` : 0.0.0.0, comptes, faux mkcert
+  pour l'adresse réseau du PC, le téléphone simulé se connecte à cette adresse et le PC à 127.0.0.1 ; aucune sortie du
+  PC), `tests/test_acces_porte.py`.
 
 ### 22.7 Derrière un mandataire (D129, CS128)
 

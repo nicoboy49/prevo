@@ -38,6 +38,7 @@ const Accueil = (() => {
 
   // Adresses du serveur lues une première fois puis gardées (évite un aller-retour à chaque affichage).
   let adressesEnMemoire = null;
+  let porteOuverte = false;       // lot 7 : le serveur a sa porte d'entrée (deux écouteurs, hors de « ce PC »)
 
   // ===========================================================================================
   // 1. Calculs (fonctions pures sur les lignes des tables, exposées pour les tests)
@@ -208,6 +209,9 @@ const Accueil = (() => {
       const informations = await App.adaptateur.info();
       adresses = (informations && informations.adressesReseau) || [];
       adressesEnMemoire = adresses;
+      // Lot 7 (§22.6) : hors de « ce PC », l'adresse est celle de la porte d'entrée, qui conduit le téléphone à
+      // l'application en https après « Faites confiance au PC atelier » (une fois par téléphone).
+      porteOuverte = Boolean(informations && informations.porte);
     } catch (erreur) {
       console.warn('Prévo : adresses réseau du serveur inconnues (' + (erreur && erreur.message) + ').', erreur);
     }
@@ -238,6 +242,8 @@ const Accueil = (() => {
           <ul class="accueil-rappels">
             <li>Le téléphone doit être sur le <b>même réseau Wi-Fi</b> que ce PC.</li>
             <li>Au premier lancement, Windows demande d'autoriser Python : choisissez <b>réseau privé</b>.</li>
+            ${porteOuverte ? UI.html`<li>La première fois, le téléphone affiche <b>« Faites confiance au PC atelier »</b> :
+              suivez ses étapes une seule fois, puis Prévo s'ouvre de lui-même.</li>` : ''}
           </ul>
         </div>
       </div>

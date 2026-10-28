@@ -8,16 +8,17 @@ chargement de la page) : aucun micro, aucun service en ligne. Familles :
       variante « sur ce PC » quand la reconnaissance sur l'appareil est disponible en français ;
     - texte dicté ajouté à la fin du champ, sans rien effacer ; second clic : arrêt ; erreurs ;
     - « Désactiver la dictée » : plus aucun bouton, réglage gardé sur le poste ;
-    - téléphone sur une page non sécurisée (adresse réseau en http) : pas de bouton, aide « micro du
-      clavier ».
+    - téléphone (lot 7, T161) : par la porte d'entrée, un téléphone ouvre l'application en https, page
+      sécurisée, où la dictée est disponible ; un navigateur tactile sans reconnaissance vocale (Firefox
+      sur Android) n'a pas de bouton mais l'aide « micro du clavier ». La page non sécurisée sur téléphone
+      (adresse réseau en http) n'existe plus : la porte ne sert jamais l'application en http au réseau.
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_dictee.py" -v
 """
-import json
 import unittest
-import urllib.request
 
+from atelier import ServeurAtelier, enroler_appareil, motif_refus_du_demandeur
 from commun import CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil
 
 RECONNAISSANCE_SIMULEE_JS = """(() => {
@@ -203,21 +204,42 @@ class TestDictee(CasNavigateur):
         page.evaluate("window.__dictee.erreur('not-allowed')")
         self.assertIn("Micro refusé", self.attendre_toast(page, "Micro refusé"))
 
-    def test_telephone_sur_page_non_securisee_aide_clavier(self):
-        with urllib.request.urlopen(self.serveur.url + "/api/info", timeout=10) as reponse:
-            adresses = json.loads(reponse.read().decode("utf-8"))["adresses_reseau"]
-        if not adresses:
-            self.skipTest("aucune adresse réseau sur ce PC : impossible d'ouvrir une page non sécurisée")
-        contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 375, "height": 812}, is_mobile=True, has_touch=True)
+    def telephone(self, **options):
+        contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 375, "height": 812}, is_mobile=True,
+                                               has_touch=True, **options)
         self.addCleanup(contexte.close)
         page = contexte.new_page()
         self.surveiller(page)
-        self.ouvrir(contexte=contexte, page=page, url=adresses[0].rstrip("/"))
+        return contexte, page
+
+    def test_telephone_sans_reconnaissance_aide_clavier(self):
+        """Navigateur tactile sans reconnaissance vocale (Firefox sur Android) : pas de bouton, l'aide du clavier —
+        sur une page sécurisée (127.0.0.1), puisque la porte du lot 7 ne donne plus jamais l'application en http."""
+        contexte, page = self.telephone()
+        self.ouvrir(script=SANS_RECONNAISSANCE_JS, contexte=contexte, page=page)
         page.wait_for_selector(CHAMP_DESCRIPTION)
-        self.assertFalse(page.evaluate("window.isSecureContext"))
+        self.assertTrue(page.evaluate("window.isSecureContext"))
         page.wait_for_selector(".dictee-aide")
         self.assertIn("micro du clavier", page.inner_text(".dictee-aide"))
         self.assertEqual(page.locator(".dictee-bouton").count(), 0)
+
+    def test_telephone_par_la_porte_dictee_disponible_en_https(self):
+        """Le chemin réel du lot 7 : adresse de la porte → application en https (contexte sécurisé) → bouton micro,
+        sans aide du clavier. Téléphone = appareil enrôlé qui fait confiance à l'autorité (ignore_https_errors)."""
+        with ServeurAtelier() as atelier:
+            contexte, page = self.telephone(ignore_https_errors=True)
+            enroler_appareil(atelier, contexte)
+            contexte.add_init_script(RECONNAISSANCE_SIMULEE_JS)
+            preregler_profil(contexte, "demandeur", "Karim Benali")
+            self.autoriser_erreur(motif_refus_du_demandeur())
+            page.goto(atelier.url_porte + "/#/di/nouvelle")
+            page.wait_for_url(atelier.url_https + "/#/di/nouvelle")
+            attendre_pret(page)
+            self.assertTrue(page.evaluate("window.isSecureContext"))
+            page.wait_for_selector(BOUTON_DESCRIPTION)
+            self.assertEqual(page.get_attribute(BOUTON_DESCRIPTION, "aria-pressed"), "false")
+            self.assertEqual(page.locator(".dictee-aide").count(), 0)
+            self.assertTrue(page.evaluate("Dictee.prisEnCharge()"))
 
 
 if __name__ == "__main__":

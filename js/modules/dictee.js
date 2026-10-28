@@ -101,8 +101,9 @@ const Dictee = (() => {
 
   /**
    * Pose un bouton micro après chaque champ [data-dictee] de `racine` qui n'en a pas encore (après
-   * chaque affichage d'écran et à l'ouverture d'une fenêtre). Sans dictée possible : sur un appareil
-   * tactile dont la page n'est pas sécurisée (téléphone en http://192.168…), une aide discrète sous le
+   * chaque affichage d'écran et à l'ouverture d'une fenêtre). Sans dictée possible sur un appareil
+   * tactile (navigateur sans reconnaissance vocale, comme Firefox sur Android ; ou page non sécurisée,
+   * ce qu'un téléphone ne voit plus depuis la porte d'entrée du lot 7, §22.6), une aide discrète sous le
    * premier champ dicté rappelle la dictée du clavier.
    */
   function equiper(racine) {
@@ -111,7 +112,7 @@ const Dictee = (() => {
     const champs = Array.from(zone.querySelectorAll('[data-dictee]'));
     if (!champs.length) return;
     if (!disponible()) {
-      const aideUtile = reglages().active && appareilTactile() && window.isSecureContext !== true;
+      const aideUtile = reglages().active && appareilTactile() && !prisEnCharge();
       if (aideUtile && !zone.querySelector('.dictee-aide')) {
         champs[0].insertAdjacentElement('afterend', UI.element(UI.html`<p class="aide dictee-aide">${AIDE_CLAVIER}</p>`));
       }

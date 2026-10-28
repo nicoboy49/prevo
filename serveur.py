@@ -235,7 +235,7 @@ TYPE_PAR_DEFAUT = 'application/octet-stream'
 # Les noms sont en minuscules : la comparaison ignore la casse, car Windows (NTFS) ne
 # distingue pas « Index.html » de « index.html » ni « CSS/ » de « css/ ».
 FICHIERS_PUBLICS = ('index.html', 'favicon.svg', 'guide.html')     # à la racine seulement
-DOSSIERS_PUBLICS = (('css',), ('js',))                               # avec tout leur contenu
+DOSSIERS_PUBLICS = (('css',), ('js',), ('acces',))                   # avec tout leur contenu ; acces/ : la porte (§22.6)
 DOSSIER_FIXTURES = ('tests', 'fixtures')                             # seulement avec --servir-tests
 
 # Noms réservés de Windows : « CON.txt » ou « nul.pdf » désignent un périphérique, pas un fichier.
@@ -323,6 +323,21 @@ NOMBRE_JOURNAUX_SERVEUR = 5
 PORT_HTTPS_PAR_DEFAUT = 8443
 PORTEES = ('ce-pc', 'atelier', 'dehors')
 ECOUTES = ('127.0.0.1', '0.0.0.0')
+# Porte d'entrée (lot 7, §22.6 ; D127, CS125, CS137) : hors de « ce PC », port_http ne sert à un client du réseau que
+# la page acces/porte.html (autonome, sans donnée), ses fichiers et le certificat public de l'autorité ; la page
+# interroge https://<même hôte>:<port_https>/api/ping et conduit le téléphone à l'application en https. Le port https
+# est injecté dans l'attribut data-port-https de la page au moment de la servir : jamais une adresse codée en dur.
+DOSSIER_PORTE = ('acces',)
+PAGE_PORTE = os.path.join(DOSSIER_APPLICATION, 'acces', 'porte.html')
+ATTRIBUT_PORT_HTTPS = 'data-port-https=""'
+CHEMIN_CERTIFICAT_AUTORITE = ['acces', 'ca.crt']
+TYPE_CERTIFICAT_AUTORITE = 'application/x-x509-ca-cert'
+NOM_FICHIER_CERTIFICAT_AUTORITE = 'prevo-ca.crt'
+# La politique de la porte n'autorise au dehors que l'origine https du même hôte (le ping de porte.js).
+POLITIQUE_PORTE = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+                   "connect-src 'self' %s; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
+MESSAGE_SANS_AUTORITE = ('Aucune autorité locale sur ce serveur : le certificat a été fourni par votre informaticien, '
+                         'demandez-lui comment le faire reconnaître par le téléphone.')
 
 # (clé, type, défaut, texte d'aide) : la même liste sert à lire le fichier, à --aide et au contrat.
 CLES_CONFIGURATION = [
@@ -1470,6 +1485,30 @@ def preparer_certificat_local(config, executable, adresses=None, forcer=False):
     return certificat, cle, noms
 
 
+def certificat_du_serveur(config, reglages, mkcert=None):
+    """(certificat, clé) du serveur (§22.1, §22.6) : ceux de la configuration s'ils sont donnés ; sinon, hors de
+    « ce PC », ceux que mkcert fabrique (certificat_auto) ; (None, None) sur ce PC sans certificat (http, comme avant).
+    ErreurConfiguration (démarrage refusé, code 2) quand Prévo devrait écouter sur le réseau et qu'aucun certificat ne
+    vaut — mkcert absent, empreinte fausse ou échec compris : jamais d'écoute réseau en clair. « mkcert » : l'exécutable
+    (tests) ; sinon trouver_mkcert (outils-tiers/, empreinte vérifiée)."""
+    if reglages.get('certificat'):
+        return reglages['certificat'], reglages['cle']
+    if reglages['ecoute'] == '127.0.0.1':
+        return None, None
+    if not reglages.get('certificat_auto'):
+        raise ErreurConfiguration(
+            'Prévo refuse d\'écouter sur le réseau sans https. Donnez un certificat (« certificat » et « cle ») ou '
+            'laissez Prévo fabriquer le sien (« certificat_auto »: true).')
+    try:
+        certificat, cle, _ = preparer_certificat_local(config, mkcert or trouver_mkcert())
+    except ErreurConfiguration as erreur:
+        raise ErreurConfiguration(
+            'Certificat de l\'atelier impossible (%s). Prévo n\'écoute pas sur le réseau sans https : remettez mkcert '
+            'dans le dossier outils-tiers/ (il est dans le zip de Prévo), ou donnez « certificat » et « cle » dans %s.'
+            % (str(erreur).rstrip('.'), NOM_FICHIER_CONFIGURATION))
+    return certificat, cle
+
+
 
 # ---------------------------------------------------------------------------
 # Démarrer avec la machine (lot 7, ARCHITECTURE.md §22.9 ; D130) : scripts écrits par Prévo, jamais exécutés ici
@@ -1702,11 +1741,15 @@ class Configuration:
         self.nom_pc = socket.gethostname().lower()
         self.hotes_supplementaires = [hote.lower().strip() for hote in hotes_supplementaires]
         self.servir_tests = servir_tests    # --servir-tests : tests/fixtures/ servi en plus
-        self.port = None            # renseigné quand le port est trouvé
+        self.port = None            # renseigné quand le port est trouvé (port_http : l'application, ou la porte)
         # Lot 7 (§22.1) : axes du serveur, posés par main() d'après la configuration et la ligne de commande.
         self.reglages = reglages_par_defaut()
         self.ecoute = '127.0.0.1'
-        self.contexte_ssl = None    # lot 4 : https en option (--certificat, --cle)
+        self.contexte_ssl = None    # lot 4 : https en option (--certificat, --cle) ; lot 7 : obligatoire sur le réseau
+        # Lot 7 (§22.6) : hors de « ce PC », deux écouteurs — la porte en http sur « port » et l'application en https
+        # sur « port_https » ; « porte » vrai dès que les deux sont ouverts (demarrer_serveur).
+        self.porte = False
+        self.port_https = None
         # Lot 7 (§22.3) : horloge et attente injectables (tests du blocage et des durées de session) ; échecs de
         # connexion en mémoire, remis à zéro à chaque démarrage du serveur.
         self.horloge = time.time
@@ -1723,7 +1766,9 @@ class Configuration:
 
     @property
     def schema(self):
-        return 'https' if self.contexte_ssl is not None else 'http'
+        """Schéma des adresses que Prévo donne (console, /api/info, QR, étiquettes) : avec la porte, toujours http sur
+        port_http — l'adresse https:<port_https> n'est jamais donnée (CS137), la porte y conduit les téléphones."""
+        return 'https' if self.contexte_ssl is not None and not self.porte else 'http'
 
     def adresse_locale(self):
         return '%s://localhost:%d/' % (self.schema, self.port)
@@ -2156,6 +2201,17 @@ def chemin_public(morceaux, servir_tests):
         return minuscules[0] in FICHIERS_PUBLICS
     dossiers = DOSSIERS_PUBLICS + ((DOSSIER_FIXTURES,) if servir_tests else ())
     return any(commence_par(minuscules, dossier) for dossier in dossiers)
+
+
+def fichier_de_la_porte(minuscules):
+    """Vrai si la porte sert ce chemin (minuscules) tel quel à un client du réseau (§22.6) : ses fichiers sous acces/
+    (sauf porte.html, toujours rendue avec son port https), le favicon et les polices de la charte. Rien d'autre : ni
+    index.html, ni js/, ni css/ hors polices — aucune donnée, aucun écran de l'application."""
+    if minuscules == ['favicon.svg']:
+        return True
+    if commence_par(minuscules, ('css', 'polices')):
+        return True
+    return commence_par(minuscules, DOSSIER_PORTE) and minuscules != ['acces', 'porte.html']
 
 
 def morceaux_resolus(chemin, dossier):
@@ -3466,6 +3522,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             if not hote_autorise(self.headers.get('Host'), self.config):
                 raise ErreurHttp(403, 'Nom d\'hôte refusé. Utilisez l\'adresse IP du PC.')
             morceaux = analyser_chemin(self.path)
+            if self.sur_la_porte():
+                self.servir_porte(methode, morceaux)       # client du réseau sur port_http : la porte, rien d'autre
+                return
             if morceaux[0] == 'api':
                 self.session = self.controler_acces(methode, morceaux[1:])
             corps = b''
@@ -3561,6 +3620,66 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.envoyer_json(200, {'comptes': True, 'session': session_publique(self.session)},
                           {'Set-Cookie': entete_cookie_session(jeton, self.en_https(), duree)})
 
+    # --- Porte d'entrée (lot 7, §22.6) -------------------------------------
+
+    def client_de_confiance(self):
+        """Client servi comme l'application même sur la porte : le PC serveur lui-même (127.0.0.1, ::1), dont le
+        navigateur est en contexte sécurisé en http. T164 y ajoute le mandataire attesté (mandataire vrai, en-têtes
+        X-Forwarded-* venus de ce PC)."""
+        return self.client_address[0] in ('127.0.0.1', '::1')
+
+    def sur_la_porte(self):
+        """Requête d'un client du réseau arrivée sur la porte (port_http hors de « ce PC ») : seule la page de porte."""
+        return self.server.porte and not self.client_de_confiance()
+
+    def servir_porte(self, methode, morceaux):
+        """Porte d'entrée pour un client du réseau : ses propres fichiers (acces/, le favicon, les polices de la
+        charte), /acces/ca.crt, et pour toute autre adresse — /api/ compris — la page de porte, 200, sans rien lire
+        ni rien servir de l'application. Un corps n'est jamais lu : la connexion est fermée après la réponse."""
+        if methode != 'GET':
+            self.close_connection = True
+        minuscules = [morceau.lower() for morceau in morceaux]
+        if minuscules == CHEMIN_CERTIFICAT_AUTORITE:
+            self.servir_certificat_autorite()
+        elif (methode == 'GET' and fichier_de_la_porte(minuscules)
+              and os.path.isfile(chemin_sous(DOSSIER_APPLICATION, *morceaux))):
+            self.servir_statique(morceaux, self.entetes_porte())
+        else:
+            self.envoyer(200, self.page_de_porte(), TYPES_STATIQUES['html'], self.entetes_porte())
+
+    def page_de_porte(self):
+        """acces/porte.html avec le port https de ce serveur dans data-port-https (porte.js interroge
+        https://<même hôte>:<ce port>/api/ping ; le port vient toujours de la page servie)."""
+        octets = lire_octets(PAGE_PORTE)
+        if octets is None:
+            raise ErreurHttp(500, 'Page de porte introuvable (acces/porte.html).')
+        attribut = 'data-port-https="%d"' % self.config.port_https
+        return octets.replace(ATTRIBUT_PORT_HTTPS.encode('ascii'), attribut.encode('ascii'), 1)
+
+    def origine_https(self):
+        """Origine https de ce serveur vue par ce client (même hôte que la requête, port_https)."""
+        hote = extraire_nom_hote(self.headers.get('Host', ''))
+        if ':' in hote:
+            hote = '[%s]' % hote
+        return 'https://%s:%d' % (hote, self.config.port_https)
+
+    def entetes_porte(self):
+        """En-têtes de la porte : ceux de §22.13, la politique n'autorisant au dehors que l'origine https du même
+        hôte (le ping de porte.js) ; jamais HSTS (la porte est en http et doit le rester)."""
+        entetes = dict(ENTETES_SECURITE)
+        entetes['Content-Security-Policy'] = POLITIQUE_PORTE % self.origine_https()
+        return entetes
+
+    def servir_certificat_autorite(self):
+        """GET /acces/ca.crt : le certificat PUBLIC de l'autorité locale (rootCA.pem seul ; rootCA-key.pem n'est jamais
+        lu ni servi), en téléchargement, pour que le téléphone l'installe ; 404 clair sans autorité locale (certificat
+        fourni par l'informaticien). Servi par la porte comme par l'application : rien de privé."""
+        octets = certificat_de_l_autorite(self.config)
+        if octets is None:
+            raise ErreurHttp(404, MESSAGE_SANS_AUTORITE)
+        self.envoyer(200, octets, TYPE_CERTIFICAT_AUTORITE,
+                     {'Content-Disposition': 'attachment; filename="%s"' % NOM_FICHIER_CERTIFICAT_AUTORITE})
+
     # --- Contrôles des requêtes qui écrivent --------------------------------
 
     def verifier_entete_prevo(self):
@@ -3593,10 +3712,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                 'version': VERSION_APPLICATION, 'api': VERSION_API})
 
     def api_info(self, segment, corps):
-        """GET /api/info : port, adresses, et l'état de la copie externe des sauvegardes (D133 ; None sans dossier)."""
+        """GET /api/info : port, adresses (celles de la porte hors de « ce PC », §22.6), « porte » vrai quand elle est
+        ouverte (la carte « Connecter un téléphone » rappelle alors « Faites confiance au PC atelier »), et l'état de
+        la copie externe des sauvegardes (D133 ; None sans dossier). Jamais le port https : il n'est pas une adresse
+        que Prévo donne (CS137)."""
         self.envoyer_json(200, {'port': self.config.port,
                                 'adresse_locale': self.config.adresse_locale(),
                                 'adresses_reseau': self.config.adresses_reseau(),
+                                'porte': self.config.porte,
                                 'copie_externe': etat_copie_externe_public(self.config)})
 
     def api_session(self, segment, corps):
@@ -3917,13 +4040,17 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
 
     # --- Fichiers statiques ------------------------------------------------
 
-    def servir_statique(self, morceaux):
-        """Sert un fichier de la liste blanche (index.html, favicon.svg, GUIDE.html, css/, js/ ;
-        tests/fixtures/ avec --servir-tests). Jamais donnees/ ni les fichiers cachés."""
+    def servir_statique(self, morceaux, entetes=None):
+        """Sert un fichier de la liste blanche (index.html, favicon.svg, GUIDE.html, css/, js/, acces/ ;
+        tests/fixtures/ avec --servir-tests) et /acces/ca.crt (certificat public de l'autorité, §22.6). Jamais
+        donnees/ ni les fichiers cachés. « entetes » : ceux de la porte ; sinon ceux de l'application."""
         if morceaux == ['']:
             morceaux = ['index.html']
         if morceaux[0].lower() == 'donnees':
             raise ErreurHttp(403, 'Accès refusé.')
+        if [morceau.lower() for morceau in morceaux] == CHEMIN_CERTIFICAT_AUTORITE:
+            self.servir_certificat_autorite()
+            return
         servir_tests = self.config.servir_tests
         # Hors liste blanche : même réponse qu'un fichier absent (on ne dit pas qu'il existe).
         if not chemin_public(morceaux, servir_tests):
@@ -3939,7 +4066,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         octets = lire_octets(chemin)
         if octets is None:
             raise ErreurHttp(404, 'Fichier introuvable.')
-        entetes = None if morceaux[0].lower() == 'tests' else self.entetes_securite()
+        if entetes is None:
+            entetes = None if morceaux[0].lower() == 'tests' else self.entetes_securite()
         self.envoyer(200, octets, TYPES_STATIQUES.get(extension(chemin), TYPE_PAR_DEFAUT), entetes)
 
     def entetes_securite(self):
@@ -3950,9 +4078,10 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             origines += ' http://127.0.0.1:* http://localhost:*'
         entetes = dict(ENTETES_SECURITE)
         entetes['Content-Security-Policy'] = POLITIQUE_CONTENU % origines
-        # HSTS seulement pour un nom déclaré (jamais une adresse IP : un retour en http serait bloqué), en https.
+        # HSTS seulement pour un nom déclaré (jamais une adresse IP : un retour en http serait bloqué), sur une
+        # requête arrivée en https (jamais par la porte, ni pour le PC servi en http).
         hote = extraire_nom_hote(self.headers.get('Host', ''))
-        if (self.config.contexte_ssl is not None and hote and not est_une_adresse_ip(hote)
+        if (self.en_https() and hote and not est_une_adresse_ip(hote)
                 and hote in self.config.hotes_supplementaires):
             entetes['Strict-Transport-Security'] = 'max-age=%d' % DUREE_HSTS_S
         return entetes
@@ -4021,16 +4150,21 @@ class ServeurPrevo(http.server.ThreadingHTTPServer):
     # on le désactive et on demande l'usage exclusif du port.
     allow_reuse_address = (os.name != 'nt')
 
-    def __init__(self, adresse, config):
+    def __init__(self, adresse, config, porte=False):
+        """« porte » (lot 7, §22.6) : cet écouteur est la porte d'entrée, en http ; un client du réseau n'y reçoit que
+        la page de porte, le PC serveur lui-même y reçoit l'application. Sinon : l'application (https avec un
+        certificat, http en portée « ce PC »)."""
         self.config = config
+        self.porte = porte
+        self.contexte_ssl = None if porte else config.contexte_ssl
         super().__init__(adresse, GestionnaireRequetes)
 
     def get_request(self):
         """https (lot 4) : la connexion acceptée est enveloppée en TLS ; la poignée de main est faite
         plus tard, dans le fil de la requête (GestionnaireRequetes.setup)."""
         connexion, adresse = self.socket.accept()
-        if self.config.contexte_ssl is not None:
-            connexion = self.config.contexte_ssl.wrap_socket(connexion, server_side=True, do_handshake_on_connect=False)
+        if self.contexte_ssl is not None:
+            connexion = self.contexte_ssl.wrap_socket(connexion, server_side=True, do_handshake_on_connect=False)
         return connexion, adresse
 
     def handle_error(self, request, client_address):
@@ -4063,19 +4197,39 @@ def port_pris_ailleurs(port):
         sonde.close()
 
 
-def demarrer_serveur(port_demande, config):
-    """Ouvre le premier port libre à partir de port_demande (jusqu'à +20)."""
+def ouvrir_ecouteur(port_demande, config, porte=False):
+    """Ouvre un écouteur sur le premier port libre à partir de port_demande (jusqu'à +20) ; rend (serveur, port)."""
     derniere_erreur = None
     port_maximum = min(port_demande + NOMBRE_PORTS_SUPPLEMENTAIRES, 65535)
     for port in range(port_demande, port_maximum + 1):
         try:
             if config.ecoute != '0.0.0.0' and port_pris_ailleurs(port):
                 raise OSError('port %d déjà utilisé par un autre programme' % port)
-            return ServeurPrevo((config.ecoute, port), config), port
+            return ServeurPrevo((config.ecoute, port), config, porte), port
         except OSError as erreur:
             derniere_erreur = erreur
     raise SystemExit('Impossible d\'ouvrir un port entre %d et %d (%s).'
                      % (port_demande, port_maximum, derniere_erreur))
+
+
+def demarrer_serveur(port_demande, config):
+    """Écouteurs du serveur (§22.1, §22.6). Portée « ce PC » (127.0.0.1) : un seul, sur port_demande, l'application
+    en http (ou en https avec un certificat donné, lot 4). Hors de « ce PC » : la porte en http sur port_demande et
+    l'application en https sur port_https (config.contexte_ssl est alors obligatoire : main l'a vérifié). Rend (liste
+    des serveurs, le dernier à servir dans le fil principal ; port de la porte ou de l'application)."""
+    if config.ecoute == '127.0.0.1':
+        serveur, port = ouvrir_ecouteur(port_demande, config)
+        return [serveur], port
+    if config.contexte_ssl is None:
+        raise SystemExit('Prévo n\'écoute pas sur le réseau sans https (certificat absent).')
+    porte, port = ouvrir_ecouteur(port_demande, config, porte=True)
+    try:
+        application, config.port_https = ouvrir_ecouteur(config.reglages['port_https'], config)
+    except SystemExit:
+        porte.server_close()
+        raise
+    config.porte = True
+    return [porte, application], port
 
 
 def afficher_accueil(config, port_demande, avertissements=()):
@@ -4094,6 +4248,11 @@ def afficher_accueil(config, port_demande, avertissements=()):
         afficher('  Écoute           : ce PC seulement (127.0.0.1) ; les autres appareils ne joignent pas Prévo.')
     else:
         afficher('  Écoute           : le réseau (%s), comptes exigés.' % config.ecoute)
+    if config.porte:
+        # Jamais l'adresse https elle-même (CS137) : les téléphones passent par la porte, qui les y conduit.
+        afficher('  Application      : en https sur le port %d ; l\'adresse ci-dessus (la porte) y conduit les '
+                 'téléphones%s.' % (config.port_https, ' avec le certificat fabriqué par Prévo'
+                                     if config.reglages.get('_https_auto') else ''))
     afficher('  Assistant IA     : %s' % resume_ia(config))
     if dossier_copie_externe(config):
         afficher('  Copie externe    : %s (chaque nuit, %d copies gardées)'
@@ -4106,9 +4265,10 @@ def afficher_accueil(config, port_demande, avertissements=()):
 def lire_arguments(arguments=None):
     analyseur = argparse.ArgumentParser(
         description='Serveur local de la GMAO Prévo. Sert index.html, favicon.svg, '
-                    'GUIDE.html, css/ et js/ ; tout autre fichier répond 404.')
+                    'GUIDE.html, css/, js/ et acces/ (la porte d\'entrée) ; tout autre fichier répond 404.')
     analyseur.add_argument('--port', type=int, default=None,
-                           help='port d\'écoute (défaut 8080 ; le suivant si occupé)')
+                           help='port d\'écoute (défaut 8080 ; le suivant si occupé) ; sur le réseau, celui de la '
+                                'porte d\'entrée, l\'application étant en https sur « port_https » (8443)')
     analyseur.add_argument('--donnees', default=os.path.join(DOSSIER_APPLICATION, 'donnees'),
                            help='dossier des données (défaut : donnees/ à côté de serveur.py)')
     analyseur.add_argument('--sans-navigateur', action='store_true',
@@ -4170,6 +4330,9 @@ def reglages_du_lancement(options):
     # Clé du fournisseur (audit M3) : la variable d'environnement passe avant le fichier ; gardée à part
     # (« _ia_cle ») pour qu'une réécriture du fichier de configuration ne la recopie jamais.
     reglages['_ia_cle'] = os.environ.get(VARIABLE_CLE_IA, '').strip() or reglages['ia_cle']
+    # Certificat fabriqué par Prévo (§22.6) : sans certificat donné, « certificat_auto » vaut https pour les règles
+    # de portée ; main le fabrique ensuite (certificat_du_serveur), et refuse de démarrer si mkcert fait défaut.
+    reglages['_https_auto'] = bool(reglages.get('certificat_auto')) and not reglages['certificat']
     return reglages
 
 
@@ -4202,23 +4365,29 @@ def main(arguments=None):
             reinitialiser_en_ligne_de_commande(config, options.reinitialiser)
             return
         avertissements = verifier_regles_portee(reglages, il_existe_un_responsable(config))
+        config.ecoute = reglages['ecoute']
+        # Hors de « ce PC » : certificat de la configuration, sinon fabriqué par mkcert ; refus (code 2) sans lui.
+        certificat, cle = certificat_du_serveur(config, reglages)
     except ErreurConfiguration as erreur:
         afficher('Démarrage refusé. %s' % erreur)
         sys.exit(CODE_SORTIE_REGLES)
-    config.ecoute = reglages['ecoute']
-    if reglages['certificat']:
-        config.contexte_ssl = creer_contexte_ssl(reglages['certificat'], reglages['cle'])
-    serveur, config.port = demarrer_serveur(reglages['port_http'], config)
+    if certificat:
+        config.contexte_ssl = creer_contexte_ssl(certificat, cle)
+    serveurs, config.port = demarrer_serveur(reglages['port_http'], config)
     afficher_accueil(config, reglages['port_http'], avertissements)
     lancer_copie_externe(config)        # D133 : copie externe au démarrage, dans son propre fil
     if not options.sans_navigateur:
         webbrowser.open(config.adresse_locale())
+    # Deux écouteurs (§22.6) : la porte tourne dans son propre fil, l'application dans celui-ci (Ctrl+C).
+    for serveur in serveurs[:-1]:
+        threading.Thread(target=serveur.serve_forever, name='porte', daemon=True).start()
     try:
-        serveur.serve_forever()
+        serveurs[-1].serve_forever()
     except KeyboardInterrupt:
         afficher('Serveur arrêté.')
     finally:
-        serveur.server_close()
+        for serveur in serveurs:
+            serveur.server_close()
 
 
 if __name__ == '__main__':

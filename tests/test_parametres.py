@@ -209,23 +209,34 @@ class TestAccueil(CasParametres):
             self.assertIn("même réseau Wi-Fi", texte)
             self.assertIn("réseau privé", texte)
             if adresses:
-                # Vrai réseau de la machine de test : le QR contient la première adresse réseau.
+                # Vrai réseau de la machine de test : le QR contient la première adresse réseau, en http (lot 7 :
+                # c'est l'adresse de la porte d'entrée, jamais l'adresse https de l'application, CS137).
                 self.assertEqual(page.evaluate(LIRE_QR_JS), adresses[0])
                 self.assertEqual(self.texte("#adresse-reseau"), adresses[0])
+                self.assertTrue(adresses[0].startswith("http://"), adresses[0])
             else:
                 self.assertIn("Aucune adresse réseau", texte)
                 self.assertEqual(page.locator("#qr-connexion").count(), 0)
+            # Portée « ce PC » : pas de porte, donc pas le rappel « Faites confiance au PC atelier ».
+            self.assertNotIn("Faites confiance au PC atelier", texte)
 
     def test_accueil_qr_avec_adresse_reseau_imposee_puis_sans_adresse(self):
         adresse = "http://192.168.7.20:8080/"
         with ServeurPrevo() as serveur:
-            # Réponse de /api/info imposée : le test ne dépend pas du réseau de la machine.
+            # Réponse de /api/info imposée : le test ne dépend pas du réseau de la machine. « porte » vrai = serveur
+            # hors de « ce PC » (lot 7, T161) : l'adresse est celle de la porte et la carte rappelle l'étape du
+            # téléphone, « Faites confiance au PC atelier ».
             self.page.route("**/api/info", lambda route: route.fulfill(
                 status=200, content_type="application/json",
-                body=json.dumps({"port": 8080, "adresse_locale": "http://localhost:8080/", "adresses_reseau": [adresse]})))
+                body=json.dumps({"port": 8080, "adresse_locale": "http://localhost:8080/", "adresses_reseau": [adresse],
+                                 "porte": True})))
             page = self.ouvrir(serveur)
             self.assertEqual(page.evaluate(LIRE_QR_JS), adresse)
             self.assertEqual(self.texte("#adresse-reseau"), adresse)
+            texte = self.texte("#carte-connexion")
+            self.assertIn("Faites confiance au PC atelier", texte)
+            self.assertIn("suivez ses étapes une seule fois", texte)
+            self.assertNotIn("8443", texte)
 
             # Sans adresse réseau : explication à la place du QR.
             page.unroute("**/api/info")

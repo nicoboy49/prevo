@@ -290,7 +290,8 @@ const StockageServeur = (() => {
     async function info() {
       const reponse = await appelerOuErreur(base + '/api/info', { method: 'GET' });
       const donnees = await lireJson(reponse);
-      return { adressesReseau: donnees.adresses_reseau || [], port: donnees.port,
+      // Lot 7 (§22.6) : hors de « ce PC », les adresses sont celles de la porte d'entrée et « porte » est vrai.
+      return { adressesReseau: donnees.adresses_reseau || [], port: donnees.port, porte: donnees.porte === true,
         copieExterne: copieExterneLue(donnees.copie_externe) };
     }
 

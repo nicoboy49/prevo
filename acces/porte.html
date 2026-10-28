@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="fr" data-port-https="">
+<!-- Porte d'entrée de Prévo (lot 7, ARCHITECTURE.md §22.6 ; D127, CS125, CS137).
+     Page autonome, sans donnée : servie par serveur.py sur le port http à tout appareil du réseau. Elle vérifie que le
+     téléphone fait confiance au PC atelier (https://<même hôte>:<port https>/api/ping), puis ouvre l'application en
+     https sur la même route ; sinon elle guide, écran par écran, l'installation du certificat de l'atelier.
+     data-port-https est rempli par le serveur au moment de servir la page : aucune adresse n'est écrite ici. -->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0B1226">
+  <title>Prévo — Bienvenue</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/acces/porte.css">
+</head>
+<body>
+<main class="porte">
+  <header class="marque">
+    <span class="logo" aria-hidden="true"><img src="/favicon.svg" alt=""></span>
+    <div>
+      <h1>Prévo</h1>
+      <p class="sous-titre">GMAO de l'atelier</p>
+    </div>
+  </header>
+
+  <!-- 1. Essai : la page interroge l'application en https. Un téléphone qui fait confiance ne voit que cet écran. -->
+  <section id="essai" class="carte centre" aria-live="polite">
+    <div class="chargement" role="status">Bienvenue sur Prévo. Ouverture de l'application…</div>
+  </section>
+
+  <!-- 2. « Faites confiance au PC atelier » : une étape numérotée par écran du téléphone, dans l'ordre des réglages. -->
+  <section id="confiance" class="carte" hidden>
+    <h2>Faites confiance au PC atelier</h2>
+    <p>Prévo tourne sur le PC de l'atelier, pas sur Internet. Pour que votre téléphone lui fasse confiance (caméra,
+      micro, mot de passe protégé), il faut installer une fois son certificat. Cinq minutes, une seule fois par
+      téléphone.</p>
+
+    <div id="choix-systeme" class="choix" hidden>
+      <p><b>Quel téléphone avez-vous ?</b></p>
+      <div class="boutons">
+        <button type="button" class="btn btn-secondaire" data-systeme="android">Android</button>
+        <button type="button" class="btn btn-secondaire" data-systeme="iphone">iPhone ou iPad</button>
+      </div>
+    </div>
+
+    <ol class="etapes" id="etapes-android" hidden>
+      <li>
+        <h3>Téléchargez le certificat</h3>
+        <p>Touchez le bouton, puis, en haut de l'écran, « Téléchargement terminé ».</p>
+        <p><a class="btn btn-primaire btn-telecharger" href="/acces/ca.crt" download="prevo-ca.crt">Télécharger le certificat</a></p>
+        <figure><img src="/acces/captures/android-1-telecharger.svg" alt="Illustration : la page de Prévo avec le bouton Télécharger le certificat" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Ouvrez Paramètres, puis « Sécurité et confidentialité »</h3>
+        <p>Sur certains téléphones, la rubrique s'appelle « Sécurité » ou « Données biométriques et sécurité ».</p>
+        <figure><img src="/acces/captures/android-2-parametres.svg" alt="Illustration : les Paramètres d'Android avec la rubrique Sécurité et confidentialité" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Touchez « Chiffrement et identifiants »</h3>
+        <p>Souvent sous « Autres paramètres de sécurité » ou « Plus de paramètres de sécurité » : le chemin varie
+          selon le fabricant. En cas de doute, cherchez « certificat » dans la recherche des Paramètres.</p>
+        <figure><img src="/acces/captures/android-3-chiffrement.svg" alt="Illustration : la rubrique Chiffrement et identifiants" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Touchez « Installer un certificat », puis « Certificat CA »</h3>
+        <figure><img src="/acces/captures/android-4-installer.svg" alt="Illustration : Installer un certificat, choix Certificat CA" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Touchez « Installer quand même »</h3>
+        <p>Android prévient que le réseau pourrait être surveillé : c'est normal pour un certificat que vous installez
+          vous-même, celui du PC atelier.</p>
+        <figure><img src="/acces/captures/android-5-avertissement.svg" alt="Illustration : l'avertissement d'Android avec le bouton Installer quand même" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Choisissez le fichier <code>prevo-ca.crt</code></h3>
+        <p>Il est dans « Téléchargements ». Android confirme : « Certificat CA installé ».</p>
+        <figure><img src="/acces/captures/android-6-fichier.svg" alt="Illustration : le fichier prevo-ca.crt dans Téléchargements" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Revenez ici et touchez « Réessayer »</h3>
+        <p>Prévo s'ouvre alors sur la page demandée.</p>
+        <p><button type="button" class="btn btn-primaire btn-reessayer">Réessayer</button></p>
+      </li>
+    </ol>
+
+    <ol class="etapes" id="etapes-iphone" hidden>
+      <li>
+        <h3>Téléchargez le certificat</h3>
+        <p>Touchez le bouton. Safari demande « Ce site Web tente de télécharger un profil de configuration » :
+          touchez « Autoriser », puis « Fermer ».</p>
+        <p><a class="btn btn-primaire btn-telecharger" href="/acces/ca.crt" download="prevo-ca.crt">Télécharger le certificat</a></p>
+        <figure><img src="/acces/captures/iphone-1-telecharger.svg" alt="Illustration : Safari demande l'autorisation de télécharger un profil" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Ouvrez Réglages, puis « Profil téléchargé »</h3>
+        <p>La ligne est en haut des Réglages. Si elle n'y est pas : Réglages, Général, « VPN et gestion de
+          l'appareil ».</p>
+        <figure><img src="/acces/captures/iphone-2-profil.svg" alt="Illustration : les Réglages de l'iPhone avec la ligne Profil téléchargé" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Touchez « Installer » (en haut à droite)</h3>
+        <p>L'iPhone demande son code, puis « Installer » une seconde fois, puis « OK ».</p>
+        <figure><img src="/acces/captures/iphone-3-installer.svg" alt="Illustration : l'écran Installer le profil" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Ouvrez Réglages, Général, puis « Informations »</h3>
+        <figure><img src="/acces/captures/iphone-4-informations.svg" alt="Illustration : Réglages, Général, Informations" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Tout en bas, « Réglages de confiance des certificats » : activez le certificat, puis « Continuer »</h3>
+        <p>C'est l'étape qu'on oublie : sans « Autoriser pleinement », Safari refuse encore le PC atelier.</p>
+        <figure><img src="/acces/captures/iphone-5-confiance.svg" alt="Illustration : Réglages de confiance des certificats, interrupteur activé" width="360" height="640"><figcaption>Illustration</figcaption></figure>
+      </li>
+      <li>
+        <h3>Revenez dans Safari et touchez « Réessayer »</h3>
+        <p>Prévo s'ouvre alors sur la page demandée.</p>
+        <p><button type="button" class="btn btn-primaire btn-reessayer">Réessayer</button></p>
+      </li>
+    </ol>
+
+    <p id="message-essai" class="message" hidden aria-live="polite"></p>
+
+    <div class="encadre note-firefox" id="note-firefox" hidden>
+      <p><b>Firefox sur Android</b> a son propre magasin de certificats et ignore celui du téléphone. Ouvrez de
+        préférence Prévo avec Chrome (ou le navigateur livré avec le téléphone). Pour rester sur Firefox : menu,
+        Paramètres, « À propos de Firefox », touchez cinq fois le logo, puis dans le menu secret activez « Utiliser
+        les certificats CA tiers ».</p>
+    </div>
+
+    <p class="note">Ce certificat ne sert qu'à reconnaître le PC de l'atelier. Il ne donne aucun accès à votre
+      téléphone et peut être retiré à tout moment dans les mêmes réglages.</p>
+  </section>
+
+  <noscript>
+    <section class="carte">
+      <p>Le JavaScript de ce navigateur est désactivé : Prévo ne peut pas vérifier la connexion. Activez-le, ou
+        demandez de l'aide au responsable.</p>
+    </section>
+  </noscript>
+</main>
+<script src="/acces/porte.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 640" width="360" height="640" font-family="Sora, system-ui, sans-serif">
+<rect width="360" height="640" rx="28" fill="#F2F4F8"/>
+<rect x="0" y="0" width="360" height="26" fill="#F2F4F8"/>
+<text x="16" y="18" font-size="12" fill="#1C2033" font-weight="bold" text-anchor="start">9:41</text>
+<text x="344" y="18" font-size="11" fill="#1C2033" font-weight="normal" text-anchor="end">▃▅▇ ▮</text>
+<text x="22" y="62" font-size="22" fill="#1C2033" font-weight="normal" text-anchor="start">←</text>
+<text x="48" y="62" font-size="17" fill="#1C2033" font-weight="bold" text-anchor="start">Certificat CA</text>
+<rect x="24" y="106" width="312" height="132" rx="16" fill="#FFFFFF" stroke="#E1E5EE"/>
+<text x="40" y="136" font-size="13" fill="#1C2033" font-weight="normal" text-anchor="start">Votre réseau pourrait être surveillé</text>
+<text x="40" y="160" font-size="13" fill="#1C2033" font-weight="normal" text-anchor="start">par un tiers. C’est normal pour un</text>
+<text x="40" y="184" font-size="13" fill="#1C2033" font-weight="normal" text-anchor="start">certificat que vous installez vous-même.</text>
+<rect x="40" y="254" width="280" height="48" rx="12" fill="#3366E6"/>
+<text x="180" y="285" font-size="15" fill="#FFFFFF" font-weight="bold" text-anchor="middle">Installer quand même</text>
+<circle cx="280" cy="278" r="22" fill="#22C3E6" fill-opacity=".18"/><circle cx="280" cy="278" r="11" fill="#22C3E6" stroke="#FFFFFF" stroke-width="3"/>
+<text x="180" y="626" font-size="11" fill="#6B7490" font-weight="normal" text-anchor="middle">Illustration — l’écran réel varie selon le téléphone</text>
+</svg>

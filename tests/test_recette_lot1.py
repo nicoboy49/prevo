@@ -13,8 +13,10 @@ Scénarios :
                   administrativement → visible dans l'historique de PO-02 ;
     ras           clôture refusée avec « RAS » et sans code cause, message clair, statut inchangé ;
     conflit       deux navigateurs valident une DI au même instant → deux DI distinctes, aucune perte ;
-    telephone     QR de la fiche relu par jsQR → téléphone 375 px → profil → DI avec photo →
-                  visible sur le PC, sans rechargement, en moins de 30 s ;
+    telephone     (lot 7, T161 : serveur en portée « atelier », tests/atelier.py) QR de la fiche relu par
+                  jsQR = adresse de la porte → téléphone 375 px qui fait confiance au PC atelier → porte →
+                  application en https, route gardée → appareil enrôlé → profil → DI avec photo →
+                  visible sur le PC (client 127.0.0.1, responsable), sans rechargement, en moins de 30 s ;
     habilitation  OT sur AE-03 (BR) affecté au technicien dont la BR est échue → avertissement affiché et tracé ;
     sauvegarde    sauvegarde, ligne supprimée sur le disque, restauration par les Paramètres ;
     traversee     PUT /api/documents/../serveur.py refusé ;
@@ -38,6 +40,7 @@ import time
 import unittest
 from pathlib import Path
 
+from atelier import ServeurAtelier, connecter, enroler_appareil, motif_refus_du_demandeur
 from commun import (CasNavigateur, DOSSIER_DEMO, RACINE, ServeurPrevo, attendre_pret, preregler_profil,
                     scenarios_demo, url_fichier)
 from test_demandes import dimensions_jpeg, fichier_png
@@ -536,30 +539,43 @@ class TestRecetteConflit(CasRecette):
 class TestRecetteTelephone(CasRecette):
 
     def test_telephone_serveur_qr_fiche_di_photo_visible_sur_le_pc(self):
+        """Lot 7 (T161) : le chemin réel d'un téléphone — l'étiquette porte l'adresse de la porte (http), la porte
+        conduit un téléphone qui fait confiance au PC atelier à l'application en https sur la même fiche, l'appareil
+        enrôlé (invitation du responsable, POST /api/enroler ; l'écran vient à T156) signale avec photo, le PC
+        (client 127.0.0.1, responsable connecté) voit la demande sans recharger."""
         pc = self.page
         pc.set_viewport_size({"width": 1440, "height": 900})
         preregler_profil(self.contexte, "responsable")
-        with ServeurPrevo() as serveur:
-            # PC : lit le QR de la fiche de PO-02 (comme l'appareil photo le ferait)
-            pc.goto(serveur.url + "/#/equipement/" + POMPE)
+        with ServeurAtelier() as serveur:
+            # PC : le responsable est connecté (cookie de session ; l'écran de connexion vient à T155)
+            cookie = connecter(serveur.url_pc, "nicolas.briand").cookie
+            self.contexte.add_cookies([{"name": "id", "value": cookie.split("=", 1)[1], "url": serveur.url_pc,
+                                        "httpOnly": True, "sameSite": "Lax"}])
+            # PC : lit le QR de la fiche de PO-02 (comme l'appareil photo le ferait) : l'adresse de la porte
+            pc.goto(serveur.url_pc + "/#/equipement/" + POMPE)
             attendre_pret(pc)
             pc.wait_for_selector(".parc-qr-carte svg.qr-svg")
             url_qr = pc.evaluate(LIRE_QR_FICHE_JS)
-            self.assertRegex(url_qr or "", r"^http://[^/]+/#/equipement/%s$" % re.escape(POMPE))
+            self.assertEqual(url_qr, serveur.url_porte + "/#/equipement/" + POMPE)
             print("\n  [telephone] QR de %s relu par jsQR : %s" % (REPERE_POMPE, url_qr))
             # PC : la liste des demandes reste affichée, sans rechargement
             self.menu("liste-di", pc)
             pc.wait_for_selector(".di-zone-tableau tbody tr.cliquable")
             pc.evaluate("window.__memePage = true")
 
-            # Téléphone : ouvre l'URL du QR sans profil mémorisé
+            # Téléphone : fait confiance au PC atelier (certificat installé : ignore_https_errors), appareil enrôlé
+            # sans profil mémorisé ; les tables qui ne sont pas au demandeur répondent 403 (vues comme absentes).
             telephone = self.navigateur.new_context(locale="fr-FR", viewport={"width": 375, "height": 812},
-                                                    is_mobile=True, has_touch=True)
+                                                    is_mobile=True, has_touch=True, ignore_https_errors=True)
             self.addCleanup(telephone.close)
             telephone.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
+            enroler_appareil(serveur, telephone, "Karim Benali")
+            self.autoriser_erreur(motif_refus_du_demandeur())
             tel = telephone.new_page()
             self.surveiller(tel)
-            tel.goto(url_qr)
+            tel.goto(url_qr)                                      # la porte, en http…
+            tel.wait_for_url(serveur.url_https + "/#/equipement/" + POMPE)   # … puis l'application en https, même fiche
+            self.assertTrue(tel.evaluate("window.isSecureContext"))
             self.attendre_etat("profil", tel)
             self.sans_defilement_horizontal("écran de profil", tel)
             self.choisir_profil("demandeur", "Karim Benali", page=tel)

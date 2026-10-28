@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 640" width="360" height="640" font-family="Sora, system-ui, sans-serif">
+<rect width="360" height="640" rx="28" fill="#F2F4F8"/>
+<rect x="0" y="0" width="360" height="26" fill="#F2F4F8"/>
+<text x="16" y="18" font-size="12" fill="#1C2033" font-weight="bold" text-anchor="start">9:41</text>
+<text x="344" y="18" font-size="11" fill="#1C2033" font-weight="normal" text-anchor="end">▃▅▇ ▮</text>
+<text x="22" y="62" font-size="22" fill="#1C2033" font-weight="normal" text-anchor="start">‹</text>
+<text x="48" y="62" font-size="17" fill="#1C2033" font-weight="bold" text-anchor="start">Réglages</text>
+<rect x="14" y="96" width="332" height="52" rx="12" fill="#FFFFFF" stroke="#3366E6" stroke-width="3"/>
+<text x="30" y="128" font-size="15" fill="#1C2033" font-weight="bold" text-anchor="start">Profil téléchargé</text>
+<text x="328" y="129" font-size="18" fill="#9AA3B8" font-weight="normal" text-anchor="end">›</text>
+<circle cx="300" cy="122" r="22" fill="#22C3E6" fill-opacity=".18"/><circle cx="300" cy="122" r="11" fill="#22C3E6" stroke="#FFFFFF" stroke-width="3"/>
+<rect x="14" y="158" width="332" height="52" rx="12" fill="#FFFFFF" stroke="#E1E5EE" stroke-width="1"/>
+<text x="30" y="190" font-size="15" fill="#1C2033" font-weight="normal" text-anchor="start">Mode Avion</text>
+<text x="328" y="191" font-size="18" fill="#9AA3B8" font-weight="normal" text-anchor="end">›</text>
+<rect x="14" y="220" width="332" height="52" rx="12" fill="#FFFFFF" stroke="#E1E5EE" stroke-width="1"/>
+<text x="30" y="252" font-size="15" fill="#1C2033" font-weight="normal" text-anchor="start">Wi-Fi</text>
+<text x="328" y="253" font-size="18" fill="#9AA3B8" font-weight="normal" text-anchor="end">›</text>
+<rect x="14" y="282" width="332" height="52" rx="12" fill="#FFFFFF" stroke="#E1E5EE" stroke-width="1"/>
+<text x="30" y="314" font-size="15" fill="#1C2033" font-weight="normal" text-anchor="start">Bluetooth</text>
+<text x="328" y="315" font-size="18" fill="#9AA3B8" font-weight="normal" text-anchor="end">›</text>
+<rect x="14" y="344" width="332" height="52" rx="12" fill="#FFFFFF" stroke="#E1E5EE" stroke-width="1"/>
+<text x="30" y="376" font-size="15" fill="#1C2033" font-weight="normal" text-anchor="start">Données cellulaires</text>
+<text x="328" y="377" font-size="18" fill="#9AA3B8" font-weight="normal" text-anchor="end">›</text>
+<rect x="14" y="406" width="332" height="52" rx="12" fill="#FFFFFF" stroke="#E1E5EE" stroke-width="1"/>
+<text x="30" y="438" font-size="15" fill="#1C2033" font-weight="normal" text-anchor="start">Général</text>
+<text x="328" y="439" font-size="18" fill="#9AA3B8" font-weight="normal" text-anchor="end">›</text>
+<text x="180" y="626" font-size="11" fill="#6B7490" font-weight="normal" text-anchor="middle">Illustration — l’écran réel varie selon le téléphone</text>
+</svg>

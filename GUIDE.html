@@ -1113,14 +1113,15 @@ un certificat que les téléphones reconnaissent. L'outil libre <b>mkcert</b> le
 <pre><code>Lancer_GMAO.bat --certificat prevo-cert.pem --cle prevo-cle.pem</code></pre>
 <p>ou, sans le lanceur&nbsp;:</p>
 <pre><code>py serveur.py --certificat prevo-cert.pem --cle prevo-cle.pem</code></pre>
-<p>Les adresses affichées,
-le QR code de l'accueil et les étiquettes QR imprimées ensuite sont alors en <code>https://</code>. Les deux
-options vont ensemble&nbsp;: sans elles, Prévo reste en http comme avant.</p>
-<div class="encadre attention">
-  <p><b>Les étiquettes QR changent d'adresse.</b> Un serveur en https ne répond plus aux adresses en
-  <code>http://</code>&nbsp;: les étiquettes imprimées avant le passage en https ne mènent plus à la fiche.
-  Réimprimez-les (Parc, Étiquettes QR) une fois le https en place, puis lancez toujours Prévo de la même
-  façon.</p>
+<p>Sur le réseau, Prévo ouvre alors deux portes&nbsp;: la <b>porte d'entrée</b>, en http sur le port 8080, et
+l'application elle-même, en https sur le port 8443. Les adresses affichées, le QR code de l'accueil et les étiquettes
+QR restent celles de la porte (<code>http://192.168.1.20:8080</code>)&nbsp;: un téléphone qui les ouvre est conduit à
+l'application en https s'il fait confiance au PC atelier, et voit sinon la page «&nbsp;Faites confiance au PC
+atelier&nbsp;», qui le guide pas à pas (8.3 et 8.4). Les deux options vont ensemble&nbsp;: sans elles, Prévo n'écoute
+que sur ce PC.</p>
+<div class="encadre info">
+  <p><b>Les étiquettes QR ne changent pas d'adresse.</b> Elles portent l'adresse de la porte, en http&nbsp;: les
+  étiquettes imprimées avant le passage en https mènent toujours à la fiche.</p>
 </div>
 <p>Pour un double-clic, créez dans le dossier de Prévo un fichier texte nommé
 <code>Lancer_GMAO_https.bat</code> contenant ces trois lignes&nbsp;:</p>
@@ -1140,8 +1141,10 @@ La commande <code>mkcert -CAROOT</code> affiche le dossier où il se trouve.</p>
     puis Chiffrement et identifiants), «&nbsp;Installer un certificat&nbsp;», «&nbsp;Certificat CA&nbsp;», puis choisissez le
     fichier. Android prévient que le réseau peut être surveillé&nbsp;: c'est normal pour un certificat que vous
     installez vous-même.</li>
-  <li>Ouvrez <code>https://192.168.1.20:8080</code> dans Chrome&nbsp;: la page s'ouvre sans alerte, et le bouton
-    Dicter apparaît dans «&nbsp;Signaler un problème&nbsp;».</li>
+  <li>Ouvrez l'adresse de la porte, <code>http://192.168.1.20:8080</code>, dans Chrome (ou scannez le QR code de
+    l'accueil)&nbsp;: Prévo s'ouvre de lui-même en https, sans alerte, et le bouton Dicter apparaît dans
+    «&nbsp;Signaler un problème&nbsp;». Si la page «&nbsp;Faites confiance au PC atelier&nbsp;» s'affiche encore, suivez ses
+    étapes puis touchez «&nbsp;Réessayer&nbsp;».</li>
 </ol>
 
 <h3 id="https-iphone">8.4 Sur un iPhone</h3>
@@ -1151,7 +1154,9 @@ La commande <code>mkcert -CAROOT</code> affiche le dossier où il se trouve.</p>
   <li>Réglages, «&nbsp;Profil téléchargé&nbsp;» (ou Général, VPN et gestion de l'appareil), puis Installer.</li>
   <li>Réglages, Général, Informations, <b>Réglages des certificats</b>&nbsp;: activez la confiance totale pour le
     certificat de mkcert. Sans cette étape, Safari affiche encore une alerte.</li>
-  <li>Ouvrez <code>https://192.168.1.20:8080</code> dans Safari.</li>
+  <li>Ouvrez l'adresse de la porte, <code>http://192.168.1.20:8080</code>, dans Safari (ou scannez le QR code de
+    l'accueil)&nbsp;: Prévo s'ouvre de lui-même en https. La page «&nbsp;Faites confiance au PC atelier&nbsp;» reprend ces
+    mêmes étapes, avec une illustration par écran, et son bouton «&nbsp;Réessayer&nbsp;».</li>
 </ol>
 <div class="encadre important">
   <p><b>Ne donnez jamais le fichier <code>rootCA-key.pem</code></b> (dans le même dossier que

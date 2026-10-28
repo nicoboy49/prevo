@@ -186,7 +186,10 @@ class TestModules(unittest.TestCase):
         invisibles = {" ": "U+00A0", " ": "U+202F", " ": "U+2009", "​": "U+200B"}
         sources = [f for f in sorted((RACINE / "js").rglob("*.js")) if "lib" not in f.relative_to(RACINE).parts]
         sources += sorted((RACINE / "css").rglob("*.css")) + sorted(RACINE.glob("*.html"))
+        # Lot 7 (T161) : les fichiers de la porte d'entrée (acces/porte.html, porte.js, porte.css), servis aussi.
+        sources += sorted(f for f in (RACINE / "acces").glob("*.*") if f.suffix in (".html", ".js", ".css"))
         self.assertGreater(len(sources), 40)
+        self.assertTrue(any(f.name == "porte.js" for f in sources))
         for fichier in sources:
             with self.subTest(fichier=fichier.relative_to(RACINE).as_posix()):
                 texte = fichier.read_text(encoding="utf-8")
