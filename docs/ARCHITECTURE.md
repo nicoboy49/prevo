@@ -3385,6 +3385,17 @@ contrôle d'accès et `tests/test_acces_sessions.py` : une route ajoutée est fe
   compte touché, adresse et agent de la requête du responsable). Un rôle changé vaut dès la requête suivante de ses
   sessions (le compte est relu à chaque requête) ; un compte désactivé perd ses sessions.
 
+Côté navigateur (`js/stockage-serveur.js`, T154) : toute réponse ≥ 400 autre que 409 devient une
+`Donnees.ErreurStockage` portant `codeHttp` ; un **401** (session absente ou expirée, appareil refusé) porte aussi
+`sessionAbsente` et `appareilRefuse`, et l'adaptateur émet sur `document` l'événement `prevo:session-absente`
+(`StockageServeur.EVENEMENT_SESSION_ABSENTE`, `detail: { message, appareilRefuse }`, au plus un par seconde) que
+l'écran de connexion (T155) écoute ; un **403** garde le message du serveur (« Accès refusé : … »). `adaptateur.session()`
+rend `GET /api/session` en camelCase (`technicienId`, `aChanger`). Tests (`tests/commun.py`, CS119) :
+`ServeurPrevo(comptes=True, reglages={…})` écrit les trois comptes de `COMPTES_DE_TEST` (nicolas.briand responsable,
+julien.moreau technicien lié à TEC-0001, lea.martin demandeur) dans la copie et `--config` à « comptes » ;
+`serveur.session(role)` rend le cookie d'une session, `serveur.poser_session(contexte, role)` le pose dans un
+contexte Playwright ; l'usage par défaut (`ServeurPrevo()`, portée « ce PC ») ne change pas.
+
 ### 22.5 Rôles par route (D126)
 
 `ROLES_PAR_ROUTE` dans `serveur.py`, appliquée par `verifier_role` dans `controler_acces` (T152) : quand `comptes` est

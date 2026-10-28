@@ -10,6 +10,7 @@ Lancer depuis la racine du projet :
 """
 import base64
 import hashlib
+import json
 import re
 import sys
 import unittest
@@ -17,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from commun import CasNavigateur, ServeurPrevo, ServeurStatique, RACINE  # noqa: E402
+from commun import CasNavigateur, ServeurPrevo, ServeurStatique, RACINE, COMPTES_DE_TEST  # noqa: E402
 
 CHEMIN_PAGE = "/tests/fixtures/page-stockage-serveur.html"
 BOM = b"\xef\xbb\xbf"
@@ -420,6 +421,62 @@ class TestInfoEtServeurArrete(CasStockageServeur):
                     self.assertEqual(erreur["nom"], "ErreurStockage")
                     self.assertTrue(erreur["estStockage"])
                     self.assertEqual(erreur["message"], MESSAGE_SERVEUR_INJOIGNABLE)
+
+
+class TestComptes(CasStockageServeur):
+    """Lot 7 (T154) : ServeurPrevo(comptes=True) et l'adaptateur face à 401 et 403 (§22.4, §22.5)."""
+
+    ECOUTEUR_JS = ("window.__sessionsAbsentes = []; document.addEventListener(StockageServeur.EVENEMENT_SESSION_ABSENTE, "
+                   "(e) => window.__sessionsAbsentes.push(e.detail));")
+
+    def test_usage_par_defaut_inchange_sans_comptes(self):
+        with ServeurPrevo(source=None) as serveur:
+            self.ouvrir(serveur)
+            session = self.executer_ok("return await stockage.session();")
+            self.assertEqual(session, {"comptes": False, "session": None})
+            self.assertFalse((serveur.dossier / "acces").exists())
+            with self.assertRaises(ValueError):
+                serveur.session("responsable")
+
+    def test_sans_session_401_evenement_puis_avec_session_lecture_et_403_du_role(self):
+        with ServeurPrevo(comptes=True) as serveur:
+            self.assertEqual(set(json.loads((serveur.dossier / "acces" / "comptes.json").read_text("utf-8"))
+                                 ["comptes"][0].keys()) >= {"identifiant", "role", "empreinte"}, True)
+            self.ouvrir(serveur)
+            self.page.evaluate(self.ECOUTEUR_JS)
+            # Sans cookie : /api/session reste publique ; une table rend 401, ErreurStockage + événement.
+            self.assertEqual(self.executer_ok("return await stockage.session();"), {"comptes": True, "session": None})
+            erreur = self.executer_erreur("return await stockage.charger('equipements');")
+            self.assertTrue(erreur["estStockage"], erreur)
+            self.assertIn("Connexion nécessaire", erreur["message"])
+            self.assertEqual(self.page.evaluate("window.__sessionsAbsentes.length"), 1)
+            self.assertEqual(self.page.evaluate("window.__sessionsAbsentes[0].appareilRefuse"), False)
+            self.assertIn("Connexion nécessaire", self.page.evaluate("window.__sessionsAbsentes[0].message"))
+            self.executer_erreur("return await stockage.charger('equipements');")      # un seul événement par seconde
+            self.assertEqual(self.page.evaluate("window.__sessionsAbsentes.length"), 1)
+            # Session du technicien posée dans le contexte : lecture permise, écriture de parametres refusée (403).
+            cookie = serveur.poser_session(self.contexte, "technicien", profil=False)
+            self.assertRegex(cookie, r"^id=[A-Za-z0-9_-]{43}$")
+            self.ouvrir(serveur)
+            self.page.evaluate(self.ECOUTEUR_JS)
+            session = self.executer_ok("return await stockage.session();")
+            self.assertEqual((session["comptes"], session["session"]["identifiant"], session["session"]["role"],
+                              session["session"]["technicienId"], session["session"]["aChanger"],
+                              session["session"]["appareil"]),
+                             (True, COMPTES_DE_TEST["technicien"][0], "technicien", "TEC-0001", False, False))
+            lu = self.executer_ok("const r = await stockage.charger('equipements'); return r.octets !== null;")
+            self.assertTrue(lu)
+            refus = self.executer_erreur(
+                "return await stockage.enregistrer('parametres', versOctets(argument), null);",
+                list(BOM + b"cle;valeur\r\nessai;1\r\n"))
+            self.assertTrue(refus["estStockage"], refus)
+            self.assertTrue(refus["message"].startswith("Accès refusé"), refus)
+            self.assertEqual(self.page.evaluate("window.__sessionsAbsentes.length"), 0)     # 403 : pas un 401
+            # Réglage en plus par « reglages » : session courte, cookie d'un autre rôle.
+            self.assertEqual(serveur.session("responsable")[:3], "id=")
+        with ServeurPrevo(comptes=True, reglages={"invitation_heures": 2}) as serveur:
+            configuration = json.loads((serveur._racine_temporaire / "prevo.config.json").read_text("utf-8"))
+            self.assertEqual(configuration, {"invitation_heures": 2, "comptes": True})
 
 
 class TestReponsesAnormales(CasStockageServeur):

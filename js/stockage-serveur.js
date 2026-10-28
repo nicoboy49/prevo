@@ -55,7 +55,11 @@ const StockageServeur = (() => {
     }
   }
 
-  // Transforme une réponse en erreur (409 → ErreurConflit, autre code ≥ 400 → ErreurStockage).
+  // Transforme une réponse en erreur (409 → ErreurConflit, autre code ≥ 400 → ErreurStockage, avec le code HTTP
+  // dans `codeHttp`). Lot 7 (§22.4, §22.5) : 401 = session absente ou expirée, appareil refusé → l'événement
+  // EVENEMENT_SESSION_ABSENTE est émis sur document (l'écran de connexion, T155, l'écoute et s'affiche ; sans
+  // écouteur, le message du serveur s'affiche comme toute erreur) ; 403 = rôle ou règle refusés → le message du
+  // serveur (« Accès refusé : … ») tel quel.
   async function erreurDepuisReponse(reponse) {
     const donnees = await lireJsonOuNull(reponse);
     const message = (donnees && donnees.erreur)
@@ -66,7 +70,31 @@ const StockageServeur = (() => {
       return new Donnees.ErreurConflit(message, versionActuelle);
     }
     // 423 (fichier ouvert dans Excel) et tous les autres codes : le message du serveur est lisible tel quel.
-    return new Donnees.ErreurStockage(message);
+    const erreur = new Donnees.ErreurStockage(message);
+    erreur.codeHttp = reponse.status;
+    if (reponse.status === 401) {
+      erreur.sessionAbsente = true;
+      erreur.appareilRefuse = Boolean(donnees && donnees.appareil_refuse);
+      signalerSessionAbsente(erreur);
+    }
+    return erreur;
+  }
+
+  // Événement d'une session absente (401) : { message, appareilRefuse }. Jamais plus d'un par seconde (un
+  // chargement lance plusieurs requêtes à la fois : un seul passage à l'écran de connexion).
+  const EVENEMENT_SESSION_ABSENTE = 'prevo:session-absente';
+  const SILENCE_SESSION_ABSENTE_MS = 1000;
+  let derniereSessionAbsente = 0;
+  function signalerSessionAbsente(erreur) {
+    const maintenant = Date.now();
+    if (maintenant - derniereSessionAbsente < SILENCE_SESSION_ABSENTE_MS) { return; }
+    derniereSessionAbsente = maintenant;
+    try {
+      document.dispatchEvent(new CustomEvent(EVENEMENT_SESSION_ABSENTE,
+        { detail: { message: erreur.message, appareilRefuse: Boolean(erreur.appareilRefuse) } }));
+    } catch (erreurEvenement) {
+      console.warn('Prévo : événement de session absente non émis (' + erreurEvenement.message + ').');
+    }
   }
 
   // Erreur pendant l'envoi ou la lecture : délai dépassé (requête abandonnée) ou serveur injoignable.
@@ -287,6 +315,23 @@ const StockageServeur = (() => {
       return lireJson(reponse);
     }
 
+    // Lot 7 (§22.4) : GET /api/session → { comptes: bool, session: null | { identifiant, role, prenom, nom,
+    // technicienId, aChanger, appareil } } ; route publique (jamais 401), même sans comptes ({ comptes: false }).
+    async function session() {
+      const reponse = await appelerOuErreur(base + '/api/session', { method: 'GET' });
+      const donnees = await lireJson(reponse);
+      const identite = donnees.session && typeof donnees.session === 'object' ? donnees.session : null;
+      return {
+        comptes: Boolean(donnees.comptes),
+        session: identite === null ? null : {
+          identifiant: String(identite.identifiant || ''), role: String(identite.role || ''),
+          prenom: String(identite.prenom || ''), nom: String(identite.nom || ''),
+          technicienId: String(identite.technicien_id || ''), aChanger: Boolean(identite.a_changer),
+          appareil: Boolean(identite.appareil),
+        },
+      };
+    }
+
     async function info() {
       const reponse = await appelerOuErreur(base + '/api/info', { method: 'GET' });
       const donnees = await lireJson(reponse);
@@ -310,11 +355,13 @@ const StockageServeur = (() => {
       restaurer: restaurer,
       testerSauvegarde: testerSauvegarde,
       info: info,
+      session: session,
     };
   }
 
   return {
     detecter: detecter,
     creer: creer,
+    EVENEMENT_SESSION_ABSENTE: EVENEMENT_SESSION_ABSENTE,
   };
 })();

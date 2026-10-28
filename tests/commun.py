@@ -4,7 +4,9 @@ Contenu :
     RACINE                      dossier du projet
     port_libre()                un port TCP libre sur 127.0.0.1
     url_fichier(chemin)         URL file:// d'un fichier du projet
-    ServeurPrevo               serveur.py lancé sur une COPIE du jeu de démo (jamais donnees/ réel)
+    ServeurPrevo               serveur.py lancé sur une COPIE du jeu de démo (jamais donnees/ réel) ;
+                               option comptes=True (lot 7) : trois comptes dans la copie, --config à
+                               « comptes », session(role) et poser_session(contexte, role)
     ServeurStatique(racine)     petit serveur HTTP de fichiers (pour le dossier simulé OPFS)
     CasNavigateur               TestCase Playwright : Chromium headless, erreurs JS = échec
     preregler_profil(...)       profil et poste mémorisés dans localStorage avant le chargement
@@ -20,6 +22,7 @@ Lancer depuis la racine du projet :
     py -m unittest discover -s tests -v
 """
 import functools
+import importlib.util
 import http.server
 import json
 import os
@@ -48,6 +51,34 @@ FICHIER_SCENARIOS = RACINE / "tests" / "fixtures" / "demo-scenarios.json"
 
 # Valeur par défaut de ServeurPrevo(source=...) : « le jeu de démo s'il existe, sinon vide ».
 SOURCE_AUTO = "auto"
+
+# Lot 7 (§22.3, T154) : comptes créés dans la copie des données par ServeurPrevo(comptes=True) — rôle → (identifiant,
+# prénom, nom, mot de passe, technicien lié). Les tests des lots 1 à 6 n'en ont pas (portée « ce PC », CS119).
+COMPTES_DE_TEST = {
+    "responsable": ("nicolas.briand", "Nicolas", "Briand", "phrase du responsable 2026", ""),
+    "technicien": ("julien.moreau", "Julien", "Moreau", "cle a molette et graisse", "TEC-0001"),
+    "demandeur": ("lea.martin", "Léa", "Martin", "une demande de lea 2026", ""),
+}
+MOTS_DE_PASSE_DE_TEST = {valeurs[0]: valeurs[3] for valeurs in COMPTES_DE_TEST.values()}
+
+
+@functools.lru_cache(maxsize=1)
+def comptes_json():
+    """Octets d'un comptes.json avec les trois comptes de COMPTES_DE_TEST, calculés une fois par processus (scrypt
+    coûte) par les fonctions de serveur.py importé comme module (le serveur lancé ensuite est un autre processus)."""
+    specification = importlib.util.spec_from_file_location("serveur_prevo_commun", RACINE / "serveur.py")
+    serveur = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(serveur)
+    dossier = Path(tempfile.mkdtemp(prefix="prevo-comptes-"))
+    try:
+        config = serveur.Configuration(str(dossier / "donnees"), [])
+        serveur.creer_dossiers(config)
+        for role, (identifiant, prenom, nom, mot_de_passe, technicien_id) in COMPTES_DE_TEST.items():
+            serveur.creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id=technicien_id,
+                                 identifiant=identifiant)
+        return (dossier / "donnees" / "acces" / "comptes.json").read_bytes()
+    finally:
+        _supprimer_dossier(dossier)
 
 
 # ---------------------------------------------------------------------------
@@ -121,15 +152,25 @@ class ServeurPrevo:
     environnement : variables d'environnement ajoutées pour serveur.py (lot 7 : PREVO_IA_CLE, la clé du
              fournisseur d'IA, qui ne passe jamais par la ligne de commande) ; une valeur None retire la variable.
              PREVO_IA_CLE n'est jamais héritée du poste qui lance les tests : seulement si le test la donne.
+    comptes : False (défaut : portée « ce PC », aucun compte, usage des lots 1 à 6 inchangé) ; True (lot 7, T154) :
+             les trois comptes de COMPTES_DE_TEST écrits dans acces/comptes.json de la copie et --config à
+             « comptes » (plus `reglages`, un dictionnaire ajouté au fichier de configuration) ; ensuite
+             serveur.session(role) rend le cookie « id=<jeton> » d'une session ouverte par POST /api/connexion,
+             serveur.poser_session(contexte, role) le pose dans un contexte Playwright (avec le profil, tant que
+             l'écran de connexion n'existe pas : T155).
     Ne touche jamais au dossier donnees/ réel : seul le dossier temporaire est passé à --donnees.
     """
 
     DELAI_DEMARRAGE_S = 15
     VARIABLES_JAMAIS_HERITEES = ("PREVO_IA_CLE",)
 
-    def __init__(self, source=SOURCE_AUTO, arguments=None, environnement=None):
+    def __init__(self, source=SOURCE_AUTO, arguments=None, environnement=None, comptes=False, reglages=None):
         self.arguments = list(arguments or [])
         self.environnement = dict(environnement or {})
+        self.comptes = bool(comptes)
+        self.reglages = dict(reglages or {})
+        if self.reglages and not self.comptes:
+            raise ValueError("ServeurPrevo : « reglages » va avec comptes=True (sinon la configuration par défaut).")
         self.https = "--certificat" in self.arguments
         if source == SOURCE_AUTO:
             source = DOSSIER_DEMO if DOSSIER_DEMO.is_dir() else None
@@ -164,6 +205,11 @@ class ServeurPrevo:
             shutil.copytree(self.source, self.dossier)
         else:
             self.dossier.mkdir()
+        if self.comptes:
+            (self.dossier / "acces").mkdir(exist_ok=True)
+            (self.dossier / "acces" / "comptes.json").write_bytes(comptes_json())
+            configuration = dict(self.reglages, comptes=True)
+            (self._racine_temporaire / "prevo.config.json").write_text(json.dumps(configuration), encoding="utf-8")
 
         self.port = port_libre()
         self.url = "%s://127.0.0.1:%d" % ("https" if self.https else "http", self.port)
@@ -230,6 +276,35 @@ class ServeurPrevo:
         if self._racine_temporaire is not None:
             _supprimer_dossier(self._racine_temporaire)
             self._racine_temporaire = None
+
+    def session(self, role="responsable", rester=False):
+        """Cookie « id=<jeton> » d'une session neuve du compte de ce rôle (COMPTES_DE_TEST), par POST /api/connexion ;
+        ValueError sans comptes=True, RuntimeError si le serveur refuse."""
+        if not self.comptes:
+            raise ValueError("ServeurPrevo.session : lancez le serveur avec comptes=True.")
+        identifiant, _, _, mot_de_passe, _ = COMPTES_DE_TEST[role]
+        corps = json.dumps({"identifiant": identifiant, "mot_de_passe": mot_de_passe, "rester": rester}).encode("utf-8")
+        requete = urllib.request.Request(self.url + "/api/connexion", data=corps, method="POST", headers={
+            "Content-Type": "application/json; charset=utf-8", "X-Prevo": "1", "User-Agent": "tests-prevo/1.0"})
+        contexte = ssl._create_unverified_context() if self.https else None
+        try:
+            with urllib.request.urlopen(requete, timeout=10, context=contexte) as reponse:
+                cookie = reponse.headers.get("Set-Cookie", "")
+        except urllib.error.HTTPError as erreur:
+            raise RuntimeError("connexion de %s refusée (%s) : %s" % (identifiant, erreur.code, erreur.read()[:200]))
+        return cookie.split(";")[0]
+
+    def poser_session(self, contexte, role="responsable", rester=False, profil=True):
+        """Pose le cookie de session de ce rôle dans un contexte Playwright (avant tout chargement de page) et,
+        par défaut, le profil correspondant dans localStorage (preregler_profil ; App.profil déduit de /api/session
+        vient avec T155). Rend le cookie « id=<jeton> »."""
+        cookie = self.session(role, rester)
+        contexte.add_cookies([{"name": "id", "value": cookie.split("=", 1)[1], "url": self.url,
+                               "httpOnly": True, "sameSite": "Lax", "secure": self.https}])
+        if profil:
+            identifiant, prenom, nom, _, technicien_id = COMPTES_DE_TEST[role]
+            preregler_profil(contexte, role, (prenom + " " + nom).strip(), technicien_id)
+        return cookie
 
     def sortie_console(self):
         """Texte écrit par serveur.py sur sa console (utile pour comprendre un échec)."""
