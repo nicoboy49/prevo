@@ -313,7 +313,7 @@ class TestRelaisAudit(unittest.TestCase):
         self.relayer({"url": "ftp://exemple.invalid/", "chemin": "models", "cle": CLE_DU_POSTE})
         reglages_publics(self.serveur)
         console = self.serveur.sortie_console()
-        self.assertIn("POST /api/ia", console)
+        self.assertIn("POST '/api/ia'", console)                                # chemin en repr (audit I2, T159)
         self.assertIn("Assistant IA     : API compatible OpenAI, %s/v1 ; clé réglée ; fournisseurs en ligne refusés."
                       % self.service.url, console)
         self.assertNotIn(CLE_SERVEUR, console)
