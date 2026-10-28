@@ -145,7 +145,10 @@ class TestSemaphore(unittest.TestCase):
         # Une seule limite par serveur (§22.6) : le sémaphore est un objet du module, pas de l'écouteur.
         self.assertIsInstance(serveur.SEMAPHORE_CONNEXIONS, type(serveur.threading.BoundedSemaphore(1)))
         self.assertEqual(serveur.SEMAPHORE_CONNEXIONS._initial_value, serveur.CONNEXIONS_MAX)
-        self.assertIn("SEMAPHORE_CONNEXIONS", serveur.ServeurPrevo.process_request_thread.__code__.co_names)
+        # Pris par requête (au premier octet), pas par connexion : une connexion keep-alive inactive ne tient
+        # aucune place (défaut trouvé par la recette du lot 7, tests/test_recette_lot7.py TestConnexionsInactives).
+        self.assertIn("SEMAPHORE_CONNEXIONS", serveur.GestionnaireRequetes.handle_one_request.__code__.co_names)
+        self.assertNotIn("process_request_thread", vars(serveur.ServeurPrevo))
 
 
 # ---------------------------------------------------------------------------

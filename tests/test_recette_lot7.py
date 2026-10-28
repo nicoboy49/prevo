@@ -47,9 +47,13 @@ navigateur (CasNavigateur : seuls les refus attendus — 401 de la sonde, 403 de
                 l'écran, cookie Secure, adresses en https sur le nom Tailscale, journal avec l'adresse et l'utilisateur
                 Tailscale ; nouvelle relance avec le faux « Stopped » : la session tient, l'accueil du responsable signale
                 Tailscale déconnecté et Paramètres › Accès et installation montre l'état du serveur.
-Défauts trouvés (tests expectedFailure, docstring de chacun) :
-    TestEtiquetteCePc         en portée « ce PC », les adresses réseau annoncées (QR des étiquettes) ne répondent pas ;
-    TestConnexionsInactives   32 connexions keep-alive inactives bloquent toute nouvelle requête jusqu'à 60 s.
+Défauts trouvés par la recette, corrigés par l'orchestrateur (chaque test le prouve) :
+    TestEtiquetteCePc         en portée « ce PC », les adresses annoncées pour les téléphones ne répondaient pas :
+                              /api/info dit maintenant ce_pc_seulement, la carte « Connecter un téléphone » ne montre
+                              plus de QR et l'écran des étiquettes prévient (l'adresse des QR, celle de la porte sur
+                              le même port, répondra dès que Prévo sera ouvert au Wi-Fi) ;
+    TestConnexionsInactives   32 connexions keep-alive inactives bloquaient toute nouvelle requête jusqu'à 60 s : la
+                              place du sémaphore se prend maintenant au premier octet d'une requête.
 Aucune commande d'administrateur, aucune sortie réseau, jamais le vrai mkcert ni le vrai tailscale, jamais le dossier
 donnees/ réel ni C:\\Prevo (« Rester ici ») ; aucune relance réelle (config.relancer injecté ; « Appliquer et relancer »
 n'est jamais cliqué sur un serveur.py réel). Captures facultatives dans tests/resultats/recette-lot7/ (hors dépôt).
@@ -978,43 +982,40 @@ class TestParcoursTailscale(CasRecetteAssistant):
 
 
 # ---------------------------------------------------------------------------
-# Défauts trouvés par la recette (expectedFailure : l'orchestrateur corrige)
+# Défauts trouvés par la recette, corrigés (28/10/2026)
 # ---------------------------------------------------------------------------
 
-class TestEtiquetteCePc(unittest.TestCase):
+class TestEtiquetteCePc(CasNavigateur):
 
-    @unittest.expectedFailure
-    def test_etiquette_solo_ce_pc_mene_a_une_adresse_qui_repond(self):
-        """DÉFAUT (parcours Solo, D132 « étiquette QR → fiche machine », CS120, CS125) : en portée « ce PC » (écoute sur
-        127.0.0.1 seulement, la portée de Solo par défaut), GET /api/info rend encore dans « adresses_reseau » les
-        adresses réseau du PC (http://<IP du PC>:<port>/, Configuration.adresses_reseau, quelle que soit l'écoute) ; les
-        QR des étiquettes (App.urlFicheEquipement), la carte « Connecter un téléphone » de l'accueil les reprennent et la
-        console les affiche « Sur le réseau : … (téléphones, tablettes) » juste avant « Écoute : ce PC seulement ».
-        Prévo n'y écoute pas : le QR d'une étiquette imprimée en Solo « ce PC » ne mène nulle part (connexion refusée,
-        même depuis le PC). Attendu : n'annoncer une adresse que là où Prévo répond (comme GET installation/fiche, qui ne
-        donne les adresses réseau « que quand Prévo écoute sur le réseau »), ou dire sur l'écran des étiquettes que le
-        QR ne servira qu'une fois Prévo ouvert au Wi-Fi de l'atelier. À trancher avec CS119 : test_etiquettes (lot 3)
-        attend aujourd'hui l'URL réseau dans le QR avec ServeurPrevo() (portée « ce PC »)."""
-        reseau = adresse_reseau()
-        if reseau is None:
-            self.skipTest("ce PC n'a pas d'adresse réseau : rien d'annoncé, rien à montrer")
+    def test_portee_ce_pc_les_ecrans_disent_que_les_telephones_ne_joignent_pas_prevo(self):
+        """Correction (parcours Solo, D132, CS120, CS125) : en portée « ce PC » (écoute sur 127.0.0.1), aucun téléphone
+        ne joint Prévo. /api/info le dit (ce_pc_seulement), la console n'annonce aucune adresse « pour les
+        téléphones », la carte « Connecter un téléphone » ne montre plus de QR et renvoie à Paramètres › Accès et
+        installation, et l'écran des étiquettes prévient : l'adresse mise dans les QR (le PC sur port_http, celle de
+        la porte) ne répondra qu'une fois Prévo ouvert au Wi-Fi (une étiquette imprimée reste alors valable)."""
         with ServeurPrevo() as reel:                          # portée « ce PC », comme Solo après l'assistant
             info = requete(reel.url, "/api/info").json()
-            injoignables = []
-            for adresse in info["adresses_reseau"]:
-                hote, port = adresse.split("//", 1)[1].rstrip("/").rsplit(":", 1)
-                try:
-                    socket.create_connection((hote, int(port)), timeout=3).close()
-                except OSError as erreur:
-                    injoignables.append("%s (%s)" % (adresse, erreur.__class__.__name__))
-            self.assertEqual(injoignables, [], "adresses annoncées où Prévo n'écoute pas")
+            self.assertTrue(info["ce_pc_seulement"])
+            self.assertNotIn("Sur le réseau", reel.sortie_console())
+            commun.preregler_profil(self.contexte, "responsable")
+            page = self.page
+            page.goto(reel.url + "/#/accueil")
+            attendre_pret(page)
+            page.wait_for_selector("#carte-connexion #connexion-ce-pc")
+            self.assertIn("joignable que sur ce PC", page.inner_text("#carte-connexion"))
+            self.assertEqual(page.locator("#qr-connexion").count(), 0)
+            page.goto(reel.url + "/#/parc/etiquettes")
+            page.wait_for_selector("#etiquettes-ce-pc")
+            self.assertIn("dès que Prévo", page.inner_text("#etiquettes-ce-pc"))
+            if info["adresses_reseau"]:                       # l'adresse de la future porte, sur port_http
+                self.assertIn(info["adresses_reseau"][0].rstrip("/"), page.inner_text("#etiquettes-adresse-encodee"))
 
 
 class TestConnexionsInactives(unittest.TestCase):
 
-    @unittest.expectedFailure
     def test_des_connexions_keep_alive_inactives_ne_bloquent_pas_une_nouvelle_requete(self):
-        """DÉFAUT (audit F2, §22.12 ; révélé par le parcours Atelier : avec quatre navigateurs ouverts, une requête de plus
+        """Corrigé le 28/10 (la place se prend au premier octet d'une requête, handle_one_request). DÉFAUT d'origine
+        (audit F2, §22.12 ; révélé par le parcours Atelier : avec quatre navigateurs ouverts, une requête de plus
         est restée plus de 15 s sans réponse) : SEMAPHORE_CONNEXIONS (32 places) est pris dans
         ServeurPrevo.process_request_thread pour toute la vie d'une connexion HTTP/1.1, y compris quand elle attend,
         inactive, la requête suivante (keep-alive, coupée après 60 s de silence : GestionnaireRequetes.timeout). Le

@@ -69,8 +69,10 @@ VERSION_API = 1
 PORT_PAR_DEFAUT = 8080
 NOMBRE_PORTS_SUPPLEMENTAIRES = 20          # 8080 occupé → 8081, … jusqu'à 8100
 TAILLE_MAX_CORPS = 10 * 1024 * 1024        # 10 Mo
-# Audit F2 (§22.12) : requêtes servies en même temps, tous écouteurs confondus (porte et application) ; la
-# suivante attend son tour dans son fil (SEMAPHORE_CONNEXIONS), elle n'est ni refusée ni perdue.
+# Audit F2 (§22.12) : requêtes en cours en même temps, tous écouteurs confondus (porte et application) ; une place
+# est prise dès le premier octet d'une requête et rendue avec sa réponse (une requête lente ou laissée à moitié la
+# tient) ; une connexion keep-alive inactive, qui attend la requête suivante, n'en tient aucune (défaut trouvé par
+# la recette du lot 7). La suivante attend son tour dans son fil (SEMAPHORE_CONNEXIONS), ni refusée ni perdue.
 CONNEXIONS_MAX = 32
 ESSAIS_SI_VERROUILLE = 3                   # fichier ouvert dans Excel : 3 essais…
 PAUSE_ENTRE_ESSAIS_S = 0.1                 # … espacés de 100 ms
@@ -272,9 +274,10 @@ NOMS_RESERVES_WINDOWS = (
 # rendue corresponde toujours au contenu rendu). Deux postes qui écrivent en même temps
 # sont donc traités l'un après l'autre.
 VERROU_ECRITURE = threading.Lock()
-# Audit F2 : au plus CONNEXIONS_MAX requêtes servies en même temps, pour tout le processus (la porte et l'application
-# partagent la limite, §22.6) ; chaque fil de service l'acquiert avant de lire la requête et le rend à la fin
-# (ServeurPrevo.process_request_thread). La 33e connexion attend dans son fil : elle n'est ni refusée ni perdue.
+# Audit F2 : au plus CONNEXIONS_MAX requêtes en cours en même temps, pour tout le processus (la porte et l'application
+# partagent la limite, §22.6) ; une place est prise au premier octet d'une requête et rendue avec sa réponse
+# (GestionnaireRequetes.handle_one_request) : une connexion keep-alive inactive n'en tient aucune. La 33e requête
+# attend dans son fil : elle n'est ni refusée ni perdue.
 SEMAPHORE_CONNEXIONS = threading.BoundedSemaphore(CONNEXIONS_MAX)
 
 
@@ -2795,7 +2798,21 @@ class Configuration:
     def adresse_locale(self):
         return '%s://localhost:%d/' % (self.schema, self.port)
 
+    @property
+    def ce_pc_seulement(self):
+        """Portée « ce PC » (§22.1) : Prévo n'écoute que sur 127.0.0.1 et aucun mandataire ne le publie ; aucun
+        téléphone ne le joint (défaut trouvé par la recette du lot 7 : les écrans le disent)."""
+        return self.ecoute == '127.0.0.1' and not self.reglages.get('mandataire')
+
     def adresses_reseau(self):
+        """Adresses données pour les téléphones et les QR. Derrière un mandataire sur ce PC (Tailscale, Intranet :
+        écoute 127.0.0.1), celles des noms acceptés en https, par lesquels le mandataire publie Prévo. Sinon les
+        adresses du PC sur port_http : la porte hors de « ce PC » ; en portée « ce PC », la même adresse, qui ne
+        répond pas encore mais répondra dès que Prévo sera ouvert au Wi-Fi (porte sur le même port : une étiquette
+        imprimée reste valable) — les écrans le disent (ce_pc_seulement de /api/info)."""
+        noms = [nom for nom in (self.reglages.get('noms') or []) if nom]
+        if self.ecoute == '127.0.0.1' and self.reglages.get('mandataire') and noms:
+            return ['https://%s/' % nom for nom in noms]
         return ['%s://%s:%d/' % (self.schema, ip, self.port) for ip in adresses_ip_reseau()]
 
 
@@ -4593,6 +4610,22 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
 
     # --- Points d'entrée appelés par http.server ---------------------------
 
+    def handle_one_request(self):
+        """Une requête de la connexion (audit F2, §22.12). On attend son premier octet SANS place : une connexion
+        keep-alive inactive ne tient rien (sinon 32 connexions ouvertes par cinq navigateurs bloquaient le sixième,
+        défaut trouvé par la recette du lot 7) ; puis la place de SEMAPHORE_CONNEXIONS est tenue de la ligne de
+        requête à la réponse, requête lente ou laissée à moitié comprise ; la 33e attend son tour."""
+        try:
+            premier = self.rfile.peek(1)
+        except (OSError, ValueError):                   # délai de 60 s dépassé, connexion coupée ou fermée
+            self.close_connection = True
+            return
+        if not premier:
+            self.close_connection = True
+            return
+        with SEMAPHORE_CONNEXIONS:
+            super().handle_one_request()
+
     def do_GET(self):
         self.traiter('GET')
 
@@ -4873,6 +4906,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                 'adresse_locale': adresse_locale,
                                 'adresses_reseau': adresses_reseau,
                                 'porte': self.config.porte and self.mandat is None,
+                                # Recette du lot 7 : en portée « ce PC », aucun téléphone ne joint Prévo ; les
+                                # écrans le disent (carte « Connecter un téléphone », étiquettes).
+                                'ce_pc_seulement': self.config.ce_pc_seulement and self.mandat is None,
                                 'actif_depuis': self.config.actif_depuis,        # D130, T170 : instant du démarrage
                                 'copie_externe': etat_copie_externe_public(self.config),
                                 'tailscale': etat_tailscale_public(self.config),
@@ -5685,13 +5721,6 @@ class ServeurPrevo(http.server.ThreadingHTTPServer):
         self.contexte_ssl = None if porte else config.contexte_ssl
         super().__init__(adresse, GestionnaireRequetes)
 
-    def process_request_thread(self, request, client_address):
-        """Fil de service d'une connexion (audit F2) : au plus CONNEXIONS_MAX connexions servies en même temps pour tout
-        le processus, la suivante attend ici son tour (ni refusée ni perdue) ; le sémaphore est rendu à la fin, quoi
-        qu'il arrive."""
-        with SEMAPHORE_CONNEXIONS:
-            super().process_request_thread(request, client_address)
-
     def get_request(self):
         """https (lot 4) : la connexion acceptée est enveloppée en TLS ; la poignée de main est faite
         plus tard, dans le fil de la requête (GestionnaireRequetes.setup)."""
@@ -5770,11 +5799,11 @@ def afficher_accueil(config, port_demande, avertissements=()):
     if config.port != port_demande:
         afficher('  Le port %d est occupé : port %d utilisé.' % (port_demande, config.port))
     afficher('  Sur ce PC        : %s' % config.adresse_locale())
-    adresses = config.adresses_reseau() if config.ecoute != '127.0.0.1' else []
+    adresses = [] if config.ce_pc_seulement else config.adresses_reseau()
     if adresses:
         for adresse in adresses:
             afficher('  Sur le réseau    : %s   (téléphones, tablettes)' % adresse)
-    elif config.ecoute != '127.0.0.1':
+    elif not config.ce_pc_seulement:
         afficher('  Sur le réseau    : aucune adresse trouvée (PC non connecté ?)')
     afficher('  Données          : %s' % config.dossier_donnees)
     if not config.reglages.get('_present'):

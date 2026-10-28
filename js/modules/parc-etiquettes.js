@@ -229,6 +229,9 @@ Object.assign(Parc, (() => {
       <div class="encadre attention etiquettes-avertissement">${UI.icone('alerte')}
         Si l'adresse IP ou le port du PC change, les étiquettes ne mènent plus à la fiche : demandez une adresse fixe pour ce PC (réservation dans la box).</div>
       ${adresses.length ? '' : UI.html`<p class="note">Aucune adresse réseau n'a été détectée : branchez ce PC au réseau de l'atelier pour que les téléphones puissent ouvrir les fiches.</p>`}
+      ${App.cePcSeulement && App.cePcSeulement() ? UI.html`<div class="encadre info" id="etiquettes-ce-pc">${UI.icone('alerte')}
+        Prévo n'est joignable que sur ce PC pour l'instant : ces étiquettes s'ouvriront depuis un téléphone dès que Prévo
+        sera ouvert au Wi-Fi de l'atelier, à la même adresse (Paramètres › Accès et installation).</div>` : ''}
       ${choix}
     </section>`;
   }

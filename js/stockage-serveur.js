@@ -349,7 +349,9 @@ const StockageServeur = (() => {
       const donnees = await lireJson(reponse);
       // Lot 7 (§22.6) : hors de « ce PC », les adresses sont celles de la porte d'entrée et « porte » est vrai.
       // Lot 7 (§22.10) : installation_a_faire est vrai tant que prevo.config.json n'existe pas (assistant proposé, jamais imposé).
+      // Recette du lot 7 : ce_pc_seulement vrai en portée « ce PC » (aucun téléphone ne joint Prévo).
       return { adressesReseau: donnees.adresses_reseau || [], port: donnees.port, porte: donnees.porte === true,
+        cePcSeulement: donnees.ce_pc_seulement === true,
         copieExterne: copieExterneLue(donnees.copie_externe), tailscale: tailscaleLu(donnees.tailscale),
         installationAFaire: donnees.installation_a_faire === true };
     }

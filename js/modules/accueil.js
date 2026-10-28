@@ -39,6 +39,7 @@ const Accueil = (() => {
   // Adresses du serveur lues une première fois puis gardées (évite un aller-retour à chaque affichage).
   let adressesEnMemoire = null;
   let porteOuverte = false;       // lot 7 : le serveur a sa porte d'entrée (deux écouteurs, hors de « ce PC »)
+  let cePcSeulement = false;      // recette du lot 7 : portée « ce PC », aucun téléphone ne joint Prévo
 
   // ===========================================================================================
   // 1. Calculs (fonctions pures sur les lignes des tables, exposées pour les tests)
@@ -212,6 +213,7 @@ const Accueil = (() => {
       // Lot 7 (§22.6) : hors de « ce PC », l'adresse est celle de la porte d'entrée, qui conduit le téléphone à
       // l'application en https après « Faites confiance au PC atelier » (une fois par téléphone).
       porteOuverte = Boolean(informations && informations.porte);
+      cePcSeulement = Boolean(informations && informations.cePcSeulement);
     } catch (erreur) {
       console.warn('Prévo : adresses réseau du serveur inconnues (' + (erreur && erreur.message) + ').', erreur);
     }
@@ -219,6 +221,17 @@ const Accueil = (() => {
   }
 
   function carteConnexion(adresses) {
+    // Recette du lot 7 : en portée « ce PC », Prévo n'écoute que sur ce PC : pas de QR qu'aucun téléphone n'ouvrirait.
+    if (cePcSeulement) {
+      return UI.html`<article class="carte" id="carte-connexion">
+        <div class="entete-carte"><h2>Connecter un téléphone</h2></div>
+        <div class="encadre info" id="connexion-ce-pc">
+          <b>Prévo n'est joignable que sur ce PC pour l'instant</b> (portée « ce PC »)&nbsp;: un téléphone ne peut pas
+          l'ouvrir. Pour les téléphones de l'atelier, ouvrez Prévo au Wi-Fi&nbsp;: Paramètres › Accès et installation
+          (responsable, sur ce PC).
+        </div>
+      </article>`;
+    }
     if (adresses.length === 0) {
       return UI.html`<article class="carte" id="carte-connexion">
         <div class="entete-carte"><h2>Connecter un téléphone</h2></div>

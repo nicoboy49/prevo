@@ -198,26 +198,20 @@ class TestAccueil(CasParametres):
             page.wait_for_function("location.hash === '#/controle'")
             self.attendre_ecran("Contrôle de la base")
 
-    def test_accueil_qr_de_connexion_relu_par_jsqr_egal_a_l_adresse_reseau(self):
+    def test_accueil_portee_ce_pc_carte_sans_qr_qui_renvoie_aux_parametres(self):
+        """Lot 7 (recette, 28/10) : en portée « ce PC » (ServeurPrevo par défaut), Prévo n'écoute que sur ce PC ; la
+        carte ne montre plus un QR qu'aucun téléphone n'ouvrirait, elle renvoie à Paramètres › Accès et installation.
+        Le QR de la carte (adresse de la porte, en http) est vérifié par le test suivant, adresse imposée."""
         with ServeurPrevo() as serveur:
             with urllib.request.urlopen(serveur.url + "/api/info", timeout=5) as reponse:
-                adresses = json.loads(reponse.read().decode("utf-8"))["adresses_reseau"]
+                self.assertTrue(json.loads(reponse.read().decode("utf-8"))["ce_pc_seulement"])
             page = self.ouvrir(serveur)
             self.assertTrue(page.is_visible("#carte-connexion"))
             texte = self.texte("#carte-connexion")
             self.assertIn("Connecter un téléphone", texte)
-            self.assertIn("même réseau Wi-Fi", texte)
-            self.assertIn("réseau privé", texte)
-            if adresses:
-                # Vrai réseau de la machine de test : le QR contient la première adresse réseau, en http (lot 7 :
-                # c'est l'adresse de la porte d'entrée, jamais l'adresse https de l'application, CS137).
-                self.assertEqual(page.evaluate(LIRE_QR_JS), adresses[0])
-                self.assertEqual(self.texte("#adresse-reseau"), adresses[0])
-                self.assertTrue(adresses[0].startswith("http://"), adresses[0])
-            else:
-                self.assertIn("Aucune adresse réseau", texte)
-                self.assertEqual(page.locator("#qr-connexion").count(), 0)
-            # Portée « ce PC » : pas de porte, donc pas le rappel « Faites confiance au PC atelier ».
+            self.assertIn("joignable que sur ce PC", texte)
+            self.assertIn("Paramètres › Accès et installation", texte)
+            self.assertEqual(page.locator("#qr-connexion").count(), 0)
             self.assertNotIn("Faites confiance au PC atelier", texte)
 
     def test_accueil_qr_avec_adresse_reseau_imposee_puis_sans_adresse(self):

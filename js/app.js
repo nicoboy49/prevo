@@ -79,6 +79,7 @@ const App = (() => {
   let promesseConnexion = null;    // écran de connexion en cours (une seule fois à la fois)
   let poste = '';                  // nom du poste (journal, verrou)
   let adressesReseau = [];         // mode serveur : ['http://192.168.1.10:8080/', …]
+  let cePcSeulement = false;       // mode serveur : portée « ce PC », aucun téléphone ne joint Prévo (recette du lot 7)
   let installationAFaire = false;  // mode serveur : /api/info rend installation_a_faire (pas de prevo.config.json, §22.10)
   const ecrans = [];               // écrans enregistrés par les modules
   let ecranCourant = null;
@@ -394,6 +395,7 @@ const App = (() => {
         const informations = await adaptateur.info();
         adressesReseau = (informations && informations.adressesReseau) || [];
         installationAFaire = Boolean(informations && informations.installationAFaire);
+        cePcSeulement = Boolean(informations && informations.cePcSeulement);
       } catch (erreur) {
         console.warn('Prévo : adresses réseau du serveur inconnues (' + (erreur && erreur.message) + ').', erreur);
       }
@@ -1332,6 +1334,7 @@ const App = (() => {
     changerProfil,
     comptesExiges: () => comptesExiges,
     installationAFaire: () => installationAFaire,
+    cePcSeulement: () => cePcSeulement,
     pcServeur,
     demanderConnexion,
     deconnecter,

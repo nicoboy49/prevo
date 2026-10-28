@@ -3613,7 +3613,12 @@ le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis
   sans autorité locale. `acces/` est dans `DOSSIERS_PUBLICS` (§14.7). `Configuration.schema` vaut `http` dès que la
   porte est ouverte : `adresse_locale`, `adresses_reseau`, la console et `/api/info` (qui rend aussi `porte` vrai,
   d'où le rappel « Faites confiance au PC atelier » de la carte « Connecter un téléphone ») donnent la porte ; le port
-  https n'apparaît sur la console que comme un numéro de port. `porte.js` : `fetch` en mode `no-cors` (le serveur
+  https n'apparaît sur la console que comme un numéro de port. Corrections du 28/10 (recette du lot 7) : `/api/info`
+  rend `ce_pc_seulement` vrai en portée « ce PC » (écoute 127.0.0.1 sans mandataire : aucun téléphone ne joint
+  Prévo) ; la carte « Connecter un téléphone » ne montre alors pas de QR, l'écran des étiquettes le dit et la console
+  n'annonce aucune adresse réseau ; l'adresse des QR reste celle du PC sur `port_http`, qui répondra dès que Prévo
+  sera ouvert au Wi-Fi (la porte garde ce port) ; derrière un mandataire sur ce PC, `adresses_reseau` vaut
+  `https://<nom>/` pour chaque nom accepté. `porte.js` : `fetch` en mode `no-cors` (le serveur
   n'envoie aucun en-tête CORS : seule compte la réponse du réseau), `AbortController` à 2 s, `location.replace(origine
   https + pathname + search + hash)` ; système par `navigator.userAgent` (`android` ; `iPhone|iPad|iPod` ou
   `Macintosh` tactile ⇒ iPhone ; sinon choix) ; sans autorité (`/acces/ca.crt` 404), le bouton de téléchargement est
@@ -4063,8 +4068,11 @@ posé par le serveur, délai fixé à 120 s ; en mode serveur, « Ce poste » mo
 demander, et le navigateur ne garde aucune clé (I5 : en mode dossier, inchangé, avec la mention) ; M2 fournisseur
 distant autorisé par `ia_en_ligne` seulement, la case « Autoriser les fournisseurs d'IA en ligne » de Paramètres
 affichant en mode serveur la décision du PC serveur sans la changer ; F2 (précisé à T159) `SEMAPHORE_CONNEXIONS =
-BoundedSemaphore(32)` du module, pris par chaque fil de service dans `ServeurPrevo.process_request_thread` et rendu à
-la fin : la 33e connexion attend son tour, ni refusée ni perdue, une seule limite pour la porte et l'application ;
+BoundedSemaphore(32)` du module, une place prise au premier octet d'une requête et rendue avec sa réponse
+(`GestionnaireRequetes.handle_one_request` : le premier octet est attendu sans place, par `rfile.peek(1)`, donc une
+connexion keep-alive inactive n'en tient aucune — correction du 28/10 : à T159 la place était tenue par connexion et
+cinq navigateurs bloquaient le sixième) ; une requête lente ou laissée à moitié tient sa place, la 33e attend son
+tour, ni refusée ni perdue, une seule limite pour la porte et l'application ;
 corps lu après le contrôle de session (`traiter`, T151) ; délai IA fixé par le serveur (`DELAI_IA_S`, T158) ; une
 sauvegarde manuelle par minute, 429 (T175) ; quota du dossier `documents/` : avant d'écrire, sous `VERROU_ECRITURE`,
 taille du dossier (`taille_des_documents`, parcours `os.scandir` à chaque envoi : un compteur en mémoire se tromperait
