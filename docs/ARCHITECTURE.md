@@ -3372,7 +3372,7 @@ Précisions de T153 (appareils enrôlés, D125, CS123) :
 | `POST /api/acces/appareils/revoquer-tous` | responsable | 200 `{"appareils_revoques": [ids]}` |
 | `POST /api/acces/deconnecter-partout` | responsable (ou soi-même) | sans corps ou `{}` : toutes ses propres sessions, la courante comprise (cookie effacé) ; `{"identifiant": X}` pour un autre compte : responsable seulement (403 sinon), 404 compte inconnu ; 200 `{"identifiant", "sessions_fermees"}` |
 | `GET /api/acces/journal` | responsable | `journal-acces.csv` tel quel (`text/csv`, `Content-Disposition: attachment`), l'en-tête seul tant qu'il n'existe pas |
-| `GET /api/ia/reglages` | tous (session ou appareil) | `{"fournisseur", "url", "cle_reglee": bool, "en_ligne": bool, "portee"}`, jamais la clé (§22.12) |
+| `GET /api/ia/reglages` | technicien, responsable | `{"fournisseur", "url", "cle_reglee": bool, "en_ligne": bool, "portee"}`, jamais la clé (§22.12) |
 | `GET /api/installation/<etape>` | responsable, PC serveur seulement | `etat`, `fiche` (§22.10) ; 404 « Adresse inconnue dans l'API. » à tout client qui n'est pas 127.0.0.1 ou qui est mandaté, avant tout contrôle d'accès |
 | `POST /api/installation/<etape>` | responsable, PC serveur seulement | `situation`, `portee`, `compte`, `certificat`, `tailscale`, `demarrage`, `sauvegardes`, `deplacer`, `terminer` (§22.10) ; même 404 vu du réseau |
 
@@ -3514,8 +3514,8 @@ ce tableau dit la même chose : une route ajoutée à `ROUTES_API` sans sa ligne
 | `POST /api/sauvegarde/tester` | non | non | non | oui |
 | `GET /api/sauvegardes` | non | non | non | oui |
 | `POST /api/restauration` | non | non | non | oui |
-| `POST /api/ia` | oui | oui | oui | oui |
-| `GET /api/ia/reglages` | oui | oui | oui | oui |
+| `POST /api/ia` | non | non | oui | oui |
+| `GET /api/ia/reglages` | non | non | oui | oui |
 | `GET /api/installation/<etape>` | non | non | non | oui |
 | `POST /api/installation/<etape>` | non | non | non | oui |
 
@@ -3565,9 +3565,11 @@ Précisions de T152 :
 - **Sans comptes** : rien ne change (aucune colonne ni ligne retirée, toutes les versions, aucune règle d'écriture).
 
 `App.profil` est déduit de `/api/session` ; l'écran de profil de 1.2 ne sert qu'en portée « ce PC » et en modes dossier
-et démo. L'IA reste ouverte au demandeur (précisé à T158) : l'écran Signaler s'en sert pour reformuler la demande
-(lot 4), le relais n'appelle que le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis à
-`ia_en_ligne`.
+et démo. **L'IA est réservée aux techniciens et au responsable** (arbitrage de Nicolas du 2026-10-28, qui revient sur
+la précision de T158) : `POST /api/ia` et `GET /api/ia/reglages` répondent 403 au demandeur et à l'appareil enrôlé ;
+côté navigateur, `Ia.permiseAuProfil()` est faux pour un demandeur en mode comptes, donc `Ia.active()` aussi : l'écran
+Signaler ne lui propose pas « Proposer avec l'IA » et aucun réglage du serveur n'est lu pour lui. Le relais n'appelle que
+le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis à `ia_en_ligne`.
 
 ### 22.6 Porte d'entrée et certificat local (D127, CS125, CS126, CS137)
 

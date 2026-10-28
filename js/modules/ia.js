@@ -338,10 +338,12 @@ const Ia = (() => {
     return portee(url) !== 'distant' || distantAutorise();
   }
 
-  /** IA utilisable sur ce poste : activée, réglages valides, portée autorisée par le responsable. */
+  /** IA utilisable sur ce poste : activée, réglages valides, portée autorisée par le responsable, profil permis
+   *  (Ia.permiseAuProfil de ia-serveur.js : jamais pour un demandeur en mode comptes, lot 7 §22.5). */
   function active() {
     const r = reglages();
-    return r.actif && urlValide(r.url) && r.modele !== '' && porteeAutorisee(r.url);
+    const permise = typeof Ia === 'undefined' || typeof Ia.permiseAuProfil !== 'function' || Ia.permiseAuProfil();
+    return r.actif && permise && urlValide(r.url) && r.modele !== '' && porteeAutorisee(r.url);
   }
 
   /** 'ok' (le fournisseur a répondu), 'injoignable', ou 'inconnu' (pas testé, ou IA inactive). */

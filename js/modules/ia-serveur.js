@@ -31,6 +31,13 @@ Object.assign(Ia, (() => {
     return typeof App !== 'undefined' && Boolean(App) && App.mode === 'serveur' && !Ia.versionWeb();
   }
 
+  /** L'IA est réservée aux techniciens et au responsable (lot 7, §22.5, arbitrage de Nicolas du 2026-10-28) : faux
+   *  pour un demandeur en mode serveur avec les comptes exigés (le serveur lui répond 403) ; vrai partout ailleurs. */
+  function permiseAuProfil() {
+    if (!modeServeur() || typeof App.comptesExiges !== 'function' || !App.comptesExiges()) return true;
+    return !(typeof App.estDemandeur === 'function' && App.estDemandeur());
+  }
+
   /** Réglages de l'IA lus sur le PC serveur (copie), ou null. */
   function reglagesServeur() {
     return connus ? Object.assign({}, connus) : null;
@@ -59,7 +66,7 @@ Object.assign(Ia, (() => {
 
   /** Relit GET /api/ia/reglages ; promesse de reglagesServeur() (null hors mode serveur). Ne lève jamais. */
   function lireReglagesServeur() {
-    if (!modeServeur()) return Promise.resolve(null);
+    if (!modeServeur() || !permiseAuProfil()) return Promise.resolve(null);   // un demandeur n'a pas l'IA (403)
     if (!lecture) {
       lecture = fetch(ADRESSE_REGLAGES, { cache: 'no-store', headers: { Accept: 'application/json' } })
         .then((reponse) => (reponse.ok ? reponse.json() : null))
@@ -117,10 +124,10 @@ Object.assign(Ia, (() => {
   Ia.evenements.addEventListener('changement', (evenement) => {
     if (!evenement.detail || evenement.detail.raison !== 'ouverture' || !modeServeur()) return;
     oublierAncienReglage();
-    if (Ia.reglages().actif) lireReglagesServeur();
+    if (Ia.reglages().actif) lireReglagesServeur();     // lireReglagesServeur ne fait rien pour un demandeur
   });
 
   Ia.interne.appelRelais = appelRelais;
 
-  return { reglagesServeur, lireReglagesServeur };
+  return { reglagesServeur, lireReglagesServeur, permiseAuProfil };
 })());

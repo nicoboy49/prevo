@@ -4096,6 +4096,7 @@ PHOTOS_DE_DEMANDES = 'photos de demandes'
 DOCUMENTS_DU_DEMANDEUR = 'photos de demandes et documents des équipements'
 TOUS = (OUI, OUI, OUI, OUI)
 RESPONSABLE = (NON, NON, NON, OUI)
+INTERVENANTS = (NON, NON, OUI, OUI)     # technicien et responsable (l'IA : arbitrage de Nicolas du 2026-10-28)
 
 # Route → règle de chaque rôle (ORDRE_DES_ROLES) : OUI, NON (403), ou ce que le rôle y peut (tables permises, règle
 # des documents). Chaque route de ROUTES_API a sa ligne. Les routes publiques et celles du mot de passe provisoire
@@ -4132,8 +4133,8 @@ ROLES_PAR_ROUTE = {
     ('POST', 'sauvegarde/tester'): RESPONSABLE,
     ('GET', 'sauvegardes'): RESPONSABLE,
     ('POST', 'restauration'): RESPONSABLE,
-    ('POST', 'ia'): TOUS,
-    ('GET', 'ia/reglages'): TOUS,
+    ('POST', 'ia'): INTERVENANTS,
+    ('GET', 'ia/reglages'): INTERVENANTS,
     ('GET', 'installation/<etape>'): RESPONSABLE,
     ('POST', 'installation/<etape>'): RESPONSABLE,
 }

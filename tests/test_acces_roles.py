@@ -74,6 +74,7 @@ PHOTOS = "photos de demandes"
 PHOTOS_ET_EQUIPEMENTS = "photos de demandes, documents des équipements"
 TOUS = (OUI, OUI, OUI, OUI)
 RESPONSABLE = (NON, NON, NON, OUI)
+INTERVENANTS = (NON, NON, OUI, OUI)
 
 ATTENDU = {
     # route                                        demandeur, appareil, technicien, responsable
@@ -105,8 +106,8 @@ ATTENDU = {
     ("POST", "sauvegarde/tester"): RESPONSABLE,
     ("GET", "sauvegardes"): RESPONSABLE,
     ("POST", "restauration"): RESPONSABLE,
-    ("POST", "ia"): TOUS,
-    ("GET", "ia/reglages"): TOUS,
+    ("POST", "ia"): INTERVENANTS,
+    ("GET", "ia/reglages"): INTERVENANTS,
     ("GET", "installation/<etape>"): RESPONSABLE,       # T167 (§22.10) : et PC serveur seulement, 404 au réseau
     ("POST", "installation/<etape>"): RESPONSABLE,
 }
