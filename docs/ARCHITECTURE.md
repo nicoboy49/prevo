@@ -3567,6 +3567,29 @@ et démo. L'IA reste ouverte au demandeur (précisé à T158) : l'écran Signale
 sont ignorés. La porte sert alors l'application en http sur 127.0.0.1. Exemples de configuration dans
 `docs/INSTALLATION.md` (`tailscale serve`, Caddy, nginx, IIS, Cloudflare Tunnel).
 
+Précisions de T164 :
+
+- **`origine_mandatee(gestionnaire)`** → `{'protocole', 'hote', 'adresse'}` ou `None`. Attestée seulement si
+  `mandataire` est vrai, que la connexion vient de 127.0.0.1 ou ::1 (`ADRESSES_DE_CE_PC`) et qu'elle porte
+  `X-Forwarded-Proto` (`http` ou `https`, première valeur d'une liste, casse ignorée) et `X-Forwarded-Host` (première
+  valeur, minuscules, port gardé, refusé s'il contient une espace, `/`, `\`, `?` ou `#`) ; l'adresse d'origine est la
+  dernière de `X-Forwarded-For` si elle se lit comme une adresse IP, sinon celle de la connexion. Posée dans
+  `self.mandat` au début de chaque requête ; `None` pour un client direct ou `mandataire` faux : les en-têtes
+  `X-Forwarded-*` sont alors ignorés, jamais crus.
+- **Hôte d'origine** : après `Host`, `hote_autorise(mandat['hote'])` (adresse IP, `localhost`, nom du PC, `noms`) ;
+  sinon 403 `MESSAGE_HOTE_ORIGINE_REFUSE` sur toute route, `/api/ping` compris.
+- **Effets** : `en_https()` = protocole d'origine `https` (cookie `Secure`, HSTS pour un nom de `noms` par
+  `hote_de_la_requete()`) ; `adresse_client()` = adresse d'origine (journal des connexions, ralentissement des
+  échecs) ; `adresses_donnees()` : `/api/info` rend `adresse_locale` = `adresses_reseau[0]` =
+  `<protocole>://<hôte d'origine>/` (QR, étiquettes, carte « Connecter un téléphone ») et `porte` faux pour une
+  requête mandatée ; `client_de_confiance()` vrai : la porte (§22.6) sert l'application en http au mandataire. La
+  colonne `tailscale` du journal garde la règle de T151 (`mandataire` vrai et connexion venue de ce PC), que la
+  requête porte ou non les en-têtes `X-Forwarded-*`.
+- **Tests** : `tests/mandataire_test.py` (`MandataireTest` : relais inverse en bibliothèque standard sur 127.0.0.1,
+  qui ajoute `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-For` et au choix `Tailscale-User-Login` ;
+  `forwarded=False` pour un simple relais), `tests/test_acces_mandataire.py` (serveur en portée Intranet par
+  `ServeurPrevo(comptes=True, reglages={'mandataire': True, 'noms': [...]})`).
+
 ### 22.8 Tailscale (D128, CS127)
 
 `detecter_tailscale()` lance `tailscale version` et `tailscale status --json` (chemin standard de chaque système,

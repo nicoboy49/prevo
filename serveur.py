@@ -2114,6 +2114,38 @@ def hote_autorise(valeur_host, config):
 
 
 # ---------------------------------------------------------------------------
+# Derrière un mandataire (lot 7, ARCHITECTURE.md §22.7 ; D129, CS128)
+# ---------------------------------------------------------------------------
+
+ADRESSES_DE_CE_PC = ('127.0.0.1', '::1')
+PROTOCOLES_MANDATES = ('http', 'https')
+MESSAGE_HOTE_ORIGINE_REFUSE = ('Nom d\'hôte d\'origine refusé (X-Forwarded-Host) : ajoutez-le aux noms acceptés '
+                               '(« noms » de la configuration).')
+
+
+def origine_mandatee(gestionnaire):
+    """Origine d'une requête derrière un mandataire attesté (§22.7) : {'protocole', 'hote', 'adresse'}, ou None pour
+    un client direct. Attestée seulement si « mandataire » est vrai, que la connexion vient de 127.0.0.1 ou ::1 (le
+    mandataire tourne sur ce PC : tailscale serve, Caddy, nginx, IIS) et qu'elle porte X-Forwarded-Proto (http ou
+    https) et X-Forwarded-Host. Sinon les en-têtes X-Forwarded-* sont ignorés, jamais crus (un client direct peut
+    les forger). L'adresse d'origine est la dernière de X-Forwarded-For (celle que le mandataire a vue), si elle se
+    lit ; sinon celle de la connexion. L'hôte d'origine garde son port éventuel (adresses données par Prévo)."""
+    config = gestionnaire.config
+    reglages = getattr(config, 'reglages', None) or {}
+    if not reglages.get('mandataire') or gestionnaire.client_address[0] not in ADRESSES_DE_CE_PC:
+        return None
+    protocole = (gestionnaire.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
+    hote = (gestionnaire.headers.get('X-Forwarded-Host') or '').split(',')[0].strip().lower()
+    if protocole not in PROTOCOLES_MANDATES or not hote or any(c.isspace() or c in '/\\?#' for c in hote):
+        return None
+    adresse = gestionnaire.client_address[0]
+    pour = (gestionnaire.headers.get('X-Forwarded-For') or '').split(',')[-1].strip().strip('[]')
+    if pour and est_une_adresse_ip(pour):
+        adresse = pour
+    return {'protocole': protocole, 'hote': hote, 'adresse': adresse}
+
+
+# ---------------------------------------------------------------------------
 # Analyse et contrôle des chemins
 # ---------------------------------------------------------------------------
 
@@ -3518,9 +3550,12 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.corps_lu = methode not in ('PUT', 'POST')
         self.lecture_commencee = False
         self.session = None
+        self.mandat = origine_mandatee(self)        # §22.7 : None pour un client direct
         try:
             if not hote_autorise(self.headers.get('Host'), self.config):
                 raise ErreurHttp(403, 'Nom d\'hôte refusé. Utilisez l\'adresse IP du PC.')
+            if self.mandat is not None and not hote_autorise(self.mandat['hote'], self.config):
+                raise ErreurHttp(403, MESSAGE_HOTE_ORIGINE_REFUSE)
             morceaux = analyser_chemin(self.path)
             if self.sur_la_porte():
                 self.servir_porte(methode, morceaux)       # client du réseau sur port_http : la porte, rien d'autre
@@ -3591,13 +3626,30 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         verifier_role(self.config, identite, route, segment_de_route(motif, morceaux))
         return identite
 
+    mandat = None               # origine_mandatee(self), posée au début de chaque requête (§22.7)
+
     def adresse_client(self):
-        """Adresse du client pour le journal et le ralentissement (T164 : celle d'origine derrière un mandataire)."""
-        return self.client_address[0]
+        """Adresse du client pour le journal et le ralentissement : celle d'origine derrière un mandataire attesté."""
+        return self.mandat['adresse'] if self.mandat is not None else self.client_address[0]
 
     def en_https(self):
-        """Requête arrivée en https : cookie Secure (T164 : aussi derrière un mandataire en https)."""
+        """Requête arrivée en https (cookie Secure, HSTS) : TLS sur ce serveur, ou mandataire attesté en https."""
+        if self.mandat is not None:
+            return self.mandat['protocole'] == 'https'
         return isinstance(self.request, ssl.SSLSocket)
+
+    def hote_de_la_requete(self):
+        """Nom d'hôte vu par le navigateur (sans port) : l'hôte d'origine derrière un mandataire, sinon Host."""
+        return extraire_nom_hote(self.mandat['hote'] if self.mandat is not None else self.headers.get('Host', ''))
+
+    def adresses_donnees(self):
+        """(adresse locale, adresses réseau) que Prévo donne à ce client (/api/info, QR, étiquettes) : derrière un
+        mandataire attesté, l'adresse d'origine (protocole et hôte des en-têtes, port compris) ; sinon celles du
+        serveur (la porte hors de « ce PC », §22.6)."""
+        if self.mandat is not None:
+            origine = '%s://%s/' % (self.mandat['protocole'], self.mandat['hote'])
+            return origine, [origine]
+        return self.config.adresse_locale(), self.config.adresses_reseau()
 
     def origine(self):
         """(adresse, agent, Tailscale) d'une ligne du journal des connexions. L'en-tête Tailscale-User-Login n'est cru
@@ -3624,9 +3676,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
 
     def client_de_confiance(self):
         """Client servi comme l'application même sur la porte : le PC serveur lui-même (127.0.0.1, ::1), dont le
-        navigateur est en contexte sécurisé en http. T164 y ajoute le mandataire attesté (mandataire vrai, en-têtes
-        X-Forwarded-* venus de ce PC)."""
-        return self.client_address[0] in ('127.0.0.1', '::1')
+        navigateur est en contexte sécurisé en http, et le mandataire attesté (§22.7 : « mandataire » vrai, en-têtes
+        X-Forwarded-* venus de ce PC), qui porte lui-même le https."""
+        return self.client_address[0] in ADRESSES_DE_CE_PC or self.mandat is not None
 
     def sur_la_porte(self):
         """Requête d'un client du réseau arrivée sur la porte (port_http hors de « ce PC ») : seule la page de porte."""
@@ -3716,10 +3768,11 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         ouverte (la carte « Connecter un téléphone » rappelle alors « Faites confiance au PC atelier »), et l'état de
         la copie externe des sauvegardes (D133 ; None sans dossier). Jamais le port https : il n'est pas une adresse
         que Prévo donne (CS137)."""
+        adresse_locale, adresses_reseau = self.adresses_donnees()
         self.envoyer_json(200, {'port': self.config.port,
-                                'adresse_locale': self.config.adresse_locale(),
-                                'adresses_reseau': self.config.adresses_reseau(),
-                                'porte': self.config.porte,
+                                'adresse_locale': adresse_locale,
+                                'adresses_reseau': adresses_reseau,
+                                'porte': self.config.porte and self.mandat is None,
                                 'copie_externe': etat_copie_externe_public(self.config)})
 
     def api_session(self, segment, corps):
@@ -4080,7 +4133,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         entetes['Content-Security-Policy'] = POLITIQUE_CONTENU % origines
         # HSTS seulement pour un nom déclaré (jamais une adresse IP : un retour en http serait bloqué), sur une
         # requête arrivée en https (jamais par la porte, ni pour le PC servi en http).
-        hote = extraire_nom_hote(self.headers.get('Host', ''))
+        hote = self.hote_de_la_requete()
         if (self.en_https() and hote and not est_une_adresse_ip(hote)
                 and hote in self.config.hotes_supplementaires):
             entetes['Strict-Transport-Security'] = 'max-age=%d' % DUREE_HSTS_S
