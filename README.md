@@ -45,41 +45,82 @@ en ZIP.
 
 ## Installation
 
-### Mode dossier (un seul poste, sans Python)
+1. **Dézippez** le zip de la [dernière version](https://github.com/nicoboy49/prevo/releases/latest) et placez son
+   dossier en `C:\Prevo` (conseillé ; ailleurs, l'assistant propose de l'y déplacer).
+2. **Double-cliquez sur `Lancer_GMAO.bat`** : Python est dans le zip, il n'y a rien d'autre à installer. Sur Mac
+   ou Linux : `./lancer.sh` (Python 3.11 ou plus récent).
+3. **Suivez l'assistant** qui s'ouvre dans le navigateur : trois questions (qui utilise Prévo, d'où, votre
+   compte), puis il règle le reste et prépare la fiche d'accès à imprimer.
 
-Ouvrez `index.html` dans **Chrome ou Edge**, cliquez sur « Choisir le dossier de données » et
-désignez un dossier de votre PC. Ce mode est fait pour **un seul poste à la fois** (un
-avertissement s'affiche si une autre session semble ouverte) ; pour plusieurs postes ou des
-téléphones, utilisez le mode serveur. Prévo lit et écrit les fichiers CSV dans ce dossier. Au
-lancement suivant, « Reprendre le dossier précédent » évite de le choisir à nouveau. Ce mode utilise
-l'API d'accès aux fichiers de Chrome et d'Edge ; Firefox et Safari ne la proposent pas.
+Tant que l'installation n'est pas terminée, Prévo n'est joignable que sur ce PC. Au-delà de ce PC, comptes et
+https sont obligatoires : Prévo refuse de démarrer autrement. Tout se refait ensuite dans Paramètres › Accès et
+installation, sur le PC serveur. Le guide détaille chaque étape ([GUIDE.html](GUIDE.html), chapitres 2 et 8).
+Vous aviez Prévo 1.2 ? Mettez la nouvelle version dans le même dossier : le zip n'a pas de dossier `donnees/`,
+vos fichiers CSV restent, et l'assistant n'en remplace aucun.
 
-### Mode serveur (plusieurs postes et téléphones)
+### Quelle installation pour vous ?
 
-Il faut Python 3.8 ou plus récent ; le serveur n'utilise que la bibliothèque standard.
+| | Solo | Atelier | Intranet | Hébergé |
+| --- | --- | --- | --- | --- |
+| **Pour qui** | Une personne en maintenance | Une équipe de 1 à 3 techniciens, et des demandeurs | Une entreprise avec un informaticien | Une entreprise qui ne veut rien installer |
+| **Où tourne Prévo** | Votre PC | Un PC ou un mini-PC de l'atelier | Un serveur de l'entreprise | Chez un hébergeur |
+| **Qui installe** | Vous, avec l'assistant | Le responsable, avec l'assistant ; puis deux minutes par téléphone, une seule fois | L'informaticien, avec [docs/INSTALLATION.md](docs/INSTALLATION.md) | Un prestataire |
+| **Téléphone dans l'atelier** | Oui, avec votre mot de passe | Oui, étiquettes QR comprises | Oui | Oui |
+| **Téléphone hors de l'atelier** | Oui, par un réseau privé (Tailscale) | Oui, par Tailscale | Par le VPN de l'entreprise | Oui |
+| **Comptes** | Aucun sur ce PC seul ; le vôtre dès qu'un téléphone se connecte | Un par technicien ; les demandeurs par téléphone enrôlé (QR, sans mot de passe) | Un par personne, demandeurs compris | Un par personne |
+| **Démarre avec la machine** | Au choix | Oui | Oui (tâche planifiée ou service) | — |
+| **Sauvegardes** | Chaque jour, et copie externe chaque nuit | Chaque jour, et copie externe chaque nuit | Chaque jour, et celles de l'entreprise | Celles de l'hébergeur |
+| **Disponible** | Dans Prévo 2 | Dans Prévo 2 | Dans Prévo 2 | Sur demande, auprès de SELECTIS (https://selectis.eu) |
 
-- Windows : double-cliquez sur `Lancer_GMAO.bat`. Si Python est absent, le lanceur propose de
-  l'installer avec winget (avec votre accord).
-- Mac ou Linux : `./lancer.sh`.
-- Directement : `py serveur.py` (Windows) ou `python3 serveur.py`. Options : `--port`,
-  `--donnees CHEMIN`, `--sans-navigateur`, `--hote NOM`, et `--certificat FICHIER --cle FICHIER`
-  pour le https (voir plus bas). Les lanceurs transmettent ces options.
+Hébergé n'est pas dans le zip : c'est une prestation, étudiée sur demande avec SELECTIS.
 
-Au premier lancement sous Windows, le pare-feu demande d'autoriser Python : **cochez uniquement
-« Réseau privé »**, jamais « Réseau public ».
+### Pour l'informaticien
 
-Pour connecter un téléphone, il doit être sur le **même Wi-Fi** que le PC. L'écran d'accueil
-affiche un QR code de l'adresse du PC : scannez-le avec l'appareil photo du téléphone.
+Configuration (`prevo.config.json` et chacune de ses clés), mandataires inverses (`tailscale serve`, Caddy, nginx,
+IIS, Cloudflare Tunnel), démarrage en tâche planifiée ou en service, comptes, journaux, sauvegardes, mise à jour et
+désinstallation : [docs/INSTALLATION.md](docs/INSTALLATION.md). Ce document n'est pas dans le zip : lisez-le dans
+le dépôt (https://github.com/nicoboy49/prevo/blob/main/docs/INSTALLATION.md).
+
+### Pare-feu et téléphones
+
+Quand Prévo démarre avec le PC, l'assistant ajoute lui-même une règle au pare-feu de Windows, limitée au réseau
+privé de l'atelier. Sinon, au premier lancement sur le réseau, Windows demande d'autoriser Python : **cochez
+uniquement « Réseaux privés »**, jamais « Réseaux publics ».
+
+Un téléphone doit être sur le **même Wi-Fi** que le PC serveur (ou sur le réseau privé Tailscale). Il scanne le QR
+code de l'accueil du responsable, ou l'adresse de la fiche d'accès. La première fois, la page « Faites confiance au
+PC atelier » guide l'installation du certificat de l'atelier (Android, iPhone) ; ensuite Prévo s'ouvre en https,
+avec la caméra et le micro. Un demandeur n'a pas de mot de passe : le responsable lui envoie une invitation (QR).
 
 Les données du mode serveur sont dans le dossier `donnees/` (hors dépôt git), avec les sauvegardes
-quotidiennes (`donnees/sauvegardes/`) et les documents joints.
+quotidiennes (`donnees/sauvegardes/`), les documents joints et les comptes (`donnees/acces/`).
+
+### Mode dossier (un seul poste, sans serveur)
+
+Ouvrez `index.html` dans **Chrome ou Edge**, cliquez sur « Choisir le dossier de données » et désignez un dossier
+de votre PC : Prévo y lit et écrit les fichiers CSV. Ce mode est fait pour **un seul poste à la fois**, sans
+téléphone ni compte ; « Reprendre le dossier précédent » évite de le choisir à nouveau. Il utilise l'API d'accès
+aux fichiers de Chrome et d'Edge ; Firefox et Safari ne la proposent pas. Pour travailler à plusieurs, avec des
+téléphones ou avec l'assistant IA, installez Prévo (ci-dessus) : même seul sur un PC, c'est le mode conseillé.
 
 ## Fonctions par module
 
 - **Trois modes de stockage** : dossier, serveur Python local, démo en mémoire. Écritures concurrentes
   gérées : en cas de conflit, la modification est rejouée sur la version la plus récente du fichier
   (trois essais). Les tables modifiées sur un autre poste sont relues toutes seules.
-- **Profils** Demandeur, Technicien et Responsable : menus et écrans adaptés (ce n'est pas une sécurité).
+- **Rôles** Demandeur, Technicien et Responsable : menus et écrans adaptés. Avec les comptes, le serveur vérifie
+  le rôle à chaque requête (un demandeur ne voit ni coûts ni techniciens, un technicien ni taux horaire ni prix) ;
+  sans comptes (ce PC seul, mode dossier, démo), le profil adapte seulement les écrans.
+- **Accès et comptes** (mode serveur) : trois portées (ce PC, le Wi-Fi de l'atelier, aussi hors de l'atelier) ;
+  au-delà de ce PC, connexion obligatoire et https. Comptes vérifiés par le serveur (mot de passe gardé en
+  empreinte, blocage après dix échecs, « Rester connecté sur cet appareil »), créés et désactivés dans Équipe ›
+  Accès, avec le journal des connexions exportable ; téléphones des demandeurs enrôlés par un QR d'invitation, sans
+  mot de passe, révocables à tout moment. Le https sans rien acheter : une porte d'entrée en http conduit chaque
+  appareil en https, avec un certificat que Prévo fabrique pour l'atelier ; hors de l'atelier par Tailscale, sans
+  ouvrir la box ; démarrage avec le PC (tâche planifiée Windows, service systemd). Assistant d'installation en trois
+  questions, fiche d'accès imprimable, et Paramètres › Accès et installation pour tout refaire depuis le PC serveur.
+- **Mode Solo** (une personne fait tout) : le profil responsable avec un menu allégé, « Nouvel OT » en premier, le
+  technicien « moi » pré-rempli et la clôture en une étape.
 - **Accueil** par profil : compteurs du responsable (DI à traiter, OT en retard, P1 ouverts, préventifs
   de la semaine, articles à commander, contrôles sous 30 jours, habilitations à renouveler, suggestions
   de préventif), OT du technicien, demandes du demandeur ; QR code de connexion en mode serveur.
@@ -118,8 +159,8 @@ quotidiennes (`donnees/sauvegardes/`) et les documents joints.
 - **Rapport mensuel figé** : une page A4 par mois (chiffres comparés, faits marquants, points à
   examiner dont « réparer ou remplacer ? »), qui se rouvre sans Prévo ; « Préparer un courriel »
   ouvre la messagerie du poste, Prévo n'envoie rien lui-même.
-- **Paramètres** : réglages partagés, codes de défaillance, sauvegardes et restauration, contrôle de la
-  base, export ZIP.
+- **Paramètres** : réglages partagés, codes de défaillance, sauvegardes (test d'une sauvegarde, copie externe
+  chaque nuit en mode serveur) et restauration, contrôle de la base, export ZIP.
 - **Reprendre ses données** (responsable) : l'assistant « Importer des données » reprend, en cinq étapes,
   les listes d'un atelier (localisations, équipements, articles, fournisseurs, techniciens et
   habilitations, codes, compteurs, contrôles, gammes) et l'historique des interventions d'une autre GMAO, depuis Excel (.xlsx,
@@ -131,9 +172,11 @@ quotidiennes (`donnees/sauvegardes/`) et les documents joints.
   compte rendu structuré, des codes de défaillance pris **uniquement** dans la liste existante, une
   check-list de gamme, un commentaire du rapport mensuel et les textes du wiki de maintenance (ci-dessous).
   L'IA propose, l'humain valide (« Utiliser », « Modifier », « Ignorer ») : rien n'est écrit sans clic.
-  Une mention permanente dit où vont les textes (« reste sur ce PC »… « données envoyées à … ») ; les
-  fournisseurs en ligne ne sont utilisables que si le responsable les autorise ; la clé d'accès reste
-  dans le navigateur du poste. En mode serveur, les appels passent par le serveur de Prévo.
+  Une mention permanente dit où vont les textes (« reste sur ce PC »… « données envoyées à … »). En mode
+  serveur, le fournisseur, son adresse et sa clé sont réglés une fois sur le PC serveur, jamais dans un
+  navigateur, et le serveur relaie les demandes de tous les postes ; un fournisseur en ligne n'est utilisable que
+  si le PC serveur l'autorise. Avec les comptes, l'IA est réservée aux techniciens et au responsable. En mode
+  dossier, la clé reste dans le navigateur du poste.
 - **Wiki de maintenance** : l'encyclopédie de l'atelier (menu « Wiki ») : une page par machine, panne,
   article, technicien, intervention et savoir-faire, toutes reliées. Les faits (pannes, interventions,
   pièces, stock, habilitations) sont calculés par Prévo sans IA, et la recherche n'utilise pas l'IA.
@@ -148,12 +191,9 @@ quotidiennes (`donnees/sauvegardes/`) et les documents joints.
   des comptes rendus ; rien n'est facturé avec Ollama.
 - **Dictée vocale** : bouton micro sur les champs de texte longs, texte ajouté à la fin du champ,
   avertissement à la première utilisation (la voix est transcrite par Google ou Microsoft), désactivable
-  par poste ; sur téléphone sans https, Prévo rappelle le micro du clavier.
-- **Ce poste** : écran ouvert à tous pour les réglages du navigateur (profil et nom du poste, assistant
-  IA, dictée, **thème clair** ou sombre).
-- **https en option** : `serveur.py --certificat … --cle …` avec un certificat que vous fournissez (le
-  guide explique mkcert et l'installation sur Android et iPhone), pour avoir le micro et la caméra dans
-  la page sur les téléphones. Les étiquettes QR imprimées en http sont alors à réimprimer.
+  par poste ; sans page sécurisée, Prévo rappelle le micro du clavier.
+- **Ce poste** : écran ouvert à tous pour les réglages du navigateur (profil et nom du poste sans comptes,
+  assistant IA, dictée, **thème clair** ou sombre).
 - **Mise à jour signalée** (responsable, désactivée par défaut) : Paramètres, « Me signaler les nouvelles
   versions de Prévo » ; Prévo lit alors `https://prevo.pro/version.json` au plus une fois par jour et par
   poste et dit, sur l'accueil du responsable et dans « À propos », qu'une version plus récente existe, avec
@@ -177,24 +217,36 @@ Pour lancer les tests ou contribuer : voir CONTRIBUTING.md.
 
 ## Limites connues
 
-- **Pas d'authentification.** Les profils adaptent l'interface ; ils ne sont pas une mesure de
-  sécurité. Toute personne qui atteint le serveur peut lire et écrire les données.
-- **Réseau local uniquement.** Le serveur n'est pas conçu pour être exposé sur Internet ; il n'a pas de
-  gestion de comptes. Le https est une option, avec un certificat que vous fournissez.
-- **Le serveur ne sert que l'application.** Il répond seulement pour `index.html`, `favicon.svg`,
-  `GUIDE.html` et les dossiers `css/` et `js/` (liste blanche). Tout autre fichier du dossier
-  (`README.md`, `docs/`, `tests/`, `outils/`, `serveur.py`…) répond « introuvable » (404), et le dossier
-  `donnees/` n'est accessible que par l'API de l'application. Ce n'est pas une protection des données :
-  sans authentification, l'API reste ouverte à qui atteint le serveur.
+- **Un certificat à reconnaître par appareil.** Sur le Wi-Fi de l'atelier, chaque téléphone et chaque autre poste
+  fait confiance au PC atelier une fois, guidé par la page de Prévo ; d'ici là, il reste sur cette page et n'ouvre
+  pas Prévo. Un certificat fourni par l'informaticien, ou l'accès par Tailscale, évite cette étape.
+- **Hors de l'atelier, il faut Tailscale ou un VPN.** Tailscale demande un compte chez Tailscale (un service
+  tiers), son application sur le PC serveur et sur chaque téléphone. Prévo n'ouvre jamais la box. N'exposez Prévo
+  sur Internet que derrière Tailscale, le VPN de l'entreprise ou un mandataire inverse en https
+  ([docs/INSTALLATION.md](docs/INSTALLATION.md)) : Prévo n'a pas de double facteur.
+- **Pas d'annuaire d'entreprise.** Ni Active Directory, ni LDAP, ni connexion unique : des comptes locaux, l'export
+  du journal des connexions, et le mandataire inverse ou le VPN de l'entreprise pour vos propres contrôles d'accès.
+- **L'hébergement n'est pas fourni.** Prévo s'installe chez vous, sur un PC qui doit rester allumé ; un hébergement
+  se discute sur demande avec SELECTIS.
+- **Sans comptes, les profils ne protègent rien.** Sur ce PC seul, en mode dossier et en démo, chacun choisit son
+  profil : les profils adaptent les écrans. C'est pourquoi Prévo refuse d'écouter le réseau sans comptes ni https.
+- **Le serveur ne sert que l'application.** Il répond seulement pour `index.html`, `favicon.svg`, `GUIDE.html` et
+  les dossiers `css/`, `js/` et `acces/` (la porte d'entrée) : c'est une liste blanche. Tout autre fichier du dossier
+  (`README.md`, `docs/`, `tests/`, `outils/`, `serveur.py`…) répond « introuvable » (404). Les données ne passent
+  que par l'API de l'application, après connexion et selon le rôle ; `donnees/acces/` (comptes, sessions) n'est
+  jamais servi.
+- **Python.** Le zip embarque Python pour Windows 64 bits ; ailleurs, il faut Python 3.11 ou plus récent (et, pour
+  le certificat de l'atelier, le mkcert du système : voir [docs/INSTALLATION.md](docs/INSTALLATION.md)).
 - **Chrome ou Edge requis pour le mode dossier** (API d'accès aux fichiers).
 - **Coût des pièces au prix actuel.** Le coût d'un OT utilise le prix actuel de l'article ; une
   réception d'achat ne change pas ce prix (le responsable le modifie à la main), mais un changement
   de prix modifie aussi le coût des OT passés, et donc les indicateurs de coût. Un rapport mensuel
   figé, lui, garde les chiffres du jour où il a été figé (« Recalculer » en crée une nouvelle version).
-- **Étiquettes QR et adresse du PC.** En mode serveur, le QR contient l'adresse réseau du PC. Si
-  elle change (la box attribue une autre adresse, le port change), les étiquettes déjà collées ne
-  mènent plus à la fiche : réservez une adresse fixe pour ce PC dans la box. En modes dossier et
-  démo, le QR contient `GMAO:<identifiant>`, lisible seulement par le scan de Prévo sur ce poste.
+- **Étiquettes QR et adresse du PC.** En mode serveur, le QR contient l'adresse réseau du PC (celle de la
+  porte d'entrée, en http : elle ne change pas avec le https). Si elle change (la box attribue une autre
+  adresse, le port change), les étiquettes déjà collées ne mènent plus à la fiche : réservez une adresse fixe
+  pour ce PC dans la box. En modes dossier et démo, le QR contient `GMAO:<identifiant>`, lisible seulement par
+  le scan de Prévo sur ce poste.
 - **Les indicateurs valent ce que vaut la saisie.** MTBF, MTTR et disponibilité reposent sur la durée
   d'arrêt saisie à la clôture et sur les heures de fonctionnement par jour de chaque équipement ; un
   équipement sans ces heures est exclu, et la liste des exclus est affichée. « Dont attente de
@@ -207,8 +259,8 @@ Pour lancer les tests ou contribuer : voir CONTRIBUTING.md.
   une gamme » (avant, l'absence d'anomalie n'était pas saisie).
 - **Assistant IA.** Une proposition peut être fausse : elle est toujours relue avant d'être utilisée.
   Un modèle local est lent sans carte graphique (plus d'une minute par réponse est possible). En modes
-  dossier et démo, Ollama doit autoriser les pages ouvertes depuis le disque (`OLLAMA_ORIGINS`, voir
-  le guide) ; un fournisseur en ligne reçoit les textes envoyés.
+  dossier et démo, Ollama refuse la page ouverte depuis le disque : pour l'IA, lancez Prévo en mode serveur,
+  même seul sur un PC. Un fournisseur en ligne reçoit les textes envoyés.
 - **Wiki de maintenance.** Il ne se fabrique qu'à partir des OT clôturés administrativement ; ses textes
   rédigés sont contrôlés et validés, mais restent à relire. Les textes du wiki de la démo ont été écrits
   par Claude Sonnet (un agent par OT, avec la consigne de Prévo) puis relus : ils décrivent un atelier
@@ -216,8 +268,6 @@ Pour lancer les tests ou contribuer : voir CONTRIBUTING.md.
   facturé, mais la qualité des textes et la durée n'ont pas été mesurées.
 - **Dictée.** Elle dépend du navigateur : Chrome et Edge envoient la voix à Google ou Microsoft, et
   le micro n'est permis que sur une page sécurisée (sur le PC lui-même, ou en https).
-- Sur téléphone en mode serveur sans https, le scan par caméra intégrée à la page et la dictée ne sont
-  pas proposés : la photo passe par l'appareil photo du téléphone, la dictée par le micro du clavier.
 
 ## Comment ce projet a été fait
 

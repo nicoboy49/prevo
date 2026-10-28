@@ -5,7 +5,10 @@ labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
-      value: "**N'envoyez aucune donnée réelle de votre entreprise.**"
+      value: |
+        **N'envoyez aucune donnée réelle de votre entreprise.**
+
+        **Ne collez jamais** un mot de passe, un jeton, un cookie, une clé d'IA, ni le contenu du dossier `donnees/acces/` ou de `prevo.config.json`.
   - type: textarea
     id: besoin
     attributes:
@@ -20,6 +23,17 @@ body:
       description: "Avec Prévo, un tableur, un cahier… et ce qui coince."
     validations:
       required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: "Votre installation (facultatif)"
+      options:
+        - "Solo (une personne, un PC)"
+        - "Atelier (une petite équipe sur le Wi-Fi)"
+        - "Intranet (installé par l'informaticien)"
+        - "Mode dossier ou démo"
+    validations:
+      required: false
   - type: textarea
     id: aide
     attributes:

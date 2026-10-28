@@ -1,10 +1,13 @@
-"""Tests du dépôt : bibliothèques tierces, police, licences, favicon, règles git et découpage des
-modules JavaScript (taille, ordre de chargement dans index.html).
+"""Tests du dépôt : bibliothèques tierces, police, licences, favicon, règles git, découpage des
+modules JavaScript (taille, ordre de chargement dans index.html) et documentation du lot 7 (README,
+docs/INSTALLATION.md, ARCHITECTURE §22).
 
 Bibliothèque standard seulement. Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_depot.py" -v
 """
 import hashlib
+import importlib.util
+import json
 import re
 import subprocess
 import unittest
@@ -203,7 +206,7 @@ class TestModules(unittest.TestCase):
 # Documents publics du dépôt : aucun chemin ni outil personnel du poste de développement
 # (lettre de lecteur Windows, dossier d'utilisateur, dossier synchronisé, service de synchronisation,
 # chemin Git Bash). Motifs génériques (audit G5) : le test ne cite aucun dossier réel du poste.
-DOCUMENTS_PUBLICS = ["README.md", "docs/PILOTAGE.md", "GUIDE.html", "FICHE_TECHNIQUE_CSV.md"]
+DOCUMENTS_PUBLICS = ["README.md", "docs/PILOTAGE.md", "GUIDE.html", "FICHE_TECHNIQUE_CSV.md", "docs/INSTALLATION.md"]
 MOTIF_CHEMIN_PERSONNEL = re.compile(
     r"\b[A-Za-z]:\\(?!Prevo\b)"                            # lecteur Windows : X:\… (sauf C:\Prevo, le dossier
                                                             # conseillé par l'assistant, D131 : un chemin du produit)
@@ -238,6 +241,97 @@ class TestDocumentsPublics(unittest.TestCase):
                        "docs/a/x", "base64 +/w/Erl6L7", "rsync -a", "nuage de points"):
             with self.subTest(propre=propre):
                 self.assertEqual(chemins_personnels(propre), [], propre)
+
+
+# Documentation du lot 7 (T178 ; CS135, D136, D138) : le README porte la grille Solo / Atelier / Intranet / Hébergé
+# (aucun prix) et ses limites revues (plus de « pas d'authentification »), renvoie à docs/INSTALLATION.md, qui
+# documente les mandataires et recopie toutes les clés de la configuration (CLES_CONFIGURATION de serveur.py, la
+# seule source, celle que « serveur.py --aide » imprime) ; ARCHITECTURE garde le contrat du lot (§22).
+INSTALLATION = "docs/INSTALLATION.md"
+GRILLE = ("Solo", "Atelier", "Intranet", "Hébergé")
+DEBUT_CLES = "<!-- cles-configuration:debut -->"
+FIN_CLES = "<!-- cles-configuration:fin -->"
+MOTIF_LIGNE_CLE = re.compile(r"^\| `([a-z_]+)` \| (.*?) \| (.*?) \| (.*) \|$", re.MULTILINE)
+
+
+def charger_serveur():
+    """serveur.py lu comme module (rien n'est lancé), comme tests/test_acces_config.py."""
+    specification = importlib.util.spec_from_file_location("serveur_prevo_depot", RACINE / "serveur.py")
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    return module
+
+
+def tableaux_markdown(texte):
+    """Tableaux Markdown d'un texte : chacun est la liste de ses lignes (lignes consécutives commençant par « | »)."""
+    tableaux, courant = [], []
+    for ligne in texte.splitlines():
+        if ligne.lstrip().startswith("|"):
+            courant.append(ligne.strip())
+        elif courant:
+            tableaux.append(courant)
+            courant = []
+    return tableaux + ([courant] if courant else [])
+
+
+def cellules(ligne):
+    return [cellule.strip() for cellule in ligne.strip().strip("|").split("|")]
+
+
+class TestDocumentationLot7(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.readme = lire("README.md")
+        chemin = RACINE / INSTALLATION
+        cls.installation = chemin.read_text(encoding="utf-8") if chemin.is_file() else ""
+
+    def test_readme_limites_revues(self):
+        texte = self.readme.lower().replace("’", "'")
+        # « ollama_origins » : le guide ne conseille plus ce réglage (D134, M4).
+        for interdit in ("pas d'authentification", "réseau local uniquement", "ollama_origins"):
+            with self.subTest(interdit=interdit):
+                self.assertFalse(interdit in texte, "README.md contient encore « %s »" % interdit)
+
+    def test_readme_grille_dans_un_meme_tableau_sans_prix(self):
+        grilles = [t for t in tableaux_markdown(self.readme) if all(mot in cellules(t[0]) for mot in GRILLE)]
+        self.assertEqual(len(grilles), 1, "un tableau dont l'en-tête porte Solo, Atelier, Intranet et Hébergé")
+        grille = "\n".join(grilles[0])
+        self.assertIn("sur demande", grille.lower())
+        self.assertIn("SELECTIS", grille)
+        self.assertIsNone(re.search(r"€|\$|\beuros?\b|\bHT\b|\bTTC\b|/ ?mois", grille, re.IGNORECASE),
+                          "aucun prix dans la grille (D136)")
+
+    def test_readme_renvoie_a_installation(self):
+        self.assertIn("(%s)" % INSTALLATION, self.readme)
+        self.assertIn("Hébergé", self.readme)
+
+    def test_installation_mandataires(self):
+        self.assertTrue((RACINE / INSTALLATION).is_file(), INSTALLATION + " absent")
+        for attendu in ("X-Forwarded-Proto", "X-Forwarded-Host", "tailscale serve", "Caddy", "nginx", "IIS",
+                        "Cloudflare Tunnel", '"mandataire": true', "127.0.0.1", "systemd", "Retirer_demarrage.ps1",
+                        "Reinitialiser_mot_de_passe.bat", "--reinitialiser", "journal-acces.csv", "sessions.json",
+                        "annuaire", "RGPD", "prevo.config.json"):
+            with self.subTest(attendu=attendu):
+                self.assertIn(attendu, self.installation)
+
+    def test_installation_recopie_toutes_les_cles_de_configuration(self):
+        serveur = charger_serveur()
+        self.assertIn(DEBUT_CLES, self.installation)
+        self.assertIn(FIN_CLES, self.installation)
+        section = self.installation.split(DEBUT_CLES, 1)[1].split(FIN_CLES, 1)[0]
+        lignes = MOTIF_LIGNE_CLE.findall(section)
+        self.assertEqual([ligne[0] for ligne in lignes], [cle for cle, _, _, _ in serveur.CLES_CONFIGURATION])
+        # Recopie fidèle : type, défaut (en JSON, tel qu'on l'écrit dans le fichier) et aide de chaque clé, comme
+        # « serveur.py --aide » les imprime (texte_aide_configuration).
+        for (cle, genre, defaut, aide), (_, genre_doc, defaut_doc, aide_doc) in zip(serveur.CLES_CONFIGURATION, lignes):
+            with self.subTest(cle=cle):
+                self.assertEqual(genre_doc, genre.replace("choix:", "un parmi ").replace("|", ", "))
+                self.assertEqual(defaut_doc, "`%s`" % json.dumps(defaut, ensure_ascii=False))
+                self.assertEqual(aide_doc, aide)
+
+    def test_architecture_contrat_du_lot_7(self):
+        self.assertIn("\n## 22. ", lire("docs/ARCHITECTURE.md"))
 
 
 if __name__ == "__main__":

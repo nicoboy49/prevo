@@ -1,6 +1,6 @@
 # Fiche technique des fichiers CSV de Prévo
 
-Document généré par `outils/generer_fiche_csv.py` d'après `js/schema.js` (et, pour la section 4, `js/modules/import-regles.js`) : ne pas le modifier à la main.
+Document généré par `outils/generer_fiche_csv.py` d'après `js/schema.js` (et, pour la section 4, `js/modules/import-regles.js` ; pour la section 5, `serveur.py` et `js/modules/parametres.js`) : ne pas le modifier à la main.
 
 Prévo range ses données dans **24 fichiers CSV** (format **version 3**), dans le dossier de données (`donnees/` à côté de `serveur.py`, ou le dossier choisi en mode dossier). Ils s'ouvrent et se modifient dans Excel. Le paramètre `version_schema` de `parametres.csv` indique la version du format.
 
@@ -29,7 +29,7 @@ Prévo range ses données dans **24 fichiers CSV** (format **version 3**), dans 
 | `booleen` | `1` (oui) ou `0` (non) |
 | `choix` | une des valeurs de la liste fermée |
 | `ref` | identifiant d'une ligne d'un autre fichier |
-| `document` | nom d'un fichier du dossier `documents/` (photo, PDF…) |
+| `document` | nom d'un fichier du dossier `documents/` (photo, PDF…) ; en mode serveur, préfixé `AAAAMMJJ-HHMMSS-` (§5) |
 
 ## 3. Les 24 fichiers
 
@@ -701,3 +701,34 @@ Les interventions passées d'une autre GMAO : chacune devient un OT clôturé ; 
 | Technicien | `ordres_travail.csv` : `technicien_id` |  | intervenant, réalisé par, nom du technicien | par son nom ; vide et signalé s'il est introuvable |
 | Temps passé (heures) | `ot_temps.csv` |  | temps passé, heures, durée intervention, temps, temps (h), temps passé (h), main d'oeuvre | une ligne de `ot_temps.csv` (technicien de l'OT) |
 | Coût de sous-traitance | `ordres_travail.csv` : `cout_soustraitance` |  | sous-traitance, coût sous-traitance, coût externe |  |
+
+## 5. Prévo 2 : accès et installation
+
+Ce que la version 2 (lot 7) change pour qui ouvre le dossier des données. Le format des fichiers CSV ne change pas. Le détail pour l'informaticien est dans `docs/INSTALLATION.md` (dépôt).
+
+### 5.1 Le dossier `acces/` (mode serveur)
+
+`acces/` range les fichiers du serveur pour les comptes et les appareils : `comptes.json` (empreintes des mots de passe, jamais les mots de passe), `sessions.json`, `appareils.json`, `journal-acces.csv`, et le certificat de l'atelier (`certificat.pem`, `cle.pem`, dossier `autorite/`).
+
+- **Jamais à modifier à la main** (Excel compris) : le serveur seul les lit et les écrit. Ne les joignez jamais à un signalement.
+- **Jamais servis** : ni par l'API des tables, ni dans l'export ZIP. Seul le journal des connexions sort, quand le responsable l'exporte (Équipe › Accès).
+- **Sauvegardes** : les sauvegardes du serveur copient les fichiers de `acces/` (pas le dossier `autorite/`), sauf `sessions.json` (une session ne se restaure jamais) ; une restauration ne les remet jamais en place.
+- **`journal-acces.csv`**, le journal des connexions, suit les règles de la section 1 (UTF-8 avec BOM, `;`, CRLF, apostrophe de protection). Colonnes : `date`, `qui`, `adresse`, `agent`, `resultat`, `tailscale`. `date` est écrite `AAAA-MM-JJTHH:MM:SS` ; `resultat` vaut `connexion`, `echec`, `bloque`, `deconnexion`, `appareil`, `invitation`, `revocation`, `reinitialisation`, `creation`, `modification` ; `tailscale` porte le compte Tailscale d'une session venue par `tailscale serve`. Les lignes de plus de 366 jours sont effacées. Le responsable l'exporte depuis Équipe › Accès.
+
+À côté, dans le dossier des données : `installation.json` (brouillon de l'assistant d'installation, supprimé à la fin), `journal-serveur.log` (journal du serveur) et `copie-externe.json` (état de la copie externe des sauvegardes). La configuration, `prevo.config.json`, est à côté de `serveur.py`, jamais dans le dossier des données.
+
+### 5.2 Les documents joints (`documents/`)
+
+- **Nom imposé par le serveur** : en mode serveur, chaque document envoyé est enregistré sous `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules), et c'est ce nom qui est écrit dans la colonne (type `document`). Les documents déjà présents gardent leur nom ; en mode dossier, le nom n'a pas de préfixe.
+- **Extensions acceptées** : `.csv`, `.docx`, `.gif`, `.html`, `.jpeg`, `.jpg`, `.ods`, `.odt`, `.pdf`, `.png`, `.txt`, `.webp`, `.xlsx`. Toute autre est refusée, dont `.doc` et `.xls` depuis Prévo 2 : enregistrez en `.docx` ou `.xlsx`.
+- **Place** : 2048 Mo au plus pour tout le dossier, par défaut (`quota_documents_mo` de `prevo.config.json`).
+
+### 5.3 Nouveaux réglages de `parametres.csv`
+
+| Clé | Libellé dans Paramètres | Valeurs | Défaut | Rôle |
+| --- | --- | --- | --- | --- |
+| `mode_solo` | Mode Solo : je fais tout moi-même | `0`, `1` | `0` | `1` : mode Solo (menu allégé, « Nouvel OT » en premier). Posé par l'assistant en Solo ou par « Passer en mode Solo » (Paramètres), remis à `0` par « Quitter le mode Solo ». |
+| `cloture_une_etape` | Clôture en une étape (bouton « Clore » pour le responsable) | `0`, `1` | `0` | `1` : bouton « Clore » du responsable (clôtures technique et administrative d'un coup). Posé à `1` avec le mode Solo ; réglable dans Paramètres, section Ordres de travail. |
+| `solo_technicien_id` | Technicien « moi » du mode Solo | texte | vide | Identifiant (`TEC-…`) du technicien « moi » du mode Solo, pré-rempli sur les OT ; il reste dans l'équipe si l'on quitte ce mode. |
+
+`ia_distant_autorise` (« Autoriser les fournisseurs d'IA en ligne (OpenAI, Mistral, Groq…) ») ne décide plus rien en mode serveur : un fournisseur d'IA en ligne n'y est permis que par `ia_en_ligne` dans `prevo.config.json` du PC serveur, et la case de Paramètres montre cette décision. En mode dossier, la case décide comme avant.

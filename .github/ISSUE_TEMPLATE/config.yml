@@ -1,1 +1,11 @@
 blank_issues_enabled: false
+contact_links:
+  - name: "Une faille de sécurité"
+    url: "https://selectis.eu"
+    about: "Ne la décrivez pas dans un ticket public : contactez d'abord SELECTIS, par son site."
+  - name: "Installer Prévo (informaticien)"
+    url: "https://github.com/nicoboy49/prevo/blob/main/docs/INSTALLATION.md"
+    about: "Configuration, mandataires inverses, démarrage en service, comptes, journaux, sauvegardes."
+  - name: "Hébergement et accompagnement"
+    url: "https://selectis.eu"
+    about: "Prévo hébergé ou une aide à l'installation : sur demande, auprès de SELECTIS."

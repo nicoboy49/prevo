@@ -5,13 +5,18 @@ labels: ["bug"]
 body:
   - type: markdown
     attributes:
-      value: "**N'envoyez aucune donnée réelle de votre entreprise.**"
+      value: |
+        **N'envoyez aucune donnée réelle de votre entreprise.**
+
+        **Ne collez jamais** un mot de passe, un mot de passe provisoire, un jeton, un cookie, une clé d'IA, ni le contenu du dossier `donnees/acces/` (comptes, sessions, appareils, certificat de l'atelier) ou de `prevo.config.json`.
+
+        Problème de connexion ? Joignez les lignes utiles du journal des connexions (`journal-acces.csv` : Équipe › Accès › Journal des connexions, « Exporter (CSV) »). Vous pouvez en retirer les adresses et les noms si vous préférez.
   - type: textarea
     id: action
     attributes:
       label: "Qu'avez-vous fait ?"
-      description: "Les étapes, dans l'ordre : écran, profil, boutons cliqués, valeurs saisies (des exemples, pas vos vraies données)."
-      placeholder: "1. Profil Technicien, écran Ordres de travail\n2. Clic sur un OT, puis « Clôturer »\n3. …"
+      description: "Les étapes, dans l'ordre : écran, boutons cliqués, valeurs saisies (des exemples, pas vos vraies données)."
+      placeholder: "1. Connecté comme technicien, écran Ordres de travail\n2. Clic sur un OT, puis « Clôturer »\n3. …"
     validations:
       required: true
   - type: textarea
@@ -32,22 +37,54 @@ body:
     attributes:
       label: "Mode utilisé"
       options:
+        - "Serveur (Prévo installé : Lancer_GMAO.bat ou lancer.sh)"
         - "Dossier (un seul poste, Chrome ou Edge)"
-        - "Serveur (plusieurs postes et téléphones)"
-        - "Démo (données de démo)"
+        - "Démo (données de démo, sur ce PC ou en ligne)"
+    validations:
+      required: true
+  - type: dropdown
+    id: portee
+    attributes:
+      label: "Portée"
+      description: "D'où Prévo est ouvert (réglé par l'assistant d'installation ; visible dans Paramètres › Accès et installation)."
+      options:
+        - "Ce PC seulement"
+        - "Le Wi-Fi de l'atelier"
+        - "Hors de l'atelier (Tailscale ou VPN)"
+        - "Réseau de l'entreprise, derrière un mandataire (Intranet)"
+        - "Je ne sais pas, ou sans objet (mode dossier, démo)"
     validations:
       required: true
   - type: input
-    id: navigateur
+    id: appareil
     attributes:
-      label: "Navigateur et appareil"
-      placeholder: "Exemple : Edge sur PC Windows 11, Chrome sur téléphone Android"
+      label: "Appareil et navigateur"
+      placeholder: "Exemple : PC Windows 11 avec Edge, téléphone Android avec Chrome, iPhone avec Safari"
     validations:
       required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: "Rôle"
+      options:
+        - "Demandeur, téléphone enrôlé par invitation (sans mot de passe)"
+        - "Demandeur, avec un compte"
+        - "Technicien"
+        - "Responsable"
+        - "Sans compte (profil choisi à l'écran)"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: "Version de Prévo (facultatif)"
+      description: "Écran « À propos »."
+    validations:
+      required: false
   - type: textarea
     id: capture
     attributes:
       label: "Capture d'écran (facultatif)"
-      description: "Glissez l'image dans ce champ. Masquez d'abord toute donnée réelle."
+      description: "Glissez l'image dans ce champ. Masquez d'abord toute donnée réelle, tout mot de passe et tout QR d'invitation."
     validations:
       required: false

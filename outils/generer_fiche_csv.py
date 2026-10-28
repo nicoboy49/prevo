@@ -4,12 +4,16 @@ Le schéma est la seule source : js/schema.js (objet Schema) est lu dans Chromiu
 développement, déjà utilisé par les tests) ; la fiche est donc toujours fidèle aux fichiers réels.
 La section 4 (import depuis un tableur, lot 5) reprend Import.TYPES, relu en Python dans
 js/modules/import-regles.js (types, clés naturelles, colonnes reconnues et leurs autres titres).
+La section 5 (Prévo 2, lot 7 : accès et installation) relit serveur.py importé comme module (colonnes du journal
+des connexions, types de documents, fichiers jamais sauvegardés, quota) et les réglages de js/modules/parametres.js.
 tests/test_fiche_csv.py vérifie qu'elle est à jour (ARCHITECTURE.md §17.8).
 
-Lancer depuis la racine du projet, après toute modification de js/schema.js ou des types de
-js/modules/import-regles.js :
+Lancer depuis la racine du projet, après toute modification de js/schema.js, des types de
+js/modules/import-regles.js, des réglages du lot 7 de js/modules/parametres.js ou des listes de serveur.py citées
+en section 5 :
     py outils/generer_fiche_csv.py
 """
+import importlib.util
 import json
 import re
 import sys
@@ -59,7 +63,8 @@ TYPES = [
     ("booleen", "`1` (oui) ou `0` (non)"),
     ("choix", "une des valeurs de la liste fermée"),
     ("ref", "identifiant d'une ligne d'un autre fichier"),
-    ("document", "nom d'un fichier du dossier `documents/` (photo, PDF…)"),
+    ("document", "nom d'un fichier du dossier `documents/` (photo, PDF…) ; en mode serveur, préfixé"
+                 " `AAAAMMJJ-HHMMSS-` (§5)"),
 ]
 
 
@@ -551,6 +556,134 @@ def rediger_import(schema):
     return lignes
 
 
+# ---------------------------------------------------------------------------------------------------------
+# Section 5 : Prévo 2 (lot 7, accès et installation), ce qui change pour qui ouvre le dossier des données
+# (ARCHITECTURE.md §22.3, §22.11, §22.12). Les listes viennent de serveur.py, importé comme module (rien n'est
+# lancé), et de js/modules/parametres.js ; si elles ne disent plus ce que la section affirme, la génération
+# s'arrête avec un message clair : jamais de fiche fausse.
+# ---------------------------------------------------------------------------------------------------------
+
+FICHIER_SERVEUR = RACINE / "serveur.py"
+FICHIER_PARAMETRES = RACINE / "js" / "modules" / "parametres.js"
+EXTENSIONS_RETIREES = ("doc", "xls")              # audit F4 : refusées depuis Prévo 2 (§22.12)
+# Réglages de parametres.csv ajoutés au lot 7 (D132, §22.11) et leur rôle, écrit à la main ; libellé, valeurs et
+# défaut sont relus dans REGLAGES de parametres.js.
+ROLES_PARAMETRES_LOT_7 = {
+    "mode_solo": ("`1` : mode Solo (menu allégé, « Nouvel OT » en premier). Posé par l'assistant en Solo ou par"
+                  " « Passer en mode Solo » (Paramètres), remis à `0` par « Quitter le mode Solo »."),
+    "cloture_une_etape": ("`1` : bouton « Clore » du responsable (clôtures technique et administrative d'un coup)."
+                          " Posé à `1` avec le mode Solo ; réglable dans Paramètres, section Ordres de travail."),
+    "solo_technicien_id": ("Identifiant (`TEC-…`) du technicien « moi » du mode Solo, pré-rempli sur les OT ; il reste"
+                           " dans l'équipe si l'on quitte ce mode."),
+}
+CLE_IA_DISTANT = "ia_distant_autorise"
+
+
+class ErreurLectureLot7(Exception):
+    """serveur.py ou parametres.js ne disent plus ce que la section 5 affirme : la fiche n'est pas écrite."""
+
+
+def lire_serveur():
+    """serveur.py importé comme module (comme tests/test_acces_config.py) : rien n'est lancé."""
+    spec_serveur = importlib.util.spec_from_file_location("serveur_prevo_fiche", FICHIER_SERVEUR)
+    module = importlib.util.module_from_spec(spec_serveur)
+    spec_serveur.loader.exec_module(module)
+    return module
+
+
+def lire_reglages_parametres(cles):
+    """{ clé : {libelle, valeurs, defaut} } des réglages « cles » du tableau REGLAGES de js/modules/parametres.js."""
+    texte = FICHIER_PARAMETRES.read_text(encoding="utf-8")
+    trouves = {}
+    for bloc in re.finditer(r"\{\s*cle: '([a-z0-9_]+)'(.*?)\}", texte, re.DOTALL):
+        cle, corps = bloc.group(1), bloc.group(2)
+        if cle not in cles:
+            continue
+        libelle = re.search(r"libelle: '((?:[^'\\]|\\.)*)'", corps)
+        defaut = re.search(r"defaut: '([^']*)'", corps)
+        valeurs = re.search(r"valeurs: \[([^\]]*)\]", corps)
+        if not libelle or not defaut:
+            raise ErreurLectureLot7("réglage « %s » sans libellé ou sans défaut dans %s" % (cle, FICHIER_PARAMETRES.name))
+        trouves[cle] = {"libelle": re.sub(r"\\(.)", r"\1", libelle.group(1)), "defaut": defaut.group(1),
+                        "valeurs": re.findall(r"'([^']*)'", valeurs.group(1)) if valeurs else []}
+    manquants = [cle for cle in cles if cle not in trouves]
+    if manquants:
+        raise ErreurLectureLot7("réglages absents de %s : %s" % (FICHIER_PARAMETRES.name, ", ".join(manquants)))
+    return trouves
+
+
+def rediger_lot7():
+    """Lignes Markdown de la section « Prévo 2 : accès et installation » (mêmes fichiers → même texte)."""
+    serveur = lire_serveur()
+    extensions = sorted(serveur.TYPES_DOCUMENTS)
+    retirees_presentes = [ext for ext in EXTENSIONS_RETIREES if ext in extensions]
+    if retirees_presentes:
+        raise ErreurLectureLot7("serveur.py accepte de nouveau %s : revoir la section 5" % ", ".join(retirees_presentes))
+    non_sauvegardes = list(serveur.FICHIERS_ACCES_NON_SAUVEGARDES)
+    if non_sauvegardes != ["sessions.json"]:
+        raise ErreurLectureLot7("FICHIERS_ACCES_NON_SAUVEGARDES a changé (%s) : revoir la section 5" % non_sauvegardes)
+    quota = next(defaut for cle, _, defaut, _ in serveur.CLES_CONFIGURATION if cle == "quota_documents_mo")
+    reglages = lire_reglages_parametres(list(ROLES_PARAMETRES_LOT_7) + [CLE_IA_DISTANT])
+    lignes = [
+        "",
+        "## 5. Prévo 2 : accès et installation",
+        "",
+        "Ce que la version 2 (lot 7) change pour qui ouvre le dossier des données. Le format des fichiers CSV ne change"
+        " pas. Le détail pour l'informaticien est dans `docs/INSTALLATION.md` (dépôt).",
+        "",
+        "### 5.1 Le dossier `acces/` (mode serveur)",
+        "",
+        "`acces/` range les fichiers du serveur pour les comptes et les appareils : `comptes.json` (empreintes des mots"
+        " de passe, jamais les mots de passe), `sessions.json`, `appareils.json`, `journal-acces.csv`, et le certificat"
+        " de l'atelier (`certificat.pem`, `cle.pem`, dossier `autorite/`).",
+        "",
+        "- **Jamais à modifier à la main** (Excel compris) : le serveur seul les lit et les écrit. Ne les joignez jamais"
+        " à un signalement.",
+        "- **Jamais servis** : ni par l'API des tables, ni dans l'export ZIP. Seul le journal des connexions sort, quand"
+        " le responsable l'exporte (Équipe › Accès).",
+        "- **Sauvegardes** : les sauvegardes du serveur copient les fichiers de `acces/` (pas le dossier `autorite/`),"
+        " sauf %s (une session ne se restaure jamais) ; une restauration ne les remet jamais en place." % ", ".join("`%s`" % n for n in non_sauvegardes),
+        "- **`journal-acces.csv`**, le journal des connexions, suit les règles de la section 1 (UTF-8 avec BOM, `;`,"
+        " CRLF, apostrophe de protection). Colonnes : %s. `date` est écrite `AAAA-MM-JJTHH:MM:SS` ; `resultat` vaut %s ;"
+        " `tailscale` porte le compte Tailscale d'une session venue par `tailscale serve`. Les lignes de plus de %d jours"
+        " sont effacées. Le responsable l'exporte depuis Équipe › Accès." % (
+            ", ".join("`%s`" % c for c in serveur.COLONNES_JOURNAL_ACCES),
+            ", ".join("`%s`" % r for r in serveur.RESULTATS_JOURNAL_ACCES), serveur.DUREE_JOURNAL_ACCES_JOURS),
+        "",
+        "À côté, dans le dossier des données : `installation.json` (brouillon de l'assistant d'installation, supprimé à la"
+        " fin), `journal-serveur.log` (journal du serveur) et `copie-externe.json` (état de la copie externe des"
+        " sauvegardes). La configuration, `prevo.config.json`, est à côté de `serveur.py`, jamais dans le dossier des"
+        " données.",
+        "",
+        "### 5.2 Les documents joints (`documents/`)",
+        "",
+        "- **Nom imposé par le serveur** : en mode serveur, chaque document envoyé est enregistré sous"
+        " `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules), et c'est ce nom qui est écrit"
+        " dans la colonne (type `document`). Les documents déjà présents gardent leur nom ; en mode dossier, le nom n'a"
+        " pas de préfixe.",
+        "- **Extensions acceptées** : %s. Toute autre est refusée, dont %s depuis Prévo 2 : enregistrez en `.docx` ou"
+        " `.xlsx`." % (", ".join("`.%s`" % e for e in extensions), " et ".join("`.%s`" % e for e in EXTENSIONS_RETIREES)),
+        "- **Place** : %d Mo au plus pour tout le dossier, par défaut (`quota_documents_mo` de `prevo.config.json`)." % quota,
+        "",
+        "### 5.3 Nouveaux réglages de `parametres.csv`",
+        "",
+        "| Clé | Libellé dans Paramètres | Valeurs | Défaut | Rôle |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for cle, role in ROLES_PARAMETRES_LOT_7.items():
+        reglage = reglages[cle]
+        valeurs = ", ".join("`%s`" % v for v in reglage["valeurs"]) or "texte"
+        defaut = "`%s`" % reglage["defaut"] if reglage["defaut"] else "vide"
+        lignes.append("| `%s` | %s | %s | %s | %s |" % (cle, cellule(reglage["libelle"]), valeurs, defaut, cellule(role)))
+    lignes += [
+        "",
+        "`%s` (« %s ») ne décide plus rien en mode serveur : un fournisseur d'IA en ligne n'y est permis que par"
+        " `ia_en_ligne` dans `prevo.config.json` du PC serveur, et la case de Paramètres montre cette décision. En mode"
+        " dossier, la case décide comme avant." % (CLE_IA_DISTANT, reglages[CLE_IA_DISTANT]["libelle"]),
+    ]
+    return lignes
+
+
 def rediger_fiche(schema):
     """Texte Markdown complet de la fiche (fonction pure : même schéma → même texte)."""
     tables = schema["tables"]
@@ -558,7 +691,8 @@ def rediger_fiche(schema):
         "# Fiche technique des fichiers CSV de Prévo",
         "",
         "Document généré par `outils/generer_fiche_csv.py` d'après `js/schema.js` (et, pour la section 4,"
-        " `js/modules/import-regles.js`) : ne pas le modifier à la main.",
+        " `js/modules/import-regles.js` ; pour la section 5, `serveur.py` et `js/modules/parametres.js`) : ne pas le"
+        " modifier à la main.",
         "",
         "Prévo range ses données dans **%d fichiers CSV** (format **version %d**), dans le dossier de données"
         " (`donnees/` à côté de `serveur.py`, ou le dossier choisi en mode dossier). Ils s'ouvrent et se modifient"
@@ -608,6 +742,7 @@ def rediger_fiche(schema):
                 cellule(valeurs_ou_reference(champ)), cellule("`%s`" % champ["defaut"] if champ.get("defaut") not in (None, "") else ""),
                 cellule(remarques(champ))))
     lignes += rediger_import(schema)
+    lignes += rediger_lot7()
     lignes.append("")
     return "\n".join(lignes)
 
