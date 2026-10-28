@@ -532,6 +532,12 @@ const App = (() => {
     comptesExiges = etat.comptes;
     session = null;
     if (!comptesExiges) return;
+    // Comptes exigés sans aucun compte responsable (configuration écrite à la main, §22.10) : personne ne peut se
+    // connecter ; sur le PC serveur, l'assistant s'ouvre pour créer le premier compte (terminé, la page se recharge).
+    if (!etat.session && etat.installationInachevee && pcServeur() && typeof Installation !== 'undefined') {
+      montrer('ecran-installation', 'installation');
+      await Installation.ouvrir();
+    }
     if (etat.session && !etat.session.aChanger) {
       session = etat.session;
       return;

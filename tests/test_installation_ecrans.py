@@ -469,6 +469,21 @@ class TestOuverture(CasInstallation):
         page.wait_for_selector("#fiche-qr-ouvrir svg")
         self.assertTrue(page.is_visible("#inst-retour-assistant"))
 
+    def test_comptes_sans_responsable_le_pc_serveur_ouvre_l_assistant(self):
+        """Configuration écrite à la main avec « comptes », sans aucun compte (§22.10, correction du 28/10) : sur le
+        PC serveur, l'assistant s'ouvre à la place d'un écran de connexion sans issue, quelle que soit l'adresse."""
+        racine = Path(tempfile.mkdtemp(prefix="prevo-sans-responsable-"))
+        self.addCleanup(shutil.rmtree, racine, True)
+        fichier = racine / "prevo.config.json"
+        fichier.write_text(json.dumps({"comptes": True}), encoding="utf-8")
+        self.autoriser_erreur(re.compile(r"status of 401 .*/api/"))     # la sonde d'App avant l'assistant
+        with commun.ServeurPrevo(arguments=["--config", str(fichier)]) as reel:
+            page = self.page
+            page.goto(reel.url + "/")
+            page.wait_for_function("document.documentElement.dataset.etat === 'installation'")
+            page.wait_for_selector('#installation-contenu section[data-etape="situation"]')
+            self.assertTrue(page.is_hidden("#ecran-connexion"))
+
 
 if __name__ == "__main__":
     unittest.main()

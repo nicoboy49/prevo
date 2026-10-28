@@ -52,7 +52,7 @@ FICHIERS = ["index.html", "favicon.svg", "GUIDE.html", "README.md", "LICENSE", "
             "Lancer_GMAO.bat", "lancer.sh", "Reinitialiser_mot_de_passe.bat", "serveur.py", "outils/empreintes-tiers.json"]
 CACHE_TIERS_PAR_DEFAUT = SORTIE_PAR_DEFAUT / "tiers"
 DELAI_TELECHARGEMENT_S = 120
-DOSSIERS = ["css", "js"]
+DOSSIERS = ["css", "js", "acces"]      # acces/ : la porte d'entrée et ses schémas (lot 7, §22.6)
 EXECUTABLES = {"lancer.sh", "serveur.py"}
 DROITS_FICHIER = 0o100644
 DROITS_EXECUTABLE = 0o100755

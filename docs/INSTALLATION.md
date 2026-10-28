@@ -64,9 +64,9 @@ Les trois parcours de l'assistant :
 
 ### 3.1 Windows
 
-1. Dézippez le zip et placez son dossier en `C:\Prevo` (conseillé : chemin court, hors du profil
-   d'utilisateur). Ailleurs, l'assistant propose de copier Prévo dans `C:\Prevo` : chaque fichier est copié puis
-   vérifié, l'ancien dossier n'est jamais supprimé.
+1. Dézippez le zip dans `C:\Prevo` (conseillé : chemin court, hors du profil d'utilisateur ; le dossier
+   `C:\Prevo\prevo-<version>` obtenu convient tel quel). Ailleurs, l'assistant propose de copier Prévo dans
+   `C:\Prevo` : chaque fichier est copié puis vérifié, l'ancien dossier n'est jamais supprimé.
 2. Double-cliquez sur `Lancer_GMAO.bat`. Il utilise `python\python.exe` du zip, sinon un Python 3.11 ou plus
    récent déjà installé (`py -3` ou `python`).
 3. Le navigateur du PC s'ouvre sur l'assistant (`http://localhost:8080/#/installation`). Choisissez « Je suis
@@ -121,11 +121,11 @@ puis ouvrez `http://localhost:8080/#/installation` sur votre poste : pour Prévo
   (code 2), avec le nom de la clé.
 - **Liste à jour** : `serveur.py --aide` imprime chaque clé, son type, son défaut et son aide.
 
-**Le premier compte d'abord.** N'écrivez pas `"comptes": true` à la main avant que le premier compte responsable
-existe. Sans lui, Prévo n'écoute que sur ce PC et ne laisse entrer personne, assistant compris. Créez ce compte
-avec l'assistant (étape « Votre compte »), puis ajustez le fichier. Si c'est déjà arrivé : arrêtez Prévo, renommez
-`prevo.config.json`, relancez, créez le compte dans l'assistant, puis reportez vos réglages dans le fichier qu'il
-écrit.
+**Le premier compte.** Avec `"comptes": true` écrit à la main et aucun compte responsable encore créé, Prévo
+n'écoute que sur ce PC, n'ouvre aucune session et garde l'assistant joignable **depuis ce PC seulement** : la
+console donne son adresse (`http://localhost:8080/#/installation`), et le navigateur du PC serveur l'ouvre de
+lui-même. Créez-y le compte (étape « Votre compte ») ; dès qu'il existe, l'assistant n'est plus joignable que par
+une session du responsable (Paramètres › Accès et installation).
 
 ### 4.2 Toutes les clés
 
@@ -562,7 +562,8 @@ Jamais un mot de passe ni un jeton n'y est écrit.
 Ce que Prévo fait tout seul (mode serveur) :
 
 - **Chaque jour**, avant la première modification : `donnees/sauvegardes/AAAA-MM-JJ/`, avec les 24 fichiers CSV et
-  les fichiers de `donnees/acces/` **sauf `sessions.json`** (une session ne se restaure jamais).
+  les fichiers de `donnees/acces/` **sauf `sessions.json`** (une session ne se restaure jamais) **et `cle.pem`** (la
+  clé privée du certificat de l'atelier ne quitte pas le PC ; Prévo la refabrique au démarrage si elle manque).
 - **Avant un import, une restauration ou un changement de format** : une sauvegarde complète dont le nom le dit
   (`…_avant-import`, `…_avant-restauration`, `…_avant-format-vN`).
 - **Copie externe** (`copie_sauvegardes`) : au démarrage et chaque nuit, à la première modification après 2 h du
@@ -578,8 +579,8 @@ Ce qui n'est **pas** dans ces sauvegardes, à sauvegarder avec vos outils :
   au PC atelier ;
 - `journal-serveur.log`.
 
-La copie externe contient `comptes.json` (empreintes des mots de passe) et la clé privée du certificat de
-l'atelier : protégez son dossier comme le serveur.
+La copie externe contient `comptes.json` (empreintes des mots de passe, jamais les mots de passe) : protégez son
+dossier comme le serveur.
 
 **Tester** (Paramètres › Sauvegardes, « Tester ») relit chaque table d'une sauvegarde et compte ses lignes, sans
 rien écrire. **Restaurer…** remet toutes les tables ou une seule, après une copie de sécurité de l'état actuel.

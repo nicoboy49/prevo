@@ -233,6 +233,7 @@ class CasDansLeProcessus(unittest.TestCase):
         (self.donnees / "equipements.csv").write_bytes(csv_de("equipements", "EQ-0001;'PO-01;Pompe"))
         (self.donnees / "acces" / "comptes.json").write_bytes(COMPTES_JSON)
         (self.donnees / "acces" / "sessions.json").write_bytes(SESSIONS_JSON)
+        (self.donnees / "acces" / "cle.pem").write_bytes(b"-----BEGIN PRIVATE KEY-----\nessai\n")
         self.console = []
         espion = mock.patch.object(serveur, "afficher", side_effect=self.console.append)
         espion.start()
@@ -269,6 +270,7 @@ class TestCopieExterne(CasDansLeProcessus):
         self.assertEqual(contenu_du_dossier(self.copie / "2026-06-15"), attendu)
         self.assertEqual(attendu["acces/comptes.json"], COMPTES_JSON)
         self.assertNotIn("acces/sessions.json", attendu)
+        self.assertNotIn("acces/cle.pem", attendu)              # la clé privée du certificat ne quitte pas le PC
         self.assertIn(b"Atelier test", attendu["parametres.csv"])  # l'état d'avant la première écriture du jour
         self.assertEqual([chemin.name for chemin in self.copie.iterdir()], ["2026-06-15"])   # aucun dossier temporaire
         self.assertEqual(self.etat_copie()["derniere_reussie"], "2026-06-15")
@@ -455,6 +457,7 @@ class TestPlafondEtAcces(CasDansLeProcessus):
         sauvegarde = self.sauvegardes / nom
         self.assertEqual((sauvegarde / "acces" / "comptes.json").read_bytes(), COMPTES_JSON)
         self.assertFalse((sauvegarde / "acces" / "sessions.json").exists())
+        self.assertFalse((sauvegarde / "acces" / "cle.pem").exists())
         # Après la sauvegarde : un compte change, une table aussi.
         changes = json.dumps({"version": 1, "comptes": [{"identifiant": "nicolas.briand", "role": "responsable",
                                                           "actif": False}]}, indent=2).encode("utf-8")

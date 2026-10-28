@@ -599,7 +599,9 @@ COLONNES_JOURNAL_ACCES = ['date', 'qui', 'adresse', 'agent', 'resultat', 'tailsc
 RESULTATS_JOURNAL_ACCES = ('connexion', 'echec', 'bloque', 'deconnexion', 'appareil', 'invitation', 'revocation',
                            'reinitialisation', 'creation', 'modification')
 DUREE_JOURNAL_ACCES_JOURS = 366
-FICHIERS_ACCES_NON_SAUVEGARDES = ('sessions.json',)     # une session ne se restaure jamais
+# Jamais sauvegardés : une session ne se restaure jamais ; la clé privée du certificat de l'atelier ne quitte pas le PC
+# (copie externe sur une clé USB ou un NAS) et se refabrique au démarrage si elle manque (preparer_certificat_local).
+FICHIERS_ACCES_NON_SAUVEGARDES = ('sessions.json', 'cle.pem')
 VERROU_ACCES = threading.Lock()
 
 
@@ -796,6 +798,17 @@ def responsable_actif_existe(config):
     try:
         return any(c.get('role') == 'responsable' and c.get('actif') for c in lire_comptes(config))
     except (OSError, ValueError):
+        return False
+
+
+def aucun_responsable_sur(config):
+    """Vrai seulement quand on SAIT qu'aucun compte responsable actif n'existe (§22.10) : comptes.json absent, ou
+    lisible sans responsable actif. Illisible ou de forme inattendue : faux — rien ne s'ouvre sans session (un
+    compte créé par l'assistant écraserait alors tous les comptes) et la connexion dit pourquoi."""
+    try:
+        comptes = lire_comptes(config)
+        return not any(c.get('role') == 'responsable' and c.get('actif') for c in comptes)
+    except (OSError, ValueError, AttributeError, TypeError):
         return False
 
 
@@ -2217,9 +2230,14 @@ def supprimer_brouillon(config):
 
 
 def dans_dossier_conseille(config):
-    """Vrai quand Prévo tourne déjà dans C:\\Prevo (Windows) ; faux ailleurs et sur les autres systèmes."""
-    return (config.systeme.startswith('win')
-            and chemins_egaux(os.path.abspath(config.dossier_application), DOSSIER_CONSEILLE_WINDOWS))
+    """Vrai quand Prévo tourne déjà dans C:\\Prevo, ou dans un dossier juste dessous (le zip dézippé dans C:\\Prevo
+    donne C:\\Prevo\\prevo-<version> : l'y redéplacer serait refusé, « au-dessus » de la source) ; faux ailleurs et sur
+    les autres systèmes."""
+    if not config.systeme.startswith('win'):
+        return False
+    dossier = os.path.abspath(config.dossier_application)
+    return (chemins_egaux(dossier, DOSSIER_CONSEILLE_WINDOWS)
+            or chemins_egaux(os.path.dirname(dossier), DOSSIER_CONSEILLE_WINDOWS))
 
 
 def ecoute_du_brouillon(brouillon):
@@ -4698,6 +4716,10 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                 erreur = ErreurHttp(401, MESSAGE_APPAREIL_REFUSE, appareil_refuse=True)
                 erreur.entetes = {'Set-Cookie': entete_cookie_session('', self.en_https(), 0, NOM_COOKIE_APPAREIL)}
                 raise erreur
+            if motif == 'installation/<etape>' and self.client_local() and aucun_responsable_sur(self.config):
+                # §22.10 : comptes exigés mais aucun compte responsable (configuration écrite à la main, comptes.json
+                # absent) ; personne ne peut se connecter, l'assistant, depuis ce PC seulement, crée le premier compte.
+                return None
             raise ErreurHttp(401, MESSAGE_SESSION_ABSENTE)
         if identite['a_changer'] and route not in ROUTES_MOT_DE_PASSE_PROVISOIRE:
             raise ErreurHttp(403, MESSAGE_MOT_DE_PASSE_PROVISOIRE)
@@ -4867,8 +4889,11 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                 if empreinte_jeton(jeton) == self.session.get('cle'):
                     entetes = {'Set-Cookie': entete_cookie_session(jeton, self.en_https(), DUREE_APPAREIL_JOURS * 86400,
                                                                    NOM_COOKIE_APPAREIL)}
-        self.envoyer_json(200, {'comptes': bool(self.config.reglages.get('comptes')),
-                                'session': session_publique(self.session)}, entetes)
+        reponse = {'comptes': bool(self.config.reglages.get('comptes')), 'session': session_publique(self.session)}
+        if reponse['comptes'] and self.session is None and aucun_responsable_sur(self.config):
+            # §22.10 : aucun compte responsable : l'écran ouvre l'assistant sur le PC serveur au lieu de la connexion.
+            reponse['installation_inachevee'] = True
+        self.envoyer_json(200, reponse, entetes)
 
     def api_connexion(self, segment, corps):
         """POST /api/connexion {identifiant, mot_de_passe, rester} : 200 et cookie « id » (jeton neuf ; l'ancienne
@@ -5745,16 +5770,19 @@ def afficher_accueil(config, port_demande, avertissements=()):
     if config.port != port_demande:
         afficher('  Le port %d est occupé : port %d utilisé.' % (port_demande, config.port))
     afficher('  Sur ce PC        : %s' % config.adresse_locale())
-    adresses = config.adresses_reseau()
+    adresses = config.adresses_reseau() if config.ecoute != '127.0.0.1' else []
     if adresses:
         for adresse in adresses:
             afficher('  Sur le réseau    : %s   (téléphones, tablettes)' % adresse)
-    else:
+    elif config.ecoute != '127.0.0.1':
         afficher('  Sur le réseau    : aucune adresse trouvée (PC non connecté ?)')
     afficher('  Données          : %s' % config.dossier_donnees)
     if not config.reglages.get('_present'):
         afficher('  Installation     : pas encore faite ; l\'assistant est sur %s%s (sur ce PC seulement).'
                  % (config.adresse_locale(), ROUTE_INSTALLATION))
+    elif config.reglages.get('comptes') and aucun_responsable_sur(config):
+        afficher('  Installation     : aucun compte responsable ; créez-le avec l\'assistant sur %s%s (sur ce PC '
+                 'seulement).' % (config.adresse_locale(), ROUTE_INSTALLATION))
     if config.ecoute == '127.0.0.1':
         afficher('  Écoute           : ce PC seulement (127.0.0.1) ; les autres appareils ne joignent pas Prévo.')
     else:

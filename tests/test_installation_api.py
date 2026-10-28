@@ -814,6 +814,59 @@ class TestServeurReel(unittest.TestCase):
             self.assertEqual(client.get("etat", cookie=session).statut, 200)
             self.assertNotIn("#/installation", reel.sortie_console())
 
+    def test_comptes_exiges_sans_responsable_l_assistant_reste_joignable_sur_ce_pc(self):
+        """Configuration écrite à la main avec « comptes », sans aucun compte : personne ne peut se connecter ;
+        depuis ce PC, l'assistant reste joignable jusqu'à la création du premier responsable (§22.10)."""
+        dossier = Path(tempfile.mkdtemp(prefix="prevo-sans-responsable-"))
+        self.addCleanup(shutil.rmtree, dossier, True)
+        configuration = dossier / "prevo.config.json"
+        configuration.write_text(json.dumps({"comptes": True}), encoding="utf-8")
+        with commun.ServeurPrevo(arguments=["--config", str(configuration)]) as reel:
+            client = Client(reel.url)
+            self.assertEqual(client.requete("GET", "/api/session").json(),
+                             {"comptes": True, "session": None, "installation_inachevee": True})
+            self.assertEqual(client.requete("GET", "/api/csv/equipements").statut, 401)    # le reste est fermé
+            self.assertEqual(client.get("etat").statut, 200)
+            console = reel.sortie_console()
+            self.assertIn("aucun compte responsable", console)
+            self.assertIn("#/installation", console)
+            self.assertNotIn("Sur le réseau", console)              # Prévo n'écoute que sur ce PC
+            self.assertEqual(client.post("situation", {"situation": "equipe"}).statut, 200)
+            self.assertEqual(client.post("portee", {"portee": "atelier"}).statut, 200)
+            reponse = client.post("compte", {"prenom": "Nicolas", "nom": "Briand", "mot_de_passe": MOT_DE_PASSE})
+            self.assertEqual(reponse.statut, 200, reponse.octets)
+            # Le premier responsable existe : l'assistant redevient réservé à sa session.
+            self.assertEqual(client.get("etat").statut, 401)
+            self.assertEqual(client.requete("GET", "/api/session").json(), {"comptes": True, "session": None})
+            cookie = client.connecter("nicolas.briand", MOT_DE_PASSE)
+            self.assertEqual(client.get("etat", cookie=cookie).statut, 200)
+            # comptes.json abîmé : on ne SAIT pas qu'aucun responsable existe : rien ne s'ouvre sans session (un
+            # compte créé par l'assistant écraserait tous les comptes).
+            (reel.dossier / "acces" / "comptes.json").write_bytes(b"{ pas du json")
+            self.assertEqual(client.requete("GET", "/api/session").json(), {"comptes": True, "session": None})
+            self.assertEqual(client.get("etat").statut, 401)
+            self.assertEqual(client.post("compte", {"prenom": "Paul", "nom": "Essai",
+                                                     "mot_de_passe": MOT_DE_PASSE}).statut, 401)
+            self.assertEqual((reel.dossier / "acces" / "comptes.json").read_bytes(), b"{ pas du json")
+
+
+@unittest.skipUnless(os.name == "nt", "chemins Windows")
+class TestDossierConseille(unittest.TestCase):
+
+    def test_c_prevo_et_un_dossier_juste_dessous(self):
+        """Le zip dézippé dans C:\\Prevo donne C:\\Prevo\\prevo-<version> : déjà au bon endroit, rien à proposer."""
+        from types import SimpleNamespace
+
+        def conseille(dossier, systeme="win32"):
+            return serveur.dans_dossier_conseille(SimpleNamespace(systeme=systeme, dossier_application=dossier))
+
+        self.assertTrue(conseille("C:\\Prevo"))
+        self.assertTrue(conseille("c:\\prevo\\prevo-2.0.0"))
+        self.assertFalse(conseille("C:\\Prevo\\a\\b"))
+        self.assertFalse(conseille("C:\\Users\\essai\\Downloads\\prevo-2.0.0"))
+        self.assertFalse(conseille("C:\\Prevo2\\prevo-2.0.0"))
+        self.assertFalse(conseille("C:\\Prevo", systeme="linux"))
+
 
 if __name__ == "__main__":
     unittest.main()

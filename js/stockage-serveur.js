@@ -333,7 +333,7 @@ const StockageServeur = (() => {
       const reponse = await appelerOuErreur(base + '/api/session', { method: 'GET' });
       const donnees = await lireJson(reponse);
       const identite = donnees.session && typeof donnees.session === 'object' ? donnees.session : null;
-      return {
+      return Object.assign({
         comptes: Boolean(donnees.comptes),
         session: identite === null ? null : {
           identifiant: String(identite.identifiant || ''), role: String(identite.role || ''),
@@ -341,7 +341,7 @@ const StockageServeur = (() => {
           technicienId: String(identite.technicien_id || ''), aChanger: Boolean(identite.a_changer),
           appareil: Boolean(identite.appareil),
         },
-      };
+      }, donnees.installation_inachevee ? { installationInachevee: true } : {});   // §22.10 : aucun responsable
     }
 
     async function info() {

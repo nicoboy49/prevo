@@ -62,8 +62,8 @@ LISTE_BLANCHE_WEB = ["GUIDE.html", "css", "favicon.svg", "index.html", "js"]
 DRAPEAU_DEPOT = "const VERSION_WEB = false;"
 DRAPEAU_WEB = "const VERSION_WEB = true;"
 CONTENU_RELEASE = ["FICHE_TECHNIQUE_CSV.md", "GUIDE.html", "LICENSE", "Lancer_GMAO.bat", "NOTICE", "README.md",
-                   "Reinitialiser_mot_de_passe.bat", "css", "favicon.svg", "index.html", "js", "lancer.sh", "outils",
-                   "serveur.py"]
+                   "Reinitialiser_mot_de_passe.bat", "acces", "css", "favicon.svg", "index.html", "js", "lancer.sh",
+                   "outils", "serveur.py"]
 # outils/ : seulement la liste des empreintes des binaires tiers (lot 7, §22.14), que serveur.py lit pour vérifier mkcert.
 FICHIERS_OUTILS_RELEASE = ["outils/empreintes-tiers.json"]
 EXECUTABLES = ["lancer.sh", "serveur.py"]
@@ -439,7 +439,8 @@ class TestRelease(unittest.TestCase):
                 self.assertTrue(nom.startswith(prefixe), nom)
             relatifs = [nom[len(prefixe):] for nom in noms if not nom.endswith("/")]
             self.assertEqual(sorted({r.split("/")[0] for r in relatifs}), sorted(CONTENU_RELEASE))
-            attendus = sorted([n for n in CONTENU_RELEASE if n not in ("css", "js", "outils")] + fichiers_du_depot("css", "js")
+            attendus = sorted([n for n in CONTENU_RELEASE if n not in ("acces", "css", "js", "outils")]
+                              + fichiers_du_depot("acces", "css", "js")
                               + FICHIERS_OUTILS_RELEASE)
             self.assertEqual(sorted(relatifs), attendus)
             for relatif in relatifs:
@@ -447,11 +448,19 @@ class TestRelease(unittest.TestCase):
                     self.assertEqual(archive.read(prefixe + relatif), (RACINE / relatif).read_bytes())
             self.assertEqual([n for n in relatifs if n.startswith("outils/")], FICHIERS_OUTILS_RELEASE,
                              "de outils/, seule la liste des empreintes entre dans le zip")
-            for interdit in ("tests/", "outils/construire", "outils/generer", "docs/", "captures", "donnees/",
+            # Captures d'écran du README et du guide : sous docs/, jamais dans le zip ; les schémas de la page d'entrée
+            # (acces/captures/, §22.6), eux, y sont : sans eux, un téléphone ne voit pas les étapes illustrées.
+            for interdit in ("tests/", "outils/construire", "outils/generer", "docs/", "donnees/",
                              "__pycache__", ".pyc", "BRIEF",
                              "brief-gmao", "CONTRIBUTING", "CHANGELOG", ".chantier", ".git", "dist/"):
                 with self.subTest(interdit=interdit):
                     self.assertFalse([n for n in noms if interdit in n], interdit + " ne doit pas être dans le zip")
+            self.assertFalse([n for n in relatifs if "captures" in n and not n.startswith("acces/captures/")],
+                             "seules les captures de la page d'entrée entrent dans le zip")
+            for fichier in ("acces/porte.html", "acces/porte.js", "acces/porte.css"):
+                self.assertIn(fichier, relatifs, "page d'entrée (§22.6) absente du zip")
+            self.assertTrue([n for n in relatifs if n.startswith("acces/captures/") and n.endswith(".svg")],
+                            "schémas de la page d'entrée absents du zip")
             self.assertIn(DRAPEAU_DEPOT.encode(), archive.read(prefixe + "js/app.js"), "la release n'est pas la version web")
             self.assertIn(prefixe + "js/demo-donnees.js", noms, "jeu de démo : « Partir des données de démo »")
 
