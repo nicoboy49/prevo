@@ -36,6 +36,7 @@ NON_IGNORES = ["donnees/demo/equipements.csv", "donnees/.gitkeep", "docs/brief-g
 # (ordre du lot 3, qui complète celui du §14.2). Le contrat et ce test changent ensemble.
 ORDRE_MODULES = [
     "apropos.js", "mise-a-jour.js", "aide-ecrans-textes.js", "aide-ecrans.js", "acces-textes.js", "connexion-ecrans.js",
+    "installation-etapes.js", "installation-ecrans.js", "installation-fiche.js",
     "accueil.js", "accueil-bento.js", "causes-frequentes.js",
     "ia.js", "ia-prompts.js", "ia-encadre.js", "ia-serveur.js", "dictee.js", "poste.js",
     "parc-regles.js", "parc-arbre.js", "parc-formulaires.js", "parc-etiquettes.js", "parc-fiche.js",

@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/modules/app.css">
   <link rel="stylesheet" href="css/modules/connexion.css">
+  <link rel="stylesheet" href="css/modules/installation.css">
   <link rel="stylesheet" href="css/modules/accueil.css">
   <link rel="stylesheet" href="css/modules/ia.css">
   <link rel="stylesheet" href="css/modules/poste.css">
@@ -32,7 +33,7 @@
 </head>
 <body>
 
-<!-- Page unique de Prévo. Cinq écrans « plein écran » (chargement, démarrage, base vide, profil, connexion)
+<!-- Page unique de Prévo. Six écrans « plein écran » (chargement, démarrage, base vide, profil, connexion, installation)
      puis la coque de l'application (#app). js/app.js montre l'un d'eux à la fois.
      Les <span data-icone="…"> et <span data-ui="logo"> sont remplacés par les dessins de UI. -->
 
@@ -116,6 +117,8 @@
         <span>Créer une base vide<small>23 fichiers CSV avec leurs seuls en-têtes de colonnes</small></span>
       </button>
     </div>
+    <!-- Lot 7 (§22.10) : visible sur le PC serveur tant que l'installation n'est pas faite (js/app.js) -->
+    <p class="note lien-installation" hidden><a href="#/installation">Installer Prévo (assistant)</a> : comptes, https, téléphones, démarrage avec le PC.</p>
   </div>
 </div>
 
@@ -176,6 +179,8 @@
     <div class="actions">
       <button type="button" class="btn btn-fantome" id="profil-annuler" hidden>Annuler</button>
     </div>
+    <!-- Lot 7 (§22.10) : visible sur le PC serveur tant que l'installation n'est pas faite (js/app.js) -->
+    <p class="note lien-installation" hidden><a href="#/installation">Installer Prévo (assistant)</a> : comptes, https, téléphones, démarrage avec le PC.</p>
   </div>
 </div>
 
@@ -265,6 +270,24 @@
   </div>
 </div>
 
+<!-- ===================================================== installation (lot 7 : assistant, PC serveur, #/installation) -->
+<div id="ecran-installation" class="ecran-plein" hidden>
+  <div class="boite-demarrage">
+    <div class="marque">
+      <span data-ui="logo" data-classe="grand"></span>
+      <div>
+        <h1>Installer Prévo</h1>
+        <p id="installation-premiere-ligne">Tant que l'installation n'est pas terminée, Prévo n'est joignable que sur ce PC.</p>
+      </div>
+    </div>
+    <div id="installation-alertes" hidden></div>
+    <!-- Les étapes (js/modules/installation-ecrans.js) : progression, étape courante ou page unique de l'informaticien -->
+    <div id="installation-contenu"><p class="chargement" role="status">Lecture de l'état de l'installation…</p></div>
+    <p class="installation-quitter"><a href="#/accueil" id="installation-quitter">Ouvrir Prévo sans terminer l'installation (il reste joignable sur ce PC seulement)</a></p>
+    <p class="demarrage-pied">Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS</p>
+  </div>
+</div>
+
 <!-- ===================================================== coque de l'application -->
 <div class="coque" id="app" hidden>
 
@@ -344,6 +367,9 @@
 <script src="js/modules/aide-ecrans.js"></script>
 <script src="js/modules/acces-textes.js"></script>
 <script src="js/modules/connexion-ecrans.js"></script>
+<script src="js/modules/installation-etapes.js"></script>
+<script src="js/modules/installation-ecrans.js"></script>
+<script src="js/modules/installation-fiche.js"></script>
 <script src="js/modules/accueil.js"></script>
 <script src="js/modules/accueil-bento.js"></script>
 <script src="js/modules/causes-frequentes.js"></script>

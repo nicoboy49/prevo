@@ -1,0 +1,155 @@
+/* Prévo — assistant d'installation (js/modules/installation-ecrans.js, installation-etapes.js, installation-fiche.js ;
+   ARCHITECTURE.md §22.10 ; lot 7, CS130). Écran plein #ecran-installation (boîte centrée plus large que celle de la
+   connexion : les textes de chaque étape) et fiche d'accès, à l'écran comme à l'impression. Uniquement des variables
+   de la charte (css/style.css) : aucune couleur codée en dur.
+   Sommaire : 1 écran et progression · 2 étape (choix, champs de 48 px, textes, « Régler autrement ») · 3 fiche d'accès ·
+   4 téléphone · 5 impression (fond blanc, encre noire, pas de bouton, deux QR lisibles). */
+
+/* =========================================================================================
+   1. Écran et progression
+   ========================================================================================= */
+
+#ecran-installation .boite-demarrage { max-width: 760px; }
+#ecran-installation .marque p { margin-top: 6px; }
+#installation-premiere-ligne { font-weight: 600; color: var(--texte); }
+#installation-alertes { display: flex; flex-direction: column; gap: 8px; }
+#installation-alertes .alerte { margin: 0; }
+.installation-quitter { text-align: center; }
+.installation-quitter a { color: var(--muted); font-size: .875rem; text-decoration: underline; }
+
+.installation-progression {
+  list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px;
+}
+.installation-progression li {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px; border-top: 3px solid var(--trait-2);
+  font-size: .75rem; color: var(--muted); text-align: center; min-width: 0;
+}
+.installation-progression .numero { font-weight: 800; color: var(--texte-2); }
+.installation-progression .libelle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.installation-progression li.faite { border-top-color: var(--vert); }
+.installation-progression li.faite .numero { color: var(--vert); }
+.installation-progression li.courante { border-top-color: var(--bleu); color: var(--texte); }
+.installation-progression li.courante .numero { color: var(--bleu); }
+.installation-progression li.sans-objet { opacity: .55; text-decoration: line-through; }
+
+.installation-sautee { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--survol); color: var(--texte-2); font-size: .9375rem; }
+.installation-une-page { margin: 0; }
+
+/* =========================================================================================
+   2. Une étape : question, choix, champs tactiles de 48 px, les quatre textes, « Régler autrement »
+   ========================================================================================= */
+
+.installation-etape { display: flex; flex-direction: column; gap: 14px; }
+.installation-etape h2 { margin: 0; display: flex; flex-direction: column; gap: 2px; font-size: 1.375rem; }
+.installation-numero { font-size: .75rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 600; }
+.installation-fait { color: var(--vert); margin-left: .5em; }
+.installation-fait::before { content: "\2713 "; }
+.installation-etape .note, .installation-etape .aide { margin: 0; }
+.installation-etape .alerte { margin: 0; }
+
+.installation-choix-liste { display: flex; flex-direction: column; gap: 8px; }
+.installation-choix {
+  display: flex; align-items: flex-start; gap: 12px; min-height: 48px; padding: 10px 14px; border-radius: 14px;
+  border: 1px solid var(--trait-2); background: var(--carte-2); cursor: pointer; color: var(--texte);
+}
+.installation-choix:hover { background: var(--survol); }
+.installation-choix:has(input:checked) { border-color: var(--bleu); background: var(--teinte-bleu); }
+.installation-choix input { width: 22px; height: 22px; margin: 3px 0 0; flex: none; accent-color: var(--bleu); }
+.installation-choix > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.installation-choix b { color: var(--fort); }
+.installation-choix small { color: var(--texte-2); font-size: .875rem; overflow-wrap: anywhere; }
+.installation-case { min-height: 48px; }
+.installation-case input { width: 24px; height: 24px; flex-shrink: 0; }
+
+.installation-etape .champ input[type="text"], .installation-etape .champ input[type="password"],
+.installation-etape .champ input[type="number"] { min-height: 48px; font-size: 1rem; }
+.installation-etape .btn { min-height: 48px; }
+.installation-actions { margin-top: 0; }
+.installation-actions .espace { flex: 1 1 auto; }
+.installation-actions-etape { margin-top: 0; }
+.installation-erreur[hidden] { display: none; }
+.installation-resultat { border: 1px solid var(--bord-vert); background: var(--teinte-vert-faible); border-radius: 12px; padding: 10px 14px; }
+.installation-resultat p { margin: 0 0 .4rem; }
+.installation-resultat ul { margin: 0; padding-left: 1.2rem; color: var(--texte-2); }
+.installation-attente .chargement { margin: 0; }
+.installation-tailscale-etat { margin: 0; font-weight: 600; }
+
+/* Les quatre textes : qui est concerné, ce que ça change, pourquoi, conseil selon la situation */
+.installation-textes { border-top: 1px solid var(--trait); padding-top: 12px; }
+.installation-textes h3 { margin: 0 0 .5rem; font-size: 1rem; color: var(--texte); }
+.installation-textes dl { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 16px; }
+.installation-textes dl > div { min-width: 0; }
+.installation-textes dt { font-size: .75rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; margin-bottom: 3px; }
+.installation-textes dd { margin: 0; color: var(--texte-2); font-size: .9375rem; overflow-wrap: anywhere; }
+.installation-textes [data-texte="conseil"] { color: var(--texte); }
+.installation-conseils { margin: 0; padding-left: 1.1rem; }
+.installation-conseils b { color: var(--fort); }
+
+.installation-autrement { border: 1px solid var(--trait-2); border-radius: 12px; padding: 0 14px; }
+.installation-autrement summary { cursor: pointer; min-height: 48px; display: flex; align-items: center; color: var(--cyan); font-weight: 600; }
+.installation-autrement-corps { padding: 4px 0 14px; display: flex; flex-direction: column; gap: 12px; }
+.installation-autrement-corps .note, .installation-autrement-corps .aide { margin: 0; }
+.installation-autrement-corps code { font-family: ui-monospace, Consolas, monospace; background: var(--survol); border-radius: 6px; padding: .1rem .35rem; overflow-wrap: anywhere; }
+.installation-reglage-lu { color: var(--texte-2); font-size: .9375rem; }
+.installation-reglage-lu b { color: var(--texte); font-family: ui-monospace, Consolas, monospace; font-weight: 600; }
+
+.installation-recap { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 6px 14px; }
+.installation-recap dt { color: var(--muted); font-size: .875rem; }
+.installation-recap dd { margin: 0; color: var(--texte); overflow-wrap: anywhere; }
+.installation-recap > div { display: contents; }
+.installation-dossier { margin: 0; }
+.installation-dossier h3 { margin: 0 0 .4rem; }
+.installation-dossier p { margin: 0; }
+
+/* =========================================================================================
+   3. Fiche d'accès (étape 8, #/installation/fiche, et la coque)
+   ========================================================================================= */
+
+.fiche-acces { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--trait); padding-top: 12px; }
+.fiche-entete { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.fiche-entete h2 { margin: 0; font-size: 1.25rem; }
+.fiche-entete .aide { margin: 0; }
+.fiche-entete .btn { min-height: 48px; }
+.fiche-bloc { border: 1px solid var(--trait-2); border-radius: 14px; padding: 12px 16px; background: var(--carte-2); }
+.fiche-bloc h3 { margin: 0 0 .4rem; font-size: 1rem; }
+.fiche-bloc p { margin: 0 0 .4rem; color: var(--texte-2); }
+.fiche-bloc p:last-child { margin-bottom: 0; }
+.fiche-bloc ul { margin: 0 0 .4rem; padding-left: 1.2rem; }
+.fiche-bloc b { color: var(--fort); }
+.fiche-adresse { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.fiche-qrs { display: flex; gap: 18px; flex-wrap: wrap; margin: .6rem 0 .4rem; }
+.fiche-qr { margin: 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; max-width: 240px; }
+.fiche-qr svg { width: 160px; height: 160px; display: block; border-radius: 8px; background: var(--qr-fond); }
+.fiche-qr figcaption { display: flex; flex-direction: column; gap: 2px; font-size: .875rem; color: var(--texte-2); }
+.fiche-qr figcaption b { color: var(--fort); }
+
+/* =========================================================================================
+   4. Téléphone (≤ 640 px) : une colonne, boutons pleine largeur, progression sans libellés
+   ========================================================================================= */
+
+@media (max-width: 640px) {
+  .installation-progression .libelle { display: none; }
+  .installation-textes dl { grid-template-columns: minmax(0, 1fr); }
+  .installation-recap { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+  .installation-recap dd { margin-bottom: 8px; }
+  .installation-actions .btn, .installation-actions-etape .btn, .installation-dossier .btn { flex: 1 1 100%; }
+  .installation-actions .espace { display: none; }
+  .fiche-entete .btn { flex: 1 1 100%; }
+  .fiche-qr { max-width: none; }
+}
+
+/* =========================================================================================
+   5. Impression : la fiche copiée dans #impression est seule imprimée (css/style.css) ; fond blanc, encre noire,
+      aucun bouton, deux QR lisibles. Hors de #impression (aperçu du navigateur sans copie), les mêmes règles.
+   ========================================================================================= */
+
+@media print {
+  .fiche-acces, .fiche-bloc, .fiche-qr, .fiche-entete { background: var(--papier); color: var(--encre); }
+  .fiche-acces { border-top: 0; padding-top: 0; }
+  .fiche-bloc { border: 1px solid var(--encre-trait); border-radius: 6px; break-inside: avoid; }
+  .fiche-bloc p, .fiche-qr figcaption, .fiche-entete .aide { color: var(--encre); }
+  .fiche-bloc b, .fiche-qr figcaption b { color: var(--encre); }
+  .fiche-entete .btn, .fiche-acces button, .sans-impression { display: none !important; }
+  .fiche-qr svg { width: 45mm; height: 45mm; border-radius: 0; background: var(--papier); }
+  .installation-progression, .installation-autrement, .installation-actions, .installation-attente, .installation-quitter { display: none !important; }
+}

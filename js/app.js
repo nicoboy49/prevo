@@ -15,7 +15,12 @@
 //      session (rôle → type, prénom et nom, technicien lié), jamais l'écran de profil, jamais mémorisé ;
 //   4. technicien ou responsable : génération des OT préventifs échus (RG5) → marque prevo:preventif ;
 //   5. coque (menu, barre du bas, bandeaux) et premier écran → <html data-etat="pret">.
-// États lus par les tests : data-etat = 'chargement' | 'demarrage' | 'profil' | 'connexion' | 'pret'.
+//   Assistant d'installation (lot 7, §22.10, T168) : page ouverte sur #/installation, servie par le serveur depuis le
+//   PC serveur (127.0.0.1 ou localhost) et /api/info qui rend installation_a_faire → l'écran plein #ecran-installation
+//   (Installation, js/modules/installation-ecrans.js) avant toute lecture de table ; jamais imposé sur une autre
+//   route (les tests des lots 1 à 6 démarrent sans configuration) ; depuis le réseau, rien. L'assistant quitté sans
+//   terminer → démarrage normal sur l'accueil ; terminé → le serveur se relance et la page se recharge.
+// États lus par les tests : data-etat = 'chargement' | 'demarrage' | 'profil' | 'connexion' | 'installation' | 'pret'.
 //
 // Contrat des écrans (les modules de js/modules/ appellent App.ecran) :
 //   App.ecran({
@@ -60,7 +65,9 @@ const App = (() => {
   // Mode Solo (D132, §22.11) : réglage mode_solo de parametres.csv, profil responsable seulement. Ces écrans
   // passent sous « Plus » (repliable dans le menu latéral, feuille « Plus » au téléphone) ; leurs routes restent.
   const ECRANS_SOUS_PLUS_SOLO = ['equipe', 'planning'];
-  const ECRANS_PLEINS = ['ecran-chargement', 'ecran-demarrage', 'ecran-base-vide', 'ecran-profil', 'ecran-connexion', 'app'];
+  const ECRANS_PLEINS = ['ecran-chargement', 'ecran-demarrage', 'ecran-base-vide', 'ecran-profil', 'ecran-connexion', 'ecran-installation', 'app'];
+  const ROUTE_INSTALLATION = '#/installation';
+  const HOTES_DU_PC_SERVEUR = ['127.0.0.1', 'localhost', '[::1]', '::1'];
   const CHAMPS_DOCUMENTS = [['equipements', 'document'], ['demandes', 'photo'], ['controles_reglementaires', 'rapport']];
 
   // --- État de l'application ----------------------------------------------------------------
@@ -72,6 +79,7 @@ const App = (() => {
   let promesseConnexion = null;    // écran de connexion en cours (une seule fois à la fois)
   let poste = '';                  // nom du poste (journal, verrou)
   let adressesReseau = [];         // mode serveur : ['http://192.168.1.10:8080/', …]
+  let installationAFaire = false;  // mode serveur : /api/info rend installation_a_faire (pas de prevo.config.json, §22.10)
   const ecrans = [];               // écrans enregistrés par les modules
   let ecranCourant = null;
   let saisieEnCours = false;
@@ -177,8 +185,12 @@ const App = (() => {
     // Version web : pas de serveur Prévo à chercher (le site est statique : /api/ping n'existe pas).
     const pageEnHttp = location.protocol === 'http:' || location.protocol === 'https:';
     if (!VERSION_WEB && pageEnHttp && await StockageServeur.detecter()) {
+      const serveur = StockageServeur.creer();
+      // Lot 7 (§22.10) : #/installation sur le PC serveur, sans configuration → l'assistant d'abord ; quitté sans
+      // terminer, Prévo s'ouvre normalement sur l'accueil (terminé, la page se recharge d'elle-même).
+      if (await ouvrirAssistantSiDemande(serveur)) remplacerRoute(ROUTE_ACCUEIL);
       try {
-        await ouvrirAvec(StockageServeur.creer());
+        await ouvrirAvec(serveur);
       } catch (erreur) {
         signalerErreur(erreur, 'lecture des données du serveur');
         await afficherDemarrage();
@@ -186,6 +198,34 @@ const App = (() => {
       return;
     }
     await afficherDemarrage();
+  }
+
+  // Le PC serveur lui-même : la page est ouverte par 127.0.0.1 ou localhost (les routes de l'assistant n'existent que là).
+  function pcServeur() {
+    return HOTES_DU_PC_SERVEUR.includes(location.hostname);
+  }
+
+  // Vrai si l'assistant a été montré (route #/installation, PC serveur, installation à faire) puis quitté sans terminer.
+  async function ouvrirAssistantSiDemande(serveur) {
+    if (typeof Installation === 'undefined' || !Installation.estRoute(location.hash) || !pcServeur()) return false;
+    let informations;
+    try {
+      informations = await serveur.info();
+    } catch (erreur) {
+      console.warn('Prévo : état de l\'installation inconnu (' + (erreur && erreur.message) + ').', erreur);
+      return false;
+    }
+    if (!informations.installationAFaire) return false;
+    montrer('ecran-installation', 'installation');
+    await Installation.ouvrir();
+    return true;
+  }
+
+  // Lien discret « Installer Prévo (assistant) » des écrans de démarrage en mode serveur : sur le PC serveur seulement,
+  // tant que l'installation n'est pas faite ; depuis le réseau, rien.
+  function montrerLienInstallation() {
+    const visible = mode === 'serveur' && installationAFaire && pcServeur() && typeof Installation !== 'undefined';
+    UI.$$('.lien-installation').forEach((zone) => { zone.hidden = !visible; });
   }
 
   async function afficherDemarrage() {
@@ -347,6 +387,18 @@ const App = (() => {
     // chaque table répondrait 401 (ou 403 avec un mot de passe provisoire : la base paraîtrait vide).
     if (mode === 'serveur') await ouvrirSession();
     montrer('ecran-chargement', 'chargement');
+    // /api/info avant les tables (après la session : la route n'est pas publique) : adresses réseau, et l'installation
+    // à faire, pour le lien de l'assistant sur les écrans « base vide » et « profil » (§22.10).
+    if (mode === 'serveur') {
+      try {
+        const informations = await adaptateur.info();
+        adressesReseau = (informations && informations.adressesReseau) || [];
+        installationAFaire = Boolean(informations && informations.installationAFaire);
+      } catch (erreur) {
+        console.warn('Prévo : adresses réseau du serveur inconnues (' + (erreur && erreur.message) + ').', erreur);
+      }
+    }
+    montrerLienInstallation();
     await Donnees.chargerTout();
 
     if (mode !== 'demo' && Donnees.baseVide()) {
@@ -357,14 +409,6 @@ const App = (() => {
     }
     const formatAJour = await passerAuFormatCourant();   // avant TOUTE autre écriture, pour tous les profils
 
-    if (mode === 'serveur') {
-      try {
-        const informations = await adaptateur.info();
-        adressesReseau = (informations && informations.adressesReseau) || [];
-      } catch (erreur) {
-        console.warn('Prévo : adresses réseau du serveur inconnues (' + (erreur && erreur.message) + ').', erreur);
-      }
-    }
     if (mode === 'dossier') await verifierVerrouDossier();
 
     // Comptes exigés : le profil est déduit de la session (D126), l'écran de profil de 1.2 ne s'affiche jamais.
@@ -1183,6 +1227,14 @@ const App = (() => {
     window.addEventListener('dragover', (evenement) => evenement.preventDefault());
     window.addEventListener('drop', (evenement) => evenement.preventDefault());
 
+    // Assistant d'installation (§22.10) : le lien des écrans de démarrage recharge la page sur #/installation
+    // (l'assistant s'ouvre avant toute lecture de table : rien à perdre au démarrage).
+    UI.$$('.lien-installation a').forEach((lien) => lien.addEventListener('click', (evenement) => {
+      evenement.preventDefault();
+      location.hash = ROUTE_INSTALLATION;
+      location.reload();
+    }));
+
     // Base vide
     UI.$('#btn-base-demo').addEventListener('click', () => { if (resoudreBaseVide) resoudreBaseVide('demo'); resoudreBaseVide = null; });
     UI.$('#btn-base-vide').addEventListener('click', () => { if (resoudreBaseVide) resoudreBaseVide('vide'); resoudreBaseVide = null; });
@@ -1273,6 +1325,8 @@ const App = (() => {
     chargerSheetJS,
     changerProfil,
     comptesExiges: () => comptesExiges,
+    installationAFaire: () => installationAFaire,
+    pcServeur,
     demanderConnexion,
     deconnecter,
     exporterZip,

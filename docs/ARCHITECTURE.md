@@ -1303,7 +1303,10 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   Écart retenu (T43) : `indicateurs-series.js` (séries des graphiques) s'insère après
   `indicateurs-regles.js`, qui aurait dépassé 700 lignes. Lot 7 (T155) : `connexion-ecrans.js` (objet `Connexion`,
   écran de connexion, §22.4) se charge après `acces-textes.js` (ses textes) et avant `accueil.js` ; feuille
-  `css/modules/connexion.css`.
+  `css/modules/connexion.css`. Lot 7 (T168) : `installation-etapes.js` (objet `InstallationEtapes`, les formulaires des
+  huit étapes), `installation-ecrans.js` (objet `Installation`, l'écran plein de l'assistant, §22.10) et
+  `installation-fiche.js` (objet `InstallationFiche`, la fiche d'accès et la route `#/installation/fiche` de la coque) se
+  chargent dans cet ordre après `connexion-ecrans.js` ; feuille `css/modules/installation.css` (avec `@media print`).
   Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
   fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
   `Parametres`. Un seul écouteur `DOMContentLoaded` par module, dans son dernier fichier
@@ -3833,7 +3836,47 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   faite… ») et `GET /api/info` rend `installation_a_faire: true` — pour que l'écran propose l'assistant, jamais
   pour l'imposer : les tests des lots 1 à 6 tournent sans configuration. Le message « tant que l'installation n'est
   pas terminée, Prévo n'est joignable que sur ce PC » est un texte d'écran (T168, T169).
-- **Tests** : `tests/test_installation_api.py` (serveur du processus avec `config.lancer_eleve`, `config.relancer`,
+- **Écran** (T168 ; `js/modules/installation-ecrans.js`, `installation-etapes.js`, `installation-fiche.js`, feuille
+  `css/modules/installation.css`) : écran plein `#ecran-installation` hors de la coque (état `'installation'`), ouvert par
+  `App` quand la page est sur `#/installation` (ou `#/installation/fiche`), servie depuis le PC serveur
+  (`location.hostname` 127.0.0.1 ou localhost) et que `/api/info` rend `installation_a_faire` (`adaptateur.info().
+  installationAFaire`) ; jamais sur une autre route (les tests des lots 1 à 6 ouvrent `/` sans configuration et voient
+  l'écran de profil comme avant) ; depuis le réseau, rien. Les écrans « base vide » et « profil » montrent un lien discret
+  « Installer Prévo (assistant) » (`.lien-installation`) sur le PC serveur tant que l'installation n'est pas faite.
+  Première ligne : « Tant que l'installation n'est pas terminée, Prévo n'est joignable que sur ce PC. » Huit étapes
+  (`Installation.ETAPES` : situation, portée, compte, certificat, Tailscale, démarrage, sauvegardes, récapitulatif), une
+  par écran avec la progression, « Précédent » et « Continuer » ; chaque étape montre les quatre textes de son choix
+  d'`AccesTextes.choix` (`installation`, `exterieur` + `mot_de_passe`, `mot_de_passe`, `certificat`, `exterieur`,
+  `demarrage` + `veille`, `sauvegardes`, `etiquettes` ; conseil de la situation choisie, les trois conseils avant le choix)
+  dans `.installation-textes[data-choix]` (`dd[data-texte=qui|change|pourquoi|conseil]`) et un `<details
+  class="installation-autrement">` « Régler autrement » (ports, noms, fichiers PEM, mandataire, veille… avec l'aide
+  d'`AccesTextes.options` ; les réglages sans étape dans l'API — durées de session, IA, quota — sont montrés avec leur aide
+  et renvoyés à Paramètres › Accès et installation). Étapes `sans_objet` sautées avec une ligne `.installation-sautee`.
+  Appels : `POST situation`, `portee` (ports et noms), `compte` (12 caractères au moins, indication par la longueur,
+  confirmation, champs vidés à chaque réponse ; Solo sur « ce PC » : prénom et nom seuls ; 409 → l'étape se passe),
+  `certificat` (automatique recommandé ; réseau privé si « dehors » ; fichiers et mandataire pour l'informaticien, sous
+  « Régler autrement » sinon), `tailscale` (lien de téléchargement officiel quand absent ; « J'ai installé Tailscale et je
+  suis connecté » → `detecter` puis `appliquer`, rappels, `unattended` sur clic ; « Plus tard »), `demarrage` (une seule
+  invite d'administrateur annoncée ; élévation refusée → message, l'étape reste ouverte ; commandes hors Windows),
+  `sauvegardes` (dossier ou « Plus tard »), `deplacer` (carte du récapitulatif quand l'étape est à faire, « Garder ce
+  dossier » possible), `terminer` puis attente de la relance (`/api/info` toutes les 2 s jusqu'à `installation_a_faire`
+  faux ou 401, rechargement sur `#/accueil` ; message au bout de 60 s). Toute erreur du serveur s'affiche telle quelle
+  sous le bouton (`.installation-erreur`), l'étape reste ouverte. Le brouillon fait foi : `GET etat` replace l'assistant à
+  la première étape à faire. Situation « informaticien » : après l'étape 1, toutes les étapes sur une page (une section
+  par étape, « Enregistrer cette étape », rien d'automatique sans clic). Fiche d'accès (`InstallationFiche.rendre`,
+  `GET fiche`) à l'étape 8, sur `#/installation/fiche` et dans la coque après l'installation (responsable) : adresses
+  de la porte, QR « Ouvrir Prévo » (`UI.qrSvg`), QR « Faire confiance au PC atelier » si `autorite_presente`, adresse
+  Tailscale, arrêter et relancer, où sont les données, mot de passe oublié ; « Imprimer » copie la fiche dans
+  `#impression` (seul imprimé, règle de `style.css`) puis `window.print()` ; `@media print` : fond blanc, encre noire,
+  aucun bouton, QR de 45 mm. « Ouvrir Prévo sans terminer » quitte l'assistant : démarrage normal sur l'accueil.
+  Point ouvert (T167, T171) : en Solo, `terminer` crée `parametres.csv` et `techniciens.csv`, la base n'est donc plus
+  « vide » à la première ouverture (pas de choix « démo ou vide ») ; l'assistant ne le propose pas encore.
+- **Tests** : `tests/test_installation_ecrans.py` (T168 : serveur du processus sur une copie de la démo ou un dossier
+  vide, servant l'application, `lancer_eleve` et `relancer` injectés, faux mkcert et faux tailscale par
+  `PREVO_MKCERT` et `PREVO_TAILSCALE` ; parcours Solo « ce PC » à 1280 px jusqu'à « Terminer » et le fichier écrit,
+  Atelier à 375 px sans défilement horizontal et zones de 48 px, informaticien sur une page, les quatre textes de chaque
+  étape comparés à `AccesTextes`, « Régler autrement », impression en média `print`, client du réseau sans assistant,
+  `/` sans configuration inchangé) ; `tests/test_installation_api.py` (serveur du processus avec `config.lancer_eleve`, `config.relancer`,
   `dossier_application` et `systeme` injectés ; faux mkcert et faux tailscale par `PREVO_MKCERT` et `PREVO_TAILSCALE`,
   jamais hérités du poste : `tests/commun.py` ; les quatre parcours comparés clé à clé ; 404 vu du réseau par un
   serveur sur 0.0.0.0 et par `tests/mandataire_test.py` ; serveur réel au premier lancement) ;
