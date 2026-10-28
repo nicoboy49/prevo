@@ -7,8 +7,9 @@ vise un lecteur qui se demande si un projet confié à une IA peut être contrô
 Les chiffres cités viennent de commandes lancées au moment de la rédaction (suite de tests, historique
 git) ou du journal de chantier, qui consigne chaque vérification. Ce qui n'a pas été vérifié est
 présenté comme prévu. Les sections 1 à 6 décrivent la méthode et le lot 1 ; la section 7 décrit le
-lot 2, la section 8 le lot 3, la section 9 le lot 3 bis, la section 10 le lot 4 et la section 11 le
-lot 5, menés de la même façon.
+lot 2, la section 8 le lot 3, la section 9 le lot 3 bis, la section 10 le lot 4, la section 11 le
+lot 5, la section 12 le lot 6 et la section 13 le lot 7, menés de la même façon ; la section 14 en
+tire les leçons.
 
 ## 1. Principe : écrire ce qui est attendu avant de coder
 
@@ -797,7 +798,127 @@ Le dépôt a été **recréé** le 24 octobre sous le nouveau nom (`nicoboy49/pr
 réécrit pour ne plus porter l'ancien nom ; `main` et les étiquettes publiques y sont envoyées à la
 clôture avec l'accord de Nicolas, les étiquettes internes du chantier restant sur le poste.
 
-## 13. À retenir pour piloter une IA
+## 13. Lot 7 : accès et installation, version 2.0.0
+
+Jusqu'à la version 1.2, le serveur écoutait tout le réseau sans authentification et les profils n'étaient
+« pas une sécurité ». Le lot 7 rend Prévo **installable seul et joignable en sécurité**. Un **assistant
+d'installation**, dans le navigateur, pose trois questions (qui l'utilise, depuis où, le compte du
+responsable) et règle le reste : trois **portées** (ce PC, le Wi-Fi de l'atelier, aussi hors de
+l'atelier), des **comptes** vérifiés par le serveur sur chaque route, des **téléphones enrôlés** par QR
+pour les demandeurs, le **https** dès que Prévo quitte le PC (certificat local fabriqué par mkcert, page
+d'entrée qui guide chaque téléphone pour « faire confiance au PC atelier »), **Tailscale** ou le mandataire
+de l'entreprise pour l'extérieur sans ouvrir de port sur la box, le **démarrage avec le PC**, la **copie
+externe des sauvegardes**, un **mode Solo** pour la personne seule et les **corrections de l'audit** de la
+version 1.1. Python est dans le zip : rien à installer. Le lot s'est fait en deux temps : une **étude**
+complète (benchmark de 23 logiciels, comparatif des accès distants, options techniques), validée par
+Nicolas avec ses réponses à quinze questions, puis le cahier des charges et le chantier.
+
+### Les décisions de Nicolas
+
+Le cahier des charges compte **20 décisions** (D121 à D140) et **19 critères de succès** (CS119 à CS137).
+Règle de fond, tirée du brief : **mot de passe et https obligatoires dès que Prévo est joignable au-delà du
+PC**, et **jamais de port ouvert sur la box**. Les points tranchés par Nicolas :
+
+- **Qui se connecte comment** (D124, D125) : un compte nominatif pour le responsable et les techniciens ;
+  à l'atelier, un demandeur n'a qu'un téléphone enrôlé par QR, sans mot de passe ; en Intranet, un mot de
+  passe pour tous.
+- **Le https dès le Wi-Fi** (D127) : un téléphone non configuré ne doit jamais voir une erreur du
+  navigateur. D'où une porte d'entrée en http qui guide pas à pas Android et iPhone, et des étiquettes qui
+  gardent l'adresse de la porte : celles imprimées en 1.2 restent valables. Nicolas a ajouté ce critère à
+  la validation du cahier des charges (CS137).
+- **Hors de l'atelier** (D128) : Tailscale nommé, détecté et guidé, jamais installé à la place de
+  l'utilisateur ; le VPN de l'entreprise en alternative.
+- **La distribution** (D131) : Python embarqué dans le zip, `C:\Prevo` par défaut. La version 3.12 prévue
+  ne recevant plus de paquets Windows corrigés, c'est la 3.14 qui est livrée, validée aux arbitrages.
+- **Le mode Solo** (D132) : le compte responsable avec un technicien « moi », « Nouvel OT » en premier et
+  la clôture en une étape.
+- **Hors périmètre** (D135, D136, D139) : pas d'annuaire d'entreprise, l'hébergement « sur demande »,
+  ECharts 6 et le contrôle des archives importées reportés.
+- **Les arbitrages de fin de chantier** (28 octobre) : les points tranchés par l'orchestrateur faute de
+  texte, présentés sur une page à cocher avec le contexte minimum de chacun. Tous validés sauf un :
+  l'**assistant IA**, que le chantier laissait au demandeur pour reformuler sa demande, est **réservé aux
+  techniciens et au responsable**.
+
+### Les chiffres
+
+- **33 tâches** (T148 à T181) en **12 vagues**, chacune validée par l'outil de vérification ; environ la
+  moitié faite par des sous-agents dans des copies de travail séparées, reportées sur la branche
+  principale par l'orchestrateur après relecture et preuve rejouée.
+- **45 commits** depuis la version 1.2.0, l'aide à l'écran comprise ; **171 fichiers** touchés, environ
+  **27 400 lignes ajoutées** : 11 000 lignes de code (serveur, écrans de connexion,
+  d'accès et de l'assistant, page d'entrée, lanceurs), 13 700 lignes de tests (28 fichiers de tests
+  nouveaux), 2 500 lignes de documentation ; aucune bibliothèque nouvelle, ni côté serveur ni côté
+  navigateur.
+- **1 762 tests** dans la suite (1 449 à la fin du lot 6), jouée d'un trait en 39 minutes avant la clôture.
+- **Durée** : de la demande d'étude (25 octobre, 22 h 23) à la clôture (29 octobre, avant la recette
+  réelle), dont environ deux jours d'arrêt (crédits d'usage épuisés, coupures réseau).
+
+### Ce que les relectures et la recette ont trouvé
+
+Chaque tâche a été relue et sa preuve rejouée par l'orchestrateur. Les quatre premiers défauts ci-dessous
+ont été trouvés en écrivant la documentation d'installation, les deux suivants par la recette en mode
+serveur, qui suit les parcours comme un utilisateur :
+
+- un **zip incomplet** : la page d'entrée n'était pas dans le zip de release, si bien qu'une installation
+  d'atelier aurait répondu par une erreur ; le test du zip exige maintenant ses fichiers ;
+- une **impasse au premier compte** : avec les comptes exigés à la main et aucun responsable, personne ne
+  pouvait plus entrer, assistant compris. L'assistant reste joignable depuis le PC serveur tant qu'on sait
+  qu'aucun responsable n'existe ; un fichier des comptes abîmé garde tout fermé, sinon le premier compte
+  créé aurait écrasé les autres ;
+- un **dossier conseillé refusé** : le zip dézippé dans `C:\Prevo` donne un sous-dossier, que l'assistant
+  proposait de déplacer, puis refusait de déplacer ;
+- la **clé privée du certificat** partait dans les sauvegardes et leur copie externe (clé USB, NAS) ; elle
+  n'y va plus et se refabrique au démarrage si elle manque ;
+- une **limite de connexions mal placée** : le plafond de 32 requêtes à la fois (audit F2) était tenu par
+  les connexions inactives que les navigateurs gardent ouvertes, si bien que cinq navigateurs ouverts
+  bloquaient le sixième ; une place n'est prise qu'à l'arrivée d'une requête ;
+- des **adresses qui ne répondaient pas** : en portée « ce PC », l'accueil proposait un QR à un téléphone
+  qui ne pouvait pas joindre le PC ; il renvoie maintenant aux paramètres.
+
+Plus tôt, un piège de Windows : écouter sur 127.0.0.1 réussissait sur un port déjà tenu par un autre
+programme ; Prévo sonde maintenant le port avant d'écouter.
+
+### Les preuves propres au lot 7
+
+- **Aucune vraie commande d'administrateur dans les tests** : faux mkcert avec une autorité de test, faux
+  Tailscale (le vrai n'est jamais lancé), scripts de démarrage vérifiés par l'analyseur de PowerShell sans
+  être exécutés. L'élévation réelle, les vrais téléphones et Tailscale en 4G sont à la recette réelle.
+- **Table des droits, route par route** : trois sessions (demandeur, technicien, responsable) et un appareil
+  enrôlé ; chaque case interdite rend 403, chaque case permise 200. La liste des routes vient du code : une
+  route oubliée dans la table fait échouer le test.
+- **Mandataire de test** (`tests/mandataire_test.py`) : un mandataire inverse minimal qui joue
+  `tailscale serve` ou celui de l'entreprise ; les en-têtes `X-Forwarded-*` forgés par un client direct
+  restent sans effet.
+- **Calcul indépendant** du hachage des mots de passe (scrypt) et horloge simulée pour le blocage de
+  15 minutes après dix échecs.
+- **Recette** (`tests/test_recette_lot7.py`) en mode serveur : quatre parcours de bout en bout (Solo,
+  Atelier, Intranet, Tailscale), vérifiés à l'écran, sur le disque et dans la console, dont une étiquette
+  QR relue par le décodeur de la caméra.
+
+### La clôture
+
+La suite complète (1 762 tests, dont 4 sautés) a été jouée d'un trait en 39 minutes
+(`.chantier/suite-complete-2026-10-29-ok.log`), puis sa deuxième moitié (`test_[i-z]`) rejouée par la
+vérification de la dernière vague. Sont sautés, en le disant, les essais qui demandent le vrai Excel
+(`PREVO_TEST_EXCEL=1`) ou un vrai modèle d'IA (`PREVO_TEST_IA=1`). Un piège de l'outil de vérification
+est noté pour la suite : un motif est lu comme une expression régulière quand il en est une ;
+« ## [2.0.0] » cherchait un seul caractère et ne prouvait rien, il a fallu échapper les crochets.
+
+Ce que seuls de vrais appareils prouvent passe par la **recette réelle de Nicolas**, en onze points :
+installation Solo et Atelier depuis le zip, une seule invite d'administrateur, Android et iPhone non
+configurés devant une étiquette, navigateur réglé « toujours https », connexion au téléphone, appareil enrôlé
+puis révoqué, redémarrage sans ouvrir de session, Tailscale en 4G, mot de passe oublié, mode Solo de bout en
+bout. Les étiquettes `lot-7` et **`v2.0.0`** sont posées une fois ces onze points à oui ; un « non » ouvre
+d'abord une vague de correction.
+
+### La publication
+
+La branche principale a été envoyée sur le dépôt privé le 28 octobre, avec l'accord de Nicolas, jusqu'à
+l'arbitrage sur l'assistant IA. La suite, avec les étiquettes `lot-7` et `v2.0.0`, part après la recette
+réelle et avec son accord ; le zip de la release, Python et mkcert compris, se joint à la release GitHub
+de `v2.0.0` (`docs/RELEASE.md`).
+
+## 14. À retenir pour piloter une IA
 
 1. Faire écrire et valider le cahier des charges et ses critères de succès avant le code.
 2. Écrire le contrat entre les morceaux avant de distribuer le travail.
@@ -813,3 +934,10 @@ clôture avec l'accord de Nicolas, les étiquettes internes du chantier restant 
    relance avec la raison) et garder les réponses pour qu'une relance ne coûte rien.
 9. Laisser l'humain fixer les seuils qui engagent l'argent et le ton (nombre de phrases, budget,
    taux d'arrêt), et noter au journal chaque décision prise sans lui.
+10. Avant la clôture, faire suivre les parcours de bout en bout par un agent qui joue l'utilisateur,
+    sur le vrai serveur, et faire écrire la documentation d'installation en suivant ses propres
+    consignes : les défauts d'assemblage (un zip incomplet, une limite tenue par des connexions
+    inactives, une impasse au premier compte) ne se voient pas tâche par tâche.
+11. Présenter à l'humain les décisions prises sans lui avec le contexte minimum pour trancher (ce qui
+    existe, ce qui a été choisi, ce que l'autre choix changerait), sur une page à cocher : une
+    question nue, une fois le contexte oublié, ne permet pas de répondre.
