@@ -2128,6 +2128,7 @@ ETAPES_D_ECRITURE = ETAPES_INSTALLATION + ('terminer',)
 ETAT_FAIT, ETAT_A_FAIRE, ETAT_SANS_OBJET = 'fait', 'a_faire', 'sans_objet'
 MODES_CERTIFICAT = ('automatique', 'reseau_prive', 'fichiers', 'mandataire')
 ACTIONS_TAILSCALE = ('detecter', 'appliquer', 'unattended', 'plus_tard')
+# Dossier conseillé sous Windows : C:\Prevo (D131 ; l'assistant propose d'y déplacer Prévo, T171).
 DOSSIER_CONSEILLE_WINDOWS = 'C:\\Prevo'
 DOSSIERS_JAMAIS_COPIES = ('.git', '__pycache__')
 NOM_LANCEUR_WINDOWS, NOM_LANCEUR_AUTRE = 'Lancer_GMAO.bat', 'lancer.sh'
