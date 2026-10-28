@@ -10,9 +10,12 @@
 // l'étape 1, toutes les étapes sur une seule page, rien d'automatique sans clic.
 // Chaque étape écrit le brouillon par POST /api/installation/<etape> (fetch avec X-Prevo) ; une erreur du serveur
 // s'affiche telle quelle sous le bouton et l'étape reste ouverte. Le brouillon fait foi : GET etat replace
-// l'assistant à la première étape à faire. « Terminer et ouvrir Prévo » : POST terminer, puis attente de la relance
-// (/api/info toutes les 2 s, rechargement sur #/accueil ; message au bout de 60 s). Un mot de passe n'est jamais
-// mémorisé ni réécrit dans la page. La fiche d'accès (étape 8, route #/installation/fiche) est mise en page par
+// l'assistant à la première étape à faire. « Terminer et ouvrir Prévo » : POST terminer (base « vide » ou « demo »
+// quand aucun CSV n'était là au départ, T171), puis attente de la relance (/api/info toutes les 2 s, rechargement sur
+// #/accueil ; message au bout de 60 s). Dossier conseillé C:\Prevo (étape 8) : POST deplacer puis attente du serveur
+// relancé depuis la copie (GET etat : dossier), ou « Rester ici » mémorisé dans le brouillon. Un mot de passe n'est
+// jamais mémorisé ni réécrit dans la page. La première ligne (« Tant que l'installation n'est pas terminée… ») est
+// dans index.html, seule source. La fiche d'accès (étape 8, route #/installation/fiche) est mise en page par
 // InstallationFiche (installation-fiche.js) ; les formulaires des étapes sont dans InstallationEtapes
 // (installation-etapes.js). Dépendances : UI, AccesTextes, InstallationEtapes, InstallationFiche. Charte :
 // css/modules/installation.css.
@@ -23,7 +26,6 @@ const Installation = (() => {
   const MOTIF_ROUTE_FICHE = /^#\/installation\/fiche(\?.*)?$/;
   const INTERVALLE_RELANCE_MS = 2000;           // ping du serveur relancé
   const DELAI_RELANCE_MS = 60000;               // au-delà : message, le serveur ne revient pas
-  const PREMIERE_LIGNE = 'Tant que l\'installation n\'est pas terminée, Prévo n\'est joignable que sur ce PC.';
   const MESSAGE_SERVEUR_INJOIGNABLE = 'Le serveur Prévo ne répond pas. Vérifiez que la fenêtre du serveur est ouverte sur le PC.';
   const RAISONS_SANS_OBJET = {
     compte: 'Prévo reste sur ce PC : aucun compte n\'est nécessaire.',
@@ -49,7 +51,6 @@ const Installation = (() => {
   let sautees = [];                // étapes sans objet passées depuis la dernière étape montrée
   let resoudre = null;             // termine Installation.ouvrir (l'assistant quitté sans terminer)
   let fiche = null;                // GET fiche, lue à l'étape 8
-  let dossierRefuse = false;       // « Garder ce dossier » : la proposition de copie vers C:\Prevo n'est plus montrée
 
   // ===========================================================================================
   // 1. Appels au serveur
@@ -137,7 +138,7 @@ const Installation = (() => {
 
   // Contexte donné aux formulaires d'InstallationEtapes : l'état et les textes de cet écran.
   function formulaireDe(etape) {
-    return InstallationEtapes.formulaire(etape.cle, { etat, brouillon, situation, etatEtape, blocTextes, aideOption, dossierRefuse });
+    return InstallationEtapes.formulaire(etape.cle, { etat, brouillon, situation, etatEtape, blocTextes, aideOption });
   }
 
   // ===========================================================================================
@@ -256,9 +257,9 @@ const Installation = (() => {
     const deplacer = UI.$('#inst-deplacer', section);
     if (deplacer) deplacer.addEventListener('click', () => pendant(deplacer, () => deplacerPrevo(section)));
     const garder = UI.$('#inst-dossier-garder', section);
-    if (garder) garder.addEventListener('click', () => { dossierRefuse = true; UI.$('#inst-dossier', section).hidden = true; });
+    if (garder) garder.addEventListener('click', () => pendant(garder, () => resterIci(section)));
     const terminer = UI.$('#inst-terminer', section);
-    if (terminer) terminer.addEventListener('click', () => pendant(terminer, () => terminerInstallation(section)));
+    if (terminer) terminer.addEventListener('click', () => pendant(terminer, () => terminerInstallation(section, lire())));
   }
 
   // Lecture du formulaire puis POST de l'étape ; « passer » (compte déjà fait) avance sans appel.
@@ -359,23 +360,55 @@ const Installation = (() => {
     UI.remplir(zone, InstallationFiche.rendre(fiche));
   }
 
+  // Étape « Dossier » (D131, T171) : copie dans C:\Prevo, chaque fichier vérifié, puis Prévo se relance depuis là ;
+  // l'assistant reprend à la même étape (le brouillon est dans la copie). L'ancien dossier n'est pas supprimé.
   async function deplacerPrevo(section) {
     const erreur = UI.$('#inst-deplacer-erreur', section);
     erreur.hidden = true;
     const reponse = await appeler('deplacer', { vers: etat.dossier_conseille });
     if (!reponse.statut || reponse.statut >= 400) { erreur.textContent = reponse.message; erreur.hidden = false; return; }
-    await attendreRelance(section, reponse.donnees.relance, 'Prévo a été copié (' + reponse.donnees.copie + ' fichiers) dans ' + reponse.donnees.vers + '.', location.hash);
+    const vers = reponse.donnees.vers;
+    await attendreRelance(section, reponse.donnees.relance,
+      'Prévo a été copié (' + reponse.donnees.copie + ' fichiers) dans ' + vers + '. L\'ancien dossier (' + etat.dossier + ') n\'est pas supprimé : effacez-le à la main ensuite.',
+      location.hash, serveurRelanceDepuis(vers));
   }
 
-  async function terminerInstallation(section) {
-    const reponse = await appeler('terminer', {});
+  // « Rester ici » : refus mémorisé dans le brouillon (deplacement_refuse) ; la proposition n'est plus montrée.
+  async function resterIci(section) {
+    const erreur = UI.$('#inst-deplacer-erreur', section);
+    erreur.hidden = true;
+    const reponse = await appeler('deplacer', { rester: true });
+    if (!reponse.statut || reponse.statut >= 400) { erreur.textContent = reponse.message; erreur.hidden = false; return; }
+    reprendre(reponse.donnees);
+    UI.$('#inst-dossier', section).hidden = true;
+  }
+
+  async function terminerInstallation(section, formulaire) {
+    const corps = formulaire && formulaire.lire ? formulaire.lire(section) : {};
+    const reponse = await appeler('terminer', corps);
     if (!reponse.statut || reponse.statut >= 400) { montrerErreur('recapitulatif', reponse.message); return; }
-    await attendreRelance(section, reponse.donnees.relance, 'Configuration écrite dans ' + reponse.donnees.fichier + '.', '#/accueil');
+    await attendreRelance(section, reponse.donnees.relance, 'Configuration écrite dans ' + reponse.donnees.fichier + '.', '#/accueil', serveurConfigure);
   }
 
-  // Le serveur se relance avec la configuration écrite : /api/info toutes les 2 s jusqu'à ce qu'il réponde avec
-  // l'installation faite (ou 401 : comptes exigés, donc configuré), puis la page se recharge ; message après 60 s.
-  async function attendreRelance(section, relance, message, route) {
+  // Après « terminer » : le serveur relancé répond à /api/info avec l'installation faite (ou 401 : comptes exigés,
+  // donc configuré).
+  async function serveurConfigure() {
+    const reponse = await fetch('/api/info', { cache: 'no-store', credentials: 'same-origin' });
+    const donnees = reponse.ok ? await reponse.json().catch(() => null) : null;
+    return reponse.status === 401 || Boolean(donnees && donnees.installation_a_faire === false);
+  }
+
+  // Après « deplacer » : le serveur relancé dit tourner depuis le nouveau dossier (GET etat, casse ignorée : Windows).
+  function serveurRelanceDepuis(vers) {
+    return async () => {
+      const reponse = await appeler('etat');
+      return Boolean(reponse.statut === 200 && reponse.donnees && String(reponse.donnees.dossier || '').toLowerCase() === String(vers).toLowerCase());
+    };
+  }
+
+  // Le serveur se relance : « pret » (une fonction async) interrogé toutes les 2 s jusqu'à ce qu'il dise vrai, puis la
+  // page se recharge sur « route » ; message après 60 s.
+  async function attendreRelance(section, relance, message, route, pret) {
     const zone = UI.$('#inst-attente', section) || UI.$('#inst-attente');
     UI.$$('.btn', section).forEach((bouton) => { bouton.disabled = true; });
     zone.hidden = false;
@@ -384,9 +417,7 @@ const Installation = (() => {
     while (Date.now() - debut < DELAI_RELANCE_MS) {
       await new Promise((suite) => { setTimeout(suite, INTERVALLE_RELANCE_MS); });
       try {
-        const reponse = await fetch('/api/info', { cache: 'no-store', credentials: 'same-origin' });
-        const donnees = reponse.ok ? await reponse.json().catch(() => null) : null;
-        if (reponse.status === 401 || (donnees && donnees.installation_a_faire === false)) {
+        if (await pret()) {
           location.replace(location.pathname + route);
           location.reload();
           return;
@@ -423,7 +454,6 @@ const Installation = (() => {
 
   /** Conduit l'assistant (écran déjà montré par App). Promesse : résolue si l'assistant est quitté sans terminer. */
   async function ouvrir() {
-    UI.$('#installation-premiere-ligne').textContent = PREMIERE_LIGNE;
     const quitter = UI.$('#installation-quitter');
     quitter.onclick = (evenement) => { evenement.preventDefault(); const fin = resoudre; resoudre = null; if (fin) fin('quitter'); };
     const promesse = new Promise((fin) => { resoudre = fin; });
@@ -440,5 +470,5 @@ const Installation = (() => {
     return promesse;
   }
 
-  return { ouvrir, estRoute, ETAPES, PREMIERE_LIGNE };
+  return { ouvrir, estRoute, ETAPES };
 })();

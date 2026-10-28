@@ -233,8 +233,8 @@ class TestParcours(CasInstallation):
         # Dossier conseillé (système simulé Windows, dossier temporaire) : proposé, refus possible.
         page.wait_for_selector("#inst-dossier", state="visible")
         self.assertIn("C:\\Prevo", page.inner_text("#inst-dossier"))
-        page.click("#inst-dossier-garder")
-        self.assertTrue(page.is_hidden("#inst-dossier"))
+        page.click("#inst-dossier-garder")                     # « Rester ici » (T171) : mémorisé par le serveur, puis caché
+        page.wait_for_selector("#inst-dossier", state="hidden")
         self.assertEqual(self.enregistreur.relances, [])
         # Terminer : configuration écrite, relance notée, attente ; le serveur relancé dit l'installation faite → #/accueil.
         page.click("#inst-terminer")

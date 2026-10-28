@@ -3730,7 +3730,8 @@ avec `X-Prevo` : `etat`, `situation` (`seul` \| `equipe` \| `informaticien`), `p
 relance depuis la nouvelle place), `terminer` (écrit la configuration, puis le serveur se relance avec elle). Écran
 `installation-ecrans.js` (huit étapes, quatre textes chacune, « Régler autrement »), vue informaticien sur une page ;
 fiche d'accès imprimable. Paramètres › Accès et installation (`parametres-acces.js`) refait chaque étape depuis le PC
-serveur seulement. Migration 1.2 : CSV gardés ; profils mémorisés ignorés quand `comptes` est vrai.
+serveur seulement. Migration 1.2 : CSV gardés ; profils mémorisés ignorés quand `comptes` est vrai (paragraphe
+« Migration et dossier » ci-dessous, T171).
 
 Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») — T168 (écran) et T170 (Paramètres) sont
 écrits d'après lui :
@@ -3743,7 +3744,8 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   installation, T170). Écritures avec `X-Prevo`. `<etape>` inconnue : 404.
 - **Brouillon** : `donnees/installation.json` (atomique, sous `VERROU_INSTALLATION` : une étape à la fois), clés =
   celles de `prevo.config.json` sauf `ia_cle` (`CLES_DU_BROUILLON` : jamais un secret) + `situation`, `etapes`,
-  `mode_solo`, `solo_technicien_id` ; relu par `etat` (un rechargement ou un redémarrage avant « terminer » ne perd
+  `mode_solo`, `solo_technicien_id`, `base_presente` (des CSV au départ de l'assistant, T171), `deplacement_refuse`
+  (« Rester ici ») ; relu par `etat` (un rechargement ou un redémarrage avant « terminer » ne perd
   rien), copié avec Prévo par `deplacer`, supprimé par `terminer` ; illisible ⇒ comme absent. `ecoute` est toujours
   dérivée (`ecoute_du_brouillon`) : `127.0.0.1` en portée « ce PC » et quand un mandataire sur ce PC porte seul le
   https (réseau privé Tailscale sans certificat local, mandataire de l'entreprise : `mandataire` vrai sans
@@ -3753,7 +3755,8 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   en Solo : il crée le technicien « moi »), `tailscale` hors de la portée `dehors`, `deplacer` hors de Windows ou
   déjà dans `C:\Prevo` ; un responsable actif vaut `compte` fait.
 - `GET etat` → `{"configuration_presente", "portee", "situation", "etapes", "brouillon" (null sans brouillon),
-  "csv_presents" (des CSV dans le dossier des données : migration 1.2), "dossier" (celui de Prévo),
+  "csv_presents" (des CSV dans le dossier des données : migration 1.2), "nombre_csv", "derniere_modification"
+  (`AAAA-MM-JJTHH:MM:SS` du CSV le plus récent, null sans CSV), "dossier" (celui de Prévo),
   "dossier_conseille" (`C:\Prevo` sous Windows, null ailleurs), "dans_dossier_conseille", "python_embarque"
   (`python/python.exe` présent), "responsable_existe", "tailscale" `{present, connecte, nom, jours_avant_expiration,
   raison}` (`detecter_tailscale` à chaque appel, jamais gardée dans `config.tailscale` : `/api/info` ne change pas),
@@ -3804,21 +3807,26 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   existe, s'écrit (fichier témoin créé puis supprimé) et n'est ni le dossier des données ni un de ses sous-dossiers
   (400 au message, qui ne cite que le nom du dossier) ; brouillon `copie_sauvegardes` (chemin absolu).
 - `POST deplacer` `{"vers": chemin}` (défaut `C:\Prevo` ; Windows seulement, 400 ailleurs ; chemin complet exigé)
-  → `verifier_dossier_cible` (ni le dossier de Prévo, ni dedans, ni au-dessus ; absent ou vide ; 400) ; les données
-  doivent être dans le dossier de Prévo (400 sinon : `--donnees`) ; étape notée faite dans le brouillon (la copie
-  l'emporte), puis `copier_prevo` : le dossier entier, données comprises, sans `.git` ni `__pycache__`, chaque
-  fichier relu (taille et SHA-256 ; écart ⇒ 500, copie retirée, ancien dossier intact) ; puis
-  `config.relancer(cible)`. Rend `{"copie": nombre de fichiers, "vers", "relance": bool}`. L'ancien dossier n'est
-  jamais supprimé.
-- `POST terminer` → réglages = défauts + brouillon, `ecoute` dérivée, `_https_auto` ; 400 au message si `comptes`
+  → étape notée faite dans le brouillon (la copie l'emporte), puis `deplacer_installation(config, cible, brouillon)` :
+  les données doivent être dans le dossier de Prévo (400 sinon : `--donnees`), `verifier_dossier_cible` (ni le
+  dossier de Prévo, ni dedans, ni au-dessus ; absent ou vide ; 400), `copier_prevo` : le dossier entier, données
+  comprises, sans `.git` ni `__pycache__`, chaque fichier relu (taille et SHA-256 ; écart ⇒ 500, copie retirée,
+  ancien dossier intact), brouillon écrit dans la copie (`ecrire_brouillon` au même chemin relatif : l'assistant y
+  reprend à l'étape 8), puis `config.relancer(cible)`. Rend `{"copie": nombre de fichiers, "vers", "relance": bool}`.
+  L'ancien dossier n'est jamais supprimé. `{"rester": true}` (« Rester ici », T171) : `deplacement_refuse` vrai dans
+  le brouillon, étape `a_faire`, rien de copié ; une demande de déplacement ultérieure l'efface.
+- `POST terminer` `{"base": "vide" | "demo"}` (défaut `vide` ; `demo` seulement si `base_presente` est faux dans le
+  brouillon, 400 sinon : les CSV existants ne sont jamais remplacés ; valeur inconnue 400) → réglages = défauts +
+  brouillon, `ecoute` dérivée, `_https_auto` ; 400 au message si `comptes`
   sans responsable actif, si `verifier_regles_portee` refuse (réseau sans https ni mandataire…) ou si le réseau
-  compte sur mkcert absent (Prévo refuserait de démarrer) ; puis `prevo.config.json` écrit **seulement ici**
+  compte sur mkcert absent (Prévo refuserait de démarrer) ; `demo` ⇒ `installer_jeu_de_demo` d'abord (un échec ne
+  laisse rien d'écrit) ; puis `prevo.config.json` écrit **seulement ici**
   (`ecrire_configuration` s'il n'existe pas, `modifier_configuration` sinon : `_aide`, `ia_cle` et les clés inconnues
   gardés) au chemin de `--config` (défaut : à côté de `serveur.py`) ; Solo ⇒ `poser_mode_solo` : `mode_solo` = 1,
   `cloture_une_etape` = 1, `solo_technicien_id` dans `parametres.csv` (écriture de table normale, sauvegarde du
-  jour d'abord ; fichier créé avec `version_schema` s'il manque — la base existe alors et le premier démarrage ne
-  propose plus « démo ou vide », à savoir pour T168/T171) ; brouillon supprimé ; `config.relancer(None)`. Rend
-  `{"configuration" (les clés écrites), "fichier", "relance": bool}`.
+  jour d'abord, toutes les autres lignes gardées ; fichier créé avec `version_schema` s'il manque, `version_schema`
+  jamais réécrit sinon) ; brouillon supprimé ; `config.relancer(None)`. Rend
+  `{"configuration" (les clés écrites), "fichier", "relance": bool, "base"}`.
 - `GET fiche` → données de la fiche d'accès (T168 la met en page), d'après le brouillon, sinon le fichier de
   configuration (ce que `terminer` vient d'écrire), sinon les réglages du serveur : `{"situation", "portee",
   "comptes", "adresse_locale", "adresses" (la porte : `http://<adresse IP>:<port_http>/` et les noms acceptés hors
@@ -3843,7 +3851,8 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   installationAFaire`) ; jamais sur une autre route (les tests des lots 1 à 6 ouvrent `/` sans configuration et voient
   l'écran de profil comme avant) ; depuis le réseau, rien. Les écrans « base vide » et « profil » montrent un lien discret
   « Installer Prévo (assistant) » (`.lien-installation`) sur le PC serveur tant que l'installation n'est pas faite.
-  Première ligne : « Tant que l'installation n'est pas terminée, Prévo n'est joignable que sur ce PC. » Huit étapes
+  Première ligne : « Tant que l'installation n'est pas terminée, Prévo n'est joignable que sur ce PC. »
+  (`#installation-premiere-ligne` d'`index.html`, seule source du texte). Huit étapes
   (`Installation.ETAPES` : situation, portée, compte, certificat, Tailscale, démarrage, sauvegardes, récapitulatif), une
   par écran avec la progression, « Précédent » et « Continuer » ; chaque étape montre les quatre textes de son choix
   d'`AccesTextes.choix` (`installation`, `exterieur` + `mot_de_passe`, `mot_de_passe`, `certificat`, `exterieur`,
@@ -3858,9 +3867,14 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   « Régler autrement » sinon), `tailscale` (lien de téléchargement officiel quand absent ; « J'ai installé Tailscale et je
   suis connecté » → `detecter` puis `appliquer`, rappels, `unattended` sur clic ; « Plus tard »), `demarrage` (une seule
   invite d'administrateur annoncée ; élévation refusée → message, l'étape reste ouverte ; commandes hors Windows),
-  `sauvegardes` (dossier ou « Plus tard »), `deplacer` (carte du récapitulatif quand l'étape est à faire, « Garder ce
-  dossier » possible), `terminer` puis attente de la relance (`/api/info` toutes les 2 s jusqu'à `installation_a_faire`
-  faux ou 401, rechargement sur `#/accueil` ; message au bout de 60 s). Toute erreur du serveur s'affiche telle quelle
+  `sauvegardes` (dossier ou « Plus tard »), `deplacer` (carte `#inst-dossier` du récapitulatif quand l'étape est à
+  faire et que le brouillon n'a pas `deplacement_refuse` : « Déplacer Prévo dans C:\Prevo (recommandé) » avec ce que
+  ça fait, ou « Rester ici » → `{"rester": true}`), `terminer` (avec `{"base"}` quand la carte `#inst-base` « Par quoi
+  commencer ? » est montrée : `base_presente` faux dans le brouillon) puis attente de la relance (`attendreRelance`
+  interroge toutes les 2 s jusqu'à ce que le serveur relancé réponde : après `terminer`, `/api/info` avec
+  `installation_a_faire` faux ou 401, rechargement sur `#/accueil` ; après `deplacer`, `GET etat` avec `dossier`
+  égal au nouveau dossier, rechargement sur `#/installation` où l'assistant reprend à l'étape 8 ; message au bout de
+  60 s). Toute erreur du serveur s'affiche telle quelle
   sous le bouton (`.installation-erreur`), l'étape reste ouverte. Le brouillon fait foi : `GET etat` replace l'assistant à
   la première étape à faire. Situation « informaticien » : après l'étape 1, toutes les étapes sur une page (une section
   par étape, « Enregistrer cette étape », rien d'automatique sans clic). Fiche d'accès (`InstallationFiche.rendre`,
@@ -3869,9 +3883,37 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   Tailscale, arrêter et relancer, où sont les données, mot de passe oublié ; « Imprimer » copie la fiche dans
   `#impression` (seul imprimé, règle de `style.css`) puis `window.print()` ; `@media print` : fond blanc, encre noire,
   aucun bouton, QR de 45 mm. « Ouvrir Prévo sans terminer » quitte l'assistant : démarrage normal sur l'accueil.
-  Point ouvert (T167, T171) : en Solo, `terminer` crée `parametres.csv` et `techniciens.csv`, la base n'est donc plus
-  « vide » à la première ouverture (pas de choix « démo ou vide ») ; l'assistant ne le propose pas encore.
-- **Tests** : `tests/test_installation_ecrans.py` (T168 : serveur du processus sur une copie de la démo ou un dossier
+- **Migration et dossier** (T171 ; D131 dernier point, CS130) :
+  - *CSV existants gardés (migration 1.2)* : `etat.csv_presents` vrai (un CSV du schéma dans `donnees/`) ⇒ l'étape 1
+    l'annonce (`#inst-migration` : « Vos données de Prévo 1.2 sont là : N fichiers, dernière modification le … ;
+    elles sont gardées. ») ; aucune étape ne touche un CSV existant, sauf `techniciens.csv` en Solo (technicien
+    « moi » ajouté, ou reconnu par son prénom et son nom : fichier inchangé) et `parametres.csv` à `terminer` en Solo
+    (`mode_solo`, `cloture_une_etape`, `solo_technicien_id` ajoutés ou remplacés, toutes les autres lignes gardées,
+    `version_schema` écrit seulement s'il manque). `base_presente` est noté dans le brouillon à `situation` (l'assistant
+    crée lui-même des CSV ensuite en Solo) : faux ⇒ l'étape 8 demande « Par quoi commencer ? » (vide, ou la démo) et
+    `terminer` reçoit `base`. `demo` : `installer_jeu_de_demo` lit `js/demo-donnees.js` (`lire_jeu_de_demo` : le seul
+    jeu livré, §22.14 ; une ligne par table, chaîne JSON ou morceaux du wiki recollés ; 500 au message s'il est
+    illisible, rien d'écrit), décale les dates du nombre de semaines entières depuis `dateReference`
+    (`decaler_texte_csv` : toute cellule qui commence par `AAAA-MM-JJ`, exactement les colonnes `date` et `date_heure`
+    du schéma sur ce jeu — testé —, 0 semaine : texte tel quel ; même résultat que `StockageDemo.decalerDates`), écrit
+    les 24 tables (sauvegarde du jour d'abord), puis, en Solo, recrée le technicien « moi » dans la table de la démo
+    (`technicien_moi` : TEC-0005, ou un technicien de la démo du même nom), met son identifiant dans le brouillon
+    (`poser_mode_solo` le prend) et dans le compte responsable lié (`modifier_compte`). `vide` : rien de plus que ce
+    que Solo pose ; hors Solo la base reste sans CSV et la première ouverture propose « démo ou vide » comme en 1.2.
+  - *Profils remplacés par la connexion* : avec `comptes`, `prevo.profil` mémorisé par 1.2 est ignoré (T155 : la
+    session fait foi, l'écran de connexion s'affiche, `App.profil` vient de la session) ; sans comptes (Solo « ce
+    PC »), le profil mémorisé reste valable. Prouvé par `test_installation_migration`.
+  - *Dossier C:\Prevo* : voir `POST deplacer` et la carte `#inst-dossier` ci-dessus ; `deplacer_installation` est la
+    fonction de `serveur.py` que la route appelle (copie, vérification, brouillon dans la copie, relance injectable).
+- **Tests** : `tests/test_installation_migration.py` (T171 : base 1.2 = copie de la démo, Solo « ce PC » jusqu'à
+  `terminer` avec chaque CSV comparé octet à octet sauf `parametres.csv` ; base absente avec `demo` — les 24 tables
+  comparées à un décalage calculé d'après les colonnes typées de `js/schema.js`, technicien « moi » et compte
+  relié — et avec `vide` ; `demo` refusé sur une base présente ; `deplacer_installation` vers un dossier temporaire
+  (compte des fichiers, SHA-256, brouillon dans la copie, relance notée, source intacte), « Rester ici » mémorisé,
+  cibles refusées ; profils : Playwright avec `prevo.profil` préréglé, serveur en mode comptes → connexion, sans
+  comptes → profil gardé ; écran : étape 1 avec la ligne de migration, étape 8 avec « Par quoi commencer ? » sur une
+  base absente seulement, « Rester ici » puis rechargement sans la carte, « demo » jusqu'à la relance) ;
+  `tests/test_installation_ecrans.py` (T168 : serveur du processus sur une copie de la démo ou un dossier
   vide, servant l'application, `lancer_eleve` et `relancer` injectés, faux mkcert et faux tailscale par
   `PREVO_MKCERT` et `PREVO_TAILSCALE` ; parcours Solo « ce PC » à 1280 px jusqu'à « Terminer » et le fichier écrit,
   Atelier à 375 px sans défilement horizontal et zones de 48 px, informaticien sur une page, les quatre textes de chaque

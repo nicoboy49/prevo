@@ -2,9 +2,12 @@
 // InstallationEtapes : les formulaires des huit étapes de l'assistant d'installation (installation-ecrans.js,
 // ARCHITECTURE.md §22.10 ; D131, D132 ; CS130) — champs, « Régler autrement » (réglages fins avec l'aide
 // d'AccesTextes.options), lecture des valeurs et messages. Chaque formulaire reçoit le contexte « c » de l'écran :
-// c.etat (GET etat), c.brouillon(), c.situation(), c.etatEtape(cle), c.blocTextes(choix), c.aideOption(cle),
-// c.dossierRefuse. Les réglages que l'API n'écrit pas (durées de session, IA, quota) sont montrés avec leur aide et
-// renvoyés à Paramètres › Accès et installation. Dépendances : UI, AccesTextes. Chargé avant installation-ecrans.js.
+// c.etat (GET etat), c.brouillon(), c.situation(), c.etatEtape(cle), c.blocTextes(choix), c.aideOption(cle).
+// Les réglages que l'API n'écrit pas (durées de session, IA, quota) sont montrés avec leur aide et renvoyés à
+// Paramètres › Accès et installation. Migration depuis 1.2 (T171) : les CSV présents sont annoncés dès l'étape 1 et
+// gardés ; sans CSV au départ (brouillon.base_presente faux), l'étape 8 demande par quoi commencer (vide ou démo) ;
+// dossier conseillé C:\Prevo proposé à l'étape 8 tant que le brouillon n'a pas deplacement_refuse (« Rester ici »).
+// Dépendances : UI, AccesTextes. Chargé avant installation-ecrans.js.
 
 const InstallationEtapes = (() => {
 
@@ -56,8 +59,14 @@ const InstallationEtapes = (() => {
       informaticien: 'Toutes les options sur une page ; rien d\'automatique sans votre accord.',
     };
     const choisie = c.situation();
+    const nombre = Number(c.etat.nombre_csv) || 0;
+    // Migration depuis 1.2 (D131, T171) : des CSV sont là → dit dès la première étape ; ils ne sont jamais touchés.
+    const migration = c.etat.csv_presents ? UI.html`<div class="alerte" id="inst-migration"><div class="alerte-texte">
+        <b>Vos données de Prévo 1.2 sont là</b> : ${nombre} fichier${nombre > 1 ? 's' : ''}${c.etat.derniere_modification
+          ? ', dernière modification le ' + UI.dateHeureFr(c.etat.derniere_modification) : ''} ; elles sont gardées. L'assistant règle
+        l'accès (comptes, https, téléphones) sans rien changer à vos fichiers.</div></div>` : '';
     return {
-      champs: UI.html`<div class="installation-choix-liste">${Object.keys(AccesTextes.situations).map((cle) =>
+      champs: UI.html`${migration}<div class="installation-choix-liste">${Object.keys(AccesTextes.situations).map((cle) =>
         choixRadio('situation', cle, cle === choisie, AccesTextes.situations[cle], details[cle]))}</div>`,
       autrement: UI.html`<p class="note">Tout ce que l'assistant règle s'écrit dans <b>prevo.config.json</b>, à côté de serveur.py, à la fin
         (« Terminer ») ; rien avant. Un informaticien peut aussi tout faire en ligne de commande : <b>serveur.py --aide</b>.</p>`,
@@ -280,22 +289,38 @@ const InstallationEtapes = (() => {
       ['Veille', b.veille_desactivee ? 'Empêchée sur secteur' : 'Inchangée'],
       ['Copie des sauvegardes', b.copie_sauvegardes || 'Plus tard'],
     ];
-    const deplacer = c.etatEtape('deplacer') === 'a_faire' && !c.dossierRefuse;
+    const deplacer = c.etatEtape('deplacer') === 'a_faire' && !b.deplacement_refuse;
+    // Sans CSV au départ de l'assistant (T171) : par quoi commencer ; avec (migration 1.2) : rien à demander, tout est gardé.
+    const choixBase = b.base_presente === false;
     return {
       champs: UI.html`
         <dl class="installation-recap">${lignes.map(([titre, valeur]) => UI.html`<div><dt>${titre}</dt><dd>${valeur}</dd></div>`)}</dl>
+        ${choixBase ? UI.html`<div class="carte installation-dossier" id="inst-base">
+          <h3>Par quoi commencer ?</h3>
+          <div class="installation-choix-liste">
+            ${choixRadio('base', 'vide', true, 'Commencer vide', 'Vos équipements, vos demandes, vos OT : rien d\'autre.')}
+            ${choixRadio('base', 'demo', false, 'Commencer avec les données de démonstration', 'Un atelier fictif (équipements, OT, gammes, magasin, wiki) pour essayer ; ses dates sont ramenées à aujourd\'hui.')}
+          </div>
+        </div>` : ''}
         ${deplacer ? UI.html`<div class="carte installation-dossier" id="inst-dossier">
           <h3>Dossier de Prévo</h3>
           <p>Prévo tourne dans <b>${c.etat.dossier}</b>. Le dossier conseillé est <b>${c.etat.dossier_conseille}</b> : hors des téléchargements et du bureau, un chemin
-            court et stable pour la tâche planifiée et les sauvegardes. L'ancien dossier n'est jamais supprimé.</p>
+            court et stable pour la tâche planifiée et les sauvegardes.</p>
+          <p>Déplacer : Prévo est copié dans ${c.etat.dossier_conseille}, chaque fichier est vérifié, puis Prévo se relance depuis là et l'assistant
+            reprend ici. L'ancien dossier n'est pas supprimé : à effacer à la main ensuite.</p>
           <div class="actions">
-            <button type="button" class="btn btn-secondaire" id="inst-deplacer">Copier Prévo dans ${c.etat.dossier_conseille} et relancer</button>
-            <button type="button" class="btn btn-fantome" id="inst-dossier-garder">Garder ce dossier</button>
+            <button type="button" class="btn btn-secondaire" id="inst-deplacer">Déplacer Prévo dans ${c.etat.dossier_conseille} (recommandé)</button>
+            <button type="button" class="btn btn-fantome" id="inst-dossier-garder">Rester ici</button>
           </div>
           <p class="erreur-champ" id="inst-deplacer-erreur" role="alert" hidden></p>
         </div>` : ''}
         <div id="inst-fiche"><p class="chargement" role="status">Lecture de la fiche d'accès…</p></div>`,
       autrement: UI.html`${c.blocTextes('ia')}<p class="note">${NOTE_PLUS_TARD}</p>${['ia_fournisseur', 'ia_url', 'ia_en_ligne'].map((cle) => reglageLu(c, cle))}`,
+      // Corps de « terminer » : la base de départ quand elle a été demandée, rien sinon.
+      lire(section) {
+        const coche = UI.$('input[name="base"]:checked', section);
+        return coche ? { base: coche.value } : {};
+      },
     };
   }
 

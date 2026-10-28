@@ -2135,6 +2135,16 @@ NOM_SCRIPT_REINITIALISATION = 'Reinitialiser_mot_de_passe.bat'
 VERSION_SCHEMA_CSV = 3                  # « version » de js/schema.js (§14.1) : posée dans un parametres.csv créé ici
 DELAI_RELANCE_S = 2                     # le serveur s'arrête 2 s après la réponse de « terminer » ou « deplacer »
 ATTENTE_AVANT_RELANCE_S = 3             # le lanceur repart 3 s plus tard, une fois le port rendu
+# « terminer » sur une base absente au départ (T171) : rien de plus (« vide »), ou le jeu de démo, lu dans
+# js/demo-donnees.js — le seul jeu livré (§22.14 : le zip n'a pas de dossier donnees/), produit par
+# outils/generer_demo.py : une ligne par table (chaîne JSON, ou morceaux recollés pour le wiki) et la date de référence.
+BASES_AU_DEPART = ('vide', 'demo')
+FICHIER_JEU_DE_DEMO = os.path.join(DOSSIER_APPLICATION, 'js', 'demo-donnees.js')
+MOTIF_TABLE_DU_JEU_DE_DEMO = re.compile(r'^    ([a-z_]+): ')
+MOTIF_DATE_DU_JEU_DE_DEMO = re.compile(r'^  dateReference: "([0-9]{4}-[0-9]{2}-[0-9]{2})",?$')
+PREFIXE_MORCEAUX_DU_JEU_DE_DEMO = "((m, s) => s.map((r) => m[r]).join(''))("
+MOTIF_DEBUT_DE_DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')     # comme MOTIF_DATE de js/stockage-demo.js
+MESSAGE_JEU_DE_DEMO_ILLISIBLE = 'Jeu de démo illisible (js/demo-donnees.js) : commencez vide, ou remettez le fichier du zip.'
 MESSAGE_ADRESSE_INCONNUE = 'Adresse inconnue dans l\'API.'
 MESSAGE_SANS_BROUILLON = 'Commencez par dire qui utilise Prévo (étape « situation »).'
 # Clés du brouillon = celles de la configuration, sauf la clé du fournisseur d'IA (un secret : jamais ici).
@@ -2174,11 +2184,16 @@ def lire_brouillon(config):
     return brouillon
 
 
-def ecrire_brouillon(config, brouillon):
+def octets_du_brouillon(brouillon):
+    return (json.dumps(brouillon, ensure_ascii=False, indent=2) + '\n').encode('utf-8')
+
+
+def ecrire_brouillon(config, brouillon, chemin=None):
     """Écriture atomique de donnees/installation.json (un rechargement ou un redémarrage avant « terminer » ne perd
-    rien) ; sous VERROU_INSTALLATION par l'appelant."""
-    os.makedirs(config.dossier_donnees, exist_ok=True)
-    ecrire_atomique(chemin_brouillon(config), (json.dumps(brouillon, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+    rien) ; sous VERROU_INSTALLATION par l'appelant. « chemin » : un autre fichier (le brouillon copié avec Prévo)."""
+    chemin = chemin or chemin_brouillon(config)
+    os.makedirs(os.path.dirname(chemin), exist_ok=True)
+    ecrire_atomique(chemin, octets_du_brouillon(brouillon))
 
 
 def supprimer_brouillon(config):
@@ -2243,6 +2258,9 @@ def brouillon_neuf(config, situation):
     brouillon['situation'] = situation
     brouillon['etapes'] = {etape: ETAT_A_FAIRE for etape in ETAPES_INSTALLATION}
     brouillon['etapes']['situation'] = ETAT_FAIT
+    # Migration depuis 1.2 (T171) : des CSV au départ de l'assistant (ceux de l'utilisateur, jamais touchés) ; noté ici
+    # parce que l'assistant lui-même en crée ensuite en Solo (techniciens.csv à « compte », parametres.csv à « terminer »).
+    brouillon['base_presente'] = bool(tables_presentes(config.dossier_donnees))
     return completer_brouillon(config, brouillon)
 
 
@@ -2273,22 +2291,39 @@ def detection_tailscale_publique(detection):
             'raison': detection.get('raison')}
 
 
+def derniere_modification_csv(dossier, tables):
+    """Date et heure (AAAA-MM-JJTHH:MM:SS, heure locale) du CSV modifié le plus récemment parmi « tables » ; None sans
+    table ou sans fichier lisible."""
+    instants = []
+    for table in tables:
+        try:
+            instants.append(os.path.getmtime(os.path.join(dossier, table + '.csv')))
+        except OSError:
+            pass
+    if not instants:
+        return None
+    return datetime.datetime.fromtimestamp(max(instants)).strftime('%Y-%m-%dT%H:%M:%S')
+
+
 def etat_installation(config):
     """GET /api/installation/etat : la configuration est-elle présente, le brouillon et ses étapes, des CSV dans le
-    dossier des données (migration depuis 1.2), le dossier de Prévo, le Python embarqué, un responsable, Tailscale
-    (detecter_tailscale : commandes locales, jamais gardée dans config.tailscale pour ne pas changer /api/info),
-    mkcert disponible, le système et la version."""
+    dossier des données (migration depuis 1.2 : combien, modifiés quand), le dossier de Prévo, le Python embarqué, un
+    responsable, Tailscale (detecter_tailscale : commandes locales, jamais gardée dans config.tailscale pour ne pas
+    changer /api/info), mkcert disponible, le système et la version."""
     brouillon = lire_brouillon(config)
     if brouillon is not None:
         brouillon = completer_brouillon(config, brouillon)
     reglages = brouillon if brouillon is not None else config.reglages
     windows = config.systeme.startswith('win')
+    tables = tables_presentes(config.dossier_donnees)
     return {'configuration_presente': bool(config.reglages.get('_present')),
             'portee': reglages.get('portee'),
             'situation': brouillon.get('situation') if brouillon is not None else None,
             'etapes': brouillon['etapes'] if brouillon is not None else {etape: ETAT_A_FAIRE for etape in ETAPES_INSTALLATION},
             'brouillon': brouillon,
-            'csv_presents': bool(tables_presentes(config.dossier_donnees)),
+            'csv_presents': bool(tables),
+            'nombre_csv': len(tables),
+            'derniere_modification': derniere_modification_csv(config.dossier_donnees, tables),
             'dossier': os.path.abspath(config.dossier_application),
             'dossier_conseille': DOSSIER_CONSEILLE_WINDOWS if windows else None,
             'dans_dossier_conseille': dans_dossier_conseille(config),
@@ -2526,6 +2561,104 @@ def relancer_prevo(config, dossier=None):
 
     threading.Thread(target=arreter, name='relance', daemon=True).start()
     return True
+
+
+def deplacer_installation(config, cible, brouillon=None):
+    """Déplace Prévo dans « cible » (D131, étape « Dossier » : C:\\Prevo conseillé) : cible vérifiée
+    (verifier_dossier_cible ; les données doivent être dans le dossier de Prévo), copie du dossier entier avec chaque
+    fichier relu (copier_prevo), brouillon de l'assistant écrit dans la copie (l'assistant y reprend où il en était,
+    étape « deplacer » faite), puis relance depuis la copie (config.relancer, injectable, jamais lancée par les tests).
+    Rend {'copie': nombre de fichiers, 'vers', 'relance'} ; ErreurHttp 400 ou 500 au message clair. L'ancien dossier
+    n'est jamais supprimé : l'utilisateur l'efface à la main ensuite."""
+    source = os.path.abspath(config.dossier_application)
+    if not est_sous_dossier(os.path.realpath(config.dossier_donnees), source):
+        raise ErreurHttp(400, 'Le dossier des données n\'est pas dans le dossier de Prévo (option --donnees) : '
+                              'déplacez Prévo à la main.')
+    verifier_dossier_cible(source, cible)               # chemin complet exigé : jamais résolu depuis le dossier courant
+    cible = os.path.abspath(cible)
+    nombre = copier_prevo(source, cible)
+    if brouillon is not None:
+        ecrire_brouillon(config, brouillon, os.path.join(cible, os.path.relpath(chemin_brouillon(config), source)))
+    return {'copie': nombre, 'vers': cible, 'relance': bool(config.relancer(cible))}
+
+
+def lire_jeu_de_demo():
+    """(date de référence, {table: texte CSV}) lus dans js/demo-donnees.js (format d'outils/generer_demo.py : une
+    ligne par table, chaîne JSON ou morceaux recollés pour le wiki) ; ErreurHttp 500 au message clair s'il manque, ne
+    se lit pas ou n'a pas toutes les tables."""
+    octets = lire_octets(FICHIER_JEU_DE_DEMO)
+    if octets is None:
+        raise ErreurHttp(500, MESSAGE_JEU_DE_DEMO_ILLISIBLE)
+    decodeur = json.JSONDecoder()
+    date_reference, textes = None, {}
+    try:
+        for ligne in octets.decode('utf-8').splitlines():
+            trouvee = MOTIF_DATE_DU_JEU_DE_DEMO.match(ligne)
+            if trouvee:
+                date_reference = trouvee.group(1)
+                continue
+            trouvee = MOTIF_TABLE_DU_JEU_DE_DEMO.match(ligne)
+            if not trouvee:
+                continue
+            reste = ligne[trouvee.end():]
+            if reste.startswith(PREFIXE_MORCEAUX_DU_JEU_DE_DEMO):
+                morceaux, fin = decodeur.raw_decode(reste[len(PREFIXE_MORCEAUX_DU_JEU_DE_DEMO):])
+                ordre, _ = decodeur.raw_decode(reste[len(PREFIXE_MORCEAUX_DU_JEU_DE_DEMO) + fin:].lstrip(', '))
+                texte = ''.join(morceaux[rang] for rang in ordre)
+            else:
+                texte, _ = decodeur.raw_decode(reste)
+            if trouvee.group(1) in TABLES and isinstance(texte, str):
+                textes[trouvee.group(1)] = texte
+    except (UnicodeDecodeError, ValueError, TypeError, IndexError):
+        raise ErreurHttp(500, MESSAGE_JEU_DE_DEMO_ILLISIBLE)
+    if date_reference is None or len(textes) != len(TABLES):
+        raise ErreurHttp(500, MESSAGE_JEU_DE_DEMO_ILLISIBLE)
+    return date_reference, textes
+
+
+def decaler_texte_csv(texte, jours):
+    """Octets d'un CSV du jeu de démo avec ses dates décalées de « jours » (comme StockageDemo.decalerDates : toute
+    cellule qui commence par AAAA-MM-JJ, le reste de la cellule gardé ; test_installation_migration vérifie que ces
+    cellules sont exactement celles des colonnes date et date_heure du schéma). 0 jour : le texte tel quel."""
+    if jours == 0:
+        return BOM_UTF8 + texte.encode('utf-8')
+    entete, lignes = lire_csv_tolerant(texte.encode('utf-8'))
+    for ligne in lignes:
+        for position, cellule in enumerate(ligne):
+            if MOTIF_DEBUT_DE_DATE.match(cellule):
+                jour = datetime.date.fromisoformat(cellule[:10]) + datetime.timedelta(days=jours)
+                ligne[position] = jour.isoformat() + cellule[10:]
+    return ecrire_tableau_csv(entete, lignes)
+
+
+def technicien_par_id(config, identifiant):
+    """Ligne de techniciens.csv (dict) qui porte cet identifiant, ou None."""
+    lignes = dictionnaires_csv(lire_octets(chemin_table(config, 'techniciens')), 'techniciens')
+    return next((ligne for ligne in lignes if ligne.get('id', '').strip() == identifiant), None)
+
+
+def installer_jeu_de_demo(config, brouillon, origine=('', '', '')):
+    """« terminer » avec base « demo » sur une base absente au départ (T171) : les tables du jeu de démo écrites dans
+    le dossier des données, dates décalées du nombre de semaines entières écoulées depuis la date de référence
+    (comme « Partir des données de démo » du navigateur, §11), sauvegarde du jour d'abord. En Solo, le technicien
+    « moi » créé à l'étape « compte » est recréé dans la table de la démo (technicien_moi : même prénom et nom), le
+    brouillon et le compte responsable lié suivent son nouvel identifiant. En tenant VERROU_ECRITURE."""
+    date_reference, textes = lire_jeu_de_demo()
+    ancien = brouillon.get('solo_technicien_id', '')
+    moi = technicien_par_id(config, ancien) if ancien else None
+    aujourd_hui = datetime.date.fromtimestamp(maintenant_s(config))
+    jours = int((aujourd_hui - datetime.date.fromisoformat(date_reference)).days / 7) * 7
+    faire_sauvegarde_quotidienne(config)
+    for table in TABLES:
+        ecrire_atomique(chemin_table(config, table), decaler_texte_csv(textes[table], jours))
+    if moi is not None:
+        nouveau = technicien_moi(config, moi.get('prenom', ''), moi.get('nom', ''))
+        brouillon['solo_technicien_id'] = nouveau
+        if nouveau != ancien:
+            for compte in lire_comptes(config):
+                if compte.get('technicien_id') == ancien:
+                    modifier_compte(config, compte['identifiant'], origine, technicien_id=nouveau)
+    return len(TABLES)
 
 
 class Configuration:
@@ -5208,36 +5341,44 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         return self.garder_brouillon(brouillon, 'sauvegardes')
 
     def installation_deplacer(self, brouillon, demande):
-        """{"vers": chemin} (défaut C:\\Prevo ; Windows seulement, 400 ailleurs) : copie du dossier de Prévo entier
-        (données comprises, .git exclu) vers un dossier nouveau ou vide, chaque fichier vérifié, puis relance depuis
-        la nouvelle place (config.relancer) ; l'ancien dossier n'est jamais supprimé. Rend {copie, vers, relance}."""
+        """{"vers": chemin} (défaut C:\\Prevo ; Windows seulement, 400 ailleurs) : deplacer_installation — copie du
+        dossier de Prévo entier (données et brouillon compris, .git exclu) vers un dossier nouveau ou vide, chaque
+        fichier vérifié, puis relance depuis la nouvelle place (config.relancer) ; l'ancien dossier n'est jamais
+        supprimé. Rend {copie, vers, relance}. {"rester": true} (« Rester ici ») : refus mémorisé dans le brouillon
+        (deplacement_refuse), l'étape reste à faire et l'écran ne la propose plus."""
         if not self.config.systeme.startswith('win'):
             raise ErreurHttp(400, 'Le déplacement vers %s n\'existe que sous Windows.' % DOSSIER_CONSEILLE_WINDOWS)
+        if demande.get('rester') is True:
+            brouillon['deplacement_refuse'] = True
+            return self.garder_brouillon(brouillon, 'deplacer', ETAT_A_FAIRE)
         vers = demande.get('vers', DOSSIER_CONSEILLE_WINDOWS)
         if not isinstance(vers, str) or not vers.strip():
             vers = DOSSIER_CONSEILLE_WINDOWS
-        source = os.path.abspath(self.config.dossier_application)
         if not os.path.isabs(vers.strip()):
             raise ErreurHttp(400, 'Donnez un chemin complet (par exemple %s).' % DOSSIER_CONSEILLE_WINDOWS)
-        cible = os.path.abspath(vers.strip())
-        if not est_sous_dossier(os.path.realpath(self.config.dossier_donnees), source):
-            raise ErreurHttp(400, 'Le dossier des données n\'est pas dans le dossier de Prévo (option --donnees) : '
-                                  'déplacez Prévo à la main.')
-        verifier_dossier_cible(source, cible)
+        brouillon.pop('deplacement_refuse', None)
         self.garder_brouillon(brouillon, 'deplacer')          # noté avant la copie : le brouillon copié le sait
         try:
-            nombre = copier_prevo(source, cible)
+            resultat = deplacer_installation(self.config, vers.strip(), brouillon)
         except ErreurHttp:
             self.garder_brouillon(brouillon, 'deplacer', ETAT_A_FAIRE)
             raise
-        relance = bool(self.config.relancer(cible))
-        return {'copie': nombre, 'vers': cible, 'relance': relance, 'etapes': brouillon['etapes']}
+        return dict(resultat, etapes=brouillon['etapes'])
 
     def installation_terminer(self, brouillon, demande):
-        """Règles de portée sur le brouillon (400 au message : comptes sans responsable, réseau sans https…), puis
+        """{"base": "vide" | "demo"} (défaut vide ; demo seulement sur une base absente au départ, 400 sinon : les CSV
+        existants ne sont jamais remplacés). Règles de portée sur le brouillon (400 au message : comptes sans
+        responsable, réseau sans https…), jeu de démo écrit s'il est demandé (installer_jeu_de_demo), puis
         prevo.config.json écrit (seulement ici : ecrire_configuration, ou modifier_configuration s'il existe déjà,
-        les clés inconnues gardées) ; Solo ⇒ mode_solo dans parametres.csv ; brouillon supprimé ; puis le serveur se
-        relance avec la configuration (config.relancer). Rend {configuration, fichier, relance}."""
+        les clés inconnues gardées) ; Solo ⇒ mode_solo dans parametres.csv (les autres lignes gardées) ; brouillon
+        supprimé ; puis le serveur se relance avec la configuration (config.relancer). Rend {configuration, fichier,
+        relance, base}."""
+        base = demande.get('base', 'vide')
+        if base not in BASES_AU_DEPART:
+            raise ErreurHttp(400, 'Base de départ inconnue : « vide » ou « demo ».')
+        if base == 'demo' and brouillon.get('base_presente', True):
+            raise ErreurHttp(400, 'Des fichiers de données sont déjà là : la démonstration ne remplace jamais une base '
+                                  'existante. Terminez avec « vide » (vos fichiers sont gardés).')
         reglages = reglages_par_defaut()
         reglages.update({cle: brouillon[cle] for cle in CLES_DU_BROUILLON if cle in brouillon})
         reglages['ecoute'] = ecoute_du_brouillon(brouillon)
@@ -5255,6 +5396,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         chemin = self.config.reglages.get('_fichier') or os.path.join(self.config.dossier_application,
                                                                       NOM_FICHIER_CONFIGURATION)
         a_ecrire = {cle: reglages[cle] for cle in CLES_DU_BROUILLON}
+        if base == 'demo':
+            with VERROU_ECRITURE:                             # avant la configuration : un échec ne laisse rien d'écrit
+                installer_jeu_de_demo(self.config, brouillon, origine=self.origine())
         try:
             if os.path.isfile(chemin):
                 modifier_configuration(chemin, a_ecrire)
@@ -5267,7 +5411,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                 poser_mode_solo(self.config, brouillon.get('solo_technicien_id', ''))
         supprimer_brouillon(self.config)
         relance = bool(self.config.relancer(None))
-        return {'configuration': a_ecrire, 'fichier': chemin, 'relance': relance}
+        return {'configuration': a_ecrire, 'fichier': chemin, 'relance': relance, 'base': base}
 
     # --- Fichiers statiques ------------------------------------------------
 
