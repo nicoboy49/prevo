@@ -18,6 +18,7 @@ Lancer depuis la racine du projet :
 import csv
 import http.client
 import io
+import json
 import re
 import unittest
 from pathlib import Path
@@ -133,25 +134,33 @@ class TestSocleServeur(CasNavigateur):
         contenu = "<!doctype html><title>Rapport</title><p>Données au 01/10</p>".encode("utf-8")
         statut, _, corps = self.requete("PUT", "/api/documents/rapport-mensuel-test-socle.html", contenu)
         self.assertEqual(statut, 201, corps)
-        statut, entetes, corps = self.requete("GET", "/api/documents/rapport-mensuel-test-socle.html")
+        nom = json.loads(corps)["nom"]          # nom imposé par le serveur (audit F4, T159)
+        self.assertRegex(nom, r"^\d{8}-\d{6}-rapport-mensuel-test-socle\.html$")
+        statut, entetes, corps = self.requete("GET", "/api/documents/" + nom)
         self.assertEqual(statut, 200)
         self.assertEqual(corps, contenu)
         self.assertEqual(entetes["content-type"], "text/html; charset=utf-8")
         self.assertEqual(entetes["content-security-policy"], "sandbox")
         self.assertEqual(entetes["x-content-type-options"], "nosniff")
-        # Jamais d'écrasement : le même nom est refusé (409)
-        statut, _, _ = self.requete("PUT", "/api/documents/rapport-mensuel-test-socle.html", b"v2")
-        self.assertEqual(statut, 409)
-        # « .htm » reste refusé
+        self.assertNotIn("content-disposition", entetes)      # ouvert dans un onglet (« Ouvrir »), jamais téléchargé d'office
+        # Jamais d'écrasement : même nom demandé ⇒ 409 dans la même seconde (test_audit_reseau le prouve sans aléa),
+        # sinon un autre nom imposé ; le premier document reste tel quel.
+        statut, _, corps = self.requete("PUT", "/api/documents/rapport-mensuel-test-socle.html", b"v2")
+        self.assertIn(statut, (201, 409))
+        if statut == 201:
+            self.assertNotEqual(json.loads(corps)["nom"], nom)
+        self.assertEqual(self.requete("GET", "/api/documents/" + nom)[2], contenu)
+        # « .htm » reste refusé (415 : type de document inconnu)
         statut, _, _ = self.requete("PUT", "/api/documents/page.htm", b"<p>x</p>")
-        self.assertEqual(statut, 400)
+        self.assertEqual(statut, 415)
 
     def test_document_html_ecrit_par_l_application(self):
         self.ouvrir()
         nom = self.page.evaluate("""async () => App.adaptateur.ecrireDocument('rapport-socle-app.html',
             new Blob(['<!doctype html><title>R</title>'], { type: 'text/html' }))""")
-        self.assertEqual(nom, "rapport-socle-app.html")
-        self.assertTrue((Path(self.serveur.dossier) / "documents" / "rapport-socle-app.html").is_file())
+        # L'application garde le nom imposé par le serveur (audit F4, T159)
+        self.assertRegex(nom, r"^\d{8}-\d{6}-rapport-socle-app\.html$")
+        self.assertTrue((Path(self.serveur.dossier) / "documents" / nom).is_file())
 
     # -- adresse ---------------------------------------------------------------------------------
 

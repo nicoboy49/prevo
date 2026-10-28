@@ -69,6 +69,9 @@ VERSION_API = 1
 PORT_PAR_DEFAUT = 8080
 NOMBRE_PORTS_SUPPLEMENTAIRES = 20          # 8080 occupé → 8081, … jusqu'à 8100
 TAILLE_MAX_CORPS = 10 * 1024 * 1024        # 10 Mo
+# Audit F2 (§22.12) : requêtes servies en même temps, tous écouteurs confondus (porte et application) ; la
+# suivante attend son tour dans son fil (SEMAPHORE_CONNEXIONS), elle n'est ni refusée ni perdue.
+CONNEXIONS_MAX = 32
 ESSAIS_SI_VERROUILLE = 3                   # fichier ouvert dans Excel : 3 essais…
 PAUSE_ENTRE_ESSAIS_S = 0.1                 # … espacés de 100 ms
 # Relais vers le fournisseur d'IA (lot 4, ARCHITECTURE.md §17.2) : liste fermée des chemins (Ollama :
@@ -184,7 +187,12 @@ COLONNES_PAR_TABLE = {
 }
 
 # Noms autorisés (re.ASCII : \d et \w ne reconnaissent que les caractères ASCII).
+# Nom DEMANDÉ d'un document (PUT /api/documents/<nom>) ; le serveur l'enregistre sous « AAAAMMJJ-HHMMSS-<nom demandé> »
+# (audit F4, nom_de_document_impose) : un nom enregistré est un nom demandé avec ce préfixe facultatif (les documents
+# d'avant le lot 7 n'en ont pas).
 MOTIF_NOM_DOCUMENT = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', re.ASCII)
+PREFIXE_NOM_DOCUMENT = r'([0-9]{8}-[0-9]{6}-)?'
+MOTIF_NOM_DOCUMENT_ENREGISTRE = re.compile(PREFIXE_NOM_DOCUMENT + MOTIF_NOM_DOCUMENT.pattern, re.ASCII)
 # Nom d'une sauvegarde (mêmes règles que js/stockage-dossier.js) :
 #   AAAA-MM-JJ                               quotidienne
 #   AAAA-MM-JJ_HHMMSS                        manuelle
@@ -198,7 +206,8 @@ MOTIF_NOM_SAUVEGARDE = re.compile(
 # « avant-format-v<N> » ; on n'ajoute ici que les versions que Prévo sait vraiment produire.
 MOTIFS_SAUVEGARDE = ('avant-format-v2', 'avant-format-v3', 'avant-import')
 
-# Types MIME des documents acceptés (l'extension décide du type, jamais le contenu).
+# Types MIME des documents acceptés (l'extension décide du type, jamais le contenu ; toute autre extension : 415).
+# Audit F4 (§22.12) : « .doc » et « .xls » (formats binaires à macros) ne sont plus acceptés.
 TYPES_DOCUMENTS = {
     'jpg': 'image/jpeg',
     'jpeg': 'image/jpeg',
@@ -209,12 +218,22 @@ TYPES_DOCUMENTS = {
     'txt': 'text/plain; charset=utf-8',
     'csv': 'text/csv; charset=utf-8',
     'html': 'text/html; charset=utf-8',     # rapport mensuel figé (lot 3, ARCHITECTURE.md §15.1), servi en bac à sable
-    'doc': 'application/msword',
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'xls': 'application/vnd.ms-excel',
     'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'odt': 'application/vnd.oasis.opendocument.text',
     'ods': 'application/vnd.oasis.opendocument.spreadsheet',
+}
+# Documents que la page affiche elle-même (<img>, aperçu PDF) ou ouvre dans un onglet (rapport mensuel figé en html,
+# « Ouvrir » de rapport-ecrans.js : « sandbox » interdit scripts et formulaires, ce qui est l'objet de l'audit F4) ;
+# tout autre document est servi en téléchargement (Content-Disposition: attachment), toujours avec « sandbox » et nosniff.
+TYPES_AFFICHABLES = ('jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'html')
+# Signature (premiers octets) d'une image : un « .jpg » qui commence par « %PDF » est refusé (audit F4).
+SIGNATURES_IMAGES = {
+    'jpg': (b'\xff\xd8\xff',),
+    'jpeg': (b'\xff\xd8\xff',),
+    'png': (b'\x89PNG\r\n\x1a\n',),
+    'gif': (b'GIF87a', b'GIF89a'),
+    'webp': (b'RIFF',),                     # puis « WEBP » aux octets 8 à 11 (verifier_signature_image)
 }
 
 # Types MIME des fichiers statiques de l'application.
@@ -252,6 +271,10 @@ NOMS_RESERVES_WINDOWS = (
 # rendue corresponde toujours au contenu rendu). Deux postes qui écrivent en même temps
 # sont donc traités l'un après l'autre.
 VERROU_ECRITURE = threading.Lock()
+# Audit F2 : au plus CONNEXIONS_MAX requêtes servies en même temps, pour tout le processus (la porte et l'application
+# partagent la limite, §22.6) ; chaque fil de service l'acquiert avant de lire la requête et le rend à la fin
+# (ServeurPrevo.process_request_thread). La 33e connexion attend dans son fil : elle n'est ni refusée ni perdue.
+SEMAPHORE_CONNEXIONS = threading.BoundedSemaphore(CONNEXIONS_MAX)
 
 
 # ---------------------------------------------------------------------------
@@ -2571,15 +2594,32 @@ def extension(nom):
     return nom.rsplit('.', 1)[-1].lower() if '.' in nom else ''
 
 
-def verifier_nom_document(nom):
-    """Lève ErreurHttp 400 si le nom de document n'est pas autorisé."""
-    if not MOTIF_NOM_DOCUMENT.fullmatch(nom) or '..' in nom:
+def verifier_nom_document(nom, demande=False):
+    """Lève ErreurHttp 400 si le nom de document n'est pas autorisé, 415 si son type (extension) ne l'est pas.
+    « demande » : nom demandé par un envoi (MOTIF_NOM_DOCUMENT) ; sinon nom d'un document enregistré, avec le préfixe
+    d'horodatage facultatif que le serveur impose depuis le lot 7 (MOTIF_NOM_DOCUMENT_ENREGISTRE)."""
+    motif = MOTIF_NOM_DOCUMENT if demande else MOTIF_NOM_DOCUMENT_ENREGISTRE
+    if not motif.fullmatch(nom) or '..' in nom:
         raise ErreurHttp(400, 'Nom de document refusé : lettres, chiffres, « . », « _ » ou « - ».')
     if extension(nom) not in TYPES_DOCUMENTS:
-        raise ErreurHttp(400, 'Type de document refusé. Types acceptés : %s.'
+        raise ErreurHttp(415, 'Type de document refusé. Types acceptés : %s.'
                          % ', '.join(sorted(TYPES_DOCUMENTS)))
     if nom.split('.', 1)[0].lower() in NOMS_RESERVES_WINDOWS:
         raise ErreurHttp(400, 'Nom de document réservé par Windows.')
+
+
+def verifier_signature_image(nom, octets):
+    """Audit F4 : un document d'image (jpg, jpeg, png, gif, webp) doit commencer par la signature de son format,
+    sinon 400 et rien n'est écrit. Les autres types ne sont pas contrôlés (l'extension décide du type MIME)."""
+    type_image = extension(nom)
+    signatures = SIGNATURES_IMAGES.get(type_image)
+    if signatures is None:
+        return
+    reconnue = any(octets.startswith(signature) for signature in signatures)
+    if type_image == 'webp':
+        reconnue = reconnue and octets[8:12] == b'WEBP'
+    if not reconnue:
+        raise ErreurHttp(400, "Le contenu n'est pas une image %s." % type_image)
 
 
 def verifier_nom_sauvegarde(nom):
@@ -3292,12 +3332,56 @@ def chemin_document(config, nom):
     return chemin_sous(config.dossier_documents, nom)
 
 
-def enregistrer_document(config, nom, octets):
-    """Enregistre un nouveau document ; 409 s'il existe déjà (jamais d'écrasement)."""
+def nom_de_document_impose(config, nom_demande):
+    """Audit F4 : nom sous lequel le serveur enregistre un document, « AAAAMMJJ-HHMMSS-<nom demandé> » (horodatage du
+    serveur, extension en minuscules). Le navigateur garde le nom rendu par la réponse 201, jamais celui qu'il a
+    demandé. 400 ou 415 si le nom demandé n'est pas autorisé."""
+    verifier_nom_document(nom_demande, demande=True)
+    base, _, ext = nom_demande.rpartition('.')
+    horodatage = maintenant_iso(config).replace('-', '').replace(':', '').replace('T', '-')
+    return '%s-%s.%s' % (horodatage, base, ext.lower())
+
+
+def taille_des_documents(config):
+    """Octets occupés par le dossier documents/ (fichiers seulement). Parcours du dossier à chaque envoi de document :
+    un compteur en mémoire se tromperait dès qu'on fait de la place à la main (le message du 413 le demande) ; un
+    envoi est rare et os.scandir rend la taille sans appel système par fichier sous Windows."""
+    total = 0
+    try:
+        with os.scandir(config.dossier_documents) as entrees:
+            for entree in entrees:
+                try:
+                    if entree.is_file(follow_symlinks=False):
+                        total += entree.stat(follow_symlinks=False).st_size
+                except OSError:
+                    pass
+    except FileNotFoundError:
+        pass
+    return total
+
+
+def verifier_quota_documents(config, taille_ajoutee):
+    """Audit F2 : 413 si le dossier documents/ et le document envoyé dépassent quota_documents_mo (2 Go par défaut).
+    À appeler en tenant VERROU_ECRITURE, avant d'écrire."""
+    quota_mo = config.reglages.get('quota_documents_mo', 2048)
+    occupe = taille_des_documents(config) + taille_ajoutee
+    if occupe > quota_mo * 1024 * 1024:
+        raise ErreurHttp(413, 'Dossier des documents plein (%s Mo sur %d Mo avec ce document) : faites de la place '
+                              'ou augmentez quota_documents_mo.'
+                         % (('%.1f' % (occupe / (1024 * 1024))).replace('.', ','), quota_mo))
+
+
+def enregistrer_document(config, nom_demande, octets):
+    """Enregistre un nouveau document sous le nom imposé par le serveur (nom_de_document_impose) et rend ce nom ;
+    409 s'il existe déjà (même nom demandé dans la même seconde : jamais d'écrasement), 413 si le quota du dossier
+    serait dépassé. La signature d'une image est contrôlée avant (verifier_signature_image, api_document_ecrire)."""
+    nom = nom_de_document_impose(config, nom_demande)
     chemin = chemin_document(config, nom)
     if os.path.exists(chemin):
         raise ErreurHttp(409, 'Le document %s existe déjà.' % nom)
+    verifier_quota_documents(config, len(octets))
     ecrire_atomique(chemin, octets)
+    return nom
 
 
 # ---------------------------------------------------------------------------
@@ -3388,8 +3472,10 @@ TABLES_DU_RESPONSABLE_EN_ECRITURE = ('parametres', 'techniciens', 'fournisseurs'
 TABLES_DU_TECHNICIEN_EN_ECRITURE = tuple(table for table in TABLES if table not in TABLES_DU_RESPONSABLE_EN_ECRITURE)
 # Documents du demandeur : les photos de demandes (nom donné par nomPhoto de js/modules/demandes-ecritures.js) et les
 # documents des équipements (noms de la colonne « document » d'equipements.csv). Le serveur ne sait pas qui a pris
-# une photo (« demandeur » est un nom libre) : le demandeur lit toutes les photos de demandes.
-MOTIF_PHOTO_DE_DEMANDE = re.compile(r'photo-[0-9]{8}-[0-9]{6}-[A-Z0-9]{4}\.(jpg|jpeg|png|gif|webp)', re.ASCII)
+# une photo (« demandeur » est un nom libre) : le demandeur lit toutes les photos de demandes. Le nom enregistré porte
+# le préfixe d'horodatage du serveur (audit F4) ; le nom demandé par l'envoi n'en a pas : préfixe facultatif.
+MOTIF_PHOTO_DE_DEMANDE = re.compile(PREFIXE_NOM_DOCUMENT + r'photo-[0-9]{8}-[0-9]{6}-[A-Z0-9]{4}\.(jpg|jpeg|png|gif|webp)',
+                                    re.ASCII)
 PHOTOS_DE_DEMANDES = 'photos de demandes'
 DOCUMENTS_DU_DEMANDEUR = 'photos de demandes et documents des équipements'
 TOUS = (OUI, OUI, OUI, OUI)
@@ -3831,10 +3917,12 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         """Silence : http.server écrirait une ligne par requête, lectures comprises."""
 
     def log_request(self, code='-', size='-'):
-        """Une ligne par écriture : heure, IP, méthode, chemin, statut."""
+        """Une ligne par écriture : heure, IP, méthode, chemin, statut. Le chemin vient du client : il est écrit en
+        repr (audit I2), un retour à la ligne ou un caractère de contrôle ne peut abîmer ni la console ni
+        journal-serveur.log."""
         if self.command in ('PUT', 'POST'):
             afficher('%s  %s  %s %s  %s' % (time.strftime('%H:%M:%S'), self.client_address[0],
-                                            self.command, self.path[:200], code))
+                                            self.command, repr(self.path[:200]), code))
 
     # --- Aiguillage --------------------------------------------------------
 
@@ -4352,18 +4440,26 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.envoyer_json(200, {'version': version})
 
     def api_document_lire(self, nom, corps):
-        chemin = chemin_document(self.config, nom)          # 400 si nom refusé
+        chemin = chemin_document(self.config, nom)          # 400 si nom refusé, 415 si type refusé
         octets = lire_octets(chemin)
         if octets is None:
             raise ErreurHttp(404, 'Document introuvable : %s.' % nom)
-        # nosniff + sandbox : un document ne peut jamais s'exécuter comme une page.
-        self.envoyer(200, octets, TYPES_DOCUMENTS[extension(nom)],
-                     {'Content-Security-Policy': 'sandbox'})
+        # nosniff + sandbox : un document ne peut jamais s'exécuter comme une page. Hors images et PDF (audit F4) :
+        # en téléchargement, jamais affiché dans la page (le nom ne contient que lettres, chiffres, « . », « _ », « - »).
+        entetes = {'Content-Security-Policy': 'sandbox'}
+        if extension(nom) not in TYPES_AFFICHABLES:
+            entetes['Content-Disposition'] = 'attachment; filename="%s"' % nom
+        self.envoyer(200, octets, TYPES_DOCUMENTS[extension(nom)], entetes)
 
     def api_document_ecrire(self, nom, corps):
+        """PUT /api/documents/<nom> : 201 {"nom"} avec le nom imposé par le serveur (audit F4, nom_de_document_impose) ;
+        400 nom ou signature d'image refusés, 415 type refusé, 413 quota du dossier (audit F2), 409 même nom demandé
+        dans la même seconde ; rien n'est écrit dans ces cas."""
+        verifier_nom_document(nom, demande=True)
+        verifier_signature_image(nom, corps)
         with VERROU_ECRITURE:
-            enregistrer_document(self.config, nom, corps)
-        self.envoyer_json(201, {'nom': nom})
+            nom_enregistre = enregistrer_document(self.config, nom, corps)
+        self.envoyer_json(201, {'nom': nom_enregistre})
 
     def api_sauvegarde(self, segment, corps):
         """Sauvegarde manuelle (corps vide) ou automatique avec un motif de la liste fermée
@@ -4517,6 +4613,13 @@ class ServeurPrevo(http.server.ThreadingHTTPServer):
         self.porte = porte
         self.contexte_ssl = None if porte else config.contexte_ssl
         super().__init__(adresse, GestionnaireRequetes)
+
+    def process_request_thread(self, request, client_address):
+        """Fil de service d'une connexion (audit F2) : au plus CONNEXIONS_MAX connexions servies en même temps pour tout
+        le processus, la suivante attend ici son tour (ni refusée ni perdue) ; le sémaphore est rendu à la fin, quoi
+        qu'il arrive."""
+        with SEMAPHORE_CONNEXIONS:
+            super().process_request_thread(request, client_address)
 
     def get_request(self):
         """https (lot 4) : la connexion acceptée est enveloppée en TLS ; la poignée de main est faite

@@ -98,7 +98,8 @@ SYMPTOME_POMPE = "Fuite au niveau de la garniture"
 DESCRIPTION_POMPE = "Goutte à goutte continu sous la garniture côté moteur, flaque d'environ 30 cm."
 COMPTE_RENDU_POMPE = ("Garniture mécanique usée (faces rayées) : kit garniture remplacé, "
                       "remise en eau et essai 15 min sans fuite.")
-MOTIF_PHOTO = re.compile(r"^photo-\d{8}-\d{6}-[A-Z0-9]{4}\.jpg$")
+# Nom enregistré par le serveur : « AAAAMMJJ-HHMMSS-photo-… » (préfixe imposé, audit F4, T159)
+MOTIF_PHOTO = re.compile(r"^\d{8}-\d{6}-photo-\d{8}-\d{6}-[A-Z0-9]{4}\.jpg$")
 
 # Lecture d'un QR (SVG de la fiche équipement) par jsQR, dans la page.
 LIRE_QR_FICHE_JS = """async () => {

@@ -393,7 +393,8 @@ class TestParcServeur(CasParc):
             self.assertEqual(ligne["habilitation_requise"], "BR")
             self.assertEqual(ligne["consignation"], "1. Couper le courant.\n2. Cadenasser.")
             self.assertEqual(ligne["actif"], "1")
-            self.assertRegex(ligne["document"], r"^ZZ-77_\d{8}-\d{6}_[a-z0-9]{4}\.pdf$")
+            # Nom imposé par le serveur devant le nom demandé (audit F4, T159)
+            self.assertRegex(ligne["document"], r"^\d{8}-\d{6}-ZZ-77_\d{8}-\d{6}_[a-z0-9]{4}\.pdf$")
             self.assertTrue((serveur.dossier / "documents" / ligne["document"]).is_file())
             self.assertIn("\r\n", texte)
             # Les autres lignes n'ont pas bougé

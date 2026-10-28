@@ -403,19 +403,21 @@ par `--hote` — sinon 403 (un suffixe quelconque permettrait le « DNS rebindin
 | `GET /api/csv/<table>` | octets du fichier, en-tête `X-Version` ; 404 si absent |
 | `PUT /api/csv/<table>` | en-tête `X-Version-Attendue: <version>` ou `aucune` ; 200 `{"version"}` · 409 `{"erreur", "version_actuelle"}` · 423 si le fichier est verrouillé (Excel ouvert) |
 | `POST /api/csv/<table>/ajout` | corps = en-tête + lignes (UTF-8 sans BOM) ; ajoute en fin de fichier (crée le fichier avec BOM s'il n'existe pas) ; 409 si l'en-tête ou l'encodage du fichier existant diffère |
-| `GET /api/documents/<nom>` | octets, type MIME deviné ; 404 |
-| `PUT /api/documents/<nom>` | 201 `{"nom"}` · 409 si le document existe déjà |
+| `GET /api/documents/<nom>` | octets, type MIME d'après l'extension, `Content-Security-Policy: sandbox`, `Content-Disposition: attachment; filename="<nom>"` hors images (jpg, jpeg, png, gif, webp), PDF et rapport figé en html (ouvert dans un onglet, `sandbox`) (audit F4, §22.12) ; 404 ; 415 extension inconnue |
+| `PUT /api/documents/<nom>` | 201 `{"nom"}` avec le **nom imposé par le serveur** `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules : le navigateur garde ce nom, jamais celui qu'il a demandé) · 400 nom refusé, ou image dont le contenu n'a pas la signature de son format (`verifier_signature_image` : `FF D8 FF`, `89 50 4E 47 0D 0A 1A 0A`, `GIF87a`/`GIF89a`, `RIFF…WEBP`) · 409 même nom demandé dans la même seconde (jamais d'écrasement) · 413 dossier `documents/` plein (`quota_documents_mo`, 2048 par défaut, mesuré à chaque envoi) · 415 extension inconnue (`.doc` et `.xls` retirés) ; rien n'est écrit en cas de refus |
 | `POST /api/sauvegarde` | corps vide → sauvegarde manuelle `{"sauvegarde": "AAAA-MM-JJ_HHMMSS"}` ; corps JSON facultatif `{"motif": "avant-format-v2"}` → `{"sauvegarde": "AAAA-MM-JJ_HHMMSS_avant-format-v2"}` (motif `avant-import` depuis le lot 5, §18.1) ; motif hors de la liste fermée `MOTIFS_SAUVEGARDE`, corps qui n'est pas un objet JSON, JSON invalide ou trop imbriqué → 400 (contrôlé avant toute écriture) |
 | `GET /api/sauvegardes` | `{"sauvegardes": [{"nom", "tables": [...]}]}` |
 | `POST /api/restauration` | corps `{"sauvegarde": "…", "tables": [...] (facultatif)}` → `{"restaurees", "copie_securite"}` |
 
 Règles : noms de tables limités aux 22 du schéma (liste recopiée dans `serveur.py`, avec un
-commentaire de renvoi vers `js/schema.js`, cohérence vérifiée par un test) ; nom de document
-`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` sans `..` ; nom de sauvegarde
+commentaire de renvoi vers `js/schema.js`, cohérence vérifiée par un test) ; nom de document demandé
+`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` sans `..`, nom enregistré précédé de `AAAAMMJJ-HHMMSS-` (préfixe facultatif à la
+lecture : les documents d'avant le lot 7 n'en ont pas), extensions de `TYPES_DOCUMENTS` seulement ; nom de sauvegarde
 `^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+|_avant-import)?)?$` ; tout chemin résolu doit
 rester sous `donnees/` (vérification sur le chemin brut **et** décodé, `\` compris) ; écriture
 atomique (fichier temporaire dans le même dossier, `fsync`, `os.replace`) ; un verrou global
-sérialise les écritures ; sauvegarde quotidienne faite par le serveur avant la première écriture
+sérialise les écritures ; au plus 32 requêtes servies en même temps pour tout le processus (`BoundedSemaphore` pris
+par chaque fil de service, la suivante attend son tour sans être refusée : audit F2, §22.12) ; sauvegarde quotidienne faite par le serveur avant la première écriture
 du jour. Les corps JSON (`/api/sauvegarde`, `/api/restauration`) sont lus par `lire_objet_json` :
 UTF-8 invalide, JSON invalide, JSON qui n'est pas un objet ou trop imbriqué (`[[[[…`) → 400, jamais
 500.
@@ -3502,7 +3504,9 @@ Précisions de T152 :
   version : une version périmée rend toujours 409. `POST /api/csv/demandes/ajout` suit les mêmes règles pour les lignes
   ajoutées, `POST /api/csv/journal/ajout` est permis ; tout autre `PUT` ou ajout : 403.
 - **Documents du demandeur** : lecture des photos de demandes (`photo-AAAAMMJJ-HHMMSS-XXXX.<jpg|jpeg|png|gif|webp>`, nom
-  donné par `nomPhoto`, `MOTIF_PHOTO_DE_DEMANDE`) et des documents des équipements (noms de la colonne `document`
+  donné par `nomPhoto`, enregistré derrière le préfixe `AAAAMMJJ-HHMMSS-` que le serveur impose (audit F4, §22.12) :
+  `MOTIF_PHOTO_DE_DEMANDE` accepte ce préfixe en option, l'envoi étant contrôlé sur le nom demandé, sans préfixe) et des
+  documents des équipements (noms de la colonne `document`
   d'`equipements.csv`, relue à chaque requête) ; envoi des seules photos de demandes. « Ses » demandes : le serveur ne sait
   pas relier une photo à la personne qui l'a prise (`demandeur` est un nom libre) ; le demandeur lit donc toutes les photos
   de demandes.
@@ -3748,9 +3752,31 @@ rend `{fournisseur, url, cle_reglee, en_ligne, portee}` (jamais la clé) ; `POST
 posé par le serveur, délai fixé à 120 s ; en mode serveur, « Ce poste » montre l'adresse et l'état de la clé sans les
 demander, et le navigateur ne garde aucune clé (I5 : en mode dossier, inchangé, avec la mention) ; M2 fournisseur
 distant autorisé par `ia_en_ligne` seulement, la case « Autoriser les fournisseurs d'IA en ligne » de Paramètres
-affichant en mode serveur la décision du PC serveur sans la changer ; F2 `BoundedSemaphore(32)` dans `process_request`, corps
-lu après la session ; F4 `.doc`/`.xls` retirés, `Content-Disposition: attachment` hors images et PDF, nom
-`<préfixe>_<horodatage>_<4 car.>.<ext>` imposé, signature JPEG (`FF D8 FF`) et PNG vérifiée ; I2 `repr` du chemin ;
+affichant en mode serveur la décision du PC serveur sans la changer ; F2 (précisé à T159) `SEMAPHORE_CONNEXIONS =
+BoundedSemaphore(32)` du module, pris par chaque fil de service dans `ServeurPrevo.process_request_thread` et rendu à
+la fin : la 33e connexion attend son tour, ni refusée ni perdue, une seule limite pour la porte et l'application ;
+corps lu après le contrôle de session (`traiter`, T151) ; délai IA fixé par le serveur (`DELAI_IA_S`, T158) ; une
+sauvegarde manuelle par minute, 429 (T175) ; quota du dossier `documents/` : avant d'écrire, sous `VERROU_ECRITURE`,
+taille du dossier (`taille_des_documents`, parcours `os.scandir` à chaque envoi : un compteur en mémoire se tromperait
+dès qu'on fait de la place à la main) + taille du corps ≤ `quota_documents_mo` × 1 Mo, sinon 413 « Dossier des
+documents plein (… Mo sur … Mo avec ce document) : faites de la place ou augmentez quota_documents_mo. » et rien
+d'écrit ; F4 (précisé à T159) `.doc`/`.xls` retirés de `TYPES_DOCUMENTS` (415 « Type de document refusé » pour toute
+extension inconnue, à la lecture comme à l'écriture ; `docx`, `xlsx`, `odt`, `ods` restent ; les listes du navigateur,
+`parc-formulaires.js` et `stockage-dossier.js`, suivent), `Content-Disposition: attachment; filename="<nom>"` sur
+tout document qui n'est ni une image (`TYPES_AFFICHABLES` : jpg, jpeg, png, gif, webp), ni un PDF, ni le rapport
+figé en html (que « Ouvrir » affiche dans un onglet : `sandbox` y interdit déjà scripts et formulaires, un
+téléchargement d'office casserait l'écran Rapports), toujours avec `sandbox` et nosniff ; nom imposé `AAAAMMJJ-HHMMSS-<nom demandé>` (`nom_de_document_impose`, horodatage de
+`maintenant_iso`, extension en minuscules, nom demandé contrôlé par `MOTIF_NOM_DOCUMENT`, nom enregistré par
+`MOTIF_NOM_DOCUMENT_ENREGISTRE` au préfixe facultatif) rendu dans le 201 et gardé par le navigateur
+(`ecrireDocument` rend `nom`), 409 pour le même nom demandé dans la même seconde, documents existants inchangés ;
+`rapport-contenu.js` retire ce préfixe (`nomDemande`, `Rapport.interne`) pour reconnaître un mois déjà figé
+(`moisAProposer`), compter les révisions et retrouver le mois d'un rapport dans la liste (`rapport-ecrans.js`) ;
+signature des images (`verifier_signature_image`, appelée par `api_document_ecrire` avant toute écriture :
+`FF D8 FF`, `89 50 4E 47 0D 0A 1A 0A`, `GIF87a`/`GIF89a`, `RIFF…WEBP`, sinon 400 « Le contenu n'est pas une image
+<ext> ») ; I2 `repr` du chemin (`log_request`, 200 caractères) : aucun retour à la ligne ni caractère de contrôle
+venu du client n'atteint la console ni `journal-serveur.log` ; tests : `test_audit_reseau` (un test par constat, les
+constats déjà prouvés — corps, 429, délai IA — cités vers `test_acces_sessions`, `test_sauvegardes_lot7`,
+`test_audit_ia`) ;
 I3 `ecrireValeur` pour les colonnes inconnues ; I4 masquage `[téléphone]` et `[courriel]` dans les textes envoyés à
 l'IA ; G3 plage ARCEP ; G5 `.example`.
 

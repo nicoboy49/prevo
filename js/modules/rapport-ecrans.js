@@ -9,9 +9,10 @@
 
 Object.assign(Rapport, (() => {
 
-  const { texte, libelleMois, decalerMois, lienCourriel, estCouvert } = Rapport.interne;
+  const { texte, nomDemande, libelleMois, decalerMois, lienCourriel, estCouvert } = Rapport.interne;
   const ESSAIS_DE_NOM = 50;
   const CLE_PLUS_TARD = 'prevo.rapport.plusTard';     // sessionStorage : mois reporté à plus tard
+  // Appliqué au nom demandé (nomDemande de rapport-contenu.js : préfixe d'horodatage du serveur retiré, audit F4).
   const MOTIF_NOM = /^rapport-mensuel-(\d{4}-\d{2})(?:-r(\d+))?\.html$/;
 
   /** « de septembre 2026 », « d'octobre 2026 », « d'août 2026 » (élision devant une voyelle). */
@@ -45,7 +46,7 @@ Object.assign(Rapport, (() => {
     const reglages = options || {};
     const rapport = Rapport.donnees(mois, reglages.aujourdhui, reglages.maintenant);
     const page = await Rapport.html(mois, { donnees: rapport, commentaire: reglages.commentaire });
-    const dejaFiges = Rapport.rapportsFiges();
+    const dejaFiges = Rapport.rapportsFiges().map(nomDemande);
     let revision = 1;
     while (dejaFiges.includes(nomFichier(mois, revision))) revision += 1;
     let nom = null;
@@ -84,7 +85,7 @@ Object.assign(Rapport, (() => {
 
   function lignesDesRapports() {
     return Rapport.rapportsFiges().map((nom) => Object.assign({ nom }, (() => {
-      const morceaux = MOTIF_NOM.exec(nom);
+      const morceaux = MOTIF_NOM.exec(nomDemande(nom));
       return morceaux ? { mois: morceaux[1], revision: Number(morceaux[2] || 1) } : { mois: '', revision: 1 };
     })())).reverse();
   }

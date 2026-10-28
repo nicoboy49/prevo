@@ -297,25 +297,35 @@ class TestDocuments(CasStockageServeur):
                 "const blob = new Blob([versOctets(argument)], { type: 'image/png' });"
                 "return await stockage.ecrireDocument('photo-test.png', blob);",
                 list(PNG_UN_PIXEL))
-            self.assertEqual(nom, "photo-test.png")
-            self.assertEqual((serveur.dossier / "documents" / "photo-test.png").read_bytes(), PNG_UN_PIXEL)
+            # Audit F4 (T159) : l'adaptateur rend le nom imposé par le serveur, « AAAAMMJJ-HHMMSS-<nom demandé> »
+            self.assertRegex(nom, r"^\d{8}-\d{6}-photo-test\.png$")
+            self.assertEqual((serveur.dossier / "documents" / nom).read_bytes(), PNG_UN_PIXEL)
+            self.assertFalse((serveur.dossier / "documents" / "photo-test.png").exists())
             relu = self.executer_ok(
-                "const blob = await stockage.lireDocument('photo-test.png');"
-                "return { type: blob.type, octets: Array.from(new Uint8Array(await blob.arrayBuffer())) };")
+                "const blob = await stockage.lireDocument(argument);"
+                "return { type: blob.type, octets: Array.from(new Uint8Array(await blob.arrayBuffer())) };", nom)
             self.assertEqual(relu["type"], "image/png")
             self.assertEqual(bytes(relu["octets"]), PNG_UN_PIXEL)
 
-    def test_deuxieme_ecriture_du_meme_nom_est_refusee(self):
+    def test_jamais_d_ecrasement_du_meme_nom_demande(self):
+        # Même nom demandé deux fois : dans la même seconde le serveur répond 409 (« porte déjà ce nom » ; prouvé sans
+        # aléa dans test_audit_reseau), à la seconde suivante il impose un autre nom. Le premier reste intact.
         with ServeurPrevo(source=None) as serveur:
             self.ouvrir(serveur)
             script = ("const blob = new Blob([versOctets(argument)], { type: 'image/png' });"
                       "return await stockage.ecrireDocument('photo-test.png', blob);")
-            self.executer_ok(script, list(PNG_UN_PIXEL))
-            erreur = self.executer_erreur(script, list(PNG_UN_PIXEL) + [0])
-            self.assertTrue(erreur["estStockage"], erreur)
-            self.assertFalse(erreur["estConflit"])
-            self.assertIn("porte déjà ce nom", erreur["message"])
-            self.assertEqual((serveur.dossier / "documents" / "photo-test.png").read_bytes(), PNG_UN_PIXEL)
+            premier = self.executer_ok(script, list(PNG_UN_PIXEL))
+            resultat = self.executer(script, list(PNG_UN_PIXEL) + [0])
+            if "erreur" in resultat:
+                erreur = resultat["erreur"]
+                self.assertTrue(erreur["estStockage"], erreur)
+                self.assertFalse(erreur["estConflit"])
+                self.assertIn("porte déjà ce nom", erreur["message"])
+                self.assertEqual(sorted(p.name for p in (serveur.dossier / "documents").iterdir()), [premier])
+            else:
+                self.assertNotEqual(resultat["ok"], premier)
+                self.assertEqual((serveur.dossier / "documents" / resultat["ok"]).read_bytes(), PNG_UN_PIXEL + b"\x00")
+            self.assertEqual((serveur.dossier / "documents" / premier).read_bytes(), PNG_UN_PIXEL)
 
     def test_document_absent_donne_null(self):
         with ServeurPrevo(source=None) as serveur:
@@ -328,17 +338,17 @@ class TestDocuments(CasStockageServeur):
             self.assertEqual(
                 self.executer_ok("return await stockage.urlDocument('a b+c.png');"),
                 "/api/documents/a%20b%2Bc.png")
-            self.executer_ok(
+            nom = self.executer_ok(
                 "const blob = new Blob([versOctets(argument)], { type: 'image/png' });"
                 "return await stockage.ecrireDocument('photo-test.png', blob);",
                 list(PNG_UN_PIXEL))
             largeur = self.executer_ok(
-                "const adresse = await stockage.urlDocument('photo-test.png');"
+                "const adresse = await stockage.urlDocument(argument);"       # nom imposé par le serveur (T159)
                 "const image = new Image();"
                 "await new Promise((fini, echec) => {"
                 "  image.onload = fini; image.onerror = () => echec(new Error('image non chargée'));"
                 "  image.src = adresse; });"
-                "return image.naturalWidth;")
+                "return image.naturalWidth;", nom)
             self.assertEqual(largeur, 1)
 
 

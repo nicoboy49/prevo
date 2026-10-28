@@ -395,7 +395,8 @@ class TestRealisation(CasControles):
             self.assertEqual(ligne["prochaine_date"], attendue.isoformat())
             self.assertEqual(ligne["organisme"], "Organisme du test")
             self.assertEqual((ligne["observations"], ligne["observations_levees"]), ("", "1"))
-            self.assertRegex(ligne["rapport"], r"^controle-%s-%s(-\d+)?\.pdf$" % (EN_RETARD, date.isoformat()))
+            # Nom imposé par le serveur devant le nom demandé (audit F4, T159)
+            self.assertRegex(ligne["rapport"], r"^\d{8}-\d{6}-controle-%s-%s(-\d+)?\.pdf$" % (EN_RETARD, date.isoformat()))
             self.assertEqual((documents / ligne["rapport"]).read_bytes(), PDF["buffer"])
             actions = [e["action"] for e in journal_de(serveur.dossier, EN_RETARD)]
             self.assertTrue(any("contrôle réalisé le %s" % date.strftime("%d/%m/%Y") in a for a in actions), actions)

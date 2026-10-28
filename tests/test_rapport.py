@@ -99,12 +99,25 @@ class CasRapport(CasNavigateur):
             time.sleep(0.2)
         return condition()
 
+    def rapport(self, nom_demande):
+        """Fichier du rapport figé demandé sous ce nom : le serveur l'enregistre sous « AAAAMMJJ-HHMMSS-<nom demandé> »
+        (audit F4, T159) ; None tant qu'il n'est pas écrit."""
+        if not self.documents.is_dir():
+            return None
+        return next((p for p in self.documents.iterdir() if re.fullmatch(r"\d{8}-\d{6}-" + re.escape(nom_demande), p.name)),
+                    None)
+
+    @staticmethod
+    def nom_demande(nom):
+        """Nom demandé d'un rapport enregistré (préfixe du serveur retiré)."""
+        return re.sub(r"^\d{8}-\d{6}-", "", nom)
+
     def figer_depuis_l_accueil(self):
         self.page.wait_for_selector("#bandeau-rapport")
         self.page.click('#bandeau-rapport [data-action="figer-rapport"]')
-        self.assertTrue(self.attendre(lambda: (self.documents / NOM).is_file()), "rapport non écrit")
-        self.assertTrue(self.attendre(lambda: NOM in (parametre(self.serveur.dossier, "rapports_mensuels") or "")))
-        return (self.documents / NOM).read_text(encoding="utf-8")
+        self.assertTrue(self.attendre(lambda: self.rapport(NOM) is not None), "rapport non écrit")
+        self.assertTrue(self.attendre(lambda: self.rapport(NOM).name in (parametre(self.serveur.dossier, "rapports_mensuels") or "")))
+        return self.rapport(NOM).read_text(encoding="utf-8")
 
 
 class TestFiger(CasRapport):
@@ -114,11 +127,11 @@ class TestFiger(CasRapport):
         self.assertIn(LIBELLE, self.page.inner_text("#bandeau-rapport"))
         self.assertEqual(self.page.locator("#bento > #bandeau-rapport").count(), 1)      # tuile de la grille (T90)
         # Rien n'est écrit sans clic
-        self.assertFalse((self.documents / NOM).exists())
+        self.assertIsNone(self.rapport(NOM))
         self.assertFalse(parametre(self.serveur.dossier, "rapports_mensuels"))
         contenu = self.figer_depuis_l_accueil()
         self.assertIn("Rapport mensuel de maintenance — " + LIBELLE, contenu)
-        self.assertTrue(self.attendre(lambda: any("rapport mensuel figé : " + NOM in entree["action"]
+        self.assertTrue(self.attendre(lambda: any("rapport mensuel figé : " + self.rapport(NOM).name in entree["action"]
                                                   for entree in lire_csv(self.serveur.dossier, "journal.csv"))))
         # La tuile ne revient pas : le mois est figé
         self.page.wait_for_function("!document.querySelector('#bandeau-rapport')")
@@ -214,16 +227,18 @@ class TestRevisions(CasRapport):
     def test_recalculer_cree_une_revision_sans_ecraser_et_onglet(self):
         self.ouvrir()
         premier = self.figer_depuis_l_accueil()
+        nom = self.rapport(NOM).name
         # Onglet « Rapports mensuels » affiché dans la page (indépendamment de l'écran Indicateurs)
         self.page.evaluate("Rapport.afficherOnglet(document.querySelector('#contenu'))")
-        self.assertEqual(self.page.locator('.rapports-liste tr[data-nom="%s"]' % NOM).count(), 1)
+        self.assertEqual(self.page.locator('.rapports-liste tr[data-nom="%s"]' % nom).count(), 1)
         self.page.click('.rapports-liste [data-action="recalculer"][data-mois="%s"]' % MOIS)
+        # Révision « -r2 » malgré le préfixe du serveur (rapport-ecrans.js le retire pour compter les révisions)
         revision = "rapport-mensuel-%s-r2.html" % MOIS
-        self.assertTrue(self.attendre(lambda: (self.documents / revision).is_file()))
-        self.assertEqual((self.documents / NOM).read_text(encoding="utf-8"), premier)
-        self.page.wait_for_selector('.rapports-liste tr[data-nom="%s"]' % revision)
+        self.assertTrue(self.attendre(lambda: self.rapport(revision) is not None))
+        self.assertEqual(self.rapport(NOM).read_text(encoding="utf-8"), premier)
+        self.page.wait_for_selector('.rapports-liste tr[data-nom="%s"]' % self.rapport(revision).name)
         self.assertIn("figé", self.page.inner_text("#rapports-message"))
-        self.assertEqual(parametre(self.serveur.dossier, "rapports_mensuels"), NOM + "," + revision)
+        self.assertEqual(parametre(self.serveur.dossier, "rapports_mensuels"), nom + "," + self.rapport(revision).name)
         # À 375 px, la liste des rapports défile dans son cadre, jamais la page (correction de relecture)
         self.page.set_viewport_size({"width": 375, "height": 812})
         self.page.evaluate("Rapport.afficherOnglet(document.querySelector('#contenu'))")
@@ -231,15 +246,16 @@ class TestRevisions(CasRapport):
         self.assertLessEqual(largeur, visible + 1)
 
     def test_un_fichier_du_meme_nom_deja_sur_le_disque_n_est_jamais_ecrase(self):
-        self.autoriser_erreur("409")
+        # Un rapport d'avant le lot 7 (sans préfixe) porte déjà le nom demandé : le serveur écrit le nouveau sous son
+        # nom imposé (audit F4, T159), l'ancien reste intact et seul le nouveau entre dans rapports_mensuels.
         self.documents.mkdir(exist_ok=True)
         (self.documents / NOM).write_text("ANCIEN RAPPORT", encoding="utf-8")
         self.ouvrir()
         self.page.click('#bandeau-rapport [data-action="figer-rapport"]')
-        revision = "rapport-mensuel-%s-r2.html" % MOIS
-        self.assertTrue(self.attendre(lambda: (self.documents / revision).is_file()))
+        self.assertTrue(self.attendre(lambda: self.rapport(NOM) is not None))
         self.assertEqual((self.documents / NOM).read_text(encoding="utf-8"), "ANCIEN RAPPORT")
-        self.assertTrue(self.attendre(lambda: parametre(self.serveur.dossier, "rapports_mensuels") == revision))
+        self.assertIn("Rapport mensuel de maintenance", self.rapport(NOM).read_text(encoding="utf-8"))
+        self.assertTrue(self.attendre(lambda: parametre(self.serveur.dossier, "rapports_mensuels") == self.rapport(NOM).name))
 
 
 class TestRapportDemo(CasNavigateur):

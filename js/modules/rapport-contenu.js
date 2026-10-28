@@ -23,9 +23,16 @@ const Rapport = (() => {
   const NOMS_MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
   const COULEURS_SERIES = ['#2F5BD3', '#A86A12', '#6B7280'];     // impression sur blanc : bleu, ocre, gris
   const PREFIXE_FICHIER = 'rapport-mensuel-';
+  // Nom enregistré d'un rapport : en mode serveur, le nom demandé précédé de l'horodatage du serveur (audit F4,
+  // « AAAAMMJJ-HHMMSS- ») ; en mode dossier ou démo, le nom demandé tel quel. nomDemande() retire ce préfixe.
+  const PREFIXE_SERVEUR = /^\d{8}-\d{6}-/;
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
+  }
+
+  function nomDemande(nom) {
+    return texte(nom).replace(PREFIXE_SERVEUR, '');
   }
 
   /** 'AAAA-MM' + n mois (n négatif possible). */
@@ -222,7 +229,7 @@ const Rapport = (() => {
   function moisAProposer(aujourdhui) {
     const jour = /^\d{4}-\d{2}-\d{2}$/.test(texte(aujourdhui).slice(0, 10)) ? texte(aujourdhui).slice(0, 10) : Donnees.aujourdhui();
     const mois = decalerMois(jour.slice(0, 7), -1);
-    if (rapportsFiges().some((nom) => nom.startsWith(PREFIXE_FICHIER + mois))) return null;
+    if (rapportsFiges().some((nom) => nomDemande(nom).startsWith(PREFIXE_FICHIER + mois))) return null;
     return estCouvert(mois) ? mois : null;
   }
 
@@ -388,6 +395,6 @@ ${rapport.nonCalculables.length ? UI.html`<section class="non-calculable"><h2>No
     donnees, moisAProposer, texteCourriel, rapportsFiges, jetonsCommentaire,
     html,
     // Usage interne au module (pas une API).
-    interne: { texte, decalerMois, libelleMois, lienCourriel, estCouvert, debutHistorique },
+    interne: { texte, nomDemande, decalerMois, libelleMois, lienCourriel, estCouvert, debutHistorique },
   };
 })();

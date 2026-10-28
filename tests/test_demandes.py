@@ -42,7 +42,9 @@ DI_P4 = SCENARIOS["di_nouvelle_p4"]                       # Nouvelle, PO-03 (cri
 DI_SANS_OT = SCENARIOS["di_nouvelle_sans_ot_ouvert"]      # Nouvelle, ET-01 (C) × gêne → P4, aucun OT ouvert
 DI_DEGRADEE = SCENARIOS["di_nouvelle_degradee"]           # Nouvelle, PR-01, demandeur Sarah Colin
 OT_REGROUPE = SCENARIOS["ot_en_cours_regroupe"]           # seul OT ouvert de son équipement (EM-01), En cours
-MOTIF_PHOTO = re.compile(r"^photo-\d{8}-\d{6}-[A-Z0-9]{4}\.jpg$")
+# Mode serveur : nom enregistré « AAAAMMJJ-HHMMSS-photo-… » (préfixe imposé par le serveur, audit F4, T159) ; modes démo
+# et dossier : le nom demandé tel quel.
+MOTIF_PHOTO = re.compile(r"^(?:\d{8}-\d{6}-)?photo-\d{8}-\d{6}-[A-Z0-9]{4}\.jpg$")
 
 
 # ---------------------------------------------------------------------------

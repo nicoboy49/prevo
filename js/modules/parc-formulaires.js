@@ -12,7 +12,8 @@ Object.assign(Parc, (() => {
     estEnBaisse } = Parc.interne;
 
   const TAILLE_MAX_DOCUMENT = 9 * 1024 * 1024;        // le serveur refuse plus de 10 Mo
-  const EXTENSIONS_DOCUMENT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'odt', 'ods'];
+  // Les mêmes que TYPES_DOCUMENTS de serveur.py (audit F4 : « .doc » et « .xls » ne sont plus acceptés), sans « html ».
+  const EXTENSIONS_DOCUMENT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'docx', 'xlsx', 'odt', 'ods'];
   const TYPE_ENFANT = { site: 'atelier', atelier: 'ligne', ligne: 'ligne' };
 
   // ===========================================================================================

@@ -14,6 +14,7 @@ Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_acces_entetes.py" -v
 """
 import http.client
+import json
 import re
 import shutil
 import ssl
@@ -72,16 +73,15 @@ class TestEntetes(unittest.TestCase):
 
     def test_documents_gardent_sandbox_sans_entetes_application(self):
         with ServeurPrevo() as serveur:
-            reponse = serveur.requete("PUT", "/api/documents/essai-entetes.pdf", corps=b"%PDF-1.4\n%essai\n",
-                                      entetes={"X-Prevo": "1"}) if hasattr(serveur, "requete") else None
-            if reponse is None:
-                morceaux = serveur.url.split("://")[1].split(":")
-                connexion = http.client.HTTPConnection(morceaux[0], int(morceaux[1]), timeout=10)
-                connexion.request("PUT", "/api/documents/essai-entetes.pdf", body=b"%PDF-1.4\n%essai\n",
-                                  headers={"X-Prevo": "1", "Content-Type": "application/pdf"})
-                self.assertIn(connexion.getresponse().status, (200, 201))
-                connexion.close()
-            statut, recus = entetes(serveur, "/api/documents/essai-entetes.pdf")
+            morceaux = serveur.url.split("://")[1].split(":")
+            connexion = http.client.HTTPConnection(morceaux[0], int(morceaux[1]), timeout=10)
+            connexion.request("PUT", "/api/documents/essai-entetes.pdf", body=b"%PDF-1.4\n%essai\n",
+                              headers={"X-Prevo": "1", "Content-Type": "application/pdf"})
+            reponse = connexion.getresponse()
+            self.assertEqual(reponse.status, 201)
+            nom = json.loads(reponse.read())["nom"]         # nom imposé par le serveur (audit F4, T159)
+            connexion.close()
+            statut, recus = entetes(serveur, "/api/documents/" + nom)
             self.assertEqual(statut, 200)
             self.assertEqual(recus["content-security-policy"], "sandbox")
             self.assertNotIn("x-frame-options", recus)

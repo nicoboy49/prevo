@@ -470,28 +470,43 @@ class TestApiServeur(CasAvecServeur):
         octets = b'\xff\xd8\xff\xe0 fausse photo JPEG'
         reponse = self.requete('PUT', '/api/documents/photo-DI_2026.0001.jpg', octets)
         self.assertEqual(reponse.statut, 201)
-        self.assertEqual(reponse.json(), {'nom': 'photo-DI_2026.0001.jpg'})
-        lecture = self.requete('GET', '/api/documents/photo-DI_2026.0001.jpg')
+        # Audit F4 (T159) : le serveur impose le nom « AAAAMMJJ-HHMMSS-<nom demandé> », rendu dans la réponse.
+        nom = reponse.json()['nom']
+        self.assertRegex(nom, r'^[0-9]{8}-[0-9]{6}-photo-DI_2026\.0001\.jpg$')
+        lecture = self.requete('GET', '/api/documents/' + nom)
         self.assertEqual(lecture.statut, 200)
         self.assertEqual(lecture.corps, octets)
         self.assertEqual(lecture.entetes['content-type'], 'image/jpeg')
         self.assertEqual(lecture.entetes['x-content-type-options'], 'nosniff')
         self.assertEqual(lecture.entetes['content-security-policy'], 'sandbox')
-        self.assertEqual(self.lire_fichier(self.chemin_donnee('documents', 'photo-DI_2026.0001.jpg')),
-                         octets)
+        self.assertEqual(self.lire_fichier(self.chemin_donnee('documents', nom)), octets)
+        self.assertEqual(self.requete('GET', '/api/documents/photo-DI_2026.0001.jpg').statut, 404)
 
-    def test_document_existant_non_ecrase_409(self):
-        self.assertEqual(self.requete('PUT', '/api/documents/rapport.pdf', b'v1').statut, 201)
-        self.assertEqual(self.requete('PUT', '/api/documents/rapport.pdf', b'v2').statut, 409)
-        self.assertEqual(self.lire_fichier(self.chemin_donnee('documents', 'rapport.pdf')), b'v1')
+    def test_document_jamais_ecrase(self):
+        # Même nom demandé deux fois : même seconde ⇒ 409 (prouvé sans aléa dans test_audit_reseau), seconde suivante ⇒
+        # un autre nom imposé. Dans les deux cas, le premier document reste intact.
+        premiere = self.requete('PUT', '/api/documents/rapport.pdf', b'v1')
+        self.assertEqual(premiere.statut, 201)
+        nom = premiere.json()['nom']
+        seconde = self.requete('PUT', '/api/documents/rapport.pdf', b'v2')
+        self.assertIn(seconde.statut, (201, 409))
+        if seconde.statut == 201:
+            self.assertNotEqual(seconde.json()['nom'], nom)
+        self.assertEqual(self.lire_fichier(self.chemin_donnee('documents', nom)), b'v1')
+        self.assertFalse(os.path.exists(self.chemin_donnee('documents', 'rapport.pdf')))
 
-    def test_document_extension_ou_nom_interdit_400(self):
+    def test_document_extension_415_ou_nom_interdit_400(self):
         # « page.html » est accepté depuis le lot 3 (rapport mensuel figé, §15.1) : « .htm » reste refusé.
-        for nom in ('page.htm', 'image.svg', 'script.js', 'sans-extension', 'CON.txt',
-                    '-tiret.jpg', 'a%20b.jpg', 'a..b.jpg', 'x' * 130 + '.jpg', '%C3%A9t%C3%A9.jpg'):
+        # Audit F4 (T159) : une extension inconnue répond 415, un nom refusé 400.
+        for nom in ('page.htm', 'image.svg', 'script.js', 'sans-extension', 'lettre.doc', 'classeur.xls'):
+            with self.subTest(nom=nom):
+                self.assertEqual(self.requete('PUT', '/api/documents/' + nom, b'<b>x</b>').statut, 415)
+                self.assertEqual(self.requete('GET', '/api/documents/' + nom).statut, 415)
+        for nom in ('CON.txt', '-tiret.jpg', 'a%20b.jpg', 'a..b.jpg', 'x' * 130 + '.jpg', '%C3%A9t%C3%A9.jpg'):
             with self.subTest(nom=nom):
                 self.assertEqual(self.requete('PUT', '/api/documents/' + nom, b'<b>x</b>').statut, 400)
-        self.assertEqual(os.listdir(self.chemin_donnee('documents')).count('page.htm'), 0)
+        self.assertEqual([nom for nom in os.listdir(self.chemin_donnee('documents'))
+                          if nom.endswith(('.htm', '.svg', '.js', '.doc', '.xls', 'sans-extension'))], [])
 
     def test_document_absent_404(self):
         self.assertEqual(self.requete('GET', '/api/documents/absent.png').statut, 404)
@@ -610,7 +625,7 @@ class TestApiServeur(CasAvecServeur):
             version = self.mettre_csv('articles', contenu, version).json()['version']
         self.requete('POST', '/api/csv/mouvements_stock/ajout', entete('mouvements_stock') + b'\r\nMVT-1\r\n')
         self.requete('POST', '/api/csv/mouvements_stock/ajout', entete('mouvements_stock') + b'\r\nMVT-2\r\n')
-        self.requete('PUT', '/api/documents/temp-test.png', b'png')
+        self.requete('PUT', '/api/documents/temp-test.png', b'\x89PNG\r\n\x1a\n' + b'png')     # signature PNG (audit F4)
         self.assertEqual(self.fichiers_temporaires_restants(), [])
 
     # --- Sauvegardes ----------------------------------------------------------
@@ -738,11 +753,12 @@ class TestApiServeur(CasAvecServeur):
         self.requete('GET', '/api/csv/parametres')
         self.mettre_csv('parametres', BOM + b'cle;valeur\r\n')
         limite = time.time() + 5
-        while 'PUT /api/csv/parametres' not in self.serveur.console() and time.time() < limite:
+        while "PUT '/api/csv/parametres'" not in self.serveur.console() and time.time() < limite:
             time.sleep(0.05)
         lignes = [l for l in self.serveur.lignes if '/api/csv/parametres' in l]
         self.assertEqual(len(lignes), 1, lignes)
-        self.assertRegex(lignes[0], r'^\d{2}:\d{2}:\d{2}\s+127\.0\.0\.1\s+PUT /api/csv/parametres\s+200$')
+        # Audit I2 (T159) : le chemin, venu du client, est écrit en repr (entre apostrophes).
+        self.assertRegex(lignes[0], r"^\d{2}:\d{2}:\d{2}\s+127\.0\.0\.1\s+PUT '/api/csv/parametres'\s+200$")
 
     def test_console_de_demarrage(self):
         console = self.serveur.console()

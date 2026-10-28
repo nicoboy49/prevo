@@ -825,7 +825,11 @@ class TestDemandeur(unittest.TestCase):
         nom = "photo-20261026-101530-WXYZ.jpg"
         envoi = self.requete("PUT", "/api/documents/" + nom, JPEG)
         self.assertEqual(envoi.statut, 201, envoi.octets)
-        relu = self.requete("GET", "/api/documents/" + nom)
+        # Nom imposé par le serveur (audit F4, T159) : le demandeur relit sa photo sous ce nom (préfixe accepté par
+        # MOTIF_PHOTO_DE_DEMANDE), l'envoi ayant été contrôlé sur le nom demandé.
+        enregistre = envoi.json()["nom"]
+        self.assertRegex(enregistre, r"^\d{8}-\d{6}-" + re.escape(nom) + "$")
+        relu = self.requete("GET", "/api/documents/" + enregistre)
         self.assertEqual((relu.statut, relu.entetes["content-type"], relu.octets), (200, "image/jpeg", JPEG))
         self.assertEqual(self.requete("GET", "/api/documents/" + DOCUMENT_EQUIPEMENT).statut, 200)
         self.assertEqual(self.requete("GET", "/api/documents/photo-20261026-101531-ABSE.jpg").statut, 404)   # permis
@@ -1069,7 +1073,8 @@ class TestNavigateurDemandeur(CasNavigateurComptes):
         ecritures = {(methode, adresse.split("/api/", 1)[1], statut) for methode, adresse, statut in self.reponses
                      if methode in ("PUT", "POST")}
         self.assertIn(("PUT", "csv/demandes", 200), ecritures)
-        self.assertIn(("PUT", "documents/" + ligne["photo"], 201), ecritures)
+        # L'envoi porte le nom demandé ; la demande garde le nom imposé par le serveur (préfixe, audit F4, T159).
+        self.assertIn(("PUT", "documents/" + re.sub(r"^\d{8}-\d{6}-", "", ligne["photo"]), 201), ecritures)
         self.assertIn(("POST", "csv/journal/ajout", 200), ecritures)
         self.verifier_refus_attendus()
 

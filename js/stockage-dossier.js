@@ -50,8 +50,9 @@ const StockageDossier = (() => {
   // Motifs acceptés par sauvegarder(motif) : liste FERMÉE, la même que MOTIFS_SAUVEGARDE de serveur.py.
   const MOTIFS_SAUVEGARDE = ['avant-format-v2', 'avant-format-v3', 'avant-import'];
   // 'html' : rapport mensuel figé (lot 3, ARCHITECTURE.md §15.1).
-  const EXTENSIONS_DOCUMENTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'doc', 'docx',
-    'xls', 'xlsx', 'odt', 'ods', 'html'];
+  // Les mêmes que TYPES_DOCUMENTS de serveur.py (audit F4 : « .doc » et « .xls » ne sont plus acceptés).
+  const EXTENSIONS_DOCUMENTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'docx',
+    'xlsx', 'odt', 'ods', 'html'];
   const NOMS_RESERVES_WINDOWS = ['con', 'prn', 'aux', 'nul']
     .concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return 'com' + n; }))
     .concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return 'lpt' + n; }));

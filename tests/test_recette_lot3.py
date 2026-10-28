@@ -239,8 +239,9 @@ class TestRecetteServeur(CasRecette):
         page = self.ouvrir_serveur(serveur)
         page.click('#bandeau-rapport [data-action="figer-rapport"]')
         documents = Path(serveur.dossier) / "documents"
-        self.assertTrue(self.attendre(lambda: documents.is_dir() and any(documents.glob("rapport-mensuel-*.html"))))
-        nom = next(documents.glob("rapport-mensuel-*.html")).name
+        # Nom imposé par le serveur : « AAAAMMJJ-HHMMSS-rapport-mensuel-… » (audit F4, T159)
+        self.assertTrue(self.attendre(lambda: documents.is_dir() and any(documents.glob("*-rapport-mensuel-*.html"))))
+        nom = next(documents.glob("*-rapport-mensuel-*.html")).name
         self.aller("#/indicateurs?onglet=rapports")
         page.wait_for_selector('.rapports-liste tr[data-nom="%s"]' % nom)
         with self.contexte.expect_page() as attente:
