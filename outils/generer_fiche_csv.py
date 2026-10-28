@@ -620,7 +620,7 @@ def rediger_lot7():
     if retirees_presentes:
         raise ErreurLectureLot7("serveur.py accepte de nouveau %s : revoir la section 5" % ", ".join(retirees_presentes))
     non_sauvegardes = list(serveur.FICHIERS_ACCES_NON_SAUVEGARDES)
-    if non_sauvegardes != ["sessions.json"]:
+    if non_sauvegardes != ["sessions.json", "cle.pem"]:
         raise ErreurLectureLot7("FICHIERS_ACCES_NON_SAUVEGARDES a changé (%s) : revoir la section 5" % non_sauvegardes)
     quota = next(defaut for cle, _, defaut, _ in serveur.CLES_CONFIGURATION if cle == "quota_documents_mo")
     reglages = lire_reglages_parametres(list(ROLES_PARAMETRES_LOT_7) + [CLE_IA_DISTANT])
@@ -642,7 +642,9 @@ def rediger_lot7():
         "- **Jamais servis** : ni par l'API des tables, ni dans l'export ZIP. Seul le journal des connexions sort, quand"
         " le responsable l'exporte (Équipe › Accès).",
         "- **Sauvegardes** : les sauvegardes du serveur copient les fichiers de `acces/` (pas le dossier `autorite/`),"
-        " sauf %s (une session ne se restaure jamais) ; une restauration ne les remet jamais en place." % ", ".join("`%s`" % n for n in non_sauvegardes),
+        " sauf `sessions.json` (une session ne se restaure jamais) et `cle.pem` (la clé privée du certificat de l'atelier"
+        " ne quitte pas le PC ; Prévo la refabrique au démarrage si elle manque) ; une restauration ne les remet jamais"
+        " en place.",
         "- **`journal-acces.csv`**, le journal des connexions, suit les règles de la section 1 (UTF-8 avec BOM, `;`,"
         " CRLF, apostrophe de protection). Colonnes : %s. `date` est écrite `AAAA-MM-JJTHH:MM:SS` ; `resultat` vaut %s ;"
         " `tailscale` porte le compte Tailscale d'une session venue par `tailscale serve`. Les lignes de plus de %d jours"
