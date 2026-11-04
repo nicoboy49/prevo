@@ -20,6 +20,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -141,6 +142,23 @@ class TestTiers(CasRelease):
         chemin, _ = release.construire(self.source, self.dossier / "d", tiers=False)
         with zipfile.ZipFile(chemin) as archive:
             self.assertFalse([n for n in archive.namelist() if "/python/" in n or "/outils-tiers/" in n])
+
+    def test_version_beta_zip_version_json_et_changelog(self):
+        """2.0.0-beta.2 : nom du zip, dossier interne, version.json et section « ## [2.0.0-beta.2] » du CHANGELOG."""
+        app = self.source / "js" / "app.js"
+        texte = app.read_text(encoding="utf-8")
+        app.write_text(re.sub(r"const VERSION = '[^']*';", "const VERSION = '2.0.0-beta.2';", texte), encoding="utf-8")
+        (self.source / "CHANGELOG.md").write_text(
+            "# Journal\n\n## [2.0.0-beta.2] - 2026-11-04\n\n- Une nouveauté.\n\n## [2.0.0] - 2026-10-28\n\n- Autre.\n",
+            encoding="utf-8")
+        chemin, _ = release.construire(self.source, self.dossier / "d", tiers=False)
+        self.assertEqual(chemin.name, "prevo-2.0.0-beta.2.zip")
+        with zipfile.ZipFile(chemin) as archive:
+            self.assertTrue(all(n.startswith("prevo-2.0.0-beta.2/") for n in archive.namelist()))
+        donnees = json.loads((self.dossier / "d" / "version.json").read_text(encoding="utf-8"))
+        self.assertEqual(donnees["version"], "2.0.0-beta.2")
+        self.assertTrue(donnees["adresse"].endswith("/v2.0.0-beta.2"))
+        self.assertEqual(donnees["nouveautes"], ["Une nouveauté."])
 
 
 class TestEmpreintesReelles(unittest.TestCase):

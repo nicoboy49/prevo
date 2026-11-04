@@ -5,13 +5,13 @@ construit **toujours depuis une copie propre de l'étiquette**, jamais depuis le
 script prend les fichiers tels qu'ils sont sur le disque, et un travail en cours (fichiers modifiés ou
 pas encore versionnés) se retrouverait sinon dans le zip.
 
-Dans le dossier du dépôt, pour l'étiquette `v2.0.0` par exemple (remplacez par l'étiquette voulue ;
-elle doit contenir `NOTICE` et ce script, donc `v1.2.0` ou une suivante ; `v2.0.0` pour Python et mkcert dans le zip) :
+Dans le dossier du dépôt, pour l'étiquette `v2.0.0-beta.2` par exemple (remplacez par l'étiquette voulue ;
+elle doit contenir `NOTICE` et ce script, donc `v1.2.0` ou une suivante ; `v2.0.0-beta.1` ou une suivante pour Python et mkcert dans le zip) :
 
 ```
-git worktree add ../prevo-v2.0.0 v2.0.0
-py outils/construire_release.py --source ../prevo-v2.0.0
-git worktree remove ../prevo-v2.0.0
+git worktree add ../prevo-v2.0.0-beta.2 v2.0.0-beta.2
+py outils/construire_release.py --source ../prevo-v2.0.0-beta.2
+git worktree remove ../prevo-v2.0.0-beta.2
 ```
 
 - `git worktree add` crée à côté du dépôt une copie exacte de l'étiquette, sans toucher au dossier de
