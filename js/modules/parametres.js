@@ -11,7 +11,7 @@
 //                (mode_solo, solo_technicien_id : §22.11, D132) ; carte « Accès et installation » (parametres-acces.js,
 //                §22.10 : PC serveur et responsable seulement).
 //   Fichiers du module : parametres.js, parametres-codes.js, parametres-solo.js, parametres-sauvegardes.js,
-//                parametres-acces.js.
+//                parametres-zip.js (import ZIP, T191), parametres-acces.js.
 //   Contrôle   : problèmes de Donnees.problemes() groupés par gravité, attribution des identifiants
 //                manquants, relecture des fichiers, liens vers les DI / OT concernés.
 
@@ -86,6 +86,9 @@ const Parametres = (() => {
   const actionsSauvegarde = (sauvegarde, boutonRestaurer) => (Parametres.interne.actionsSauvegarde
     ? Parametres.interne.actionsSauvegarde(sauvegarde, boutonRestaurer, pendant) : boutonRestaurer);
   const noteSauvegardes = () => (Parametres.interne.noteSauvegardes ? Parametres.interne.noteSauvegardes() : '');
+  // Import ZIP (T191, D172) : bouton « Importer un ZIP… » de la carte, dans parametres-zip.js (même relais).
+  const blocImportZip = () => (Parametres.interne.blocImportZip ? Parametres.interne.blocImportZip() : '');
+  const brancherImportZip = (conteneur) => { if (Parametres.interne.brancherImportZip) Parametres.interne.brancherImportZip(conteneur, pendant); };
   // Carte « Accès et installation » (§22.10, D131 dernier point) : dans parametres-acces.js, chargé APRÈS ce fichier
   // (même relais) ; la carte décide elle-même d'exister (mode serveur, PC serveur, responsable) ; absente sans lui.
   const carteAcces = () => (Parametres.interne.carteAcces ? Parametres.interne.carteAcces() : '');
@@ -391,6 +394,7 @@ const Parametres = (() => {
       ${sauvegardes.indisponible
         ? bandeauHtml('info', sauvegardes.indisponible)
         : UI.html`<div id="zone-sauvegardes"></div>`}
+      ${blocImportZip()}
     </article>`;
   }
 
@@ -461,6 +465,7 @@ const Parametres = (() => {
     }
     brancherSolo(conteneur);
     brancherAcces(conteneur);
+    brancherImportZip(conteneur);
     mettreSurLeBouton(conteneur, '#btn-export-zip', (bouton) => pendant(bouton, 'export ZIP', () => App.exporterZip()));
   }
 

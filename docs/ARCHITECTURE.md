@@ -1323,7 +1323,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   rapport-contenu.js  rapport-ecrans.js
   zip-donnees.js
   zip-lecture.js
-  parametres.js  parametres-codes.js  (puis js/app.js)
+  parametres.js  parametres-codes.js  parametres-solo.js  parametres-sauvegardes.js  parametres-zip.js  parametres-acces.js  (puis import-*.js, §18.1, et wiki-*.js, §20 ; puis js/app.js)
   ```
   Écart retenu (T43) : `indicateurs-series.js` (séries des graphiques) s'insère après
   `indicateurs-regles.js`, qui aurait dépassé 700 lignes. Lot 7 (T155) : `connexion-ecrans.js` (objet `Connexion`,
@@ -1338,6 +1338,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   Chantier socle de données (T189, D171) : `zip-donnees.js` (objet `ZipDonnees`, export ZIP complet : 24 CSV, documents
   cités, rapports figés, `manifeste.json`, jamais `acces/` ; `App.exporterZip` délègue) se charge après `rapport-ecrans.js`.
   Socle de données (T190, D172) : `zip-lecture.js` (objet `ZipLecture`, `lire(source)` : lecture et contrôles stricts d'un ZIP de données, migration en mémoire, sans rien écrire) se charge après `zip-donnees.js`.
+  Socle de données (T191, D172) : `parametres-zip.js` (objet `ParametresZip`, bouton « Importer un ZIP… » de la carte « Sauvegardes » : import par remplacement complet, §22.11 « Import ZIP » ; relié à `Parametres.interne` par les relais `blocImportZip` et `brancherImportZip`) se charge juste après `parametres-sauvegardes.js`.
   Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
   fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
   `Parametres`. Un seul écouteur `DOMContentLoaded` par module, dans son dernier fichier
@@ -4085,6 +4086,63 @@ Précisions de T175 (sauvegardes du serveur, `tests/test_sauvegardes_lot7.py`) :
   touchées. Les sauvegardes à motif (`avant-import`, `avant-format-vN`, `avant-restauration`) ne sont jamais limitées.
 - **`acces/`** : copié par `copier_acces_dans_sauvegarde` (T150) dans toute sauvegarde du serveur sans `sessions.json`,
   jamais restauré par `restaurer` : une restauration complète laisse `comptes.json` et `sessions.json` tels quels.
+
+**Import ZIP** (chantier « socle de données », T191 ; D172 ; docs/FORMAT.md §10 ; CS168 : ce changement touche la
+sécurité, il est donc écrit ici). `js/modules/parametres-zip.js` (objet `ParametresZip` : `etat()`, `importer(fichier)`,
+relais `blocImportZip` et `brancherImportZip` de `parametres.js`) : bouton « Importer un ZIP… » (`#btn-import-zip`,
+champ caché `#fichier-import-zip`) en bas de la carte « Sauvegardes ». Remplacement complet seulement, jamais de
+fusion ; aucune route serveur nouvelle (D172) : le navigateur lit le ZIP et écrit par l'API et les adaptateurs existants.
+
+- **Droits** : la règle de l'export (`ZipDonnees.exportPermis`) : avec les comptes, le responsable seul (bouton absent
+  pour les autres rôles, qui n'ouvrent pas Paramètres ; un appel direct est refusé ; le serveur refuse de toute façon
+  `POST /api/sauvegarde` et `/api/restauration` à un autre rôle, 403, donc rien n'est écrit) ; sans comptes (« ce PC »,
+  mode dossier), le profil qui ouvre Paramètres. Démo : bouton inactif, note `#note-import-zip` « indisponible en
+  démo ». Lecture seule (D169) : fenêtre `#import-zip-refus` dès le clic, et pour un fichier donné quand même.
+- **Contrôles, avant toute écriture** : `ZipLecture.lire` (`zip-lecture.js`, §15.1 ; détail dans son en-tête) : taille
+  du fichier (200 Mo), nombre d'entrées (2 000), répertoire central lu par Prévo (noms hostiles : absolus, « .. », « . »,
+  barre inverse, segment vide, caractère de contrôle, UTF-8 invalide ; doublons ; chiffrement ; méthode), tailles
+  déclarées puis réelles (CRC-32), taux de compression (bombe), 10 Mo par CSV, 1 Go décompressé, noms admis (CSV des
+  tables à la racine, `documents/<nom>` à la règle des noms du serveur, `manifeste.json`), manifeste et empreintes
+  SHA-256 (aucun fichier ajouté, manquant ou modifié), format plus récent refusé, CSV illisible ou abîmé refusé. Un ZIP
+  plus ancien est migré en mémoire. Refus : fenêtre `#import-zip-refus` (message de `ZipLecture`), rien d'écrit.
+- **Confirmation** `#confirmation-import-zip` : date, version et mode de l'export (manifeste ; « sans manifeste » pour
+  un export plus ancien), format (« mises au format 3 » si migré), lignes actuelles → importées par table
+  (`[data-actuel]`, `[data-importe]`), tables absentes du ZIP qui seront vidées (`[data-videe]`), nombre de documents,
+  points relevés à la lecture (documents manquants à l'export…), et l'avertissement « Toutes les données actuelles
+  seront remplacées ; une sauvegarde complète, documents compris, est faite juste avant ; les comptes et l'accès ne
+  sont pas touchés. » « Annuler » (bouton par défaut) : rien d'écrit.
+- **Déroulé** (surveillance arrêtée pendant les écritures) : (a) sauvegarde `avant-import-zip` d'abord (tables,
+  `documents/`, et `acces/` en mode serveur, T187/T188) ; échec → arrêt, rien d'écrit ; (b) documents du ZIP écrits par
+  `ecrireDocument` ; nom demandé = nom du ZIP sans le préfixe `AAAAMMJJ-HHMMSS-` ; le nom rendu (horodaté par le
+  serveur) est gardé ; deux noms demandés égaux dans le même import → `-2`, `-3`… ; en mode dossier, un document du même
+  nom identique à l'octet est repris, différent → `-2`… ; un document existant n'est jamais supprimé ni remplacé ;
+  échec → arrêt avant les tables (les documents déjà copiés restent, inutilisés) ; (c) références réécrites vers les
+  noms rendus (`equipements.document`, `demandes.photo`, `controles_reglementaires.rapport`, `rapports_mensuels`) ; une
+  référence à un document absent du ZIP reste telle quelle ; (d) les 24 tables remplacées, dans l'ordre du schéma :
+  `Donnees.csv.serialiser` (protection des cellules, en-tête du format courant, colonnes inconnues du ZIP gardées) puis
+  `App.adaptateur.enregistrer` avec la version fraîche (`Donnees.rechargerTable` avant et après : contrôle de version ;
+  écritures refusées en lecture seule) ; `version_schema` = format courant ; (e) une ligne de journal (table `parametres`)
+  `import ZIP : <fichier>, 24 tables, <m> documents ; sauvegarde <nom> faite juste avant` ; (f) fenêtre `#import-zip-termine`, puis
+  `location.reload()` (mode dossier : « Reprendre le dossier »).
+- **Échec pendant (c) à (e)** : `App.adaptateur.restaurer(<avant-import-zip>)` remet toutes les tables (avec la copie
+  de sécurité `avant-restauration` habituelle, qui garde l'état interrompu) ; une table absente de la sauvegarde (elle
+  n'existait pas avant) est vidée ; fenêtre `#import-zip-echec` qui nomme la sauvegarde ; si la restauration échoue
+  aussi, la fenêtre dit de restaurer cette sauvegarde à la main (Paramètres › Sauvegardes).
+- **Jamais touché** : `acces/` (comptes, sessions, appareils) : rien dans ce déroulé n'y écrit, et `restaurer` ne le
+  remet pas. **Pas restauré** : les documents (la restauration remet les tables seulement ; les documents copiés par
+  un import interrompu restent ; ceux d'avant sont intacts, et copiés dans `documents/` de la sauvegarde).
+- Écart retenu : les tables ne passent pas par `Donnees.modifier`, qui ne garde que les colonnes inconnues de la table
+  actuelle (celles du ZIP seraient perdues sans le dire, CS140) et journaliserait chaque ligne ; c'est le chemin de
+  `Import.annuler` (lot 5, §18.7) : sérialisation de `Donnees`, adaptateur protégé, version contrôlée.
+- **Risques restants** : le ZIP entier reste en mémoire le temps de l'import (jusqu'à 200 Mo lus, 1 Go décompressé :
+  un poste à court de mémoire peut fermer l'onglet ; rien n'est écrit avant la confirmation) ; le contenu des documents
+  n'est pas analysé au-delà des signatures d'image contrôlées par le serveur (`verifier_signature_image` ; aucune en
+  mode dossier) : un document reste servi isolé (`Content-Security-Policy: sandbox`, enveloppe sans script hors
+  serveur, §15.1) ; en http par le réseau (contexte non sécurisé), un ZIP avec manifeste est refusé faute de
+  `crypto.subtle` (importer depuis le PC serveur ou en https) ; une sauvegarde de plus de 15 s (gros dossier
+  `documents/`) dépasse le délai des requêtes : l'import s'arrête sans rien écrire ; une écriture d'un autre poste
+  pendant l'import donne un conflit, donc le retour en arrière ; la ligne de journal compte les documents du ZIP, repris
+  ou écrits.
 
 ### 22.12 Corrections de l'audit (D134, CS134)
 
