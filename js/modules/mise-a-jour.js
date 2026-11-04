@@ -4,6 +4,8 @@
 // plus récente existe, le dit par un bandeau discret sur l'accueil du responsable et une ligne dans « À propos ».
 // Jamais d'installation automatique ; version égale ou plus ancienne, fichier absent, injoignable ou mal formé :
 // rien, sans erreur visible. Rien pour le technicien, le demandeur ni la démo en ligne (App.versionWeb).
+// Numéros SemVer (T216) : une bêta (2.0.0-beta.2) est prévenue de la finale (2.0.0) ; une installation stable
+// n'est jamais prévenue d'une bêta.
 window.MiseAJour = (function () {
   'use strict';
 
@@ -14,7 +16,7 @@ window.MiseAJour = (function () {
   const DELAI_MS = 5000;                     // au-delà, le fichier est tenu pour injoignable (aucune erreur montrée)
   const NOUVEAUTES_MAX = 3;
   const LONGUEUR_MAX = 200;
-  const MOTIF_VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
+  const MOTIF_VERSION = /^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-([0-9A-Za-z]{1,20}(?:\.[0-9A-Za-z]{1,20}){0,3}))?$/;
   const MOTIF_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
   /** Adresse lue : window.PREVO_ADRESSE_VERSION (tests, faux serveur local) sinon prevo.pro. */
@@ -41,18 +43,44 @@ window.MiseAJour = (function () {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
-  /** « 1.2.0 » → [1, 2, 0] ; null si ce n'est pas un numéro de version. */
+  /** « 1.2.0 » → [1, 2, 0] ; « 2.0.0-beta.2 » → [2, 0, 0, 'beta', 2] (identifiants de pré-version : nombre ou
+   *  texte) ; null si ce n'est pas un numéro de version. */
   function nombres(version) {
-    return typeof version === 'string' && MOTIF_VERSION.test(version.trim()) ? version.trim().split('.').map(Number) : null;
+    const trouve = typeof version === 'string' ? MOTIF_VERSION.exec(version.trim()) : null;
+    if (!trouve) return null;
+    const pre = trouve[4] ? trouve[4].split('.').map((id) => (/^\d+$/.test(id) ? Number(id) : id)) : [];
+    return [Number(trouve[1]), Number(trouve[2]), Number(trouve[3])].concat(pre);
   }
 
-  /** Vrai si la version a est plus récente que la version b (tableaux de nombres(), null = jamais plus récent). */
+  // Ordre de deux identifiants de pré-version (SemVer §11) : deux nombres entre eux, deux textes dans l'ordre ASCII,
+  // un nombre avant un texte.
+  function comparerIdentifiants(x, y) {
+    if (typeof x === 'number' && typeof y === 'number') return x - y;
+    if (typeof x === 'number') return -1;
+    if (typeof y === 'number') return 1;
+    return x < y ? -1 : (x > y ? 1 : 0);
+  }
+
+  /** Vrai si la version a est plus récente que la version b (tableaux de nombres(), null = jamais plus récent).
+   *  SemVer (T216) : une pré-version passe avant sa finale (2.0.0-beta.2 < 2.0.0) ; deux pré-versions se comparent
+   *  identifiant par identifiant (beta.2 < beta.10 < rc.1), la plus courte d'abord à égalité (beta < beta.1). */
   function plusRecente(a, b) {
     if (!a || !b) return false;
     for (let i = 0; i < 3; i += 1) {
       if (a[i] !== b[i]) return a[i] > b[i];
     }
-    return false;
+    if (a.length === 3 || b.length === 3) return a.length === 3 && b.length > 3;
+    for (let i = 3; i < Math.min(a.length, b.length); i += 1) {
+      const ordre = comparerIdentifiants(a[i], b[i]);
+      if (ordre !== 0) return ordre > 0;
+    }
+    return a.length > b.length;
+  }
+
+  /** Vrai si la version lue est à signaler à l'installation : plus récente, et jamais une pré-version (bêta) à une
+   *  installation stable (T216 ; un canal bêta à part viendra au Lot 4). Une bêta est prévenue de la finale. */
+  function aSignaler(lue, installee) {
+    return plusRecente(lue, installee) && (lue.length === 3 || installee.length > 3);
   }
 
   /** Contenu de version.json vérifié et nettoyé : { version, date, adresse, nouveautes } ; null s'il est mal formé. */
@@ -104,7 +132,7 @@ window.MiseAJour = (function () {
     if (!active()) return null;
     const lecture = lectureDuJour();
     const fichier = lecture && lecture.fichier ? lireFichier(lecture.fichier) : null;
-    if (!fichier || !plusRecente(nombres(fichier.version), nombres(App.version))) return null;
+    if (!fichier || !aSignaler(nombres(fichier.version), nombres(App.version))) return null;
     if (lireMemoire(CLE_IGNOREE) === fichier.version) return null;
     return fichier;
   }
@@ -163,6 +191,7 @@ window.MiseAJour = (function () {
     return UI.html`Prévo est à jour (vérifié le ${UI.dateFr(lecture.date)}).`;
   }
 
-  return { adresse, verifier, disponible, ignorer, afficherSiPossible, ligneApropos, nombres, plusRecente, lireFichier,
+  return { adresse, verifier, disponible, ignorer, afficherSiPossible, ligneApropos, nombres, plusRecente, aSignaler,
+    lireFichier,
     PARAMETRE, CLE_LECTURE, CLE_IGNOREE };
 })();

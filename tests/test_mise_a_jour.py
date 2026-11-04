@@ -9,6 +9,8 @@ signale une version plus récente sur l'accueil du responsable et dans « À pro
     rien         sans accord, technicien, version web : aucune requête ; version égale, fichier mal formé, absent
                  (404), serveur injoignable : pas de bandeau, aucune erreur JavaScript, ligne de À propos adaptée ;
     fichier      vérification du contenu (numéro, adresse https, nouveautés bornées), comparaison des versions ;
+    semver       (T216) pré-versions : 2.0.0-beta.2 < 2.0.0-beta.10 < 2.0.0 ; une bêta est prévenue de la finale,
+                 une installation stable jamais d'une bêta ;
     release      outils/construire_release.py écrit dist/version.json (numéro, date, adresse de la release,
                  nouveautés tirées du CHANGELOG sans Markdown).
 
@@ -33,8 +35,12 @@ PANNE_RESEAU = r"ERR_CONNECTION_REFUSED|Failed to fetch|net::ERR"
 
 
 def version_suivante(version):
-    """x.y.z → x.y.(z+1) : une version plus récente que celle de l'application."""
-    nombres = [int(n) for n in version.split(".")]
+    """Une version plus récente que celle de l'application, à signaler : x.y.z → x.y.(z+1) ; pré-version
+    x.y.z-beta.N → x.y.z (la finale, que la bêta doit voir, T216)."""
+    base, _, pre = version.partition("-")
+    if pre:
+        return base
+    nombres = [int(n) for n in base.split(".")]
     nombres[2] += 1
     return ".".join(str(n) for n in nombres)
 
@@ -248,6 +254,33 @@ class TestSignalement(CasMiseAJour):
             self.assertEqual(len(fichier["nouveautes"]), 3)
             self.assertEqual(resultat["refuses"], [None, None, None, None])
             self.assertEqual(resultat["dateIgnoree"], "")
+
+    def test_semver_une_beta_voit_la_finale_une_stable_jamais_une_beta(self):
+        # T216 : MOTIF_VERSION n'acceptait que X.Y.Z, une installation 2.0.0-beta.2 n'aurait jamais vu la 2.0.0.
+        with ServeurPrevo() as serveur, FauxSite(fichier_version(self.nouvelle)) as site:
+            page = self.ouvrir(serveur, site.url, accord=False)
+            resultat = page.evaluate("""() => {
+              const n = MiseAJour.nombres;
+              const plus = (a, b) => MiseAJour.plusRecente(n(a), n(b));
+              const signaler = (lue, installee) => MiseAJour.aSignaler(n(lue), n(installee));
+              return {
+                nombres: [n('2.0.0-beta.2'), n(' 2.0.0-rc.1 '), n('2.0.0-'), n('2.0.0-beta..1'), n('2.0.0+build.1'),
+                          n('2.0.0-béta'), n('2.0.0-a.b.c.d.e'), n('2.0.0-' + 'x'.repeat(21))],
+                plus: [plus('2.0.0', '2.0.0-beta.2'), plus('2.0.0-beta.2', '2.0.0'), plus('2.0.0-beta.10', '2.0.0-beta.2'),
+                       plus('2.0.0-beta.2', '2.0.0-beta.10'), plus('2.0.0-beta.2', '2.0.0-beta.2'), plus('2.0.0-beta.1', '2.0.0-beta'),
+                       plus('2.0.0-rc.1', '2.0.0-beta.9'), plus('2.0.0-beta', '2.0.0-1'), plus('2.0.1-beta.1', '2.0.0'),
+                       plus('1.2.1', '2.0.0-beta.2'), plus('2.0.0-beta.2', '1.2.1')],
+                signaler: [signaler('2.0.0', '2.0.0-beta.2'), signaler('2.0.0-beta.3', '2.0.0-beta.2'),
+                           signaler('2.1.0', '2.0.0-beta.2'), signaler('2.0.0-beta.2', '1.2.1'), signaler('2.0.0-beta.2', '2.0.0'),
+                           signaler('1.2.2', '1.2.1'), signaler('1.2.1', '2.0.0-beta.2'), signaler('2.0.0', null)],
+                fichier: MiseAJour.lireFichier({ version: '2.0.0-beta.3', adresse: 'https://prevo.pro/x' }).version,
+              };
+            }""")
+            self.assertEqual(resultat["nombres"], [[2, 0, 0, "beta", 2], [2, 0, 0, "rc", 1], None, None, None, None, None,
+                                                   None])
+            self.assertEqual(resultat["plus"], [True, False, True, False, False, True, True, True, True, False, True])
+            self.assertEqual(resultat["signaler"], [True, True, True, False, False, True, False, False])
+            self.assertEqual(resultat["fichier"], "2.0.0-beta.3")
 
 
 class TestVersionJsonDeLaRelease(unittest.TestCase):
