@@ -256,7 +256,9 @@ Donnees.stockArticle(articleId)      // recalculé depuis mouvements_stock (un i
 await Donnees.journaliser(table, idLigne, action)   // entrée de journal sans modification (ex. avertissement RG8)
 Donnees.instantane()                 // { table: Uint8Array } des 22 tables sérialisées (export ZIP, copie de la démo)
 Donnees.baseVide()                   // vrai si aucun des 22 fichiers n'existe
-await Donnees.mettreAJourVersionSchema()   // passage au format courant, sauvegarde d'abord (§5.6)
+Donnees.etatDuFormat() / Donnees.lectureSeule()   // format de départ et courant ; données plus récentes (§5.6)
+await Donnees.migrerAuFormatCourant()   // mode dossier : passage au format courant, sauvegarde d'abord ; mode serveur :
+                                        // rien, le serveur l'a fait à son démarrage (§5.6, FORMAT.md §6)
 Donnees.demarrerSurveillance() / Donnees.arreterSurveillance()   // §5.5
 Donnees.csv.analyser(table, entree)  // → { lignes, colonnesInconnues, problemes, encodage }
 Donnees.csv.serialiser(table, lignes, colonnesInconnues) // → Uint8Array
@@ -354,22 +356,34 @@ await ecrireDocument(nom, blob)       → nom   (refuse d'écraser un document e
 await lireDocument(nom)               → Blob|null
 await urlDocument(nom)                → URL affichable (serveur : /api/documents/nom ; sinon URL d'objet)
 await sauvegarder(motif?)             → nom de la sauvegarde : manuelle sans motif (AAAA-MM-JJ_HHMMSS) ;
-                                      avec motif 'avant-format-v2' (liste fermée, le seul motif accepté)
-                                      → AAAA-MM-JJ_HHMMSS_avant-format-v2 ; autre motif → ErreurStockage
+                                      avec un motif de la liste fermée (avant-format-v2, avant-format-v3,
+                                      avant-import, avant-import-zip, avant-mise-a-jour)
+                                      → AAAA-MM-JJ_HHMMSS_<motif> ; autre motif → ErreurStockage
+                                      (avant-import-zip copie aussi documents/ ; FORMAT.md §8)
+await sauvegarderAvantMiseAJour(versionAppli)   (dossier seulement) → { sauvegarde: nom ou null, de }
+                                      sauvegarde « avant-mise-a-jour » puis derniere-version.json si la version
+                                      notée n'est pas versionAppli (le serveur le fait à son démarrage ; FORMAT.md §8)
 await listerSauvegardes()             → [{ nom, tables: [...] }]  (plus récente d'abord)
 await restaurer(nom, tables?)         → { restaurees: [...], copieSecurite: nom }
 await testerSauvegarde(nom)           → { nom, ok, tables: [{ table, lignes, erreur }] }  (serveur seulement, §22.11)
 await info()                          → { adressesReseau: [...], port, copieExterne: { derniereReussie, joursSansCopie,
-                                      erreur } | null } (serveur, §22.11) ou {}
+                                      erreur } | null, format: { base, courant, plusRecent, migration, … } }
+                                      (serveur, §22.11 et §5.6) ou {}
 ```
+`App` n'utilise l'adaptateur qu'au travers de `Donnees.protegerEcritures(adaptateur)` : en lecture seule (données
+d'un format plus récent, §5.6), ses écritures (`enregistrer`, `ajouter`, `ecrireDocument`, `sauvegarder`,
+`restaurer`, `sauvegarderAvantMiseAJour`) sont refusées par `ErreurLectureSeule` ; le serveur répond de son côté 409
+`format_plus_recent`.
 Version d'un fichier = empreinte SHA-256 du contenu, 16 premiers caractères hexadécimaux
 (décision D7). Sauvegarde quotidienne : avant la **première écriture de la journée**, copie de
 tous les CSV dans `sauvegardes/AAAA-MM-JJ/` (si ce dossier n'existe pas). Une restauration copie
 d'abord l'état courant dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-restauration/`. Le passage au
-format 2 (§5.6) copie tous les CSV dans `sauvegardes/AAAA-MM-JJ_HHMMSS_avant-format-v2/`. Noms de
-sauvegarde acceptés (serveur et dossier, mêmes règles) :
+format N (§5.6 ; serveur au démarrage, navigateur en mode dossier) copie d'abord tous les CSV dans
+`sauvegardes/AAAA-MM-JJ_HHMMSS_avant-format-vN/`. Noms de sauvegarde acceptés (serveur et dossier, mêmes règles) :
 `AAAA-MM-JJ`, `AAAA-MM-JJ_HHMMSS`, `AAAA-MM-JJ_HHMMSS_avant-restauration`,
-`AAAA-MM-JJ_HHMMSS_avant-format-vN`. Le mode dossier
+`AAAA-MM-JJ_HHMMSS_avant-format-vN`, `…_avant-import`, `…_avant-import-zip`, `…_avant-mise-a-jour`. Chaque
+sauvegarde porte un `manifeste.json` ; les quotidiennes de plus de 30 jours et les manuelles au-delà des 60 plus
+récentes sont supprimées (jamais les « avant-… ») : détail dans [FORMAT.md](FORMAT.md) §8 et §9. Le mode dossier
 pose une marque `.en-cours` dans une sauvegarde pendant qu'il la copie et l'enlève à la fin : une
 sauvegarde qui porte encore la marque est incomplète (ni listée, ni restaurable ; celle du jour est
 refaite) — le serveur applique la même règle.
@@ -938,10 +952,11 @@ Restent :
 - Points ouverts du lot 5 (§18.11), dont les contrôles des formulaires à appliquer ou non à l'import.
 - Piste notée par Nicolas : stocker le prix unitaire dans `mouvements_stock` au moment de la sortie
   pour figer le coût des OT passés (changement de format, lève la limite de D24 ; à décider).
-- Nouveau format : ajouter les champs en fin de table avec `depuisVersion: N`, porter
-  `Schema.version` à N, ajouter `avant-format-vN` aux listes fermées de motifs de sauvegarde
-  (`MOTIFS_SAUVEGARDE` de `serveur.py` et de `js/stockage-dossier.js`) : `mettreAJourVersionSchema`
-  fera la sauvegarde puis le passage.
+- Nouveau format : suivre la liste de contrôle de [FORMAT.md](FORMAT.md) §11 (champs en fin de table avec
+  `depuisVersion: N`, `Schema.version` à N, étape dans `Formats.ETAPES` et son miroir `ETAPES_FORMAT` de
+  `serveur.py`, `avant-format-vN` dans les listes fermées `MOTIFS_SAUVEGARDE` de `serveur.py` et de
+  `js/stockage-dossier.js`). La sauvegarde puis le passage sont faits par le serveur à son démarrage (mode
+  serveur) ou par `Donnees.migrerAuFormatCourant` à l'ouverture (mode dossier) : §5.6.
 
 ## 14. Contrat du lot 2 (CDC validé le 2026-10-20 : D19–D32)
 
@@ -972,6 +987,10 @@ a été fait et pourquoi.
   démarrage par `Donnees.mettreAJourVersionSchema()`, **juste après** une sauvegarde automatique
   `AAAA-MM-JJ_HHMMSS_avant-format-v2` ; sans sauvegarde confirmée, pas de passage (nouvel essai à
   la prochaine ouverture). Détail au §5.6 ; motif de sauvegarde au §6 et au §7.
+  Mis à jour par le chantier « socle de données » (D168) : le passage n'est plus fait par le navigateur pour tous.
+  En mode serveur, c'est le **serveur, à son démarrage**, avant toute connexion ; en mode dossier, c'est
+  `Donnees.migrerAuFormatCourant()` (ancien nom `mettreAJourVersionSchema`, même fonction), à l'ouverture. Dans
+  les deux cas, sauvegarde `avant-format-vN` d'abord ; voir §5.6 et [FORMAT.md](FORMAT.md) §6.
 
 ### 14.2 Découpage des modules (D28) et ordre de chargement
 Un module = un préfixe de fichiers, chacun ≤ 700 lignes (dérogation assumée au « un fichier JS par
@@ -2663,11 +2682,14 @@ Version de clôture `v1.2.0`.
   | `decide_par`, `decide_le` | texte, `date_heure` | qui a décidé, et quand |
   | `motif` | `texte_long` | motif d'un rejet ; « rejoué : page créée entre-temps » (D112) |
 
-- **Passage au format 3** : `Donnees.mettreAJourVersionSchema()` (§5.6) tel quel, motif `avant-format-v3`
+- **Passage au format 3** : au lot 6, `Donnees.mettreAJourVersionSchema()` (§5.6) tel quel, motif `avant-format-v3`
   (déjà dans `MOTIFS_SAUVEGARDE` de `serveur.py` et `js/stockage-dossier.js`) ; aucun fichier réécrit sauf
   `parametres.csv` ; une base au format 1 passe directement au format 3. Une base déjà en version 3 (première
   version du lot, jamais publiée) n'a rien à faire. « Créer une base vide » et la démo portent
   `version_schema` = 3. `serveur.py` : `TABLES` à 24 (test de cohérence avec `js/schema.js`).
+  Depuis le chantier « socle de données » (D167, D168), le passage se fait étape par étape (1 → 2 → 3, colonnes
+  ajoutées en fin de table, une ligne de journal par étape), par le serveur à son démarrage en mode serveur et par
+  `Donnees.migrerAuFormatCourant()` à l'ouverture en mode dossier : §5.6 et [FORMAT.md](FORMAT.md) §6.
 - `Donnees.problemes()` : lien vers une page inexistante ou archivée, OT cité inexistant, deux pages actives
   de même `cle`, entrée « validée » dont les changements ne sont pas dans les pages (`attention`) ; page
   active sans OT cité, contradiction ouverte depuis plus de `contradictionAncienneJours` (`info`).

@@ -107,10 +107,19 @@ Rien n'est migré « vers le bas » : on met l'appli à jour, ou on restaure une
   changement important. On les supprime à la main quand on n'en a plus besoin.
 - Les documents (photos, PDF) sont dans les sauvegardes faites avant un import et dans l'export ZIP, pas dans les
   quotidiennes.
+- **Restaurer** une sauvegarde (Paramètres › Sauvegardes) remet ses tables (les CSV) et rien d'autre : restaurer une
+  sauvegarde `avant-import-zip` ne recopie **pas** les documents de son dossier `documents/`. Pour les retrouver, on
+  les copie à la main de `sauvegardes/<nom>/documents/` vers `documents/`.
+- La version notée est dans `derniere-version.json`, à la racine du dossier de données : `{"version", "depuis"}`
+  (version de l'appli, date `AAAA-MM-JJTHH:MM:SS`). Elle est écrite après la sauvegarde `avant-mise-a-jour`, et
+  seulement si celle-ci a réussi (base vide : voir plus bas).
 - La **copie externe nocturne** (lot 7, ARCHITECTURE.md §22.11) est inchangée.
 - Piège : un dossier nommé comme la version de l'appli (`prevo-<version>/`) peut être remplacé par une mise à jour
   manuelle ; gardez les données hors de ce dossier (voir [INSTALLATION.md](INSTALLATION.md)).
-- Mêmes règles en mode dossier.
+- Mêmes règles en mode dossier, sauf pour une **base vide** (aucun CSV) : le mode dossier note la version dès
+  l'ouverture, sans sauvegarde (il n'y a rien à garder) ; le serveur, lui, n'écrit rien au démarrage. La base créée
+  ensuite par le navigateur (« Créer une base vide », démo) reçoit donc, en mode serveur, une sauvegarde
+  `avant-mise-a-jour` au démarrage suivant du serveur, puis la version est notée.
 
 ## 9. Manifeste (`manifeste.json`)
 
@@ -129,6 +138,8 @@ Chaque sauvegarde et chaque export ZIP contient un `manifeste.json` :
 ```
 
 `fichiers` liste chaque fichier avec sa taille et son empreinte SHA-256 complète (hexadécimal), triés par nom.
+`date` est toujours de la forme `AAAA-MM-JJTHH:MM:SS` (heure locale, sans fuseau horaire) : celle du serveur pour ses
+sauvegardes, celle du poste pour le mode dossier et l'export.
 Le manifeste sert à contrôler qu'une sauvegarde ou un ZIP est complet et intact, et à savoir de quel format il vient.
 
 ## 10. Export et import ZIP
