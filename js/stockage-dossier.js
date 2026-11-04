@@ -9,8 +9,9 @@
 //   2. la mémorisation du dossier choisi (IndexedDB) ;
 //   3. la fabrique `creer(poignee, { poste })` qui rend l'adaptateur.
 // Le mode dossier tourne toujours en contexte sécurisé (file:// ou http://127.0.0.1) : on peut
-// donc utiliser crypto.subtle. Dépendances : Schema (js/schema.js) et Donnees (js/donnees.js)
-// pour les erreurs ; elles ne sont lues qu'au moment des appels, pas au chargement du fichier.
+// donc utiliser crypto.subtle. Dépendances : Schema (js/schema.js), Donnees (js/donnees.js) pour
+// les erreurs, Formats (js/formats.js) pour le manifeste des sauvegardes, App (version de l'appli,
+// facultatif) ; elles ne sont lues qu'au moment des appels, pas au chargement du fichier.
 
 const StockageDossier = (() => {
 
@@ -35,6 +36,28 @@ const StockageDossier = (() => {
   // Marqueur plus récent que 2 minutes : la copie est sans doute en cours sur un autre poste
   // (il est réécrit avant chaque table copiée).
   const DUREE_SAUVEGARDE_EN_COURS_MS = 2 * 60 * 1000;
+  // Sauvegardes du mode dossier (D170, docs/FORMAT.md §8 et §9 ; mêmes règles que serveur.py) :
+  //   - rotation, après chaque nouvelle quotidienne et chaque nouvelle manuelle : quotidiennes « AAAA-MM-JJ » de
+  //     plus de 30 jours (date du jour du poste) et manuelles « AAAA-MM-JJ_HHMMSS » au-delà des 60 plus récentes
+  //     supprimées ; « …_avant-… » jamais ; un nom hors de ces motifs n'est jamais touché ;
+  //   - manifeste.json dans chaque sauvegarde (Formats.manifeste des fichiers copiés), écrit avant le retrait du
+  //     marqueur « .en-cours » ; la restauration ne copie que les CSV des tables, donc l'ignore ;
+  //   - « avant-import-zip » copie aussi documents/ (dans documents/ de la sauvegarde, compté dans le manifeste) ;
+  //   - « avant-mise-a-jour » : au premier démarrage d'une nouvelle version de l'appli sur ce dossier, puis
+  //     derniere-version.json (racine du dossier de données) : { "version", "depuis" }.
+  const MOTIF_NOM_QUOTIDIENNE = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const MOTIF_NOM_MANUELLE = /^\d{4}-\d{2}-\d{2}_\d{6}$/;
+  const JOURS_GARDES_QUOTIDIENNES = 30;
+  const MANUELLES_GARDEES = 60;
+  const MS_PAR_JOUR = 24 * 60 * 60 * 1000;
+  const NOM_MANIFESTE = 'manifeste.json';
+  const NOM_DERNIERE_VERSION = 'derniere-version.json';
+  const MOTIF_AVANT_IMPORT_ZIP = 'avant-import-zip';
+  const MOTIF_AVANT_MISE_A_JOUR = 'avant-mise-a-jour';
+  // Motif écrit dans le manifeste d'une sauvegarde sans motif de MOTIFS_SAUVEGARDE.
+  const MOTIF_QUOTIDIENNE = 'quotidienne';
+  const MOTIF_MANUELLE = 'manuelle';
+  const MOTIF_AVANT_RESTAURATION = 'avant-restauration';
 
   // Un verrou plus ancien que 3 minutes est considéré comme abandonné ; on le réécrit toutes les 60 s.
   const DUREE_VALIDITE_VERROU_MS = 3 * 60 * 1000;
@@ -46,9 +69,9 @@ const StockageDossier = (() => {
   // « _avant-restauration » (copie de sécurité), « _avant-format-v<N> » (juste avant le passage
   // au format N) ou « _avant-import » (juste avant un import, lot 5). En JavaScript, \d ne reconnaît
   // que 0-9, comme [0-9] côté serveur.
-  const MOTIF_NOM_SAUVEGARDE = /^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+|_avant-import)?)?$/;
+  const MOTIF_NOM_SAUVEGARDE = /^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+|_avant-import-zip|_avant-import|_avant-mise-a-jour)?)?$/;
   // Motifs acceptés par sauvegarder(motif) : liste FERMÉE, la même que MOTIFS_SAUVEGARDE de serveur.py.
-  const MOTIFS_SAUVEGARDE = ['avant-format-v2', 'avant-format-v3', 'avant-import'];
+  const MOTIFS_SAUVEGARDE = ['avant-format-v2', 'avant-format-v3', 'avant-import', 'avant-import-zip', 'avant-mise-a-jour'];
   // 'html' : rapport mensuel figé (lot 3, ARCHITECTURE.md §15.1).
   // Les mêmes que TYPES_DOCUMENTS de serveur.py (audit F4 : « .doc » et « .xls » ne sont plus acceptés).
   const EXTENSIONS_DOCUMENTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'docx',
@@ -92,6 +115,30 @@ const StockageDossier = (() => {
     if (!trouve) { return null; }
     return new Date(Number(trouve[1]), Number(trouve[2]) - 1, Number(trouve[3]),
       Number(trouve[4]), Number(trouve[5]), Number(trouve[6]));
+  }
+
+  // 'AAAA-MM-JJTHH:MM:SS' (heure locale) : date des manifestes et de derniere-version.json (docs/FORMAT.md §9).
+  function dateHeureManifeste(date) {
+    return dateDuJour(date) + 'T' + deuxChiffres(date.getHours()) + ':' + deuxChiffres(date.getMinutes())
+      + ':' + deuxChiffres(date.getSeconds());
+  }
+
+  // Jour (Date à minuit, heure locale) d'un nom « AAAA-MM-JJ », ou null si le nom n'a pas exactement cette forme
+  // ou n'est pas une vraie date (« 2026-02-30 », « 2026-13-01 ») : un tel dossier n'est jamais touché.
+  function jourDuNom(nom) {
+    const trouve = MOTIF_NOM_QUOTIDIENNE.exec(nom);
+    if (!trouve) { return null; }
+    const annee = Number(trouve[1]);
+    const mois = Number(trouve[2]) - 1;
+    const quantieme = Number(trouve[3]);
+    const jour = new Date(annee, mois, quantieme);
+    return jour.getFullYear() === annee && jour.getMonth() === mois && jour.getDate() === quantieme ? jour : null;
+  }
+
+  // Nombre de jours de `debut` à `fin` (deux Dates à minuit) ; arrondi, car un jour de changement d'heure dure 23
+  // ou 25 heures.
+  function joursEntre(debut, fin) {
+    return Math.round((fin.getTime() - debut.getTime()) / MS_PAR_JOUR);
   }
 
   function attendre(millisecondes) {
@@ -312,12 +359,61 @@ const StockageDossier = (() => {
     return Schema.nomsTables().filter(function (table) { return noms.has(table); });
   }
 
-  // Copie les CSV des tables données de « source » vers « cible » (sans changer leur contenu).
-  async function copierTables(source, cible, tables) {
-    for (const table of tables) {
-      const poigneeFichier = await source.getFileHandle(table + '.csv');
-      await ecrireFichier(cible, table + '.csv', await poigneeFichier.getFile());
+  // Copie le fichier `nom` de « source » vers « cible » (sans changer son contenu) ; rend les octets copiés (pour
+  // le manifeste : c'est exactement ce qui a été écrit).
+  async function copierFichier(source, cible, nom) {
+    const poigneeFichier = await source.getFileHandle(nom);
+    const octets = new Uint8Array(await (await poigneeFichier.getFile()).arrayBuffer());
+    await ecrireFichier(cible, nom, octets);
+    return octets;
+  }
+
+  // --- Manifeste des sauvegardes (docs/FORMAT.md §9) -----------------------------------------
+  // Formats (js/formats.js) et Donnees (js/donnees.js) ne sont lus qu'au moment des appels.
+
+  // { nom, octets, sha256 } d'un fichier copié, calculé par Formats.manifeste. Fichier par fichier : les octets d'un
+  // document (photo, PDF) ne restent pas en mémoire jusqu'à la fin de la sauvegarde.
+  async function decrireFichier(nom, octets) {
+    return (await Formats.manifeste([{ nom: nom, octets: octets }])).fichiers[0];
+  }
+
+  // Format de la base sauvegardée : parametres.version_schema (Formats.versionDeBase : absent ou illisible → 1) ;
+  // null (champ omis) si parametres.csv ne se lit pas : le manifeste n'empêche jamais une sauvegarde.
+  function formatDeLaBase(octetsParametres) {
+    try {
+      const lignes = octetsParametres === null ? [] : Donnees.csv.analyser('parametres', octetsParametres).lignes;
+      return Formats.versionDeBase(lignes);
+    } catch (erreurLecture) {
+      return null;
     }
+  }
+
+  function versionDeLAppli() {
+    return typeof App !== 'undefined' && App && typeof App.version === 'string' ? App.version : undefined;
+  }
+
+  // Manifeste d'une sauvegarde : { application, version_appli, format, date, motif, mode: 'dossier', [de, vers,]
+  // fichiers } (décrits par decrireFichier, triés par nom comme le fait Formats.manifeste).
+  // reglages : { motif, versionAppli (défaut App.version), complements (champs ajoutés avant « fichiers ») }.
+  async function manifesteDeSauvegarde(decrits, octetsParametres, reglages) {
+    const manifeste = await Formats.manifeste([], {
+      version_appli: reglages.versionAppli || versionDeLAppli(),
+      format: formatDeLaBase(octetsParametres),
+      date: dateHeureManifeste(new Date()),
+      motif: reglages.motif,
+      mode: 'dossier',
+    });
+    delete manifeste.fichiers;
+    Object.assign(manifeste, reglages.complements || {});
+    manifeste.fichiers = decrits.slice().sort(function (a, b) {
+      if (a.nom < b.nom) { return -1; }
+      return a.nom > b.nom ? 1 : 0;
+    });
+    return manifeste;
+  }
+
+  function enJson(valeur) {
+    return encodeurUtf8.encode(JSON.stringify(valeur, null, 2) + '\n');
   }
 
   function verifierNomTable(table) {
@@ -511,21 +607,51 @@ const StockageDossier = (() => {
 
     // --- Sauvegardes -----------------------------------------------------------------------
 
-    // Crée sauvegardes/<nom>/ avec une copie des tables données. Le marqueur « .en-cours » est
-    // posé d'abord (et réécrit avant chaque table), retiré en dernier. Si la copie échoue, le
-    // dossier à moitié rempli est supprimé ; si l'onglet est fermé pendant la copie, le marqueur
-    // reste et la sauvegarde est vue comme incomplète (ignorée par la liste, refaite si c'est
-    // celle du jour).
-    async function creerSauvegarde(nom, tables) {
+    // documents/ du dossier de données → documents/ de la sauvegarde (« avant-import-zip »), fichier par fichier,
+    // marqueur réécrit avant chacun. Rend leurs descriptions pour le manifeste, sous le nom « documents/<nom> ».
+    async function copierDocuments(dossierSauvegarde, marqueur) {
+      const source = await trouverDossier(racine, NOM_DOSSIER_DOCUMENTS, false);
+      if (!source) { return []; }
+      const noms = [];
+      for await (const entree of source.values()) {
+        if (entree.kind === 'file') { noms.push(entree.name); }
+      }
+      noms.sort();
+      const cible = await trouverDossier(dossierSauvegarde, NOM_DOSSIER_DOCUMENTS, true);
+      const decrits = [];
+      for (const nom of noms) {
+        await ecrireFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS, marqueur);
+        decrits.push(await decrireFichier(NOM_DOSSIER_DOCUMENTS + '/' + nom, await copierFichier(source, cible, nom)));
+      }
+      return decrits;
+    }
+
+    // Crée sauvegardes/<nom>/ avec une copie des tables données (et de documents/ si reglages.documents),
+    // puis manifeste.json. Le marqueur « .en-cours » est posé d'abord (et réécrit avant chaque fichier
+    // copié), retiré en dernier, APRÈS le manifeste. Si la copie échoue, le dossier à moitié rempli est
+    // supprimé ; si l'onglet est fermé pendant la copie, le marqueur reste et la sauvegarde est vue
+    // comme incomplète (ignorée par la liste, refaite si c'est celle du jour).
+    // reglages : { motif (écrit dans le manifeste), documents, versionAppli, complements } (manifesteDeSauvegarde).
+    async function creerSauvegarde(nom, tables, reglages) {
+      const options = reglages || {};
       const dossierSauvegardes = await trouverDossier(racine, NOM_DOSSIER_SAUVEGARDES, true);
       const dossierSauvegarde = await trouverDossier(dossierSauvegardes, nom, true);
       const marqueur = encodeurUtf8.encode(poste + ';' + idSession);
+      const decrits = [];
+      let octetsParametres = null;
       try {
         for (const table of tables) {
           await ecrireFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS, marqueur);
-          await copierTables(racine, dossierSauvegarde, [table]);
+          const octets = await copierFichier(racine, dossierSauvegarde, table + '.csv');
+          if (table === 'parametres') { octetsParametres = octets; }
+          decrits.push(await decrireFichier(table + '.csv', octets));
+        }
+        if (options.documents) {
+          decrits.push.apply(decrits, await copierDocuments(dossierSauvegarde, marqueur));
         }
         await ecrireFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS, marqueur);
+        await ecrireFichier(dossierSauvegarde, NOM_MANIFESTE,
+          enJson(await manifesteDeSauvegarde(decrits, octetsParametres, options)));
         await dossierSauvegarde.removeEntry(NOM_MARQUEUR_EN_COURS);
       } catch (erreur) {
         try { await dossierSauvegardes.removeEntry(nom, { recursive: true }); } catch (erreurNettoyage) { /* tant pis */ }
@@ -555,9 +681,48 @@ const StockageDossier = (() => {
       }
     }
 
+    // Rotation (D170), après chaque nouvelle quotidienne et chaque nouvelle manuelle : quotidiennes
+    // « AAAA-MM-JJ » (date réelle) de plus de 30 jours avant la date du jour du poste, et manuelles
+    // « AAAA-MM-JJ_HHMMSS » au-delà des 60 plus récentes, supprimées. Rien d'autre n'est touché : ni
+    // les « …_avant-… », ni un nom hors de ces motifs, ni un fichier. Une suppression impossible
+    // n'arrête pas l'écriture en cours (nouvel essai à la rotation suivante). Rend les noms supprimés.
+    async function tournerSauvegardes() {
+      try {
+        const dossierSauvegardes = await trouverDossier(racine, NOM_DOSSIER_SAUVEGARDES, false);
+        if (!dossierSauvegardes) { return []; }
+        const aujourdhui = jourDuNom(dateDuJour());
+        const manuelles = [];
+        const aSupprimer = [];
+        for await (const entree of dossierSauvegardes.values()) {
+          if (entree.kind !== 'directory') { continue; }
+          if (MOTIF_NOM_MANUELLE.test(entree.name)) {
+            manuelles.push(entree.name);
+            continue;
+          }
+          const jour = jourDuNom(entree.name);
+          if (jour !== null && joursEntre(jour, aujourdhui) > JOURS_GARDES_QUOTIDIENNES) { aSupprimer.push(entree.name); }
+        }
+        manuelles.sort();                                   // la plus ancienne d'abord
+        aSupprimer.push.apply(aSupprimer, manuelles.slice(0, Math.max(0, manuelles.length - MANUELLES_GARDEES)));
+        const supprimees = [];
+        for (const nom of aSupprimer) {
+          try {
+            await dossierSauvegardes.removeEntry(nom, { recursive: true });
+            supprimees.push(nom);
+          } catch (erreurSuppression) {
+            // retentée à la rotation suivante
+          }
+        }
+        return supprimees;
+      } catch (erreur) {
+        console.warn('Prévo : rotation des sauvegardes impossible (' + (erreur && erreur.message) + ').', erreur);
+        return [];
+      }
+    }
+
     // Avant la première écriture du jour : copie de tous les CSV dans sauvegardes/AAAA-MM-JJ/
     // (rien si elle existe déjà complète, si un autre poste est en train de la faire, ou s'il n'y
-    // a encore aucun CSV ; refaite si elle a été interrompue). À appeler dans enSerie.
+    // a encore aucun CSV ; refaite si elle a été interrompue), puis rotation. À appeler dans enSerie.
     async function sauvegardeQuotidienneSiBesoin() {
       const nom = dateDuJour();
       const dossierSauvegardes = await trouverDossier(racine, NOM_DOSSIER_SAUVEGARDES, false);
@@ -568,18 +733,62 @@ const StockageDossier = (() => {
       }
       const tables = await tablesPresentes(racine);
       if (tables.length === 0) { return; }
-      await creerSauvegarde(nom, tables);
+      await creerSauvegarde(nom, tables, { motif: MOTIF_QUOTIDIENNE });
+      await tournerSauvegardes();
     }
 
     // motif (facultatif) : 'avant-format-v2' → « AAAA-MM-JJ_HHMMSS_avant-format-v2 » ; sans motif,
-    // sauvegarde manuelle « AAAA-MM-JJ_HHMMSS ». Motif hors liste → ErreurStockage, rien n'est écrit.
+    // sauvegarde manuelle « AAAA-MM-JJ_HHMMSS » (puis rotation). 'avant-import-zip' copie aussi
+    // documents/. Motif hors liste → ErreurStockage, rien n'est écrit.
     async function sauvegarder(motif) {
       const suffixe = suffixeDuMotif(motif);
       return enSerie(async function () {
         const nom = await nouveauNomHorodate(suffixe);
         verifierNomSauvegarde(nom);                     // sécurité : le nom reste dans les règles
-        await creerSauvegarde(nom, await tablesPresentes(racine));
+        await creerSauvegarde(nom, await tablesPresentes(racine),
+          { motif: suffixe ? motif : MOTIF_MANUELLE, documents: motif === MOTIF_AVANT_IMPORT_ZIP });
+        if (!suffixe) { await tournerSauvegardes(); }
         return nom;
+      });
+    }
+
+    // Version notée dans derniere-version.json, ou null (fichier absent, illisible ou sans « version »).
+    async function lireVersionNotee() {
+      const octets = await lireOctets(racine, NOM_DERNIERE_VERSION);
+      if (octets === null) { return null; }
+      try {
+        const contenu = JSON.parse(decodeurUtf8Strict.decode(sansBom(octets)));
+        return contenu && typeof contenu.version === 'string' && contenu.version !== '' ? contenu.version : null;
+      } catch (erreurLecture) {
+        return null;
+      }
+    }
+
+    // D170 : à l'ouverture du dossier, AVANT le passage au format courant et toute autre écriture
+    // (js/app.js ; jamais en lecture seule, où rien ne doit être écrit). derniere-version.json absent,
+    // illisible ou d'une autre version que `versionAppli` → sauvegarde « AAAA-MM-JJ_HHMMSS_avant-mise-a-jour »
+    // (manifeste avec « de » : version notée ou null, et « vers »), puis, seulement si elle a réussi,
+    // derniere-version.json réécrit : { version, depuis }. Base vide (aucun CSV) : rien à sauvegarder, la
+    // version est seulement notée (la base sera créée par cette version). Même version : rien n'est écrit.
+    // Rend { sauvegarde: nom ou null, de: version notée ou null }.
+    async function sauvegarderAvantMiseAJour(versionAppli) {
+      if (typeof versionAppli !== 'string' || versionAppli === '') {
+        throw erreurStockage('Version de l\'application inconnue : rien n\'est sauvegardé.');
+      }
+      return enSerie(async function () {
+        const notee = await lireVersionNotee();
+        if (notee === versionAppli) { return { sauvegarde: null, de: notee }; }
+        const tables = await tablesPresentes(racine);
+        let nom = null;
+        if (tables.length > 0) {
+          nom = await nouveauNomHorodate('_' + MOTIF_AVANT_MISE_A_JOUR);
+          verifierNomSauvegarde(nom);
+          await creerSauvegarde(nom, tables, { motif: MOTIF_AVANT_MISE_A_JOUR, versionAppli: versionAppli,
+            complements: { de: notee, vers: versionAppli } });
+        }
+        await ecrireFichier(racine, NOM_DERNIERE_VERSION,
+          enJson({ version: versionAppli, depuis: dateHeureManifeste(new Date()) }));
+        return { sauvegarde: nom, de: notee };
       });
     }
 
@@ -630,7 +839,7 @@ const StockageDossier = (() => {
         const aRestaurer = choisirTablesARestaurer(await tablesPresentes(dossierSauvegarde), tables);
 
         const copieSecurite = await nouveauNomHorodate(SUFFIXE_AVANT_RESTAURATION);
-        await creerSauvegarde(copieSecurite, await tablesPresentes(racine));
+        await creerSauvegarde(copieSecurite, await tablesPresentes(racine), { motif: MOTIF_AVANT_RESTAURATION });
 
         const restaurees = [];
         for (const table of aRestaurer) {
@@ -836,6 +1045,7 @@ const StockageDossier = (() => {
       sauvegarder: proteger('sauvegarde', sauvegarder),
       listerSauvegardes: proteger('liste des sauvegardes', listerSauvegardes),
       restaurer: proteger('restauration', restaurer),
+      sauvegarderAvantMiseAJour: proteger('sauvegarde avant la mise à jour de Prévo', sauvegarderAvantMiseAJour),
       info: async function () { return {}; },
       verifierVerrou: verifierVerrou,
       demarrerVerrou: demarrerVerrou,

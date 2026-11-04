@@ -179,14 +179,17 @@ const Parametres = (() => {
 
   // Nom d'une sauvegarde → texte lisible. « 2026-10-19 » : quotidienne ; « 2026-10-19_153012 » :
   // manuelle ; « …_avant-restauration » : copie de sécurité faite avant une restauration ;
-  // « …_avant-format-v2 » : sauvegarde automatique faite juste avant le passage au format 2.
+  // « …_avant-format-v2 » : sauvegarde automatique faite juste avant le passage au format 2 ; « …_avant-import-zip » et
+  // « …_avant-mise-a-jour » (D170) : avant un import ZIP, avant la mise à jour de Prévo.
   function decrireSauvegarde(nom) {
-    const lu = /^(\d{4}-\d{2}-\d{2})(?:_(\d{2})(\d{2})(\d{2}))?(?:(_avant-restauration)|_avant-format-v(\d+)|(_avant-import))?$/.exec(nom);
+    const lu = /^(\d{4}-\d{2}-\d{2})(?:_(\d{2})(\d{2})(\d{2}))?(?:(_avant-restauration)|_avant-format-v(\d+)|(_avant-import-zip)|(_avant-import)|(_avant-mise-a-jour))?$/.exec(nom);
     if (!lu) return { date: nom, type: 'Sauvegarde', ton: 'neutre' };
     const date = UI.dateFr(lu[1]) + (lu[2] ? ' à ' + lu[2] + ':' + lu[3] + ':' + lu[4] : '');
     if (lu[5]) return { date: date, type: 'Copie de sécurité', ton: 'attention' };
     if (lu[6]) return { date: date, type: 'Avant format ' + Number(lu[6]), ton: 'info' };
-    if (lu[7]) return { date: date, type: 'Avant import', ton: 'info' };
+    if (lu[7]) return { date: date, type: 'Avant un import ZIP', ton: 'info' };
+    if (lu[8]) return { date: date, type: 'Avant import', ton: 'info' };
+    if (lu[9]) return { date: date, type: 'Avant la mise à jour de Prévo', ton: 'info' };
     return lu[2] ? { date: date, type: 'Manuelle', ton: 'info' } : { date: date, type: 'Quotidienne', ton: 'neutre' };
   }
 
@@ -241,7 +244,7 @@ const Parametres = (() => {
       return UI.html`<option value="${nomTable}">${description ? description.libelle : nomTable} (${nomTable}.csv)</option>`;
     });
     const contenu = UI.element(UI.html`<div class="form-colonne" id="fenetre-restauration">
-      <p>Sauvegarde du <b>${decrite.date}</b> (${decrite.type.toLowerCase()}) : ${pluriel(sauvegarde.tables.length, 'table')}.</p>
+      <p>Sauvegarde du <b>${decrite.date}</b> (${decrite.type.charAt(0).toLowerCase() + decrite.type.slice(1)}) : ${pluriel(sauvegarde.tables.length, 'table')}.</p>
       <fieldset class="restauration-choix">
         <legend class="libelle">Que faut-il restaurer ?</legend>
         <label class="case"><input type="radio" name="portee" value="toutes" checked><span>Toutes les tables (retour complet à cette sauvegarde)</span></label>

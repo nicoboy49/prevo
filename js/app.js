@@ -6,7 +6,8 @@
 //      sinon écran de démarrage : dossier (File System Access), dossier précédent, démo, CSV déposés ;
 //      version web (VERSION_WEB, démo en ligne) : pas de serveur cherché, la démo seule et
 //      « Télécharger Prévo » ;
-//   2. chargement des 23 tables ; base vide (serveur ou dossier) → « Partir des données de démo »
+//   2. chargement des 23 tables ; dossier : sauvegarde « avant-mise-a-jour » si la version de Prévo notée dans le
+//      dossier n'est pas celle-ci (D170, sauf lecture seule) ; base vide (serveur ou dossier) → « Partir des données de démo »
 //      ou « Créer une base vide » ; puis format des fichiers, avant toute autre écriture (D168, D169) :
 //      dossier et démo → passage au format courant par le navigateur (sauvegarde « avant-format-vN »
 //      d'abord) ; serveur → le navigateur ne migre pas (le serveur le fait à son démarrage), bandeau au
@@ -409,6 +410,7 @@ const App = (() => {
     }
     montrerLienInstallation();
     await Donnees.chargerTout();
+    await sauvegarderAvantMiseAJour();                   // D170 : avant toute écriture (base vide, format courant)
 
     if (mode !== 'demo' && Donnees.baseVide()) {
       const choix = await demanderBaseVide();
@@ -438,6 +440,22 @@ const App = (() => {
     // En démo, les données repartent du jeu d'origine à chaque ouverture : la génération a lieu à chaque
     // fois, et sa notification n'apprendrait rien (T89, brief : pas de toast à chaque ouverture de la démo).
     if (otPreventifs.length && mode !== 'demo') UI.toast(Preventif.texteGeneration(otPreventifs.length) + '.', 'succes');
+  }
+
+  // Mode dossier, nouvelle version de Prévo (D170) : une fois les tables chargées, AVANT toute écriture (base vide,
+  // passage au format courant), sauvegarde « avant-mise-a-jour » puis derniere-version.json si la version notée dans
+  // le dossier n'est pas celle-ci (StockageDossier, sauvegarderAvantMiseAJour). Lecture seule : rien (aucune
+  // écriture). Échec : erreur signalée et bandeau, l'application continue ; nouvel essai à la prochaine ouverture.
+  // Le serveur fait la même chose à son démarrage (serveur.py).
+  async function sauvegarderAvantMiseAJour() {
+    if (mode !== 'dossier' || Donnees.lectureSeule() || typeof adaptateur.sauvegarderAvantMiseAJour !== 'function') return;
+    try {
+      await adaptateur.sauvegarderAvantMiseAJour(VERSION);
+    } catch (erreur) {
+      signalerErreur(erreur, 'sauvegarde avant la mise à jour de Prévo');
+      alertesCoque.push(UI.bandeau('attention', UI.html`<b>La sauvegarde « avant la mise à jour de Prévo » n'a pas pu être faite.</b>
+        ${(erreur && erreur.message) || ''} Elle sera retentée à la prochaine ouverture.`));
+    }
   }
 
   // Format des fichiers (ARCHITECTURE.md §5.6 et §14.1 ; décisions D168 et D169) : une fois les tables chargées,

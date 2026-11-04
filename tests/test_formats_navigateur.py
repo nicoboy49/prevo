@@ -44,6 +44,11 @@ ERREUR_CSV_ABSENT = re.compile(r"status of 404.*/api/csv/")       # mode serveur
 NOM_DOSSIER = "donnees-formats"
 FORMAT_COURANT = 3
 VERROU = "verrou.txt"
+# T188 (D170) : au premier démarrage d'une version, sauvegarde « avant-mise-a-jour » (avant le passage), puis
+# derniere-version.json ; chaque sauvegarde a son manifeste.json (vérifiés par tests/test_sauvegardes_dossier.py).
+DERNIERE_VERSION = "derniere-version.json"
+MANIFESTE = "manifeste.json"
+MOTIF_AVANT_MISE_A_JOUR = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-mise-a-jour$")
 MOTIF_AVANT_FORMAT = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v3$")
 MOTIF_QUOTIDIENNE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Valeur par défaut des colonnes que les formats 2 et 3 ajoutent (js/schema.js) : anomalie_constatee est un booléen.
@@ -109,6 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const adaptateur = await creer.apply(this, arguments);
     if (localStorage.getItem('test.sauvegardeEnPanne') === '1') {
       adaptateur.sauvegarder = async () => { throw new Donnees.ErreurStockage('Disque plein (simulé).'); };
+      adaptateur.sauvegarderAvantMiseAJour = adaptateur.sauvegarder;        // T188 : la sauvegarde « avant-mise-a-jour » aussi
     }
     return adaptateur;
   };
@@ -217,15 +223,18 @@ class CasFormats(CasNavigateur):
 
     def verifier_sauvegardes(self, origine, apres, attendue):
         """Chaque sauvegarde garde les fichiers d'origine à l'octet (faite avant toute écriture) ; une seule
-        « avant-format-v3 » si un passage était à faire, aucune sinon. Rend le nom de la sauvegarde avant format."""
+        « avant-format-v3 » si un passage était à faire, aucune sinon ; une seule « avant-mise-a-jour » (T188, premier
+        démarrage de cette version). Rend le nom de la sauvegarde avant format."""
         dossiers = sorted({chemin.split("/")[1] for chemin in apres if chemin.startswith("sauvegardes/")})
         avant_format = [nom for nom in dossiers if MOTIF_AVANT_FORMAT.match(nom)]
         self.assertEqual(len(avant_format), 1 if attendue else 0, dossiers)
-        self.assertTrue(all(MOTIF_AVANT_FORMAT.match(nom) or MOTIF_QUOTIDIENNE.match(nom) for nom in dossiers), dossiers)
+        self.assertEqual(len([nom for nom in dossiers if MOTIF_AVANT_MISE_A_JOUR.match(nom)]), 1, dossiers)
+        self.assertTrue(all(MOTIF_AVANT_FORMAT.match(nom) or MOTIF_QUOTIDIENNE.match(nom)
+                            or MOTIF_AVANT_MISE_A_JOUR.match(nom) for nom in dossiers), dossiers)
         csv_origine = {chemin: octets for chemin, octets in origine.items() if "/" not in chemin and chemin.endswith(".csv")}
         for nom in dossiers:
             copie = {chemin.split("/", 2)[2]: octets for chemin, octets in apres.items()
-                     if chemin.startswith("sauvegardes/%s/" % nom)}
+                     if chemin.startswith("sauvegardes/%s/" % nom) and not chemin.endswith("/" + MANIFESTE)}
             self.assertTrue(copie, nom)
             for fichier, octets in copie.items():
                 self.assertEqual(octets, csv_origine.get(fichier), "sauvegarde %s : %s" % (nom, fichier))
@@ -238,10 +247,11 @@ class CasFormats(CasNavigateur):
             self.ouvrir_dossier(statique, origine, profil)
             apres = self.instantane()
 
-            # Rien n'a disparu ; en plus : verrou.txt, journal.csv (s'il y a un passage) et les sauvegardes.
+            # Rien n'a disparu ; en plus : verrou.txt, derniere-version.json (T188), journal.csv (s'il y a un passage)
+            # et les sauvegardes.
             self.assertTrue(set(origine) <= set(apres), sorted(set(origine) - set(apres)))
             nouveaux = {chemin for chemin in set(apres) - set(origine) if not chemin.startswith("sauvegardes/")}
-            self.assertTrue(nouveaux <= {VERROU, "journal.csv"}, nouveaux)
+            self.assertTrue({VERROU, DERNIERE_VERSION} <= nouveaux <= {VERROU, DERNIERE_VERSION, "journal.csv"}, nouveaux)
             nom_sauvegarde = self.verifier_sauvegardes(origine, apres, bool(changes_attendus))
 
             # Seuls les fichiers attendus ont changé, sans perdre une cellule.

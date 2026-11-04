@@ -468,8 +468,9 @@ class TestDossier(CasNavigateur):
             self.assertEqual(sorted(resultat["valeur"]["tables"]), ["demandes", "equipements", "ordres_travail"])
             self.assertEqual(resultat["valeur"]["abimees"], [])
 
-            # Sauvegarde complète (sans marqueur « .en-cours »), avec l'état d'avant (toutes les tables, à l'octet).
-            self.assertEqual(self.lister("sauvegardes/" + nom), sorted(t + ".csv" for t in TABLES_V1))
+            # Sauvegarde complète (sans marqueur « .en-cours »), avec l'état d'avant (toutes les tables, à l'octet) et
+            # son manifeste.json (T188).
+            self.assertEqual(self.lister("sauvegardes/" + nom), sorted([t + ".csv" for t in TABLES_V1] + ["manifeste.json"]))
             for table in TABLES_V1:
                 self.assertEqual(self.lire("sauvegardes/%s/%s.csv" % (nom, table)),
                                  (PARAMETRES_V1.parent / (table + ".csv")).read_bytes(), table)

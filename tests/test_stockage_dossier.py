@@ -450,7 +450,7 @@ class TestStockageDossier(CasNavigateur):
         self.enregistrer("equipements", etat, None)
         self.reussir("ajouter", "journal", octets_js(b"id;texte\r\n1;x\r\n"))
         self.assertEqual(self.lire_opfs("sauvegardes/%s/equipements.csv" % jour), etat)
-        self.assertEqual(self.lister_opfs("sauvegardes/%s" % jour), ["equipements.csv"])
+        self.assertEqual(self.lister_opfs("sauvegardes/%s" % jour), ["equipements.csv", "manifeste.json"])   # T188
 
     def test_ecritures_simultanees_une_seule_sauvegarde_du_jour_complete(self):
         self.choisir_dossier()
@@ -825,7 +825,7 @@ class TestStockageDossier(CasNavigateur):
         self.assertEqual(len(du_jour), 1, liste)
         self.assertEqual(du_jour[0]["tables"], ["equipements", "journal"])
         self.assertEqual([n for n in self.lister_opfs("sauvegardes/%s" % jour, page=seconde)
-                          if not n.startswith(".")], ["equipements.csv", "journal.csv"])
+                          if not n.startswith(".")], ["equipements.csv", "journal.csv", "manifeste.json"])
         seconde.close()
 
     def test_sauvegarde_en_cours_sur_un_autre_poste_n_est_pas_effacee(self):
