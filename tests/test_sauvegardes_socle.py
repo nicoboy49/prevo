@@ -344,7 +344,7 @@ class TestAvantMiseAJour(CasDossier):
         self.assertEqual(contenu, origine)
         format_d_origine = 2 if ajouts_au_format_3 else 3
         self.verifier_manifeste(copie / "sauvegardes" / mise_a_jour, "avant-mise-a-jour", format_d_origine,
-                                complement={"de": "inconnue", "vers": SERVEUR.VERSION_APPLICATION})
+                                complement={"de": None, "vers": SERVEUR.VERSION_APPLICATION})
         self.assertIn("sauvegarde %s faite avant la mise à jour" % mise_a_jour, console)
         # derniere-version.json : la version courante, depuis maintenant.
         notee = json.loads((copie / "derniere-version.json").read_text(encoding="utf-8"))
@@ -416,7 +416,7 @@ class TestAvantMiseAJour(CasDossier):
                                        if chemin[:-len(".csv")] in SERVEUR.TABLES})
             self.assertIn("pieces_v4.csv", origine)
             self.verifier_manifeste(serveur.dossier / "sauvegardes" / mise_a_jour, "avant-mise-a-jour", 4,
-                                    complement={"de": "inconnue", "vers": SERVEUR.VERSION_APPLICATION})
+                                    complement={"de": None, "vers": SERVEUR.VERSION_APPLICATION})
             self.assertEqual(csv_a_la_racine(fichiers_de(serveur.dossier)), origine)     # aucune table écrite
             statut, reponse = requete(serveur.port, "PUT", "/api/csv/equipements", origine["equipements.csv"],
                                       {"X-Version-Attendue": "aucune"})
@@ -431,7 +431,7 @@ class TestAvantMiseAJour(CasDossier):
         nom = SERVEUR.sauvegarder_avant_mise_a_jour(config)
         self.assertEqual(nom, "2026-06-15_073005_avant-mise-a-jour")
         self.verifier_manifeste(donnees / "sauvegardes" / nom, "avant-mise-a-jour", 3, date="2026-06-15T07:30:05",
-                                complement={"de": "inconnue", "vers": SERVEUR.VERSION_APPLICATION})
+                                complement={"de": None, "vers": SERVEUR.VERSION_APPLICATION})
         self.assertEqual(json.loads((donnees / "derniere-version.json").read_text(encoding="utf-8")),
                          {"version": SERVEUR.VERSION_APPLICATION, "depuis": "2026-06-15T07:30:05"})
         self.assertIsNone(SERVEUR.sauvegarder_avant_mise_a_jour(config))             # notée : rien de plus

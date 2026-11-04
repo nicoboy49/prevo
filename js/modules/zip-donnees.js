@@ -10,7 +10,7 @@
 //     controles_reglementaires.rapport, et les rapports mensuels figés (paramètre rapports_mensuels), lus par
 //     l'adaptateur de stockage (lireDocument : donnees/documents/ en modes serveur et dossier, mémoire en démo) ;
 //   - manifeste.json à la racine : Formats.manifeste de tous les autres fichiers du ZIP (application, version_appli,
-//     format de la base, date « AAAA-MM-JJ HH:MM:SS » du poste, motif « export », mode serveur | dossier | demo,
+//     format de la base, date « AAAA-MM-JJTHH:MM:SS » du poste (comme les sauvegardes, docs/FORMAT.md), motif « export », mode serveur | dossier | demo,
 //     fichiers [{ nom, octets, sha256 }]) ; s'il en manque, `manquants` : les documents cités introuvables.
 // Jamais rien de acces/ (comptes, sessions, appareils) ni d'autre dossier : un nom cité n'est lu que s'il a la forme
 // d'un nom de document (MOTIF_NOM_DOCUMENT, mêmes règles que serveur.py : ni « / », ni « \ », ni « .. ») ; sinon il
@@ -45,7 +45,7 @@ const ZipDonnees = (() => {
 
   // Date et heure du poste : 'AAAA-MM-JJ HH:MM:SS'.
   function dateHeure(date) {
-    return date.getFullYear() + '-' + deuxChiffres(date.getMonth() + 1) + '-' + deuxChiffres(date.getDate()) + ' '
+    return date.getFullYear() + '-' + deuxChiffres(date.getMonth() + 1) + '-' + deuxChiffres(date.getDate()) + 'T'
       + deuxChiffres(date.getHours()) + ':' + deuxChiffres(date.getMinutes()) + ':' + deuxChiffres(date.getSeconds());
   }
 

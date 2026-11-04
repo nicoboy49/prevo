@@ -7,7 +7,7 @@ ouvert en Python (zipfile) et contrôlé entièrement (verifier_export) :
     - les 24 CSV à la racine (BOM UTF-8), les documents attendus sous documents/ octet pour octet, manifeste.json, et
       rien d'autre (ni sauvegardes/, ni document non cité, ni aucun chemin acces/, absolu ou avec « .. ») ;
     - manifeste.json exact : clés dans l'ordre, application « Prévo », version_appli = VERSION de js/app.js, format de
-      la base, date « AAAA-MM-JJ HH:MM:SS » du jour du nom du fichier, motif « export », mode, fichiers = toutes les
+      la base, date « AAAA-MM-JJTHH:MM:SS » du jour du nom du fichier, motif « export », mode, fichiers = toutes les
       autres entrées triées par nom avec leur taille et hashlib.sha256 de leurs octets, `manquants` s'il y en a ;
     - le message montré à l'utilisateur (documents introuvables nommés).
 
@@ -51,7 +51,7 @@ FORMAT_COURANT = 3
 BOM = b"\xef\xbb\xbf"
 CLES_MANIFESTE = ["application", "version_appli", "format", "date", "motif", "mode", "fichiers"]
 MOTIF_NOM_ZIP = re.compile(r"^prevo-export-(\d{4}-\d{2}-\d{2})\.zip$")
-MOTIF_DATE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
+MOTIF_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
 NOM_PIEGE = "../acces/comptes.json"
 RAISON_RESERVE = ("L'export ZIP est réservé au responsable : avec les comptes, les autres rôles ne voient qu'une partie "
                   "des données, et l'export serait incomplet.")

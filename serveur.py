@@ -4827,7 +4827,7 @@ def sauvegarder_avant_mise_a_jour(config):
     notee = lire_derniere_version(config)
     if notee == VERSION_APPLICATION:
         return None
-    de = notee or VERSION_INCONNUE
+    de = notee                                          # None (JSON null) si inconnue, comme le mode dossier
     try:
         with VERROU_ECRITURE:
             nom = nouveau_nom_horodate(config, '_' + MOTIF_AVANT_MISE_A_JOUR)
@@ -4838,7 +4838,7 @@ def sauvegarder_avant_mise_a_jour(config):
                  % (MOTIF_AVANT_MISE_A_JOUR, getattr(erreur, 'message', None) or erreur))
         return None
     afficher(PREFIXE_CONSOLE_SAUVEGARDES + 'version de Prévo précédente : %s, version actuelle : %s ; sauvegarde %s '
-             'faite avant la mise à jour.' % (de, VERSION_APPLICATION, nom))
+             'faite avant la mise à jour.' % (de or VERSION_INCONNUE, VERSION_APPLICATION, nom))
     contenu = {'version': VERSION_APPLICATION, 'depuis': maintenant_iso(config)}
     try:
         ecrire_atomique(chemin_derniere_version(config),

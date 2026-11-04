@@ -1587,7 +1587,8 @@ const Donnees = (() => {
 
   const CLE_VERSION_SCHEMA = 'version_schema';
   const VERSION_SCHEMA_PAR_DEFAUT = 1;       // clé absente ou illisible : fichiers du lot 1 (format 1)
-  const ECRITURES_ADAPTATEUR = ['enregistrer', 'ajouter', 'ecrireDocument', 'sauvegarder', 'restaurer'];
+  const ECRITURES_ADAPTATEUR = ['enregistrer', 'ajouter', 'ecrireDocument', 'sauvegarder', 'restaurer',
+    'sauvegarderAvantMiseAJour'];
   const adaptateursProteges = new WeakSet();
 
   // Version du format lue dans une valeur de parametres.csv (absente ou illisible → 1).
