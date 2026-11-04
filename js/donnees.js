@@ -1880,6 +1880,7 @@ const Donnees = (() => {
 
   // Passage au format courant (mode dossier et démo, D168). Sans effet (rien n'est écrit) en mode serveur, en
   // lecture seule, sur une base vide ou déjà au format courant ; idempotent : un second appel n'écrit rien.
+  //   0. parametres.csv abîmé (sauf démo) : ErreurFichierAbime et RIEN n'est écrit, pas même la sauvegarde (T204) ;
   //   1. la sauvegarde « avant-format-vN » (sauf démo) : impossible → ErreurStockage et RIEN n'est écrit (nouvel
   //      essai à la prochaine ouverture) ;
   //   2. Formats.migrer, étape par étape, sur les tables présentes et lisibles ;
@@ -1909,6 +1910,13 @@ const Donnees = (() => {
     resultat.abimees = etat.abimees;
     problemesFormat = etat.abimees.map(problemeTableLaissee);
     aRecalculer();
+
+    // T204 (comme le correctif 1.2.1 et le serveur) : parametres.csv abîmé, version_schema ne pourra pas être écrite ;
+    // le passage est refusé AVANT la sauvegarde : rien n'est écrit, aucune sauvegarde refaite à chaque ouverture.
+    // L'application s'ouvre quand même, avec le bandeau « Fichier abîmé » (js/app.js). Démo : tout reste en mémoire.
+    if (entreeDe('parametres').abime && sauvegardeExigee()) {
+      throw new ErreurFichierAbime('parametres', descriptionTable('parametres').fichier);
+    }
 
     // 1. La sauvegarde d'abord : sans elle, on ne touche à rien.
     if (sauvegardeExigee()) {

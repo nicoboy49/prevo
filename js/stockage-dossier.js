@@ -202,6 +202,20 @@ const StockageDossier = (() => {
     return sansBom(octets).every(function (octet) { return OCTETS_BLANCS.indexOf(octet) !== -1; });
   }
 
+  // Garde « fichier abîmé » de la fonction d'écriture commune (T200), sur les octets du fichier en place (null s'il
+  // est absent) ; rien si le fichier est absent ou vide. Réécriture (enregistrer) : refusée si le fichier est abîmé
+  // (Donnees.csv.analyser, `abime`) ; ajout (ajouter) : refusé s'il finit dans un texte entre guillemets jamais fermé
+  // (Donnees.csv.finitDansUnGuillemetOuvert). Donnees.ErreurFichierAbime, rien n'est écrit.
+  function verifierFichierEnPlace(table, actuel, ajout) {
+    if (actuel === null || estVide(actuel)) { return; }
+    const abime = ajout ? Donnees.csv.finitDansUnGuillemetOuvert(actuel) : Donnees.csv.analyser(table, actuel).abime;
+    if (abime) { throw new Donnees.ErreurFichierAbime(table, table + '.csv'); }
+  }
+
+  function memesOctets(a, b) {
+    return a === null || b === null ? a === b : octetsEgaux(a, b);
+  }
+
   // Première ligne (sans BOM ni fin de ligne) et reste du contenu (comme premiere_ligne de serveur.py).
   function decouperPremiereLigne(octets) {
     const contenu = sansBom(octets);
@@ -883,12 +897,16 @@ const StockageDossier = (() => {
     // l'en-tête) : Donnees.ErreurFichierAbime, rien n'est écrit, sauf `options.remplacerFichierAbime === true` (import
     // ZIP). C'est la fonction d'écriture commune d'une table entière : tout appelant y passe (Donnees et les écritures
     // directes de l'application) ; seule la restauration d'une sauvegarde (restaurer) remplace aussi un tel fichier.
+    // T204 (comme le correctif 1.2.1) : garde contrôlée AVANT la sauvegarde du jour (un refus n'écrit rien, pas même
+    // la sauvegarde), puis de nouveau si le fichier a changé pendant celle-ci.
     async function enregistrer(table, octets, versionAttendue, options) {
       verifierNomTable(table);
       const nouveauContenu = enOctets(octets);
       const attendue = versionAttendue === undefined ? null : versionAttendue;
       const remplacerFichierAbime = Boolean(options) && options.remplacerFichierAbime === true;
       return enSerie(async function () {
+        const enPlace = await lireOctets(racine, table + '.csv');
+        if (!remplacerFichierAbime) { verifierFichierEnPlace(table, enPlace, false); }
         await sauvegardeQuotidienneSiBesoin();
         const actuel = await lireOctets(racine, table + '.csv');
         const versionActuelle = actuel === null ? null : await empreinte(actuel);
@@ -903,9 +921,7 @@ const StockageDossier = (() => {
           }
           throw new Donnees.ErreurConflit(message, versionActuelle);
         }
-        if (!remplacerFichierAbime && actuel !== null && !estVide(actuel) && Donnees.csv.analyser(table, actuel).abime) {
-          throw new Donnees.ErreurFichierAbime(table, table + '.csv');
-        }
+        if (!remplacerFichierAbime && !memesOctets(enPlace, actuel)) { verifierFichierEnPlace(table, actuel, false); }
         await ecrireFichier(racine, table + '.csv', nouveauContenu,
           { controle: controleInchange(table + '.csv', actuel) });
         return { version: await empreinte(nouveauContenu) };
@@ -931,8 +947,13 @@ const StockageDossier = (() => {
         throw erreurStockage('Le contenu à ajouter doit commencer par la ligne d\'en-tête.');
       }
       return enSerie(async function () {
+        // T204 : garde (fichier qui finit dans un guillemet ouvert) AVANT la sauvegarde du jour, puis de nouveau si
+        // le fichier a changé pendant celle-ci (comme enregistrer).
+        const enPlace = await lireOctets(racine, table + '.csv');
+        verifierFichierEnPlace(table, enPlace, true);
         await sauvegardeQuotidienneSiBesoin();
         const actuel = await lireOctets(racine, table + '.csv');
+        if (!memesOctets(enPlace, actuel)) { verifierFichierEnPlace(table, actuel, true); }
         const controle = controleInchange(table + '.csv', actuel);
 
         if (actuel === null || estVide(actuel)) {
@@ -941,11 +962,9 @@ const StockageDossier = (() => {
           return { version: await empreinte(nouveau) };
         }
 
-        // T200 : fichier qui finit DANS une cellule entre guillemets jamais fermée : nos lignes y seraient avalées à
-        // la relecture (perdues). Donnees.ErreurFichierAbime, rien n'est écrit ; aucune dérogation pour un ajout.
-        if (Donnees.csv.finitDansUnGuillemetOuvert(actuel)) {
-          throw new Donnees.ErreurFichierAbime(table, table + '.csv');
-        }
+        // T200 : un fichier qui finit DANS une cellule entre guillemets jamais fermée (nos lignes y seraient avalées à
+        // la relecture) a été refusé plus haut (verifierFichierEnPlace, avant la sauvegarde du jour) ; aucune
+        // dérogation pour un ajout.
         const versionActuelle = await empreinte(actuel);
         if (!estUtf8(actuel)) {
           throw new Donnees.ErreurConflit('Le fichier ' + table

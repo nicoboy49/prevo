@@ -525,6 +525,13 @@ const App = (() => {
       tablesLaissees = resultat.abimees.slice();
       return true;
     } catch (erreur) {
+      // T204 : parametres.csv abîmé, passage refusé sans rien écrire (Donnees.migrerAuFormatCourant) ; le bandeau
+      // « Fichier abîmé » posé après le choix du profil le dit : ni toast, ni bandeau en plus, ni génération du préventif.
+      if (erreur instanceof Donnees.ErreurFichierAbime) {
+        tablesLaissees = [];
+        console.warn('Prévo (passage au format ' + Schema.version + ' des fichiers) : ' + erreur.message, erreur);
+        return false;
+      }
       signalerErreur(erreur, 'passage au format ' + Schema.version + ' des fichiers');
       alertesCoque.push(UI.bandeau('attention', UI.html`<b>Les fichiers n'ont pas pu passer au format ${Schema.version}.</b>
         ${(erreur && erreur.message) || ''} D'ici là, les OT préventifs échus ne sont pas générés automatiquement.`));
