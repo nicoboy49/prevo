@@ -601,6 +601,8 @@ class TestServeurReel(CasServeurReel):
 
     def test_corps_jamais_lu_sans_session(self):
         # 10 Mo annoncés, rien d'envoyé : 401 aussitôt et connexion fermée, le serveur n'attend pas le corps.
+        # Sauvegardes faites au démarrage (T187 : avant-mise-a-jour, quotidienne) : on compare avant / après.
+        sauvegardes_avant = sorted((self.serveur.dossier / "sauvegardes").glob("*"))
         lignes = ["PUT /api/csv/equipements HTTP/1.1", "Host: 127.0.0.1:%d" % self.serveur.port, "X-Prevo: 1",
                   "X-Version-Attendue: aucune", "Content-Length: %d" % (10 * 1024 * 1024)]
         debut = time.monotonic()
@@ -631,7 +633,7 @@ class TestServeurReel(CasServeurReel):
             self.assertIs(connexion.sock, prise)
         finally:
             connexion.close()
-        self.assertEqual(list((self.serveur.dossier / "sauvegardes").glob("*")), [])
+        self.assertEqual(sorted((self.serveur.dossier / "sauvegardes").glob("*")), sauvegardes_avant)
 
     def test_cookie_connexion_session_deconnexion(self):
         entree = self.client.connecter("nicolas.briand", MOT_DE_PASSE_RESPONSABLE)

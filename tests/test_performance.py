@@ -537,15 +537,21 @@ class TestPerformance(CasNavigateur):
         for nom, ouvrir in (("serveur", lambda p: p.goto(self.serveur.url + "/")),
                             ("démo", lambda p: (p.goto(url_fichier("index.html")), p.click("#btn-demo")))):
             with self.subTest(mode=nom):
-                page = self.nouvelle_page()
-                adresses = []
-                page.on("request", lambda requete: adresses.append(requete.url))
-                ouvrir(page)
-                attendre_pret(page, 30000)
-                page.wait_for_load_state("networkidle")
-                duree = page.evaluate(CHARGEMENT_JS)
-                print("\n  [performance] chargement (%s) sans SheetJS : %.0f ms (budget %d), %d fichiers demandés"
-                      % (nom, duree, BUDGET_CHARGEMENT_MS, len(adresses)))
+                # Médiane de trois ouvertures (T198) : une mesure unique dépassait le budget sous la charge de la
+                # suite complète (2 070 ms le 2026-11-04, 1 650 ms seule) ; budget inchangé.
+                durees = []
+                for _ in range(3):
+                    page = self.nouvelle_page()
+                    adresses = []
+                    page.on("request", lambda requete, liste=adresses: liste.append(requete.url))
+                    ouvrir(page)
+                    attendre_pret(page, 30000)
+                    page.wait_for_load_state("networkidle")
+                    durees.append(page.evaluate(CHARGEMENT_JS))
+                duree = statistics.median(durees)
+                print("\n  [performance] chargement (%s) sans SheetJS : %s ms -> médiane %.0f ms (budget %d), "
+                      "%d fichiers demandés" % (nom, ", ".join("%.0f" % d for d in durees), duree,
+                                                BUDGET_CHARGEMENT_MS, len(adresses)))
                 self.assertEqual([a for a in adresses if SHEETJS in a], [])
                 self.assertEqual(page.evaluate("typeof XLSX"), "undefined")
                 self.assertLess(duree, BUDGET_CHARGEMENT_MS)
