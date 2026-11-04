@@ -282,22 +282,81 @@ const Formats = (function () {
     return a.nom > b.nom ? 1 : 0;
   }
 
+  // --- Repli SHA-256 en JavaScript (T189) ----------------------------------------------------
+  // crypto.subtle n'existe qu'en contexte sécurisé (file://, https, 127.0.0.1) : un téléphone ou un poste qui ouvre
+  // Prévo en http par le réseau n'en a pas (ARCHITECTURE.md §2). L'empreinte est alors calculée ici, selon la norme
+  // FIPS 180-4 (blocs de 64 octets, 64 tours), sans bibliothèque. Testée contre hashlib.sha256 (tests/test_zip_export.py).
+  const SHA256_DEPART = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+  const SHA256_CONSTANTES = new Uint32Array([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+  ]);
+
+  // Rotation à droite d'un mot de 32 bits.
+  function rotation(mot, rang) {
+    return (mot >>> rang) | (mot << (32 - rang));
+  }
+
+  // Octets (Uint8Array) → ArrayBuffer de 32 octets, comme crypto.subtle.digest('SHA-256', …).
+  function sha256(octets) {
+    const longueur = octets.length;
+    const message = new Uint8Array(Math.ceil((longueur + 9) / 64) * 64);
+    message.set(octets);
+    message[longueur] = 0x80;                                    // un bit 1, puis des 0 jusqu'à la longueur
+    const vue = new DataView(message.buffer);
+    vue.setUint32(message.length - 8, Math.floor(longueur / 0x20000000));   // longueur en bits, 64 bits gros-boutiste
+    vue.setUint32(message.length - 4, (longueur * 8) >>> 0);
+    const etat = new Uint32Array(SHA256_DEPART);
+    const mots = new Uint32Array(64);
+    for (let debut = 0; debut < message.length; debut += 64) {
+      for (let i = 0; i < 16; i += 1) { mots[i] = vue.getUint32(debut + i * 4); }
+      for (let i = 16; i < 64; i += 1) {
+        const avant15 = mots[i - 15];
+        const avant2 = mots[i - 2];
+        const sigma0 = rotation(avant15, 7) ^ rotation(avant15, 18) ^ (avant15 >>> 3);
+        const sigma1 = rotation(avant2, 17) ^ rotation(avant2, 19) ^ (avant2 >>> 10);
+        mots[i] = (mots[i - 16] + sigma0 + mots[i - 7] + sigma1) | 0;
+      }
+      let [a, b, c, d, e, f, g, h] = etat;
+      for (let i = 0; i < 64; i += 1) {
+        const somme1 = rotation(e, 6) ^ rotation(e, 11) ^ rotation(e, 25);
+        const choix = (e & f) ^ (~e & g);
+        const t1 = (h + somme1 + choix + SHA256_CONSTANTES[i] + mots[i]) | 0;
+        const somme0 = rotation(a, 2) ^ rotation(a, 13) ^ rotation(a, 22);
+        const majorite = (a & b) ^ (a & c) ^ (b & c);
+        const t2 = (somme0 + majorite) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0;
+        d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      etat[0] += a; etat[1] += b; etat[2] += c; etat[3] += d;    // Uint32Array : addition modulo 2^32
+      etat[4] += e; etat[5] += f; etat[6] += g; etat[7] += h;
+    }
+    const resultat = new DataView(new ArrayBuffer(32));
+    for (let i = 0; i < 8; i += 1) { resultat.setUint32(i * 4, etat[i]); }
+    return resultat.buffer;
+  }
+
   // Manifeste d'un ensemble de fichiers ([{ nom, octets: Uint8Array }]) → Promise de
   // { application: 'Prévo', version_appli, format, date, motif, mode, fichiers: [{ nom, octets, sha256 }] } :
   // champs du contexte absents (undefined ou null) omis, fichiers triés par nom, octets = taille, sha256 en
-  // hexadécimal (crypto.subtle). crypto.subtle n'existe qu'en contexte sécurisé (file://, https, 127.0.0.1 ;
-  // ARCHITECTURE.md §2) : ailleurs, la promesse est rejetée avec un message clair.
+  // hexadécimal. Empreinte par crypto.subtle quand il existe (contexte sécurisé : file://, https, 127.0.0.1 ;
+  // ARCHITECTURE.md §2), sinon par sha256 ci-dessus (même résultat, T189) : la promesse n'est plus rejetée.
   async function manifeste(fichiers, contexte) {
     const outilsCrypto = typeof crypto !== 'undefined' && crypto ? crypto.subtle : undefined;
-    if (!outilsCrypto) {
-      throw new Error('Formats.manifeste : empreintes SHA-256 indisponibles sur cette page (crypto.subtle n\'existe '
-        + 'qu\'en contexte sécurisé : file://, https ou 127.0.0.1).');
-    }
+    const empreinteDe = outilsCrypto
+      ? function (octets) { return outilsCrypto.digest('SHA-256', octets); }
+      : function (octets) { return Promise.resolve(sha256(octets)); };
     const entrees = (Array.isArray(fichiers) ? fichiers : []).map(function (fichier) {
       return { nom: String(fichier.nom), octets: enOctets(fichier.octets) };
     }).sort(comparerNoms);
     const decrits = await Promise.all(entrees.map(async function (entree) {
-      const empreinte = await outilsCrypto.digest('SHA-256', entree.octets);
+      const empreinte = await empreinteDe(entree.octets);
       return { nom: entree.nom, octets: entree.octets.byteLength, sha256: hexadecimal(empreinte) };
     }));
     const resultat = { application: NOM_APPLICATION };

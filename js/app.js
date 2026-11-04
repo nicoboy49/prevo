@@ -71,7 +71,6 @@ const App = (() => {
   const ECRANS_PLEINS = ['ecran-chargement', 'ecran-demarrage', 'ecran-base-vide', 'ecran-profil', 'ecran-connexion', 'ecran-installation', 'app'];
   const ROUTE_INSTALLATION = '#/installation';
   const HOTES_DU_PC_SERVEUR = ['127.0.0.1', 'localhost', '[::1]', '::1'];
-  const CHAMPS_DOCUMENTS = [['equipements', 'document'], ['demandes', 'photo'], ['controles_reglementaires', 'rapport']];
 
   // --- État de l'application ----------------------------------------------------------------
   let mode = null;                 // 'serveur' | 'dossier' | 'demo'
@@ -1202,54 +1201,20 @@ const App = (() => {
   // 7. Export ZIP (tous modes) et adresse des fiches équipement
   // ===========================================================================================
 
-  /** Télécharge prevo-export-AAAA-MM-JJ.zip : les 23 CSV et les documents référencés. */
+  /**
+   * Télécharge prevo-export-AAAA-MM-JJ.zip (D171, T189) : ZipDonnees.exporter (js/modules/zip-donnees.js) y met les
+   * 24 CSV, les documents cités, les rapports mensuels figés et manifeste.json, jamais acces/. Avec les comptes,
+   * réservé au responsable (sinon la raison est montrée) ; permis en lecture seule. Promise du résultat de
+   * ZipDonnees.contenu, ou undefined (rien d'ouvert, ou erreur déjà signalée).
+   */
   async function exporterZip() {
-    if (!adaptateur) return;
+    if (!adaptateur) return undefined;
     try {
-      try {
-        await Donnees.rafraichir();                      // journal à jour (écrit par ajout)
-      } catch (erreur) {
-        console.warn('Prévo : rafraîchissement avant export impossible (' + (erreur && erreur.message) + ').', erreur);
-      }
-      const archive = new JSZip();
-      const fichiers = Donnees.instantane();
-      Schema.nomsTables().forEach((nomTable) => {
-        archive.file(Schema.table(nomTable).fichier, fichiers[nomTable]);
-      });
-      const documents = await documentsAExporter();
-      documents.trouves.forEach((document) => archive.file('documents/' + document.nom, document.blob));
-      const blob = await archive.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-      UI.telecharger('prevo-export-' + Donnees.aujourdhui() + '.zip', blob);
-      let message = 'Export téléchargé : ' + Schema.nomsTables().length + ' fichiers CSV';
-      if (documents.trouves.length) message += ' et ' + documents.trouves.length + ' document(s)';
-      if (documents.manquants.length) message += ' (' + documents.manquants.length + ' document(s) introuvable(s))';
-      UI.toast(message + '.', documents.manquants.length ? 'attention' : 'succes');
+      return await ZipDonnees.exporter();
     } catch (erreur) {
       signalerErreur(erreur, 'export ZIP');
+      return undefined;
     }
-  }
-
-  // Démo : documents ajoutés en mémoire. Ailleurs : documents cités dans les CSV (photo, document, rapport).
-  async function documentsAExporter() {
-    if (typeof adaptateur.documentsEnMemoire === 'function') {
-      return { trouves: adaptateur.documentsEnMemoire(), manquants: [] };
-    }
-    const noms = new Set();
-    CHAMPS_DOCUMENTS.forEach(([nomTable, nomChamp]) => {
-      Donnees.lignes(nomTable).forEach((ligne) => { if (ligne[nomChamp]) noms.add(ligne[nomChamp]); });
-    });
-    const trouves = [];
-    const manquants = [];
-    for (const nom of noms) {
-      try {
-        const blob = await adaptateur.lireDocument(nom);
-        if (blob) trouves.push({ nom, blob }); else manquants.push(nom);
-      } catch (erreur) {
-        console.warn('Prévo : document « ' + nom + ' » non exporté (' + (erreur && erreur.message) + ').', erreur);
-        manquants.push(nom);
-      }
-    }
-    return { trouves, manquants };
   }
 
   /** Texte du QR d'une fiche équipement : URL réseau en mode serveur, sinon « GMAO:<id> ». */
