@@ -434,7 +434,8 @@ class TestServeur(CasImport):
             self.assertEqual(info["importe"], {table: len(lire_csv(csv_zip[table])[1]) for table in TABLES})
             self.assertEqual(info["videes"], [])
             self.assertIsNone(info["tablesVidees"])
-            self.assertRegex(info["origine"], r"^Exporté le \d{2}/\d{2}/\d{4} à \d{2}:\d{2} par Prévo [0-9.]+ "
+            self.assertRegex(info["origine"], r"^Exporté le \d{2}/\d{2}/\d{4} à \d{2}:\d{2} par Prévo "
+                                              r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)? "     # T221 : bêta (2.0.0-beta.2)
                                               r"\(mode serveur\)\.$")
             self.assertEqual(info["formatTexte"], "Format des données : 3 (format de cette version).")
             self.assertIn("6 documents joints", info["documentsTexte"])
