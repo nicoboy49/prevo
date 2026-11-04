@@ -7,6 +7,33 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [1.2.1] - 2026-11-04
+
+**Correctif important : protection contre une perte de données sur fichier abîmé.** Mise à jour recommandée pour
+tous les utilisateurs de la 1.2.0 ; rien d'autre ne change (mêmes écrans, même format de données).
+
+**Ce qui pouvait arriver.** Si l'un des fichiers CSV de Prévo était abîmé en dehors de Prévo (une note tapée à
+droite du tableau dans Excel, un guillemet oublié dans le Bloc-notes, une copie ou une synchronisation interrompue),
+Prévo le relisait du mieux qu'il pouvait, puis le réenregistrait à la première modification, parfois dès
+l'ouverture (quand il crée les ordres de travail préventifs du jour) : ce qu'il n'avait pas pu lire était perdu,
+sans avertissement. La sauvegarde du jour gardait l'original.
+
+### Corrigé
+
+- **Un fichier abîmé n'est plus jamais réécrit** : Prévo refuse de l'enregistrer, en mode dossier comme en mode
+  serveur ; seule la restauration d'une sauvegarde peut le remplacer.
+- **Bandeau « Fichier abîmé » dès l'ouverture** : il nomme le fichier et dit quoi faire ; un enregistrement refusé le
+  dit aussi, et la saisie reste dans le formulaire.
+- Le refus couvre toutes les écritures : formulaires, ordres de travail préventifs créés à l'ouverture, journal (une
+  ligne de journal refusée ne fait pas échouer l'action), passage au format (aucune sauvegarde refaite à chaque
+  ouverture) ; le serveur répond 409 `fichier_abime` à une écriture directe (`PUT` ou ajout).
+
+**Si le bandeau apparaît.** Le responsable ferme Excel (ou le programme qui a ouvert le fichier), puis ouvre
+Paramètres › Sauvegardes et clique sur « Restaurer… » devant la sauvegarde du jour, ou celle de la veille si le
+fichier était déjà abîmé (« Une seule table » ne remet que ce fichier ; Prévo copie d'abord l'état actuel dans une
+copie de sécurité). Il peut aussi réparer le fichier : ce qui ne va pas est décrit dans Paramètres › Contrôle de la
+base. Les autres profils préviennent le responsable. Aide : https://github.com/nicoboy49/prevo/issues
+
 ## [1.2.0] - 2026-10-24
 
 Le lot 6 : le wiki de maintenance, l'encyclopédie de l'atelier (le détail est dans
@@ -100,7 +127,8 @@ Première version, qui réunit les lots 1 à 4 du cahier des charges (le détail
   option, guide d'utilisation imprimable, fiche technique des fichiers CSV.
 - Données dans 22 fichiers CSV lisibles dans Excel ; 907 tests automatisés.
 
-[Non publié]: https://github.com/nicoboy49/prevo/compare/v1.2.0...HEAD
+[Non publié]: https://github.com/nicoboy49/prevo/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/nicoboy49/prevo/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/nicoboy49/prevo/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/nicoboy49/prevo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/nicoboy49/prevo/releases/tag/v1.0.0
