@@ -9,12 +9,12 @@ vrai File), sauf les cas ArrayBuffer et Blob.
     acceptés : export complet avec manifeste exact ; exports 1.2 et 2.0 bêta sans manifeste ; ZIP fait par JSZip et
                Formats.manifeste (ArrayBuffer et Blob) ; variantes (stocké, ZIP64 local, dossier documents/) ; format 2
                et format 1 migrés en mémoire, lignes intactes champ à champ ; fichier au format 2 dans une base au
-               format 3 ; tables absentes ; 2 000 entrées ; aucune écriture ni requête pendant la lecture ;
+               format 3 ; tables absentes ; 10 000 entrées ; aucune écriture ni requête pendant la lecture ;
     refusés  : chemins hostiles (../x.csv, /x.csv, C:/x.csv, documents/../../x.csv, a\\b.csv, segment vide, caractère
                de contrôle…) ; noms non admis (acces/comptes.json, virus.exe…) ; doublons ; bombe (60 Mo de zéros) ;
-               taille réelle plus grande que la taille annoncée ; contenu abîmé (CRC) ; 2 001 entrées ; CSV de 51 Mo ;
+               taille réelle plus grande que la taille annoncée ; contenu abîmé (CRC) ; 10 001 entrées ; CSV de 51 Mo ;
                document de 10 Mo et un octet (10 Mo pile accepté) ;
-               plus de 1 Go décompressé ; plus de 200 Mo ; empreinte fausse, fichier ajouté ou manquant ; manifeste
+               plus de 1 Go décompressé ; plus de 400 Mo ; empreinte fausse, fichier ajouté ou manquant ; manifeste
                illisible ; format plus récent ; ZIP sans CSV ; fichier non ZIP ; CSV illisible (format 0) ; entrée
                chiffrée ou méthode inconnue ;
     deux passes (T205) : le résultat ne garde aucun octet de document (nom, taille, empreinte), un seul document
@@ -442,11 +442,11 @@ class TestZipAcceptes(CasZip):
         attention = [p["table"] for p in resultat["problemes"] if p["type"] == "table" and p["gravite"] == "attention"]
         self.assertEqual(attention, ["articles", "wiki_pages"])
 
-    def test_2000_entrees_acceptees(self):
+    def test_10000_entrees_acceptees(self):
         entrees = dict(csv_de_base())
-        entrees.update({"documents/d%04d.txt" % numero: b"x" for numero in range(2000 - len(entrees))})
+        entrees.update({"documents/d%05d.txt" % numero: b"x" for numero in range(10000 - len(entrees))})
         resultat = self.accepte(octets_zip(entrees))
-        self.assertEqual(len(resultat["documents"]), 2000 - 2)
+        self.assertEqual(len(resultat["documents"]), 10000 - 2)
 
     def test_aucune_ecriture_ni_requete_pendant_la_lecture(self):
         self.page.evaluate("""() => {
@@ -622,10 +622,10 @@ class TestZipRefuses(CasZip):
         octets = octets[:donnees + 3] + b"#" + octets[donnees + 4:]       # un octet changé : CRC-32 faux
         self.refus(octets, "« documents/notice.txt » est abîmé")
 
-    def test_2001_entrees(self):
+    def test_10001_entrees(self):
         entrees = dict(csv_de_base())
-        entrees.update({"documents/d%04d.txt" % numero: b"x" for numero in range(2001 - len(entrees))})
-        self.refus(octets_zip(entrees), "2 001 entrées", "2 000 au plus")
+        entrees.update({"documents/d%05d.txt" % numero: b"x" for numero in range(10001 - len(entrees))})
+        self.refus(octets_zip(entrees), "10 001 entrées", "10 000 au plus")
 
     def test_csv_de_51_mo(self):
         # T208 : 50 Mo au plus par CSV (LIMITES.racine ; tests/test_zip_limites.py la lie à serveur.py).
@@ -656,15 +656,15 @@ class TestZipRefuses(CasZip):
         entrees.update({"documents/z%04d.txt" % numero: zeros for numero in range(1100)})
         self.refus(octets_zip(entrees), "1 Go au plus")
 
-    def test_zip_de_plus_de_200_mo_refuse_sans_etre_lu(self):
+    def test_zip_de_plus_de_400_mo_refuse_sans_etre_lu(self):
         resultat = self.page.evaluate("""async () => {
           const morceau = new Blob([new Uint8Array(1024 * 1024)]);
-          return resumer(await ZipLecture.lire(new Blob(new Array(201).fill(morceau))));
+          return resumer(await ZipLecture.lire(new Blob(new Array(401).fill(morceau))));
         }""")
         self.assertFalse(resultat["ok"])
         self.assertEqual(resultat["cles"], ["ok", "refus"])
-        self.assertIn("201 Mo", resultat["refus"])
-        self.assertIn("200 Mo", resultat["refus"])
+        self.assertIn("401 Mo", resultat["refus"])
+        self.assertIn("400 Mo", resultat["refus"])
 
     def test_empreinte_fausse_fichier_ajoute_ou_manquant(self):
         fichiers = dict(fichiers_du_jeu("f3-v1.2.0"), **DOCUMENTS)

@@ -45,11 +45,11 @@
 
 const ZipLecture = (function () {
 
-  // Limites de l'import, écrites ICI seulement (T208) : l'export (ZipDonnees) les contrôle ; serveur.py en suit deux.
+  // Limites de l'import, écrites ICI seulement (T208 ; T212 : ZIP 400 Mo, 10 000 entrées, en attendant T215) : l'export (ZipDonnees) les contrôle ; serveur.py en suit deux.
   const MO = 1024 * 1024;
   const LIMITES = Object.freeze({
-    zip: 200 * MO,          // taille du fichier ZIP
-    entrees: 2000,          // entrées du ZIP (fichiers et dossiers)
+    zip: 400 * MO,          // taille du fichier ZIP
+    entrees: 10000,         // entrées du ZIP (fichiers et dossiers)
     racine: 50 * MO,        // un fichier à la racine (CSV, manifeste), décompressé ; = envoi d'un CSV au serveur
     document: 10 * MO,      // un document (documents/<nom>), décompressé ; = envoi d'un document au serveur
     total: 1024 * MO,       // tout le contenu décompressé

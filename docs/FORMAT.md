@@ -165,7 +165,7 @@ Le manifeste sert à contrôler qu'une sauvegarde ou un ZIP est complet et intac
 `acces/`.
 
 **Règle (T208) : tout ce que Prévo exporte, Prévo peut le réimporter.** Limites de l'import, écrites à un seul endroit
-(`LIMITES` de `js/modules/zip-lecture.js`) : ZIP 200 Mo, 2 000 entrées, 50 Mo par CSV, 10 Mo par document, 1 Go
+(`LIMITES` de `js/modules/zip-lecture.js`) : ZIP 400 Mo, 10 000 entrées (T212), 50 Mo par CSV, 10 Mo par document, 1 Go
 décompressé ; `serveur.py` les suit (envoi d'une table 50 Mo, d'un document 10 Mo). L'export les contrôle avant de
 produire le ZIP : s'il en dépasse une, il dit quoi (fichier, taille, limite) et ne produit rien.
 
@@ -175,7 +175,7 @@ produire le ZIP : s'il en dépasse une, il dit quoi (fichier, taille, limite) et
 - Contrôles avant d'écrire quoi que ce soit : taille totale, nombre d'entrées, taux de compression (bombe de
   décompression), chemins (aucun `..`, aucun chemin absolu), noms de fichiers admis, empreintes du manifeste, format.
 - Lecture en **deux passes** : chaque document est décompressé pour le contrôle puis oublié, puis relu depuis le ZIP
-  (empreinte revérifiée) juste avant d'être écrit. Pic de mémoire : le ZIP (200 Mo au plus) + les tables + UN document.
+  (empreinte revérifiée) juste avant d'être écrit. Pic de mémoire : le ZIP (400 Mo au plus) + les tables + UN document.
 - Une **sauvegarde `avant-import-zip`** est faite d'abord (documents compris) ; une confirmation liste ce qui sera
   remplacé.
 - `acces/` n'est jamais remplacé.
@@ -259,3 +259,21 @@ serveur pour un journal de 14,6 Mo.
 **À surveiller** : au-delà d'environ 15 000 OT en mode dossier, le contrôle dépasse 500 ms par enregistrement d'un OT.
 Une optimisation est possible plus tard (ne pas recontrôler un fichier que Prévo vient lui-même d'écrire), sans
 changer la règle.
+
+**Mémoire de l'export et de l'import ZIP (T212).** Mesuré le 2026-11-04 (PC de développement, Chromium sans tête :
+processus du navigateur de test seulement, relevés toutes les 100 ms) sur la grosse base de `tests/test_zip_limites.py`
+(20 000 OT, journal de 45 Mo, 37 documents) complétée de photos fictives incompressibles :
+
+| Cas | ZIP | Chromium (avant → pic) | Onglet seul (pic) | Durée |
+| --- | --- | --- | --- | --- |
+| Export, mode serveur, 367 documents | 385 Mo, 392 entrées | 0,7 → 2,6 Go | 2,1 Go | 78 s |
+| Import du même ZIP, mode dossier | 385 Mo | 0,2 → 2,3 Go | 1,6 Go | 29 s |
+| Export, mode dossier (cette base, après rechargement) | 385 Mo | 1,3 → 3,1 Go | 2,2 Go | 51 s |
+| Export, mode serveur, 9 925 documents | 390 Mo, 9 950 entrées | 0,7 → 2,8 Go | 2,4 Go | 170 s |
+
+L'export garde tous les documents en mémoire, puis JSZip produit le ZIP par morceaux et un fichier final : l'onglet
+monte à 5 ou 6 fois la taille du ZIP. **Pour un PC de 4 Go, ce n'est pas raisonnable près de la limite** : Windows et
+le navigateur y laissent souvent moins de 1,5 Go libres, l'onglet peut se fermer (rien n'est perdu, rien n'est
+exporté). Par extrapolation (non mesuré), un ZIP de 100 à 150 Mo y reste possible ; un PC de 8 Go passe les limites.
+Parades : l'export « données seules » (sans les documents, T214) ; la lecture et l'écriture du ZIP par morceaux (T215,
+avant la 2.0.0 finale) bornera la mémoire aux tables plus un ou deux documents.

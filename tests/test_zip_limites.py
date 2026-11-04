@@ -275,11 +275,11 @@ class TestUnSeulEndroit(unittest.TestCase):
     def test_l_export_lit_les_limites_sans_les_recopier(self):
         code = ZIP_DONNEES.read_text(encoding="utf-8")
         self.assertIn("ZipLecture.LIMITES", code)
-        self.assertIsNone(re.search(r"\d+\s*\*\s*(1024|MO)\b|\b(200|50|10)\s*Mo\b|\b2 ?000\b|\b1 ?Go\b", code))
+        self.assertIsNone(re.search(r"\d+\s*\*\s*(1024|MO)\b|\b(400|200|50|10)\s*Mo\b|\b(10 ?000|2 ?000)\b|\b1 ?Go\b", code))
 
     def test_les_messages_de_l_import_tirent_leurs_nombres_de_limites(self):
         code = ZIP_LECTURE.read_text(encoding="utf-8")
-        for fige in ("dépasser 200 Mo", "10 Mo au plus", "50 Mo au plus", "1 Go au plus", "2 000 au plus"):
+        for fige in ("dépasser 400 Mo", "10 Mo au plus", "50 Mo au plus", "1 Go au plus", "10 000 au plus"):
             self.assertFalse(fige in code, fige)
 
 

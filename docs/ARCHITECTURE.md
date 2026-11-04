@@ -4108,7 +4108,7 @@ fusion ; aucune route serveur nouvelle (D172) : le navigateur lit le ZIP et écr
   mode dossier), le profil qui ouvre Paramètres. Démo : bouton inactif, note `#note-import-zip` « indisponible en
   démo ». Lecture seule (D169) : fenêtre `#import-zip-refus` dès le clic, et pour un fichier donné quand même.
 - **Contrôles, avant toute écriture** : `ZipLecture.lire` (`zip-lecture.js`, §15.1 ; détail dans son en-tête) : taille
-  du fichier (200 Mo), nombre d'entrées (2 000), répertoire central lu par Prévo (noms hostiles : absolus, « .. », « . »,
+  du fichier (400 Mo), nombre d'entrées (10 000) (T212), répertoire central lu par Prévo (noms hostiles : absolus, « .. », « . »,
   barre inverse, segment vide, caractère de contrôle, UTF-8 invalide ; doublons ; chiffrement ; méthode), tailles
   déclarées puis réelles (CRC-32), taux de compression (bombe), 50 Mo par CSV et 10 Mo par document (T208),
   1 Go décompressé, noms admis (CSV des
@@ -4144,7 +4144,7 @@ fusion ; aucune route serveur nouvelle (D172) : le navigateur lit le ZIP et écr
 - Écart retenu : les tables ne passent pas par `Donnees.modifier`, qui ne garde que les colonnes inconnues de la table
   actuelle (celles du ZIP seraient perdues sans le dire, CS140) et journaliserait chaque ligne ; c'est le chemin de
   `Import.annuler` (lot 5, §18.7) : sérialisation de `Donnees`, adaptateur protégé, version contrôlée.
-- **Risques restants** : le ZIP entier reste en mémoire le temps de l'import (jusqu'à 200 Mo lus, 1 Go décompressé :
+- **Risques restants** : le ZIP entier reste en mémoire le temps de l'import (jusqu'à 400 Mo lus, 1 Go décompressé :
   un poste à court de mémoire peut fermer l'onglet ; rien n'est écrit avant la confirmation) ; le contenu des documents
   n'est pas analysé au-delà des signatures d'image contrôlées par le serveur (`verifier_signature_image` ; aucune en
   mode dossier) : un document reste servi isolé (`Content-Security-Policy: sandbox`, enveloppe sans script hors
