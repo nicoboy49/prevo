@@ -342,10 +342,11 @@ const Formats = (function () {
     return resultat.buffer;
   }
 
-  // Manifeste d'un ensemble de fichiers ([{ nom, octets: Uint8Array }]) → Promise de
-  // { application: 'Prévo', version_appli, format, date, motif, mode, fichiers: [{ nom, octets, sha256 }] } :
+  // Manifeste d'un ensemble de fichiers ([{ nom, octets: Uint8Array, abime }]) → Promise de
+  // { application: 'Prévo', version_appli, format, date, motif, mode, fichiers: [{ nom, octets, sha256, abime }] } :
   // champs du contexte absents (undefined ou null) omis, fichiers triés par nom, octets = taille, sha256 en
-  // hexadécimal. Empreinte par crypto.subtle quand il existe (contexte sécurisé : file://, https, 127.0.0.1 ;
+  // hexadécimal ; « abime »: true seulement pour un fichier donné avec abime === true (T206 : CSV abîmé, critère de
+  // l'appelant ; absent sinon). Empreinte par crypto.subtle quand il existe (contexte sécurisé : file://, https, 127.0.0.1 ;
   // ARCHITECTURE.md §2), sinon par sha256 ci-dessus (même résultat, T189) : la promesse n'est plus rejetée.
   async function manifeste(fichiers, contexte) {
     const outilsCrypto = typeof crypto !== 'undefined' && crypto ? crypto.subtle : undefined;
@@ -353,11 +354,13 @@ const Formats = (function () {
       ? function (octets) { return outilsCrypto.digest('SHA-256', octets); }
       : function (octets) { return Promise.resolve(sha256(octets)); };
     const entrees = (Array.isArray(fichiers) ? fichiers : []).map(function (fichier) {
-      return { nom: String(fichier.nom), octets: enOctets(fichier.octets) };
+      return { nom: String(fichier.nom), octets: enOctets(fichier.octets), abime: fichier.abime === true };
     }).sort(comparerNoms);
     const decrits = await Promise.all(entrees.map(async function (entree) {
       const empreinte = await empreinteDe(entree.octets);
-      return { nom: entree.nom, octets: entree.octets.byteLength, sha256: hexadecimal(empreinte) };
+      const decrit = { nom: entree.nom, octets: entree.octets.byteLength, sha256: hexadecimal(empreinte) };
+      if (entree.abime) { decrit.abime = true; }
+      return decrit;
     }));
     const resultat = { application: NOM_APPLICATION };
     const source = contexte && typeof contexte === 'object' ? contexte : {};

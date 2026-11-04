@@ -138,7 +138,7 @@ class ParcoursJournalCoupe:
         self.assertEqual(equipement["designation"], DESIGNATION)
         bandeaux = self.bandeaux_du_journal()
         self.assertEqual(len(bandeaux), 1, bandeaux)
-        self.assertIn("Fichier abîmé : journal.csv.", bandeaux[0])
+        self.assertIn("Fichier abîmé : journal.csv, repéré aujourd'hui.", bandeaux[0])
         self.assertEqual(self.entetes_remplacer(), [])
 
     def test_journal_a_guillemet_ouvert_des_l_ouverture_jamais_complete(self):

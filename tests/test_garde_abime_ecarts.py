@@ -8,9 +8,11 @@
        fichiers n'ont pas pu passer au format » en plus).
     2. TestCelluleLongueServeur (sans navigateur) : un fichier sain dont une cellule a 200 000 caractères (plus que
        la limite par défaut du module csv, 131 072) n'est pas un fichier abîmé : raisons_fichier_abime vide, PUT 200.
-    3. TestGardeAvantSauvegardeDuJourDossier (navigateur) : mode dossier, la garde de enregistrer et de ajouter
-       (js/stockage-dossier.js) passe AVANT la sauvegarde du jour : un refus n'écrit rien, pas même la sauvegarde du
-       jour (jour sans sauvegarde au départ).
+    3. TestSauvegardeDuJourAvantGardeDossier (navigateur) : mode dossier. T204 disait « garde AVANT la sauvegarde du
+       jour : un refus n'écrit rien, pas même la sauvegarde » ; inversé par T206 (règle de Nicolas : un fichier abîmé
+       bloque l'écriture, jamais la sauvegarde quotidienne) : un refus de enregistrer et de ajouter fait la sauvegarde
+       du jour si elle manque (jour sans sauvegarde au départ), les CSV abîmés y sont marqués « abime » dans le
+       manifeste, et les CSV des données restent identiques à l'octet.
 
 Règle numéro un : jamais de données réelles (copies des jeux de tests/fixtures/formats/ dans des dossiers temporaires,
 ou dans l'OPFS du navigateur de test).
@@ -18,6 +20,7 @@ ou dans l'OPFS du navigateur de test).
 Lancer depuis la racine du projet (à travers le verrou du navigateur) :
     py -X utf8 -m unittest discover -s tests -p "test_garde_abime_ecarts.py" -v
 """
+import json
 import re
 import unittest
 
@@ -54,7 +57,7 @@ class TestParametresAbimeFormatAncienDossier(CasRecetteSocle):
         self.assertEqual([t for t in bandeaux if "pas pu passer au format" in t], [], bandeaux)
         abimes = [t for t in bandeaux if "abîmé" in t]
         self.assertEqual(len(abimes), 1, abimes)
-        self.assertIn("Fichier abîmé : parametres.csv.", abimes[0])
+        self.assertIn("Fichier abîmé : parametres.csv, repéré aujourd'hui.", abimes[0])
         self.assertEqual(csv_de_la_racine(apres), csv_de_la_racine(origine),
                          "ouverture %d : un CSV a été réécrit" % numero)
 
@@ -105,10 +108,10 @@ class TestCelluleLongueServeur(CasCopies):
 
 
 # ---------------------------------------------------------------------------
-# 3. Garde avant la sauvegarde du jour (mode dossier)
+# 3. Sauvegarde du jour avant la garde (mode dossier ; T204 inversé par T206)
 # ---------------------------------------------------------------------------
 
-class TestGardeAvantSauvegardeDuJourDossier(CasRecetteSocle):
+class TestSauvegardeDuJourAvantGardeDossier(CasRecetteSocle):
 
     def setUp(self):
         super().setUp()
@@ -117,7 +120,7 @@ class TestGardeAvantSauvegardeDuJourDossier(CasRecetteSocle):
     def sauvegardes_du_jour(self):
         return sorted(nom for nom in sauvegardes(self.instantane()) if MOTIF_QUOTIDIENNE.match(nom))
 
-    def test_refus_sur_fichier_abime_sans_sauvegarde_du_jour(self):
+    def test_refus_sur_fichier_abime_fait_la_sauvegarde_du_jour(self):
         origine = fichiers_du_jeu("entete-tronque")                  # ordres_travail.csv abîmé
         origine["journal.csv"] = avec_ligne_coupee(origine["journal.csv"])
         self.ouvrir_dossier(origine, "demandeur")
@@ -128,8 +131,13 @@ class TestGardeAvantSauvegardeDuJourDossier(CasRecetteSocle):
             with self.subTest(appel=appel):
                 self.assertFalse(resultat["ok"], resultat)
                 self.assertTrue(resultat["abime"], resultat)
-        self.assertEqual(self.sauvegardes_du_jour(), [], "sauvegarde du jour faite avant le refus")
-        self.assertEqual(csv_de_la_racine(self.instantane()), csv_de_la_racine(origine))
+        jours = self.sauvegardes_du_jour()
+        self.assertEqual(len(jours), 1, "une sauvegarde du jour attendue malgré le refus (T206) : %r" % jours)
+        apres = self.instantane()
+        manifeste = json.loads(sauvegardes(apres)[jours[0]]["manifeste.json"].decode("utf-8"))
+        marques = sorted(f["nom"] for f in manifeste["fichiers"] if f.get("abime") is True)
+        self.assertEqual(marques, ["journal.csv", "ordres_travail.csv"])
+        self.assertEqual(csv_de_la_racine(apres), csv_de_la_racine(origine))
 
 
 if __name__ == "__main__":

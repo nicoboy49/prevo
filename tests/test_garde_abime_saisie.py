@@ -243,7 +243,7 @@ class TestQrServeurComptes(CasSaisieGardee):
             self.assertEqual(poste.evaluate("location.hash"), "#/accueil")
             bandeaux = [b for b in poste.evaluate(BANDEAUX_JS) if "abîmé" in b]
             self.assertEqual(len(bandeaux), 1, bandeaux)
-            self.assertIn("Fichier abîmé : demandes.csv.", bandeaux[0])
+            self.assertIn("Fichier abîmé : demandes.csv, repéré aujourd'hui.", bandeaux[0])
             self.assertIn("Paramètres › Contrôle de la base", bandeaux[0])
             self.assertNotIn("prévenez le responsable", bandeaux[0])
             self.assertEqual((serveur.dossier / "demandes.csv").read_bytes(), abime)
@@ -337,7 +337,7 @@ class TestResponsableDossier(CasSaisieGardee):
         self.ouvrir_dossier(fichiers, "responsable")
         bandeaux = [b for b in self.page.evaluate(BANDEAUX_JS) if "abîmé" in b]
         self.assertEqual(len(bandeaux), 1, bandeaux)
-        self.assertIn("Fichier abîmé : equipements.csv.", bandeaux[0])
+        self.assertIn("Fichier abîmé : equipements.csv, repéré aujourd'hui.", bandeaux[0])
         debut = self.nombre_de_toasts(self.page)
         self.remplir_equipement(DESIGNATION)
         toast = self.toast_apres(self.page, debut, "abîmé")

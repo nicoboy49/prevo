@@ -98,6 +98,7 @@ const App = (() => {
   const alertesCoque = [];         // bandeaux à montrer dans la coque (ex. verrou du dossier)
   let tablesLaissees = [];          // tables laissées par le passage au format (déjà dites par leur bandeau, T197)
   const tablesDitesAbimees = new Set();   // tables dont le bandeau « Fichier abîmé » est déjà posé (T197, T200)
+  let depuisAbimes = {};            // T206 : { table: 'AAAA-MM-JJTHH:MM:SS' }, depuis quand chaque table est abîmée
   let formatEnAttente = null;      // mode serveur : état du format (Donnees.etatDuFormat) d'une base pas au format courant
 
   // Thème du poste (lot 4, §17.7) : <html data-theme="clair"> posé dès la lecture de ce fichier, donc
@@ -470,6 +471,7 @@ const App = (() => {
     // Fichiers abîmés (T197) : jamais réécrits ; on le dit tout de suite, avant qu'une écriture soit refusée.
     const abimes = lectureSeule ? [] : Donnees.tablesAbimees()
       .filter((t) => !tablesLaissees.includes(t) && !tablesDitesAbimees.has(t));
+    depuisAbimes = await lireDepuisAbimes(lectureSeule, abimes.length > 0);
     abimes.forEach((t) => tablesDitesAbimees.add(t));
     if (abimes.length) alertesCoque.push(bandeauFichiersAbimes(abimes));
     const otPreventifs = await genererPreventifAOuverture(formatAJour && !lectureSeule);
@@ -559,6 +561,7 @@ const App = (() => {
 
   // Fichiers abîmés (T197, défaut trouvé par la recette T193) : Prévo ne les enregistre plus (ErreurFichierAbime).
   // T201 : sans jargon pour qui n'est pas responsable (il prévient le responsable, comme messageErreur).
+  // T206 : pour le responsable, depuis quand chaque fichier est abîmé (fichierAbimeDepuis).
   function bandeauFichiersAbimes(tables) {
     const plusieurs = tables.length > 1;
     const titre = plusieurs ? 'Fichiers abîmés' : 'Fichier abîmé';
@@ -568,10 +571,39 @@ const App = (() => {
         : 'Tant qu\'il n\'est pas réparé, Prévo refuse les enregistrements qui le touchent, sans rien perdre.';
       return UI.bandeau('attention', UI.html`<b>${titre} : prévenez le responsable.</b> ${suite}`);
     }
-    const fichiers = tables.map((nomTable) => (Schema.table(nomTable) || {}).fichier || nomTable + '.csv').join(', ');
+    const fichiers = tables.map(fichierAbimeDepuis).join(' ; ');
     return UI.bandeau('attention', UI.html`<b>${titre} : ${fichiers}.</b> En-tête coupé, guillemet non fermé ou
       valeurs au-delà de l'en-tête : Prévo ne l'enregistre plus, pour ne rien perdre. Corrigez le fichier,
       restaurez une sauvegarde ou importez un ZIP ; le détail est dans Paramètres › Contrôle de la base.`);
+  }
+
+  // T206 (contrat, point 4) : depuis quand chaque table est abîmée ({ table: 'AAAA-MM-JJTHH:MM:SS' }). Mode dossier
+  // (jamais en lecture seule) : fichiers-abimes.json est d'abord mis à jour avec les tables abîmées chargées, à chaque
+  // ouverture (StockageDossier, noterFichiersAbimes) ; serveur : /api/info (abimesDepuis), seulement si le bandeau du
+  // responsable en a besoin. Échec : {} (le bandeau dit « repéré aujourd'hui »), l'application continue.
+  async function lireDepuisAbimes(lectureSeule, besoin) {
+    if (lectureSeule) return {};
+    try {
+      if (mode === 'dossier' && typeof adaptateur.noterFichiersAbimes === 'function') {
+        return await adaptateur.noterFichiersAbimes(Donnees.tablesAbimees());
+      }
+      if (besoin && estResponsable() && typeof adaptateur.abimesDepuis === 'function') return await adaptateur.abimesDepuis();
+    } catch (erreur) {
+      console.warn('Prévo : date des fichiers abîmés inconnue (' + (erreur && erreur.message) + ').', erreur);
+    }
+    return {};
+  }
+
+  // T206 (contrat, point 5) : « <fichier>, depuis le JJ/MM/AAAA (N jours) » d'après depuisAbimes ; date inconnue, ou
+  // date du jour → « <fichier>, repéré aujourd'hui ».
+  function fichierAbimeDepuis(nomTable) {
+    const fichier = (Schema.table(nomTable) || {}).fichier || nomTable + '.csv';
+    const lu = /^(\d{4})-(\d{2})-(\d{2})T/.exec(String(depuisAbimes[nomTable] || ''));
+    const jour = new Date();
+    const jours = lu ? Math.round((Date.UTC(jour.getFullYear(), jour.getMonth(), jour.getDate())
+      - Date.UTC(+lu[1], lu[2] - 1, +lu[3])) / 86400000) : 0;
+    if (jours <= 0) return fichier + ', repéré aujourd\'hui';
+    return fichier + ', depuis le ' + UI.dateFr(lu[0].slice(0, 10)) + ' (' + jours + (jours === 1 ? ' jour)' : ' jours)');
   }
 
   // Bandeau « Fichier abîmé » pour une table pas encore signalée (ni à l'ouverture, ni par le passage au format) :

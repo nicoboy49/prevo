@@ -39,9 +39,15 @@ const StockageDossier = (() => {
   // Sauvegardes du mode dossier (D170, docs/FORMAT.md §8 et §9 ; mêmes règles que serveur.py) :
   //   - rotation, après chaque nouvelle quotidienne et chaque nouvelle manuelle : quotidiennes « AAAA-MM-JJ » de
   //     plus de 30 jours (date du jour du poste) et manuelles « AAAA-MM-JJ_HHMMSS » au-delà des 60 plus récentes
-  //     supprimées ; « …_avant-… » jamais ; un nom hors de ces motifs n'est jamais touché ;
+  //     supprimées ; « …_avant-… » jamais ; un nom hors de ces motifs n'est jamais touché ; T206 : les 7
+  //     quotidiennes les plus récentes sans fichier abîmé sont toujours gardées, quel que soit leur âge ;
   //   - manifeste.json dans chaque sauvegarde (Formats.manifeste des fichiers copiés), écrit avant le retrait du
-  //     marqueur « .en-cours » ; la restauration ne copie que les CSV des tables, donc l'ignore ;
+  //     marqueur « .en-cours » ; la restauration ne copie que les CSV des tables, donc l'ignore ; T206 : un CSV
+  //     abîmé (Donnees.csv.analyser, `abime`) y porte « abime »: true. Un fichier abîmé bloque l'écriture dans la
+  //     table, jamais la sauvegarde quotidienne (faite avant la garde de enregistrer et ajouter) ;
+  //   - fichiers-abimes.json (racine, T206) : { "depuis": { "<table>": "AAAA-MM-JJTHH:MM:SS" } }, date à laquelle
+  //     Prévo a vu la table abîmée la première fois, mis à jour à chaque sauvegarde et à l'ouverture
+  //     (noterFichiersAbimes, depuis js/app.js) ; jamais copié dans une sauvegarde ni remplacé par une restauration ;
   //   - « avant-import-zip » copie aussi documents/ (dans documents/ de la sauvegarde, compté dans le manifeste) ;
   //   - « avant-mise-a-jour » : au premier démarrage d'une nouvelle version de l'appli sur ce dossier, puis
   //     derniere-version.json (racine du dossier de données) : { "version", "depuis" }.
@@ -52,6 +58,10 @@ const StockageDossier = (() => {
   const MS_PAR_JOUR = 24 * 60 * 60 * 1000;
   const NOM_MANIFESTE = 'manifeste.json';
   const NOM_DERNIERE_VERSION = 'derniere-version.json';
+  const NOM_FICHIERS_ABIMES = 'fichiers-abimes.json';
+  // T206 : quotidiennes sans fichier abîmé gardées à la rotation quel que soit leur âge (les plus récentes).
+  const QUOTIDIENNES_SAINES_GARDEES = 7;
+  const MOTIF_DATE_MANIFESTE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
   const MOTIF_AVANT_IMPORT_ZIP = 'avant-import-zip';
   const MOTIF_AVANT_MISE_A_JOUR = 'avant-mise-a-jour';
   // Motif écrit dans le manifeste d'une sauvegarde sans motif de MOTIFS_SAUVEGARDE.
@@ -388,8 +398,19 @@ const StockageDossier = (() => {
 
   // { nom, octets, sha256 } d'un fichier copié, calculé par Formats.manifeste. Fichier par fichier : les octets d'un
   // document (photo, PDF) ne restent pas en mémoire jusqu'à la fin de la sauvegarde.
-  async function decrireFichier(nom, octets) {
-    return (await Formats.manifeste([{ nom: nom, octets: octets }])).fichiers[0];
+  // T206 (contrat, point 2) : abime vrai → « abime »: true dans l'entrée du manifeste (absente sinon).
+  async function decrireFichier(nom, octets, abime) {
+    return (await Formats.manifeste([{ nom: nom, octets: octets, abime: abime === true }])).fichiers[0];
+  }
+
+  // T206 : critère « fichier abîmé » d'un CSV de table (règle numéro un, celui de la garde : Donnees.csv.analyser,
+  // `abime`) ; un fichier que l'analyse ne sait pas lire du tout est compté abîmé.
+  function csvAbime(table, octets) {
+    try {
+      return Donnees.csv.analyser(table, octets).abime === true;
+    } catch (erreurLecture) {
+      return true;
+    }
   }
 
   // Format de la base sauvegardée : parametres.version_schema (Formats.versionDeBase : absent ou illisible → 1) ;
@@ -647,19 +668,24 @@ const StockageDossier = (() => {
     // supprimé ; si l'onglet est fermé pendant la copie, le marqueur reste et la sauvegarde est vue
     // comme incomplète (ignorée par la liste, refaite si c'est celle du jour).
     // reglages : { motif (écrit dans le manifeste), documents, versionAppli, complements } (manifesteDeSauvegarde).
+    // T206 : chaque CSV abîmé est marqué « abime » dans le manifeste ; `tables` étant toujours toutes celles du
+    // dossier, fichiers-abimes.json est ensuite mis à jour (sans jamais faire échouer la sauvegarde).
     async function creerSauvegarde(nom, tables, reglages) {
       const options = reglages || {};
       const dossierSauvegardes = await trouverDossier(racine, NOM_DOSSIER_SAUVEGARDES, true);
       const dossierSauvegarde = await trouverDossier(dossierSauvegardes, nom, true);
       const marqueur = encodeurUtf8.encode(poste + ';' + idSession);
       const decrits = [];
+      const abimees = [];
       let octetsParametres = null;
       try {
         for (const table of tables) {
           await ecrireFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS, marqueur);
           const octets = await copierFichier(racine, dossierSauvegarde, table + '.csv');
           if (table === 'parametres') { octetsParametres = octets; }
-          decrits.push(await decrireFichier(table + '.csv', octets));
+          const abime = csvAbime(table, octets);
+          if (abime) { abimees.push(table); }
+          decrits.push(await decrireFichier(table + '.csv', octets, abime));
         }
         if (options.documents) {
           decrits.push.apply(decrits, await copierDocuments(dossierSauvegarde, marqueur));
@@ -671,6 +697,13 @@ const StockageDossier = (() => {
       } catch (erreur) {
         try { await dossierSauvegardes.removeEntry(nom, { recursive: true }); } catch (erreurNettoyage) { /* tant pis */ }
         throw erreur;
+      }
+      etatsDesQuotidiennes.set(nom, abimees.length === 0);
+      try {
+        await ecrireFichiersAbimes(abimees);
+      } catch (erreurNote) {
+        console.warn('Prévo : ' + NOM_FICHIERS_ABIMES + ' non mis à jour (' + (erreurNote && erreurNote.message) + ').',
+          erreurNote);
       }
     }
 
@@ -696,18 +729,77 @@ const StockageDossier = (() => {
       }
     }
 
+    // T206 (contrat, point 3) : quotidienne « sans fichier abîmé » = complète (sans « .en-cours », au moins un CSV),
+    // dont le manifeste ne marque aucun fichier « abime » et dont aucun CSV n'est abîmé (csvAbime). Un manifeste
+    // sain d'après T206 ne se distingue pas d'un manifeste plus ancien (sans l'information) : les CSV sont donc
+    // analysés, seulement quand la rotation en a besoin pour décider, une fois par session (etatsDesQuotidiennes ;
+    // une sauvegarde n'est jamais modifiée après coup) ; rien n'est jamais écrit dans la sauvegarde.
+    const etatsDesQuotidiennes = new Map();               // nom → vrai si sans fichier abîmé
+    async function quotidienneSaine(dossierSauvegarde, nom) {
+      if (etatsDesQuotidiennes.has(nom)) { return etatsDesQuotidiennes.get(nom); }
+      if (await trouverFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS)) { return false; }
+      const octetsManifeste = await lireOctets(dossierSauvegarde, NOM_MANIFESTE);
+      let saine = true;
+      if (octetsManifeste !== null) {
+        try {
+          const manifeste = JSON.parse(decodeurUtf8Strict.decode(sansBom(octetsManifeste)));
+          const fichiers = manifeste && Array.isArray(manifeste.fichiers) ? manifeste.fichiers : [];
+          saine = !fichiers.some(function (fichier) { return fichier && fichier.abime === true; });
+        } catch (erreurLecture) {
+          // manifeste illisible : les CSV décident
+        }
+      }
+      const tables = saine ? await tablesPresentes(dossierSauvegarde) : [];
+      if (saine && tables.length === 0) { saine = false; }
+      for (const table of tables) {
+        if (!saine) { break; }
+        saine = !csvAbime(table, await lireOctets(dossierSauvegarde, table + '.csv'));
+      }
+      etatsDesQuotidiennes.set(nom, saine);
+      return saine;
+    }
+
+    // Quotidiennes [{ nom, dossier, ancienne }] → noms à supprimer : les anciennes (plus de 30 jours), sauf celles
+    // qui sont parmi les QUOTIDIENNES_SAINES_GARDEES plus récentes sans fichier abîmé. Parcours de la plus récente à
+    // la plus ancienne ; l'état d'une quotidienne n'est lu que tant que les 7 saines ne sont pas trouvées et qu'il
+    // reste une ancienne à décider.
+    async function quotidiennesASupprimer(quotidiennes) {
+      const parDate = quotidiennes.slice().sort(function (a, b) {
+        if (a.nom < b.nom) { return 1; }
+        return a.nom > b.nom ? -1 : 0;
+      });
+      let anciennesADecider = parDate.filter(function (q) { return q.ancienne; }).length;
+      let saines = 0;
+      const resultat = [];
+      for (const quotidienne of parDate) {
+        if (anciennesADecider === 0) { break; }
+        if (saines >= QUOTIDIENNES_SAINES_GARDEES) {
+          if (quotidienne.ancienne) { resultat.push(quotidienne.nom); anciennesADecider -= 1; }
+          continue;
+        }
+        const saine = await quotidienneSaine(quotidienne.dossier, quotidienne.nom);
+        if (saine) { saines += 1; }
+        if (quotidienne.ancienne) {
+          anciennesADecider -= 1;
+          if (!saine) { resultat.push(quotidienne.nom); }
+        }
+      }
+      return resultat;
+    }
+
     // Rotation (D170), après chaque nouvelle quotidienne et chaque nouvelle manuelle : quotidiennes
-    // « AAAA-MM-JJ » (date réelle) de plus de 30 jours avant la date du jour du poste, et manuelles
-    // « AAAA-MM-JJ_HHMMSS » au-delà des 60 plus récentes, supprimées. Rien d'autre n'est touché : ni
-    // les « …_avant-… », ni un nom hors de ces motifs, ni un fichier. Une suppression impossible
-    // n'arrête pas l'écriture en cours (nouvel essai à la rotation suivante). Rend les noms supprimés.
+    // « AAAA-MM-JJ » (date réelle) de plus de 30 jours avant la date du jour du poste, sauf les 7 plus récentes
+    // sans fichier abîmé (T206, quotidiennesASupprimer), et manuelles « AAAA-MM-JJ_HHMMSS » au-delà des 60 plus
+    // récentes, supprimées. Rien d'autre n'est touché : ni les « …_avant-… », ni un nom hors de ces motifs, ni un
+    // fichier. Une suppression impossible n'arrête pas l'écriture en cours (nouvel essai à la rotation suivante).
+    // Rend les noms supprimés.
     async function tournerSauvegardes() {
       try {
         const dossierSauvegardes = await trouverDossier(racine, NOM_DOSSIER_SAUVEGARDES, false);
         if (!dossierSauvegardes) { return []; }
         const aujourdhui = jourDuNom(dateDuJour());
         const manuelles = [];
-        const aSupprimer = [];
+        const quotidiennes = [];
         for await (const entree of dossierSauvegardes.values()) {
           if (entree.kind !== 'directory') { continue; }
           if (MOTIF_NOM_MANUELLE.test(entree.name)) {
@@ -715,8 +807,12 @@ const StockageDossier = (() => {
             continue;
           }
           const jour = jourDuNom(entree.name);
-          if (jour !== null && joursEntre(jour, aujourdhui) > JOURS_GARDES_QUOTIDIENNES) { aSupprimer.push(entree.name); }
+          if (jour !== null) {
+            quotidiennes.push({ nom: entree.name, dossier: entree,
+              ancienne: joursEntre(jour, aujourdhui) > JOURS_GARDES_QUOTIDIENNES });
+          }
         }
+        const aSupprimer = await quotidiennesASupprimer(quotidiennes);
         manuelles.sort();                                   // la plus ancienne d'abord
         aSupprimer.push.apply(aSupprimer, manuelles.slice(0, Math.max(0, manuelles.length - MANUELLES_GARDEES)));
         const supprimees = [];
@@ -777,6 +873,54 @@ const StockageDossier = (() => {
       } catch (erreurLecture) {
         return null;
       }
+    }
+
+    // T206 (contrat, point 4) : contenu valable de fichiers-abimes.json, { table: 'AAAA-MM-JJTHH:MM:SS' } (tables du
+    // schéma seulement) ; {} si le fichier est absent ou illisible.
+    async function lireFichiersAbimes() {
+      const octets = await lireOctets(racine, NOM_FICHIERS_ABIMES);
+      const resultat = {};
+      if (octets === null) { return resultat; }
+      let depuis = null;
+      try {
+        const contenu = JSON.parse(decodeurUtf8Strict.decode(sansBom(octets)));
+        depuis = contenu && typeof contenu === 'object' ? contenu.depuis : null;
+      } catch (erreurLecture) {
+        return resultat;
+      }
+      if (!depuis || typeof depuis !== 'object') { return resultat; }
+      Schema.nomsTables().forEach(function (table) {
+        const date = depuis[table];
+        if (typeof date === 'string' && MOTIF_DATE_MANIFESTE.test(date)) { resultat[table] = date; }
+      });
+      return resultat;
+    }
+
+    // Met fichiers-abimes.json à jour quand l'état de toutes les tables est connu (`abimees` : les tables abîmées) :
+    // table abîmée → date gardée si elle y est, sinon maintenant ; table saine → retirée. Réécrit seulement s'il
+    // change ; jamais créé tant qu'aucune table n'est abîmée. Rend { table: date } des tables abîmées. À appeler dans
+    // enSerie (écritures une par une).
+    async function ecrireFichiersAbimes(abimees) {
+      const connues = await lireFichiersAbimes();
+      const maintenant = dateHeureManifeste(new Date());
+      const depuis = {};
+      Schema.nomsTables().forEach(function (table) {
+        if (abimees.indexOf(table) !== -1) { depuis[table] = connues[table] || maintenant; }
+      });
+      const octets = enJson({ depuis: depuis });
+      const actuel = await lireOctets(racine, NOM_FICHIERS_ABIMES);
+      if (actuel === null ? Object.keys(depuis).length > 0 : !memesOctets(actuel, octets)) {
+        await ecrireFichier(racine, NOM_FICHIERS_ABIMES, octets);
+      }
+      return depuis;
+    }
+
+    // À l'ouverture du dossier, une fois les tables chargées (js/app.js ; jamais en lecture seule) : `tables` =
+    // les tables abîmées (Donnees.tablesAbimees). Rend { table: date } (abimesDepuis).
+    async function noterFichiersAbimes(tables) {
+      if (!Array.isArray(tables)) { throw erreurStockage('« tables » doit être une liste de noms de tables.'); }
+      tables.forEach(verifierNomTable);
+      return enSerie(function () { return ecrireFichiersAbimes(tables); });
     }
 
     // D170 : à l'ouverture du dossier, AVANT le passage au format courant et toute autre écriture
@@ -869,6 +1013,16 @@ const StockageDossier = (() => {
           }
           restaurees.push(table);
         }
+        try {
+          const abimees = [];
+          for (const table of await tablesPresentes(racine)) {
+            if (csvAbime(table, await lireOctets(racine, table + '.csv'))) { abimees.push(table); }
+          }
+          await ecrireFichiersAbimes(abimees);              // T206 : table redevenue saine → retirée
+        } catch (erreurNote) {
+          console.warn('Prévo : ' + NOM_FICHIERS_ABIMES + ' non mis à jour (' + (erreurNote && erreurNote.message) + ').',
+            erreurNote);
+        }
         return { restaurees: restaurees, copieSecurite: copieSecurite };
       });
     }
@@ -897,18 +1051,18 @@ const StockageDossier = (() => {
     // l'en-tête) : Donnees.ErreurFichierAbime, rien n'est écrit, sauf `options.remplacerFichierAbime === true` (import
     // ZIP). C'est la fonction d'écriture commune d'une table entière : tout appelant y passe (Donnees et les écritures
     // directes de l'application) ; seule la restauration d'une sauvegarde (restaurer) remplace aussi un tel fichier.
-    // T204 (comme le correctif 1.2.1) : garde contrôlée AVANT la sauvegarde du jour (un refus n'écrit rien, pas même
-    // la sauvegarde), puis de nouveau si le fichier a changé pendant celle-ci.
+    // T206 (règle de Nicolas, contrat point 1 ; remplace l'ordre de T204) : un fichier abîmé bloque l'écriture, jamais
+    // la sauvegarde quotidienne. La sauvegarde du jour (si besoin) passe donc AVANT la garde : un refus fait la
+    // sauvegarde du jour si elle manque (le CSV abîmé y est marqué), puis refuse ; la table reste identique à l'octet.
     async function enregistrer(table, octets, versionAttendue, options) {
       verifierNomTable(table);
       const nouveauContenu = enOctets(octets);
       const attendue = versionAttendue === undefined ? null : versionAttendue;
       const remplacerFichierAbime = Boolean(options) && options.remplacerFichierAbime === true;
       return enSerie(async function () {
-        const enPlace = await lireOctets(racine, table + '.csv');
-        if (!remplacerFichierAbime) { verifierFichierEnPlace(table, enPlace, false); }
         await sauvegardeQuotidienneSiBesoin();
         const actuel = await lireOctets(racine, table + '.csv');
+        if (!remplacerFichierAbime) { verifierFichierEnPlace(table, actuel, false); }
         const versionActuelle = actuel === null ? null : await empreinte(actuel);
         if (attendue !== versionActuelle) {
           let message;
@@ -921,7 +1075,6 @@ const StockageDossier = (() => {
           }
           throw new Donnees.ErreurConflit(message, versionActuelle);
         }
-        if (!remplacerFichierAbime && !memesOctets(enPlace, actuel)) { verifierFichierEnPlace(table, actuel, false); }
         await ecrireFichier(racine, table + '.csv', nouveauContenu,
           { controle: controleInchange(table + '.csv', actuel) });
         return { version: await empreinte(nouveauContenu) };
@@ -947,13 +1100,11 @@ const StockageDossier = (() => {
         throw erreurStockage('Le contenu à ajouter doit commencer par la ligne d\'en-tête.');
       }
       return enSerie(async function () {
-        // T204 : garde (fichier qui finit dans un guillemet ouvert) AVANT la sauvegarde du jour, puis de nouveau si
-        // le fichier a changé pendant celle-ci (comme enregistrer).
-        const enPlace = await lireOctets(racine, table + '.csv');
-        verifierFichierEnPlace(table, enPlace, true);
+        // T206 (comme enregistrer) : sauvegarde du jour d'abord, puis garde (fichier qui finit dans un guillemet
+        // ouvert) : un refus fait la sauvegarde du jour si elle manque, rien d'autre.
         await sauvegardeQuotidienneSiBesoin();
         const actuel = await lireOctets(racine, table + '.csv');
-        if (!memesOctets(enPlace, actuel)) { verifierFichierEnPlace(table, actuel, true); }
+        verifierFichierEnPlace(table, actuel, true);
         const controle = controleInchange(table + '.csv', actuel);
 
         if (actuel === null || estVide(actuel)) {
@@ -963,7 +1114,7 @@ const StockageDossier = (() => {
         }
 
         // T200 : un fichier qui finit DANS une cellule entre guillemets jamais fermée (nos lignes y seraient avalées à
-        // la relecture) a été refusé plus haut (verifierFichierEnPlace, avant la sauvegarde du jour) ; aucune
+        // la relecture) a été refusé plus haut (verifierFichierEnPlace, après la sauvegarde du jour) ; aucune
         // dérogation pour un ajout.
         const versionActuelle = await empreinte(actuel);
         if (!estUtf8(actuel)) {
@@ -1079,6 +1230,8 @@ const StockageDossier = (() => {
       listerSauvegardes: proteger('liste des sauvegardes', listerSauvegardes),
       restaurer: proteger('restauration', restaurer),
       sauvegarderAvantMiseAJour: proteger('sauvegarde avant la mise à jour de Prévo', sauvegarderAvantMiseAJour),
+      noterFichiersAbimes: proteger('mise à jour de ' + NOM_FICHIERS_ABIMES, noterFichiersAbimes),
+      abimesDepuis: proteger('lecture de ' + NOM_FICHIERS_ABIMES, lireFichiersAbimes),
       info: async function () { return {}; },
       verifierVerrou: verifierVerrou,
       demarrerVerrou: demarrerVerrou,

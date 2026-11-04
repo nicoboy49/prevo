@@ -23,6 +23,7 @@ const StockageServeur = (() => {
   const CODE_FORMAT_PLUS_RECENT = 'format_plus_recent';      // 409 du serveur en lecture seule (T185, D169)
   const CODE_FICHIER_ABIME = 'fichier_abime';                // 409 du serveur : fichier abîmé, jamais réécrit (T200)
   const ENTETE_REMPLACER_ABIME = 'X-Prevo-Remplacer-Abime';  // dérogation demandée (import ZIP, T200)
+  const MOTIF_DATE_HEURE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;   // dates de fichiers-abimes.json (T206)
 
   // ===========================================================================
   // Détection
@@ -203,9 +204,19 @@ const StockageServeur = (() => {
   // données plus récentes : plusRecent), 'impossible' (sauvegarde « avant-format-vN » impossible : rien d'écrit) ou
   // 'incomplete' (un fichier tenu par un autre programme, tableBloquee : fermez Excel et relancez Prévo).
   // tablesAbimees : fichiers jamais réécrits (en-tête illisible, ou fichier qu'une réécriture abîmerait).
+  // abimesDepuis (T206, « abimes_depuis ») : { table: 'AAAA-MM-JJTHH:MM:SS' }, date à laquelle le serveur a vu chaque
+  // table abîmée la première fois (fichiers-abimes.json) ; {} si le serveur ne la donne pas.
   function formatLu(format) {
     if (!format || typeof format !== 'object') return null;
     const tables = (liste) => (Array.isArray(liste) ? liste.filter((table) => typeof table === 'string') : []);
+    const dates = (objet) => {
+      const resultat = {};
+      if (!objet || typeof objet !== 'object' || Array.isArray(objet)) return resultat;
+      Object.keys(objet).forEach((table) => {
+        if (typeof objet[table] === 'string' && MOTIF_DATE_HEURE.test(objet[table])) resultat[table] = objet[table];
+      });
+      return resultat;
+    };
     return {
       base: typeof format.base === 'number' ? format.base : null,
       courant: typeof format.courant === 'number' ? format.courant : null,
@@ -214,6 +225,7 @@ const StockageServeur = (() => {
       tablesAbimees: tables(format.tables_abimees),
       tablesVides: tables(format.tables_vides),
       tableBloquee: typeof format.table_bloquee === 'string' && format.table_bloquee ? format.table_bloquee : null,
+      abimesDepuis: dates(format.abimes_depuis),
     };
   }
 
@@ -402,6 +414,13 @@ const StockageServeur = (() => {
         format: formatLu(donnees.format) };        // T185 : passage au format courant fait par le serveur
     }
 
+    // T206 (contrat, point 4) : depuis quand chaque table est abîmée, { table: 'AAAA-MM-JJTHH:MM:SS' } (format de
+    // /api/info, « abimes_depuis » ; {} si le serveur ne le donne pas).
+    async function abimesDepuis() {
+      const format = (await info()).format;
+      return format ? format.abimesDepuis : {};
+    }
+
     return {
       mode: 'serveur',
       libelle: 'Serveur ' + location.host,
@@ -417,6 +436,7 @@ const StockageServeur = (() => {
       restaurer: restaurer,
       testerSauvegarde: testerSauvegarde,
       info: info,
+      abimesDepuis: abimesDepuis,
       session: session,
     };
   }

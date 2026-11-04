@@ -914,7 +914,9 @@ class TestPlusRecent(ParcoursPlusRecent, CasRecetteSocle):
 # ---------------------------------------------------------------------------
 
 JOUR = datetime.date(2026, 6, 15)
-AGES_GARDES = (10, 29, 30)
+# T206 : au moins 7 quotidiennes sans fichier abîmé plus récentes que les anciennes (1 à 5 jours en plus), sinon la
+# rotation garderait celles de 31 et 45 jours (les 7 quotidiennes saines les plus récentes sont toujours gardées).
+AGES_GARDES = (1, 2, 3, 4, 5, 10, 29, 30)
 AGES_SUPPRIMES = (31, 45)
 AVANT = ["2025-01-02_101010_avant-format-v3", "2025-01-02_101011_avant-import", "2025-01-02_101012_avant-restauration",
          "2025-01-02_101013_avant-import-zip", "2025-01-02_101014_avant-mise-a-jour"]

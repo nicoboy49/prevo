@@ -6,7 +6,7 @@ Le dossier est simulé dans l'OPFS du navigateur (installer_dossier_simule de te
 jeux de tests/fixtures/formats/ sont copiés dans un dossier temporaire puis écrits dans l'OPFS : jamais de données réelles.
 
     rotation           horloge Playwright (contexte.clock.install) au 2026-04-10, changement d'heure du 29 mars dans
-                       l'intervalle : fausses quotidiennes de 10, 29, 30, 31 et 45 jours, « …_avant-… » anciennes,
+                       l'intervalle : fausses quotidiennes de 1 à 5, 10, 29, 30, 31 et 45 jours, « …_avant-… » anciennes,
                        62 manuelles, noms hors motif et un fichier ; la première écriture du jour (nouvelle quotidienne)
                        supprime les quotidiennes de plus de 30 jours et les 2 manuelles les plus anciennes, rien d'autre ;
                        une nouvelle manuelle (61) supprime la plus ancienne ;
@@ -227,7 +227,10 @@ class TestRotationEtManifeste(CasSauvegardesDossier):
     def test_rotation_quotidiennes_de_plus_de_30_jours_et_manuelles_au_dela_de_60(self):
         self.contexte.clock.install(time=HORLOGE)
         equipements = csv_prevo("id;nom\nEQ-0001;Presse\n")
-        quotidiennes = {age: (AUJOURDHUI - datetime.timedelta(days=age)).isoformat() for age in (10, 29, 30, 31, 45)}
+        # T206 : 1 à 5 jours en plus, pour que 7 quotidiennes saines soient plus récentes que celles de 31 et 45 jours
+        # (les 7 quotidiennes saines les plus récentes sont toujours gardées, quel que soit leur âge).
+        quotidiennes = {age: (AUJOURDHUI - datetime.timedelta(days=age)).isoformat()
+                        for age in (1, 2, 3, 4, 5, 10, 29, 30, 31, 45)}
         avant = ["2025-01-01_120000_avant-format-v3", "2025-01-01_120000_avant-mise-a-jour",
                  "2025-01-02_120000_avant-import-zip", "2025-01-03_120000_avant-import",
                  "2025-01-04_120000_avant-restauration", "2025-01-05_120000_avant-format-v2"]
@@ -246,7 +249,8 @@ class TestRotationEtManifeste(CasSauvegardesDossier):
         self.reussir("enregistrer", "equipements", {"texte": "id;nom\r\nEQ-0001;Presse 2\r\n"}, empreinte(equipements))
         apres = self.instantane()
         du_jour = AUJOURDHUI.isoformat()
-        gardees = ({quotidiennes[age] for age in (10, 29, 30)} | set(avant) | set(manuelles[2:]) | set(etrangers))
+        gardees = ({quotidiennes[age] for age in (1, 2, 3, 4, 5, 10, 29, 30)} | set(avant) | set(manuelles[2:])
+                   | set(etrangers))
         self.assertEqual(set(dossiers_de_sauvegarde(apres)), gardees | {du_jour})
         self.assertEqual(apres[un_fichier], fichiers[un_fichier])
         for nom in gardees:
