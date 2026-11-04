@@ -162,6 +162,7 @@ Chaque sauvegarde et chaque export ZIP contient un `manifeste.json` :
 `fichiers` liste chaque fichier avec sa taille et son empreinte SHA-256 complète (hexadécimal), triés par nom.
 Un CSV abîmé (§3) porte aussi `"abime": true` (sauvegardes, T206 ; export, T210) et, dans un export, `"abime_depuis":
 "AAAA-MM-JJTHH:MM:SS"` : depuis quand Prévo le voit abîmé (`fichiers-abimes.json` ; absente si inconnue, T213).
+Un export « données seules » porte `"documents": "exclus"` (juste avant `fichiers`, T214).
 `date` est toujours de la forme `AAAA-MM-JJTHH:MM:SS` (heure locale, sans fuseau horaire) : celle du serveur pour ses
 sauvegardes, celle du poste pour le mode dossier et l'export.
 Le manifeste sert à contrôler qu'une sauvegarde ou un ZIP est complet et intact, et à savoir de quel format il vient.
@@ -169,7 +170,10 @@ Le manifeste sert à contrôler qu'une sauvegarde ou un ZIP est complet et intac
 ## 10. Export et import ZIP
 
 **Export** (en un clic) : tous les CSV, les documents cités, les rapports figés et `manifeste.json`. **Jamais**
-`acces/`.
+`acces/`. Variante « données seules (sans les documents) » (T214) : les CSV et `manifeste.json` seulement
+(`"documents": "exclus"`, aucun document listé manquant), `prevo-export-AAAA-MM-JJ-sans-documents.zip`, importable
+comme l'export complet : les tables sont remplacées, les documents déjà présents gardés tels quels (jamais supprimés),
+et la confirmation dit combien de documents cités par les données importées manquent.
 
 **Règle (T208) : tout ce que Prévo exporte, Prévo peut le réimporter.** Limites de l'import, écrites à un seul endroit
 (`LIMITES` de `js/modules/zip-lecture.js`) : ZIP 400 Mo, 10 000 entrées (T212), 50 Mo par CSV, 10 Mo par document, 1 Go

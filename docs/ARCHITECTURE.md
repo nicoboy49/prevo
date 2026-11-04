@@ -4126,6 +4126,15 @@ fusion ; aucune route serveur nouvelle (D172) : le navigateur lit le ZIP et écr
   que la comparaison de l'en-tête au schéma, pour un fichier qu'il voit lui-même abîmé (`raisons_fichier_abime`) ;
   UTF-8 et cellules dangereuses restent contrôlés. En mode dossier (« ce PC »), aucune frontière de droits : la
   personne peut déjà modifier ces fichiers. Un journal abîmé importé tel quel ne reçoit pas la ligne de l'import.
+- **Données seules** (T214, décision de Nicolas) : Paramètres › « Exporter les données seules (sans les documents) »
+  (`#btn-export-donnees-seules`, `App.exporterZip({ sansDocuments: true })`, `ZipDonnees.contenu`) : les CSV et
+  `manifeste.json` (`"documents": "exclus"`, pas de `manquants`), mêmes contrôles des limites,
+  `prevo-export-AAAA-MM-JJ-sans-documents.zip`. Import : `ZipLecture` refuse un tel manifeste si le ZIP contient
+  des documents ; tables remplacées comme d'habitude ; aucun document écrit, supprimé ni remplacé ; la confirmation
+  (`#documents-import-zip`, `data-sans-documents="1"`) dit « Ce ZIP ne contient pas les documents : les N documents
+  déjà présents sont gardés tels quels ; M documents cités par les données importées n'existent pas ici. » (N : cités
+  par les données actuelles et présents ; M : cités par les données importées et absents ; chaque document n'est lu
+  que pour savoir s'il est là). L'import complet non plus ne supprime jamais un document existant absent du ZIP.
 - **Confirmation** `#confirmation-import-zip` : date, version et mode de l'export (manifeste ; « sans manifeste » pour
   un export plus ancien), format (« mises au format 3 » si migré), lignes actuelles → importées par table
   (`[data-actuel]`, `[data-importe]`), tables absentes du ZIP qui seront vidées (`[data-videe]`), nombre de documents,

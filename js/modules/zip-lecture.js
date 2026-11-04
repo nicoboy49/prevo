@@ -38,7 +38,8 @@
 // documents/<nom> au nom admis par serveur.py, manifeste.json, le dossier documents/ lui-même, rien d'autre ;
 // (8) au moins un CSV de table ; (9) décompression : taille RÉELLE contrôlée pendant (arrêt dès qu'elle dépasse la
 // taille déclarée) et après (égale, CRC-32 juste) ; (10) manifeste : chaque fichier y figure avec sa taille et son
-// empreinte SHA-256, et réciproquement ; (11) CSV illisible (format 0 : des colonnes du format 1 manquent à
+// empreinte SHA-256, et réciproquement ; un manifeste « documents »: « exclus » (export « données seules », T214)
+// et des documents dans le ZIP : refusé ; (11) CSV illisible (format 0 : des colonnes du format 1 manquent à
 // l'en-tête) ou abîmé (l'écrire en perdrait une partie) : on ne remplace pas une base par un fichier illisible, sauf
 // fichier marqué « abime » au manifeste, à l'empreinte juste (T213 : ZipTables, rendu dans `abimes`).
 // Dépendances : JSZip (js/lib/jszip.min.js), Schema, Formats, Donnees (csv.analyser), ZipTables ; crypto.subtle
@@ -590,6 +591,10 @@ const ZipLecture = (function () {
     }
     for (const contenu of contenus.values()) { memoire.racine += contenu.byteLength; }
     if (manifeste) { verifierManifeste(manifeste, resumes); }
+    if (manifeste && manifeste.documents === 'exclus' && documents.size) {
+      refuser('Le manifeste dit que ce ZIP ne contient pas les documents (données seules), mais il en contient : il a '
+        + 'été modifié après l\'export. Il est refusé ; refaites l\'export.');
+    }
 
     // 11 (après le manifeste : un CSV abîmé n'est accepté que marqué, à l'empreinte vérifiée, T213).
     const lues = ZipTables.lire(contenus, fichiersTables, parametres ? { parametres: parametres } : {}, manifeste);

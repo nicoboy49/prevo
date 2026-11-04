@@ -1339,12 +1339,13 @@ const App = (() => {
    * Télécharge prevo-export-AAAA-MM-JJ.zip (D171, T189) : ZipDonnees.exporter (js/modules/zip-donnees.js) y met les
    * 24 CSV, les documents cités, les rapports mensuels figés et manifeste.json, jamais acces/. Avec les comptes,
    * réservé au responsable (sinon la raison est montrée) ; permis en lecture seule. Promise du résultat de
-   * ZipDonnees.contenu, ou undefined (rien d'ouvert, ou erreur déjà signalée).
+   * ZipDonnees.contenu, ou undefined (rien d'ouvert, ou erreur déjà signalée). options.sansDocuments (T214) : données
+   * seules, sans les documents (prevo-export-AAAA-MM-JJ-sans-documents.zip).
    */
-  async function exporterZip() {
+  async function exporterZip(options) {
     if (!adaptateur) return undefined;
     try {
-      return await ZipDonnees.exporter();
+      return await ZipDonnees.exporter(options);
     } catch (erreur) {
       signalerErreur(erreur, 'export ZIP');
       return undefined;

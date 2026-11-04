@@ -11,6 +11,9 @@
 //
 // Déroulé (ParametresZip.importer(fichier)) :
 //   1. ZipLecture.lire (contrôles stricts, migration en mémoire, rien d'écrit) ; refus → fenêtre #import-zip-refus ;
+//   T214 : ZIP « données seules » (manifeste « documents »: « exclus », ZipDonnees) : tables remplacées comme
+//      d'habitude, aucun document écrit, supprimé ni remplacé (le dossier des documents ne change pas) ; la
+//      confirmation dit combien de documents déjà présents sont gardés et combien de documents cités manquent ici ;
 //   2. confirmation #confirmation-import-zip : date et version du ZIP (manifeste), format (« mis au format N »), lignes
 //      par table (actuel → importé), tables vidées (absentes du ZIP), nombre de documents, avertissement ;
 //      Annuler → rien d'écrit ;
@@ -201,17 +204,54 @@ const ParametresZip = (() => {
       + 'sauvegarde.';
   }
 
-  /** Fenêtre de confirmation ; true si l'utilisateur confirme le remplacement. */
-  async function confirmer(lu, nomFichier) {
+  // T214 : vrai pour un ZIP « données seules » (export sans les documents).
+  function sansDocuments(lu) {
+    return Boolean(lu.manifeste) && lu.manifeste.documents === 'exclus';
+  }
+
+  async function estPresent(nom) {
+    if (!ZipDonnees.nomDocumentValide(nom)) return false;
+    try { return Boolean(await App.adaptateur.lireDocument(nom)); } catch (erreur) { return false; }
+  }
+
+  // T214 : documents d'un import « données seules », pour la confirmation : { presents, cites, absents } = documents
+  // cités par les données actuelles qui sont là (gardés tels quels), documents cités par les données importées, et
+  // ceux-ci qui n'existent pas ici. Chacun n'est lu que pour savoir s'il est là, une fois. Un document là mais cité
+  // par aucune donnée est gardé aussi, sans être compté (aucun adaptateur ne liste le dossier des documents).
+  async function documentsHorsZip(lu) {
+    const actuels = ZipDonnees.nomsDocuments();
+    const importes = ZipDonnees.nomsDocuments(lu.tables);
+    const presence = new Map();
+    for (const nom of new Set(actuels.concat(importes))) presence.set(nom, await estPresent(nom));
+    return { presents: actuels.filter((nom) => presence.get(nom)).length, cites: importes.length,
+      absents: importes.filter((nom) => !presence.get(nom)).length };
+  }
+
+  function phraseSansDocuments(etat) {
+    const presents = etat.presents > 1 ? 'les ' + etat.presents + ' documents déjà présents sont gardés tels quels'
+      : (etat.presents === 1 ? 'le document déjà présent est gardé tel quel' : 'aucun document existant n\'est supprimé');
+    let absents = 'les données importées ne citent aucun document';
+    if (etat.absents > 1) absents = etat.absents + ' documents cités par les données importées n\'existent pas ici';
+    else if (etat.absents === 1) absents = '1 document cité par les données importées n\'existe pas ici';
+    else if (etat.cites) absents = 'tous les documents cités par les données importées sont déjà ici';
+    return 'Ce ZIP ne contient pas les documents : ' + presents + ' ; ' + absents + '.';
+  }
+
+  /**
+   * Fenêtre de confirmation ; true si l'utilisateur confirme le remplacement. horsZip : documentsHorsZip pour un ZIP
+   * « données seules » (T214), sinon null.
+   */
+  async function confirmer(lu, nomFichier, horsZip) {
     const videes = lu.absentes.map((nomTable) => libelleTable(nomTable) + ' (' + Schema.table(nomTable).fichier + ')');
     const contenu = UI.element(UI.html`<div class="form-colonne" id="confirmation-import-zip"
-        data-format="${String(lu.formatOrigine)}" data-migre="${lu.migre ? '1' : '0'}" data-documents="${String(lu.documents.length)}">
+        data-format="${String(lu.formatOrigine)}" data-migre="${lu.migre ? '1' : '0'}" data-documents="${String(lu.documents.length)}"
+        data-sans-documents="${horsZip ? '1' : '0'}">
       <p>Fichier <b>${nomFichier}</b>. <span id="origine-import-zip">${origine(lu.manifeste)}</span></p>
       <p id="format-import-zip">${texteFormat(lu)}</p>
       <div id="zone-tables-import-zip"></div>
       ${videes.length ? UI.html`<div class="encadre attention" id="tables-videes-import-zip"><b>${pluriel(videes.length,
         'table absente du ZIP sera vidée', 'tables absentes du ZIP seront vidées')} :</b> ${videes.join(', ')}.</div>` : ''}
-      <p id="documents-import-zip">${lu.documents.length
+      <p id="documents-import-zip">${horsZip ? phraseSansDocuments(horsZip) : lu.documents.length
         ? pluriel(lu.documents.length, 'document joint', 'documents joints') + ' (photos, notices, rapports figés) '
           + (lu.documents.length > 1 ? 'seront ajoutés' : 'sera ajouté') + ' au dossier des documents ; les documents '
           + 'déjà présents sont gardés.'
@@ -437,7 +477,9 @@ const ParametresZip = (() => {
       for (const nomTable of nomsTables) await remplacerTable(nomTable, tables[nomTable], abimes.get(nomTable));
       const ligne = 'import ZIP : ' + nomFichier + ', ' + pluriel(nomsTables.length, 'table') + ', '
         + pluriel(lu.documents.length, 'document') + (abimes.size ? ' ; importés tels quels, abîmés : '
-          + lu.abimes.map((abime) => abime.fichier).join(', ') : '') + ' ; sauvegarde ' + sauvegarde + ' faite juste avant';
+          + lu.abimes.map((abime) => abime.fichier).join(', ') : '')
+        + (sansDocuments(lu) ? ' ; données seules : documents gardés tels quels' : '')
+        + ' ; sauvegarde ' + sauvegarde + ' faite juste avant';
       // Un journal abîmé importé tel quel ne reçoit pas cette ligne : il doit rester identique à l'octet (T213).
       if (!abimes.has('journal') && !(await Donnees.journaliser('parametres', '', ligne))) {
         throw new Donnees.ErreurStockage('la ligne du journal n\'a pas pu être écrite');
@@ -446,7 +488,7 @@ const ParametresZip = (() => {
       return restaurerApresEchec(sauvegarde, erreur);
     }
     return { ok: true, sauvegarde: sauvegarde, tables: nomsTables.length, documents: lu.documents.length,
-      repris: documents.repris, abimes: lu.abimes.map((abime) => abime.fichier) };
+      repris: documents.repris, abimes: lu.abimes.map((abime) => abime.fichier), sansDocuments: sansDocuments(lu) };
   }
 
   // ===========================================================================================
@@ -476,7 +518,8 @@ const ParametresZip = (() => {
     } catch (erreur) {
       console.warn('Prévo : rafraîchissement avant l\'import ZIP impossible (' + sansPoint(erreur) + ').', erreur);
     }
-    if (!(await confirmer(lu, nomFichier))) {
+    const horsZip = sansDocuments(lu) ? await documentsHorsZip(lu) : null;
+    if (!(await confirmer(lu, nomFichier, horsZip))) {
       UI.toast('Import ZIP annulé : rien n\'a été écrit.', 'info');
       return { ok: false, etape: 'annule' };
     }
@@ -495,8 +538,9 @@ const ParametresZip = (() => {
     const message = 'Import ZIP terminé : ' + pluriel(resultat.tables, 'table remplacée', 'tables remplacées')
       + (resultat.abimes.length ? ' (dont ' + resultat.abimes.join(', ') + (resultat.abimes.length > 1
         ? ', abîmés, importés tels quels)' : ', abîmé, importé tel quel)') : '') + ', '
-      + pluriel(resultat.documents, 'document') + ' (' + (resultat.repris ? resultat.repris + ' déjà présent(s), repris ; ' : '')
-      + 'aucun document existant supprimé). Sauvegarde faite juste avant : « ' + resultat.sauvegarde + ' » (Paramètres '
+      + (resultat.sansDocuments ? 'sans les documents (données seules : aucun document existant supprimé ni remplacé)'
+        : pluriel(resultat.documents, 'document') + ' (' + (resultat.repris ? resultat.repris + ' déjà présent(s), repris ; ' : '')
+        + 'aucun document existant supprimé)') + '. Sauvegarde faite juste avant : « ' + resultat.sauvegarde + ' » (Paramètres '
       + '› Sauvegardes). Prévo va se recharger avec les nouvelles données.';
     await montrerMessage('import-zip-termine', 'Import ZIP terminé', 'succes', message,
       [{ libelle: 'Recharger Prévo', valeur: 'ok', classe: 'btn-primaire', defaut: true }]);

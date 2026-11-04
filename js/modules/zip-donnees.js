@@ -16,6 +16,10 @@
 // Jamais rien de acces/ (comptes, sessions, appareils) ni d'autre dossier : un nom cité n'est lu que s'il a la forme
 // d'un nom de document (MOTIF_NOM_DOCUMENT, mêmes règles que serveur.py : ni « / », ni « \ », ni « .. ») ; sinon il
 // est compté parmi les manquants, sans aucune lecture. Un document introuvable n'arrête pas l'export.
+// T214 (décision de Nicolas) : export « données seules (sans les documents) », importable comme l'export complet
+// (contenu({ sansDocuments: true }), bouton #btn-export-donnees-seules de Paramètres) : les CSV et manifeste.json,
+// aucune entrée documents/, aucun document lu ; manifeste : « documents »: « exclus », pas de `manquants` (les
+// documents cités n'y sont pas « manquants », ils sont exclus) ; prevo-export-AAAA-MM-JJ-sans-documents.zip.
 // T208 (règle de Nicolas : tout ce que Prévo exporte, Prévo peut le réimporter) : avant de produire le ZIP, l'export
 // contrôle les limites de l'import (ZipLecture.LIMITES, lues, jamais recopiées) ; s'il en dépasse une, rien n'est
 // produit et une fenêtre dit quoi (depassements, refusDe).
@@ -63,14 +67,18 @@ const ZipDonnees = (() => {
   /**
    * Documents à exporter, sans doublon, dans l'ordre : ceux des trois colonnes (table par table, ligne par ligne),
    * puis les rapports figés (même règle que Rapport.rapportsFiges : rapports_mensuels, séparés par des virgules).
+   * tables (facultatif, T214) : { <table>: { lignes } } (un ZIP lu par ZipLecture) au lieu des données chargées.
    */
-  function nomsDocuments() {
+  function nomsDocuments(tables) {
     const noms = [];
     const ajouter = (nom) => { if (nom && !noms.includes(nom)) noms.push(nom); };
+    const lignesDe = (nomTable) => (tables ? (tables[nomTable] || { lignes: [] }).lignes : Donnees.lignes(nomTable));
     CHAMPS_DOCUMENTS.forEach(([nomTable, nomChamp]) => {
-      Donnees.lignes(nomTable).forEach((ligne) => ajouter(texte(ligne[nomChamp])));
+      lignesDe(nomTable).forEach((ligne) => ajouter(texte(ligne[nomChamp])));
     });
-    texte(Donnees.parametre('rapports_mensuels', '')).split(',').map(texte).forEach(ajouter);
+    const rapports = tables ? (lignesDe('parametres').find((ligne) => ligne.cle === 'rapports_mensuels') || {}).valeur
+      : Donnees.parametre('rapports_mensuels', '');
+    texte(rapports).split(',').map(texte).forEach(ajouter);
     return noms;
   }
 
@@ -220,12 +228,14 @@ const ZipDonnees = (() => {
    *   - refus : null, ou le message quand une limite de l'import serait dépassée (depassements, T208) : manifeste
    *     est alors null, et fichiers sans manifeste.json (rien ne doit en être produit).
    * Lit les données en mémoire telles quelles : exporter() appelle Donnees.rafraichir() avant.
-   * options.adaptateur (défaut App.adaptateur), options.mode (défaut App.mode), options.date (défaut maintenant).
+   * options.adaptateur (défaut App.adaptateur), options.mode (défaut App.mode), options.date (défaut maintenant),
+   * options.sansDocuments (T214 : données seules, aucun document lu ; résultat `sansDocuments` vrai).
    */
   async function contenu(options) {
     const reglages = options || {};
     const adaptateur = reglages.adaptateur || App.adaptateur;
     const mode = reglages.mode || App.mode;
+    const sansDocuments = reglages.sansDocuments === true;
     const quand = dateHeure(reglages.date || new Date());
     const instantane = Donnees.instantane();
     // T210 : un CSV abîmé porte « abime » au manifeste, comme dans les sauvegardes (T206, Formats.manifeste), et part
@@ -236,14 +246,16 @@ const ZipDonnees = (() => {
       nom: Schema.table(nomTable).fichier, abime: abimes.includes(nomTable),
       octets: abimes.includes(nomTable) ? (await adaptateur.charger(nomTable)).octets : instantane[nomTable],
     })));
-    const documents = await lireDocuments(adaptateur, nomsDocuments());
+    const documents = sansDocuments ? { trouves: [], tropGros: [], manquants: [], interrompu: false }
+      : await lireDocuments(adaptateur, nomsDocuments());
     documents.trouves.forEach((document) => fichiers.push({ nom: DOSSIER_DOCUMENTS + document.nom, octets: document.octets }));
     const tailles = fichiers.map((fichier) => ({ nom: fichier.nom, taille: fichier.octets.length }))
       .concat(documents.tropGros.map((document) => ({ nom: DOSSIER_DOCUMENTS + document.nom, taille: document.taille })))
       .concat([{ nom: NOM_MANIFESTE, taille: 0 }]);       // quelques centaines de Ko au plus
     const phrases = depassements(tailles, documents.interrompu);
     const resume = {
-      nomFichier: 'prevo-export-' + quand.slice(0, 10) + '.zip',
+      nomFichier: 'prevo-export-' + quand.slice(0, 10) + (sansDocuments ? '-sans-documents' : '') + '.zip',
+      sansDocuments,
       fichiers,
       manifeste: null,
       csv: fichiers.length - documents.trouves.length,
@@ -252,13 +264,16 @@ const ZipDonnees = (() => {
       refus: phrases.length ? refusDe(phrases) : null,
     };
     if (resume.refus) return resume;
-    const manifeste = await Formats.manifeste(fichiers, {
+    const decrit = await Formats.manifeste(fichiers, {
       version_appli: App.version,
       format: Formats.versionDeBase(Donnees.lignes('parametres')),
       date: quand,
       motif: MOTIF_EXPORT,
       mode: mode,
     });
+    // T214 : « documents »: « exclus » juste avant la liste des fichiers.
+    const { fichiers: decrits, ...entete } = decrit;
+    const manifeste = sansDocuments ? Object.assign(entete, { documents: 'exclus', fichiers: decrits }) : decrit;
     await noterDepuis(manifeste, abimes, adaptateur);
     if (documents.manquants.length) manifeste.manquants = documents.manquants.slice();
     fichiers.push({ nom: NOM_MANIFESTE, octets: new TextEncoder().encode(JSON.stringify(manifeste, null, 2) + '\n') });
@@ -269,6 +284,7 @@ const ZipDonnees = (() => {
   // Message montré après l'export (inchangé depuis le lot 1, plus les noms des documents introuvables).
   function message(resultat) {
     let phrase = 'Export téléchargé : ' + resultat.csv + ' fichiers CSV';
+    if (resultat.sansDocuments) return phrase + ', sans les documents (données seules).';
     if (resultat.documents) phrase += ' et ' + resultat.documents + ' document(s)';
     if (resultat.manquants.length) {
       const montres = resultat.manquants.slice(0, 3).join(', ') + (resultat.manquants.length > 3 ? '…' : '');
@@ -284,8 +300,9 @@ const ZipDonnees = (() => {
    * rejetée (ErreurValidation, avec la raison) pour un rôle qui n'a pas l'export, ou si le ZIP ne se construit pas.
    * T208 : si l'import refuserait le ZIP (contenu().refus, puis la taille réelle du ZIP construit), rien n'est
    * téléchargé : fenêtre #export-zip-refus qui dit quoi (fichier, taille, limite) ; le résultat porte `refus`.
+   * options.sansDocuments (T214) : données seules, sans les documents (mêmes contrôles des limites).
    */
-  async function exporter() {
+  async function exporter(options) {
     const droit = exportPermis();
     if (!droit.permis) throw new Donnees.ErreurValidation(droit.raison);
     try {
@@ -293,7 +310,7 @@ const ZipDonnees = (() => {
     } catch (erreur) {
       console.warn('Prévo : rafraîchissement avant export impossible (' + (erreur && erreur.message) + ').', erreur);
     }
-    const resultat = await contenu();
+    const resultat = await contenu({ sansDocuments: Boolean(options) && options.sansDocuments === true });
     if (!resultat.refus) {
       const archive = new JSZip();
       // createFolders : false → aucune entrée « documents/ » de dossier, seulement les fichiers (lus par ZipLecture).

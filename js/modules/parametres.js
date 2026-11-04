@@ -450,8 +450,9 @@ const Parametres = (() => {
           </article>
           <article class="carte">
             <div class="entete-carte"><h2>Exporter les données</h2></div>
-            <p>Un fichier ZIP avec les ${Schema.nomsTables().length} fichiers CSV (lisibles dans Excel) et les documents joints.</p>
-            <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-export-zip">${UI.icone('export')}Exporter en ZIP</button></div>
+            <p>Un fichier ZIP avec les ${Schema.nomsTables().length} fichiers CSV (lisibles dans Excel) et les documents joints ; ou les données seules, plus léger (sans les documents), importable de la même façon.</p>
+            <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-export-zip">${UI.icone('export')}Exporter en ZIP</button>
+              <button type="button" class="btn btn-secondaire" id="btn-export-donnees-seules">${UI.icone('export')}Exporter les données seules (sans les documents)</button></div>
           </article>
         </div>
       </div>
@@ -467,6 +468,8 @@ const Parametres = (() => {
     brancherAcces(conteneur);
     brancherImportZip(conteneur);
     mettreSurLeBouton(conteneur, '#btn-export-zip', (bouton) => pendant(bouton, 'export ZIP', () => App.exporterZip()));
+    mettreSurLeBouton(conteneur, '#btn-export-donnees-seules', (bouton) => pendant(bouton, 'export des données seules',
+      () => App.exporterZip({ sansDocuments: true })));
   }
 
   // ===========================================================================================
