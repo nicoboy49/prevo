@@ -15,8 +15,9 @@
 //      par table (actuel → importé), tables vidées (absentes du ZIP), nombre de documents, avertissement ;
 //      Annuler → rien d'écrit ;
 //   3. sauvegarde « avant-import-zip » d'abord (documents/ compris : T187, T188) ; échec → arrêt, rien d'écrit ;
-//   4. documents du ZIP écrits par l'adaptateur (nom demandé : celui du ZIP sans le préfixe « AAAAMMJJ-HHMMSS- » ; le
-//      nom rendu est gardé) ; un document existant n'est jamais supprimé ni remplacé (mode dossier : repris s'il est
+//   4. documents du ZIP écrits un par un par l'adaptateur, chacun relu depuis le ZIP et revérifié juste avant
+//      (ZipLecture.lireDocument, seconde passe : un seul document décompressé à la fois) ; nom demandé : celui du
+//      ZIP sans le préfixe « AAAAMMJJ-HHMMSS- » ; le nom rendu est gardé ; un document existant n'est jamais supprimé ni remplacé (mode dossier : repris s'il est
 //      identique à l'octet, sinon nom suivi de « -2 », « -3 »…) ; échec → arrêt, aucune table touchée ;
 //   5. références réécrites avec les noms rendus (ZipDonnees.CHAMPS_DOCUMENTS et le paramètre rapports_mensuels) ;
 //   6. chaque table du format courant remplacée : Donnees.csv.serialiser (protection des cellules, colonnes inconnues
@@ -274,14 +275,24 @@ const ParametresZip = (() => {
     throw new Donnees.ErreurStockage('Aucun nom libre pour le document « ' + joint.nom + ' » du ZIP');
   }
 
-  /** Écrit les documents du ZIP, dans son ordre → { parNom: Map(nom dans le ZIP → nom rendu), repris }. */
-  async function ecrireDocuments(documents) {
+  // Un document relu depuis le ZIP puis écrit, dans sa propre trame : une fois finie, plus rien ne garde ses octets
+  // (une variable de la boucle de ecrireDocuments les garderait pendant la relecture du suivant).
+  async function ecrireDepuisLeZip(lu, nom, pris) {
+    return ecrireUnDocument({ nom: nom, octets: await ZipLecture.lireDocument(lu, nom) }, pris);
+  }
+
+  /**
+   * Écrit les documents du ZIP lu, dans son ordre → { parNom: Map(nom dans le ZIP → nom rendu), repris }. Seconde passe
+   * de la lecture (T205) : chaque document est décompressé à nouveau depuis le ZIP, son empreinte revérifiée
+   * (ZipLecture.lireDocument ; refus → échec de l'import, avant les tables), écrit, puis oublié avant le suivant.
+   */
+  async function ecrireDocuments(lu) {
     const parNom = new Map();
     const pris = new Set();
     let repris = 0;
-    for (const joint of documents) {
-      const resultat = await ecrireUnDocument(joint, pris);
-      parNom.set(joint.nom, resultat.nom);
+    for (const decrit of lu.documents) {
+      const resultat = await ecrireDepuisLeZip(lu, decrit.nom, pris);
+      parNom.set(decrit.nom, resultat.nom);
       if (resultat.repris) repris += 1;
     }
     return { parNom: parNom, repris: repris };
@@ -386,7 +397,7 @@ const ParametresZip = (() => {
     }
     let documents;
     try {
-      documents = await ecrireDocuments(lu.documents);
+      documents = await ecrireDocuments(lu);
     } catch (erreur) {
       return arretAvantLesTables(sansPoint(erreur) + '. Import arrêté avant de toucher aux tables : aucune donnée n\'a '
         + 'changé (sauvegarde « ' + sauvegarde + ' » faite juste avant). Les documents déjà copiés restent dans le '

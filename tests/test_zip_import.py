@@ -21,6 +21,9 @@ Chaque écriture est contrôlée sur le disque (serveur) ou dans l'OPFS du navig
               (format 4) : refus, aucun octet changé ;
               échec simulé pendant l'écriture de ordres_travail : tables remises à l'octet depuis la sauvegarde,
               message qui la nomme ;
+              deux passes (T205) : documents relus depuis le ZIP et écrits un par un (jamais deux gardés à la fois) ;
+              document changé dans le ZIP entre les deux passes (même CRC-32, autre empreinte) : import arrêté avant
+              les tables, tables à l'octet, document changé jamais écrit ;
     dossier   OPFS (installer_dossier_simule) : f3-v2.0.0 (avec acces/) + deux documents déjà là ; import d'un ZIP
               (démo + documents, manifeste) : document identique repris, nom pris par un autre contenu → « -2 »,
               sauvegarde « avant-import-zip » (CSV d'avant, documents/), acces/ intact ; rechargement puis
@@ -47,6 +50,7 @@ from pathlib import Path
 from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule,
                     preregler_profil, url_fichier)
 from jeux_formats import copier_jeu
+from test_zip_lecture import MIO, meme_crc32_autre_contenu, octets_pseudo_aleatoires
 
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
 TABLES = sorted(chemin.stem for chemin in DOSSIER_DEMO.glob("*.csv"))         # les 24 tables du format 3
@@ -110,6 +114,43 @@ PANNE_ENREGISTRER_JS = """(table) => {
     }
     return vrai.call(this, nomTable, ...reste);
   };
+}"""
+
+# Seconde passe de l'import (T205) : chaque document relu depuis le ZIP (ZipLecture.lireDocument) est « gardé »
+# jusqu'à la fin de son écriture (App.adaptateur.ecrireDocument) ; on note l'ordre et le plus grand nombre gardé.
+ESPION_DOCUMENTS_JS = """() => {
+  window.evenementsDocuments = [];
+  window.documentsGardes = 0;
+  window.documentsGardesMax = 0;
+  const lireDocument = ZipLecture.lireDocument;
+  ZipLecture.lireDocument = function (lu, nom) {
+    window.documentsGardes += 1;
+    window.documentsGardesMax = Math.max(window.documentsGardesMax, window.documentsGardes);
+    window.evenementsDocuments.push('lu:' + nom);
+    return lireDocument.call(this, lu, nom);
+  };
+  const ecrireDocument = App.adaptateur.ecrireDocument;
+  App.adaptateur.ecrireDocument = async function (nom, blob) {
+    try { return await ecrireDocument.call(this, nom, blob); } finally {
+      window.evenementsDocuments.push('écrit:' + nom);
+      window.documentsGardes -= 1;
+    }
+  };
+}"""
+
+# Le ZIP choisi passe à ZipLecture.lire en ArrayBuffer gardé par la page (lu sans copie) : le modifier après la
+# confirmation, c'est modifier le ZIP entre les deux passes.
+TAMPON_ZIP_JS = """() => {
+  const lire = ZipLecture.lire;
+  ZipLecture.lire = async function (source) {
+    window.tamponZip = await source.arrayBuffer();
+    return lire.call(this, window.tamponZip);
+  };
+}"""
+
+MODIFIER_TAMPON_JS = """([position, remplacement64]) => {
+  const binaire = atob(remplacement64);
+  new Uint8Array(window.tamponZip).set(Uint8Array.from(binaire, (c) => c.charCodeAt(0)), position);
 }"""
 
 
@@ -196,8 +237,9 @@ def manifeste(fichiers, format=3):
     return json.dumps(contenu, ensure_ascii=False, indent=2).encode("utf-8")
 
 
-def ecrire_zip(chemin, entrees, avec_manifeste=True):
-    """Écrit un ZIP ({nom: octets}, noms TELS QUELS, chemins hostiles compris), avec le manifeste exact au besoin."""
+def ecrire_zip(chemin, entrees, avec_manifeste=True, stockes=()):
+    """Écrit un ZIP ({nom: octets}, noms TELS QUELS, chemins hostiles compris), avec le manifeste exact au besoin ;
+    les entrées de `stockes` sont stockées sans compression (leur contenu est alors lisible tel quel dans le ZIP)."""
     entrees = dict(entrees)
     if avec_manifeste:
         entrees["manifeste.json"] = manifeste(entrees)
@@ -205,7 +247,7 @@ def ecrire_zip(chemin, entrees, avec_manifeste=True):
         for nom, octets in entrees.items():
             info = zipfile.ZipInfo("provisoire", date_time=(2026, 11, 4, 9, 30, 0))
             info.filename = nom
-            info.compress_type = zipfile.ZIP_DEFLATED
+            info.compress_type = zipfile.ZIP_STORED if nom in stockes else zipfile.ZIP_DEFLATED
             archive.writestr(info, octets)
     return chemin
 
@@ -602,6 +644,64 @@ class TestServeur(CasImport):
             self.fermer_fenetre(page, "import-zip-echec")
             self.assertEqual(page.evaluate("Donnees.lignes('equipements').length"),
                              len(lire_csv(avant["equipements.csv"])[1]))
+
+    def test_serveur_documents_relus_et_ecrits_un_par_un(self):
+        """Seconde passe (T205) : chaque document est relu depuis le ZIP (empreinte revérifiée), écrit, puis oublié
+        avant le suivant ; la première passe n'en a décompressé qu'un à la fois."""
+        f3 = {chemin: o for chemin, o in fichiers_du_jeu("f3-v1.2.0").items() if chemin.endswith(".csv")}
+        documents = {nom: b"%PDF-1.4\n" + octets_pseudo_aleatoires(MIO, rang)
+                     for rang, nom in enumerate(("a-notice.pdf", "b-plan.pdf", "c-vgp.pdf"))}
+        chemin_zip = ecrire_zip(self.temporaire / "trois.zip",
+                                dict(f3, **{"documents/" + nom: o for nom, o in documents.items()}))
+        with ServeurPrevo() as serveur:
+            page = self.ouvrir_parametres(serveur)
+            page.evaluate(ESPION_DOCUMENTS_JS)
+            self.choisir_zip(page, chemin_zip)
+            self.assertEqual(self.confirmation(page)["documents"], 3)
+            page.click(BOUTON_REMPLACER)
+            self.assertIn("3 documents", self.texte_fenetre(page, "import-zip-termine"))
+            self.assertEqual(page.evaluate("window.evenementsDocuments"),
+                             [evenement for nom in documents for evenement in ("lu:" + nom, "écrit:" + nom)])
+            self.assertEqual(page.evaluate("window.documentsGardesMax"), 1)
+            self.assertEqual(page.evaluate("ZipLecture.memoire().documentsGardesMax"), 1)
+            presents = [o for chemin, o in instantane(serveur.dossier).items() if chemin.startswith("documents/")]
+            for nom, octets in documents.items():
+                self.assertIn(octets, presents, nom)
+
+    def test_serveur_document_modifie_entre_les_deux_passes_import_arrete_tables_intactes(self):
+        """Seconde passe (T205) : un document dont le contenu a changé dans le ZIP depuis le contrôle (même CRC-32,
+        autre empreinte) fait échouer l'import avant les tables (écrites après les documents) : tables à l'octet,
+        sauvegarde nommée, document précédent gardé, document changé jamais écrit."""
+        f3 = {chemin: o for chemin, o in fichiers_du_jeu("f3-v1.2.0").items() if chemin.endswith(".csv")}
+        premier = octets_pdf("premier")
+        second = b"%PDF-1.4\n" + octets_pseudo_aleatoires(4000, 11)
+        change = meme_crc32_autre_contenu(second, position=20, compensation=40)
+        chemin_zip = ecrire_zip(self.temporaire / "change.zip", dict(f3, **{"documents/a-premier.pdf": premier,
+                                                                             "documents/b-second.pdf": second}),
+                                stockes={"documents/b-second.pdf"})
+        octets_du_zip = chemin_zip.read_bytes()
+        self.assertEqual(octets_du_zip.count(second), 1)
+        with ServeurPrevo() as serveur:
+            page = self.ouvrir_parametres(serveur)
+            avant = instantane(serveur.dossier)
+            page.evaluate(TAMPON_ZIP_JS)
+            self.choisir_zip(page, chemin_zip)
+            self.assertEqual(self.confirmation(page)["documents"], 2)
+            page.evaluate(MODIFIER_TAMPON_JS, [octets_du_zip.find(second), en_base64(change)])
+            page.click(BOUTON_REMPLACER)
+            message = self.texte_fenetre(page, "import-zip-echec")
+            apres = instantane(serveur.dossier)
+            for table in TABLES:
+                self.assertEqual(apres[table + ".csv"], avant[table + ".csv"], table)
+            noms = sauvegardes_de(apres, MOTIF_AVANT_IMPORT_ZIP)
+            self.assertEqual(len(noms), 1, noms)
+            self.assertEqual(sauvegardes_de(apres, MOTIF_AVANT_RESTAURATION), [])      # aucune table à remettre
+            self.assertIn("« documents/b-second.pdf » a changé depuis le contrôle du ZIP (son empreinte ne correspond "
+                          "plus)", message)
+            self.assertIn("aucune donnée n'a changé (sauvegarde « %s » faite juste avant)" % noms[0], message)
+            nouveaux = [o for chemin, o in apres.items() if chemin.startswith("documents/") and chemin not in avant]
+            self.assertEqual(nouveaux, [premier])
+            self.fermer_fenetre(page, "import-zip-echec")
 
 
 # ---------------------------------------------------------------------------

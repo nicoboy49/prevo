@@ -18,10 +18,14 @@
 //                       (Donnees.csv.analyser, puis migration) ; une table absente du ZIP y est vide (sauf
 //                       parametres quand la migration la crée : sa seule ligne est alors version_schema) ;
 //       absentes      : tables absentes du ZIP (l'import les videra), dans l'ordre du schéma ;
-//       documents     : [{ nom, octets: Uint8Array }] (nom sans « documents/ », contenu décompressé) ;
+//       documents     : [{ nom, taille, empreinte }] (nom sans « documents/ », taille décompressée, SHA-256 en
+//                       hexadécimal, ou null sans crypto.subtle) : AUCUN octet, le contenu se relit par lireDocument ;
 //       problemes     : problèmes de lecture des CSV, tables absentes, documents manquants à l'export (forme des
 //                       problèmes de Donnees, ARCHITECTURE.md §5.2).
 // La promesse n'est rejetée que sur un défaut du code (dépendance absente) : tout ZIP refusé donne { ok: false }.
+// Deux passes (T205), mémoire bornée au ZIP (gardé par le résultat) + les tables + UN document : lire contrôle chaque
+// document (étapes 9, 10) puis l'oublie ; lireDocument(lu, nom) le relit du même ZIP (taille, CRC-32, empreinte
+// revérifiés) → Promise de Uint8Array, rejetée (Error au message clair) s'il a changé. memoire() : mesure (tests).
 //
 // Contrôles, dans l'ordre (le premier qui échoue donne le refus) : (1) taille du fichier avant de le lire ;
 // (2) répertoire central lu ICI, pas par JSZip (qui assainit les noms et fusionne les doublons) : nombre d'entrées,
@@ -350,12 +354,13 @@ const ZipLecture = (function () {
       + 'annonce) : il est refusé. Refaites l\'export.';
   }
 
-  // Contenu décompressé d'une entrée (copie neuve). Taille RÉELLE contrôlée pendant la décompression : dès qu'elle
-  // dépasse la taille déclarée (bombe qui ment sur sa taille), la lecture s'arrête et le ZIP est refusé ; à la fin,
-  // taille et CRC-32 doivent être ceux du répertoire central.
+  // Contenu décompressé d'une entrée (copie neuve, de la taille déclarée : bornée à l'étape 3, et sans seconde copie
+  // à la fin). Taille RÉELLE contrôlée pendant la décompression : dès qu'elle dépasse la taille déclarée (bombe qui
+  // ment sur sa taille), la lecture s'arrête et le ZIP est refusé ; à la fin, taille et CRC-32 doivent être ceux du
+  // répertoire central.
   function decompresser(entree) {
     return new Promise(function (resoudre, rejeter) {
-      const morceaux = [];
+      const contenu = new Uint8Array(entree.decompresse);
       let recu = 0;
       let fini = false;
       let flux = null;
@@ -373,20 +378,17 @@ const ZipLecture = (function () {
       }
       flux.on('data', function (morceau) {
         if (fini) { return; }
-        recu += morceau.length;
-        if (recu > entree.decompresse) {
+        if (recu + morceau.length > entree.decompresse) {
           arreter('« ' + afficher(entree.nom) + ' » se décompresse plus gros que ce que le ZIP annonce : bombe de '
             + 'décompression probable. Le ZIP est refusé.');
           return;
         }
-        morceaux.push(morceau);
+        contenu.set(morceau, recu);
+        recu += morceau.length;
       });
       flux.on('error', function () { arreter(abime(entree)); });
       flux.on('end', function () {
         if (fini) { return; }
-        const contenu = new Uint8Array(recu);
-        let position = 0;
-        for (const morceau of morceaux) { contenu.set(morceau, position); position += morceau.length; }
         if (recu !== entree.decompresse || crc32(contenu) !== entree.crc) { arreter(abime(entree)); return; }
         fini = true;
         resoudre(contenu);
@@ -441,29 +443,35 @@ const ZipLecture = (function () {
     return Array.from(new Uint8Array(tampon), function (octet) { return octet.toString(16).padStart(2, '0'); }).join('');
   }
 
-  // Chaque fichier du ZIP (hors manifeste et dossiers) est décrit par le manifeste, avec sa taille et son empreinte
-  // SHA-256 exactes ; chaque fichier décrit est dans le ZIP.
-  async function verifierManifeste(manifeste, contenus) {
-    const outilsCrypto = typeof crypto !== 'undefined' && crypto ? crypto.subtle : undefined;
-    if (!outilsCrypto) {
+  function outilsCrypto() { return typeof crypto !== 'undefined' && crypto ? crypto.subtle : undefined; }
+
+  // Résumé d'un contenu décompressé : { taille, empreinte } (SHA-256 en hexadécimal ; null sans crypto.subtle).
+  async function resumer(contenu) {
+    const outils = outilsCrypto();
+    return { taille: contenu.byteLength, empreinte: outils ? hexadecimal(await outils.digest('SHA-256', contenu)) : null };
+  }
+
+  // Chaque fichier du ZIP (hors manifeste et dossiers ; resumes : nom → résumé) est décrit par le manifeste, avec sa
+  // taille et son empreinte SHA-256 exactes ; chaque fichier décrit est dans le ZIP.
+  function verifierManifeste(manifeste, resumes) {
+    if (!outilsCrypto()) {
       refuser('Les empreintes du manifeste ne peuvent pas être vérifiées sur cette page (il faut un contexte '
         + 'sécurisé : https, ou Prévo ouvert sur ce PC) : le ZIP est refusé.');
     }
     const decrits = new Set(manifeste.fichiers.map(function (fichier) { return fichier.nom; }));
-    for (const nom of contenus.keys()) {
+    for (const nom of resumes.keys()) {
       if (!decrits.has(nom)) {
         refuser('« ' + afficher(nom) + ' » n\'est pas décrit par le manifeste : le ZIP a été modifié après l\'export. '
           + 'Il est refusé ; refaites l\'export.');
       }
     }
     for (const fichier of manifeste.fichiers) {
-      const contenu = contenus.get(fichier.nom);
-      if (!contenu) {
+      const resume = resumes.get(fichier.nom);
+      if (!resume) {
         refuser('« ' + afficher(fichier.nom) + ' », décrit par le manifeste, manque dans le ZIP : il a été modifié '
           + 'après l\'export. Il est refusé ; refaites l\'export.');
       }
-      const empreinte = hexadecimal(await outilsCrypto.digest('SHA-256', contenu));
-      if (contenu.byteLength !== fichier.octets || empreinte !== fichier.sha256.toLowerCase()) {
+      if (resume.taille !== fichier.octets || resume.empreinte !== fichier.sha256.toLowerCase()) {
         refuser('« ' + afficher(fichier.nom) + ' » ne correspond pas à son empreinte dans le manifeste : le fichier '
           + 'a été modifié ou abîmé après l\'export. Le ZIP est refusé ; refaites l\'export.');
       }
@@ -587,13 +595,25 @@ const ZipLecture = (function () {
     }
   }
 
+  const DOCUMENTS_DES_RESULTATS = new WeakMap();   // résultat accepté → documents (leurs entrées gardent le ZIP)
+  // Mesure de la dernière lecture (tests) : ZIP, racine (tables, manifeste), documents gardés à la fois, plus gros.
+  let memoire = { zip: 0, racine: 0, documentsGardesMax: 0, documentMax: 0 };
+
+  // Document décompressé et résumé dans sa propre trame (une fois finie, plus rien ne le garde) → résumé.
+  async function resumerDocument(entree) {
+    const contenu = await decompresser(entree);
+    memoire.documentMax = Math.max(memoire.documentMax, contenu.byteLength);
+    return resumer(contenu);
+  }
+
   async function lireEtControler(source) {
     const octets = await lireOctets(source);
+    memoire = { zip: octets.length, racine: 0, documentsGardesMax: 0, documentMax: 0 };
     const repertoire = repertoireControle(octets);
     const fichiers = repertoire.entrees.filter(function (entree) { return !entree.dossier; });
     await ouvrirAvecJszip(octets, fichiers);
     const parNom = new Map(fichiers.map(function (entree) { return [entree.nom, entree]; }));
-    const contenus = new Map();
+    const contenus = new Map();               // fichiers de la racine (10 Mo au plus chacun), gardés
     async function contenuDe(nom) {
       if (!contenus.has(nom)) { contenus.set(nom, await decompresser(parNom.get(nom))); }
       return contenus.get(nom);
@@ -605,9 +625,22 @@ const ZipLecture = (function () {
     refuserSiPlusRecent(manifeste, parametres);
     const fichiersTables = tablesParFichier();
     controlerNomsAdmis(repertoire.entrees, fichiersTables);
-    for (const entree of fichiers) { await contenuDe(entree.nom); }
-    contenus.delete(NOM_MANIFESTE);
-    if (manifeste) { await verifierManifeste(manifeste, contenus); }
+    // Fichiers résumés dans l'ordre d'avant (parametres.csv, puis le ZIP) ; un document à la fois, oublié aussitôt.
+    const resumes = new Map();
+    const documents = new Map();              // seconde passe : nom sans « documents/ » → { entree, resume }
+    let gardes = 0;                           // documents décompressés gardés
+    for (const nom of [fichierParametres].concat(Array.from(parNom.keys()))) {
+      if (nom === NOM_MANIFESTE || resumes.has(nom) || !parNom.has(nom)) { continue; }
+      const document = genreDe(parNom.get(nom), fichiersTables) === 'document';
+      memoire.documentsGardesMax = Math.max(memoire.documentsGardesMax, gardes += document ? 1 : 0);
+      resumes.set(nom, document ? await resumerDocument(parNom.get(nom)) : await resumer(await contenuDe(nom)));
+      gardes -= document ? 1 : 0;             // document oublié : relu par lireDocument
+      if (document) {
+        documents.set(nom.slice(DOSSIER_DOCUMENTS.length), { entree: parNom.get(nom), resume: resumes.get(nom) });
+      }
+    }
+    for (const contenu of contenus.values()) { memoire.racine += contenu.byteLength; }
+    if (manifeste) { verifierManifeste(manifeste, resumes); }
 
     const lues = lireTables(contenus, fichiersTables, parametres ? { parametres: parametres } : {});
     const formatBase = formatDuManifeste(manifeste) !== null ? formatDuManifeste(manifeste)
@@ -617,13 +650,30 @@ const ZipLecture = (function () {
     const tables = formatOrigine < Formats.courant
       ? Formats.migrer({ tables: lues.tables }, formatOrigine, Formats.courant).base.tables : lues.tables;
     const absentes = completerAbsentes(tables, presentes, formatOrigine);
-    const documents = fichiers.filter(function (entree) { return entree.nom.startsWith(DOSSIER_DOCUMENTS); })
-      .map(function (entree) { return { nom: entree.nom.slice(DOSSIER_DOCUMENTS.length), octets: contenus.get(entree.nom) }; });
-    return {
+    const resultat = {
       ok: true, refus: null, format: Formats.courant, formatOrigine: formatOrigine,
       migre: formatOrigine < Formats.courant, manifeste: manifeste, tables: tables, absentes: absentes.absentes,
-      documents: documents, problemes: lues.problemes.concat(absentes.problemes, problemesManquants(manifeste)),
+      documents: Array.from(documents, function (paire) { return Object.assign({ nom: paire[0] }, paire[1].resume); }),
+      problemes: lues.problemes.concat(absentes.problemes, problemesManquants(manifeste)),
     };
+    DOCUMENTS_DES_RESULTATS.set(resultat, documents);
+    return resultat;
+  }
+
+  // Seconde passe (voir l'en-tête) : document `nom` (sans « documents/ ») d'un résultat accepté, relu et revérifié ;
+  // taille et CRC-32 le sont pendant la décompression. Le contenu rendu (copie neuve) est à oublier après usage.
+  async function lireDocument(lu, nom) {
+    const document = (DOCUMENTS_DES_RESULTATS.get(lu) || new Map()).get(nom);
+    if (!document) {
+      throw new Error('ZipLecture.lireDocument : « ' + afficher(String(nom)) + ' » n\'est pas un document d\'un ZIP '
+        + 'accepté par ZipLecture.lire.');
+    }
+    const contenu = await decompresser(document.entree);
+    if (document.resume.empreinte !== null && (await resumer(contenu)).empreinte !== document.resume.empreinte) {
+      refuser('« ' + afficher(document.entree.nom) + ' » a changé depuis le contrôle du ZIP (son empreinte ne '
+        + 'correspond plus) : il n\'est pas importé.');
+    }
+    return contenu;
   }
 
   // Lit et contrôle un ZIP de données (voir l'en-tête) ; rien n'est écrit nulle part.
@@ -639,6 +689,8 @@ const ZipLecture = (function () {
 
   return {
     lire: lire,
+    lireDocument: lireDocument,
+    memoire: function () { return Object.assign({}, memoire); },
     nomDocumentAdmis: nomDocumentAdmis,
     LIMITES: LIMITES,
     // Copie de la règle de serveur.py, exposée pour le test de cohérence.

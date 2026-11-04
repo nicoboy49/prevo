@@ -161,9 +161,10 @@ LIRE_ZIP_JS = """async () => {
   if (!r.ok) { return { ok: false, refus: r.refus }; }
   const tables = {};
   for (const [nom, t] of Object.entries(r.tables)) { tables[nom] = t.lignes.length; }
+  const documents = [];          // relus un par un depuis le ZIP (seconde passe, T205)
+  for (const d of r.documents) { documents.push([d.nom, (await ZipLecture.lireDocument(r, d.nom)).length]); }
   return { ok: true, refus: r.refus, format: r.format, formatOrigine: r.formatOrigine, migre: r.migre,
-    motif: r.manifeste && r.manifeste.motif, absentes: r.absentes, tables: tables,
-    documents: r.documents.map((d) => [d.nom, d.octets.length]),
+    motif: r.manifeste && r.manifeste.motif, absentes: r.absentes, tables: tables, documents: documents,
     problemes: r.problemes.filter((p) => p.type === 'document').map((p) => p.message) };
 }"""
 

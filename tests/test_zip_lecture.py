@@ -16,6 +16,9 @@ vrai File), sauf les cas ArrayBuffer et Blob.
                plus de 1 Go décompressé ; plus de 200 Mo ; empreinte fausse, fichier ajouté ou manquant ; manifeste
                illisible ; format plus récent ; ZIP sans CSV ; fichier non ZIP ; CSV illisible (format 0) ; entrée
                chiffrée ou méthode inconnue ;
+    deux passes (T205) : le résultat ne garde aucun octet de document (nom, taille, empreinte), un seul document
+               décompressé à la fois (ZipLecture.memoire), relecture exacte par ZipLecture.lireDocument ; ZIP modifié
+               entre les deux passes (même CRC-32 : empreinte ; CRC-32 faux : abîmé), avec et sans manifeste ;
     règle des noms de documents : copie conforme à serveur.py (listes et décisions sur une batterie de noms).
 
 Lancer depuis la racine du projet :
@@ -28,12 +31,14 @@ import hashlib
 import importlib.util
 import io
 import json
+import random
 import shutil
 import sys
 import tempfile
 import unittest
 import warnings
 import zipfile
+import zlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -80,16 +85,24 @@ window.depuisBase64 = function (texte) {
   for (let i = 0; i < binaire.length; i += 1) { octets[i] = binaire.charCodeAt(i); }
   return octets;
 };
-window.resumer = function (r) {
+// Documents : relus un par un depuis le ZIP (ZipLecture.lireDocument, seconde passe), r.documents n'en gardant
+// aucun octet (nom, taille, empreinte).
+window.resumer = async function (r) {
   const resume = { ok: r.ok, refus: r.refus, cles: Object.keys(r).sort() };
   if (!r.ok) { return resume; }
   const tables = {};
   for (const [nom, t] of Object.entries(r.tables)) {
     tables[nom] = { entete: t.entete, lignes: t.lignes.length, inconnues: t.colonnesInconnues };
   }
+  const documents = [];
+  for (const d of r.documents) {
+    const octets = await ZipLecture.lireDocument(r, d.nom);
+    documents.push({ nom: d.nom, base64: enBase64(octets), uint8: octets instanceof Uint8Array,
+      cles: Object.keys(d).sort(), taille: d.taille, empreinte: d.empreinte,
+      sansOctets: Object.values(d).every((v) => v === null || typeof v !== 'object') });
+  }
   return Object.assign(resume, { format: r.format, formatOrigine: r.formatOrigine, migre: r.migre,
-    manifeste: r.manifeste, absentes: r.absentes, tables: tables,
-    documents: r.documents.map((d) => ({ nom: d.nom, base64: enBase64(d.octets), uint8: d.octets instanceof Uint8Array })),
+    manifeste: r.manifeste, absentes: r.absentes, tables: tables, documents: documents,
     problemes: r.problemes.map((p) => ({ gravite: p.gravite, type: p.type, table: p.table, message: p.message })) });
 };
 window.serialiserTables = function () {
@@ -171,6 +184,52 @@ def modifier_entier(octets, position, taille, valeur):
     tampon = bytearray(octets)
     tampon[position:position + taille] = valeur.to_bytes(taille, "little")
     return bytes(tampon)
+
+
+def meme_crc32_autre_contenu(octets, position=8, compensation=16):
+    """Octets de même longueur et de même CRC-32, mais autre contenu (donc autre SHA-256) : l'octet `position` est
+    changé, quatre octets à partir de `compensation` rétablissent le CRC (le CRC-32 est linéaire sur GF(2)). Seule
+    l'empreinte SHA-256 distingue alors les deux contenus."""
+    longueur = len(octets)
+    zero = zlib.crc32(bytes(longueur))
+
+    def lineaire(delta):
+        return zlib.crc32(bytes(delta)) ^ zero
+
+    delta = bytearray(longueur)
+    delta[position] = 0x5A
+    colonnes = []
+    for bit in range(32):
+        unitaire = bytearray(longueur)
+        unitaire[compensation + bit // 8] = 1 << (bit % 8)
+        colonnes.append(lineaire(unitaire))
+    pivots = {}
+    for rang, colonne in enumerate(colonnes):                 # base de Gauss sur GF(2) : bit fort → (vecteur, masque)
+        vecteur, masque = colonne, 1 << rang
+        for fort in range(31, -1, -1):
+            if not (vecteur >> fort) & 1:
+                continue
+            if fort not in pivots:
+                pivots[fort] = (vecteur, masque)
+                break
+            vecteur, masque = vecteur ^ pivots[fort][0], masque ^ pivots[fort][1]
+    reste, masque = lineaire(delta), 0
+    for fort in range(31, -1, -1):
+        if (reste >> fort) & 1:
+            reste, masque = reste ^ pivots[fort][0], masque ^ pivots[fort][1]
+    assert reste == 0
+    for bit in range(32):
+        if (masque >> bit) & 1:
+            delta[compensation + bit // 8] ^= 1 << (bit % 8)
+    autre = bytes(a ^ b for a, b in zip(octets, delta))
+    assert autre != octets and zlib.crc32(autre) == zlib.crc32(octets)
+    assert hashlib.sha256(autre).digest() != hashlib.sha256(octets).digest()
+    return autre
+
+
+def octets_pseudo_aleatoires(taille, graine):
+    """Contenu incompressible, reproductible (aucune donnée réelle)."""
+    return random.Random(graine).randbytes(taille)
 
 
 def lire_table(octets):
@@ -327,8 +386,8 @@ class TestZipAcceptes(CasZip):
                   archive.file('manifeste.json', JSON.stringify(manifeste, null, 2));
                   const octets = await archive.generateAsync({ type: 'uint8array', compression: compression });
                   const tampon = octets.buffer.slice(octets.byteOffset, octets.byteOffset + octets.byteLength);
-                  return [resumer(await ZipLecture.lire(tampon)),
-                          resumer(await ZipLecture.lire(new Blob([octets], { type: 'application/zip' })))];
+                  return [await resumer(await ZipLecture.lire(tampon)),
+                          await resumer(await ZipLecture.lire(new Blob([octets], { type: 'application/zip' })))];
                 }""", [en_base64, compression])
                 for resultat in resultats:
                     self.assertTrue(resultat["ok"], resultat["refus"])
@@ -408,6 +467,75 @@ class TestZipAcceptes(CasZip):
         fichiers = dict(fichiers_du_jeu("f2-v1.1.0"), **DOCUMENTS)
         self.accepte(octets_zip(dict(fichiers, **{"manifeste.json": manifeste(fichiers, format=2)})))
         self.assertEqual(self.page.evaluate("window.appels"), [])
+
+
+# ---------------------------------------------------------------------------
+# Lecture en deux passes (T205) : documents contrôlés puis oubliés, relus un par un
+# ---------------------------------------------------------------------------
+
+# Le ZIP vient d'un ArrayBuffer de la page (ZipLecture le lit sans copie) : le modifier après la première passe, c'est
+# modifier le ZIP entre les deux passes.
+MODIFIER_ENTRE_LES_PASSES_JS = """async ([zip64, nom, position, remplacement64]) => {
+  const tampon = depuisBase64(zip64).buffer;
+  const lu = await ZipLecture.lire(tampon);
+  if (!lu.ok) { return { refus: lu.refus }; }
+  const intact = enBase64(await ZipLecture.lireDocument(lu, nom));
+  new Uint8Array(tampon).set(depuisBase64(remplacement64), position);
+  let autres = 0;
+  for (const d of lu.documents) { if (d.nom !== nom) { await ZipLecture.lireDocument(lu, d.nom); autres += 1; } }
+  const erreurDe = async (r, n) => { try { await ZipLecture.lireDocument(r, n); return null; } catch (e) { return e.message; } };
+  return { refus: null, intact: intact, autres: autres, erreur: await erreurDe(lu, nom),
+    inconnus: [await erreurDe(lu, 'absent.pdf'), await erreurDe({ documents: lu.documents }, nom)] };
+}"""
+
+
+class TestDeuxPasses(CasZip):
+
+    def test_documents_controles_un_par_un_sans_octets_gardes(self):
+        """Première passe : chaque document décompressé, contrôlé (taille, CRC-32, empreinte du manifeste) puis oublié
+        avant le suivant ; le résultat n'en garde que nom, taille et empreinte ; seconde passe : contenu exact."""
+        documents = {"documents/gros-%d.pdf" % n: octets_pseudo_aleatoires(taille, n)
+                     for n, taille in enumerate((2 * MIO, 3 * MIO, MIO))}
+        fichiers = dict(fichiers_du_jeu("f3-v1.2.0"), **documents)
+        contenu_manifeste = manifeste(fichiers)
+        octets = octets_zip(dict(fichiers, **{"manifeste.json": contenu_manifeste}))
+        resultat = self.accepte(octets)
+        self.assertEqual(len(resultat["documents"]), 3)
+        for d in resultat["documents"]:
+            attendu = documents["documents/" + d["nom"]]
+            self.assertEqual(d["cles"], ["empreinte", "nom", "taille"])
+            self.assertTrue(d["sansOctets"], d["nom"])
+            self.assertEqual(d["taille"], len(attendu))
+            self.assertEqual(d["empreinte"], hashlib.sha256(attendu).hexdigest())
+            self.assertEqual(base64.b64decode(d["base64"]), attendu)
+            self.assertTrue(d["uint8"])
+        racine = sum(len(o) for nom, o in fichiers.items() if "/" not in nom) + len(contenu_manifeste)
+        self.assertEqual(self.page.evaluate("ZipLecture.memoire()"),
+                         {"zip": len(octets), "racine": racine, "documentsGardesMax": 1, "documentMax": 3 * MIO})
+
+    def test_document_modifie_entre_les_deux_passes_refuse_a_la_relecture(self):
+        """Contenu changé, même CRC-32 : seule l'empreinte SHA-256 (du manifeste, ou calculée à la première passe
+        pour un export sans manifeste) le voit ; contenu changé, CRC-32 faux : « abîmé »."""
+        vise = octets_pseudo_aleatoires(4000, 7)
+        meme_crc = meme_crc32_autre_contenu(vise)
+        crc_faux = vise[:8] + bytes([vise[8] ^ 0x5A]) + vise[9:]
+        fichiers = dict(csv_de_base(), **{"documents/autre.pdf": b"%PDF-1.4 autre", "documents/vise.pdf": vise})
+        for avec_manifeste in (True, False):
+            entrees = dict(fichiers, **({"manifeste.json": manifeste(fichiers)} if avec_manifeste else {}))
+            octets = octets_zip(entrees, compression=zipfile.ZIP_STORED)
+            self.assertEqual(octets.count(vise), 1)
+            for remplacement, attendu in ((meme_crc, "a changé depuis le contrôle du ZIP (son empreinte ne "
+                                                     "correspond plus)"), (crc_faux, "« documents/vise.pdf » est abîmé")):
+                with self.subTest(manifeste=avec_manifeste, attendu=attendu):
+                    sortie = self.page.evaluate(MODIFIER_ENTRE_LES_PASSES_JS, [
+                        base64.b64encode(octets).decode("ascii"), "vise.pdf", octets.find(vise),
+                        base64.b64encode(remplacement).decode("ascii")])
+                    self.assertIsNone(sortie["refus"])
+                    self.assertEqual(base64.b64decode(sortie["intact"]), vise)
+                    self.assertEqual(sortie["autres"], 1)
+                    self.assertIsNotNone(sortie["erreur"])
+                    self.assertIn(attendu, sortie["erreur"])
+                    self.assertTrue(all(sortie["inconnus"]), sortie["inconnus"])
 
 
 class TestSourceSansEcriture(unittest.TestCase):
