@@ -2735,18 +2735,18 @@ def installer_jeu_de_demo(config, brouillon, origine=('', '', '')):
     (comme « Partir des données de démo » du navigateur, §11), sauvegarde du jour d'abord. En Solo, le technicien
     « moi » créé à l'étape « compte » est recréé dans la table de la démo (technicien_moi : même prénom et nom), le
     brouillon et le compte responsable lié suivent son nouvel identifiant. En tenant VERROU_ECRITURE. T200 : un
-    fichier en place abîmé (techniciens.csv de l'étape « compte ») arrête tout avant la moindre écriture (409
-    « fichier_abime »)."""
+    fichier en place abîmé (techniciens.csv de l'étape « compte ») arrête tout avant la moindre écriture dans les
+    tables (409 « fichier_abime ») ; T206 : la sauvegarde du jour est faite avant ces gardes."""
     verifier_ecriture_permise(config)
     date_reference, textes = lire_jeu_de_demo()
     ancien = brouillon.get('solo_technicien_id', '')
     moi = technicien_par_id(config, ancien) if ancien else None
     aujourd_hui = datetime.date.fromtimestamp(maintenant_s(config))
     jours = int((aujourd_hui - datetime.date.fromisoformat(date_reference)).days / 7) * 7
+    faire_sauvegarde_quotidienne(config)
     actuels = {table: lire_octets(chemin_table(config, table)) for table in TABLES}
     for table in TABLES:
         verifier_fichier_en_place(table, actuels[table])
-    faire_sauvegarde_quotidienne(config)
     for table in TABLES:
         ecrire_fichier_de_donnees(config, table, decaler_texte_csv(textes[table], jours), actuels[table],
                                   sauvegarde_du_jour=False)
@@ -3807,6 +3807,10 @@ MESSAGE_PLAFOND_MANUELLES = 'Une sauvegarde manuelle par minute au plus : réess
 # (« avant-… » jamais) ; manifeste.json dans chaque sauvegarde ; documents/ dans la seule « avant-import-zip » ;
 # sauvegarde « avant-mise-a-jour » au premier démarrage d'une autre version (donnees/derniere-version.json).
 QUOTIDIENNES_GARDEES_JOURS = 30
+# T206 : les 7 quotidiennes les plus récentes sans fichier abîmé ne sont jamais supprimées, quel que soit leur âge.
+QUOTIDIENNES_SAINES_GARDEES = 7
+MARQUE_ABIME = 'abime'                          # "abime": true sur l'entrée d'un CSV abîmé du manifeste (T206)
+NOM_FICHIERS_ABIMES = 'fichiers-abimes.json'
 MOTIF_QUOTIDIENNE = 'quotidienne'               # « motif » du manifeste d'une sauvegarde AAAA-MM-JJ
 MOTIF_MANUELLE = 'manuelle'                     # … et d'une sauvegarde AAAA-MM-JJ_HHMMSS
 MOTIF_AVANT_MISE_A_JOUR = 'avant-mise-a-jour'
@@ -3856,9 +3860,15 @@ def format_des_tables_copiees(dossier):
     return version_de_base(lignes_en_dictionnaires(lire_fichier_de_donnees(octets)))
 
 
+def est_un_csv_de_table(relatif):
+    """Vrai pour « <table>.csv » à la racine d'une sauvegarde (table du schéma)."""
+    return relatif.endswith('.csv') and relatif[:-len('.csv')] in TABLES
+
+
 def fichiers_du_manifeste(dossier):
     """[{"nom", "octets", "sha256"}] de chaque fichier du dossier (chemin relatif en « / », triés par nom), sans le
-    manifeste lui-même ; empreinte SHA-256 complète, lue par morceaux (documents volumineux)."""
+    manifeste lui-même ; empreinte SHA-256 complète, lue par morceaux (documents volumineux). T206 : l'entrée d'un CSV
+    de table abîmé (raisons_fichier_abime, le critère de la garde) porte aussi "abime": true, absente sinon."""
     fichiers = []
     for racine, _, noms in os.walk(dossier):
         for nom in noms:
@@ -3871,7 +3881,10 @@ def fichiers_du_manifeste(dossier):
                 for morceau in iter(lambda: fichier.read(TAILLE_MORCEAU_EMPREINTE), b''):
                     hachage.update(morceau)
                     taille += len(morceau)
-            fichiers.append({'nom': relatif, 'octets': taille, 'sha256': hachage.hexdigest()})
+            decrit = {'nom': relatif, 'octets': taille, 'sha256': hachage.hexdigest()}
+            if est_un_csv_de_table(relatif) and raisons_fichier_abime(lire_octets(chemin)):
+                decrit[MARQUE_ABIME] = True
+            fichiers.append(decrit)
     fichiers.sort(key=lambda decrit: decrit['nom'])
     return fichiers
 
@@ -3917,6 +3930,7 @@ def copier_tables_dans_sauvegarde(config, nom_sauvegarde, complement=None):
     interrompue (panne, disque plein) ne laisse jamais un dossier à moitié rempli.
     T187 (D170) : acces/ (sans sessions.json ni cle.pem), documents/ pour le motif « avant-import-zip » seulement,
     puis manifeste.json en dernier (complement : champs ajoutés au manifeste, ex. « de » et « vers »).
+    T206 : la sauvegarde faite, fichiers-abimes.json suit les marques « abime » de son manifeste.
     """
     tables = tables_presentes(config.dossier_donnees)
     dossier_final = os.path.join(config.dossier_sauvegardes, nom_sauvegarde)
@@ -3932,11 +3946,13 @@ def copier_tables_dans_sauvegarde(config, nom_sauvegarde, complement=None):
         copier_acces_dans_sauvegarde(config, dossier_temporaire)      # lot 7 : comptes, appareils, journal
         if motif_du_nom_de_sauvegarde(nom_sauvegarde) in MOTIFS_AVEC_DOCUMENTS:
             copier_documents_dans_sauvegarde(config, dossier_temporaire)
-        ecrire_manifeste(config, dossier_temporaire, nom_sauvegarde, complement)
+        manifeste = ecrire_manifeste(config, dossier_temporaire, nom_sauvegarde, complement)
         os.rename(dossier_temporaire, dossier_final)
     finally:
         if os.path.isdir(dossier_temporaire):
             shutil.rmtree(dossier_temporaire, ignore_errors=True)
+    noter_fichiers_abimes(config, [decrit['nom'][:-len('.csv')] for decrit in manifeste['fichiers']
+                                   if decrit.get(MARQUE_ABIME) and est_un_csv_de_table(decrit['nom'])])
     return tables
 
 
@@ -3951,7 +3967,8 @@ def sauvegarde_complete(dossier):
 
 def faire_sauvegarde_du_jour(config):
     """Copie dans sauvegardes/AAAA-MM-JJ/ si la sauvegarde du jour manque (rien s'il n'y a encore aucun CSV) ; chaque
-    nouvelle quotidienne supprime celles de plus de 30 jours (T187). Le jour est celui de l'horloge du serveur. Rend
+    nouvelle quotidienne supprime celles de plus de 30 jours (T187), sauf les 7 plus récentes sans fichier abîmé
+    (T206, purger_sauvegardes_quotidiennes). Le jour est celui de l'horloge du serveur. Rend
     le nom de la sauvegarde faite, ou None. À appeler en tenant VERROU_ECRITURE."""
     nom_du_jour = instant_local(config).strftime('%Y-%m-%d')
     dossier_du_jour = os.path.join(config.dossier_sauvegardes, nom_du_jour)
@@ -3966,25 +3983,120 @@ def faire_sauvegarde_du_jour(config):
     return nom_du_jour
 
 
+def marques_du_manifeste(dossier):
+    """Noms des fichiers que manifeste.json de la sauvegarde marque « abime » (T206) ; [] s'il n'en marque aucun, ou
+    s'il manque ou est illisible. Ne modifie rien."""
+    try:
+        with open(os.path.join(dossier, NOM_MANIFESTE), 'rb') as fichier:
+            fichiers = json.loads(fichier.read().decode('utf-8-sig'))['fichiers']
+        return [decrit['nom'] for decrit in fichiers if decrit.get(MARQUE_ABIME) is True]
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError, KeyError, TypeError, AttributeError):
+        return []
+
+
+def tables_abimees_de_la_sauvegarde(dossier):
+    """Tables dont le CSV de la sauvegarde est abîmé (raisons_fichier_abime), lues sans rien y écrire."""
+    return [table for table in TABLES if raisons_fichier_abime(lire_octets(os.path.join(dossier, table + '.csv')))]
+
+
+def quotidienne_saine(dossier, analyser):
+    """Vrai pour une quotidienne sans fichier abîmé (T206). Au moins une marque « abime » au manifeste : abîmée, sans
+    analyse ; incomplète (MARQUE_SAUVEGARDE_EN_COURS) : pas saine. Sans marque (manifeste sain d'après T206, manifeste
+    plus ancien, ou pas de manifeste : rien ne les distingue), ses CSV sont analysés si « analyser » (la rotation se
+    demande si elle compte parmi les 7 saines : candidate à la suppression), même critère que la garde, résultat
+    jamais écrit dans la sauvegarde ; sinon elle compte comme saine."""
+    if not sauvegarde_complete(dossier) or marques_du_manifeste(dossier):
+        return False
+    if not analyser:
+        return True
+    try:
+        return not tables_abimees_de_la_sauvegarde(dossier)
+    except OSError:                                     # illisible : pas une bonne sauvegarde
+        return False
+
+
 def purger_sauvegardes_quotidiennes(config):
     """Supprime les sauvegardes quotidiennes de plus de 30 jours (D170) : dossiers dont le nom est exactement une vraie
     date AAAA-MM-JJ, plus vieux de 31 jours ou davantage que le jour de l'horloge du serveur. Jamais un autre nom
-    (manuelles, « …_avant-… »), un fichier, un lien ni une jonction. Rend les noms supprimés."""
+    (manuelles, « …_avant-… »), un fichier, un lien ni une jonction. T206 : jamais non plus l'une des 7 quotidiennes
+    les plus récentes sans fichier abîmé (QUOTIDIENNES_SAINES_GARDEES, quotidienne_saine), quel que soit son âge.
+    En partant de la plus récente : rien n'est examiné s'il n'y en a aucune de plus de 30 jours, ni une fois les 7
+    saines retenues ; une quotidienne sans marque n'est analysée que si elle a plus de 30 jours (contrat T206, le même
+    que le mode dossier). Rend les noms supprimés."""
     aujourd_hui = instant_local(config).date()
     try:
-        noms = sorted(os.listdir(config.dossier_sauvegardes))
+        noms = sorted(os.listdir(config.dossier_sauvegardes), reverse=True)        # la plus récente d'abord
     except OSError:
         return []
-    supprimees = []
+    ages = {}
     for nom in noms:
         chemin = os.path.join(config.dossier_sauvegardes, nom)
-        if not est_une_date(nom) or not os.path.isdir(chemin) or est_un_lien(chemin):
-            continue
-        age = (aujourd_hui - datetime.datetime.strptime(nom, '%Y-%m-%d').date()).days
-        if age > QUOTIDIENNES_GARDEES_JOURS:
+        if est_une_date(nom) and os.path.isdir(chemin) and not est_un_lien(chemin):
+            ages[nom] = (aujourd_hui - datetime.datetime.strptime(nom, '%Y-%m-%d').date()).days
+    if all(age <= QUOTIDIENNES_GARDEES_JOURS for age in ages.values()):
+        return []                                       # rien à décider : rien n'est examiné
+    supprimees, saines = [], 0
+    for nom, age in ages.items():
+        chemin = os.path.join(config.dossier_sauvegardes, nom)
+        ancienne = age > QUOTIDIENNES_GARDEES_JOURS
+        if saines < QUOTIDIENNES_SAINES_GARDEES and quotidienne_saine(chemin, analyser=ancienne):
+            saines += 1                                 # parmi les 7 plus récentes saines : gardée
+        elif ancienne:
             shutil.rmtree(chemin, ignore_errors=True)
             supprimees.append(nom)
     return supprimees
+
+
+# T206 (contrat, point 4) : donnees/fichiers-abimes.json, {"depuis": {"<table>": "AAAA-MM-JJTHH:MM:SS"}} (heure
+# locale, comme les manifestes), date à laquelle Prévo a vu la table abîmée la première fois (raisons_fichier_abime).
+# Tenu à jour chaque fois que le serveur connaît l'état de toutes les tables : au démarrage (après le passage au
+# format), à chaque sauvegarde (marques de son manifeste), après une restauration. Table abîmée : date gardée si elle
+# y est, sinon « maintenant » ; table redevenue saine : retirée ; plus rien d'abîmé : fichier supprimé. Jamais dans
+# une sauvegarde (copier_tables_dans_sauvegarde ne copie que les CSV et acces/), jamais remplacé par une restauration ;
+# rien en lecture seule (données plus récentes). Rendu par GET /api/info, « format » → « abimes_depuis ».
+MOTIF_DATE_DEPUIS = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}', re.ASCII)
+
+
+def chemin_fichiers_abimes(config):
+    return os.path.join(config.dossier_donnees, NOM_FICHIERS_ABIMES)
+
+
+def lire_fichiers_abimes(config):
+    """{table: "AAAA-MM-JJTHH:MM:SS"} de fichiers-abimes.json (tables du schéma, dates bien formées), dans l'ordre du
+    schéma ; {} si le fichier manque ou est illisible."""
+    try:
+        with open(chemin_fichiers_abimes(config), 'rb') as fichier:
+            depuis = json.loads(fichier.read().decode('utf-8-sig')).get('depuis')
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError, AttributeError):
+        return {}
+    if not isinstance(depuis, dict):
+        return {}
+    return {table: depuis[table] for table in TABLES
+            if isinstance(depuis.get(table), str) and MOTIF_DATE_DEPUIS.fullmatch(depuis[table])}
+
+
+def noter_fichiers_abimes(config, abimees=None):
+    """Met fichiers-abimes.json à jour (en tête de cette partie) ; abimees : les tables abîmées, ou None pour les
+    trouver en lisant donnees/. Jamais d'exception vers l'appelant : un échec est dit sur la console."""
+    etat = getattr(config, 'format_donnees', None)
+    if etat and etat.get('plus_recent'):
+        return
+    try:
+        if abimees is None:
+            abimees = [table for table in TABLES if raisons_fichier_abime(lire_octets(chemin_table(config, table)))]
+        ancien = lire_fichiers_abimes(config)
+        maintenant = maintenant_iso(config)
+        neuf = {table: ancien.get(table, maintenant) for table in TABLES if table in abimees}
+        chemin = chemin_fichiers_abimes(config)
+        if neuf == ancien and (neuf or not os.path.exists(chemin)):
+            return
+        if neuf:
+            ecrire_atomique(chemin, (json.dumps({'depuis': neuf}, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+        else:
+            os.remove(chemin)
+    except (ErreurHttp, OSError) as erreur:
+        afficher(PREFIXE_CONSOLE_SAUVEGARDES + '%s non mis à jour (%s).'
+                 % (NOM_FICHIERS_ABIMES, getattr(erreur, 'message', None) or erreur))
 
 
 def faire_sauvegarde_quotidienne(config):
@@ -4087,7 +4199,8 @@ def tables_a_restaurer(dossier_sauvegarde, tables_demandees):
 
 def restaurer(config, nom_sauvegarde, tables_demandees):
     """Copie de sécurité de l'état actuel, puis copie des tables depuis la sauvegarde. T200 : la restauration est le
-    remède à un fichier abîmé, elle le remplace (ecrire_fichier_de_donnees, remplacer_abime)."""
+    remède à un fichier abîmé, elle le remplace (ecrire_fichier_de_donnees, remplacer_abime). T206 : puis
+    fichiers-abimes.json à jour (une table restaurée saine en est retirée)."""
     verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     verifier_nom_sauvegarde(nom_sauvegarde)
     dossier_sauvegarde = chemin_sous(config.dossier_sauvegardes, nom_sauvegarde)
@@ -4110,6 +4223,7 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
                 % (erreur.message, table, ', '.join(restaurees) or 'aucune', copie_securite),
                 restaurees=restaurees, copie_securite=copie_securite)
         restaurees.append(table)
+    noter_fichiers_abimes(config)
     return {'restaurees': restaurees, 'copie_securite': copie_securite}
 
 
@@ -4818,8 +4932,10 @@ def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
 #      courante), puis, après sa réussite seulement, derniere-version.json écrit d'un coup ({"version", "depuis"}) ;
 #      échec : une ligne sur la console et rien d'autre (nouvel essai au démarrage suivant) ; base vide : rien ;
 #   2. le passage au format courant (migrer_donnees_au_demarrage, T185), avec sa sauvegarde « avant-format-vN » ;
-#   3. la sauvegarde quotidienne si celle du jour manque (faire_sauvegarde_du_jour, rotation à 30 jours comprise).
-# Aucune de ces étapes n'écrit dans les tables : elles se font aussi en lecture seule (données plus récentes, D169).
+#   3. la sauvegarde quotidienne si celle du jour manque (faire_sauvegarde_du_jour, rotation à 30 jours comprise) ;
+#   4. T206 : fichiers-abimes.json à jour (noter_fichiers_abimes ; fait par la sauvegarde de l'étape 3 si elle a lieu).
+# Aucune de ces étapes n'écrit dans les tables : elles se font aussi en lecture seule (données plus récentes, D169 ;
+# fichiers-abimes.json excepté, laissé tel quel en lecture seule).
 PREFIXE_CONSOLE_SAUVEGARDES = 'Sauvegardes : '
 
 
@@ -4882,11 +4998,12 @@ def sauvegarder_le_jour_au_demarrage(config):
 
 
 def preparer_donnees_au_demarrage(config):
-    """Étapes 1 à 3 ci-dessus, dans cet ordre (main, avant les écouteurs). Rend l'état du format des données
+    """Étapes 1 à 4 ci-dessus, dans cet ordre (main, avant les écouteurs). Rend l'état du format des données
     (migrer_donnees_au_demarrage)."""
     sauvegarder_avant_mise_a_jour(config)
     etat = migrer_donnees_au_demarrage(config)
-    sauvegarder_le_jour_au_demarrage(config)
+    if sauvegarder_le_jour_au_demarrage(config) is None:
+        noter_fichiers_abimes(config)
     return etat
 
 
@@ -4952,7 +5069,9 @@ def verifier_contenu_csv(table, octets, corps_d_ajout=False):
 # Dérogations à la réécriture : la restauration d'une sauvegarde (le remède) et un PUT /api/csv/<table> qui porte
 # l'en-tête X-Prevo-Remplacer-Abime: 1 (l'import ZIP du navigateur). L'en-tête n'ajoute aucun droit : les règles des
 # rôles (§22.5 : routes permises, controle_d_ecriture) et le contrôle de version restent les mêmes. Refus : 409
-# {"erreur", "code": "fichier_abime", "table"}, rien d'écrit dans donnees/ (ni la table, ni la sauvegarde du jour).
+# {"erreur", "code": "fichier_abime", "table"}, la table reste identique à l'octet. T206 (règle de Nicolas : « un
+# fichier abîmé bloque l'écriture dans les données, jamais la sauvegarde quotidienne ») : la sauvegarde du jour passe
+# AVANT la garde, une écriture refusée la fait donc si elle manque (son manifeste marque le fichier abîmé).
 CODE_FICHIER_ABIME = 'fichier_abime'
 ENTETE_REMPLACER_ABIME = 'X-Prevo-Remplacer-Abime'
 SUITE_FICHIER_ABIME = ('Corrigez-le, restaurez une sauvegarde ou importez un ZIP (Paramètres) ; le détail est dans '
@@ -5044,18 +5163,20 @@ def verifier_fichier_en_place(table, actuel, ajout=False, remplacer_abime=False)
 def ecrire_fichier_de_donnees(config, table, octets, actuel=A_LIRE, *, ajout=False, remplacer_abime=False,
                               sauvegarde_du_jour):
     """LA fonction d'écriture des CSV de données (donnees/<table>.csv ; en tête de cette partie), dans cet ordre :
-      1. la garde (verifier_fichier_en_place) sur le fichier en place : « actuel », ses octets (None s'il est absent),
+      1. la sauvegarde du jour si « sauvegarde_du_jour » (faire_sauvegarde_quotidienne), AVANT la garde (T206) : un
+         fichier abîmé bloque l'écriture dans les données, jamais la sauvegarde quotidienne ;
+      2. la garde (verifier_fichier_en_place) sur le fichier en place : « actuel », ses octets (None s'il est absent),
          lus ici s'ils ne sont pas donnés ; ajout : « octets » est le fichier en place suivi des lignes ajoutées ;
          remplacer_abime : la réécriture d'un fichier abîmé est voulue (restauration, import ZIP) ;
-      2. la sauvegarde du jour si « sauvegarde_du_jour » (faire_sauvegarde_quotidienne) ;
       3. ecrire_atomique (423 si le fichier est verrouillé, Excel).
-    Refus de la garde : 409 « fichier_abime », rien n'est écrit (ni la table, ni la sauvegarde). Rend l'empreinte des
-    octets écrits. À appeler en tenant VERROU_ECRITURE (ou au démarrage, avant les écouteurs)."""
+    Refus de la garde : 409 « fichier_abime », la table reste identique à l'octet (la sauvegarde du jour, elle, est
+    faite si elle manquait ; son manifeste marque le fichier abîmé). Rend l'empreinte des octets écrits. À appeler en
+    tenant VERROU_ECRITURE (ou au démarrage, avant les écouteurs)."""
     chemin = chemin_table(config, table)
-    if ajout or not remplacer_abime:
-        verifier_fichier_en_place(table, lire_octets(chemin) if actuel is A_LIRE else actuel, ajout, remplacer_abime)
     if sauvegarde_du_jour:
         faire_sauvegarde_quotidienne(config)
+    if ajout or not remplacer_abime:
+        verifier_fichier_en_place(table, lire_octets(chemin) if actuel is A_LIRE else actuel, ajout, remplacer_abime)
     ecrire_atomique(chemin, octets)
     return empreinte(octets)
 
@@ -5103,7 +5224,8 @@ def ajouter_au_csv(config, table, corps, controle=None):
     controle (lot 7, §22.5) : (en-tête, lignes, octets actuels) → lignes à ajouter (colonnes cachées vidées pour le
     technicien, demandes nouvelles seulement pour le demandeur ; 403 sinon). T200 : 409 « fichier_abime » si le
     fichier en place (non vide) se termine au milieu d'un texte entre guillemets, avant les contrôles d'UTF-8 et
-    d'en-tête (verifier_fichier_en_place, puis ecrire_fichier_de_donnees en ajout)."""
+    d'en-tête (verifier_fichier_en_place, puis ecrire_fichier_de_donnees en ajout). T206 : la sauvegarde du jour est
+    faite juste avant cette garde, même si elle refuse."""
     verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     chemin = chemin_table(config, table)
     verifier_contenu_csv(table, corps, corps_d_ajout=True)
@@ -5112,9 +5234,10 @@ def ajouter_au_csv(config, table, corps, controle=None):
     if controle is not None:
         lignes = controle(entete, lignes, actuel)
         corps = entete + FIN_DE_LIGNE + lignes
+    faire_sauvegarde_quotidienne(config)                # T206 : avant la garde (faite ici, pas dans les écritures)
     verifier_fichier_en_place(table, actuel, ajout=True)
     if actuel is None or not actuel.replace(BOM_UTF8, b'', 1).strip():
-        return ecrire_fichier_de_donnees(config, table, BOM_UTF8 + corps, actuel, ajout=True, sauvegarde_du_jour=True)
+        return ecrire_fichier_de_donnees(config, table, BOM_UTF8 + corps, actuel, ajout=True, sauvegarde_du_jour=False)
     if not est_utf8(actuel):
         raise ErreurHttp(409, 'Le fichier %s.csv n\'est pas en UTF-8 (réenregistré par Excel ?).'
                          % table, version_actuelle=empreinte(actuel))
@@ -5125,7 +5248,7 @@ def ajouter_au_csv(config, table, corps, controle=None):
         return empreinte(actuel)
     separateur = b'' if actuel.endswith(b'\n') else FIN_DE_LIGNE
     return ecrire_fichier_de_donnees(config, table, actuel + separateur + lignes, actuel, ajout=True,
-                                     sauvegarde_du_jour=True)
+                                     sauvegarde_du_jour=False)
 
 
 # ---------------------------------------------------------------------------
@@ -6014,7 +6137,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                 'installation_a_faire': not self.config.reglages.get('_present'),
                                 # T185 : format des données trouvé au démarrage et passage fait ou non (le bandeau
                                 # du responsable en dit la raison) ; None quand le serveur ne l'a pas regardé.
-                                'format': self.config.format_donnees})
+                                # T206 : « abimes_depuis », {table: date} des tables abîmées (fichiers-abimes.json).
+                                'format': self.config.format_donnees and dict(
+                                    self.config.format_donnees, abimes_depuis=lire_fichiers_abimes(self.config))})
 
     def api_session(self, segment, corps):
         """GET /api/session : comptes exigés ou non, et l'identité de la session (jamais le jeton). Pour un appareil

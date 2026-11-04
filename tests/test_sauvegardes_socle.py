@@ -4,7 +4,9 @@ purger_sauvegardes_quotidiennes, ecrire_manifeste, copier_documents_dans_sauvega
 
 Ce qui est vérifié, sans navigateur :
     rotation           à chaque nouvelle sauvegarde quotidienne, celles de plus de 30 jours (jour de l'horloge du
-                       serveur) sont supprimées : 10, 29 et 30 jours gardées, 31 et 45 supprimées ; « avant-… »
+                       serveur) sont supprimées : 10, 29 et 30 jours gardées, 31 et 45 supprimées (T206 : sauf les 7
+                       saines les plus récentes, d'où les quotidiennes de 1 à 4 jours ajoutées ici ; la règle elle-même
+                       est dans tests/test_sauvegardes_abimes_serveur.py) ; « avant-… »
                        anciennes, manuelles et noms étrangers (date impossible, fichier, autre nom) jamais touchés ;
                        aucune rotation sans nouvelle quotidienne ; au démarrage du serveur réel (date du jour) aussi ;
     avant-mise-a-jour  premier démarrage sur une copie de f2-v1.1.0 et de f3-v1.2.0 sans derniere-version.json :
@@ -264,7 +266,8 @@ class TestRotation(CasDossier):
 
     def test_a_la_premiere_ecriture_du_jour_plus_de_30_jours_supprimees_rien_d_autre(self):
         donnees = self.preparer()
-        gardees = [self.quotidienne(donnees, jours) for jours in (10, 29, 30)]
+        # T206 : 1, 2 et 3 jours ajoutées, pour que 7 saines plus récentes laissent partir celles de plus de 30 jours.
+        gardees = [self.quotidienne(donnees, jours) for jours in (1, 2, 3, 10, 29, 30)]
         supprimees = [self.quotidienne(donnees, jours) for jours in (31, 45)]
         serveur = ServeurDansLeProcessus(donnees, instant(2026, 6, 15, 9, 0))
         self.addCleanup(serveur.arreter)
@@ -286,11 +289,11 @@ class TestRotation(CasDossier):
         serveur.instant = instant(2026, 6, 16, 8, 0)
         serveur.ecrire_parametres("Lendemain")
         self.assertEqual(noms_des_sauvegardes(donnees),
-                         sorted(gardees[:2] + self.AUTRES + ["2025-01-05", "2026-06-15", "2026-06-16"]))
+                         sorted(gardees[:5] + self.AUTRES + ["2025-01-05", "2026-06-15", "2026-06-16"]))
 
     def test_au_demarrage_horloge_simulee(self):
         donnees = self.preparer()
-        gardees = [self.quotidienne(donnees, jours) for jours in (10, 29)]
+        gardees = [self.quotidienne(donnees, jours) for jours in (1, 2, 3, 4, 10, 29)]           # T206 : 7 saines
         for jours in (31, 45):
             self.quotidienne(donnees, jours)
         (donnees / "derniere-version.json").write_text(json.dumps({"version": SERVEUR.VERSION_APPLICATION}),
@@ -308,7 +311,7 @@ class TestRotation(CasDossier):
     def test_au_demarrage_du_serveur_reel(self):
         source = self.preparer()
         aujourd_hui = datetime.date.today()
-        gardees = [self.quotidienne(source, jours, aujourd_hui) for jours in (10, 29)]
+        gardees = [self.quotidienne(source, jours, aujourd_hui) for jours in (1, 2, 3, 4, 10, 29)]   # T206
         supprimees = [self.quotidienne(source, jours, aujourd_hui) for jours in (31, 45)]
         with commun.ServeurPrevo(source=source) as serveur:
             noms = noms_des_sauvegardes(serveur.dossier)

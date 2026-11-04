@@ -10,8 +10,9 @@ qui regarde le fichier en place avant d'écrire :
     refusée si le fichier en place est abîmé (raisons_fichier_abime, même critère que entree.abime du navigateur),
     sauf dérogation : PUT avec l'en-tête X-Prevo-Remplacer-Abime: 1 (import ZIP), et restauration d'une sauvegarde
     (le remède) ;
-  - refus : 409 {"erreur", "code": "fichier_abime", "table"} ; rien n'est écrit dans donnees/ (ni la table, ni la
-    sauvegarde du jour).
+  - refus : 409 {"erreur", "code": "fichier_abime", "table"} ; la table reste identique à l'octet. T206 (inversé) : la
+    sauvegarde du jour passe AVANT la garde, un refus la fait donc si elle manque (son manifeste marque le fichier
+    abîmé ; tests/test_sauvegardes_abimes_serveur.py pour le reste).
 
 Sans navigateur. Les jeux de tests/fixtures/formats (tests/jeux_formats.py) sont copiés dans un dossier temporaire
 (jamais lus ni écrits en place, jamais de données réelles).
@@ -22,7 +23,8 @@ Sans navigateur. Les jeux de tests/fixtures/formats (tests/jeux_formats.py) sont
    navigateur garde la seconde colonne, associerColonnes).
 2. TestEcrituresInternes — serveur.py importé comme module, sur une copie : ecrire_table (technicien_moi,
    poser_mode_solo) sur techniciens.csv ou parametres.csv abîmé, jeu de démo sur une base dont un fichier en place
-   est abîmé, enregistrer_csv et ajouter_au_csv (rien d'écrit, sauvegarde du jour comprise) ; restauration
+   est abîmé, enregistrer_csv et ajouter_au_csv (tables identiques à l'octet ; T206 : la sauvegarde du jour faite
+   avant le refus, verifier_sauvegarde_du_jour_puis_rien) ; restauration
    par-dessus un fichier abîmé ; passage au format au démarrage : un refus ne le fait pas planter ; journal à
    guillemet ouvert laissé tel quel par le passage.
 3. TestRoutes — serveur réel (ServeurPrevo) : POST /api/csv/journal/ajout sur un journal à guillemet ouvert ; PUT
@@ -197,6 +199,21 @@ class CasCopies(unittest.TestCase):
         self.assertIn("restaurez une sauvegarde ou importez un ZIP", erreur.message)
         self.assertIn("Paramètres › Contrôle de la base", erreur.message)
 
+    def verifier_sauvegarde_du_jour_puis_rien(self, dossier, avant, table):
+        """T206 (contrat, point 1 ; inverse de T200, « rien d'écrit, sauvegarde du jour comprise ») : la sauvegarde du
+        jour passe avant la garde. Le refus a fait UNE quotidienne, dont le manifeste marque le fichier abîmé ; à part
+        elle et fichiers-abimes.json, rien n'a changé à l'octet."""
+        apres = fichiers_de(dossier)
+        nouvelles = sorted({chemin.split("/")[1] for chemin in apres
+                            if chemin.startswith("sauvegardes/") and chemin not in avant})
+        self.assertEqual(len(nouvelles), 1, nouvelles)
+        self.assertRegex(nouvelles[0], r"^\d{4}-\d{2}-\d{2}$")
+        manifeste = json.loads(apres["sauvegardes/%s/manifeste.json" % nouvelles[0]].decode("utf-8"))
+        self.assertIn(table + ".csv", [decrit["nom"] for decrit in manifeste["fichiers"] if decrit.get("abime") is True])
+        self.assertEqual({chemin: octets for chemin, octets in apres.items()
+                          if not chemin.startswith("sauvegardes/%s/" % nouvelles[0])
+                          and chemin != "fichiers-abimes.json"}, avant)
+
     def verifier_reponse_de_refus(self, statut, reponse, table, extrait="est abîmé"):
         self.assertEqual(statut, 409, reponse)
         self.assertEqual((reponse.get("code"), reponse.get("table")), (CODE, table), reponse)
@@ -280,7 +297,7 @@ class TestEcrituresInternes(CasCopies):
         with SERVEUR.VERROU_ECRITURE, self.assertRaises(SERVEUR.ErreurHttp) as refus:
             SERVEUR.technicien_moi(config, "Camille", "Nouvelle")
         self.verifier_refus(refus.exception, "techniciens")
-        self.assertEqual(fichiers_de(dossier), avant)                 # ni la table, ni la sauvegarde du jour
+        self.verifier_sauvegarde_du_jour_puis_rien(dossier, avant, "techniciens")     # T206 : la quotidienne, seule
 
     def test_ecrire_table_par_poser_mode_solo_refuse_sur_parametres_abime(self):
         dossier = self.jeu("f3-v1.2.0")
@@ -291,7 +308,7 @@ class TestEcrituresInternes(CasCopies):
         with SERVEUR.VERROU_ECRITURE, self.assertRaises(SERVEUR.ErreurHttp) as refus:
             SERVEUR.poser_mode_solo(config, "TEC-0001")
         self.verifier_refus(refus.exception, "parametres")
-        self.assertEqual(fichiers_de(dossier), avant)
+        self.verifier_sauvegarde_du_jour_puis_rien(dossier, avant, "parametres")
 
     def test_ecrire_table_sur_un_fichier_sain_ecrit_comme_avant(self):
         dossier = self.jeu("f3-v1.2.0")
@@ -304,7 +321,7 @@ class TestEcrituresInternes(CasCopies):
         self.assertIn(b"mode_solo;1", (dossier / "parametres.csv").read_bytes())
         self.assertTrue(any(re.fullmatch(r"\d{4}-\d{2}-\d{2}", p.name) for p in (dossier / "sauvegardes").iterdir()))
 
-    def test_jeu_de_demo_refuse_sans_rien_ecrire_si_un_fichier_en_place_est_abime(self):
+    def test_jeu_de_demo_refuse_sans_toucher_aux_tables_si_un_fichier_en_place_est_abime(self):
         sain = self.octets_du_jeu("f3-v1.2.0", "techniciens.csv")
         dossier = self.temporaire / "demo" / "donnees"
         dossier.mkdir(parents=True)
@@ -314,9 +331,9 @@ class TestEcrituresInternes(CasCopies):
         with SERVEUR.VERROU_ECRITURE, self.assertRaises(SERVEUR.ErreurHttp) as refus:
             SERVEUR.installer_jeu_de_demo(config, {})
         self.verifier_refus(refus.exception, "techniciens")
-        self.assertEqual(fichiers_de(dossier), avant)                 # aucune table de la démo, aucune sauvegarde
+        self.verifier_sauvegarde_du_jour_puis_rien(dossier, avant, "techniciens")     # aucune table de la démo
 
-    def test_enregistrer_csv_refuse_avant_la_sauvegarde_du_jour(self):
+    def test_enregistrer_csv_refuse_apres_la_sauvegarde_du_jour(self):
         dossier = self.jeu("entete-tronque")
         sain = self.octets_du_jeu("f3-v1.2.0", "ordres_travail.csv")
         config = self.config(dossier)
@@ -324,13 +341,13 @@ class TestEcrituresInternes(CasCopies):
         with SERVEUR.VERROU_ECRITURE, self.assertRaises(SERVEUR.ErreurHttp) as refus:
             SERVEUR.enregistrer_csv(config, "ordres_travail", sain, version_de(avant["ordres_travail.csv"]))
         self.verifier_refus(refus.exception, "ordres_travail")
-        self.assertEqual(fichiers_de(dossier), avant)
+        self.verifier_sauvegarde_du_jour_puis_rien(dossier, avant, "ordres_travail")
         with SERVEUR.VERROU_ECRITURE:                                  # dérogation (import ZIP) : écrit
             version = SERVEUR.enregistrer_csv(config, "ordres_travail", sain, version_de(avant["ordres_travail.csv"]),
                                               remplacer_abime=True)
         self.assertEqual(((dossier / "ordres_travail.csv").read_bytes(), version), (sain, version_de(sain)))
 
-    def test_ajouter_au_csv_refuse_avant_la_sauvegarde_du_jour(self):
+    def test_ajouter_au_csv_refuse_apres_la_sauvegarde_du_jour(self):
         dossier = self.jeu("f3-v1.2.0")
         journal = (dossier / "journal.csv").read_bytes()
         coupe = journal + 'J-9;2026-04-01 10:00;"Poste coupé'.encode()
@@ -341,7 +358,7 @@ class TestEcrituresInternes(CasCopies):
         with SERVEUR.VERROU_ECRITURE, self.assertRaises(SERVEUR.ErreurHttp) as refus:
             SERVEUR.ajouter_au_csv(config, "journal", corps)
         self.verifier_refus(refus.exception, "journal", "se termine au milieu d'un texte entre guillemets")
-        self.assertEqual(fichiers_de(dossier), avant)
+        self.verifier_sauvegarde_du_jour_puis_rien(dossier, avant, "journal")
 
     def test_restaurer_par_dessus_un_fichier_abime(self):
         dossier = self.jeu("f3-v1.2.0")

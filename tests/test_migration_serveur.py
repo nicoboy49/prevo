@@ -57,7 +57,8 @@ AJOUTS_DU_FORMAT_2 = {"equipements": [("valeur_remplacement", "")],
                       "demandes": [("symptome_code", ""), ("ot_origine_id", "")],
                       "ordres_travail": [("anomalie_constatee", "0")]}
 AJOUTS_DU_FORMAT_3 = {"ordres_travail": [("astuce", "")]}
-CLES_DE_L_ETAT = {"base", "courant", "plus_recent", "migration", "tables_abimees", "tables_vides", "table_bloquee"}
+CLES_DE_L_ETAT = {"base", "courant", "plus_recent", "migration", "tables_abimees", "tables_vides", "table_bloquee",
+                  "abimes_depuis"}          # T206 : {table: date} de donnees/fichiers-abimes.json
 
 
 def charger_serveur():
@@ -102,9 +103,10 @@ MOTIF_SAUVEGARDE_DU_DEMARRAGE = re.compile(r"^sauvegardes/\d{4}-\d{2}-\d{2}(_\d{
 
 def sans_le_demarrage(fichiers):
     """Les fichiers (fichiers_de) sans ce que T187 ajoute au démarrage : derniere-version.json, les sauvegardes du jour
-    et « avant-mise-a-jour »."""
+    et « avant-mise-a-jour » ; ni fichiers-abimes.json (T206, écrit quand une table est abîmée)."""
     return {chemin: octets for chemin, octets in fichiers.items()
-            if chemin != "derniere-version.json" and not MOTIF_SAUVEGARDE_DU_DEMARRAGE.match(chemin)}
+            if chemin not in ("derniere-version.json", "fichiers-abimes.json")
+            and not MOTIF_SAUVEGARDE_DU_DEMARRAGE.match(chemin)}
 
 
 def sauvegardes_de_format(dossier):
@@ -191,7 +193,8 @@ class CasJeux(unittest.TestCase):
             copie = self.temporaire / "apres"
             shutil.copytree(serveur.dossier, copie)
         self.assertEqual(etat, {"base": FORMAT_COURANT, "courant": FORMAT_COURANT, "plus_recent": False,
-                                "migration": "faite", "tables_abimees": [], "tables_vides": [], "table_bloquee": None})
+                                "migration": "faite", "tables_abimees": [], "tables_vides": [], "table_bloquee": None,
+                                "abimes_depuis": {}})
         # La sauvegarde « avant-format-v3 », aux octets d'origine (données et rien d'autre).
         sauvegardes = sauvegardes_de_format(copie)
         self.assertEqual(len(sauvegardes), 1, sauvegardes)
@@ -280,6 +283,8 @@ class TestDemarrage(CasJeux):
                 self.assertEqual(etat["migration"], "rien")
                 self.assertEqual(etat[cle], [table])
                 self.assertIn(table + ".csv", console)
+                # T206 : un en-tête tronqué est un fichier abîmé (depuis ce démarrage) ; un fichier vide ne l'est pas.
+                self.assertEqual(table in etat["abimes_depuis"], cle == "tables_abimees", etat["abimes_depuis"])
 
     def test_base_au_format_2_avec_un_entete_tronque_le_reste_passe_au_format_3(self):
         source = self.jeu("f2-v1.1.0")
