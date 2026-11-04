@@ -533,7 +533,8 @@ class TestAdaptateurServeur(CasNavigateur):
                 self.ouvrir(serveur)
                 resultat = self.page.evaluate(ESSAYER_LES_ECRITURES_JS)
         self.assertEqual(resultat["format"], {"base": 4, "courant": 3, "plusRecent": True, "migration": "rien",
-                                              "tablesAbimees": [], "tablesVides": [], "tableBloquee": None})
+                                              "tablesAbimees": [], "tablesVides": [], "tableBloquee": None,
+                                              "abimesDepuis": {}})
         for ecriture in ("enregistrer", "ajouter", "document", "restaurer"):
             self.assertEqual(resultat[ecriture], "ErreurLectureSeule 4", ecriture)
 
@@ -544,7 +545,8 @@ class TestAdaptateurServeur(CasNavigateur):
                 self.ouvrir(serveur)
                 format_lu = self.page.evaluate("async () => (await StockageServeur.creer().info()).format")
         self.assertEqual(format_lu, {"base": 3, "courant": 3, "plusRecent": False, "migration": "faite",
-                                     "tablesAbimees": [], "tablesVides": [], "tableBloquee": None})
+                                     "tablesAbimees": [], "tablesVides": [], "tableBloquee": None,
+                                              "abimesDepuis": {}})
 
 
 if __name__ == "__main__":
