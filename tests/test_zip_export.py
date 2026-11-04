@@ -316,6 +316,24 @@ class TestServeur(CasExport):
                 for nom in noms_csv_attendus():
                     self.assertEqual(entrees[nom], (serveur.dossier / nom).read_bytes(), nom)
 
+    def test_serveur_fichier_abime_marque_au_manifeste_de_l_export(self):
+        """T210 : un CSV abîmé (jeu entete-tronque : ordres_travail.csv) porte « abime »: true dans le manifeste de
+        l'export, comme dans les sauvegardes (T206) ; les autres fichiers n'ont pas la clé ; octets du disque."""
+        with tempfile.TemporaryDirectory(prefix="prevo-zip-export-") as temporaire:
+            source = copier_jeu("entete-tronque", Path(temporaire) / "donnees")
+            with ServeurPrevo(source=source) as serveur:
+                preregler_profil(self.contexte, "responsable", nom="Claire Export")
+                page = self.page
+                page.goto(serveur.url + "/#/parametres")
+                attendre_pret(page)
+                page.wait_for_selector("#btn-export-zip")
+                _, _, entrees = self.exporter(page, "#btn-export-zip")
+                manifeste = json.loads(entrees["manifeste.json"].decode("utf-8"))
+                marques = sorted(f["nom"] for f in manifeste["fichiers"] if f.get("abime") is True)
+                self.assertEqual(marques, ["ordres_travail.csv"])
+                self.assertTrue(all("abime" not in f for f in manifeste["fichiers"] if f["nom"] != "ordres_travail.csv"))
+                self.assertEqual(entrees["ordres_travail.csv"], (serveur.dossier / "ordres_travail.csv").read_bytes())
+
     def test_serveur_technicien_et_demandeur_n_ont_pas_l_export(self):
         self.autoriser_erreur(ERREUR_TABLE_REFUSEE)
         with ServeurPrevo(comptes=True) as serveur:

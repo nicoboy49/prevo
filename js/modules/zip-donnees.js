@@ -209,9 +209,14 @@ const ZipDonnees = (() => {
     const mode = reglages.mode || App.mode;
     const quand = dateHeure(reglages.date || new Date());
     const instantane = Donnees.instantane();
-    const fichiers = Schema.nomsTables().map((nomTable) => ({
-      nom: Schema.table(nomTable).fichier, octets: instantane[nomTable],
-    }));
+    // T210 : un CSV abîmé porte « abime » au manifeste, comme dans les sauvegardes (T206, Formats.manifeste), et part
+    // avec les octets du fichier tel quel (adaptateur.charger) : le réécrire depuis ce que Prévo en a lu perdrait ce
+    // qu'il n'a pas su lire (valeurs au-delà de l'en-tête, lignes fondues), comme une écriture (T197).
+    const abimes = Donnees.tablesAbimees();
+    const fichiers = await Promise.all(Schema.nomsTables().map(async (nomTable) => ({
+      nom: Schema.table(nomTable).fichier, abime: abimes.includes(nomTable),
+      octets: abimes.includes(nomTable) ? (await adaptateur.charger(nomTable)).octets : instantane[nomTable],
+    })));
     const documents = await lireDocuments(adaptateur, nomsDocuments());
     documents.trouves.forEach((document) => fichiers.push({ nom: DOSSIER_DOCUMENTS + document.nom, octets: document.octets }));
     const tailles = fichiers.map((fichier) => ({ nom: fichier.nom, taille: fichier.octets.length }))
