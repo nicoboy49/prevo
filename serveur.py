@@ -2467,7 +2467,9 @@ def forme_de_nom(texte):
 
 
 def ecrire_table(config, table, entete, lignes):
-    """Réécrit un CSV entier au format de Prévo, la sauvegarde du jour faite d'abord ; en tenant VERROU_ECRITURE."""
+    """Réécrit un CSV entier au format de Prévo, la sauvegarde du jour faite d'abord ; en tenant VERROU_ECRITURE.
+    409 en lecture seule (T185, données plus récentes)."""
+    verifier_ecriture_permise(config)
     faire_sauvegarde_quotidienne(config)
     ecrire_atomique(chemin_table(config, table), ecrire_tableau_csv(entete, lignes))
 
@@ -2724,6 +2726,7 @@ def installer_jeu_de_demo(config, brouillon, origine=('', '', '')):
     (comme « Partir des données de démo » du navigateur, §11), sauvegarde du jour d'abord. En Solo, le technicien
     « moi » créé à l'étape « compte » est recréé dans la table de la démo (technicien_moi : même prénom et nom), le
     brouillon et le compte responsable lié suivent son nouvel identifiant. En tenant VERROU_ECRITURE."""
+    verifier_ecriture_permise(config)
     date_reference, textes = lire_jeu_de_demo()
     ancien = brouillon.get('solo_technicien_id', '')
     moi = technicien_par_id(config, ancien) if ancien else None
@@ -2784,6 +2787,9 @@ class Configuration:
         self.systeme = sys.platform
         self.lancer_eleve = lancer_script_powershell
         self.relancer = lambda dossier=None: relancer_prevo(self, dossier)
+        # T185 (D168, D169) : état du format des données, posé par migrer_donnees_au_demarrage (main, avant les
+        # écouteurs) ; rendu par GET /api/info, lu par verifier_ecriture_permise (lecture seule). None hors de main.
+        self.format_donnees = None
         # Dossiers jamais servis en statique : le dossier de données choisi et donnees/
         # à côté de serveur.py (même si --donnees pointe ailleurs).
         self.dossiers_interdits_statique = [
@@ -3456,8 +3462,8 @@ def est_utf8(octets):
 # ARCHITECTURE.md §5.6, §14.1, §20.2) : colonnes et tables de chaque format, format d'un fichier d'après son en-tête,
 # format d'une base (parametres.version_schema), étapes de passage pures et idempotentes, une ligne de journal par
 # étape. Le format est un entier, distinct de la version de l'application ; le format courant est VERSION_SCHEMA_CSV,
-# ses colonnes sont COLONNES_PAR_TABLE et ses tables TABLES. Rien ici ne lit ni n'écrit de fichier, et aucune route ne
-# s'en sert : le serveur en marche ne change pas (le passage au format courant au démarrage viendra avec T185).
+# ses colonnes sont COLONNES_PAR_TABLE et ses tables TABLES. Rien ici ne lit ni n'écrit de fichier ; le passage au
+# format courant au démarrage du serveur (T185, migrer_donnees_au_demarrage) s'en sert, aucune route.
 # Une base a la forme {<table>: {'entete': [noms…], 'lignes': [{<colonne>: '<cellule>'}]}} : les cellules sont celles
 # du fichier, telles que lire_csv_tolerant les rend (apostrophe de protection comprise), pour être réécrites telles
 # quelles par ecrire_tableau_csv. C'est la seule différence avec la base en mémoire de js/formats.js (valeurs relues
@@ -3943,6 +3949,7 @@ def tables_a_restaurer(dossier_sauvegarde, tables_demandees):
 
 def restaurer(config, nom_sauvegarde, tables_demandees):
     """Copie de sécurité de l'état actuel, puis copie des tables depuis la sauvegarde."""
+    verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     verifier_nom_sauvegarde(nom_sauvegarde)
     dossier_sauvegarde = chemin_sous(config.dossier_sauvegardes, nom_sauvegarde)
     if not sauvegarde_complete(dossier_sauvegarde):
@@ -4237,6 +4244,425 @@ def etat_copie_externe_public(config):
 
 
 # ---------------------------------------------------------------------------
+# Passage au format courant au démarrage du serveur, lecture seule (T185 ; décisions D168 et D169)
+# ---------------------------------------------------------------------------
+
+# En mode serveur, c'est le serveur qui passe les fichiers de données au format courant (D168), une fois, à son
+# démarrage : avant d'ouvrir ses écouteurs (main), donc avant toute connexion, que la configuration existe ou non
+# (assistant d'installation). Mêmes règles que Donnees.etatDuFormat et Donnees.migrerAuFormatCourant (js/donnees.js,
+# §4.11), appliquées aux fichiers :
+#   1. point de départ = le plus petit format entre version_schema (version_de_base) et celui de chaque fichier
+#      présent et lisible (format_du_fichier) ; fichiers vides, fichiers laissés (ci-dessous) et tables absentes
+#      ignorés ; base vide (aucun CSV) ou déjà au format courant : rien ;
+#   2. la sauvegarde « AAAA-MM-JJ_HHMMSS_avant-format-vN » (N = format courant, motif de MOTIFS_SAUVEGARDE) d'abord ;
+#      impossible : rien n'est écrit, nouvel essai au prochain démarrage ;
+#   3. chaque table présente que les étapes (migrer_tables) complètent est réécrite d'un coup (ecrire_atomique) :
+#      ses colonnes dans leur ordre, ses cellules telles quelles, les colonnes du format en fin d'en-tête avec la
+#      valeur par défaut du champ ; une table absente n'est pas créée ; une table à l'en-tête illisible (format 0), ou
+#      d'un format plus ancien qu'une réécriture ferait perdre en partie (structure abîmée, valeurs au-delà de
+#      l'en-tête, noms de colonnes en double), n'est jamais réécrite : laissée telle quelle et signalée ;
+#   4. puis version_schema (parametres.csv, créé s'il manque) ; 5. puis une ligne de journal par étape (journal.csv),
+#      mêmes textes que le navigateur. Un fichier tenu par un autre programme (Excel, 423) arrête le passage : ce qui
+#      est écrit l'est en entier, version_schema n'avance pas, le démarrage suivant reprend (étapes idempotentes).
+# Données d'un format plus récent (version_schema > format courant, D169) : rien n'est écrit, et jusqu'au prochain
+# démarrage toute écriture de données est refusée (409, code « format_plus_recent ») ; les lectures et la sauvegarde
+# manuelle restent permises. L'état est gardé dans config.format_donnees et rendu par GET /api/info (« format »).
+
+MIGRATIONS_DU_FORMAT = ('faite', 'rien', 'impossible', 'incomplete')
+CODE_FORMAT_PLUS_RECENT = 'format_plus_recent'
+# Routes qui écrivent dans les données, refusées en lecture seule (traiter_api). Les étapes de l'assistant qui écrivent
+# une table (« compte » en Solo, « terminer » en Solo ou avec la démo) le vérifient elles-mêmes, avant toute écriture.
+ROUTES_ECRITURE_DES_DONNEES = (('PUT', 'csv/<table>'), ('POST', 'csv/<table>/ajout'), ('PUT', 'documents/<nom>'),
+                               ('POST', 'restauration'))
+MESSAGE_FORMAT_PLUS_RECENT = (
+    'Lecture seule : ces données viennent d\'une version plus récente de Prévo (format %s des fichiers ; ce serveur '
+    'lit jusqu\'au format %d). Rien n\'est enregistré : mettez Prévo à jour sur le PC serveur, puis relancez-le.')
+PREFIXE_CONSOLE_FORMAT = 'Format des données : '
+POSTE_DU_SERVEUR = 'Serveur Prévo'          # colonne « poste » des lignes de journal écrites par le serveur
+CARACTERES_ID_JOURNAL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'     # CARACTERES_ALEATOIRES de js/donnees.js
+OCTETS_HORS_CP1252 = frozenset((0x81, 0x8D, 0x8F, 0x90, 0x9D))      # sans caractère en cp1252 (WHATWG : même code)
+RAISONS_DE_LAISSER = {
+    'entete': 'en-tête illisible : des colonnes du format 1 y manquent',
+    'illisible': 'fichier illisible',
+}
+
+
+def texte_du_format(format):
+    """Format pour un message : « 4 », ou « 4.5 » s'il n'est pas entier."""
+    return str(int(format)) if float(format).is_integer() else str(format)
+
+
+def verifier_ecriture_permise(config):
+    """Lecture seule (D169) : 409 {"erreur", "code": "format_plus_recent", "format"} quand le serveur a trouvé à son
+    démarrage des données d'un format plus récent que le sien ; rien sinon (ni avant le démarrage, ni hors de main)."""
+    etat = getattr(config, 'format_donnees', None)
+    if etat and etat.get('plus_recent'):
+        raise ErreurHttp(409, MESSAGE_FORMAT_PLUS_RECENT % (texte_du_format(etat['base']), VERSION_SCHEMA_CSV),
+                         code=CODE_FORMAT_PLUS_RECENT, format=etat['base'])
+
+
+def decoder_windows_1252(octets):
+    """Octets → texte, comme TextDecoder('windows-1252') du navigateur : les cinq octets sans caractère en cp1252
+    donnent le caractère de même code (rien n'est perdu à la réécriture en UTF-8)."""
+    try:
+        return octets.decode('cp1252')
+    except UnicodeDecodeError:
+        return ''.join(chr(octet) if octet in OCTETS_HORS_CP1252 else bytes((octet,)).decode('cp1252')
+                       for octet in octets)
+
+
+def lire_fichier_de_donnees(octets):
+    """Lecture d'un CSV de données pour le passage au format courant, comme Donnees.csv.analyser (§3.3) : BOM retiré,
+    UTF-8 sinon Windows-1252, « ; » (« , » si la première ligne non vide n'a aucun « ; » et a une virgule), lignes
+    entièrement blanches ignorées, cellules telles quelles (apostrophe de protection comprise). Rend {"vide",
+    "entete", "lignes", "pertes", "utf8", "separateur", "octets"} : vide si le fichier n'a aucun enregistrement (0
+    octet, ou seulement des blancs) ; entete : les noms de la ligne d'en-tête tels qu'écrits ; lignes : listes de
+    cellules ; pertes : ce qu'une réécriture ferait perdre (structure abîmée — guillemet non fermé, texte collé à un
+    guillemet fermant, comme les erreurs de PapaParse —, valeurs au-delà de l'en-tête, noms de colonnes en double),
+    [] sinon."""
+    lu = {'vide': True, 'entete': [], 'lignes': [], 'pertes': [], 'utf8': True, 'separateur': ';', 'octets': octets}
+    if octets.startswith(BOM_UTF8):
+        octets = octets[len(BOM_UTF8):]
+    try:
+        texte = octets.decode('utf-8')
+    except UnicodeDecodeError:
+        texte, lu['utf8'] = decoder_windows_1252(octets), False
+    if sans_blancs_js_aux_bords(texte) == '':
+        return lu
+    trouvee = MOTIF_PREMIERE_LIGNE_NON_VIDE.search(texte)
+    premiere = trouvee.group(0) if trouvee else ''
+    lu['separateur'] = ',' if ';' not in premiere and ',' in premiere else ';'
+
+    def decouper(strict):
+        lecteur = csv.reader(io.StringIO(texte, newline=''), delimiter=lu['separateur'], strict=strict)
+        return [ligne for ligne in lecteur if any(sans_blancs_js_aux_bords(cellule) for cellule in ligne)]
+
+    try:
+        enregistrements = decouper(True)
+    except csv.Error:
+        lu['pertes'].append('structure du fichier abîmée (guillemet non fermé, ou texte collé à un guillemet)')
+        try:
+            enregistrements = decouper(False)
+        except csv.Error:
+            enregistrements = []
+    lu['vide'] = not enregistrements and not lu['pertes']
+    if not enregistrements:
+        return lu
+    entete = enregistrements[0]
+    lu['entete'], lu['lignes'] = entete, enregistrements[1:]
+    if any(sans_blancs_js_aux_bords(cellule) for ligne in lu['lignes'] for cellule in ligne[len(entete):]):
+        lu['pertes'].append('valeurs au-delà de l\'en-tête')
+    cles = [cle_de_colonne(nom) for nom in entete]
+    doubles = sorted({nom for nom, cle in zip(entete, cles) if cle and cles.count(cle) > 1})
+    if doubles:
+        lu['pertes'].append('colonnes en double (%s)' % ', '.join(doubles))
+    return lu
+
+
+def raison_de_laisser(lu):
+    """Pourquoi le passage au format courant ne réécrit jamais ce fichier (raisonDeLaisser de js/donnees.js), ou
+    None : « entete » (en-tête illisible, format 0) ; « contenu » (format plus ancien que le courant et une réécriture
+    ferait perdre une partie du fichier : lu['pertes'])."""
+    if lu['format'] == 0:
+        return 'entete'
+    return 'contenu' if lu['pertes'] and lu['format'] < VERSION_SCHEMA_CSV else None
+
+
+def lignes_en_dictionnaires(lu):
+    """Lignes d'un fichier lu en {colonne: cellule} (première colonne d'un nom en double), pour version_de_base."""
+    lignes = []
+    for cellules in lu['lignes']:
+        ligne = {}
+        for position, nom in enumerate(lu['entete']):
+            ligne.setdefault(nom, cellules[position] if position < len(cellules) else '')
+        lignes.append(ligne)
+    return lignes
+
+
+def etat_des_fichiers(config):
+    """État du format des fichiers de données, sans rien écrire (Donnees.etatDuFormat) : {"base", "depart",
+    "plus_recent", "lus", "laissees", "vides"} ; lus : {table: lecture (lire_fichier_de_donnees, plus « format »)} des
+    tables du schéma présentes, dans l'ordre du schéma ; laissees : [(table, raison)] des fichiers que le passage ne
+    réécrit jamais (raison_de_laisser, ou « illisible » si la lecture échoue) ; vides : fichiers sans enregistrement,
+    lus comme des tables vides. Les fichiers laissés et vides ne comptent pas pour le point de départ."""
+    lus, laissees, vides = {}, [], []
+    for table in TABLES:
+        try:
+            octets = lire_octets(chemin_table(config, table))
+        except OSError:
+            laissees.append((table, 'illisible'))
+            continue
+        if octets is None:
+            continue
+        lu = lire_fichier_de_donnees(octets)
+        lu['format'] = 0 if lu['vide'] else format_du_fichier(table, lu['entete'])
+        lus[table] = lu
+    parametres = lus.get('parametres')
+    base = (version_de_base(lignes_en_dictionnaires(parametres)) if parametres is not None
+            else VERSION_SCHEMA_PAR_DEFAUT)
+    depart = base
+    for table, lu in lus.items():
+        if lu['vide']:
+            vides.append(table)
+            continue
+        raison = raison_de_laisser(lu)
+        if raison:
+            laissees.append((table, raison))
+            continue
+        depart = min(depart, lu['format'])
+    ordre = {table: position for position, table in enumerate(TABLES)}
+    laissees.sort(key=lambda laissee: ordre[laissee[0]])
+    return {'base': base, 'depart': depart, 'plus_recent': base > VERSION_SCHEMA_CSV, 'lus': lus, 'laissees': laissees,
+            'vides': vides}
+
+
+def etapes_du_passage(depart, entetes):
+    """Étapes du passage depuis « depart » sur les en-têtes donnés ({table: en-tête}, ordre du schéma), comme
+    etapesDuPassage de js/donnees.js : [{"vers", "passage", "tables"}], où passage est la ligne de journal de l'étape
+    et tables les tables données que l'étape complète."""
+    base = {table: {'entete': list(entete), 'lignes': []} for table, entete in entetes.items()}
+    etapes = []
+    for etape in ETAPES_FORMAT:
+        if etape.vers <= depart or etape.vers > VERSION_SCHEMA_CSV:
+            continue
+        suivante, journal, _ = migrer_tables(base, etape.de, etape.vers)
+        etapes.append({'vers': etape.vers, 'passage': journal[0],
+                       'tables': [table for table in entetes
+                                  if len(suivante[table]['entete']) != len(base[table]['entete'])]})
+        base = suivante
+    return etapes
+
+
+def cellules_alignees(cellules, largeur):
+    """Les cellules d'une ligne sur « largeur » colonnes : complétées par des cellules vides, ou coupées (seules des
+    cellules blanches dépassent l'en-tête d'un fichier réécrit : lire_fichier_de_donnees)."""
+    return (list(cellules) + [''] * largeur)[:largeur]
+
+
+def table_au_format_courant(table, lu):
+    """(en-tête, lignes) d'une table lisible passée de son format au format courant (ecrireAuFormatCourant) : les
+    colonnes que les étapes ajoutent (migrer_tables) en fin d'en-tête, avec la valeur par défaut du champ dans chaque
+    ligne ; les colonnes et les cellules du fichier telles quelles, dans leur ordre."""
+    entete = list(lu['entete'])
+    sonde = migrer_tables({table: {'entete': list(entete), 'lignes': [{}]}}, lu['format'], VERSION_SCHEMA_CSV)[0][table]
+    ajoutees = sonde['entete'][len(entete):]
+    defauts = [sonde['lignes'][0].get(colonne, '') for colonne in ajoutees]
+    return entete + ajoutees, [cellules_alignees(cellules, len(entete)) + defauts for cellules in lu['lignes']]
+
+
+def parametres_au_format_courant(lu):
+    """(en-tête, lignes) de parametres.csv avec version_schema au format courant, écrit comme Prévo l'écrit (« '3 »,
+    poser_version_de_base) : dans la première ligne qui porte la clé, sinon dans une ligne ajoutée en fin ; fichier
+    absent ou vide : l'en-tête du format courant. Les autres lignes et colonnes telles quelles."""
+    if lu is None or lu['vide']:
+        entete, lignes = colonnes_du_format('parametres'), []
+    else:
+        entete = list(lu['entete'])
+        lignes = [cellules_alignees(cellules, len(entete)) for cellules in lu['lignes']]
+    position_cle = entete.index(colonne_de_champ(entete, 'cle'))
+    position_valeur = entete.index(colonne_de_champ(entete, 'valeur'))
+    cellule = ecrire_valeur_texte(str(VERSION_SCHEMA_CSV))
+    for ligne in lignes:
+        if sans_blancs_js_aux_bords(ligne[position_cle]) == CLE_VERSION_SCHEMA:
+            ligne[position_valeur] = cellule
+            break
+    else:
+        nouvelle = [''] * len(entete)
+        nouvelle[position_cle], nouvelle[position_valeur] = CLE_VERSION_SCHEMA, cellule
+        lignes.append(nouvelle)
+    return entete, lignes
+
+
+def lignes_de_journal_du_format(config, actions):
+    """Lignes de journal ({colonne: cellule}) des actions du passage, comme entreeJournal : identifiant
+    « J-AAAAMMJJHHMMSS-XXXX » (distincts dans le lot), date et heure du serveur, poste « Serveur Prévo », table
+    parametres, ligne version_schema."""
+    instant = instant_local(config)
+    pris, lignes = set(), []
+    for action in actions:
+        identifiant = None
+        while identifiant is None or identifiant in pris:
+            identifiant = 'J-%s-%s' % (instant.strftime('%Y%m%d%H%M%S'),
+                                       ''.join(secrets.choice(CARACTERES_ID_JOURNAL) for _ in range(4)))
+        pris.add(identifiant)
+        lignes.append({'id': identifiant, 'date_heure': instant.strftime('%Y-%m-%d %H:%M'),
+                       'poste': ecrire_valeur_texte(POSTE_DU_SERVEUR), 'profil': '', 'table': 'parametres',
+                       'id_ligne': CLE_VERSION_SCHEMA, 'action': ecrire_valeur_texte(action)})
+    return lignes
+
+
+def ecrire_journal_du_format(config, lu, lignes):
+    """Ajoute les lignes à journal.csv ; rend vrai si c'est fait. Fichier absent ou vide : créé avec l'en-tête du
+    format courant. En UTF-8 et en « ; » : lignes ajoutées en fin (le reste du fichier à l'octet près), dans l'ordre de
+    ses colonnes (celles du fichier inconnues du schéma laissées vides) ; en Windows-1252 ou en « , » : le fichier
+    réécrit en entier, cellules telles quelles. Fichier laissé (format 0) ou qu'une réécriture abîmerait : rien
+    (faux). ErreurHttp 423 ou OSError si l'écriture échoue."""
+    chemin = chemin_table(config, 'journal')
+    colonnes = colonnes_du_format('journal')
+    if lu is None or lu['vide']:
+        ecrire_atomique(chemin, ecrire_tableau_csv(colonnes, [[ligne[colonne] for colonne in colonnes]
+                                                              for ligne in lignes]))
+        return True
+    if lu['pertes'] or lu['format'] == 0:
+        return False
+    entete = lu['entete']
+    champs = {cle_de_colonne(colonne): colonne for colonne in colonnes}
+    nouvelles = [[ligne.get(champs.get(cle_de_colonne(nom)), '') for nom in entete] for ligne in lignes]
+    if lu['utf8'] and lu['separateur'] == ';':
+        ajout = ''.join(';'.join(cellule_csv(cellule) for cellule in ligne) + '\r\n' for ligne in nouvelles)
+        octets = lu['octets']
+        ecrire_atomique(chemin, octets + (b'' if octets.endswith(b'\n') else FIN_DE_LIGNE) + ajout.encode('utf-8'))
+    else:
+        anciennes = [cellules_alignees(cellules, len(entete)) for cellules in lu['lignes']]
+        ecrire_atomique(chemin, ecrire_tableau_csv(entete, anciennes + nouvelles))
+    return True
+
+
+def noms_de_fichiers(tables):
+    """« a.csv, b.csv » pour un message de la console."""
+    return ', '.join(table + '.csv' for table in tables)
+
+
+def signaler_fichiers_laisses(etat):
+    """Console : fichiers laissés tels quels (jamais réécrits) et fichiers vides, à chaque démarrage."""
+    lus = etat['lus']
+    for table, raison in etat['laissees']:
+        detail = ('fichier abîmé : %s' % ', '.join(lus[table]['pertes']) if raison == 'contenu'
+                  else RAISONS_DE_LAISSER[raison])
+        afficher(PREFIXE_CONSOLE_FORMAT + '%s laissé tel quel, jamais réécrit (%s). Corrigez le fichier, ou '
+                 'restaurez une sauvegarde.' % (table + '.csv', detail))
+    if etat['vides']:
+        afficher(PREFIXE_CONSOLE_FORMAT + 'sans aucune ligne, lu comme une table vide : %s.'
+                 % noms_de_fichiers(etat['vides']))
+
+
+def migrer_donnees_au_demarrage(config):
+    """Passage des fichiers de données au format courant au démarrage du serveur (T185, D168 ; règles en tête de cette
+    partie), et garde des données plus récentes (D169). Appelée par main avant l'ouverture des écouteurs ; idempotente
+    (un second démarrage n'écrit rien et ne refait pas de sauvegarde). Rend l'état public et le garde dans
+    config.format_donnees (GET /api/info, « format ») : {"base", "courant", "plus_recent", "migration": "faite" | "rien"
+    | "impossible" | "incomplete", "tables_abimees", "tables_vides", "table_bloquee"} ; base : version_schema après ce
+    démarrage ; table_bloquee : la table qui a arrêté un passage incomplet. Aucune donnée des fichiers."""
+    etat = etat_des_fichiers(config)
+    public = {'base': etat['base'], 'courant': VERSION_SCHEMA_CSV, 'plus_recent': etat['plus_recent'],
+              'migration': 'rien', 'tables_abimees': [table for table, _ in etat['laissees']],
+              'tables_vides': list(etat['vides']), 'table_bloquee': None}
+    config.format_donnees = public
+    if not etat['lus'] and not etat['laissees']:
+        return public                                   # base vide : aucun CSV
+    signaler_fichiers_laisses(etat)
+    if etat['plus_recent']:
+        afficher(PREFIXE_CONSOLE_FORMAT + 'format %s, plus récent que celui de cette version de Prévo (%d) : données '
+                 'en LECTURE SEULE, rien n\'est enregistré. Mettez Prévo à jour sur ce PC, puis relancez-le.'
+                 % (texte_du_format(etat['base']), VERSION_SCHEMA_CSV))
+        return public
+    if etat['depart'] >= VERSION_SCHEMA_CSV:
+        return public
+    suivi = {'sauvegarde': None, 'ecrites': []}
+    try:
+        passer_les_fichiers_au_format_courant(config, etat, public, suivi)
+    except Exception:                       # bogue : tracé ; le serveur démarre quand même, rien de plus n'est écrit
+        traceback.print_exc()
+        if public['migration'] != 'faite':
+            public['migration'] = 'incomplete' if suivi['sauvegarde'] else 'impossible'
+        afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d arrêté par une erreur interne (%s) ; nouvel essai au '
+                 'prochain démarrage.' % (VERSION_SCHEMA_CSV, 'sauvegarde %s faite juste avant' % suivi['sauvegarde']
+                                          if suivi['sauvegarde'] else 'rien n\'a été écrit'))
+    return public
+
+
+def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
+    """Étapes 2 à 5 du passage (en tête de cette partie) ; suivi : {"sauvegarde", "ecrites"} tenu à jour."""
+    courant = VERSION_SCHEMA_CSV
+    lus = etat['lus']
+    version_a_ecrire = etat['base'] < courant
+    parametres = lus.get('parametres')
+    laissees = {table for table, _ in etat['laissees']}
+    if version_a_ecrire and ('parametres' in laissees or (parametres is not None and parametres['pertes'])):
+        # version_schema ne s'écrirait pas sans perte (en-tête illisible, fichier abîmé ou illisible) : rien n'est fait
+        # (sinon une sauvegarde à chaque démarrage, et jamais de version_schema).
+        if 'parametres' not in public['tables_abimees']:
+            public['tables_abimees'].append('parametres')
+        public['migration'] = 'impossible'
+        afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d impossible : parametres.csv ne se réécrit pas sans '
+                 'perte (%s) ; rien n\'a été écrit. Corrigez parametres.csv, ou restaurez une sauvegarde, puis '
+                 'relancez Prévo.' %(courant, ', '.join(parametres['pertes']) if parametres and parametres['pertes']
+                             else RAISONS_DE_LAISSER[dict(etat['laissees'])['parametres']]))
+        return
+
+    # 2. La sauvegarde d'abord : sans elle, on ne touche à rien.
+    motif = 'avant-format-v%d' % courant
+    try:
+        with VERROU_ECRITURE:
+            nom = nouveau_nom_horodate(config, '_' + motif)
+            verifier_nom_sauvegarde(nom)
+            copier_tables_dans_sauvegarde(config, nom)
+    except (ErreurHttp, OSError) as erreur:
+        public['migration'] = 'impossible'
+        afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d impossible : la sauvegarde « %s » n\'a pas pu être '
+                 'faite (%s). Rien n\'a été écrit ; nouvel essai au prochain démarrage.'
+                 % (courant, motif, getattr(erreur, 'message', None) or erreur))
+        return
+    suivi['sauvegarde'] = nom
+
+    # 3. Les tables que les étapes complètent, dans l'ordre du schéma (parametres à part).
+    lisibles =[table for table in lus if not lus[table]['vide'] and table not in laissees]
+    etapes = etapes_du_passage(etat['depart'], {table: lus[table]['entete'] for table in lisibles})
+    a_ecrire = [table for table in lisibles
+                if table != 'parametres' and any(table in etape['tables'] for etape in etapes)]
+    for table in a_ecrire + (['parametres'] if version_a_ecrire else []):
+        if table == 'parametres':
+            entete, lignes = parametres_au_format_courant(parametres)         # 4. version_schema
+        else:
+            entete, lignes = table_au_format_courant(table, lus[table])
+        try:
+            with VERROU_ECRITURE:
+                ecrire_atomique(chemin_table(config, table), ecrire_tableau_csv(entete, lignes))
+        except (ErreurHttp, OSError) as erreur:
+            public['migration'], public['table_bloquee'] = 'incomplete', table
+            afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d interrompu : %s.csv ne peut pas être écrit (%s). '
+                     'Fermez Excel (ou le programme qui a ouvert ce fichier) et relancez Prévo : le passage reprendra '
+                     'là (sauvegarde %s faite juste avant ; déjà complétés : %s).'
+                     % (courant, table, getattr(erreur, 'message', None) or erreur, nom,
+                        noms_de_fichiers(suivi['ecrites']) or 'aucun'))
+            return
+        if table != 'parametres':
+            suivi['ecrites'].append(table)
+    if version_a_ecrire:
+        public['base'] = courant
+    public['migration'] = 'faite'
+
+    # 5. Le journal : une ligne par étape, mêmes textes que migrerAuFormatCourant.
+    suite = 'sauvegarde %s faite juste avant' % nom
+    actions = []
+    for etape in etapes:
+        if version_a_ecrire and etape['vers'] > etat['base']:
+            actions.append(etape['passage'] + ' ; ' + suite)
+            continue
+        completees = [table for table in etape['tables'] if table in suivi['ecrites']]
+        if completees:
+            actions.append('fichiers complétés au format %d : %s ; %s' % (etape['vers'], ', '.join(completees), suite))
+    if version_a_ecrire:
+        afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d fait (sauvegarde %s faite juste avant) ; fichiers '
+                 'complétés : %s.' % (courant, nom, noms_de_fichiers(suivi['ecrites']) or 'aucun'))
+    else:
+        afficher(PREFIXE_CONSOLE_FORMAT + 'fichiers complétés au format %d : %s (sauvegarde %s faite juste avant).'
+                 % (courant, noms_de_fichiers(suivi['ecrites']), nom))
+    if not actions:
+        return
+    ecrit, detail = False, 'journal.csv laissé tel quel'
+    if 'journal' not in laissees:               # illisible : jamais remplacé par un journal neuf
+        try:
+            with VERROU_ECRITURE:
+                ecrit = ecrire_journal_du_format(config, lus.get('journal'),
+                                                 lignes_de_journal_du_format(config, actions))
+        except (ErreurHttp, OSError) as erreur:
+            detail = getattr(erreur, 'message', None) or erreur
+    if not ecrit:
+        afficher(PREFIXE_CONSOLE_FORMAT + 'lignes du journal du passage non écrites (%s).' % detail)
+
+
+# ---------------------------------------------------------------------------
 # Opérations sur les CSV
 # ---------------------------------------------------------------------------
 
@@ -4287,6 +4713,7 @@ def enregistrer_csv(config, table, octets, version_attendue, controle=None):
     """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit). Contenu vérifié d'abord (E2).
     controle (lot 7, §22.5) : (octets reçus, octets actuels) → octets à écrire, appelé après le contrôle de version
     (colonnes cachées remises pour le technicien, demandes en ajout seulement pour le demandeur ; 403 sinon)."""
+    verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     verifier_contenu_csv(table, octets)
     chemin = chemin_table(config, table)
     actuel = lire_octets(chemin)
@@ -4323,6 +4750,7 @@ def ajouter_au_csv(config, table, corps, controle=None):
     """Ajoute des lignes en fin de fichier (journal) ; 409 si en-tête ou encodage différent.
     controle (lot 7, §22.5) : (en-tête, lignes, octets actuels) → lignes à ajouter (colonnes cachées vidées pour le
     technicien, demandes nouvelles seulement pour le demandeur ; 403 sinon)."""
+    verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     chemin = chemin_table(config, table)
     verifier_contenu_csv(table, corps, corps_d_ajout=True)
     corps, entete, lignes = decouper_corps_ajout(corps)
@@ -4402,6 +4830,7 @@ def enregistrer_document(config, nom_demande, octets):
     """Enregistre un nouveau document sous le nom imposé par le serveur (nom_de_document_impose) et rend ce nom ;
     409 s'il existe déjà (même nom demandé dans la même seconde : jamais d'écrasement), 413 si le quota du dossier
     serait dépassé. La signature d'une image est contrôlée avant (verifier_signature_image, api_document_ecrire)."""
+    verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     nom = nom_de_document_impose(config, nom_demande)
     chemin = chemin_document(config, nom)
     if os.path.exists(chemin):
@@ -5042,6 +5471,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         fonction = ROUTES_API.get((methode, motif))
         if fonction is None:
             raise ErreurHttp(405, 'Méthode non autorisée.')
+        if (methode, motif) in ROUTES_ECRITURE_DES_DONNEES:
+            verifier_ecriture_permise(self.config)          # T185 (D169) : données plus récentes, 409
         getattr(self, fonction)(segment, corps)
 
     # --- Accès à l'API (lot 7, §22.3, §22.4) -------------------------------
@@ -5230,7 +5661,10 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                 'tailscale': etat_tailscale_public(self.config),
                                 # §22.10 : l'écran propose l'assistant tant que prevo.config.json manque (jamais
                                 # imposé : les tests des lots 1 à 6 tournent sans configuration).
-                                'installation_a_faire': not self.config.reglages.get('_present')})
+                                'installation_a_faire': not self.config.reglages.get('_present'),
+                                # T185 : format des données trouvé au démarrage et passage fait ou non (le bandeau
+                                # du responsable en dit la raison) ; None quand le serveur ne l'a pas regardé.
+                                'format': self.config.format_donnees})
 
     def api_session(self, segment, corps):
         """GET /api/session : comptes exigés ou non, et l'identité de la session (jamais le jeton). Pour un appareil
@@ -5684,6 +6118,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if not prenom:
             raise ErreurHttp(400, 'Le prénom est obligatoire.')
         solo = bool(brouillon.get('mode_solo'))
+        if solo:
+            verifier_ecriture_permise(self.config)          # T185 : techniciens.csv serait écrit (lecture seule)
         if brouillon.get('portee') == 'ce-pc':
             if not solo:
                 raise ErreurHttp(400, 'Sur ce PC seulement, aucun compte n\'est nécessaire : passez cette étape.')
@@ -5882,6 +6318,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if base == 'demo' and brouillon.get('base_presente', True):
             raise ErreurHttp(400, 'Des fichiers de données sont déjà là : la démonstration ne remplace jamais une base '
                                   'existante. Terminez avec « vide » (vos fichiers sont gardés).')
+        if base == 'demo' or brouillon.get('mode_solo'):
+            verifier_ecriture_permise(self.config)          # T185 : tables écrites (lecture seule), avant la config
         reglages = reglages_par_defaut()
         reglages.update({cle: brouillon[cle] for cle in CLES_DU_BROUILLON if cle in brouillon})
         reglages['ecoute'] = ecoute_du_brouillon(brouillon)
@@ -6266,6 +6704,10 @@ def main(arguments=None):
         sys.exit(CODE_SORTIE_REGLES)
     if certificat:
         config.contexte_ssl = creer_contexte_ssl(certificat, cle)
+    # T185 (D168) : les données au format courant, après la sauvegarde « avant-format-vN », AVANT d'ouvrir les
+    # écouteurs (aucune connexion ne voit une base à moitié passée) ; avec ou sans configuration (assistant) ; données
+    # plus récentes : lecture seule (D169).
+    migrer_donnees_au_demarrage(config)
     serveurs, config.port = demarrer_serveur(reglages['port_http'], config)
     if tailscale_attendu(reglages):
         detecter_tailscale_pour(config)         # §22.8 : commandes locales, une fois au démarrage (ligne de console)

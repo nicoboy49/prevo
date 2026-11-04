@@ -777,11 +777,16 @@ class TestApiServeur(CasAvecServeur):
 class TestSauvegardeQuotidienne(CasAvecServeur):
 
     ETAT_AVANT = BOM + entete('techniciens') + b'\r\nTEC-0001;Avant\r\n'
+    # T185 : base au format courant (version_schema 3), sinon le serveur la passerait au format courant à son
+    # démarrage (parametres.csv et journal.csv créés, sauvegarde « avant-format-v3 »).
+    PARAMETRES = BOM + entete('parametres') + b"\r\nversion_schema;'3\r\n"
 
     def preparer_donnees(cls, dossier_donnees):
         os.makedirs(dossier_donnees)
         with open(os.path.join(dossier_donnees, 'techniciens.csv'), 'wb') as fichier:
             fichier.write(cls.ETAT_AVANT)
+        with open(os.path.join(dossier_donnees, 'parametres.csv'), 'wb') as fichier:
+            fichier.write(cls.PARAMETRES)
 
     def test_sauvegarde_quotidienne_contient_etat_avant(self):
         aujourd_hui = datetime.date.today().strftime('%Y-%m-%d')
@@ -792,7 +797,7 @@ class TestSauvegardeQuotidienne(CasAvecServeur):
         version = empreinte(self.ETAT_AVANT)
         etat_apres = BOM + entete('techniciens') + b'\r\nTEC-0001;Apres\r\n'
         self.assertEqual(self.mettre_csv('techniciens', etat_apres, version).statut, 200)
-        self.assertEqual(os.listdir(dossier_du_jour), ['techniciens.csv'])
+        self.assertEqual(sorted(os.listdir(dossier_du_jour)), ['parametres.csv', 'techniciens.csv'])
         self.assertEqual(self.lire_fichier(os.path.join(dossier_du_jour, 'techniciens.csv')),
                          self.ETAT_AVANT)
         # Deuxième écriture du jour : la sauvegarde du jour n'est pas refaite.
@@ -800,7 +805,7 @@ class TestSauvegardeQuotidienne(CasAvecServeur):
         self.assertEqual(self.lire_fichier(os.path.join(dossier_du_jour, 'techniciens.csv')),
                          self.ETAT_AVANT)
         liste = self.requete('GET', '/api/sauvegardes').json()['sauvegardes']
-        self.assertEqual(liste, [{'nom': aujourd_hui, 'tables': ['techniciens']}])
+        self.assertEqual(liste, [{'nom': aujourd_hui, 'tables': ['techniciens', 'parametres']}])
         self.assertEqual(self.fichiers_temporaires_restants(), [])
 
     def test_sauvegarde_incomplete_du_mode_dossier_ignoree(self):

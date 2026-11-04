@@ -260,17 +260,19 @@ class TestFormatV2ModeServeur(CasNavigateur):
 
     def setUp(self):
         super().setUp()
-        # Copie du jeu de démo où les quatre fichiers v1 remplacent ceux de la démo ; ServeurPrevo
-        # en refait une copie temporaire (jamais donnees/ réel).
+        # Copie du jeu de démo ; ServeurPrevo en refait une copie temporaire (jamais donnees/ réel), où ouvrir()
+        # pose les fichiers v1 APRÈS le démarrage : le serveur passe au format courant à son démarrage (T185) ;
+        # c'est le cas « le serveur n'a pas pu » (Excel ouvert) qui reste à lire et à réécrire par le navigateur.
         temporaire = tempfile.TemporaryDirectory(prefix="prevo-test-v2-")
         self.addCleanup(temporaire.cleanup)
         self.source = Path(temporaire.name) / "donnees"
         shutil.copytree(str(DOSSIER_DEMO), str(self.source))
-        for table in COLONNES_V2:
-            (self.source / (table + ".csv")).write_bytes(octets_v1(table))
 
     def ouvrir(self, serveur):
-        """Page vide à l'adresse du serveur, scripts de Donnees et StockageServeur, 22 tables chargées."""
+        """Les fichiers v1 à la place de ceux de la démo, puis page vide à l'adresse du serveur, scripts de Donnees
+        et StockageServeur, 22 tables chargées."""
+        for table in COLONNES_V2:
+            (serveur.dossier / (table + ".csv")).write_bytes(octets_v1(table))
         adresse = serveur.url + "/test-format-v2.html"
         self.page.route(adresse, lambda route: route.fulfill(
             status=200, content_type="text/html; charset=utf-8", body=PAGE_VIDE_HTML))

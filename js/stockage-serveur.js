@@ -20,6 +20,7 @@ const StockageServeur = (() => {
   // Réponse « réussie » mais illisible (ex. page d'un portail Wi-Fi, proxy) : l'écriture a pu se faire.
   const MESSAGE_REPONSE_INATTENDUE =
     'Réponse inattendue du serveur ; l\'opération a peut-être été faite, rechargez la page.';
+  const CODE_FORMAT_PLUS_RECENT = 'format_plus_recent';      // 409 du serveur en lecture seule (T185, D169)
 
   // ===========================================================================
   // Détection
@@ -60,10 +61,16 @@ const StockageServeur = (() => {
   // EVENEMENT_SESSION_ABSENTE est émis sur document (l'écran de connexion, T155, l'écoute et s'affiche ; sans
   // écouteur, le message du serveur s'affiche comme toute erreur) ; 403 = rôle ou règle refusés → le message du
   // serveur (« Accès refusé : … ») tel quel.
+  // T185 (D169) : 409 au code « format_plus_recent » = le serveur a trouvé à son démarrage des données d'une version
+  // plus récente de Prévo et refuse toute écriture → Donnees.ErreurLectureSeule (jamais un conflit à réessayer).
   async function erreurDepuisReponse(reponse) {
     const donnees = await lireJsonOuNull(reponse);
     const message = (donnees && donnees.erreur)
       || 'Le serveur a refusé la demande (code ' + reponse.status + ').';
+    if (reponse.status === 409 && donnees && donnees.code === CODE_FORMAT_PLUS_RECENT
+      && typeof Donnees.ErreurLectureSeule === 'function') {
+      return new Donnees.ErreurLectureSeule(donnees.format);
+    }
     if (reponse.status === 409) {
       const versionActuelle = donnees && donnees.version_actuelle !== undefined
         ? donnees.version_actuelle : null;
@@ -180,6 +187,26 @@ const StockageServeur = (() => {
     };
   }
 
+  // « format » de /api/info (T185, D168, D169) → { base, courant, plusRecent, migration, tablesAbimees, tablesVides,
+  // tableBloquee }, ou null quand le serveur n'a pas regardé le format des données. C'est le serveur qui passe les
+  // fichiers au format courant, à son démarrage ; migration dit ce qu'il a fait : 'faite', 'rien' (rien à faire, ou
+  // données plus récentes : plusRecent), 'impossible' (sauvegarde « avant-format-vN » impossible : rien d'écrit) ou
+  // 'incomplete' (un fichier tenu par un autre programme, tableBloquee : fermez Excel et relancez Prévo).
+  // tablesAbimees : fichiers jamais réécrits (en-tête illisible, ou fichier qu'une réécriture abîmerait).
+  function formatLu(format) {
+    if (!format || typeof format !== 'object') return null;
+    const tables = (liste) => (Array.isArray(liste) ? liste.filter((table) => typeof table === 'string') : []);
+    return {
+      base: typeof format.base === 'number' ? format.base : null,
+      courant: typeof format.courant === 'number' ? format.courant : null,
+      plusRecent: format.plus_recent === true,
+      migration: typeof format.migration === 'string' ? format.migration : null,
+      tablesAbimees: tables(format.tables_abimees),
+      tablesVides: tables(format.tables_vides),
+      tableBloquee: typeof format.table_bloquee === 'string' && format.table_bloquee ? format.table_bloquee : null,
+    };
+  }
+
   // ===========================================================================
   // Fabrique de l'adaptateur
   // ===========================================================================
@@ -255,10 +282,14 @@ const StockageServeur = (() => {
         headers: Object.assign({ 'Content-Type': blob.type || 'application/octet-stream' }, entetesEcriture),
         body: blob,
       });
-      if (reponse.status === 409) {
-        throw new Donnees.ErreurStockage('Un document porte déjà ce nom.');
+      if (reponse.status >= 400) {
+        const erreur = await erreurDepuisReponse(reponse);
+        // 409 : document du même nom (conflit), sauf en lecture seule (T185 : ErreurLectureSeule telle quelle).
+        if (erreur instanceof Donnees.ErreurConflit) {
+          throw new Donnees.ErreurStockage('Un document porte déjà ce nom.');
+        }
+        throw erreur;
       }
-      if (reponse.status >= 400) { throw await erreurDepuisReponse(reponse); }
       const donnees = await lireJson(reponse);
       return donnees.nom;
     }
@@ -353,7 +384,8 @@ const StockageServeur = (() => {
       return { adressesReseau: donnees.adresses_reseau || [], port: donnees.port, porte: donnees.porte === true,
         cePcSeulement: donnees.ce_pc_seulement === true,
         copieExterne: copieExterneLue(donnees.copie_externe), tailscale: tailscaleLu(donnees.tailscale),
-        installationAFaire: donnees.installation_a_faire === true };
+        installationAFaire: donnees.installation_a_faire === true,
+        format: formatLu(donnees.format) };        // T185 : passage au format courant fait par le serveur
     }
 
     return {
