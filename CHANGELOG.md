@@ -7,7 +7,52 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
-## [2.0.0] - 2026-10-28
+## [2.0.0-beta.2] - 2026-11-05
+
+Deuxième bêta de la 2.0 (pré-version : pour essayer, pas pour la production ; la version stable reste la 1.2.1).
+Elle se met par-dessus la bêta 1 : vos données sont migrées automatiquement, après une sauvegarde « avant mise à jour ».
+
+### Corrigé
+
+- **Plus de perte de données sur un fichier abîmé** : si un fichier de données est abîmé hors de Prévo (une note tapée
+  dans Excel, un guillemet oublié), Prévo ne le réécrit plus jamais, ne perd plus ce qu'il n'avait pas su lire, affiche
+  un bandeau « Fichier abîmé » et garde votre saisie dans le formulaire. Seules la restauration d'une sauvegarde et
+  l'import ZIP peuvent le remplacer.
+- **Un fichier abîmé ne bloque plus la sauvegarde quotidienne** : elle est faite, marquée « abîmé » au manifeste, et
+  les 7 dernières sauvegardes saines sont toujours gardées.
+
+### Ajouté
+
+- **Un format de données versionné** : chaque base porte son format, décrit dans [docs/FORMAT.md](docs/FORMAT.md).
+- **Migration automatique** : au démarrage, une base d'un format plus ancien est mise à niveau étape par étape, après
+  une sauvegarde « avant mise à jour ».
+- **Lecture seule d'une base plus récente** : si les données viennent d'une version de Prévo plus récente que la
+  vôtre, Prévo les lit sans rien modifier.
+- **Sauvegardes** : une avant chaque mise à jour, une par jour, gardées 30 jours ; celles d'avant mise à jour ne sont
+  jamais effacées.
+- **Export ZIP complet** (Paramètres › Sauvegardes) : tous les fichiers de données, les documents, les rapports figés
+  et un manifeste. Le dossier des accès n'y est jamais ; avec les comptes, le responsable seul peut l'exporter.
+- **Export « données seules »** (sans les documents) : plus léger, importable comme l'export complet ; l'import ne
+  supprime alors aucun document existant.
+- **Import ZIP** : contrôle du fichier, confirmation détaillée, sauvegarde avant remplacement, retour arrière
+  automatique en cas d'échec.
+- **Tout ce que Prévo exporte, Prévo peut le réimporter** : un ZIP produit par l'export est toujours accepté à
+  l'import, y compris pour une grosse base ; l'export prévient avant de produire un ZIP que l'import refuserait. Limites
+  d'un ZIP : 400 Mo et 10 000 entrées ; 50 Mo par table ; 10 Mo par document.
+- **Base avec un fichier abîmé** : l'export la marque « abîmé » au manifeste et garde le fichier tel quel ; l'import le
+  retrouve dans le même état, avec le bandeau « Fichier abîmé ».
+- **Signalement des versions** : une bêta est prévenue de la 2.0.0 finale (comparaison correcte des numéros de version).
+
+### Modifié
+
+- **Hébergement derrière nginx ou IIS** : Prévo accepte l'enregistrement d'une table jusqu'à 50 Mo. Si Prévo est
+  derrière un de ces serveurs, relevez sa limite d'envoi (nginx : `client_max_body_size 52m;` ; IIS :
+  `maxAllowedContentLength="54525952"`), sinon les grosses tables seront refusées. Détail dans
+  [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+## [2.0.0-beta.1] - 2026-10-28
+
+Publiée d'abord sous le numéro 2.0.0, renommée « bêta 1 » le 2026-11-04.
 
 Le lot 7 : l'accès et l'installation (le détail est dans [docs/PILOTAGE.md](docs/PILOTAGE.md), l'installation pour
 l'informaticien dans [docs/INSTALLATION.md](docs/INSTALLATION.md)). Version majeure : au-delà de ce PC, la connexion
