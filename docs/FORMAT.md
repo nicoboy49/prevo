@@ -228,3 +228,24 @@ périodicités réglementaires seront sourcées et modifiables.
 - `equipements.annee_fabrication` (2.3) : année de fabrication lue sur la plaque.
 - `consignations` (2.3) : fiche de consignation structurée par machine (énergie, point d'isolement, dispositif, vérification, validation), affichée par QR code ; aide, ne remplace pas la procédure.
 <!-- plan:fin -->
+
+## 13. Performances connues
+
+Contrôle « fichier abîmé » (§3) : avant chaque réécriture d'une table, le fichier en place est relu en entier. Mesuré
+le 2026-11-04 (PC de développement, Chromium, médiane de 7 mesures) sur les jeux de charge de
+`outils/generer_demo.py --volume 500,N` :
+
+| Fichier | 5 000 OT | 20 000 OT |
+| --- | --- | --- |
+| `ordres_travail.csv` (2,7 Mo / 11 Mo), mode dossier (navigateur) | 156 ms | **700 ms** |
+| `ordres_travail.csv`, mode serveur (serveur.py) | 70 ms | 358 ms |
+| `ot_operations.csv` (1 Mo), mode dossier / serveur | 60 / 40 ms | 45 / 35 ms |
+| `equipements.csv` (0,3 Mo), mode dossier / serveur | 7 / 7 ms | 6 / 6 ms |
+
+Ce temps s'ajoute à chaque enregistrement qui touche la table (par exemple chaque OT enregistré). L'ajout en fin de
+journal ne fait qu'un contrôle léger (guillemet ouvert en fin de fichier) : 80 ms dans le navigateur et 160 ms sur le
+serveur pour un journal de 14,6 Mo.
+
+**À surveiller** : au-delà d'environ 15 000 OT en mode dossier, le contrôle dépasse 500 ms par enregistrement d'un OT.
+Une optimisation est possible plus tard (ne pas recontrôler un fichier que Prévo vient lui-même d'écrire), sans
+changer la règle.
