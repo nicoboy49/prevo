@@ -58,6 +58,20 @@ const Donnees = (() => {
     }
   }
 
+  // Écriture refusée : le fichier de la table est abîmé (structure, ou valeurs au-delà de l'en-tête : csv.analyser,
+  // entree.abime) ; le réécrire en perdrait une partie sans le dire (règle numéro un, CS140 ; défaut trouvé par la
+  // recette T193). Seuls l'import ZIP (option remplacerFichierAbime) et la restauration d'une sauvegarde (adaptateur)
+  // remplacent un tel fichier. Sous-classe d'ErreurStockage : le message est montré tel quel.
+  class ErreurFichierAbime extends ErreurStockage {
+    constructor(nomTable, fichier) {
+      super('Le fichier ' + (fichier || nomTable + '.csv') + ' est abîmé (en-tête coupé, guillemet non fermé ou '
+        + 'valeurs au-delà de l\'en-tête) : Prévo ne l\'enregistre plus, pour ne rien perdre. Corrigez-le, '
+        + 'restaurez une sauvegarde ou importez un ZIP (Paramètres) ; le détail est dans Paramètres › Contrôle de la base.');
+      this.name = 'ErreurFichierAbime';
+      this.table = nomTable;
+    }
+  }
+
   // ===========================================================================
   // 2. Dates, nombres, normalisation
   // ===========================================================================
@@ -1315,8 +1329,11 @@ const Donnees = (() => {
   // Chemin d'écriture d'une table entière (modifier et passage au format courant) : en lecture seule,
   // ErreurLectureSeule ; sinon les lignes sont sérialisées (§3.1) et enregistrées si le stockage a encore la
   // version lue (`entree.version`), puis le cache est mis à jour. Version périmée : ErreurConflit, rien n'est écrit.
-  async function enregistrerLignes(nomTable, description, entree, nouvelles) {
+  async function enregistrerLignes(nomTable, description, entree, nouvelles, reglagesEcriture) {
     verifierEcriturePermise();
+    if (entree.abime && !(reglagesEcriture && reglagesEcriture.remplacerFichierAbime)) {
+      throw new ErreurFichierAbime(nomTable, description.fichier);
+    }
     const octets = serialiser(nomTable, nouvelles, entree.colonnesInconnues);
     const reponse = await adaptateurActif.enregistrer(nomTable, octets, entree.version);
     const nouvelIndex = indexer(description, nouvelles);
@@ -1338,7 +1355,8 @@ const Donnees = (() => {
   // des objets et renvoie une valeur (renvoyée par modifier). outils : { nouvelId(lignes?, dateIso?),
   // maintenant(), aujourdhui() }. ErreurValidation levée par la fonction : jamais réessayée.
   // Conflit d'écriture : la table est relue et la fonction réappliquée (3 essais au total).
-  // options : { action: texte ajouté au journal, journal: false pour ne pas journaliser }.
+  // options : { action: texte ajouté au journal, journal: false pour ne pas journaliser, remplacerFichierAbime: vrai
+  // pour remplacer un fichier abîmé (import ZIP seulement ; sinon ErreurFichierAbime, rien n'est écrit) }.
   async function modifier(nomTable, fonction, options) {
     verifierInitialise();
     const description = descriptionTable(nomTable);
@@ -1362,7 +1380,8 @@ const Donnees = (() => {
           return { valeur: valeurRendue, changements: [] };      // rien à écrire
         }
         try {
-          await enregistrerLignes(nomTable, description, entree, nouvelles);
+          await enregistrerLignes(nomTable, description, entree, nouvelles,
+            { remplacerFichierAbime: reglages.remplacerFichierAbime === true });
         } catch (erreur) {
           if (!(erreur instanceof ErreurConflit)) { throw erreur; }
           statistiques.conflits += 1;
@@ -1653,6 +1672,12 @@ const Donnees = (() => {
     return entree.abime && format < Schema.version ? 'contenu' : null;
   }
 
+  // Tables chargées dont le fichier est abîmé (entree.abime), dans l'ordre du schéma : jamais réécrites par
+  // modifier (ErreurFichierAbime), quel que soit leur format (T197).
+  function tablesAbimees() {
+    return Schema.nomsTables().filter((nomTable) => { const entree = cache.get(nomTable); return !!(entree && entree.abime); });
+  }
+
   // État du format de la base chargée, sans rien écrire : { base, courant, depart, plusRecent, aCompleter, abimees }
   //   - base       : format de la base (version_schema ; absent ou illisible : 1) ; courant : Schema.version ;
   //   - depart     : le plus petit format trouvé (base et fichiers présents, lisibles et non abîmés) ;
@@ -1865,6 +1890,8 @@ const Donnees = (() => {
     ErreurValidation: ErreurValidation,
     ErreurStockage: ErreurStockage,
     ErreurLectureSeule: ErreurLectureSeule,
+    ErreurFichierAbime: ErreurFichierAbime,
+    tablesAbimees: tablesAbimees,
     // 2. Dates, nombres, normalisation
     nombre: nombre,
     aujourdhui: aujourdhui,

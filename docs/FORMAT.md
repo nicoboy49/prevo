@@ -28,7 +28,8 @@ colonnes, leurs types, leurs valeurs permises et leurs références sont dans
 [FICHE_TECHNIQUE_CSV.md](../FICHE_TECHNIQUE_CSV.md) : on ne les recopie pas ici.
 
 Le dossier d'accès (`acces/`, comptes, sessions, certificats) n'est **pas** une donnée au sens de ce document : il
-n'est jamais exporté, jamais sauvegardé par les sauvegardes de données, jamais remplacé par un import.
+n'est jamais exporté ni remplacé par un import. Les sauvegardes du serveur en copient les fichiers (comptes,
+appareils, journal des connexions), jamais les sessions ni les clés, et ne le restaurent jamais.
 
 ## 3. Règles d'écriture
 

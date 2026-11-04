@@ -22,7 +22,7 @@ table, `parametres.csv` entier), reproductibles octet pour octet.
 ## Jeux de base
 
 **f1** : les quatre fichiers de `tests/fixtures/v1/` (`demandes`, `equipements`, `ordres_travail`, `parametres`),
-format 1 (avant le lot 2) : pas de `version_schema` dans `parametres.csv`. Rien n'est abîmé. Un lecteur doit
+format 1 (avant le lot 2) : `version_schema;'1` dans `parametres.csv` (une base sans la clé vaut aussi 1). Rien n'est abîmé. Un lecteur doit
 reconnaître le format 1, et migrer vers 2 puis 3 (tables manquantes créées vides, colonnes ajoutées).
 
 **f2-v1.1.0** : `donnees/demo/` de l'étiquette `v1.1.0`, format 2 (versions 1.0 et 1.1), 22 tables,

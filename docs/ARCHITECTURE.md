@@ -430,7 +430,7 @@ Règles : noms de tables limités aux 22 du schéma (liste recopiée dans `serve
 commentaire de renvoi vers `js/schema.js`, cohérence vérifiée par un test) ; nom de document demandé
 `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` sans `..`, nom enregistré précédé de `AAAAMMJJ-HHMMSS-` (préfixe facultatif à la
 lecture : les documents d'avant le lot 7 n'en ont pas), extensions de `TYPES_DOCUMENTS` seulement ; nom de sauvegarde
-`^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+|_avant-import)?)?$` ; tout chemin résolu doit
+`^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+|_avant-import-zip|_avant-import|_avant-mise-a-jour)?)?$` ; tout chemin résolu doit
 rester sous `donnees/` (vérification sur le chemin brut **et** décodé, `\` compris) ; écriture
 atomique (fichier temporaire dans le même dossier, `fsync`, `os.replace`) ; un verrou global
 sérialise les écritures ; au plus 32 requêtes servies en même temps pour tout le processus (`BoundedSemaphore` pris

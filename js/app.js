@@ -96,6 +96,7 @@ const App = (() => {
   let resoudreBaseVide = null;     // fonction qui termine l'écran « base vide » en cours
   let menuPlusOuvert = false;      // mode Solo : groupe « Plus » du menu latéral déplié
   const alertesCoque = [];         // bandeaux à montrer dans la coque (ex. verrou du dossier)
+  let tablesLaissees = [];          // tables laissées par le passage au format (déjà dites par leur bandeau, T197)
   let formatEnAttente = null;      // mode serveur : état du format (Donnees.etatDuFormat) d'une base pas au format courant
 
   // Thème du poste (lot 4, §17.7) : <html data-theme="clair"> posé dès la lecture de ce fichier, donc
@@ -429,6 +430,9 @@ const App = (() => {
     if (!session && !profilValable(profilChoisi)) profilChoisi = await demanderProfil(false);
     appliquerProfil(profilChoisi);
     if (formatEnAttente && estResponsable()) alertesCoque.push(bandeauFormatEnAttente(formatEnAttente));
+    // Fichiers abîmés (T197) : jamais réécrits ; on le dit tout de suite, avant qu'une écriture soit refusée.
+    const abimes = lectureSeule ? [] : Donnees.tablesAbimees().filter((t) => !tablesLaissees.includes(t));
+    if (abimes.length) alertesCoque.push(bandeauFichiersAbimes(abimes));
     const otPreventifs = await genererPreventifAOuverture(formatAJour && !lectureSeule);
     Donnees.demarrerSurveillance();
     // Assistant IA (lot 4, §17.3) : un seul test du fournisseur s'il est activé sur le poste, aucun
@@ -479,6 +483,7 @@ const App = (() => {
       }
       const resultat = await Donnees.migrerAuFormatCourant();
       if (resultat.abimees.length) alertesCoque.push(bandeauFichiersLaisses(resultat.abimees));
+      tablesLaissees = resultat.abimees.slice();
       return true;
     } catch (erreur) {
       signalerErreur(erreur, 'passage au format ' + Schema.version + ' des fichiers');
@@ -504,6 +509,15 @@ const App = (() => {
     return UI.bandeau('attention', UI.html`<b>${titre} : ${fichiers}.</b> En-tête illisible, ou lignes qu'une
       réécriture ferait perdre : Prévo ne le réécrit pas pour le passer au format ${Schema.version}. Corrigez le
       fichier, ou restaurez une sauvegarde ; le détail est dans Paramètres › Contrôle de la base.`);
+  }
+
+  // Fichiers abîmés (T197, défaut trouvé par la recette T193) : Prévo ne les enregistre plus (ErreurFichierAbime).
+  function bandeauFichiersAbimes(tables) {
+    const fichiers = tables.map((nomTable) => (Schema.table(nomTable) || {}).fichier || nomTable + '.csv').join(', ');
+    const titre = tables.length > 1 ? 'Fichiers abîmés' : 'Fichier abîmé';
+    return UI.bandeau('attention', UI.html`<b>${titre} : ${fichiers}.</b> En-tête coupé, guillemet non fermé ou
+      valeurs au-delà de l'en-tête : Prévo ne l'enregistre plus, pour ne rien perdre. Corrigez le fichier,
+      restaurez une sauvegarde ou importez un ZIP ; le détail est dans Paramètres › Contrôle de la base.`);
   }
 
   // Lecture seule (D169) : bandeau permanent (sans bouton « Fermer ») en tête de la coque, donc sur tous les

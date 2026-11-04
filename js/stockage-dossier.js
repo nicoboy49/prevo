@@ -614,7 +614,7 @@ const StockageDossier = (() => {
       if (!source) { return []; }
       const noms = [];
       for await (const entree of source.values()) {
-        if (entree.kind === 'file') { noms.push(entree.name); }
+        if (entree.kind === 'file' && !entree.name.startsWith('.')) { noms.push(entree.name); }   // ni caché (serveur)
       }
       noms.sort();
       const cible = await trouverDossier(dossierSauvegarde, NOM_DOSSIER_DOCUMENTS, true);

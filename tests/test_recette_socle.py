@@ -23,8 +23,7 @@ vérifient que le dossier donnees/ du dépôt n'a pas changé d'un octet pendant
                               modifie un équipement par le formulaire ; aucune perte silencieuse (chaque cellule
                               d'origine retrouvée), message ou problème visible, et chaque fichier changé a ses octets
                               d'origine dans une sauvegarde. entete-tronque : parcours du demandeur (le fichier n'est
-                              jamais réécrit) ; le DÉFAUT trouvé par la recette est montré par un test
-                              expectedFailure (voir plus bas).
+                              jamais réécrit) ; le défaut trouvé par la recette (voir plus bas) est corrigé par T197.
     TestPlusRecent            CS141 : jeu plus-recent (format 4) dans les deux modes : bandeau de lecture seule, demande
                               et modification d'équipement refusées par l'interface avec un message, AUCUN octet de
                               données modifié (mode dossier : aucun octet du tout), export ZIP possible (format 4).
@@ -38,7 +37,8 @@ vérifient que le dossier donnees/ du dépôt n'a pas changé d'un octet pendant
 CS145 (import ZIP) : l'aller-retour export puis import est dans tests/test_zip_import.py (T191), pas ici. CS168 : la
 liste des changements du lot qui touchent la sécurité est dans le compte rendu de T193.
 
-Défaut trouvé par la recette (tests @unittest.expectedFailure, à corriger dans une tâche à part) :
+Défaut trouvé par la recette, CORRIGÉ par T197 (ErreurFichierAbime : un fichier abîmé n'est plus jamais réécrit hors
+import ZIP et restauration ; les deux tests ci-dessous en sont la preuve) :
     entete-tronque : ordres_travail.csv a un en-tête coupé ; le serveur (console : « laissé tel quel, jamais
     réécrit ») et le passage au format le laissent tel quel, mais à l'ouverture par un technicien ou le responsable,
     la génération des OT préventifs le réécrit par Donnees.modifier (aucune garde pour une table abîmée hors du
@@ -801,7 +801,6 @@ class TestAbimesServeur(ParcoursAbimes, CasRecetteSocle):
         etat = requete_json(self.serveur.url + "/api/info")["format"]
         self.assertEqual((etat["tables_abimees"], etat["migration"]), (["ordres_travail"], "rien"))
 
-    @unittest.expectedFailure
     def test_entete_tronque_serveur_jamais_reecrit_a_l_ouverture(self):
         self.verifier_entete_tronque_jamais_reecrit()
 
@@ -833,7 +832,6 @@ class TestAbimesDossier(ParcoursAbimes, CasRecetteSocle):
     def test_entete_tronque_signale_jamais_reecrit_pour_le_demandeur(self):
         self.verifier_entete_tronque_demandeur()
 
-    @unittest.expectedFailure
     def test_entete_tronque_dossier_jamais_reecrit_a_l_ouverture(self):
         self.verifier_entete_tronque_jamais_reecrit()
 
