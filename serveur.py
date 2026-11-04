@@ -68,12 +68,20 @@ VERSION_API = 1
 
 PORT_PAR_DEFAUT = 8080
 NOMBRE_PORTS_SUPPLEMENTAIRES = 20          # 8080 occupé → 8081, … jusqu'à 8100
+# Corps d'une requête (lire_corps, 413 au-delà) : 10 Mo (un document, du JSON ; = LIMITES.document de
+# js/modules/zip-lecture.js, l'import ZIP en mode serveur envoie ainsi chaque document). T208 (Nicolas : tout ce que
+# Prévo exporte, Prévo peut le réimporter) : l'envoi d'une table (ROUTES_CORPS_CSV) suit la limite d'un CSV de l'import
+# ZIP (LIMITES.racine) : à 20 000 OT, ordres_travail.csv dépasse 10 Mo. Les autres routes gardent 10 Mo (audit F2).
+# tests/test_zip_limites.py compare ces valeurs à celles de zip-lecture.js.
 TAILLE_MAX_CORPS = 10 * 1024 * 1024        # 10 Mo
+TAILLE_MAX_CORPS_CSV = 50 * 1024 * 1024    # 50 Mo
+ROUTES_CORPS_CSV = (('PUT', 'csv/<table>'), ('POST', 'csv/<table>/ajout'))
 # T204 (comme le correctif 1.2.1) : une cellule peut dépasser la limite par défaut du module csv (131 072 caractères :
 # page du wiki, compte rendu très long) ; sans cette limite relevée, une fois pour tout ce fichier, un fichier sain
 # serait pris pour un fichier abîmé (raisons_fichier_abime) et son enregistrement refusé. T207 (Nicolas) : relevée à
-# 10 Mo, la limite d'un CSV dans l'import ZIP (LIMITES.racine de js/modules/zip-lecture.js), et non sans limite.
-TAILLE_MAX_CELLULE_CSV = 10 * 1024 * 1024
+# la limite d'un CSV dans l'import ZIP (LIMITES.racine de js/modules/zip-lecture.js, 50 Mo depuis T208), et non sans
+# limite.
+TAILLE_MAX_CELLULE_CSV = 50 * 1024 * 1024
 csv.field_size_limit(TAILLE_MAX_CELLULE_CSV)
 # Audit F2 (§22.12) : requêtes en cours en même temps, tous écouteurs confondus (porte et application) ; une place
 # est prise dès le premier octet d'une requête et rendue avec sa réponse (une requête lente ou laissée à moitié la
@@ -6093,7 +6101,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             raise ErreurHttp(403, 'En-tête X-Prevo manquant.')
 
     def lire_corps(self):
-        """Lit le corps : Content-Length obligatoire (411) et au plus 10 Mo (413)."""
+        """Lit le corps : Content-Length obligatoire (411) et au plus TAILLE_MAX_CORPS (413), TAILLE_MAX_CORPS_CSV pour
+        l'envoi d'une table (ROUTES_CORPS_CSV, T208)."""
         longueur_texte = self.headers.get('Content-Length')
         if longueur_texte is None:
             raise ErreurHttp(411, 'En-tête Content-Length obligatoire.')
@@ -6103,8 +6112,11 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             raise ErreurHttp(400, 'En-tête Content-Length invalide.')
         if longueur < 0:
             raise ErreurHttp(400, 'En-tête Content-Length invalide.')
-        if longueur > TAILLE_MAX_CORPS:
-            raise ErreurHttp(413, 'Envoi trop gros (10 Mo au maximum).')
+        morceaux = analyser_chemin(self.path)          # déjà contrôlé par traiter
+        route = (self.command, motif_de_route(morceaux[1:])) if morceaux[0] == 'api' else None
+        limite = TAILLE_MAX_CORPS_CSV if route in ROUTES_CORPS_CSV else TAILLE_MAX_CORPS
+        if longueur > limite:
+            raise ErreurHttp(413, 'Envoi trop gros (%d Mo au maximum).' % (limite // (1024 * 1024)))
         corps = self.rfile.read(longueur)
         if len(corps) != longueur:
             raise ErreurHttp(400, 'Corps de la requête incomplet.')

@@ -32,7 +32,7 @@
 // noms hostiles (absolu « / » ou « C: », segment « .. » ou « . », barre inverse, segment vide, caractère de contrôle,
 // UTF-8 invalide), doublons (casse ignorée), entrée chiffrée, méthode autre que « stocké » et « deflate », données
 // hors du fichier ; (3) tailles DÉCLARÉES, avant toute décompression : taux de compression (au-delà de 1 Mo
-// décompressé : en dessous, aucune bombe possible), fichier à la racine (CSV, manifeste), total ; (4) JSZip voit les
+// décompressé : en dessous, aucune bombe possible), fichier à la racine (CSV, manifeste), document, total ; (4) JSZip voit les
 // mêmes fichiers sous les mêmes noms ; (5) manifeste illisible ; (6) format plus récent que Formats.courant
 // (manifeste, ou version_schema de parametres.csv) ; (7) noms admis : <table>.csv à la racine (table de Schema),
 // documents/<nom> au nom admis par serveur.py, manifeste.json, le dossier documents/ lui-même, rien d'autre ;
@@ -45,11 +45,13 @@
 
 const ZipLecture = (function () {
 
+  // Limites de l'import, écrites ICI seulement (T208) : l'export (ZipDonnees) les contrôle ; serveur.py en suit deux.
   const MO = 1024 * 1024;
   const LIMITES = Object.freeze({
     zip: 200 * MO,          // taille du fichier ZIP
     entrees: 2000,          // entrées du ZIP (fichiers et dossiers)
-    racine: 10 * MO,        // un fichier à la racine (CSV d'une table, manifeste), décompressé
+    racine: 50 * MO,        // un fichier à la racine (CSV, manifeste), décompressé ; = envoi d'un CSV au serveur
+    document: 10 * MO,      // un document (documents/<nom>), décompressé ; = envoi d'un document au serveur
     total: 1024 * MO,       // tout le contenu décompressé
     taux: 100,              // taux de compression d'une entrée : taille décompressée / taille compressée
     seuilTaux: MO,          // le taux n'est contrôlé qu'au-delà de 1 Mo décompressé
@@ -67,8 +69,7 @@ const ZipLecture = (function () {
     .concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return 'com' + n; }))
     .concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return 'lpt' + n; })));
 
-  // Vrai si le nom (sans « documents/ ») est admis par la règle du serveur.
-  function nomDocumentAdmis(nom) {
+  function nomDocumentAdmis(nom) {           // vrai si le nom (sans « documents/ ») est admis par la règle du serveur
     if (typeof nom !== 'string' || !MOTIF_NOM_DOCUMENT.test(nom) || nom.indexOf('..') >= 0) { return false; }
     const extension = nom.indexOf('.') < 0 ? '' : nom.slice(nom.lastIndexOf('.') + 1).toLowerCase();
     if (EXTENSIONS_DOCUMENTS.indexOf(extension) < 0) { return false; }
@@ -79,9 +80,7 @@ const ZipLecture = (function () {
 
   class Refus extends Error {}          // refus d'un ZIP : converti en { ok: false, refus } par lire()
 
-  function refuser(message) {
-    throw new Refus(message);
-  }
+  function refuser(message) { throw new Refus(message); }
 
   const PAS_UN_ZIP = 'Ce fichier n\'est pas un ZIP lisible. Choisissez le fichier ZIP exporté par Prévo '
     + '(« prevo-export-AAAA-MM-JJ.zip »).';
@@ -90,19 +89,14 @@ const ZipLecture = (function () {
   const MANIFESTE_ILLISIBLE = 'Le manifeste du ZIP (manifeste.json) est illisible : le ZIP a été abîmé ou modifié '
     + 'après l\'export. Il est refusé ; refaites l\'export.';
 
-  // Nombre écrit à la française : 2 001.
-  function enChiffres(nombre) {
-    return String(nombre).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  }
-
-  // Taille en Mo, une décimale au plus : « 60 Mo », « 10,5 Mo ».
+  // Nombre écrit à la française : 2 001. Taille, une décimale au plus : « 60 Mo », « 10,5 Mo », « 1 Go », « 1,1 Go ».
+  function enChiffres(nombre) { return String(nombre).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
   function enMo(octets) {
-    return String(Math.round(octets / MO * 10) / 10).replace('.', ',') + ' Mo';
+    const go = octets >= 1024 * MO;
+    return String(Math.round(octets / (go ? 1024 * MO : MO) * 10) / 10).replace('.', ',') + (go ? ' Go' : ' Mo');
   }
 
-  function estControle(code) {
-    return code < 0x20 || (code >= 0x7f && code <= 0x9f);
-  }
+  function estControle(code) { return code < 0x20 || (code >= 0x7f && code <= 0x9f); }
 
   // Nom d'entrée affichable dans un message : caractères de contrôle remplacés par « ? », 100 caractères au plus.
   function afficher(nom) {
@@ -129,7 +123,8 @@ const ZipLecture = (function () {
     const taille = tailleDe(source);
     if (taille === null) { refuser('Aucun fichier à lire : choisissez le fichier ZIP exporté par Prévo.'); }
     if (taille > LIMITES.zip) {
-      refuser('Ce fichier fait ' + enMo(taille) + ' : un ZIP de données ne peut pas dépasser 200 Mo. Il est refusé.');
+      refuser('Ce fichier fait ' + enMo(taille) + ' : un ZIP de données ne peut pas dépasser ' + enMo(LIMITES.zip)
+        + '. Il est refusé.');
     }
     if (source instanceof ArrayBuffer) { return new Uint8Array(source); }
     if (ArrayBuffer.isView(source)) { return new Uint8Array(source.buffer, source.byteOffset, source.byteLength); }
@@ -215,7 +210,8 @@ const ZipLecture = (function () {
     const lire = lecteur(octets);
     const fin = lireFin(octets, lire);
     if (fin.nombre > LIMITES.entrees) {
-      refuser('Ce ZIP contient ' + enChiffres(fin.nombre) + ' entrées : 2 000 au plus. Il est refusé.');
+      refuser('Ce ZIP contient ' + enChiffres(fin.nombre) + ' entrées : ' + enChiffres(LIMITES.entrees)
+        + ' au plus. Il est refusé.');
     }
     const finRepertoire = fin.debut + fin.taille;
     if (finRepertoire > octets.length) { refuser(ZIP_ABIME); }
@@ -302,14 +298,17 @@ const ZipLecture = (function () {
         refuser('« ' + afficher(entree.nom) + ' » se décompresse ' + taux + ' plus gros qu\'il n\'est compressé '
           + '(100 fois au plus) : bombe de décompression probable. Le ZIP est refusé.');
       }
-      if (entree.nom.indexOf('/') < 0 && entree.decompresse > LIMITES.racine) {
+      const [limite, quoi] = entree.nom.indexOf('/') < 0 ? [LIMITES.racine, 'fichier de données']
+        : [LIMITES.document, 'document'];
+      if (entree.decompresse > limite) {
         refuser('« ' + afficher(entree.nom) + ' » fait ' + enMo(entree.decompresse) + ' une fois décompressé : '
-          + '10 Mo au plus par fichier de données. Le ZIP est refusé.');
+          + enMo(limite) + ' au plus par ' + quoi + '. Le ZIP est refusé.');
       }
       total += entree.decompresse;
     }
     if (total > LIMITES.total) {
-      refuser('Ce ZIP fait ' + enMo(total) + ' une fois décompressé : 1 Go au plus. Il est refusé.');
+      refuser('Ce ZIP fait ' + enMo(total) + ' une fois décompressé : ' + enMo(LIMITES.total)
+        + ' au plus. Il est refusé.');
     }
   }
 
@@ -613,7 +612,7 @@ const ZipLecture = (function () {
     const fichiers = repertoire.entrees.filter(function (entree) { return !entree.dossier; });
     await ouvrirAvecJszip(octets, fichiers);
     const parNom = new Map(fichiers.map(function (entree) { return [entree.nom, entree]; }));
-    const contenus = new Map();               // fichiers de la racine (10 Mo au plus chacun), gardés
+    const contenus = new Map();               // fichiers de la racine (LIMITES.racine au plus chacun), gardés
     async function contenuDe(nom) {
       if (!contenus.has(nom)) { contenus.set(nom, await decompresser(parNom.get(nom))); }
       return contenus.get(nom);
@@ -693,6 +692,7 @@ const ZipLecture = (function () {
     memoire: function () { return Object.assign({}, memoire); },
     nomDocumentAdmis: nomDocumentAdmis,
     LIMITES: LIMITES,
+    enMo: enMo,                       // « 50 Mo », « 1 Go » : messages de l'export (ZipDonnees) comme de l'import
     // Copie de la règle de serveur.py, exposée pour le test de cohérence.
     REGLE_DOCUMENTS: Object.freeze({ motif: MOTIF_NOM_DOCUMENT.source, extensions: EXTENSIONS_DOCUMENTS,
       reserves: NOMS_RESERVES_WINDOWS }),

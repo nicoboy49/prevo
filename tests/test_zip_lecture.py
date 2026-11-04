@@ -12,7 +12,8 @@ vrai File), sauf les cas ArrayBuffer et Blob.
                format 3 ; tables absentes ; 2 000 entrées ; aucune écriture ni requête pendant la lecture ;
     refusés  : chemins hostiles (../x.csv, /x.csv, C:/x.csv, documents/../../x.csv, a\\b.csv, segment vide, caractère
                de contrôle…) ; noms non admis (acces/comptes.json, virus.exe…) ; doublons ; bombe (60 Mo de zéros) ;
-               taille réelle plus grande que la taille annoncée ; contenu abîmé (CRC) ; 2 001 entrées ; CSV de 11 Mo ;
+               taille réelle plus grande que la taille annoncée ; contenu abîmé (CRC) ; 2 001 entrées ; CSV de 51 Mo ;
+               document de 10 Mo et un octet (10 Mo pile accepté) ;
                plus de 1 Go décompressé ; plus de 200 Mo ; empreinte fausse, fichier ajouté ou manquant ; manifeste
                illisible ; format plus récent ; ZIP sans CSV ; fichier non ZIP ; CSV illisible (format 0) ; entrée
                chiffrée ou méthode inconnue ;
@@ -626,11 +627,12 @@ class TestZipRefuses(CasZip):
         entrees.update({"documents/d%04d.txt" % numero: b"x" for numero in range(2001 - len(entrees))})
         self.refus(octets_zip(entrees), "2 001 entrées", "2 000 au plus")
 
-    def test_csv_de_11_mo(self):
+    def test_csv_de_51_mo(self):
+        # T208 : 50 Mo au plus par CSV (LIMITES.racine ; tests/test_zip_limites.py la lie à serveur.py).
         jeu = fichiers_du_jeu("f3-v1.2.0")
         lignes = [jeu["equipements.csv"].split(b"\r\n")[0]]
         taille, numero = len(lignes[0]), 0
-        while taille <= 11 * MIO:
+        while taille <= 51 * MIO:
             ligne = ("EQ-%07d;Équipement %d;%s" % (numero, numero, hashlib.md5(str(numero).encode()).hexdigest())).encode()
             lignes.append(ligne)
             taille += len(ligne) + 2
@@ -638,7 +640,14 @@ class TestZipRefuses(CasZip):
         gros = b"\r\n".join(lignes) + b"\r\n"
         octets = octets_zip({"parametres.csv": jeu["parametres.csv"], "equipements.csv": gros})
         self.assertLess(len(gros) / len(octets), 100)                     # pas une bombe : la taille seule refuse
-        self.refus(octets, "« equipements.csv »", "10 Mo au plus")
+        self.refus(octets, "« equipements.csv »", "51 Mo", "50 Mo au plus par fichier de données")
+
+    def test_document_de_10_mo_et_un_octet(self):
+        # T208 : 10 Mo au plus par document (LIMITES.document, ce que le serveur accepte d'un envoi) ; 10 Mo pile passe.
+        pile = octets_pseudo_aleatoires(10 * MIO, "pile")
+        self.accepte(octets_zip(dict(csv_de_base(), **{"documents/pile.pdf": pile})))
+        trop = octets_zip(dict(csv_de_base(), **{"documents/trop.pdf": pile + b"x"}))
+        self.refus(trop, "« documents/trop.pdf »", "10 Mo au plus par document")
 
     def test_plus_de_1_go_decompresse(self):
         # 1 100 fichiers de 1 Mo de zéros (chacun sous le seuil du taux) : 1 100 Mo annoncés en tout.

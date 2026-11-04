@@ -164,6 +164,11 @@ Le manifeste sert à contrôler qu'une sauvegarde ou un ZIP est complet et intac
 **Export** (en un clic) : tous les CSV, les documents cités, les rapports figés et `manifeste.json`. **Jamais**
 `acces/`.
 
+**Règle (T208) : tout ce que Prévo exporte, Prévo peut le réimporter.** Limites de l'import, écrites à un seul endroit
+(`LIMITES` de `js/modules/zip-lecture.js`) : ZIP 200 Mo, 2 000 entrées, 50 Mo par CSV, 10 Mo par document, 1 Go
+décompressé ; `serveur.py` les suit (envoi d'une table 50 Mo, d'un document 10 Mo). L'export les contrôle avant de
+produire le ZIP : s'il en dépasse une, il dit quoi (fichier, taille, limite) et ne produit rien.
+
 **Import** : remplacement complet seulement (pas de fusion).
 
 - Réservé au **responsable** (ou à toute personne si l'installation n'a pas de comptes).

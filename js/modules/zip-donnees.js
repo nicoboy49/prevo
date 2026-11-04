@@ -15,9 +15,13 @@
 // Jamais rien de acces/ (comptes, sessions, appareils) ni d'autre dossier : un nom cité n'est lu que s'il a la forme
 // d'un nom de document (MOTIF_NOM_DOCUMENT, mêmes règles que serveur.py : ni « / », ni « \ », ni « .. ») ; sinon il
 // est compté parmi les manquants, sans aucune lecture. Un document introuvable n'arrête pas l'export.
+// T208 (règle de Nicolas : tout ce que Prévo exporte, Prévo peut le réimporter) : avant de produire le ZIP, l'export
+// contrôle les limites de l'import (ZipLecture.LIMITES, lues, jamais recopiées) ; s'il en dépasse une, rien n'est
+// produit et une fenêtre dit quoi (depassements, refusDe).
 // Avec les comptes (mode serveur), l'export est réservé au responsable : un technicien ou un demandeur reçoit des
 // tables filtrées par le serveur (export partiel). En lecture seule (D169), l'export reste permis : il n'écrit rien.
-// Dépendances : JSZip (js/lib/jszip.min.js), Schema, Formats, Donnees, UI ; App (lu à l'appel, chargé après).
+// Dépendances : JSZip (js/lib/jszip.min.js), Schema, Formats, Donnees, UI ; App et ZipLecture (lus à l'appel,
+// chargés après).
 
 const ZipDonnees = (() => {
 
@@ -80,33 +84,122 @@ const ZipDonnees = (() => {
     return new Uint8Array(await blob.arrayBuffer());
   }
 
-  // Lit chaque document par l'adaptateur → { trouves: [{ nom, octets }], manquants: [noms] }. Un nom invalide n'est
-  // jamais lu ; une lecture en erreur (réseau, fichier illisible) compte comme manquante (console.warn).
+  // Lit chaque document par l'adaptateur → { trouves: [{ nom, octets }], manquants: [noms], tropGros: [{ nom, taille }],
+  // interrompu }. Un nom invalide n'est jamais lu ; une lecture en erreur (réseau, fichier illisible) compte comme
+  // manquante (console.warn). T208 : un document plus gros que ZipLecture.LIMITES.document n'est pas chargé (sa taille
+  // suffit au refus) ; la lecture s'arrête (interrompu) dès que les documents dépassent à eux seuls le total décompressé
+  // ou le nombre d'entrées de l'import : l'export sera refusé, rien ne sert de tout charger en mémoire.
   async function lireDocuments(adaptateur, noms) {
-    const trouves = [];
-    const manquants = [];
+    const limites = ZipLecture.LIMITES;
+    const lus = { trouves: [], manquants: [], tropGros: [], interrompu: false };
+    let total = 0;
     for (const nom of noms) {
+      if (total > limites.total || lus.trouves.length + lus.tropGros.length >= limites.entrees) {
+        lus.interrompu = true;
+        break;
+      }
       if (!nomDocumentValide(nom)) {
-        manquants.push(nom);
+        lus.manquants.push(nom);
         continue;
       }
       try {
         const blob = await adaptateur.lireDocument(nom);
-        if (blob) trouves.push({ nom, octets: await octetsDe(blob) });
-        else manquants.push(nom);
+        const taille = !blob ? 0 : (blob instanceof Uint8Array ? blob.length : blob.size);
+        total += taille;
+        if (!blob) lus.manquants.push(nom);
+        else if (taille > limites.document) lus.tropGros.push({ nom, taille });
+        else lus.trouves.push({ nom, octets: await octetsDe(blob) });
       } catch (erreur) {
         console.warn('Prévo : document « ' + nom + ' » non exporté (' + (erreur && erreur.message) + ').', erreur);
-        manquants.push(nom);
+        lus.manquants.push(nom);
       }
     }
-    return { trouves, manquants };
+    return lus;
+  }
+
+  // --- Limites de l'import, contrôlées AVANT de produire le ZIP (T208) ---------------------------------------------
+  // Règle de Nicolas : tout ce que Prévo exporte, Prévo peut le réimporter. Les limites sont celles de l'import,
+  // ZipLecture.LIMITES (js/modules/zip-lecture.js, seul endroit où elles sont écrites), lues ici à l'appel.
+  // Documents déjà compressés : le ZIP ne les réduit presque pas (moins de 10 %) ; ils bornent sa taille par en bas.
+  const DEJA_COMPRESSES = Object.freeze(['jpg', 'jpeg', 'webp', 'docx', 'xlsx', 'odt', 'ods']);
+  const PART_INCOMPRESSIBLE = 0.9;
+
+  function chiffres(nombre) {
+    return String(nombre).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  }
+
+  // « 52,3 Mo » ; « plus de <limite> » quand l'arrondi égalerait la limite (la limite et quelques octets).
+  function taille(octets, limite) {
+    const texte = ZipLecture.enMo(octets);
+    return texte === ZipLecture.enMo(limite) ? 'plus de ' + texte : texte;
+  }
+
+  /** Taille minimale du ZIP de ces entrées ([{ nom, taille }]) : la part incompressible des documents déjà compressés. */
+  function tailleMinimaleZip(entrees) {
+    return entrees.reduce((somme, entree) => {
+      const extension = entree.nom.slice(entree.nom.lastIndexOf('.') + 1).toLowerCase();
+      const compresse = entree.nom.startsWith(DOSSIER_DOCUMENTS) && DEJA_COMPRESSES.includes(extension);
+      return somme + (compresse ? Math.floor(entree.taille * PART_INCOMPRESSIBLE) : 0);
+    }, 0);
+  }
+
+  /**
+   * Ce qui dépasse les limites de l'import dans les entrées du ZIP à produire ([{ nom, taille }], manifeste compris) →
+   * phrases (fichier, taille, limite) ; [] si l'import l'acceptera. incomplet : documents pas tous lus (au moins…).
+   */
+  function depassements(entrees, incomplet) {
+    const limites = ZipLecture.LIMITES;
+    const auMoins = incomplet ? 'au moins ' : '';
+    const phrases = [];
+    let total = 0;
+    entrees.forEach((entree) => {
+      const document = entree.nom.startsWith(DOSSIER_DOCUMENTS);
+      const limite = document ? limites.document : limites.racine;
+      if (entree.taille > limite) {
+        phrases.push('« ' + entree.nom + ' » fait ' + taille(entree.taille, limite) + ' (' + ZipLecture.enMo(limite)
+          + ' au plus par ' + (document ? 'document' : 'fichier de données') + ')');
+      }
+      total += entree.taille;
+    });
+    if (entrees.length > limites.entrees) {
+      phrases.push('le ZIP compterait ' + auMoins + chiffres(entrees.length) + ' fichiers (' + chiffres(limites.entrees)
+        + ' au plus)');
+    }
+    if (total > limites.total) {
+      phrases.push('le contenu ferait ' + auMoins + taille(total, limites.total) + ' une fois décompressé ('
+        + ZipLecture.enMo(limites.total) + ' au plus)');
+    }
+    const minimum = tailleMinimaleZip(entrees);
+    if (minimum > limites.zip) {
+      phrases.push('le ZIP ferait au moins ' + taille(minimum, limites.zip) + ', photos et documents déjà compressés ('
+        + ZipLecture.enMo(limites.zip) + ' au plus)');
+    }
+    return phrases;
+  }
+
+  // Message du refus : ce qui dépasse (quatre phrases au plus), et rien n'est produit.
+  function refusDe(phrases) {
+    const montrees = phrases.slice(0, 4);
+    const suite = phrases.length > montrees.length ? ' ; et ' + (phrases.length - montrees.length) + ' autre(s)' : '';
+    const texte = montrees.join(' ; ') + suite;
+    return 'Export impossible : l\'import de Prévo refuserait ce ZIP. ' + texte.charAt(0).toUpperCase() + texte.slice(1)
+      + '. Aucun ZIP n\'a été produit.';
+  }
+
+  // Fenêtre du refus (#export-zip-refus), sans attendre qu'elle soit fermée.
+  function prevenir(refus) {
+    const contenu = UI.element(UI.html`<div class="form-colonne" id="export-zip-refus"></div>`);
+    contenu.appendChild(UI.bandeau('important', refus));
+    UI.fenetre({ titre: 'Export ZIP impossible', contenu: contenu });
   }
 
   /**
    * Contenu du ZIP, sans rien télécharger ni écrire → Promise de
-   * { nomFichier, fichiers: [{ nom, octets }], manifeste, csv, documents, manquants } :
+   * { nomFichier, fichiers: [{ nom, octets }], manifeste, csv, documents, manquants, refus } :
    *   - fichiers : les entrées du ZIP dans l'ordre (CSV du schéma, documents/<nom>, manifeste.json en dernier) ;
-   *   - manifeste : l'objet écrit dans manifeste.json ; csv, documents : nombres de fichiers ; manquants : noms.
+   *   - manifeste : l'objet écrit dans manifeste.json ; csv, documents : nombres de fichiers ; manquants : noms ;
+   *   - refus : null, ou le message quand une limite de l'import serait dépassée (depassements, T208) : manifeste
+   *     est alors null, et fichiers sans manifeste.json (rien ne doit en être produit).
    * Lit les données en mémoire telles quelles : exporter() appelle Donnees.rafraichir() avant.
    * options.adaptateur (défaut App.adaptateur), options.mode (défaut App.mode), options.date (défaut maintenant).
    */
@@ -121,6 +214,20 @@ const ZipDonnees = (() => {
     }));
     const documents = await lireDocuments(adaptateur, nomsDocuments());
     documents.trouves.forEach((document) => fichiers.push({ nom: DOSSIER_DOCUMENTS + document.nom, octets: document.octets }));
+    const tailles = fichiers.map((fichier) => ({ nom: fichier.nom, taille: fichier.octets.length }))
+      .concat(documents.tropGros.map((document) => ({ nom: DOSSIER_DOCUMENTS + document.nom, taille: document.taille })))
+      .concat([{ nom: NOM_MANIFESTE, taille: 0 }]);       // quelques centaines de Ko au plus
+    const phrases = depassements(tailles, documents.interrompu);
+    const resume = {
+      nomFichier: 'prevo-export-' + quand.slice(0, 10) + '.zip',
+      fichiers,
+      manifeste: null,
+      csv: fichiers.length - documents.trouves.length,
+      documents: documents.trouves.length,
+      manquants: documents.manquants,
+      refus: phrases.length ? refusDe(phrases) : null,
+    };
+    if (resume.refus) return resume;
     const manifeste = await Formats.manifeste(fichiers, {
       version_appli: App.version,
       format: Formats.versionDeBase(Donnees.lignes('parametres')),
@@ -129,16 +236,9 @@ const ZipDonnees = (() => {
       mode: mode,
     });
     if (documents.manquants.length) manifeste.manquants = documents.manquants.slice();
-    const nombreCsv = fichiers.length - documents.trouves.length;
     fichiers.push({ nom: NOM_MANIFESTE, octets: new TextEncoder().encode(JSON.stringify(manifeste, null, 2) + '\n') });
-    return {
-      nomFichier: 'prevo-export-' + quand.slice(0, 10) + '.zip',
-      fichiers,
-      manifeste,
-      csv: nombreCsv,
-      documents: documents.trouves.length,
-      manquants: documents.manquants,
-    };
+    resume.manifeste = manifeste;
+    return resume;
   }
 
   // Message montré après l'export (inchangé depuis le lot 1, plus les noms des documents introuvables).
@@ -157,6 +257,8 @@ const ZipDonnees = (() => {
    * Export en un clic : vérifie le droit (exportPermis), relit les tables (Donnees.rafraichir), construit le ZIP
    * (contenu), propose le téléchargement (UI.telecharger) et le dit (toast). Promise du résultat de contenu() ;
    * rejetée (ErreurValidation, avec la raison) pour un rôle qui n'a pas l'export, ou si le ZIP ne se construit pas.
+   * T208 : si l'import refuserait le ZIP (contenu().refus, puis la taille réelle du ZIP construit), rien n'est
+   * téléchargé : fenêtre #export-zip-refus qui dit quoi (fichier, taille, limite) ; le résultat porte `refus`.
    */
   async function exporter() {
     const droit = exportPermis();
@@ -167,12 +269,21 @@ const ZipDonnees = (() => {
       console.warn('Prévo : rafraîchissement avant export impossible (' + (erreur && erreur.message) + ').', erreur);
     }
     const resultat = await contenu();
-    const archive = new JSZip();
-    // createFolders : false → aucune entrée « documents/ » de dossier, seulement les fichiers (lus par ZipLecture).
-    resultat.fichiers.forEach((fichier) => archive.file(fichier.nom, fichier.octets, { createFolders: false }));
-    const blob = await archive.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: 'application/zip' });
-    UI.telecharger(resultat.nomFichier, blob);
-    UI.toast(message(resultat), resultat.manquants.length ? 'attention' : 'succes');
+    if (!resultat.refus) {
+      const archive = new JSZip();
+      // createFolders : false → aucune entrée « documents/ » de dossier, seulement les fichiers (lus par ZipLecture).
+      resultat.fichiers.forEach((fichier) => archive.file(fichier.nom, fichier.octets, { createFolders: false }));
+      const blob = await archive.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: 'application/zip' });
+      const limite = ZipLecture.LIMITES.zip;
+      if (blob.size <= limite) {
+        UI.telecharger(resultat.nomFichier, blob);
+        UI.toast(message(resultat), resultat.manquants.length ? 'attention' : 'succes');
+        return resultat;
+      }
+      resultat.refus = refusDe(['le ZIP ferait ' + taille(blob.size, limite) + ' (' + ZipLecture.enMo(limite)
+        + ' au plus)']);
+    }
+    prevenir(resultat.refus);
     return resultat;
   }
 
@@ -182,6 +293,7 @@ const ZipDonnees = (() => {
     nomDocumentValide,
     nomsDocuments,
     exportPermis,
+    depassements,
     contenu,
     exporter,
   };

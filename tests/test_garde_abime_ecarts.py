@@ -98,7 +98,7 @@ class TestCelluleLongueServeur(CasCopies):
             self.assertEqual(chemin.read_bytes(), long_b)
 
     def test_limite_des_cellules_egale_a_celle_d_un_csv_de_l_import_zip(self):
-        """T207 (Nicolas) : la limite relevée est de 10 Mo, celle d'un CSV dans l'import ZIP (LIMITES.racine de
+        """T207 (Nicolas) : la limite relevée est celle d'un CSV dans l'import ZIP (50 Mo depuis T208, LIMITES.racine de
         js/modules/zip-lecture.js), et non sans limite ; elle est bien celle du module csv."""
         texte = (SERVEUR_RACINE / "js" / "modules" / "zip-lecture.js").read_text(encoding="utf-8")
         mo = re.search(r"^\s*racine: (\d+) \* MO,", texte, re.M)
