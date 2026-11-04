@@ -53,7 +53,17 @@ NOM = "rapport-mensuel-%s.html" % MOIS
 
 
 def lire_csv(dossier, nom):
-    return list(csv.DictReader(io.StringIO((Path(dossier) / nom).read_text(encoding="utf-8-sig")), delimiter=";"))
+    # Windows refuse un instant l'ouverture d'un fichier que le serveur remplace (écriture atomique, os.replace) :
+    # quelques essais rapprochés au lieu d'une erreur (T199 : PermissionError vu dans la suite complète du 2026-11-04).
+    for essai in range(20):
+        try:
+            texte = (Path(dossier) / nom).read_text(encoding="utf-8-sig")
+            break
+        except PermissionError:
+            if essai == 19:
+                raise
+            time.sleep(0.05)
+    return list(csv.DictReader(io.StringIO(texte), delimiter=";"))
 
 
 def ecrire_parametre(dossier, cle, valeur):
