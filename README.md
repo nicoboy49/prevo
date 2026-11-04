@@ -171,6 +171,17 @@ en tête de cellule et la retire à la lecture. À la lecture, il accepte aussi 
 Ne modifiez pas un fichier dans Excel pendant que quelqu'un enregistre dans Prévo : le serveur
 signale un fichier verrouillé, et le mode dossier détecte le conflit.
 
+### Si Prévo signale un fichier abîmé
+
+Prévo n'enregistre jamais un fichier CSV qu'il ne peut pas relire sans perte (une note tapée à droite
+du tableau dans Excel, un guillemet oublié, une copie interrompue) : un bandeau « Fichier abîmé » le
+nomme dès l'ouverture, et toute modification de ce fichier est refusée sans rien effacer (la saisie
+reste dans le formulaire). Le responsable ouvre alors **Paramètres › Sauvegardes** et clique sur
+**Restaurer…** devant la sauvegarde du jour, ou celle de la veille si le fichier était déjà abîmé
+(« Une seule table » ne remet que ce fichier) ; avant de restaurer, Prévo copie l'état actuel dans
+une copie de sécurité. Il peut aussi réparer le fichier : ce qui ne va pas est décrit dans
+**Paramètres › Contrôle de la base**. Besoin d'aide : https://github.com/nicoboy49/prevo/issues
+
 Pour lancer les tests ou contribuer : voir CONTRIBUTING.md.
 
 ## Limites connues

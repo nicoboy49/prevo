@@ -897,7 +897,8 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
     for table in tables:
         octets = lire_octets(os.path.join(dossier_sauvegarde, table + '.csv'))
         try:
-            ecrire_atomique(chemin_table(config, table), octets)
+            # 1.2.1 : la restauration est le remède à un fichier abîmé, elle le remplace (seule dérogation à la garde).
+            ecrire_fichier_de_donnees(config, table, octets, remplacer_abime=True, sauvegarde_du_jour=False)
         except ErreurHttp as erreur:
             # Restauration partielle : on le dit clairement, avec la copie de sécurité à utiliser.
             raise ErreurHttp(
@@ -908,6 +909,171 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
                 restaurees=restaurees, copie_securite=copie_securite)
         restaurees.append(table)
     return {'restaurees': restaurees, 'copie_securite': copie_securite}
+
+
+# ---------------------------------------------------------------------------
+# Écriture des CSV de données : la fonction commune et sa garde « fichier abîmé » (version 1.2.1)
+# ---------------------------------------------------------------------------
+
+# Toutes les écritures de donnees/<table>.csv passent par ecrire_fichier_de_donnees (PUT et ajout de l'API,
+# restauration ; tests/test_garde_abime_serveur.py le vérifie sur le code : aucun autre ecrire_atomique d'un chemin venu
+# de chemin_table). Avant d'écrire, elle regarde le fichier en place (verifier_fichier_en_place), comme le navigateur
+# (Donnees.ErreurFichierAbime, js/donnees.js) :
+#   - réécriture : refusée si le fichier en place est abîmé (raisons_fichier_abime : le réécrire en perdrait une partie
+#     sans le dire) ;
+#   - ajout en fin de fichier : refusé s'il se termine au milieu d'un texte entre guillemets (les lignes ajoutées y
+#     seraient avalées) ; un fichier abîmé ailleurs reçoit l'ajout (rien de ce qui est en place ne change) ;
+#   - restauration d'une sauvegarde : seule dérogation (c'est le remède).
+# Refus : 409 {"erreur", "code": "fichier_abime", "table"}, rien n'est écrit (ni la table, ni la sauvegarde du jour).
+CODE_FICHIER_ABIME = 'fichier_abime'
+AIDE_FICHIER_ABIME = 'https://github.com/nicoboy49/prevo/issues'
+SUITE_FICHIER_ABIME = ('Restaurez la sauvegarde du jour (Paramètres › Sauvegardes, bouton « Restaurer… ») ou réparez '
+                       'le fichier ; aide : ' + AIDE_FICHIER_ABIME)
+MESSAGE_FICHIER_ABIME = ('Fichier abîmé (%s.csv : %s) : rien n\'a été enregistré, pour ne rien perdre. '
+                         + SUITE_FICHIER_ABIME)
+MESSAGE_GUILLEMET_OUVERT = ('Fichier abîmé (%s.csv se termine au milieu d\'un texte entre guillemets jamais fermé) : '
+                            'rien n\'a été ajouté, pour ne rien perdre (les lignes ajoutées y seraient avalées). '
+                            + SUITE_FICHIER_ABIME)
+PERTE_STRUCTURE = 'structure du fichier abîmée (guillemet non fermé, ou texte collé à un guillemet)'
+PERTE_AU_DELA_DE_L_ENTETE = 'valeurs au-delà de l\'en-tête'
+# Blancs de JavaScript (\s et trim : espaces Unicode, fins de ligne, BOM), pour juger « vide » comme le navigateur ;
+# codes en clair, jamais de caractère invisible dans ce fichier.
+BLANCS_JS = frozenset(chr(code) for code in (0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2028, 0x2029, 0x202F,
+                                             0x205F, 0x3000, 0xFEFF) + tuple(range(0x2000, 0x200B)))
+MOTIF_FIN_DE_LIGNE = re.compile(r'\r\n|\r|\n')
+# Une cellule peut dépasser la limite par défaut du module csv (131 072 caractères : page du wiki, compte rendu
+# très long) : sans cette limite relevée, un fichier sain serait pris pour un fichier abîmé.
+csv.field_size_limit(2 ** 31 - 1)
+A_LIRE = object()           # ecrire_fichier_de_donnees : le fichier en place est lu par la fonction elle-même
+
+
+def non_blanc_js(texte):
+    """Vrai si texte.trim() de JavaScript n'est pas vide."""
+    return any(caractere not in BLANCS_JS for caractere in texte)
+
+
+def separateur_des_octets(octets):
+    """« ; », ou « , » si la première ligne non vide n'a aucun « ; » et a une virgule (choisirSeparateur de
+    js/donnees.js), sur les octets bruts : lignes coupées en CR ou LF, « non vide » = un octet autre qu'un blanc."""
+    for ligne in re.split(rb'\r\n|\r|\n', octets):
+        if ligne.strip():
+            return b',' if b';' not in ligne and b',' in ligne else b';'
+    return b';'
+
+
+def finit_dans_un_guillemet_ouvert(octets):
+    """Vrai si le CSV se termine au milieu d'un texte entre guillemets (cellule « "… » jamais fermée) : à la relecture,
+    une ligne ajoutée à la suite serait avalée dans cette cellule. Sur les octets bruts, sans décodage (BOM UTF-8 de
+    tête ignoré ; séparateur : separateur_des_octets), par l'automate que le navigateur applique aussi
+    (Donnees.csv.finitDansUnGuillemetOuvert, mêmes exemples) :
+      - début de champ : « " » → entre guillemets ; séparateur, CR ou LF → début de champ ; autre → dans le champ ;
+      - dans le champ : séparateur, CR ou LF → début de champ ; tout autre octet (« " » compris) → dans le champ ;
+      - entre guillemets : « " » → guillemet vu ; tout autre octet (CR et LF compris) → entre guillemets ;
+      - guillemet vu : « " » → entre guillemets (guillemet doublé) ; séparateur, CR ou LF → début de champ ; autre →
+        dans le champ.
+    Vrai si et seulement si l'état final est « entre guillemets » ; aucun blanc n'est sauté. « Guillemet vu » se
+    comporte comme « début de champ » : la lecture va donc d'un guillemet au suivant (bytes.find : un journal de
+    plusieurs Mo se lit vite), l'état devant un guillemet se déduisant de l'octet qui le précède."""
+    if octets.startswith(BOM_UTF8):
+        octets = octets[len(BOM_UTF8):]
+    fins_de_champ = (separateur_des_octets(octets)[0], 0x0D, 0x0A)
+    position, dans_le_champ = 0, False      # état à « position » : début de champ (ou guillemet vu), ou dans le champ
+    while True:
+        guillemet = octets.find(b'"', position)
+        if guillemet < 0:
+            return False                    # plus de guillemet : l'état final n'est pas « entre guillemets »
+        if guillemet > position:
+            dans_le_champ = octets[guillemet - 1] not in fins_de_champ
+        if dans_le_champ:
+            position = guillemet + 1        # guillemet ordinaire d'un champ non guillemeté : on reste dans le champ
+            continue
+        fermant = octets.find(b'"', guillemet + 1)          # entre guillemets jusqu'au guillemet suivant
+        if fermant < 0:
+            return True
+        position, dans_le_champ = fermant + 1, False        # guillemet vu
+
+
+def raisons_fichier_abime(octets):
+    """Ce qu'une réécriture du fichier ferait perdre, même critère que entree.abime du navigateur (csv.analyser de
+    js/donnees.js) : structure abîmée (guillemet non fermé, texte collé à un guillemet fermant : les erreurs de
+    PapaParse) et valeurs au-delà de l'en-tête ; [] si rien (fichier sain, vide ou absent). Lecture comme le
+    navigateur : BOM retiré, UTF-8 sinon Windows-1252 (lu ici en latin-1 : seuls « ; », « , », guillemets, fins de
+    ligne et blancs comptent, et ils s'y codent de même), « ; » (« , » si la première ligne non vide n'a aucun « ; »
+    et a une virgule), lignes entièrement blanches ignorées (skipEmptyLines « greedy »)."""
+    if octets is None:
+        return []
+    if octets.startswith(BOM_UTF8):
+        octets = octets[len(BOM_UTF8):]
+    try:
+        texte = octets.decode('utf-8')
+    except UnicodeDecodeError:
+        texte = octets.decode('latin-1')
+    if not non_blanc_js(texte):
+        return []
+    premiere = next((ligne for ligne in MOTIF_FIN_DE_LIGNE.split(texte) if non_blanc_js(ligne)), '')
+    separateur = ',' if ';' not in premiere and ',' in premiere else ';'
+
+    def decouper(strict):
+        lecteur = csv.reader(io.StringIO(texte, newline=''), delimiter=separateur, strict=strict)
+        return [ligne for ligne in lecteur if any(non_blanc_js(cellule) for cellule in ligne)]
+
+    raisons = []
+    try:
+        enregistrements = decouper(True)
+    except csv.Error:
+        raisons.append(PERTE_STRUCTURE)
+        try:
+            enregistrements = decouper(False)
+        except csv.Error:
+            enregistrements = []
+    if enregistrements:
+        largeur = len(enregistrements[0])
+        if any(non_blanc_js(cellule) for ligne in enregistrements[1:] for cellule in ligne[largeur:]):
+            raisons.append(PERTE_AU_DELA_DE_L_ENTETE)
+    return raisons
+
+
+def fichier_sans_contenu(octets):
+    """Vrai pour un fichier absent (None), de 0 octet, ou qui n'a que des blancs (après un BOM de tête)."""
+    if octets is None:
+        return True
+    return not (octets[len(BOM_UTF8):] if octets.startswith(BOM_UTF8) else octets).strip()
+
+
+def verifier_fichier_en_place(table, actuel, ajout=False):
+    """Garde « fichier abîmé » (en tête de cette partie) sur « actuel », les octets du fichier en place (None s'il est
+    absent) ; rien si le fichier est sans contenu. Ajout : 409 s'il se termine au milieu d'un texte entre guillemets
+    (finit_dans_un_guillemet_ouvert). Réécriture : 409 s'il est abîmé (raisons_fichier_abime).
+    409 {"erreur", "code": "fichier_abime", "table"}."""
+    if fichier_sans_contenu(actuel):
+        return
+    if ajout:
+        if finit_dans_un_guillemet_ouvert(actuel):
+            raise ErreurHttp(409, MESSAGE_GUILLEMET_OUVERT % table, code=CODE_FICHIER_ABIME, table=table)
+        return
+    raisons = raisons_fichier_abime(actuel)
+    if raisons:
+        raise ErreurHttp(409, MESSAGE_FICHIER_ABIME % (table, ', '.join(raisons)), code=CODE_FICHIER_ABIME,
+                         table=table)
+
+
+def ecrire_fichier_de_donnees(config, table, octets, actuel=A_LIRE, *, ajout=False, remplacer_abime=False,
+                              sauvegarde_du_jour):
+    """LA fonction d'écriture des CSV de données (donnees/<table>.csv ; en tête de cette partie), dans cet ordre :
+      1. la garde (verifier_fichier_en_place) sur le fichier en place : « actuel », ses octets (None s'il est
+         absent) déjà lus par l'appelant, sinon lus ici ; ajout : « octets » est le fichier en place suivi des lignes ajoutées ;
+         remplacer_abime (restauration seulement) : pas de garde, le fichier abîmé est remplacé ;
+      2. la sauvegarde du jour si « sauvegarde_du_jour » (faire_sauvegarde_quotidienne) ;
+      3. ecrire_atomique (423 si le fichier est verrouillé, Excel).
+    Refus de la garde : 409 « fichier_abime », rien n'est écrit (ni la table, ni la sauvegarde). Rend l'empreinte des
+    octets écrits. À appeler en tenant VERROU_ECRITURE."""
+    chemin = chemin_table(config, table)
+    if not remplacer_abime:
+        verifier_fichier_en_place(table, lire_octets(chemin) if actuel is A_LIRE else actuel, ajout)
+    if sauvegarde_du_jour:
+        faire_sauvegarde_quotidienne(config)
+    ecrire_atomique(chemin, octets)
+    return empreinte(octets)
 
 
 # ---------------------------------------------------------------------------
@@ -928,9 +1094,9 @@ def versions_des_tables(config):
 
 
 def enregistrer_csv(config, table, octets, version_attendue):
-    """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit)."""
-    chemin = chemin_table(config, table)
-    actuel = lire_octets(chemin)
+    """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit). Puis ecrire_fichier_de_donnees
+    (1.2.1) : 409 « fichier_abime » si le fichier en place est abîmé, rien n'est écrit."""
+    actuel = lire_octets(chemin_table(config, table))
     version_actuelle = empreinte(actuel) if actuel is not None else None
     attendue = None if version_attendue == 'aucune' else version_attendue
     if attendue != version_actuelle:
@@ -941,9 +1107,7 @@ def enregistrer_csv(config, table, octets, version_attendue):
         else:
             message = 'Le fichier %s.csv a été modifié par un autre poste.' % table
         raise ErreurHttp(409, message, version_actuelle=version_actuelle)
-    faire_sauvegarde_quotidienne(config)
-    ecrire_atomique(chemin, octets)
-    return empreinte(octets)
+    return ecrire_fichier_de_donnees(config, table, octets, actuel, sauvegarde_du_jour=True)
 
 
 def decouper_corps_ajout(corps):
@@ -959,15 +1123,14 @@ def decouper_corps_ajout(corps):
 
 
 def ajouter_au_csv(config, table, corps):
-    """Ajoute des lignes en fin de fichier (journal) ; 409 si en-tête ou encodage différent."""
-    chemin = chemin_table(config, table)
+    """Ajoute des lignes en fin de fichier (journal) ; 409 si en-tête ou encodage différent. 1.2.1 : 409
+    « fichier_abime » si le fichier en place se termine au milieu d'un texte entre guillemets, avant les contrôles
+    d'UTF-8 et d'en-tête (verifier_fichier_en_place, puis ecrire_fichier_de_donnees en ajout) ; rien n'est écrit."""
     corps, entete, lignes = decouper_corps_ajout(corps)
-    actuel = lire_octets(chemin)
+    actuel = lire_octets(chemin_table(config, table))
+    verifier_fichier_en_place(table, actuel, ajout=True)
     if actuel is None or not actuel.replace(BOM_UTF8, b'', 1).strip():
-        faire_sauvegarde_quotidienne(config)
-        nouveau = BOM_UTF8 + corps
-        ecrire_atomique(chemin, nouveau)
-        return empreinte(nouveau)
+        return ecrire_fichier_de_donnees(config, table, BOM_UTF8 + corps, actuel, ajout=True, sauvegarde_du_jour=True)
     if not est_utf8(actuel):
         raise ErreurHttp(409, 'Le fichier %s.csv n\'est pas en UTF-8 (réenregistré par Excel ?).'
                          % table, version_actuelle=empreinte(actuel))
@@ -977,10 +1140,8 @@ def ajouter_au_csv(config, table, corps):
     if not lignes:
         return empreinte(actuel)
     separateur = b'' if actuel.endswith(b'\n') else FIN_DE_LIGNE
-    nouveau = actuel + separateur + lignes
-    faire_sauvegarde_quotidienne(config)
-    ecrire_atomique(chemin, nouveau)
-    return empreinte(nouveau)
+    return ecrire_fichier_de_donnees(config, table, actuel + separateur + lignes, actuel, ajout=True,
+                                     sauvegarde_du_jour=True)
 
 
 # ---------------------------------------------------------------------------

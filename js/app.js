@@ -73,6 +73,7 @@ const App = (() => {
   let resoudreProfil = null;       // fonction qui termine l'écran de profil en cours
   let resoudreBaseVide = null;     // fonction qui termine l'écran « base vide » en cours
   const alertesCoque = [];         // bandeaux à montrer dans la coque (ex. verrou du dossier)
+  const tablesDitesAbimees = new Set();   // tables dont le bandeau « Fichier abîmé » est déjà posé (1.2.1)
 
   // Thème du poste (lot 4, §17.7) : <html data-theme="clair"> posé dès la lecture de ce fichier, donc
   // avant DOMContentLoaded et avant le premier écran (pas d'écran sombre qui passe au clair).
@@ -331,6 +332,7 @@ const App = (() => {
     montrer('ecran-chargement', 'chargement');
     adaptateur = nouvelAdaptateur;
     mode = nouvelAdaptateur.mode;
+    tablesDitesAbimees.clear();
     Donnees.initialiser(adaptateur, { poste, profil: '' });
     await Donnees.chargerTout();
 
@@ -355,6 +357,9 @@ const App = (() => {
     let profilChoisi = lireProfilMemorise();
     if (!profilValable(profilChoisi)) profilChoisi = await demanderProfil(false);
     appliquerProfil(profilChoisi);
+    // 1.2.1 : fichiers abîmés, jamais réécrits ; on le dit dès l'ouverture, avant qu'une écriture soit refusée
+    // (démo : tout reste en mémoire, rien à protéger).
+    signalerFichiersAbimes(mode === 'demo' ? [] : Donnees.tablesAbimees());
     const otPreventifs = await genererPreventifAOuverture(formatAJour);
     Donnees.demarrerSurveillance();
     // Assistant IA (lot 4, §17.3) : un seul test du fournisseur s'il est activé sur le poste, aucun
@@ -374,11 +379,18 @@ const App = (() => {
   // Sauvegarde impossible : erreur signalée et bandeau dans la coque, la version reste inchangée,
   // l'application reste utilisable et le passage sera retenté à la prochaine ouverture.
   // Renvoie true si les fichiers sont au format courant (passage fait, ou rien à faire), false sinon.
+  // parametres.csv abîmé (1.2.1, Donnees.ErreurFichierAbime) : rien n'est écrit (ni la sauvegarde), le bandeau
+  // « Fichier abîmé » posé après le choix du profil le dit ; ni message en plus, ni génération du préventif.
   async function passerAuFormatCourant() {
     try {
       await Donnees.mettreAJourVersionSchema();
       return true;
     } catch (erreur) {
+      if (erreur instanceof Donnees.ErreurFichierAbime) {
+        console.warn('Prévo : passage au format ' + Schema.version + ' non fait, ' + erreur.table + '.csv est abîmé.',
+          erreur);
+        return false;
+      }
       signalerErreur(erreur, 'passage au format ' + Schema.version + ' des fichiers');
       alertesCoque.push(UI.bandeau('attention', UI.html`<b>Les fichiers n'ont pas pu passer au format ${Schema.version}.</b>
         ${(erreur && erreur.message) || ''} D'ici là, les OT préventifs échus ne sont pas générés automatiquement.`));
@@ -410,7 +422,12 @@ const App = (() => {
       try {
         crees = await Preventif.genererOTEchus();
       } catch (erreur) {
-        signalerErreur(erreur, 'génération des OT préventifs à l\'ouverture');
+        // 1.2.1 : fichier abîmé, rien n'est écrit ; le bandeau « Fichier abîmé » le dit déjà (pas de message en plus).
+        if (erreur instanceof Donnees.ErreurFichierAbime) {
+          console.warn('Prévo : OT préventifs non générés, ' + erreur.table + '.csv est abîmé.', erreur);
+        } else {
+          signalerErreur(erreur, 'génération des OT préventifs à l\'ouverture');
+        }
       }
     }
     if (!preventifDejaMarque && window.performance && typeof performance.mark === 'function') {
@@ -459,6 +476,27 @@ const App = (() => {
     }
     await adaptateur.demarrerVerrou();
     try { window.sessionStorage.setItem(CLE_VERROU_ONGLET, poste); } catch (erreur) { /* sans mémoire */ }
+  }
+
+  // Fichiers abîmés (1.2.1) : Prévo ne les enregistre plus (Donnees.ErreurFichierAbime). Bandeau « Fichier abîmé »
+  // dans la coque, une seule fois par table : il nomme les fichiers et dit quoi faire (le responsable : restaurer la
+  // sauvegarde du jour ou réparer ; les autres profils : prévenir le responsable).
+  function signalerFichiersAbimes(tables) {
+    const nouvelles = tables.filter((nomTable) => !tablesDitesAbimees.has(nomTable));
+    nouvelles.forEach((nomTable) => tablesDitesAbimees.add(nomTable));
+    if (nouvelles.length) alertesCoque.push(bandeauFichiersAbimes(nouvelles));
+  }
+
+  function bandeauFichiersAbimes(tables) {
+    const fichiers = tables.map((nomTable) => (Schema.table(nomTable) || {}).fichier || nomTable + '.csv').join(', ');
+    const plusieurs = tables.length > 1;
+    const titre = UI.html`<b>${plusieurs ? 'Fichiers abîmés' : 'Fichier abîmé'} : ${fichiers}.</b>
+      Prévo ${plusieurs ? 'ne les enregistre' : 'ne l\'enregistre'} plus, pour ne rien perdre`;
+    if (!estResponsable()) return UI.bandeau('attention', UI.html`${titre} : prévenez le responsable.`);
+    const aide = Donnees.AIDE_FICHIER_ABIME;
+    return UI.bandeau('attention', UI.html`${titre}. Restaurez la sauvegarde du jour (${Donnees.CHEMIN_SAUVEGARDES})
+      ou ${plusieurs ? 'réparez les fichiers' : 'réparez le fichier'} ; aide :
+      <a href="${aide}" target="_blank" rel="noopener">${aide}</a>`);
   }
 
   // ===========================================================================================
@@ -513,7 +551,7 @@ const App = (() => {
     }
     ecrireMemoire(CLE_PROFIL, JSON.stringify(profil));
     ecrireMemoire(CLE_POSTE, poste);
-    Donnees.definirIdentite({ poste, profil: libelleJournal(profil) });
+    Donnees.definirIdentite({ poste, profil: libelleJournal(profil), responsable: profil.type === 'responsable' });
     UI.$('#libelle-profil').textContent = libelleAffiche(profil) + ' · ' + poste;
     UI.$('#etat-poste').title = 'Profil : ' + libelleAffiche(profil) + ' — poste « ' + poste + ' ». Cliquer pour changer.';
   }
@@ -1015,6 +1053,15 @@ const App = (() => {
     UI.$('#contenu').addEventListener('change', surSaisie);
     window.addEventListener('hashchange', () => { afficherRoute(false); });
     Donnees.evenements.addEventListener('changement', surChangement);
+    // 1.2.1 : fichier abîmé découvert par une ligne de journal refusée (journal qui finit par un guillemet ouvert,
+    // abîmé après l'ouverture) : bandeau « Fichier abîmé » pour une table pas encore signalée ; tout de suite si la
+    // coque est affichée, sinon à son ouverture (afficherAlertesCoque).
+    Donnees.evenements.addEventListener('fichierAbime', (evenement) => {
+      const nomTable = evenement.detail && evenement.detail.table;
+      if (!nomTable || mode === 'demo') return;
+      signalerFichiersAbimes([nomTable]);
+      if (coqueVisible()) afficherAlertesCoque();
+    });
 
     // Erreurs de Donnees non attrapées par un module : message clair plutôt qu'une erreur console.
     window.addEventListener('unhandledrejection', (evenement) => {

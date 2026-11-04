@@ -44,6 +44,34 @@ const Donnees = (() => {
     }
   }
 
+  // Version 1.2.1 (même principe que T197 et T200 de la 2.0) : écriture refusée, le fichier de la table est abîmé
+  // (structure abîmée ou valeurs au-delà de l'en-tête : csv.analyser, entree.abime ; pour un ajout, fin dans un texte
+  // entre guillemets jamais fermé : csv.finitDansUnGuillemetOuvert). Le réécrire en perdrait une partie sans le dire :
+  // rien n'est écrit. Levée par modifier et le passage au format, et par la fonction d'écriture commune de chaque
+  // adaptateur (enregistrer, ajouter ; serveur : 409 « fichier_abime ») ; seule la restauration d'une sauvegarde
+  // remplace un tel fichier. Sous-classe d'ErreurStockage : le message, sans jargon, est montré tel quel ; il dépend du
+  // profil (identite.responsable) et dit que la saisie est restée dans le formulaire (les écrans ne la vident pas).
+  const AIDE_FICHIER_ABIME = 'https://github.com/nicoboy49/prevo/issues';
+  const CHEMIN_SAUVEGARDES = 'Paramètres › Sauvegardes, bouton « Restaurer… »';
+
+  class ErreurFichierAbime extends ErreurStockage {
+    constructor(nomTable, fichier) {
+      super(messageFichierAbime(fichier || nomTable + '.csv'));
+      this.name = 'ErreurFichierAbime';
+      this.table = nomTable;
+    }
+  }
+
+  function messageFichierAbime(fichier) {
+    if (!identite.responsable) {
+      return 'Fichier abîmé : prévenez le responsable. Rien n\'a été enregistré ; votre saisie est restée dans le '
+        + 'formulaire.';
+    }
+    return 'Fichier abîmé (' + fichier + ') : rien n\'a été enregistré, pour ne rien perdre ; votre saisie est restée '
+      + 'dans le formulaire. Restaurez la sauvegarde du jour (' + CHEMIN_SAUVEGARDES + ') ou réparez le fichier ; '
+      + 'aide : ' + AIDE_FICHIER_ABIME;
+  }
+
   // ===========================================================================
   // 2. Dates, nombres, normalisation
   // ===========================================================================
@@ -577,9 +605,11 @@ const Donnees = (() => {
       + description.fichier + ' ; ' + suite + '. Elle sera ajoutée à la prochaine modification de la table.');
   }
 
-  // Octets (ou texte) d'un fichier CSV → { lignes, colonnesInconnues, problemes, encodage, separateur }.
+  // Octets (ou texte) d'un fichier CSV → { lignes, colonnesInconnues, problemes, encodage, separateur, abime }.
   // Chaque ligne est un objet avec TOUS les champs du schéma (valeur par défaut du schéma si la
   // colonne est absente du fichier, sinon chaîne vide), plus les colonnes inconnues.
+  // abime (1.2.1) : vrai si le fichier ne se relit pas sans perte (structure abîmée, ou valeurs au-delà de
+  // l'en-tête) : le réécrire perdrait ces valeurs, Prévo ne le réécrit donc pas (ErreurFichierAbime).
   function analyser(nomTable, entree) {
     const description = descriptionTable(nomTable);
     const decode = decoder(entree);
@@ -587,7 +617,7 @@ const Donnees = (() => {
     const separateur = choisirSeparateur(texte);
     const problemes = [];
     const resultat = { lignes: [], colonnesInconnues: [], problemes: problemes,
-      encodage: decode.encodage, separateur: separateur };
+      encodage: decode.encodage, separateur: separateur, abime: false };
 
     if (decode.encodage === 'windows-1252') {
       problemes.push(probleme('info', 'encodage', nomTable, null, null, null, null,
@@ -612,6 +642,7 @@ const Donnees = (() => {
     const indexCle = colonnes.findIndex((colonne) => colonne.champ && colonne.champ.nom === description.cle);
 
     for (const erreur of decoupage.erreurs) {
+      resultat.abime = true;
       problemes.push(probleme('erreur', 'valeur', nomTable, erreur.numero, null, null, null,
         description.libelle + ', ligne ' + erreur.numero + ' de ' + description.fichier
         + ' : structure du fichier abîmée (' + erreur.message + '), par exemple un guillemet non fermé. '
@@ -645,6 +676,7 @@ const Donnees = (() => {
       // Cellules au-delà de l'en-tête : signalées si elles ne sont pas vides, puis ignorées.
       for (let index = colonnes.length; index < cellules.length; index += 1) {
         if (cellules[index].trim() !== '') {
+          resultat.abime = true;
           problemes.push(probleme('attention', 'colonne', nomTable, numero, identifiant, null, cellules[index],
             reperage + ' : cette ligne contient plus de valeurs que l\'en-tête n\'a de colonnes ; '
             + 'la valeur « ' + cellules[index] + ' » (colonne ' + (index + 1) + ') est ignorée.'));
@@ -655,6 +687,67 @@ const Donnees = (() => {
     return resultat;
   }
 
+  // --- 3.5 Fin dans une cellule entre guillemets jamais fermée (1.2.1, comme T200 de la 2.0) ------
+
+  // Vrai si les octets d'un CSV finissent DANS une cellule entre guillemets jamais fermée : une ligne ajoutée à la fin
+  // (journal, ajouter) serait avalée par cette cellule à la relecture, donc perdue. Sur les octets bruts, sans
+  // décodage ; même automate que finit_dans_un_guillemet_ouvert de serveur.py (mêmes exemples, mêmes réponses) :
+  // BOM UTF-8 de tête ignoré ; séparateur « ; », sauf si la première ligne non vide n'a aucun « ; » et a une « , » ;
+  // un guillemet n'ouvre une cellule qu'en tout début de cellule (aucun blanc sauté) ; « "" » est un guillemet doublé.
+  const OCTET_GUILLEMET = 0x22;
+  const OCTET_CR = 0x0D;
+  const OCTET_LF = 0x0A;
+  const OCTET_POINT_VIRGULE = 0x3B;
+  const OCTET_VIRGULE = 0x2C;
+  const OCTETS_BLANCS_LIGNE = [0x20, 0x09, 0x0B, 0x0C];      // espace, tabulations, saut de page
+  const DEBUT_DE_CELLULE = 0;
+  const DANS_LA_CELLULE = 1;
+  const ENTRE_GUILLEMETS = 2;
+  const GUILLEMET_VU = 3;
+
+  // Séparateur des octets (comme choisirSeparateur sur le texte) : « , » si la première ligne non vide n'a aucun « ; »
+  // et a une « , », sinon « ; ».
+  function separateurDesOctets(octets, debut) {
+    let ligneNonVide = false;
+    let pointVirgule = false;
+    let virgule = false;
+    for (let position = debut; position < octets.length; position += 1) {
+      const octet = octets[position];
+      if (octet === OCTET_CR || octet === OCTET_LF) {
+        if (ligneNonVide) { break; }
+        pointVirgule = false;
+        virgule = false;
+        continue;
+      }
+      if (OCTETS_BLANCS_LIGNE.indexOf(octet) === -1) { ligneNonVide = true; }
+      if (octet === OCTET_POINT_VIRGULE) { pointVirgule = true; } else if (octet === OCTET_VIRGULE) { virgule = true; }
+    }
+    return ligneNonVide && !pointVirgule && virgule ? OCTET_VIRGULE : OCTET_POINT_VIRGULE;
+  }
+
+  function finitDansUnGuillemetOuvert(entree) {
+    const octets = enOctets(entree);
+    const debut = octets.length >= 3 && octets[0] === 0xEF && octets[1] === 0xBB && octets[2] === 0xBF ? 3 : 0;
+    const separateur = separateurDesOctets(octets, debut);
+    let etat = DEBUT_DE_CELLULE;
+    for (let position = debut; position < octets.length; position += 1) {
+      const octet = octets[position];
+      const finDeCellule = octet === separateur || octet === OCTET_CR || octet === OCTET_LF;
+      if (etat === ENTRE_GUILLEMETS) {
+        if (octet === OCTET_GUILLEMET) { etat = GUILLEMET_VU; }
+      } else if (etat === GUILLEMET_VU && octet === OCTET_GUILLEMET) {
+        etat = ENTRE_GUILLEMETS;                                  // guillemet doublé
+      } else if (finDeCellule) {
+        etat = DEBUT_DE_CELLULE;
+      } else if (etat === DEBUT_DE_CELLULE && octet === OCTET_GUILLEMET) {
+        etat = ENTRE_GUILLEMETS;
+      } else {
+        etat = DANS_LA_CELLULE;
+      }
+    }
+    return etat === ENTRE_GUILLEMETS;
+  }
+
   const csv = {
     decoder: decoder,
     aProteger: aProteger,
@@ -662,15 +755,18 @@ const Donnees = (() => {
     relireValeur: relireValeur,
     analyser: analyser,
     serialiser: serialiser,
+    finitDansUnGuillemetOuvert: finitDansUnGuillemetOuvert,
   };
 
   // ===========================================================================
   // 4. Chargement, mutation, journal, rafraîchissement (ARCHITECTURE.md §5.2 à §5.5)
   // ===========================================================================
   // Le cache garde, pour chaque table, une « entrée » :
-  //   { lignes, colonnesInconnues, version, index, problemesLecture, perime, absente }
+  //   { lignes, colonnesInconnues, abime, version, index, problemesLecture, perime, absente }
   //   - lignes            : tableau d'objets (toutes les valeurs sont des chaînes) ;
   //   - colonnesInconnues : colonnes du fichier qui ne sont pas dans le schéma (conservées) ;
+  //   - abime             : (1.2.1) vrai si le fichier lu ne se réécrirait pas sans perte (csv.analyser) :
+  //                         modifier refuse alors de le réécrire (ErreurFichierAbime) ;
   //   - version           : version donnée par l'adaptateur (null si le fichier n'existe pas) ;
   //   - index             : Map clé → ligne (première ligne si la clé est en double) ;
   //   - problemesLecture  : problèmes trouvés par csv.analyser ;
@@ -689,10 +785,11 @@ const Donnees = (() => {
   const MOTIF_ANNEE = /^([0-9]{4})/;
 
   let adaptateurActif = null;
-  let identite = { poste: '', profil: '' };
+  let identite = { poste: '', profil: '', responsable: false };
   const cache = new Map();                    // nom de table → entrée (voir ci-dessus)
   const filesAttente = new Map();             // nom de table → promesse de la dernière tâche
   const evenements = new EventTarget();
+  const tablesDitesAbimees = new Set();      // tables dont l'événement « fichierAbime » est déjà émis (1.2.1)
   const statistiques = { conflits: 0, essais: 0 };
 
   // Résultats calculés à la demande, oubliés à chaque changement de données (« à recalculer »).
@@ -717,6 +814,12 @@ const Donnees = (() => {
     mouvementsParArticle = null;
   }
 
+  // Garde « fichier abîmé » de Donnees (1.2.1) : partout sauf en démo, où rien n'est jamais enregistré sur un disque
+  // (tout reste en mémoire, aucune perte possible) ; les adaptateurs dossier et serveur ont aussi la leur.
+  function gardeActive() {
+    return adaptateurActif.mode !== 'demo';
+  }
+
   // Exécute les tâches d'une même table l'une après l'autre (jamais deux écritures en même
   // temps sur un fichier depuis ce poste). Une tâche en échec ne bloque pas les suivantes.
   function enSerie(nomTable, tache) {
@@ -737,7 +840,7 @@ const Donnees = (() => {
   }
 
   function entreeAbsente() {
-    return { lignes: [], colonnesInconnues: [], version: null, index: new Map(),
+    return { lignes: [], colonnesInconnues: [], abime: false, version: null, index: new Map(),
       problemesLecture: [], perime: false, absente: true };
   }
 
@@ -748,6 +851,7 @@ const Donnees = (() => {
     return {
       lignes: lu.lignes,
       colonnesInconnues: lu.colonnesInconnues,
+      abime: lu.abime,
       version: version === undefined ? null : version,
       index: indexer(descriptionTable(nomTable), lu.lignes),
       problemesLecture: lu.problemes,
@@ -792,16 +896,19 @@ const Donnees = (() => {
     definirIdentite(options);
     cache.clear();
     filesAttente.clear();
+    tablesDitesAbimees.clear();
     statistiques.conflits = 0;
     statistiques.essais = 0;
     rafraichissementEnCours = null;
     aRecalculer();
   }
 
-  // Change le poste et le profil inscrits au journal (ex. après le choix du profil).
+  // Change le poste et le profil inscrits au journal (ex. après le choix du profil). options.responsable (1.2.1) :
+  // vrai pour le profil responsable (message d'un fichier abîmé : quoi faire, ou « prévenez le responsable »).
   function definirIdentite(options) {
     const valeurs = options || {};
-    identite = { poste: enTexte(valeurs.poste), profil: enTexte(valeurs.profil) };
+    identite = { poste: enTexte(valeurs.poste), profil: enTexte(valeurs.profil),
+      responsable: valeurs.responsable === true };
   }
 
   // Charge les 23 tables en parallèle. Renvoie { tablesAbsentes: [noms des fichiers absents] }.
@@ -1189,7 +1296,9 @@ const Donnees = (() => {
   }
 
   // Écrit des entrées au journal. Un échec ne fait jamais échouer l'action de l'utilisateur :
-  // il est signalé en console (console.warn) et la fonction renvoie false.
+  // il est signalé en console (console.warn) et la fonction renvoie false. Fichier du journal abîmé
+  // (ErreurFichierAbime, 1.2.1) : en plus, événement « fichierAbime » (detail : { table }), une seule fois
+  // par table jusqu'au prochain initialiser() ; l'application en fait un bandeau.
   async function ecrireJournal(entrees) {
     if (entrees.length === 0) { return true; }
     try {
@@ -1197,8 +1306,15 @@ const Donnees = (() => {
       return true;
     } catch (erreur) {
       console.warn('Prévo : le journal n\'a pas pu être écrit (' + (erreur && erreur.message) + ').', erreur);
+      if (erreur instanceof ErreurFichierAbime) { signalerFichierAbime(erreur.table || 'journal'); }
       return false;
     }
+  }
+
+  function signalerFichierAbime(nomTable) {
+    if (tablesDitesAbimees.has(nomTable)) { return; }
+    tablesDitesAbimees.add(nomTable);
+    evenements.dispatchEvent(new CustomEvent('fichierAbime', { detail: { table: nomTable } }));
   }
 
   // Entrée de journal sans modification de donnée (ex. avertissement d'habilitation RG8).
@@ -1292,6 +1408,8 @@ const Donnees = (() => {
         if (changements.length === 0 && nouvelles.length === entree.lignes.length) {
           return { valeur: valeurRendue, changements: [] };      // rien à écrire
         }
+        // 1.2.1 : un fichier abîmé n'est jamais réécrit (rien n'est écrit) ; l'adaptateur le refuse aussi.
+        if (entree.abime && gardeActive()) { throw new ErreurFichierAbime(nomTable, description.fichier); }
         const octets = serialiser(nomTable, nouvelles, entree.colonnesInconnues);
         let reponse;
         try {
@@ -1309,6 +1427,7 @@ const Donnees = (() => {
         cache.set(nomTable, {
           lignes: nouvelles,
           colonnesInconnues: entree.colonnesInconnues,
+          abime: false,
           version: reponse && reponse.version !== undefined ? reponse.version : null,
           index: nouvelIndex,
           problemesLecture: problemesApresReecriture(entree.problemesLecture, nouvelIndex, entree.colonnesInconnues),
@@ -1354,7 +1473,9 @@ const Donnees = (() => {
     try {
       reponse = await adaptateurActif.ajouter(nomTable, octets);
     } catch (erreur) {
-      if (!(erreur instanceof ErreurConflit)) { throw erreur; }
+      // Fichier abîmé (1.2.1 : il finit par un guillemet ouvert, nos lignes seraient avalées) : l'erreur remonte telle
+      // quelle, jamais de repli sur modifier (il réécrirait le fichier). Seul un conflit se replie.
+      if (erreur instanceof ErreurFichierAbime || !(erreur instanceof ErreurConflit)) { throw erreur; }
       await modifier(nomTable, (lignesActuelles) => {
         for (const ligne of lignesAAjouter) { lignesActuelles.push(Object.assign({}, ligne)); }
       }, { journal: false });
@@ -1565,6 +1686,9 @@ const Donnees = (() => {
     if (baseVide() || versionSchemaDe(parametre(CLE_VERSION_SCHEMA, '')) >= versionCible) {
       return { misAJour: false, sauvegarde: null };      // base pas encore créée, ou déjà à jour
     }
+    // 1.2.1 : parametres.csv abîmé → refusé AVANT la sauvegarde : rien n'est écrit, aucune sauvegarde refaite à chaque
+    // ouverture ; l'application s'ouvre quand même, avec le bandeau « Fichier abîmé » (js/app.js).
+    if (cache.get('parametres').abime && gardeActive()) { throw new ErreurFichierAbime('parametres', 'parametres.csv'); }
 
     // 1. La sauvegarde d'abord : sans elle, on ne touche à rien.
     let sauvegarde = null;
@@ -1594,11 +1718,20 @@ const Donnees = (() => {
     return { misAJour: misAJour, sauvegarde: sauvegarde };
   }
 
+  // Tables chargées dont le fichier est abîmé (entree.abime), dans l'ordre du schéma : jamais réécrites (1.2.1).
+  function tablesAbimees() {
+    return Schema.nomsTables().filter((nomTable) => { const entree = cache.get(nomTable); return !!(entree && entree.abime); });
+  }
+
   return {
     // 1. Erreurs
     ErreurConflit: ErreurConflit,
     ErreurValidation: ErreurValidation,
     ErreurStockage: ErreurStockage,
+    ErreurFichierAbime: ErreurFichierAbime,
+    AIDE_FICHIER_ABIME: AIDE_FICHIER_ABIME,
+    CHEMIN_SAUVEGARDES: CHEMIN_SAUVEGARDES,
+    tablesAbimees: tablesAbimees,
     // 2. Dates, nombres, normalisation
     nombre: nombre,
     aujourdhui: aujourdhui,

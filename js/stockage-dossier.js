@@ -183,8 +183,8 @@ const StockageDossier = (() => {
     return new Donnees.ErreurStockage(message, cause);
   }
 
-  // Les erreurs de Prévo passent telles quelles ; les erreurs du navigateur sont traduites
-  // en ErreurStockage avec un message en français (la cause d'origine est conservée).
+  // Les erreurs de Prévo passent telles quelles (ErreurFichierAbime est une ErreurStockage) ; les erreurs du
+  // navigateur sont traduites en ErreurStockage avec un message en français (la cause d'origine est conservée).
   function traduireErreur(erreur, action) {
     if (erreur instanceof Donnees.ErreurConflit || erreur instanceof Donnees.ErreurStockage) {
       return erreur;
@@ -323,6 +323,24 @@ const StockageDossier = (() => {
     if (Schema.nomsTables().indexOf(table) === -1) {
       throw erreurStockage('Table inconnue : ' + table + '.');
     }
+  }
+
+  // Garde « fichier abîmé » de la fonction d'écriture commune (version 1.2.1, même principe que T200 de la 2.0), sur
+  // les octets du fichier en place (null s'il est absent) ; rien si le fichier est absent ou vide :
+  //   - réécriture (enregistrer) : refusée si le fichier est abîmé (Donnees.csv.analyser, `abime` : structure abîmée
+  //     ou valeurs au-delà de l'en-tête) : le réécrire en perdrait une partie sans le dire ;
+  //   - ajout (ajouter, le journal) : refusé si le fichier finit dans un texte entre guillemets jamais fermé
+  //     (Donnees.csv.finitDansUnGuillemetOuvert) : les lignes ajoutées y seraient avalées.
+  // Donnees.ErreurFichierAbime, rien n'est écrit. Seule la restauration d'une sauvegarde (restaurer) remplace un tel
+  // fichier.
+  function verifierFichierEnPlace(table, actuel, ajout) {
+    if (actuel === null || estVide(actuel)) { return; }
+    const abime = ajout ? Donnees.csv.finitDansUnGuillemetOuvert(actuel) : Donnees.csv.analyser(table, actuel).abime;
+    if (abime) { throw new Donnees.ErreurFichierAbime(table, table + '.csv'); }
+  }
+
+  function memesOctets(a, b) {
+    return a === null || b === null ? a === b : octetsEgaux(a, b);
   }
 
   function verifierNomDocument(nom) {
@@ -668,13 +686,19 @@ const StockageDossier = (() => {
     // PUIS lecture et contrôle de version, écriture dans le fichier temporaire, dernier contrôle
     // (contenu inchangé) et fermeture. Une écriture d'un autre poste pendant la sauvegarde ou
     // pendant notre écriture donne un conflit au lieu d'être écrasée.
+    // 1.2.1 : c'est la fonction d'écriture commune d'une table entière (Donnees et les écritures directes de
+    // l'application y passent) : fichier en place abîmé → Donnees.ErreurFichierAbime (verifierFichierEnPlace), contrôlé
+    // AVANT la sauvegarde du jour (rien n'est écrit), et de nouveau s'il a changé pendant celle-ci.
     async function enregistrer(table, octets, versionAttendue) {
       verifierNomTable(table);
       const nouveauContenu = enOctets(octets);
       const attendue = versionAttendue === undefined ? null : versionAttendue;
       return enSerie(async function () {
+        const enPlace = await lireOctets(racine, table + '.csv');
+        verifierFichierEnPlace(table, enPlace, false);
         await sauvegardeQuotidienneSiBesoin();
         const actuel = await lireOctets(racine, table + '.csv');
+        if (!memesOctets(enPlace, actuel)) { verifierFichierEnPlace(table, actuel, false); }
         const versionActuelle = actuel === null ? null : await empreinte(actuel);
         if (attendue !== versionActuelle) {
           let message;
@@ -703,6 +727,9 @@ const StockageDossier = (() => {
     // ErreurConflit : Donnees.ajouter se replie alors sur modifier, qui relit tout. Se placer à
     // la « taille réelle » ne suffirait pas : on ne sait pas si la copie a été faite avant ou
     // après l'écriture de l'autre poste, ni si celui-ci a réécrit le fichier au lieu d'ajouter.
+    // 1.2.1 : fichier qui finit DANS un texte entre guillemets jamais fermé → Donnees.ErreurFichierAbime
+    // (verifierFichierEnPlace), contrôlé AVANT la sauvegarde du jour et les autres contrôles (rien n'est écrit, aucun
+    // repli de Donnees.ajouter sur modifier) ; un fichier abîmé ailleurs reçoit l'ajout (rien n'y est réécrit).
     async function ajouter(table, octets) {
       verifierNomTable(table);
       const corps = sansBom(enOctets(octets));
@@ -712,8 +739,11 @@ const StockageDossier = (() => {
         throw erreurStockage('Le contenu à ajouter doit commencer par la ligne d\'en-tête.');
       }
       return enSerie(async function () {
+        const enPlace = await lireOctets(racine, table + '.csv');
+        verifierFichierEnPlace(table, enPlace, true);
         await sauvegardeQuotidienneSiBesoin();
         const actuel = await lireOctets(racine, table + '.csv');
+        if (!memesOctets(enPlace, actuel)) { verifierFichierEnPlace(table, actuel, true); }
         const controle = controleInchange(table + '.csv', actuel);
 
         if (actuel === null || estVide(actuel)) {

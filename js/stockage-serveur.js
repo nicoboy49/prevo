@@ -4,7 +4,7 @@
 // Tout passe par fetch vers /api/… (même origine que la page). Ce fichier n'utilise ni crypto,
 // ni presse-papiers : il doit marcher en http://192.168.x.x:8080 depuis un téléphone
 // (contexte non sécurisé). Les versions (SHA-256) et les sauvegardes sont calculées par le serveur.
-// Dépendances : Donnees (js/donnees.js) pour les erreurs ErreurConflit et ErreurStockage, Schema
+// Dépendances : Donnees (js/donnees.js) pour les erreurs ErreurConflit, ErreurStockage et ErreurFichierAbime, Schema
 // (js/schema.js) pour la liste des tables ; lues au moment des appels, pas au chargement.
 
 const StockageServeur = (() => {
@@ -20,6 +20,7 @@ const StockageServeur = (() => {
   // Réponse « réussie » mais illisible (ex. page d'un portail Wi-Fi, proxy) : l'écriture a pu se faire.
   const MESSAGE_REPONSE_INATTENDUE =
     'Réponse inattendue du serveur ; l\'opération a peut-être été faite, rechargez la page.';
+  const CODE_FICHIER_ABIME = 'fichier_abime';                // 409 du serveur : fichier abîmé, jamais réécrit (1.2.1)
 
   // ===========================================================================
   // Détection
@@ -56,10 +57,17 @@ const StockageServeur = (() => {
   }
 
   // Transforme une réponse en erreur (409 → ErreurConflit, autre code ≥ 400 → ErreurStockage).
+  // 1.2.1 : 409 au code « fichier_abime » (corps { erreur, code, table }) = le fichier de la table est abîmé et le
+  // serveur refuse de le réécrire ou de le compléter → Donnees.ErreurFichierAbime, AVANT le 409 générique (un conflit
+  // serait réessayé par Donnees.modifier, avec un faux message).
   async function erreurDepuisReponse(reponse) {
     const donnees = await lireJsonOuNull(reponse);
     const message = (donnees && donnees.erreur)
       || 'Le serveur a refusé la demande (code ' + reponse.status + ').';
+    if (reponse.status === 409 && donnees && donnees.code === CODE_FICHIER_ABIME) {
+      const table = typeof donnees.table === 'string' ? donnees.table : '';
+      return new Donnees.ErreurFichierAbime(table, table ? table + '.csv' : 'fichier de données');
+    }
     if (reponse.status === 409) {
       const versionActuelle = donnees && donnees.version_actuelle !== undefined
         ? donnees.version_actuelle : null;
