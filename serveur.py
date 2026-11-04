@@ -3449,6 +3449,322 @@ def est_utf8(octets):
 
 
 # ---------------------------------------------------------------------------
+# Formats des données (miroir de js/formats.js, T184)
+# ---------------------------------------------------------------------------
+
+# Registre des formats des fichiers de données, mêmes règles que js/formats.js (décisions D167 et D168 ;
+# ARCHITECTURE.md §5.6, §14.1, §20.2) : colonnes et tables de chaque format, format d'un fichier d'après son en-tête,
+# format d'une base (parametres.version_schema), étapes de passage pures et idempotentes, une ligne de journal par
+# étape. Le format est un entier, distinct de la version de l'application ; le format courant est VERSION_SCHEMA_CSV,
+# ses colonnes sont COLONNES_PAR_TABLE et ses tables TABLES. Rien ici ne lit ni n'écrit de fichier, et aucune route ne
+# s'en sert : le serveur en marche ne change pas (le passage au format courant au démarrage viendra avec T185).
+# Une base a la forme {<table>: {'entete': [noms…], 'lignes': [{<colonne>: '<cellule>'}]}} : les cellules sont celles
+# du fichier, telles que lire_csv_tolerant les rend (apostrophe de protection comprise), pour être réécrites telles
+# quelles par ecrire_tableau_csv. C'est la seule différence avec la base en mémoire de js/formats.js (valeurs relues
+# sans l'apostrophe) : version_de_base retire l'apostrophe avant de lire le nombre (Donnees.csv.relireValeur), et
+# l'étape écrit version_schema comme Prévo l'écrit dans le fichier (« '3 », Donnees.csv.ecrireValeur). Les tests
+# tests/test_formats_serveur.py comparent ces fonctions à js/formats.js et à Donnees.csv, octet pour octet.
+
+PREMIER_FORMAT = 1
+CLE_VERSION_SCHEMA = 'version_schema'
+VERSION_SCHEMA_PAR_DEFAUT = 1           # version_schema absent ou illisible : fichiers du lot 1 (format 1)
+# Premier format des tables et des colonnes apparues après le format 1 (depuisVersion de js/schema.js), toujours en fin
+# de table pour les colonnes ; les autres existent depuis le format 1. RENVOI CROISÉ : cohérence avec js/schema.js et
+# avec COLONNES_DES_FORMATS_SUIVANTS vérifiée par tests/test_formats_serveur.py.
+PREMIER_FORMAT_DES_TABLES = {'wiki_pages': 3, 'wiki_journal': 3}
+PREMIER_FORMAT_DES_COLONNES = {
+    'equipements': {'valeur_remplacement': 2},
+    'demandes': {'symptome_code': 2, 'ot_origine_id': 2},
+    'ordres_travail': {'anomalie_constatee': 2, 'astuce': 3},
+}
+# Valeur par défaut des champs qui en ont une (« defaut » de js/schema.js ; les autres : ''), mise par une étape dans
+# chaque ligne d'une colonne qu'elle ajoute. Aucun de ces champs n'est un texte : la cellule écrite est la valeur même,
+# sans apostrophe. RENVOI CROISÉ : cohérence avec js/schema.js vérifiée par tests/test_formats_serveur.py.
+DEFAUTS_DES_CHAMPS = {
+    'equipements': {'criticite': 'B', 'statut': 'en service', 'actif': '1'},
+    'demandes': {'statut': 'Nouvelle'},
+    'ordres_travail': {'statut': 'Créé', 'arret_production': '0', 'remise_service': '0', 'anomalie_constatee': '0'},
+    'ot_operations': {'fait': '0'},
+    'gammes': {'declencheur': 'date', 'actif': '1'},
+    'articles': {'critique': '0', 'actif': '1'},
+    'techniciens': {'actif': '1'},
+    'controles_reglementaires': {'observations_levees': '0'},
+    'achats': {'statut': 'demandée'},
+    'wiki_pages': {'version': '0', 'statut': 'active'},
+    'wiki_journal': {'anterieure': '0', 'essais': '0'},
+}
+# Blancs de JavaScript (\s et trim : espaces Unicode, fins de ligne, BOM), pour lire les noms de colonne et les nombres
+# comme le navigateur ; codes en clair, jamais de caractère invisible dans ce fichier.
+BLANCS_JS = frozenset(chr(code) for code in (0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2028, 0x2029, 0x202F,
+                                             0x205F, 0x3000, 0xFEFF) + tuple(range(0x2000, 0x200B)))
+CARACTERE_BOM = chr(0xFEFF)
+PREMIERE_MARQUE_D_ACCENT, DERNIERE_MARQUE_D_ACCENT = 0x0300, 0x036F     # MOTIF_ACCENTS de js/formats.js
+# Protection par apostrophe d'un champ texte (Donnees.csv, §3.2) : début de formule, ou valeur qu'Excel prendrait pour
+# un nombre, une date, une fraction, une heure ou un pourcentage (motifs recopiés de js/donnees.js).
+MOTIF_DEBUT_DANGEREUX_JS = re.compile(r'[=+\-@\t\r]')
+MOTIFS_NOMBRE_DATE_FRACTION_JS = tuple(re.compile(motif) for motif in (
+    r'[0-9]+([.,][0-9]+)?',
+    r'[0-9]+([.,][0-9]+)?[eE][+-]?[0-9]+',
+    r'[0-9]{1,4}[/.-][0-9]{1,2}([/.-][0-9]{1,4})?',
+    r'[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?',
+    r'[0-9]+([.,][0-9]+)?[' + ''.join(re.escape(blanc) for blanc in sorted(BLANCS_JS)) + ']?%',
+))
+MOTIF_NOMBRE_JS = re.compile(r'([+-]?)([0-9]*)(?:\.([0-9]*))?')      # Donnees.nombre, après retrait des blancs
+
+
+def sans_blancs_js_aux_bords(texte):
+    """texte.trim() de JavaScript : blancs JS (BLANCS_JS) retirés aux deux bords."""
+    debut, fin = 0, len(texte)
+    while debut < fin and texte[debut] in BLANCS_JS:
+        debut += 1
+    while fin > debut and texte[fin - 1] in BLANCS_JS:
+        fin -= 1
+    return texte[debut:fin]
+
+
+def cle_de_colonne(nom):
+    """Clé de comparaison d'un nom de colonne, celle de Formats.formatDuFichier (js/formats.js, cleDeColonne) : BOM et
+    blancs de bord retirés, accents retirés, minuscules, blancs et soulignés ignorés. None → ''."""
+    texte = '' if nom is None else str(nom)
+    if texte.startswith(CARACTERE_BOM):
+        texte = texte[1:]
+    texte = unicodedata.normalize('NFD', sans_blancs_js_aux_bords(texte))
+    texte = ''.join(caractere for caractere in texte
+                    if not PREMIERE_MARQUE_D_ACCENT <= ord(caractere) <= DERNIERE_MARQUE_D_ACCENT).lower()
+    return ''.join(caractere for caractere in texte if caractere not in BLANCS_JS and caractere != '_')
+
+
+def premier_format_de_table(table):
+    """Premier format où la table existe : 1 pour les tables du brief, 3 pour celles du wiki."""
+    return PREMIER_FORMAT_DES_TABLES.get(table, PREMIER_FORMAT)
+
+
+def colonnes_du_format(table, format=None):
+    """Noms des colonnes de la table dans ce format (None : le format courant), dans l'ordre du schéma ; [] si la table
+    n'existe pas encore dans ce format ou n'est pas dans le schéma (Formats.colonnes)."""
+    voulu = VERSION_SCHEMA_CSV if format is None else format
+    if not isinstance(table, str) or table not in COLONNES_PAR_TABLE or premier_format_de_table(table) > voulu:
+        return []
+    depuis = PREMIER_FORMAT_DES_COLONNES.get(table, {})
+    return [colonne for colonne in COLONNES_PAR_TABLE[table] if depuis.get(colonne, PREMIER_FORMAT) <= voulu]
+
+
+def tables_du_format(format=None):
+    """Noms des tables qui existent dans ce format (None : le format courant), dans l'ordre du schéma
+    (Formats.tables)."""
+    voulu = VERSION_SCHEMA_CSV if format is None else format
+    return [table for table in TABLES if premier_format_de_table(table) <= voulu]
+
+
+def format_du_fichier(table, entete):
+    """Format d'un fichier d'après son en-tête (liste de noms, ordre indifférent), comme Formats.formatDuFichier : le
+    plus grand format N, du premier format de la table au format courant, dont toutes les colonnes sont dans l'en-tête
+    (noms comparés par cle_de_colonne) ; 0 si même les colonnes du premier format manquent (fichier abîmé, en-tête vide
+    ou illisible) ; None pour une table inconnue du schéma. Ne lève jamais d'exception."""
+    if not isinstance(table, str) or table not in COLONNES_PAR_TABLE:
+        return None
+    try:
+        presentes = {cle_de_colonne(nom) for nom in (entete if isinstance(entete, (list, tuple)) else [])}
+        trouve = 0
+        for format in range(premier_format_de_table(table), VERSION_SCHEMA_CSV + 1):
+            if not all(cle_de_colonne(nom) in presentes for nom in colonnes_du_format(table, format)):
+                break                       # les colonnes d'un format contiennent celles des formats précédents
+            trouve = format
+        return trouve
+    except Exception:                       # nom de colonne qui refuse d'être converti en texte
+        return 0
+
+
+def ressemble_nombre_date_fraction_js(valeur):
+    """ressembleNombreDateFraction de js/donnees.js : après retrait de [ \\t\\r\\n] aux deux bords."""
+    sans_espaces_aux_bords = valeur.strip(' \t\r\n')
+    return any(motif.fullmatch(sans_espaces_aux_bords) for motif in MOTIFS_NOMBRE_DATE_FRACTION_JS)
+
+
+def a_proteger_texte(valeur):
+    """Donnees.csv.aProteger pour un champ texte non « protege » (parametres.valeur, colonne inconnue)."""
+    return valeur != '' and (MOTIF_DEBUT_DANGEREUX_JS.match(valeur) is not None or valeur.startswith("'")
+                             or ressemble_nombre_date_fraction_js(valeur))
+
+
+def relire_valeur_texte(cellule):
+    """Cellule d'un champ texte non « protege » → valeur en mémoire, apostrophe de protection retirée
+    (Donnees.csv.relireValeur). None → ''."""
+    texte = '' if cellule is None else str(cellule)
+    return texte[1:] if texte.startswith("'") and a_proteger_texte(texte[1:]) else texte
+
+
+def ecrire_valeur_texte(valeur):
+    """Valeur en mémoire d'un champ texte non « protege » → cellule écrite, apostrophe ajoutée si besoin
+    (Donnees.csv.ecrireValeur). None → ''."""
+    texte = '' if valeur is None else str(valeur)
+    return "'" + texte if a_proteger_texte(texte) else texte
+
+
+def nombre_js(valeur):
+    """Copie de Donnees.nombre (js/donnees.js) : valeur → nombre (int s'il est entier), ou None si vide ou illisible ;
+    virgule décimale et blancs (insécables compris) acceptés."""
+    if isinstance(valeur, bool):
+        valeur = 'true' if valeur else 'false'
+    elif isinstance(valeur, (int, float)):
+        return valeur if valeur == valeur and abs(valeur) != float('inf') else None
+    texte = sans_blancs_js_aux_bords('' if valeur is None else str(valeur))
+    if texte == '':
+        return None
+    compact = ''.join(caractere for caractere in texte if caractere not in BLANCS_JS).replace(',', '.', 1)
+    morceaux = MOTIF_NOMBRE_JS.fullmatch(compact)
+    if not morceaux or (morceaux.group(2) == '' and not morceaux.group(3)):
+        return None
+    signe = '-' if morceaux.group(1) == '-' else ''
+    partie_decimale = '.' + morceaux.group(3) if morceaux.group(3) else ''
+    converti = float(signe + (morceaux.group(2) or '0') + partie_decimale)
+    if abs(converti) == float('inf'):
+        return None
+    return int(converti) if converti.is_integer() else converti
+
+
+def colonne_de_champ(noms, champ):
+    """Premier nom de « noms » (en-tête, ou clés d'une ligne) qui désigne ce champ (cle_de_colonne) ; None sinon."""
+    if champ in noms:
+        return champ
+    cle = cle_de_colonne(champ)
+    return next((nom for nom in noms if cle_de_colonne(nom) == cle), None)
+
+
+def cle_de_parametre(ligne):
+    """Clé d'une ligne de parametres, lue comme Donnees.csv.analyser lit un identifiant (blancs de bord retirés)."""
+    colonne = colonne_de_champ(list(ligne), 'cle')
+    return sans_blancs_js_aux_bords('' if colonne is None or ligne[colonne] is None else str(ligne[colonne]))
+
+
+def version_de_base(lignes_parametres):
+    """Format d'une base d'après les lignes de parametres.csv ([{colonne: cellule}], cellules du fichier) : même règle
+    que Formats.versionDeBase, sur les valeurs relues sans l'apostrophe de protection (« '3 » → 3) : version_schema de
+    la première ligne qui porte cette clé, lu comme Donnees.nombre ; absent, vide ou illisible → 1."""
+    lignes = lignes_parametres if isinstance(lignes_parametres, (list, tuple)) else []
+    for ligne in lignes:
+        if isinstance(ligne, dict) and cle_de_parametre(ligne) == CLE_VERSION_SCHEMA:
+            colonne = colonne_de_champ(list(ligne), 'valeur')
+            lue = nombre_js(relire_valeur_texte(None if colonne is None else ligne[colonne]))
+            return VERSION_SCHEMA_PAR_DEFAUT if lue is None else lue
+    return VERSION_SCHEMA_PAR_DEFAUT
+
+
+def copier_table_de_base(table):
+    """Copie d'une table de la base : en-tête et lignes copiés (les autres clés de la table sont gardées)."""
+    source = table if isinstance(table, dict) else {}
+    copie = dict(source)
+    entete, lignes = source.get('entete'), source.get('lignes')
+    copie['entete'] = list(entete) if isinstance(entete, (list, tuple)) else []
+    copie['lignes'] = ([dict(ligne) if isinstance(ligne, dict) else {} for ligne in lignes]
+                       if isinstance(lignes, (list, tuple)) else [])
+    return copie
+
+
+def completer_colonnes(table, contenu, format):
+    """Ajoute en fin d'en-tête les colonnes du format absentes de la table (comparées par cle_de_colonne), avec la
+    valeur par défaut du champ (sinon '') dans chaque ligne qui n'a pas déjà cette colonne. Les colonnes inconnues
+    restent à leur place, avec leurs valeurs. Modifie la COPIE reçue."""
+    presentes = {cle_de_colonne(nom) for nom in contenu['entete']}
+    defauts = DEFAUTS_DES_CHAMPS.get(table, {})
+    for colonne in colonnes_du_format(table, format):
+        if cle_de_colonne(colonne) in presentes:
+            continue
+        contenu['entete'].append(colonne)
+        presentes.add(cle_de_colonne(colonne))
+        for ligne in contenu['lignes']:
+            if colonne not in ligne:
+                ligne[colonne] = defauts.get(colonne, '')
+
+
+def poser_version_de_base(parametres, format):
+    """parametres.version_schema = format, écrit comme Prévo l'écrit (« '3 ») : la première ligne qui porte la clé,
+    sinon une ligne ajoutée en fin (ses autres colonnes à ''). Modifie la COPIE reçue (colonnes cle et valeur
+    présentes : completer_colonnes est passé avant)."""
+    colonne_cle = colonne_de_champ(parametres['entete'], 'cle')
+    colonne_valeur = colonne_de_champ(parametres['entete'], 'valeur')
+    cellule = ecrire_valeur_texte(str(format))
+    for ligne in parametres['lignes']:
+        if cle_de_parametre(ligne) == CLE_VERSION_SCHEMA:
+            ligne[colonne_valeur] = cellule
+            return
+    nouvelle = {colonne: '' for colonne in parametres['entete']}
+    nouvelle[colonne_cle] = CLE_VERSION_SCHEMA
+    nouvelle[colonne_valeur] = cellule
+    parametres['lignes'].append(nouvelle)
+
+
+def passer_au_format(base, format):
+    """Passage d'une base au format « format » (étape additive, §14.1 et §20.2), comme passerAuFormat de
+    js/formats.js. Rend une NOUVELLE base où chaque table du format absente est créée vide (en-tête = ses colonnes),
+    chaque colonne du format absente d'une table est ajoutée en fin d'en-tête avec sa valeur par défaut, les colonnes
+    et tables inconnues sont gardées telles quelles, et parametres.version_schema vaut le format. La base reçue n'est
+    pas modifiée ; appliquée deux fois, l'étape donne le même résultat qu'une fois."""
+    source = base if isinstance(base, dict) else {}
+    nouvelle = {table: copier_table_de_base(contenu) for table, contenu in source.items()}
+    for table in tables_du_format(format):
+        if table not in nouvelle:
+            nouvelle[table] = {'entete': [], 'lignes': []}
+        completer_colonnes(table, nouvelle[table], format)
+    poser_version_de_base(nouvelle['parametres'], format)
+    return nouvelle
+
+
+class EtapeDeFormat:
+    """Une étape du registre : de N à N+1, sa description, et appliquer(base) → nouvelle base (pure, idempotente)."""
+
+    __slots__ = ('de', 'vers', 'description')
+
+    def __init__(self, de, vers, description):
+        self.de, self.vers, self.description = de, vers, description
+
+    def appliquer(self, base):
+        return passer_au_format(base, self.vers)
+
+
+# Le registre, dans l'ordre, mêmes étapes et mêmes descriptions que Formats.ETAPES. Un format futur ajoute son étape
+# ici ET dans js/formats.js (et VERSION_SCHEMA_CSV) : tests/test_formats_serveur.py compare les deux registres.
+ETAPES_FORMAT = (
+    EtapeDeFormat(1, 2, 'Format 2 (versions 1.0 et 1.1, §14.1) : colonnes equipements.valeur_remplacement, '
+                        'demandes.symptome_code, demandes.ot_origine_id et ordres_travail.anomalie_constatee '
+                        '(défaut 0), en fin de table.'),
+    EtapeDeFormat(2, 3, 'Format 3 (versions 1.2 et 2.0, §20.2) : colonne ordres_travail.astuce en fin de table, '
+                        'tables wiki_pages et wiki_journal (vides).'),
+)
+
+
+def ligne_de_journal_de_format(format):
+    """Ligne de journal d'une étape, texte exact de js/formats.js (relu par la suggestion S4 : ne pas le changer)."""
+    return 'passage au format %d du fichier' % format
+
+
+def migrer_tables(base, de, vers):
+    """Enchaîne les étapes de « de » à « vers », comme Formats.migrer → (base, journal, etapes) :
+    base au format « vers » (nouvel objet ; la base reçue n'est pas modifiée), une ligne de journal « passage au format
+    N du fichier » par étape appliquée, et les étapes appliquées ([{'de', 'vers', 'description'}]). « de » est le
+    format actuel (version_de_base) ; de >= vers (base déjà au format, ou plus récente) : base rendue telle quelle,
+    journal et étapes vides. « vers » : un format entier de 1 au format courant (ValueError sinon) ; « de » illisible :
+    TypeError."""
+    entier = not isinstance(vers, bool) and (isinstance(vers, int) or (isinstance(vers, float) and vers.is_integer()))
+    if not entier or not PREMIER_FORMAT <= vers <= VERSION_SCHEMA_CSV:
+        raise ValueError('migrer_tables : format cible inconnu (%s) ; formats connus : %d à %d.'
+                         % (vers, PREMIER_FORMAT, VERSION_SCHEMA_CSV))
+    if isinstance(de, bool) or not isinstance(de, (int, float)) or de != de:
+        raise TypeError('migrer_tables : format de départ illisible (%s).' % (de,))
+    vers = int(vers)
+    if de >= vers:
+        return base, [], []
+    courante, journal, etapes = base, [], []
+    for etape in ETAPES_FORMAT:
+        if etape.vers <= de or etape.vers > vers:
+            continue
+        courante = etape.appliquer(courante)
+        journal.append(ligne_de_journal_de_format(etape.vers))
+        etapes.append({'de': etape.de, 'vers': etape.vers, 'description': etape.description})
+    return courante, journal, etapes
+
+
+# ---------------------------------------------------------------------------
 # Sauvegardes
 # ---------------------------------------------------------------------------
 
