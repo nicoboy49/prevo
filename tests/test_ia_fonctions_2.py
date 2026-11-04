@@ -234,6 +234,10 @@ class TestSansResume(CasFonctions):
 class TestCommentaireRapport(CasFonctions):
 
     def ouvrir_rapports(self, modele="faux"):
+        # Horloge du navigateur fixée à la date de référence de la démo (T194) : le serveur sert donnees/demo telle
+        # quelle (dates du 2026-10-19 au plus tard) ; un autre jour, le mois proposé pourrait n'avoir aucune
+        # disponibilité calculable, et le faux modèle, qui écrit toujours {disponibilite}, serait refusé (jeton inconnu).
+        self.contexte.clock.set_fixed_time("2026-10-19T09:00:00")
         page = self.ouvrir("#/indicateurs?onglet=rapports", modele=modele)
         page.wait_for_selector("#rapports-commentaire")
         return page
