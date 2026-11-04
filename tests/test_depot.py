@@ -54,7 +54,7 @@ ORDRE_MODULES = [
     "planning-regles.js", "planning-ecritures.js", "planning-ecrans.js",
     "indicateurs-regles.js", "indicateurs-series.js", "indicateurs-graphiques.js", "indicateurs-ecrans.js",
     "rapport-contenu.js", "rapport-ecrans.js",
-    "zip-donnees.js",
+    "zip-donnees.js", "zip-lecture.js",
     "parametres.js", "parametres-codes.js", "parametres-solo.js", "parametres-sauvegardes.js", "parametres-acces.js",
     "import-regles.js", "import-historique.js", "import-controles.js", "import-lecture.js", "import-ecritures.js",
     "import-modeles.js",

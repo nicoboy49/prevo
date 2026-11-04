@@ -1303,6 +1303,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   indicateurs-regles.js  indicateurs-series.js  indicateurs-graphiques.js  indicateurs-ecrans.js
   rapport-contenu.js  rapport-ecrans.js
   zip-donnees.js
+  zip-lecture.js
   parametres.js  parametres-codes.js  (puis js/app.js)
   ```
   Écart retenu (T43) : `indicateurs-series.js` (séries des graphiques) s'insère après
@@ -1317,6 +1318,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   `brancherAcces`).
   Chantier socle de données (T189, D171) : `zip-donnees.js` (objet `ZipDonnees`, export ZIP complet : 24 CSV, documents
   cités, rapports figés, `manifeste.json`, jamais `acces/` ; `App.exporterZip` délègue) se charge après `rapport-ecrans.js`.
+  Socle de données (T190, D172) : `zip-lecture.js` (objet `ZipLecture`, `lire(source)` : lecture et contrôles stricts d'un ZIP de données, migration en mémoire, sans rien écrire) se charge après `zip-donnees.js`.
   Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
   fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
   `Parametres`. Un seul écouteur `DOMContentLoaded` par module, dans son dernier fichier
