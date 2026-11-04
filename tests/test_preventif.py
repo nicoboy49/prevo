@@ -11,9 +11,10 @@ Familles (le nom du test le dit) :
     ecrans      : liste et statuts, filtres, bouton « Générer les OT échus » ; création d'une gamme et
                   de sa check-list, modification, ordre, suppression journalisée ; calendrier de
                   12 semaines ; technicien en lecture seule ; demandeur sans accès ; téléphone 375 px ;
-    demarrage   : base vide écrite au format courant (sans sauvegarde) ; base au format 1 →
-                  sauvegarde puis format courant (tous profils) ; sauvegarde impossible → aucun OT généré
-                  à cette ouverture, application utilisable, nouvel essai à l'ouverture suivante ;
+    demarrage   : base vide écrite au format courant (sans sauvegarde) ; mode serveur, base au format 1
+                  (T186, D168 : le passage est fait par le serveur, jamais par le navigateur) → rien n'est
+                  écrit (tous profils) ; aucun OT généré tant que la base n'est pas au format courant,
+                  bandeau au responsable, application utilisable ;
                   démo : génération sans toast (T89 : la démo génère à chaque ouverture ; chaque toast
                   affiché est noté dès son apparition) ; marques.
 
@@ -24,7 +25,6 @@ numéro d'OT n'est écrit en dur. Lancer depuis la racine du projet :
 import csv
 import datetime
 import io
-import json
 import re
 import shutil
 import unittest
@@ -635,36 +635,31 @@ class TestDemarrage(CasPreventif):
             self.assertEqual(lire_csv(serveur.dossier, "journal.csv"), [])     # rien d'autre n'a été écrit
             self.assertEqual(self.page.evaluate("performance.getEntriesByName('prevo:preventif').length"), 1)
 
-    def test_demarrage_base_au_format_1_sauvegarde_puis_format_courant_pour_tous_les_profils(self):
+    def test_demarrage_serveur_base_au_format_1_le_navigateur_n_ecrit_rien_pour_tous_les_profils(self):
+        """T186 (D168) : en mode serveur, le passage au format courant est fait par le serveur à son démarrage
+        (T185), jamais par le navigateur : ni sauvegarde, ni version, à aucune ouverture."""
         with ServeurPrevo() as serveur:
             shutil.copyfile(str(PARAMETRES_V1), str(serveur.dossier / "parametres.csv"))
             self.ouvrir(serveur, profil="demandeur", nom="Lucie Test")
-            sauvegardes = sauvegardes_avant_format(serveur.dossier)
-            self.assertEqual(len(sauvegardes), 1, sauvegardes)
-            copie = serveur.dossier / "sauvegardes" / sauvegardes[0] / "parametres.csv"
-            self.assertEqual(copie.read_bytes(), PARAMETRES_V1.read_bytes())      # état d'avant
-            self.assertEqual(version_schema(serveur.dossier), "3")
-            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "3")
+            self.assertEqual(sauvegardes_avant_format(serveur.dossier), [])
+            self.assertEqual((serveur.dossier / "parametres.csv").read_bytes(), PARAMETRES_V1.read_bytes())
+            self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "1")
             self.page.reload()
             attendre_pret(self.page)
-            self.assertEqual(sauvegardes_avant_format(serveur.dossier), sauvegardes)   # pas de seconde sauvegarde
+            self.assertEqual(sauvegardes_avant_format(serveur.dossier), [])
+            self.assertEqual(version_schema(serveur.dossier), "1")
 
-    def test_demarrage_sauvegarde_impossible_aucun_ot_genere_application_utilisable_puis_nouvel_essai(self):
-        """Pas de passage au format courant sans sauvegarde confirmée (décision de Nicolas) : sauvegarde
-        impossible → version inchangée, AUCUNE génération automatique à cette ouverture (elle
-        écrirait ordres_travail et ot_operations au format courant), application utilisable ; l'ouverture
-        suivante retente tout (sauvegarde, format, génération)."""
-        self.autoriser_erreur(re.compile(r"status of 500.*/api/sauvegarde"))
+    def test_demarrage_serveur_base_pas_au_format_courant_aucun_ot_genere_bandeau_application_utilisable(self):
+        """Pas d'OT préventifs générés sur une base qui n'est pas au format courant (ils seraient écrits au format
+        courant sans la sauvegarde « avant-format-vN ») : en mode serveur, le serveur n'a pas pu faire le passage
+        à son démarrage (Excel ouvert…) ; le responsable le lit dans un bandeau ; l'application reste utilisable.
+        (Le cas du mode dossier, sauvegarde impossible puis nouvel essai : tests/test_formats_navigateur.py.)"""
         with ServeurPrevo() as serveur:
             shutil.copyfile(str(PARAMETRES_V1), str(serveur.dossier / "parametres.csv"))
             self.assertEqual(ots_ouverts_de(serveur.dossier, GAMME_ECHUE), [])     # gamme échue sans OT ouvert
             ordres_avant = (serveur.dossier / "ordres_travail.csv").read_bytes()
             operations_avant = (serveur.dossier / "ot_operations.csv").read_bytes()
-            corps = json.dumps({"erreur": "Disque plein (simulé)."})
-            self.page.route("**/api/sauvegarde", lambda route: route.fulfill(
-                status=500, content_type="application/json; charset=utf-8", body=corps))
             self.ouvrir(serveur)
-            self.page.wait_for_load_state("networkidle")
             self.assertEqual(version_schema(serveur.dossier), "1")
             self.assertEqual(sauvegardes_avant_format(serveur.dossier), [])
             # Aucun OT généré : les deux fichiers sont inchangés sur le disque
@@ -672,20 +667,13 @@ class TestDemarrage(CasPreventif):
             self.assertEqual((serveur.dossier / "ordres_travail.csv").read_bytes(), ordres_avant)
             self.assertEqual((serveur.dossier / "ot_operations.csv").read_bytes(), operations_avant)
             alertes = self.page.inner_text("#alertes-app")
-            self.assertIn("Disque plein (simulé)", alertes)
+            self.assertIn("pas encore au format 3", alertes)
             self.assertIn("les OT préventifs échus ne sont pas générés automatiquement", alertes)
             self.assertEqual(self.page.evaluate("performance.getEntriesByName('prevo:preventif').length"), 1)
             # Application utilisable : écran Préventif, bouton « Générer les OT échus » du responsable
             self.page.click("#menu a[href='#/preventif']")
             self.page.wait_for_selector(".pv-liste-tableau tbody tr")
             self.assertTrue(self.page.is_visible("#pv-generer"))
-
-            self.page.unroute("**/api/sauvegarde")
-            self.page.reload()
-            attendre_pret(self.page)
-            self.assertEqual(version_schema(serveur.dossier), "3")
-            self.assertEqual(len(sauvegardes_avant_format(serveur.dossier)), 1)
-            self.assertEqual(len(ots_ouverts_de(serveur.dossier, GAMME_ECHUE)), 1)     # génération à cette ouverture
 
     def test_demarrage_demo_generation_a_l_ouverture_sans_toast_et_marques(self):
         self.noter_les_toasts()

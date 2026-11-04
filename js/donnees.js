@@ -7,7 +7,8 @@
 //   3. la lecture et l'écriture des CSV (protection par apostrophe, lecture tolérante) ;
 //   4. le chargement, les mutations, le journal et le rafraîchissement (tâche T08).
 // Toute valeur en mémoire est une CHAÎNE au format du fichier : dates ISO, booléens 0/1,
-// point décimal. Dépendances : Schema (js/schema.js) et Papa (js/lib/papaparse.min.js).
+// point décimal. Dépendances : Schema (js/schema.js) et Papa (js/lib/papaparse.min.js) ; Formats
+// (js/formats.js) pour le seul passage au format courant (§4.11 : etatDuFormat, migrerAuFormatCourant).
 
 const Donnees = (() => {
 
@@ -41,6 +42,19 @@ const Donnees = (() => {
       super(message || 'Lecture ou écriture du fichier impossible.');
       this.name = 'ErreurStockage';
       this.cause = cause === undefined ? null : cause;
+    }
+  }
+
+  // Écriture refusée : les données viennent d'une version plus récente de Prévo (parametres.version_schema plus
+  // grand que Schema.version, décision D169) et sont ouvertes en lecture seule. format : le format de la base.
+  // Sous-classe d'ErreurStockage : partout où une erreur de stockage est montrée telle quelle, ce message l'est aussi.
+  class ErreurLectureSeule extends ErreurStockage {
+    constructor(format) {
+      super('Ces données viennent d\'une version plus récente de Prévo (format ' + format + ' des fichiers ; '
+        + 'cette version lit jusqu\'au format ' + Schema.version + ') : elles sont ouvertes en lecture seule et '
+        + 'rien n\'est enregistré. Ouvrez-les avec la dernière version de Prévo.');
+      this.name = 'ErreurLectureSeule';
+      this.format = format;
     }
   }
 
@@ -581,9 +595,13 @@ const Donnees = (() => {
       + description.fichier + ' ; ' + suite + '. Elle sera ajoutée à la prochaine modification de la table.');
   }
 
-  // Octets (ou texte) d'un fichier CSV → { lignes, colonnesInconnues, problemes, encodage, separateur }.
+  // Octets (ou texte) d'un fichier CSV → { lignes, colonnesInconnues, problemes, encodage, separateur, entete }.
   // Chaque ligne est un objet avec TOUS les champs du schéma (valeur par défaut du schéma si la
   // colonne est absente du fichier, sinon chaîne vide), plus les colonnes inconnues.
+  // entete : les noms de la ligne d'en-tête du fichier, tels qu'écrits (espaces des bords retirés) ; [] pour un
+  // fichier vide. Il sert à reconnaître le format du fichier (Formats.formatDuFichier, décision D167).
+  // abime : vrai si le fichier ne se relit pas sans perte (structure abîmée, ou valeurs au-delà de l'en-tête) :
+  // le réécrire perdrait ces valeurs, le passage au format courant ne le réécrit donc pas (§4.11).
   function analyser(nomTable, entree) {
     const description = descriptionTable(nomTable);
     const decode = decoder(entree);
@@ -591,7 +609,7 @@ const Donnees = (() => {
     const separateur = choisirSeparateur(texte);
     const problemes = [];
     const resultat = { lignes: [], colonnesInconnues: [], problemes: problemes,
-      encodage: decode.encodage, separateur: separateur };
+      encodage: decode.encodage, separateur: separateur, entete: [], abime: false };
 
     if (decode.encodage === 'windows-1252') {
       problemes.push(probleme('info', 'encodage', nomTable, null, null, null, null,
@@ -604,6 +622,7 @@ const Donnees = (() => {
     const decoupage = decouper(texte, separateur);
     const enregistrements = decoupage.enregistrements;
     const entete = enregistrements.length > 0 ? enregistrements[0].cellules : [];
+    resultat.entete = entete.map((cellule) => cellule.trim());
     const donnees = enregistrements.slice(1);
     const association = associerColonnes(description, nomTable, entete, donnees, problemes);
     const colonnes = association.colonnes;
@@ -616,6 +635,7 @@ const Donnees = (() => {
     const indexCle = colonnes.findIndex((colonne) => colonne.champ && colonne.champ.nom === description.cle);
 
     for (const erreur of decoupage.erreurs) {
+      resultat.abime = true;
       problemes.push(probleme('erreur', 'valeur', nomTable, erreur.numero, null, null, null,
         description.libelle + ', ligne ' + erreur.numero + ' de ' + description.fichier
         + ' : structure du fichier abîmée (' + erreur.message + '), par exemple un guillemet non fermé. '
@@ -649,6 +669,7 @@ const Donnees = (() => {
       // Cellules au-delà de l'en-tête : signalées si elles ne sont pas vides, puis ignorées.
       for (let index = colonnes.length; index < cellules.length; index += 1) {
         if (cellules[index].trim() !== '') {
+          resultat.abime = true;
           problemes.push(probleme('attention', 'colonne', nomTable, numero, identifiant, null, cellules[index],
             reperage + ' : cette ligne contient plus de valeurs que l\'en-tête n\'a de colonnes ; '
             + 'la valeur « ' + cellules[index] + ' » (colonne ' + (index + 1) + ') est ignorée.'));
@@ -672,9 +693,12 @@ const Donnees = (() => {
   // 4. Chargement, mutation, journal, rafraîchissement (ARCHITECTURE.md §5.2 à §5.5)
   // ===========================================================================
   // Le cache garde, pour chaque table, une « entrée » :
-  //   { lignes, colonnesInconnues, version, index, problemesLecture, perime, absente }
+  //   { lignes, colonnesInconnues, entete, version, index, problemesLecture, perime, absente }
   //   - lignes            : tableau d'objets (toutes les valeurs sont des chaînes) ;
   //   - colonnesInconnues : colonnes du fichier qui ne sont pas dans le schéma (conservées) ;
+  //   - entete            : noms de la ligne d'en-tête du fichier (lue, ou écrite par nous) ; [] si le fichier
+  //                         est absent ou vide. Le format du fichier s'en déduit (Formats.formatDuFichier) ;
+  //   - abime             : vrai si le fichier lu ne se réécrirait pas sans perte (csv.analyser) ;
   //   - version           : version donnée par l'adaptateur (null si le fichier n'existe pas) ;
   //   - index             : Map clé → ligne (première ligne si la clé est en double) ;
   //   - problemesLecture  : problèmes trouvés par csv.analyser ;
@@ -706,6 +730,12 @@ const Donnees = (() => {
   let minuteurSurveillance = null;
   let surRetourOnglet = null;
   let rafraichissementEnCours = null;
+
+  // Format des fichiers (§4.11) : format de la base quand il dépasse Schema.version (lecture seule, D169), sinon
+  // null ; une fois vu pendant une session, il le reste jusqu'au prochain initialiser(). problemesFormat : tables à
+  // l'en-tête illisible laissées telles quelles par le dernier passage au format courant.
+  let formatPlusRecent = null;
+  let problemesFormat = [];
 
   // --- 4.1 Outils internes ------------------------------------------------------------------
 
@@ -741,8 +771,13 @@ const Donnees = (() => {
   }
 
   function entreeAbsente() {
-    return { lignes: [], colonnesInconnues: [], version: null, index: new Map(),
+    return { lignes: [], colonnesInconnues: [], entete: [], abime: false, version: null, index: new Map(),
       problemesLecture: [], perime: false, absente: true };
+  }
+
+  // En-tête que serialiser écrit pour une table : les champs du schéma, puis les colonnes inconnues conservées.
+  function enteteEcrit(description, colonnesInconnues) {
+    return description.champs.map((champ) => champ.nom).concat(colonnesInconnues);
   }
 
   // Résultat de adaptateur.charger → entrée de cache.
@@ -752,6 +787,8 @@ const Donnees = (() => {
     return {
       lignes: lu.lignes,
       colonnesInconnues: lu.colonnesInconnues,
+      entete: lu.entete,
+      abime: lu.abime,
       version: version === undefined ? null : version,
       index: indexer(descriptionTable(nomTable), lu.lignes),
       problemesLecture: lu.problemes,
@@ -777,6 +814,7 @@ const Donnees = (() => {
     const entree = entreeDepuisFichier(nomTable, resultat.octets, resultat.version);
     cache.set(nomTable, entree);
     aRecalculer();
+    if (nomTable === 'parametres') { noterFormatDeLaBase(); }
     return entree;
   }
 
@@ -789,16 +827,19 @@ const Donnees = (() => {
   // --- 4.2 Lecture --------------------------------------------------------------------------
 
   // adaptateur : objet du contrat ARCHITECTURE.md §6 ; options : { poste, profil } (pour le journal).
-  // Vide le cache : appeler ensuite chargerTout().
+  // Vide le cache : appeler ensuite chargerTout(). Les écritures passent par protegerEcritures(adaptateur)
+  // (refusées en lecture seule, §4.11) : passer le même adaptateur protégé à l'application (App.adaptateur).
   function initialiser(adaptateur, options) {
     arreterSurveillance();
-    adaptateurActif = adaptateur;
+    adaptateurActif = protegerEcritures(adaptateur);
     definirIdentite(options);
     cache.clear();
     filesAttente.clear();
     statistiques.conflits = 0;
     statistiques.essais = 0;
     rafraichissementEnCours = null;
+    formatPlusRecent = null;
+    problemesFormat = [];
     aRecalculer();
   }
 
@@ -821,6 +862,7 @@ const Donnees = (() => {
       cache.set(nomTable, entree);
     });
     aRecalculer();
+    noterFormatDeLaBase();
     return { tablesAbsentes: tablesAbsentes };
   }
 
@@ -1063,6 +1105,7 @@ const Donnees = (() => {
     for (const nomTable of Schema.nomsTables()) {
       for (const lu of entreeDe(nomTable).problemesLecture) { resultat.push(lu); }
     }
+    for (const laissee of problemesFormatActuels()) { resultat.push(laissee); }
     for (const nomTable of Schema.nomsTables()) {
       const description = descriptionTable(nomTable);
       const lignesTable = entreeDe(nomTable).lignes;
@@ -1269,6 +1312,28 @@ const Donnees = (() => {
     return 'Le fichier ' + nomTable + ' est modifié en même temps sur un autre poste. Réessayez dans un instant.';
   }
 
+  // Chemin d'écriture d'une table entière (modifier et passage au format courant) : en lecture seule,
+  // ErreurLectureSeule ; sinon les lignes sont sérialisées (§3.1) et enregistrées si le stockage a encore la
+  // version lue (`entree.version`), puis le cache est mis à jour. Version périmée : ErreurConflit, rien n'est écrit.
+  async function enregistrerLignes(nomTable, description, entree, nouvelles) {
+    verifierEcriturePermise();
+    const octets = serialiser(nomTable, nouvelles, entree.colonnesInconnues);
+    const reponse = await adaptateurActif.enregistrer(nomTable, octets, entree.version);
+    const nouvelIndex = indexer(description, nouvelles);
+    cache.set(nomTable, {
+      lignes: nouvelles,
+      colonnesInconnues: entree.colonnesInconnues,
+      entete: enteteEcrit(description, entree.colonnesInconnues),
+      abime: false,
+      version: reponse && reponse.version !== undefined ? reponse.version : null,
+      index: nouvelIndex,
+      problemesLecture: problemesApresReecriture(entree.problemesLecture, nouvelIndex, entree.colonnesInconnues),
+      perime: false,
+      absente: false,
+    });
+    aRecalculer();
+  }
+
   // Modifie une table : fonction(lignes, outils) reçoit une COPIE des lignes, ajoute ou modifie
   // des objets et renvoie une valeur (renvoyée par modifier). outils : { nouvelId(lignes?, dateIso?),
   // maintenant(), aujourdhui() }. ErreurValidation levée par la fonction : jamais réessayée.
@@ -1296,10 +1361,8 @@ const Donnees = (() => {
         if (changements.length === 0 && nouvelles.length === entree.lignes.length) {
           return { valeur: valeurRendue, changements: [] };      // rien à écrire
         }
-        const octets = serialiser(nomTable, nouvelles, entree.colonnesInconnues);
-        let reponse;
         try {
-          reponse = await adaptateurActif.enregistrer(nomTable, octets, entree.version);
+          await enregistrerLignes(nomTable, description, entree, nouvelles);
         } catch (erreur) {
           if (!(erreur instanceof ErreurConflit)) { throw erreur; }
           statistiques.conflits += 1;
@@ -1309,17 +1372,6 @@ const Donnees = (() => {
           entree = await rechargerSansAttente(nomTable);
           continue;
         }
-        const nouvelIndex = indexer(description, nouvelles);
-        cache.set(nomTable, {
-          lignes: nouvelles,
-          colonnesInconnues: entree.colonnesInconnues,
-          version: reponse && reponse.version !== undefined ? reponse.version : null,
-          index: nouvelIndex,
-          problemesLecture: problemesApresReecriture(entree.problemesLecture, nouvelIndex, entree.colonnesInconnues),
-          perime: false,
-          absente: false,
-        });
-        aRecalculer();
         return { valeur: valeurRendue, changements: changements };
       }
       throw new ErreurConflit(messageConflitPersistant(nomTable));   // jamais atteint (sécurité)
@@ -1351,6 +1403,7 @@ const Donnees = (() => {
     const description = descriptionTable(nomTable);
     const lignesAAjouter = nouvellesLignes || [];
     if (lignesAAjouter.length === 0) { return { repli: false }; }
+    verifierEcriturePermise();
     const colonnesInconnues = entreeDe(nomTable).colonnesInconnues;
     const propres = lignesAAjouter.map((ligne) => ligneNormalisee(description, colonnesInconnues, ligne));
     const octets = serialiser(nomTable, propres, colonnesInconnues, { bom: false });
@@ -1382,9 +1435,13 @@ const Donnees = (() => {
     }
     const lignesCompletees = entree.lignes.concat(propres);
     const versionRendue = reponse && typeof reponse.version === 'string' ? reponse.version : null;
+    // Fichier absent ou vide : le stockage l'a créé avec notre en-tête (sinon l'en-tête est resté le même).
+    const description = descriptionTable(nomTable);
+    const entete = entree.entete.length ? entree.entete : enteteEcrit(description, entree.colonnesInconnues);
     cache.set(nomTable, Object.assign({}, entree, {
+      entete: entete,
       lignes: lignesCompletees,
-      index: indexer(descriptionTable(nomTable), lignesCompletees),
+      index: indexer(description, lignesCompletees),
       perime: true,
       absente: false,
       versionApresAjout: versionRendue,
@@ -1514,19 +1571,128 @@ const Donnees = (() => {
     return fichiers;
   }
 
-  // --- 4.11 Passage au format courant : version_schema (ARCHITECTURE.md §5.6 et §14.1) --------
-  // Décision de Nicolas (2026-10-20) : JUSTE AVANT que parametres.version_schema passe de 1 à 2
-  // sur une base existante, Prévo fait une sauvegarde automatique (« AAAA-MM-JJ_HHMMSS_avant-format-v2 »),
-  // restaurable depuis Paramètres comme les autres. À appeler au démarrage, après chargerTout()
-  // et avant toute autre écriture (appelée par passerAuFormatCourant dans js/app.js).
+  // --- 4.11 Format des fichiers : passage au format courant, lecture seule ----------------------
+  // ARCHITECTURE.md §5.6, §14.1 et §20.2 ; chantier « socle de données » (T186, décisions D167 à D169).
+  // Le format d'une base est parametres.version_schema (absent ou illisible : 1) ; celui de chaque fichier se
+  // reconnaît à son en-tête (Formats.formatDuFichier, js/formats.js ; 0 si l'en-tête est illisible). Le POINT DE
+  // DÉPART d'un passage est le plus petit format trouvé (version_schema et chaque fichier présent et lisible) :
+  // une base dont un fichier est resté à un format plus ancien (copie partielle de fichiers) est ainsi complétée.
+  //   - mode dossier et démo : le navigateur fait le passage (migrerAuFormatCourant), au démarrage, après
+  //     chargerTout() et avant toute autre écriture (passerAuFormatCourant dans js/app.js) ;
+  //   - mode serveur : le navigateur ne fait plus de passage (D168), le serveur le fait à son démarrage ;
+  //   - version_schema plus grand que Schema.version (données d'une version plus récente de Prévo, D169) :
+  //     lecture seule, toute écriture lève ErreurLectureSeule, l'application reste consultable.
+  // Décision de Nicolas (2026-10-20), inchangée : JUSTE AVANT le passage, Prévo fait une sauvegarde automatique
+  // « AAAA-MM-JJ_HHMMSS_avant-format-vN » (N = format courant), restaurable depuis Paramètres ; sans elle, rien.
 
   const CLE_VERSION_SCHEMA = 'version_schema';
   const VERSION_SCHEMA_PAR_DEFAUT = 1;       // clé absente ou illisible : fichiers du lot 1 (format 1)
+  const ECRITURES_ADAPTATEUR = ['enregistrer', 'ajouter', 'ecrireDocument', 'sauvegarder', 'restaurer'];
+  const adaptateursProteges = new WeakSet();
 
   // Version du format lue dans une valeur de parametres.csv (absente ou illisible → 1).
   function versionSchemaDe(valeur) {
     const lue = nombre(valeur);
     return lue === null ? VERSION_SCHEMA_PAR_DEFAUT : lue;
+  }
+
+  // Note le format de la base (parametres en cache) : plus récent que Schema.version → lecture seule jusqu'au
+  // prochain initialiser() ; la première fois, événement « lectureSeule » (detail : { format }).
+  function noterFormatDeLaBase() {
+    if (formatPlusRecent !== null) { return; }
+    const format = versionSchemaDe(parametre(CLE_VERSION_SCHEMA, ''));
+    if (!(format > Schema.version)) { return; }
+    formatPlusRecent = format;
+    evenements.dispatchEvent(new CustomEvent('lectureSeule', { detail: { format: format } }));
+  }
+
+  // Vrai si les données sont ouvertes en lecture seule (format plus récent que celui de cette version de Prévo).
+  function lectureSeule() {
+    return formatPlusRecent !== null;
+  }
+
+  function verifierEcriturePermise() {
+    if (formatPlusRecent !== null) { throw new ErreurLectureSeule(formatPlusRecent); }
+  }
+
+  // Adaptateur dont les écritures (enregistrer, ajouter, ecrireDocument, sauvegarder, restaurer) sont refusées en
+  // lecture seule (promesse rejetée : ErreurLectureSeule). C'est une vue (Proxy) de l'adaptateur : tout le reste
+  // (lectures, info, verrou…) est le sien, et une méthode remplacée sur l'un se voit sur l'autre. Un adaptateur
+  // déjà protégé est rendu tel quel.
+  function protegerEcritures(adaptateur) {
+    if (!adaptateur || adaptateursProteges.has(adaptateur)) { return adaptateur; }
+    const protege = new Proxy(adaptateur, {
+      get(cible, nom) {
+        const valeur = cible[nom];
+        if (typeof valeur !== 'function' || !ECRITURES_ADAPTATEUR.includes(nom)) { return valeur; }
+        return function () {
+          if (formatPlusRecent !== null) { return Promise.reject(new ErreurLectureSeule(formatPlusRecent)); }
+          return valeur.apply(cible, arguments);
+        };
+      },
+    });
+    adaptateursProteges.add(protege);
+    return protege;
+  }
+
+  function exigerFormats() {
+    if (typeof Formats === 'undefined') {
+      throw new Error('Donnees : le registre des formats (js/formats.js) doit être chargé avant js/donnees.js.');
+    }
+  }
+
+  // Pourquoi un passage au format courant ne réécrirait pas une table présente, ou null (fichier à réécrire, ou rien
+  // à faire) : 'entete' → fichier non vide dont l'en-tête est illisible (format 0 : des colonnes du format 1 y
+  // manquent) ; 'contenu' → fichier d'un format plus ancien qui ne se relit pas sans perte (entree.abime : structure
+  // abîmée, ou valeurs au-delà de l'en-tête), que la réécriture ferait perdre (CS140 : aucune perte silencieuse).
+  function raisonDeLaisser(nomTable, entree) {
+    if (!entree || entree.absente) { return null; }
+    const format = Formats.formatDuFichier(nomTable, entree.entete);
+    if (format === 0) { return entree.entete.length > 0 ? 'entete' : null; }      // fichier vide : rien à perdre
+    return entree.abime && format < Schema.version ? 'contenu' : null;
+  }
+
+  // État du format de la base chargée, sans rien écrire : { base, courant, depart, plusRecent, aCompleter, abimees }
+  //   - base       : format de la base (version_schema ; absent ou illisible : 1) ; courant : Schema.version ;
+  //   - depart     : le plus petit format trouvé (base et fichiers présents, lisibles et non abîmés) ;
+  //                  depart < courant : un passage est à faire ;
+  //   - plusRecent : base > courant (lecture seule) ;
+  //   - aCompleter : tables présentes dont le fichier est à un format plus ancien que le courant ;
+  //   - abimees    : tables qu'un passage laisse telles quelles (raisonDeLaisser) : jamais réécrites, elles ne
+  //                  comptent pas pour le point de départ (un fichier vide non plus).
+  function etatDuFormat() {
+    verifierInitialise();
+    exigerFormats();
+    const courant = Schema.version;
+    const base = versionSchemaDe(parametre(CLE_VERSION_SCHEMA, ''));
+    const etat = { base: base, courant: courant, depart: base, plusRecent: base > courant, aCompleter: [], abimees: [] };
+    for (const nomTable of Schema.nomsTables()) {
+      const entree = cache.get(nomTable);
+      if (!entree || entree.absente) { continue; }
+      if (raisonDeLaisser(nomTable, entree)) { etat.abimees.push(nomTable); continue; }
+      const format = Formats.formatDuFichier(nomTable, entree.entete);
+      if (format === 0) { continue; }                                       // fichier vide
+      if (format < courant) { etat.aCompleter.push(nomTable); }
+      etat.depart = Math.min(etat.depart, format);
+    }
+    return etat;
+  }
+
+  // Problème signalé pour une table laissée telle quelle par le passage au format courant (montré par problemes()
+  // tant que la raison demeure ; le détail de ce qui est abîmé est dans les problèmes de lecture de la table).
+  function problemeTableLaissee(nomTable) {
+    const description = descriptionTable(nomTable);
+    const raison = raisonDeLaisser(nomTable, entreeDe(nomTable)) === 'entete'
+      ? 'la ligne d\'en-tête de ' + description.fichier + ' est incomplète ou illisible (des colonnes du format 1 y manquent)'
+      : description.fichier + ' est abîmé (structure du fichier, ou valeurs au-delà de l\'en-tête : voir ses autres '
+        + 'problèmes) et le réécrire en perdrait une partie';
+    return probleme('erreur', 'colonne', nomTable, 1, null, null, null,
+      description.libelle + ' : ' + raison + ' ; Prévo ne réécrit pas ce fichier pour le passer au format '
+      + Schema.version + ' et le laisse tel quel. Corrigez-le, ou restaurez une sauvegarde.');
+  }
+
+  function problemesFormatActuels() {
+    return problemesFormat.filter((laissee) => raisonDeLaisser(laissee.table, entreeDe(laissee.table)) !== null);
   }
 
   // Vrai si une sauvegarde est exigée avant le passage : tous les modes sauf la démo, où rien
@@ -1552,50 +1718,144 @@ const Donnees = (() => {
     return String((erreur && erreur.message) || 'erreur inconnue').replace(/[\s.]+$/, '');
   }
 
-  // Met parametres.version_schema à Schema.version, après une sauvegarde automatique.
-  // Idempotente : si la version est déjà à jour (ou plus récente), rien n'est fait.
-  // Renvoie { misAJour, sauvegarde } :
-  //   - misAJour   : vrai si CET appel a écrit la nouvelle version dans parametres.csv ;
-  //   - sauvegarde : nom de la sauvegarde faite juste avant, ou null (aucune, ou démo).
-  // Sauvegarde impossible → ErreurStockage, et la version n'est PAS changée : la mise à jour
-  // (sauvegarde comprise) sera retentée à la prochaine ouverture.
-  // Deux postes ouverts en même temps sur une base en format 1 peuvent faire chacun leur
-  // sauvegarde : sans gravité (deux copies identiques). Un seul écrit la version : l'autre, en
-  // conflit, relit parametres.csv (lignes fraîches) et n'écrit rien car la version y est déjà.
-  async function mettreAJourVersionSchema() {
-    verifierInitialise();
-    const versionCible = Schema.version;
-    if (!cache.has('parametres')) { await rechargerTable('parametres'); }
-    if (baseVide() || versionSchemaDe(parametre(CLE_VERSION_SCHEMA, '')) >= versionCible) {
-      return { misAJour: false, sauvegarde: null };      // base pas encore créée, ou déjà à jour
+  // Étapes du passage depuis `depart`, calculées en mémoire par Formats.migrer sur les en-têtes des tables données
+  // (aucune ligne n'est copiée) : [{ vers, passage, tables }] dans l'ordre, où passage est la ligne de journal de
+  // Formats (« passage au format N du fichier ») et tables les tables données que l'étape complète. Une table
+  // absente que l'étape crée n'est pas comptée : elle reste absente (lue vide) jusqu'à sa première écriture.
+  function etapesDuPassage(depart, nomsTables) {
+    let base = { tables: {} };
+    for (const nomTable of nomsTables) { base.tables[nomTable] = { entete: entreeDe(nomTable).entete.slice(), lignes: [] }; }
+    const etapes = [];
+    for (const etape of Formats.ETAPES) {
+      if (etape.vers <= depart || etape.vers > Schema.version) { continue; }
+      const pas = Formats.migrer(base, etape.de, etape.vers);
+      etapes.push({
+        vers: etape.vers,
+        passage: pas.journal[0],
+        tables: nomsTables.filter((nomTable) => pas.base.tables[nomTable].entete.length !== base.tables[nomTable].entete.length),
+      });
+      base = pas.base;
     }
+    return etapes;
+  }
+
+  // Réécrit une table présente au format courant par le chemin d'écriture habituel (enregistrerLignes : contrôle
+  // de version ; conflit → table relue et nouvel essai, 3 essais au total). Décidé sur la table FRAÎCHE : déjà au
+  // format courant (un autre poste l'a fait), absente, illisible ou abîmée → rien. Les lignes écrites sont celles que
+  // rend Formats.migrer (colonnes ajoutées avec leur valeur par défaut, toutes les autres valeurs gardées).
+  // Rend vrai si la table a été écrite.
+  async function ecrireAuFormatCourant(nomTable) {
+    const description = descriptionTable(nomTable);
+    return enSerie(nomTable, async () => {
+      let entree = entreeDe(nomTable);
+      if (entree.perime) { entree = await rechargerSansAttente(nomTable); }
+      for (let essai = 1; essai <= NOMBRE_ESSAIS; essai += 1) {
+        const format = entree.absente ? 0 : Formats.formatDuFichier(nomTable, entree.entete);
+        if (format === 0 || format >= Schema.version || entree.abime) { return false; }
+        const seule = { tables: {} };
+        seule.tables[nomTable] = { entete: entree.entete, lignes: entree.lignes };
+        const migree = Formats.migrer(seule, format, Schema.version).base.tables[nomTable];
+        const nouvelles = migree.lignes.map((ligne) => ligneNormalisee(description, entree.colonnesInconnues, ligne));
+        try {
+          await enregistrerLignes(nomTable, description, entree, nouvelles);
+          return true;
+        } catch (erreur) {
+          if (!(erreur instanceof ErreurConflit)) { throw erreur; }
+          statistiques.conflits += 1;
+          if (essai === NOMBRE_ESSAIS) {
+            throw new ErreurConflit(messageConflitPersistant(nomTable), erreur.versionActuelle);
+          }
+          entree = await rechargerSansAttente(nomTable);
+        }
+      }
+      return false;
+    });
+  }
+
+  // Passage au format courant (mode dossier et démo, D168). Sans effet (rien n'est écrit) en mode serveur, en
+  // lecture seule, sur une base vide ou déjà au format courant ; idempotent : un second appel n'écrit rien.
+  //   1. la sauvegarde « avant-format-vN » (sauf démo) : impossible → ErreurStockage et RIEN n'est écrit (nouvel
+  //      essai à la prochaine ouverture) ;
+  //   2. Formats.migrer, étape par étape, sur les tables présentes et lisibles ;
+  //   3. chaque table que le passage change (sauf parametres) est réécrite par le chemin habituel ; une table à
+  //      l'en-tête illisible (format 0), ou abîmée au point qu'une réécriture en perdrait une partie, n'est JAMAIS
+  //      réécrite : signalée (problemes()) et laissée telle quelle ;
+  //   4. parametres.version_schema, décidé sur les lignes FRAÎCHES (rien si un autre poste l'a déjà mis) ;
+  //   5. une ligne de journal par étape (table parametres, ligne version_schema) : « passage au format N du
+  //      fichier ; sauvegarde … faite juste avant » (texte relu par la suggestion S4) ; pour une étape qui ne fait
+  //      que compléter des fichiers d'une base déjà à ce format, « fichiers complétés au format N : <tables> ;
+  //      sauvegarde … faite juste avant ». En démo : « … ; sans sauvegarde (démo) ».
+  // Renvoie { misAJour, sauvegarde, depart, tables, abimees } : misAJour vrai si CET appel a écrit (une table ou
+  // version_schema) ; sauvegarde : nom de la sauvegarde faite juste avant, ou null (aucune, ou démo) ; depart : le
+  // point de départ ; tables : tables réécrites (hors parametres) ; abimees : tables laissées telles quelles.
+  // Deux postes ouverts en même temps sur une base ancienne peuvent faire chacun leur sauvegarde (sans gravité) ;
+  // le second, en conflit, relit chaque table et ne réécrit rien de ce que le premier a déjà fait.
+  async function migrerAuFormatCourant() {
+    verifierInitialise();
+    exigerFormats();
+    const courant = Schema.version;
+    if (!cache.has('parametres')) { await rechargerTable('parametres'); }
+    const etat = etatDuFormat();
+    const resultat = { misAJour: false, sauvegarde: null, depart: etat.depart, tables: [], abimees: [] };
+    if (lectureSeule() || adaptateurActif.mode === 'serveur' || baseVide() || etat.depart >= courant) {
+      return resultat;
+    }
+    resultat.abimees = etat.abimees;
+    problemesFormat = etat.abimees.map(problemeTableLaissee);
+    aRecalculer();
 
     // 1. La sauvegarde d'abord : sans elle, on ne touche à rien.
-    let sauvegarde = null;
     if (sauvegardeExigee()) {
       try {
-        sauvegarde = await sauvegarderAvantFormat(versionCible);
+        resultat.sauvegarde = await sauvegarderAvantFormat(courant);
       } catch (erreur) {
-        throw new ErreurStockage('Sauvegarde avant le passage au format ' + versionCible + ' impossible : '
+        throw new ErreurStockage('Sauvegarde avant le passage au format ' + courant + ' impossible : '
           + messageSansPointFinal(erreur) + ' ; la mise à jour sera retentée à la prochaine ouverture.', erreur);
       }
     }
 
-    // 2. Puis la version, décidée sur les lignes FRAÎCHES (modifier relit la table en cas de
-    // conflit et réapplique la fonction) : rien n'est écrit si un autre poste l'a déjà fait.
-    const action = 'passage au format ' + versionCible + ' du fichier ; '
-      + (sauvegarde ? 'sauvegarde ' + sauvegarde + ' faite juste avant' : 'sans sauvegarde (démo)');
-    const misAJour = await modifier('parametres', (lignesParametres) => {
+    // 2 et 3. Les étapes, puis les tables qu'elles changent, dans l'ordre du schéma.
+    const lisibles = Schema.nomsTables().filter((nomTable) => !entreeDe(nomTable).absente
+      && !etat.abimees.includes(nomTable));
+    const etapes = etapesDuPassage(etat.depart, lisibles);
+    for (const nomTable of lisibles) {
+      if (nomTable === 'parametres' || !etapes.some((etape) => etape.tables.includes(nomTable))) { continue; }
+      if (await ecrireAuFormatCourant(nomTable)) { resultat.tables.push(nomTable); }
+    }
+
+    // 4. Puis version_schema, décidée sur les lignes FRAÎCHES (modifier relit la table en cas de conflit et
+    // réapplique la fonction) : rien n'est écrit si un autre poste l'a déjà fait.
+    let versionTrouvee = etat.base;
+    const versionEcrite = await modifier('parametres', (lignesParametres) => {
       const ligne = lignesParametres.find((l) => l.cle === CLE_VERSION_SCHEMA);
-      if (ligne && versionSchemaDe(ligne.valeur) >= versionCible) { return false; }
+      versionTrouvee = versionSchemaDe(ligne ? ligne.valeur : '');
+      if (versionTrouvee >= courant) { return false; }
       if (ligne) {
-        ligne.valeur = String(versionCible);
+        ligne.valeur = String(courant);
       } else {
-        lignesParametres.push({ cle: CLE_VERSION_SCHEMA, valeur: String(versionCible) });
+        lignesParametres.push({ cle: CLE_VERSION_SCHEMA, valeur: String(courant) });
       }
       return true;
-    }, { action: action });
-    return { misAJour: misAJour, sauvegarde: sauvegarde };
+    }, { journal: false });
+
+    // 5. Le journal : une ligne par étape.
+    const suite = resultat.sauvegarde ? 'sauvegarde ' + resultat.sauvegarde + ' faite juste avant' : 'sans sauvegarde (démo)';
+    const identifiantsPris = new Set();
+    const entrees = [];
+    for (const etape of etapes) {
+      let action = null;
+      if (versionEcrite && etape.vers > versionTrouvee) {
+        action = etape.passage;
+      } else {
+        const completees = etape.tables.filter((nomTable) => resultat.tables.includes(nomTable));
+        if (completees.length) { action = 'fichiers complétés au format ' + etape.vers + ' : ' + completees.join(', '); }
+      }
+      if (action) { entrees.push(entreeJournal(identifiantsPris, 'parametres', CLE_VERSION_SCHEMA, action + ' ; ' + suite)); }
+    }
+    await ecrireJournal(entrees);
+    resultat.misAJour = versionEcrite === true || resultat.tables.length > 0;
+    if (resultat.tables.length) { signaler(resultat.tables.slice(), 'local'); }
+    return resultat;
   }
 
   return {
@@ -1603,6 +1863,7 @@ const Donnees = (() => {
     ErreurConflit: ErreurConflit,
     ErreurValidation: ErreurValidation,
     ErreurStockage: ErreurStockage,
+    ErreurLectureSeule: ErreurLectureSeule,
     // 2. Dates, nombres, normalisation
     nombre: nombre,
     aujourdhui: aujourdhui,
@@ -1631,7 +1892,12 @@ const Donnees = (() => {
     demarrerSurveillance: demarrerSurveillance,
     arreterSurveillance: arreterSurveillance,
     instantane: instantane,
-    mettreAJourVersionSchema: mettreAJourVersionSchema,
+    // 4.11 Format des fichiers : passage au format courant, lecture seule
+    etatDuFormat: etatDuFormat,
+    migrerAuFormatCourant: migrerAuFormatCourant,
+    mettreAJourVersionSchema: migrerAuFormatCourant,      // ancien nom (lot 2), même fonction
+    lectureSeule: lectureSeule,
+    protegerEcritures: protegerEcritures,
     evenements: evenements,
     statistiques: statistiques,
   };

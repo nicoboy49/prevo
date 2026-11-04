@@ -7,8 +7,11 @@
 //      version web (VERSION_WEB, démo en ligne) : pas de serveur cherché, la démo seule et
 //      « Télécharger Prévo » ;
 //   2. chargement des 23 tables ; base vide (serveur ou dossier) → « Partir des données de démo »
-//      ou « Créer une base vide » ; puis passage des fichiers au format courant (version_schema,
-//      sauvegarde « avant-format-v2 » d'abord), avant toute autre écriture ;
+//      ou « Créer une base vide » ; puis format des fichiers, avant toute autre écriture (D168, D169) :
+//      dossier et démo → passage au format courant par le navigateur (sauvegarde « avant-format-vN »
+//      d'abord) ; serveur → le navigateur ne migre pas (le serveur le fait à son démarrage), bandeau au
+//      responsable si la base n'est pas au format courant ; données d'une version plus récente → lecture
+//      seule (rien n'est écrit : ni passage, ni verrou, ni OT préventifs ; bandeau permanent) ;
 //   3. profil (mémorisé sur le poste) ; la route demandée avant (QR scanné) est gardée ;
 //      mode serveur avec les comptes exigés (lot 7, D126, §22.4) : GET /api/session AVANT la lecture des tables ;
 //      sans session → écran de connexion (Connexion, js/modules/connexion-ecrans.js) ; le profil est déduit de la
@@ -93,6 +96,7 @@ const App = (() => {
   let resoudreBaseVide = null;     // fonction qui termine l'écran « base vide » en cours
   let menuPlusOuvert = false;      // mode Solo : groupe « Plus » du menu latéral déplié
   const alertesCoque = [];         // bandeaux à montrer dans la coque (ex. verrou du dossier)
+  let formatEnAttente = null;      // mode serveur : état du format (Donnees.etatDuFormat) d'une base pas au format courant
 
   // Thème du poste (lot 4, §17.7) : <html data-theme="clair"> posé dès la lecture de ce fichier, donc
   // avant DOMContentLoaded et avant le premier écran (pas d'écran sombre qui passe au clair).
@@ -129,6 +133,7 @@ const App = (() => {
     return 'Poste-' + suffixe;
   }
 
+  // (Donnees.ErreurLectureSeule est une ErreurStockage : son message est montré tel quel.)
   function estErreurDonnees(erreur) {
     return erreur instanceof Donnees.ErreurValidation || erreur instanceof Donnees.ErreurConflit
       || erreur instanceof Donnees.ErreurStockage;
@@ -381,8 +386,11 @@ const App = (() => {
 
   async function ouvrirAvec(nouvelAdaptateur) {
     montrer('ecran-chargement', 'chargement');
-    adaptateur = nouvelAdaptateur;
+    // Le même adaptateur, protégé, pour Donnees et pour les modules : en lecture seule (D169), ses écritures
+    // (tables, documents, sauvegardes, restauration) sont refusées.
+    adaptateur = Donnees.protegerEcritures(nouvelAdaptateur);
     mode = nouvelAdaptateur.mode;
+    formatEnAttente = null;
     Donnees.initialiser(adaptateur, { poste, profil: '' });
     // Lot 7 (§22.4) : comptes exigés → connexion (ou mot de passe à choisir) AVANT toute lecture de table, sinon
     // chaque table répondrait 401 (ou 403 avec un mot de passe provisoire : la base paraîtrait vide).
@@ -410,14 +418,17 @@ const App = (() => {
       await Donnees.chargerTout();
     }
     const formatAJour = await passerAuFormatCourant();   // avant TOUTE autre écriture, pour tous les profils
+    const lectureSeule = Donnees.lectureSeule();
 
-    if (mode === 'dossier') await verifierVerrouDossier();
+    // Lecture seule : pas de verrou (verrou.txt est une écriture dans le dossier ; rien n'y est écrit).
+    if (mode === 'dossier' && !lectureSeule) await verifierVerrouDossier();
 
     // Comptes exigés : le profil est déduit de la session (D126), l'écran de profil de 1.2 ne s'affiche jamais.
     let profilChoisi = session ? profilDepuisSession(session) : lireProfilMemorise();
     if (!session && !profilValable(profilChoisi)) profilChoisi = await demanderProfil(false);
     appliquerProfil(profilChoisi);
-    const otPreventifs = await genererPreventifAOuverture(formatAJour);
+    if (formatEnAttente && estResponsable()) alertesCoque.push(bandeauFormatEnAttente(formatEnAttente));
+    const otPreventifs = await genererPreventifAOuverture(formatAJour && !lectureSeule);
     Donnees.demarrerSurveillance();
     // Assistant IA (lot 4, §17.3) : un seul test du fournisseur s'il est activé sur le poste, aucun
     // appel sinon ; sans attendre la réponse (l'état « prêt » n'en dépend pas).
@@ -430,15 +441,27 @@ const App = (() => {
     if (otPreventifs.length && mode !== 'demo') UI.toast(Preventif.texteGeneration(otPreventifs.length) + '.', 'succes');
   }
 
-  // Format des fichiers (ARCHITECTURE.md §14.1) : une fois les tables chargées, pour tous les profils
-  // et AVANT toute autre écriture, parametres.version_schema passe au format courant, juste après une
-  // sauvegarde « avant-format-v2 » (Donnees.mettreAJourVersionSchema, sans effet si c'est déjà fait).
-  // Sauvegarde impossible : erreur signalée et bandeau dans la coque, la version reste inchangée,
-  // l'application reste utilisable et le passage sera retenté à la prochaine ouverture.
+  // Format des fichiers (ARCHITECTURE.md §5.6 et §14.1 ; décisions D168 et D169) : une fois les tables chargées,
+  // pour tous les profils et AVANT toute autre écriture.
+  //   - données d'une version plus récente (Donnees.lectureSeule()) : rien n'est fait ni écrit ; le bandeau
+  //     permanent de la coque le dit (afficherLectureSeule) ;
+  //   - mode serveur : le navigateur ne migre plus, c'est le serveur à son démarrage ; base pas au format courant
+  //     → bandeau au responsable (posé après le choix du profil, bandeauFormatEnAttente) ;
+  //   - dossier et démo : Donnees.migrerAuFormatCourant (sauvegarde « avant-format-vN » d'abord, sans effet si
+  //     c'est déjà fait). Sauvegarde impossible : erreur signalée et bandeau dans la coque, rien n'est écrit,
+  //     l'application reste utilisable et le passage sera retenté à la prochaine ouverture. Tables abîmées,
+  //     laissées telles quelles : bandeau.
   // Renvoie true si les fichiers sont au format courant (passage fait, ou rien à faire), false sinon.
   async function passerAuFormatCourant() {
+    if (Donnees.lectureSeule()) return false;
     try {
-      await Donnees.mettreAJourVersionSchema();
+      if (mode === 'serveur') {
+        const etat = Donnees.etatDuFormat();
+        formatEnAttente = etat.depart < etat.courant ? etat : null;
+        return formatEnAttente === null;
+      }
+      const resultat = await Donnees.migrerAuFormatCourant();
+      if (resultat.abimees.length) alertesCoque.push(bandeauFichiersLaisses(resultat.abimees));
       return true;
     } catch (erreur) {
       signalerErreur(erreur, 'passage au format ' + Schema.version + ' des fichiers');
@@ -446,6 +469,44 @@ const App = (() => {
         ${(erreur && erreur.message) || ''} D'ici là, les OT préventifs échus ne sont pas générés automatiquement.`));
       return false;
     }
+  }
+
+  // Mode serveur, base pas au format courant (le serveur n'a pas pu la mettre à jour à son démarrage).
+  function bandeauFormatEnAttente(etat) {
+    return UI.bandeau('attention', UI.html`<b>Les fichiers de données ne sont pas encore au format ${etat.courant}</b>
+      (format ${etat.depart} trouvé). C'est le serveur Prévo qui les met à jour, à son démarrage, après une sauvegarde ;
+      ce navigateur n'y touche pas. Si ce message reste affiché, fermez Excel (et tout programme qui a ouvert un
+      fichier de données), puis relancez Prévo. D'ici là, les OT préventifs échus ne sont pas générés automatiquement.`);
+  }
+
+  // Tables laissées telles quelles par le passage au format courant (en-tête illisible, ou fichier abîmé qu'une
+  // réécriture ferait perdre en partie) : jamais réécrites.
+  function bandeauFichiersLaisses(tables) {
+    const fichiers = tables.map((nomTable) => (Schema.table(nomTable) || {}).fichier || nomTable + '.csv').join(', ');
+    const titre = tables.length > 1 ? 'Fichiers abîmés laissés tels quels' : 'Fichier abîmé laissé tel quel';
+    return UI.bandeau('attention', UI.html`<b>${titre} : ${fichiers}.</b> En-tête illisible, ou lignes qu'une
+      réécriture ferait perdre : Prévo ne le réécrit pas pour le passer au format ${Schema.version}. Corrigez le
+      fichier, ou restaurez une sauvegarde ; le détail est dans Paramètres › Contrôle de la base.`);
+  }
+
+  // Lecture seule (D169) : bandeau permanent (sans bouton « Fermer ») en tête de la coque, donc sur tous les
+  // écrans ; retiré si les données ouvertes ne sont plus en lecture seule (autre dossier).
+  function afficherLectureSeule() {
+    const zone = UI.$('#alertes-app');
+    const present = UI.$('#bandeau-lecture-seule');
+    if (!Donnees.lectureSeule()) {
+      if (present) present.remove();
+      zone.hidden = zone.children.length === 0;
+      return;
+    }
+    if (present) return;
+    const format = Donnees.etatDuFormat().base;
+    const bandeau = UI.bandeau('important', UI.html`<b>Lecture seule : ces données viennent d'une version plus récente
+      de Prévo</b> (format ${format} des fichiers ; cette version lit jusqu'au format ${Schema.version}). Vous pouvez
+      les consulter, mais rien n'est enregistré. Ouvrez-les avec la dernière version de Prévo.`);
+    bandeau.id = 'bandeau-lecture-seule';
+    zone.prepend(bandeau);
+    zone.hidden = false;
   }
 
   // RG5 (ARCHITECTURE.md §14.3) : à l'ouverture, un technicien ou un responsable (jamais un demandeur)
@@ -803,6 +864,7 @@ const App = (() => {
     montrer('app');
     UI.$('#bandeau-demo').hidden = mode !== 'demo';
     afficherAlertesCoque();
+    afficherLectureSeule();
     appliquerRepli(lireMemoire(CLE_MENU_REPLIE) === '1');
     mettreAJourEntreprise();
     if (!location.hash || location.hash === '#' || location.hash === '#/'
@@ -1282,6 +1344,9 @@ const App = (() => {
     UI.$('#contenu').addEventListener('change', surSaisie);
     window.addEventListener('hashchange', () => { afficherRoute(false); });
     Donnees.evenements.addEventListener('changement', surChangement);
+    // Lecture seule découverte pendant l'usage (parametres relu : un autre poste a ouvert la base avec une version
+    // plus récente de Prévo) : le bandeau permanent apparaît sur l'écran en cours.
+    Donnees.evenements.addEventListener('lectureSeule', () => { if (coqueVisible()) afficherLectureSeule(); });
     // Lot 7 (§22.4) : session absente ou appareil refusé pendant l'usage (401) → écran de connexion.
     if (typeof StockageServeur !== 'undefined') {
       document.addEventListener(StockageServeur.EVENEMENT_SESSION_ABSENTE, surSessionAbsente);
