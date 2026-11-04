@@ -380,21 +380,21 @@ class TestDepassements(CasNavigateur):
                          ["« ordres_travail.csv » fait 52,3 Mo (50 Mo au plus par fichier de données)"])
         self.assertEqual(self.depassements([{"nom": "documents/notice.pdf", "taille": LIMITES["document"] + 1}]),
                          ["« documents/notice.pdf » fait plus de 10 Mo (10 Mo au plus par document)"])
-        # Nombre d'entrées : 2 000 pile passe, 2 001 non.
-        petits = [{"nom": "documents/d%04d.txt" % n, "taille": 1} for n in range(LIMITES["entrees"])]
+        # Nombre d'entrées : 10 000 pile passe, 10 001 non (T212).
+        petits = [{"nom": "documents/d%05d.txt" % n, "taille": 1} for n in range(LIMITES["entrees"])]
         self.assertEqual(self.depassements(petits), [])
-        self.assertEqual(self.depassements(petits + manifeste), ["le ZIP compterait 2 001 fichiers (2 000 au plus)"])
+        self.assertEqual(self.depassements(petits + manifeste), ["le ZIP compterait 10 001 fichiers (10 000 au plus)"])
         self.assertEqual(self.depassements(petits + manifeste, True),
-                         ["le ZIP compterait au moins 2 001 fichiers (2 000 au plus)"])
+                         ["le ZIP compterait au moins 10 001 fichiers (10 000 au plus)"])
         # Total décompressé : 1 Go pile passe, 1,1 Go non (documents de 10 Mo, sous leur limite).
         dix = [{"nom": "documents/n%03d.pdf" % n, "taille": LIMITES["document"]} for n in range(110)]
         self.assertEqual(self.depassements(dix[:102] + [{"nom": "documents/reste.pdf", "taille": 4 * MIO}]), [])
         self.assertEqual(self.depassements(dix),
                          ["le contenu ferait 1,1 Go une fois décompressé (1 Go au plus)"])
-        # Taille du ZIP : 230 photos de 1 Mo (JPEG, déjà compressées) en font au moins 207 Mo ; 230 PDF, rien d'avance.
-        photos = [{"nom": "documents/p%03d.jpg" % n, "taille": MIO} for n in range(230)]
+        # Taille du ZIP : 460 photos de 1 Mo (JPEG, déjà compressées) en font au moins 414 Mo ; 460 PDF, rien d'avance.
+        photos = [{"nom": "documents/p%03d.jpg" % n, "taille": MIO} for n in range(460)]
         self.assertEqual(self.depassements(photos),
-                         ["le ZIP ferait au moins 207 Mo, photos et documents déjà compressés (200 Mo au plus)"])
+                         ["le ZIP ferait au moins 414 Mo, photos et documents déjà compressés (400 Mo au plus)"])
         self.assertEqual(self.depassements([{"nom": e["nom"].replace(".jpg", ".pdf"), "taille": MIO} for e in photos]),
                          [])
 
