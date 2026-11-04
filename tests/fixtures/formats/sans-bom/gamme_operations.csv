@@ -1,0 +1,13 @@
+id;gamme_id;ordre;operation;valeur_attendue
+GOP-000001;GAM-0001;1;Relever les heures de marche et la pression de service;6 à 7,5 bar
+GOP-000002;GAM-0001;2;Contrôler le niveau d'huile;Entre mini et maxi
+GOP-000003;GAM-0001;3;Purger les condensats du réservoir et du sécheur;Purge fonctionnelle
+GOP-000004;GAM-0001;4;Nettoyer les ailettes du radiateur d'huile;Propres
+GOP-000005;GAM-0001;5;Relever la température de refoulement;< 95 °C
+GOP-000006;GAM-0001;6;Vérifier l'absence de fuite d'huile ou d'air;Aucune fuite
+GOP-000007;GAM-0001;7;Contrôler le serrage des raccords et des protecteurs;Serrés
+GOP-000008;GAM-0002;1;Remplacer le filtre à air;Filtre neuf posé
+GOP-000009;GAM-0002;2;Remplacer la cartouche du filtre à huile;Cartouche neuve posée
+GOP-000010;GAM-0002;3;Remplacer l'huile du compresseur;Niveau entre mini et maxi
+GOP-000011;GAM-0002;4;Mesurer la perte de charge du séparateur;< 0,8 bar
+GOP-000012;GAM-0002;5;Contrôler l'état de la courroie et son alignement;Pas de fissure

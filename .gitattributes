@@ -16,3 +16,5 @@ js/demo-donnees.js -text
 tests/fixtures/*.json -text
 # Fichiers d'essai de l'import (lot 5) : écrits par outils/generer_fixtures_import.py, comparés à l'octet.
 tests/fixtures/import/** -text
+# Jeux de fichiers des formats de donnees (T182) : ecrits par outils/generer_fixtures_formats.py, compares a l octet.
+tests/fixtures/formats/** -text

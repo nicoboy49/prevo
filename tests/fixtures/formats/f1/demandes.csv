@@ -1,0 +1,13 @@
+﻿id;date_heure;demandeur;equipement_id;symptome;impact;description;photo;statut;motif_decision;date_decision;ot_id
+DI-2026-0001;2026-04-23 09:45;Lucas Perrot;EQ-0026;On entend de l'air qui fuit derrière la machine.;arrêt;;;Acceptée;;2026-04-23 12:07;OT-2026-0001
+DI-2026-0002;2026-04-24 10:55;Lucas Perrot;EQ-0030;Grincement au déplacement de CH-01.;dégradé;;;Acceptée;;2026-04-24 13:25;OT-2026-0003
+DI-2026-0003;2026-04-27 12:30;Inès Marchand;EQ-0001;Défaut température haute, il est tombé en sécurité.;arrêt;;;Acceptée;;2026-04-27 14:36;OT-2026-0006
+DI-2026-0004;2026-04-28 14:15;Manon Duval;EQ-0022;Le convoyeur s'arrête tout seul plusieurs fois par heure.;dégradé;;;Acceptée;;2026-04-28 16:14;OT-2026-0007
+DI-2026-0005;2026-04-29 08:40;Paul Dubois;EQ-0028;La machine RB-01 s'arrête sans arrêt de cause visible.;dégradé;Rien de spécial avant.;;Acceptée;;2026-04-29 10:07;OT-2026-0008
+DI-2026-0006;2026-05-07 12:15;Inès Marchand;EQ-0022;Le problème est revenu après la dernière intervention. Le tapis stoppe sans raison, le voyant de défaut capteur clignote.;dégradé;;;Acceptée;;2026-05-07 12:32;OT-2026-0013
+DI-2026-0007;2026-05-13 08:25;Antoine Mercier;EQ-0026;On entend de l'air qui fuit derrière la machine.;dégradé;;;Acceptée;;2026-05-13 09:00;OT-2026-0015
+DI-2026-0008;2026-05-13 14:35;Inès Marchand;EQ-0026;Manque d'air sur EM-01, les vérins sont mous.;gêne;Même problème que la demande précédente.;;Regroupée;Regroupée avec l'OT déjà ouvert pour cet équipement.;2026-05-13 14:55;OT-2026-0015
+DI-2026-0009;2026-05-14 08:30;Camille Girard;EQ-0014;Le sol est mouillé autour de la machine, ça vient de l'arrosage.;gêne;;;Acceptée;;2026-05-14 08:51;OT-2026-0016
+DI-2026-0010;2026-05-15 14:25;Antoine Mercier;EQ-0023;Le convoyeur s'arrête tout seul plusieurs fois par heure.;dégradé;;;Acceptée;;2026-05-15 14:43;OT-2026-0017
+DI-2026-0011;2026-05-19 11:00;Léa Fontaine;EQ-0020;Les pièces sortent hors cote de la presse.;gêne;;;Acceptée;;2026-05-19 12:03;OT-2026-0020
+DI-2026-0012;2026-05-29 12:00;Paul Dubois;EQ-0026;La machine EM-01 s'arrête sans arrêt de cause visible.;arrêt;Merci de passer dès que possible.;;Acceptée;;2026-05-29 14:13;OT-2026-0025

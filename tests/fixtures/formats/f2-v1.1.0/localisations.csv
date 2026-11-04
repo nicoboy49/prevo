@@ -1,0 +1,8 @@
+﻿id;libelle;parent_id;type
+LOC-0001;Site des Trois Vallées;;site
+LOC-0002;Atelier Usinage;LOC-0001;atelier
+LOC-0003;Atelier Assemblage-conditionnement;LOC-0001;atelier
+LOC-0004;Atelier Utilités;LOC-0001;atelier
+LOC-0005;Ligne de conditionnement;LOC-0003;ligne
+LOC-0006;Ligne d'assemblage;LOC-0003;ligne
+LOC-0007;Cellule d'usinage CN;LOC-0002;ligne

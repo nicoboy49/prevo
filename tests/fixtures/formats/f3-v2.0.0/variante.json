@@ -1,0 +1,6 @@
+{
+  "base": "f3-v1.2.0",
+  "description": "Base f3-v1.2.0 plus les réglages de la 2.0 (mode Solo, clôture en une étape, technicien « moi ») et un compte responsable fictif dans acces/comptes.json (format 3 inchangé).",
+  "supprimer": [],
+  "vider": []
+}

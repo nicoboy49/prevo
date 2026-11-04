@@ -1,0 +1,6 @@
+{
+  "base": "f3-v1.2.0",
+  "description": "equipements.csv avec une colonne inconnue (colonne_maison) au milieu, après designation, et une autre (note_maison) en fin de table.",
+  "supprimer": [],
+  "vider": []
+}

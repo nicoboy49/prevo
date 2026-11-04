@@ -1,0 +1,12 @@
+﻿cle;valeur
+entreprise_nom;Atelier des Trois Vallées (démo)
+delai_p1_h;'0
+delai_p2_h;'24
+delai_p3_h;'168
+delai_p4;prochain arrêt
+heures_fonct_defaut;'8
+tolerance_preventif_pct;'10
+rafraichissement_s;'20
+priorite_preventif;P3
+horizon_calendrier_semaines;'12
+version_schema;'2

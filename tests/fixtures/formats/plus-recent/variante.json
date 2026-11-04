@@ -1,0 +1,6 @@
+{
+  "base": "f3-v1.2.0",
+  "description": "Données d'une version plus récente : version_schema 4, colonne inconnue nouvelle_colonne_v4 en fin de ordres_travail.csv, table inconnue pieces_v4.csv.",
+  "supprimer": [],
+  "vider": []
+}

@@ -1,0 +1,6 @@
+{
+  "base": "f3-v1.2.0",
+  "description": "ordres_travail.csv au format 2 (sans la colonne astuce) dans une base dont version_schema vaut 3.",
+  "supprimer": [],
+  "vider": []
+}
