@@ -63,6 +63,13 @@ ORDRE_MODULES = [
     "wiki-journal-ecrans.js", "wiki-ecrire-ecrans.js",
 ]
 LIGNES_MAX_MODULE = 700   # décision D28 : aucun fichier de js/modules/ au-delà
+# Ordre exact des scripts du socle dans index.html, avant ceux de js/modules/ : RECOPIE de docs/ARCHITECTURE.md §1
+# (« Ordre de chargement dans index.html »). js/formats.js juste après js/schema.js (chantier socle de données, T183).
+ORDRE_SOCLE = [
+    "js/lib/papaparse.min.js", "js/lib/qrcode.js", "js/lib/jsQR.js", "js/lib/jszip.min.js",
+    "js/schema.js", "js/formats.js", "js/donnees.js",
+    "js/stockage-serveur.js", "js/stockage-dossier.js", "js/stockage-demo.js", "js/interface.js",
+]
 
 # Lecture des <script src="…"> d'une page : les commentaires HTML sont retirés d'abord (une balise
 # mise en commentaire n'est pas chargée), puis d'autres attributs sont acceptés avant src
@@ -177,6 +184,22 @@ class TestModules(unittest.TestCase):
         debut = scripts.index("js/interface.js") + 1
         self.assertEqual(scripts[debut:debut + len(ORDRE_MODULES)], ["js/modules/" + m for m in ORDRE_MODULES])
         self.assertEqual(scripts[debut + len(ORDRE_MODULES):], ["js/app.js"])
+
+    def test_socle_charge_dans_l_ordre_du_contrat(self):
+        scripts = self.scripts_index()
+        # Seul js/prechargement.js (dans <head>, §22.13 : ancien script en ligne) précède le socle
+        debut = scripts.index(ORDRE_SOCLE[0])
+        self.assertEqual(scripts[:debut], ["js/prechargement.js"])
+        self.assertEqual(scripts[debut:debut + len(ORDRE_SOCLE)], ORDRE_SOCLE)
+        # Le bloc des modules suit le socle sans rien entre les deux
+        suivant = scripts[debut + len(ORDRE_SOCLE)]
+        self.assertTrue(suivant.startswith("js/modules/"), suivant)
+
+    def test_socle_recopie_l_ordre_d_architecture(self):
+        texte = lire("docs/ARCHITECTURE.md")
+        debut = texte.index("**Ordre de chargement dans `index.html`**")
+        fin = texte.index("les fichiers de `js/modules/`", debut)
+        self.assertEqual(re.findall(r"`(js/[^`]+\.js)`", texte[debut:fin]), ORDRE_SOCLE)
 
     def test_modules_tous_charges_par_index_html(self):
         charges = set(self.scripts_index())

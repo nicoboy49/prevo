@@ -1,0 +1,322 @@
+'use strict';
+// Formats : registre des formats des fichiers de données (chantier « socle de données », décisions D167 et D168).
+// Contrat : docs/ARCHITECTURE.md §1 (chargé juste après js/schema.js), §4 (schéma), §5.6 (passage au format
+// courant), §14.1 (format 2) et §20.2 (format 3).
+// Le format est un entier (Schema.version), distinct de la version de l'application (2.0.0) ; celui d'une base est
+// parametres.version_schema (absent ou illisible : format 1). Tout est dérivé de Schema : une table ou un champ qui
+// porte depuisVersion: N n'existe qu'à partir du format N ; les autres existent depuis le format 1.
+//   - format 1 : les 22 tables du brief, sans les colonnes marquées depuisVersion ;
+//   - format 2 : + equipements.valeur_remplacement, demandes.symptome_code, demandes.ot_origine_id,
+//                ordres_travail.anomalie_constatee (§14.1) ;
+//   - format 3 : + ordres_travail.astuce et les tables wiki_pages, wiki_journal (§20.2).
+// Les étapes de migration (ETAPES) sont explicites, une par passage de N à N+1, pures (l'entrée n'est jamais
+// modifiée) et idempotentes (rejouée, une étape ne change rien). migrer() les enchaîne et rend une ligne de journal
+// par étape, exactement « passage au format N du fichier » : ce texte est relu par la suggestion S4
+// (js/modules/suggestions-regles.js, MARQUE_FORMAT_2) et ne doit pas changer.
+// Une base en mémoire a la forme { tables: { <nom>: { entete: [noms…], lignes: [{ <colonne>: '<valeur>' }] } } }
+// (valeurs = chaînes, comme en mémoire dans Prévo). Ce fichier ne lit ni n'écrit aucun fichier : il sert de
+// référence à la migration en mode dossier, à l'import et à l'export ZIP, et au miroir Python de serveur.py (mêmes
+// règles).
+// Dépendance : Schema (js/schema.js) seulement.
+
+const Formats = (function () {
+
+  const PREMIER_FORMAT = 1;
+  const CLE_VERSION_SCHEMA = 'version_schema';
+  const VERSION_PAR_DEFAUT = 1;              // version_schema absent ou illisible : fichiers du lot 1 (format 1)
+  const NOM_APPLICATION = 'Prévo';
+  const CHAMPS_CONTEXTE = ['version_appli', 'format', 'date', 'motif', 'mode'];   // ordre du manifeste
+  const CODE_BOM = 0xFEFF;
+
+  function aLaPropriete(objet, nom) {
+    return Object.prototype.hasOwnProperty.call(objet, nom);
+  }
+
+  // Vrai si une table ou un champ du schéma existe dans ce format (pas de depuisVersion : depuis le format 1).
+  function existeDans(element, format) {
+    return element.depuisVersion === undefined || element.depuisVersion <= format;
+  }
+
+  // Premier format où la table existe (1 pour les tables du brief, 3 pour celles du wiki).
+  function premierFormatDe(description) {
+    return description.depuisVersion === undefined ? PREMIER_FORMAT : description.depuisVersion;
+  }
+
+  // Format demandé, ou le format courant s'il est omis.
+  function formatOuCourant(format) {
+    return format === undefined ? Schema.version : format;
+  }
+
+  // Champs (descriptions du schéma) de la table dans ce format, dans l'ordre du schéma ; [] si elle n'y existe pas.
+  function champsDuFormat(nomTable, format) {
+    const description = Schema.table(nomTable);
+    if (!description || !existeDans(description, format)) { return []; }
+    return description.champs.filter(function (champ) { return existeDans(champ, format); });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Colonnes et tables d'un format
+  // ---------------------------------------------------------------------------
+
+  // Noms des colonnes de la table dans ce format (format omis : le format courant), dans l'ordre du schéma ;
+  // [] si la table n'existe pas encore dans ce format ou n'est pas dans le schéma.
+  function colonnes(nomTable, format) {
+    return champsDuFormat(nomTable, formatOuCourant(format)).map(function (champ) { return champ.nom; });
+  }
+
+  // Noms des tables qui existent dans ce format (format omis : le format courant), dans l'ordre du schéma.
+  function tables(format) {
+    const voulu = formatOuCourant(format);
+    return Schema.nomsTables().filter(function (nomTable) { return existeDans(Schema.table(nomTable), voulu); });
+  }
+
+  // Nom de colonne comparable : BOM de tête retiré, espaces de bord retirés.
+  function nomDeColonne(valeur) {
+    let texte = valeur === null || valeur === undefined ? '' : String(valeur);
+    if (texte.charCodeAt(0) === CODE_BOM) { texte = texte.slice(1); }
+    return texte.trim();
+  }
+
+  // Clé de comparaison d'un nom de colonne, la même que la lecture de Prévo (Donnees, cleEntete) : BOM et espaces
+  // de bord retirés, accents retirés, minuscules, espaces et soulignés ignorés. Un en-tête que Donnees sait lire
+  // n'est donc jamais vu « abîmé » ici (relecture de T183).
+  const MOTIF_ACCENTS = /[\u0300-\u036f]/g;
+  const MOTIF_SEPARATEURS = /[\s_]+/g;
+  function cleDeColonne(valeur) {
+    return nomDeColonne(valeur).normalize('NFD').replace(MOTIF_ACCENTS, '').toLowerCase()
+      .replace(MOTIF_SEPARATEURS, '');
+  }
+
+  // Format d'un fichier d'après son en-tête (tableau de noms, ordre indifférent) : le plus grand format N, du
+  // premier format où la table existe jusqu'au format courant, dont toutes les colonnes sont dans l'en-tête.
+  // Une table dont les colonnes n'ont pas changé depuis le format N donne donc le format courant (son en-tête est
+  // celui de tous ces formats). 0 si même les colonnes du premier format de la table manquent (fichier abîmé ou
+  // incomplet, en-tête vide) ; null pour une table inconnue du schéma. Ne lève jamais d'exception.
+  function formatDuFichier(nomTable, entete) {
+    try {
+      const description = Schema.table(nomTable);
+      if (!description) { return null; }
+      const presentes = new Set((Array.isArray(entete) ? entete : []).map(cleDeColonne));
+      let trouve = 0;
+      for (let format = premierFormatDe(description); format <= Schema.version; format += 1) {
+        const complet = colonnes(nomTable, format).every(function (nom) { return presentes.has(cleDeColonne(nom)); });
+        if (!complet) { break; }            // les colonnes d'un format contiennent celles des formats précédents
+        trouve = format;
+      }
+      return trouve;
+    } catch (erreur) {
+      return 0;                             // en-tête illisible (valeur qui refuse d'être convertie en texte)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Format d'une base : parametres.version_schema
+  // ---------------------------------------------------------------------------
+
+  // Copie exacte de Donnees.nombre (js/donnees.js, normaliserDecimal) : Formats est chargé avant Donnees.
+  // Valeur → Number, ou null si vide ou illisible ; virgule décimale et espaces (insécables compris) acceptés.
+  function nombre(valeur) {
+    if (typeof valeur === 'number') { return Number.isFinite(valeur) ? valeur : null; }
+    const texte = (valeur === null || valeur === undefined ? '' : String(valeur)).trim();
+    if (texte === '') { return null; }
+    const compact = texte.replace(/\s+/g, '').replace(',', '.');
+    const morceaux = /^([+-]?)(\d*)(?:\.(\d*))?$/.exec(compact);
+    if (!morceaux || (morceaux[2] === '' && !morceaux[3])) { return null; }
+    const signe = morceaux[1] === '-' ? '-' : '';
+    const partieEntiere = morceaux[2] === '' ? '0' : morceaux[2];
+    const partieDecimale = morceaux[3] ? '.' + morceaux[3] : '';
+    const converti = Number(signe + partieEntiere + partieDecimale);
+    return Number.isFinite(converti) ? converti : null;
+  }
+
+  // Format d'une base d'après les lignes de parametres ([{ cle, valeur }], valeurs en mémoire, sans l'apostrophe de
+  // protection) : version_schema de la première ligne qui porte cette clé, lu comme Donnees.nombre ; absent, vide ou
+  // illisible → 1. Même règle que versionSchemaDe de js/donnees.js (§5.6). Toujours un entier dans un fichier
+  // écrit par Prévo ; une valeur décimale écrite à la main est rendue telle quelle, comme par versionSchemaDe.
+  function versionDeBase(lignesParametres) {
+    const lignes = Array.isArray(lignesParametres) ? lignesParametres : [];
+    const ligne = lignes.find(function (l) { return Boolean(l) && l.cle === CLE_VERSION_SCHEMA; });
+    const lue = ligne ? nombre(ligne.valeur) : null;
+    return lue === null ? VERSION_PAR_DEFAUT : lue;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Étapes de migration (D168) : pures et idempotentes
+  // ---------------------------------------------------------------------------
+
+  // Copie d'une table de la base : en-tête et lignes copiés (les autres propriétés de la table sont gardées).
+  function copierTable(table) {
+    const source = table && typeof table === 'object' ? table : {};
+    return Object.assign({}, source, {
+      entete: Array.isArray(source.entete) ? source.entete.slice() : [],
+      lignes: Array.isArray(source.lignes)
+        ? source.lignes.map(function (ligne) { return Object.assign({}, ligne); })
+        : [],
+    });
+  }
+
+  // Ajoute en fin d'en-tête les colonnes du format absentes de la table (comparées comme dans formatDuFichier),
+  // avec la valeur par défaut du schéma (sinon '') dans chaque ligne qui n'a pas déjà cette colonne. Les colonnes
+  // inconnues du schéma restent à leur place, avec leurs valeurs. Modifie la COPIE reçue.
+  function completerColonnes(nomTable, table, format) {
+    const presentes = new Set(table.entete.map(cleDeColonne));
+    for (const champ of champsDuFormat(nomTable, format)) {
+      if (presentes.has(cleDeColonne(champ.nom))) { continue; }
+      const valeurParDefaut = champ.defaut === undefined ? '' : champ.defaut;
+      table.entete.push(champ.nom);
+      presentes.add(cleDeColonne(champ.nom));
+      for (const ligne of table.lignes) {
+        if (!aLaPropriete(ligne, champ.nom)) { ligne[champ.nom] = valeurParDefaut; }
+      }
+    }
+  }
+
+  // parametres.version_schema = String(format) : la première ligne qui porte la clé, sinon une ligne ajoutée en fin
+  // (les autres colonnes de l'en-tête y valent ''). Modifie la COPIE reçue.
+  function poserVersion(tableParametres, format) {
+    const ligne = tableParametres.lignes.find(function (l) { return l.cle === CLE_VERSION_SCHEMA; });
+    if (ligne) {
+      ligne.valeur = String(format);
+      return;
+    }
+    const nouvelle = {};
+    for (const colonne of tableParametres.entete) { nouvelle[colonne] = ''; }
+    nouvelle.cle = CLE_VERSION_SCHEMA;
+    nouvelle.valeur = String(format);
+    tableParametres.lignes.push(nouvelle);
+  }
+
+  // Passage d'une base au format `format` (étape additive, §14.1 et §20.2). Rend une NOUVELLE base où :
+  //   - chaque table du format absente est créée vide (entete = colonnes(table, format), lignes = []) ;
+  //   - chaque colonne du format absente d'une table est ajoutée en fin d'en-tête, avec sa valeur par défaut ;
+  //   - les colonnes et les tables inconnues du schéma sont gardées telles quelles ;
+  //   - parametres.version_schema vaut String(format).
+  // La base reçue n'est pas modifiée ; appliquée deux fois, l'étape donne le même résultat qu'une fois.
+  function passerAuFormat(base, format) {
+    const source = base && typeof base === 'object' ? base : {};
+    const tablesSource = source.tables && typeof source.tables === 'object' ? source.tables : {};
+    const nouvellesTables = {};
+    for (const nomTable of Object.keys(tablesSource)) {
+      nouvellesTables[nomTable] = copierTable(tablesSource[nomTable]);
+    }
+    for (const nomTable of tables(format)) {
+      if (!aLaPropriete(nouvellesTables, nomTable)) { nouvellesTables[nomTable] = { entete: [], lignes: [] }; }
+      completerColonnes(nomTable, nouvellesTables[nomTable], format);
+    }
+    poserVersion(nouvellesTables.parametres, format);
+    return Object.assign({}, source, { tables: nouvellesTables });
+  }
+
+  // Une étape du registre : de N à N+1, une description, et sa fonction pure appliquer(base) → nouvelle base.
+  function etape(de, vers, description) {
+    return Object.freeze({
+      de: de,
+      vers: vers,
+      description: description,
+      appliquer: function (base) { return passerAuFormat(base, vers); },
+    });
+  }
+
+  // Le registre, dans l'ordre. Un format futur ajoute son étape ici (et Schema.version) : le test
+  // tests/test_formats_js.py vérifie que la chaîne va sans trou du format 1 au format courant.
+  const ETAPES = Object.freeze([
+    etape(1, 2, 'Format 2 (versions 1.0 et 1.1, §14.1) : colonnes equipements.valeur_remplacement, '
+      + 'demandes.symptome_code, demandes.ot_origine_id et ordres_travail.anomalie_constatee (défaut 0), '
+      + 'en fin de table.'),
+    etape(2, 3, 'Format 3 (versions 1.2 et 2.0, §20.2) : colonne ordres_travail.astuce en fin de table, '
+      + 'tables wiki_pages et wiki_journal (vides).'),
+  ]);
+
+  // Ligne de journal d'une étape : texte exact relu par la suggestion S4.
+  function ligneDeJournal(format) {
+    return 'passage au format ' + format + ' du fichier';
+  }
+
+  // Enchaîne les étapes de `de` à `vers` → { base, journal, etapes } :
+  //   - base    : la base au format `vers` (nouvel objet ; la base reçue n'est pas modifiée) ;
+  //   - journal : une ligne « passage au format N du fichier » par étape appliquée ;
+  //   - etapes  : les étapes appliquées ({ de, vers, description }).
+  // `de` est le format actuel de la base (versionDeBase) ; de >= vers (base déjà au format, ou plus récente) :
+  // base rendue telle quelle, journal et etapes vides. `vers` : un format entier de 1 au format courant.
+  function migrer(base, de, vers) {
+    if (!Number.isInteger(vers) || vers < PREMIER_FORMAT || vers > Schema.version) {
+      throw new RangeError('Formats.migrer : format cible inconnu (' + vers + ') ; formats connus : '
+        + PREMIER_FORMAT + ' à ' + Schema.version + '.');
+    }
+    if (typeof de !== 'number' || Number.isNaN(de)) {
+      throw new TypeError('Formats.migrer : format de départ illisible (' + de + ').');
+    }
+    if (de >= vers) { return { base: base, journal: [], etapes: [] }; }
+    let courante = base;
+    const journal = [];
+    const etapes = [];
+    for (const etapeDuRegistre of ETAPES) {
+      if (etapeDuRegistre.vers <= de || etapeDuRegistre.vers > vers) { continue; }
+      courante = etapeDuRegistre.appliquer(courante);
+      journal.push(ligneDeJournal(etapeDuRegistre.vers));
+      etapes.push({ de: etapeDuRegistre.de, vers: etapeDuRegistre.vers, description: etapeDuRegistre.description });
+    }
+    return { base: courante, journal: journal, etapes: etapes };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Manifeste (sauvegardes, export ZIP : D167)
+  // ---------------------------------------------------------------------------
+
+  // Uint8Array, ArrayBuffer ou autre vue typée → Uint8Array (sans copie).
+  function enOctets(entree) {
+    if (entree instanceof Uint8Array) { return entree; }
+    if (entree instanceof ArrayBuffer) { return new Uint8Array(entree); }
+    if (ArrayBuffer.isView(entree)) { return new Uint8Array(entree.buffer, entree.byteOffset, entree.byteLength); }
+    throw new TypeError('Formats.manifeste : octets attendus (Uint8Array ou ArrayBuffer).');
+  }
+
+  function hexadecimal(tampon) {
+    return Array.from(new Uint8Array(tampon), function (octet) {
+      return octet.toString(16).padStart(2, '0');
+    }).join('');
+  }
+
+  function comparerNoms(a, b) {
+    if (a.nom < b.nom) { return -1; }
+    return a.nom > b.nom ? 1 : 0;
+  }
+
+  // Manifeste d'un ensemble de fichiers ([{ nom, octets: Uint8Array }]) → Promise de
+  // { application: 'Prévo', version_appli, format, date, motif, mode, fichiers: [{ nom, octets, sha256 }] } :
+  // champs du contexte absents (undefined ou null) omis, fichiers triés par nom, octets = taille, sha256 en
+  // hexadécimal (crypto.subtle). crypto.subtle n'existe qu'en contexte sécurisé (file://, https, 127.0.0.1 ;
+  // ARCHITECTURE.md §2) : ailleurs, la promesse est rejetée avec un message clair.
+  async function manifeste(fichiers, contexte) {
+    const outilsCrypto = typeof crypto !== 'undefined' && crypto ? crypto.subtle : undefined;
+    if (!outilsCrypto) {
+      throw new Error('Formats.manifeste : empreintes SHA-256 indisponibles sur cette page (crypto.subtle n\'existe '
+        + 'qu\'en contexte sécurisé : file://, https ou 127.0.0.1).');
+    }
+    const entrees = (Array.isArray(fichiers) ? fichiers : []).map(function (fichier) {
+      return { nom: String(fichier.nom), octets: enOctets(fichier.octets) };
+    }).sort(comparerNoms);
+    const decrits = await Promise.all(entrees.map(async function (entree) {
+      const empreinte = await outilsCrypto.digest('SHA-256', entree.octets);
+      return { nom: entree.nom, octets: entree.octets.byteLength, sha256: hexadecimal(empreinte) };
+    }));
+    const resultat = { application: NOM_APPLICATION };
+    const source = contexte && typeof contexte === 'object' ? contexte : {};
+    for (const cle of CHAMPS_CONTEXTE) {
+      if (source[cle] !== undefined && source[cle] !== null) { resultat[cle] = source[cle]; }
+    }
+    resultat.fichiers = decrits;
+    return resultat;
+  }
+
+  return {
+    courant: Schema.version,           // format courant des fichiers (= Schema.version)
+    colonnes: colonnes,
+    tables: tables,
+    formatDuFichier: formatDuFichier,
+    versionDeBase: versionDeBase,
+    ETAPES: ETAPES,
+    migrer: migrer,
+    manifeste: manifeste,
+  };
+})();

@@ -22,6 +22,7 @@ css/modules/*.css          mise en page propre à chaque module (une feuille par
 css/polices/               police Sora (OFL)
 js/lib/                    bibliothèques tierces + LICENCES.txt (jamais modifiées)
 js/schema.js               Schema    : description des 22 tables (champs, types, identifiants)
+js/formats.js              Formats   : registre des formats (colonnes de chaque format, étapes de migration, manifeste)
 js/donnees.js              Donnees   : CSV, chargement, contrôle, mutation, journal, rafraîchissement
 js/stockage-serveur.js     StockageServeur : adaptateur « serveur » (API HTTP)
 js/stockage-dossier.js     StockageDossier : adaptateur « dossier » (File System Access)
@@ -51,7 +52,8 @@ tests/                     tests automatisés (unittest + Playwright) ; tests/fi
 
 **Ordre de chargement dans `index.html`** (scripts classiques, jamais `type="module"`) :
 `js/lib/papaparse.min.js`, `js/lib/qrcode.js`, `js/lib/jsQR.js`, `js/lib/jszip.min.js`,
-`js/schema.js`, `js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
+`js/schema.js`, `js/formats.js` (juste après le schéma, dont il dépend seul : chantier « socle de données »),
+`js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
 `js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
 §15.1 (il remplace, depuis le lot 3, celui du §14.2 ; le lot 3 bis y insère `suggestions-regles.js` et
 `suggestions-ecrans.js` juste après `preventif-calendrier.js`, §16.1 ; le lot 4 insère `ia.js`,
