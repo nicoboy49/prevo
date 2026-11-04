@@ -21,7 +21,7 @@ Lancer depuis la racine du projet (à travers le verrou du navigateur) :
 import re
 import unittest
 
-from commun import ServeurPrevo
+from commun import RACINE as SERVEUR_RACINE, ServeurPrevo
 from test_garde_abime_navigateur import AJOUTER_DIRECT_JS, ENREGISTRER_DIRECT_JS, avec_ligne_coupee
 from test_garde_abime_serveur import SERVEUR, CasCopies, ecrire_tableau, lire_tableau, requete, version_de
 from test_recette_socle import MOTIF_QUOTIDIENNE, CasRecetteSocle, csv_de_la_racine, fichiers_du_jeu, sauvegardes
@@ -93,6 +93,15 @@ class TestCelluleLongueServeur(CasCopies):
                                       {"X-Version-Attendue": version_de(long_a)})
             self.assertEqual(statut, 200, reponse)
             self.assertEqual(chemin.read_bytes(), long_b)
+
+    def test_limite_des_cellules_egale_a_celle_d_un_csv_de_l_import_zip(self):
+        """T207 (Nicolas) : la limite relevée est de 10 Mo, celle d'un CSV dans l'import ZIP (LIMITES.racine de
+        js/modules/zip-lecture.js), et non sans limite ; elle est bien celle du module csv."""
+        texte = (SERVEUR_RACINE / "js" / "modules" / "zip-lecture.js").read_text(encoding="utf-8")
+        mo = re.search(r"^\s*racine: (\d+) \* MO,", texte, re.M)
+        self.assertIsNotNone(mo, "LIMITES.racine introuvable dans zip-lecture.js")
+        self.assertEqual(SERVEUR.TAILLE_MAX_CELLULE_CSV, int(mo.group(1)) * 1024 * 1024)
+        self.assertEqual(SERVEUR.csv.field_size_limit(), SERVEUR.TAILLE_MAX_CELLULE_CSV)
 
 
 # ---------------------------------------------------------------------------

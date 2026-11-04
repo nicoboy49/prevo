@@ -71,8 +71,10 @@ NOMBRE_PORTS_SUPPLEMENTAIRES = 20          # 8080 occupé → 8081, … jusqu'à
 TAILLE_MAX_CORPS = 10 * 1024 * 1024        # 10 Mo
 # T204 (comme le correctif 1.2.1) : une cellule peut dépasser la limite par défaut du module csv (131 072 caractères :
 # page du wiki, compte rendu très long) ; sans cette limite relevée, une fois pour tout ce fichier, un fichier sain
-# serait pris pour un fichier abîmé (raisons_fichier_abime) et son enregistrement refusé.
-csv.field_size_limit(2 ** 31 - 1)
+# serait pris pour un fichier abîmé (raisons_fichier_abime) et son enregistrement refusé. T207 (Nicolas) : relevée à
+# 10 Mo, la limite d'un CSV dans l'import ZIP (LIMITES.racine de js/modules/zip-lecture.js), et non sans limite.
+TAILLE_MAX_CELLULE_CSV = 10 * 1024 * 1024
+csv.field_size_limit(TAILLE_MAX_CELLULE_CSV)
 # Audit F2 (§22.12) : requêtes en cours en même temps, tous écouteurs confondus (porte et application) ; une place
 # est prise dès le premier octet d'une requête et rendue avec sa réponse (une requête lente ou laissée à moitié la
 # tient) ; une connexion keep-alive inactive, qui attend la requête suivante, n'en tient aucune (défaut trouvé par
