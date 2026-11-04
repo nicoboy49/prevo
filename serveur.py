@@ -202,12 +202,15 @@ MOTIF_NOM_DOCUMENT_ENREGISTRE = re.compile(PREFIXE_NOM_DOCUMENT + MOTIF_NOM_DOCU
 #   AAAA-MM-JJ_HHMMSS_avant-restauration     copie de sécurité faite avant une restauration
 #   AAAA-MM-JJ_HHMMSS_avant-format-v<N>      faite juste avant le passage au format N des fichiers
 #   AAAA-MM-JJ_HHMMSS_avant-import           faite juste avant un import de données (lot 5)
+#   AAAA-MM-JJ_HHMMSS_avant-import-zip       faite juste avant un import ZIP, documents/ compris (T187, D170)
+#   AAAA-MM-JJ_HHMMSS_avant-mise-a-jour      faite au premier démarrage d'une autre version de Prévo (T187, D170)
 MOTIF_NOM_SAUVEGARDE = re.compile(
-    r'[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{6}(_avant-restauration|_avant-format-v[0-9]+|_avant-import)?)?', re.ASCII)
+    r'[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{6}(_avant-restauration|_avant-format-v[0-9]+|_avant-import-zip|_avant-import'
+    r'|_avant-mise-a-jour)?)?', re.ASCII)
 # Motifs acceptés par POST /api/sauvegarde {"motif": "…"} : liste FERMÉE (tout autre motif → 400).
 # Le motif devient la fin du nom de la sauvegarde (« _avant-format-v2 »). Règle générale :
 # « avant-format-v<N> » ; on n'ajoute ici que les versions que Prévo sait vraiment produire.
-MOTIFS_SAUVEGARDE = ('avant-format-v2', 'avant-format-v3', 'avant-import')
+MOTIFS_SAUVEGARDE = ('avant-format-v2', 'avant-format-v3', 'avant-import', 'avant-import-zip', 'avant-mise-a-jour')
 
 # Types MIME des documents acceptés (l'extension décide du type, jamais le contenu ; toute autre extension : 415).
 # Audit F4 (§22.12) : « .doc » et « .xls » (formats binaires à macros) ne sont plus acceptés.
@@ -3788,6 +3791,19 @@ ESSAIS_NOM_HORODATE = 25                # nom pris : la seconde suivante est att
 NOM_ETAT_COPIE_EXTERNE = 'copie-externe.json'
 PREFIXE_COPIE_EN_COURS = '.prevo-copie-en-cours-'
 MESSAGE_PLAFOND_MANUELLES = 'Une sauvegarde manuelle par minute au plus : réessayez dans %d s.'
+# T187 (D170, docs/FORMAT.md §8 et §9) : quotidiennes de plus de 30 jours supprimées à chaque nouvelle quotidienne
+# (« avant-… » jamais) ; manifeste.json dans chaque sauvegarde ; documents/ dans la seule « avant-import-zip » ;
+# sauvegarde « avant-mise-a-jour » au premier démarrage d'une autre version (donnees/derniere-version.json).
+QUOTIDIENNES_GARDEES_JOURS = 30
+MOTIF_QUOTIDIENNE = 'quotidienne'               # « motif » du manifeste d'une sauvegarde AAAA-MM-JJ
+MOTIF_MANUELLE = 'manuelle'                     # … et d'une sauvegarde AAAA-MM-JJ_HHMMSS
+MOTIF_AVANT_MISE_A_JOUR = 'avant-mise-a-jour'
+MOTIFS_AVEC_DOCUMENTS = ('avant-import-zip',)
+NOM_MANIFESTE = 'manifeste.json'
+MODE_DU_MANIFESTE = 'serveur'
+TAILLE_MORCEAU_EMPREINTE = 1024 * 1024
+NOM_DERNIERE_VERSION = 'derniere-version.json'
+VERSION_INCONNUE = 'inconnue'                   # « de » du manifeste quand derniere-version.json manque ou est illisible
 # Colonnes ajoutées par un format après le premier (depuisVersion de js/schema.js), toujours en fin de table : une
 # sauvegarde faite avant ce format ne les a pas, sans être abîmée (« Tester une sauvegarde »). RENVOI CROISÉ : cohérence
 # avec js/schema.js vérifiée par tests/test_sauvegardes_lot7.py.
@@ -3809,11 +3825,86 @@ def tables_presentes(dossier):
     return [table for table in TABLES if os.path.isfile(os.path.join(dossier, table + '.csv'))]
 
 
-def copier_tables_dans_sauvegarde(config, nom_sauvegarde):
+def motif_du_nom_de_sauvegarde(nom):
+    """« motif » du manifeste d'après le nom : « quotidienne » (AAAA-MM-JJ), « manuelle » (AAAA-MM-JJ_HHMMSS), sinon
+    la fin du nom (« avant-format-v3 », « avant-restauration », « avant-import-zip »…)."""
+    if MOTIF_NOM_QUOTIDIENNE.fullmatch(nom):
+        return MOTIF_QUOTIDIENNE
+    if MOTIF_NOM_MANUELLE.fullmatch(nom):
+        return MOTIF_MANUELLE
+    return nom[len('AAAA-MM-JJ_HHMMSS_'):]
+
+
+def format_des_tables_copiees(dossier):
+    """Format des données d'une sauvegarde : version_schema de son parametres.csv (version_de_base, même règle que
+    Formats.versionDeBase) ; 1 sans parametres.csv, comme etat_des_fichiers."""
+    octets = lire_octets(os.path.join(dossier, 'parametres.csv'))
+    if octets is None:
+        return VERSION_SCHEMA_PAR_DEFAUT
+    return version_de_base(lignes_en_dictionnaires(lire_fichier_de_donnees(octets)))
+
+
+def fichiers_du_manifeste(dossier):
+    """[{"nom", "octets", "sha256"}] de chaque fichier du dossier (chemin relatif en « / », triés par nom), sans le
+    manifeste lui-même ; empreinte SHA-256 complète, lue par morceaux (documents volumineux)."""
+    fichiers = []
+    for racine, _, noms in os.walk(dossier):
+        for nom in noms:
+            chemin = os.path.join(racine, nom)
+            relatif = os.path.relpath(chemin, dossier).replace(os.sep, '/')
+            if relatif == NOM_MANIFESTE:
+                continue
+            hachage, taille = hashlib.sha256(), 0
+            with open(chemin, 'rb') as fichier:
+                for morceau in iter(lambda: fichier.read(TAILLE_MORCEAU_EMPREINTE), b''):
+                    hachage.update(morceau)
+                    taille += len(morceau)
+            fichiers.append({'nom': relatif, 'octets': taille, 'sha256': hachage.hexdigest()})
+    fichiers.sort(key=lambda decrit: decrit['nom'])
+    return fichiers
+
+
+def ecrire_manifeste(config, dossier, nom_sauvegarde, complement=None):
+    """manifeste.json d'une sauvegarde (FORMAT.md §9 ; mêmes champs, dans le même ordre, que Formats.manifeste de
+    js/formats.js) : {"application", "version_appli", "format", "date", "motif", "mode": "serveur", …complement,
+    "fichiers"}. Écrit en dernier, dans le dossier temporaire, avant son renommage."""
+    manifeste = {'application': NOM_APPLICATION, 'version_appli': VERSION_APPLICATION,
+                 'format': format_des_tables_copiees(dossier), 'date': maintenant_iso(config),
+                 'motif': motif_du_nom_de_sauvegarde(nom_sauvegarde), 'mode': MODE_DU_MANIFESTE}
+    manifeste.update(complement or {})
+    manifeste['fichiers'] = fichiers_du_manifeste(dossier)
+    with open(os.path.join(dossier, NOM_MANIFESTE), 'wb') as fichier:
+        fichier.write((json.dumps(manifeste, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+    return manifeste
+
+
+def copier_documents_dans_sauvegarde(config, dossier_sauvegarde):
+    """Copie les fichiers de donnees/documents/ (ni sous-dossier, ni fichier caché ou temporaire) dans documents/ de la
+    sauvegarde : sauvegarde « avant-import-zip » seulement (T187, D170). Rend le nombre de fichiers copiés."""
+    if not os.path.isdir(config.dossier_documents):
+        return 0
+    cible = os.path.join(dossier_sauvegarde, 'documents')
+    os.makedirs(cible, exist_ok=True)
+    copies = 0
+    for nom in sorted(os.listdir(config.dossier_documents)):
+        chemin = os.path.join(config.dossier_documents, nom)
+        if nom.startswith('.') or not os.path.isfile(chemin) or est_un_lien(chemin):
+            continue
+        try:
+            shutil.copy2(chemin, os.path.join(cible, nom))
+        except PermissionError:
+            raise ErreurHttp(423, MESSAGE_FICHIER_VERROUILLE)
+        copies += 1
+    return copies
+
+
+def copier_tables_dans_sauvegarde(config, nom_sauvegarde, complement=None):
     """Copie tous les CSV présents dans sauvegardes/<nom>/ et renvoie la liste des tables.
 
     La copie se fait dans un dossier temporaire renommé à la fin : une sauvegarde
     interrompue (panne, disque plein) ne laisse jamais un dossier à moitié rempli.
+    T187 (D170) : acces/ (sans sessions.json ni cle.pem), documents/ pour le motif « avant-import-zip » seulement,
+    puis manifeste.json en dernier (complement : champs ajoutés au manifeste, ex. « de » et « vers »).
     """
     tables = tables_presentes(config.dossier_donnees)
     dossier_final = os.path.join(config.dossier_sauvegardes, nom_sauvegarde)
@@ -3827,6 +3918,9 @@ def copier_tables_dans_sauvegarde(config, nom_sauvegarde):
             except PermissionError:
                 raise ErreurHttp(423, MESSAGE_FICHIER_VERROUILLE)
         copier_acces_dans_sauvegarde(config, dossier_temporaire)      # lot 7 : comptes, appareils, journal
+        if motif_du_nom_de_sauvegarde(nom_sauvegarde) in MOTIFS_AVEC_DOCUMENTS:
+            copier_documents_dans_sauvegarde(config, dossier_temporaire)
+        ecrire_manifeste(config, dossier_temporaire, nom_sauvegarde, complement)
         os.rename(dossier_temporaire, dossier_final)
     finally:
         if os.path.isdir(dossier_temporaire):
@@ -3843,18 +3937,50 @@ def sauvegarde_complete(dossier):
     return os.path.isdir(dossier) and not os.path.exists(os.path.join(dossier, MARQUE_SAUVEGARDE_EN_COURS))
 
 
-def faire_sauvegarde_quotidienne(config):
-    """Avant chaque écriture CSV : copie dans sauvegardes/AAAA-MM-JJ/ si la sauvegarde du jour manque (rien s'il n'y
-    a encore aucun CSV), puis, à la première écriture après 2 h du matin, la copie externe du jour, lancée dans son
-    propre fil (D133). Le jour est celui de l'horloge du serveur. À appeler en tenant VERROU_ECRITURE.
-    """
+def faire_sauvegarde_du_jour(config):
+    """Copie dans sauvegardes/AAAA-MM-JJ/ si la sauvegarde du jour manque (rien s'il n'y a encore aucun CSV) ; chaque
+    nouvelle quotidienne supprime celles de plus de 30 jours (T187). Le jour est celui de l'horloge du serveur. Rend
+    le nom de la sauvegarde faite, ou None. À appeler en tenant VERROU_ECRITURE."""
     nom_du_jour = instant_local(config).strftime('%Y-%m-%d')
     dossier_du_jour = os.path.join(config.dossier_sauvegardes, nom_du_jour)
-    if not sauvegarde_complete(dossier_du_jour):
-        if os.path.isdir(dossier_du_jour):      # sauvegarde du jour laissée incomplète : on la refait
-            shutil.rmtree(dossier_du_jour, ignore_errors=True)
-        if tables_presentes(config.dossier_donnees):
-            copier_tables_dans_sauvegarde(config, nom_du_jour)
+    if sauvegarde_complete(dossier_du_jour):
+        return None
+    if os.path.isdir(dossier_du_jour):          # sauvegarde du jour laissée incomplète : on la refait
+        shutil.rmtree(dossier_du_jour, ignore_errors=True)
+    if not tables_presentes(config.dossier_donnees):
+        return None
+    copier_tables_dans_sauvegarde(config, nom_du_jour)
+    purger_sauvegardes_quotidiennes(config)
+    return nom_du_jour
+
+
+def purger_sauvegardes_quotidiennes(config):
+    """Supprime les sauvegardes quotidiennes de plus de 30 jours (D170) : dossiers dont le nom est exactement une vraie
+    date AAAA-MM-JJ, plus vieux de 31 jours ou davantage que le jour de l'horloge du serveur. Jamais un autre nom
+    (manuelles, « …_avant-… »), un fichier, un lien ni une jonction. Rend les noms supprimés."""
+    aujourd_hui = instant_local(config).date()
+    try:
+        noms = sorted(os.listdir(config.dossier_sauvegardes))
+    except OSError:
+        return []
+    supprimees = []
+    for nom in noms:
+        chemin = os.path.join(config.dossier_sauvegardes, nom)
+        if not est_une_date(nom) or not os.path.isdir(chemin) or est_un_lien(chemin):
+            continue
+        age = (aujourd_hui - datetime.datetime.strptime(nom, '%Y-%m-%d').date()).days
+        if age > QUOTIDIENNES_GARDEES_JOURS:
+            shutil.rmtree(chemin, ignore_errors=True)
+            supprimees.append(nom)
+    return supprimees
+
+
+def faire_sauvegarde_quotidienne(config):
+    """Avant chaque écriture CSV : la sauvegarde du jour si elle manque (faire_sauvegarde_du_jour, rotation comprise),
+    puis, à la première écriture après 2 h du matin, la copie externe du jour, lancée dans son propre fil (D133). À
+    appeler en tenant VERROU_ECRITURE.
+    """
+    faire_sauvegarde_du_jour(config)
     lancer_copie_externe_si_due(config)
 
 
@@ -4660,6 +4786,89 @@ def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
             detail = getattr(erreur, 'message', None) or erreur
     if not ecrit:
         afficher(PREFIXE_CONSOLE_FORMAT + 'lignes du journal du passage non écrites (%s).' % detail)
+
+
+# ---------------------------------------------------------------------------
+# Sauvegardes du démarrage (T187 ; décision D170 ; docs/FORMAT.md §8)
+# ---------------------------------------------------------------------------
+
+# Au démarrage du serveur, dans main, avant d'ouvrir les écouteurs (donc avant toute connexion), dans cet ordre :
+#   1. « avant-mise-a-jour » : base non vide (au moins un CSV du schéma) et donnees/derniere-version.json absent,
+#      illisible ou portant une autre version que VERSION_APPLICATION → sauvegarde
+#      « AAAA-MM-JJ_HHMMSS_avant-mise-a-jour » (manifeste : « de » = version notée ou « inconnue », « vers » = version
+#      courante), puis, après sa réussite seulement, derniere-version.json écrit d'un coup ({"version", "depuis"}) ;
+#      échec : une ligne sur la console et rien d'autre (nouvel essai au démarrage suivant) ; base vide : rien ;
+#   2. le passage au format courant (migrer_donnees_au_demarrage, T185), avec sa sauvegarde « avant-format-vN » ;
+#   3. la sauvegarde quotidienne si celle du jour manque (faire_sauvegarde_du_jour, rotation à 30 jours comprise).
+# Aucune de ces étapes n'écrit dans les tables : elles se font aussi en lecture seule (données plus récentes, D169).
+PREFIXE_CONSOLE_SAUVEGARDES = 'Sauvegardes : '
+
+
+def chemin_derniere_version(config):
+    return os.path.join(config.dossier_donnees, NOM_DERNIERE_VERSION)
+
+
+def lire_derniere_version(config):
+    """Version de Prévo notée dans donnees/derniere-version.json (texte non vide), ou None : fichier absent, illisible,
+    ou sans « version »."""
+    try:
+        with open(chemin_derniere_version(config), 'rb') as fichier:
+            contenu = json.loads(fichier.read().decode('utf-8-sig'))
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+        return None
+    version = contenu.get('version') if isinstance(contenu, dict) else None
+    return version.strip() if isinstance(version, str) and version.strip() else None
+
+
+def sauvegarder_avant_mise_a_jour(config):
+    """Étape 1 ci-dessus. Rend le nom de la sauvegarde faite, ou None (rien à faire, ou échec dit sur la console)."""
+    if not tables_presentes(config.dossier_donnees):
+        return None                                     # base vide : rien à garder
+    notee = lire_derniere_version(config)
+    if notee == VERSION_APPLICATION:
+        return None
+    de = notee or VERSION_INCONNUE
+    try:
+        with VERROU_ECRITURE:
+            nom = nouveau_nom_horodate(config, '_' + MOTIF_AVANT_MISE_A_JOUR)
+            verifier_nom_sauvegarde(nom)
+            copier_tables_dans_sauvegarde(config, nom, {'de': de, 'vers': VERSION_APPLICATION})
+    except (ErreurHttp, OSError) as erreur:
+        afficher(PREFIXE_CONSOLE_SAUVEGARDES + 'sauvegarde « %s » impossible (%s) ; nouvel essai au prochain démarrage.'
+                 % (MOTIF_AVANT_MISE_A_JOUR, getattr(erreur, 'message', None) or erreur))
+        return None
+    afficher(PREFIXE_CONSOLE_SAUVEGARDES + 'version de Prévo précédente : %s, version actuelle : %s ; sauvegarde %s '
+             'faite avant la mise à jour.' % (de, VERSION_APPLICATION, nom))
+    contenu = {'version': VERSION_APPLICATION, 'depuis': maintenant_iso(config)}
+    try:
+        ecrire_atomique(chemin_derniere_version(config),
+                        (json.dumps(contenu, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+    except (ErreurHttp, OSError) as erreur:
+        afficher(PREFIXE_CONSOLE_SAUVEGARDES + '%s non écrit (%s) : une autre sauvegarde « %s » sera faite au prochain '
+                 'démarrage.' % (NOM_DERNIERE_VERSION, getattr(erreur, 'message', None) or erreur,
+                                 MOTIF_AVANT_MISE_A_JOUR))
+    return nom
+
+
+def sauvegarder_le_jour_au_demarrage(config):
+    """Étape 3 ci-dessus : la sauvegarde quotidienne si celle du jour manque (rotation comprise). Échec dit sur la
+    console (la première écriture du jour la retente). Rend son nom, ou None."""
+    try:
+        with VERROU_ECRITURE:
+            return faire_sauvegarde_du_jour(config)
+    except (ErreurHttp, OSError) as erreur:
+        afficher(PREFIXE_CONSOLE_SAUVEGARDES + 'sauvegarde du jour impossible au démarrage (%s) ; elle sera refaite '
+                 'avant la première modification.' % (getattr(erreur, 'message', None) or erreur))
+        return None
+
+
+def preparer_donnees_au_demarrage(config):
+    """Étapes 1 à 3 ci-dessus, dans cet ordre (main, avant les écouteurs). Rend l'état du format des données
+    (migrer_donnees_au_demarrage)."""
+    sauvegarder_avant_mise_a_jour(config)
+    etat = migrer_donnees_au_demarrage(config)
+    sauvegarder_le_jour_au_demarrage(config)
+    return etat
 
 
 # ---------------------------------------------------------------------------
@@ -5967,6 +6176,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         Manuelle (D133) : une par minute au plus (429 et Retry-After), les 60 dernières gardées ; une sauvegarde à
         motif n'est ni limitée ni comptée."""
         motif = lire_motif_sauvegarde(corps)            # 400 si motif refusé, avant toute écriture
+        # T187 : « avant-import-zip » copie aussi donnees/documents/ ; manifeste.json dans toute sauvegarde.
         suffixe = '_' + motif if motif else ''
         with VERROU_ECRITURE:
             if not motif:
@@ -6706,8 +6916,9 @@ def main(arguments=None):
         config.contexte_ssl = creer_contexte_ssl(certificat, cle)
     # T185 (D168) : les données au format courant, après la sauvegarde « avant-format-vN », AVANT d'ouvrir les
     # écouteurs (aucune connexion ne voit une base à moitié passée) ; avec ou sans configuration (assistant) ; données
-    # plus récentes : lecture seule (D169).
-    migrer_donnees_au_demarrage(config)
+    # plus récentes : lecture seule (D169). T187 (D170) : la sauvegarde « avant-mise-a-jour » d'abord (nouvelle
+    # version de Prévo), la sauvegarde du jour ensuite (rotation à 30 jours).
+    preparer_donnees_au_demarrage(config)
     serveurs, config.port = demarrer_serveur(reglages['port_http'], config)
     if tailscale_attendu(reglages):
         detecter_tailscale_pour(config)         # §22.8 : commandes locales, une fois au démarrage (ligne de console)

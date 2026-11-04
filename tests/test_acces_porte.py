@@ -105,6 +105,8 @@ class TestPorte(CasAtelier):
     def test_un_envoi_depuis_le_reseau_n_est_jamais_lu(self):
         chemin = self.atelier.dossier / "equipements.csv"
         avant = chemin.read_bytes()
+        # T187 : le démarrage a déjà fait ses sauvegardes (du jour, « avant-mise-a-jour ») ; aucune de plus ensuite.
+        sauvegardes_avant = sorted(p.name for p in (self.atelier.dossier / "sauvegardes").iterdir())
         for methode, adresse in (("POST", "/api/connexion"), ("PUT", "/api/csv/equipements"), ("POST", "/api/sauvegarde"),
                                  ("PUT", "/api/documents/essai.txt")):
             with self.subTest(methode=methode, adresse=adresse):
@@ -114,7 +116,7 @@ class TestPorte(CasAtelier):
                 self.assertEqual(reponse.entetes.get("connection"), "close")
         self.assertEqual(chemin.read_bytes(), avant)
         self.assertFalse((self.atelier.dossier / "documents" / "essai.txt").exists())
-        self.assertFalse(any(p.name.startswith("20") and "_" in p.name for p in (self.atelier.dossier / "sauvegardes").iterdir()))
+        self.assertEqual(sorted(p.name for p in (self.atelier.dossier / "sauvegardes").iterdir()), sauvegardes_avant)
 
     def test_la_porte_sert_ses_fichiers_et_rien_de_l_application(self):
         attendus = {"/acces/porte.js": ("text/javascript", b"Porte"), "/acces/porte.css": ("text/css", b"Sora"),

@@ -205,6 +205,7 @@ class TestFormat2ModeServeur(CasServeurV1):
                 (serveur.dossier / nom).unlink()
             retirer_derniere_colonne(serveur.dossier / "ordres_travail.csv", "astuce")
             avant = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
+            sauvegardes_avant = self.sauvegardes(serveur)   # T187 : celles du démarrage (du jour, avant-mise-a-jour)
             self.assertNotIn("wiki_pages.csv", avant)
             self.assertNotIn(b";astuce", avant["ordres_travail.csv"].split(b"\r\n", 1)[0])
 
@@ -216,7 +217,7 @@ class TestFormat2ModeServeur(CasServeurV1):
             attendre_pret(self.page)
 
             # Aucune sauvegarde, aucun fichier changé à l'octet ni créé.
-            self.assertEqual(self.sauvegardes(serveur), [])
+            self.assertEqual(self.sauvegardes(serveur), sauvegardes_avant)
             apres = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
             self.assertEqual(apres, avant)
             self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "2")
@@ -238,11 +239,12 @@ class TestFormat2ModeServeur(CasServeurV1):
         with ServeurPrevo() as serveur:
             shutil.copyfile(str(PARAMETRES_V1), str(serveur.dossier / "parametres.csv"))
             avant = {p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}
+            sauvegardes_avant = self.sauvegardes(serveur)   # T187 : celles du démarrage (du jour, avant-mise-a-jour)
             preregler_profil(self.contexte, "demandeur", nom="Lucie Martin")
             self.page.goto(serveur.url + "/#/accueil")
             attendre_pret(self.page)
             self.assertEqual({p.name: p.read_bytes() for p in serveur.dossier.glob("*.csv")}, avant)
-            self.assertEqual(self.sauvegardes(serveur), [])
+            self.assertEqual(self.sauvegardes(serveur), sauvegardes_avant)
             self.assertNotIn("pas encore au format", self.page.inner_text("#app"))
 
 

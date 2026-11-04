@@ -653,9 +653,11 @@ def rediger_lot7():
             ", ".join("`%s`" % r for r in serveur.RESULTATS_JOURNAL_ACCES), serveur.DUREE_JOURNAL_ACCES_JOURS),
         "",
         "À côté, dans le dossier des données : `installation.json` (brouillon de l'assistant d'installation, supprimé à la"
-        " fin), `journal-serveur.log` (journal du serveur) et `copie-externe.json` (état de la copie externe des"
-        " sauvegardes). La configuration, `prevo.config.json`, est à côté de `serveur.py`, jamais dans le dossier des"
-        " données.",
+        " fin), `journal-serveur.log` (journal du serveur), `copie-externe.json` (état de la copie externe des"
+        " sauvegardes) et `derniere-version.json` (version de Prévo qui a ouvert ces données en dernier ; une autre"
+        " version fait d'abord une sauvegarde `…_avant-mise-a-jour`). Chaque sauvegarde contient un `manifeste.json`"
+        " (ses fichiers, avec leur taille et leur empreinte SHA-256). La configuration, `prevo.config.json`, est à côté"
+        " de `serveur.py`, jamais dans le dossier des données.",
         "",
         "### 5.2 Les documents joints (`documents/`)",
         "",

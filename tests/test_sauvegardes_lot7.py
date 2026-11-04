@@ -588,7 +588,10 @@ class TestServeurReel(unittest.TestCase):
         self.addCleanup(shutil.rmtree, racine, True)
         source = racine / "source"
         shutil.copytree(commun.DOSSIER_DEMO, source)
-        quotidienne = source / "sauvegardes" / "2026-06-01"
+        # T187 : la quotidienne du jour (le serveur ne la refait donc pas à son démarrage, et une quotidienne de plus
+        # de 30 jours serait supprimée par la rotation).
+        jour = datetime.date.today().isoformat()
+        quotidienne = source / "sauvegardes" / jour
         (quotidienne / "acces").mkdir(parents=True)
         shutil.copy2(source / "parametres.csv", quotidienne / "parametres.csv")
         (quotidienne / "acces" / "comptes.json").write_bytes(COMPTES_JSON)
@@ -600,17 +603,17 @@ class TestServeurReel(unittest.TestCase):
         configuration.write_text(json.dumps({"copie_sauvegardes": str(cible)}), encoding="utf-8")
         with commun.ServeurPrevo(source=source, arguments=["--config", str(configuration)]) as reel:
             attendre(lambda: (reel.dossier / "copie-externe.json").is_file(), message=reel.sortie_console())
-            self.assertEqual(contenu_du_dossier(cible / "2026-06-01"), {
+            self.assertEqual(contenu_du_dossier(cible / jour), {
                 "acces/comptes.json": COMPTES_JSON,
                 "parametres.csv": (source / "parametres.csv").read_bytes()})
-            self.assertEqual(copies_datees(cible), ["2026-06-01"])
-            self.assertEqual([chemin.name for chemin in cible.iterdir()], ["2026-06-01"])
+            self.assertEqual(copies_datees(cible), [jour])
+            self.assertEqual([chemin.name for chemin in cible.iterdir()], [jour])
             info = requete(reel.port, "GET", "/api/info").json()["copie_externe"]
             self.assertEqual(info, {"derniere_reussie": datetime.date.today().isoformat(), "jours_sans_copie": 0,
                                     "erreur": None})
             console = reel.sortie_console()
             self.assertIn("Copie externe    : %s" % cible, console)
-            self.assertIn("Copie externe des sauvegardes : sauvegarde du 2026-06-01 à jour", console)
+            self.assertIn("Copie externe des sauvegardes : sauvegarde du %s à jour" % jour, console)
 
 
 class TestCoherenceSchema(CasNavigateur):

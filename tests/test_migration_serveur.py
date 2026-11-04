@@ -94,6 +94,19 @@ def fichiers_de(dossier):
     return {p.relative_to(dossier).as_posix(): p.read_bytes() for p in sorted(dossier.rglob("*")) if p.is_file()}
 
 
+# T187 (D170) : à son premier démarrage sur ces jeux (aucune version de Prévo notée), le serveur fait aussi la
+# sauvegarde « avant-mise-a-jour » (et écrit derniere-version.json) et la sauvegarde du jour (AAAA-MM-JJ), vérifiées
+# par tests/test_sauvegardes_socle.py ; chaque sauvegarde a son manifeste.json.
+MOTIF_SAUVEGARDE_DU_DEMARRAGE = re.compile(r"^sauvegardes/\d{4}-\d{2}-\d{2}(_\d{6}_avant-mise-a-jour)?/")
+
+
+def sans_le_demarrage(fichiers):
+    """Les fichiers (fichiers_de) sans ce que T187 ajoute au démarrage : derniere-version.json, les sauvegardes du jour
+    et « avant-mise-a-jour »."""
+    return {chemin: octets for chemin, octets in fichiers.items()
+            if chemin != "derniere-version.json" and not MOTIF_SAUVEGARDE_DU_DEMARRAGE.match(chemin)}
+
+
 def sauvegardes_de_format(dossier):
     dossier = Path(dossier) / "sauvegardes"
     if not dossier.is_dir():
@@ -185,6 +198,8 @@ class CasJeux(unittest.TestCase):
         sauvegarde = sauvegardes[0]
         contenu = {chemin.split("/", 2)[2]: octets for chemin, octets in apres.items()
                    if chemin.startswith("sauvegardes/" + sauvegarde + "/")}
+        self.assertIn("manifeste.json", contenu)                        # T187 : chaque sauvegarde a son manifeste
+        del contenu["manifeste.json"]
         self.assertEqual(contenu, {chemin: octets for chemin, octets in origine.items() if chemin.endswith(".csv")})
         # Les tables complétées, version_schema, le journal ; tout le reste à l'octet près ; aucune table créée.
         for table, colonnes in ajouts.items():
@@ -210,7 +225,7 @@ class CasJeux(unittest.TestCase):
             self.assertRegex(ligne["id"], MOTIF_ID_JOURNAL)
             self.assertRegex(ligne["date_heure"], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
         changes = set(ajouts) | {"journal", "parametres"}
-        donnees_apres = {c: o for c, o in apres.items() if "/" not in c}
+        donnees_apres = {c: o for c, o in sans_le_demarrage(apres).items() if "/" not in c}
         self.assertEqual(set(donnees_apres), {c for c in origine if "/" not in c} | {"journal.csv"})
         for chemin, octets in origine.items():
             if chemin[:-len(".csv")] not in changes:
@@ -245,7 +260,7 @@ class TestDemarrage(CasJeux):
                 source = self.jeu(nom, nom)
                 origine = fichiers_de(source)
                 with ServeurPrevo(source=source) as serveur:
-                    self.assertEqual(fichiers_de(serveur.dossier), origine)
+                    self.assertEqual(sans_le_demarrage(fichiers_de(serveur.dossier)), origine)
                     self.assertEqual(sauvegardes_de_format(serveur.dossier), [])
                     self.assertEqual(self.info_format(serveur)["migration"], "rien")
                 if nom == "f3-v2.0.0":
@@ -258,7 +273,7 @@ class TestDemarrage(CasJeux):
                 source = self.jeu(nom, nom)
                 origine = fichiers_de(source)
                 with ServeurPrevo(source=source) as serveur:
-                    self.assertEqual(fichiers_de(serveur.dossier), origine)
+                    self.assertEqual(sans_le_demarrage(fichiers_de(serveur.dossier)), origine)
                     self.assertEqual(sauvegardes_de_format(serveur.dossier), [])
                     etat = self.info_format(serveur)
                     console = serveur.sortie_console()
@@ -289,7 +304,7 @@ class TestDemarrage(CasJeux):
         source = self.jeu("plus-recent")
         origine = fichiers_de(source)
         with ServeurPrevo(source=source) as serveur:
-            self.assertEqual(fichiers_de(serveur.dossier), origine)
+            self.assertEqual(sans_le_demarrage(fichiers_de(serveur.dossier)), origine)
             etat = self.info_format(serveur)
             self.assertEqual((etat["base"], etat["plus_recent"], etat["migration"]), (4, True, "rien"))
             self.assertIn("LECTURE SEULE", serveur.sortie_console())
@@ -314,12 +329,13 @@ class TestDemarrage(CasJeux):
                     self.assertEqual(reponse["format"], 4)
                     self.assertIn("version plus récente de Prévo", reponse["erreur"])
                     self.assertIn("format 4", reponse["erreur"])
-            self.assertEqual(fichiers_de(serveur.dossier), origine)
+            self.assertEqual(sans_le_demarrage(fichiers_de(serveur.dossier)), origine)
             self.assertEqual(os.listdir(serveur.dossier / "documents"), [])
             # Sauvegarde manuelle permise ; les données restent intactes.
             statut, reponse = requete(serveur, "POST", "/api/sauvegarde")
             self.assertEqual(statut, 200, reponse)
-            donnees = {c: o for c, o in fichiers_de(serveur.dossier).items() if not c.startswith("sauvegardes/")}
+            donnees = {c: o for c, o in sans_le_demarrage(fichiers_de(serveur.dossier)).items()
+                       if not c.startswith("sauvegardes/")}
             self.assertEqual(donnees, origine)
 
     def test_comptes_exiges_passage_fait_sans_aucune_connexion(self):

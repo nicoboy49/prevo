@@ -789,15 +789,16 @@ class TestSauvegardeQuotidienne(CasAvecServeur):
             fichier.write(cls.PARAMETRES)
 
     def test_sauvegarde_quotidienne_contient_etat_avant(self):
+        # T187 (D170) : la sauvegarde du jour est faite au démarrage du serveur, donc avant toute écriture, avec son
+        # manifeste ; ni une lecture ni les écritures du même jour ne la refont.
         aujourd_hui = datetime.date.today().strftime('%Y-%m-%d')
         dossier_du_jour = self.chemin_donnee('sauvegardes', aujourd_hui)
-        self.assertFalse(os.path.exists(dossier_du_jour))     # rien avant la 1re écriture
+        self.assertEqual(sorted(os.listdir(dossier_du_jour)), ['manifeste.json', 'parametres.csv', 'techniciens.csv'])
         self.requete('GET', '/api/versions')
-        self.assertFalse(os.path.exists(dossier_du_jour))     # une lecture ne sauvegarde pas
         version = empreinte(self.ETAT_AVANT)
         etat_apres = BOM + entete('techniciens') + b'\r\nTEC-0001;Apres\r\n'
         self.assertEqual(self.mettre_csv('techniciens', etat_apres, version).statut, 200)
-        self.assertEqual(sorted(os.listdir(dossier_du_jour)), ['parametres.csv', 'techniciens.csv'])
+        self.assertEqual(sorted(os.listdir(dossier_du_jour)), ['manifeste.json', 'parametres.csv', 'techniciens.csv'])
         self.assertEqual(self.lire_fichier(os.path.join(dossier_du_jour, 'techniciens.csv')),
                          self.ETAT_AVANT)
         # Deuxième écriture du jour : la sauvegarde du jour n'est pas refaite.
@@ -805,7 +806,11 @@ class TestSauvegardeQuotidienne(CasAvecServeur):
         self.assertEqual(self.lire_fichier(os.path.join(dossier_du_jour, 'techniciens.csv')),
                          self.ETAT_AVANT)
         liste = self.requete('GET', '/api/sauvegardes').json()['sauvegardes']
-        self.assertEqual(liste, [{'nom': aujourd_hui, 'tables': ['techniciens', 'parametres']}])
+        self.assertEqual([s for s in liste if '_' not in s['nom']],
+                         [{'nom': aujourd_hui, 'tables': ['techniciens', 'parametres']}])
+        # La seule autre : « avant-mise-a-jour », faite au premier démarrage (aucune version de Prévo notée).
+        self.assertEqual([s['nom'][len('AAAA-MM-JJ_HHMMSS_'):] for s in liste if '_' in s['nom']],
+                         ['avant-mise-a-jour'])
         self.assertEqual(self.fichiers_temporaires_restants(), [])
 
     def test_sauvegarde_incomplete_du_mode_dossier_ignoree(self):
