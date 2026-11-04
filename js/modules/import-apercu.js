@@ -46,7 +46,7 @@ Object.assign(Import.assistant, (() => {
   function messageErreur(erreur, contexte) {
     if (erreur instanceof Import.ErreurImport) return erreur.message;
     console.warn('Prévo (import) : ' + contexte + ' impossible (' + (erreur && erreur.message) + ').', erreur);
-    return contexte.charAt(0).toUpperCase() + contexte.slice(1) + ' impossible : ' + ((erreur && erreur.message) || 'erreur inconnue') + '.';
+    return contexte.charAt(0).toUpperCase() + contexte.slice(1) + ' impossible : ' + App.raisonErreur(erreur) + '.';
   }
 
   // ===========================================================================================

@@ -47,6 +47,9 @@ appareils, journal des connexions), jamais les sessions ni les clés, et ne le r
   d'un CSV de données, y compris celles de l'assistant, de la démo et du passage de format) ; `Donnees` refuse aussi
   plus tôt, avec le même message. Refus : `ErreurFichierAbime` dans le navigateur, **409** au code `fichier_abime`
   (avec `table`) pour le serveur ; rien n'est écrit, et un bandeau « Fichier abîmé » le dit à l'ouverture.
+  Le message dit quoi faire, sans jargon (T201) : pour qui n'est pas responsable, « Fichier abîmé : prévenez le
+  responsable » ; pour le responsable, le fichier et le remède (sauvegarde du jour, import ZIP). La saisie reste
+  dans le formulaire (rien n'est vidé), et rien n'est écrit, pas même la photo d'une demande.
 - **Ajout en fin de fichier** (journal) : refusé si le fichier en place se termine au milieu d'un texte entre
   guillemets (guillemet ouvert jamais fermé), sinon les lignes ajoutées y seraient avalées. Une ligne de journal
   refusée ne fait pas échouer l'action de l'utilisateur.

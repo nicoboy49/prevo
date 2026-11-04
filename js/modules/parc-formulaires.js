@@ -364,7 +364,7 @@ Object.assign(Parc, (() => {
       return '';
     } catch (erreur) {
       const message = 'Relevé enregistré, mais la base des gammes au compteur ' + compteurId
-        + ' n\'a pas pu être ajustée après la remise à zéro (' + ((erreur && erreur.message) || String(erreur))
+        + ' n\'a pas pu être ajustée après la remise à zéro (' + App.raisonErreur(erreur)
         + ') : vérifiez le relevé de dernière réalisation de chacune de ces gammes.';
       console.warn('Prévo (parc) : ' + message, erreur);
       return message;
@@ -380,7 +380,7 @@ Object.assign(Parc, (() => {
       crees = await Preventif.genererOTEchus();
     } catch (erreur) {
       App.signalerErreur({ message: (avertissement ? avertissement + ' De plus, les' : 'Relevé enregistré, mais les')
-        + ' OT préventifs n\'ont pas pu être générés : ' + ((erreur && erreur.message) || String(erreur)) },
+        + ' OT préventifs n\'ont pas pu être générés : ' + App.raisonErreur(erreur) },
       'génération du préventif après un relevé');
       return;
     }

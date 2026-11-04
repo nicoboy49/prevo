@@ -99,7 +99,7 @@ Object.assign(Demandes, (() => {
         await marquerAnomalie(otOrigineId, id);
       } catch (erreur) {
         UI.toast('La demande ' + id + ' est bien créée, mais l\'OT ' + otOrigineId
-          + ' n\'a pas pu être marqué « anomalie constatée » : ' + ((erreur && erreur.message) || erreur), 'attention');
+          + ' n\'a pas pu être marqué « anomalie constatée » : ' + App.raisonErreur(erreur), 'attention');
         console.warn('Prévo (demandes) : anomalie non marquée sur ' + otOrigineId + ' après ' + id + '.', erreur);
       }
     }

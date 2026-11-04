@@ -119,7 +119,7 @@ Object.assign(Ordres, (() => {
       avertissementsGamme.delete(otId);
     } catch (erreur) {
       const message = 'L\'OT ' + otId + ' est bien clôturé, mais la gamme ' + ot.gamme_id + ' n\'a pas été mise à jour ('
-        + ((erreur && erreur.message) || erreur) + ') : vérifiez sa dernière réalisation sur la fiche de la gamme.';
+        + App.raisonErreur(erreur) + ') : vérifiez sa dernière réalisation sur la fiche de la gamme.';
       avertissementsGamme.set(otId, message);
       UI.toast(message, 'attention');
       console.warn('Prévo (ordres) : ' + message, erreur);

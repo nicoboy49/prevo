@@ -478,7 +478,7 @@ Object.assign(Wiki, (() => {
     } catch (erreur) {
       if (erreur instanceof Donnees.ErreurValidation) annoncer('important', UI.html`<b>Refusé :</b> ${erreur.message}`);
       else {
-        annoncer('important', UI.html`<b>L'action n'a pas abouti :</b> ${(erreur && erreur.message) || String(erreur)}`);
+        annoncer('important', UI.html`<b>L'action n'a pas abouti :</b> ${App.raisonErreur(erreur)}`);
         App.signalerErreur(erreur, 'journal du wiki');
       }
     }

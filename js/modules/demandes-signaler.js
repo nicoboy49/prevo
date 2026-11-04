@@ -304,6 +304,11 @@ Object.assign(Demandes, (() => {
       const texteBouton = UI.$('span', boutonEnvoyer);
       texteBouton.textContent = 'Envoi en cours…';
       try {
+        // demandes.csv abîmé (T201) : refus AVANT d'écrire la photo (la demande serait refusée juste après) : rien
+        // n'est écrit ; la saisie et la photo choisie restent dans le formulaire.
+        if (Donnees.tablesAbimees().includes('demandes')) {
+          throw new Donnees.ErreurFichierAbime('demandes', 'demandes.csv');
+        }
         if (photo.preparation) await photo.preparation;
         let nomDeLaPhoto = '';
         if (photo.blob) {

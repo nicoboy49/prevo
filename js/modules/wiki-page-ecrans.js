@@ -324,7 +324,7 @@ Object.assign(Wiki, (() => {
       await App.reafficher();
     } catch (erreur) {
       console.warn('Prévo (wiki) : décision non enregistrée (' + (erreur && erreur.message) + ').', erreur);
-      UI.toast('Décision non enregistrée : ' + ((erreur && erreur.message) || String(erreur)), 'erreur');
+      UI.toast('Décision non enregistrée : ' + App.raisonErreur(erreur), 'erreur');
       boutons.forEach((autre) => { autre.disabled = false; });
       bouton.removeAttribute('aria-busy');
     }

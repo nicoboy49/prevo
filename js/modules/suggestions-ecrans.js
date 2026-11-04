@@ -421,7 +421,7 @@ Object.assign(Suggestions, (() => {
       suivi.cle = cle;                                    // nouvel essai à la prochaine modification
       console.warn('Prévo : suggestion ' + cle + ' non marquée traitée (' + (erreur && erreur.message) + ').', erreur);
       UI.toast('C\'est enregistré, mais la suggestion ' + cle + ' n\'a pas pu être marquée traitée : '
-        + ((erreur && erreur.message) || 'erreur inconnue'), 'attention');
+        + App.raisonErreur(erreur), 'attention');
       return false;
     }
     traitees.set(cle, ceQuiAEteFait);

@@ -112,7 +112,7 @@ Object.assign(Wiki, (() => {
       return ajoutes || 0;
     } catch (erreur) {
       if (!avecMessage) throw erreur;
-      annoncer('OT non ajouté à la file du wiki (' + (erreur && erreur.message ? erreur.message : String(erreur))
+      annoncer('OT non ajouté à la file du wiki (' + (typeof App !== 'undefined' ? App.raisonErreur(erreur) : erreur && erreur.message ? erreur.message : String(erreur))
         + ') : il reste « hors du wiki », à ajouter depuis l\'écran Wiki.', 'attention');
       return 0;
     }

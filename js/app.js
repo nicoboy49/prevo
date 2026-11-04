@@ -141,11 +141,46 @@ const App = (() => {
       || erreur instanceof Donnees.ErreurStockage;
   }
 
-  /** Erreur gérée : message à l'utilisateur (toast) et trace console.warn (jamais console.error). */
+  // Fichier abîmé (T201) : jamais réécrit (T197, T200, Donnees.ErreurFichierAbime) ; le message dit quoi faire, sans
+  // jargon et selon le rôle. Qui n'est pas responsable (technicien, demandeur, appareil enrôlé, autre profil en mode
+  // dossier) n'a rien à réparer : il prévient le responsable. Les écrans ne vident ni ne quittent rien sur une erreur :
+  // la saisie reste dans le formulaire. Le message technique de l'erreur ne va qu'en console.
+  function fichierAbimeDe(erreur) {
+    const nomTable = erreur.table || '';
+    return nomTable ? (Schema.table(nomTable) || {}).fichier || nomTable + '.csv' : '';
+  }
+
+  /** Texte d'une erreur pour l'utilisateur : son message, sauf fichier abîmé (texte selon le rôle, T201). */
+  function messageErreur(erreur) {
+    if (!(erreur instanceof Donnees.ErreurFichierAbime)) return (erreur && erreur.message) || String(erreur);
+    if (!estResponsable()) {
+      return 'Fichier abîmé : prévenez le responsable. Rien n\'a été enregistré ; votre saisie est restée dans le '
+        + 'formulaire.';
+    }
+    const fichier = fichierAbimeDe(erreur);
+    return 'Fichier abîmé' + (fichier ? ' (' + fichier + ')' : '') + ' : rien n\'a été enregistré, pour ne rien perdre ; '
+      + 'votre saisie est restée dans le formulaire. Restaurez la sauvegarde du jour (Paramètres › Sauvegardes) ou '
+      + 'importez un ZIP ; le détail est dans Paramètres › Contrôle de la base.';
+  }
+
+  /**
+   * Raison d'un échec, à glisser dans une phrase (« …, mais la gamme n'a pas été mise à jour (raison) ») : le message
+   * de l'erreur (« erreur inconnue » sans erreur), sauf fichier abîmé (texte court selon le rôle, T201).
+   */
+  function raisonErreur(erreur) {
+    if (erreur === undefined || erreur === null) return 'erreur inconnue';
+    if (!(erreur instanceof Donnees.ErreurFichierAbime)) return erreur.message || String(erreur);
+    if (!estResponsable()) return 'fichier abîmé : prévenez le responsable';
+    const fichier = fichierAbimeDe(erreur);
+    return 'fichier abîmé' + (fichier ? ' (' + fichier + ')' : '') + ', rien n\'y a été enregistré : restaurez la '
+      + 'sauvegarde du jour ou importez un ZIP ; le détail est dans Paramètres › Contrôle de la base';
+  }
+
+  /** Erreur gérée : message à l'utilisateur (toast, messageErreur) et trace console.warn (jamais console.error). */
   function signalerErreur(erreur, contexte) {
-    const message = (erreur && erreur.message) || String(erreur);
-    UI.toast(message, 'erreur');
-    console.warn('Prévo' + (contexte ? ' (' + contexte + ')' : '') + ' : ' + message, erreur);
+    UI.toast(messageErreur(erreur), 'erreur');
+    console.warn('Prévo' + (contexte ? ' (' + contexte + ')' : '') + ' : ' + ((erreur && erreur.message) || String(erreur)),
+      erreur);
   }
 
   // Remplace <span data-icone="nom"> et <span data-ui="logo"> par les dessins de UI.
@@ -516,12 +551,30 @@ const App = (() => {
   }
 
   // Fichiers abîmés (T197, défaut trouvé par la recette T193) : Prévo ne les enregistre plus (ErreurFichierAbime).
+  // T201 : sans jargon pour qui n'est pas responsable (il prévient le responsable, comme messageErreur).
   function bandeauFichiersAbimes(tables) {
+    const plusieurs = tables.length > 1;
+    const titre = plusieurs ? 'Fichiers abîmés' : 'Fichier abîmé';
+    if (!estResponsable()) {
+      const suite = plusieurs
+        ? 'Tant qu\'ils ne sont pas réparés, Prévo refuse les enregistrements qui les touchent, sans rien perdre.'
+        : 'Tant qu\'il n\'est pas réparé, Prévo refuse les enregistrements qui le touchent, sans rien perdre.';
+      return UI.bandeau('attention', UI.html`<b>${titre} : prévenez le responsable.</b> ${suite}`);
+    }
     const fichiers = tables.map((nomTable) => (Schema.table(nomTable) || {}).fichier || nomTable + '.csv').join(', ');
-    const titre = tables.length > 1 ? 'Fichiers abîmés' : 'Fichier abîmé';
     return UI.bandeau('attention', UI.html`<b>${titre} : ${fichiers}.</b> En-tête coupé, guillemet non fermé ou
       valeurs au-delà de l'en-tête : Prévo ne l'enregistre plus, pour ne rien perdre. Corrigez le fichier,
       restaurez une sauvegarde ou importez un ZIP ; le détail est dans Paramètres › Contrôle de la base.`);
+  }
+
+  // Bandeau « Fichier abîmé » pour une table pas encore signalée (ni à l'ouverture, ni par le passage au format) :
+  // tout de suite si la coque est affichée, sinon à son ouverture (afficherAlertesCoque). T200 (écriture refusée
+  // découverte pendant l'usage), T201 (génération des OT préventifs refusée à l'ouverture).
+  function direFichierAbime(nomTable) {
+    if (!nomTable || tablesLaissees.includes(nomTable) || tablesDitesAbimees.has(nomTable)) return;
+    tablesDitesAbimees.add(nomTable);
+    alertesCoque.push(bandeauFichiersAbimes([nomTable]));
+    if (coqueVisible()) afficherAlertesCoque();
   }
 
   // Lecture seule (D169) : bandeau permanent (sans bouton « Fermer ») en tête de la coque, donc sur tous les
@@ -568,7 +621,13 @@ const App = (() => {
       try {
         crees = await Preventif.genererOTEchus();
       } catch (erreur) {
-        signalerErreur(erreur, 'génération des OT préventifs à l\'ouverture');
+        // Fichier abîmé (T201) : aucune saisie à garder ici ; le bandeau « Fichier abîmé » de l'ouverture le dit.
+        if (erreur instanceof Donnees.ErreurFichierAbime) {
+          direFichierAbime(erreur.table);
+          console.warn('Prévo (génération des OT préventifs à l\'ouverture) : ' + erreur.message, erreur);
+        } else {
+          signalerErreur(erreur, 'génération des OT préventifs à l\'ouverture');
+        }
       }
     }
     if (!preventifDejaMarque && window.performance && typeof performance.mark === 'function') {
@@ -1352,11 +1411,7 @@ const App = (() => {
     // l'ouverture) : bandeau « Fichier abîmé », seulement pour une table pas encore signalée (ni à l'ouverture, ni par
     // le passage au format) ; tout de suite si la coque est affichée, sinon à son ouverture (afficherAlertesCoque).
     Donnees.evenements.addEventListener('fichierAbime', (evenement) => {
-      const nomTable = evenement.detail && evenement.detail.table;
-      if (!nomTable || tablesLaissees.includes(nomTable) || tablesDitesAbimees.has(nomTable)) return;
-      tablesDitesAbimees.add(nomTable);
-      alertesCoque.push(bandeauFichiersAbimes([nomTable]));
-      if (coqueVisible()) afficherAlertesCoque();
+      direFichierAbime(evenement.detail && evenement.detail.table);
     });
     // Lot 7 (§22.4) : session absente ou appareil refusé pendant l'usage (401) → écran de connexion.
     if (typeof StockageServeur !== 'undefined') {
@@ -1416,5 +1471,7 @@ const App = (() => {
     deconnecter,
     exporterZip,
     signalerErreur,
+    messageErreur,
+    raisonErreur,
   };
 })();

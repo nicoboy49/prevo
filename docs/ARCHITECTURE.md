@@ -599,8 +599,9 @@ Actualiser » s'affiche à la place.
 `App.estTechnicien()`, `App.estDemandeur()`, `App.libelleProfil()`, `App.changerProfil()`,
 `App.urlFicheEquipement(id)` (URL réseau en mode serveur — depuis le lot 3, `adresse_qr` quand
 elle est renseignée —, sinon `GMAO:<id>`), `App.chargerScriptDemo()`, `App.exporterZip()`,
-`App.signalerErreur(erreur)`, depuis le lot 3 `App.chargerEcharts()` et `App.adressesReseau()`
-(§15.1), et depuis le lot 5 `App.chargerSheetJS()` (§18.1).
+`App.signalerErreur(erreur)` (texte de `App.messageErreur(erreur)` ; `App.raisonErreur(erreur)`
+pour le glisser dans une phrase ; fichier abîmé : texte selon le rôle, T201), depuis le lot 3
+`App.chargerEcharts()` et `App.adressesReseau()` (§15.1), et depuis le lot 5 `App.chargerSheetJS()` (§18.1).
 
 **Menu** : latéral sur grand écran (≥ 1100 px), repliable en icônes (mémorisé
 `prevo.menuReplie`), icônes seules de 641 à 1099 px, barre du bas sur téléphone (≤ 640 px :

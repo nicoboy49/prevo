@@ -273,7 +273,7 @@ Object.assign(Wiki, (() => {
     if (!(erreur instanceof Donnees.ErreurValidation)) App.signalerErreur(erreur, 'écriture dans le wiki');
     UI.remplir(zone, UI.bandeau('important', raisons.length
       ? UI.html`<p><b>Texte refusé, rien n'a été écrit :</b></p><ul class="wj-raisons">${raisons.map((r) => UI.html`<li>${r}</li>`)}</ul>`
-      : UI.html`<p><b>Rien n'a été écrit :</b> ${(erreur && erreur.message) || String(erreur)}</p>`));
+      : UI.html`<p><b>Rien n'a été écrit :</b> ${App.raisonErreur(erreur)}</p>`));
     zone.scrollIntoView({ block: 'nearest' });
   }
 
