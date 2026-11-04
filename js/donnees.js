@@ -61,7 +61,9 @@ const Donnees = (() => {
   // Écriture refusée : le fichier de la table est abîmé (structure, ou valeurs au-delà de l'en-tête : csv.analyser,
   // entree.abime) ; le réécrire en perdrait une partie sans le dire (règle numéro un, CS140 ; défaut trouvé par la
   // recette T193). Seuls l'import ZIP (option remplacerFichierAbime) et la restauration d'une sauvegarde (adaptateur)
-  // remplacent un tel fichier. Sous-classe d'ErreurStockage : le message est montré tel quel.
+  // remplacent un tel fichier. T200 : la garde est aussi dans la fonction d'écriture commune de chaque adaptateur
+  // (enregistrer : fichier abîmé ; ajouter : fichier qui finit par un guillemet ouvert, csv.finitDansUnGuillemetOuvert),
+  // par laquelle passent toutes les écritures. Sous-classe d'ErreurStockage : le message est montré tel quel.
   class ErreurFichierAbime extends ErreurStockage {
     constructor(nomTable, fichier) {
       super('Le fichier ' + (fichier || nomTable + '.csv') + ' est abîmé (en-tête coupé, guillemet non fermé ou '
@@ -694,6 +696,67 @@ const Donnees = (() => {
     return resultat;
   }
 
+  // --- 3.5 Fin dans une cellule entre guillemets jamais fermée (T200) -------------------------
+
+  // Vrai si les octets d'un CSV finissent DANS une cellule entre guillemets jamais fermée : une ligne ajoutée à la fin
+  // (journal, ajouter) serait avalée par cette cellule à la relecture, donc perdue. Sur les octets bruts, sans
+  // décodage ; même automate que finit_dans_un_guillemet_ouvert de serveur.py (mêmes exemples, mêmes réponses) :
+  // BOM UTF-8 de tête ignoré ; séparateur « ; », sauf si la première ligne non vide n'a aucun « ; » et a une « , » ;
+  // un guillemet n'ouvre une cellule qu'en tout début de cellule (aucun blanc sauté) ; « "" » est un guillemet doublé.
+  const OCTET_GUILLEMET = 0x22;
+  const OCTET_CR = 0x0D;
+  const OCTET_LF = 0x0A;
+  const OCTET_POINT_VIRGULE = 0x3B;
+  const OCTET_VIRGULE = 0x2C;
+  const OCTETS_BLANCS_LIGNE = [0x20, 0x09, 0x0B, 0x0C];      // espace, tabulations, saut de page
+  const DEBUT_DE_CELLULE = 0;
+  const DANS_LA_CELLULE = 1;
+  const ENTRE_GUILLEMETS = 2;
+  const GUILLEMET_VU = 3;
+
+  // Séparateur des octets (comme choisirSeparateur sur le texte) : « , » si la première ligne non vide n'a aucun « ; »
+  // et a une « , », sinon « ; ».
+  function separateurDesOctets(octets, debut) {
+    let ligneNonVide = false;
+    let pointVirgule = false;
+    let virgule = false;
+    for (let position = debut; position < octets.length; position += 1) {
+      const octet = octets[position];
+      if (octet === OCTET_CR || octet === OCTET_LF) {
+        if (ligneNonVide) { break; }
+        pointVirgule = false;
+        virgule = false;
+        continue;
+      }
+      if (OCTETS_BLANCS_LIGNE.indexOf(octet) === -1) { ligneNonVide = true; }
+      if (octet === OCTET_POINT_VIRGULE) { pointVirgule = true; } else if (octet === OCTET_VIRGULE) { virgule = true; }
+    }
+    return ligneNonVide && !pointVirgule && virgule ? OCTET_VIRGULE : OCTET_POINT_VIRGULE;
+  }
+
+  function finitDansUnGuillemetOuvert(entree) {
+    const octets = enOctets(entree);
+    const debut = octets.length >= 3 && octets[0] === 0xEF && octets[1] === 0xBB && octets[2] === 0xBF ? 3 : 0;
+    const separateur = separateurDesOctets(octets, debut);
+    let etat = DEBUT_DE_CELLULE;
+    for (let position = debut; position < octets.length; position += 1) {
+      const octet = octets[position];
+      const finDeCellule = octet === separateur || octet === OCTET_CR || octet === OCTET_LF;
+      if (etat === ENTRE_GUILLEMETS) {
+        if (octet === OCTET_GUILLEMET) { etat = GUILLEMET_VU; }
+      } else if (etat === GUILLEMET_VU && octet === OCTET_GUILLEMET) {
+        etat = ENTRE_GUILLEMETS;                                  // guillemet doublé
+      } else if (finDeCellule) {
+        etat = DEBUT_DE_CELLULE;
+      } else if (etat === DEBUT_DE_CELLULE && octet === OCTET_GUILLEMET) {
+        etat = ENTRE_GUILLEMETS;
+      } else {
+        etat = DANS_LA_CELLULE;
+      }
+    }
+    return etat === ENTRE_GUILLEMETS;
+  }
+
   const csv = {
     decoder: decoder,
     aProteger: aProteger,
@@ -701,6 +764,7 @@ const Donnees = (() => {
     relireValeur: relireValeur,
     analyser: analyser,
     serialiser: serialiser,
+    finitDansUnGuillemetOuvert: finitDansUnGuillemetOuvert,
   };
 
   // ===========================================================================
@@ -735,6 +799,7 @@ const Donnees = (() => {
   const cache = new Map();                    // nom de table → entrée (voir ci-dessus)
   const filesAttente = new Map();             // nom de table → promesse de la dernière tâche
   const evenements = new EventTarget();
+  const tablesDitesAbimees = new Set();      // tables dont l'événement « fichierAbime » est déjà émis (T200)
   const statistiques = { conflits: 0, essais: 0 };
 
   // Résultats calculés à la demande, oubliés à chaque changement de données (« à recalculer »).
@@ -854,6 +919,7 @@ const Donnees = (() => {
     rafraichissementEnCours = null;
     formatPlusRecent = null;
     problemesFormat = [];
+    tablesDitesAbimees.clear();
     aRecalculer();
   }
 
@@ -1250,7 +1316,9 @@ const Donnees = (() => {
   }
 
   // Écrit des entrées au journal. Un échec ne fait jamais échouer l'action de l'utilisateur :
-  // il est signalé en console (console.warn) et la fonction renvoie false.
+  // il est signalé en console (console.warn) et la fonction renvoie false. Fichier du journal abîmé
+  // (ErreurFichierAbime, T200) : en plus, événement « fichierAbime » (detail : { table }), une seule fois par
+  // table jusqu'au prochain initialiser() ; l'application en fait un bandeau.
   async function ecrireJournal(entrees) {
     if (entrees.length === 0) { return true; }
     try {
@@ -1258,8 +1326,15 @@ const Donnees = (() => {
       return true;
     } catch (erreur) {
       console.warn('Prévo : le journal n\'a pas pu être écrit (' + (erreur && erreur.message) + ').', erreur);
+      if (erreur instanceof ErreurFichierAbime) { signalerFichierAbime(erreur.table || 'journal'); }
       return false;
     }
+  }
+
+  function signalerFichierAbime(nomTable) {
+    if (tablesDitesAbimees.has(nomTable)) { return; }
+    tablesDitesAbimees.add(nomTable);
+    evenements.dispatchEvent(new CustomEvent('fichierAbime', { detail: { table: nomTable } }));
   }
 
   // Entrée de journal sans modification de donnée (ex. avertissement d'habilitation RG8).
@@ -1335,7 +1410,10 @@ const Donnees = (() => {
       throw new ErreurFichierAbime(nomTable, description.fichier);
     }
     const octets = serialiser(nomTable, nouvelles, entree.colonnesInconnues);
-    const reponse = await adaptateurActif.enregistrer(nomTable, octets, entree.version);
+    // T200 : l'adaptateur refuse aussi de remplacer un fichier abîmé (ErreurFichierAbime), sauf dérogation demandée.
+    const reponse = reglagesEcriture && reglagesEcriture.remplacerFichierAbime
+      ? await adaptateurActif.enregistrer(nomTable, octets, entree.version, { remplacerFichierAbime: true })
+      : await adaptateurActif.enregistrer(nomTable, octets, entree.version);
     const nouvelIndex = indexer(description, nouvelles);
     cache.set(nomTable, {
       lignes: nouvelles,
@@ -1430,7 +1508,9 @@ const Donnees = (() => {
     try {
       reponse = await adaptateurActif.ajouter(nomTable, octets);
     } catch (erreur) {
-      if (!(erreur instanceof ErreurConflit)) { throw erreur; }
+      // Fichier abîmé (T200 : il finit par un guillemet ouvert, nos lignes seraient avalées) : l'erreur remonte telle
+      // quelle, jamais de repli sur modifier (il réécrirait le fichier). Seul un conflit se replie.
+      if (erreur instanceof ErreurFichierAbime || !(erreur instanceof ErreurConflit)) { throw erreur; }
       await modifier(nomTable, (lignesActuelles) => {
         for (const ligne of lignesAAjouter) { lignesActuelles.push(Object.assign({}, ligne)); }
       }, { journal: false });

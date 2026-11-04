@@ -310,6 +310,10 @@ le cache, mais la table reste **périmée** : `modifier` la relit toujours avant
 (sinon les lignes ajoutées entre-temps par un autre poste seraient perdues). Le rafraîchissement
 périodique ne la relit que si sa version a changé depuis notre ajout ; `Donnees.rafraichir()`
 appelé explicitement (ex. avant l'export ZIP) relit tout.
+Fichier en place qui se termine au milieu d'un texte entre guillemets (guillemet ouvert jamais fermé :
+`Donnees.csv.finitDansUnGuillemetOuvert`, miroir `finit_dans_un_guillemet_ouvert` du serveur) : l'adaptateur refuse
+l'ajout (`ErreurFichierAbime`, T200), sans repli sur `modifier` ; pour le journal, la ligne manquée ne fait pas
+échouer l'action de l'utilisateur (le bandeau « Fichier abîmé » le dit). FORMAT.md §3.
 
 ### 5.5 Rafraîchissement
 `Donnees.demarrerSurveillance()` : toutes les `rafraichissement_s` secondes (20 par défaut) et à
@@ -348,9 +352,12 @@ Chaque fichier `js/stockage-*.js` expose une fabrique : `await StockageServeur.c
 mode                                  'serveur' | 'dossier' | 'demo'
 libelle                               texte affiché (ex. « Serveur 192.168.1.10:8080 »)
 await charger(table)                  → { octets: Uint8Array|null, version: string|null }  (null = fichier absent)
-await enregistrer(table, octets, versionAttendue)   → { version }
-                                      versionAttendue null = le fichier ne doit pas exister ; sinon ErreurConflit
-await ajouter(table, octets)          → { version }  (ErreurConflit si en-tête/encodage différent)
+await enregistrer(table, octets, versionAttendue, options?)   → { version }
+                                      versionAttendue null = le fichier ne doit pas exister ; sinon ErreurConflit ;
+                                      fichier en place abîmé → ErreurFichierAbime, sauf options.remplacerFichierAbime
+                                      (import ZIP seulement, T200 ; FORMAT.md §3)
+await ajouter(table, octets)          → { version }  (ErreurConflit si en-tête/encodage différent ;
+                                      ErreurFichierAbime si le fichier finit dans un guillemet ouvert)
 await listerVersions()                → { nomTable: version|null, … }
 await ecrireDocument(nom, blob)       → nom   (refuse d'écraser un document existant)
 await lireDocument(nom)               → Blob|null
@@ -418,8 +425,8 @@ par `--hote` — sinon 403 (un suffixe quelconque permettrait le « DNS rebindin
 | `GET /api/info` | `{"port": 8080, "adresse_locale": "http://localhost:8080/", "adresses_reseau": ["http://192.168.1.10:8080/"]}` |
 | `GET /api/versions` | `{"tables": {"equipements": {"version": "…", "modifie": "AAAA-MM-JJ HH:MM:SS"} ou null, …}}` (les 22 tables) |
 | `GET /api/csv/<table>` | octets du fichier, en-tête `X-Version` ; 404 si absent |
-| `PUT /api/csv/<table>` | en-tête `X-Version-Attendue: <version>` ou `aucune` ; 200 `{"version"}` · 409 `{"erreur", "version_actuelle"}` · 423 si le fichier est verrouillé (Excel ouvert) |
-| `POST /api/csv/<table>/ajout` | corps = en-tête + lignes (UTF-8 sans BOM) ; ajoute en fin de fichier (crée le fichier avec BOM s'il n'existe pas) ; 409 si l'en-tête ou l'encodage du fichier existant diffère |
+| `PUT /api/csv/<table>` | en-tête `X-Version-Attendue: <version>` ou `aucune` ; 200 `{"version"}` · 409 `{"erreur", "version_actuelle"}` · 409 `{"erreur", "code": "fichier_abime", "table"}` si le fichier en place est abîmé (T200 ; en-tête `X-Prevo-Remplacer-Abime: 1` pour le remplacer quand même : import ZIP seulement ; avec les comptes, 403 si la session n'est pas celle d'un responsable) · 423 si le fichier est verrouillé (Excel ouvert) |
+| `POST /api/csv/<table>/ajout` | corps = en-tête + lignes (UTF-8 sans BOM) ; ajoute en fin de fichier (crée le fichier avec BOM s'il n'existe pas) ; 409 si l'en-tête ou l'encodage du fichier existant diffère · 409 `{"erreur", "code": "fichier_abime", "table"}` si le fichier en place finit dans un guillemet ouvert (T200) |
 | `GET /api/documents/<nom>` | octets, type MIME d'après l'extension, `Content-Security-Policy: sandbox`, `Content-Disposition: attachment; filename="<nom>"` hors images (jpg, jpeg, png, gif, webp), PDF et rapport figé en html (ouvert dans un onglet, `sandbox`) (audit F4, §22.12) ; 404 ; 415 extension inconnue |
 | `PUT /api/documents/<nom>` | 201 `{"nom"}` avec le **nom imposé par le serveur** `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules : le navigateur garde ce nom, jamais celui qu'il a demandé) · 400 nom refusé, ou image dont le contenu n'a pas la signature de son format (`verifier_signature_image` : `FF D8 FF`, `89 50 4E 47 0D 0A 1A 0A`, `GIF87a`/`GIF89a`, `RIFF…WEBP`) · 409 même nom demandé dans la même seconde (jamais d'écrasement) · 413 dossier `documents/` plein (`quota_documents_mo`, 2048 par défaut, mesuré à chaque envoi) · 415 extension inconnue (`.doc` et `.xls` retirés) ; rien n'est écrit en cas de refus |
 | `POST /api/sauvegarde` | corps vide → sauvegarde manuelle `{"sauvegarde": "AAAA-MM-JJ_HHMMSS"}` ; corps JSON facultatif `{"motif": "avant-format-v2"}` → `{"sauvegarde": "AAAA-MM-JJ_HHMMSS_avant-format-v2"}` (motif `avant-import` depuis le lot 5, §18.1) ; motif hors de la liste fermée `MOTIFS_SAUVEGARDE`, corps qui n'est pas un objet JSON, JSON invalide ou trop imbriqué → 400 (contrôlé avant toute écriture) |

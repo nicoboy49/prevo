@@ -2471,10 +2471,10 @@ def forme_de_nom(texte):
 
 def ecrire_table(config, table, entete, lignes):
     """Réécrit un CSV entier au format de Prévo, la sauvegarde du jour faite d'abord ; en tenant VERROU_ECRITURE.
-    409 en lecture seule (T185, données plus récentes)."""
+    409 en lecture seule (T185, données plus récentes) ; 409 « fichier_abime » si le fichier en place est abîmé
+    (T200, ecrire_fichier_de_donnees : rien n'est écrit)."""
     verifier_ecriture_permise(config)
-    faire_sauvegarde_quotidienne(config)
-    ecrire_atomique(chemin_table(config, table), ecrire_tableau_csv(entete, lignes))
+    ecrire_fichier_de_donnees(config, table, ecrire_tableau_csv(entete, lignes), sauvegarde_du_jour=True)
 
 
 def technicien_moi(config, prenom, nom):
@@ -2728,16 +2728,22 @@ def installer_jeu_de_demo(config, brouillon, origine=('', '', '')):
     le dossier des données, dates décalées du nombre de semaines entières écoulées depuis la date de référence
     (comme « Partir des données de démo » du navigateur, §11), sauvegarde du jour d'abord. En Solo, le technicien
     « moi » créé à l'étape « compte » est recréé dans la table de la démo (technicien_moi : même prénom et nom), le
-    brouillon et le compte responsable lié suivent son nouvel identifiant. En tenant VERROU_ECRITURE."""
+    brouillon et le compte responsable lié suivent son nouvel identifiant. En tenant VERROU_ECRITURE. T200 : un
+    fichier en place abîmé (techniciens.csv de l'étape « compte ») arrête tout avant la moindre écriture (409
+    « fichier_abime »)."""
     verifier_ecriture_permise(config)
     date_reference, textes = lire_jeu_de_demo()
     ancien = brouillon.get('solo_technicien_id', '')
     moi = technicien_par_id(config, ancien) if ancien else None
     aujourd_hui = datetime.date.fromtimestamp(maintenant_s(config))
     jours = int((aujourd_hui - datetime.date.fromisoformat(date_reference)).days / 7) * 7
+    actuels = {table: lire_octets(chemin_table(config, table)) for table in TABLES}
+    for table in TABLES:
+        verifier_fichier_en_place(table, actuels[table])
     faire_sauvegarde_quotidienne(config)
     for table in TABLES:
-        ecrire_atomique(chemin_table(config, table), decaler_texte_csv(textes[table], jours))
+        ecrire_fichier_de_donnees(config, table, decaler_texte_csv(textes[table], jours), actuels[table],
+                                  sauvegarde_du_jour=False)
     if moi is not None:
         nouveau = technicien_moi(config, moi.get('prenom', ''), moi.get('nom', ''))
         brouillon['solo_technicien_id'] = nouveau
@@ -4074,7 +4080,8 @@ def tables_a_restaurer(dossier_sauvegarde, tables_demandees):
 
 
 def restaurer(config, nom_sauvegarde, tables_demandees):
-    """Copie de sécurité de l'état actuel, puis copie des tables depuis la sauvegarde."""
+    """Copie de sécurité de l'état actuel, puis copie des tables depuis la sauvegarde. T200 : la restauration est le
+    remède à un fichier abîmé, elle le remplace (ecrire_fichier_de_donnees, remplacer_abime)."""
     verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     verifier_nom_sauvegarde(nom_sauvegarde)
     dossier_sauvegarde = chemin_sous(config.dossier_sauvegardes, nom_sauvegarde)
@@ -4087,7 +4094,7 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
     for table in tables:
         octets = lire_octets(os.path.join(dossier_sauvegarde, table + '.csv'))
         try:
-            ecrire_atomique(chemin_table(config, table), octets)
+            ecrire_fichier_de_donnees(config, table, octets, remplacer_abime=True, sauvegarde_du_jour=False)
         except ErreurHttp as erreur:
             # Restauration partielle : on le dit clairement, avec la copie de sécurité à utiliser.
             raise ErreurHttp(
@@ -4411,6 +4418,10 @@ RAISONS_DE_LAISSER = {
     'entete': 'en-tête illisible : des colonnes du format 1 y manquent',
     'illisible': 'fichier illisible',
 }
+# Pertes d'une réécriture (lire_fichier_de_donnees) que le navigateur compte aussi (entree.abime) : celles de la garde
+# « fichier abîmé » (raisons_fichier_abime, T200).
+PERTE_STRUCTURE = 'structure du fichier abîmée (guillemet non fermé, ou texte collé à un guillemet)'
+PERTE_AU_DELA_DE_L_ENTETE = 'valeurs au-delà de l\'en-tête'
 
 
 def texte_du_format(format):
@@ -4466,7 +4477,7 @@ def lire_fichier_de_donnees(octets):
     try:
         enregistrements = decouper(True)
     except csv.Error:
-        lu['pertes'].append('structure du fichier abîmée (guillemet non fermé, ou texte collé à un guillemet)')
+        lu['pertes'].append(PERTE_STRUCTURE)
         try:
             enregistrements = decouper(False)
         except csv.Error:
@@ -4477,7 +4488,7 @@ def lire_fichier_de_donnees(octets):
     entete = enregistrements[0]
     lu['entete'], lu['lignes'] = entete, enregistrements[1:]
     if any(sans_blancs_js_aux_bords(cellule) for ligne in lu['lignes'] for cellule in ligne[len(entete):]):
-        lu['pertes'].append('valeurs au-delà de l\'en-tête')
+        lu['pertes'].append(PERTE_AU_DELA_DE_L_ENTETE)
     cles = [cle_de_colonne(nom) for nom in entete]
     doubles = sorted({nom for nom, cle in zip(entete, cles) if cle and cles.count(cle) > 1})
     if doubles:
@@ -4622,12 +4633,12 @@ def ecrire_journal_du_format(config, lu, lignes):
     format courant. En UTF-8 et en « ; » : lignes ajoutées en fin (le reste du fichier à l'octet près), dans l'ordre de
     ses colonnes (celles du fichier inconnues du schéma laissées vides) ; en Windows-1252 ou en « , » : le fichier
     réécrit en entier, cellules telles quelles. Fichier laissé (format 0) ou qu'une réécriture abîmerait : rien
-    (faux). ErreurHttp 423 ou OSError si l'écriture échoue."""
-    chemin = chemin_table(config, 'journal')
+    (faux). ErreurHttp 423 ou OSError si l'écriture échoue, 409 « fichier_abime » si la garde la refuse (T200,
+    ecrire_fichier_de_donnees : l'ajout en fin de fichier passe par elle comme un ajout)."""
     colonnes = colonnes_du_format('journal')
     if lu is None or lu['vide']:
-        ecrire_atomique(chemin, ecrire_tableau_csv(colonnes, [[ligne[colonne] for colonne in colonnes]
-                                                              for ligne in lignes]))
+        neuf = ecrire_tableau_csv(colonnes, [[ligne[colonne] for colonne in colonnes] for ligne in lignes])
+        ecrire_fichier_de_donnees(config, 'journal', neuf, sauvegarde_du_jour=False)
         return True
     if lu['pertes'] or lu['format'] == 0:
         return False
@@ -4637,10 +4648,12 @@ def ecrire_journal_du_format(config, lu, lignes):
     if lu['utf8'] and lu['separateur'] == ';':
         ajout = ''.join(';'.join(cellule_csv(cellule) for cellule in ligne) + '\r\n' for ligne in nouvelles)
         octets = lu['octets']
-        ecrire_atomique(chemin, octets + (b'' if octets.endswith(b'\n') else FIN_DE_LIGNE) + ajout.encode('utf-8'))
+        ecrire_fichier_de_donnees(config, 'journal', octets + (b'' if octets.endswith(b'\n') else FIN_DE_LIGNE)
+                                  + ajout.encode('utf-8'), ajout=True, sauvegarde_du_jour=False)
     else:
         anciennes = [cellules_alignees(cellules, len(entete)) for cellules in lu['lignes']]
-        ecrire_atomique(chemin, ecrire_tableau_csv(entete, anciennes + nouvelles))
+        ecrire_fichier_de_donnees(config, 'journal', ecrire_tableau_csv(entete, anciennes + nouvelles),
+                                  sauvegarde_du_jour=False)
     return True
 
 
@@ -4743,8 +4756,8 @@ def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
             entete, lignes = table_au_format_courant(table, lus[table])
         try:
             with VERROU_ECRITURE:
-                ecrire_atomique(chemin_table(config, table), ecrire_tableau_csv(entete, lignes))
-        except (ErreurHttp, OSError) as erreur:
+                ecrire_fichier_de_donnees(config, table, ecrire_tableau_csv(entete, lignes), sauvegarde_du_jour=False)
+        except (ErreurHttp, OSError) as erreur:             # 423 (Excel), et 409 « fichier_abime » (T200) : arrêt propre
             public['migration'], public['table_bloquee'] = 'incomplete', table
             afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d interrompu : %s.csv ne peut pas être écrit (%s). '
                      'Fermez Excel (ou le programme qui a ouvert ce fichier) et relancez Prévo : le passage reprendra '
@@ -4918,10 +4931,135 @@ def verifier_contenu_csv(table, octets, corps_d_ajout=False):
                                       '(« %s ») ; Prévo la protège par une apostrophe.' % (numero, table, cellule[:1]))
 
 
-def enregistrer_csv(config, table, octets, version_attendue, controle=None):
+# ---------------------------------------------------------------------------
+# Écriture des CSV de données : la fonction commune et sa garde « fichier abîmé » (T200 ; suite de T197)
+# ---------------------------------------------------------------------------
+
+# Toutes les écritures de donnees/<table>.csv du serveur passent par ecrire_fichier_de_donnees (PUT et ajout de l'API,
+# assistant et Solo, jeu de démo, passage au format, restauration ; tests/test_garde_abime_serveur.py le vérifie sur le
+# code : aucun autre ecrire_atomique d'un chemin venu de chemin_table). Avant d'écrire, elle regarde le fichier en place
+# (verifier_fichier_en_place), comme Donnees.enregistrerLignes du navigateur (ErreurFichierAbime) :
+#   - réécriture : refusée si le fichier en place est abîmé (raisons_fichier_abime : la réécrire en perdrait une
+#     partie sans le dire) ;
+#   - ajout en fin de fichier : refusé s'il se termine au milieu d'un texte entre guillemets (les lignes ajoutées y
+#     seraient avalées, donc perdues) ; un fichier abîmé ailleurs reçoit l'ajout (rien de ce qui est en place ne change).
+# Dérogations à la réécriture : la restauration d'une sauvegarde (le remède) et un PUT /api/csv/<table> qui porte
+# l'en-tête X-Prevo-Remplacer-Abime: 1 (l'import ZIP du navigateur). L'en-tête n'ajoute aucun droit : les règles des
+# rôles (§22.5 : routes permises, controle_d_ecriture) et le contrôle de version restent les mêmes. Refus : 409
+# {"erreur", "code": "fichier_abime", "table"}, rien d'écrit dans donnees/ (ni la table, ni la sauvegarde du jour).
+CODE_FICHIER_ABIME = 'fichier_abime'
+ENTETE_REMPLACER_ABIME = 'X-Prevo-Remplacer-Abime'
+SUITE_FICHIER_ABIME = ('Corrigez-le, restaurez une sauvegarde ou importez un ZIP (Paramètres) ; le détail est dans '
+                       'Paramètres › Contrôle de la base.')
+MESSAGE_FICHIER_ABIME = ('Le fichier %s.csv est abîmé (%s) : Prévo ne l\'enregistre plus, pour ne rien perdre. '
+                         + SUITE_FICHIER_ABIME)
+MESSAGE_GUILLEMET_OUVERT = ('Le fichier %s.csv se termine au milieu d\'un texte entre guillemets (guillemet jamais '
+                            'fermé) : Prévo n\'y ajoute plus rien, pour ne rien perdre (les lignes ajoutées seraient '
+                            'avalées dans ce texte). ' + SUITE_FICHIER_ABIME)
+MOTIF_PREMIERE_LIGNE_NON_VIDE_OCTETS = re.compile(rb'[^\r\n]*\S[^\r\n]*')
+A_LIRE = object()           # ecrire_fichier_de_donnees : le fichier en place est lu par la fonction elle-même
+
+
+def separateur_des_octets(octets):
+    """« ; », ou « , » si la première ligne non vide n'a aucun « ; » et a une virgule (choisirSeparateur de
+    js/donnees.js), sur les octets bruts : lignes coupées en CR ou LF, « non vide » = un octet autre qu'un blanc."""
+    trouvee = MOTIF_PREMIERE_LIGNE_NON_VIDE_OCTETS.search(octets)
+    premiere = trouvee.group(0) if trouvee else b''
+    return b',' if b';' not in premiere and b',' in premiere else b';'
+
+
+def finit_dans_un_guillemet_ouvert(octets):
+    """Vrai si le CSV se termine au milieu d'un texte entre guillemets (cellule « "… » jamais fermée) : à la relecture,
+    une ligne ajoutée à la suite serait avalée dans cette cellule. Sur les octets bruts, sans décodage (BOM UTF-8 de
+    tête ignoré ; séparateur : separateur_des_octets), par l'automate que le navigateur applique aussi :
+      - début de champ : « " » → entre guillemets ; séparateur, CR ou LF → début de champ ; autre → dans le champ ;
+      - dans le champ : séparateur, CR ou LF → début de champ ; tout autre octet (« " » compris) → dans le champ ;
+      - entre guillemets : « " » → guillemet vu ; tout autre octet (CR et LF compris) → entre guillemets ;
+      - guillemet vu : « " » → entre guillemets (guillemet doublé) ; séparateur, CR ou LF → début de champ ; autre →
+        dans le champ.
+    Vrai si et seulement si l'état final est « entre guillemets » ; aucun blanc n'est sauté. « Guillemet vu » se
+    comporte comme « début de champ » : la lecture va donc d'un guillemet au suivant (bytes.find : un journal de
+    plusieurs Mo se lit vite), l'état devant un guillemet se déduisant de l'octet qui le précède."""
+    if octets.startswith(BOM_UTF8):
+        octets = octets[len(BOM_UTF8):]
+    fins_de_champ = (separateur_des_octets(octets)[0], 0x0D, 0x0A)
+    position, dans_le_champ = 0, False      # état à « position » : début de champ (ou guillemet vu), ou dans le champ
+    while True:
+        guillemet = octets.find(b'"', position)
+        if guillemet < 0:
+            return False                    # plus de guillemet : l'état final n'est pas « entre guillemets »
+        if guillemet > position:
+            dans_le_champ = octets[guillemet - 1] not in fins_de_champ
+        if dans_le_champ:
+            position = guillemet + 1        # guillemet ordinaire d'un champ non guillemeté : on reste dans le champ
+            continue
+        fermant = octets.find(b'"', guillemet + 1)          # entre guillemets jusqu'au guillemet suivant
+        if fermant < 0:
+            return True
+        position, dans_le_champ = fermant + 1, False        # guillemet vu
+
+
+def raisons_fichier_abime(octets):
+    """Ce qu'une réécriture du fichier ferait perdre, même critère que entree.abime du navigateur (csv.analyser de
+    js/donnees.js) : structure abîmée (guillemet non fermé, texte collé à un guillemet fermant) et valeurs au-delà de
+    l'en-tête, lues par lire_fichier_de_donnees ; [] si rien (fichier sain, vide ou absent). Les colonnes en double
+    n'y sont pas : le navigateur garde la seconde colonne d'un même nom (associerColonnes : colonne inconnue
+    « nom (2) », réécrite en fin de fichier), rien ne s'en perd."""
+    if octets is None:
+        return []
+    return [perte for perte in lire_fichier_de_donnees(octets)['pertes']
+            if perte in (PERTE_STRUCTURE, PERTE_AU_DELA_DE_L_ENTETE)]
+
+
+def fichier_sans_contenu(octets):
+    """Vrai pour un fichier absent (None), de 0 octet, ou qui n'a que des blancs (après un BOM de tête)."""
+    if octets is None:
+        return True
+    return not (octets[len(BOM_UTF8):] if octets.startswith(BOM_UTF8) else octets).strip()
+
+
+def verifier_fichier_en_place(table, actuel, ajout=False, remplacer_abime=False):
+    """Garde « fichier abîmé » (en tête de cette partie) sur « actuel », les octets du fichier en place (None s'il est
+    absent) ; rien si le fichier est sans contenu (fichier_sans_contenu). Ajout : 409 s'il se termine au milieu d'un
+    texte entre guillemets (finit_dans_un_guillemet_ouvert). Réécriture : 409 s'il est abîmé (raisons_fichier_abime),
+    sauf remplacer_abime. 409 {"erreur", "code": "fichier_abime", "table"}."""
+    if fichier_sans_contenu(actuel):
+        return
+    if ajout:
+        if finit_dans_un_guillemet_ouvert(actuel):
+            raise ErreurHttp(409, MESSAGE_GUILLEMET_OUVERT % table, code=CODE_FICHIER_ABIME, table=table)
+        return
+    raisons = [] if remplacer_abime else raisons_fichier_abime(actuel)
+    if raisons:
+        raise ErreurHttp(409, MESSAGE_FICHIER_ABIME % (table, ', '.join(raisons)), code=CODE_FICHIER_ABIME,
+                         table=table)
+
+
+def ecrire_fichier_de_donnees(config, table, octets, actuel=A_LIRE, *, ajout=False, remplacer_abime=False,
+                              sauvegarde_du_jour):
+    """LA fonction d'écriture des CSV de données (donnees/<table>.csv ; en tête de cette partie), dans cet ordre :
+      1. la garde (verifier_fichier_en_place) sur le fichier en place : « actuel », ses octets (None s'il est absent),
+         lus ici s'ils ne sont pas donnés ; ajout : « octets » est le fichier en place suivi des lignes ajoutées ;
+         remplacer_abime : la réécriture d'un fichier abîmé est voulue (restauration, import ZIP) ;
+      2. la sauvegarde du jour si « sauvegarde_du_jour » (faire_sauvegarde_quotidienne) ;
+      3. ecrire_atomique (423 si le fichier est verrouillé, Excel).
+    Refus de la garde : 409 « fichier_abime », rien n'est écrit (ni la table, ni la sauvegarde). Rend l'empreinte des
+    octets écrits. À appeler en tenant VERROU_ECRITURE (ou au démarrage, avant les écouteurs)."""
+    chemin = chemin_table(config, table)
+    if ajout or not remplacer_abime:
+        verifier_fichier_en_place(table, lire_octets(chemin) if actuel is A_LIRE else actuel, ajout, remplacer_abime)
+    if sauvegarde_du_jour:
+        faire_sauvegarde_quotidienne(config)
+    ecrire_atomique(chemin, octets)
+    return empreinte(octets)
+
+
+def enregistrer_csv(config, table, octets, version_attendue, controle=None, remplacer_abime=False):
     """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit). Contenu vérifié d'abord (E2).
     controle (lot 7, §22.5) : (octets reçus, octets actuels) → octets à écrire, appelé après le contrôle de version
-    (colonnes cachées remises pour le technicien, demandes en ajout seulement pour le demandeur ; 403 sinon)."""
+    (colonnes cachées remises pour le technicien, demandes en ajout seulement pour le demandeur ; 403 sinon). Puis
+    ecrire_fichier_de_donnees (T200) : 409 « fichier_abime » si le fichier en place est abîmé, sauf remplacer_abime
+    (PUT avec l'en-tête X-Prevo-Remplacer-Abime: 1, l'import ZIP)."""
     verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     verifier_contenu_csv(table, octets)
     chemin = chemin_table(config, table)
@@ -4938,9 +5076,8 @@ def enregistrer_csv(config, table, octets, version_attendue, controle=None):
         raise ErreurHttp(409, message, version_actuelle=version_actuelle)
     if controle is not None:
         octets = controle(octets, actuel)
-    faire_sauvegarde_quotidienne(config)
-    ecrire_atomique(chemin, octets)
-    return empreinte(octets)
+    return ecrire_fichier_de_donnees(config, table, octets, actuel, remplacer_abime=remplacer_abime,
+                                     sauvegarde_du_jour=True)
 
 
 def decouper_corps_ajout(corps):
@@ -4958,7 +5095,9 @@ def decouper_corps_ajout(corps):
 def ajouter_au_csv(config, table, corps, controle=None):
     """Ajoute des lignes en fin de fichier (journal) ; 409 si en-tête ou encodage différent.
     controle (lot 7, §22.5) : (en-tête, lignes, octets actuels) → lignes à ajouter (colonnes cachées vidées pour le
-    technicien, demandes nouvelles seulement pour le demandeur ; 403 sinon)."""
+    technicien, demandes nouvelles seulement pour le demandeur ; 403 sinon). T200 : 409 « fichier_abime » si le
+    fichier en place (non vide) se termine au milieu d'un texte entre guillemets, avant les contrôles d'UTF-8 et
+    d'en-tête (verifier_fichier_en_place, puis ecrire_fichier_de_donnees en ajout)."""
     verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
     chemin = chemin_table(config, table)
     verifier_contenu_csv(table, corps, corps_d_ajout=True)
@@ -4967,11 +5106,9 @@ def ajouter_au_csv(config, table, corps, controle=None):
     if controle is not None:
         lignes = controle(entete, lignes, actuel)
         corps = entete + FIN_DE_LIGNE + lignes
+    verifier_fichier_en_place(table, actuel, ajout=True)
     if actuel is None or not actuel.replace(BOM_UTF8, b'', 1).strip():
-        faire_sauvegarde_quotidienne(config)
-        nouveau = BOM_UTF8 + corps
-        ecrire_atomique(chemin, nouveau)
-        return empreinte(nouveau)
+        return ecrire_fichier_de_donnees(config, table, BOM_UTF8 + corps, actuel, ajout=True, sauvegarde_du_jour=True)
     if not est_utf8(actuel):
         raise ErreurHttp(409, 'Le fichier %s.csv n\'est pas en UTF-8 (réenregistré par Excel ?).'
                          % table, version_actuelle=empreinte(actuel))
@@ -4981,10 +5118,8 @@ def ajouter_au_csv(config, table, corps, controle=None):
     if not lignes:
         return empreinte(actuel)
     separateur = b'' if actuel.endswith(b'\n') else FIN_DE_LIGNE
-    nouveau = actuel + separateur + lignes
-    faire_sauvegarde_quotidienne(config)
-    ecrire_atomique(chemin, nouveau)
-    return empreinte(nouveau)
+    return ecrire_fichier_de_donnees(config, table, actuel + separateur + lignes, actuel, ajout=True,
+                                     sauvegarde_du_jour=True)
 
 
 # ---------------------------------------------------------------------------
@@ -6138,9 +6273,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         version_attendue = self.headers.get('X-Version-Attendue')
         if not version_attendue:
             raise ErreurHttp(400, 'En-tête X-Version-Attendue manquant.')
+        # T200 : « X-Prevo-Remplacer-Abime: 1 » (import ZIP) permet de remplacer un fichier abîmé ; aucun droit de plus.
+        # Avec les comptes, l'import ZIP est réservé au responsable (D172) : la dérogation aussi (403 sinon, rien écrit).
+        remplacer_abime = (self.headers.get(ENTETE_REMPLACER_ABIME) or '').strip() == '1'
+        if remplacer_abime and self.session is not None and role_effectif(self.session) != 'responsable':
+            raise ErreurHttp(403, 'Accès refusé : seul le responsable remplace un fichier abîmé (import ZIP).')
         with VERROU_ECRITURE:
             version = enregistrer_csv(self.config, table, corps, version_attendue.strip(),
-                                      controle_d_ecriture(self.session, table))
+                                      controle_d_ecriture(self.session, table), remplacer_abime=remplacer_abime)
         self.envoyer_json(200, {'version': version})
 
     def api_ajout(self, table, corps):

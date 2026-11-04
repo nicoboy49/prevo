@@ -40,6 +40,19 @@ appareils, journal des connexions), jamais les sessions ni les clés, et ne le r
 - Aucune ligne de métadonnées et aucune colonne technique n'est ajoutée dans les CSV : un tableur les casserait, et
   le serveur de la 2.0 bêta les refuserait. Le format n'est donc pas écrit dans chaque fichier (voir §4).
 - Une ligne n'est jamais supprimée : on désactive (`actif`) ou on annule. Le journal (`journal.csv`) est écrit par ajout.
+- **Un fichier abîmé n'est jamais réécrit.** Abîmé = une réécriture en perdrait une partie : structure abîmée
+  (guillemet non fermé, texte collé à un guillemet fermant) ou valeurs au-delà de l'en-tête (en-tête coupé). La garde
+  est dans la fonction d'écriture commune du stockage, par laquelle passent toutes les écritures : l'adaptateur du
+  navigateur en mode dossier (`enregistrer`, `ajouter`) et, en mode serveur, le serveur lui-même (toutes les écritures
+  d'un CSV de données, y compris celles de l'assistant, de la démo et du passage de format) ; `Donnees` refuse aussi
+  plus tôt, avec le même message. Refus : `ErreurFichierAbime` dans le navigateur, **409** au code `fichier_abime`
+  (avec `table`) pour le serveur ; rien n'est écrit, et un bandeau « Fichier abîmé » le dit à l'ouverture.
+- **Ajout en fin de fichier** (journal) : refusé si le fichier en place se termine au milieu d'un texte entre
+  guillemets (guillemet ouvert jamais fermé), sinon les lignes ajoutées y seraient avalées. Une ligne de journal
+  refusée ne fait pas échouer l'action de l'utilisateur.
+- **Deux dérogations seulement**, qui sont les remèdes : la **restauration** d'une sauvegarde et l'**import ZIP**
+  (option `remplacerFichierAbime` de l'adaptateur ; en mode serveur, en-tête `X-Prevo-Remplacer-Abime: 1` sur
+  `PUT /api/csv/<table>` ; avec les comptes, réservé au responsable comme l'import ZIP, 403 sinon).
 
 ## 4. Numéro de format et signature
 

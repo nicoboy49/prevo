@@ -21,6 +21,8 @@ const StockageServeur = (() => {
   const MESSAGE_REPONSE_INATTENDUE =
     'Réponse inattendue du serveur ; l\'opération a peut-être été faite, rechargez la page.';
   const CODE_FORMAT_PLUS_RECENT = 'format_plus_recent';      // 409 du serveur en lecture seule (T185, D169)
+  const CODE_FICHIER_ABIME = 'fichier_abime';                // 409 du serveur : fichier abîmé, jamais réécrit (T200)
+  const ENTETE_REMPLACER_ABIME = 'X-Prevo-Remplacer-Abime';  // dérogation demandée (import ZIP, T200)
 
   // ===========================================================================
   // Détection
@@ -63,6 +65,9 @@ const StockageServeur = (() => {
   // serveur (« Accès refusé : … ») tel quel.
   // T185 (D169) : 409 au code « format_plus_recent » = le serveur a trouvé à son démarrage des données d'une version
   // plus récente de Prévo et refuse toute écriture → Donnees.ErreurLectureSeule (jamais un conflit à réessayer).
+  // T200 : 409 au code « fichier_abime » (corps { erreur, code, table }) = le fichier de la table est abîmé et le serveur
+  // refuse de le réécrire ou de le compléter → Donnees.ErreurFichierAbime, AVANT le 409 générique (un conflit serait
+  // réessayé par Donnees.modifier, avec un faux message).
   async function erreurDepuisReponse(reponse) {
     const donnees = await lireJsonOuNull(reponse);
     const message = (donnees && donnees.erreur)
@@ -70,6 +75,11 @@ const StockageServeur = (() => {
     if (reponse.status === 409 && donnees && donnees.code === CODE_FORMAT_PLUS_RECENT
       && typeof Donnees.ErreurLectureSeule === 'function') {
       return new Donnees.ErreurLectureSeule(donnees.format);
+    }
+    if (reponse.status === 409 && donnees && donnees.code === CODE_FICHIER_ABIME
+      && typeof Donnees.ErreurFichierAbime === 'function') {
+      const table = typeof donnees.table === 'string' ? donnees.table : '';
+      return new Donnees.ErreurFichierAbime(table, table ? table + '.csv' : 'de cette table');
     }
     if (reponse.status === 409) {
       const versionActuelle = donnees && donnees.version_actuelle !== undefined
@@ -236,14 +246,18 @@ const StockageServeur = (() => {
     }
 
     // versionAttendue : version lue au chargement, ou null si le fichier ne doit pas exister.
-    async function enregistrer(table, octets, versionAttendue) {
+    // options.remplacerFichierAbime === true (import ZIP, T200) : en-tête X-Prevo-Remplacer-Abime: 1, le serveur
+    // remplace alors un fichier abîmé ; sans lui, il refuse (409 « fichier_abime » → ErreurFichierAbime).
+    async function enregistrer(table, octets, versionAttendue, options) {
+      const derogation = Boolean(options) && options.remplacerFichierAbime === true
+        ? { [ENTETE_REMPLACER_ABIME]: '1' } : {};
       const reponse = await appelerOuErreur(urlTable(table), {
         method: 'PUT',
         headers: Object.assign({
           'Content-Type': 'text/csv; charset=utf-8',
           'X-Version-Attendue': versionAttendue === null || versionAttendue === undefined
             ? 'aucune' : versionAttendue,
-        }, entetesEcriture),
+        }, derogation, entetesEcriture),
         body: octets,
       });
       const donnees = await lireJson(reponse);

@@ -231,8 +231,9 @@ const StockageDossier = (() => {
     return new Donnees.ErreurStockage(message, cause);
   }
 
-  // Les erreurs de Prévo passent telles quelles ; les erreurs du navigateur sont traduites
-  // en ErreurStockage avec un message en français (la cause d'origine est conservée).
+  // Les erreurs de Prévo passent telles quelles (ErreurFichierAbime et ErreurLectureSeule sont des ErreurStockage) ;
+  // les erreurs du navigateur sont traduites en ErreurStockage avec un message en français (la cause d'origine est
+  // conservée).
   function traduireErreur(erreur, action) {
     if (erreur instanceof Donnees.ErreurConflit || erreur instanceof Donnees.ErreurStockage) {
       return erreur;
@@ -878,10 +879,15 @@ const StockageDossier = (() => {
     // PUIS lecture et contrôle de version, écriture dans le fichier temporaire, dernier contrôle
     // (contenu inchangé) et fermeture. Une écriture d'un autre poste pendant la sauvegarde ou
     // pendant notre écriture donne un conflit au lieu d'être écrasée.
-    async function enregistrer(table, octets, versionAttendue) {
+    // Fichier abîmé (T200, règle numéro un : Donnees.csv.analyser, `abime` : structure abîmée ou valeurs au-delà de
+    // l'en-tête) : Donnees.ErreurFichierAbime, rien n'est écrit, sauf `options.remplacerFichierAbime === true` (import
+    // ZIP). C'est la fonction d'écriture commune d'une table entière : tout appelant y passe (Donnees et les écritures
+    // directes de l'application) ; seule la restauration d'une sauvegarde (restaurer) remplace aussi un tel fichier.
+    async function enregistrer(table, octets, versionAttendue, options) {
       verifierNomTable(table);
       const nouveauContenu = enOctets(octets);
       const attendue = versionAttendue === undefined ? null : versionAttendue;
+      const remplacerFichierAbime = Boolean(options) && options.remplacerFichierAbime === true;
       return enSerie(async function () {
         await sauvegardeQuotidienneSiBesoin();
         const actuel = await lireOctets(racine, table + '.csv');
@@ -896,6 +902,9 @@ const StockageDossier = (() => {
             message = 'Le fichier ' + table + '.csv a été modifié par un autre poste.';
           }
           throw new Donnees.ErreurConflit(message, versionActuelle);
+        }
+        if (!remplacerFichierAbime && actuel !== null && !estVide(actuel) && Donnees.csv.analyser(table, actuel).abime) {
+          throw new Donnees.ErreurFichierAbime(table, table + '.csv');
         }
         await ecrireFichier(racine, table + '.csv', nouveauContenu,
           { controle: controleInchange(table + '.csv', actuel) });
@@ -932,6 +941,11 @@ const StockageDossier = (() => {
           return { version: await empreinte(nouveau) };
         }
 
+        // T200 : fichier qui finit DANS une cellule entre guillemets jamais fermée : nos lignes y seraient avalées à
+        // la relecture (perdues). Donnees.ErreurFichierAbime, rien n'est écrit ; aucune dérogation pour un ajout.
+        if (Donnees.csv.finitDansUnGuillemetOuvert(actuel)) {
+          throw new Donnees.ErreurFichierAbime(table, table + '.csv');
+        }
         const versionActuelle = await empreinte(actuel);
         if (!estUtf8(actuel)) {
           throw new Donnees.ErreurConflit('Le fichier ' + table

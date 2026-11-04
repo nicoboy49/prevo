@@ -97,6 +97,7 @@ const App = (() => {
   let menuPlusOuvert = false;      // mode Solo : groupe « Plus » du menu latéral déplié
   const alertesCoque = [];         // bandeaux à montrer dans la coque (ex. verrou du dossier)
   let tablesLaissees = [];          // tables laissées par le passage au format (déjà dites par leur bandeau, T197)
+  const tablesDitesAbimees = new Set();   // tables dont le bandeau « Fichier abîmé » est déjà posé (T197, T200)
   let formatEnAttente = null;      // mode serveur : état du format (Donnees.etatDuFormat) d'une base pas au format courant
 
   // Thème du poste (lot 4, §17.7) : <html data-theme="clair"> posé dès la lecture de ce fichier, donc
@@ -392,6 +393,7 @@ const App = (() => {
     adaptateur = Donnees.protegerEcritures(nouvelAdaptateur);
     mode = nouvelAdaptateur.mode;
     formatEnAttente = null;
+    tablesDitesAbimees.clear();
     Donnees.initialiser(adaptateur, { poste, profil: '' });
     // Lot 7 (§22.4) : comptes exigés → connexion (ou mot de passe à choisir) AVANT toute lecture de table, sinon
     // chaque table répondrait 401 (ou 403 avec un mot de passe provisoire : la base paraîtrait vide).
@@ -431,7 +433,9 @@ const App = (() => {
     appliquerProfil(profilChoisi);
     if (formatEnAttente && estResponsable()) alertesCoque.push(bandeauFormatEnAttente(formatEnAttente));
     // Fichiers abîmés (T197) : jamais réécrits ; on le dit tout de suite, avant qu'une écriture soit refusée.
-    const abimes = lectureSeule ? [] : Donnees.tablesAbimees().filter((t) => !tablesLaissees.includes(t));
+    const abimes = lectureSeule ? [] : Donnees.tablesAbimees()
+      .filter((t) => !tablesLaissees.includes(t) && !tablesDitesAbimees.has(t));
+    abimes.forEach((t) => tablesDitesAbimees.add(t));
     if (abimes.length) alertesCoque.push(bandeauFichiersAbimes(abimes));
     const otPreventifs = await genererPreventifAOuverture(formatAJour && !lectureSeule);
     Donnees.demarrerSurveillance();
@@ -1344,6 +1348,16 @@ const App = (() => {
     // Lecture seule découverte pendant l'usage (parametres relu : un autre poste a ouvert la base avec une version
     // plus récente de Prévo) : le bandeau permanent apparaît sur l'écran en cours.
     Donnees.evenements.addEventListener('lectureSeule', () => { if (coqueVisible()) afficherLectureSeule(); });
+    // Fichier abîmé découvert par une écriture refusée (T200 : journal qui finit par un guillemet ouvert, abîmé après
+    // l'ouverture) : bandeau « Fichier abîmé », seulement pour une table pas encore signalée (ni à l'ouverture, ni par
+    // le passage au format) ; tout de suite si la coque est affichée, sinon à son ouverture (afficherAlertesCoque).
+    Donnees.evenements.addEventListener('fichierAbime', (evenement) => {
+      const nomTable = evenement.detail && evenement.detail.table;
+      if (!nomTable || tablesLaissees.includes(nomTable) || tablesDitesAbimees.has(nomTable)) return;
+      tablesDitesAbimees.add(nomTable);
+      alertesCoque.push(bandeauFichiersAbimes([nomTable]));
+      if (coqueVisible()) afficherAlertesCoque();
+    });
     // Lot 7 (§22.4) : session absente ou appareil refusé pendant l'usage (401) → écran de connexion.
     if (typeof StockageServeur !== 'undefined') {
       document.addEventListener(StockageServeur.EVENEMENT_SESSION_ABSENTE, surSessionAbsente);

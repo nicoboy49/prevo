@@ -21,7 +21,8 @@
 //   5. références réécrites avec les noms rendus (ZipDonnees.CHAMPS_DOCUMENTS et le paramètre rapports_mensuels) ;
 //   6. chaque table du format courant remplacée : Donnees.csv.serialiser (protection des cellules, colonnes inconnues
 //      du ZIP gardées), App.adaptateur.enregistrer avec la version fraîche (contrôle de version ; écritures refusées
-//      en lecture seule) ; parametres.version_schema = format courant ;
+//      en lecture seule) et { remplacerFichierAbime: true } (un fichier abîmé est remplacé : T200, l'import est l'une
+//      des deux seules dérogations, avec la restauration) ; parametres.version_schema = format courant ;
 //   7. une ligne de journal ; 8. fenêtre #import-zip-termine, puis rechargement de l'application.
 //   Erreur pendant 5 à 7 : tables remises depuis la sauvegarde « avant-import-zip » (App.adaptateur.restaurer), fenêtre
 //   #import-zip-echec qui la nomme. acces/ (comptes, sessions, appareils) n'est jamais touché : rien ici n'y écrit.
@@ -319,11 +320,12 @@ const ParametresZip = (() => {
 
   // Remplace une table : octets du chemin habituel (Donnees.csv.serialiser : protection des cellules, en-tête du
   // format courant puis colonnes inconnues), écrits par l'adaptateur avec la version FRAÎCHE (rien n'est écrasé sans
-  // contrôle de version ; lecture seule : refusé), puis relus (cache juste : le journal s'y ajoute ensuite).
+  // contrôle de version ; lecture seule : refusé), puis relus (cache juste : le journal s'y ajoute ensuite). Un fichier
+  // abîmé est remplacé (dérogation de l'import ZIP, T200 : remplacerFichierAbime ; sans elle, ErreurFichierAbime).
   async function remplacerTable(nomTable, table) {
     const octets = Donnees.csv.serialiser(nomTable, table.lignes, table.colonnesInconnues);
     await Donnees.rechargerTable(nomTable);
-    await App.adaptateur.enregistrer(nomTable, octets, Donnees.version(nomTable));
+    await App.adaptateur.enregistrer(nomTable, octets, Donnees.version(nomTable), { remplacerFichierAbime: true });
     await Donnees.rechargerTable(nomTable);
   }
 
