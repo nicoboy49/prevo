@@ -5894,7 +5894,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
 
     def traiter(self, methode):
         # Ordre des contrôles (audit F2, §22.4) : hôte, chemin, accès à l'API (session quand les comptes sont
-        # exigés), X-Prevo, puis seulement la lecture du corps : un client sans session ne fait jamais lire 10 Mo.
+        # exigés), X-Prevo, puis seulement la lecture du corps : un client sans session ne fait jamais lire 10 Mo (50 Mo
+        # pour l'envoi d'une table, T208).
         # Un refus prononcé avant la lecture jette au plus 64 Ko de corps (envoyer_erreur) pour que le navigateur
         # reçoive la réponse ; au-delà, la connexion persistante est fermée après la réponse (les octets non lus
         # seraient pris pour la requête suivante).

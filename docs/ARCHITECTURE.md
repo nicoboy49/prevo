@@ -413,7 +413,8 @@ refaite) — le serveur applique la même règle.
 ## 7. API du serveur (`serveur.py`)
 
 Réponses JSON `{"erreur": "message en français"}` en cas d'erreur. Toute requête qui écrit
-(`PUT`, `POST`) exige l'en-tête **`X-Prevo: 1`** (sinon 403). Corps limité à **10 Mo**
+(`PUT`, `POST`) exige l'en-tête **`X-Prevo: 1`** (sinon 403). Corps limité à **10 Mo**, **50 Mo** pour
+l'envoi d'une table (`PUT /api/csv/<table>`, `POST /api/csv/<table>/ajout` : T208, `TAILLE_MAX_CORPS_CSV`)
 (`Content-Length` obligatoire : 411 sinon, 413 au-delà). En-tête `Host` accepté seulement pour
 une adresse IP, `localhost`, le nom du PC seul ou suivi d'un suffixe de réseau local
 (`.local`, `.lan`, `.home`, `.localdomain`, `.home.arpa`, `.internal`, `.intranet`) ou un nom donné
@@ -4109,7 +4110,8 @@ fusion ; aucune route serveur nouvelle (D172) : le navigateur lit le ZIP et écr
 - **Contrôles, avant toute écriture** : `ZipLecture.lire` (`zip-lecture.js`, §15.1 ; détail dans son en-tête) : taille
   du fichier (200 Mo), nombre d'entrées (2 000), répertoire central lu par Prévo (noms hostiles : absolus, « .. », « . »,
   barre inverse, segment vide, caractère de contrôle, UTF-8 invalide ; doublons ; chiffrement ; méthode), tailles
-  déclarées puis réelles (CRC-32), taux de compression (bombe), 10 Mo par CSV, 1 Go décompressé, noms admis (CSV des
+  déclarées puis réelles (CRC-32), taux de compression (bombe), 50 Mo par CSV et 10 Mo par document (T208),
+  1 Go décompressé, noms admis (CSV des
   tables à la racine, `documents/<nom>` à la règle des noms du serveur, `manifeste.json`), manifeste et empreintes
   SHA-256 (aucun fichier ajouté, manquant ou modifié), format plus récent refusé, CSV illisible ou abîmé refusé. Un ZIP
   plus ancien est migré en mémoire. Refus : fenêtre `#import-zip-refus` (message de `ZipLecture`), rien d'écrit.

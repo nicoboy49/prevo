@@ -287,7 +287,8 @@ mandataire ne doit pas les remplacer.
   l'adresse de la personne au journal des connexions (Prévo prend la dernière adresse de la liste).
 - Le nom public est dans **`noms`**, sinon Prévo répond 403 « Nom d'hôte d'origine refusé (X-Forwarded-Host) ».
 - **`"comptes": true`** est obligatoire avec `"mandataire": true`.
-- Laissez passer des requêtes de **10 Mo** (envoi de photos et de fichiers) et des réponses qui tardent jusqu'à
+- Laissez passer des requêtes de **50 Mo** (enregistrement d'une table entière, par exemple `ordres_travail.csv` d'une
+  grosse base ; un document ou une photo : 10 Mo au plus) et des réponses qui tardent jusqu'à
   **120 secondes** (relais de l'IA). Prévo n'utilise pas de WebSocket.
 - Exposer Prévo sur Internet ne se fait que derrière Tailscale, le VPN de l'entreprise ou un mandataire en https.
   Prévo n'a pas de double facteur : mettez de préférence votre propre contrôle d'accès devant.
@@ -347,7 +348,7 @@ server {
     ssl_certificate     /etc/prevo/certificat.pem;
     ssl_certificate_key /etc/prevo/cle.pem;
 
-    client_max_body_size 12m;      # Prévo accepte 10 Mo par requête
+    client_max_body_size 52m;      # Prévo accepte 50 Mo pour une table, 10 Mo pour un document
     proxy_read_timeout   180s;     # le relais de l'IA peut répondre en 120 s
 
     location / {
@@ -392,6 +393,12 @@ server {
         </rule>
       </rules>
     </rewrite>
+    <security>
+      <requestFiltering>
+        <!-- 50 Mo par table (IIS refuse au-delà d'environ 30 Mo par défaut) -->
+        <requestLimits maxAllowedContentLength="54525952" />
+      </requestFiltering>
+    </security>
   </system.webServer>
 </configuration>
 ```
