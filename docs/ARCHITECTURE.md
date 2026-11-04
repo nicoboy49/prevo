@@ -316,25 +316,26 @@ dont la version diffère est relue ; événement `changement` (`origine: 'distan
 écrit par ajout, n'est signalé que s'il a changé sur un autre poste (pas pour nos propres ajouts,
 qui ne le font pas relire) : depuis le lot 4, les onglets Suggestions et Décisions en dépendent.
 
-### 5.6 Passage au format courant : `mettreAJourVersionSchema` (lot 2)
-`await Donnees.mettreAJourVersionSchema()` → `{ misAJour, sauvegarde }`. Appelée par `App` au
-démarrage, après `chargerTout()`, **pour tous les profils et avant toute autre écriture** (§8).
-- Rien à faire (renvoie `{ misAJour: false, sauvegarde: null }`) si la base est vide ou si
-  `parametres.version_schema` vaut déjà `Schema.version` (ou plus).
-- Sinon, **décision de Nicolas** : d'abord une sauvegarde automatique complète
-  `adaptateur.sauvegarder('avant-format-v2')`, nommée `AAAA-MM-JJ_HHMMSS_avant-format-v2`
-  (restaurable depuis Paramètres, où elle apparaît avec le type « Avant format 2 ») ; **puis
-  seulement** `version_schema` passe à 2, par un `modifier('parametres')` décidé sur les lignes
-  fraîches (si un autre poste l'a déjà fait, rien n'est écrit). Journal : « passage au format 2 du
-  fichier ; sauvegarde … faite juste avant ».
-- Si la sauvegarde échoue, ou si le stockage ne sait pas sauvegarder (pas de méthode `sauvegarder`,
-  ou aucun nom renvoyé) : `ErreurStockage` (« Sauvegarde avant le passage au format 2 impossible :
-  … ; la mise à jour sera retentée à la prochaine ouverture. »), et `version_schema` **n'est pas
-  changé**. Seule exception : la démo (rien n'y est enregistré, aucune sauvegarde n'est exigée).
-- Deux postes ouverts ensemble sur une base au format 1 peuvent faire chacun leur sauvegarde (deux
-  copies identiques, sans gravité) ; un seul écrit la version.
-- « Créer une base vide » écrit directement `version_schema` = 2 dans `parametres.csv` : pas de
-  sauvegarde inutile au premier démarrage. Le jeu de démo porte déjà `version_schema` = 2.
+### 5.6 Passage au format courant : `migrerAuFormatCourant` (socle de données, D167-D169)
+Vocabulaire, historique des formats, sauvegardes et ZIP : **[FORMAT.md](FORMAT.md)** (référence). Ici, seulement le
+contrat de `Donnees`. Le registre d'étapes (1→2, 2→3 ; pures, idempotentes, additives) est `Formats.ETAPES`
+(`js/formats.js`) ; son miroir Python est `ETAPES_FORMAT` dans `serveur.py`.
+- `Donnees.etatDuFormat()` rend le format de départ (le plus petit entre `parametres.version_schema` et la
+  signature de chaque fichier) et le format courant ; `Donnees.lectureSeule()` dit si la base est d'un format plus
+  récent que l'appli.
+- **Mode serveur** : la migration est faite **par le serveur, au démarrage, avant toute connexion**, après une
+  sauvegarde `avant-format-vN`. Le navigateur n'écrit rien pour cela (`migrerAuFormatCourant` ne fait rien).
+- **Mode dossier** : `await Donnees.migrerAuFormatCourant()` (ancien nom `mettreAJourVersionSchema`, même
+  fonction), appelée par `App` après `chargerTout()` et avant toute autre écriture. Elle enchaîne les étapes une à
+  une ; **d'abord** une sauvegarde `avant-format-vN`, puis la migration, avec une ligne de journal « passage au
+  format N du fichier ; sauvegarde … faite juste avant ». Si la sauvegarde échoue (ou si le stockage ne sait pas
+  sauvegarder), `ErreurStockage` et rien n'est migré : la migration est retentée à l'ouverture suivante.
+  Un fichier illisible n'est jamais réécrit. Démo : rien n'est écrit.
+- **Format plus récent que l'appli** : lecture seule. Le navigateur lève `ErreurLectureSeule` pour toute écriture
+  (événement `lectureSeule`) ; le serveur répond 409 `format_plus_recent`.
+- « Créer une base vide » écrit directement `version_schema` au format courant ; le jeu de démo le porte déjà.
+- Deux postes ouverts ensemble sur une base ancienne peuvent faire chacun leur sauvegarde (deux copies identiques,
+  sans gravité) ; un seul écrit la version.
 
 ## 6. Adaptateurs de stockage (contrat commun)
 
@@ -460,14 +461,15 @@ Base vide (aucun CSV) → choix « Créer une base vide » ou « Partir des donn
 Navigateur sans File System Access → message « utilisez Chrome ou Edge » + démo.
 
 Suite du démarrage (lot 2), dans cet ordre, **avant le premier écran** :
-1. tables chargées → `Donnees.mettreAJourVersionSchema()` (§5.6), pour tous les profils et avant
-   toute autre écriture ; en cas d'échec (sauvegarde impossible), l'erreur est signalée, un bandeau
-   « Les fichiers n'ont pas pu passer au format 2 » s'affiche dans la coque, et l'application reste
-   utilisable ;
+1. tables chargées → `Donnees.migrerAuFormatCourant()` (§5.6) en mode dossier, pour tous les profils et avant
+   toute autre écriture (en mode serveur, le serveur a déjà migré au démarrage) ; données d'un format plus récent :
+   lecture seule signalée par un bandeau ; en cas d'échec (sauvegarde impossible), l'erreur est signalée, un bandeau
+   « Les fichiers n'ont pas pu passer au format courant » s'affiche dans la coque, et l'application reste utilisable
+   (détail et règles : [FORMAT.md](FORMAT.md)) ;
 2. profil (mémorisé ou demandé ; comptes exigés : déduit de la session, voir ci-dessous et §22.4) ;
 3. technicien ou responsable : `Preventif.genererOTEchus()` (RG5, §14.3) ; toast « n OT préventifs
    générés » si n > 0 ; erreur → `App.signalerErreur`, l'application reste utilisable. **Pas de
-   génération automatique si l'étape 1 a échoué** (elle écrirait des fichiers au format 2 sans
+   génération automatique si l'étape 1 a échoué** (elle écrirait avant la sauvegarde de migration, sans
    sauvegarde confirmée) : la prochaine ouverture retente tout. Puis
    `performance.mark('prevo:preventif')`, posée une seule fois, aussi pour le demandeur (rien à
    générer) ;

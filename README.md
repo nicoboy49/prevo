@@ -31,6 +31,7 @@ embarquées et aucun appel vers Internet (sauf l'assistant IA en ligne, s'il est
 
 - **Guide d'utilisation** : [GUIDE.html](GUIDE.html), à ouvrir dans le navigateur (imprimable).
 - **Format des fichiers** : [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md).
+- **Format des données, migrations, sauvegardes et ZIP** : [docs/FORMAT.md](docs/FORMAT.md).
 
 Cette version, la **2.0.0 (bêta)**, contient les **lots 1 à 7** du cahier des charges, dont le wiki de maintenance, la reprise des données
 existantes (lot 5) et l'accès sécurisé avec son assistant d'installation (lot 7) ; les nouveautés de chaque version sont dans
