@@ -48,12 +48,12 @@ from commun import RACINE, CasNavigateur, charger_scripts  # noqa: E402
 from jeux_formats import copier_jeu  # noqa: E402
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/lib/jszip.min.js", "js/schema.js", "js/formats.js", "js/donnees.js",
-           "js/modules/zip-lecture.js"]
+           "js/modules/zip-tables.js", "js/modules/zip-lecture.js"]
 FORMAT_COURANT = 3
 MIO = 1024 * 1024
 DATE = (2026, 11, 4, 12, 0, 0)
-CLES_ACCEPTE = ["absentes", "documents", "format", "formatOrigine", "manifeste", "migre", "ok", "problemes", "refus",
-                "tables"]
+CLES_ACCEPTE = ["abimes", "absentes", "documents", "format", "formatOrigine", "manifeste", "migre", "ok", "problemes",
+                "refus", "tables"]
 # Documents fictifs, avec la signature de leur format : photo, notice au nom horodaté par le serveur, rapport figé.
 DOCUMENTS = {
     "documents/photo-pompe.jpg": b"\xff\xd8\xff\xe0" + b"photo fictive " * 40,

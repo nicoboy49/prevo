@@ -56,6 +56,11 @@ appareils, journal des connexions), jamais les sessions ni les clés, et ne le r
 - **Deux dérogations seulement**, qui sont les remèdes : la **restauration** d'une sauvegarde et l'**import ZIP**
   (option `remplacerFichierAbime` de l'adaptateur ; en mode serveur, en-tête `X-Prevo-Remplacer-Abime: 1` sur
   `PUT /api/csv/<table>` ; avec les comptes, réservé au responsable comme l'import ZIP, 403 sinon).
+- **Fichier abîmé importé tel quel** (T213) : l'import ZIP écrit avec les octets du ZIP un CSV que le manifeste marque
+  `"abime": true` (option `abimeDepuis` de l'adaptateur ; en mode serveur, en-tête `X-Prevo-Abime-Depuis:
+  AAAA-MM-JJTHH:MM:SS` avec `X-Prevo-Remplacer-Abime: 1`, 400 sinon). Le serveur ne compare alors pas son en-tête au
+  schéma, seulement s'il voit lui-même le fichier abîmé (UTF-8 et cellules dangereuses toujours contrôlés). La date
+  va dans `fichiers-abimes.json` ; après une écriture de l'import, ce fichier suit la table (saine : retirée).
 
 ## 4. Numéro de format et signature
 
@@ -155,6 +160,8 @@ Chaque sauvegarde et chaque export ZIP contient un `manifeste.json` :
 ```
 
 `fichiers` liste chaque fichier avec sa taille et son empreinte SHA-256 complète (hexadécimal), triés par nom.
+Un CSV abîmé (§3) porte aussi `"abime": true` (sauvegardes, T206 ; export, T210) et, dans un export, `"abime_depuis":
+"AAAA-MM-JJTHH:MM:SS"` : depuis quand Prévo le voit abîmé (`fichiers-abimes.json` ; absente si inconnue, T213).
 `date` est toujours de la forme `AAAA-MM-JJTHH:MM:SS` (heure locale, sans fuseau horaire) : celle du serveur pour ses
 sauvegardes, celle du poste pour le mode dossier et l'export.
 Le manifeste sert à contrôler qu'une sauvegarde ou un ZIP est complet et intact, et à savoir de quel format il vient.
@@ -180,6 +187,10 @@ produire le ZIP : s'il en dépasse une, il dit quoi (fichier, taille, limite) et
   remplacé.
 - `acces/` n'est jamais remplacé.
 - Un ZIP d'un format plus ancien est migré ; un ZIP d'un format **plus récent** est refusé.
+- Un CSV illisible ou abîmé est refusé, **sauf** s'il est marqué `"abime": true` au manifeste et que son empreinte
+  correspond (T213, décision de Nicolas) : il est alors écrit tel quel, sans réparation ni migration ; la confirmation
+  le dit ; la date « abîmé depuis » du manifeste est gardée (sinon : la date de l'import) ; la base retrouve le même
+  état, bandeau « Fichier abîmé » compris.
 - Le navigateur lit le ZIP et écrit par le chemin habituel : aucune route serveur nouvelle.
 
 ## 11. Ajouter un format 4 (liste de contrôle)

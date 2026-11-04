@@ -23,6 +23,7 @@ const StockageServeur = (() => {
   const CODE_FORMAT_PLUS_RECENT = 'format_plus_recent';      // 409 du serveur en lecture seule (T185, D169)
   const CODE_FICHIER_ABIME = 'fichier_abime';                // 409 du serveur : fichier abîmé, jamais réécrit (T200)
   const ENTETE_REMPLACER_ABIME = 'X-Prevo-Remplacer-Abime';  // dérogation demandée (import ZIP, T200)
+  const ENTETE_ABIME_DEPUIS = 'X-Prevo-Abime-Depuis';        // CSV abîmé importé tel quel, et sa date (T213)
   const MOTIF_DATE_HEURE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;   // dates de fichiers-abimes.json (T206)
 
   // ===========================================================================
@@ -260,9 +261,15 @@ const StockageServeur = (() => {
     // versionAttendue : version lue au chargement, ou null si le fichier ne doit pas exister.
     // options.remplacerFichierAbime === true (import ZIP, T200) : en-tête X-Prevo-Remplacer-Abime: 1, le serveur
     // remplace alors un fichier abîmé ; sans lui, il refuse (409 « fichier_abime » → ErreurFichierAbime).
+    // T213 : options.abimeDepuis ('AAAA-MM-JJTHH:MM:SS', avec remplacerFichierAbime) : l'import ZIP écrit un CSV marqué
+    // abîmé, tel quel ; en-tête X-Prevo-Abime-Depuis : le serveur l'accepte malgré son en-tête s'il le voit abîmé lui
+    // aussi, et garde cette date dans fichiers-abimes.json.
     async function enregistrer(table, octets, versionAttendue, options) {
       const derogation = Boolean(options) && options.remplacerFichierAbime === true
         ? { [ENTETE_REMPLACER_ABIME]: '1' } : {};
+      if (derogation[ENTETE_REMPLACER_ABIME] && typeof options.abimeDepuis === 'string') {
+        derogation[ENTETE_ABIME_DEPUIS] = options.abimeDepuis;
+      }
       const reponse = await appelerOuErreur(urlTable(table), {
         method: 'PUT',
         headers: Object.assign({

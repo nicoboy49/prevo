@@ -23,7 +23,10 @@
 //   6. chaque table du format courant remplacée : Donnees.csv.serialiser (protection des cellules, colonnes inconnues
 //      du ZIP gardées), App.adaptateur.enregistrer avec la version fraîche (contrôle de version ; écritures refusées
 //      en lecture seule) et { remplacerFichierAbime: true } (un fichier abîmé est remplacé : T200, l'import est l'une
-//      des deux seules dérogations, avec la restauration) ; parametres.version_schema = format courant ;
+//      des deux seules dérogations, avec la restauration) ; parametres.version_schema = format courant ; T213 : un CSV
+//      que le ZIP marque abîmé (lu.abimes, accepté seulement à l'empreinte juste) est écrit avec les octets du ZIP,
+//      tels quels, et sa date « abîmé depuis » (manifeste, sinon maintenant) va dans fichiers-abimes.json ; la
+//      confirmation le dit (#abimes-import-zip) ;
 //   7. une ligne de journal ; 8. fenêtre #import-zip-termine, puis rechargement de l'application.
 //   Erreur pendant 5 à 7 : tables remises depuis la sauvegarde « avant-import-zip » (App.adaptateur.restaurer), fenêtre
 //   #import-zip-echec qui la nomme. acces/ (comptes, sessions, appareils) n'est jamais touché : rien ici n'y écrit.
@@ -63,6 +66,13 @@ const ParametresZip = (() => {
   function libelleTable(nomTable) {
     const description = Schema.table(nomTable);
     return description ? description.libelle : nomTable;
+  }
+
+  // Date et heure locales « AAAA-MM-JJTHH:MM:SS » (fichiers-abimes.json, comme les manifestes).
+  function dateHeure(date) {
+    const deux = (nombre) => String(nombre).padStart(2, '0');
+    return date.getFullYear() + '-' + deux(date.getMonth() + 1) + '-' + deux(date.getDate()) + 'T'
+      + deux(date.getHours()) + ':' + deux(date.getMinutes()) + ':' + deux(date.getSeconds());
   }
 
   // ===========================================================================================
@@ -154,6 +164,7 @@ const ParametresZip = (() => {
       actuel: Donnees.lignes(nomTable).length,
       importe: lu.tables[nomTable].lignes.length,
       videe: lu.absentes.includes(nomTable),
+      abime: lu.abimes.some((abime) => abime.table === nomTable),
     }));
     return UI.tableau({
       libelle: 'Tables remplacées',
@@ -164,7 +175,8 @@ const ParametresZip = (() => {
           rendu: (l) => UI.html`<span data-actuel="${l.table}">${String(l.actuel)}</span>` },
         { cle: 'importe', libelle: 'Lignes après l\'import', type: 'nombre', valeurTri: (l) => l.importe,
           rendu: (l) => UI.html`<span data-importe="${l.table}">${String(l.importe)}</span>${l.videe
-            ? UI.html` <span class="badge attention" data-videe="${l.table}">vidée</span>` : ''}` },
+            ? UI.html` <span class="badge attention" data-videe="${l.table}">vidée</span>` : ''}${l.abime
+            ? UI.html` <span class="badge attention" data-tel-quel="${l.table}">abîmé, tel quel</span>` : ''}` },
       ],
       lignes: lignes,
     });
@@ -179,6 +191,14 @@ const ParametresZip = (() => {
     return UI.html`<div class="encadre" id="problemes-import-zip"><b>Points relevés à la lecture du ZIP :</b>
       <ul>${retenus.slice(0, PROBLEMES_MONTRES).map((probleme) => UI.html`<li>${probleme.message}</li>`)}</ul>
       ${autres ? UI.html`<p class="note">… et ${pluriel(autres, 'autre')}.</p>` : ''}</div>`;
+  }
+
+  // T213 : phrase d'un CSV que le ZIP marque abîmé (ZipLecture, `abimes`) : importé tel quel, bandeau gardé.
+  function phraseAbime(abime) {
+    const depuis = abime.depuis ? ' (abîmé depuis le ' + UI.dateFr(abime.depuis.slice(0, 10)) + ')' : '';
+    return abime.fichier + ' est abîmé dans ce ZIP' + depuis + ' : il sera importé tel quel, sans réparation ; la '
+      + 'base retrouvera le même état, avec le bandeau « Fichier abîmé ». Réparez-le ensuite, ou restaurez une '
+      + 'sauvegarde.';
   }
 
   /** Fenêtre de confirmation ; true si l'utilisateur confirme le remplacement. */
@@ -196,6 +216,8 @@ const ParametresZip = (() => {
           + (lu.documents.length > 1 ? 'seront ajoutés' : 'sera ajouté') + ' au dossier des documents ; les documents '
           + 'déjà présents sont gardés.'
         : 'Aucun document joint dans ce ZIP ; les documents déjà présents sont gardés.'}</p>
+      ${lu.abimes.length ? UI.html`<div class="encadre attention" id="abimes-import-zip">${lu.abimes.map((abime) =>
+        UI.html`<p data-abime="${abime.table}">${phraseAbime(abime)}</p>`)}</div>` : ''}
       ${problemesMontres(lu)}
       <div class="encadre attention" id="avertissement-import-zip"><b>${AVERTISSEMENT}</b></div>
     </div>`);
@@ -333,10 +355,15 @@ const ParametresZip = (() => {
   // format courant puis colonnes inconnues), écrits par l'adaptateur avec la version FRAÎCHE (rien n'est écrasé sans
   // contrôle de version ; lecture seule : refusé), puis relus (cache juste : le journal s'y ajoute ensuite). Un fichier
   // abîmé est remplacé (dérogation de l'import ZIP, T200 : remplacerFichierAbime ; sans elle, ErreurFichierAbime).
-  async function remplacerTable(nomTable, table) {
-    const octets = Donnees.csv.serialiser(nomTable, table.lignes, table.colonnesInconnues);
+  // T213 : un CSV que le ZIP marque abîmé (`abime`, de lu.abimes) est écrit avec les octets du ZIP, tels quels (ni
+  // re-sérialisation, ni migration, ni réparation) ; abimeDepuis : la date du manifeste, sinon maintenant (gardée dans
+  // fichiers-abimes.json par l'adaptateur : le bandeau « Fichier abîmé » dit toujours depuis quand).
+  async function remplacerTable(nomTable, table, abime) {
+    const octets = abime ? abime.octets : Donnees.csv.serialiser(nomTable, table.lignes, table.colonnesInconnues);
+    const options = { remplacerFichierAbime: true };
+    if (abime) options.abimeDepuis = abime.depuis || dateHeure(new Date());
     await Donnees.rechargerTable(nomTable);
-    await App.adaptateur.enregistrer(nomTable, octets, Donnees.version(nomTable), { remplacerFichierAbime: true });
+    await App.adaptateur.enregistrer(nomTable, octets, Donnees.version(nomTable), options);
     await Donnees.rechargerTable(nomTable);
   }
 
@@ -406,17 +433,20 @@ const ParametresZip = (() => {
     const nomsTables = Schema.nomsTables();
     try {
       const tables = tablesImportees(lu.tables, documents.parNom);
-      for (const nomTable of nomsTables) await remplacerTable(nomTable, tables[nomTable]);
+      const abimes = new Map(lu.abimes.map((abime) => [abime.table, abime]));
+      for (const nomTable of nomsTables) await remplacerTable(nomTable, tables[nomTable], abimes.get(nomTable));
       const ligne = 'import ZIP : ' + nomFichier + ', ' + pluriel(nomsTables.length, 'table') + ', '
-        + pluriel(lu.documents.length, 'document') + ' ; sauvegarde ' + sauvegarde + ' faite juste avant';
-      if (!(await Donnees.journaliser('parametres', '', ligne))) {
+        + pluriel(lu.documents.length, 'document') + (abimes.size ? ' ; importés tels quels, abîmés : '
+          + lu.abimes.map((abime) => abime.fichier).join(', ') : '') + ' ; sauvegarde ' + sauvegarde + ' faite juste avant';
+      // Un journal abîmé importé tel quel ne reçoit pas cette ligne : il doit rester identique à l'octet (T213).
+      if (!abimes.has('journal') && !(await Donnees.journaliser('parametres', '', ligne))) {
         throw new Donnees.ErreurStockage('la ligne du journal n\'a pas pu être écrite');
       }
     } catch (erreur) {
       return restaurerApresEchec(sauvegarde, erreur);
     }
     return { ok: true, sauvegarde: sauvegarde, tables: nomsTables.length, documents: lu.documents.length,
-      repris: documents.repris };
+      repris: documents.repris, abimes: lu.abimes.map((abime) => abime.fichier) };
   }
 
   // ===========================================================================================
@@ -462,7 +492,9 @@ const ParametresZip = (() => {
       await App.reafficher();
       return Object.assign({ etape: 'ecriture' }, resultat);
     }
-    const message = 'Import ZIP terminé : ' + pluriel(resultat.tables, 'table remplacée', 'tables remplacées') + ', '
+    const message = 'Import ZIP terminé : ' + pluriel(resultat.tables, 'table remplacée', 'tables remplacées')
+      + (resultat.abimes.length ? ' (dont ' + resultat.abimes.join(', ') + (resultat.abimes.length > 1
+        ? ', abîmés, importés tels quels)' : ', abîmé, importé tel quel)') : '') + ', '
       + pluriel(resultat.documents, 'document') + ' (' + (resultat.repris ? resultat.repris + ' déjà présent(s), repris ; ' : '')
       + 'aucun document existant supprimé). Sauvegarde faite juste avant : « ' + resultat.sauvegarde + ' » (Paramètres '
       + '› Sauvegardes). Prévo va se recharger avec les nouvelles données.';

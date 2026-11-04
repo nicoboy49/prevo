@@ -1331,7 +1331,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   indicateurs-regles.js  indicateurs-series.js  indicateurs-graphiques.js  indicateurs-ecrans.js
   rapport-contenu.js  rapport-ecrans.js
   zip-donnees.js
-  zip-lecture.js
+  zip-tables.js  zip-lecture.js
   parametres.js  parametres-codes.js  parametres-solo.js  parametres-sauvegardes.js  parametres-zip.js  parametres-acces.js  (puis import-*.js, §18.1, et wiki-*.js, §20 ; puis js/app.js)
   ```
   Écart retenu (T43) : `indicateurs-series.js` (séries des graphiques) s'insère après
@@ -1347,6 +1347,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   Chantier socle de données (T189, D171) : `zip-donnees.js` (objet `ZipDonnees`, export ZIP complet : 24 CSV, documents
   cités, rapports figés, `manifeste.json`, jamais `acces/` ; `App.exporterZip` délègue) se charge après `rapport-ecrans.js`.
   Socle de données (T190, D172) : `zip-lecture.js` (objet `ZipLecture`, `lire(source)` : lecture et contrôles stricts d'un ZIP de données, migration en mémoire, sans rien écrire) se charge après `zip-donnees.js`. Lecture en deux passes (T205) : `lire` décompresse chaque document pour le contrôler puis l'oublie (le résultat n'en garde que nom, taille et empreinte SHA-256) ; `lireDocument(lu, nom)` le relit depuis le même ZIP, taille, CRC-32 et empreinte revérifiés, au moment de l'écrire (`parametres-zip.js`, un document à la fois) ; pic de mémoire : le ZIP + les tables + un document (`memoire()` : mesure de la dernière lecture, pour les tests).
+  Socle de données (T213) : `zip-tables.js` (objet `ZipTables`, `lire(contenus, fichiersTables, deja, manifeste)` : étape 11 de `ZipLecture`, les tables du ZIP lues, CSV illisibles refusés sauf fichier marqué « abime » au manifeste à l'empreinte juste, rendu dans `abimes` ; format d'origine, migration en mémoire, tables absentes) se charge juste avant `zip-lecture.js`, qui l'appelle : sorti de `zip-lecture.js`, arrivé à 700 lignes.
   Socle de données (T191, D172) : `parametres-zip.js` (objet `ParametresZip`, bouton « Importer un ZIP… » de la carte « Sauvegardes » : import par remplacement complet, §22.11 « Import ZIP » ; relié à `Parametres.interne` par les relais `blocImportZip` et `brancherImportZip`) se charge juste après `parametres-sauvegardes.js`.
   Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
   fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
@@ -4115,6 +4116,16 @@ fusion ; aucune route serveur nouvelle (D172) : le navigateur lit le ZIP et écr
   tables à la racine, `documents/<nom>` à la règle des noms du serveur, `manifeste.json`), manifeste et empreintes
   SHA-256 (aucun fichier ajouté, manquant ou modifié), format plus récent refusé, CSV illisible ou abîmé refusé. Un ZIP
   plus ancien est migré en mémoire. Refus : fenêtre `#import-zip-refus` (message de `ZipLecture`), rien d'écrit.
+- **Fichier marqué abîmé** (T213, option B de Nicolas) : un CSV illisible ou abîmé n'est accepté (`ZipTables`,
+  `lu.abimes`) que si le manifeste le marque `"abime": true` ET que son empreinte correspond (étape 10, vérifiée
+  avant) ; sinon refus comme ci-dessus. Il est écrit avec les octets du ZIP, tels quels (ni sérialisation, ni
+  migration, ni réparation ; ses références à des documents ne sont pas réécrites), option `abimeDepuis` = la date
+  `abime_depuis` du manifeste, sinon maintenant (`fichiers-abimes.json`, adaptateur dossier ; serveur : en-tête
+  `X-Prevo-Abime-Depuis`). Sécurité : l'empreinte ne prouve que l'intégrité du ZIP, pas son origine (n'importe qui
+  peut la recalculer) ; la dérogation reste donc bornée : responsable seul (comme l'import), et le serveur ne relâche
+  que la comparaison de l'en-tête au schéma, pour un fichier qu'il voit lui-même abîmé (`raisons_fichier_abime`) ;
+  UTF-8 et cellules dangereuses restent contrôlés. En mode dossier (« ce PC »), aucune frontière de droits : la
+  personne peut déjà modifier ces fichiers. Un journal abîmé importé tel quel ne reçoit pas la ligne de l'import.
 - **Confirmation** `#confirmation-import-zip` : date, version et mode de l'export (manifeste ; « sans manifeste » pour
   un export plus ancien), format (« mises au format 3 » si migré), lignes actuelles → importées par table
   (`[data-actuel]`, `[data-importe]`), tables absentes du ZIP qui seront vidées (`[data-videe]`), nombre de documents,

@@ -915,6 +915,23 @@ const StockageDossier = (() => {
       return depuis;
     }
 
+    // T213 : un CSV que l'import ZIP écrit tel quel parce que son ZIP le marque abîmé (enregistrer,
+    // options.abimeDepuis) : sa date « depuis » (celle du manifeste du ZIP, gardée telle quelle, jamais remise à zéro
+    // par l'import) remplace celle de fichiers-abimes.json. Échec : dit sur la console, la table reste écrite. À
+    // appeler dans enSerie.
+    async function noterDepuisImporte(table, date) {
+      try {
+        const connues = await lireFichiersAbimes();
+        const depuis = {};
+        Schema.nomsTables().forEach(function (nom) {
+          if (nom === table || connues[nom]) { depuis[nom] = nom === table ? date : connues[nom]; }
+        });
+        await ecrireFichier(racine, NOM_FICHIERS_ABIMES, enJson({ depuis: depuis }));
+      } catch (erreur) {
+        console.warn('Prévo : ' + NOM_FICHIERS_ABIMES + ' non mis à jour (' + (erreur && erreur.message) + ').', erreur);
+      }
+    }
+
     // À l'ouverture du dossier, une fois les tables chargées (js/app.js ; jamais en lecture seule) : `tables` =
     // les tables abîmées (Donnees.tablesAbimees). Rend { table: date } (abimesDepuis).
     async function noterFichiersAbimes(tables) {
@@ -1059,6 +1076,8 @@ const StockageDossier = (() => {
       const nouveauContenu = enOctets(octets);
       const attendue = versionAttendue === undefined ? null : versionAttendue;
       const remplacerFichierAbime = Boolean(options) && options.remplacerFichierAbime === true;
+      const abimeDepuis = remplacerFichierAbime && typeof options.abimeDepuis === 'string'
+        && MOTIF_DATE_MANIFESTE.test(options.abimeDepuis) ? options.abimeDepuis : null;     // T213 (import ZIP)
       return enSerie(async function () {
         await sauvegardeQuotidienneSiBesoin();
         const actuel = await lireOctets(racine, table + '.csv');
@@ -1077,6 +1096,7 @@ const StockageDossier = (() => {
         }
         await ecrireFichier(racine, table + '.csv', nouveauContenu,
           { controle: controleInchange(table + '.csv', actuel) });
+        if (abimeDepuis) { await noterDepuisImporte(table, abimeDepuis); }
         return { version: await empreinte(nouveauContenu) };
       });
     }

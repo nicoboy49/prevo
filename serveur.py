@@ -4107,6 +4107,31 @@ def noter_fichiers_abimes(config, abimees=None):
                  % (NOM_FICHIERS_ABIMES, getattr(erreur, 'message', None) or erreur))
 
 
+def noter_table_importee(config, table, abimee, depuis=None):
+    """T213 : après l'écriture d'une table par l'import ZIP (PUT avec X-Prevo-Remplacer-Abime: 1), fichiers-abimes.json
+    suit cette table : abîmée → « depuis » (date du manifeste du ZIP, X-Prevo-Abime-Depuis : gardée telle quelle,
+    jamais remise à zéro par l'import), sinon la date déjà notée, sinon maintenant ; saine → retirée. Jamais
+    d'exception vers l'appelant : un échec est dit sur la console (la table, elle, est écrite)."""
+    try:
+        ancien = lire_fichiers_abimes(config)
+        dates = dict(ancien)
+        if abimee:
+            dates[table] = depuis or ancien.get(table) or maintenant_iso(config)
+        else:
+            dates.pop(table, None)
+        neuf = {nom: dates[nom] for nom in TABLES if nom in dates}
+        chemin = chemin_fichiers_abimes(config)
+        if neuf == ancien and (neuf or not os.path.exists(chemin)):
+            return
+        if neuf:
+            ecrire_atomique(chemin, (json.dumps({'depuis': neuf}, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+        else:
+            os.remove(chemin)
+    except (ErreurHttp, OSError) as erreur:
+        afficher(PREFIXE_CONSOLE_SAUVEGARDES + '%s non mis à jour (%s).'
+                 % (NOM_FICHIERS_ABIMES, getattr(erreur, 'message', None) or erreur))
+
+
 def faire_sauvegarde_quotidienne(config):
     """Avant chaque écriture CSV : la sauvegarde du jour si elle manque (faire_sauvegarde_du_jour, rotation comprise),
     puis, à la première écriture après 2 h du matin, la copie externe du jour, lancée dans son propre fil (D133). À
@@ -5038,8 +5063,9 @@ def versions_des_tables(config):
 MOTIF_CELLULE_DANGEREUSE = re.compile(r'^(?:[=+@\t\r]|-(?![0-9.,]))')
 
 
-def verifier_contenu_csv(table, octets, corps_d_ajout=False):
-    """UTF-8, en-tête qui commence par les colonnes du schéma, aucune cellule dangereuse sans apostrophe ; 400 sinon."""
+def verifier_contenu_csv(table, octets, corps_d_ajout=False, entete_libre=False):
+    """UTF-8, en-tête qui commence par les colonnes du schéma, aucune cellule dangereuse sans apostrophe ; 400 sinon.
+    entete_libre (T213) : l'en-tête n'est pas comparé au schéma (CSV abîmé importé tel quel, enregistrer_csv)."""
     if not est_utf8(octets):
         raise ErreurHttp(400, 'Le fichier %s.csv doit être encodé en UTF-8.' % table)
     texte = octets.decode('utf-8')
@@ -5053,7 +5079,7 @@ def verifier_contenu_csv(table, octets, corps_d_ajout=False):
         raise ErreurHttp(400, 'Le fichier %s.csv est vide : la ligne d\'en-tête manque.' % table)
     attendues = list(COLONNES_PAR_TABLE.get(table, ()))
     recues = [nom.strip() for nom in lignes[0]]
-    if recues[:len(attendues)] != attendues:
+    if not entete_libre and recues[:len(attendues)] != attendues:
         raise ErreurHttp(400, 'En-tête de %s.csv inattendu : il doit commencer par %s.' % (table, ';'.join(attendues)))
     for numero, ligne in enumerate(lignes[1:], 2):
         for cellule in ligne:
@@ -5082,6 +5108,7 @@ def verifier_contenu_csv(table, octets, corps_d_ajout=False):
 # AVANT la garde, une écriture refusée la fait donc si elle manque (son manifeste marque le fichier abîmé).
 CODE_FICHIER_ABIME = 'fichier_abime'
 ENTETE_REMPLACER_ABIME = 'X-Prevo-Remplacer-Abime'
+ENTETE_ABIME_DEPUIS = 'X-Prevo-Abime-Depuis'   # T213 : CSV abîmé importé tel quel (avec la dérogation) et sa date
 SUITE_FICHIER_ABIME = ('Corrigez-le, restaurez une sauvegarde ou importez un ZIP (Paramètres) ; le détail est dans '
                        'Paramètres › Contrôle de la base.')
 MESSAGE_FICHIER_ABIME = ('Le fichier %s.csv est abîmé (%s) : Prévo ne l\'enregistre plus, pour ne rien perdre. '
@@ -5189,14 +5216,20 @@ def ecrire_fichier_de_donnees(config, table, octets, actuel=A_LIRE, *, ajout=Fal
     return empreinte(octets)
 
 
-def enregistrer_csv(config, table, octets, version_attendue, controle=None, remplacer_abime=False):
+def enregistrer_csv(config, table, octets, version_attendue, controle=None, remplacer_abime=False,
+                    abime_depuis=None):
     """Remplace le CSV si sa version actuelle est celle attendue ; sinon 409 (conflit). Contenu vérifié d'abord (E2).
     controle (lot 7, §22.5) : (octets reçus, octets actuels) → octets à écrire, appelé après le contrôle de version
     (colonnes cachées remises pour le technicien, demandes en ajout seulement pour le demandeur ; 403 sinon). Puis
     ecrire_fichier_de_donnees (T200) : 409 « fichier_abime » si le fichier en place est abîmé, sauf remplacer_abime
-    (PUT avec l'en-tête X-Prevo-Remplacer-Abime: 1, l'import ZIP)."""
+    (PUT avec l'en-tête X-Prevo-Remplacer-Abime: 1, l'import ZIP). T213 : abime_depuis (en-tête X-Prevo-Abime-Depuis,
+    avec remplacer_abime) : l'import écrit tel quel un CSV que son ZIP marque abîmé ; son en-tête n'est alors pas
+    comparé au schéma si le serveur le voit abîmé lui aussi (raisons_fichier_abime ; UTF-8 et cellules dangereuses
+    toujours contrôlés). Après une écriture avec remplacer_abime, fichiers-abimes.json suit la table
+    (noter_table_importee)."""
     verifier_ecriture_permise(config)                   # T185 : lecture seule (données plus récentes), 409
-    verifier_contenu_csv(table, octets)
+    abimee = bool(remplacer_abime and raisons_fichier_abime(octets))
+    verifier_contenu_csv(table, octets, entete_libre=abimee and abime_depuis is not None)
     chemin = chemin_table(config, table)
     actuel = lire_octets(chemin)
     version_actuelle = empreinte(actuel) if actuel is not None else None
@@ -5211,8 +5244,11 @@ def enregistrer_csv(config, table, octets, version_attendue, controle=None, remp
         raise ErreurHttp(409, message, version_actuelle=version_actuelle)
     if controle is not None:
         octets = controle(octets, actuel)
-    return ecrire_fichier_de_donnees(config, table, octets, actuel, remplacer_abime=remplacer_abime,
-                                     sauvegarde_du_jour=True)
+    version = ecrire_fichier_de_donnees(config, table, octets, actuel, remplacer_abime=remplacer_abime,
+                                        sauvegarde_du_jour=True)
+    if remplacer_abime:
+        noter_table_importee(config, table, abimee, abime_depuis)
+    return version
 
 
 def decouper_corps_ajout(corps):
@@ -6422,9 +6458,17 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         remplacer_abime = (self.headers.get(ENTETE_REMPLACER_ABIME) or '').strip() == '1'
         if remplacer_abime and self.session is not None and role_effectif(self.session) != 'responsable':
             raise ErreurHttp(403, 'Accès refusé : seul le responsable remplace un fichier abîmé (import ZIP).')
+        # T213 : « X-Prevo-Abime-Depuis: AAAA-MM-JJTHH:MM:SS », seulement avec la dérogation (400 sinon, rien écrit).
+        abime_depuis = self.headers.get(ENTETE_ABIME_DEPUIS)
+        if abime_depuis is not None:
+            abime_depuis = abime_depuis.strip()
+            if not remplacer_abime or not MOTIF_DATE_DEPUIS.fullmatch(abime_depuis):
+                raise ErreurHttp(400, 'En-tête %s refusé : une date AAAA-MM-JJTHH:MM:SS, avec %s: 1.'
+                                 % (ENTETE_ABIME_DEPUIS, ENTETE_REMPLACER_ABIME))
         with VERROU_ECRITURE:
             version = enregistrer_csv(self.config, table, corps, version_attendue.strip(),
-                                      controle_d_ecriture(self.session, table), remplacer_abime=remplacer_abime)
+                                      controle_d_ecriture(self.session, table), remplacer_abime=remplacer_abime,
+                                      abime_depuis=abime_depuis)
         self.envoyer_json(200, {'version': version})
 
     def api_ajout(self, table, corps):

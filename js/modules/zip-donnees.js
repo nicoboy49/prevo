@@ -11,7 +11,8 @@
 //     l'adaptateur de stockage (lireDocument : donnees/documents/ en modes serveur et dossier, mémoire en démo) ;
 //   - manifeste.json à la racine : Formats.manifeste de tous les autres fichiers du ZIP (application, version_appli,
 //     format de la base, date « AAAA-MM-JJTHH:MM:SS » du poste (comme les sauvegardes, docs/FORMAT.md), motif « export », mode serveur | dossier | demo,
-//     fichiers [{ nom, octets, sha256 }]) ; s'il en manque, `manquants` : les documents cités introuvables.
+//     fichiers [{ nom, octets, sha256 }], plus « abime »: true et « abime_depuis » pour un CSV abîmé, T210 et T213) ;
+//     s'il en manque, `manquants` : les documents cités introuvables.
 // Jamais rien de acces/ (comptes, sessions, appareils) ni d'autre dossier : un nom cité n'est lu que s'il a la forme
 // d'un nom de document (MOTIF_NOM_DOCUMENT, mêmes règles que serveur.py : ni « / », ni « \ », ni « .. ») ; sinon il
 // est compté parmi les manquants, sans aucune lecture. Un document introuvable n'arrête pas l'export.
@@ -36,6 +37,7 @@ const ZipDonnees = (() => {
   // Nom d'un document enregistré : nom demandé (MOTIF_NOM_DOCUMENT de serveur.py et des adaptateurs), précédé ou non
   // de l'horodatage que le serveur impose depuis le lot 7 (« AAAAMMJJ-HHMMSS- », MOTIF_NOM_DOCUMENT_ENREGISTRE).
   const MOTIF_NOM_DOCUMENT = /^(?:[0-9]{8}-[0-9]{6}-)?[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+  const MOTIF_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;      // « abime_depuis » (fichiers-abimes.json, T206)
   const RAISON_RESERVE = 'L\'export ZIP est réservé au responsable : avec les comptes, les autres rôles ne voient '
     + 'qu\'une partie des données, et l\'export serait incomplet.';
 
@@ -193,6 +195,23 @@ const ZipDonnees = (() => {
     UI.fenetre({ titre: 'Export ZIP impossible', contenu: contenu });
   }
 
+  // T213 : l'entrée du manifeste d'un CSV abîmé porte aussi « abime_depuis » (AAAA-MM-JJTHH:MM:SS, depuis quand Prévo
+  // le voit abîmé : adaptateur.abimesDepuis, fichiers-abimes.json), que l'import garde telle quelle ; absente si
+  // inconnue (démo, date illisible, lecture impossible : l'export n'échoue pas pour autant).
+  async function noterDepuis(manifeste, abimes, adaptateur) {
+    if (!abimes.length || typeof adaptateur.abimesDepuis !== 'function') return;
+    let depuis = {};
+    try {
+      depuis = (await adaptateur.abimesDepuis()) || {};
+    } catch (erreur) {
+      console.warn('Prévo : date des fichiers abîmés inconnue pour l\'export (' + (erreur && erreur.message) + ').', erreur);
+    }
+    abimes.forEach((nomTable) => {
+      const decrit = manifeste.fichiers.find((fichier) => fichier.nom === Schema.table(nomTable).fichier);
+      if (decrit && MOTIF_DATE.test(String(depuis[nomTable] || ''))) decrit.abime_depuis = depuis[nomTable];
+    });
+  }
+
   /**
    * Contenu du ZIP, sans rien télécharger ni écrire → Promise de
    * { nomFichier, fichiers: [{ nom, octets }], manifeste, csv, documents, manquants, refus } :
@@ -240,6 +259,7 @@ const ZipDonnees = (() => {
       motif: MOTIF_EXPORT,
       mode: mode,
     });
+    await noterDepuis(manifeste, abimes, adaptateur);
     if (documents.manquants.length) manifeste.manquants = documents.manquants.slice();
     fichiers.push({ nom: NOM_MANIFESTE, octets: new TextEncoder().encode(JSON.stringify(manifeste, null, 2) + '\n') });
     resume.manifeste = manifeste;

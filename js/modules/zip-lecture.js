@@ -7,8 +7,8 @@
 //
 // ZipLecture.lire(source) — source : File, Blob ou ArrayBuffer (ou vue typée) → Promise de :
 //   - refusé  : { ok: false, refus: '<message clair en français>' } et rien d'autre ;
-//   - accepté : { ok: true, refus: null, format, formatOrigine, migre, manifeste, tables, absentes, documents,
-//                 problemes } :
+//   - accepté : { ok: true, refus: null, format, formatOrigine, migre, manifeste, tables, absentes, abimes,
+//                 documents, problemes } (formatOrigine, migre, tables, absentes, abimes : ZipTables, zip-tables.js) :
 //       format        : format des tables rendues (Formats.courant) ;
 //       formatOrigine : format du ZIP : celui du manifeste, sinon version_schema de parametres.csv
 //                       (Formats.versionDeBase), ramené au plus petit format des fichiers (comme Donnees.etatDuFormat) ;
@@ -39,9 +39,10 @@
 // (8) au moins un CSV de table ; (9) décompression : taille RÉELLE contrôlée pendant (arrêt dès qu'elle dépasse la
 // taille déclarée) et après (égale, CRC-32 juste) ; (10) manifeste : chaque fichier y figure avec sa taille et son
 // empreinte SHA-256, et réciproquement ; (11) CSV illisible (format 0 : des colonnes du format 1 manquent à
-// l'en-tête) ou abîmé (l'écrire en perdrait une partie) : on ne remplace pas une base par un fichier illisible.
-// Dépendances : JSZip (js/lib/jszip.min.js), Schema, Formats, Donnees (csv.analyser) ; crypto.subtle pour un ZIP avec
-// manifeste (contexte sécurisé : file://, https, 127.0.0.1).
+// l'en-tête) ou abîmé (l'écrire en perdrait une partie) : on ne remplace pas une base par un fichier illisible, sauf
+// fichier marqué « abime » au manifeste, à l'empreinte juste (T213 : ZipTables, rendu dans `abimes`).
+// Dépendances : JSZip (js/lib/jszip.min.js), Schema, Formats, Donnees (csv.analyser), ZipTables ; crypto.subtle
+// pour un ZIP avec manifeste (contexte sécurisé : file://, https, 127.0.0.1).
 
 const ZipLecture = (function () {
 
@@ -477,7 +478,7 @@ const ZipLecture = (function () {
     }
   }
 
-  // --- 7, 8 et 11. Noms admis, tables et documents ------------------------------------------------------------------
+  // --- 7 et 8. Noms admis (11, les tables : ZipTables) ------------------------------------------------------------
 
   // Fichier d'une table (« equipements.csv ») → nom de la table, dans l'ordre du schéma.
   function tablesParFichier() {
@@ -510,58 +511,6 @@ const ZipLecture = (function () {
     }
   }
 
-  // Raison de refuser un CSV lu (format 0 : en-tête illisible ; abîmé : le réécrire en perdrait une partie), ou null.
-  function raisonCsvIllisible(nomTable, lu) {
-    if (lu.entete.length > 0 && Formats.formatDuFichier(nomTable, lu.entete) === 0) {
-      return 'sa ligne d\'en-tête est incomplète ou illisible : des colonnes du format 1 y manquent';
-    }
-    return lu.abime ? 'sa structure est abîmée, ou des lignes ont des valeurs au-delà de l\'en-tête' : null;
-  }
-
-  // Tables lues ({ entete, lignes, colonnesInconnues }), leurs problèmes de lecture et le plus petit format des
-  // fichiers non vides (Infinity s'il n'y en a pas). deja : tables déjà lues (parametres).
-  function lireTables(contenus, fichiersTables, deja) {
-    const tables = {};
-    const problemes = [];
-    let formatFichiers = Infinity;
-    for (const [fichier, nomTable] of fichiersTables) {
-      if (!contenus.has(fichier)) { continue; }
-      const lu = deja[nomTable] || Donnees.csv.analyser(nomTable, contenus.get(fichier));
-      const raison = raisonCsvIllisible(nomTable, lu);
-      if (raison) {
-        refuser('« ' + fichier + ' » est illisible (' + raison + ') : on ne remplace pas une base par un fichier '
-          + 'illisible. Le ZIP est refusé ; corrigez ce fichier ou refaites l\'export.');
-      }
-      if (lu.entete.length > 0) { formatFichiers = Math.min(formatFichiers, Formats.formatDuFichier(nomTable, lu.entete)); }
-      tables[nomTable] = { entete: lu.entete, lignes: lu.lignes, colonnesInconnues: lu.colonnesInconnues };
-      Array.prototype.push.apply(problemes, lu.problemes);
-    }
-    return { tables: tables, problemes: problemes, formatFichiers: formatFichiers };
-  }
-
-  // Tables absentes du ZIP : un problème chacune, et une table vide (en-tête du format courant) si la migration ne
-  // l'a pas déjà créée (elle crée parametres avec sa ligne version_schema).
-  function completerAbsentes(tables, presentes, formatOrigine) {
-    const absentes = [];
-    const problemes = [];
-    for (const nomTable of Schema.nomsTables()) {
-      if (presentes.indexOf(nomTable) >= 0) { continue; }
-      const description = Schema.table(nomTable);
-      absentes.push(nomTable);
-      if (!Object.prototype.hasOwnProperty.call(tables, nomTable)) {
-        tables[nomTable] = { entete: Formats.colonnes(nomTable), lignes: [], colonnesInconnues: [] };
-      } else if (!Array.isArray(tables[nomTable].colonnesInconnues)) {
-        tables[nomTable].colonnesInconnues = [];
-      }
-      const nouvelle = Formats.tables(formatOrigine).indexOf(nomTable) < 0;
-      problemes.push(probleme(nouvelle ? 'info' : 'attention', 'table', nomTable, description.libelle + ' : '
-        + description.fichier + (nouvelle
-          ? ' n\'existait pas au format ' + formatOrigine + ' ; la table sera vide après l\'import.'
-          : ' est absent du ZIP ; l\'import videra cette table.')));
-    }
-    return { absentes: absentes, problemes: problemes };
-  }
-
   // Documents cités par la base mais absents de l'export (manifeste.manquants, facultatif).
   function problemesManquants(manifeste) {
     const manquants = manifeste && Array.isArray(manifeste.manquants) ? manifeste.manquants : [];
@@ -575,7 +524,8 @@ const ZipLecture = (function () {
 
   function exigerDependances() {
     const manquantes = [['JSZip', typeof JSZip], ['Schema', typeof Schema], ['Formats', typeof Formats],
-      ['Donnees', typeof Donnees]].filter(function (paire) { return paire[1] === 'undefined'; });
+      ['Donnees', typeof Donnees], ['ZipTables', typeof ZipTables]]
+      .filter(function (paire) { return paire[1] === 'undefined'; });
     if (manquantes.length) {
       throw new Error('ZipLecture : à charger après ' + manquantes.map(function (paire) { return paire[0]; }).join(', ')
         + ' (ordre de index.html).');
@@ -641,19 +591,14 @@ const ZipLecture = (function () {
     for (const contenu of contenus.values()) { memoire.racine += contenu.byteLength; }
     if (manifeste) { verifierManifeste(manifeste, resumes); }
 
-    const lues = lireTables(contenus, fichiersTables, parametres ? { parametres: parametres } : {});
-    const formatBase = formatDuManifeste(manifeste) !== null ? formatDuManifeste(manifeste)
-      : Formats.versionDeBase(parametres ? parametres.lignes : []);
-    const formatOrigine = Math.max(1, Math.min(formatBase, lues.formatFichiers));
-    const presentes = Object.keys(lues.tables);
-    const tables = formatOrigine < Formats.courant
-      ? Formats.migrer({ tables: lues.tables }, formatOrigine, Formats.courant).base.tables : lues.tables;
-    const absentes = completerAbsentes(tables, presentes, formatOrigine);
+    // 11 (après le manifeste : un CSV abîmé n'est accepté que marqué, à l'empreinte vérifiée, T213).
+    const lues = ZipTables.lire(contenus, fichiersTables, parametres ? { parametres: parametres } : {}, manifeste);
+    if (lues.refus) { refuser(lues.refus); }
     const resultat = {
-      ok: true, refus: null, format: Formats.courant, formatOrigine: formatOrigine,
-      migre: formatOrigine < Formats.courant, manifeste: manifeste, tables: tables, absentes: absentes.absentes,
+      ok: true, refus: null, format: Formats.courant, formatOrigine: lues.formatOrigine, migre: lues.migre,
+      manifeste: manifeste, tables: lues.tables, absentes: lues.absentes, abimes: lues.abimes,
       documents: Array.from(documents, function (paire) { return Object.assign({ nom: paire[0] }, paire[1].resume); }),
-      problemes: lues.problemes.concat(absentes.problemes, problemesManquants(manifeste)),
+      problemes: lues.problemes.concat(problemesManquants(manifeste)),
     };
     DOCUMENTS_DES_RESULTATS.set(resultat, documents);
     return resultat;
