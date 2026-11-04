@@ -30,6 +30,7 @@ Lancer depuis la racine du projet :
 import base64
 import csv
 import io
+import json
 import re
 import tempfile
 import unittest
@@ -68,6 +69,11 @@ ATTENDUS = {
     "sans-bom": (set(), []),
     "entete-tronque": (set(), []),
 }
+# T206a : un jeu abîmé fait noter, à la sauvegarde du jour, la date « abîmé depuis » de ses tables dans
+# fichiers-abimes.json ({"depuis": {"<table>": "AAAA-MM-JJTHH:MM:SS"}}, racine du dossier).
+FICHIERS_ABIMES = "fichiers-abimes.json"
+JEUX_ABIMES = {"entete-tronque"}
+MOTIF_DEPUIS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
 
 # ---------------------------------------------------------------------------
 # Dossier simulé (OPFS) : écriture des fichiers d'un jeu, instantané de tout le dossier
@@ -247,11 +253,15 @@ class CasFormats(CasNavigateur):
             self.ouvrir_dossier(statique, origine, profil)
             apres = self.instantane()
 
-            # Rien n'a disparu ; en plus : verrou.txt, derniere-version.json (T188), journal.csv (s'il y a un passage)
-            # et les sauvegardes.
+            # Rien n'a disparu ; en plus : verrou.txt, derniere-version.json (T188), journal.csv (s'il y a un passage),
+            # fichiers-abimes.json pour un jeu abîmé (T206a) et les sauvegardes.
             self.assertTrue(set(origine) <= set(apres), sorted(set(origine) - set(apres)))
             nouveaux = {chemin for chemin in set(apres) - set(origine) if not chemin.startswith("sauvegardes/")}
-            self.assertTrue({VERROU, DERNIERE_VERSION} <= nouveaux <= {VERROU, DERNIERE_VERSION, "journal.csv"}, nouveaux)
+            attendus = {VERROU, DERNIERE_VERSION} | ({FICHIERS_ABIMES} if nom_jeu in JEUX_ABIMES else set())
+            self.assertTrue(attendus <= nouveaux <= attendus | {"journal.csv"}, nouveaux)
+            if nom_jeu in JEUX_ABIMES:
+                depuis = json.loads(apres[FICHIERS_ABIMES].decode("utf-8"))["depuis"]
+                self.assertTrue(depuis and all(MOTIF_DEPUIS.match(date) for date in depuis.values()), depuis)
             nom_sauvegarde = self.verifier_sauvegardes(origine, apres, bool(changes_attendus))
 
             # Seuls les fichiers attendus ont changé, sans perdre une cellule.
