@@ -14,7 +14,7 @@ outils-tiers/
 # --- Fichiers de travail, hors dépôt
 .chantier/
 reference-design/
-LISEZMOI.md
+/LISEZMOI.md
 
 # --- Site commercial, marketing et études : dans « SIte gmao » (dossier à part), jamais ici
 xxx/
