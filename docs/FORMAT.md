@@ -12,12 +12,12 @@ rien n'est créé tant que la version concernée n'est pas développée.
 
 | Notion | Forme | Exemple | À quoi elle sert |
 |---|---|---|---|
-| **Version de l'appli** | semver `x.y.z` | `2.0.1` | Ce que l'utilisateur télécharge ; affichée dans « À propos », comparée par le bandeau de mise à jour. |
+| **Version de l'appli** | semver `x.y.z` | `2.0.0` | Ce que l'utilisateur télécharge ; affichée dans « À propos », comparée par le bandeau de mise à jour. |
 | **Version du format** | entier | `3` | La forme des fichiers de données (tables, colonnes). C'est elle qui décide d'une migration. |
 | **Empreinte d'un fichier** | SHA-256 tronqué | `3f2a…` | Contrôle de concurrence : « ce fichier a-t-il changé depuis que je l'ai lu ? ». Sans rapport avec le format. |
 | **Version de l'API** | entier | `1` | Le contrat entre le navigateur et `serveur.py` (`/api/…`). |
 
-Une nouvelle version de l'appli n'implique pas un nouveau format : 1.2.0, 2.0 bêta et 2.0.1 partagent le format 3.
+Une nouvelle version de l'appli n'implique pas un nouveau format : 1.2.0, les bêtas de la 2.0 et la 2.0.0 partagent le format 3.
 Dans le code, `Schema.version` (`js/schema.js`) est le format courant ; il n'a rien à voir avec la version de l'appli.
 
 ## 2. Le format 3 (format courant)
@@ -82,7 +82,7 @@ appareils, journal des connexions), jamais les sessions ni les clés, et ne le r
 |---|---|---|
 | **1** | avant les versions publiées | Les 22 tables du brief (§6), sans les colonnes ci-dessous. `version_schema` absent. |
 | **2** | 1.0, 1.1 | Colonnes `equipements.valeur_remplacement`, `demandes.symptome_code`, `demandes.ot_origine_id`, `ordres_travail.anomalie_constatee` (défaut `0`), en fin de table. |
-| **3** | 1.2.0, 2.0 bêta, 2.0.1 | Colonne `ordres_travail.astuce` en fin de table ; tables `wiki_pages` et `wiki_journal` (créées vides). 24 tables en tout. |
+| **3** | 1.2.0, 2.0 bêta, 2.0.0 | Colonne `ordres_travail.astuce` en fin de table ; tables `wiki_pages` et `wiki_journal` (créées vides). 24 tables en tout. |
 
 La source de vérité est l'attribut `depuisVersion` dans [js/schema.js](../js/schema.js).
 
@@ -150,7 +150,7 @@ Chaque sauvegarde et chaque export ZIP contient un `manifeste.json` :
 ```json
 {
   "application": "Prévo",
-  "version_appli": "2.0.1",
+  "version_appli": "2.0.0",
   "format": 3,
   "date": "2026-11-04T09:30:00",
   "motif": "avant-format-v3",
