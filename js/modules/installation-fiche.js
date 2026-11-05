@@ -146,7 +146,7 @@ const InstallationFiche = (() => {
   async function afficherDansLaCoque(conteneur) {
     UI.remplir(conteneur, UI.html`<div class="entete-page"><h1>Fiche d'accès</h1></div>`);
     if (App.mode !== 'serveur') {
-      conteneur.appendChild(UI.vide('Pas de serveur', 'La fiche d\'accès décrit le serveur Prévo : elle n\'existe qu\'en mode serveur.'));
+      conteneur.appendChild(UI.element(UI.vide('Pas de serveur', 'La fiche d\'accès décrit le serveur Prévo : elle n\'existe qu\'en mode serveur.')));
       return;
     }
     let fiche;

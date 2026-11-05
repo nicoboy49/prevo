@@ -17722,6 +17722,17 @@
 },
 {
 "profil": "responsable",
+"ecran": "installation-fiche",
+"titre": "Fiche d'accès — Prévo",
+"texte": {
+"Fiche d'accès": 1,
+"La fiche d'accès décrit le serveur Prévo : elle n'existe qu'en mode serveur.": 1,
+"Pas de serveur": 1
+},
+"attributs": {}
+},
+{
+"profil": "responsable",
 "ecran": "poste",
 "titre": "Ce poste — Prévo",
 "texte": {

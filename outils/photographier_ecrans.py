@@ -211,7 +211,7 @@ ECRANS = [
                 ("reinitialiser", '#contenu button[data-action="reinitialiser"]'))),
     E("parametres", "#/parametres", RESPONSABLE, capture=True),
     E("controle", "#/controle", RESPONSABLE),
-    E("installation-fiche", "#/installation/fiche", RESPONSABLE, modes=("serveur",)),
+    E("installation-fiche", "#/installation/fiche", RESPONSABLE),
     E("poste", "#/poste", capture=True),
     E("apropos", "#/apropos", capture=True),
 ]
