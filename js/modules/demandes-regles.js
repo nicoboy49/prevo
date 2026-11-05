@@ -47,15 +47,20 @@ const Demandes = (() => {
   const PRIORITES = ['P1', 'P2', 'P3', 'P4'];
   const TYPE_IMMEDIAT = 'correctif immédiat';
   const TYPE_DIFFERE = 'correctif différé';
-  const MESSAGE_DEJA_TRAITEE = 'Cette demande a déjà été traitée sur un autre poste';
+  // Lu à l'affichage (jamais figé au chargement).
+  function messageDejaTraitee() {
+    return I18n.t('demandes.message_deja_traitee.demande_deja_ete_traitee');
+  }
 
   // Les 4 impacts, dans l'ordre d'affichage, avec l'explication montrée sur les gros boutons.
-  const IMPACTS = [
-    { valeur: 'sécurité', libelle: 'Sécurité', explication: 'Danger pour une personne' },
-    { valeur: 'arrêt', libelle: 'Arrêt', explication: 'La machine ne tourne plus' },
-    { valeur: 'dégradé', libelle: 'Dégradé', explication: 'Elle tourne, mais mal' },
-    { valeur: 'gêne', libelle: 'Gêne', explication: 'Peut attendre' },
-  ];
+  function impacts() {
+    return [
+      { valeur: 'sécurité', libelle: I18n.t('demandes.impacts.securite'), explication: I18n.t('demandes.impacts.danger_personne') },
+      { valeur: 'arrêt', libelle: I18n.t('demandes.impacts.arret'), explication: I18n.t('demandes.impacts.machine_tourne_plus') },
+      { valeur: 'dégradé', libelle: I18n.t('demandes.impacts.degrade'), explication: I18n.t('demandes.impacts.tourne_mais_mal') },
+      { valeur: 'gêne', libelle: I18n.t('demandes.impacts.gene'), explication: I18n.t('demandes.impacts.peut_attendre') },
+    ];
+  }
 
   // RG2 : priorité = criticité de l'équipement × impact (« sécurité » donne toujours P1).
   const MATRICE_PRIORITE = {
@@ -73,7 +78,7 @@ const Demandes = (() => {
   /** Impact écrit de façon approximative (« Securite », « ARRET ») → valeur canonique, ou ''. */
   function normaliserImpact(impact) {
     const cherche = sansAccents(impact);
-    const trouve = IMPACTS.find((entree) => sansAccents(entree.valeur) === cherche);
+    const trouve = impacts().find((entree) => sansAccents(entree.valeur) === cherche);
     return trouve ? trouve.valeur : '';
   }
 
@@ -191,7 +196,7 @@ const Demandes = (() => {
   function nomDuProfil() {
     const profil = App.profil;
     if (profil && profil.nom) return profil.nom;
-    return App.libelleProfil() || 'Responsable';
+    return App.libelleProfil() || I18n.t('demandes.nom_du_profil.responsable');
   }
 
   /** Badge d'impact (le texte est toujours affiché, la couleur aide seulement). */
@@ -201,13 +206,14 @@ const Demandes = (() => {
   }
 
   return {
-    STATUTS, IMPACTS, MATRICE_PRIORITE,
+    STATUTS, impacts, MATRICE_PRIORITE,
+    get IMPACTS() { return impacts(); },
     prioriteCalculee, normaliserImpact, typePropose, datePrevue, libelleEquipement, codeSymptome,
     // (les écritures creer, accepter, regrouper, differer, refuser : demandes-ecritures.js)
     // Usage interne au module : outils prêtés aux fichiers demandes-*.js, qui y ajoutent les leurs
     // par Object.assign(Demandes.interne, …). Pas une API : son contenu peut changer à tout moment.
     interne: {
-      STATUTS_A_TRAITER, PRIORITES, TYPE_IMMEDIAT, TYPE_DIFFERE, MESSAGE_DEJA_TRAITEE,
+      STATUTS_A_TRAITER, PRIORITES, TYPE_IMMEDIAT, TYPE_DIFFERE, messageDejaTraitee,
       sansAccents, texte, deuxChiffres, prioriteDeLaDemande, estOuvert, otOuvertsDeLEquipement,
       nomDuProfil, badgeImpact, codesSymptome, estOtPreventif,
     },

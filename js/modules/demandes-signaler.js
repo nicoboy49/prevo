@@ -10,7 +10,7 @@
 Object.assign(Demandes, (() => {
 
   // Constantes, outils, règles et écritures des fichiers précédents (demandes-regles.js, demandes-ecritures.js).
-  const { IMPACTS, prioriteCalculee, libelleEquipement, codeSymptome, creer } = Demandes;
+  const { prioriteCalculee, libelleEquipement, codeSymptome, creer } = Demandes;
   const { texte, nomDuProfil, prioriteDeLaDemande, nomPhoto, codesSymptome, estOtPreventif } = Demandes.interne;
 
   // ===========================================================================================
@@ -39,15 +39,15 @@ Object.assign(Demandes, (() => {
     UI.remplir(conteneur, UI.html`
       <div class="di-nouvelle">
         <div class="entete-page"><div>
-          <h1>Signaler un problème</h1>
-          <p>Cinq questions, une minute. Le responsable maintenance reçoit votre demande aussitôt.</p>
+          <h1>${I18n.t('demandes.nouvelle.signaler_probleme')}</h1>
+          <p>${I18n.t('demandes.nouvelle.cinq_questions_minute_responsable')}</p>
         </div></div>
         <div class="di-origine"></div>
         <div class="di-alerte-equipement"></div>
         <form class="form-colonne di-formulaire" novalidate>
           <section class="carte di-etape">
             <div class="champ" data-champ="equipement_id">
-              <span class="libelle">1. Quel équipement ? <span class="requis" aria-hidden="true">*</span></span>
+              <span class="libelle">${I18n.t('demandes.nouvelle.1_quel_equipement')} <span class="requis" aria-hidden="true">*</span></span>
               <div class="di-selecteur"></div>
               <p class="erreur-champ" hidden></p>
             </div>
@@ -55,12 +55,12 @@ Object.assign(Demandes, (() => {
 
           <section class="carte di-etape">
             <div class="champ" data-champ="symptome">
-              <label class="libelle" for="${idSymptome}">2. Que constatez-vous ? <span class="requis" aria-hidden="true">*</span></label>
+              <label class="libelle" for="${idSymptome}">${I18n.t('demandes.nouvelle.2_constatez')} <span class="requis" aria-hidden="true">*</span></label>
               <input type="text" id="${idSymptome}" name="symptome" list="${idListe}" maxlength="200" required
                 aria-required="true" autocomplete="off" enterkeyhint="next"
-                placeholder="Ex. fuite d'huile sous la pompe">
+                placeholder="${I18n.t('demandes.nouvelle.ex_fuite_huile_sous')}">
               <datalist id="${idListe}">${libellesSymptomes.map((libelle) => UI.html`<option value="${libelle}"></option>`)}</datalist>
-              ${libellesSymptomes.length ? UI.html`<div class="di-suggestions" role="group" aria-label="Suggestions de symptômes">
+              ${libellesSymptomes.length ? UI.html`<div class="di-suggestions" role="group" aria-label="${I18n.t('demandes.nouvelle.suggestions_symptomes')}">
                 ${libellesSymptomes.map((libelle) => UI.html`<button type="button" class="di-puce" data-symptome="${libelle}" aria-pressed="false">${libelle}</button>`)}
               </div>` : ''}
               <p class="erreur-champ" hidden></p>
@@ -69,10 +69,10 @@ Object.assign(Demandes, (() => {
 
           <section class="carte di-etape">
             <div class="champ" data-champ="impact">
-              <span class="libelle" id="${idSymptome}-impact">3. Quel impact ? <span class="requis" aria-hidden="true">*</span></span>
+              <span class="libelle" id="${idSymptome}-impact">${I18n.t('demandes.nouvelle.3_quel_impact')} <span class="requis" aria-hidden="true">*</span></span>
               <fieldset class="tuiles di-impacts" aria-labelledby="${idSymptome}-impact">
-                ${IMPACTS.map((entree) => UI.html`
-                  <label class="tuile${entree.valeur === 'sécurité' ? ' securite' : ''}">
+                ${Demandes.impacts().map((entree) => UI.html`
+                  <label class="tuile${entree.valeur === 'sécurité' ? ' ' + I18n.t('demandes.nouvelle.securite') : ''}">
                     <input type="radio" name="impact" value="${entree.valeur}">
                     <span>${entree.libelle}<small>${entree.explication}</small></span>
                   </label>`)}
@@ -85,31 +85,31 @@ Object.assign(Demandes, (() => {
 
           <section class="carte di-etape">
             <div class="champ" data-champ="description">
-              <label class="libelle" for="${idDescription}">4. Précisions <span class="aide">(facultatif)</span></label>
+              <label class="libelle" for="${idDescription}">${I18n.html('demandes.nouvelle.4_precisions_facultatif')}</label>
               <textarea id="${idDescription}" name="description" rows="4" data-dictee
-                placeholder="Depuis quand ? Bruit, odeur, voyant allumé… Le clavier du téléphone permet de dicter."></textarea>
+                placeholder="${I18n.t('demandes.nouvelle.depuis_quand_bruit_odeur')}"></textarea>
             </div>
             <div class="actions di-ia sans-impression" hidden></div>
           </section>
 
           <section class="carte di-etape">
             <div class="champ" data-champ="photo">
-              <span class="libelle">5. Une photo <span class="aide">(facultatif)</span></span>
+              <span class="libelle">${I18n.html('demandes.nouvelle.5_photo_facultatif')}</span>
               <label class="btn btn-secondaire btn-gros di-bouton-photo" for="${idPhoto}">
-                ${UI.icone('photo')}<span class="di-texte-photo">Prendre une photo<small>ou en choisir une dans la galerie</small></span>
+                ${UI.icone('photo')}<span class="di-texte-photo">${I18n.html('demandes.nouvelle.prendre_photo_choisir_galerie')}</span>
               </label>
               <input type="file" id="${idPhoto}" class="di-fichier-photo" accept="image/*" capture="environment">
               <div class="di-apercu" hidden>
-                <img class="di-apercu-image" alt="Photo jointe à la demande">
-                <button type="button" class="btn btn-fantome di-retirer-photo">${UI.icone('fermer')}Retirer la photo</button>
+                <img class="di-apercu-image" alt="${I18n.t('demandes.nouvelle.photo_jointe_demande')}">
+                <button type="button" class="btn btn-fantome di-retirer-photo">${UI.icone('fermer')}${I18n.t('demandes.nouvelle.retirer_photo')}</button>
               </div>
               <p class="aide di-etat-photo" aria-live="polite"></p>
             </div>
           </section>
 
-          <p class="di-demandeur">Demande envoyée au nom de <b>${nomDuProfil()}</b>.</p>
+          <p class="di-demandeur">${I18n.html('demandes.nouvelle.demande_envoyee_nom', { nomDuProfil: nomDuProfil() })}</p>
           <button type="submit" class="btn btn-primaire btn-gros di-envoyer">
-            ${UI.icone('valider')}<span>Envoyer la demande</span>
+            ${UI.icone('valider')}<span>${I18n.t('demandes.nouvelle.envoyer_demande')}</span>
           </button>
         </form>
       </div>`);
@@ -143,7 +143,7 @@ Object.assign(Demandes, (() => {
     Wiki.poserRechercheDemande(champSymptome, selecteur.valeur());
     if (equipementDemande && !selecteur.valeur()) {
       UI.$('.di-alerte-equipement', conteneur).appendChild(UI.bandeau('attention',
-        UI.html`L'équipement <b>${equipementDemande}</b> est inconnu ou n'est plus actif : choisissez-le dans la liste.`));
+        UI.html`${I18n.html('demandes.nouvelle.equipement_inconnu_plus_actif', { equipementDemande })}`));
     }
 
     // --- OT préventif d'origine (?ot=) : bandeau, ou avertissement si l'OT ne convient pas -----
@@ -151,13 +151,11 @@ Object.assign(Demandes, (() => {
     // sera pas marqué : le bandeau le dit avant l'envoi.
     if (otDemande) {
       const suite = origineValable && Ordres.estVerrouille(otOrigine)
-        ? UI.html`La demande sera liée à cet OT, mais l'OT ${otDemande} est verrouillé : il ne sera pas
-            marqué « anomalie constatée » (statut ${otOrigine.statut}).`
-        : UI.html`La demande sera liée à cet OT, qui sera marqué « anomalie constatée ».`;
+        ? UI.html`${I18n.t('demandes.nouvelle.demande_sera_liee_ot', { otDemande, otOrigineStatut: otOrigine.statut })}`
+        : UI.html`${I18n.t('demandes.nouvelle.demande_sera_liee_ot_2')}`;
       UI.$('.di-origine', conteneur).appendChild(origineValable
-        ? UI.bandeau('info', UI.html`<b>Anomalie constatée pendant l'OT préventif ${lienOt(otDemande)}</b><br>${suite}`)
-        : UI.bandeau('attention', UI.html`L'ordre de travail <b>${otDemande}</b> est introuvable ou n'est pas
-            un OT préventif : la demande sera créée sans lien avec lui.`));
+        ? UI.bandeau('info', UI.html`<b>${I18n.t('demandes.nouvelle.anomalie_constatee_pendant_ot')} ${lienOt(otDemande)}</b><br>${suite}`)
+        : UI.bandeau('attention', UI.html`${I18n.html('demandes.nouvelle.ordre_travail_introuvable_pas', { otDemande })}`));
     }
 
     // --- 2. symptôme : les puces remplissent le champ ; le code suit le texte -----------------
@@ -193,17 +191,17 @@ Object.assign(Demandes, (() => {
       zoneSecurite.textContent = '';
       if (impact === 'sécurité') {
         zoneSecurite.appendChild(UI.bandeau('securite',
-          UI.html`<b>Danger : mettez la zone en sécurité et prévenez votre responsable.</b>`));
+          UI.html`<b>${I18n.t('demandes.nouvelle.danger_mettez_zone_securite')}</b>`));
       }
       const equipement = Donnees.trouver('equipements', selecteur.valeur());
       if (!impact) {
-        UI.remplir(zonePriorite, UI.html`<span class="aide">La priorité s'affiche quand l'impact est choisi.</span>`);
+        UI.remplir(zonePriorite, UI.html`<span class="aide">${I18n.t('demandes.nouvelle.priorite_affiche_quand_impact')}</span>`);
         return;
       }
       const priorite = prioriteCalculee(equipement ? equipement.criticite : '', impact);
-      UI.remplir(zonePriorite, UI.html`Priorité calculée : ${UI.badgePriorite(priorite)}
-        <span class="aide">${equipement ? 'criticité ' + (equipement.criticite || 'B') + ' × impact ' + impact
-          : 'choisissez l\'équipement pour affiner'}</span>`);
+      UI.remplir(zonePriorite, UI.html`${I18n.t('demandes.nouvelle.priorite_calculee')} ${UI.badgePriorite(priorite)}
+        <span class="aide">${equipement ? I18n.t('demandes.nouvelle.criticite_impact', { criticite: (equipement.criticite || 'B'), impact })
+          : I18n.t('demandes.nouvelle.choisissez_equipement_affiner')}</span>`);
     }
     UI.$$('input[name=impact]', formulaire).forEach((bouton) => bouton.addEventListener('change', () => {
       effacerErreur('impact');
@@ -226,7 +224,7 @@ Object.assign(Demandes, (() => {
       imageApercu.removeAttribute('src');
       apercu.hidden = true;
       etatPhoto.textContent = '';
-      UI.remplir(UI.$('.di-texte-photo', formulaire), UI.html`Prendre une photo<small>ou en choisir une dans la galerie</small>`);
+      UI.remplir(UI.$('.di-texte-photo', formulaire), UI.html`${I18n.html('demandes.nouvelle.prendre_photo_choisir_galerie')}`);
     }
 
     champPhoto.addEventListener('change', () => {
@@ -235,19 +233,19 @@ Object.assign(Demandes, (() => {
       libererApercu();
       photo.blob = null;
       photo.nomEnvoye = '';
-      etatPhoto.textContent = 'Préparation de la photo…';
+      etatPhoto.textContent = I18n.t('demandes.nouvelle.preparation_photo');
       const preparation = UI.redimensionnerPhoto(fichier, 1280).then((blob) => {
         if (photo.preparation !== preparation) return blob;    // une autre photo a été choisie entre-temps
         photo.blob = blob;
         photo.adresseApercu = URL.createObjectURL(blob);
         imageApercu.src = photo.adresseApercu;
         apercu.hidden = false;
-        etatPhoto.textContent = 'Photo prête (' + Math.max(1, Math.round(blob.size / 1024)) + ' Ko). Elle sera envoyée avec la demande.';
-        UI.remplir(UI.$('.di-texte-photo', formulaire), UI.html`Changer la photo<small>la photo actuelle sera remplacée</small>`);
+        etatPhoto.textContent = I18n.t('demandes.nouvelle.photo_prete_ko_sera', { max: Math.max(1, Math.round(blob.size / 1024)) });
+        UI.remplir(UI.$('.di-texte-photo', formulaire), UI.html`${I18n.html('demandes.nouvelle.changer_photo_photo_actuelle')}`);
         return blob;
       }).catch((erreur) => {
         if (photo.preparation === preparation) retirerPhoto();
-        UI.toast('Cette photo ne peut pas être lue. Essayez une autre photo.', 'attention');
+        UI.toast(I18n.t('demandes.nouvelle.photo_peut_pas_etre'), 'attention');
         console.warn('Prévo (demandes) : photo illisible (' + (erreur && erreur.message) + ').', erreur);
         return null;
       });
@@ -282,9 +280,9 @@ Object.assign(Demandes, (() => {
 
     function verifier() {
       const manques = [];
-      if (!selecteur.valeur()) manques.push(['equipement_id', 'Choisissez l\'équipement concerné.']);
-      if (!champSymptome.value.trim()) manques.push(['symptome', 'Décrivez en quelques mots ce que vous constatez.']);
-      if (!impactChoisi()) manques.push(['impact', 'Choisissez l\'impact.']);
+      if (!selecteur.valeur()) manques.push(['equipement_id', I18n.t('demandes.nouvelle.choisissez_equipement_concerne')]);
+      if (!champSymptome.value.trim()) manques.push(['symptome', I18n.t('demandes.nouvelle.decrivez_quelques_mots_constatez')]);
+      if (!impactChoisi()) manques.push(['impact', I18n.t('demandes.nouvelle.choisissez_impact')]);
       manques.forEach(([nom, message]) => afficherErreur(nom, message));
       if (manques.length) {
         const premier = blocChamp(manques[0][0]);
@@ -302,7 +300,7 @@ Object.assign(Demandes, (() => {
       boutonEnvoyer.disabled = true;
       boutonEnvoyer.setAttribute('aria-busy', 'true');
       const texteBouton = UI.$('span', boutonEnvoyer);
-      texteBouton.textContent = 'Envoi en cours…';
+      texteBouton.textContent = I18n.t('demandes.nouvelle.envoi_cours');
       try {
         // demandes.csv abîmé (T201) : refus AVANT d'écrire la photo (la demande serait refusée juste après) : rien
         // n'est écrit ; la saisie et la photo choisie restent dans le formulaire.
@@ -333,7 +331,7 @@ Object.assign(Demandes, (() => {
         App.signalerErreur(erreur, 'envoi de la demande');
         boutonEnvoyer.disabled = false;
         boutonEnvoyer.removeAttribute('aria-busy');
-        texteBouton.textContent = 'Envoyer la demande';
+        texteBouton.textContent = I18n.t('demandes.nouvelle.envoyer_demande');
       }
     });
   }
@@ -404,8 +402,8 @@ Object.assign(Demandes, (() => {
     function rendu(resultat) {
       const garde = resultat.impact && resultat.impact !== 'sécurité' && !impactRetenu(resultat.impact);
       return UI.html`<ul class="ia-liste">
-        <li>Symptôme : <b>${resultat.symptome}</b></li>
-        <li>Impact : ${resultat.impact ? UI.html`<b>${resultat.impact}</b>` : 'aucun impact de la liste proposé'}${garde ? ' — « Sécurité » choisi : gardé' : ''}</li>
+        <li>${I18n.html('demandes.brancher_ia.symptome_symptome', { symptome: resultat.symptome })}</li>
+        <li>${I18n.t('demandes.brancher_ia.impact')} ${resultat.impact ? UI.html`<b>${resultat.impact}</b>` : I18n.t('demandes.brancher_ia.aucun_impact_liste_propose')}${garde ? ' ' + I18n.t('demandes.brancher_ia.securite_choisi_garde') : ''}</li>
       </ul>`;
     }
 
@@ -426,20 +424,20 @@ Object.assign(Demandes, (() => {
 
     function proposer() {
       if (!champSymptome.value.trim() && !champDescription.value.trim()) {
-        UI.toast('Écrivez d\'abord ce que vous constatez (question 2 ou 4) : l\'IA le reformule.', 'attention');
+        UI.toast(I18n.t('demandes.brancher_ia.ecrivez_abord_constatez_question'), 'attention');
         return;
       }
       Ia.ouvrirEncadre({ apres: zone, fonction: 'reformulerDI', donnees: donnees(), rendu,
         utiliser: (resultat, reponse) => {
           reprendre(resultat, reponse);
-          UI.toast('Proposition reprise dans le formulaire : relisez-la avant d\'envoyer.', 'info');
+          UI.toast(I18n.t('demandes.brancher_ia.proposition_reprise_formulaire_relisez'), 'info');
         },
         modifier: (resultat, reponse) => { reprendre(resultat, reponse); champSymptome.focus(); } });
     }
 
     function poser() {
       zone.textContent = '';
-      const bouton = Ia.bouton('Proposer avec l\'IA', proposer);
+      const bouton = Ia.bouton(I18n.t('demandes.brancher_ia.proposer_ia'), proposer);
       if (bouton) zone.appendChild(bouton);
       zone.hidden = !bouton;
     }
@@ -458,30 +456,27 @@ Object.assign(Demandes, (() => {
     // OT d'origine verrouillé (lu après l'écriture : la marque l'a relu s'il a changé ailleurs).
     const otOrigine = demande.ot_origine_id ? Donnees.trouver('ordres_travail', demande.ot_origine_id) : null;
     const origineVerrouillee = Ordres.estVerrouille(otOrigine)
-      ? UI.html`<br>L'OT ${demande.ot_origine_id} est verrouillé : il n'a pas été marqué « anomalie constatée »
-          (statut ${otOrigine.statut}).` : '';
-    App.definirTitre('Demande envoyée');
+      ? UI.html`<br>${I18n.t('demandes.confirmation.ot_verrouille_pas_ete', { ot_origine_id: demande.ot_origine_id, otOrigineStatut: otOrigine.statut })}` : '';
+    App.definirTitre(I18n.t('demandes.confirmation.demande_envoyee'));
     UI.remplir(conteneur, UI.html`
       <div class="di-confirmation" role="status">
         <div class="carte di-confirmation-carte">
           <div class="di-confirmation-icone">${UI.icone('valider')}</div>
-          <p class="di-confirmation-titre">Demande envoyée</p>
+          <p class="di-confirmation-titre">${I18n.t('demandes.confirmation.demande_envoyee')}</p>
           <p class="di-numero" data-numero="${id}">${id}</p>
-          <p class="di-confirmation-texte">Notez ce numéro : il permet de suivre votre demande.<br>
-            ${libelleEquipement(demande.equipement_id)} · priorité ${UI.badgePriorite(priorite)}</p>
-          ${demande.ot_origine_id ? UI.html`<p class="di-confirmation-texte di-confirmation-origine">Anomalie signalée
-            pendant l'OT préventif ${lienOt(demande.ot_origine_id)}.${origineVerrouillee}</p>` : ''}
+          <p class="di-confirmation-texte">${I18n.html('demandes.confirmation.notez_numero_permet_suivre', { libelleEquipement: libelleEquipement(demande.equipement_id) })} ${UI.badgePriorite(priorite)}</p>
+          ${demande.ot_origine_id ? UI.html`<p class="di-confirmation-texte di-confirmation-origine">${I18n.t('demandes.confirmation.anomalie_signalee_pendant_ot')} ${lienOt(demande.ot_origine_id)}.${origineVerrouillee}</p>` : ''}
         </div>
         <div class="di-zone-securite"></div>
         <div class="pile-gros">
-          <a class="btn btn-primaire btn-gros" href="#/di/${encodeURIComponent(id)}">${UI.icone('demandes')}<span>Voir ma demande</span></a>
-          <a class="btn btn-secondaire btn-gros" href="#/di">${UI.icone('ordres')}<span>Mes demandes</span></a>
-          <button type="button" class="btn btn-secondaire btn-gros di-autre">${UI.icone('ajouter')}<span>Signaler un autre problème</span></button>
+          <a class="btn btn-primaire btn-gros" href="#/di/${encodeURIComponent(id)}">${UI.icone('demandes')}<span>${I18n.t('demandes.confirmation.voir_ma_demande')}</span></a>
+          <a class="btn btn-secondaire btn-gros" href="#/di">${UI.icone('ordres')}<span>${I18n.t('demandes.confirmation.mes_demandes')}</span></a>
+          <button type="button" class="btn btn-secondaire btn-gros di-autre">${UI.icone('ajouter')}<span>${I18n.t('demandes.confirmation.signaler_autre_probleme')}</span></button>
         </div>
       </div>`);
     if (demande.impact === 'sécurité') {
       UI.$('.di-zone-securite', conteneur).appendChild(UI.bandeau('securite',
-        UI.html`<b>Danger : mettez la zone en sécurité et prévenez votre responsable.</b> N'attendez pas la réponse à cette demande.`));
+        UI.html`${I18n.html('demandes.confirmation.danger_mettez_zone_securite')}`));
     }
     UI.$('.di-autre', conteneur).addEventListener('click', () => App.naviguer('#/di/nouvelle'));
     window.scrollTo(0, 0);

@@ -9,7 +9,7 @@
 Object.assign(Ordres, (() => {
 
   // Constantes, outils, règles et écritures des fichiers précédents (ordres-regles.js à ordres-liste.js).
-  const { PRIORITES, RAPPEL_CONSIGNATION, transitionsPossibles, verifierPassage, verifierHabilitation,
+  const { PRIORITES, transitionsPossibles, verifierPassage, verifierHabilitation,
     piecesManquantes, estVerrouille, datePrevueParDefaut, libelleEquipement, nomTechnicien,
     creer, changerStatut, changerPriorite, creerOtLie } = Ordres;
   const { ETAPES, STATUTS_CLOTURES, memoire, texte, aujourdhui, estResponsable, estTechnicien,
@@ -47,15 +47,15 @@ Object.assign(Ordres, (() => {
     const priorite = urgence ? 'P1' : 'P3';
     // Titre pré-rempli par l'adresse (?titre=…), toujours modifiable avant la création.
     const titre = (requete.get('titre') || '').trim();
-    App.definirTitre(urgence ? 'OT d\'urgence' : 'Nouvel OT');
+    App.definirTitre(urgence ? I18n.t('ordres.nouveau.ot_urgence') : I18n.t('ordres.nouveau.nouvel_ot'));
     UI.remplir(conteneur, UI.html`
       <div class="entete-page"><div>
-        <div class="fil"><a href="#/ot">Ordres de travail</a> › <span>${urgence ? 'OT d\'urgence' : 'Nouvel OT'}</span></div>
-        <h1>${urgence ? 'OT d\'urgence' : 'Nouvel ordre de travail'}</h1>
-        <p>${urgence ? 'Correctif immédiat, priorité P1 : l\'OT pourra être démarré tout de suite.' : 'OT créé à la main (origine « manuel »). Il pourra ensuite être préparé, planifié et exécuté.'}</p>
+        <div class="fil">${I18n.html('ordres.nouveau.ordres_travail')} <span>${urgence ? I18n.t('ordres.nouveau.ot_urgence') : I18n.t('ordres.nouveau.nouvel_ot')}</span></div>
+        <h1>${urgence ? I18n.t('ordres.nouveau.ot_urgence') : I18n.t('ordres.nouveau.nouvel_ordre_travail')}</h1>
+        <p>${urgence ? I18n.t('ordres.nouveau.correctif_immediat_priorite_p') : I18n.t('ordres.nouveau.ot_cree_main_origine')}</p>
       </div></div>
       <form class="carte form-grille" id="form-nouvel-ot" novalidate>
-        <div class="champ large"><span class="libelle">Équipement <span class="requis" aria-hidden="true">*</span></span>
+        <div class="champ large"><span class="libelle">${I18n.t('commun.champ.equipement')} <span class="requis" aria-hidden="true">*</span></span>
           <div id="ot-nouveau-equipement"></div><p class="erreur-champ" id="ot-nouveau-equipement-erreur" hidden></p></div>
         <div class="large" data-place="titre"></div>
         <div data-place="type"></div><div data-place="priorite"></div>
@@ -63,23 +63,23 @@ Object.assign(Ordres, (() => {
         <div data-place="technicien_id"></div><div data-place="date_prevue"></div>
         <div class="large ot-zone-habilitation"></div>
         <div class="actions">
-          <a class="btn btn-fantome" href="#/ot">Annuler</a><span class="espace"></span>
-          <button type="submit" class="btn ${urgence ? 'btn-danger' : 'btn-primaire'}">${UI.icone('valider')}${urgence ? 'Créer l\'OT d\'urgence' : 'Créer l\'OT'}</button>
+          <a class="btn btn-fantome" href="#/ot">${I18n.t('commun.bouton.annuler')}</a><span class="espace"></span>
+          <button type="submit" class="btn ${urgence ? 'btn-danger' : 'btn-primaire'}">${UI.icone('valider')}${urgence ? I18n.t('ordres.nouveau.creer_ot_urgence') : I18n.t('ordres.nouveau.creer_ot')}</button>
         </div>
       </form>`);
     if (urgence) {
-      conteneur.insertBefore(UI.bandeau('securite', UI.html`<b>Intervention d'urgence.</b> Mettez la zone en sécurité et appliquez la procédure de consignation de l'équipement avant d'intervenir.`), UI.$('#form-nouvel-ot', conteneur));
+      conteneur.insertBefore(UI.bandeau('securite', UI.html`${I18n.html('ordres.nouveau.intervention_urgence_mettez_zone')}`), UI.$('#form-nouvel-ot', conteneur));
     }
     const formulaire = UI.$('#form-nouvel-ot', conteneur);
     const placer = (nom, element) => placerChamp(formulaire, nom, element);
-    placer('titre', champOt('titre', titre, { placeholder: 'Ex. PO-02 — fuite à la garniture' }));
+    placer('titre', champOt('titre', titre, { placeholder: I18n.t('ordres.nouveau.ex_po_02_fuite') }));
     placer('type', champOt('type', urgence ? 'correctif immédiat' : typeDemande(requete), { lectureSeule: urgence }));
     placer('priorite', champOt('priorite', priorite, { lectureSeule: urgence }));
     placer('travail_a_faire', champOt('travail_a_faire', ''));
     // Mode Solo (D132) : le technicien « moi » est pré-rempli (toujours modifiable) ; '' sinon.
     const technicienParDefaut = App.technicienSolo();
     placer('technicien_id', champOt('technicien_id', technicienParDefaut, { liste: listeTechniciens(technicienParDefaut) }));
-    placer('date_prevue', champOt('date_prevue', datePrevueParDefaut(priorite), { aide: 'Par défaut : création + délai de la priorité (Paramètres).' }));
+    placer('date_prevue', champOt('date_prevue', datePrevueParDefaut(priorite), { aide: I18n.t('ordres.nouveau.defaut_creation_delai_priorite') }));
 
     const selecteur = UI.selecteurEquipement(UI.$('#ot-nouveau-equipement', formulaire), {
       equipements: Donnees.lignes('equipements'), localisations: Donnees.lignes('localisations'),
@@ -111,7 +111,7 @@ Object.assign(Ordres, (() => {
     const erreurs = UI.verifierFormulaire(formulaire);
     const erreurEquipement = UI.$('#ot-nouveau-equipement-erreur', formulaire);
     erreurEquipement.hidden = Boolean(selecteur.valeur());
-    erreurEquipement.textContent = selecteur.valeur() ? '' : 'Choisissez l\'équipement concerné.';
+    erreurEquipement.textContent = selecteur.valeur() ? '' : I18n.t('ordres.valider_nouvel_ot.choisissez_equipement_concerne');
     if (erreurs.length || !selecteur.valeur()) return;
     const valeurs = UI.lireFormulaire(formulaire);
     const bouton = UI.$('button[type=submit]', formulaire);
@@ -125,7 +125,7 @@ Object.assign(Ordres, (() => {
       const habilitation = verifierHabilitation(selecteur.valeur(), valeurs.technicien_id, valeurs.date_prevue);
       if (habilitation) await journaliserHabilitation(id, habilitation);
       App.marquerSaisie(false);
-      UI.toast('Ordre de travail ' + id + ' créé.', 'succes');
+      UI.toast(I18n.t('ordres.valider_nouvel_ot.ordre_travail_cree', { id }), 'succes');
       App.naviguer('#/ot/' + encodeURIComponent(id));
     } catch (erreur) {
       App.signalerErreur(erreur, 'création d\'un OT');
@@ -138,13 +138,13 @@ Object.assign(Ordres, (() => {
   // ===========================================================================================
 
   const LIBELLES_ACTION = {
-    'Préparé': (ot) => (ot.statut === 'Planifié' ? 'Déplanifier' : ot.statut === 'En attente' ? 'Reprendre (Préparé)' : 'Marquer préparé'),
-    'Planifié': () => 'Planifier',
-    'En cours': (ot) => (ot.statut === 'Clôturé techniquement' ? 'Rouvrir' : ot.statut === 'En attente' ? 'Reprendre (En cours)' : 'Démarrer'),
-    'En attente': () => 'Mettre en attente',
-    'Annulé': () => 'Annuler l\'OT',
-    'Clôturé techniquement': () => 'Clôturer techniquement',
-    'Clôturé administrativement': () => 'Clôturer administrativement',
+    'Préparé': (ot) => (ot.statut === 'Planifié' ? I18n.t('ordres.prepare.deplanifier') : ot.statut === 'En attente' ? I18n.t('ordres.prepare.reprendre_prepare') : I18n.t('ordres.prepare.marquer_prepare')),
+    'Planifié': () => I18n.t('ordres.planifie.planifier'),
+    'En cours': (ot) => (ot.statut === 'Clôturé techniquement' ? I18n.t('ordres.en_cours.rouvrir') : ot.statut === 'En attente' ? I18n.t('ordres.en_cours.reprendre_cours') : I18n.t('ordres.en_cours.demarrer')),
+    'En attente': () => I18n.t('ordres.en_attente.mettre_attente'),
+    'Annulé': () => I18n.t('ordres.annule.annuler_ot'),
+    'Clôturé techniquement': () => I18n.t('ordres.cloture_techniquement.cloturer_techniquement'),
+    'Clôturé administrativement': () => I18n.t('ordres.cloture_administrativement.cloturer_administrativement'),
   };
 
   /** Le profil courant peut-il demander ce passage ? (technicien : démarrer, attente, clôture technique) */
@@ -175,7 +175,7 @@ Object.assign(Ordres, (() => {
     let rangCourant = ETAPES.indexOf(reference);
     if (ot.statut === 'Annulé') rangCourant = -1;
     const horsEtape = ot.statut === 'En attente' || ot.statut === 'Annulé';
-    return UI.html`<ol class="etapes ot-etapes" aria-label="Avancement de l'OT">
+    return UI.html`<ol class="etapes ot-etapes" aria-label="${I18n.t('ordres.etapes.avancement_ot')}">
       ${ETAPES.map((etape, rang) => {
         let classe = '';
         if (rang < rangCourant || (rang === rangCourant && horsEtape)) classe = 'fait';
@@ -191,7 +191,7 @@ Object.assign(Ordres, (() => {
     return UI.html`
       <div class="entete-page ot-entete">
         <div>
-          <div class="fil"><a href="#/ot">Ordres de travail</a> › <span>${ot.id}</span></div>
+          <div class="fil">${I18n.html('ordres.entete_fiche.ordres_travail', { otId: ot.id })}</div>
           <h1><span class="ot-numero">${ot.id}</span> ${ot.titre}</h1>
           <div class="ot-badges">${UI.badgePriorite(ot.priorite)} ${UI.badgeStatut(ot.statut)}${badgeRetard(ot)}${badgeAnomalie(ot)}
             <span class="badge neutre">${ot.type}</span>
@@ -199,8 +199,8 @@ Object.assign(Ordres, (() => {
           </div>
         </div>
         <div class="actions">
-          ${estResponsable() && !estVerrouille(ot) ? UI.html`<button type="button" class="btn btn-fantome" id="ot-priorite">${UI.icone('alerte')}Priorité</button>` : ''}
-          <button type="button" class="btn btn-secondaire" id="ot-imprimer">${UI.icone('imprimer')}Imprimer le bon de travail</button>
+          ${estResponsable() && !estVerrouille(ot) ? UI.html`<button type="button" class="btn btn-fantome" id="ot-priorite">${UI.icone('alerte')}${I18n.t('ordres.fiche.bouton_priorite')}</button>` : ''}
+          <button type="button" class="btn btn-secondaire" id="ot-imprimer">${UI.icone('imprimer')}${I18n.t('ordres.entete_fiche.imprimer_bon_travail')}</button>
         </div>
       </div>`;
   }
@@ -212,28 +212,28 @@ Object.assign(Ordres, (() => {
   function reperesHtml(ot) {
     const lies = Donnees.lignes('ordres_travail').filter((autre) => autre.ot_lie_id === ot.id);
     return UI.html`<dl class="valeurs">
-      <dt>Origine</dt><dd>${origineHtml(ot)}${ot.gamme_id ? UI.html` (gamme ${ot.gamme_id})` : ''}</dd>
-      <dt>Technicien</dt><dd>${nomTechnicien(ot.technicien_id)}</dd>
-      <dt>Créé le</dt><dd>${UI.dateHeureFr(ot.date_creation)}</dd>
-      <dt>Prévu le</dt><dd>${UI.dateFr(ot.date_prevue)}${badgeRetard(ot)}</dd>
-      <dt>Temps prévu</dt><dd>${ot.temps_prevu_h ? UI.heures(ot.temps_prevu_h) : ''}</dd>
-      <dt>Début · fin</dt><dd>${UI.dateHeureFr(ot.date_debut)}${ot.date_fin ? ' → ' + UI.dateHeureFr(ot.date_fin) : ''}</dd>
-      ${ot.date_cloture_tech ? UI.html`<dt>Clôture technique</dt><dd>${UI.dateHeureFr(ot.date_cloture_tech)}</dd>` : ''}
-      ${ot.date_cloture_admin ? UI.html`<dt>Clôture administrative</dt><dd>${UI.dateHeureFr(ot.date_cloture_admin)}</dd>` : ''}
-      ${ot.ot_lie_id ? UI.html`<dt>Reprend l'OT</dt><dd>${lienOt(ot.ot_lie_id)}</dd>` : ''}
-      ${lies.length ? UI.html`<dt>Repris par</dt><dd>${lies.map((l, rang) => UI.html`${rang ? ', ' : ''}${lienOt(l.id)}`)}</dd>` : ''}
+      <dt>${I18n.t('ordres.reperes.origine')}</dt><dd>${origineHtml(ot)}${ot.gamme_id ? UI.html` ${I18n.t('ordres.reperes.gamme_gamme_id', { gamme_id: ot.gamme_id })}` : ''}</dd>
+      <dt>${I18n.t('commun.champ.technicien')}</dt><dd>${nomTechnicien(ot.technicien_id)}</dd>
+      <dt>${I18n.t('ordres.reperes.cree')}</dt><dd>${UI.dateHeureFr(ot.date_creation)}</dd>
+      <dt>${I18n.t('ordres.reperes.prevu')}</dt><dd>${UI.dateFr(ot.date_prevue)}${badgeRetard(ot)}</dd>
+      <dt>${I18n.t('ordres.reperes.temps_prevu')}</dt><dd>${ot.temps_prevu_h ? UI.heures(ot.temps_prevu_h) : ''}</dd>
+      <dt>${I18n.t('ordres.reperes.debut_fin')}</dt><dd>${UI.dateHeureFr(ot.date_debut)}${ot.date_fin ? ' → ' + UI.dateHeureFr(ot.date_fin) : ''}</dd>
+      ${ot.date_cloture_tech ? UI.html`<dt>${I18n.t('ordres.reperes.cloture_technique')}</dt><dd>${UI.dateHeureFr(ot.date_cloture_tech)}</dd>` : ''}
+      ${ot.date_cloture_admin ? UI.html`<dt>${I18n.t('ordres.reperes.cloture_administrative')}</dt><dd>${UI.dateHeureFr(ot.date_cloture_admin)}</dd>` : ''}
+      ${ot.ot_lie_id ? UI.html`<dt>${I18n.t('ordres.reperes.reprend_ot')}</dt><dd>${lienOt(ot.ot_lie_id)}</dd>` : ''}
+      ${lies.length ? UI.html`<dt>${I18n.t('ordres.reperes.repris')}</dt><dd>${lies.map((l, rang) => UI.html`${rang ? ', ' : ''}${lienOt(l.id)}`)}</dd>` : ''}
     </dl>`;
   }
 
   function equipementHtml(equipement) {
-    if (!equipement) return UI.html`<p class="muted">Équipement introuvable.</p>`;
+    if (!equipement) return UI.html`<p class="muted">${I18n.t('ordres.equipement.equipement_introuvable')}</p>`;
     return UI.html`<dl class="valeurs">
-      <dt>Repère</dt><dd><a href="#/equipement/${encodeURIComponent(equipement.id)}">${equipement.repere || equipement.id}</a></dd>
-      <dt>Désignation</dt><dd>${equipement.designation}</dd>
-      <dt>Localisation</dt><dd>${cheminLocalisation(equipement.localisation_id)}</dd>
-      <dt>Criticité</dt><dd>${equipement.criticite}</dd>
-      <dt>État</dt><dd>${equipement.statut ? UI.badgeStatut(equipement.statut) : ''}</dd>
-      <dt>Habilitation requise</dt><dd>${equipement.habilitation_requise || 'aucune'}</dd>
+      <dt>${I18n.t('commun.champ.repere')}</dt><dd><a href="#/equipement/${encodeURIComponent(equipement.id)}">${equipement.repere || equipement.id}</a></dd>
+      <dt>${I18n.t('commun.champ.designation')}</dt><dd>${equipement.designation}</dd>
+      <dt>${I18n.t('ordres.equipement.localisation')}</dt><dd>${cheminLocalisation(equipement.localisation_id)}</dd>
+      <dt>${I18n.t('commun.champ.criticite')}</dt><dd>${equipement.criticite}</dd>
+      <dt>${I18n.t('ordres.equipement.etat')}</dt><dd>${equipement.statut ? UI.badgeStatut(equipement.statut) : ''}</dd>
+      <dt>${I18n.t('ordres.equipement.habilitation_requise')}</dt><dd>${equipement.habilitation_requise || 'aucune'}</dd>
     </dl>`;
   }
 
@@ -241,10 +241,10 @@ Object.assign(Ordres, (() => {
   function consignationHtml(equipement) {
     const procedure = texte(equipement && equipement.consignation);
     return UI.html`<section class="carte ot-consignation" aria-labelledby="ot-titre-consignation">
-      <div class="entete-carte"><h2 id="ot-titre-consignation">${UI.icone('cle')} Consignation de l'équipement</h2></div>
+      <div class="entete-carte"><h2 id="ot-titre-consignation">${UI.icone('cle')} ${I18n.t('ordres.consignation.consignation_equipement')}</h2></div>
       ${procedure ? UI.html`<div class="ot-procedure">${procedure}</div>`
-        : UI.html`<p class="muted">Aucune procédure de consignation n'est renseignée pour cet équipement : voyez votre responsable avant d'intervenir.</p>`}
-      <p class="ot-rappel"><b>${RAPPEL_CONSIGNATION}</b></p>
+        : UI.html`<p class="muted">${I18n.t('ordres.consignation.aucune_procedure_consignation_renseignee')}</p>`}
+      <p class="ot-rappel"><b>${Ordres.rappelConsignation()}</b></p>
     </section>`;
   }
 
@@ -267,34 +267,33 @@ Object.assign(Ordres, (() => {
     const liees = demandesLiees(ot);
     const adresse = '#/di/nouvelle?equipement=' + encodeURIComponent(ot.equipement_id) + '&ot=' + encodeURIComponent(ot.id);
     return UI.html`<section class="carte ot-anomalie sans-impression" data-hors-saisie aria-labelledby="ot-titre-anomalie">
-      <div class="entete-carte"><h2 id="ot-titre-anomalie">Anomalie pendant le préventif</h2>
-        ${verrouille ? UI.html`<span class="aide">OT verrouillé : lecture seule</span>` : ''}</div>
+      <div class="entete-carte"><h2 id="ot-titre-anomalie">${I18n.t('ordres.anomalie.anomalie_pendant_preventif')}</h2>
+        ${verrouille ? UI.html`<span class="aide">${I18n.t('ordres.anomalie.ot_verrouille_lecture_seule')}</span>` : ''}</div>
       <label class="case"><input type="checkbox" id="ot-anomalie-constatee"${ot.anomalie_constatee === '1' ? UI.brut(' checked') : ''}${verrouille ? UI.brut(' disabled') : ''}>
-        <span>Anomalie constatée</span></label>
-      ${verrouille ? '' : UI.html`<p class="aide">Une anomalie à traiter se signale par une demande d'intervention liée à cet OT :
-        l'OT est alors marqué « anomalie constatée » et le responsable décide de la demande.</p>
-        <div class="actions"><a class="btn btn-secondaire" id="ot-signaler-anomalie" href="${adresse}">${UI.icone('alerte')}Signaler une anomalie (DI liée)</a></div>`}
-      <h3 class="ot-sous-titre">Demandes liées (${liees.length})</h3>
+        <span>${I18n.t('ordres.anomalie.anomalie_constatee')}</span></label>
+      ${verrouille ? '' : UI.html`<p class="aide">${I18n.t('ordres.anomalie.anomalie_traiter_signale_demande')}</p>
+        <div class="actions"><a class="btn btn-secondaire" id="ot-signaler-anomalie" href="${adresse}">${UI.icone('alerte')}${I18n.t('ordres.anomalie.signaler_anomalie_di_liee')}</a></div>`}
+      <h3 class="ot-sous-titre">${I18n.t('ordres.anomalie.demandes_liees', { nbLiees: liees.length })}</h3>
       ${liees.length ? UI.html`<ul class="ot-di-liees">${liees.map((di) => UI.html`<li>
           <a href="#/di/${encodeURIComponent(di.id)}">${di.id}</a> ${UI.badgeStatut(di.statut)} <span>${di.symptome}</span></li>`)}</ul>`
-        : UI.html`<p class="muted">Aucune demande liée à cet OT.</p>`}
+        : UI.html`<p class="muted">${I18n.t('ordres.anomalie.aucune_demande_liee_ot')}</p>`}
     </section>`;
   }
 
   /** Case « Anomalie constatée » : enregistrée aussitôt ; remise comme avant si l'écriture est refusée. */
   async function basculerAnomalie(ot, caseAnomalie) {
     const coche = caseAnomalie.checked;
-    const reussi = await pendant(caseAnomalie, () => changerAnomalie(ot.id, coche), 'anomalie constatée');
+    const reussi = await pendant(caseAnomalie, () => changerAnomalie(ot.id, coche), I18n.t('ordres.basculer_anomalie.anomalie_constatee'));
     if (reussi === undefined) { caseAnomalie.checked = !coche; return; }
     await apresEnregistrement();
-    UI.toast(ot.id + (coche ? ' : anomalie constatée.' : ' : mention « anomalie constatée » retirée.'), 'succes');
+    UI.toast(ot.id + (coche ? ' ' + I18n.t('ordres.basculer_anomalie.phrase_anomalie_constatee') : ' ' + I18n.t('ordres.basculer_anomalie.mention_anomalie_constatee_retiree')), 'succes');
   }
 
   function bandeauEtat(ot) {
-    if (ot.statut === 'En attente') return UI.bandeau('attention', UI.html`<b>En attente</b> — ${ot.motif_attente || 'motif non renseigné'}`);
-    if (ot.statut === 'Annulé') return UI.bandeau('important', UI.html`<b>OT annulé</b> — ${ot.motif_annulation || 'motif non renseigné'}. Il reste consultable mais n'est plus modifiable.`);
+    if (ot.statut === 'En attente') return UI.bandeau('attention', UI.html`${I18n.html('ordres.bandeau_etat.attente', { motif: ot.motif_attente || I18n.t('ordres.bandeau_etat.motif_non_renseigne') })}`);
+    if (ot.statut === 'Annulé') return UI.bandeau('important', UI.html`${I18n.html('ordres.bandeau_etat.ot_annule_reste_consultable', { motif: ot.motif_annulation || I18n.t('ordres.bandeau_etat.motif_non_renseigne') })}`);
     if (ot.statut === 'Clôturé administrativement') {
-      return UI.bandeau('info', UI.html`<b>OT verrouillé</b> (clôturé administrativement le ${UI.dateHeureFr(ot.date_cloture_admin)}) : lecture seule. Une reprise se fait par un nouvel OT lié.`);
+      return UI.bandeau('info', UI.html`${I18n.html('ordres.bandeau_etat.ot_verrouille_cloture_administrativement', { date_cloture_admin: UI.dateHeureFr(ot.date_cloture_admin) })}`);
     }
     return null;
   }
@@ -302,10 +301,10 @@ Object.assign(Ordres, (() => {
   function actionsHtml(ot) {
     const boutons = boutonsTransitions(ot, ['Préparé', 'Planifié', 'En cours', 'Clôturé techniquement', 'Clôturé administrativement', 'En attente', 'Annulé']);
     const lie = estVerrouille(ot) && estResponsable()
-      ? UI.html`<button type="button" class="btn btn-primaire" id="ot-lie">${UI.icone('ajouter')}Créer un OT lié</button>` : '';
+      ? UI.html`<button type="button" class="btn btn-primaire" id="ot-lie">${UI.icone('ajouter')}${I18n.t('ordres.actions.creer_ot_lie')}</button>` : '';
     const clore = boutonClore(ot);                                  // §22.11, D132 : réglage cloture_une_etape
     if (!boutons.length && !lie && !clore) return '';
-    return UI.html`<div class="carte ot-actions sans-impression"><div class="entete-carte"><h2>Actions</h2></div>
+    return UI.html`<div class="carte ot-actions sans-impression"><div class="entete-carte"><h2>${I18n.t('ordres.actions.actions')}</h2></div>
       <div class="actions">${clore}${boutons}${lie}</div></div>`;
   }
 
@@ -335,8 +334,8 @@ Object.assign(Ordres, (() => {
     formulairesFiche = [];
     const ot = Donnees.trouver('ordres_travail', parametres.id);
     if (!ot) {
-      UI.remplir(conteneur, UI.html`<div class="entete-page"><div><div class="fil"><a href="#/ot">Ordres de travail</a> › <span>${parametres.id}</span></div><h1>Ordre de travail ${parametres.id}</h1></div></div>
-        ${UI.vide('Ordre de travail introuvable', 'Aucun OT ne porte cet identifiant.', 'ordres')}`);
+      UI.remplir(conteneur, UI.html`<div class="entete-page"><div><div class="fil">${I18n.html('ordres.fiche.ordres_travail', { parametresId: parametres.id })}</div><h1>${I18n.t('ordres.fiche.ordre_travail', { parametresId: parametres.id })}</h1></div></div>
+        ${UI.vide(I18n.t('ordres.fiche.ordre_travail_introuvable'), I18n.t('ordres.fiche.aucun_ot_porte_identifiant'), 'ordres')}`);
       return;
     }
     App.definirTitre(ot.id);
@@ -350,8 +349,8 @@ Object.assign(Ordres, (() => {
       ${etapesHtml(ot)}
       <div class="ot-bandeau-etat"></div>
       <div class="grille">
-        <section class="carte c6"><h2>Équipement</h2>${equipementHtml(equipement)}</section>
-        <section class="carte c6"><h2>Repères</h2>${reperesHtml(ot)}</section>
+        <section class="carte c6"><h2>${I18n.t('ordres.fiche.equipement')}</h2>${equipementHtml(equipement)}</section>
+        <section class="carte c6"><h2>${I18n.t('ordres.fiche.reperes')}</h2>${reperesHtml(ot)}</section>
       </div>
       ${consignationHtml(equipement)}
       ${anomalieHtml(ot)}
@@ -362,11 +361,11 @@ Object.assign(Ordres, (() => {
     if (etat) UI.$('.ot-bandeau-etat', racine).appendChild(etat);
 
     UI.onglets(UI.$('.ot-onglets', racine), [
-      { id: 'preparation', libelle: 'Préparation', afficher: (panneau) => afficherPreparation(panneau, ot) },
-      { id: 'execution', libelle: 'Exécution', afficher: (panneau) => afficherExecution(panneau, ot) },
-      { id: 'compte-rendu', libelle: 'Compte rendu', afficher: (panneau) => afficherCompteRendu(panneau, ot) },
-      { id: 'historique', libelle: 'Historique équipement', afficher: (panneau) => afficherHistorique(panneau, ot) },
-    ], { actif: memoire.ongletParOt[ot.id] || ongletParDefaut(ot), libelle: 'Parties de l\'ordre de travail',
+      { id: 'preparation', libelle: I18n.t('ordres.fiche.preparation'), afficher: (panneau) => afficherPreparation(panneau, ot) },
+      { id: 'execution', libelle: I18n.t('ordres.fiche.execution'), afficher: (panneau) => afficherExecution(panneau, ot) },
+      { id: 'compte-rendu', libelle: I18n.t('ordres.fiche.compte_rendu'), afficher: (panneau) => afficherCompteRendu(panneau, ot) },
+      { id: 'historique', libelle: I18n.t('ordres.fiche.historique_equipement'), afficher: (panneau) => afficherHistorique(panneau, ot) },
+    ], { actif: memoire.ongletParOt[ot.id] || ongletParDefaut(ot), libelle: I18n.t('ordres.fiche.parties_ordre_travail'),
       surChangement: (id) => { memoire.ongletParOt[ot.id] = id; } });
 
     brancherActionsFiche(racine, ot);
@@ -455,9 +454,9 @@ Object.assign(Ordres, (() => {
       return;
     }
     if (cible === 'Clôturé administrativement' && !(await UI.confirmer(
-      'L\'OT ' + actuel.id + ' sera verrouillé : plus aucune modification possible. Une reprise se fera par un nouvel OT lié.',
-      { titre: 'Clôturer administrativement', oui: 'Clôturer et verrouiller' }))) return;
-    const reussi = await pendant(bouton, () => changerStatut(actuel.id, actuel.statut, cible, complement), 'changement de statut');
+      I18n.t('ordres.demander_transition.ot_sera_verrouille_plus', { actuelId: actuel.id }),
+      { titre: I18n.t('ordres.cloture_administrativement.cloturer_administrativement'), oui: I18n.t('ordres.demander_transition.cloturer_verrouiller') }))) return;
+    const reussi = await pendant(bouton, () => changerStatut(actuel.id, actuel.statut, cible, complement), I18n.t('ordres.demander_transition.changement_statut'));
     if (reussi === undefined) return;
     await apresEnregistrement();
     // Clôture d'un préventif dont la gamme n'a pas pu être mise à jour (RG5) : l'avertissement
@@ -471,11 +470,11 @@ Object.assign(Ordres, (() => {
   // Motif demandé pour En attente et Annulé : { motif_… } ; null si l'utilisateur renonce.
   async function demanderComplement(ot, cible) {
     if (cible === 'En attente') {
-      const motif = await UI.demanderMotif('Mettre en attente ' + ot.id, 'Motif de mise en attente', { exemple: 'Ex. pièce en commande, attente de l\'arrêt de la ligne…' });
+      const motif = await UI.demanderMotif(I18n.t('ordres.demander_complement.mettre_attente', { otId: ot.id }), I18n.t('ordres.demander_complement.motif_mise_attente'), { exemple: I18n.t('ordres.demander_complement.ex_piece_commande_attente') });
       return motif === null ? null : { motif_attente: motif };
     }
     if (cible === 'Annulé') {
-      const motif = await UI.demanderMotif('Annuler ' + ot.id, 'Motif d\'annulation', { libelleValider: 'Annuler l\'OT' });
+      const motif = await UI.demanderMotif(I18n.t('ordres.demander_complement.annuler_ot_id', { otId: ot.id }), I18n.t('ordres.demander_complement.motif_annulation'), { libelleValider: I18n.t('ordres.annule.annuler_ot') });
       return motif === null ? null : { motif_annulation: motif };
     }
     return {};
@@ -483,46 +482,50 @@ Object.assign(Ordres, (() => {
 
   function afficherRefus(ot, cible, verification) {
     const titre = cible === 'Clôturé techniquement'
-      ? 'Clôture technique impossible : le statut reste « ' + ot.statut + ' ».'
-      : 'Passage à « ' + cible + ' » refusé : le statut reste « ' + ot.statut + ' ».';
+      ? I18n.t('ordres.refus.cloture_technique_impossible_statut', { otStatut: ot.statut })
+      : I18n.t('ordres.refus.passage_refuse_statut_reste', { cible, otStatut: ot.statut });
     const bandeau = afficherMessage('important', listeErreursHtml(titre, verification.erreurs));
     if (bandeau && verification.piecesManquantes.length && transitionsPossibles(ot).includes('En attente') && actionAutorisee(ot, 'En attente')) {
       bandeau.querySelector('.alerte-texte').appendChild(UI.element(UI.html`<div class="actions">
-        <button type="button" class="btn btn-secondaire" data-action="attente-piece">Mettre en attente (motif : pièce)</button></div>`));
+        <button type="button" class="btn btn-secondaire" data-action="attente-piece">${I18n.t('ordres.refus.mettre_attente_motif_piece')}</button></div>`));
     }
   }
+
+  // Début du motif de mise en attente pour pièce (D156) : écrit dans les données et relu par le code (RG3,
+  // indicateurs) ; jamais traduit, seul le détail qui suit l'est.
+  const MARQUEUR_PIECE = 'Pièce : ';
 
   /** RG3 : stock insuffisant → mise en attente avec un motif « Pièce : … » prérempli (modifiable). */
   async function mettreEnAttentePiece(ot) {
     const actuel = Donnees.trouver('ordres_travail', ot.id) || ot;
     const manquantes = piecesManquantes(actuel.id);
-    const proposition = 'Pièce : ' + (manquantes.length
+    const proposition = MARQUEUR_PIECE + (manquantes.length
       ? manquantes.map((p) => p.libelle + ' (' + detailManque(p) + ')').join(' ; ')
-      : 'stock insuffisant') + '.';
-    const motif = await UI.demanderMotif('Mettre en attente ' + actuel.id, 'Motif de mise en attente', { valeur: proposition });
+      : I18n.t('ordres.mettre_en_attente_piece.stock_insuffisant')) + '.';
+    const motif = await UI.demanderMotif(I18n.t('ordres.mettre_en_attente_piece.mettre_attente', { actuelId: actuel.id }), I18n.t('ordres.demander_complement.motif_mise_attente'), { valeur: proposition });
     if (motif === null) return;
-    const reussi = await pendant(null, () => changerStatut(actuel.id, actuel.statut, 'En attente', { motif_attente: motif }), 'mise en attente');
+    const reussi = await pendant(null, () => changerStatut(actuel.id, actuel.statut, 'En attente', { motif_attente: motif }), I18n.t('ordres.mettre_en_attente_piece.mise_attente'));
     if (reussi === undefined) return;
     await apresEnregistrement();
-    UI.toast(actuel.id + ' : En attente.', 'succes');
+    UI.toast(I18n.t('ordres.mettre_en_attente_piece.actuel_id_attente', { actuelId: actuel.id }), 'succes');
   }
 
   async function demanderPriorite(ot) {
     const contenu = UI.element(UI.html`<div class="form-colonne">
-      <p>Priorité actuelle : ${UI.badgePriorite(ot.priorite)}. Le changement est tracé au journal avec son motif.</p>
-      <div class="champ"><label class="libelle" for="ot-nouvelle-priorite">Nouvelle priorité</label>
+      <p>${I18n.t('ordres.demander_priorite.priorite_actuelle')} ${UI.badgePriorite(ot.priorite)}${I18n.t('ordres.demander_priorite.changement_trace_journal_motif')}</p>
+      <div class="champ"><label class="libelle" for="ot-nouvelle-priorite">${I18n.t('ordres.demander_priorite.nouvelle_priorite')}</label>
         <select id="ot-nouvelle-priorite">${optionsHtml(PRIORITES.map((p) => ({ valeur: p, libelle: p })), ot.priorite)}</select></div>
-      <div class="champ"><label class="libelle" for="ot-motif-priorite">Motif <span class="requis" aria-hidden="true">*</span></label>
+      <div class="champ"><label class="libelle" for="ot-motif-priorite">${I18n.t('ordres.demander_priorite.motif')} <span class="requis" aria-hidden="true">*</span></label>
         <textarea id="ot-motif-priorite" rows="3" data-dictee required aria-required="true"></textarea>
         <p class="erreur-champ" hidden></p></div></div>`);
     const choix = await UI.fenetre({
-      titre: 'Modifier la priorité de ' + ot.id, contenu,
-      boutons: [{ libelle: 'Annuler', valeur: null, classe: 'btn-fantome' }, { libelle: 'Enregistrer', valeur: 'ok', classe: 'btn-primaire', defaut: true }],
+      titre: I18n.t('ordres.demander_priorite.modifier_priorite', { otId: ot.id }), contenu,
+      boutons: [{ libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' }, { libelle: I18n.t('commun.bouton.enregistrer'), valeur: 'ok', classe: 'btn-primaire', defaut: true }],
       avantFermeture() {
         const erreur = UI.$('.erreur-champ', contenu);
         let message = '';
-        if (UI.$('#ot-nouvelle-priorite', contenu).value === ot.priorite) message = 'Choisissez une priorité différente de l\'actuelle.';
-        else if (!UI.$('#ot-motif-priorite', contenu).value.trim()) message = 'Le motif est obligatoire.';
+        if (UI.$('#ot-nouvelle-priorite', contenu).value === ot.priorite) message = I18n.t('ordres.demander_priorite.choisissez_priorite_differente_actuelle');
+        else if (!UI.$('#ot-motif-priorite', contenu).value.trim()) message = I18n.t('ordres.demander_priorite.motif_obligatoire');
         erreur.textContent = message;
         erreur.hidden = !message;
         return !message;
@@ -531,16 +534,16 @@ Object.assign(Ordres, (() => {
     if (choix !== 'ok') return;
     const nouvelle = UI.$('#ot-nouvelle-priorite', contenu).value;
     const motif = UI.$('#ot-motif-priorite', contenu).value.trim();
-    const reussi = await pendant(null, () => changerPriorite(ot.id, nouvelle, motif), 'changement de priorité');
+    const reussi = await pendant(null, () => changerPriorite(ot.id, nouvelle, motif), I18n.t('ordres.demander_priorite.changement_priorite'));
     if (reussi === undefined) return;
     await apresEnregistrement();
-    UI.toast('Priorité ' + ot.priorite + ' → ' + nouvelle + ' enregistrée.', 'succes');
+    UI.toast(I18n.t('ordres.demander_priorite.priorite_enregistree', { priorite: ot.priorite, nouvelle }), 'succes');
   }
 
   async function lancerOtLie(ot) {
-    const id = await pendant(UI.$('#ot-lie'), () => creerOtLie(ot.id), 'création d\'un OT lié');
+    const id = await pendant(UI.$('#ot-lie'), () => creerOtLie(ot.id), I18n.t('ordres.lancer_ot_lie.creation_ot_lie'));
     if (!id) return;
-    UI.toast('OT lié ' + id + ' créé (reprise de ' + ot.id + ').', 'succes');
+    UI.toast(I18n.t('ordres.lancer_ot_lie.ot_lie_cree_reprise', { id, otId: ot.id }), 'succes');
     App.naviguer('#/ot/' + encodeURIComponent(id));
   }
 
@@ -549,39 +552,39 @@ Object.assign(Ordres, (() => {
   /** Bouton « Clore » : réglage actif, profil responsable, OT qui peut recevoir la clôture technique. */
   function boutonClore(ot) {
     return Ordres.clotureUneEtape() && transitionsPossibles(ot).includes('Clôturé techniquement')
-      ? UI.html`<button type="button" class="btn btn-primaire" id="ot-clore">${UI.icone('valider')}Clore</button>` : '';
+      ? UI.html`<button type="button" class="btn btn-primaire" id="ot-clore">${UI.icone('valider')}${I18n.t('ordres.bouton_clore.clore')}</button>` : '';
   }
 
   // Champs de la fenêtre « Clore » : ceux des onglets Exécution et Compte rendu (mêmes libellés et
   // aides), le temps passé et une pièce sortie du magasin (facultative, Magasin.sortir).
   function champsClore(ot) {
-    const { lignesDeLOt, listeCodes, libelleArticle, nombre, AIDE_ASTUCE } = Ordres.interne;
+    const { lignesDeLOt, listeCodes, libelleArticle, nombre, aideAstuce } = Ordres.interne;
     const total = lignesDeLOt('ot_temps', ot.id).reduce((somme, ligne) => somme + nombre(ligne.heures), 0);
     const technicien = App.technicienSolo() || ot.technicien_id || '';
     const articles = Donnees.lignes('articles').filter((a) => texte(a.actif) !== '0')
-      .map((a) => ({ valeur: a.id, libelle: libelleArticle(a) + ' — stock ' + UI.nombreFr(Donnees.stockArticle(a.id)) }));
+      .map((a) => ({ valeur: a.id, libelle: I18n.t('ordres.options_articles.libelle_article_stock_stock_article', { libelleArticle: libelleArticle(a), stockArticle: UI.nombreFr(Donnees.stockArticle(a.id)) }) }));
     const fin = champOt('date_fin', texte(ot.date_fin) || Donnees.maintenant().slice(0, 16));
     UI.$('input', fin).max = Donnees.maintenant().replace(' ', 'T');     // pas de date de fin dans le futur
     const remise = champOt('remise_service', ot.remise_service, {
-      libelle: 'Équipement remis en service en sécurité (protections remises, consignation levée, production prévenue)',
+      libelle: I18n.t('ordres.champs_clore.equipement_remis_service_securite'),
     });
-    if (texte((equipementDe(ot) || {}).habilitation_requise)) remise.appendChild(UI.element(UI.html`<p class="aide">${RAPPEL_CONSIGNATION}</p>`));
+    if (texte((equipementDe(ot) || {}).habilitation_requise)) remise.appendChild(UI.element(UI.html`<p class="aide">${Ordres.rappelConsignation()}</p>`));
     return [
       fin,
-      champOt('arret_production', ot.arret_production, { libelle: 'Arrêt de production pendant l\'intervention' }),
+      champOt('arret_production', ot.arret_production, { libelle: I18n.t('ordres.champs_clore.arret_production_pendant_intervention') }),
       champOt('duree_arret_h', ot.duree_arret_h),
-      UI.champ({ nom: 'heures', type: 'decimal', libelle: 'Temps passé à ajouter (heures)' }, '',
-        { aide: total > 0 ? 'Déjà saisi : ' + UI.heures(total) + '.' : 'Au moins un temps passé est exigé (ex. 1,5).' }),
-      champOt('technicien_id', technicien, { liste: listeTechniciens(technicien), libelle: 'Technicien du temps passé' }),
-      UI.champ({ nom: 'article_id', type: 'ref', libelle: 'Pièce sortie du magasin (facultatif)' }, '', { liste: articles }),
-      UI.champ({ nom: 'quantite', type: 'decimal', libelle: 'Quantité sortie' }, '1'),
+      UI.champ({ nom: 'heures', type: 'decimal', libelle: I18n.t('ordres.champs_clore.temps_passe_ajouter_heures') }, '',
+        { aide: total > 0 ? I18n.t('ordres.champs_clore.deja_saisi', { total: UI.heures(total) }) : I18n.t('ordres.champs_clore.moins_temps_passe_exige') }),
+      champOt('technicien_id', technicien, { liste: listeTechniciens(technicien), libelle: I18n.t('ordres.champs_clore.technicien_temps_passe') }),
+      UI.champ({ nom: 'article_id', type: 'ref', libelle: I18n.t('ordres.champs_clore.piece_sortie_magasin_facultatif') }, '', { liste: articles }),
+      UI.champ({ nom: 'quantite', type: 'decimal', libelle: I18n.t('ordres.champs_clore.quantite_sortie') }, '1'),
       champOt('symptome_code', ot.symptome_code, { liste: listeCodes('symptôme') }),
       champOt('cause_code', ot.cause_code, { liste: listeCodes('cause') }),
       champOt('remede_code', ot.remede_code, { liste: listeCodes('remède') }),
       champOt('compte_rendu', ot.compte_rendu, {
-        aide: 'Ce qui a été constaté, la cause, ce qui a été fait (10 caractères au moins ; « RAS » refusé sur un correctif).',
+        aide: I18n.t('ordres.champs_clore.ete_constate_cause_ete'),
       }),
-      champOt('astuce', ot.astuce, { aide: AIDE_ASTUCE }),
+      champOt('astuce', ot.astuce, { aide: aideAstuce() }),
       remise,
     ];
   }
@@ -593,8 +596,8 @@ Object.assign(Ordres, (() => {
     if (!sauvegarde.ok) return;
     const actuel = Donnees.trouver('ordres_travail', ot.id) || ot;
     const fait = await UI.fenetreAction({
-      titre: 'Clore ' + actuel.id, libelleValider: 'Clore et verrouiller', classe: 'ot-fenetre-clore',
-      introduction: UI.html`<p>Clôture technique puis administrative en une fois : l'OT sera verrouillé. Une reprise se fera par un nouvel OT lié.</p>`,
+      titre: I18n.t('ordres.demander_clore.clore_actuel_id', { actuelId: actuel.id }), libelleValider: I18n.t('ordres.demander_clore.clore_verrouiller'), classe: 'ot-fenetre-clore',
+      introduction: UI.html`<p>${I18n.t('ordres.demander_clore.cloture_technique_puis_administrative')}</p>`,
       champs: champsClore(actuel),
       verifier: () => [],
       action: (valeurs, contenu) => Ordres.clore(actuel, UI.lireFormulaire(contenu.closest('form'))),
@@ -602,7 +605,7 @@ Object.assign(Ordres, (() => {
     if (!fait) { if (sauvegarde.enregistres) await apresEnregistrement(); return; }
     await apresEnregistrement();
     const avertissementGamme = lireAvertissementGamme(actuel.id);
-    UI.toast(avertissementGamme || actuel.id + ' : clôturé techniquement et administrativement.', avertissementGamme ? 'attention' : 'succes');
+    UI.toast(avertissementGamme || I18n.t('ordres.demander_clore.cloture_techniquement_administrativement', { actuelId: actuel.id }), avertissementGamme ? 'attention' : 'succes');
   }
 
   /** Avertissement RG8 affichable (texte complet, avec le nom du technicien et l'équipement). */
@@ -610,9 +613,7 @@ Object.assign(Ordres, (() => {
     const equipement = Donnees.trouver('equipements', equipementId);
     const jour = texte(date).slice(0, 10) || aujourdhui();
     const manquantes = habilitationsManquantes(equipement, technicienId, jour);
-    return UI.bandeau('attention', UI.html`<b>Avertissement habilitation :</b> ${nomTechnicien(technicienId)} (${technicienId})
-      n'a pas d'habilitation ${manquantes.join(', ')} valide au ${UI.dateFr(jour)}, exigée pour ${repereEquipement(equipementId)}.
-      L'affectation reste possible ; l'avertissement est tracé au journal.`);
+    return UI.bandeau('attention', UI.html`${I18n.html('ordres.bandeau_habilitation.avertissement_habilitation_pas_habilitation', { nomTechnicien: nomTechnicien(technicienId), technicienId, join: manquantes.join(', '), jour: UI.dateFr(jour), repereEquipement: repereEquipement(equipementId) })}`);
   }
 
   // Panneau d'onglet : zone de titre + contenu en lecture seule ou modifiable.
