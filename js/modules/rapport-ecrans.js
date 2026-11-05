@@ -18,7 +18,7 @@ Object.assign(Rapport, (() => {
   /** « de septembre 2026 », « d'octobre 2026 », « d'août 2026 » (élision devant une voyelle). */
   function deMois(mois) {
     const libelle = libelleMois(mois);
-    return (/^[aeiouyàâéèêîôû]/i.test(libelle) ? 'd\'' : 'de ') + libelle;
+    return (/^[aeiouyàâéèêîôû]/i.test(libelle) ? 'd\'' : I18n.t('rapport.de_mois.de') + ' ') + libelle;
   }
 
   // ===========================================================================================
@@ -42,7 +42,7 @@ Object.assign(Rapport, (() => {
    * est ajouté à rapports_mensuels (une écriture de parametres.csv, journalisée).
    */
   async function figer(mois, options) {
-    if (!/^\d{4}-\d{2}$/.test(texte(mois))) throw new Donnees.ErreurValidation('Mois invalide : « ' + mois + ' ».');
+    if (!/^\d{4}-\d{2}$/.test(texte(mois))) throw new Donnees.ErreurValidation(I18n.t('rapport.figer.mois_invalide', { mois }));
     const reglages = options || {};
     const rapport = Rapport.donnees(mois, reglages.aujourdhui, reglages.maintenant);
     const page = await Rapport.html(mois, { donnees: rapport, commentaire: reglages.commentaire });
@@ -57,7 +57,7 @@ Object.assign(Rapport, (() => {
         if (!estNomPris(erreur)) throw erreur;
       }
     }
-    if (!nom) throw new Donnees.ErreurStockage('Aucun nom libre pour le rapport ' + deMois(mois) + '.');
+    if (!nom) throw new Donnees.ErreurStockage(I18n.t('rapport.figer.aucun_nom_libre_rapport', { deMois: deMois(mois) }));
     await Donnees.modifier('parametres', (lignes) => {
       let ligne = lignes.find((candidate) => candidate.cle === 'rapports_mensuels');
       if (!ligne) { ligne = { cle: 'rapports_mensuels', valeur: '' }; lignes.push(ligne); }
@@ -93,18 +93,18 @@ Object.assign(Rapport, (() => {
   /** Ouvre le document dans un nouvel onglet (rouvrable sans Prévo). */
   async function ouvrir(nom) {
     const adresse = await App.adaptateur.urlDocument(nom);
-    if (!adresse) throw new Donnees.ErreurStockage('Le rapport ' + nom + ' est introuvable dans les documents.');
+    if (!adresse) throw new Donnees.ErreurStockage(I18n.t('rapport.ouvrir.rapport_introuvable_documents', { nom }));
     window.open(adresse, '_blank', 'noopener');
   }
 
   /** Imprime le document : il est affiché dans un cadre isolé (aucun script n'y tourne), puis imprimé. */
   async function imprimer(nom) {
     const blob = await App.adaptateur.lireDocument(nom);
-    if (!blob) throw new Donnees.ErreurStockage('Le rapport ' + nom + ' est introuvable dans les documents.');
+    if (!blob) throw new Donnees.ErreurStockage(I18n.t('rapport.ouvrir.rapport_introuvable_documents', { nom }));
     const cadre = document.createElement('iframe');
     cadre.setAttribute('sandbox', 'allow-same-origin allow-modals');
     cadre.className = 'rapport-cadre-impression';
-    cadre.title = 'Impression du rapport ' + nom;
+    cadre.title = I18n.t('rapport.imprimer.impression_rapport', { nom });
     cadre.srcdoc = await blob.text();
     cadre.addEventListener('load', () => {
       cadre.contentWindow.print();
@@ -115,13 +115,12 @@ Object.assign(Rapport, (() => {
 
   async function telecharger(nom) {
     const blob = await App.adaptateur.lireDocument(nom);
-    if (!blob) throw new Donnees.ErreurStockage('Le rapport ' + nom + ' est introuvable.');
+    if (!blob) throw new Donnees.ErreurStockage(I18n.t('rapport.telecharger.rapport_introuvable', { nom }));
     UI.telecharger(nom, blob);
   }
 
   function messageFige(resultat) {
-    return UI.html`<b>Rapport ${deMois(resultat.rapport.mois)} figé :</b> ${resultat.nom}.
-      <a href="${lienCourriel(resultat.rapport)}">Préparer un courriel</a> (votre messagerie s'ouvre avec le résumé ; rien n'est envoyé par Prévo).`;
+    return UI.html`${I18n.html('rapport.message_fige.rapport_fige', { mois: deMois(resultat.rapport.mois), nom: resultat.nom, adresse: lienCourriel(resultat.rapport) })}`;
   }
 
   function afficherOnglet(conteneur) {
@@ -131,32 +130,30 @@ Object.assign(Rapport, (() => {
     UI.remplir(conteneur, UI.html`<div class="rapports">
       <div id="rapports-message"></div>
       <article class="carte rapports-figer">
-        <div class="entete-carte"><h2>Figer un rapport mensuel</h2></div>
-        <p class="note">Une page A4 pour la direction : disponibilité, coût, part du préventif (comparés au mois précédent
-          et à l'année précédente), faits marquants, décisions proposées. Le rapport est enregistré dans les documents
-          (fichier HTML rouvrable sans Prévo, imprimable en PDF) et n'est jamais écrasé : « Recalculer » crée une révision.</p>
+        <div class="entete-carte"><h2>${I18n.t('rapport.onglet.figer_rapport_mensuel')}</h2></div>
+        <p class="note">${I18n.t('rapport.onglet.page_4_direction_disponibilite')}</p>
         ${proposables.length ? UI.html`<form class="rapports-formulaire" data-hors-saisie>
-          <div class="champ"><label class="libelle" for="rapports-mois">Mois</label>
+          <div class="champ"><label class="libelle" for="rapports-mois">${I18n.t('rapport.onglet.mois')}</label>
             <select id="rapports-mois">${proposables.map((mois) => UI.html`<option value="${mois}">${libelleMois(mois)}</option>`)}</select></div>
-          <div class="champ large"><label class="libelle" for="rapports-commentaire">Commentaire du mois (facultatif)</label>
+          <div class="champ large"><label class="libelle" for="rapports-commentaire">${I18n.t('rapport.onglet.commentaire_mois_facultatif')}</label>
             <textarea id="rapports-commentaire" rows="4" maxlength="4000" data-dictee></textarea></div>
-          <button type="submit" class="btn btn-primaire">Figer le rapport</button>
-        </form>` : UI.html`<p>Aucun mois complet dans l'historique pour l'instant.</p>`}
+          <button type="submit" class="btn btn-primaire">${I18n.t('rapport.onglet.figer_rapport')}</button>
+        </form>` : UI.html`<p>${I18n.t('rapport.onglet.aucun_mois_complet_historique')}</p>`}
       </article>
       <article class="carte rapports-liste">
-        <div class="entete-carte"><h2>Rapports figés</h2><span class="badge ${rapports.length ? 'info' : 'neutre'}">${rapports.length}</span></div>
+        <div class="entete-carte"><h2>${I18n.t('rapport.onglet.rapports_figes')}</h2><span class="badge ${rapports.length ? 'info' : 'neutre'}">${rapports.length}</span></div>
         ${rapports.length ? UI.html`<div class="table-defile"><table class="table">
-          <thead><tr><th scope="col">Mois</th><th scope="col">Fichier</th><th scope="col">Actions</th></tr></thead>
+          <thead><tr><th scope="col">${I18n.t('rapport.onglet.mois')}</th><th scope="col">${I18n.t('rapport.onglet.fichier')}</th><th scope="col">${I18n.t('rapport.onglet.actions')}</th></tr></thead>
           <tbody>${rapports.map((ligne) => UI.html`<tr data-nom="${ligne.nom}">
-            <td>${ligne.mois ? libelleMois(ligne.mois) : '—'}${ligne.revision > 1 ? UI.html` <span class="badge neutre">révision ${ligne.revision}</span>` : ''}</td>
+            <td>${ligne.mois ? libelleMois(ligne.mois) : '—'}${ligne.revision > 1 ? UI.html` <span class="badge neutre">${I18n.t('rapport.onglet.revision_revision', { revision: ligne.revision })}</span>` : ''}</td>
             <td><code>${ligne.nom}</code></td>
             <td class="actions">
-              <button type="button" class="btn btn-secondaire" data-action="ouvrir" data-nom="${ligne.nom}">Ouvrir</button>
-              <button type="button" class="btn btn-secondaire" data-action="imprimer" data-nom="${ligne.nom}">Imprimer</button>
-              ${ligne.mois ? UI.html`<button type="button" class="btn btn-fantome" data-action="recalculer" data-mois="${ligne.mois}">Recalculer</button>` : ''}
-              ${demo ? UI.html`<button type="button" class="btn btn-fantome" data-action="telecharger" data-nom="${ligne.nom}">Télécharger</button>` : ''}
+              <button type="button" class="btn btn-secondaire" data-action="ouvrir" data-nom="${ligne.nom}">${I18n.t('rapport.onglet.ouvrir')}</button>
+              <button type="button" class="btn btn-secondaire" data-action="imprimer" data-nom="${ligne.nom}">${I18n.t('commun.bouton.imprimer')}</button>
+              ${ligne.mois ? UI.html`<button type="button" class="btn btn-fantome" data-action="recalculer" data-mois="${ligne.mois}">${I18n.t('rapport.onglet.recalculer')}</button>` : ''}
+              ${demo ? UI.html`<button type="button" class="btn btn-fantome" data-action="telecharger" data-nom="${ligne.nom}">${I18n.t('rapport.onglet.telecharger')}</button>` : ''}
             </td></tr>`)}</tbody></table></div>`
-          : UI.vide('Aucun rapport figé', 'Figez le mois écoulé pour garder sa photographie.', 'indicateurs')}
+          : UI.vide(I18n.t('rapport.onglet.aucun_rapport_fige'), I18n.t('rapport.onglet.figez_mois_ecoule_garder'), 'indicateurs')}
       </article></div>`);
     const racine = conteneur.querySelector('.rapports');
     const message = (type, contenu) => UI.remplir(racine.querySelector('#rapports-message'), UI.bandeau(type, contenu));
@@ -174,7 +171,7 @@ Object.assign(Rapport, (() => {
           const resultat = await figer(mois, { commentaire });
           if (commentaire.texte && commentaire.aideIa) {
             try {
-              await Ia.tracerUtilisation('parametres', 'rapports_mensuels', 'commentaire du rapport ' + resultat.nom, zoneCommentaire.dataset.iaModele);
+              await Ia.tracerUtilisation('parametres', 'rapports_mensuels', I18n.t('rapport.onglet.commentaire_rapport', { resultatNom: resultat.nom }), zoneCommentaire.dataset.iaModele);
             } catch (erreur) {                                            // le rapport est figé : on le dit quand même
               console.warn('Prévo (rapport) : trace de la proposition IA non écrite (' + (erreur && erreur.message) + ').', erreur);
             }
@@ -218,7 +215,7 @@ Object.assign(Rapport, (() => {
       if (!zoneCommentaire.value.trim()) { delete zoneCommentaire.dataset.iaModele; delete zoneCommentaire.dataset.iaMois; }
       avertirMois();
     });
-    const zone = Ia.emplacement('Proposer un commentaire', () => {
+    const zone = Ia.emplacement(I18n.t('rapport.brancher_commentaire_ia.proposer_commentaire'), () => {
       const mois = formulaire.querySelector('#rapports-mois').value;
       const rapport = Rapport.donnees(mois);
       const remplir = (resultat, reponse, retoucher) => {
@@ -239,13 +236,12 @@ Object.assign(Rapport, (() => {
   function ecartDeMois(zoneCommentaire, mois) {
     const iaMois = zoneCommentaire.dataset.iaModele ? zoneCommentaire.dataset.iaMois : '';
     if (!iaMois || iaMois === mois) return '';
-    return 'Ce commentaire a été proposé par l\'IA pour ' + libelleMois(iaMois) + ' : ses chiffres ne valent pas pour '
-      + libelleMois(mois) + '. Proposez-le de nouveau pour ce mois, ou effacez-le.';
+    return I18n.t('rapport.ecart_de_mois.commentaire_ete_propose_ia', { moisIa: libelleMois(iaMois), moisRapport: libelleMois(mois) });
   }
 
   /** Point du rapport envoyé à l'IA sans chiffre ni montant (§17.3 : aucun coût ; D71 : l'IA n'écrit aucun chiffre). */
   function sansChiffres(point) {
-    return texte(point).replace(/\d[\d\s\u00a0\u202f.,]*(?:\s?(?:€|%|h\b|j\b))?/g, '… ').replace(/\s+/g, ' ').trim();
+    return texte(point).replace(/\d[\d\s\u00a0\u202f.,]*(?:\s?(?:€|%|h\b|j\b))?/g, I18n.t('rapport.sans_chiffres.texte') + ' ').replace(/\s+/g, ' ').trim();
   }
 
   /** Fige (ou recalcule) puis réaffiche l'onglet avec le message de réussite. */
@@ -253,7 +249,7 @@ Object.assign(Rapport, (() => {
     bouton.disabled = true;
     try {
       const resultat = await action();
-      UI.toast('Rapport figé : ' + resultat.nom, 'succes');
+      UI.toast(I18n.t('rapport.executer.rapport_fige', { resultatNom: resultat.nom }), 'succes');
       afficherOnglet(conteneur);
       UI.remplir(conteneur.querySelector('#rapports-message'), UI.bandeau('succes', messageFige(resultat)));
     } catch (erreur) {
@@ -285,12 +281,12 @@ Object.assign(Rapport, (() => {
     if (!mois || moisReporte() === mois) return null;
     const bloc = UI.element(UI.html`<section class="bento-tuile bento-rapport" id="bandeau-rapport" aria-labelledby="bento-rapport-titre">
       <div class="bento-rapport-texte">
-        <h2 id="bento-rapport-titre">Rapport ${deMois(mois)}</h2>
-        <p>Pas encore figé : une page A4 qui garde la photographie du mois, rouvrable sans Prévo.</p>
+        <h2 id="bento-rapport-titre">${I18n.t('rapport.tuile_accueil.rapport_de_mois', { deMois: deMois(mois) })}</h2>
+        <p>${I18n.t('rapport.tuile_accueil.pas_encore_fige_page')}</p>
       </div>
       <div class="bento-rapport-actions">
-        <button type="button" class="btn btn-primaire" data-action="figer-rapport"><span>Figer<span class="bento-rapport-suite"> le rapport</span></span></button>
-        <button type="button" class="btn btn-fantome" data-action="rapport-plus-tard">Plus tard</button>
+        <button type="button" class="btn btn-primaire" data-action="figer-rapport"><span>${I18n.html('rapport.tuile_accueil.figer_rapport')}</span></button>
+        <button type="button" class="btn btn-fantome" data-action="rapport-plus-tard">${I18n.t('rapport.tuile_accueil.plus_tard')}</button>
       </div>
     </section>`);
     bloc.querySelector('[data-action="figer-rapport"]').addEventListener('click', async (evenement) => {
@@ -298,7 +294,7 @@ Object.assign(Rapport, (() => {
       bouton.disabled = true;
       try {
         const resultat = await figer(mois);
-        UI.toast('Rapport figé : ' + resultat.nom, 'succes');
+        UI.toast(I18n.t('rapport.executer.rapport_fige', { resultatNom: resultat.nom }), 'succes');
         await App.reafficher();
       } catch (erreur) {
         bouton.disabled = false;

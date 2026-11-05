@@ -52,10 +52,10 @@ Object.assign(Magasin, (() => {
   /** Badges d'un article : rupture ou « À commander », critique, inactif. */
   function badgesArticle(article, stock) {
     const valeur = stock === undefined ? Donnees.stockArticle(article.id) : stock;
-    return UI.html`${estACommander(article, valeur) ? UI.html`<span class="badge attention magasin-badge-commander">À commander</span>` : ''}
-      ${valeur <= 0 && estActif(article) ? UI.html`<span class="badge ko">Rupture</span>` : ''}
-      ${article.critique === '1' ? UI.html`<span class="badge violet">Critique</span>` : ''}
-      ${estActif(article) ? '' : UI.html`<span class="badge neutre barre">Inactif</span>`}`;
+    return UI.html`${estACommander(article, valeur) ? UI.html`<span class="badge attention magasin-badge-commander">${I18n.t('magasin.badges_article.commander')}</span>` : ''}
+      ${valeur <= 0 && estActif(article) ? UI.html`<span class="badge ko">${I18n.t('magasin.badges_article.rupture')}</span>` : ''}
+      ${article.critique === '1' ? UI.html`<span class="badge violet">${I18n.t('magasin.badges_article.critique')}</span>` : ''}
+      ${estActif(article) ? '' : UI.html`<span class="badge neutre barre">${I18n.t('magasin.badges_article.inactif')}</span>`}`;
   }
 
   /** Achats en cours (demandée ou commandée) d'un article, les plus récents d'abord. */
@@ -143,8 +143,8 @@ Object.assign(Magasin, (() => {
     const choix = await UI.fenetre({
       titre, contenu,
       boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
-        { libelle: libelleValider || 'Enregistrer', valeur: 'ok', classe: 'btn-primaire', defaut: true },
+        { libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' },
+        { libelle: libelleValider || I18n.t('commun.bouton.enregistrer'), valeur: 'ok', classe: 'btn-primaire', defaut: true },
       ],
       surOuverture(dialogue, fermerFenetre) { fermer = fermerFenetre; },
       avantFermeture(valeur) {
@@ -170,12 +170,12 @@ Object.assign(Magasin, (() => {
   function ongletsDuProfil() {
     const enCours = Donnees.lignes('achats').filter((achat) => achat.statut === 'demandée' || achat.statut === 'commandée').length;
     return [
-      { id: 'articles', libelle: 'Articles' },
-      { id: 'mouvements', libelle: 'Mouvements' },
-      App.estResponsable() && { id: 'inventaire', libelle: 'Inventaire' },
-      { id: 'a-commander', libelle: 'À commander', compteur: Magasin.aCommander().length },
-      { id: 'achats', libelle: 'Achats', compteur: enCours },
-      { id: 'fournisseurs', libelle: 'Fournisseurs' },
+      { id: 'articles', libelle: I18n.t('magasin.onglets_du_profil.articles') },
+      { id: 'mouvements', libelle: I18n.t('magasin.onglets_du_profil.mouvements') },
+      App.estResponsable() && { id: 'inventaire', libelle: I18n.t('magasin.onglets_du_profil.inventaire') },
+      { id: 'a-commander', libelle: I18n.t('magasin.badges_article.commander'), compteur: Magasin.aCommander().length },
+      { id: 'achats', libelle: I18n.t('magasin.onglets_du_profil.achats'), compteur: enCours },
+      { id: 'fournisseurs', libelle: I18n.t('magasin.onglets_du_profil.fournisseurs') },
     ].filter(Boolean);
   }
 
@@ -205,17 +205,17 @@ Object.assign(Magasin, (() => {
     UI.remplir(conteneur, UI.html`
       <div class="magasin">
         <div class="entete-page">
-          <div><h1>Magasin</h1><p>Pièces détachées : stock, mouvements, inventaire, réapprovisionnement et fournisseurs.</p></div>
+          <div><h1>${I18n.t('magasin.magasin.magasin')}</h1><p>${I18n.t('magasin.magasin.pieces_detachees_stock_mouvements')}</p></div>
           <div class="actions">${App.estResponsable() ? UI.html`
-            <a class="btn btn-primaire" id="magasin-nouvel-article" href="#/magasin/article/nouveau">${UI.icone('ajouter')}Nouvel article</a>` : ''}</div>
+            <a class="btn btn-primaire" id="magasin-nouvel-article" href="#/magasin/article/nouveau">${UI.icone('ajouter')}${I18n.t('magasin.magasin.nouvel_article')}</a>` : ''}</div>
         </div>
-        ${App.estResponsable() ? '' : UI.html`<p class="note magasin-consultation">Consultation : les sorties et retours de pièces se font depuis l'ordre de travail.</p>`}
+        ${App.estResponsable() ? '' : UI.html`<p class="note magasin-consultation">${I18n.t('magasin.magasin.consultation_sorties_retours_pieces')}</p>`}
         <div class="magasin-onglets"></div>
       </div>`);
     UI.onglets(UI.$('.magasin-onglets', conteneur), onglets.map((onglet) => Object.assign({}, onglet, {
       afficher: (panneau) => AFFICHAGES[onglet.id](panneau, onglet.id === demande ? requete : null),
     })), {
-      actif, libelle: 'Rubriques du magasin',
+      actif, libelle: I18n.t('magasin.magasin.rubriques_magasin'),
       surChangement: (id) => { memoire.onglet = id; remplacerAdresse(id); },
     });
     // Sur téléphone la barre d'onglets défile : l'onglet ouvert doit y être visible.
@@ -228,20 +228,22 @@ Object.assign(Magasin, (() => {
   // 9. Onglet « Articles » : recherche, catégorie, état ; tableau ou cartes
   // ===========================================================================================
 
-  const ETATS_ARTICLES = [
-    { valeur: 'actifs', libelle: 'Articles actifs' },
-    { valeur: 'a-commander', libelle: 'À commander' },
-    { valeur: 'critiques', libelle: 'Critiques' },
-    { valeur: 'inactifs', libelle: 'Inactifs' },
-    { valeur: 'tous', libelle: 'Tous les articles' },
-  ];
+  function etatsArticles() {
+    return [
+      { valeur: 'actifs', libelle: I18n.t('magasin.etats_articles.articles_actifs') },
+      { valeur: 'a-commander', libelle: I18n.t('magasin.badges_article.commander') },
+      { valeur: 'critiques', libelle: I18n.t('magasin.etats_articles.critiques') },
+      { valeur: 'inactifs', libelle: I18n.t('magasin.etats_articles.inactifs') },
+      { valeur: 'tous', libelle: I18n.t('magasin.etats_articles.tous_articles') },
+    ];
+  }
 
   function filtresArticles(requete) {
     const filtres = Object.assign({ recherche: '', categorie: '', etat: 'actifs' }, memoire.filtresArticles || {});
     if (requete) {
       if (requete.has('recherche')) filtres.recherche = requete.get('recherche');
       if (requete.has('categorie')) filtres.categorie = requete.get('categorie').toUpperCase();
-      if (ETATS_ARTICLES.some((etat) => etat.valeur === requete.get('etat'))) filtres.etat = requete.get('etat');
+      if (etatsArticles().some((etat) => etat.valeur === requete.get('etat'))) filtres.etat = requete.get('etat');
     }
     memoire.filtresArticles = filtres;
     return filtres;
@@ -273,17 +275,17 @@ Object.assign(Magasin, (() => {
 
   function colonnesArticles() {
     return [
-      { cle: 'reference', libelle: 'Référence', rendu: (l) => lienArticle(l.article) },
-      { cle: 'designation', libelle: 'Désignation', classe: 'magasin-col-designation',
-        rendu: (l) => UI.html`${l.designation} ${l.article.critique === '1' ? UI.html`<span class="badge violet">Critique</span>` : ''}
-          ${estActif(l.article) ? '' : UI.html`<span class="badge neutre barre">Inactif</span>`}
+      { cle: 'reference', libelle: I18n.t('commun.champ.reference'), rendu: (l) => lienArticle(l.article) },
+      { cle: 'designation', libelle: I18n.t('commun.champ.designation'), classe: 'magasin-col-designation',
+        rendu: (l) => UI.html`${l.designation} ${l.article.critique === '1' ? UI.html`<span class="badge violet">${I18n.t('magasin.badges_article.critique')}</span>` : ''}
+          ${estActif(l.article) ? '' : UI.html`<span class="badge neutre barre">${I18n.t('magasin.badges_article.inactif')}</span>`}
           <small class="magasin-categorie">${l.categorie.libelle}</small>` },
-      { cle: 'emplacement', libelle: 'Emplacement' },
-      { cle: 'stock', libelle: 'Stock', type: 'nombre',
+      { cle: 'emplacement', libelle: I18n.t('magasin.colonnes_articles.emplacement') },
+      { cle: 'stock', libelle: I18n.t('magasin.colonnes_articles.stock'), type: 'nombre',
         rendu: (l) => UI.html`<span class="sans-coupure">${quantiteUnite(l.stock, l.unite)}</span>${l.aCommander
-          ? UI.html` <span class="badge attention magasin-badge-commander">À commander</span>` : ''}` },
-      { cle: 'pointCommande', libelle: 'Point de commande', type: 'nombre', rendu: (l) => UI.nombreFr(l.pointCommande) },
-      { cle: 'prix', libelle: 'Prix unitaire', type: 'nombre', rendu: (l) => UI.euro(l.prix) },
+          ? UI.html` <span class="badge attention magasin-badge-commander">${I18n.t('magasin.badges_article.commander')}</span>` : ''}` },
+      { cle: 'pointCommande', libelle: I18n.t('magasin.colonnes_articles.point_commande'), type: 'nombre', rendu: (l) => UI.nombreFr(l.pointCommande) },
+      { cle: 'prix', libelle: I18n.t('commun.champ.prix_unitaire'), type: 'nombre', rendu: (l) => UI.euro(l.prix) },
     ];
   }
 
@@ -291,9 +293,8 @@ Object.assign(Magasin, (() => {
     return UI.html`<a href="#/magasin/article/${encodeURIComponent(l.id)}">
       <div class="carte-tete"><b>${l.reference || l.id}</b>${badgesArticle(l.article, l.stock)}</div>
       <div class="carte-titre">${l.designation}</div>
-      <div class="carte-meta"><span>Stock : ${quantiteUnite(l.stock, l.unite)}</span>
-        <span>Point de commande : ${UI.nombreFr(l.pointCommande)}</span>
-        ${l.emplacement ? UI.html`<span>Emplacement : ${l.emplacement}</span>` : ''}</div></a>`;
+      <div class="carte-meta">${I18n.html('magasin.carte_article.stock_point_commande', { quantiteUnite: quantiteUnite(l.stock, l.unite), pointCommande: UI.nombreFr(l.pointCommande) })}
+        ${l.emplacement ? UI.html`<span>${I18n.t('magasin.carte_article.emplacement_emplacement', { emplacement: l.emplacement })}</span>` : ''}</div></a>`;
   }
 
   function afficherOngletArticles(panneau, requete) {
@@ -301,17 +302,17 @@ Object.assign(Magasin, (() => {
     const toutes = Donnees.lignes('articles').map(ligneArticle);
     const categories = new Map();
     toutes.forEach((l) => categories.set(l.categorie.code, l.categorie.libelle));
-    const optionsCategories = [{ valeur: '', libelle: 'Toutes catégories' }].concat(Array.from(categories.entries())
+    const optionsCategories = [{ valeur: '', libelle: I18n.t('magasin.onglet_articles.toutes_categories') }].concat(Array.from(categories.entries())
       .map(([code, libelle]) => ({ valeur: code, libelle })).sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr')));
     UI.remplir(panneau, UI.html`
-      <form class="filtres magasin-filtres" id="magasin-filtres-articles" data-hors-saisie role="search" aria-label="Filtrer les articles">
-        <label class="visuellement-cache" for="magasin-recherche-article">Rechercher un article</label>
+      <form class="filtres magasin-filtres" id="magasin-filtres-articles" data-hors-saisie role="search" aria-label="${I18n.t('magasin.onglet_articles.filtrer_articles')}">
+        <label class="visuellement-cache" for="magasin-recherche-article">${I18n.t('magasin.onglet_articles.rechercher_article')}</label>
         <input type="search" id="magasin-recherche-article" name="recherche" value="${filtres.recherche}"
-          placeholder="Référence, désignation, fabricant, emplacement" autocomplete="off">
-        <label class="visuellement-cache" for="magasin-categorie">Catégorie</label>
+          placeholder="${I18n.t('magasin.onglet_articles.reference_designation_fabricant_emplacement')}" autocomplete="off">
+        <label class="visuellement-cache" for="magasin-categorie">${I18n.t('magasin.onglet_articles.categorie')}</label>
         <select id="magasin-categorie" name="categorie">${optionsHtml(optionsCategories, filtres.categorie)}</select>
-        <label class="visuellement-cache" for="magasin-etat-article">État</label>
-        <select id="magasin-etat-article" name="etat">${optionsHtml(ETATS_ARTICLES, filtres.etat)}</select>
+        <label class="visuellement-cache" for="magasin-etat-article">${I18n.t('magasin.onglet_articles.etat')}</label>
+        <select id="magasin-etat-article" name="etat">${optionsHtml(etatsArticles(), filtres.etat)}</select>
       </form>
       <p class="note magasin-compteur" role="status"></p>
       <div class="carte magasin-liste"></div>`);
@@ -321,11 +322,10 @@ Object.assign(Magasin, (() => {
       const lignes = toutes.filter((l) => garderArticle(l, memoire.filtresArticles))
         .sort((a, b) => texte(a.reference).localeCompare(texte(b.reference), 'fr', { numeric: true }));
       UI.remplir(zone, listeAdaptative({
-        colonnes: colonnesArticles(), lignes, libelle: 'Articles du magasin', carte: carteArticle,
-        vide: 'Aucun article ne correspond à ces filtres.', lien: (l) => '#/magasin/article/' + encodeURIComponent(l.id),
+        colonnes: colonnesArticles(), lignes, libelle: I18n.t('magasin.onglet_articles.articles_magasin'), carte: carteArticle,
+        vide: I18n.t('magasin.onglet_articles.aucun_article_correspond_filtres'), lien: (l) => '#/magasin/article/' + encodeURIComponent(l.id),
       }));
-      compteur.textContent = lignes.length + ' article(s) sur ' + toutes.length
-        + ' — ' + toutes.filter((l) => l.aCommander).length + ' à commander';
+      compteur.textContent = I18n.t('magasin.onglet_articles.article_commander', { n: lignes.length, nbToutes: toutes.length, nbACommander: toutes.filter((l) => l.aCommander).length });
     }
     const formulaire = UI.$('#magasin-filtres-articles', panneau);
     const lireFiltres = () => { memoire.filtresArticles = Object.assign({}, memoire.filtresArticles, UI.lireFormulaire(formulaire)); rafraichir(); };
@@ -344,11 +344,10 @@ Object.assign(Magasin, (() => {
     const valeur = Magasin.suggestionPointCommande(article.id);
     const fin = dateDuJour();
     const { sorties, retours } = consommationEntre(article.id, ajouterJours(fin, -(FENETRE_CONSOMMATION_JOURS - 1)), fin);
-    if (valeur === null) return { valeur, detail: 'aucune sortie sur les ' + FENETRE_CONSOMMATION_JOURS + ' derniers jours' };
+    if (valeur === null) return { valeur, detail: I18n.t('magasin.suggestion.aucune_sortie_derniers_jours', { n: FENETRE_CONSOMMATION_JOURS }) };
     return {
       valeur,
-      detail: 'consommation des ' + FENETRE_CONSOMMATION_JOURS + ' derniers jours : ' + quantiteUnite(Math.max(0, sorties - retours), article.unite)
-        + ', délai ' + (texte(article.delai_jours) || '0') + ' j, stock de sécurité ' + (texte(article.stock_securite) || '0'),
+      detail: I18n.t('magasin.suggestion.consommation_derniers_jours_delai', { n: FENETRE_CONSOMMATION_JOURS, quantiteUnite: quantiteUnite(Math.max(0, sorties - retours), article.unite), delai: (texte(article.delai_jours) || '0'), securite: (texte(article.stock_securite) || '0') }),
     };
   }
 
@@ -357,9 +356,9 @@ Object.assign(Magasin, (() => {
   function encadreSuggestion(article, bouton) {
     const calcul = suggestion(article);
     return UI.html`<div class="encadre info magasin-suggestion large" id="magasin-suggestion" data-valeur="${calcul.valeur === null ? '' : String(calcul.valeur)}">
-      <p>Point de commande suggéré : <b>${calcul.valeur === null ? 'non calculable' : nombreTexte(calcul.valeur)}</b>
-        <span class="magasin-detail">(${calcul.detail}).</span> Le point de commande reste celui que vous saisissez.</p>
-      ${bouton && calcul.valeur !== null ? UI.html`<button type="button" class="btn btn-secondaire" id="magasin-reprendre-suggestion">${UI.icone('valider')}Reprendre la suggestion</button>` : ''}
+      <p>${I18n.t('magasin.encadre_suggestion.point_commande_suggere')} <b>${calcul.valeur === null ? I18n.t('magasin.encadre_suggestion.non_calculable') : nombreTexte(calcul.valeur)}</b>
+        ${I18n.html('magasin.encadre_suggestion.point_commande_reste_celui', { detail: calcul.detail })}</p>
+      ${bouton && calcul.valeur !== null ? UI.html`<button type="button" class="btn btn-secondaire" id="magasin-reprendre-suggestion">${UI.icone('valider')}${I18n.t('magasin.encadre_suggestion.reprendre_suggestion')}</button>` : ''}
     </div>`;
   }
 
@@ -369,29 +368,29 @@ Object.assign(Magasin, (() => {
     const calcul = suggestion(article);
     const ton = stock <= 0 ? 'rouge' : (estACommander(article, stock) ? 'ambre' : 'vert');
     return UI.html`<div class="instruments magasin-instruments">
-      <div class="${ton}"><div class="lib">Stock</div><div class="chiffre" id="magasin-stock">${quantiteUnite(stock, article.unite)}</div>
-        <div class="comp">${article.emplacement ? 'Emplacement ' + article.emplacement : 'Emplacement non renseigné'}</div></div>
-      <div><div class="lib">Valeur du stock</div><div class="chiffre" id="magasin-valeur-stock">${prix === null ? '–' : UI.euro(Math.max(0, stock) * prix)}</div>
-        <div class="comp">Prix unitaire ${UI.euro(prix)}</div></div>
-      <div class="ambre"><div class="lib">Point de commande</div><div class="chiffre">${point === null ? '–' : UI.nombreFr(point)}</div>
-        <div class="comp">Stock de sécurité ${UI.nombreFr(article.stock_securite)}</div></div>
-      <div class="cyan"><div class="lib">Suggestion</div><div class="chiffre">${calcul.valeur === null ? 'non calculable' : nombreTexte(calcul.valeur)}</div>
-        <div class="comp">Consommation sur ${FENETRE_CONSOMMATION_JOURS} jours</div></div>
+      <div class="${ton}"><div class="lib">${I18n.t('magasin.colonnes_articles.stock')}</div><div class="chiffre" id="magasin-stock">${quantiteUnite(stock, article.unite)}</div>
+        <div class="comp">${article.emplacement ? I18n.t('magasin.instruments_fiche.emplacement_emplacement', { emplacement: article.emplacement }) : I18n.t('magasin.instruments_fiche.emplacement_non_renseigne')}</div></div>
+      <div><div class="lib">${I18n.t('magasin.instruments_fiche.valeur_stock')}</div><div class="chiffre" id="magasin-valeur-stock">${prix === null ? '–' : UI.euro(Math.max(0, stock) * prix)}</div>
+        <div class="comp">${I18n.t('magasin.instruments_fiche.prix_unitaire', { euro: UI.euro(prix) })}</div></div>
+      <div class="ambre"><div class="lib">${I18n.t('magasin.colonnes_articles.point_commande')}</div><div class="chiffre">${point === null ? '–' : UI.nombreFr(point)}</div>
+        <div class="comp">${I18n.t('magasin.instruments_fiche.stock_securite', { stock_securite: UI.nombreFr(article.stock_securite) })}</div></div>
+      <div class="cyan"><div class="lib">${I18n.t('magasin.instruments_fiche.suggestion')}</div><div class="chiffre">${calcul.valeur === null ? I18n.t('magasin.encadre_suggestion.non_calculable') : nombreTexte(calcul.valeur)}</div>
+        <div class="comp">${I18n.t('magasin.instruments_fiche.consommation_jours', { n: FENETRE_CONSOMMATION_JOURS })}</div></div>
     </div>`;
   }
 
   function carteDescription(article) {
-    return UI.html`<article class="carte"><h2>Article</h2><dl class="valeurs">
-      <dt>Référence</dt><dd>${article.reference}</dd><dt>Désignation</dt><dd>${article.designation}</dd>
-      <dt>Catégorie</dt><dd>${categorieArticle(article).libelle}</dd>
-      <dt>Fabricant</dt><dd>${article.fabricant}</dd><dt>Référence fabricant</dt><dd>${article.ref_fabricant}</dd>
-      <dt>Emplacement</dt><dd>${article.emplacement}</dd><dt>Unité</dt><dd>${article.unite}</dd>
-      <dt>Prix unitaire</dt><dd>${article.prix_unitaire === '' ? '' : UI.euro(article.prix_unitaire)}</dd>
-      <dt>Fournisseur</dt><dd>${libelleFournisseur(article.fournisseur_id)}</dd>
-      <dt>Délai d'approvisionnement</dt><dd>${article.delai_jours === '' ? '' : article.delai_jours + ' j'}</dd>
-      <dt>Stock de sécurité</dt><dd>${article.stock_securite}</dd><dt>Point de commande</dt><dd>${article.point_commande}</dd>
-      <dt>Quantité à commander</dt><dd>${article.qte_commande}</dd>
-      <dt>Article critique</dt><dd>${article.critique === '1' ? 'Oui' : 'Non'}</dd>
+    return UI.html`<article class="carte"><h2>${I18n.t('magasin.fiche_article.article')}</h2><dl class="valeurs">
+      <dt>${I18n.t('commun.champ.reference')}</dt><dd>${article.reference}</dd><dt>${I18n.t('commun.champ.designation')}</dt><dd>${article.designation}</dd>
+      <dt>${I18n.t('magasin.onglet_articles.categorie')}</dt><dd>${categorieArticle(article).libelle}</dd>
+      <dt>${I18n.t('magasin.carte_description.fabricant')}</dt><dd>${article.fabricant}</dd><dt>${I18n.t('magasin.carte_description.reference_fabricant')}</dt><dd>${article.ref_fabricant}</dd>
+      <dt>${I18n.t('magasin.colonnes_articles.emplacement')}</dt><dd>${article.emplacement}</dd><dt>${I18n.t('magasin.carte_description.unite')}</dt><dd>${article.unite}</dd>
+      <dt>${I18n.t('commun.champ.prix_unitaire')}</dt><dd>${article.prix_unitaire === '' ? '' : UI.euro(article.prix_unitaire)}</dd>
+      <dt>${I18n.t('magasin.carte_description.fournisseur')}</dt><dd>${libelleFournisseur(article.fournisseur_id)}</dd>
+      <dt>${I18n.t('magasin.carte_description.delai_approvisionnement')}</dt><dd>${article.delai_jours === '' ? '' : I18n.t('magasin.carte_description.delai_jours', { delai_jours: article.delai_jours })}</dd>
+      <dt>${I18n.t('magasin.carte_description.stock_securite')}</dt><dd>${article.stock_securite}</dd><dt>${I18n.t('magasin.colonnes_articles.point_commande')}</dt><dd>${article.point_commande}</dd>
+      <dt>${I18n.t('magasin.carte_description.quantite_commander')}</dt><dd>${article.qte_commande}</dd>
+      <dt>${I18n.t('magasin.carte_description.article_critique')}</dt><dd>${article.critique === '1' ? I18n.t('magasin.carte_description.oui') : I18n.t('magasin.carte_description.non')}</dd>
     </dl>${encadreSuggestion(article, false)}</article>`;
   }
 
@@ -401,26 +400,26 @@ Object.assign(Magasin, (() => {
     const valeur = (nom) => (article ? article[nom] : undefined);
     const ajouter = (bloc, large) => { if (large) bloc.classList.add('large'); formulaire.appendChild(bloc); return bloc; };
     const champ = (nom, options) => ajouter(UI.champ(definitionChamp('articles', nom), valeur(nom), options));
-    champ('reference', { aide: 'Unique parmi les articles actifs. Le préfixe donne la catégorie (ex. ROU-012 : roulements).', attributs: { maxlength: '40' } });
+    champ('reference', { aide: I18n.t('magasin.formulaire_article.unique_parmi_articles_actifs'), attributs: { maxlength: '40' } });
     champ('designation', { attributs: { maxlength: '120' } });
     champ('fabricant');
     champ('ref_fabricant');
-    champ('emplacement', { aide: 'Rayon et casier (ex. A1-03).' });
-    champ('unite', { placeholder: 'u, m, L…' });
-    champ('prix_unitaire', { aide: 'Prix actuel en € HT : une réception d\'achat ne le change pas.' });
+    champ('emplacement', { aide: I18n.t('magasin.formulaire_article.rayon_casier_ex_1') });
+    champ('unite', { placeholder: I18n.t('magasin.formulaire_article.u') });
+    champ('prix_unitaire', { aide: I18n.t('magasin.formulaire_article.prix_actuel_ht_reception') });
     champ('fournisseur_id', { liste: listeFournisseurs() });
     champ('stock_securite');
     champ('delai_jours');
-    champ('point_commande', { aide: 'Sous ce niveau (ou à ce niveau), l\'article passe « À commander ».' });
-    champ('qte_commande', { aide: 'Vide : point de commande − stock + stock de sécurité.' });
+    champ('point_commande', { aide: I18n.t('magasin.formulaire_article.sous_niveau_niveau_article') });
+    champ('qte_commande', { aide: I18n.t('magasin.formulaire_article.vide_point_commande_stock') });
     if (article) ajouter(UI.element(encadreSuggestion(article, true)), true);
-    else ajouter(UI.champ({ nom: 'stock_initial', type: 'decimal', libelle: 'Stock initial' }, '', { aide: 'Facultatif : enregistré comme un inventaire.' }));
+    else ajouter(UI.champ({ nom: 'stock_initial', type: 'decimal', libelle: I18n.t('magasin.formulaire_article.stock_initial') }, '', { aide: I18n.t('magasin.formulaire_article.facultatif_enregistre_comme_inventaire') }));
     champ('critique');
-    if (article) champ('actif', { aide: 'Décoché : l\'article n\'est plus proposé (son historique est conservé).' });
-    formulaire.appendChild(UI.element(UI.html`<p class="mention-requis large"><span class="requis" aria-hidden="true">*</span>champ obligatoire</p>`)).classList.add('large');
+    if (article) champ('actif', { aide: I18n.t('magasin.formulaire_article.decoche_article_plus_propose') });
+    formulaire.appendChild(UI.element(UI.html`<p class="mention-requis large"><span class="requis" aria-hidden="true">*</span>${I18n.t('commun.message.champ_obligatoire')}</p>`)).classList.add('large');
     formulaire.appendChild(UI.element(UI.html`<div class="actions">
-      <button type="submit" class="btn btn-primaire">${UI.icone('valider')}Enregistrer</button>
-      ${article ? '' : UI.html`<a class="btn btn-fantome" href="#/magasin?onglet=articles">Annuler</a>`}</div>`));
+      <button type="submit" class="btn btn-primaire">${UI.icone('valider')}${I18n.t('commun.bouton.enregistrer')}</button>
+      ${article ? '' : UI.html`<a class="btn btn-fantome" href="#/magasin?onglet=articles">${I18n.t('commun.bouton.annuler')}</a>`}</div>`));
     const reprendre = UI.$('#magasin-reprendre-suggestion', formulaire);
     if (reprendre) {
       reprendre.addEventListener('click', () => {
@@ -428,7 +427,7 @@ Object.assign(Magasin, (() => {
         point.value = nombreTexte(Number(UI.$('#magasin-suggestion', formulaire).dataset.valeur));
         point.dispatchEvent(new Event('input', { bubbles: true }));       // saisie en cours (App)
         point.focus();
-        UI.toast('Suggestion reprise : cliquez sur Enregistrer pour la garder.', 'info');
+        UI.toast(I18n.t('magasin.formulaire_article.suggestion_reprise_cliquez_enregistrer'), 'info');
       });
     }
     formulaire.addEventListener('submit', (evenement) => { evenement.preventDefault(); enregistrerArticle(formulaire, article); });
@@ -444,7 +443,7 @@ Object.assign(Magasin, (() => {
       .filter((erreur) => !erreurs.some((e) => e.nom === erreur.nom)).forEach((erreur) => erreurs.push(erreur));
     const stockInitial = article ? null : Donnees.nombre(valeurs.stock_initial);
     if (!article && texte(valeurs.stock_initial) !== '' && (stockInitial === null || stockInitial < 0)) {
-      erreurs.push({ nom: 'stock_initial', message: 'Saisissez un stock positif ou laissez vide.' });
+      erreurs.push({ nom: 'stock_initial', message: I18n.t('magasin.enregistrer_article.saisissez_stock_positif_laissez') });
     }
     UI.$$('.champ', formulaire).forEach((bloc) => UI.erreurChamp(formulaire, bloc.dataset.champ, ''));
     erreurs.forEach((erreur) => UI.erreurChamp(formulaire, erreur.nom, erreur.message));
@@ -454,13 +453,13 @@ Object.assign(Magasin, (() => {
     try {
       if (article) {
         const changes = await Magasin.modifierArticle(article.id, valeurs);
-        await apresEcriture(changes.length ? 'Article enregistré.' : 'Aucune modification à enregistrer.');
+        await apresEcriture(changes.length ? I18n.t('magasin.enregistrer_article.article_enregistre') : I18n.t('commun.message.aucune_modification'));
         return;
       }
       const id = await Magasin.creerArticle(valeurs);
-      if (stockInitial) await Magasin.inventorier([{ articleId: id, quantite: stockInitial }], 'Stock initial');
+      if (stockInitial) await Magasin.inventorier([{ articleId: id, quantite: stockInitial }], I18n.t('magasin.formulaire_article.stock_initial'));
       App.marquerSaisie(false);
-      UI.toast('Article créé.', 'succes');
+      UI.toast(I18n.t('magasin.enregistrer_article.article_cree'), 'succes');
       App.naviguer('#/magasin/article/' + encodeURIComponent(id));
     } catch (erreur) {
       App.signalerErreur(erreur, 'enregistrement de l\'article');
@@ -475,22 +474,22 @@ Object.assign(Magasin, (() => {
       .sort((a, b) => texte(b.date).localeCompare(texte(a.date)) || texte(b.id).localeCompare(texte(a.id)));
     const lignes = mouvements.slice(0, LIMITE_FICHE);
     const liste = listeAdaptative({
-      lignes, libelle: 'Derniers mouvements de l\'article', vide: 'Aucun mouvement pour cet article.',
+      lignes, libelle: I18n.t('magasin.carte_mouvements_article.derniers_mouvements_article'), vide: I18n.t('magasin.carte_mouvements_article.aucun_mouvement_article'),
       colonnes: [
-        { cle: 'date', libelle: 'Date', classe: 'sans-coupure', rendu: (m) => UI.dateHeureFr(m.date) },
-        { cle: 'type', libelle: 'Type', rendu: (m) => Magasin.interne.badgeMouvement(m.type) },
-        { cle: 'quantite', libelle: 'Quantité', type: 'nombre', rendu: (m) => UI.nombreFr(m.quantite) },
+        { cle: 'date', libelle: I18n.t('commun.champ.date'), classe: 'sans-coupure', rendu: (m) => UI.dateHeureFr(m.date) },
+        { cle: 'type', libelle: I18n.t('magasin.carte_mouvements_article.type'), rendu: (m) => Magasin.interne.badgeMouvement(m.type) },
+        { cle: 'quantite', libelle: I18n.t('commun.champ.quantite'), type: 'nombre', rendu: (m) => UI.nombreFr(m.quantite) },
         { cle: 'ot_id', libelle: 'OT', classe: 'sans-coupure', rendu: (m) => lienOt(m.ot_id) },
-        { cle: 'utilisateur', libelle: 'Par' },
-        { cle: 'commentaire', libelle: 'Commentaire', classe: 'magasin-col-commentaire' },
+        { cle: 'utilisateur', libelle: I18n.t('magasin.carte_mouvements_article.par') },
+        { cle: 'commentaire', libelle: I18n.t('commun.champ.commentaire'), classe: 'magasin-col-commentaire' },
       ],
       carte: (m) => UI.html`<div class="carte-ligne"><div class="carte-tete"><b>${UI.dateHeureFr(m.date)}</b>${Magasin.interne.badgeMouvement(m.type)}</div>
-        <div class="carte-meta"><span>Quantité : ${UI.nombreFr(m.quantite)}</span>${m.ot_id ? UI.html`<span>${lienOt(m.ot_id)}</span>` : ''}
+        <div class="carte-meta"><span>${I18n.t('magasin.carte_mouvements_article.quantite_quantite', { quantite: UI.nombreFr(m.quantite) })}</span>${m.ot_id ? UI.html`<span>${lienOt(m.ot_id)}</span>` : ''}
           ${m.utilisateur ? UI.html`<span>${m.utilisateur}</span>` : ''}</div>${m.commentaire ? UI.html`<div class="carte-meta">${m.commentaire}</div>` : ''}</div>`,
     });
     const carte = UI.element(UI.html`<article class="carte magasin-mouvements-article">
-      <div class="entete-carte"><h2>Mouvements <span class="badge">${mouvements.length}</span></h2>
-        ${mouvements.length > LIMITE_FICHE ? UI.html`<a href="#/magasin?onglet=mouvements&amp;article=${encodeURIComponent(article.id)}">Voir les ${mouvements.length}</a>` : ''}</div>
+      <div class="entete-carte"><h2>${I18n.html('magasin.carte_mouvements_article.mouvements_nb_mouvements', { nbMouvements: mouvements.length })}</h2>
+        ${mouvements.length > LIMITE_FICHE ? UI.html`<a href="#/magasin?onglet=mouvements&amp;article=${encodeURIComponent(article.id)}">${I18n.t('magasin.carte_mouvements_article.voir_nb_mouvements', { nbMouvements: mouvements.length })}</a>` : ''}</div>
       <div class="magasin-zone"></div></article>`);
     UI.$('.magasin-zone', carte).appendChild(liste);
     return carte;
@@ -500,13 +499,13 @@ Object.assign(Magasin, (() => {
     const liens = Donnees.lignes('article_equipement').filter((lien) => lien.article_id === article.id).map((lien) => {
       const equipement = Donnees.trouver('equipements', lien.equipement_id);
       return { id: lien.equipement_id, repere: equipement ? equipement.repere : lien.equipement_id,
-        designation: equipement ? equipement.designation : '(équipement inconnu)', quantite: lien.quantite };
+        designation: equipement ? equipement.designation : I18n.t('magasin.carte_equipements_lies.equipement_inconnu'), quantite: lien.quantite };
     }).sort((a, b) => texte(a.repere).localeCompare(texte(b.repere), 'fr', { numeric: true }));
-    return UI.html`<article class="carte"><h2>Équipements liés <span class="badge">${liens.length}</span></h2>
+    return UI.html`<article class="carte"><h2>${I18n.html('magasin.carte_equipements_lies.equipements_lies', { nbLiens: liens.length })}</h2>
       ${liens.length ? UI.html`<ul class="magasin-liens">${liens.map((l) => UI.html`<li>
         <a href="#/equipement/${encodeURIComponent(l.id)}"><b>${l.repere}</b> ${l.designation}</a>
         <span class="muted">× ${UI.nombreFr(l.quantite)}</span></li>`)}</ul>`
-        : UI.html`<p class="muted">Cette pièce n'est rattachée à aucun équipement.</p>`}</article>`;
+        : UI.html`<p class="muted">${I18n.t('magasin.carte_equipements_lies.piece_rattachee_aucun_equipement')}</p>`}</article>`;
   }
 
   function carteOtConsommateurs(article) {
@@ -519,30 +518,30 @@ Object.assign(Magasin, (() => {
       parOt.set(m.ot_id, ligne);
     });
     const lignes = Array.from(parOt.values()).sort((a, b) => b.derniere.localeCompare(a.derniere));
-    return UI.html`<article class="carte"><h2>OT consommateurs <span class="badge">${lignes.length}</span></h2>
+    return UI.html`<article class="carte"><h2>${I18n.html('magasin.carte_ot_consommateurs.ot_consommateurs', { nbLignes: lignes.length })}</h2>
       ${lignes.length ? UI.html`<ul class="magasin-liens">${lignes.slice(0, LIMITE_FICHE).map((l) => {
         const ot = Donnees.trouver('ordres_travail', l.otId);
         const equipement = ot ? Donnees.trouver('equipements', ot.equipement_id) : null;
         return UI.html`<li>${lienOt(l.otId)} <span>${equipement ? equipement.repere : ''}</span>
-          ${ot ? UI.badgeStatut(ot.statut) : ''} <span class="muted">${UI.dateFr(l.derniere)} · net ${quantiteUnite(l.net, article.unite)}</span></li>`;
-      })}</ul>` : UI.html`<p class="muted">Aucun ordre de travail n'a consommé cette pièce.</p>`}</article>`;
+          ${ot ? UI.badgeStatut(ot.statut) : ''} <span class="muted">${I18n.t('magasin.carte_ot_consommateurs.derniere_net_quantite_unite', { derniere: UI.dateFr(l.derniere), quantiteUnite: quantiteUnite(l.net, article.unite) })}</span></li>`;
+      })}</ul>` : UI.html`<p class="muted">${I18n.t('magasin.carte_ot_consommateurs.aucun_ordre_travail_consomme')}</p>`}</article>`;
   }
 
   function carteAchatsArticle(article) {
     const achats = Donnees.lignes('achats').filter((achat) => achat.article_id === article.id)
       .sort((a, b) => texte(b.date).localeCompare(texte(a.date)) || texte(b.id).localeCompare(texte(a.id)));
-    return UI.html`<article class="carte"><h2>Achats <span class="badge">${achats.length}</span></h2>
+    return UI.html`<article class="carte"><h2>${I18n.html('magasin.carte_achats_article.achats_nb_achats', { nbAchats: achats.length })}</h2>
       ${achats.length ? UI.html`<ul class="magasin-liens">${achats.slice(0, LIMITE_FICHE).map((achat) => UI.html`<li>
         <b>${achat.id}</b> ${UI.badgeStatut(achat.statut)} <span>${UI.nombreFr(achat.quantite)} × ${UI.euro(achat.prix_unitaire)}</span>
-        <span class="muted">${UI.dateFr(achat.date)}${achat.date_reception ? ' · reçu le ' + UI.dateFr(achat.date_reception) : ''} · ${libelleFournisseur(achat.fournisseur_id)}</span></li>`)}</ul>`
-        : UI.html`<p class="muted">Aucun achat pour cet article.</p>`}</article>`;
+        <span class="muted">${UI.dateFr(achat.date)}${achat.date_reception ? ' ' + I18n.t('magasin.carte_achats_article.recu_date_reception', { date_reception: UI.dateFr(achat.date_reception) }) : ''} · ${libelleFournisseur(achat.fournisseur_id)}</span></li>`)}</ul>`
+        : UI.html`<p class="muted">${I18n.t('magasin.carte_achats_article.aucun_achat_article')}</p>`}</article>`;
   }
 
   function afficherArticleIntrouvable(conteneur, id) {
-    App.definirTitre('Article introuvable');
+    App.definirTitre(I18n.t('magasin.article_introuvable.article_introuvable'));
     UI.remplir(conteneur, UI.html`<div class="magasin"><div class="entete-page"><div>
-      <div class="fil"><a href="#/magasin?onglet=articles">Magasin</a></div><h1>Article introuvable</h1></div></div>
-      ${UI.vide('Aucun article ne porte l\'identifiant « ' + id + ' »', 'Il a peut-être été saisi sur un autre poste : actualisez.', 'magasin')}</div>`);
+      <div class="fil"><a href="#/magasin?onglet=articles">${I18n.t('magasin.magasin.magasin')}</a></div><h1>${I18n.t('magasin.article_introuvable.article_introuvable')}</h1></div></div>
+      ${UI.vide(I18n.t('magasin.article_introuvable.aucun_article_porte_identifiant', { id }), I18n.t('commun.message.saisi_sur_autre_poste'), 'magasin')}</div>`);
   }
 
   function afficherFicheArticle(conteneur, parametres) {
@@ -556,19 +555,19 @@ Object.assign(Magasin, (() => {
       <div class="magasin magasin-fiche">
         <div class="entete-page">
           <div>
-            <div class="fil"><a href="#/magasin?onglet=articles">Magasin</a> <span aria-hidden="true">›</span> <span>${categorieArticle(article).libelle}</span></div>
+            <div class="fil">${I18n.html('magasin.fiche_article.magasin_v1', { categorie: categorieArticle(article).libelle })}</div>
             <h1>${libelleArticle(article)}</h1>
             <p class="magasin-badges">${badgesArticle(article, stock)}</p>
-            <p><a id="lien-wiki-article" href="#/wiki/${encodeURIComponent(article.id)}">${UI.icone('wiki')}Wiki de cet article</a></p>
+            <p><a id="lien-wiki-article" href="#/wiki/${encodeURIComponent(article.id)}">${UI.icone('wiki')}${I18n.t('magasin.fiche_article.wiki_article')}</a></p>
           </div>
           ${responsable ? UI.html`<div class="actions">
-            <button type="button" class="btn btn-secondaire" id="magasin-entree">${UI.icone('ajouter')}Entrée en stock</button>
-            <button type="button" class="btn btn-secondaire" id="magasin-demander-achat">${UI.icone('magasin')}Demander l'achat</button>
+            <button type="button" class="btn btn-secondaire" id="magasin-entree">${UI.icone('ajouter')}${I18n.t('magasin.fiche_article.entree_stock')}</button>
+            <button type="button" class="btn btn-secondaire" id="magasin-demander-achat">${UI.icone('magasin')}${I18n.t('magasin.fiche_article.demander_achat')}</button>
           </div>` : ''}
         </div>
         ${enCours.length ? UI.html`<div class="alertes"><div class="alerte" role="status">${UI.icone('apropos')}<div class="alerte-texte">
-          Achat en cours : ${enCours.map((achat) => UI.html`<b>${achat.id}</b> (${achat.statut}, ${UI.nombreFr(achat.quantite)}) `)}
-          — <a href="#/magasin?onglet=achats">voir les achats</a></div></div></div>` : ''}
+          ${I18n.t('magasin.fiche_article.achat_cours')} ${enCours.map((achat) => UI.html`<b>${achat.id}</b> (${achat.statut}, ${UI.nombreFr(achat.quantite)}) `)}
+          ${I18n.html('magasin.fiche_article.voir_achats')}</div></div></div>` : ''}
         ${instrumentsFiche(article, stock)}
         <div class="magasin-zone-article"></div>
         <div class="grille magasin-grille">
@@ -580,7 +579,7 @@ Object.assign(Magasin, (() => {
       </div>`);
     const zoneArticle = UI.$('.magasin-zone-article', conteneur);
     if (responsable) {
-      const carte = UI.element(UI.html`<article class="carte"><h2>Article et réapprovisionnement</h2></article>`);
+      const carte = UI.element(UI.html`<article class="carte"><h2>${I18n.t('magasin.fiche_article.article_reapprovisionnement')}</h2></article>`);
       carte.appendChild(formulaireArticle(article));
       zoneArticle.appendChild(carte);
       UI.$('#magasin-entree', conteneur).addEventListener('click', () => Magasin.interne.ouvrirEntree(article));
@@ -592,10 +591,10 @@ Object.assign(Magasin, (() => {
   }
 
   function afficherNouvelArticle(conteneur) {
-    App.definirTitre('Nouvel article');
+    App.definirTitre(I18n.t('magasin.magasin.nouvel_article'));
     UI.remplir(conteneur, UI.html`<div class="magasin">
-      <div class="entete-page"><div><div class="fil"><a href="#/magasin?onglet=articles">Magasin</a> <span aria-hidden="true">›</span> <span>Nouvel article</span></div>
-        <h1>Nouvel article</h1><p>Le stock vient des mouvements : un stock initial est enregistré comme un inventaire.</p></div></div>
+      <div class="entete-page"><div><div class="fil">${I18n.html('magasin.nouvel_article.magasin_nouvel_article')}</div>
+        <h1>${I18n.t('magasin.magasin.nouvel_article')}</h1><p>${I18n.t('magasin.nouvel_article.stock_vient_mouvements_stock')}</p></div></div>
       <article class="carte magasin-zone-article"></article></div>`);
     UI.$('.magasin-zone-article', conteneur).appendChild(formulaireArticle(null));
   }

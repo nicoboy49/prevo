@@ -94,7 +94,7 @@ Object.assign(Indicateurs, (() => {
       const code = texte(panne.ot.cause_code);
       compte.set(code, (compte.get(code) || 0) + 1);
     });
-    const lignes = Array.from(compte, ([code, total]) => ({ code, libelle: code ? (libelles.get(code) || code) : 'sans code', nombre: total }));
+    const lignes = Array.from(compte, ([code, total]) => ({ code, libelle: code ? (libelles.get(code) || code) : I18n.t('indicateurs.causes.sans_code'), nombre: total }));
     return lignes.filter((ligne) => ligne.code).sort((a, b) => b.nombre - a.nombre || a.libelle.localeCompare(b.libelle, 'fr'))
       .concat(lignes.filter((ligne) => !ligne.code));
   }

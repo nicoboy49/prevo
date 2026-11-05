@@ -20,7 +20,10 @@ const Rapport = (() => {
   // 1. Petits outils
   // ===========================================================================================
 
-  const NOMS_MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  // Fonction (et non constante) : les noms de mois sont lus au moment de l'écriture du rapport, jamais figés au chargement.
+  function nomsMois() {
+    return ['janvier', I18n.t('rapport.noms_mois.fevrier'), 'mars', 'avril', 'mai', 'juin', 'juillet', I18n.t('rapport.noms_mois.aout'), 'septembre', 'octobre', 'novembre', I18n.t('rapport.noms_mois.decembre')];
+  }
   const COULEURS_SERIES = ['#2F5BD3', '#A86A12', '#6B7280'];     // impression sur blanc : bleu, ocre, gris
   const PREFIXE_FICHIER = 'rapport-mensuel-';
   // Nom enregistré d'un rapport : en mode serveur, le nom demandé précédé de l'horodatage du serveur (audit F4,
@@ -44,7 +47,7 @@ const Rapport = (() => {
 
   /** '2026-09' → « septembre 2026 ». */
   function libelleMois(mois) {
-    return NOMS_MOIS[Number(mois.slice(5, 7)) - 1] + ' ' + mois.slice(0, 4);
+    return nomsMois()[Number(mois.slice(5, 7)) - 1] + ' ' + mois.slice(0, 4);
   }
 
   function repere(equipementId) {
@@ -72,7 +75,7 @@ const Rapport = (() => {
 
   /** Format d'une tuile selon sa nature. */
   function formater(cle, valeur) {
-    if (valeur === null || valeur === undefined) return 'non calculable';
+    if (valeur === null || valeur === undefined) return I18n.t('rapport.formater.non_calculable');
     return cle === 'cout' ? UI.euro(valeur, 0) : pourcentage(valeur);
   }
 
@@ -82,49 +85,54 @@ const Rapport = (() => {
    * écart relatif en %.
    */
   function comparer(cle, valeur, reference, comparable, libelleReference) {
-    if (!comparable) return { sens: null, texte: 'non comparable avec ' + libelleReference + ' (historique trop court)' };
-    if (valeur === null || reference === null) return { sens: null, texte: 'non calculable pour ' + libelleReference };
+    if (!comparable) return { sens: null, texte: I18n.t('rapport.comparer.non_comparable_historique_trop', { libelleReference }) };
+    if (valeur === null || reference === null) return { sens: null, texte: I18n.t('rapport.comparer.non_calculable', { libelleReference }) };
     if (cle === 'cout') {
       if (reference === 0) {
-        return valeur === 0 ? { sens: 'stable', texte: 'stable par rapport à ' + libelleReference }
-          : { sens: 'hausse', texte: 'en hausse (' + libelleReference + ' : 0 €)' };
+        return valeur === 0 ? { sens: 'stable', texte: I18n.t('rapport.comparer.stable_rapport', { libelleReference }) }
+          : { sens: 'hausse', texte: I18n.t('rapport.comparer.hausse_0', { libelleReference }) };
       }
       const ecart = (valeur - reference) / reference * 100;
-      if (Math.abs(ecart) < 0.5) return { sens: 'stable', texte: 'stable par rapport à ' + libelleReference };
+      if (Math.abs(ecart) < 0.5) return { sens: 'stable', texte: I18n.t('rapport.comparer.stable_rapport', { libelleReference }) };
       return { sens: ecart > 0 ? 'hausse' : 'baisse',
-        texte: (ecart > 0 ? 'en hausse de ' : 'en baisse de ') + UI.nombreFr(Math.abs(ecart), 0) + ' % par rapport à ' + libelleReference };
+        texte: ecart > 0 ? I18n.t('rapport.comparer.hausse_rapport', { pourcent: UI.nombreFr(Math.abs(ecart), 0), libelleReference })
+          : I18n.t('rapport.comparer.baisse_rapport', { pourcent: UI.nombreFr(Math.abs(ecart), 0), libelleReference }) };
     }
     const points = (valeur - reference) * 100;
-    if (Math.abs(points) < 0.05) return { sens: 'stable', texte: 'stable par rapport à ' + libelleReference };
+    if (Math.abs(points) < 0.05) return { sens: 'stable', texte: I18n.t('rapport.comparer.stable_rapport', { libelleReference }) };
     return { sens: points > 0 ? 'hausse' : 'baisse',
-      texte: (points > 0 ? 'en hausse de ' : 'en baisse de ') + UI.nombreFr(Math.abs(points), 1) + ' point(s) par rapport à ' + libelleReference };
+      texte: points > 0 ? I18n.t('rapport.comparer.hausse_point_rapport', { n: Math.abs(points), points: UI.nombreFr(Math.abs(points), 1), libelleReference })
+        : I18n.t('rapport.comparer.baisse_point_rapport', { n: Math.abs(points), points: UI.nombreFr(Math.abs(points), 1), libelleReference }) };
   }
 
   // ===========================================================================================
   // 2. Données du rapport (pures)
   // ===========================================================================================
 
-  const TUILES = [
-    { cle: 'disponibilite', libelle: 'Disponibilité', hausseFavorable: true, lire: (g) => g.disponibilite },
-    { cle: 'cout', libelle: 'Coût de maintenance du mois', hausseFavorable: false, lire: (g) => g.cout },
-    { cle: 'partPreventif', libelle: 'Part du préventif (heures)', hausseFavorable: true, lire: (g) => g.partPreventif },
-  ];
+  // Fonction (et non constante) : les libellés sont lus au moment de l'écriture du rapport.
+  function tuilesDefinies() {
+    return [
+      { cle: 'disponibilite', libelle: I18n.t('rapport.tuiles_definies.disponibilite'), hausseFavorable: true, lire: (g) => g.disponibilite },
+      { cle: 'cout', libelle: I18n.t('rapport.tuiles_definies.cout_maintenance_mois'), hausseFavorable: false, lire: (g) => g.cout },
+      { cle: 'partPreventif', libelle: I18n.t('rapport.tuiles_definies.part_preventif_heures'), hausseFavorable: true, lire: (g) => g.partPreventif },
+    ];
+  }
 
   function faitsMarquants(periode, global, aujourdhui) {
     const faits = [];
     const pannes = Indicateurs.pannes(periode).filter((panne) => panne.duree !== null);
     if (pannes.length) {
       const longue = pannes.reduce((a, b) => (b.duree > a.duree ? b : a));
-      faits.push('Plus long arrêt : ' + repere(longue.ot.equipement_id) + ', ' + UI.heures(longue.duree) + ' (' + longue.ot.id + ').');
+      faits.push(I18n.t('rapport.faits_marquants.plus_long_arret', { repere: repere(longue.ot.equipement_id), duree: UI.heures(longue.duree), otId: longue.ot.id }));
     }
     const plusSouvent = Indicateurs.paretoPannes(periode, 1)[0];
     if (plusSouvent && plusSouvent.valeur >= 2) {
-      faits.push(repere(plusSouvent.equipementId) + ' : ' + plusSouvent.valeur + ' pannes dans le mois.');
+      faits.push(I18n.t('rapport.faits_marquants.pannes_mois', { repere: repere(plusSouvent.equipementId), n: plusSouvent.valeur }));
     }
     const enRetard = Donnees.lignes('controles_reglementaires').filter((controle) => Controles.interne.equipementSuivi(controle) && Controles.etat(controle, aujourdhui).statut === 'en retard');
-    if (enRetard.length) faits.push(enRetard.length + ' contrôle(s) réglementaire(s) en retard au ' + UI.dateFr(aujourdhui) + '.');
-    else if (global.otEnRetard.valeur) faits.push(global.otEnRetard.valeur + ' OT en retard au ' + UI.dateFr(aujourdhui) + '.');
-    if (!faits.length) faits.push('Aucune panne avec arrêt de production ce mois-ci.');
+    if (enRetard.length) faits.push(I18n.t('rapport.faits_marquants.controle_reglementaire_retard', { n: enRetard.length, aujourdhui: UI.dateFr(aujourdhui) }));
+    else if (global.otEnRetard.valeur) faits.push(I18n.t('rapport.faits_marquants.ot_retard', { otEnRetardValeur: global.otEnRetard.valeur, aujourdhui: UI.dateFr(aujourdhui) }));
+    if (!faits.length) faits.push(I18n.t('rapport.faits_marquants.aucune_panne_arret_production'));
     return faits.slice(0, 3);
   }
 
@@ -146,8 +154,7 @@ const Rapport = (() => {
       const ratio = element.valeur / valeur * 100;
       if (ratio >= seuil && (!meilleur || ratio > meilleur.ratio)) meilleur = { equipementId: element.equipementId, cout: element.valeur, valeur, ratio };
     });
-    return { decision: meilleur && (repere(meilleur.equipementId) + ' : ' + UI.euro(meilleur.cout, 0) + ' de maintenance sur 12 mois, soit '
-      + UI.nombreFr(meilleur.ratio, 0) + ' % de sa valeur de remplacement (' + UI.euro(meilleur.valeur, 0) + ') — réparer ou remplacer ? À examiner.'),
+    return { decision: meilleur && (I18n.t('rapport.reparer_ou_remplacer.maintenance_12_mois_soit', { repere: repere(meilleur.equipementId), euro: UI.euro(meilleur.cout, 0), ratio: UI.nombreFr(meilleur.ratio, 0), valeurRemplacement: UI.euro(meilleur.valeur, 0) })),
     sansValeur, seuil };
   }
 
@@ -156,13 +163,14 @@ const Rapport = (() => {
     if (remplacement.decision) liste.push(remplacement.decision);
     const enRetard = Donnees.lignes('controles_reglementaires').filter((controle) => Controles.interne.equipementSuivi(controle) && Controles.etat(controle, aujourdhui).statut === 'en retard');
     if (enRetard.length) {
-      liste.push('Planifier ' + (enRetard.length > 1 ? 'les ' + enRetard.length + ' contrôles réglementaires en retard' : 'le contrôle réglementaire en retard')
-        + ' : ' + enRetard.slice(0, 3).map((controle) => texte(controle.nature) + ' (' + repere(controle.equipement_id) + ')').join(' ; ') + '.');
+      const controlesEnRetard = enRetard.slice(0, 3).map((controle) => texte(controle.nature) + ' (' + repere(controle.equipement_id) + ')').join(' ; ');
+      liste.push(I18n.t('rapport.decisions.planifier_controles', { n: enRetard.length, liste: controlesEnRetard }));
     }
     const aCommander = Magasin.aCommander();
     if (aCommander.length) {
       const critiques = aCommander.filter((element) => texte(element.article.critique) === '1').length;
-      liste.push('Commander ' + aCommander.length + ' article(s) sous le point de commande' + (critiques ? ', dont ' + critiques + ' critique(s)' : '') + '.');
+      liste.push(critiques ? I18n.t('rapport.decisions.commander_articles_dont_critiques', { n: aCommander.length, critiques })
+        : I18n.t('rapport.decisions.commander_articles', { n: aCommander.length }));
     }
     return liste.slice(0, 3);
   }
@@ -180,7 +188,7 @@ const Rapport = (() => {
     const anneePrecedente = decalerMois(mois, -12);
     const globalPrecedent = estCouvert(precedent) ? Indicateurs.global(Indicateurs.periodeDuMois(precedent), {}, jour) : null;
     const globalAnnee = estCouvert(anneePrecedente) ? Indicateurs.global(Indicateurs.periodeDuMois(anneePrecedente), {}, jour) : null;
-    const tuiles = TUILES.map((tuile) => {
+    const tuiles = tuilesDefinies().map((tuile) => {
       const resultat = tuile.lire(global);
       const valeurPrecedente = globalPrecedent ? tuile.lire(globalPrecedent).valeur : null;
       const valeurAnnee = globalAnnee ? tuile.lire(globalAnnee).valeur : null;
@@ -197,12 +205,10 @@ const Rapport = (() => {
     const remplacement = reparerOuRemplacer(mois);
     const nonCalculables = tuiles.filter((tuile) => tuile.valeur === null).map((tuile) => ({ libelle: tuile.libelle, raison: tuile.raison }));
     if (global.tempsRequis.exclus.length) {
-      nonCalculables.push({ libelle: 'Équipements hors disponibilité', raison: global.tempsRequis.exclus.length + ' équipement(s) sans heures de fonctionnement par jour : '
-        + global.tempsRequis.exclus.slice(0, 6).map((element) => repere(element.id)).join(', ') + (global.tempsRequis.exclus.length > 6 ? '…' : '') });
+      nonCalculables.push({ libelle: I18n.t('rapport.donnees.equipements_hors_disponibilite'), raison: I18n.t('rapport.donnees.equipement_sans_heures_fonctionnement', { n: global.tempsRequis.exclus.length, reperes: global.tempsRequis.exclus.slice(0, 6).map((element) => repere(element.id)).join(', ') }) + (global.tempsRequis.exclus.length > 6 ? I18n.t('rapport.donnees.texte') : '') });
     }
     if (remplacement.sansValeur.length) {
-      nonCalculables.push({ libelle: 'Réparer ou remplacer', raison: 'valeur de remplacement non renseignée pour ' + remplacement.sansValeur.length + ' équipement(s) avec des coûts : '
-        + remplacement.sansValeur.slice(0, 6).map(repere).join(', ') });
+      nonCalculables.push({ libelle: I18n.t('rapport.donnees.reparer_remplacer'), raison: I18n.t('rapport.donnees.valeur_remplacement_non_renseignee', { n: remplacement.sansValeur.length, reperes: remplacement.sansValeur.slice(0, 6).map(repere).join(', ') }) });
     }
     const resultat = {
       mois, libelleMois: libelleMois(mois), genereLe: texte(maintenant) || Donnees.maintenant(),
@@ -213,12 +219,12 @@ const Rapport = (() => {
       mttr: global.mttr, attentePieces: global.attentePieces, seuilRemplacement: remplacement.seuil,
       nonCalculables,
       comprendre: [
-        ['Disponibilité', 'MTBF / (MTBF + MTTR) : la part du temps de fonctionnement prévu pendant laquelle les équipements ont réellement tourné.'],
-        ['Panne', 'OT correctif avec arrêt de production, daté par la demande d\'intervention.'],
-        ['MTTR', 'durée d\'arrêt moyenne d\'une panne (temps de rétablissement, attente de pièces comprise).'],
-        ['Coût', 'heures × taux horaire + pièces sorties × prix actuel + sous-traitance, des OT clôturés dans le mois.'],
-        ['Part du préventif', 'heures passées sur des OT préventifs / heures passées sur tous les OT.'],
-        ['Réparer ou remplacer', 'coût de maintenance des 12 derniers mois rapporté à la valeur de remplacement ; signalé au-delà de ' + UI.nombreFr(remplacement.seuil, 0) + ' % (réglable dans Paramètres).'],
+        [I18n.t('rapport.tuiles_definies.disponibilite'), I18n.t('rapport.donnees.mtbf_mtbf_mttr_part')],
+        [I18n.t('rapport.donnees.panne'), I18n.t('rapport.donnees.ot_correctif_arret_production')],
+        ['MTTR', I18n.t('rapport.donnees.duree_arret_moyenne_panne')],
+        [I18n.t('rapport.donnees.cout'), I18n.t('rapport.donnees.heures_taux_horaire_pieces')],
+        [I18n.t('rapport.donnees.part_preventif'), I18n.t('rapport.donnees.heures_passees_ot_preventifs')],
+        [I18n.t('rapport.donnees.reparer_remplacer'), I18n.t('rapport.donnees.cout_maintenance_12_derniers', { seuil: UI.nombreFr(remplacement.seuil, 0) })],
       ],
     };
     resultat.courriel = texteCourriel(resultat);
@@ -240,18 +246,19 @@ const Rapport = (() => {
 
   /** Objet et corps d'un courriel de résumé (texte simple, moins de 1 800 caractères). */
   function texteCourriel(rapport) {
-    const lignes = ['Rapport mensuel de maintenance — ' + rapport.libelleMois + (rapport.entreprise ? ' — ' + rapport.entreprise : ''), ''];
+    const lignes = [rapport.entreprise ? I18n.t('rapport.texte_courriel.rapport_mensuel_maintenance', { libelleMois: rapport.libelleMois, entreprise: rapport.entreprise })
+      : I18n.t('rapport.texte_courriel.rapport_mensuel_maintenance_2', { libelleMois: rapport.libelleMois }), ''];
     rapport.tuiles.forEach((tuile) => lignes.push('• ' + tuile.libelle + ' : ' + tuile.texteValeur + ' (' + tuile.tendance.precedent.texte + ')'));
-    lignes.push('', 'Faits marquants :');
+    lignes.push('', I18n.t('rapport.texte_courriel.faits_marquants'));
     rapport.faits.forEach((fait) => lignes.push('• ' + fait));
     if (rapport.decisions.length) {
-      lignes.push('', 'Décisions proposées :');
+      lignes.push('', I18n.t('rapport.texte_courriel.decisions_proposees'));
       rapport.decisions.forEach((decision) => lignes.push('• ' + decision));
     }
-    lignes.push('', 'Le rapport complet (une page) est dans Prévo : Indicateurs, onglet « Rapports mensuels ».');
+    lignes.push('', I18n.t('rapport.texte_courriel.rapport_complet_page_prevo'));
     let corps = lignes.join('\r\n');      // RFC 6068 : fins de ligne CRLF (%0D%0A)
-    if (corps.length > 1800) corps = corps.slice(0, 1790) + '…';
-    return { objet: 'Rapport de maintenance — ' + rapport.libelleMois, corps };
+    if (corps.length > 1800) corps = I18n.t('rapport.texte_courriel.slice', { slice: corps.slice(0, 1790) });
+    return { objet: I18n.t('rapport.texte_courriel.rapport_maintenance', { libelleMois: rapport.libelleMois }), corps };
   }
 
   /** Lien mailto: (RFC 6068) : rien n'est envoyé par Prévo, la messagerie du poste s'ouvre. */
@@ -271,7 +278,7 @@ const Rapport = (() => {
   /** Graphique ECharts rendu en SVG hors écran (rien n'est ajouté à la page). */
   function svg(lib, largeur, hauteur, option) {
     const graphique = lib.init(null, null, { renderer: 'svg', ssr: true, width: largeur, height: hauteur });
-    graphique.setOption(Object.assign({ animation: false, textStyle: { fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 11, color: '#222' } }, option));
+    graphique.setOption(Object.assign({ animation: false, textStyle: { fontFamily: I18n.t('rapport.svg.arial_helvetica_sans_serif'), fontSize: 11, color: '#222' } }, option));
     const dessin = graphique.renderToSVGString();
     graphique.dispose();
     return dessin;
@@ -293,7 +300,7 @@ const Rapport = (() => {
       series: [
         // Mêmes couleurs que l'écran Indicateurs : correctif bleu, préventif ocre.
         { name: 'Correctif', type: 'bar', data: rapport.heures12Mois.map((element) => element.correctif), itemStyle: { color: COULEURS_SERIES[0] } },
-        { name: 'Préventif', type: 'bar', data: rapport.heures12Mois.map((element) => element.preventif), itemStyle: { color: COULEURS_SERIES[1] } },
+        { name: I18n.t('rapport.graphiques.preventif'), type: 'bar', data: rapport.heures12Mois.map((element) => element.preventif), itemStyle: { color: COULEURS_SERIES[1] } },
       ],
     });
     return { pareto, heures };
@@ -304,7 +311,7 @@ const Rapport = (() => {
     if (!tendance.sens) return UI.html`<span class="feu neutre">○ ${tendance.texte}</span>`;
     if (tendance.sens === 'stable') return UI.html`<span class="feu neutre">■ ${tendance.texte}</span>`;
     const favorable = (tendance.sens === 'hausse') === tuile.hausseFavorable;
-    return UI.html`<span class="feu ${favorable ? 'bon' : 'mauvais'}">${tendance.sens === 'hausse' ? '▲' : '▼'} ${tendance.texte}${favorable ? '' : ' (à surveiller)'}</span>`;
+    return UI.html`<span class="feu ${favorable ? 'bon' : 'mauvais'}">${tendance.sens === 'hausse' ? '▲' : '▼'} ${tendance.texte}${favorable ? '' : ' ' + I18n.t('rapport.feu.surveiller')}</span>`;
   }
 
   const STYLE = `@page { size: A4; margin: 11mm 12mm; }
@@ -344,32 +351,33 @@ figure { margin: 0; } figcaption { font-weight: 600; margin-bottom: 2px; }
     const commentaire = reglages.commentaire && texte(reglages.commentaire.texte) ? reglages.commentaire : null;
     const lib = await App.chargerEcharts();
     const dessins = graphiques(lib, rapport);
-    const titre = 'Rapport mensuel de maintenance — ' + rapport.libelleMois;
-    const mttr = rapport.mttr.valeur === null ? '' : UI.html`<p class="pied">MTTR : ${UI.heures(Math.round(rapport.mttr.valeur * 10) / 10)}${rapport.attentePieces.valeur === null ? ''
-      : UI.html`, dont attente de pièces : ${UI.heures(Math.round(rapport.attentePieces.valeur * 10) / 10)} (sur ${rapport.attentePieces.effectif} panne(s) à historique complet)`}.</p>`;
+    const titre = I18n.t('rapport.texte_courriel.rapport_mensuel_maintenance_2', { libelleMois: rapport.libelleMois });
+    const mttr = rapport.mttr.valeur === null ? '' : UI.html`<p class="pied">${I18n.t('rapport.html.mttr_v1', { duree: UI.heures(Math.round(rapport.mttr.valeur * 10) / 10) })}${rapport.attentePieces.valeur === null ? ''
+      : UI.html`${I18n.t('rapport.html.dont_attente_pieces_panne', { n: rapport.attentePieces.effectif, duree: UI.heures(Math.round(rapport.attentePieces.valeur * 10) / 10) })}`}.</p>`;
     const page = UI.html`<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><title>${titre}${rapport.entreprise ? ' — ' + rapport.entreprise : ''}</title>
+<html lang="fr"><head><meta charset="utf-8"><title>${rapport.entreprise ? titre + ' — ' + rapport.entreprise : titre}</title>
 <style>${UI.brut(STYLE)}</style></head>
 <body><main class="page">
 <header><h1>${titre}</h1>
-<p class="sous">${rapport.entreprise ? rapport.entreprise + ' · ' : ''}Données au ${UI.dateHeureFr(rapport.genereLe)} · Rapport figé par Prévo (GMAO)</p></header>
+<p class="sous">${rapport.entreprise ? UI.html`${I18n.t('rapport.html.donnees_rapport_fige_prevo', { entreprise: rapport.entreprise, genereLe: UI.dateHeureFr(rapport.genereLe) })}`
+  : UI.html`${I18n.t('rapport.html.donnees_rapport_fige_prevo_2', { genereLe: UI.dateHeureFr(rapport.genereLe) })}`}</p></header>
 <section class="tuiles">${rapport.tuiles.map((tuile) => UI.html`<div class="tuile" data-cle="${tuile.cle}">
   <div class="lib">${tuile.libelle}</div><div class="val">${tuile.texteValeur}</div>
   ${tuile.valeur === null ? UI.html`<div class="raison">${tuile.raison}</div>` : ''}
   ${feu(tuile, tuile.tendance.precedent)}${feu(tuile, tuile.tendance.annee)}</div>`)}</section>
-<section class="colonnes"><div><h2>Faits marquants</h2><ul>${rapport.faits.map((fait) => UI.html`<li>${fait}</li>`)}</ul></div>
-<div><h2>Décisions à prendre</h2>${rapport.decisions.length ? UI.html`<ol>${rapport.decisions.map((decision) => UI.html`<li>${decision}</li>`)}</ol>`
-    : UI.html`<p>Aucune décision urgente ce mois-ci.</p>`}</div></section>
-${commentaire ? UI.html`<section class="commentaire"><h2>Commentaire</h2><p>${texte(commentaire.texte)}</p>${commentaire.aideIa
-    ? UI.html`<p class="mention-ia">Commentaire rédigé avec l'aide de l'IA, relu et validé par le responsable.</p>` : ''}</section>` : ''}
+<section class="colonnes"><div><h2>${I18n.t('rapport.html.faits_marquants')}</h2><ul>${rapport.faits.map((fait) => UI.html`<li>${fait}</li>`)}</ul></div>
+<div><h2>${I18n.t('rapport.html.decisions_prendre')}</h2>${rapport.decisions.length ? UI.html`<ol>${rapport.decisions.map((decision) => UI.html`<li>${decision}</li>`)}</ol>`
+    : UI.html`<p>${I18n.t('rapport.html.aucune_decision_urgente_mois')}</p>`}</div></section>
+${commentaire ? UI.html`<section class="commentaire"><h2>${I18n.t('rapport.html.commentaire')}</h2><p>${texte(commentaire.texte)}</p>${commentaire.aideIa
+    ? UI.html`<p class="mention-ia">${I18n.t('rapport.html.commentaire_redige_aide_ia')}</p>` : ''}</section>` : ''}
 <section class="graphiques">
-<figure><figcaption>Durée d'arrêt du mois par équipement (heures)</figcaption>${dessins.pareto ? UI.brut(dessins.pareto) : UI.html`<p>Aucun arrêt ce mois-ci.</p>`}</figure>
-<figure><figcaption>Heures de correctif et de préventif sur 12 mois</figcaption>${UI.brut(dessins.heures)}</figure>
+<figure><figcaption>${I18n.t('rapport.html.duree_arret_mois_equipement')}</figcaption>${dessins.pareto ? UI.brut(dessins.pareto) : UI.html`<p>${I18n.t('rapport.html.aucun_arret_mois_ci')}</p>`}</figure>
+<figure><figcaption>${I18n.t('rapport.html.heures_correctif_preventif_12')}</figcaption>${UI.brut(dessins.heures)}</figure>
 </section>
 ${mttr}
-<section class="comprendre"><h2>Comprendre</h2><dl>${rapport.comprendre.map(([terme, definition]) => UI.html`<div><dt>${terme} :</dt> <dd>${definition}</dd></div>`)}</dl></section>
-${rapport.nonCalculables.length ? UI.html`<section class="non-calculable"><h2>Non calculable</h2><ul>${rapport.nonCalculables.map((element) => UI.html`<li><b>${element.libelle}</b> : ${element.raison}</li>`)}</ul></section>` : ''}
-<p class="pied sans-impression"><a href="${lienCourriel(rapport)}">Préparer un courriel</a> (votre messagerie s'ouvre avec ce résumé ; rien n'est envoyé par Prévo).</p>
+<section class="comprendre"><h2>${I18n.t('rapport.html.comprendre')}</h2><dl>${rapport.comprendre.map(([terme, definition]) => UI.html`<div><dt>${terme} :</dt> <dd>${definition}</dd></div>`)}</dl></section>
+${rapport.nonCalculables.length ? UI.html`<section class="non-calculable"><h2>${I18n.t('rapport.html.non_calculable')}</h2><ul>${rapport.nonCalculables.map((element) => UI.html`<li><b>${element.libelle}</b> : ${element.raison}</li>`)}</ul></section>` : ''}
+<p class="pied sans-impression">${I18n.html('rapport.html.lien_courriel', { adresse: lienCourriel(rapport) })}</p>
 </main></body></html>`;
     return String(page);
   }

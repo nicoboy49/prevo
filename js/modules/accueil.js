@@ -123,7 +123,7 @@ const Accueil = (() => {
 
   function carteDemande(di, avecMotif) {
     const motif = avecMotif && di.motif_decision && (di.statut === 'Refusée' || di.statut === 'Différée')
-      ? UI.html`<p class="accueil-motif"><b>${di.statut === 'Refusée' ? 'Motif du refus' : 'Motif du report'} :</b> ${di.motif_decision}</p>`
+      ? UI.html`<p class="accueil-motif"><b>${di.statut === 'Refusée' ? I18n.t('accueil.carte_demande.motif_refus') : I18n.t('accueil.carte_demande.motif_report')} :</b> ${di.motif_decision}</p>`
       : '';
     return UI.html`<li><a href="#/di/${encodeURIComponent(di.id)}" class="${di.impact === 'sécurité' ? 'accent-p1' : ''}">
       <div class="carte-tete"><b>${di.id}</b>${avecMotif ? UI.badgeStatut(di.statut) : badgeImpact(di.impact)}</div>
@@ -135,8 +135,8 @@ const Accueil = (() => {
 
   function carteOrdre(ot, aujourdhui) {
     const enRetard = otEnRetard(ot, aujourdhui);
-    const retard = enRetard ? UI.html`<span class="accueil-retard">en retard de ${pluriel(joursEntre(ot.date_prevue, aujourdhui), 'jour')}</span>` : '';
-    const prevu = ot.date_prevue ? UI.html`<span>prévu le ${UI.dateFr(ot.date_prevue)}</span>` : UI.html`<span>pas de date prévue</span>`;
+    const retard = enRetard ? UI.html`<span class="accueil-retard">${I18n.t('accueil.carte_ordre.retard_jours', { n: joursEntre(ot.date_prevue, aujourdhui) })}</span>` : '';
+    const prevu = ot.date_prevue ? UI.html`<span>${I18n.t('accueil.carte_ordre.prevu_date_prevue', { date_prevue: UI.dateFr(ot.date_prevue) })}</span>` : UI.html`<span>${I18n.t('accueil.carte_ordre.pas_date_prevue')}</span>`;
     return UI.html`<li><a href="#/ot/${encodeURIComponent(ot.id)}" class="${ot.priorite === 'P1' ? 'accent-p1' : (ot.priorite === 'P2' ? 'accent-p2' : '')}">
       <div class="carte-tete"><b>${ot.id}</b>${UI.badgePriorite(ot.priorite)}${UI.badgeStatut(ot.statut)}</div>
       <div class="carte-titre">${ot.titre}</div>
@@ -152,7 +152,7 @@ const Accueil = (() => {
       ${elements.length
         ? UI.html`<ul class="liste-cartes">${elements}</ul>`
         : UI.vide(videTitre, videTexte, videIcone)}
-      ${lien ? UI.html`<p class="accueil-voir-tout"><a href="${lien}">${reste > 0 ? libelleLien + ' (' + reste + ' de plus)' : libelleLien}</a></p>` : ''}
+      ${lien ? UI.html`<p class="accueil-voir-tout"><a href="${lien}">${reste > 0 ? I18n.t('accueil.carte_liste.libelle_lien_reste_plus', { libelleLien, reste }) : libelleLien}</a></p>` : ''}
     </article>`;
   }
 
@@ -170,11 +170,11 @@ const Accueil = (() => {
       .filter((controle) => Controles.etat(controle, aujourdhui).statut === 'en retard').length;
     const habilitationsEchues = compteurs.habilitationsARenouveler
       .filter((element) => element.etat.statut === 'échue').length;
-    return UI.html`${indicateur('#/controles?filtre=30j', controlesEnRetard ? 'rouge' : '', 'Contrôles sous 30 j',
-      compteurs.controlesSous30j.length, controlesEnRetard ? 'dont ' + controlesEnRetard + ' en retard' : 'contrôles réglementaires')}
-      ${indicateur('#/equipe?filtre=a-renouveler', habilitationsEchues ? 'ambre' : '', 'Habilitations à renouveler',
+    return UI.html`${indicateur('#/controles?filtre=30j', controlesEnRetard ? 'rouge' : '', I18n.t('accueil.indicateurs_conformite.controles_sous_30'),
+      compteurs.controlesSous30j.length, controlesEnRetard ? I18n.t('accueil.indicateurs_conformite.dont_retard', { controlesEnRetard }) : I18n.t('accueil.indicateurs_conformite.controles_reglementaires'))}
+      ${indicateur('#/equipe?filtre=a-renouveler', habilitationsEchues ? 'ambre' : '', I18n.t('accueil.indicateurs_conformite.habilitations_renouveler'),
       compteurs.habilitationsARenouveler.length,
-      habilitationsEchues ? 'dont ' + pluriel(habilitationsEchues, 'échue') : 'dans les 60 jours')}`;
+      habilitationsEchues ? I18n.t('accueil.indicateurs_conformite.dont_echues', { n: habilitationsEchues }) : I18n.t('accueil.indicateurs_conformite.60_jours'))}`;
   }
 
   // Alerte du responsable : « Contrôle de la base » a trouvé des erreurs.
@@ -182,20 +182,16 @@ const Accueil = (() => {
     const erreurs = Donnees.problemes().filter((p) => p.gravite === 'erreur').length;
     if (erreurs === 0) return '';
     // UI.bandeau rend un élément DOM : on le convertit en fragment sûr pour l'insérer dans un gabarit.
-    return UI.brut(UI.bandeau('important', UI.html`<b>Contrôle de la base : ${pluriel(erreurs, 'erreur')} à corriger.</b>
-      Des fichiers contiennent des références cassées, des identifiants manquants ou des valeurs illisibles.
-      <a href="#/controle">Voir le contrôle de la base</a>`).outerHTML);
+    return UI.brut(UI.bandeau('important', UI.html`${I18n.html('accueil.alerte_controle.erreurs_corriger', { n: erreurs })}`).outerHTML);
   }
 
   // Base sans équipement (responsable) : invitation à reprendre les listes existantes (lot 5, §18.9).
   function carteBaseVide() {
     if (Donnees.lignes('equipements').length) return '';
     return UI.html`<article class="carte" id="carte-import-accueil">
-      <div class="entete-carte"><h2>Votre parc est vide</h2></div>
-      <p>Reprenez vos listes existantes (équipements, articles, fournisseurs, techniciens, historique des
-        interventions) depuis Excel, OpenDocument ou CSV : Prévo montre tout avant d'écrire, et l'import peut
-        être annulé.</p>
-      <div class="actions"><a class="btn btn-primaire" id="lien-import-accueil" href="#/import">${UI.icone('document')}Importer des données</a></div>
+      <div class="entete-carte"><h2>${I18n.t('accueil.carte_base_vide.parc_vide')}</h2></div>
+      <p>${I18n.t('accueil.carte_base_vide.reprenez_listes_existantes_equipements')}</p>
+      <div class="actions"><a class="btn btn-primaire" id="lien-import-accueil" href="#/import">${UI.icone('document')}${I18n.t('accueil.carte_base_vide.importer_donnees')}</a></div>
     </article>`;
   }
 
@@ -224,39 +220,34 @@ const Accueil = (() => {
     // Recette du lot 7 : en portée « ce PC », Prévo n'écoute que sur ce PC : pas de QR qu'aucun téléphone n'ouvrirait.
     if (cePcSeulement) {
       return UI.html`<article class="carte" id="carte-connexion">
-        <div class="entete-carte"><h2>Connecter un téléphone</h2></div>
+        <div class="entete-carte"><h2>${I18n.t('accueil.carte_connexion.connecter_telephone')}</h2></div>
         <div class="encadre info" id="connexion-ce-pc">
-          <b>Prévo n'est joignable que sur ce PC pour l'instant</b> (portée « ce PC »)&nbsp;: un téléphone ne peut pas
-          l'ouvrir. Pour les téléphones de l'atelier, ouvrez Prévo au Wi-Fi&nbsp;: Paramètres › Accès et installation
-          (responsable, sur ce PC).
+          ${I18n.html('accueil.carte_connexion.prevo_joignable_pc_instant')}
         </div>
       </article>`;
     }
     if (adresses.length === 0) {
       return UI.html`<article class="carte" id="carte-connexion">
-        <div class="entete-carte"><h2>Connecter un téléphone</h2></div>
+        <div class="entete-carte"><h2>${I18n.t('accueil.carte_connexion.connecter_telephone')}</h2></div>
         <div class="encadre attention">
-          <b>Aucune adresse réseau détectée.</b> Ce PC ne semble pas relié à un réseau local (Wi-Fi ou câble),
-          donc un téléphone ne peut pas s'y connecter pour l'instant. Branchez le PC au réseau de l'atelier,
-          puis fermez et relancez <code>Lancer_GMAO</code> : le QR code apparaîtra ici.
+          ${I18n.html('accueil.carte_connexion.aucune_adresse_reseau_detectee')}
         </div>
-        <p class="note">En attendant, Prévo reste utilisable sur ce PC.</p>
+        <p class="note">${I18n.t('accueil.carte_connexion.attendant_prevo_reste_utilisable')}</p>
       </article>`;
     }
     const autres = adresses.slice(1);
     return UI.html`<article class="carte" id="carte-connexion">
-      <div class="entete-carte"><h2>Connecter un téléphone</h2></div>
+      <div class="entete-carte"><h2>${I18n.t('accueil.carte_connexion.connecter_telephone')}</h2></div>
       <div class="accueil-connexion">
         <div class="qr" id="qr-connexion">${UI.qrSvg(adresses[0], 176)}</div>
         <div class="accueil-connexion-texte">
-          <p>Scannez ce QR code avec l'appareil photo du téléphone : Prévo s'ouvre dans son navigateur.</p>
-          <p>Ou saisissez cette adresse : <b class="accueil-adresse" id="adresse-reseau">${adresses[0]}</b></p>
-          ${autres.length ? UI.html`<p class="note">Autres adresses de ce PC : ${autres.join(' · ')}</p>` : ''}
+          <p>${I18n.t('accueil.carte_connexion.scannez_qr_code_appareil')}</p>
+          <p>${I18n.html('accueil.carte_connexion.saisissez_adresse', { adresse: adresses[0] })}</p>
+          ${autres.length ? UI.html`<p class="note">${I18n.t('accueil.carte_connexion.autres_adresses_pc', { join: autres.join(' · ') })}</p>` : ''}
           <ul class="accueil-rappels">
-            <li>Le téléphone doit être sur le <b>même réseau Wi-Fi</b> que ce PC.</li>
-            <li>Au premier lancement, Windows demande d'autoriser Python : choisissez <b>réseau privé</b>.</li>
-            ${porteOuverte ? UI.html`<li>La première fois, le téléphone affiche <b>« Faites confiance au PC atelier »</b> :
-              suivez ses étapes une seule fois, puis Prévo s'ouvre de lui-même.</li>` : ''}
+            <li>${I18n.html('accueil.carte_connexion.telephone_doit_etre_meme')}</li>
+            <li>${I18n.html('accueil.carte_connexion.premier_lancement_windows_demande')}</li>
+            ${porteOuverte ? UI.html`<li>${I18n.html('accueil.carte_connexion.premiere_fois_telephone_affiche')}</li>` : ''}
           </ul>
         </div>
       </div>
@@ -275,16 +266,16 @@ const Accueil = (() => {
     const montres = autres.slice(0, NOMBRE_OT_TECHNICIEN);
     const reste = autres.length - montres.length;
     return UI.html`<article class="carte accueil-mes-ordres">
-      <div class="entete-carte"><h2>Mes ordres de travail ouverts</h2><span class="badge ${mesOrdres.length > 0 ? 'info' : 'neutre'}">${mesOrdres.length}</span></div>
-      <h3 class="accueil-sous-titre">Mes préventifs de la semaine <span class="badge ${preventifs.length > 0 ? 'info' : 'neutre'}">${preventifs.length}</span></h3>
+      <div class="entete-carte"><h2>${I18n.t('accueil.carte_ordres_technicien.mes_ordres_travail_ouverts')}</h2><span class="badge ${mesOrdres.length > 0 ? 'info' : 'neutre'}">${mesOrdres.length}</span></div>
+      <h3 class="accueil-sous-titre">${I18n.t('accueil.carte_ordres_technicien.mes_preventifs_semaine')} <span class="badge ${preventifs.length > 0 ? 'info' : 'neutre'}">${preventifs.length}</span></h3>
       ${preventifs.length
         ? UI.html`<ul class="liste-cartes accueil-preventifs">${preventifs.map((ot) => carteOrdre(ot, aujourdhui))}</ul>`
-        : UI.html`<p class="muted accueil-preventifs-vide">Aucun préventif à faire d'ici dimanche ${UI.dateFr(dimancheDe(aujourdhui))}.</p>`}
-      <h3 class="accueil-sous-titre">Autres ordres de travail <span class="badge neutre">${autres.length}</span></h3>
+        : UI.html`<p class="muted accueil-preventifs-vide">${I18n.t('accueil.carte_ordres_technicien.aucun_preventif_faire_ici', { dimancheDe: UI.dateFr(dimancheDe(aujourdhui)) })}</p>`}
+      <h3 class="accueil-sous-titre">${I18n.html('accueil.carte_ordres_technicien.autres_ordres_travail', { nbAutres: autres.length })}</h3>
       ${montres.length
         ? UI.html`<ul class="liste-cartes">${montres.map((ot) => carteOrdre(ot, aujourdhui))}</ul>`
-        : UI.vide('Aucun autre ordre de travail ouvert', 'Rien d\'autre ne vous est affecté pour le moment.', 'ordres')}
-      <p class="accueil-voir-tout"><a href="#/ot">${reste > 0 ? 'Voir tous les ordres de travail (' + reste + ' de plus)' : 'Voir tous les ordres de travail'}</a></p>
+        : UI.vide(I18n.t('accueil.carte_ordres_technicien.aucun_autre_ordre_travail'), I18n.t('accueil.carte_ordres_technicien.rien_autre_affecte_moment'), 'ordres')}
+      <p class="accueil-voir-tout"><a href="#/ot">${reste > 0 ? I18n.t('accueil.carte_ordres_technicien.voir_tous_ordres_travail', { reste }) : I18n.t('accueil.carte_ordres_technicien.voir_tous_ordres_travail_2')}</a></p>
     </article>`;
   }
 
@@ -302,11 +293,11 @@ const Accueil = (() => {
     const compteurs = calculerCompteurs();
     return UI.html`
       <div class="entete-page"><div>
-        <h1>Accueil</h1>
-        <p>Bonjour ${App.profil.nom}. Voici vos ordres de travail ouverts, les plus urgents en premier.</p>
+        <h1>${I18n.t('accueil.accueil_technicien.accueil')}</h1>
+        <p>${I18n.t('accueil.accueil_technicien.bonjour_voici_ordres_travail', { profilNom: App.profil.nom })}</p>
       </div></div>
       <div class="pile-gros accueil-signaler">
-        <a href="#/di/nouvelle" class="btn btn-primaire btn-gros">${UI.icone('ajouter')}<span>Signaler un problème<small>Créer une demande d'intervention</small></span></a>
+        <a href="#/di/nouvelle" class="btn btn-primaire btn-gros">${UI.icone('ajouter')}<span>${I18n.html('accueil.accueil_technicien.signaler_probleme_creer_demande')}</span></a>
       </div>
       <div class="instruments accueil-instruments accueil-instruments-technicien">${indicateursConformite(compteurs, aujourdhui)}</div>
       ${carteOrdresTechnicien(mesOrdres, idsPreventifs, aujourdhui)}`;
@@ -319,16 +310,16 @@ const Accueil = (() => {
       .sort((a, b) => b.date_heure.localeCompare(a.date_heure));
     return UI.html`
       <div class="entete-page"><div>
-        <h1>Accueil</h1>
-        <p>Bonjour ${App.profil.nom}. Un équipement ne fonctionne pas bien ? Signalez-le en quelques secondes.</p>
+        <h1>${I18n.t('accueil.accueil_technicien.accueil')}</h1>
+        <p>${I18n.t('accueil.accueil_demandeur.bonjour_equipement_fonctionne_pas', { profilNom: App.profil.nom })}</p>
       </div></div>
       <div class="pile-gros accueil-signaler">
-        <a href="#/di/nouvelle" class="btn btn-primaire btn-gros">${UI.icone('ajouter')}<span>Signaler un problème<small>Créer une demande d'intervention</small></span></a>
+        <a href="#/di/nouvelle" class="btn btn-primaire btn-gros">${UI.icone('ajouter')}<span>${I18n.html('accueil.accueil_technicien.signaler_probleme_creer_demande')}</span></a>
       </div>
-      ${carteListe('Mes dernières demandes', mesDemandes.length,
+      ${carteListe(I18n.t('accueil.accueil_demandeur.mes_dernieres_demandes'), mesDemandes.length,
         mesDemandes.slice(0, NOMBRE_LIGNES).map((di) => carteDemande(di, true)),
-        '#/di', 'Voir toutes mes demandes',
-        'Aucune demande pour le moment', 'Les demandes que vous créez apparaîtront ici avec leur avancement.', 'demandes')}`;
+        '#/di', I18n.t('accueil.accueil_demandeur.voir_toutes_mes_demandes'),
+        I18n.t('accueil.accueil_demandeur.aucune_demande_moment'), I18n.t('accueil.accueil_demandeur.demandes_creez_apparaitront_ici'), 'demandes')}`;
   }
 
   // ===========================================================================================
@@ -355,8 +346,8 @@ const Accueil = (() => {
   // App est chargé après les modules : l'écran est enregistré une fois la page lue.
   document.addEventListener('DOMContentLoaded', () => {
     App.ecran({
-      id: 'accueil', route: /^#\/accueil$/, titre: 'Accueil',
-      menu: { libelle: 'Accueil', icone: 'accueil', ordre: 10 },
+      id: 'accueil', route: /^#\/accueil$/, get titre() { return I18n.t('accueil.accueil_technicien.accueil'); },
+      menu: { get libelle() { return I18n.t('accueil.accueil_technicien.accueil'); }, icone: 'accueil', ordre: 10 },
       profils: ['demandeur', 'technicien', 'responsable'],
       // Les compteurs viennent de demandes et ordres_travail ; l'alerte de contrôle peut venir de
       // n'importe quelle table (sauf le journal, qui change à chaque action).

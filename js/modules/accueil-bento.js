@@ -22,15 +22,10 @@
 
 Object.assign(Accueil, (() => {
 
-  const { otOuvert, joursEntre, pluriel, libelleEquipement, badgeImpact, alerteControle, carteBaseVide,
+  const { otOuvert, joursEntre, libelleEquipement, badgeImpact, alerteControle, carteBaseVide,
     NOMBRE_LIGNES, ORIGINE_PREVENTIF } = Accueil.interne;
   const RANG_PRIORITE = { P1: 1, P2: 2, P3: 3, P4: 4 };
   const DATE_VIDE = '9999';                     // une date absente passe après toutes les autres
-  const MOMENTS = {
-    matin: { pastille: 'Ce matin', phrase: 'ce matin' },
-    'après-midi': { pastille: 'Cet après-midi', phrase: 'cet après-midi' },
-    soir: { pastille: 'Ce soir', phrase: 'ce soir' },
-  };
   const TONS_IMPACT = { 'sécurité': 'rouge', 'arrêt': 'ambre', 'dégradé': 'bleu' };
   const FORMAT_DATE = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
   const FORMAT_DATE_COURTE = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
@@ -52,16 +47,26 @@ Object.assign(Accueil, (() => {
 
   /** « 5 demandes à traiter », « 1 demande à traiter » ; aucune : « Rien d'urgent ce matin. » (selon le moment). */
   function phraseDemandes(nombre, moment) {
-    if (nombre === 0) return 'Rien d\'urgent ' + MOMENTS[moment].phrase + '.';
-    return pluriel(nombre, 'demande') + ' à traiter';
+    if (nombre === 0) {
+      // Une phrase complète par moment (jamais un mot choisi au milieu d'une phrase).
+      if (moment === 'matin') return I18n.t('accueil.phrase_demandes.rien_urgent_matin');
+      return moment === 'après-midi' ? I18n.t('accueil.phrase_demandes.rien_urgent_apres_midi') : I18n.t('accueil.phrase_demandes.rien_urgent_soir');
+    }
+    return I18n.t('accueil.phrase_demandes.a_traiter', { n: nombre });
+  }
+
+  /** « Ce matin dans l'atelier » (selon le moment), une phrase complète par moment. */
+  function momentAtelier(moment) {
+    if (moment === 'matin') return I18n.t('accueil.moment_atelier.matin_atelier');
+    return moment === 'après-midi' ? I18n.t('accueil.moment_atelier.apres_midi_atelier') : I18n.t('accueil.moment_atelier.soir_atelier');
   }
 
   /** « 3 OT en retard · 1 P1 ouvert · 3 préventifs cette semaine » ; un segment à 0 est omis ('' si tous). */
   function ligneSecondaire(retards, p1, preventifs) {
     return [
-      retards ? retards + ' OT en retard' : '',
-      p1 ? pluriel(p1, 'P1 ouvert', 'P1 ouverts') : '',
-      preventifs ? pluriel(preventifs, 'préventif') + ' cette semaine' : '',
+      retards ? I18n.t('accueil.ligne_secondaire.ot_retard', { n: retards }) : '',
+      p1 ? I18n.t('accueil.ligne_secondaire.p1_ouverts', { n: p1 }) : '',
+      preventifs ? I18n.t('accueil.ligne_secondaire.preventifs_semaine', { n: preventifs }) : '',
     ].filter(Boolean).join(' · ');
   }
 
@@ -132,19 +137,23 @@ Object.assign(Accueil, (() => {
   // Mode Solo (mode_solo = 1, D132, §22.11) : « Nouvel OT » en premier, « Signaler un problème » en second.
   function actionsSolo() {
     if (!App.modeSolo()) return '';
+    const iconeAjouter = UI.icone('ajouter');
+    const iconeAlerte = UI.icone('alerte');
+    const nouvelOt = UI.html`<a class="btn btn-primaire" id="accueil-nouvel-ot" href="#/ot/nouveau">${iconeAjouter}${I18n.t('accueil.actions_solo.nouvel_ot')}</a>`;
+    const signaler = UI.html`<a class="btn btn-secondaire" id="accueil-signaler" href="#/di/nouvelle">${iconeAlerte}${I18n.t('accueil.actions_solo.signaler_probleme')}</a>`;
     return UI.html`<div class="bento-solo" id="accueil-solo">
-      <a class="btn btn-primaire" id="accueil-nouvel-ot" href="#/ot/nouveau">${UI.icone('ajouter')}Nouvel OT</a>
-      <a class="btn btn-secondaire" id="accueil-signaler" href="#/di/nouvelle">${UI.icone('alerte')}Signaler un problème</a>
+      ${nouvelOt}
+      ${signaler}
     </div>`;
   }
 
   function entete(aujourdhui) {
     return UI.html`<div class="bento-entete">
-      <div class="bento-salut"><h1>Bonjour</h1><p class="bento-date">${dateEnLettres(aujourdhui, true)}</p></div>
+      <div class="bento-salut"><h1>${I18n.t('accueil.entete.bonjour')}</h1><p class="bento-date">${dateEnLettres(aujourdhui, true)}</p></div>
       ${actionsSolo()}
       <div class="bento-entete-actions">
-        ${App.mode === 'demo' ? UI.html`<span class="bento-demo" id="accueil-demo">${UI.icone('alerte')}Démo — rien n'est enregistré</span>` : ''}
-        <button type="button" class="btn btn-fantome bento-zip" id="btn-export-accueil">${UI.icone('export')}Exporter en ZIP</button>
+        ${App.mode === 'demo' ? UI.html`<span class="bento-demo" id="accueil-demo">${UI.icone('alerte')}${I18n.t('accueil.entete.demo_rien_enregistre')}</span>` : ''}
+        <button type="button" class="btn btn-fantome bento-zip" id="btn-export-accueil">${UI.icone('export')}${I18n.t('accueil.entete.exporter_zip')}</button>
       </div>
     </div>`;
   }
@@ -155,13 +164,12 @@ Object.assign(Accueil, (() => {
     const ligne = ligneSecondaire(compteurs.otEnRetard.length, compteurs.p1Ouverts.length, compteurs.preventifsSemaine.length);
     return UI.html`<section class="bento-tuile bento-synthese" id="bento-synthese" aria-labelledby="bento-phrase">
       <span class="bento-lueur" aria-hidden="true"><span class="bento-halo bento-halo-blanc"></span><span class="bento-halo bento-halo-cyan"></span></span>
-      <p class="bento-moment">${MOMENTS[moment].pastille} dans l'atelier</p>
+      <p class="bento-moment">${momentAtelier(moment)}</p>
       <h2 class="bento-phrase" id="bento-phrase">${phraseDemandes(nombre, moment)}${nombre && securite
-        ? UI.html`, dont <span class="bento-securite">${securite} sécurité</span>` : ''}</h2>
+        ? UI.html`${I18n.html('accueil.tuile_synthese.dont_securite', { securite })}` : ''}</h2>
       ${ligne ? UI.html`<p class="bento-resume" id="bento-ligne">${ligne}</p>` : ''}
       <div class="bento-actions">
-        <a class="btn bento-btn-blanc" href="#/di?statut=Nouvelle">Voir les demandes <span aria-hidden="true">→</span></a>
-        <a class="btn bento-btn-verre" href="#/planning">Ouvrir le planning</a>
+        ${I18n.html('accueil.tuile_synthese.voir_demandes_ouvrir_planning')}
       </div>
     </section>`;
   }
@@ -173,19 +181,19 @@ Object.assign(Accueil, (() => {
     switch (choix.type) {
       case 'securite':
         return { icone: 'alerte', ton: 'rouge', titre: equipement, detail: element.symptome, lien: '#/di/',
-          pastille: UI.html`<span class="badge ko">Sécurité</span>`, action: 'Traiter la demande' };
+          pastille: UI.html`<span class="badge ko">${I18n.t('accueil.reglages_premier.securite')}</span>`, action: I18n.t('accueil.reglages_premier.traiter_demande') };
       case 'p1':
         return { icone: 'alerte', ton: 'rouge', titre: element.titre, detail: equipement + ' · ' + element.statut, lien: '#/ot/',
-          pastille: UI.badgePriorite('P1'), action: 'Ouvrir l\'ordre de travail' };
+          pastille: UI.badgePriorite('P1'), action: I18n.t('accueil.reglages_premier.ouvrir_ordre_travail') };
       case 'retard':
         return { icone: 'horloge', ton: 'ambre', titre: element.titre, lien: '#/ot/',
-          detail: 'En retard de ' + pluriel(joursEntre(element.date_prevue, aujourdhui), 'jour') + ' (prévu le '
-            + UI.dateFr(element.date_prevue) + ') · ' + equipement,
-          pastille: UI.html`<span class="badge attention">En retard</span>`, action: 'Ouvrir l\'ordre de travail' };
+          detail: I18n.t('accueil.reglages_premier.retard_prevu', { n: joursEntre(element.date_prevue, aujourdhui),
+            datePrevue: UI.dateFr(element.date_prevue), equipement }),
+          pastille: UI.html`<span class="badge attention">${I18n.t('accueil.reglages_premier.retard')}</span>`, action: I18n.t('accueil.reglages_premier.ouvrir_ordre_travail') };
       default:
         return { icone: 'preventif', ton: 'vert', titre: element.titre, lien: '#/ot/',
-          detail: (element.date_prevue === aujourdhui ? 'Prévu aujourd\'hui' : 'Prévu le ' + UI.dateFr(element.date_prevue)) + ' · ' + equipement,
-          pastille: UI.html`<span class="badge info">Préventif</span>`, action: 'Ouvrir le préventif' };
+          detail: (element.date_prevue === aujourdhui ? I18n.t('accueil.reglages_premier.prevu_aujourd_hui') : I18n.t('accueil.reglages_premier.prevu_date_prevue', { date_prevue: UI.dateFr(element.date_prevue) })) + ' · ' + equipement,
+          pastille: UI.html`<span class="badge info">${I18n.t('accueil.reglages_premier.preventif')}</span>`, action: I18n.t('accueil.reglages_premier.ouvrir_preventif') };
     }
   }
 
@@ -194,7 +202,7 @@ Object.assign(Accueil, (() => {
     const r = reglagesPremier(choix, aujourdhui);
     const id = choix.ligne.id;
     return UI.html`<section class="bento-tuile bento-premier" id="bento-premier" data-type="${choix.type}" data-id="${id}" aria-labelledby="bento-premier-titre">
-      <div class="bento-premier-tete"><span class="bento-pastille-icone ${r.ton}">${UI.icone(r.icone)}</span><h2 id="bento-premier-titre">À traiter en premier</h2></div>
+      <div class="bento-premier-tete"><span class="bento-pastille-icone ${r.ton}">${UI.icone(r.icone)}</span><h2 id="bento-premier-titre">${I18n.t('accueil.tuile_premier.traiter_premier')}</h2></div>
       <p class="bento-premier-element">${r.titre}</p>
       <p class="bento-premier-detail">${r.detail}</p>
       <p class="bento-pastilles">${r.pastille}<span class="badge neutre">${id}</span></p>
@@ -216,18 +224,18 @@ Object.assign(Accueil, (() => {
     const p1 = compteurs.p1Ouverts.length;
     const preventifsEnRetard = compteurs.preventifsSemaine.filter((ot) => Accueil.otEnRetard(ot, aujourdhui)).length;
     return UI.html`
-      ${compteur('#/di?statut=Nouvelle', 'demandes', 'bleu', compteurs.diATraiter.length, 'DI à traiter',
-        securite ? complement('dont ' + securite + ' sécurité', 'rouge') : complement('demandes nouvelles'))}
-      ${compteur('#/ot?filtre=retard', 'horloge', 'ambre', compteurs.otEnRetard.length, 'OT en retard',
-        plusVieux ? complement('jusqu\'à ' + pluriel(plusVieux, 'jour') + ' de retard', 'ambre') : complement('tout est dans les temps'))}
-      ${compteur('#/ot?filtre=p1', 'alerte', 'rouge', p1, p1 > 1 ? 'P1 ouverts' : 'P1 ouvert',
-        enCours ? complement('dont ' + enCours + ' en cours', 'rouge') : complement('priorité la plus haute'))}
-      ${compteur('#/preventif?onglet=calendrier', 'preventif', 'vert', compteurs.preventifsSemaine.length, 'Préventifs de la semaine',
-        preventifsEnRetard ? complement('dont ' + preventifsEnRetard + ' en retard', 'ambre') : complement('d\'ici dimanche'))}`;
+      ${compteur('#/di?statut=Nouvelle', 'demandes', 'bleu', compteurs.diATraiter.length, I18n.t('accueil.compteurs4.di_traiter'),
+        securite ? complement(I18n.t('accueil.compteurs4.dont_securite', { securite }), 'rouge') : complement(I18n.t('accueil.compteurs4.demandes_nouvelles')))}
+      ${compteur('#/ot?filtre=retard', 'horloge', 'ambre', compteurs.otEnRetard.length, I18n.t('accueil.compteurs4.ot_retard'),
+        plusVieux ? complement(I18n.t('accueil.compteurs4.jusqu_a_retard', { n: plusVieux }), 'ambre') : complement(I18n.t('accueil.compteurs4.tout_temps')))}
+      ${compteur('#/ot?filtre=p1', 'alerte', 'rouge', p1, I18n.t('accueil.compteurs4.p1_ouverts', { n: p1 }),
+        enCours ? complement(I18n.t('accueil.compteurs4.dont_cours', { enCours }), 'rouge') : complement(I18n.t('accueil.compteurs4.priorite_plus_haute')))}
+      ${compteur('#/preventif?onglet=calendrier', 'preventif', 'vert', compteurs.preventifsSemaine.length, I18n.t('accueil.compteurs4.preventifs_semaine'),
+        preventifsEnRetard ? complement(I18n.t('accueil.compteurs4.dont_retard', { preventifsEnRetard }), 'ambre') : complement(I18n.t('accueil.compteurs4.ici_dimanche')))}`;
   }
 
   function lienListe(lien, nombre) {
-    return UI.html`<a class="bento-tout-voir" href="${lien}">Tout voir (${nombre})</a>`;
+    return UI.html`<a class="bento-tout-voir" href="${lien}">${I18n.t('accueil.lien_liste.tout_voir', { nombre })}</a>`;
   }
 
   // Demandes à traiter : sécurité d'abord, puis les plus anciennes. Un point de couleur et le badge
@@ -241,8 +249,8 @@ Object.assign(Accueil, (() => {
         <span class="bento-ligne-meta"><span class="bento-id">${di.id}</span> · ${repere(di.equipement_id)} · ${UI.dateHeureFr(di.date_heure)}</span></span>
       ${badgeImpact(di.impact)}</a></li>`);
     return UI.html`<section class="bento-tuile bento-liste" id="bento-demandes" aria-labelledby="bento-demandes-titre">
-      <div class="bento-liste-tete"><h2 id="bento-demandes-titre">Demandes à traiter</h2>${lienListe('#/di?statut=Nouvelle', demandes.length)}</div>
-      ${lignes.length ? UI.html`<ul>${lignes}</ul>` : UI.html`<p class="bento-vide">Aucune demande à traiter.</p>`}
+      <div class="bento-liste-tete"><h2 id="bento-demandes-titre">${I18n.t('accueil.liste_demandes.demandes_traiter')}</h2>${lienListe('#/di?statut=Nouvelle', demandes.length)}</div>
+      ${lignes.length ? UI.html`<ul>${lignes}</ul>` : UI.html`<p class="bento-vide">${I18n.t('accueil.liste_demandes.aucune_demande_traiter')}</p>`}
     </section>`;
   }
 
@@ -253,13 +261,11 @@ Object.assign(Accueil, (() => {
       const jours = joursEntre(ot.date_prevue, aujourdhui);
       return UI.html`<li><a href="#/ot/${encodeURIComponent(ot.id)}">
         ${UI.badgePriorite(ot.priorite)}
-        <span class="bento-ligne-texte"><span class="bento-ligne-titre">${ot.titre}</span>
-          <span class="bento-ligne-meta"><span class="bento-id">${ot.id}</span> · ${repere(ot.equipement_id)} · prévu le ${UI.dateFr(ot.date_prevue)}</span></span>
-        <span class="bento-retard"><span aria-hidden="true">${jours} j</span><span class="visuellement-cache">en retard de ${pluriel(jours, 'jour')}</span></span></a></li>`;
+        ${I18n.html('accueil.liste_retards.ot_titre_ot_id_repere_prevu', { otTitre: ot.titre, otId: ot.id, repere: repere(ot.equipement_id), date_prevue: UI.dateFr(ot.date_prevue), joursAbrege: I18n.t('accueil.liste_retards.jours_abrege', { n: jours }), retardJours: I18n.t('accueil.liste_retards.retard_jours', { n: jours }) })}</a></li>`;
     });
     return UI.html`<section class="bento-tuile bento-liste" id="bento-retards" aria-labelledby="bento-retards-titre">
-      <div class="bento-liste-tete"><h2 id="bento-retards-titre">OT en retard</h2>${lienListe('#/ot?filtre=retard', retards.length)}</div>
-      ${lignes.length ? UI.html`<ul>${lignes}</ul>` : UI.html`<p class="bento-vide">Aucun OT en retard : tout est dans les temps.</p>`}
+      <div class="bento-liste-tete"><h2 id="bento-retards-titre">${I18n.t('accueil.compteurs4.ot_retard')}</h2>${lienListe('#/ot?filtre=retard', retards.length)}</div>
+      ${lignes.length ? UI.html`<ul>${lignes}</ul>` : UI.html`<p class="bento-vide">${I18n.t('accueil.liste_retards.aucun_ot_retard_tout')}</p>`}
     </section>`;
   }
 
@@ -283,11 +289,11 @@ Object.assign(Accueil, (() => {
     return UI.html`<div class="bento-tuile bento-surveiller bento-conformite">
       <span class="bento-carre violet">${chiffre(controles + habilitations)}</span>
       <div class="bento-surveiller-corps">
-        <h2 class="lib">Contrôles et habilitations</h2>
-        <a class="bento-sous-lien" href="#/controles?filtre=30j">${chiffre(controles)}<span class="bento-sous-texte"><span>${controles > 1 ? 'contrôles' : 'contrôle'} sous 30 j</span>
-          ${enRetard ? complement('dont ' + enRetard + ' en retard', 'rouge') : complement('aucun en retard')}</span>${UI.icone('chevron', 'bento-chevron')}</a>
-        <a class="bento-sous-lien" href="#/equipe?filtre=a-renouveler">${chiffre(habilitations)}<span class="bento-sous-texte"><span>${habilitations > 1 ? 'habilitations' : 'habilitation'} à renouveler</span>
-          ${echues ? complement('dont ' + pluriel(echues, 'échue'), 'ambre') : complement('aucune échue')}</span>${UI.icone('chevron', 'bento-chevron')}</a>
+        <h2 class="lib">${I18n.t('accueil.tuile_conformite.controles_habilitations')}</h2>
+        <a class="bento-sous-lien" href="#/controles?filtre=30j">${chiffre(controles)}<span class="bento-sous-texte"><span>${I18n.t('accueil.tuile_conformite.controles_sous_30', { n: controles })}</span>
+          ${enRetard ? complement(I18n.t('accueil.tuile_conformite.dont_retard', { enRetard }), 'rouge') : complement(I18n.t('accueil.tuile_conformite.aucun_retard'))}</span>${UI.icone('chevron', 'bento-chevron')}</a>
+        <a class="bento-sous-lien" href="#/equipe?filtre=a-renouveler">${chiffre(habilitations)}<span class="bento-sous-texte"><span>${I18n.t('accueil.tuile_conformite.habilitations_renouveler', { n: habilitations })}</span>
+          ${echues ? complement(I18n.t('accueil.tuile_conformite.dont_echues', { n: echues }), 'ambre') : complement(I18n.t('accueil.tuile_conformite.aucune_echue'))}</span>${UI.icone('chevron', 'bento-chevron')}</a>
       </div>
     </div>`;
   }
@@ -298,11 +304,11 @@ Object.assign(Accueil, (() => {
     const suggestions = Suggestions.ouvertes(aujourdhui);
     const surA = suggestions.filter((suggestion) => suggestion.criticite === 'A').length;
     return UI.html`
-      ${surveiller('#/magasin?onglet=a-commander', 'ambre', compteurs.articlesACommander.length, 'Articles à commander',
-        critiques ? complement('dont ' + pluriel(critiques, 'critique'), 'rouge') : complement('stock au point de commande'))}
+      ${surveiller('#/magasin?onglet=a-commander', 'ambre', compteurs.articlesACommander.length, I18n.t('accueil.tuiles_surveiller.articles_commander'),
+        critiques ? complement(I18n.t('accueil.tuiles_surveiller.dont_critiques', { n: critiques }), 'rouge') : complement(I18n.t('accueil.tuiles_surveiller.stock_point_commande')))}
       ${tuileConformite(compteurs, aujourdhui)}
-      ${surveiller('#/preventif?onglet=suggestions', 'vert', suggestions.length, 'Suggestions de préventif',
-        surA ? complement('dont ' + surA + ' sur criticité A', 'ambre') : complement('à examiner'))}`;
+      ${surveiller('#/preventif?onglet=suggestions', 'vert', suggestions.length, I18n.t('accueil.tuiles_surveiller.suggestions_preventif'),
+        surA ? complement(I18n.t('accueil.tuiles_surveiller.dont_criticite', { surA }), 'ambre') : complement(I18n.t('accueil.tuiles_surveiller.examiner')))}`;
   }
 
   // ===========================================================================================
@@ -320,11 +326,10 @@ Object.assign(Accueil, (() => {
     if (!copie) return '';
     const jours = typeof copie.joursSansCopie === 'number' ? copie.joursSansCopie : null;
     if (!copie.erreur && !(jours !== null && jours > 1)) return '';
-    let constat = 'la dernière copie a échoué';
-    if (jours === null) constat = 'aucune copie réussie pour l\'instant';
-    else if (jours >= 1) constat = 'aucune copie depuis ' + pluriel(jours, 'jour');
-    return UI.html`<b>Copie externe des sauvegardes : ${constat}.</b> ${copie.erreur || ''}
-      La copie est refaite au prochain démarrage de Prévo et chaque nuit, à la première modification après 2 h.`;
+    let constat = I18n.t('accueil.avertissement_copie_externe.derniere_copie_echoue');
+    if (jours === null) constat = I18n.t('accueil.avertissement_copie_externe.aucune_copie_reussie_instant');
+    else if (jours >= 1) constat = I18n.t('accueil.avertissement_copie_externe.aucune_copie_depuis', { n: jours });
+    return UI.html`${I18n.html('accueil.avertissement_copie_externe.copie_externe_sauvegardes_copie', { constat, erreur: copie.erreur || '' })}`;
   }
 
   /**
@@ -336,16 +341,14 @@ Object.assign(Accueil, (() => {
   function avertissementTailscale(tailscale) {
     if (!tailscale || !tailscale.present) return '';
     if (!tailscale.connecte) {
-      return UI.html`<b>Tailscale est déconnecté :</b> les téléphones hors de l'atelier ne joignent plus Prévo.
-        Ouvrez Tailscale sur ce PC et connectez-vous.`;
+      return UI.html`${I18n.html('accueil.avertissement_tailscale.tailscale_deconnecte_telephones_hors')}`;
     }
     const jours = tailscale.joursAvantExpiration;
     if (jours === null || jours > JOURS_ALERTE_CLE_TAILSCALE) return '';
-    let echeance = 'expire dans ' + pluriel(jours, 'jour');
-    if (jours === 0) echeance = 'expire aujourd\'hui';
-    else if (jours < 0) echeance = 'a expiré';
-    return UI.html`<b>La clé Tailscale ${echeance} :</b> désactivez l'expiration de clé dans la console Tailscale
-      (Machines › ${tailscale.nom || 'ce PC'} › Disable key expiry), sinon les téléphones hors de l'atelier ne joignent plus Prévo.`;
+    let echeance = I18n.t('accueil.avertissement_tailscale.expire_dans', { n: jours });
+    if (jours === 0) echeance = I18n.t('accueil.avertissement_tailscale.expire_aujourd_hui');
+    else if (jours < 0) echeance = I18n.t('accueil.avertissement_tailscale.expire');
+    return UI.html`${I18n.html('accueil.avertissement_tailscale.cle_tailscale_desactivez_expiration', { echeance, nom: tailscale.nom || I18n.t('accueil.avertissement_tailscale.pc') })}`;
   }
 
   // Pose l'avertissement (ou rien) dans sa zone ; data-lu marque la lecture faite, avertissement ou non (point
@@ -407,7 +410,7 @@ Object.assign(Accueil, (() => {
     // Mise à jour signalée (D120) : bandeau si une version plus récente est connue sur ce poste.
     if (typeof MiseAJour !== 'undefined') MiseAJour.afficherSiPossible();
     afficherEtatServeur(conteneur);
-    App.definirTitreMobile('Bonjour', dateEnLettres(aujourdhui, false));
+    App.definirTitreMobile(I18n.t('accueil.entete.bonjour'), dateEnLettres(aujourdhui, false));
   }
 
   return { afficherResponsable, choisirEnPremier, momentDeLaJournee, phraseDemandes, ligneSecondaire,

@@ -220,6 +220,22 @@
       ],
       "classe": "identifiants",
       "raison": "Nom de l'application dans le manifeste des sauvegardes et dans la réponse de /api/ping (T238) : un identifiant du protocole, comparé tel quel à celui de serveur.py."
+    },
+    {
+      "variable": "POLICE",
+      "fichiers": [
+        "js/modules/indicateurs-graphiques.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Famille de police des graphiques (« Sora, sans-serif »), une valeur de style et non un texte affiché (T243)."
+    },
+    {
+      "variable": "STYLE",
+      "fichiers": [
+        "js/modules/rapport-contenu.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Feuille de style CSS de la page du rapport figé : du code de mise en page, aucun texte affiché (T243)."
     }
   ],
   "textes": [
@@ -372,6 +388,33 @@
         "js/modules/controles-ecrans.js"
       ],
       "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
+    },
+    {
+      "texte": "après-midi",
+      "fichiers": [
+        "js/modules/accueil-bento.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Code du moment de la journée renvoyé par momentDeLaJournee (« matin », « après-midi », « soir ») et comparé : jamais affiché tel quel (T243)."
+    },
+    {
+      "texte": "en retard",
+      "fichiers": [
+        "js/modules/accueil.js",
+        "js/modules/accueil-bento.js",
+        "js/modules/rapport-contenu.js"
+      ],
+      "classe": "D155",
+      "raison": "État d'un contrôle réglementaire calculé par Controles.etat (« à jour », « en retard »…) : code comparé pour compter, jamais affiché tel quel (T243)."
+    },
+    {
+      "texte": "échue",
+      "fichiers": [
+        "js/modules/accueil.js",
+        "js/modules/accueil-bento.js"
+      ],
+      "classe": "D155",
+      "raison": "État d'une habilitation calculé par Equipe (« valide », « à renouveler », « échue »…) : code comparé pour compter, jamais affiché tel quel (T243)."
     }
   ]
 }

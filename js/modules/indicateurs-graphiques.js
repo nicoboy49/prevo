@@ -133,7 +133,7 @@ Object.assign(Indicateurs, (() => {
       yAxis: enListe(option.yAxis).map((axe) => habillerAxe(axe, couleurs)),
       series,
       legend: { show: false },
-      aria: { enabled: true, label: { description: 'Graphique « ' + titre + ' ». Les valeurs sont dans le tableau « Voir les valeurs ».' } },
+      aria: { enabled: true, label: { description: I18n.t('indicateurs.habiller.graphique_valeurs_sont_tableau', { titre }) } },
     });
     if (!papier) {
       resultat.tooltip = Object.assign({
@@ -211,7 +211,7 @@ Object.assign(Indicateurs, (() => {
     return barresHorizontales({
       nom, categories: lignes.map((ligne) => ligne.libelle), valeurs: lignes.map((ligne) => ligne.valeur),
       formatValeur, margeDroite: 104,
-      etiquette: (rang) => 'cumul ' + UI.nombreFr(arrondi(lignes[rang].cumulPct, 1), 1) + ESPACE_INSECABLE + '%',
+      etiquette: (rang) => I18n.t('indicateurs.pareto.cumul_v1_espace_insecable', { cumul: UI.nombreFr(arrondi(lignes[rang].cumulPct, 1), 1), espace: ESPACE_INSECABLE }),
     });
   }
 
@@ -223,8 +223,8 @@ Object.assign(Indicateurs, (() => {
 
   /** Heures par mois, empilées : correctif, préventif, autres. lignes : Indicateurs.heuresParMois. */
   function heuresParMois(lignes) {
-    const groupes = [['correctif', 'Correctif', COULEURS_SERIES[0]], ['preventif', 'Préventif', COULEURS_SERIES[1]],
-      ['autres', 'Autres', COULEUR_AUTRES]];
+    const groupes = [['correctif', I18n.t('indicateurs.heures_par_mois.correctif'), COULEURS_SERIES[0]], ['preventif', I18n.t('indicateurs.heures_par_mois.preventif'), COULEURS_SERIES[1]],
+      ['autres', I18n.t('indicateurs.heures_par_mois.autres'), COULEUR_AUTRES]];
     const hauts = lignes.map((ligne) => groupes.reduce((haut, [cle], rang) => (ligne[cle] > 0 ? rang : haut), -1));
     return {
       xAxis: { type: 'category', data: lignes.map((ligne) => moisCourt(ligne.mois)) },
@@ -258,14 +258,14 @@ Object.assign(Indicateurs, (() => {
   function chargeCapacite(techniciens) {
     const semaines = techniciens.length ? techniciens[0].semaines.map((semaine) => semaine.lundi) : [];
     const barres = semaines.slice(0, COULEURS_SERIES.length).map((lundi, rang) => ({
-      type: 'bar', name: 'Semaine du ' + UI.dateFr(lundi).slice(0, 5), barMaxWidth: BARRE_MAX_PX, barGap: '12%',
+      type: 'bar', name: I18n.t('indicateurs.charge_capacite.semaine_v1', { date: UI.dateFr(lundi).slice(0, 5) }), barMaxWidth: BARRE_MAX_PX, barGap: '12%',
       data: techniciens.map((technicien) => technicien.semaines[rang].charge),
       itemStyle: { color: COULEURS_SERIES[rang], borderRadius: [RAYON_PX, RAYON_PX, 0, 0] },
     }));
     const capacites = techniciens.map((technicien, rang) => [rang, technicien.semaines.length ? technicien.semaines[0].capacite : null])
       .filter((point) => point[1] !== null && point[1] !== undefined);
     const series = barres.concat(capacites.length ? [{
-      type: 'custom', id: PREFIXE_REFERENCE + '-capacite', name: 'Capacité', data: capacites, z: 5,
+      type: 'custom', id: PREFIXE_REFERENCE + '-capacite', name: I18n.t('indicateurs.charge_capacite.capacite'), data: capacites, z: 5,
       encode: { x: 0, y: 1 }, renderItem: dessinerCapacite,
     }] : []);
     return {
@@ -304,12 +304,12 @@ Object.assign(Indicateurs, (() => {
   /** Tableau simple (non triable) des valeurs du graphique, dans un cadre qui défile. */
   function tableauValeurs(colonnes, lignes, titre) {
     return UI.element(UI.html`<div class="table-defile"><table class="table indicateurs-table-valeurs">
-      <caption class="visuellement-cache">Valeurs : ${titre}</caption>
+      <caption class="visuellement-cache">${I18n.t('indicateurs.tableau_valeurs.valeurs_titre', { titre })}</caption>
       <thead><tr>${colonnes.map((colonne) => UI.html`<th scope="col" class="${colonne.type === 'nombre' ? 'num' : ''}">${colonne.libelle}</th>`)}</tr></thead>
       <tbody>${lignes.length ? lignes.map((ligne) => UI.html`<tr>${colonnes.map((colonne) => {
         const sansValeur = colonne.type === 'nombre' && !(typeof ligne[colonne.cle] === 'number' && Number.isFinite(ligne[colonne.cle]));
         return UI.html`<td class="${colonne.type === 'nombre' ? 'num' : ''}${sansValeur ? ' indicateurs-raison' : ''}">${texteCellule(colonne, ligne)}</td>`;
-      })}</tr>`) : UI.html`<tr><td class="vide-table" colspan="${colonnes.length}">Aucune valeur sur la période.</td></tr>`}</tbody>
+      })}</tr>`) : UI.html`<tr><td class="vide-table" colspan="${colonnes.length}">${I18n.t('indicateurs.tableau_valeurs.aucune_valeur_periode')}</td></tr>`}</tbody>
     </table></div>`);
   }
 
@@ -318,14 +318,14 @@ Object.assign(Indicateurs, (() => {
     const carte = UI.element(UI.html`<article class="carte indicateurs-graphique ${reglages.classe || ''}" data-graphique="${reglages.id || ''}" data-etat="chargement">
       <div class="entete-carte"><h2>${reglages.titre}</h2>
         <div class="indicateurs-exports">
-          <button type="button" class="btn btn-fantome" data-export="csv" title="Télécharger les valeurs (CSV)" aria-label="Télécharger les valeurs de « ${reglages.titre} » (CSV)">${UI.icone('export')}CSV</button>
-          <button type="button" class="btn btn-fantome" data-export="image" disabled title="Télécharger l'image (PNG)" aria-label="Télécharger l'image de « ${reglages.titre} » (PNG)">${UI.icone('export')}Image</button>
+          <button type="button" class="btn btn-fantome" data-export="csv" title="${I18n.t('indicateurs.creer_carte.telecharger_valeurs_csv')}" aria-label="${I18n.t('indicateurs.creer_carte.telecharger_valeurs_csv_2', { reglagesTitre: reglages.titre })}">${UI.icone('export')}${I18n.t('indicateurs.creer_carte.csv')}</button>
+          <button type="button" class="btn btn-fantome" data-export="image" disabled title="${I18n.t('indicateurs.creer_carte.telecharger_image_png')}" aria-label="${I18n.t('indicateurs.creer_carte.telecharger_image_png_2', { reglagesTitre: reglages.titre })}">${UI.icone('export')}${I18n.t('indicateurs.creer_carte.image')}</button>
         </div></div>
       ${reglages.sousTitre ? UI.html`<p class="note indicateurs-sous-titre">${reglages.sousTitre}</p>` : ''}
       <div class="indicateurs-legende"></div>
       <div class="graph" role="img" aria-label="${reglages.titre}"></div>
       ${enListe(reglages.notes).map((note) => UI.html`<p class="note indicateurs-note">${note}</p>`)}
-      <details class="vue-tableau"><summary>Voir les valeurs</summary><div class="indicateurs-valeurs"></div></details>
+      <details class="vue-tableau"><summary>${I18n.t('indicateurs.creer_carte.voir_valeurs')}</summary><div class="indicateurs-valeurs"></div></details>
     </article>`);
     if (!reglages.vide) UI.remplir(UI.$('.indicateurs-legende', carte), legende(series));
     if (reglages.hauteur) UI.$('.graph', carte).style.height = reglages.hauteur + 'px';   // barres horizontales : selon le nombre
@@ -344,8 +344,7 @@ Object.assign(Indicateurs, (() => {
   }
 
   function montrerEchec(carte, erreur) {
-    remplacerZone(carte, 'erreur', UI.bandeau('attention', UI.html`<b>Le graphique n'a pas pu s'afficher.</b>
-      ${(erreur && erreur.message) || ''} Les valeurs restent lisibles dans le tableau ci-dessous.`));
+    remplacerZone(carte, 'erreur', UI.bandeau('attention', UI.html`${I18n.html('indicateurs.montrer_echec.graphique_pas_pu_afficher', { message: (erreur && erreur.message) || '' })}`));
     UI.$('.vue-tableau', carte).open = true;
   }
 
@@ -408,9 +407,9 @@ Object.assign(Indicateurs, (() => {
         dessin.fillStyle = jetons('papier').fond;
         dessin.fillRect(0, 0, toile.width, toile.height);
         dessin.drawImage(image, 0, 0, toile.width, toile.height);
-        toile.toBlob((blob) => (blob ? resoudre(blob) : rejeter(new Error('L\'image PNG n\'a pas pu être fabriquée.'))), 'image/png');
+        toile.toBlob((blob) => (blob ? resoudre(blob) : rejeter(new Error(I18n.t('indicateurs.png_depuis_svg.image_png_pas_pu')))), 'image/png');
       };
-      image.onerror = () => rejeter(new Error('L\'image du graphique n\'a pas pu être préparée.'));
+      image.onerror = () => rejeter(new Error(I18n.t('indicateurs.png_depuis_svg.image_graphique_pas_pu')));
       image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     });
   }

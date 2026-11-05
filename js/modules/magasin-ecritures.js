@@ -42,9 +42,9 @@ Object.assign(Magasin, (() => {
   function quantiteValide(valeur, zeroPermis, precision) {
     const quantite = Donnees.nombre(valeur);
     const debut = precision ? precision + ' : ' : '';
-    if (quantite === null) throw ErreurValidation(debut + 'saisissez une quantité (ex. 2).');
+    if (quantite === null) throw ErreurValidation(I18n.t('magasin.quantite_valide.saisissez_quantite_ex_2', { debut }));
     if (zeroPermis ? quantite < 0 : quantite <= 0) {
-      throw ErreurValidation(debut + (zeroPermis ? 'la quantité ne peut pas être négative.' : 'la quantité doit être supérieure à 0.'));
+      throw ErreurValidation(debut + (zeroPermis ? I18n.t('magasin.quantite_valide.quantite_peut_pas_etre') : I18n.t('magasin.quantite_valide.quantite_doit_etre_superieure')));
     }
     return arrondi(quantite, 6);
   }
@@ -56,13 +56,13 @@ Object.assign(Magasin, (() => {
   function utilisateurCourant() {
     const profil = typeof App !== 'undefined' ? App.profil : null;
     if (!profil) return '';
-    if (profil.type === 'responsable') return 'Responsable';
-    return texte(profil.nom) || texte(profil.technicienId) || (profil.type === 'technicien' ? 'Technicien' : 'Demandeur');
+    if (profil.type === 'responsable') return I18n.t('magasin.utilisateur_courant.responsable');
+    return texte(profil.nom) || texte(profil.technicienId) || (profil.type === 'technicien' ? I18n.t('magasin.utilisateur_courant.technicien') : I18n.t('magasin.utilisateur_courant.demandeur'));
   }
 
   function articleExistant(articleId) {
     const article = Donnees.trouver('articles', texte(articleId));
-    if (!article) throw ErreurValidation('L\'article ' + (texte(articleId) || '(non choisi)') + ' est introuvable.');
+    if (!article) throw ErreurValidation(I18n.t('magasin.article_existant.article_introuvable', { article: (texte(articleId) || I18n.t('magasin.article_existant.non_choisi')) }));
     return article;
   }
 
@@ -70,10 +70,11 @@ Object.assign(Magasin, (() => {
   // `mouvement` : 'sortie' ou 'retour' (pour le message).
   function verifierOtOuvert(otId, mouvement) {
     const ot = Donnees.trouver('ordres_travail', otId);
-    if (!ot) throw ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+    if (!ot) throw ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
     if (!Ordres.estOuvert(ot)) {
-      throw ErreurValidation('L\'OT ' + otId + ' est « ' + ot.statut + ' » (peut-être sur un autre poste) : '
-        + (mouvement === 'sortie' ? 'on ne peut plus lui imputer de sortie de stock.' : 'on ne peut plus lui imputer de retour en stock.'));
+      throw ErreurValidation(mouvement === 'sortie'
+        ? I18n.t('magasin.verifier_ot_ouvert.ot_peut_etre_autre', { otId, otStatut: ot.statut })
+        : I18n.t('magasin.verifier_ot_ouvert.ot_peut_etre_autre_2', { otId, otStatut: ot.statut }));
     }
     return ot;
   }
@@ -135,9 +136,9 @@ Object.assign(Magasin, (() => {
    * Renvoie l'identifiant du mouvement créé.
    */
   async function sortir(otId, articleId, quantite, commentaire) {
-    const demandee = quantiteValide(quantite, false, 'Sortie refusée');
+    const demandee = quantiteValide(quantite, false, I18n.t('magasin.sortir.sortie_refusee'));
     if (!texte(otId)) {
-      throw ErreurValidation('Sortie refusée : toute sortie de stock doit être imputée à un ordre de travail (RG6).');
+      throw ErreurValidation(I18n.t('magasin.sortir.sortie_refusee_toute_sortie'));
     }
     const article = articleExistant(articleId);
     await Donnees.rechargerTable('ordres_travail');     // un OT clôturé ou annulé ailleurs est vu
@@ -146,7 +147,7 @@ Object.assign(Magasin, (() => {
       verifierOtOuvert(otId, 'sortie');
       const stock = stockDepuisLignes(lignes, article.id);
       if (stock - demandee < 0) {
-        throw ErreurValidation('Stock insuffisant : ' + nombreTexte(stock) + ' en stock, ' + nombreTexte(demandee) + ' demandé');
+        throw ErreurValidation(I18n.t('magasin.sortir.stock_insuffisant_stock_demande', { stock: nombreTexte(stock), demande: nombreTexte(demandee) }));
       }
       return nouveauMouvement(lignes, outils, { articleId: article.id, type: 'sortie', quantite: demandee, otId, commentaire });
     }, { action: 'sortie de ' + nombreTexte(demandee) + ' ' + texte(article.reference) + ' pour ' + otId });
@@ -159,8 +160,8 @@ Object.assign(Magasin, (() => {
    * de cet article pour cet OT, OT ni clôturé ni annulé. Renvoie l'identifiant du mouvement.
    */
   async function retourner(otId, articleId, quantite, commentaire) {
-    const rendue = quantiteValide(quantite, false, 'Retour refusé');
-    if (!texte(otId)) throw ErreurValidation('Retour refusé : indiquez l\'ordre de travail pour lequel la pièce a été sortie.');
+    const rendue = quantiteValide(quantite, false, I18n.t('magasin.retourner.retour_refuse'));
+    if (!texte(otId)) throw ErreurValidation(I18n.t('magasin.retourner.retour_refuse_indiquez_ordre'));
     const article = articleExistant(articleId);
     await Donnees.rechargerTable('ordres_travail');
     verifierOtOuvert(otId, 'retour');
@@ -168,8 +169,7 @@ Object.assign(Magasin, (() => {
       verifierOtOuvert(otId, 'retour');
       const net = netSortiDepuisLignes(lignes, otId, article.id);
       if (rendue > net) {
-        throw ErreurValidation('Retour refusé : ' + nombreTexte(Math.max(0, net)) + ' sorti pour l\'OT ' + otId
-          + ' (retours déduits), ' + nombreTexte(rendue) + ' à retourner');
+        throw ErreurValidation(I18n.t('magasin.retourner.retour_refuse_sorti_ot', { sorti: nombreTexte(Math.max(0, net)), otId, aRetourner: nombreTexte(rendue) }));
       }
       return nouveauMouvement(lignes, outils, { articleId: article.id, type: 'retour', quantite: rendue, otId, commentaire });
     }, { action: 'retour de ' + nombreTexte(rendue) + ' ' + texte(article.reference) + ' (' + otId + ')' });
@@ -179,7 +179,7 @@ Object.assign(Magasin, (() => {
 
   /** Entrée en stock hors achat (ex. pièce récupérée, don d'un autre site). Renvoie l'identifiant du mouvement. */
   async function entrer(articleId, quantite, commentaire) {
-    const entree = quantiteValide(quantite, false, 'Entrée refusée');
+    const entree = quantiteValide(quantite, false, I18n.t('magasin.entrer.entree_refusee'));
     const article = articleExistant(articleId);
     const id = await Donnees.modifier('mouvements_stock', (lignes, outils) => nouveauMouvement(lignes, outils, {
       articleId: article.id, type: 'entrée', quantite: entree, commentaire,
@@ -196,12 +196,12 @@ Object.assign(Magasin, (() => {
     const vus = new Set();
     const liste = (comptages || []).map((comptage) => {
       const article = articleExistant(comptage && comptage.articleId);
-      if (vus.has(article.id)) throw ErreurValidation('Inventaire refusé : ' + libelleArticle(article) + ' est compté deux fois.');
+      if (vus.has(article.id)) throw ErreurValidation(I18n.t('magasin.inventorier.inventaire_refuse_compte_deux', { libelleArticle: libelleArticle(article) }));
       vus.add(article.id);
-      return { article, quantite: quantiteValide(comptage.quantite, true, 'Stock compté de ' + texte(article.reference)) };
+      return { article, quantite: quantiteValide(comptage.quantite, true, I18n.t('magasin.inventorier.stock_compte', { reference: texte(article.reference) })) };
     });
-    if (!liste.length) throw ErreurValidation('Inventaire vide : saisissez le stock compté d\'au moins un article.');
-    const remarque = texte(commentaire) || 'Inventaire';
+    if (!liste.length) throw ErreurValidation(I18n.t('magasin.inventorier.inventaire_vide_saisissez_stock'));
+    const remarque = texte(commentaire) || I18n.t('magasin.inventorier.inventaire');
     const ids = await Donnees.modifier('mouvements_stock', (lignes, outils) => liste.map((comptage) => nouveauMouvement(lignes, outils, {
       articleId: comptage.article.id, type: 'inventaire', quantite: comptage.quantite, commentaire: remarque,
     })), { action: 'inventaire de ' + liste.length + ' article(s)' });
@@ -215,7 +215,7 @@ Object.assign(Magasin, (() => {
 
   function ligneAchat(lignes, achatId) {
     const achat = lignes.find((ligne) => ligne.id === achatId);
-    if (!achat) throw ErreurValidation('L\'achat ' + achatId + ' est introuvable.');
+    if (!achat) throw ErreurValidation(I18n.t('magasin.ligne_achat.achat_introuvable', { achatId }));
     return achat;
   }
 
@@ -225,15 +225,14 @@ Object.assign(Magasin, (() => {
    * Refus si une demande de cet article attend déjà d'être commandée. Renvoie l'identifiant.
    */
   async function demanderAchat(articleId, quantite, fournisseurId) {
-    const demandee = quantiteValide(quantite, false, 'Demande d\'achat refusée');
+    const demandee = quantiteValide(quantite, false, I18n.t('magasin.demander_achat.demande_achat_refusee'));
     const article = articleExistant(articleId);
     const fournisseur = texte(fournisseurId === undefined || fournisseurId === null ? article.fournisseur_id : fournisseurId);
-    if (fournisseur && !Donnees.trouver('fournisseurs', fournisseur)) throw ErreurValidation('Le fournisseur ' + fournisseur + ' est introuvable.');
+    if (fournisseur && !Donnees.trouver('fournisseurs', fournisseur)) throw ErreurValidation(I18n.t('magasin.demander_achat.fournisseur_introuvable', { fournisseur }));
     return Donnees.modifier('achats', (lignes, outils) => {
       const enAttente = lignes.find((achat) => achat.article_id === article.id && achat.statut === 'demandée');
       if (enAttente) {
-        throw ErreurValidation('Une demande d\'achat de ' + libelleArticle(article) + ' attend déjà d\'être commandée ('
-          + enAttente.id + ') : commandez-la depuis l\'onglet Achats.');
+        throw ErreurValidation(I18n.t('magasin.demander_achat.demande_achat_attend_deja', { libelleArticle: libelleArticle(article), enAttenteId: enAttente.id }));
       }
       const id = outils.nouvelId(lignes);
       lignes.push({
@@ -249,7 +248,7 @@ Object.assign(Magasin, (() => {
     return Donnees.modifier('achats', (lignes) => {
       const achat = ligneAchat(lignes, achatId);
       if (achat.statut !== 'demandée') {
-        throw ErreurValidation('L\'achat ' + achatId + ' est déjà « ' + achat.statut + ' » (sans doute sur un autre poste).');
+        throw ErreurValidation(I18n.t('magasin.commander.achat_deja_sans_doute', { achatId, achatStatut: achat.statut }));
       }
       achat.statut = 'commandée';
       return achat.statut;
@@ -272,13 +271,13 @@ Object.assign(Magasin, (() => {
    * du mouvement d'entrée.
    */
   async function recevoir(achatId, quantiteRecue) {
-    const recue = quantiteValide(quantiteRecue, false, 'Réception refusée');
+    const recue = quantiteValide(quantiteRecue, false, I18n.t('magasin.recevoir.reception_refusee'));
     const etat = await Donnees.modifier('achats', (lignes, outils) => {
       const achat = ligneAchat(lignes, achatId);
-      if (!Donnees.trouver('articles', achat.article_id)) throw ErreurValidation('L\'article ' + achat.article_id + ' de l\'achat ' + achatId + ' est introuvable.');
+      if (!Donnees.trouver('articles', achat.article_id)) throw ErreurValidation(I18n.t('magasin.recevoir.article_achat_introuvable', { article_id: achat.article_id, achatId }));
       if (achat.statut === 'reçue') return { achat: Object.assign({}, achat), dejaRecu: true };
       if (achat.statut !== 'commandée') {
-        throw ErreurValidation('L\'achat ' + achatId + ' est « ' + achat.statut + ' » : commandez-le avant de le réceptionner.');
+        throw ErreurValidation(I18n.t('magasin.recevoir.achat_commandez_avant_receptionner', { achatId, achatStatut: achat.statut }));
       }
       achat.statut = 'reçue';
       achat.date_reception = outils.aujourdhui();
@@ -286,14 +285,16 @@ Object.assign(Magasin, (() => {
     }, { action: 'réception de ' + nombreTexte(recue) + ' (achat ' + achatId + ')' });
     const achat = etat.achat;
     const commandee = Donnees.nombre(achat.quantite);
-    const commentaire = 'Réception ' + achat.id + (commandee !== null && commandee !== recue
-      ? ' (' + nombreTexte(recue) + ' reçu sur ' + nombreTexte(commandee) + ' commandé)' : '');
+    // « Réception ACH-… » est un marqueur relu par le code (D156) : il reste fixe ; seul le détail est traduit.
+    const detail = commandee !== null && commandee !== recue
+      ? ' ' + I18n.t('magasin.recevoir.recu_commande', { recu: nombreTexte(recue), commande: nombreTexte(commandee) }) : '';
+    const commentaire = 'Réception ' + achat.id + detail;
     const mouvementId = await Donnees.modifier('mouvements_stock', (lignes, outils) => {
       if (lignes.some((mouvement) => estReceptionDe(mouvement, achat))) return null;
       return nouveauMouvement(lignes, outils, { articleId: achat.article_id, type: 'entrée', quantite: recue, commentaire });
     }, { action: 'entrée en stock (réception ' + achat.id + ')' });
     if (mouvementId === null && etat.dejaRecu) {
-      throw ErreurValidation('L\'achat ' + achatId + ' est déjà réceptionné (sans doute sur un autre poste).');
+      throw ErreurValidation(I18n.t('magasin.recevoir.achat_deja_receptionne_sans', { achatId }));
     }
     await copierStocks([achat.article_id]);
     return mouvementId;
@@ -313,21 +314,21 @@ Object.assign(Magasin, (() => {
     const courant = lignesArticles.find((ligne) => ligne.id === idCourant);
     const seraActif = valeurs.actif !== undefined ? texte(valeurs.actif) !== '0' : (!courant || estActif(courant));
     const reference = texte(valeurs.reference);
-    if (!reference) erreurs.push({ nom: 'reference', message: 'La référence est obligatoire (ex. ROU-012).' });
+    if (!reference) erreurs.push({ nom: 'reference', message: I18n.t('magasin.verifier_article.reference_obligatoire_ex_rou') });
     else if (seraActif) {
       const double = lignesArticles.find((ligne) => ligne.id !== idCourant && estActif(ligne) && normaliser(ligne.reference) === normaliser(reference));
-      if (double) erreurs.push({ nom: 'reference', message: 'La référence « ' + reference + ' » est déjà celle de ' + libelleArticle(double) + '.' });
+      if (double) erreurs.push({ nom: 'reference', message: I18n.t('magasin.verifier_article.reference_deja_celle', { reference, libelleArticle: libelleArticle(double) }) });
     }
-    if (!texte(valeurs.designation)) erreurs.push({ nom: 'designation', message: 'La désignation est obligatoire.' });
+    if (!texte(valeurs.designation)) erreurs.push({ nom: 'designation', message: I18n.t('magasin.verifier_article.designation_obligatoire') });
     CHAMPS_NOMBRES_ARTICLE.forEach((nom) => {
       if (valeurs[nom] === undefined || texte(valeurs[nom]) === '') return;
       const valeur = Donnees.nombre(valeurs[nom]);
-      if (valeur === null) erreurs.push({ nom, message: 'Saisissez un nombre (ex. 4).' });
-      else if (valeur < 0) erreurs.push({ nom, message: 'La valeur ne peut pas être négative.' });
-      else if (nom === 'delai_jours' && !Number.isInteger(valeur)) erreurs.push({ nom, message: 'Saisissez un nombre entier de jours.' });
+      if (valeur === null) erreurs.push({ nom, message: I18n.t('magasin.verifier_article.saisissez_nombre_ex_4') });
+      else if (valeur < 0) erreurs.push({ nom, message: I18n.t('magasin.verifier_article.valeur_peut_pas_etre') });
+      else if (nom === 'delai_jours' && !Number.isInteger(valeur)) erreurs.push({ nom, message: I18n.t('magasin.verifier_article.saisissez_nombre_entier_jours') });
     });
     const fournisseur = texte(valeurs.fournisseur_id);
-    if (fournisseur && !Donnees.trouver('fournisseurs', fournisseur)) erreurs.push({ nom: 'fournisseur_id', message: 'Ce fournisseur est introuvable.' });
+    if (fournisseur && !Donnees.trouver('fournisseurs', fournisseur)) erreurs.push({ nom: 'fournisseur_id', message: I18n.t('magasin.verifier_article.fournisseur_introuvable') });
     return erreurs;
   }
 
@@ -364,7 +365,7 @@ Object.assign(Magasin, (() => {
     const propres = valeursArticle(valeurs || {});
     return Donnees.modifier('articles', (lignes) => {
       const ligne = lignes.find((l) => l.id === articleId);
-      if (!ligne) throw ErreurValidation('L\'article ' + articleId + ' est introuvable.');
+      if (!ligne) throw ErreurValidation(I18n.t('magasin.modifier_article.article_introuvable', { articleId }));
       refuserSiErreurs(verifierArticle(Object.assign({}, ligne, propres), lignes, articleId));
       const changes = Object.keys(propres).filter((nom) => texte(ligne[nom]) !== propres[nom]);
       changes.forEach((nom) => { ligne[nom] = propres[nom]; });
@@ -376,13 +377,13 @@ Object.assign(Magasin, (() => {
   function verifierFournisseur(valeurs, lignesFournisseurs, idCourant) {
     const erreurs = [];
     const nom = texte(valeurs.nom);
-    if (!nom) erreurs.push({ nom: 'nom', message: 'Le nom du fournisseur est obligatoire.' });
+    if (!nom) erreurs.push({ nom: 'nom', message: I18n.t('magasin.verifier_fournisseur.nom_fournisseur_obligatoire') });
     else {
       const double = lignesFournisseurs.find((ligne) => ligne.id !== idCourant && normaliser(ligne.nom) === normaliser(nom));
-      if (double) erreurs.push({ nom: 'nom', message: 'Un fournisseur porte déjà ce nom (' + double.id + ').' });
+      if (double) erreurs.push({ nom: 'nom', message: I18n.t('magasin.verifier_fournisseur.fournisseur_porte_deja_nom', { doubleId: double.id }) });
     }
     const email = texte(valeurs.email);
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) erreurs.push({ nom: 'email', message: 'Adresse e-mail incomplète (ex. contact@fournisseur.example).' });
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) erreurs.push({ nom: 'email', message: I18n.t('magasin.verifier_fournisseur.adresse_e_mail_incomplete') });
     return erreurs;
   }
 
@@ -408,7 +409,7 @@ Object.assign(Magasin, (() => {
     const propres = valeursFournisseur(valeurs || {});
     return Donnees.modifier('fournisseurs', (lignes) => {
       const ligne = lignes.find((l) => l.id === fournisseurId);
-      if (!ligne) throw ErreurValidation('Le fournisseur ' + fournisseurId + ' est introuvable.');
+      if (!ligne) throw ErreurValidation(I18n.t('magasin.modifier_fournisseur.fournisseur_introuvable', { fournisseurId }));
       refuserSiErreurs(verifierFournisseur(Object.assign({}, ligne, propres), lignes, fournisseurId));
       const changes = Object.keys(propres).filter((nom) => texte(ligne[nom]) !== propres[nom]);
       changes.forEach((nom) => { ligne[nom] = propres[nom]; });
