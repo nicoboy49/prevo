@@ -221,6 +221,7 @@ const App = (() => {
   // ===========================================================================================
 
   async function demarrer() {
+    I18n.appliquer(document);          // textes statiques de index.html (data-i18n, data-i18n-attr)
     remplacerIcones(document);
     installerEcouteurs();
     poste = lireMemoire(CLE_POSTE) || posteAleatoire();

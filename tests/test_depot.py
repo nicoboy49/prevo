@@ -66,8 +66,11 @@ ORDRE_MODULES = [
 LIGNES_MAX_MODULE = 700   # décision D28 : aucun fichier de js/modules/ au-delà
 # Ordre exact des scripts du socle dans index.html, avant ceux de js/modules/ : RECOPIE de docs/ARCHITECTURE.md §1
 # (« Ordre de chargement dans index.html »). js/formats.js juste après js/schema.js (chantier socle de données, T183).
+# Chantier multilingue (T234) : le moteur de traduction, les langues, le français, l'aide française et le chargeur de la
+# langue active juste avant js/schema.js.
 ORDRE_SOCLE = [
     "js/lib/papaparse.min.js", "js/lib/qrcode.js", "js/lib/jsQR.js",
+    "js/i18n.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js", "js/i18n-chargeur.js",
     "js/schema.js", "js/formats.js", "js/donnees.js",
     "js/stockage-serveur.js", "js/stockage-dossier.js", "js/stockage-demo.js", "js/interface.js",
 ]

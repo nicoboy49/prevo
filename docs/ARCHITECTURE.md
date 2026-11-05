@@ -21,6 +21,10 @@ css/modules/*.css          mise en page propre à chaque module (une feuille par
                            chargées par index.html)
 css/polices/               police Sora (OFL)
 js/lib/                    bibliothèques tierces + LICENCES.txt (jamais modifiées)
+js/i18n.js                 I18n      : moteur de traduction (t, html, pluriels, repli, data-i18n ; multilingue)
+js/i18n/langues.js         langues déclarées ; js/i18n/<code>.js : textes d'une langue, un bloc par section
+js/i18n/aide/<code>.js     aide longue d'une langue (clés aide.*, repli silencieux sur le français)
+js/i18n-chargeur.js        ajoute la langue active (si ce n'est pas le français) avant js/schema.js
 js/schema.js               Schema    : description des 22 tables (champs, types, identifiants)
 js/formats.js              Formats   : registre des formats (colonnes de chaque format, étapes de migration, manifeste)
 js/donnees.js              Donnees   : CSV, chargement, contrôle, mutation, journal, rafraîchissement
@@ -52,7 +56,9 @@ tests/                     tests automatisés (unittest + Playwright) ; tests/fi
 
 **Ordre de chargement dans `index.html`** (scripts classiques, jamais `type="module"`) :
 `js/lib/papaparse.min.js`, `js/lib/qrcode.js`, `js/lib/jsQR.js` (JSZip, retiré en T229, n'y est plus : le ZIP
-passe par `zip-flux.js`), `js/schema.js`, `js/formats.js` (juste après le schéma, dont il dépend seul :
+passe par `zip-flux.js`), la traduction (chantier multilingue, T234) : `js/i18n.js` (le moteur, objet `I18n`),
+`js/i18n/langues.js`, `js/i18n/fr.js`, `js/i18n/aide/fr.js`, `js/i18n-chargeur.js` (la langue active, voir plus bas),
+`js/schema.js`, `js/formats.js` (juste après le schéma, dont il dépend seul :
 chantier « socle de données »),
 `js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
 `js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
@@ -64,6 +70,14 @@ le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-co
 `acces-textes.js` juste après `mise-a-jour.js` (§23, §22.2), `ia-serveur.js` juste après `ia-encadre.js` (§22.12),
 `parametres-solo.js` juste après `parametres-codes.js` et `parametres-sauvegardes.js` juste après `parametres-solo.js`
 (§22.11)), `js/app.js` (en dernier).
+Langue active (T234) : `js/i18n-chargeur.js` lit `localStorage` « prevo.langue » (rien ne l'écrit encore : le choix
+viendra aux lots 3 et 4 du chantier multilingue) ; une langue déclarée par `js/i18n/langues.js`, autre que le français,
+devient la langue active (`I18n.choisir`) et ses deux fichiers (`js/i18n/<code>.js`, `js/i18n/aide/<code>.js`) sont
+écrits par `document.write` pendant l'analyse de la page : chargés et exécutés avant `js/schema.js`, en `file://` comme
+en http. Valeur absente, non déclarée ou mal formée, stockage refusé : français, sans erreur. `acces/porte.html`
+charge `js/i18n.js`, `js/i18n/langues.js` et `js/i18n/fr.js` avant `acces/porte.js` (servis par la porte :
+`fichier_de_la_porte`, §22.6). `App` applique les attributs `data-i18n` et `data-i18n-attr` de `index.html` au
+démarrage (`I18n.appliquer(document)`).
 `js/demo-donnees.js` n'est **pas** chargé au démarrage : `App` l'injecte (balise `<script>`
 créée dynamiquement, compatible `file://`) quand on choisit la démo ou la copie du jeu de démo.
 ECharts (`js/lib/echarts.min.js`, version 5.5.1) n'est pas non plus chargé au démarrage :
@@ -3649,7 +3663,8 @@ le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis
   `certificat_auto` faux ⇒ « Démarrage refusé », code 2, aucun écouteur ouvert. `GestionnaireRequetes` :
   `client_de_confiance()` (127.0.0.1, ::1 ; T164 y ajoute le mandataire attesté), `sur_la_porte()`, `servir_porte`
   (après `hote_autorise` et `analyser_chemin`, avant tout contrôle d'accès : `fichier_de_la_porte` — `acces/**` sauf
-  `porte.html`, `favicon.svg`, `css/polices/**`, s'ils existent —, `/acces/ca.crt`, sinon `page_de_porte()` ; un PUT
+  `porte.html`, `favicon.svg`, `css/polices/**`, `js/i18n.js` et `js/i18n/**` (textes de l'interface, T234), s'ils
+  existent —, `/acces/ca.crt`, sinon `page_de_porte()` ; un PUT
   ou POST n'est jamais lu, connexion fermée après la réponse). La page sur le disque porte `data-port-https=""`, rempli
   au service par `port_https` ; sa politique est `POLITIQUE_PORTE` (`connect-src 'self' https://<hôte de la
   requête>:<port_https>`, `img-src 'self' data:`), jamais HSTS. `/acces/ca.crt` (porte et application) :

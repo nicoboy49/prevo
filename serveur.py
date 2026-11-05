@@ -383,6 +383,7 @@ ECOUTES = ('127.0.0.1', '0.0.0.0')
 # interroge https://<même hôte>:<port_https>/api/ping et conduit le téléphone à l'application en https. Le port https
 # est injecté dans l'attribut data-port-https de la page au moment de la servir : jamais une adresse codée en dur.
 DOSSIER_PORTE = ('acces',)
+DOSSIER_TEXTES = ('js', 'i18n')            # textes de l'interface par langue, servis aussi par la porte (multilingue)
 PAGE_PORTE = os.path.join(DOSSIER_APPLICATION, 'acces', 'porte.html')
 ATTRIBUT_PORT_HTTPS = 'data-port-https=""'
 CHEMIN_CERTIFICAT_AUTORITE = ['acces', 'ca.crt']
@@ -3318,11 +3319,12 @@ def chemin_public(morceaux, servir_tests):
 
 def fichier_de_la_porte(minuscules):
     """Vrai si la porte sert ce chemin (minuscules) tel quel à un client du réseau (§22.6) : ses fichiers sous acces/
-    (sauf porte.html, toujours rendue avec son port https), le favicon et les polices de la charte. Rien d'autre : ni
-    index.html, ni js/, ni css/ hors polices — aucune donnée, aucun écran de l'application."""
-    if minuscules == ['favicon.svg']:
+    (sauf porte.html, toujours rendue avec son port https), le favicon, les polices de la charte et les textes de
+    l'interface (js/i18n.js et js/i18n/, chantier multilingue : textes publics, aucune donnée). Rien d'autre : ni
+    index.html, ni le reste de js/, ni css/ hors polices — aucune donnée, aucun écran de l'application."""
+    if minuscules == ['favicon.svg'] or minuscules == ['js', 'i18n.js']:
         return True
-    if commence_par(minuscules, ('css', 'polices')):
+    if commence_par(minuscules, ('css', 'polices')) or commence_par(minuscules, DOSSIER_TEXTES):
         return True
     return commence_par(minuscules, DOSSIER_PORTE) and minuscules != ['acces', 'porte.html']
 
