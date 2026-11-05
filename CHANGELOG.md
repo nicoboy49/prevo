@@ -17,6 +17,13 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 - **Navigateur trop ancien** : lire ou écrire un ZIP par morceaux demande un navigateur récent (Chrome, Edge, Firefox
   ou Safari). Un navigateur trop ancien refuse l'export et l'import ZIP avec un message clair : mettez-le à jour, ou
   copiez simplement votre dossier de données pour le sauvegarder ou le transporter.
+- **Fichier ouvert dans Excel** : le message nomme le fichier et dit quoi faire (« Le fichier « equipements.csv » est
+  ouvert dans Excel ou un autre logiciel : fermez-le, puis réessayez. »), dans les deux modes ; la saisie reste dans
+  le formulaire.
+- **Place des documents (mode serveur)** : 4 Go par défaut au lieu de 2 Go, comme l'import ZIP ; quand elle est
+  pleine, le message dit où l'agrandir (Paramètres › Accès et installation, sur le PC serveur).
+- **Import ZIP** : si le fichier ZIP est modifié, déplacé ou supprimé pendant l'import, Prévo le dit clairement et
+  n'importe rien ; il suffit de relancer l'import.
 
 ### Retiré
 
