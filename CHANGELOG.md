@@ -12,6 +12,8 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 - **ZIP jusqu'à 4 Go** : l'export et l'import lisent et écrivent le ZIP par morceaux, un document à la fois, au lieu
   de tout charger en mémoire. Un ZIP peut maintenant faire 4 Go (4 Go une fois décompressé, 10 000 fichiers au plus ;
   toujours 50 Mo par table et 10 Mo par document).
+- **Avertissement avant un gros export** : Prévo ne prévient plus qu'au-delà de 500 Mo (au lieu de 150 Mo). Écrit par
+  morceaux, le ZIP demande au navigateur jusqu'à une fois et demie sa taille en mémoire, au lieu de 5 à 6 fois.
 - **Navigateur trop ancien** : lire ou écrire un ZIP par morceaux demande un navigateur récent (Chrome, Edge, Firefox
   ou Safari). Un navigateur trop ancien refuse l'export et l'import ZIP avec un message clair : mettez-le à jour, ou
   copiez simplement votre dossier de données pour le sauvegarder ou le transporter.

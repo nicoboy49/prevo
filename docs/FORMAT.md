@@ -299,10 +299,55 @@ la taille du ZIP. Elles valent pour la bêta 2 : **sur un PC de 4 Go, ce n'étai
 d'alors (400 Mo)** ; Windows et le navigateur y laissent souvent moins de 1,5 Go libres, l'onglet pouvait se fermer
 (rien n'est perdu, rien n'est exporté ni importé).
 
-Depuis T227 et T228, le ZIP est lu et écrit **par morceaux** (`js/modules/zip-flux.js`, sans JSZip, retiré en T229) :
-mémoire JavaScript bornée aux tables plus UN document (10 Mo au plus) ; le ZIP en cours d'écriture est un Blob composé,
-tenu par le navigateur hors de la mémoire JavaScript. D'où les limites de T229 : 4 Go par ZIP, 4 Go décompressés. La
-mémoire réelle (onglet et navigateur, gros ZIP, PC de 4 Go) n'est pas encore mesurée : c'est la recette de T215. En
-attendant, l'avertissement de l'export complet (T222, `ZipDonnees.AVERTISSEMENT` : au-delà de 150 Mo avant
-compression, données seules, export complet quand même, ou annuler) reste tel quel, et l'export « données seules »
-(sans les documents, T214) reste la parade.
+**Mémoire du ZIP par morceaux (T215).** Depuis T227 et T228, le ZIP est lu et écrit par morceaux
+(`js/modules/zip-flux.js`, sans JSZip, retiré en T229) : mémoire JavaScript bornée aux tables plus UN document. Mesuré
+le 2026-11-05 par la recette `tests/test_zip_morceaux.py` (même PC, même méthode que T212), mais avec un profil de
+navigateur **sur le disque**, comme celui d'un utilisateur (T212 : contexte incognito, où Chromium garde tout en
+mémoire) ; documents fictifs incompressibles, sur le jeu de charge `generer_demo.py --volume 300,2000` (300,20000 pour
+les 9 888 photos) : avec la grosse base de T212, la recette n'aurait pas tenu au-dessus de 1,5 Go libres sur ce PC.
+
+| Cas | ZIP | Chromium (avant → pic) | Onglet seul (pic) | Durée |
+| --- | --- | --- | --- | --- |
+| Export, mode serveur, 330 photos de 1 Mo | 330 Mo, 355 entrées | 0,2 → 0,7 Go | 0,2 Go | 14 s |
+| Le même export, en incognito (le contexte de T212) | 330 Mo | 0,2 → 0,75 Go | 0,2 Go | 12 s |
+| Import du même ZIP, mode dossier | 330 Mo | 0,2 → 0,3 Go | 0,2 Go | 14 s |
+| Export, mode dossier (cette base, navigateur relancé) | 330 Mo | 0,2 → 0,7 Go | 0,2 Go | 7 s |
+| Export, mode serveur, 9 888 photos de 34 Kio | 337 Mo, 9 913 entrées | 0,4 → 1,4 à 1,7 Go | 0,9 à 1,0 Go | 183 à 186 s |
+| Export « données seules » de la grosse base de T212 | 6 Mo, 25 entrées | 0,7 → 1,3 Go | 1,2 Go | 6 s |
+| Export, mode serveur, 220 documents de 9,5 Mo | 2 091 Mo, 245 entrées | 0,2 → 1,6 Go | 0,2 Go | 87 à 93 s |
+| Import du même ZIP, mode dossier | 2 091 Mo | 0,2 → 0,4 à 0,45 Go | 0,3 Go | 100 à 117 s |
+| Export, mode dossier (cette base, navigateur relancé) | 2 091 Mo | 0,2 → 1,5 Go | 0,2 Go | 71 s |
+| Import du ZIP du serveur, mode serveur (quota des documents relevé) | 2 091 Mo | 0,2 → 0,5 Go | 0,3 Go | 100 à 119 s |
+| ZIP écrit dans la page (`ZipFlux.ecrivain`), 40 entrées de 97,5 Mo | 3 900 Mo, 40 entrées | 0,1 → 0,4 Go | 0,2 Go | 73 à 96 s |
+
+- **L'onglet ne dépend plus de la taille du ZIP** : 0,2 à 0,3 Go de 330 Mo à 3,9 Go (contre 2,1 à 2,4 Go pour 385 Mo).
+  Sauf pour des milliers de petites entrées : 0,9 à 1 Go pour 9 913 entrées (objets de chaque entrée en attente du
+  ramasse-miettes).
+- **L'import est borné** : 0,5 Go de Chromium au plus pour un ZIP de 2 Go, en mode dossier comme en mode serveur.
+  En mode serveur, le dossier des documents est plafonné à 2 Go par défaut (`quota_documents_mo`, 2 048) : un ZIP qui
+  apporte plus de 2 Go de documents (un export du mode dossier, qui n'a pas de plafond) y est refusé proprement
+  (« Dossier des documents plein… », tables intactes, sauvegarde faite) tant que ce réglage n'est pas relevé.
+- **L'export reste proportionnel à la taille du ZIP, mais dans le processus principal du navigateur** : le ZIP en
+  cours d'écriture est un Blob composé dont Chromium garde en mémoire chaque morceau de moins de 5 Mo et les 5 premiers
+  Mo des autres (le reste va dans le dossier du profil : 1 Go sur le disque pour le ZIP de 2 Go). Chromium entier
+  prend ainsi environ 1,5 fois la taille du ZIP pour des photos de 1 Mo, les deux tiers pour des documents de 9,5 Mo,
+  un dixième pour des morceaux de 100 Mo ; tout est rendu après le téléchargement. En incognito, tout reste en mémoire.
+- **La grosse base de T212** (20 000 OT, journal de 45 Mo) : l'onglet est à 0,6 Go avant tout export et monte à 1,2 Go
+  pendant un export « données seules », sans aucun document (la garde de la recette, 1,5 Go libres sur le PC, l'a
+  arrêté deux fois avant qu'il passe). Ce coût vient des tables (relecture du journal, 24 CSV sérialisés et empreints),
+  pas du ZIP.
+
+**Pour un PC de 4 Go** : l'import est désormais raisonnable jusqu'aux limites (4 Go). L'export l'est tant que le
+navigateur peut prendre environ une fois et demie la taille du ZIP : 500 Mo en demandent jusqu'à 0,75 Go, ce que
+demandaient 150 Mo avec JSZip ; un export de 2 Go (1,4 Go de plus dans le navigateur) ne l'est pas (la recette elle-même
+n'a tenu qu'en attendant 3,3 Go libres). D'où l'avertissement de l'export complet (T222, `ZipDonnees.AVERTISSEMENT`),
+gardé mais relevé de 150 à 500 Mo avant compression, avec le texte « jusqu'à une fois et demie cette taille en
+mémoire » ; l'export « données seules » (sans les documents, T214) reste la parade. Une très grosse base (des dizaines
+de milliers d'OT, un journal de plusieurs années) reste lourde à exporter, documents ou non.
+
+**Ouverture par d'autres outils (T215).** Un vrai export de 2 091 Mo (5 entrées au-delà de 2 Go), un ZIP de 3 900 Mo
+écrit dans la page par `ZipFlux.ecrivain` (40 entrées de 97,5 Mo, 18 au-delà de 2 Go) et un ZIP de 3 900 Mo de 400
+entrées de 9,75 Mo (copie Python de l'écrivain, vérifiée à l'octet contre lui ; 189 entrées au-delà de 2 Go) : Python
+`zipfile` (`testzip()`), `tar` de Windows (liste ; extraction de la première entrée et de la plus lointaine) et
+« Extraire tout » de l'Explorateur (moteur ZIP du Shell de Windows) les ouvrent sans erreur : tous les fichiers, à
+l'octet (SHA-256), en 31 à 40 s pour 2 Go et en 43 à 68 s pour 3,9 Go.

@@ -23,10 +23,11 @@
 // T208 (règle de Nicolas : tout ce que Prévo exporte, Prévo peut le réimporter) : avant de produire le ZIP, l'export
 // contrôle les limites de l'import (ZipLecture.LIMITES, lues, jamais recopiées) ; s'il en dépasse une, rien n'est
 // produit et une fenêtre dit quoi (depassements, refusDe).
-// T222 (décision de Nicolas du 05/11, mesure T212 de docs/FORMAT.md §13, faite quand JSZip construisait le ZIP en
-// mémoire : 5 à 6 fois sa taille) : avant un export complet dont les fichiers dépassent AVERTISSEMENT.contenu
-// (150 Mo), une fenêtre (#export-zip-avertissement) propose les données seules, l'export complet quand même, ou
-// d'annuler. Gardée telle quelle par T228 (seuil et texte), jusqu'à la mesure de la recette (T215).
+// T222 (décision de Nicolas du 05/11) : avant un export complet dont les fichiers dépassent AVERTISSEMENT.contenu,
+// une fenêtre (#export-zip-avertissement) propose les données seules, l'export complet quand même, ou d'annuler.
+// T215 (recette du ZIP par morceaux, docs/FORMAT.md §13) : la mémoire de l'export reste proportionnelle à la taille du
+// ZIP, mais dans le processus principal du navigateur, plus dans l'onglet : jusqu'à une fois et demie la taille du ZIP
+// (contre 5 à 6 fois avec JSZip, T212). Seuil relevé de 150 à 500 Mo, texte corrigé.
 // T228 (T215 « ZIP par morceaux », morceau 3) : le ZIP est écrit par ZipFlux (zip-flux.js), un document à la fois,
 // sans JSZip. Mémoire JavaScript bornée aux CSV (les tables, déjà en mémoire) plus UN document, en deux passes :
 //   1. préparation (contenu) : chaque document cité est demandé à l'adaptateur pour sa TAILLE seulement (Blob.size,
@@ -237,12 +238,15 @@ const ZipDonnees = (() => {
     UI.fenetre({ titre: 'Export ZIP impossible', contenu: contenu });
   }
 
-  // --- Avertissement avant un gros export (T222) ---------------------------------------------------------------------
-  // Seuil sur les octets des fichiers à mettre dans le ZIP (CSV et documents, avant compression) : pour un ZIP de 385
-  // à 390 Mo, l'onglet montait à 2,1-2,4 Go (mesure T212, ZIP construit par JSZip), trop pour un PC de 4 Go ; 150 Mo
-  // en demandaient 750 à 900 Mo. Inchangé par T228, en attendant la mesure de l'écriture par morceaux (recette T215).
-  // Écrit 150 × 1 048 576 (1 Mo) : ce fichier ne recopie aucune limite de l'import (garde-fou de test_zip_limites.py).
-  const AVERTISSEMENT = Object.freeze({ contenu: 150 * 1048576 });
+  // --- Avertissement avant un gros export (T222 ; seuil et texte revus par T215) -------------------------------------
+  // Seuil sur les octets des fichiers à mettre dans le ZIP (CSV et documents, avant compression). Mesure T215
+  // (Chromium, profil sur disque) : le ZIP en cours d'écriture est un Blob composé, dont Chromium garde en mémoire, dans
+  // son processus principal, chaque morceau de moins de 5 Mo et les 5 premiers Mo des autres (le reste va sur le disque
+  // du profil). Pour 330 Mo de photos de 1 Mo : Chromium entier +0,5 Go, 1,5 fois le ZIP, l'onglet stable vers 0,2 Go ;
+  // documents de 9,5 Mo : les deux tiers environ du ZIP. 500 Mo coûtent donc jusqu'à 750 Mo, ce que coûtaient 150 Mo
+  // quand JSZip construisait le ZIP dans l'onglet (T212 : 5 à 6 fois) : la même marge sur un PC de 4 Go.
+  // Écrit 500 × 1 048 576 (1 Mo) : ce fichier ne recopie aucune limite de l'import (garde-fou de test_zip_limites.py).
+  const AVERTISSEMENT = Object.freeze({ contenu: 500 * 1048576 });
 
   /**
    * Message de l'avertissement pour un résultat de contenu(), ou null : seulement pour un export complet, sans refus,
@@ -253,9 +257,9 @@ const ZipDonnees = (() => {
     const octets = resultat.fichiers.reduce((somme, fichier) => somme + fichier.taille, 0);
     if (octets <= AVERTISSEMENT.contenu) return null;
     return 'Ce ZIP contiendrait ' + taille(octets, AVERTISSEMENT.contenu) + ' de données et de documents. Le '
-      + 'construire demande 5 à 6 fois cette taille en mémoire : sur un PC de 4 Go, le navigateur peut ralentir '
-      + 'fortement, voire s\'arrêter. L\'export des données seules (sans les documents) est bien plus léger et '
-      + 's\'importe comme l\'export complet : les documents déjà présents sont alors gardés tels quels.';
+      + 'construire demande au navigateur jusqu\'à une fois et demie cette taille en mémoire : sur un PC de 4 Go, il '
+      + 'peut ralentir fortement, voire s\'arrêter. L\'export des données seules (sans les documents) est bien plus '
+      + 'léger et s\'importe comme l\'export complet : les documents déjà présents sont alors gardés tels quels.';
   }
 
   // Fenêtre de l'avertissement (#export-zip-avertissement) → 'seules', 'complet', ou null (Annuler, Échap, croix).
