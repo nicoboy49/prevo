@@ -286,8 +286,10 @@ processus du navigateur de test seulement, relevés toutes les 100 ms) sur la gr
 | Export, mode dossier (cette base, après rechargement) | 385 Mo | 1,3 → 3,1 Go | 2,2 Go | 51 s |
 | Export, mode serveur, 9 925 documents | 390 Mo, 9 950 entrées | 0,7 → 2,8 Go | 2,4 Go | 170 s |
 
-L'export garde tous les documents en mémoire, puis JSZip produit le ZIP par morceaux et un fichier final : l'onglet
-monte à 5 ou 6 fois la taille du ZIP. **Pour un PC de 4 Go, ce n'est pas raisonnable près de la limite** : Windows et
+Ces mesures datent d'avant T228 : l'export gardait tous les documents en mémoire, puis JSZip produisait le ZIP par
+morceaux et un fichier final, et l'onglet montait à 5 ou 6 fois la taille du ZIP (depuis T228, l'export écrit le ZIP
+par `zip-flux.js`, un document à la fois : mémoire JavaScript bornée aux tables plus un document, à remesurer).
+**Pour un PC de 4 Go, ce n'est pas raisonnable près de la limite** : Windows et
 le navigateur y laissent souvent moins de 1,5 Go libres, l'onglet peut se fermer (rien n'est perdu, rien n'est
 exporté). Par extrapolation (non mesuré), un ZIP de 100 à 150 Mo y reste possible ; un PC de 8 Go passe les limites.
 Parades : l'export « données seules » (sans les documents, T214), que l'export complet propose lui-même dans une

@@ -4,9 +4,10 @@
 Code visé : js/modules/zip-donnees.js (AVERTISSEMENT, avertissement, exporter et sa fenêtre #export-zip-avertissement),
 par les boutons #btn-export-zip et #btn-export-donnees-seules de Paramètres (App.exporterZip).
 
-    calcul   page sans application : ZipDonnees.avertissement sur des résultats fabriqués ({ fichiers: [{ octets:
-             { length } }], refus, sansDocuments }) : 150 Mo pile (en un ou deux fichiers) → null ; un octet de plus →
-             le message exact (« plus de 150 Mo » : l'arrondi égalerait le seuil) ; 152 Mo et 1,5 Go écrits comme tels ;
+    calcul   page sans application : ZipDonnees.avertissement sur des résultats fabriqués ({ fichiers: [{ taille }],
+             refus, sansDocuments } : depuis T228, les tailles de contenu()) : 150 Mo pile (en un ou deux
+             fichiers) → null ; un octet de plus → le message exact (« plus de 150 Mo » : l'arrondi égalerait
+             le seuil) ; 152 Mo et 1,5 Go écrits comme tels ;
              données seules ou refus → null quelle que soit la taille ; AVERTISSEMENT.contenu = 157 286 400, gelé ;
     serveur  ServeurPrevo sur une copie (dossier temporaire) de la démo dont les données citent 16 documents fictifs
              incompressibles de 9,5 Mo (6 notices, 6 photos, 4 rapports de contrôle ; 10 Mo au plus par document à
@@ -106,7 +107,7 @@ class TestCalcul(CasNavigateur):
 
     def avertissement(self, tailles, refus=None, sans_documents=False):
         return self.page.evaluate(
-            "([t, r, s]) => ZipDonnees.avertissement({ fichiers: t.map((n) => ({ octets: { length: n } })), refus: r, "
+            "([t, r, s]) => ZipDonnees.avertissement({ fichiers: t.map((n) => ({ taille: n })), refus: r, "
             "sansDocuments: s })", [tailles, refus, sans_documents])
 
     def test_seuil_de_150_mo_message_exact_donnees_seules_et_refus_sans_avertissement(self):
@@ -192,7 +193,7 @@ class TestServeur(CasNavigateur):
         page.evaluate("() => { window.__toasts = []; window.__fenetres = []; }")
 
     def compteurs(self, page):
-        """[ZIP construits (JSZip.generateAsync), téléchargements proposés (UI.telecharger)]."""
+        """[ZIP écrits (ZipFlux, terminer), téléchargements proposés (UI.telecharger)]."""
         return page.evaluate("[window.__generations, window.__telechargements]")
 
     def attendre_fin_export(self, page, selecteur):

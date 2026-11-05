@@ -244,9 +244,14 @@ EMPREINTES_OPFS_JS = """async ([nom, debuts]) => {
 
 ESPION_ZIP_JS = """() => {
   window.__telechargements = 0;
-  window.__generations = 0;
-  const generer = JSZip.prototype.generateAsync;
-  JSZip.prototype.generateAsync = function () { window.__generations += 1; return generer.apply(this, arguments); };
+  window.__generations = 0;                                    // ZIP écrits (T228 : ZipFlux, terminer)
+  const creer = ZipFlux.ecrivain;
+  ZipFlux.ecrivain = function () {
+    const ecrivain = creer.apply(this, arguments);
+    const terminer = ecrivain.terminer;
+    ecrivain.terminer = function () { window.__generations += 1; return terminer.apply(this, arguments); };
+    return ecrivain;
+  };
   const cliquer = HTMLAnchorElement.prototype.click;           // UI est gelé : le lien de UI.telecharger est compté
   HTMLAnchorElement.prototype.click = function () {
     if (this.download) window.__telechargements += 1;
