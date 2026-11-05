@@ -352,31 +352,31 @@ figure { margin: 0; } figcaption { font-weight: 600; margin-bottom: 2px; }
     const lib = await App.chargerEcharts();
     const dessins = graphiques(lib, rapport);
     const titre = I18n.t('rapport.texte_courriel.rapport_mensuel_maintenance_2', { libelleMois: rapport.libelleMois });
-    const mttr = rapport.mttr.valeur === null ? '' : UI.html`<p class="pied">${I18n.t('rapport.html.mttr_v1', { duree: UI.heures(Math.round(rapport.mttr.valeur * 10) / 10) })}${rapport.attentePieces.valeur === null ? ''
-      : UI.html`${I18n.t('rapport.html.dont_attente_pieces_panne', { n: rapport.attentePieces.effectif, duree: UI.heures(Math.round(rapport.attentePieces.valeur * 10) / 10) })}`}.</p>`;
+    const mttr = rapport.mttr.valeur === null ? '' : UI.html`<p class="pied">${I18n.html('rapport.html.mttr_v1', { duree: UI.heures(Math.round(rapport.mttr.valeur * 10) / 10) })}${rapport.attentePieces.valeur === null ? ''
+      : UI.html`${I18n.html('rapport.html.dont_attente_pieces_panne', { n: rapport.attentePieces.effectif, duree: UI.heures(Math.round(rapport.attentePieces.valeur * 10) / 10) })}`}.</p>`;
     const page = UI.html`<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><title>${rapport.entreprise ? titre + ' — ' + rapport.entreprise : titre}</title>
 <style>${UI.brut(STYLE)}</style></head>
 <body><main class="page">
 <header><h1>${titre}</h1>
-<p class="sous">${rapport.entreprise ? UI.html`${I18n.t('rapport.html.donnees_rapport_fige_prevo', { entreprise: rapport.entreprise, genereLe: UI.dateHeureFr(rapport.genereLe) })}`
-  : UI.html`${I18n.t('rapport.html.donnees_rapport_fige_prevo_2', { genereLe: UI.dateHeureFr(rapport.genereLe) })}`}</p></header>
+<p class="sous">${rapport.entreprise ? UI.html`${I18n.html('rapport.html.donnees_rapport_fige_prevo', { entreprise: rapport.entreprise, genereLe: UI.dateHeureFr(rapport.genereLe) })}`
+  : UI.html`${I18n.html('rapport.html.donnees_rapport_fige_prevo_2', { genereLe: UI.dateHeureFr(rapport.genereLe) })}`}</p></header>
 <section class="tuiles">${rapport.tuiles.map((tuile) => UI.html`<div class="tuile" data-cle="${tuile.cle}">
   <div class="lib">${tuile.libelle}</div><div class="val">${tuile.texteValeur}</div>
   ${tuile.valeur === null ? UI.html`<div class="raison">${tuile.raison}</div>` : ''}
   ${feu(tuile, tuile.tendance.precedent)}${feu(tuile, tuile.tendance.annee)}</div>`)}</section>
-<section class="colonnes"><div><h2>${I18n.t('rapport.html.faits_marquants')}</h2><ul>${rapport.faits.map((fait) => UI.html`<li>${fait}</li>`)}</ul></div>
-<div><h2>${I18n.t('rapport.html.decisions_prendre')}</h2>${rapport.decisions.length ? UI.html`<ol>${rapport.decisions.map((decision) => UI.html`<li>${decision}</li>`)}</ol>`
-    : UI.html`<p>${I18n.t('rapport.html.aucune_decision_urgente_mois')}</p>`}</div></section>
-${commentaire ? UI.html`<section class="commentaire"><h2>${I18n.t('rapport.html.commentaire')}</h2><p>${texte(commentaire.texte)}</p>${commentaire.aideIa
-    ? UI.html`<p class="mention-ia">${I18n.t('rapport.html.commentaire_redige_aide_ia')}</p>` : ''}</section>` : ''}
+<section class="colonnes"><div><h2>${I18n.html('rapport.html.faits_marquants')}</h2><ul>${rapport.faits.map((fait) => UI.html`<li>${fait}</li>`)}</ul></div>
+<div><h2>${I18n.html('rapport.html.decisions_prendre')}</h2>${rapport.decisions.length ? UI.html`<ol>${rapport.decisions.map((decision) => UI.html`<li>${decision}</li>`)}</ol>`
+    : UI.html`<p>${I18n.html('rapport.html.aucune_decision_urgente_mois')}</p>`}</div></section>
+${commentaire ? UI.html`<section class="commentaire"><h2>${I18n.html('rapport.html.commentaire')}</h2><p>${texte(commentaire.texte)}</p>${commentaire.aideIa
+    ? UI.html`<p class="mention-ia">${I18n.html('rapport.html.commentaire_redige_aide_ia')}</p>` : ''}</section>` : ''}
 <section class="graphiques">
-<figure><figcaption>${I18n.t('rapport.html.duree_arret_mois_equipement')}</figcaption>${dessins.pareto ? UI.brut(dessins.pareto) : UI.html`<p>${I18n.t('rapport.html.aucun_arret_mois_ci')}</p>`}</figure>
-<figure><figcaption>${I18n.t('rapport.html.heures_correctif_preventif_12')}</figcaption>${UI.brut(dessins.heures)}</figure>
+<figure><figcaption>${I18n.html('rapport.html.duree_arret_mois_equipement')}</figcaption>${dessins.pareto ? UI.brut(dessins.pareto) : UI.html`<p>${I18n.html('rapport.html.aucun_arret_mois_ci')}</p>`}</figure>
+<figure><figcaption>${I18n.html('rapport.html.heures_correctif_preventif_12')}</figcaption>${UI.brut(dessins.heures)}</figure>
 </section>
 ${mttr}
-<section class="comprendre"><h2>${I18n.t('rapport.html.comprendre')}</h2><dl>${rapport.comprendre.map(([terme, definition]) => UI.html`<div><dt>${terme} :</dt> <dd>${definition}</dd></div>`)}</dl></section>
-${rapport.nonCalculables.length ? UI.html`<section class="non-calculable"><h2>${I18n.t('rapport.html.non_calculable')}</h2><ul>${rapport.nonCalculables.map((element) => UI.html`<li><b>${element.libelle}</b> : ${element.raison}</li>`)}</ul></section>` : ''}
+<section class="comprendre"><h2>${I18n.html('rapport.html.comprendre')}</h2><dl>${rapport.comprendre.map(([terme, definition]) => UI.html`<div><dt>${terme} :</dt> <dd>${definition}</dd></div>`)}</dl></section>
+${rapport.nonCalculables.length ? UI.html`<section class="non-calculable"><h2>${I18n.html('rapport.html.non_calculable')}</h2><ul>${rapport.nonCalculables.map((element) => UI.html`<li><b>${element.libelle}</b> : ${element.raison}</li>`)}</ul></section>` : ''}
 <p class="pied sans-impression">${I18n.html('rapport.html.lien_courriel', { adresse: lienCourriel(rapport) })}</p>
 </main></body></html>`;
     return String(page);
