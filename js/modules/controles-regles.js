@@ -75,10 +75,6 @@ const Controles = (() => {
     return dateIso(aujourdhui) || Donnees.aujourdhui();
   }
 
-  function pluriel(nombre, mot) {
-    return nombre + ' ' + mot + (Math.abs(nombre) > 1 ? 's' : '');
-  }
-
   // ===========================================================================================
   // 2. Prochaine date d'un contrôle
   // ===========================================================================================
@@ -133,15 +129,15 @@ const Controles = (() => {
 
   function raisonDuStatut(statut, prochaine, joursRestants) {
     if (statut === 'en retard') {
-      return 'en retard de ' + pluriel(-joursRestants, 'jour') + ' (prévu le ' + UI.dateFr(prochaine) + ')';
+      return I18n.t('controles.raison_du_statut.retard_jours_prevu', { n: -joursRestants, prochaine: UI.dateFr(prochaine) });
     }
-    if (statut === 'observations à lever') return 'observations du dernier contrôle non levées';
+    if (statut === 'observations à lever') return I18n.t('controles.raison_du_statut.observations_dernier_controle_non');
     if (statut === 'à planifier') {
-      if (!prochaine) return 'date inconnue : renseignez la dernière date et la périodicité';
-      return joursRestants === 0 ? 'prévu aujourd\'hui'
-        : 'dans ' + pluriel(joursRestants, 'jour') + ' (le ' + UI.dateFr(prochaine) + ')';
+      if (!prochaine) return I18n.t('controles.raison_du_statut.date_inconnue_renseignez_derniere');
+      return joursRestants === 0 ? I18n.t('controles.raison_du_statut.prevu_aujourd_hui')
+        : I18n.t('controles.raison_du_statut.n_jours_prochaine', { n: joursRestants, prochaine: UI.dateFr(prochaine) });
     }
-    return 'prochain contrôle le ' + UI.dateFr(prochaine);
+    return I18n.t('controles.raison_du_statut.prochain_controle', { prochaine: UI.dateFr(prochaine) });
   }
 
   /**

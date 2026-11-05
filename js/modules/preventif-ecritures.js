@@ -75,9 +75,9 @@ Object.assign(Preventif, (() => {
       id, origine: 'préventif', gamme_id: gamme.id, equipement_id: gamme.equipement_id,
       type: texte(gamme.declencheur) === 'seuil' ? 'préventif conditionnel' : 'préventif systématique',
       priorite: prioritePreventif(), statut: 'Créé',
-      titre: texte(gamme.libelle) || 'Gamme ' + gamme.id,
-      travail_a_faire: (nombreOperations ? 'Réaliser les ' + nombreOperations + ' opérations de la check-list de la gamme '
-        : 'Réaliser la gamme ') + gamme.id + '. Déclenchement : ' + etat.raison + '.',
+      titre: texte(gamme.libelle) || I18n.t('preventif.nouvel_ot_preventif.gamme_gamme_id', { gammeId: gamme.id }),
+      travail_a_faire: (nombreOperations ? I18n.t('preventif.nouvel_ot_preventif.realiser_operations_check_list', { n: nombreOperations }) + ' '
+        : I18n.t('preventif.nouvel_ot_preventif.realiser_gamme') + ' ') + I18n.t('preventif.nouvel_ot_preventif.gamme_id_declenchement_raison', { gammeId: gamme.id, raison: etat.raison }),
       consignes: gamme.consignes, temps_prevu_h: gamme.temps_prevu_h,
       date_creation: maintenant, date_prevue: etat.echeance > jour ? etat.echeance : jour,
       arret_production: '0', remise_service: '0', anomalie_constatee: '0',
@@ -149,8 +149,8 @@ Object.assign(Preventif, (() => {
 
   /** Message du résultat d'une génération : « Aucune gamme échue », « 1 OT préventif généré », « 3 OT préventifs générés ». */
   function texteGeneration(nombreCrees) {
-    if (!nombreCrees) return 'Aucune gamme échue';
-    return nombreCrees === 1 ? '1 OT préventif généré' : nombreCrees + ' OT préventifs générés';
+    if (!nombreCrees) return I18n.t('preventif.texte_generation.aucune_gamme_echue');
+    return nombreCrees === 1 ? I18n.t('preventif.texte_generation.1_ot_preventif_genere') : I18n.t('preventif.texte_generation.ot_preventifs_generes', { nombreCrees });
   }
 
   // ===========================================================================================
@@ -219,11 +219,11 @@ Object.assign(Preventif, (() => {
   async function apresCloture(otId) {
     const ordres = await Donnees.rechargerTable('ordres_travail');
     const ot = ordres.find((ligne) => ligne.id === otId);
-    if (!ot) throw ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+    if (!ot) throw ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
     const gammeId = texte(ot.gamme_id);
     if (!gammeId) return false;
     if (!STATUTS_CLOTURES.includes(ot.statut)) {
-      throw ErreurValidation('L\'OT ' + otId + ' n\'est pas clôturé : la gamme ' + gammeId + ' n\'est pas mise à jour.');
+      throw ErreurValidation(I18n.t('preventif.apres_cloture.ot_pas_cloture_gamme', { otId, gammeId }));
     }
     const fin = dateRealisation(ot) || Donnees.aujourdhui();
     // Un autre OT clôturé de la gamme, réalisé plus tard : c'est sa date qui fait foi.
@@ -233,7 +233,7 @@ Object.assign(Preventif, (() => {
     const date = fin.slice(0, 10);
     return Donnees.modifier('gammes', (lignes) => {
       const gamme = lignes.find((ligne) => ligne.id === gammeId);
-      if (!gamme) throw ErreurValidation('La gamme ' + gammeId + ' de l\'OT ' + otId + ' est introuvable.');
+      if (!gamme) throw ErreurValidation(I18n.t('preventif.apres_cloture.gamme_ot_introuvable', { gammeId, otId }));
       const valeurs = valeursApresRealisation(gamme, date);
       const changes = Object.keys(valeurs).filter((nom) => texte(gamme[nom]) !== texte(valeurs[nom]));
       changes.forEach((nom) => { gamme[nom] = valeurs[nom]; });
@@ -262,17 +262,17 @@ Object.assign(Preventif, (() => {
   function erreursDuDeclencheur(gamme) {
     const erreurs = [];
     if (gamme.declencheur === 'date' && !estEntierPositif(gamme.periodicite_jours, 1)) {
-      erreurs.push({ nom: 'periodicite_jours', message: 'Indiquez la périodicité en jours (nombre entier, au moins 1).' });
+      erreurs.push({ nom: 'periodicite_jours', message: I18n.t('preventif.erreurs_du_declencheur.indiquez_periodicite_jours_nombre') });
     }
     if (gamme.declencheur === 'compteur' || gamme.declencheur === 'seuil') {
-      if (!gamme.compteur_id) erreurs.push({ nom: 'compteur_id', message: 'Choisissez le compteur (ou le point de mesure).' });
-      else if (!Donnees.trouver('compteurs', gamme.compteur_id)) erreurs.push({ nom: 'compteur_id', message: 'Ce compteur n\'existe pas.' });
+      if (!gamme.compteur_id) erreurs.push({ nom: 'compteur_id', message: I18n.t('preventif.erreurs_du_declencheur.choisissez_compteur_point_mesure') });
+      else if (!Donnees.trouver('compteurs', gamme.compteur_id)) erreurs.push({ nom: 'compteur_id', message: I18n.t('preventif.erreurs_du_declencheur.compteur_existe_pas') });
     }
     if (gamme.declencheur === 'compteur' && !(nombre(gamme.periodicite_unites) > 0)) {
-      erreurs.push({ nom: 'periodicite_unites', message: 'Indiquez la périodicité en unités du compteur (nombre positif).' });
+      erreurs.push({ nom: 'periodicite_unites', message: I18n.t('preventif.erreurs_du_declencheur.indiquez_periodicite_unites_compteur') });
     }
     if (gamme.declencheur === 'seuil' && nombre(gamme.seuil) === null) {
-      erreurs.push({ nom: 'seuil', message: 'Indiquez le seuil qui déclenche la gamme.' });
+      erreurs.push({ nom: 'seuil', message: I18n.t('preventif.erreurs_du_declencheur.indiquez_seuil_declenche_gamme') });
     }
     return erreurs;
   }
@@ -281,25 +281,25 @@ Object.assign(Preventif, (() => {
   function verifierGamme(valeurs) {
     const gamme = valeursGamme(valeurs);
     const erreurs = [];
-    if (!gamme.equipement_id) erreurs.push({ nom: 'equipement_id', message: 'Choisissez l\'équipement.' });
-    else if (!Donnees.trouver('equipements', gamme.equipement_id)) erreurs.push({ nom: 'equipement_id', message: 'Cet équipement n\'existe pas.' });
-    if (!gamme.libelle) erreurs.push({ nom: 'libelle', message: 'Donnez un libellé à la gamme.' });
+    if (!gamme.equipement_id) erreurs.push({ nom: 'equipement_id', message: I18n.t('preventif.verifier_gamme.choisissez_equipement') });
+    else if (!Donnees.trouver('equipements', gamme.equipement_id)) erreurs.push({ nom: 'equipement_id', message: I18n.t('preventif.verifier_gamme.equipement_existe_pas') });
+    if (!gamme.libelle) erreurs.push({ nom: 'libelle', message: I18n.t('preventif.verifier_gamme.donnez_libelle_gamme') });
     if (!Object.keys(DECLENCHEURS).includes(gamme.declencheur)) {
-      erreurs.push({ nom: 'declencheur', message: 'Déclencheur inconnu : choisissez date, compteur ou seuil.' });
+      erreurs.push({ nom: 'declencheur', message: I18n.t('preventif.verifier_gamme.declencheur_inconnu_choisissez_date') });
     } else {
       erreurs.push(...erreursDuDeclencheur(gamme));
     }
     if (gamme.avance_jours && !estEntierPositif(gamme.avance_jours, 0)) {
-      erreurs.push({ nom: 'avance_jours', message: 'L\'avance est un nombre entier de jours (0 ou plus).' });
+      erreurs.push({ nom: 'avance_jours', message: I18n.t('preventif.verifier_gamme.avance_nombre_entier_jours') });
     }
     ['periodicite_unites', 'seuil', 'releve_derniere_realisation', 'temps_prevu_h'].forEach((nom) => {
       if (gamme[nom] && nombre(gamme[nom]) === null && !erreurs.some((e) => e.nom === nom)) {
-        erreurs.push({ nom, message: 'Saisissez un nombre (ex. 12,5).' });
+        erreurs.push({ nom, message: I18n.t('preventif.verifier_gamme.saisissez_nombre_ex_12') });
       }
     });
-    if (gamme.temps_prevu_h && nombre(gamme.temps_prevu_h) < 0) erreurs.push({ nom: 'temps_prevu_h', message: 'Le temps prévu ne peut pas être négatif.' });
+    if (gamme.temps_prevu_h && nombre(gamme.temps_prevu_h) < 0) erreurs.push({ nom: 'temps_prevu_h', message: I18n.t('preventif.verifier_gamme.temps_prevu_peut_pas') });
     ['derniere_realisation', 'prochaine_echeance'].forEach((nom) => {
-      if (gamme[nom] && !estDateIso(gamme[nom])) erreurs.push({ nom, message: 'Date illisible (format attendu : jj/mm/aaaa).' });
+      if (gamme[nom] && !estDateIso(gamme[nom])) erreurs.push({ nom, message: I18n.t('preventif.verifier_gamme.date_illisible_format_attendu') });
     });
     return erreurs;
   }
@@ -323,7 +323,7 @@ Object.assign(Preventif, (() => {
   async function modifierGamme(gammeId, valeurs) {
     return Donnees.modifier('gammes', (lignes) => {
       const ligne = lignes.find((l) => l.id === gammeId);
-      if (!ligne) throw ErreurValidation('La gamme ' + gammeId + ' n\'existe plus.');
+      if (!ligne) throw ErreurValidation(I18n.t('preventif.modifier_gamme.gamme_existe_plus', { gammeId }));
       const gamme = valeursGamme(Object.assign({}, ligne, valeurs));
       refuserSiInvalide(verifierGamme(gamme));
       const changes = CHAMPS_GAMME.filter((nom) => texte(ligne[nom]) !== gamme[nom]);
@@ -338,13 +338,13 @@ Object.assign(Preventif, (() => {
 
   function operationSaisie(valeurs) {
     const operation = texte(valeurs && valeurs.operation);
-    if (!operation) throw ErreurValidation('Décrivez l\'opération à réaliser.');
+    if (!operation) throw ErreurValidation(I18n.t('preventif.operation_saisie.decrivez_operation_realiser'));
     return { operation, valeur_attendue: texte(valeurs.valeur_attendue) };
   }
 
   function ligneOperation(lignes, operationId) {
     const ligne = lignes.find((l) => l.id === operationId);
-    if (!ligne) throw ErreurValidation('Cette opération n\'existe plus (supprimée sur un autre poste ?).');
+    if (!ligne) throw ErreurValidation(I18n.t('preventif.ligne_operation.operation_existe_plus_supprimee'));
     return ligne;
   }
 
@@ -352,7 +352,7 @@ Object.assign(Preventif, (() => {
   async function ajouterOperation(gammeId, valeurs) {
     const saisie = operationSaisie(valeurs);
     return Donnees.modifier('gamme_operations', (lignes, outils) => {
-      if (!Donnees.trouver('gammes', gammeId)) throw ErreurValidation('La gamme ' + gammeId + ' est introuvable.');
+      if (!Donnees.trouver('gammes', gammeId)) throw ErreurValidation(I18n.t('preventif.ajouter_operation.gamme_introuvable', { gammeId }));
       const dernierRang = operationsDeGamme(gammeId, lignes).reduce((plusGrand, op) => Math.max(plusGrand, nombre(op.ordre) || 0), 0);
       const id = outils.nouvelId(lignes);
       lignes.push(Object.assign({ id, gamme_id: gammeId, ordre: String(dernierRang + 1) }, saisie));
@@ -401,7 +401,7 @@ Object.assign(Preventif, (() => {
    */
   async function supprimerOperation(operationId) {
     const connue = Donnees.trouver('gamme_operations', operationId);
-    if (!connue) throw ErreurValidation('Cette opération n\'existe plus (supprimée sur un autre poste ?).');
+    if (!connue) throw ErreurValidation(I18n.t('preventif.ligne_operation.operation_existe_plus_supprimee'));
     const supprimee = await Donnees.modifier('gamme_operations', (lignes) => {
       const ligne = ligneOperation(lignes, operationId);
       lignes.splice(lignes.indexOf(ligne), 1);

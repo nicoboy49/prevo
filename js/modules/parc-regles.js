@@ -108,21 +108,21 @@ const Parc = (() => {
 
   function abreger(texte, longueurMax) {
     const propre = String(texte || '').replace(/\s+/g, ' ').trim();
-    return propre.length > longueurMax ? propre.slice(0, longueurMax - 1).trimEnd() + '…' : propre;
+    return propre.length > longueurMax ? I18n.t('parc.abreger.v1', { texte: propre.slice(0, longueurMax - 1).trimEnd() }) : propre;
   }
 
   function badgeCriticite(criticite) {
     const tons = { A: 'ko', B: 'attention', C: 'neutre' };
-    const libelles = { A: 'très critique', B: 'critique', C: 'peu critique' };
-    if (!tons[criticite]) return UI.html`<span class="badge neutre" title="Criticité non renseignée">Crit. —</span>`;
-    return UI.html`<span class="badge ${tons[criticite]}" title="Criticité ${criticite} (${libelles[criticite]})">Crit. ${criticite}</span>`;
+    const libelles = { A: I18n.t('parc.badge_criticite.tres_critique'), B: 'critique', C: I18n.t('parc.badge_criticite.peu_critique') };
+    if (!tons[criticite]) return UI.html`<span class="badge neutre" title="${I18n.t('parc.badge_criticite.criticite_non_renseignee')}">${I18n.t('parc.badge_criticite.crit')}</span>`;
+    return UI.html`<span class="badge ${tons[criticite]}" title="${I18n.t('parc.badge_criticite.criticite_criticite_v1', { criticite, libelle: libelles[criticite] })}">${I18n.t('parc.badge_criticite.crit_criticite', { criticite })}</span>`;
   }
 
   // Badges d'une ligne de l'arbre : criticité, statut s'il n'est pas « en service », mention inactif.
   function badgesEquipement(equipement) {
     return UI.html`${badgeCriticite(equipement.criticite)}
       ${equipement.statut && equipement.statut !== 'en service' ? UI.badgeStatut(equipement.statut) : ''}
-      ${estActif(equipement) ? '' : UI.html`<span class="badge neutre barre" title="Équipement désactivé">Inactif</span>`}`;
+      ${estActif(equipement) ? '' : UI.html`<span class="badge neutre barre" title="${I18n.t('parc.badges_equipement.equipement_desactive')}">${I18n.t('parc.badges_equipement.inactif')}</span>`}`;
   }
 
   // Liste « tableau sur ordinateur, cartes sur téléphone » : le tableau déborderait de l'écran.
@@ -154,53 +154,51 @@ const Parc = (() => {
     const repere = String(valeurs.repere || '').trim();
 
     if (!repere) {
-      erreurs.push({ nom: 'repere', message: 'Le repère est obligatoire (ex. PO-02).' });
+      erreurs.push({ nom: 'repere', message: I18n.t('parc.verifier_equipement.repere_obligatoire_ex_po') });
     } else if (seraActif) {
       const motif = UI.normaliserRecherche(repere);
       const double = lignesEquipements.find((e) => e.id !== idCourant && estActif(e) && UI.normaliserRecherche(e.repere) === motif);
       if (double) {
-        erreurs.push({ nom: 'repere', message: 'Le repère « ' + repere + ' » est déjà utilisé par un équipement actif : '
-          + libelleEquipement(double.id) + '. Choisissez-en un autre.' });
+        erreurs.push({ nom: 'repere', message: I18n.t('parc.verifier_equipement.repere_deja_utilise_equipement', { repere, libelleEquipement: libelleEquipement(double.id) }) });
       }
     }
 
     if (!String(valeurs.designation || '').trim()) {
-      erreurs.push({ nom: 'designation', message: 'La désignation est obligatoire (ex. Pompe centrifuge).' });
+      erreurs.push({ nom: 'designation', message: I18n.t('parc.verifier_equipement.designation_obligatoire_ex_pompe') });
     }
 
     if (valeurs.localisation_id && !lignesLocalisations.some((l) => l.id === valeurs.localisation_id)) {
-      erreurs.push({ nom: 'localisation_id', message: 'Cette localisation n\'existe pas.' });
+      erreurs.push({ nom: 'localisation_id', message: I18n.t('parc.verifier_equipement.localisation_existe_pas') });
     }
 
     if (valeurs.parent_id) {
       const parents = new Map(lignesEquipements.map((e) => [e.id, e]));
       if (idCourant && valeurs.parent_id === idCourant) {
-        erreurs.push({ nom: 'parent_id', message: 'Un équipement ne peut pas être son propre parent.' });
+        erreurs.push({ nom: 'parent_id', message: I18n.t('parc.verifier_equipement.equipement_peut_pas_etre') });
       } else if (!parents.has(valeurs.parent_id)) {
-        erreurs.push({ nom: 'parent_id', message: 'L\'équipement parent n\'existe pas.' });
+        erreurs.push({ nom: 'parent_id', message: I18n.t('parc.verifier_equipement.equipement_parent_existe_pas') });
       } else if (idCourant && remonteParentJusqua(valeurs.parent_id, idCourant, parents)) {
-        erreurs.push({ nom: 'parent_id', message: 'Boucle interdite : « ' + libelleEquipement(valeurs.parent_id)
-          + ' » est déjà un sous-équipement de celui-ci.' });
+        erreurs.push({ nom: 'parent_id', message: I18n.t('parc.verifier_equipement.boucle_interdite_deja_sous', { libelleEquipement: libelleEquipement(valeurs.parent_id) }) });
       }
     }
 
     const criticites = ['A', 'B', 'C'];
     if (valeurs.criticite && !criticites.includes(valeurs.criticite)) {
-      erreurs.push({ nom: 'criticite', message: 'La criticité doit être A, B ou C.' });
+      erreurs.push({ nom: 'criticite', message: I18n.t('parc.verifier_equipement.criticite_doit_etre_b') });
     }
     if (valeurs.statut && !['en service', 'arrêt', 'rebut'].includes(valeurs.statut)) {
-      erreurs.push({ nom: 'statut', message: 'Le statut doit être « en service », « arrêt » ou « rebut ».' });
+      erreurs.push({ nom: 'statut', message: I18n.t('parc.verifier_equipement.statut_doit_etre_service') });
     }
     if (valeurs.heures_fonct_jour) {
       const heures = UI.enNombre(valeurs.heures_fonct_jour);
       if (heures === null || heures < 0 || heures > 24) {
-        erreurs.push({ nom: 'heures_fonct_jour', message: 'Saisissez un nombre d\'heures entre 0 et 24 (ex. 16).' });
+        erreurs.push({ nom: 'heures_fonct_jour', message: I18n.t('parc.verifier_equipement.saisissez_nombre_heures_entre') });
       }
     }
     if (valeurs.valeur_remplacement) {
       const montant = UI.enNombre(valeurs.valeur_remplacement);
       if (montant === null || montant < 0) {
-        erreurs.push({ nom: 'valeur_remplacement', message: 'Saisissez un montant en euros, positif ou nul (ex. 12 500).' });
+        erreurs.push({ nom: 'valeur_remplacement', message: I18n.t('parc.verifier_equipement.saisissez_montant_euros_positif') });
       }
     }
     return erreurs;
@@ -223,19 +221,19 @@ const Parc = (() => {
     const erreurs = [];
     const libelle = String(valeurs.libelle || '').trim();
     if (!libelle) {
-      erreurs.push({ nom: 'libelle', message: 'Le libellé est obligatoire (ex. Atelier Usinage).' });
+      erreurs.push({ nom: 'libelle', message: I18n.t('parc.verifier_localisation.libelle_obligatoire_ex_atelier') });
     }
     if (!['site', 'atelier', 'ligne'].includes(valeurs.type)) {
-      erreurs.push({ nom: 'type', message: 'Choisissez un type : site, atelier ou ligne.' });
+      erreurs.push({ nom: 'type', message: I18n.t('parc.verifier_localisation.choisissez_type_site_atelier') });
     }
     if (valeurs.parent_id) {
       const parents = new Map(lignesLocalisations.map((l) => [l.id, l]));
       if (idCourant && valeurs.parent_id === idCourant) {
-        erreurs.push({ nom: 'parent_id', message: 'Une localisation ne peut pas être sa propre parente.' });
+        erreurs.push({ nom: 'parent_id', message: I18n.t('parc.verifier_localisation.localisation_peut_pas_etre') });
       } else if (!parents.has(valeurs.parent_id)) {
-        erreurs.push({ nom: 'parent_id', message: 'La localisation parente n\'existe pas.' });
+        erreurs.push({ nom: 'parent_id', message: I18n.t('parc.verifier_localisation.localisation_parente_existe_pas') });
       } else if (idCourant && remonteParentJusqua(valeurs.parent_id, idCourant, parents)) {
-        erreurs.push({ nom: 'parent_id', message: 'Boucle interdite : la localisation parente est déjà située dans celle-ci.' });
+        erreurs.push({ nom: 'parent_id', message: I18n.t('parc.verifier_localisation.boucle_interdite_localisation_parente') });
       }
     }
     if (libelle) {
@@ -243,7 +241,7 @@ const Parc = (() => {
       const jumelle = lignesLocalisations.find((l) => l.id !== idCourant && (l.parent_id || '') === (valeurs.parent_id || '')
         && UI.normaliserRecherche(l.libelle) === motif);
       if (jumelle) {
-        erreurs.push({ nom: 'libelle', message: 'Il existe déjà une localisation « ' + jumelle.libelle + ' » à cet endroit.' });
+        erreurs.push({ nom: 'libelle', message: I18n.t('parc.verifier_localisation.existe_deja_localisation_endroit', { jumelleLibelle: jumelle.libelle }) });
       }
     }
     return erreurs;
@@ -277,14 +275,14 @@ const Parc = (() => {
     const erreurs = [];
     const date = String(valeurs.date || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      erreurs.push({ nom: 'date', message: 'Indiquez la date du relevé.' });
+      erreurs.push({ nom: 'date', message: I18n.t('parc.verifier_releve.indiquez_date_releve') });
     } else if (date > aujourdhui) {
-      erreurs.push({ nom: 'date', message: 'La date du relevé ne peut pas être dans le futur.' });
+      erreurs.push({ nom: 'date', message: I18n.t('parc.verifier_releve.date_releve_peut_pas') });
     }
     if (String(valeurs.valeur || '').trim() === '') {
-      erreurs.push({ nom: 'valeur', message: 'Indiquez la valeur lue sur le compteur.' });
+      erreurs.push({ nom: 'valeur', message: I18n.t('parc.verifier_releve.indiquez_valeur_lue_compteur') });
     } else if (Donnees.nombre(valeurs.valeur) === null) {
-      erreurs.push({ nom: 'valeur', message: 'Saisissez un nombre (ex. 1 250 ou 0,85).' });
+      erreurs.push({ nom: 'valeur', message: I18n.t('parc.verifier_releve.saisissez_nombre_ex_1') });
     }
     return erreurs;
   }

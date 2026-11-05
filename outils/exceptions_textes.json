@@ -336,6 +336,42 @@
         "index.html"
       ],
       "raison": "Titre de l'onglet avant le chargement des scripts (balise <title> nue, relue par test_acces_mandataire) ; App.definirTitre le remplace par I18n.t('socle.definir_titre.prevo_gmao') à chaque écran dès le démarrage (T260)."
+    },
+    {
+      "texte": "en retard",
+      "classe": "D155",
+      "fichiers": [
+        "js/modules/controles-regles.js",
+        "js/modules/controles-ecrans.js"
+      ],
+      "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
+    },
+    {
+      "texte": "observations à lever",
+      "classe": "D155",
+      "fichiers": [
+        "js/modules/controles-regles.js",
+        "js/modules/controles-ecrans.js"
+      ],
+      "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
+    },
+    {
+      "texte": "à planifier",
+      "classe": "D155",
+      "fichiers": [
+        "js/modules/controles-regles.js",
+        "js/modules/controles-ecrans.js"
+      ],
+      "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
+    },
+    {
+      "texte": "à jour",
+      "classe": "D155",
+      "fichiers": [
+        "js/modules/controles-regles.js",
+        "js/modules/controles-ecrans.js"
+      ],
+      "raison": "Statut calculé du contrôle (RG9), valeur comparée dans le code et jamais affichée telle quelle (le libellé est dans fr.js) ; Lot 3 : passer par valeurs.*."
     }
   ]
 }

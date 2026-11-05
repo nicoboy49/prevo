@@ -80,14 +80,14 @@ Object.assign(Parc, (() => {
       return UI.qrSvg(App.urlFicheEquipement(equipement.id), TAILLE_QR_PX);
     } catch (erreur) {
       console.warn('Prévo : QR de l\'étiquette ' + equipement.id + ' impossible (' + (erreur && erreur.message) + ').', erreur);
-      return UI.html`<span class="etiquette-sans-qr">QR indisponible</span>`;
+      return UI.html`<span class="etiquette-sans-qr">${I18n.t('parc.qr_etiquette.qr_indisponible')}</span>`;
     }
   }
 
   // Une étiquette, placée en mm dans sa planche : QR, repère en gros, désignation, entreprise.
   function etiquetteHtml(equipement, position, gabarit, entreprise) {
-    const style = 'left: ' + mm(position.gaucheMm) + 'mm; top: ' + mm(position.hautMm) + 'mm; width: '
-      + mm(gabarit.largeurMm) + 'mm; height: ' + mm(gabarit.hauteurMm) + 'mm';
+    const boite = { left: mm(position.gaucheMm), top: mm(position.hautMm), width: mm(gabarit.largeurMm), height: mm(gabarit.hauteurMm) };
+    const style = Object.keys(boite).map((propriete) => propriete + ': ' + boite[propriete] + 'mm').join('; ');
     return UI.html`<div class="etiquette" data-equipement="${equipement.id}" style="${style}">
       <div class="etiquette-qr">${qrEtiquette(equipement)}</div>
       <div class="etiquette-texte">
@@ -106,7 +106,7 @@ Object.assign(Parc, (() => {
   function planchesEtiquettes(equipements, format, decalage) {
     const cle = String(format || FORMAT_DEFAUT);
     const gabarit = FORMATS_ETIQUETTES[cle];
-    if (!gabarit) throw new Error('Format d\'étiquettes inconnu : « ' + format + ' » (24 ou 8).');
+    if (!gabarit) throw new Error(I18n.t('parc.planches_etiquettes.format_etiquettes_inconnu_24', { format }));
     const haut = decalageMm(decalage && decalage.haut);
     const gauche = decalageMm(decalage && decalage.gauche);
     const parPlanche = gabarit.colonnes * gabarit.lignes;
@@ -124,7 +124,7 @@ Object.assign(Parc, (() => {
         };
         return etiquetteHtml(equipement, position, gabarit, entreprise);
       });
-      planches.push(UI.html`<section class="planche-etiquettes format-${cle}" aria-label="Planche ${numero + 1} sur ${total}">${etiquettes}</section>`);
+      planches.push(UI.html`<section class="planche-etiquettes format-${cle}" aria-label="${I18n.t('parc.planches_etiquettes.planche_v1_total', { numero: numero + 1, total })}">${etiquettes}</section>`);
     }
     return UI.html`${planches}`;
   }
@@ -197,7 +197,7 @@ Object.assign(Parc, (() => {
   async function enregistrerAdresse(adresse) {
     await Donnees.modifier('parametres', (lignes) => {
       if (!/^https?:\/\/\S+$/i.test(adresse)) {
-        throw new Donnees.ErreurValidation('Adresse invalide : « ' + adresse + ' » (elle doit commencer par http:// ou https://).');
+        throw new Donnees.ErreurValidation(I18n.t('parc.enregistrer_adresse.adresse_invalide_doit_commencer', { adresse }));
       }
       const ligne = lignes.find((l) => l.cle === CLE_ADRESSE_QR);
       if (ligne) ligne.valeur = adresse; else lignes.push({ cle: CLE_ADRESSE_QR, valeur: adresse });
@@ -209,29 +209,26 @@ Object.assign(Parc, (() => {
   function carteAdresse() {
     if (App.mode !== 'serveur') {
       return UI.html`<section class="carte etiquettes-adresse" aria-labelledby="etiquettes-titre-adresse">
-        <h2 id="etiquettes-titre-adresse">${UI.icone('qr')} Contenu des QR</h2>
-        <p>Le QR contient GMAO:&lt;id&gt;, lisible par la caméra de ce poste (bouton de scan de Prévo).
-          Un téléphone n'ouvrira pas la fiche : pour des étiquettes lisibles au téléphone, utilisez Prévo en mode serveur.</p>
+        <h2 id="etiquettes-titre-adresse">${UI.icone('qr')} ${I18n.t('parc.carte_adresse.contenu_qr')}</h2>
+        <p>${I18n.html('parc.carte_adresse.qr_contient_gmao_id')}</p>
       </section>`;
     }
     const base = adresseDeBase();
     const adresses = adressesProposees();
     const choix = adresses.length > 1 ? UI.html`<div class="form-ligne etiquettes-choix-adresse">
-        <label for="etiquettes-adresse">Adresse du PC à mettre dans les QR
+        <label for="etiquettes-adresse">${I18n.t('parc.carte_adresse.adresse_pc_mettre_qr')}
           <select id="etiquettes-adresse">${adresses.map((adresse) => UI.html`<option value="${adresse}" ${memeAdresse(adresse, base) ? UI.brut('selected') : ''}>${adresse}</option>`)}</select>
         </label>
-        <button type="button" class="btn btn-secondaire" id="etiquettes-adresse-enregistrer">${UI.icone('valider')}Utiliser cette adresse</button>
+        <button type="button" class="btn btn-secondaire" id="etiquettes-adresse-enregistrer">${UI.icone('valider')}${I18n.t('parc.carte_adresse.utiliser_adresse')}</button>
       </div>` : '';
     return UI.html`<section class="carte etiquettes-adresse" aria-labelledby="etiquettes-titre-adresse">
-      <h2 id="etiquettes-titre-adresse">${UI.icone('qr')} Adresse encodée dans les QR</h2>
-      <p>Chaque QR ouvre la fiche de l'équipement à l'adresse :
-        <code id="etiquettes-adresse-encodee" class="etiquettes-code">${base}#/equipement/&lt;id&gt;</code></p>
+      <h2 id="etiquettes-titre-adresse">${UI.icone('qr')} ${I18n.t('parc.carte_adresse.adresse_encodee_qr')}</h2>
+      <p>${I18n.html('parc.carte_adresse.chaque_qr_ouvre_fiche', { base })}</p>
       <div class="encadre attention etiquettes-avertissement">${UI.icone('alerte')}
-        Si l'adresse IP ou le port du PC change, les étiquettes ne mènent plus à la fiche : demandez une adresse fixe pour ce PC (réservation dans la box).</div>
-      ${adresses.length ? '' : UI.html`<p class="note">Aucune adresse réseau n'a été détectée : branchez ce PC au réseau de l'atelier pour que les téléphones puissent ouvrir les fiches.</p>`}
+        ${I18n.t('parc.carte_adresse.si_adresse_ip_port')}</div>
+      ${adresses.length ? '' : UI.html`<p class="note">${I18n.t('parc.carte_adresse.aucune_adresse_reseau_ete')}</p>`}
       ${App.cePcSeulement && App.cePcSeulement() ? UI.html`<div class="encadre info" id="etiquettes-ce-pc">${UI.icone('alerte')}
-        Prévo n'est joignable que sur ce PC pour l'instant : ces étiquettes s'ouvriront depuis un téléphone dès que Prévo
-        sera ouvert au Wi-Fi de l'atelier, à la même adresse (Paramètres › Accès et installation).</div>` : ''}
+        ${I18n.t('parc.carte_adresse.prevo_joignable_pc_instant')}</div>` : ''}
       ${choix}
     </section>`;
   }
@@ -241,36 +238,32 @@ Object.assign(Parc, (() => {
     const localisations = Donnees.lignes('localisations')
       .map((l) => ({ id: l.id, chemin: cheminLocalisation(l.id) }))
       .sort((a, b) => comparerTextes(a.chemin, b.chemin));
-    return UI.html`<option value="">Tout le parc</option>${localisations.map((l) => UI.html`<option value="${l.id}" ${l.id === valeur ? UI.brut('selected') : ''}>${l.chemin}</option>`)}`;
+    return UI.html`<option value="">${I18n.t('parc.options_localisations.tout_parc')}</option>${localisations.map((l) => UI.html`<option value="${l.id}" ${l.id === valeur ? UI.brut('selected') : ''}>${l.chemin}</option>`)}`;
   }
 
   function optionsCriticite(valeur) {
-    const choix = [['', 'Toutes'], ['A', 'A — très critique'], ['B', 'B — critique'], ['C', 'C — peu critique']];
+    const choix = [['', I18n.t('parc.options_criticite.toutes')], ['A', I18n.t('parc.options_criticite.tres_critique')], ['B', I18n.t('parc.options_criticite.b_critique')], ['C', I18n.t('parc.options_criticite.peu_critique')]];
     return UI.html`${choix.map(([code, libelle]) => UI.html`<option value="${code}" ${code === valeur ? UI.brut('selected') : ''}>${libelle}</option>`)}`;
   }
 
   function optionsFormat(valeur) {
     return UI.html`${Object.keys(FORMATS_ETIQUETTES).sort((a, b) => Number(b) - Number(a)).map((cle) => {
       const g = FORMATS_ETIQUETTES[cle];
-      return UI.html`<option value="${cle}" ${cle === valeur ? UI.brut('selected') : ''}>${cle} par planche (${g.colonnes} × ${g.lignes}, ${g.largeurMm} × ${g.hauteurMm} mm)</option>`;
+      return UI.html`<option value="${cle}" ${cle === valeur ? UI.brut('selected') : ''}>${I18n.t('parc.options_format.planche_mm', { cle, colonnes: g.colonnes, lignes: g.lignes, largeurMm: g.largeurMm, hauteurMm: g.hauteurMm })}</option>`;
     })}`;
   }
 
   // Liste à cocher des équipements retenus par les filtres.
   function listeEquipementsHtml(equipements, decoches) {
     if (!equipements.length) {
-      return UI.html`<p class="muted etiquettes-vide">Aucun équipement actif ne correspond à cette sélection.</p>`;
+      return UI.html`<p class="muted etiquettes-vide">${I18n.t('parc.liste_equipements.aucun_equipement_actif_correspond')}</p>`;
     }
     return UI.html`${equipements.map((e) => UI.html`<label class="case etiquettes-case">
       <input type="checkbox" value="${e.id}" ${decoches.has(e.id) ? '' : UI.brut('checked')}>
       <span class="etiquettes-case-texte"><b>${e.repere || e.id}</b> <span>${e.designation}</span>
-        <small>${e.localisation_id ? cheminLocalisation(e.localisation_id) : 'Sans localisation'}</small></span>
+        <small>${e.localisation_id ? cheminLocalisation(e.localisation_id) : I18n.t('parc.liste_equipements.sans_localisation')}</small></span>
       ${badgeCriticite(e.criticite)}
     </label>`)}`;
-  }
-
-  function pluriel(nombre, mot) {
-    return nombre + ' ' + mot + (nombre > 1 ? 's' : '');
   }
 
   function afficherEtiquettes(conteneur, parametres) {
@@ -281,54 +274,51 @@ Object.assign(Parc, (() => {
       <div class="parc etiquettes" data-hors-saisie>
         <div class="entete-page">
           <div>
-            <div class="fil"><a href="#/parc">Parc</a></div>
-            <h1>Étiquettes QR</h1>
-            <p>Choisissez les équipements et le format de la planche, vérifiez l'aperçu, puis imprimez
-              sur des planches d'étiquettes autocollantes A4.</p>
+            <div class="fil"><a href="#/parc">${I18n.t('parc.etiquettes.parc')}</a></div>
+            <h1>${I18n.t('parc.etiquettes.etiquettes_qr')}</h1>
+            <p>${I18n.t('parc.etiquettes.choisissez_equipements_format_planche')}</p>
           </div>
         </div>
         ${carteAdresse()}
         <div class="grille etiquettes-grille">
           <section class="carte c5 etiquettes-selection" aria-labelledby="etiquettes-titre-selection">
-            <h2 id="etiquettes-titre-selection">Équipements</h2>
+            <h2 id="etiquettes-titre-selection">${I18n.t('parc.etiquettes.equipements')}</h2>
             <div class="form-ligne">
-              <label for="etiquettes-localisation">Localisation (et ses sous-localisations)
+              <label for="etiquettes-localisation">${I18n.t('parc.etiquettes.localisation_sous_localisations')}
                 <select id="etiquettes-localisation">${optionsLocalisations(etat.localisationId)}</select></label>
-              <label for="etiquettes-criticite">Criticité
+              <label for="etiquettes-criticite">${I18n.t('commun.champ.criticite')}
                 <select id="etiquettes-criticite">${optionsCriticite(etat.criticite)}</select></label>
             </div>
-            ${etat.ids.length ? UI.html`<p class="note">Sélection limitée à ${pluriel(etat.ids.length, 'équipement')} choisi${etat.ids.length > 1 ? 's' : ''} par le lien.
-              <a href="#/parc/etiquettes">Tout le parc</a></p>` : ''}
+            ${etat.ids.length ? UI.html`<p class="note">${I18n.html('parc.etiquettes.selection_limitee_lien', { n: etat.ids.length })}</p>` : ''}
             <div class="actions">
-              <button type="button" class="btn btn-fantome" id="etiquettes-tout-cocher">Tout cocher</button>
-              <button type="button" class="btn btn-fantome" id="etiquettes-tout-decocher">Tout décocher</button>
+              <button type="button" class="btn btn-fantome" id="etiquettes-tout-cocher">${I18n.t('parc.etiquettes.tout_cocher')}</button>
+              <button type="button" class="btn btn-fantome" id="etiquettes-tout-decocher">${I18n.t('parc.etiquettes.tout_decocher')}</button>
             </div>
             <fieldset class="etiquettes-liste" id="etiquettes-liste">
-              <legend class="visuellement-cache">Équipements à étiqueter</legend>
+              <legend class="visuellement-cache">${I18n.t('parc.etiquettes.equipements_etiqueter')}</legend>
             </fieldset>
           </section>
           <div class="c7 etiquettes-droite">
             <section class="carte etiquettes-reglages" aria-labelledby="etiquettes-titre-format">
-              <h2 id="etiquettes-titre-format">Format et impression</h2>
+              <h2 id="etiquettes-titre-format">${I18n.t('parc.etiquettes.format_impression')}</h2>
               <div class="form-ligne">
-                <label for="etiquettes-format">Planche A4
+                <label for="etiquettes-format">${I18n.t('parc.etiquettes.planche_4')}
                   <select id="etiquettes-format">${optionsFormat(reglages.format)}</select></label>
               </div>
               <div class="form-ligne etiquettes-decalages">
-                <label for="etiquettes-decalage-haut">Décalage vers le bas (mm)
+                <label for="etiquettes-decalage-haut">${I18n.t('parc.etiquettes.decalage_vers_bas_mm')}
                   <input type="number" id="etiquettes-decalage-haut" min="-${DECALAGE_MAX_MM}" max="${DECALAGE_MAX_MM}" step="0.5" inputmode="decimal" value="${reglages.haut}"></label>
-                <label for="etiquettes-decalage-gauche">Décalage vers la droite (mm)
+                <label for="etiquettes-decalage-gauche">${I18n.t('parc.etiquettes.decalage_vers_droite_mm')}
                   <input type="number" id="etiquettes-decalage-gauche" min="-${DECALAGE_MAX_MM}" max="${DECALAGE_MAX_MM}" step="0.5" inputmode="decimal" value="${reglages.gauche}"></label>
               </div>
-              <p class="aide">Si l'impression tombe à côté des étiquettes, corrigez ici (négatif : vers le haut ou la gauche).
-                Format et décalage sont mémorisés sur ce poste.</p>
+              <p class="aide">${I18n.t('parc.etiquettes.si_impression_tombe_cote')}</p>
               <p class="etiquettes-resume" id="etiquettes-resume" role="status" aria-live="polite"></p>
               <div class="actions">
-                <button type="button" class="btn btn-primaire" id="etiquettes-imprimer">${UI.icone('imprimer')}Imprimer</button>
+                <button type="button" class="btn btn-primaire" id="etiquettes-imprimer">${UI.icone('imprimer')}${I18n.t('commun.bouton.imprimer')}</button>
               </div>
             </section>
             <section class="carte etiquettes-apercu-carte" aria-labelledby="etiquettes-titre-apercu">
-              <h2 id="etiquettes-titre-apercu">Aperçu</h2>
+              <h2 id="etiquettes-titre-apercu">${I18n.t('parc.etiquettes.apercu')}</h2>
               <div class="etiquettes-apercu" id="etiquettes-apercu"></div>
             </section>
           </div>
@@ -352,17 +342,18 @@ Object.assign(Parc, (() => {
       const gabarit = FORMATS_ETIQUETTES[reglages.format];
       const planches = Math.ceil(choisis.length / (gabarit.colonnes * gabarit.lignes));
       resume.textContent = choisis.length
-        ? pluriel(choisis.length, 'étiquette') + ' sur ' + pluriel(planches, 'planche') + ' de ' + reglages.format + '.'
-        : 'Aucune étiquette : cochez au moins un équipement.';
+        ? I18n.t('parc.etiquettes.resume_apercu', { etiquettes: I18n.t('parc.etiquettes.n_etiquettes', { n: choisis.length }),
+          planches: I18n.t('parc.etiquettes.n_planches', { n: planches }), format: reglages.format })
+        : I18n.t('parc.brancher_ecran.aucune_etiquette_cochez_moins');
       boutonImprimer.disabled = choisis.length === 0;
       UI.remplir(zoneApercu, choisis.length
         ? planchesEtiquettes(choisis, reglages.format, reglages)
-        : UI.vide('Rien à imprimer', 'Cochez des équipements pour voir leurs étiquettes.', 'qr'));
+        : UI.vide(I18n.t('parc.brancher_ecran.rien_imprimer'), I18n.t('parc.brancher_ecran.cochez_equipements_voir_etiquettes'), 'qr'));
     }
 
     function dessinerListe() {
       retenus = equipementsPourEtiquettes({ localisationId: etat.localisationId, criticite: etat.criticite, ids: etat.ids });
-      UI.remplir(zoneListe, UI.html`<legend class="visuellement-cache">Équipements à étiqueter</legend>${listeEquipementsHtml(retenus, etat.decoches)}`);
+      UI.remplir(zoneListe, UI.html`<legend class="visuellement-cache">${I18n.t('parc.etiquettes.equipements_etiqueter')}</legend>${listeEquipementsHtml(retenus, etat.decoches)}`);
       dessinerApercu();
     }
 
@@ -419,7 +410,7 @@ Object.assign(Parc, (() => {
         boutonAdresse.disabled = true;
         try {
           await enregistrerAdresse(adresse);
-          UI.toast('Les QR contiendront désormais ' + adresse + '.', 'succes');
+          UI.toast(I18n.t('parc.brancher_ecran.qr_contiendront_desormais', { adresse }), 'succes');
           await App.reafficher();
         } catch (erreur) {
           App.signalerErreur(erreur, 'adresse des QR');

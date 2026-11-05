@@ -28,19 +28,19 @@ const Preventif = (() => {
 
   /** Déclencheurs d'une gamme (valeurs du schéma) et leur libellé. */
   const DECLENCHEURS = Object.freeze({
-    date: 'Date (tous les N jours)',
-    compteur: 'Compteur (toutes les N unités)',
-    seuil: 'Seuil (mesure qui atteint une limite)',
+    get date() { return I18n.t('preventif.date.date_tous_jours'); },
+    get compteur() { return I18n.t('preventif.compteur.compteur_toutes_unites'); },
+    get seuil() { return I18n.t('preventif.seuil.seuil_mesure_atteint_limite'); },
   });
 
   /** Statuts calculés d'une gamme (etatGamme), du plus urgent au moins urgent, et leur libellé. */
   const STATUTS_GAMME = Object.freeze({
-    echue: 'Échue',
-    ot_ouvert: 'OT ouvert',
-    bientot: 'Bientôt',
-    a_jour: 'À jour',
-    incomplete: 'Incomplète',
-    inactive: 'Inactive',
+    get echue() { return I18n.t('preventif.echue.echue'); },
+    get ot_ouvert() { return I18n.t('preventif.ot_ouvert.ot_ouvert'); },
+    get bientot() { return I18n.t('preventif.bientot.bientot'); },
+    get a_jour() { return I18n.t('preventif.a_jour.jour'); },
+    get incomplete() { return I18n.t('preventif.incomplete.incomplete'); },
+    get inactive() { return I18n.t('preventif.inactive.inactive'); },
   });
 
   // Une gamme est « bientôt » échue si son déclenchement tombe dans les 14 jours qui viennent.
@@ -234,14 +234,14 @@ const Preventif = (() => {
    */
   function etatDate(gamme, jour) {
     const periodicite = nombre(gamme.periodicite_jours);
-    if (periodicite === null || periodicite <= 0) return etatDeBase('incomplete', 'périodicité en jours à renseigner');
+    if (periodicite === null || periodicite <= 0) return etatDeBase('incomplete', I18n.t('preventif.etat_date.periodicite_jours_renseigner'));
     const avance = Math.max(0, Math.round(nombre(gamme.avance_jours) || 0));
     let echeance = texte(gamme.prochaine_echeance).slice(0, 10);
     const derniere = texte(gamme.derniere_realisation).slice(0, 10);
     const jamaisRealisee = !echeance && !derniere;
     if (!echeance && derniere) echeance = ajouterJours(derniere, Math.round(periodicite));
     if (jamaisRealisee) echeance = jour;
-    if (!estDateIso(echeance)) return etatDeBase('incomplete', 'date d\'échéance illisible');
+    if (!estDateIso(echeance)) return etatDeBase('incomplete', I18n.t('preventif.etat_date.date_echeance_illisible'));
 
     const declenchement = ajouterJours(echeance, -avance);
     const etat = etatDeBase(statutSelonDeclenchement(declenchement, jour), '');
@@ -253,11 +253,10 @@ const Preventif = (() => {
   }
 
   function raisonDate(etat, jour, avance, jamaisRealisee) {
-    if (jamaisRealisee) return 'jamais réalisée';
-    if (etat.statut === 'echue' && etat.echeance < jour) return 'échue depuis le ' + UI.dateFr(etat.echeance);
-    if (etat.echeance === jour) return 'échéance aujourd\'hui (' + UI.dateFr(etat.echeance) + ')';
-    return 'échéance le ' + UI.dateFr(etat.echeance)
-      + (avance > 0 ? ' (déclenchement le ' + UI.dateFr(etat.declenchement) + ', avance de ' + avance + ' j)' : '');
+    if (jamaisRealisee) return I18n.t('preventif.raison_date.jamais_realisee');
+    if (etat.statut === 'echue' && etat.echeance < jour) return I18n.t('preventif.raison_date.echue_depuis', { echeance: UI.dateFr(etat.echeance) });
+    if (etat.echeance === jour) return I18n.t('preventif.raison_date.echeance_aujourd_hui', { echeance: UI.dateFr(etat.echeance) });
+    return I18n.t('preventif.raison_date.echeance_echeance', { echeance: UI.dateFr(etat.echeance) }) + (avance > 0 ? ' ' + I18n.t('preventif.raison_date.declenchement_avance', { declenchement: UI.dateFr(etat.declenchement), n: avance }) : '');
   }
 
   /**
@@ -266,11 +265,11 @@ const Preventif = (() => {
    */
   function compteurEtReleve(gamme, contexte) {
     const compteurId = texte(gamme.compteur_id);
-    if (!compteurId) return { incomplet: etatDeBase('incomplete', 'compteur à choisir') };
+    if (!compteurId) return { incomplet: etatDeBase('incomplete', I18n.t('preventif.compteur_et_releve.compteur_choisir')) };
     const compteur = Donnees.trouver('compteurs', compteurId);
-    if (!compteur) return { incomplet: etatDeBase('incomplete', 'compteur ' + compteurId + ' introuvable') };
+    if (!compteur) return { incomplet: etatDeBase('incomplete', I18n.t('preventif.compteur_et_releve.compteur_introuvable', { compteurId })) };
     const releve = contexte.releves.get(compteurId);
-    if (!releve) return { incomplet: etatDeBase('incomplete', 'aucun relevé pour le compteur ' + compteurId) };
+    if (!releve) return { incomplet: etatDeBase('incomplete', I18n.t('preventif.compteur_et_releve.aucun_releve_compteur', { compteurId })) };
     return { compteur, releve };
   }
 
@@ -281,7 +280,7 @@ const Preventif = (() => {
    */
   function etatCompteur(gamme, jour, contexte) {
     const periodicite = nombre(gamme.periodicite_unites);
-    if (periodicite === null || periodicite <= 0) return etatDeBase('incomplete', 'périodicité en unités à renseigner');
+    if (periodicite === null || periodicite <= 0) return etatDeBase('incomplete', I18n.t('preventif.etat_compteur.periodicite_unites_renseigner'));
     const lu = compteurEtReleve(gamme, contexte);
     if (lu.incomplet) return lu.incomplet;
     const base = nombre(gamme.releve_derniere_realisation) || 0;
@@ -292,7 +291,7 @@ const Preventif = (() => {
     let statut = 'a_jour';
     if (usage >= periodicite) statut = 'echue';
     else if (echeance && joursEntre(jour, echeance) <= HORIZON_BIENTOT_JOURS) statut = 'bientot';
-    const etat = etatDeBase(statut, valeurAvecUnite(usage, lu.compteur.unite) + ' sur ' + UI.nombreFr(periodicite));
+    const etat = etatDeBase(statut, I18n.t('preventif.etat_compteur.valeur_avec_unite_periodicite', { valeurAvecUnite: valeurAvecUnite(usage, lu.compteur.unite), periodicite: UI.nombreFr(periodicite) }));
     etat.echeance = echeance;
     etat.declenchement = echeance;                     // pas d'avance : c'est le compteur qui déclenche
     etat.releveActuel = lu.releve.valeur;
@@ -307,18 +306,18 @@ const Preventif = (() => {
    */
   function etatSeuil(gamme, contexte) {
     const seuil = nombre(gamme.seuil);
-    if (seuil === null) return etatDeBase('incomplete', 'seuil à renseigner');
+    if (seuil === null) return etatDeBase('incomplete', I18n.t('preventif.etat_seuil.seuil_renseigner'));
     const lu = compteurEtReleve(gamme, contexte);
     if (lu.incomplet) return lu.incomplet;
     const unite = lu.compteur.unite;
     const derniere = texte(gamme.derniere_realisation).slice(0, 10);
     const atteint = lu.releve.valeur >= seuil;
     const posterieur = !derniere || lu.releve.date > derniere;
-    const comparaison = 'relevé ' + valeurAvecUnite(lu.releve.valeur, unite)
-      + (atteint ? ' ≥ ' : ' < ') + 'seuil ' + valeurAvecUnite(seuil, unite);
+    const comparaison = I18n.t(atteint ? 'preventif.etat_seuil.releve_atteint_seuil' : 'preventif.etat_seuil.releve_sous_seuil',
+      { releve: valeurAvecUnite(lu.releve.valeur, unite), seuil: valeurAvecUnite(seuil, unite) });
 
     const etat = etatDeBase(atteint && posterieur ? 'echue' : 'a_jour', comparaison);
-    if (atteint && !posterieur) etat.raison += ', relevé antérieur à la dernière réalisation (' + UI.dateFr(derniere) + ')';
+    if (atteint && !posterieur) etat.raison += I18n.t('preventif.etat_seuil.releve_anterieur_derniere_realisation', { derniere: UI.dateFr(derniere) });
     etat.releveActuel = lu.releve.valeur;
     etat.reste = arrondi(seuil - lu.releve.valeur, 6);  // écart au seuil (négatif ou nul : atteint)
     return etat;
@@ -327,8 +326,8 @@ const Preventif = (() => {
   /** etatGamme avec un contexte déjà lu (voir contexteCalcul). */
   function evaluerGamme(gamme, aujourdhui, contexte) {
     const ligne = typeof gamme === 'string' ? Donnees.trouver('gammes', gamme) : gamme;
-    if (!ligne) return etatDeBase('incomplete', 'gamme introuvable');
-    if (texte(ligne.actif) === '0') return etatDeBase('inactive', 'gamme inactive');
+    if (!ligne) return etatDeBase('incomplete', I18n.t('preventif.evaluer_gamme.gamme_introuvable'));
+    if (texte(ligne.actif) === '0') return etatDeBase('inactive', I18n.t('preventif.evaluer_gamme.gamme_inactive'));
     const jour = dateDuJour(aujourdhui);
     const declencheur = texte(ligne.declencheur) || 'date';
 
@@ -336,7 +335,7 @@ const Preventif = (() => {
     if (declencheur === 'date') etat = etatDate(ligne, jour);
     else if (declencheur === 'compteur') etat = etatCompteur(ligne, jour, contexte);
     else if (declencheur === 'seuil') etat = etatSeuil(ligne, contexte);
-    else etat = etatDeBase('incomplete', 'déclencheur inconnu : ' + declencheur);
+    else etat = etatDeBase('incomplete', I18n.t('preventif.evaluer_gamme.declencheur_inconnu', { declencheur }));
 
     // Un OT ouvert pour cette gamme passe avant tout le reste : on n'en génère pas un second.
     const otOuvert = contexte.otsOuverts.get(ligne.id);
