@@ -403,8 +403,9 @@ class TestControle(unittest.TestCase):
         self.assertEqual([s.genre for s in controle.signalements if s.genre == 'page'], ['page'])
 
     def test_lot3_prevu_mais_pas_fait(self):
-        with self.assertRaises(NotImplementedError):
-            ctl.comparer_langue(None, None)
+        # La comparaison des langues (Lot 3) n'existe pas encore : aucune fonction factice ne fait semblant.
+        self.assertFalse(hasattr(ctl, 'comparer_langue'))
+        self.assertTrue(hasattr(ctl, 'Langue'))
 
 
 class TestDepotReel(unittest.TestCase):

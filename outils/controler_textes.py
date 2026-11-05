@@ -16,7 +16,7 @@ Ce qui est contrôlé :
 Le lien domaine → fichiers est celui de extraire_textes.py (préfixes de js/modules, plus le socle, schema, porte).
 
 Lot 3 (préparé, pas fait) : comparer chaque langue au français (clés manquantes ou orphelines par langue,
-mêmes variables, catégories de pluriel) — voir Langue et comparer_langue plus bas.
+mêmes variables, catégories de pluriel) — voir la classe Langue et la note « Lot 3 » plus bas.
 """
 import argparse
 import html
@@ -88,11 +88,9 @@ def variables_de(valeur):
     return {nom for forme in formes for nom in RE_VARIABLE.findall(decoder(forme))}
 
 
-def comparer_langue(reference, cible):
-    """Lot 3 : écarts d'une langue avec le français (clés manquantes ou orphelines, variables {…} différentes,
-    catégories de pluriel attendues par Intl.PluralRules de la langue). Pas encore écrit : le Lot 2 n'a que le
-    français."""
-    raise NotImplementedError('comparaison des langues : Lot 3')
+# Lot 3 : la comparaison d'une langue avec le français (clés manquantes ou orphelines, variables {…} différentes,
+# catégories de pluriel attendues par Intl.PluralRules de la langue) viendra ici, avec ses tests ; le Lot 2 n'a que
+# le français. La classe Langue et variables_de() ci-dessus lui serviront telles quelles.
 
 
 # ---------------------------------------------------------------------------------------------------------
