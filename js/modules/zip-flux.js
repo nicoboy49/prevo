@@ -47,19 +47,14 @@
 
 const ZipFlux = (() => {
 
-  const MESSAGE_NAVIGATEUR = 'Ce navigateur est trop ancien pour lire ou écrire un ZIP de Prévo. Mettez-le à jour '
-    + '(Chrome, Edge, Firefox ou Safari récents), ou copiez simplement votre dossier de données pour le sauvegarder ou '
-    + 'le transporter.';
-  const PAS_UN_ZIP = 'Ce fichier n\'est pas un ZIP lisible. Choisissez le fichier ZIP exporté par Prévo '
-    + '(« prevo-export-AAAA-MM-JJ.zip »).';
-  const ZIP_ABIME = 'Ce ZIP est abîmé (structure illisible ou incohérente) : il est refusé. Refaites l\'export, '
-    + 'ou choisissez un autre fichier.';
-  const PLUSIEURS_PARTIES = 'Ce ZIP est en plusieurs parties : il est refusé. Choisissez le ZIP exporté par Prévo, '
-    + 'en un seul fichier.';
-  const TROP_GROS = 'Le ZIP dépasserait 4 Go, la plus grande taille que Prévo écrit. Exportez les données seules, ou '
-    + 'copiez simplement votre dossier de données pour le sauvegarder ou le transporter.';
-  const TROP_D_ENTREES = 'Le ZIP aurait plus de 65 534 fichiers, le plus grand nombre que Prévo écrit. Copiez '
-    + 'simplement votre dossier de données pour le sauvegarder ou le transporter.';
+  // Messages lus à l'affichage (fonctions), jamais figés au chargement du module.
+  const messageNavigateur = () => I18n.t('zip.message_navigateur.navigateur_trop_ancien_lire');
+  const pasUnZip = () => I18n.t('zip.pas_un_zip.fichier_pas_zip_lisible');
+  const zipAbime = () => I18n.t('zip.zip_abime.zip_abime_structure_illisible');
+  const plusieursParties = () => I18n.t('zip.plusieurs_parties.zip_plusieurs_parties_refuse');
+  // Les limites citées viennent de LIMITES (jamais écrites dans le message).
+  const tropGros = () => I18n.t('zip.trop_gros.zip_depasserait_go_plus', { limite: String(Math.round(LIMITES.octets / MO_GO)) });
+  const tropDEntrees = () => I18n.t('zip.trop_dentrees.zip_aurait_plus_fichiers', { n: LIMITES.entrees, limite: String(LIMITES.entrees).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') });
 
   const SIGNATURES = Object.freeze({ fin: 0x06054b50, localisateur64: 0x07064b50, fin64: 0x06064b50,
     centrale: 0x02014b50, locale: 0x04034b50 });
@@ -74,6 +69,7 @@ const ZipFlux = (() => {
   // Sans ZIP64 : 0xFFFFFFFF dans une taille ou une position, 0xFFFF dans le nombre d'entrées, renvoient à une fin
   // ZIP64 (zip-lecture.js l'exigerait). Le plus grand ZIP écrit : 4 Go moins 2 octets, 65 534 entrées.
   const LIMITES = Object.freeze({ octets: MAX_32 - 1, entrees: MAX_16 - 1 });
+  const MO_GO = 1024 * 1024 * 1024;                  // octets dans un Go (pour dire la limite en Go)
 
   const decodeurNoms = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
   const encodeurNoms = new TextEncoder();
@@ -96,19 +92,17 @@ const ZipFlux = (() => {
     if (typeof nom !== 'string') { return '?'; }
     let texte = '';
     for (let i = 0; i < nom.length && i < 100; i += 1) { texte += estControle(nom.charCodeAt(i)) ? '?' : nom[i]; }
-    return nom.length > 100 ? texte + '…' : texte;
+    return nom.length > 100 ? I18n.t('zip.afficher.nom_tronque', { texte }) : texte;
   }
 
-  function erreurFormat(message, nom) { return new ErreurZip('format', message || ZIP_ABIME, nom); }
+  function erreurFormat(message, nom) { return new ErreurZip('format', message || zipAbime(), nom); }
 
   function erreurAbime(entree) {
-    return new ErreurZip('abime', '« ' + afficher(entree.nom) + ' » est abîmé dans ce ZIP (contenu illisible, ou '
-      + 'différent de ce que le ZIP annonce) : il est refusé. Refaites l\'export.', entree.nom);
+    return new ErreurZip('abime', I18n.t('zip.erreur.abime_contenu_illisible', { afficher: afficher(entree.nom) }), entree.nom);
   }
 
   function erreurBombe(entree) {
-    return new ErreurZip('bombe', '« ' + afficher(entree.nom) + ' » se décompresse plus gros que ce que le ZIP '
-      + 'annonce : bombe de décompression probable. Le ZIP est refusé.', entree.nom);
+    return new ErreurZip('bombe', I18n.t('zip.erreur.bombe_decompression', { afficher: afficher(entree.nom) }), entree.nom);
   }
 
   // --- Navigateur ----------------------------------------------------------------------------------------------------
@@ -131,7 +125,7 @@ const ZipFlux = (() => {
   }
 
   function exigerFlux() {
-    if (!disponible()) { throw new ErreurZip('navigateur', MESSAGE_NAVIGATEUR); }
+    if (!disponible()) { throw new ErreurZip('navigateur', messageNavigateur()); }
   }
 
   // --- CRC-32 (polynôme 0xEDB88320, celui du ZIP) --------------------------------------------------------------------
@@ -180,14 +174,14 @@ const ZipFlux = (() => {
   // Position, taille et nombre d'entrées du répertoire central (fin ZIP64 comprise), d'après la DERNIÈRE signature
   // de fin trouvée dans les 65 557 derniers octets (22 octets de fin + 65 535 de commentaire au plus).
   async function lireFin(blob) {
-    if (blob.size < 22) { throw erreurFormat(PAS_UN_ZIP); }
+    if (blob.size < 22) { throw erreurFormat(pasUnZip()); }
     const debutQueue = Math.max(0, blob.size - 22 - MAX_16);
     const queue = await lireTranche(blob, debutQueue, blob.size - debutQueue);
     const lire = lecteur(queue);
     let fin = queue.length - 22;
     while (fin >= 0 && lire.u32(fin) !== SIGNATURES.fin) { fin -= 1; }
-    if (fin < 0) { throw erreurFormat(PAS_UN_ZIP); }
-    if (lire.u16(fin + 4) !== 0 || lire.u16(fin + 6) !== 0) { throw erreurFormat(PLUSIEURS_PARTIES); }
+    if (fin < 0) { throw erreurFormat(pasUnZip()); }
+    if (lire.u16(fin + 4) !== 0 || lire.u16(fin + 6) !== 0) { throw erreurFormat(plusieursParties()); }
     const resultat = { nombre: lire.u16(fin + 10), taille: lire.u32(fin + 12), debut: lire.u32(fin + 16) };
     if (resultat.nombre === MAX_16 || resultat.taille === MAX_32 || resultat.debut === MAX_32) {
       const positionFin = debutQueue + fin;
@@ -252,11 +246,11 @@ const ZipFlux = (() => {
   // Position des données d'une entrée, d'après son en-tête local (30 octets + nom + extra).
   async function positionDonnees(blob, entree, limite) {
     const borne = limite === undefined ? blob.size : Math.min(limite, blob.size);
-    if (!(entree.local >= 0 && entree.local + 30 <= borne)) { throw erreurFormat(ZIP_ABIME, entree.nom); }
+    if (!(entree.local >= 0 && entree.local + 30 <= borne)) { throw erreurFormat(zipAbime(), entree.nom); }
     const lire = lecteur(await lireTranche(blob, entree.local, 30));
-    if (lire.u32(0) !== SIGNATURES.locale) { throw erreurFormat(ZIP_ABIME, entree.nom); }
+    if (lire.u32(0) !== SIGNATURES.locale) { throw erreurFormat(zipAbime(), entree.nom); }
     const donnees = entree.local + 30 + lire.u16(26) + lire.u16(28);
-    if (!(entree.compresse >= 0 && donnees + entree.compresse <= borne)) { throw erreurFormat(ZIP_ABIME, entree.nom); }
+    if (!(entree.compresse >= 0 && donnees + entree.compresse <= borne)) { throw erreurFormat(zipAbime(), entree.nom); }
     return donnees;
   }
 
@@ -281,12 +275,10 @@ const ZipFlux = (() => {
   async function contenu(blob, entree) {
     exigerFlux();
     if (entree.drapeaux & DRAPEAU_CHIFFRE) {
-      throw erreurFormat('« ' + afficher(entree.nom) + ' » est chiffré dans ce ZIP : un export de Prévo ne l\'est '
-        + 'jamais. Il est refusé.', entree.nom);
+      throw erreurFormat(I18n.t('zip.erreur.entree_chiffree', { afficher: afficher(entree.nom) }), entree.nom);
     }
     if (entree.methode !== 0 && entree.methode !== 8) {
-      throw erreurFormat('« ' + afficher(entree.nom) + ' » est compressé par une méthode que Prévo ne lit pas '
-        + '(méthode ' + entree.methode + ') : ZIP refusé. Refaites l\'export.', entree.nom);
+      throw erreurFormat(I18n.t('zip.erreur.methode_inconnue', { afficher: afficher(entree.nom), methode: entree.methode }), entree.nom);
     }
     const debut = await positionDonnees(blob, entree);
     let flux = blob.slice(debut, debut + entree.compresse).stream();
@@ -322,10 +314,10 @@ const ZipFlux = (() => {
   function verifierLimites(mesures, limites) {
     const bornes = Object.assign({}, LIMITES, limites || {});
     if (mesures.entrees !== undefined && !(mesures.entrees <= bornes.entrees)) {
-      throw new ErreurZip('trop-gros', TROP_D_ENTREES);
+      throw new ErreurZip('trop-gros', tropDEntrees());
     }
     for (const cle of ['total', 'compresse', 'decompresse']) {
-      if (mesures[cle] !== undefined && !(mesures[cle] <= bornes.octets)) { throw new ErreurZip('trop-gros', TROP_GROS); }
+      if (mesures[cle] !== undefined && !(mesures[cle] <= bornes.octets)) { throw new ErreurZip('trop-gros', tropGros()); }
     }
   }
 
@@ -343,7 +335,7 @@ const ZipFlux = (() => {
   function blobDe(octets) {
     if (typeof Blob !== 'undefined' && octets instanceof Blob) { return octets; }
     if (octets instanceof ArrayBuffer || ArrayBuffer.isView(octets)) { return new Blob([octets]); }
-    throw new TypeError('ZipFlux : contenu attendu en Uint8Array, ArrayBuffer ou Blob.');
+    throw new TypeError(I18n.t('zip.blob_de.zip_flux_contenu_attendu_uint'));
   }
 
   // Lit la source en flux : CRC-32 et taille mesurés au passage, puis compression (ou rien) ; résultat versé dans un
@@ -389,7 +381,7 @@ const ZipFlux = (() => {
     exigerFlux();
     const reglages = options || {};
     const date = reglages.date === undefined ? new Date() : reglages.date;
-    if (!(date instanceof Date) || isNaN(date.getTime())) { throw new TypeError('ZipFlux.ecrivain : date invalide.'); }
+    if (!(date instanceof Date) || isNaN(date.getTime())) { throw new TypeError(I18n.t('zip.ecrivain.zip_flux_ecrivain_date_invalide')); }
     const limites = Object.assign({}, LIMITES, reglages.limites || {});
     const dos = dateDos(date);
     const parties = [];                          // en-têtes locaux et données, dans l'ordre du fichier
@@ -401,11 +393,11 @@ const ZipFlux = (() => {
     let zip = null;
 
     async function ajouterMaintenant(nom, octets, choix) {
-      if (zip) { throw new Error('ZipFlux : ajouter() après terminer().'); }
+      if (zip) { throw new Error(I18n.t('zip.ecrivain.zip_flux_ajouter_apres_terminer')); }
       exigerFlux();
-      if (typeof nom !== 'string' || nom === '') { throw new TypeError('ZipFlux : nom d\'entrée attendu.'); }
+      if (typeof nom !== 'string' || nom === '') { throw new TypeError(I18n.t('zip.ecrivain.zip_flux_nom_entree_attendu')); }
       const octetsNom = encodeurNoms.encode(nom);
-      if (octetsNom.length > MAX_16) { throw new ErreurZip('trop-gros', TROP_GROS, nom); }
+      if (octetsNom.length > MAX_16) { throw new ErreurZip('trop-gros', tropGros(), nom); }
       const source = blobDe(octets);
       verifierLimites({ entrees: centrales.length + 1, decompresse: source.size }, limites);
       const stocker = Boolean(choix) && choix.stocker === true;
@@ -433,7 +425,7 @@ const ZipFlux = (() => {
       get taille() { return zip ? zip.size : taille; },
       terminer() {
         if (zip) { return zip; }
-        if (enCours > 0) { throw new Error('ZipFlux : terminer() avant la fin d\'un ajouter().'); }
+        if (enCours > 0) { throw new Error(I18n.t('zip.ecrivain.zip_flux_terminer_avant_fin')); }
         const fin = new Uint8Array(22);
         const vue = new DataView(fin.buffer);
         vue.setUint32(0, SIGNATURES.fin, true);
@@ -449,7 +441,7 @@ const ZipFlux = (() => {
 
   return {
     disponible,
-    MESSAGE_NAVIGATEUR,
+    get MESSAGE_NAVIGATEUR() { return messageNavigateur(); },
     ErreurZip,
     LIMITES,
     crc32,

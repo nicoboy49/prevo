@@ -712,5 +712,31 @@ class TestSocleEtSchema(unittest.TestCase):
                 self.assertEqual((res.erreurs, len(res.unites), len(res.relectures)), ([], 0, 0))
 
 
+MODULE_PENDANT = '''\
+const ParametresEssai = (() => {
+  function brancher(bouton, pendant) {
+    bouton.addEventListener('click', () => pendant(bouton, 'import ZIP', () => 1));
+  }
+  return { brancher };
+})();
+'''
+
+
+class TestExceptionPendantDesParametres(unittest.TestCase):
+    """T245 : le contexte de pendant(bouton, contexte, action) des cartes de Paramètres ne va que dans la console."""
+
+    def test_contexte_jamais_extrait_dans_les_cartes_de_parametres(self):
+        with tempfile.TemporaryDirectory() as dossier:
+            racine = Path(dossier)
+            ecrire(racine, 'js/modules/parametres-zip.js', MODULE_PENDANT)
+            res = ext.Extracteur(racine).extraire('zip', ['js/modules/parametres-zip.js'])
+            self.assertEqual(([u.texte for u in res.unites], res.relectures), ([], []))
+
+    def test_domaines_parametres_sauvegardes_zip_sans_texte_en_dur_sur_le_depot(self):
+        for domaine in ('parametres', 'sauvegardes', 'zip'):
+            res = ext.Extracteur(RACINE).extraire(domaine, ext.fichiers_du_domaine(RACINE, domaine), essai=True)
+            self.assertEqual((res.erreurs, len(res.unites), len(res.relectures)), ([], 0, 0), domaine)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -96,21 +96,20 @@ const ZipLecture = (function () {
 
   function refuser(message) { throw new Refus(message); }
 
-  const ZIP_ABIME = 'Ce ZIP est abîmé (structure illisible ou incohérente) : il est refusé. Refaites l\'export, '
-    + 'ou choisissez un autre fichier.';
-  const MANIFESTE_ILLISIBLE = 'Le manifeste du ZIP (manifeste.json) est illisible : le ZIP a été abîmé ou modifié '
-    + 'après l\'export. Il est refusé ; refaites l\'export.';
+  // Messages lus à l'affichage (fonctions), jamais figés au chargement du module.
+  const zipAbime = () => I18n.t('zip.zip_abime.zip_abime_structure_illisible');
+  const manifesteIllisible = () => I18n.t('zip.manifeste_illisible.manifeste_zip_manifeste_json');
 
   // Nombre écrit à la française : 2 001. Taille, une décimale au plus : « 60 Mo », « 10,5 Mo », « 1 Go », « 1,1 Go ».
   function enChiffres(nombre) { return String(nombre).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
   function enMo(octets) {
     const go = octets >= 1024 * MO;
-    return String(Math.round(octets / (go ? 1024 * MO : MO) * 10) / 10).replace('.', ',') + (go ? ' Go' : ' Mo');
+    return String(Math.round(octets / (go ? 1024 * MO : MO) * 10) / 10).replace('.', ',') + (go ? ' ' + I18n.t('zip.en_mo.go') : ' ' + I18n.t('zip.en_mo.mo'));
   }
   // Taille refusée, face à sa limite : « plus de 4 Go » quand l'arrondi égalerait la limite (T229, comme ZipDonnees).
   function enMoFace(octets, limite) {
     const texte = enMo(octets);
-    return texte === enMo(limite) ? 'plus de ' + texte : texte;
+    return texte === enMo(limite) ? I18n.t('zip.taille.plus_de', { texte }) : texte;
   }
 
   function estControle(code) { return code < 0x20 || (code >= 0x7f && code <= 0x9f); }
@@ -119,7 +118,7 @@ const ZipLecture = (function () {
   function afficher(nom) {
     let texte = '';
     for (let i = 0; i < nom.length && i < 100; i += 1) { texte += estControle(nom.charCodeAt(i)) ? '?' : nom[i]; }
-    return nom.length > 100 ? texte + '…' : texte;
+    return nom.length > 100 ? I18n.t('zip.afficher.nom_tronque', { texte }) : texte;
   }
 
   // Problème au format de Donnees (ARCHITECTURE.md §5.2).
@@ -140,10 +139,9 @@ const ZipLecture = (function () {
   // SANS COPIE : chaque tranche demandée devient un Blob de ses seuls octets, lus à ce moment-là (comme d'un fichier).
   function sourceParTranches(source) {
     const taille = tailleDe(source);
-    if (taille === null) { refuser('Aucun fichier à lire : choisissez le fichier ZIP exporté par Prévo.'); }
+    if (taille === null) { refuser(I18n.t('zip.source_par_tranches.aucun_fichier_lire_choisissez')); }
     if (taille > LIMITES.zip) {
-      refuser('Ce fichier fait ' + enMoFace(taille, LIMITES.zip) + ' : un ZIP de données ne peut pas dépasser '
-        + enMo(LIMITES.zip) + '. Il est refusé.');
+      refuser(I18n.t('zip.source_par_tranches.fichier_fait_zip_donnees', { enMoFace: enMoFace(taille, LIMITES.zip), enMo: enMo(LIMITES.zip) }));
     }
     if (typeof Blob !== 'undefined' && source instanceof Blob) { return source; }
     const octets = source instanceof ArrayBuffer ? new Uint8Array(source)
@@ -203,25 +201,24 @@ const ZipLecture = (function () {
   function lireRepertoire(blob) {
     return ZipFlux.lireRepertoire(blob, function (fin) {
       if (fin.nombre > LIMITES.entrees) {
-        refuser('Ce ZIP contient ' + enChiffres(fin.nombre) + ' entrées : ' + enChiffres(LIMITES.entrees)
-          + ' au plus. Il est refusé.');
+        refuser(I18n.t('zip.lire_repertoire.zip_contient_entrees_plus', { n: fin.nombre, nombre: enChiffres(fin.nombre), limite: enChiffres(LIMITES.entrees) }));
       }
     });
   }
 
   // Raison pour laquelle un nom d'entrée est hostile, ou null.
   function raisonHostile(nom) {
-    if (nom === null) { return 'nom illisible : ce n\'est pas de l\'UTF-8'; }
-    if (nom === '') { return 'nom vide'; }
+    if (nom === null) { return I18n.t('zip.raison_hostile.nom_illisible_pas_utf'); }
+    if (nom === '') { return I18n.t('zip.raison_hostile.nom_vide'); }
     for (let i = 0; i < nom.length; i += 1) {
-      if (estControle(nom.charCodeAt(i))) { return 'caractère de contrôle'; }
+      if (estControle(nom.charCodeAt(i))) { return I18n.t('zip.raison_hostile.caractere_controle'); }
     }
-    if (nom.indexOf('\\') >= 0) { return 'barre oblique inverse'; }
-    if (nom[0] === '/' || /^[A-Za-z]:/.test(nom)) { return 'chemin absolu'; }
+    if (nom.indexOf('\\') >= 0) { return I18n.t('zip.raison_hostile.barre_oblique_inverse'); }
+    if (nom[0] === '/' || /^[A-Za-z]:/.test(nom)) { return I18n.t('zip.raison_hostile.chemin_absolu'); }
     const segments = (nom.endsWith('/') ? nom.slice(0, -1) : nom).split('/');
-    if (segments.indexOf('..') >= 0) { return 'remontée de dossier « .. »'; }
-    if (segments.indexOf('.') >= 0) { return 'segment « . »'; }
-    return segments.indexOf('') >= 0 ? 'segment vide' : null;
+    if (segments.indexOf('..') >= 0) { return I18n.t('zip.raison_hostile.remontee_dossier'); }
+    if (segments.indexOf('.') >= 0) { return I18n.t('zip.raison_hostile.segment'); }
+    return segments.indexOf('') >= 0 ? I18n.t('zip.raison_hostile.segment_vide') : null;
   }
 
   // Noms hostiles, doublons, chiffrement, méthode, données hors du fichier, puis tailles déclarées.
@@ -230,24 +227,20 @@ const ZipLecture = (function () {
     for (const entree of repertoire.entrees) {
       const raison = raisonHostile(entree.nom);
       if (raison) {
-        refuser('Ce ZIP contient un chemin dangereux : « ' + afficher(entree.nom === null ? '?' : entree.nom) + ' » ('
-          + raison + '). Il est refusé.');
+        refuser(I18n.t('zip.controler_entrees.zip_contient_chemin_dangereux', { afficher: afficher(entree.nom === null ? '?' : entree.nom), raison }));
       }
       const cle = entree.nom.toLowerCase();
       if (vus.has(cle)) {
-        refuser('Ce ZIP contient deux fois « ' + afficher(entree.nom) + ' » : il est refusé (on ne saurait pas '
-          + 'lequel importer).');
+        refuser(I18n.t('zip.controler_entrees.zip_contient_deux_fois', { afficher: afficher(entree.nom) }));
       }
       vus.add(cle);
     }
     for (const entree of repertoire.entrees) {
       if (entree.drapeaux & 1) {
-        refuser('« ' + afficher(entree.nom) + ' » est chiffré dans ce ZIP : un export de Prévo ne l\'est jamais. '
-          + 'Il est refusé.');
+        refuser(I18n.t('zip.erreur.entree_chiffree', { afficher: afficher(entree.nom) }));
       }
       if (entree.methode !== 0 && entree.methode !== 8) {
-        refuser('« ' + afficher(entree.nom) + ' » est compressé par une méthode que Prévo ne lit pas (méthode '
-          + entree.methode + ') : ZIP refusé. Refaites l\'export.');
+        refuser(I18n.t('zip.erreur.methode_inconnue', { afficher: afficher(entree.nom), methode: entree.methode }));
       }
       // En-tête local (30 octets lus) et données avant le répertoire central, sinon 'format' (ZIP abîmé).
       await ZipFlux.positionDonnees(lecteur, entree, repertoire.debut);
@@ -261,22 +254,25 @@ const ZipLecture = (function () {
       if (entree.dossier) { continue; }
       if (entree.decompresse > LIMITES.seuilTaux
         && (entree.compresse === 0 || entree.decompresse / entree.compresse > LIMITES.taux)) {
-        const taux = entree.compresse === 0 ? 'infiniment'
-          : enChiffres(Math.round(entree.decompresse / entree.compresse)) + ' fois';
-        refuser('« ' + afficher(entree.nom) + ' » se décompresse ' + taux + ' plus gros qu\'il n\'est compressé '
-          + '(100 fois au plus) : bombe de décompression probable. Le ZIP est refusé.');
+        const nom = afficher(entree.nom);
+        const fois = Math.round(entree.decompresse / entree.compresse);
+        refuser(entree.compresse === 0
+          ? I18n.t('zip.controler_tailles_declarees.decompresse_infiniment_plus_gros', { nom, taux: LIMITES.taux })
+          : I18n.t('zip.controler_tailles_declarees.decompresse_fois_plus_gros', { n: fois, nom, nombre: enChiffres(fois), taux: LIMITES.taux }));
       }
-      const [limite, quoi] = entree.nom.indexOf('/') < 0 ? [LIMITES.racine, 'fichier de données']
-        : [LIMITES.document, 'document'];
+      const estDocument = entree.nom.indexOf('/') >= 0;
+      const limite = estDocument ? LIMITES.document : LIMITES.racine;
       if (entree.decompresse > limite) {
-        refuser('« ' + afficher(entree.nom) + ' » fait ' + enMoFace(entree.decompresse, limite)
-          + ' une fois décompressé : ' + enMo(limite) + ' au plus par ' + quoi + '. Le ZIP est refusé.');
+        const nom = afficher(entree.nom);
+        const fait = enMoFace(entree.decompresse, limite);
+        refuser(estDocument
+          ? I18n.t('zip.controler_tailles_declarees.fait_fois_decompresse_plus', { nom, fait, enMo: enMo(limite) })
+          : I18n.t('zip.controler_tailles_declarees.fait_fois_decompresse_plus_2', { nom, fait, enMo: enMo(limite) }));
       }
       total += entree.decompresse;
     }
     if (total > LIMITES.total) {
-      refuser('Ce ZIP fait ' + enMoFace(total, LIMITES.total) + ' une fois décompressé : ' + enMo(LIMITES.total)
-        + ' au plus. Il est refusé.');
+      refuser(I18n.t('zip.controler_tailles_declarees.zip_fait_fois_decompresse', { enMoFace: enMoFace(total, LIMITES.total), enMo: enMo(LIMITES.total) }));
     }
   }
 
@@ -286,13 +282,11 @@ const ZipLecture = (function () {
   // fin, taille et CRC-32 doivent être ceux du répertoire central.
 
   function abime(entree) {
-    return '« ' + afficher(entree.nom) + ' » est abîmé dans ce ZIP (contenu illisible, ou différent de ce que le ZIP '
-      + 'annonce) : il est refusé. Refaites l\'export.';
+    return I18n.t('zip.erreur.abime_contenu_illisible', { afficher: afficher(entree.nom) });
   }
 
   function bombe(entree) {
-    return '« ' + afficher(entree.nom) + ' » se décompresse plus gros que ce que le ZIP annonce : bombe de '
-      + 'décompression probable. Le ZIP est refusé.';
+    return I18n.t('zip.erreur.bombe_decompression', { afficher: afficher(entree.nom) });
   }
 
   // Erreur venue de ZipFlux → refus au message de ce module : 'bombe' et 'abime' (entrée en cause : erreur.nom),
@@ -306,7 +300,7 @@ const ZipLecture = (function () {
       return new Refus(erreur.code === 'abime' ? abime(entree) : erreur.message);
     }
     if (estErreurDeFichier(erreur)) {
-      return new Refus('Lecture du fichier impossible (' + (erreur.message || 'erreur inconnue') + ').');
+      return new Refus(I18n.t('zip.traduire.lecture_fichier_impossible', { motif: (erreur.message || I18n.t('commun.message.erreur_inconnue')) }));
     }
     return erreur;
   }
@@ -328,14 +322,14 @@ const ZipLecture = (function () {
     try {
       manifeste = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(contenu));
     } catch (erreur) {
-      refuser(MANIFESTE_ILLISIBLE);
+      refuser(manifesteIllisible());
     }
     const forme = Boolean(manifeste) && typeof manifeste === 'object' && !Array.isArray(manifeste)
       && Array.isArray(manifeste.fichiers) && manifeste.fichiers.every(fichierDecritValide)
       && (manifeste.format === undefined || manifeste.format === null
         || (Number.isInteger(manifeste.format) && manifeste.format >= 1));
     const noms = forme ? manifeste.fichiers.map(function (fichier) { return fichier.nom; }) : [];
-    if (!forme || new Set(noms).size !== noms.length) { refuser(MANIFESTE_ILLISIBLE); }
+    if (!forme || new Set(noms).size !== noms.length) { refuser(manifesteIllisible()); }
     return manifeste;
   }
 
@@ -347,9 +341,7 @@ const ZipLecture = (function () {
     const formats = [formatDuManifeste(manifeste), parametres ? Formats.versionDeBase(parametres.lignes) : null];
     const plusRecent = formats.find(function (format) { return format !== null && format > Formats.courant; });
     if (plusRecent !== undefined) {
-      refuser('Ce ZIP vient d\'une version plus récente de Prévo (format ' + plusRecent + ' des fichiers ; cette '
-        + 'version lit jusqu\'au format ' + Formats.courant + ') : il est refusé. Mettez Prévo à jour, puis '
-        + 'recommencez.');
+      refuser(I18n.t('zip.refuser_si_plus_recent.zip_vient_version_plus', { plusRecent, courant: Formats.courant }));
     }
   }
 
@@ -369,25 +361,21 @@ const ZipLecture = (function () {
   // taille et son empreinte SHA-256 exactes ; chaque fichier décrit est dans le ZIP.
   function verifierManifeste(manifeste, resumes) {
     if (!outilsCrypto()) {
-      refuser('Les empreintes du manifeste ne peuvent pas être vérifiées sur cette page (il faut un contexte '
-        + 'sécurisé : https, ou Prévo ouvert sur ce PC) : le ZIP est refusé.');
+      refuser(I18n.t('zip.verifier_manifeste.empreintes_manifeste_peuvent_pas'));
     }
     const decrits = new Set(manifeste.fichiers.map(function (fichier) { return fichier.nom; }));
     for (const nom of resumes.keys()) {
       if (!decrits.has(nom)) {
-        refuser('« ' + afficher(nom) + ' » n\'est pas décrit par le manifeste : le ZIP a été modifié après l\'export. '
-          + 'Il est refusé ; refaites l\'export.');
+        refuser(I18n.t('zip.verifier_manifeste.pas_decrit_manifeste_zip', { afficher: afficher(nom) }));
       }
     }
     for (const fichier of manifeste.fichiers) {
       const resume = resumes.get(fichier.nom);
       if (!resume) {
-        refuser('« ' + afficher(fichier.nom) + ' », décrit par le manifeste, manque dans le ZIP : il a été modifié '
-          + 'après l\'export. Il est refusé ; refaites l\'export.');
+        refuser(I18n.t('zip.verifier_manifeste.decrit_manifeste_manque_zip', { afficher: afficher(fichier.nom) }));
       }
       if (resume.taille !== fichier.octets || resume.empreinte !== fichier.sha256.toLowerCase()) {
-        refuser('« ' + afficher(fichier.nom) + ' » ne correspond pas à son empreinte dans le manifeste : le fichier '
-          + 'a été modifié ou abîmé après l\'export. Le ZIP est refusé ; refaites l\'export.');
+        refuser(I18n.t('zip.verifier_manifeste.correspond_pas_empreinte_manifeste', { afficher: afficher(fichier.nom) }));
       }
     }
   }
@@ -414,14 +402,11 @@ const ZipLecture = (function () {
   function controlerNomsAdmis(entrees, fichiersTables) {
     const refusees = entrees.filter(function (entree) { return genreDe(entree, fichiersTables) === null; });
     if (refusees.length) {
-      const autres = refusees.length > 1 ? ' (et ' + enChiffres(refusees.length - 1) + ' autre(s))' : '';
-      refuser('Ce ZIP contient un fichier qui ne vient pas d\'un export de Prévo : « ' + afficher(refusees[0].nom)
-        + ' »' + autres + '. Seuls sont admis les fichiers CSV des tables (à la racine du ZIP), le dossier '
-        + 'documents/ (documents aux noms autorisés) et manifeste.json. Le ZIP est refusé.');
+      const autres = refusees.length > 1 ? ' ' + I18n.t('zip.controler_noms_admis.en_chiffres_autre', { n: refusees.length - 1, nombre: enChiffres(refusees.length - 1) }) : '';
+      refuser(I18n.t('zip.controler_noms_admis.zip_contient_fichier_vient', { afficher: afficher(refusees[0].nom), autres }));
     }
     if (!entrees.some(function (entree) { return genreDe(entree, fichiersTables) === 'table'; })) {
-      refuser('Ce ZIP ne contient aucun fichier CSV de table (equipements.csv, ordres_travail.csv…) : ce n\'est pas '
-        + 'un export de données de Prévo. Il est refusé.');
+      refuser(I18n.t('zip.controler_noms_admis.zip_contient_aucun_fichier'));
     }
   }
 
@@ -429,20 +414,17 @@ const ZipLecture = (function () {
   function problemesManquants(manifeste) {
     const manquants = manifeste && Array.isArray(manifeste.manquants) ? manifeste.manquants : [];
     return manquants.filter(function (nom) { return typeof nom === 'string'; }).map(function (nom) {
-      return probleme('attention', 'document', null, 'Le document « ' + afficher(nom) + ' » était introuvable lors '
-        + 'de l\'export : il n\'est pas dans le ZIP.');
+      return probleme('attention', 'document', null, I18n.t('zip.problemes_manquants.document_etait_introuvable_lors', { afficher: afficher(nom) }));
     });
   }
 
   // --- Lecture complète --------------------------------------------------------------------------------------------
 
   function exigerDependances() {
-    const manquantes = [['ZipFlux', typeof ZipFlux], ['Schema', typeof Schema], ['Formats', typeof Formats],
-      ['Donnees', typeof Donnees], ['ZipTables', typeof ZipTables]]
-      .filter(function (paire) { return paire[1] === 'undefined'; });
+    const manquantes = Object.entries({ ZipFlux: typeof ZipFlux, Schema: typeof Schema, Formats: typeof Formats, Donnees: typeof Donnees,
+      ZipTables: typeof ZipTables }).filter(function (paire) { return paire[1] === 'undefined'; });
     if (manquantes.length) {
-      throw new Error('ZipLecture : à charger après ' + manquantes.map(function (paire) { return paire[0]; }).join(', ')
-        + ' (ordre de index.html).');
+      throw new Error(I18n.t('zip.exiger_dependances.zip_lecture_charger_apres_ordre', { modules: manquantes.map(function (paire) { return paire[0]; }).join(', ') }));
     }
   }
 
@@ -454,7 +436,7 @@ const ZipLecture = (function () {
       await controlerEntrees(lecteur, repertoire);
       return repertoire;
     } catch (erreur) {
-      if (erreur instanceof RangeError) { refuser(ZIP_ABIME); }
+      if (erreur instanceof RangeError) { refuser(zipAbime()); }
       throw erreur;
     }
   }
@@ -510,8 +492,7 @@ const ZipLecture = (function () {
     for (const contenu of contenus.values()) { memoire.racine += contenu.byteLength; }
     if (manifeste) { verifierManifeste(manifeste, resumes); }
     if (manifeste && manifeste.documents === 'exclus' && documents.size) {
-      refuser('Le manifeste dit que ce ZIP ne contient pas les documents (données seules), mais il en contient : il a '
-        + 'été modifié après l\'export. Il est refusé ; refaites l\'export.');
+      refuser(I18n.t('zip.lire_et_controler.manifeste_dit_zip_contient'));
     }
 
     // 11 (après le manifeste : un CSV abîmé n'est accepté que marqué, à l'empreinte vérifiée, T213).
@@ -534,8 +515,7 @@ const ZipLecture = (function () {
     const lecture = LECTURES.get(lu);
     const document = lecture ? lecture.documents.get(nom) : undefined;
     if (!document) {
-      throw new Error('ZipLecture.lireDocument : « ' + afficher(String(nom)) + ' » n\'est pas un document d\'un ZIP '
-        + 'accepté par ZipLecture.lire.');
+      throw new Error(I18n.t('zip.lire_document.zip_lecture_lire_document_pas_document', { afficher: afficher(String(nom)) }));
     }
     let contenu = null;
     try {
@@ -543,13 +523,18 @@ const ZipLecture = (function () {
     } catch (erreur) {
       if (!estErreurDeFichier(erreur)) { throw traduire(erreur); }
       const nomZip = typeof lecture.blob.name === 'string' && lecture.blob.name !== '' ? lecture.blob.name : null;
-      refuser((nomZip === null ? 'Le fichier ZIP' : 'Le fichier « ' + afficher(nomZip) + ' »') + ' a été modifié, '
-        + 'déplacé ou supprimé depuis sa vérification : il n\'est pas importé. Relancez l\'import.'
-        + (erreur.name === 'NotFoundError' ? ' Vérifiez qu\'il est toujours à sa place.' : ''));
+      const retrouve = erreur.name === 'NotFoundError';
+      if (nomZip === null) {
+        refuser(retrouve
+          ? I18n.t('zip.lire_document.fichier_zip_ete_modifie')
+          : I18n.t('zip.lire_document.fichier_zip_ete_modifie_2'));
+      }
+      refuser(retrouve
+        ? I18n.t('zip.lire_document.fichier_ete_modifie_deplace', { afficher: afficher(nomZip) })
+        : I18n.t('zip.lire_document.fichier_ete_modifie_deplace_2', { afficher: afficher(nomZip) }));
     }
     if (document.resume.empreinte !== null && (await resumer(contenu)).empreinte !== document.resume.empreinte) {
-      refuser('« ' + afficher(document.entree.nom) + ' » a changé depuis le contrôle du ZIP (son empreinte ne '
-        + 'correspond plus) : il n\'est pas importé.');
+      refuser(I18n.t('zip.lire_document.change_depuis_controle_zip', { afficher: afficher(document.entree.nom) }));
     }
     return contenu;
   }

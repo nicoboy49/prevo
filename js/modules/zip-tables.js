@@ -40,9 +40,9 @@ const ZipTables = (function () {
   // Raison de refuser un CSV lu (format 0 : en-tête illisible ; abîmé : le réécrire en perdrait une partie), ou null.
   function raisonCsvIllisible(nomTable, lu) {
     if (lu.entete.length > 0 && Formats.formatDuFichier(nomTable, lu.entete) === 0) {
-      return 'sa ligne d\'en-tête est incomplète ou illisible : des colonnes du format 1 y manquent';
+      return I18n.t('zip.raison_csv_illisible.ligne_tete_incomplete_illisible');
     }
-    return lu.abime ? 'sa structure est abîmée, ou des lignes ont des valeurs au-delà de l\'en-tête' : null;
+    return lu.abime ? I18n.t('zip.raison_csv_illisible.structure_abimee_lignes_ont') : null;
   }
 
   // Fichiers marqués « abime »: true par le manifeste (T213) → Map nom → date « abime_depuis » (ou null si absente
@@ -69,8 +69,7 @@ const ZipTables = (function () {
       const lu = deja[nomTable] || Donnees.csv.analyser(nomTable, contenus.get(fichier));
       const raison = raisonCsvIllisible(nomTable, lu);
       if (raison && !marques.has(fichier)) {
-        return { refus: '« ' + fichier + ' » est illisible (' + raison + ') : on ne remplace pas une base par un '
-          + 'fichier illisible. Le ZIP est refusé ; corrigez ce fichier ou refaites l\'export.' };
+        return { refus: I18n.t('zip.lire_tables.illisible_remplace_pas_base', { fichier, raison }) };
       }
       tables[nomTable] = { entete: lu.entete, lignes: lu.lignes, colonnesInconnues: lu.colonnesInconnues };
       if (raison) {
@@ -100,8 +99,8 @@ const ZipTables = (function () {
       const nouvelle = Formats.tables(formatOrigine).indexOf(nomTable) < 0;
       problemes.push(probleme(nouvelle ? 'info' : 'attention', 'table', nomTable, description.libelle + ' : '
         + description.fichier + (nouvelle
-          ? ' n\'existait pas au format ' + formatOrigine + ' ; la table sera vide après l\'import.'
-          : ' est absent du ZIP ; l\'import videra cette table.')));
+          ? ' ' + I18n.t('zip.completer_absentes.existait_pas_format_table', { formatOrigine })
+          : ' ' + I18n.t('zip.completer_absentes.absent_zip_import_videra'))));
     }
     return { absentes: absentes, problemes: problemes };
   }

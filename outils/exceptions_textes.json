@@ -56,6 +56,20 @@
       "raison": "Contexte de App.signalerErreur(erreur, contexte) : écrit seulement dans la console (console.warn de js/app.js) ; l'écran ne montre que le message de l'erreur (T237)."
     },
     {
+      "appel": "pendant",
+      "argument": 1,
+      "fichiers": [
+        "js/modules/parametres.js",
+        "js/modules/parametres-acces.js",
+        "js/modules/parametres-codes.js",
+        "js/modules/parametres-sauvegardes.js",
+        "js/modules/parametres-solo.js",
+        "js/modules/parametres-zip.js"
+      ],
+      "classe": "D157",
+      "raison": "Contexte de pendant(bouton, contexte, action) des cartes de Paramètres : transmis tel quel à App.signalerErreur, qui ne l'écrit que dans la console (T245)."
+    },
+    {
       "appel": "V",
       "argument": 4,
       "fichiers": [

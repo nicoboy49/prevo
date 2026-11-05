@@ -10,9 +10,9 @@ Object.assign(Parametres, (() => {
 
   // Familles, dans l'ordre d'affichage : lettre du code proposé (S01, C03, R02…) et titre.
   const FAMILLES = [
-    { famille: 'symptôme', lettre: 'S', titre: 'Symptômes' },
-    { famille: 'cause', lettre: 'C', titre: 'Causes' },
-    { famille: 'remède', lettre: 'R', titre: 'Remèdes' },
+    { famille: 'symptôme', lettre: 'S', get titre() { return I18n.t('parametres.titre.symptomes'); } },
+    { famille: 'cause', lettre: 'C', get titre() { return I18n.t('parametres.titre.causes'); } },
+    { famille: 'remède', lettre: 'R', get titre() { return I18n.t('parametres.titre.remedes'); } },
   ];
   const NUMERO_AUTRE = 99;                    // S99, C99 : « Autre » par convention, jamais proposé
   const MOTIF_CODE = /^[A-Z0-9][A-Z0-9_-]{0,11}$/;
@@ -67,20 +67,20 @@ Object.assign(Parametres, (() => {
   function verifierCode(valeurs, lignes, idCourant) {
     const erreurs = [];
     const famille = definitionFamille(valeurs.famille);
-    if (!famille) erreurs.push({ nom: 'famille', message: 'Choisissez la famille du code : symptôme, cause ou remède.' });
+    if (!famille) erreurs.push({ nom: 'famille', message: I18n.t('parametres.verifier_code.choisissez_famille_code_symptome') });
     const code = codeNormalise(valeurs.code);
     if (!MOTIF_CODE.test(code)) {
-      erreurs.push({ nom: 'code', message: 'Le code s\'écrit en lettres et chiffres, sans espace, 12 caractères au plus (ex. C15).' });
+      erreurs.push({ nom: 'code', message: I18n.t('parametres.verifier_code.code_ecrit_lettres_chiffres') });
     } else {
       const double = lignes.find((ligne) => ligne.id !== idCourant && codeNormalise(ligne.code) === code);
-      if (double) erreurs.push({ nom: 'code', message: 'Le code ' + code + ' existe déjà (' + double.famille + ' : ' + double.libelle + ').' });
+      if (double) erreurs.push({ nom: 'code', message: I18n.t('parametres.verifier_code.code_existe_deja', { code, famille: double.famille, doubleLibelle: double.libelle }) });
     }
     const libelle = texte(valeurs.libelle);
-    if (!libelle) erreurs.push({ nom: 'libelle', message: 'Le libellé est obligatoire (ex. Joint usé).' });
+    if (!libelle) erreurs.push({ nom: 'libelle', message: I18n.t('parametres.verifier_code.libelle_obligatoire_ex_joint') });
     else if (famille) {
       const double = lignes.find((ligne) => ligne.id !== idCourant && ligne.famille === famille.famille
         && UI.normaliserRecherche(ligne.libelle) === UI.normaliserRecherche(libelle));
-      if (double) erreurs.push({ nom: 'libelle', message: 'Ce libellé existe déjà dans la famille « ' + famille.famille + ' » (' + double.code + ').' });
+      if (double) erreurs.push({ nom: 'libelle', message: I18n.t('parametres.verifier_code.libelle_existe_deja_famille', { famille: famille.famille, doubleCode: double.code }) });
     }
     return erreurs;
   }
@@ -115,7 +115,7 @@ Object.assign(Parametres, (() => {
     const nouveau = texte(libelle);
     return Donnees.modifier('codes_defaillance', (lignes) => {
       const ligne = lignes.find((l) => l.id === id);
-      if (!ligne) throw new Donnees.ErreurValidation('Le code ' + id + ' est introuvable.');
+      if (!ligne) throw new Donnees.ErreurValidation(I18n.t('parametres.modifier_libelle_code.code_introuvable', { id }));
       const erreurs = verifierCode(Object.assign({}, ligne, { libelle: nouveau }), lignes, id).filter((erreur) => erreur.nom === 'libelle');
       refuserSiErreurs(erreurs);
       if (texte(ligne.libelle) === nouveau) return false;
@@ -141,8 +141,8 @@ Object.assign(Parametres, (() => {
         ${codes.length ? UI.html`<ul class="codes-liste">${codes.map((ligne) => UI.html`<li data-code="${ligne.id}">
           <b class="codes-code">${ligne.code}</b><span class="codes-libelle">${ligne.libelle}</span>
           <button type="button" class="btn btn-fantome codes-modifier" data-code-modifier="${ligne.id}"
-            aria-label="Modifier le libellé du code ${ligne.code}">Modifier</button></li>`)}</ul>`
-          : UI.html`<p class="muted">Aucun code dans cette famille.</p>`}
+            aria-label="${I18n.t('parametres.liste_familles.modifier_libelle_code', { ligneCode: ligne.code })}">${I18n.t('commun.bouton.modifier')}</button></li>`)}</ul>`
+          : UI.html`<p class="muted">${I18n.t('parametres.liste_familles.aucun_code_famille')}</p>`}
       </section>`;
     });
   }
@@ -151,12 +151,12 @@ Object.assign(Parametres, (() => {
     const formulaire = UI.element(UI.html`<form id="form-code" class="form-grille codes-ajout" novalidate></form>`);
     formulaire.appendChild(UI.champ(Schema.champ('codes_defaillance', 'famille'), familleChoisie));
     formulaire.appendChild(UI.champ(Schema.champ('codes_defaillance', 'code'), codePropose(familleChoisie),
-      { aide: 'Proposé : lettre de la famille + numéro suivant. Modifiable ; il ne pourra plus changer ensuite.', attributs: { maxlength: '12', autocomplete: 'off' } }));
-    const libelle = UI.champ(Schema.champ('codes_defaillance', 'libelle'), '', { placeholder: 'Ex. Joint de couvercle usé', attributs: { maxlength: '80' } });
+      { aide: I18n.t('parametres.formulaire_ajout.propose_lettre_famille_numero'), attributs: { maxlength: '12', autocomplete: 'off' } }));
+    const libelle = UI.champ(Schema.champ('codes_defaillance', 'libelle'), '', { placeholder: I18n.t('parametres.formulaire_ajout.ex_joint_couvercle_use'), attributs: { maxlength: '80' } });
     libelle.classList.add('large');
     formulaire.appendChild(libelle);
     formulaire.appendChild(UI.element(UI.html`<div class="actions"><span class="espace"></span>
-      <button type="submit" class="btn btn-primaire">${UI.icone('ajouter')}Ajouter le code</button></div>`));
+      <button type="submit" class="btn btn-primaire">${UI.icone('ajouter')}${I18n.t('parametres.formulaire_ajout.ajouter_code')}</button></div>`));
     UI.$('[name=famille]', formulaire).addEventListener('change', (evenement) => {
       familleChoisie = evenement.target.value;
       UI.$('[name=code]', formulaire).value = codePropose(familleChoisie);
@@ -185,7 +185,7 @@ Object.assign(Parametres, (() => {
     try {
       await ajouterCode(valeurs);
       App.marquerSaisie(false);
-      UI.toast('Code ajouté : ' + codeNormalise(valeurs.code) + ' — ' + texte(valeurs.libelle) + '.', 'succes');
+      UI.toast(I18n.t('parametres.enregistrer_ajout.code_ajoute', { codeNormalise: codeNormalise(valeurs.code), valeursLibelle: texte(valeurs.libelle) }), 'succes');
       remplirCarte(formulaire.closest('#zone-codes'));
     } catch (erreur) {
       App.signalerErreur(erreur, 'ajout d\'un code de défaillance');
@@ -196,7 +196,7 @@ Object.assign(Parametres, (() => {
 
   async function ouvrirModification(ligne, zone) {
     const champ = UI.champ(Schema.champ('codes_defaillance', 'libelle'), ligne.libelle, { attributs: { maxlength: '80' } });
-    const contenu = UI.element(UI.html`<div class="form-colonne"><p>Code <b>${ligne.code}</b> (${ligne.famille}). Les OT qui le citent afficheront le nouveau libellé.</p></div>`);
+    const contenu = UI.element(UI.html`<div class="form-colonne"><p>${I18n.html('parametres.ouvrir_modification.code_ot_citent_afficheront', { ligneCode: ligne.code, famille: ligne.famille })}</p></div>`);
     contenu.appendChild(champ);
     let fait = false;
     let fermer = null;
@@ -216,8 +216,8 @@ Object.assign(Parametres, (() => {
       }
     };
     const choix = await UI.fenetre({
-      titre: 'Modifier le libellé', contenu,
-      boutons: [{ libelle: 'Annuler', valeur: null, classe: 'btn-fantome' }, { libelle: 'Enregistrer', valeur: 'ok', classe: 'btn-primaire', defaut: true }],
+      titre: I18n.t('parametres.ouvrir_modification.modifier_libelle'), contenu,
+      boutons: [{ libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' }, { libelle: I18n.t('commun.bouton.enregistrer'), valeur: 'ok', classe: 'btn-primaire', defaut: true }],
       surOuverture(dialogue, fermerFenetre) { fermer = fermerFenetre; },
       avantFermeture(valeur) {
         if (valeur !== 'ok' || fait) return true;
@@ -226,7 +226,7 @@ Object.assign(Parametres, (() => {
       },
     });
     if (choix !== 'ok') return;
-    UI.toast('Libellé modifié.', 'succes');
+    UI.toast(I18n.t('parametres.ouvrir_modification.libelle_modifie'), 'succes');
     remplirCarte(zone);
   }
 
@@ -234,9 +234,8 @@ Object.assign(Parametres, (() => {
   function remplirCarte(zone) {
     if (!zone) return;
     UI.remplir(zone, UI.html`<article class="carte" id="carte-codes">
-      <div class="entete-carte"><h2>Codes de défaillance <span class="badge">${Donnees.lignes('codes_defaillance').length}</span></h2></div>
-      <p class="note codes-explication">Ces listes alimentent les demandes et le compte rendu des OT (symptôme, cause, remède) ; l'IA ne propose
-        que ces codes. Un code n'est jamais supprimé, car d'anciens OT le citent : corrigez plutôt son libellé.</p>
+      <div class="entete-carte"><h2>${I18n.html('parametres.remplir_carte.codes_defaillance', { nombre: Donnees.lignes('codes_defaillance').length })}</h2></div>
+      <p class="note codes-explication">${I18n.t('parametres.remplir_carte.listes_alimentent_demandes_compte')}</p>
       <div class="codes-zone-ajout"></div>
       <div class="grille codes-familles">${listeFamilles()}</div>
     </article>`);

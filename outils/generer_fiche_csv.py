@@ -623,17 +623,26 @@ def lire_serveur():
 def lire_reglages_parametres(cles):
     """{ clé : {libelle, valeurs, defaut} } des réglages « cles » du tableau REGLAGES de js/modules/parametres.js."""
     texte = FICHIER_PARAMETRES.read_text(encoding="utf-8")
+    debut = texte.index("const REGLAGES = [")
+    textes_francais = None
     trouves = {}
-    for bloc in re.finditer(r"\{\s*cle: '([a-z0-9_]+)'(.*?)\}", texte, re.DOTALL):
-        cle, corps = bloc.group(1), bloc.group(2)
+    # un enregistrement par ligne « { cle: 'nom', … » ; les libellés sont des accesseurs « get libelle() » (T245)
+    for corps in re.split(r"(?m)^    \{ cle: '", texte[debut:texte.index("\n  ];", debut)])[1:]:
+        cle = re.match(r"([a-z0-9_]+)'", corps).group(1)
         if cle not in cles:
             continue
         libelle = re.search(r"libelle: '((?:[^'\\]|\\.)*)'", corps)
+        accesseur = re.search(r"get libelle\(\) \{ return I18n\.t\('([a-z0-9_.]+)'\); \}", corps)
         defaut = re.search(r"defaut: '([^']*)'", corps)
         valeurs = re.search(r"valeurs: \[([^\]]*)\]", corps)
-        if not libelle or not defaut:
+        if accesseur:
+            textes_francais = textes_francais or lire_textes_francais()
+            libelle_texte = textes_francais.get(accesseur.group(1))
+        else:
+            libelle_texte = re.sub(r"\\(.)", r"\1", libelle.group(1)) if libelle else None
+        if not libelle_texte or not defaut:
             raise ErreurLectureLot7("réglage « %s » sans libellé ou sans défaut dans %s" % (cle, FICHIER_PARAMETRES.name))
-        trouves[cle] = {"libelle": re.sub(r"\\(.)", r"\1", libelle.group(1)), "defaut": defaut.group(1),
+        trouves[cle] = {"libelle": libelle_texte, "defaut": defaut.group(1),
                         "valeurs": re.findall(r"'([^']*)'", valeurs.group(1)) if valeurs else []}
     manquants = [cle for cle in cles if cle not in trouves]
     if manquants:

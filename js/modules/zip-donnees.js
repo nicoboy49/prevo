@@ -63,8 +63,7 @@ const ZipDonnees = (() => {
   // de l'horodatage que le serveur impose depuis le lot 7 (« AAAAMMJJ-HHMMSS- », MOTIF_NOM_DOCUMENT_ENREGISTRE).
   const MOTIF_NOM_DOCUMENT = /^(?:[0-9]{8}-[0-9]{6}-)?[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
   const MOTIF_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;      // « abime_depuis » (fichiers-abimes.json, T206)
-  const RAISON_RESERVE = 'L\'export ZIP est réservé au responsable : avec les comptes, les autres rôles ne voient '
-    + 'qu\'une partie des données, et l\'export serait incomplet.';
+  const raisonReserve = () => I18n.t('zip.raison_reserve.export_zip_reserve_responsable');
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -106,7 +105,7 @@ const ZipDonnees = (() => {
   /** { permis, raison } : avec les comptes, seul le responsable exporte (raison : la phrase à montrer sinon). */
   function exportPermis() {
     const reserve = typeof App !== 'undefined' && App.comptesExiges() && !App.estResponsable();
-    return { permis: !reserve, raison: reserve ? RAISON_RESERVE : '' };
+    return { permis: !reserve, raison: reserve ? raisonReserve() : '' };
   }
 
   // Blob (ou File) → Uint8Array.
@@ -173,7 +172,7 @@ const ZipDonnees = (() => {
   // « 52,3 Mo » ; « plus de <limite> » quand l'arrondi égalerait la limite (la limite et quelques octets).
   function taille(octets, limite) {
     const texte = ZipLecture.enMo(octets);
-    return texte === ZipLecture.enMo(limite) ? 'plus de ' + texte : texte;
+    return texte === ZipLecture.enMo(limite) ? I18n.t('zip.taille.plus_de', { texte }) : texte;
   }
 
   // Vrai pour une entrée documents/<nom> dont l'extension est dans DEJA_COMPRESSES.
@@ -194,30 +193,31 @@ const ZipDonnees = (() => {
    */
   function depassements(entrees, incomplet) {
     const limites = ZipLecture.LIMITES;
-    const auMoins = incomplet ? 'au moins ' : '';
     const phrases = [];
     let total = 0;
     entrees.forEach((entree) => {
       const document = entree.nom.startsWith(DOSSIER_DOCUMENTS);
       const limite = document ? limites.document : limites.racine;
       if (entree.taille > limite) {
-        phrases.push('« ' + entree.nom + ' » fait ' + taille(entree.taille, limite) + ' (' + ZipLecture.enMo(limite)
-          + ' au plus par ' + (document ? 'document' : 'fichier de données') + ')');
+        phrases.push(document
+          ? I18n.t('zip.depassements.fait_plus_document', { entreeNom: entree.nom, taille: taille(entree.taille, limite), enMo: ZipLecture.enMo(limite) })
+          : I18n.t('zip.depassements.fait_plus_fichier_donnees', { entreeNom: entree.nom, taille: taille(entree.taille, limite), enMo: ZipLecture.enMo(limite) }));
       }
       total += entree.taille;
     });
     if (entrees.length > limites.entrees) {
-      phrases.push('le ZIP compterait ' + auMoins + chiffres(entrees.length) + ' fichiers (' + chiffres(limites.entrees)
-        + ' au plus)');
+      phrases.push(incomplet
+        ? I18n.t('zip.depassements.zip_compterait_moins_fichiers', { n: entrees.length, nombre: chiffres(entrees.length), limite: chiffres(limites.entrees) })
+        : I18n.t('zip.depassements.zip_compterait_fichiers_plus', { n: entrees.length, nombre: chiffres(entrees.length), limite: chiffres(limites.entrees) }));
     }
     if (total > limites.total) {
-      phrases.push('le contenu ferait ' + auMoins + taille(total, limites.total) + ' une fois décompressé ('
-        + ZipLecture.enMo(limites.total) + ' au plus)');
+      phrases.push(incomplet
+        ? I18n.t('zip.depassements.contenu_ferait_moins_fois', { taille: taille(total, limites.total), enMo: ZipLecture.enMo(limites.total) })
+        : I18n.t('zip.depassements.contenu_ferait_fois_decompresse', { taille: taille(total, limites.total), enMo: ZipLecture.enMo(limites.total) }));
     }
     const minimum = tailleMinimaleZip(entrees);
     if (minimum > limites.zip) {
-      phrases.push('le ZIP ferait au moins ' + taille(minimum, limites.zip) + ', photos et documents déjà compressés ('
-        + ZipLecture.enMo(limites.zip) + ' au plus)');
+      phrases.push(I18n.t('zip.depassements.zip_ferait_moins_photos', { taille: taille(minimum, limites.zip), enMo: ZipLecture.enMo(limites.zip) }));
     }
     return phrases;
   }
@@ -225,17 +225,16 @@ const ZipDonnees = (() => {
   // Message du refus : ce qui dépasse (quatre phrases au plus), et rien n'est produit.
   function refusDe(phrases) {
     const montrees = phrases.slice(0, 4);
-    const suite = phrases.length > montrees.length ? ' ; et ' + (phrases.length - montrees.length) + ' autre(s)' : '';
-    const texte = montrees.join(' ; ') + suite;
-    return 'Export impossible : l\'import de Prévo refuserait ce ZIP. ' + texte.charAt(0).toUpperCase() + texte.slice(1)
-      + '. Aucun ZIP n\'a été produit.';
+    const autres = phrases.length - montrees.length;
+    const texte = montrees.join(' ; ') + (autres > 0 ? ' ' + I18n.t('zip.refus_de.n_autre', { n: autres }) : '');
+    return I18n.t('zip.refus_de.export_impossible_import_prevo', { debut: texte.charAt(0).toUpperCase(), suite: texte.slice(1) });
   }
 
   // Fenêtre du refus (#export-zip-refus), sans attendre qu'elle soit fermée.
   function prevenir(refus) {
     const contenu = UI.element(UI.html`<div class="form-colonne" id="export-zip-refus"></div>`);
     contenu.appendChild(UI.bandeau('important', refus));
-    UI.fenetre({ titre: 'Export ZIP impossible', contenu: contenu });
+    UI.fenetre({ titre: I18n.t('zip.prevenir.export_zip_impossible'), contenu: contenu });
   }
 
   // --- Avertissement avant un gros export (T222 ; seuil et texte revus par T215) -------------------------------------
@@ -256,10 +255,7 @@ const ZipDonnees = (() => {
     if (resultat.refus || resultat.sansDocuments) return null;
     const octets = resultat.fichiers.reduce((somme, fichier) => somme + fichier.taille, 0);
     if (octets <= AVERTISSEMENT.contenu) return null;
-    return 'Ce ZIP contiendrait ' + taille(octets, AVERTISSEMENT.contenu) + ' de données et de documents. Le '
-      + 'construire demande au navigateur jusqu\'à une fois et demie cette taille en mémoire : sur un PC de 4 Go, il '
-      + 'peut ralentir fortement, voire s\'arrêter. L\'export des données seules (sans les documents) est bien plus '
-      + 'léger et s\'importe comme l\'export complet : les documents déjà présents sont alors gardés tels quels.';
+    return I18n.t('zip.avertissement.zip_contiendrait_donnees_documents', { taille: taille(octets, AVERTISSEMENT.contenu) });
   }
 
   // Fenêtre de l'avertissement (#export-zip-avertissement) → 'seules', 'complet', ou null (Annuler, Échap, croix).
@@ -267,12 +263,12 @@ const ZipDonnees = (() => {
     const contenu = UI.element(UI.html`<div class="form-colonne" id="export-zip-avertissement"></div>`);
     contenu.appendChild(UI.bandeau('attention', texte));
     return UI.fenetre({
-      titre: 'Export ZIP volumineux',
+      titre: I18n.t('zip.demander_si_gros.export_zip_volumineux'),
       contenu: contenu,
       boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
-        { libelle: 'Continuer l\'export complet', valeur: 'complet', classe: 'btn-secondaire' },
-        { libelle: 'Exporter les données seules', valeur: 'seules', classe: 'btn-primaire', defaut: true },
+        { libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' },
+        { libelle: I18n.t('zip.demander_si_gros.continuer_export_complet'), valeur: 'complet', classe: 'btn-secondaire' },
+        { libelle: I18n.t('zip.demander_si_gros.exporter_donnees_seules'), valeur: 'seules', classe: 'btn-primaire', defaut: true },
       ],
     });
   }
@@ -451,13 +447,12 @@ const ZipDonnees = (() => {
 
   // Message montré après l'export (inchangé depuis le lot 1, plus les noms des documents introuvables).
   function message(resultat) {
-    let phrase = 'Export téléchargé : ' + resultat.csv + ' fichiers CSV';
-    if (resultat.sansDocuments) return phrase + ', sans les documents (données seules).';
-    if (resultat.documents) phrase += ' et ' + resultat.documents + ' document(s)';
+    let phrase = I18n.t('zip.message.export_telecharge_fichiers_csv', { n: resultat.csv });
+    if (resultat.sansDocuments) return I18n.t('zip.message.sans_documents_donnees_seules', { phrase });
+    if (resultat.documents) phrase += ' ' + I18n.t('zip.message.n_document', { n: resultat.documents });
     if (resultat.manquants.length) {
-      const montres = resultat.manquants.slice(0, 3).join(', ') + (resultat.manquants.length > 3 ? '…' : '');
-      phrase += ' (' + resultat.manquants.length + ' document(s) introuvable(s) : ' + montres
-        + ' ; liste dans manifeste.json)';
+      const montres = resultat.manquants.slice(0, 3).join(', ') + (resultat.manquants.length > 3 ? I18n.t('zip.message.liste_tronquee') : '');
+      phrase += ' ' + I18n.t('zip.message.document_introuvable_liste_manifeste', { n: resultat.manquants.length, montres });
     }
     return phrase + '.';
   }
@@ -511,8 +506,7 @@ const ZipDonnees = (() => {
         return resultat;
       }
       if (blob) {
-        resultat.refus = refusDe(['le ZIP ferait ' + taille(blob.size, limite) + ' (' + ZipLecture.enMo(limite)
-          + ' au plus)']);
+        resultat.refus = refusDe([I18n.t('zip.exporter.zip_ferait_plus', { taille: taille(blob.size, limite), enMo: ZipLecture.enMo(limite) })]);
       }
     }
     prevenir(resultat.refus);

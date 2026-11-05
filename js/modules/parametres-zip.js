@@ -41,10 +41,10 @@ const ParametresZip = (() => {
   const PREFIXE_HORODATAGE = /^[0-9]{8}-[0-9]{6}-/;    // préfixe que le serveur impose aux documents (audit F4)
   const LONGUEUR_NOM_MAX = 128;                         // nom demandé d'un document (MOTIF_NOM_DOCUMENT de serveur.py)
   const ESSAIS_DE_NOM = 20;
-  const AVERTISSEMENT = 'Toutes les données actuelles seront remplacées ; une sauvegarde complète, documents compris, '
-    + 'est faite juste avant ; les comptes et l\'accès ne sont pas touchés.';
-  const RAISON_RESERVE = 'L\'import ZIP est réservé au responsable : il remplace toutes les données.';
-  const RAISON_DEMO = 'Import ZIP indisponible en démo : rien n\'y est enregistré.';
+  // Textes lus à l'affichage (fonctions), jamais figés au chargement du module.
+  const avertissement = () => I18n.t('zip.avertissement.toutes_donnees_actuelles_seront');
+  const raisonReserve = () => I18n.t('zip.raison_reserve.import_zip_reserve_responsable');
+  const raisonDemo = () => I18n.t('zip.raison_demo.import_zip_indisponible_demo');
   const PROBLEMES_MONTRES = 5;
 
   function texte(valeur) {
@@ -57,13 +57,13 @@ const ParametresZip = (() => {
 
   // Message d'une erreur sans point final (pour l'insérer au milieu d'une phrase).
   function sansPoint(erreur) {
-    return String((erreur && erreur.message) || erreur || 'erreur inconnue').replace(/[\s.]+$/, '');
+    return String((erreur && erreur.message) || erreur || I18n.t('commun.message.erreur_inconnue')).replace(/[\s.]+$/, '');
   }
 
   // Nom du fichier choisi, pour les messages et le journal : sans caractère de contrôle, 120 caractères au plus.
   function nomAffiche(nom) {
     const propre = texte(nom).replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ');
-    return (propre.length > 120 ? propre.slice(0, 119) + '…' : propre) || 'fichier sans nom';
+    return (propre.length > 120 ? I18n.t('zip.afficher.nom_tronque', { texte: propre.slice(0, 119) }) : propre) || I18n.t('zip.nom_affiche.fichier_sans_nom');
   }
 
   function libelleTable(nomTable) {
@@ -84,12 +84,12 @@ const ParametresZip = (() => {
 
   /** { visible, permis, raison } : le bouton est-il montré, l'import permis, sinon pourquoi (phrase à montrer). */
   function etat() {
-    if (!ZipDonnees.exportPermis().permis) return { visible: false, permis: false, raison: RAISON_RESERVE };
-    if (App.mode === 'demo') return { visible: true, permis: false, raison: RAISON_DEMO };
+    if (!ZipDonnees.exportPermis().permis) return { visible: false, permis: false, raison: raisonReserve() };
+    if (App.mode === 'demo') return { visible: true, permis: false, raison: raisonDemo() };
     if (Donnees.lectureSeule()) {
       const format = Donnees.etatDuFormat().base;
       return { visible: true, permis: false,
-        raison: 'Import ZIP refusé. ' + new Donnees.ErreurLectureSeule(format).message };
+        raison: I18n.t('zip.etat.import_zip_refuse', { motif: new Donnees.ErreurLectureSeule(format).message }) };
     }
     return { visible: true, permis: true, raison: '' };
   }
@@ -98,12 +98,10 @@ const ParametresZip = (() => {
   function bloc() {
     if (!etat().visible) return '';
     return UI.html`<div class="import-zip" id="zone-import-zip">
-      <p class="note sauvegardes-explication">« Importer un ZIP… » remplace toutes les données par celles d'un ZIP
-        exporté par Prévo (« Exporter en ZIP »), après confirmation et une sauvegarde complète faite juste avant.
-        Les comptes et l'accès ne sont pas touchés.</p>
-      ${App.mode === 'demo' ? UI.html`<p class="note" id="note-import-zip">${RAISON_DEMO}</p>` : ''}
+      <p class="note sauvegardes-explication">${I18n.t('zip.bloc.importer_zip_remplace_toutes')}</p>
+      ${App.mode === 'demo' ? UI.html`<p class="note" id="note-import-zip">${raisonDemo()}</p>` : ''}
       <div class="actions">
-        <button type="button" class="btn btn-secondaire" id="btn-import-zip">${UI.icone('document')}Importer un ZIP…</button>
+        <button type="button" class="btn btn-secondaire" id="btn-import-zip">${UI.icone('document')}${I18n.t('zip.bloc.importer_zip')}</button>
         <input type="file" id="fichier-import-zip" accept=".zip,application/zip" hidden>
       </div>
     </div>`;
@@ -116,13 +114,13 @@ const ParametresZip = (() => {
     if (!bouton || !champ) return;
     if (App.mode === 'demo') {
       bouton.disabled = true;
-      bouton.title = RAISON_DEMO;
+      bouton.title = raisonDemo();
       return;
     }
     bouton.addEventListener('click', () => {
       const droit = etat();
       if (droit.permis) champ.click();
-      else pendant(bouton, 'import ZIP', () => montrerMessage('import-zip-refus', 'Import ZIP refusé', 'important', droit.raison));
+      else pendant(bouton, 'import ZIP', () => montrerMessage('import-zip-refus', I18n.t('zip.brancher.import_zip_refuse'), 'important', droit.raison));
     });
     champ.addEventListener('change', () => {
       const fichier = champ.files && champ.files[0];
@@ -145,20 +143,24 @@ const ParametresZip = (() => {
   // Origine du ZIP d'après son manifeste (contenu non garanti : seules des chaînes courtes sont montrées).
   function origine(manifeste) {
     if (!manifeste) {
-      return 'ZIP sans manifeste (export d\'une version plus ancienne de Prévo) : date et version de l\'export inconnues.';
+      return I18n.t('zip.origine.zip_sans_manifeste_export');
     }
     const court = (valeur) => (typeof valeur === 'string' ? texte(valeur).slice(0, 40) : '');
     const date = court(manifeste.date);
-    const jour = /^\d{4}-\d{2}-\d{2}/.test(date) ? UI.dateFr(date.slice(0, 10)) + (date.length >= 16 ? ' à ' + date.slice(11, 16) : '') : '';
+    const jour = /^\d{4}-\d{2}-\d{2}/.test(date) ? UI.dateFr(date.slice(0, 10)) + (date.length >= 16 ? ' ' + I18n.t('zip.origine.a_heure', { heure: date.slice(11, 16) }) : '') : '';
     const version = court(manifeste.version_appli);
-    return 'Exporté ' + (jour ? 'le ' + jour : '(date inconnue)') + ' par Prévo ' + (version || '(version inconnue)')
-      + (court(manifeste.mode) ? ' (mode ' + court(manifeste.mode) + ')' : '') + '.';
+    const mode = court(manifeste.mode);
+    const par = version || I18n.t('zip.origine.version_inconnue');
+    if (jour) {
+      return mode ? I18n.t('zip.origine.exporte_prevo_mode', { jour, par, mode }) : I18n.t('zip.origine.exporte_prevo', { jour, par });
+    }
+    return mode ? I18n.t('zip.origine.exporte_date_inconnue_prevo', { par, mode }) : I18n.t('zip.origine.exporte_date_inconnue_prevo_2', { par });
   }
 
   function texteFormat(lu) {
-    return 'Format des données : ' + lu.formatOrigine + (lu.migre
-      ? ' ; elles seront mises au format ' + lu.format + ' (format de cette version) à l\'import.'
-      : ' (format de cette version).');
+    return I18n.t('zip.texte_format.format_donnees', { formatOrigine: lu.formatOrigine }) + (lu.migre
+      ? ' ' + I18n.t('zip.texte_format.elles_seront_mises_format', { format: lu.format })
+      : ' ' + I18n.t('zip.texte_format.format_version'));
   }
 
   function tableauTables(lu) {
@@ -170,16 +172,16 @@ const ParametresZip = (() => {
       abime: lu.abimes.some((abime) => abime.table === nomTable),
     }));
     return UI.tableau({
-      libelle: 'Tables remplacées',
+      libelle: I18n.t('zip.tableau_tables.tables_remplacees'),
       colonnes: [
-        { cle: 'table', libelle: 'Table', valeurTri: (l) => libelleTable(l.table),
+        { cle: 'table', libelle: I18n.t('zip.tableau_tables.table'), valeurTri: (l) => libelleTable(l.table),
           rendu: (l) => UI.html`${libelleTable(l.table)} <span class="note">${Schema.table(l.table).fichier}</span>` },
-        { cle: 'actuel', libelle: 'Lignes actuelles', type: 'nombre', valeurTri: (l) => l.actuel,
+        { cle: 'actuel', libelle: I18n.t('zip.tableau_tables.lignes_actuelles'), type: 'nombre', valeurTri: (l) => l.actuel,
           rendu: (l) => UI.html`<span data-actuel="${l.table}">${String(l.actuel)}</span>` },
-        { cle: 'importe', libelle: 'Lignes après l\'import', type: 'nombre', valeurTri: (l) => l.importe,
+        { cle: 'importe', libelle: I18n.t('zip.tableau_tables.lignes_apres_import'), type: 'nombre', valeurTri: (l) => l.importe,
           rendu: (l) => UI.html`<span data-importe="${l.table}">${String(l.importe)}</span>${l.videe
-            ? UI.html` <span class="badge attention" data-videe="${l.table}">vidée</span>` : ''}${l.abime
-            ? UI.html` <span class="badge attention" data-tel-quel="${l.table}">abîmé, tel quel</span>` : ''}` },
+            ? UI.html` <span class="badge attention" data-videe="${l.table}">${I18n.t('zip.tableau_tables.videe')}</span>` : ''}${l.abime
+            ? UI.html` <span class="badge attention" data-tel-quel="${l.table}">${I18n.t('zip.tableau_tables.abime_tel_quel')}</span>` : ''}` },
       ],
       lignes: lignes,
     });
@@ -191,17 +193,15 @@ const ParametresZip = (() => {
     const retenus = lu.problemes.filter((probleme) => probleme.type !== 'table' && probleme.gravite !== 'info');
     if (!retenus.length) return '';
     const autres = retenus.length > PROBLEMES_MONTRES ? retenus.length - PROBLEMES_MONTRES : 0;
-    return UI.html`<div class="encadre" id="problemes-import-zip"><b>Points relevés à la lecture du ZIP :</b>
+    return UI.html`<div class="encadre" id="problemes-import-zip"><b>${I18n.t('zip.problemes_montres.points_releves_lecture_zip')}</b>
       <ul>${retenus.slice(0, PROBLEMES_MONTRES).map((probleme) => UI.html`<li>${probleme.message}</li>`)}</ul>
-      ${autres ? UI.html`<p class="note">… et ${pluriel(autres, 'autre')}.</p>` : ''}</div>`;
+      ${autres ? UI.html`<p class="note">${I18n.t('zip.problemes_montres.autres', { n: autres })}</p>` : ''}</div>`;
   }
 
   // T213 : phrase d'un CSV que le ZIP marque abîmé (ZipLecture, `abimes`) : importé tel quel, bandeau gardé.
   function phraseAbime(abime) {
-    const depuis = abime.depuis ? ' (abîmé depuis le ' + UI.dateFr(abime.depuis.slice(0, 10)) + ')' : '';
-    return abime.fichier + ' est abîmé dans ce ZIP' + depuis + ' : il sera importé tel quel, sans réparation ; la '
-      + 'base retrouvera le même état, avec le bandeau « Fichier abîmé ». Réparez-le ensuite, ou restaurez une '
-      + 'sauvegarde.';
+    const depuis = abime.depuis ? ' ' + I18n.t('zip.phrase_abime.abime_depuis', { date: UI.dateFr(abime.depuis.slice(0, 10)) }) : '';
+    return I18n.t('zip.phrase_abime.abime_zip_sera_importe', { fichier: abime.fichier, depuis });
   }
 
   // T214 : vrai pour un ZIP « données seules » (export sans les documents).
@@ -228,13 +228,12 @@ const ParametresZip = (() => {
   }
 
   function phraseSansDocuments(etat) {
-    const presents = etat.presents > 1 ? 'les ' + etat.presents + ' documents déjà présents sont gardés tels quels'
-      : (etat.presents === 1 ? 'le document déjà présent est gardé tel quel' : 'aucun document existant n\'est supprimé');
-    let absents = 'les données importées ne citent aucun document';
-    if (etat.absents > 1) absents = etat.absents + ' documents cités par les données importées n\'existent pas ici';
-    else if (etat.absents === 1) absents = '1 document cité par les données importées n\'existe pas ici';
-    else if (etat.cites) absents = 'tous les documents cités par les données importées sont déjà ici';
-    return 'Ce ZIP ne contient pas les documents : ' + presents + ' ; ' + absents + '.';
+    let presents = I18n.t('zip.phrase_sans_documents.aucun_document_supprime');
+    if (etat.presents > 0) presents = I18n.t('zip.phrase_sans_documents.documents_deja_presents_sont', { n: etat.presents });
+    let absents = I18n.t('zip.phrase_sans_documents.donnees_importees_citent_aucun');
+    if (etat.absents > 0) absents = I18n.t('zip.phrase_sans_documents.documents_cites_donnees_importees', { n: etat.absents });
+    else if (etat.cites) absents = I18n.t('zip.phrase_sans_documents.tous_documents_cites_donnees');
+    return I18n.t('zip.phrase_sans_documents.zip_contient_pas_documents', { presents, absents });
   }
 
   /**
@@ -246,29 +245,26 @@ const ParametresZip = (() => {
     const contenu = UI.element(UI.html`<div class="form-colonne" id="confirmation-import-zip"
         data-format="${String(lu.formatOrigine)}" data-migre="${lu.migre ? '1' : '0'}" data-documents="${String(lu.documents.length)}"
         data-sans-documents="${horsZip ? '1' : '0'}">
-      <p>Fichier <b>${nomFichier}</b>. <span id="origine-import-zip">${origine(lu.manifeste)}</span></p>
+      <p>${I18n.html('zip.confirmer.fichier_nom_fichier_origine', { nomFichier, origine: origine(lu.manifeste) })}</p>
       <p id="format-import-zip">${texteFormat(lu)}</p>
       <div id="zone-tables-import-zip"></div>
-      ${videes.length ? UI.html`<div class="encadre attention" id="tables-videes-import-zip"><b>${pluriel(videes.length,
-        'table absente du ZIP sera vidée', 'tables absentes du ZIP seront vidées')} :</b> ${videes.join(', ')}.</div>` : ''}
+      ${videes.length ? UI.html`<div class="encadre attention" id="tables-videes-import-zip"><b>${I18n.t('zip.confirmer.tables_absentes_zip_seront', { n: videes.length })} :</b> ${videes.join(', ')}.</div>` : ''}
       <p id="documents-import-zip">${horsZip ? phraseSansDocuments(horsZip) : lu.documents.length
-        ? pluriel(lu.documents.length, 'document joint', 'documents joints') + ' (photos, notices, rapports figés) '
-          + (lu.documents.length > 1 ? 'seront ajoutés' : 'sera ajouté') + ' au dossier des documents ; les documents '
-          + 'déjà présents sont gardés.'
-        : 'Aucun document joint dans ce ZIP ; les documents déjà présents sont gardés.'}</p>
+        ? I18n.t('zip.confirmer.documents_joints_photos_notices', { n: lu.documents.length })
+        : I18n.t('zip.confirmer.aucun_document_joint_zip')}</p>
       ${lu.abimes.length ? UI.html`<div class="encadre attention" id="abimes-import-zip">${lu.abimes.map((abime) =>
         UI.html`<p data-abime="${abime.table}">${phraseAbime(abime)}</p>`)}</div>` : ''}
       ${problemesMontres(lu)}
-      <div class="encadre attention" id="avertissement-import-zip"><b>${AVERTISSEMENT}</b></div>
+      <div class="encadre attention" id="avertissement-import-zip"><b>${avertissement()}</b></div>
     </div>`);
     UI.$('#zone-tables-import-zip', contenu).appendChild(tableauTables(lu));
     const reponse = await UI.fenetre({
-      titre: 'Importer un ZIP',
+      titre: I18n.t('zip.confirmer.importer_zip'),
       contenu: contenu,
       classe: 'large',
       boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome', defaut: true },
-        { libelle: 'Remplacer toutes les données', valeur: 'importer', classe: 'btn-danger' },
+        { libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome', defaut: true },
+        { libelle: I18n.t('zip.confirmer.remplacer_toutes_donnees'), valeur: 'importer', classe: 'btn-danger' },
       ],
     });
     return reponse === 'importer';
@@ -329,12 +325,11 @@ const ParametresZip = (() => {
         return { nom: nom, repris: false };
       } catch (erreur) {
         if (!estNomPris(erreur)) {
-          throw new Donnees.ErreurStockage('Le document « ' + joint.nom + ' » du ZIP n\'a pas pu être enregistré ('
-            + sansPoint(erreur) + ')', erreur);
+          throw new Donnees.ErreurStockage(I18n.t('zip.ecrire_un_document.document_zip_pas_pu', { jointNom: joint.nom, sansPoint: sansPoint(erreur) }), erreur);
         }
       }
     }
-    throw new Donnees.ErreurStockage('Aucun nom libre pour le document « ' + joint.nom + ' » du ZIP');
+    throw new Donnees.ErreurStockage(I18n.t('zip.ecrire_un_document.aucun_nom_libre_document', { jointNom: joint.nom }));
   }
 
   // Un document relu depuis le ZIP puis écrit, dans sa propre trame : une fois finie, plus rien ne garde ses octets
@@ -430,25 +425,20 @@ const ParametresZip = (() => {
       const resultat = await App.adaptateur.restaurer(sauvegarde);
       await Donnees.chargerTout();
       await viderHorsSauvegarde(resultat.restaurees || []);
-      message = 'L\'import ZIP a échoué (' + sansPoint(erreur) + '). Les tables ont été remises dans leur état '
-        + 'd\'avant, depuis la sauvegarde « ' + sauvegarde + ' » faite juste avant l\'import ; l\'état interrompu est '
-        + 'gardé dans la copie de sécurité « ' + resultat.copieSecurite + ' ». Les documents déjà copiés restent dans '
-        + 'le dossier des documents.';
+      message = I18n.t('zip.restaurer_apres_echec.echec_tables_remises', { sansPoint: sansPoint(erreur), sauvegarde, copieSecurite: resultat.copieSecurite });
     } catch (erreurRestauration) {
       console.warn('Prévo : restauration après l\'import ZIP impossible (' + sansPoint(erreurRestauration) + ').',
         erreurRestauration);
-      message = 'L\'import ZIP a échoué (' + sansPoint(erreur) + ') et la remise automatique des tables n\'a pas '
-        + 'abouti (' + sansPoint(erreurRestauration) + '). Restaurez la sauvegarde « ' + sauvegarde + ' » : Paramètres '
-        + '› Sauvegardes, « Restaurer… », toutes les tables.';
+      message = I18n.t('zip.restaurer_apres_echec.echec_puis_remise_impossible', { erreur: sansPoint(erreur), erreurRestauration: sansPoint(erreurRestauration), sauvegarde });
     }
     try { await Donnees.chargerTout(); } catch (erreurLecture) { /* l'écran dira ce qu'il peut lire */ }
     annoncerRechargement();
-    await montrerMessage('import-zip-echec', 'Import ZIP interrompu', 'important', message);
+    await montrerMessage('import-zip-echec', I18n.t('zip.restaurer_apres_echec.import_zip_interrompu'), 'important', message);
     return { ok: false, sauvegarde: sauvegarde, message: message };
   }
 
   function arretAvantLesTables(message) {
-    return montrerMessage('import-zip-echec', 'Import ZIP interrompu', 'important', message)
+    return montrerMessage('import-zip-echec', I18n.t('zip.restaurer_apres_echec.import_zip_interrompu'), 'important', message)
       .then(() => ({ ok: false, sauvegarde: null, message: message }));
   }
 
@@ -457,32 +447,29 @@ const ParametresZip = (() => {
     let sauvegarde = null;
     try {
       sauvegarde = await App.adaptateur.sauvegarder(MOTIF_SAUVEGARDE);
-      if (!sauvegarde) throw new Error('le stockage n\'a pas confirmé la sauvegarde');
+      if (!sauvegarde) throw new Error(I18n.t('zip.executer.stockage_pas_confirme_sauvegarde'));
     } catch (erreur) {
-      return arretAvantLesTables('Sauvegarde avant l\'import impossible (' + sansPoint(erreur) + ') : rien n\'a été '
-        + 'importé, aucune donnée n\'a changé.');
+      return arretAvantLesTables(I18n.t('zip.executer.sauvegarde_avant_import_impossible', { sansPoint: sansPoint(erreur) }));
     }
     let documents;
     try {
       documents = await ecrireDocuments(lu);
     } catch (erreur) {
-      return arretAvantLesTables(sansPoint(erreur) + '. Import arrêté avant de toucher aux tables : aucune donnée n\'a '
-        + 'changé (sauvegarde « ' + sauvegarde + ' » faite juste avant). Les documents déjà copiés restent dans le '
-        + 'dossier des documents.');
+      return arretAvantLesTables(I18n.t('zip.executer.import_arrete_avant_toucher', { sansPoint: sansPoint(erreur), sauvegarde }));
     }
     const nomsTables = Schema.nomsTables();
     try {
       const tables = tablesImportees(lu.tables, documents.parNom);
       const abimes = new Map(lu.abimes.map((abime) => [abime.table, abime]));
       for (const nomTable of nomsTables) await remplacerTable(nomTable, tables[nomTable], abimes.get(nomTable));
-      const ligne = 'import ZIP : ' + nomFichier + ', ' + pluriel(nomsTables.length, 'table') + ', '
+      const action = 'import ZIP : ' + nomFichier + ', ' + pluriel(nomsTables.length, 'table') + ', '
         + pluriel(lu.documents.length, 'document') + (abimes.size ? ' ; importés tels quels, abîmés : '
           + lu.abimes.map((abime) => abime.fichier).join(', ') : '')
         + (sansDocuments(lu) ? ' ; données seules : documents gardés tels quels' : '')
         + ' ; sauvegarde ' + sauvegarde + ' faite juste avant';
       // Un journal abîmé importé tel quel ne reçoit pas cette ligne : il doit rester identique à l'octet (T213).
-      if (!abimes.has('journal') && !(await Donnees.journaliser('parametres', '', ligne))) {
-        throw new Donnees.ErreurStockage('la ligne du journal n\'a pas pu être écrite');
+      if (!abimes.has('journal') && !(await Donnees.journaliser('parametres', '', action))) {
+        throw new Donnees.ErreurStockage(I18n.t('zip.executer.ligne_journal_pas_pu'));
       }
     } catch (erreur) {
       return restaurerApresEchec(sauvegarde, erreur);
@@ -503,14 +490,14 @@ const ParametresZip = (() => {
   async function importer(fichier) {
     const droit = etat();
     if (!droit.permis) {
-      await montrerMessage('import-zip-refus', 'Import ZIP refusé', 'important', droit.raison);
+      await montrerMessage('import-zip-refus', I18n.t('zip.brancher.import_zip_refuse'), 'important', droit.raison);
       return { ok: false, etape: 'refus', message: droit.raison };
     }
     const nomFichier = nomAffiche(fichier && fichier.name);
     const lu = await ZipLecture.lire(fichier);
     if (!lu.ok) {
-      const message = lu.refus + ' Rien n\'a été écrit.';
-      await montrerMessage('import-zip-refus', 'Import ZIP refusé', 'important', message);
+      const message = I18n.t('zip.importer.rien_ete_ecrit', { refus: lu.refus });
+      await montrerMessage('import-zip-refus', I18n.t('zip.brancher.import_zip_refuse'), 'important', message);
       return { ok: false, etape: 'refus', message: message };
     }
     try {
@@ -520,10 +507,10 @@ const ParametresZip = (() => {
     }
     const horsZip = sansDocuments(lu) ? await documentsHorsZip(lu) : null;
     if (!(await confirmer(lu, nomFichier, horsZip))) {
-      UI.toast('Import ZIP annulé : rien n\'a été écrit.', 'info');
+      UI.toast(I18n.t('zip.importer.import_zip_annule_rien'), 'info');
       return { ok: false, etape: 'annule' };
     }
-    UI.toast('Import ZIP en cours : sauvegarde, documents, puis tables…', 'info');
+    UI.toast(I18n.t('zip.importer.import_zip_cours_sauvegarde'), 'info');
     Donnees.arreterSurveillance();                         // aucune relecture au milieu des écritures
     let resultat;
     try {
@@ -535,20 +522,25 @@ const ParametresZip = (() => {
       await App.reafficher();
       return Object.assign({ etape: 'ecriture' }, resultat);
     }
-    const message = 'Import ZIP terminé : ' + pluriel(resultat.tables, 'table remplacée', 'tables remplacées')
-      + (resultat.abimes.length ? ' (dont ' + resultat.abimes.join(', ') + (resultat.abimes.length > 1
-        ? ', abîmés, importés tels quels)' : ', abîmé, importé tel quel)') : '') + ', '
-      + (resultat.sansDocuments ? 'sans les documents (données seules : aucun document existant supprimé ni remplacé)'
-        : pluriel(resultat.documents, 'document') + ' (' + (resultat.repris ? resultat.repris + ' déjà présent(s), repris ; ' : '')
-        + 'aucun document existant supprimé)') + '. Sauvegarde faite juste avant : « ' + resultat.sauvegarde + ' » (Paramètres '
-      + '› Sauvegardes). Prévo va se recharger avec les nouvelles données.';
-    await montrerMessage('import-zip-termine', 'Import ZIP terminé', 'succes', message,
-      [{ libelle: 'Recharger Prévo', valeur: 'ok', classe: 'btn-primaire', defaut: true }]);
+    // Trois morceaux, chacun une proposition complète par cas (tables, documents, sauvegarde).
+    const nbAbimes = resultat.abimes.length;
+    const tables = nbAbimes === 0 ? I18n.t('zip.importer.import_zip_termine_tables', { n: resultat.tables })
+      : (nbAbimes === 1 ? I18n.t('zip.importer.import_zip_termine_tables_2', { n: resultat.tables, join: resultat.abimes.join(', ') })
+        : I18n.t('zip.importer.import_zip_termine_tables_3', { n: resultat.tables, join: resultat.abimes.join(', ') }));
+    let documentsDits = I18n.t('zip.importer.sans_documents_donnees_seules');
+    if (!resultat.sansDocuments) {
+      documentsDits = resultat.repris
+        ? I18n.t('zip.importer.documents_deja_present_repris', { n: resultat.documents, repris: resultat.repris })
+        : I18n.t('zip.importer.documents_aucun_document_existant', { n: resultat.documents });
+    }
+    const message = I18n.t('zip.importer.sauvegarde_faite_juste_avant', { tables, documentsDits, sauvegarde: resultat.sauvegarde });
+    await montrerMessage('import-zip-termine', I18n.t('zip.importer.import_zip_termine'), 'succes', message,
+      [{ libelle: I18n.t('zip.importer.recharger_prevo'), valeur: 'ok', classe: 'btn-primaire', defaut: true }]);
     location.reload();                                     // étape 8 : l'application repart des nouvelles données
     return Object.assign({ etape: 'fait', message: message }, resultat);
   }
 
-  return { etat, bloc, brancher, importer, nomDemande, tablesImportees, AVERTISSEMENT };
+  return { etat, bloc, brancher, importer, nomDemande, tablesImportees, get AVERTISSEMENT() { return avertissement(); } };
 })();
 
 // Relais de parametres.js (bloc de la carte « Sauvegardes », branchement du bouton).
