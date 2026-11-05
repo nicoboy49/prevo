@@ -290,5 +290,7 @@ L'export garde tous les documents en mémoire, puis JSZip produit le ZIP par mor
 monte à 5 ou 6 fois la taille du ZIP. **Pour un PC de 4 Go, ce n'est pas raisonnable près de la limite** : Windows et
 le navigateur y laissent souvent moins de 1,5 Go libres, l'onglet peut se fermer (rien n'est perdu, rien n'est
 exporté). Par extrapolation (non mesuré), un ZIP de 100 à 150 Mo y reste possible ; un PC de 8 Go passe les limites.
-Parades : l'export « données seules » (sans les documents, T214) ; la lecture et l'écriture du ZIP par morceaux (T215,
-avant la 2.0.0 finale) bornera la mémoire aux tables plus un ou deux documents.
+Parades : l'export « données seules » (sans les documents, T214), que l'export complet propose lui-même dans une
+fenêtre quand ses fichiers dépassent 150 Mo avant compression (T222, `ZipDonnees.AVERTISSEMENT` : données seules,
+export complet quand même, ou annuler) ; la lecture et l'écriture du ZIP par morceaux (T215, avant la 2.0.0 finale)
+bornera la mémoire aux tables plus un ou deux documents.

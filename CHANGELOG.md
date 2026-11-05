@@ -33,7 +33,8 @@ Elle se met par-dessus la bêta 1 : vos données sont migrées automatiquement, 
 - **Export ZIP complet** (Paramètres › Sauvegardes) : tous les fichiers de données, les documents, les rapports figés
   et un manifeste. Le dossier des accès n'y est jamais ; avec les comptes, le responsable seul peut l'exporter.
 - **Export « données seules »** (sans les documents) : plus léger, importable comme l'export complet ; l'import ne
-  supprime alors aucun document existant.
+  supprime alors aucun document existant. Avant un export complet de plus de 150 Mo, qui demande beaucoup de mémoire,
+  Prévo prévient et propose les données seules.
 - **Import ZIP** : contrôle du fichier, confirmation détaillée, sauvegarde avant remplacement, retour arrière
   automatique en cas d'échec.
 - **Tout ce que Prévo exporte, Prévo peut le réimporter** : un ZIP produit par l'export est toujours accepté à
