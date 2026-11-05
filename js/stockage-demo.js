@@ -7,8 +7,6 @@
 
 const StockageDemo = (() => {
 
-  const MESSAGE_INDISPONIBLE = 'Indisponible en mode démo : rien n\'est enregistré.';
-  const LIBELLE = 'Démo — rien n\'est enregistré';
   const MOTIF_NOM_DOCUMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
   const MOTIF_NOM_CSV = /^(.+)\.csv$/i;
   const MOTIF_DATE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -26,7 +24,7 @@ const StockageDemo = (() => {
 
   function verifierNomTable(nomTable) {
     if (!estTableConnue(nomTable)) {
-      throw new Donnees.ErreurStockage('Table inconnue : « ' + nomTable + ' ».');
+      throw new Donnees.ErreurStockage(I18n.t('socle.verifier_nom_table.table_inconnue', { nomTable }));
     }
   }
 
@@ -45,7 +43,7 @@ const StockageDemo = (() => {
     if (ArrayBuffer.isView(contenu)) {
       return new Uint8Array(contenu.buffer.slice(contenu.byteOffset, contenu.byteOffset + contenu.byteLength));
     }
-    throw new Donnees.ErreurStockage('Contenu de fichier illisible (texte ou octets attendus).');
+    throw new Donnees.ErreurStockage(I18n.t('socle.en_octets.contenu_fichier_illisible_texte'));
   }
 
   // 'AAAA-MM-JJ' → nombre de jours depuis le 1er janvier 1970 (UTC), ou null.
@@ -81,7 +79,7 @@ const StockageDemo = (() => {
     const jourReference = jourDepuisDate(dateReference);
     const jourActuel = jourDepuisDate(aujourdhui);
     if (jourReference === null || jourActuel === null) {
-      throw new Error('StockageDemo.decalerDates : dates attendues au format AAAA-MM-JJ.');
+      throw new Error(I18n.t('socle.decaler_dates.stockage_demo_decaler_dates_dates_attendues'));
     }
     const semaines = Math.trunc((jourActuel - jourReference) / 7);
     const jours = semaines * 7;
@@ -153,9 +151,9 @@ const StockageDemo = (() => {
       const attendue = versionAttendue === undefined ? null : versionAttendue;
       const actuelle = versionDe(nomTable);
       if (attendue !== actuelle) {
-        let message = 'Le fichier ' + nomTable + '.csv a été modifié par un autre poste.';
-        if (actuelle === null) { message = 'Le fichier ' + nomTable + '.csv n\'existe plus.'; }
-        else if (attendue === null) { message = 'Le fichier ' + nomTable + '.csv existe déjà.'; }
+        let message = I18n.t('socle.creer.fichier_csv_ete_modifie', { nomTable });
+        if (actuelle === null) { message = I18n.t('socle.creer.fichier_csv_existe_plus', { nomTable }); }
+        else if (attendue === null) { message = I18n.t('socle.creer.fichier_csv_existe_deja', { nomTable }); }
         throw new Donnees.ErreurConflit(message, actuelle);
       }
       return ecrireFichier(nomTable, enOctets(octets));
@@ -168,13 +166,13 @@ const StockageDemo = (() => {
       verifierNomTable(nomTable);
       const ajout = Donnees.csv.decoder(enOctets(octets));
       if (ajout.encodage !== 'utf-8') {
-        throw new Donnees.ErreurStockage('Le contenu à ajouter doit être encodé en UTF-8.');
+        throw new Donnees.ErreurStockage(I18n.t('socle.creer.contenu_ajouter_doit_etre'));
       }
       const finEntete = ajout.texte.indexOf('\n');
       const enteteAjout = (finEntete < 0 ? ajout.texte : ajout.texte.slice(0, finEntete)).replace(/\r$/, '');
       const resteAjout = finEntete < 0 ? '' : ajout.texte.slice(finEntete + 1);
       if (enteteAjout === '') {
-        throw new Donnees.ErreurStockage('Le contenu à ajouter doit commencer par la ligne d\'en-tête.');
+        throw new Donnees.ErreurStockage(I18n.t('socle.creer.contenu_ajouter_doit_commencer'));
       }
 
       const fichier = fichiers.get(nomTable);
@@ -182,13 +180,13 @@ const StockageDemo = (() => {
       if (!actuel || actuel.texte.trim() === '') { return ecrireFichier(nomTable, enOctets(ajout.texte)); }
 
       if (actuel.encodage !== 'utf-8') {
-        throw new Donnees.ErreurConflit('Le fichier ' + nomTable + '.csv n\'est pas en UTF-8 (réenregistré par Excel ?).',
+        throw new Donnees.ErreurConflit(I18n.t('socle.creer.fichier_csv_pas_utf', { nomTable }),
           versionDe(nomTable));
       }
       const finEnteteActuel = actuel.texte.indexOf('\n');
       const enteteActuel = (finEnteteActuel < 0 ? actuel.texte : actuel.texte.slice(0, finEnteteActuel)).replace(/\r$/, '');
       if (enteteActuel !== enteteAjout) {
-        throw new Donnees.ErreurConflit('L\'en-tête de ' + nomTable + '.csv est différent.', versionDe(nomTable));
+        throw new Donnees.ErreurConflit(I18n.t('socle.creer.tete_csv_different', { nomTable }), versionDe(nomTable));
       }
       if (resteAjout === '') { return { version: versionDe(nomTable) }; }
       const separation = actuel.texte.endsWith('\n') ? '' : '\r\n';
@@ -205,13 +203,13 @@ const StockageDemo = (() => {
 
     function verifierNomDocument(nom) {
       if (typeof nom !== 'string' || !MOTIF_NOM_DOCUMENT.test(nom) || nom.indexOf('..') >= 0) {
-        throw new Donnees.ErreurStockage('Nom de document invalide : « ' + nom + ' ».');
+        throw new Donnees.ErreurStockage(I18n.t('socle.creer.nom_document_invalide', { nom }));
       }
     }
 
     async function ecrireDocument(nom, blob) {
       verifierNomDocument(nom);
-      if (documents.has(nom)) { throw new Donnees.ErreurStockage('Le document ' + nom + ' existe déjà.'); }
+      if (documents.has(nom)) { throw new Donnees.ErreurStockage(I18n.t('socle.creer.document_existe_deja', { nom })); }
       documents.set(nom, blob);
       return nom;
     }
@@ -240,12 +238,13 @@ const StockageDemo = (() => {
     // --- Sauvegardes : sans objet en démo ----------------------------------------------------
 
     async function indisponible() {
-      throw new Donnees.ErreurStockage(MESSAGE_INDISPONIBLE);
+      throw new Donnees.ErreurStockage(I18n.t('socle.creer.indisponible_mode_demo_rien'));
     }
 
     return {
       mode: 'demo',
-      libelle: LIBELLE,
+      // Lu à chaque affichage (jamais figé à la création de l'adaptateur).
+      get libelle() { return I18n.t('socle.creer.demo_rien_enregistre'); },
       charger: charger,
       enregistrer: enregistrer,
       ajouter: ajouter,
@@ -292,7 +291,7 @@ const StockageDemo = (() => {
       try {
         tables[nomTable] = await lireFichier(fichier);
       } catch (erreur) {
-        throw new Donnees.ErreurStockage('Impossible de lire le fichier ' + fichier.name + '.', erreur);
+        throw new Donnees.ErreurStockage(I18n.t('socle.depuis_fichiers.impossible_lire_fichier', { name: fichier.name }), erreur);
       }
     }
     return { adaptateur: creer(tables), fichiersIgnores: fichiersIgnores };

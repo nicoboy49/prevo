@@ -82,7 +82,7 @@ const UI = (function () {
   function html(morceaux, ...valeurs) {
     // Appelé comme une fonction ordinaire (UI.html(chaine)), il laisserait passer du HTML non échappé.
     if (!morceaux || !Array.isArray(morceaux.raw)) {
-      throw new Error("UI.html s'utilise comme gabarit : UI.html`…`");
+      throw new Error(I18n.t('socle.html.ui_html_utilise_comme'));
     }
     let resultat = morceaux[0];
     for (let i = 0; i < valeurs.length; i += 1) {
@@ -218,9 +218,9 @@ const UI = (function () {
     const texte = String(priorite === null || priorite === undefined ? '' : priorite).trim();
     const code = texte.toUpperCase();
     if (/^P[1-4]$/.test(code)) {
-      return html`<span class="badge prio-${code.toLowerCase()}" title="Priorité ${code}">${code}</span>`;
+      return html`<span class="badge prio-${code.toLowerCase()}" title="${I18n.t('socle.badge_priorite.priorite_code', { code })}">${code}</span>`;
     }
-    return html`<span class="badge neutre" title="Priorité inconnue">${texte || '—'}</span>`;
+    return html`<span class="badge neutre" title="${I18n.t('socle.badge_priorite.priorite_inconnue')}">${texte || '—'}</span>`;
   }
 
   // Ton (couleur) de chaque statut connu (DI, OT, équipements, achats, contrôles) ; inconnu → neutre.
@@ -299,8 +299,8 @@ const UI = (function () {
   function icone(nom, classe) {
     const dessin = ICONES[nom];
     if (!dessin) return brut('');
-    const classes = 'icone' + (classe ? ' ' + echapper(classe) : '');
-    return brut('<svg class="' + classes + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + dessin + '</svg>');
+    const classes = 'icone' + (classe ? ' ' + classe : '');
+    return html`<svg class="${classes}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${brut(dessin)}</svg>`;
   }
 
   /** Noms des icônes disponibles (pour le guide de style). */
@@ -317,8 +317,8 @@ const UI = (function () {
 
   /** Logo de l'application : carré dégradé avec l'engrenage. `classe` : 'grand' pour l'écran de démarrage. */
   function logo(classe) {
-    return brut('<span class="logo' + (classe ? ' ' + echapper(classe) : '') + '" aria-hidden="true">'
-      + '<svg viewBox="0 0 32 32" focusable="false"><path fill-rule="evenodd" d="' + CHEMIN_ENGRENAGE_LOGO + '"/></svg></span>');
+    const classes = 'logo' + (classe ? ' ' + classe : '');
+    return html`<span class="${classes}" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path fill-rule="evenodd" d="${CHEMIN_ENGRENAGE_LOGO}"/></svg></span>`;
   }
 
   // ===========================================================================================
@@ -391,7 +391,7 @@ const UI = (function () {
 
   /** Indicateur de chargement (texte toujours présent). */
   function chargement(texte) {
-    return html`<div class="chargement" role="status">${texte || 'Chargement…'}</div>`;
+    return html`<div class="chargement" role="status">${texte || I18n.t('socle.chargement.chargement')}</div>`;
   }
 
   // ===========================================================================================
@@ -426,7 +426,7 @@ const UI = (function () {
       formulaire.innerHTML = String(html`
         <div class="fenetre-tete">
           <h2 id="${idTitre}"></h2>
-          <button type="button" class="btn btn-fantome btn-icone fenetre-fermer" aria-label="Fermer">${icone('fermer')}</button>
+          <button type="button" class="btn btn-fantome btn-icone fenetre-fermer" aria-label="${I18n.t('commun.bouton.fermer')}">${icone('fermer')}</button>
         </div>
         <div class="fenetre-corps"></div>
         <div class="actions fenetre-actions"></div>`);
@@ -435,7 +435,7 @@ const UI = (function () {
 
       const boutons = reglages.boutons && reglages.boutons.length
         ? reglages.boutons
-        : [{ libelle: 'Fermer', valeur: null, classe: 'btn-primaire', defaut: true }];
+        : [{ libelle: I18n.t('commun.bouton.fermer'), valeur: null, classe: 'btn-primaire', defaut: true }];
       const zoneBoutons = formulaire.querySelector('.fenetre-actions');
       let boutonParDefaut = null;
       boutons.forEach((definition) => {
@@ -550,7 +550,7 @@ const UI = (function () {
     const choix = await fenetre({
       titre, contenu,
       boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
+        { libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' },
         { libelle: libelleValider, valeur: 'ok', classe: 'btn-primaire', defaut: true },
       ],
       surOuverture(dialogue, fermerFenetre) { fermer = fermerFenetre; },
@@ -570,11 +570,11 @@ const UI = (function () {
   async function confirmer(message, options) {
     const reglages = options || {};
     const choix = await fenetre({
-      titre: reglages.titre || 'Confirmation',
+      titre: reglages.titre || I18n.t('socle.confirmer.confirmation'),
       contenu: html`<p>${message}</p>`,
       boutons: [
-        { libelle: reglages.non || 'Annuler', valeur: false, classe: 'btn-fantome' },
-        { libelle: reglages.oui || 'Confirmer', valeur: true, classe: reglages.danger ? 'btn-danger' : 'btn-primaire', defaut: true },
+        { libelle: reglages.non || I18n.t('commun.bouton.annuler'), valeur: false, classe: 'btn-fantome' },
+        { libelle: reglages.oui || I18n.t('socle.confirmer.confirmer'), valeur: true, classe: reglages.danger ? 'btn-danger' : 'btn-primaire', defaut: true },
       ],
     });
     return choix === true;
@@ -590,7 +590,7 @@ const UI = (function () {
     const idChamp = identifiantUnique('motif');
     const contenu = element(html`
       <div class="champ">
-        <label class="libelle" for="${idChamp}">${libelle || 'Motif'} <span class="requis" aria-hidden="true">*</span></label>
+        <label class="libelle" for="${idChamp}">${libelle || I18n.t('socle.demander_motif.motif')} <span class="requis" aria-hidden="true">*</span></label>
         <textarea id="${idChamp}" name="motif" rows="4" required aria-required="true" data-dictee
           aria-describedby="${idChamp}-erreur" placeholder="${reglages.exemple || ''}"></textarea>
         <p class="erreur-champ" id="${idChamp}-erreur" role="alert" hidden></p>
@@ -602,15 +602,15 @@ const UI = (function () {
       if (zoneTexte.value.trim()) { zoneErreur.hidden = true; zoneTexte.removeAttribute('aria-invalid'); }
     });
     const choix = await fenetre({
-      titre: titre || 'Motif',
+      titre: titre || I18n.t('socle.demander_motif.motif'),
       contenu: contenu,
       boutons: [
-        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
-        { libelle: reglages.libelleValider || 'Valider', valeur: 'valider', classe: 'btn-primaire', defaut: true },
+        { libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-fantome' },
+        { libelle: reglages.libelleValider || I18n.t('socle.demander_motif.valider'), valeur: 'valider', classe: 'btn-primaire', defaut: true },
       ],
       avantFermeture() {
         if (zoneTexte.value.trim() !== '') return true;
-        zoneErreur.textContent = 'Le motif est obligatoire.';
+        zoneErreur.textContent = I18n.t('socle.demander_motif.motif_obligatoire');
         zoneErreur.hidden = false;
         zoneTexte.setAttribute('aria-invalid', 'true');
         zoneTexte.focus();
@@ -639,7 +639,9 @@ const UI = (function () {
    *     lignes: [...], surClic: (ligne) => …, triInitial: { cle: 'date_prevue', sens: 'desc' },
    *     vide: 'Aucun ordre de travail.', libelle: 'Ordres de travail' (légende pour les lecteurs d'écran)
    *   });
-   * rendu(ligne) peut rendre un texte (échappé), un fragment UI.html ou un nœud DOM.
+   * rendu(ligne) peut rendre un texte (échappé), un fragment UI.html ou un nœud DOM. Sans rendu, `table` (nom de
+   * table du schéma) affiche une valeur de liste par son libellé (Schema.libelleValeur, D155) : { cle: 'statut',
+   * libelle: 'Statut', table: 'demandes' }.
    * type 'nombre' : tri numérique et alignement à droite. Les cellules vides vont toujours à la fin.
    * element.mettreAJour(nouvellesLignes) réaffiche le tableau en gardant le tri.
    */
@@ -728,7 +730,7 @@ const UI = (function () {
         const cellule = corps.insertRow().insertCell();
         cellule.colSpan = Math.max(1, colonnes.length);
         cellule.className = 'vide-table';
-        remplir(cellule, options.vide === undefined ? 'Aucune ligne à afficher.' : options.vide);
+        remplir(cellule, options.vide === undefined ? I18n.t('socle.tableau.aucune_ligne_afficher') : options.vide);
       }
       lignes.forEach((ligne) => {
         const rangee = corps.insertRow();
@@ -736,7 +738,9 @@ const UI = (function () {
           const cellule = rangee.insertCell();
           if (colonne.type === 'nombre') cellule.classList.add('num');
           if (colonne.classe) cellule.className += ' ' + colonne.classe;
-          const contenu = typeof colonne.rendu === 'function' ? colonne.rendu(ligne) : ligne[colonne.cle];
+          // colonne.table : la cellule est une valeur stockée d'une liste du schéma (D155), affichée par son libellé.
+          const contenu = typeof colonne.rendu === 'function' ? colonne.rendu(ligne)
+            : colonne.table ? Schema.libelleValeur(colonne.table, colonne.cle, ligne[colonne.cle]) : ligne[colonne.cle];
           remplir(cellule, contenu);
         });
         if (typeof options.surClic === 'function') {
@@ -889,7 +893,9 @@ const UI = (function () {
         controle = champSaisie('datetime-local', valeurTexte.replace(' ', 'T').slice(0, 16));
         break;
       case 'choix':
-        controle = listeDeroulante((definition.valeurs || []).map((v) => ({ valeur: v, libelle: v })), valeurTexte, obligatoire);
+        // Valeurs stockées (D155) : libellé affiché par Schema.libelleValeur si le champ vient du schéma (nomTable).
+        controle = listeDeroulante((definition.valeurs || []).map((v) => ({ valeur: v,
+          libelle: definition.nomTable ? Schema.libelleValeur(definition.nomTable, definition.nom, v) : v })), valeurTexte, obligatoire);
         break;
       case 'ref':
         controle = listeDeroulante((reglages.liste || []).map((entree) => (typeof entree === 'object'
@@ -918,11 +924,11 @@ const UI = (function () {
   function listeDeroulante(entrees, valeurTexte, obligatoire) {
     const liste = document.createElement('select');
     if (!obligatoire || valeurTexte === '') {
-      liste.appendChild(new Option(obligatoire ? '— Choisir —' : '—', ''));
+      liste.appendChild(new Option(obligatoire ? I18n.t('socle.liste_deroulante.choisir') : '—', ''));
     }
     entrees.forEach((entree) => liste.appendChild(new Option(entree.libelle, entree.valeur)));
     if (valeurTexte !== '' && !entrees.some((entree) => entree.valeur === valeurTexte)) {
-      liste.appendChild(new Option(valeurTexte + ' (valeur inconnue)', valeurTexte));
+      liste.appendChild(new Option(I18n.t('socle.liste_deroulante.valeur_inconnue', { valeurTexte }), valeurTexte));
     }
     liste.value = valeurTexte;
     return liste;
@@ -989,11 +995,11 @@ const UI = (function () {
       const valeur = controle.type === 'checkbox' ? (controle.checked ? '1' : '') : String(controle.value || '').trim();
       let message = '';
       if (controle.required && valeur === '') {
-        message = controle.type === 'checkbox' ? 'Cette case doit être cochée.' : 'Ce champ est obligatoire.';
+        message = controle.type === 'checkbox' ? I18n.t('socle.verifier_formulaire.case_doit_etre_cochee') : I18n.t('socle.verifier_formulaire.champ_obligatoire');
       } else if (valeur !== '' && type === 'entier' && !/^[-+]?\d+$/.test(valeur.replace(/[\s\u00a0\u202f]/g, ''))) {
-        message = 'Saisissez un nombre entier (ex. 12).';
+        message = I18n.t('socle.verifier_formulaire.saisissez_nombre_entier_ex');
       } else if (valeur !== '' && type === 'decimal' && enNombre(valeur) === null) {
-        message = 'Saisissez un nombre (ex. 12,5).';
+        message = I18n.t('socle.verifier_formulaire.saisissez_nombre_ex_12');
       }
       marquerErreur(bloc, message);
       if (message) erreurs.push({ nom: controle.name, message });
@@ -1032,16 +1038,16 @@ const UI = (function () {
         <input type="hidden" name="${reglages.nom || 'equipement_id'}" data-type="ref">
         <div class="selecteur-choisi" hidden>
           <div class="selecteur-resume"></div>
-          <button type="button" class="btn btn-secondaire selecteur-changer">Changer</button>
+          <button type="button" class="btn btn-secondaire selecteur-changer">${I18n.t('socle.selecteur_equipement.changer')}</button>
         </div>
         <div class="selecteur-recherche">
           <div class="selecteur-ligne">
-            <label class="visuellement-cache" for="${idRecherche}">Rechercher un équipement</label>
+            <label class="visuellement-cache" for="${idRecherche}">${I18n.t('socle.selecteur_equipement.rechercher_equipement')}</label>
             <input type="search" id="${idRecherche}" autocomplete="off" enterkeyhint="search"
-              placeholder="Repère ou nom">
-            ${cameraDisponible() ? html`<button type="button" class="btn btn-secondaire selecteur-scanner">${icone('qr')}Scanner</button>` : ''}
+              placeholder="${I18n.t('socle.selecteur_equipement.repere_nom')}">
+            ${cameraDisponible() ? html`<button type="button" class="btn btn-secondaire selecteur-scanner">${icone('qr')}${I18n.t('socle.selecteur_equipement.scanner')}</button>` : ''}
           </div>
-          <ul class="selecteur-resultats" aria-label="Équipements trouvés"></ul>
+          <ul class="selecteur-resultats" aria-label="${I18n.t('socle.selecteur_equipement.equipements_trouves')}"></ul>
           <p class="aide selecteur-aide"></p>
         </div>
       </div>`);
@@ -1073,8 +1079,9 @@ const UI = (function () {
         <li><button type="button" class="selecteur-option" data-id="${e.id}">
           <b>${e.repere || e.id}</b><span>${e.designation}</span>${libelleLocalisation(e) ? html`<small>${libelleLocalisation(e)}</small>` : ''}
         </button></li>`)}`);
-      if (trouves.length === 0) aide.textContent = 'Aucun équipement ne correspond à « ' + saisie.value.trim() + ' ».';
-      else if (trouves.length > maxResultats) aide.textContent = trouves.length + ' équipements : tapez quelques lettres pour affiner.';
+      const recherche = saisie.value.trim();
+      if (trouves.length === 0) aide.textContent = I18n.t('socle.selecteur_equipement.aucun_equipement_correspond', { recherche });
+      else if (trouves.length > maxResultats) aide.textContent = I18n.t('socle.selecteur_equipement.equipements_trouves_affiner', { n: trouves.length });
       else aide.textContent = '';
     }
 
@@ -1120,7 +1127,7 @@ const UI = (function () {
         const texte = await scannerQR();
         if (texte === null) return;
         const id = identifiantDepuisQR(texte);
-        if (!id || !choisir(id)) toast('Ce QR code ne correspond à aucun équipement connu.', 'attention');
+        if (!id || !choisir(id)) toast(I18n.t('socle.selecteur_equipement.qr_code_correspond_aucun'), 'attention');
       });
     }
 
@@ -1157,7 +1164,7 @@ const UI = (function () {
    */
   async function scannerQR() {
     if (!cameraDisponible()) {
-      toast('Le scan par caméra n\'est pas disponible sur cette page. Utilisez l\'appareil photo du téléphone.', 'attention');
+      toast(I18n.t('socle.scanner_qr.scan_camera_pas_disponible'), 'attention');
       return null;
     }
     let flux = null;
@@ -1165,7 +1172,7 @@ const UI = (function () {
     const contenu = element(html`
       <div>
         <div class="scanner"><video playsinline muted></video><div class="scanner-viseur"></div></div>
-        <p class="note">Placez le QR code de l'équipement dans le cadre.</p>
+        <p class="note">${I18n.t('socle.scanner_qr.placez_qr_code_equipement')}</p>
       </div>`);
     const video = contenu.querySelector('video');
     const toile = document.createElement('canvas');
@@ -1178,16 +1185,16 @@ const UI = (function () {
     }
 
     const resultat = await fenetre({
-      titre: 'Scanner un QR code',
+      titre: I18n.t('socle.scanner_qr.scanner_qr_code'),
       contenu,
       classe: 'large',
-      boutons: [{ libelle: 'Annuler', valeur: null, classe: 'btn-secondaire', defaut: true }],
+      boutons: [{ libelle: I18n.t('commun.bouton.annuler'), valeur: null, classe: 'btn-secondaire', defaut: true }],
       surOuverture: async (dialogue, fermer) => {
         try {
           flux = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
         } catch (erreur) {
           fermer(null);
-          toast('Impossible d\'ouvrir la caméra (autorisation refusée ou caméra occupée).', 'erreur');
+          toast(I18n.t('socle.scanner_qr.impossible_ouvrir_camera_autorisation'), 'erreur');
           return;
         }
         if (!actif) { arreterCamera(); return; }
@@ -1219,7 +1226,7 @@ const UI = (function () {
    * (écran sombre, impression, image exportée).
    */
   function qrSvg(texte, taille) {
-    if (typeof window.qrcode !== 'function') throw new Error('Bibliothèque qrcode absente (js/lib/qrcode.js).');
+    if (typeof window.qrcode !== 'function') throw new Error(I18n.t('socle.qr_svg.bibliotheque_qrcode_absente_js'));
     const generateur = window.qrcode;
     if (generateur.stringToBytesFuncs && generateur.stringToBytesFuncs['UTF-8']) {
       generateur.stringToBytes = generateur.stringToBytesFuncs['UTF-8']; // accents corrects
@@ -1237,14 +1244,12 @@ const UI = (function () {
         if (!code.isDark(ligne, colonne)) { colonne += 1; continue; }
         const debut = colonne;
         while (colonne < modules && code.isDark(ligne, colonne)) colonne += 1;
-        chemin += 'M' + (debut + marge) + ' ' + (ligne + marge) + 'h' + (colonne - debut) + 'v1h-' + (colonne - debut) + 'z';
+        const largeur = colonne - debut;
+        chemin += 'M' + [debut + marge, ligne + marge].join(' ') + 'h' + largeur + 'v1h-' + largeur + 'z';
       }
     }
     const pixels = Math.round(taille || 160);
-    return brut('<svg xmlns="http://www.w3.org/2000/svg" class="qr-svg" viewBox="0 0 ' + cote + ' ' + cote + '" width="'
-      + pixels + '" height="' + pixels + '" shape-rendering="crispEdges" role="img" aria-label="'
-      + echapper('QR code : ' + texte) + '"><rect width="' + cote + '" height="' + cote + '" fill="#fff"/><path fill="#000" d="'
-      + chemin + '"/></svg>');
+    return html`<svg xmlns="http://www.w3.org/2000/svg" class="qr-svg" viewBox="0 0 ${cote} ${cote}" width="${pixels}" height="${pixels}" shape-rendering="crispEdges" role="img" aria-label="${I18n.t('socle.qr_svg.qr_code', { texte })}"><rect width="${cote}" height="${cote}" fill="#fff"/><path fill="#000" d="${chemin}"/></svg>`;
   }
 
   // ===========================================================================================
@@ -1271,7 +1276,7 @@ const UI = (function () {
     contexte.drawImage(image.source, 0, 0, largeur, hauteur);
     image.liberer();
     return new Promise((resoudre, rejeter) => {
-      toile.toBlob((blob) => (blob ? resoudre(blob) : rejeter(new Error('La photo n\'a pas pu être convertie.'))), 'image/jpeg', 0.85);
+      toile.toBlob((blob) => (blob ? resoudre(blob) : rejeter(new Error(I18n.t('socle.redimensionner_photo.photo_pas_pu_etre')))), 'image/jpeg', 0.85);
     });
   }
 
@@ -1290,7 +1295,7 @@ const UI = (function () {
       });
       image.onerror = () => {
         URL.revokeObjectURL(adresse);
-        rejeter(new Error('Cette image ne peut pas être lue (format non pris en charge ?).'));
+        rejeter(new Error(I18n.t('socle.charger_image.image_peut_pas_etre')));
       };
       image.src = adresse;
     });

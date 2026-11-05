@@ -162,7 +162,7 @@ const StockageDossier = (() => {
     if (ArrayBuffer.isView(contenu)) {
       return new Uint8Array(contenu.buffer, contenu.byteOffset, contenu.byteLength);
     }
-    throw new TypeError('StockageDossier : octets attendus (Uint8Array ou ArrayBuffer).');
+    throw new TypeError(I18n.t('socle.en_octets.stockage_dossier_octets_attendus_uint'));
   }
 
   function concatener(morceaux) {
@@ -265,9 +265,9 @@ const StockageDossier = (() => {
   // montre la fenêtre d'Excel) s'il est connu, sinon le repli.
   function messageFichierOuvert(nomFichier) {
     if (!nomFichier) {
-      return 'Un fichier du dossier de données est ouvert dans Excel ou un autre logiciel : fermez-le, puis réessayez.';
+      return I18n.t('socle.message_fichier_ouvert.fichier_dossier_donnees_ouvert');
     }
-    return 'Le fichier « ' + nomFichier + ' » est ouvert dans Excel ou un autre logiciel : fermez-le, puis réessayez.';
+    return I18n.t('socle.message_fichier_ouvert.fichier_ouvert_excel_autre', { nomFichier });
   }
 
   // Refus « fichier ouvert » d'une écriture de `nomFichier` → ErreurStockage qui le nomme ; toute autre erreur
@@ -288,14 +288,12 @@ const StockageDossier = (() => {
       return erreurStockage(messageFichierOuvert(null), erreur);
     }
     if (nom === 'NotAllowedError' || nom === 'SecurityError') {
-      return erreurStockage('Accès refusé au dossier de données (' + action
-        + '). Rechoisissez le dossier pour redonner l\'autorisation.', erreur);
+      return erreurStockage(I18n.t('socle.traduire_erreur.acces_refuse_dossier_donnees', { action }), erreur);
     }
     if (nom === 'NotFoundError') {
-      return erreurStockage('Dossier de données introuvable (' + action
-        + ') : a-t-il été déplacé, renommé ou débranché ?', erreur);
+      return erreurStockage(I18n.t('socle.traduire_erreur.dossier_donnees_introuvable_ete', { action }), erreur);
     }
-    return erreurStockage('Lecture ou écriture impossible dans le dossier de données (' + action + ').', erreur);
+    return erreurStockage(I18n.t('socle.traduire_erreur.lecture_ecriture_impossible_dossier', { action }), erreur);
   }
 
   // --- Dossiers et fichiers ----------------------------------------------------------------
@@ -328,8 +326,7 @@ const StockageDossier = (() => {
     try {
       await dossier.values().next();
     } catch (erreur) {
-      throw erreurStockage('Le dossier de données est introuvable ou inaccessible (supprimé, déplacé, '
-        + 'clé USB ou partage réseau débranché ?). Rebranchez-le ou rechoisissez le dossier.', erreur);
+      throw erreurStockage(I18n.t('socle.verifier_dossier_accessible.dossier_donnees_introuvable_inaccessible'), erreur);
     }
   }
 
@@ -480,26 +477,26 @@ const StockageDossier = (() => {
 
   function verifierNomTable(table) {
     if (Schema.nomsTables().indexOf(table) === -1) {
-      throw erreurStockage('Table inconnue : ' + table + '.');
+      throw erreurStockage(I18n.t('socle.verifier_nom_table.table_inconnue_dossier', { table }));
     }
   }
 
   function verifierNomDocument(nom) {
     if (typeof nom !== 'string' || !MOTIF_NOM_DOCUMENT.test(nom) || nom.indexOf('..') !== -1) {
-      throw erreurStockage('Nom de document refusé : lettres, chiffres, « . », « _ » ou « - ».');
+      throw erreurStockage(I18n.t('socle.verifier_nom_document.nom_document_refuse_lettres'));
     }
     const extension = nom.indexOf('.') === -1 ? '' : nom.slice(nom.lastIndexOf('.') + 1).toLowerCase();
     if (EXTENSIONS_DOCUMENTS.indexOf(extension) === -1) {
-      throw erreurStockage('Type de document refusé. Types acceptés : ' + EXTENSIONS_DOCUMENTS.join(', ') + '.');
+      throw erreurStockage(I18n.t('socle.verifier_nom_document.type_document_refuse_types', { types: EXTENSIONS_DOCUMENTS.join(', ') }));
     }
     if (NOMS_RESERVES_WINDOWS.indexOf(nom.split('.')[0].toLowerCase()) !== -1) {
-      throw erreurStockage('Nom de document réservé par Windows.');
+      throw erreurStockage(I18n.t('socle.verifier_nom_document.nom_document_reserve_windows'));
     }
   }
 
   function verifierNomSauvegarde(nom) {
     if (typeof nom !== 'string' || !MOTIF_NOM_SAUVEGARDE.test(nom)) {
-      throw erreurStockage('Nom de sauvegarde invalide.');
+      throw erreurStockage(I18n.t('socle.verifier_nom_sauvegarde.nom_sauvegarde_invalide'));
     }
   }
 
@@ -508,7 +505,7 @@ const StockageDossier = (() => {
   function suffixeDuMotif(motif) {
     if (motif === undefined || motif === null || motif === '') { return ''; }
     if (typeof motif !== 'string' || MOTIFS_SAUVEGARDE.indexOf(motif) === -1) {
-      throw erreurStockage('Motif de sauvegarde refusé. Motifs acceptés : ' + MOTIFS_SAUVEGARDE.join(', ') + '.');
+      throw erreurStockage(I18n.t('socle.suffixe_du_motif.motif_sauvegarde_refuse_motifs', { motifs: MOTIFS_SAUVEGARDE.join(', ') }));
     }
     return '_' + motif;
   }
@@ -582,7 +579,7 @@ const StockageDossier = (() => {
       poignee = await window.showDirectoryPicker({ mode: 'readwrite', id: 'prevo-donnees' });
     } catch (erreur) {
       if (erreur && erreur.name === 'AbortError') { return null; }
-      throw traduireErreur(erreur, 'choix du dossier');
+      throw traduireErreur(erreur, I18n.t('socle.choisir.choix_dossier'));
     }
     await memoriserPoignee(poignee);
     return poignee;
@@ -622,8 +619,8 @@ const StockageDossier = (() => {
   // options.poste : nom du poste, écrit dans verrou.txt.
   async function creer(poignee, options) {
     const racine = poignee;
-    const poste = String((options && options.poste) || 'Poste inconnu').replace(/[;\r\n]+/g, ' ').trim()
-      || 'Poste inconnu';
+    const poste = String((options && options.poste) || I18n.t('socle.creer.poste_inconnu')).replace(/[;\r\n]+/g, ' ').trim()
+      || I18n.t('socle.creer.poste_inconnu');
     const idSession = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12);
     const urlsDocuments = new Map();            // nom → URL d'objet déjà fabriquée
     let minuteurVerrou = null;
@@ -638,12 +635,13 @@ const StockageDossier = (() => {
     }
 
     // Toute erreur du navigateur devient une ErreurStockage lisible.
+    // action : fonction qui rend le nom de l'opération, lu au moment de l'erreur (jamais figé à la création).
     function proteger(action, fonction) {
       return async function () {
         try {
           return await fonction.apply(null, arguments);
         } catch (erreur) {
-          throw traduireErreur(erreur, action);
+          throw traduireErreur(erreur, action());
         }
       };
     }
@@ -961,7 +959,7 @@ const StockageDossier = (() => {
     // À l'ouverture du dossier, une fois les tables chargées (js/app.js ; jamais en lecture seule) : `tables` =
     // les tables abîmées (Donnees.tablesAbimees). Rend { table: date } (abimesDepuis).
     async function noterFichiersAbimes(tables) {
-      if (!Array.isArray(tables)) { throw erreurStockage('« tables » doit être une liste de noms de tables.'); }
+      if (!Array.isArray(tables)) { throw erreurStockage(I18n.t('socle.creer.tables_doit_etre_liste')); }
       tables.forEach(verifierNomTable);
       return enSerie(function () { return ecrireFichiersAbimes(tables); });
     }
@@ -975,7 +973,7 @@ const StockageDossier = (() => {
     // Rend { sauvegarde: nom ou null, de: version notée ou null }.
     async function sauvegarderAvantMiseAJour(versionAppli) {
       if (typeof versionAppli !== 'string' || versionAppli === '') {
-        throw erreurStockage('Version de l\'application inconnue : rien n\'est sauvegardé.');
+        throw erreurStockage(I18n.t('socle.creer.version_application_inconnue_rien'));
       }
       return enSerie(async function () {
         const notee = await lireVersionNotee();
@@ -1016,12 +1014,12 @@ const StockageDossier = (() => {
     function choisirTablesARestaurer(disponibles, tablesDemandees) {
       if (tablesDemandees === undefined || tablesDemandees === null) { return disponibles; }
       if (!Array.isArray(tablesDemandees)) {
-        throw erreurStockage('« tables » doit être une liste de noms de tables.');
+        throw erreurStockage(I18n.t('socle.creer.tables_doit_etre_liste'));
       }
       tablesDemandees.forEach(function (table) {
         verifierNomTable(table);
         if (disponibles.indexOf(table) === -1) {
-          throw erreurStockage('La table ' + table + ' est absente de cette sauvegarde.');
+          throw erreurStockage(I18n.t('socle.creer.table_absente_sauvegarde', { table }));
         }
       });
       return Schema.nomsTables().filter(function (table) { return tablesDemandees.indexOf(table) !== -1; });
@@ -1033,10 +1031,9 @@ const StockageDossier = (() => {
       return enSerie(async function () {
         const dossierSauvegardes = await trouverDossier(racine, NOM_DOSSIER_SAUVEGARDES, false);
         const dossierSauvegarde = dossierSauvegardes ? await trouverDossier(dossierSauvegardes, nom, false) : null;
-        if (!dossierSauvegarde) { throw erreurStockage('Sauvegarde introuvable : ' + nom + '.'); }
+        if (!dossierSauvegarde) { throw erreurStockage(I18n.t('socle.creer.sauvegarde_introuvable', { nom })); }
         if (await trouverFichier(dossierSauvegarde, NOM_MARQUEUR_EN_COURS)) {
-          throw erreurStockage('La sauvegarde ' + nom + ' est incomplète (copie interrompue ou en cours) : '
-            + 'choisissez-en une autre.');
+          throw erreurStockage(I18n.t('socle.creer.sauvegarde_incomplete_copie_interrompue', { nom }));
         }
         const aRestaurer = choisirTablesARestaurer(await tablesPresentes(dossierSauvegarde), tables);
 
@@ -1049,10 +1046,9 @@ const StockageDossier = (() => {
             const poigneeFichier = await dossierSauvegarde.getFileHandle(table + '.csv');
             await ecrireFichier(racine, table + '.csv', await poigneeFichier.getFile());
           } catch (erreur) {
-            const interrompue = traduireErreur(erreur, 'restauration');
-            throw erreurStockage(interrompue.message + ' Restauration interrompue à la table ' + table
-              + ' ; tables déjà restaurées : ' + (restaurees.join(', ') || 'aucune')
-              + '. L\'état d\'avant la restauration est dans la sauvegarde ' + copieSecurite + '.', erreur);
+            const interrompue = traduireErreur(erreur, I18n.t('socle.creer.restauration'));
+            const dejaRestaurees = restaurees.join(', ') || I18n.t('socle.creer.aucune_table_restauree');
+            throw erreurStockage(I18n.t('socle.creer.restauration_interrompue_table_tables', { interrompueMessage: interrompue.message, table, dejaRestaurees, copieSecurite }), erreur);
           }
           restaurees.push(table);
         }
@@ -1079,7 +1075,7 @@ const StockageDossier = (() => {
         if (await contenuInchange(racine, nomFichier, lu)) { return; }
         const actuel = await lireOctets(racine, nomFichier);
         const vide = actuel === null || (lu === null && actuel.length === 0);
-        throw new Donnees.ErreurConflit('Le fichier ' + nomFichier + ' vient d\'être modifié par un autre poste.',
+        throw new Donnees.ErreurConflit(I18n.t('socle.creer.fichier_vient_etre_modifie', { nomFichier }),
           vide ? null : await empreinte(actuel));
       };
     }
@@ -1112,11 +1108,11 @@ const StockageDossier = (() => {
         if (attendue !== versionActuelle) {
           let message;
           if (versionActuelle === null) {
-            message = 'Le fichier ' + table + '.csv n\'existe plus.';
+            message = I18n.t('socle.creer.fichier_csv_existe_plus', { nomTable: table });
           } else if (attendue === null) {
-            message = 'Le fichier ' + table + '.csv existe déjà.';
+            message = I18n.t('socle.creer.fichier_csv_existe_deja', { nomTable: table });
           } else {
-            message = 'Le fichier ' + table + '.csv a été modifié par un autre poste.';
+            message = I18n.t('socle.creer.fichier_csv_ete_modifie', { nomTable: table });
           }
           throw new Donnees.ErreurConflit(message, versionActuelle);
         }
@@ -1140,10 +1136,10 @@ const StockageDossier = (() => {
     async function ajouter(table, octets) {
       verifierNomTable(table);
       const corps = sansBom(enOctets(octets));
-      if (!estUtf8(corps)) { throw erreurStockage('Le contenu à ajouter doit être encodé en UTF-8.'); }
+      if (!estUtf8(corps)) { throw erreurStockage(I18n.t('socle.creer.contenu_ajouter_doit_etre')); }
       const decoupe = decouperPremiereLigne(corps);
       if (decoupe.entete.length === 0) {
-        throw erreurStockage('Le contenu à ajouter doit commencer par la ligne d\'en-tête.');
+        throw erreurStockage(I18n.t('socle.creer.contenu_ajouter_doit_commencer'));
       }
       return enSerie(async function () {
         // T206 (comme enregistrer) : sauvegarde du jour d'abord, puis garde (fichier qui finit dans un guillemet
@@ -1164,11 +1160,10 @@ const StockageDossier = (() => {
         // dérogation pour un ajout.
         const versionActuelle = await empreinte(actuel);
         if (!estUtf8(actuel)) {
-          throw new Donnees.ErreurConflit('Le fichier ' + table
-            + '.csv n\'est pas en UTF-8 (réenregistré par Excel ?).', versionActuelle);
+          throw new Donnees.ErreurConflit(I18n.t('socle.creer.fichier_csv_pas_utf', { nomTable: table }), versionActuelle);
         }
         if (!octetsEgaux(decouperPremiereLigne(actuel).entete, decoupe.entete)) {
-          throw new Donnees.ErreurConflit('L\'en-tête de ' + table + '.csv est différent.', versionActuelle);
+          throw new Donnees.ErreurConflit(I18n.t('socle.creer.tete_csv_different', { nomTable: table }), versionActuelle);
         }
         if (decoupe.reste.length === 0) { return { version: versionActuelle }; }
 
@@ -1186,7 +1181,7 @@ const StockageDossier = (() => {
       return enSerie(async function () {
         const dossierDocuments = await trouverDossier(racine, NOM_DOSSIER_DOCUMENTS, true);
         if (await trouverFichier(dossierDocuments, nom)) {
-          throw erreurStockage('Le document ' + nom + ' existe déjà.');
+          throw erreurStockage(I18n.t('socle.creer.document_existe_deja', { nom }));
         }
         await ecrireFichier(dossierDocuments, nom, blob);
         return nom;
@@ -1264,20 +1259,21 @@ const StockageDossier = (() => {
 
     return {
       mode: 'dossier',
-      libelle: 'Dossier « ' + poignee.name + ' »',
-      charger: proteger('lecture de la table', charger),
-      enregistrer: proteger('enregistrement de la table', enregistrer),
-      ajouter: proteger('ajout au fichier', ajouter),
-      listerVersions: proteger('lecture des versions', listerVersions),
-      ecrireDocument: proteger('enregistrement du document', ecrireDocument),
-      lireDocument: proteger('lecture du document', lireDocument),
-      urlDocument: proteger('lecture du document', urlDocument),
-      sauvegarder: proteger('sauvegarde', sauvegarder),
-      listerSauvegardes: proteger('liste des sauvegardes', listerSauvegardes),
-      restaurer: proteger('restauration', restaurer),
-      sauvegarderAvantMiseAJour: proteger('sauvegarde avant la mise à jour de Prévo', sauvegarderAvantMiseAJour),
-      noterFichiersAbimes: proteger('mise à jour de ' + NOM_FICHIERS_ABIMES, noterFichiersAbimes),
-      abimesDepuis: proteger('lecture de ' + NOM_FICHIERS_ABIMES, lireFichiersAbimes),
+      // Lu à chaque affichage (jamais figé à la création de l'adaptateur).
+      get libelle() { return I18n.t('socle.creer.dossier_name', { name: poignee.name }); },
+      charger: proteger(() => I18n.t('socle.creer.lecture_table'), charger),
+      enregistrer: proteger(() => I18n.t('socle.creer.enregistrement_table'), enregistrer),
+      ajouter: proteger(() => I18n.t('socle.creer.ajout_fichier'), ajouter),
+      listerVersions: proteger(() => I18n.t('socle.creer.lecture_versions'), listerVersions),
+      ecrireDocument: proteger(() => I18n.t('socle.creer.enregistrement_document'), ecrireDocument),
+      lireDocument: proteger(() => I18n.t('socle.creer.lecture_document'), lireDocument),
+      urlDocument: proteger(() => I18n.t('socle.creer.lecture_document'), urlDocument),
+      sauvegarder: proteger(() => I18n.t('socle.creer.sauvegarde'), sauvegarder),
+      listerSauvegardes: proteger(() => I18n.t('socle.creer.liste_sauvegardes'), listerSauvegardes),
+      restaurer: proteger(() => I18n.t('socle.creer.restauration'), restaurer),
+      sauvegarderAvantMiseAJour: proteger(() => I18n.t('socle.creer.sauvegarde_avant_mise_jour'), sauvegarderAvantMiseAJour),
+      noterFichiersAbimes: proteger(() => I18n.t('socle.creer.mise_jour', { fichier: NOM_FICHIERS_ABIMES }), noterFichiersAbimes),
+      abimesDepuis: proteger(() => I18n.t('socle.creer.lecture_nom_fichiers_abimes', { fichier: NOM_FICHIERS_ABIMES }), lireFichiersAbimes),
       info: async function () { return {}; },
       verifierVerrou: verifierVerrou,
       demarrerVerrou: demarrerVerrou,

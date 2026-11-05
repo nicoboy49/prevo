@@ -11,15 +11,8 @@ const StockageServeur = (() => {
 
   const DELAI_DETECTION_MS = 2000;
   const NOM_APPLICATION = 'Prévo';
-  const MESSAGE_SERVEUR_INJOIGNABLE =
-    'Le serveur Prévo ne répond pas. Vérifiez que la fenêtre du serveur est ouverte sur le PC.';
   // Délai maximal d'une requête (réponse et lecture du corps comprises).
   const DELAI_REPONSE_MS = 15000;
-  const MESSAGE_DELAI_DEPASSE = 'Le serveur Prévo met trop de temps à répondre. Vérifiez le réseau puis '
-    + 'réessayez ; si vous enregistriez, rechargez la page pour voir si la modification a été faite.';
-  // Réponse « réussie » mais illisible (ex. page d'un portail Wi-Fi, proxy) : l'écriture a pu se faire.
-  const MESSAGE_REPONSE_INATTENDUE =
-    'Réponse inattendue du serveur ; l\'opération a peut-être été faite, rechargez la page.';
   const CODE_FORMAT_PLUS_RECENT = 'format_plus_recent';      // 409 du serveur en lecture seule (T185, D169)
   const CODE_FICHIER_ABIME = 'fichier_abime';                // 409 du serveur : fichier abîmé, jamais réécrit (T200)
   const ENTETE_REMPLACER_ABIME = 'X-Prevo-Remplacer-Abime';  // dérogation demandée (import ZIP, T200)
@@ -60,6 +53,20 @@ const StockageServeur = (() => {
     }
   }
 
+  // Messages de ce module (lus au moment de l'erreur, jamais figés au chargement du module).
+  function messageServeurInjoignable() {
+    return I18n.t('socle.message_serveur_injoignable.serveur_prevo_repond_pas');
+  }
+
+  function messageDelaiDepasse() {
+    return I18n.t('socle.message_delai_depasse.serveur_prevo_met_trop');
+  }
+
+  // Réponse « réussie » mais illisible (ex. page d'un portail Wi-Fi, proxy) : l'écriture a pu se faire.
+  function messageReponseInattendue() {
+    return I18n.t('socle.message_reponse_inattendue.reponse_inattendue_serveur_operation');
+  }
+
   // Transforme une réponse en erreur (409 → ErreurConflit, autre code ≥ 400 → ErreurStockage, avec le code HTTP
   // dans `codeHttp`). Lot 7 (§22.4, §22.5) : 401 = session absente ou expirée, appareil refusé → l'événement
   // EVENEMENT_SESSION_ABSENTE est émis sur document (l'écran de connexion, T155, l'écoute et s'affiche ; sans
@@ -73,7 +80,7 @@ const StockageServeur = (() => {
   async function erreurDepuisReponse(reponse) {
     const donnees = await lireJsonOuNull(reponse);
     const message = (donnees && donnees.erreur)
-      || 'Le serveur a refusé la demande (code ' + reponse.status + ').';
+      || I18n.t('socle.erreur_depuis_reponse.serveur_refuse_demande_code', { status: reponse.status });
     if (reponse.status === 409 && donnees && donnees.code === CODE_FORMAT_PLUS_RECENT
       && typeof Donnees.ErreurLectureSeule === 'function') {
       return new Donnees.ErreurLectureSeule(donnees.format);
@@ -81,7 +88,7 @@ const StockageServeur = (() => {
     if (reponse.status === 409 && donnees && donnees.code === CODE_FICHIER_ABIME
       && typeof Donnees.ErreurFichierAbime === 'function') {
       const table = typeof donnees.table === 'string' ? donnees.table : '';
-      return new Donnees.ErreurFichierAbime(table, table ? table + '.csv' : 'de cette table');
+      return new Donnees.ErreurFichierAbime(table, table ? table + '.csv' : I18n.t('socle.erreur_depuis_reponse.table'));
     }
     if (reponse.status === 409) {
       const versionActuelle = donnees && donnees.version_actuelle !== undefined
@@ -119,9 +126,9 @@ const StockageServeur = (() => {
   // Erreur pendant l'envoi ou la lecture : délai dépassé (requête abandonnée) ou serveur injoignable.
   function erreurReseau(erreur) {
     if (erreur && erreur.name === 'AbortError') {
-      return new Donnees.ErreurStockage(MESSAGE_DELAI_DEPASSE, erreur);
+      return new Donnees.ErreurStockage(messageDelaiDepasse(), erreur);
     }
-    return new Donnees.ErreurStockage(MESSAGE_SERVEUR_INJOIGNABLE, erreur);
+    return new Donnees.ErreurStockage(messageServeurInjoignable(), erreur);
   }
 
   // Envoie la requête et rend la réponse, quel que soit son code (l'appelant décide).
@@ -160,10 +167,10 @@ const StockageServeur = (() => {
     try {
       donnees = JSON.parse(texte);
     } catch (erreur) {
-      throw new Donnees.ErreurStockage(MESSAGE_REPONSE_INATTENDUE, erreur);
+      throw new Donnees.ErreurStockage(messageReponseInattendue(), erreur);
     }
     if (donnees === null || typeof donnees !== 'object') {
-      throw new Donnees.ErreurStockage(MESSAGE_REPONSE_INATTENDUE);
+      throw new Donnees.ErreurStockage(messageReponseInattendue());
     }
     return donnees;
   }
@@ -284,7 +291,8 @@ const StockageServeur = (() => {
     }
 
     async function ajouter(table, octets) {
-      const reponse = await appelerOuErreur(urlTable(table) + '/ajout', {
+      const adresse = urlTable(table) + '/ajout';
+      const reponse = await appelerOuErreur(adresse, {
         method: 'POST',
         headers: Object.assign({ 'Content-Type': 'text/csv; charset=utf-8' }, entetesEcriture),
         body: octets,
@@ -298,7 +306,7 @@ const StockageServeur = (() => {
       const reponse = await appelerOuErreur(base + '/api/versions', { method: 'GET' });
       const donnees = await lireJson(reponse);
       if (!donnees.tables || typeof donnees.tables !== 'object' || Array.isArray(donnees.tables)) {
-        throw new Donnees.ErreurStockage(MESSAGE_REPONSE_INATTENDUE);
+        throw new Donnees.ErreurStockage(messageReponseInattendue());
       }
       const versions = {};
       Object.keys(donnees.tables).forEach(function (table) {
@@ -319,7 +327,7 @@ const StockageServeur = (() => {
         const erreur = await erreurDepuisReponse(reponse);
         // 409 : document du même nom (conflit), sauf en lecture seule (T185 : ErreurLectureSeule telle quelle).
         if (erreur instanceof Donnees.ErreurConflit) {
-          throw new Donnees.ErreurStockage('Un document porte déjà ce nom.');
+          throw new Donnees.ErreurStockage(I18n.t('socle.creer.document_porte_deja_nom'));
         }
         throw erreur;
       }
@@ -430,7 +438,8 @@ const StockageServeur = (() => {
 
     return {
       mode: 'serveur',
-      libelle: 'Serveur ' + location.host,
+      // Lu à chaque affichage (jamais figé à la création de l'adaptateur).
+      get libelle() { return I18n.t('socle.creer.serveur_host', { host: location.host }); },
       charger: charger,
       enregistrer: enregistrer,
       ajouter: ajouter,

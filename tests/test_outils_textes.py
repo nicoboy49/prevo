@@ -676,5 +676,41 @@ class TestExceptionsDeLImport(unittest.TestCase):
         self.assertEqual((res.erreurs, len(res.unites), len(res.relectures)), ([], 0, 0))
 
 
+# Socle et schéma (T238) : les libellés de js/schema.js sont lus dans fr.js (choix(nom, [valeurs]) n'a plus de libellé) ;
+# les valeurs stockées des listes restent reconnues (D155). Le moteur js/i18n.js n'est jamais extrait (D157).
+SCHEMA_SANS_LIBELLES = """const Schema = (() => {
+  function choix(nom, valeurs) { return { nom, valeurs }; }
+  const CRITICITES = ['A', 'B', 'C'];
+  const TABLES = [choix('statut', ['Créé', 'En attente']), choix('criticite', CRITICITES),
+    choix('impact', 'Impact', ['gêne'])];
+  return { TABLES };
+})();
+"""
+
+
+class TestSocleEtSchema(unittest.TestCase):
+
+    def test_valeurs_des_listes_lues_sans_libelle(self):
+        with tempfile.TemporaryDirectory() as dossier:
+            ecrire(dossier, 'js/schema.js', SCHEMA_SANS_LIBELLES)
+            _, valeurs, _ = ext.lire_schema(dossier)
+        self.assertEqual(valeurs, {'Créé', 'En attente', 'A', 'B', 'C', 'gêne'})
+
+    def test_valeurs_du_vrai_schema(self):
+        _, valeurs, _ = ext.lire_schema(RACINE)
+        self.assertEqual(len(valeurs), 69)
+        self.assertLessEqual({'Clôturé techniquement', 'en service', 'P1', 'B', 'à valider'}, valeurs)
+
+    def test_moteur_de_traduction_jamais_extrait(self):
+        self.assertEqual(ext.Classement(RACINE).exception_fichier('js/i18n.js')['classe'], 'D157')
+
+    def test_domaines_socle_et_schema_extraits_sur_le_depot(self):
+        extracteur = ext.Extracteur(RACINE)
+        for domaine in ('socle', 'schema'):
+            with self.subTest(domaine=domaine):
+                res = extracteur.extraire(domaine, ext.fichiers_du_domaine(RACINE, domaine), essai=True)
+                self.assertEqual((res.erreurs, len(res.unites), len(res.relectures)), ([], 0, 0))
+
+
 if __name__ == '__main__':
     unittest.main()

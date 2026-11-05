@@ -229,7 +229,7 @@ const Formats = (function () {
 
   // Ligne de journal d'une étape : texte exact relu par la suggestion S4.
   function ligneDeJournal(format) {
-    return 'passage au format ' + format + ' du fichier';
+    return `passage au format ${format} du fichier`;
   }
 
   // Enchaîne les étapes de `de` à `vers` → { base, journal, etapes } :
@@ -240,11 +240,10 @@ const Formats = (function () {
   // base rendue telle quelle, journal et etapes vides. `vers` : un format entier de 1 au format courant.
   function migrer(base, de, vers) {
     if (!Number.isInteger(vers) || vers < PREMIER_FORMAT || vers > Schema.version) {
-      throw new RangeError('Formats.migrer : format cible inconnu (' + vers + ') ; formats connus : '
-        + PREMIER_FORMAT + ' à ' + Schema.version + '.');
+      throw new RangeError(I18n.t('socle.migrer.formats_migrer_format_cible', { vers, premier: PREMIER_FORMAT, version: Schema.version }));
     }
     if (typeof de !== 'number' || Number.isNaN(de)) {
-      throw new TypeError('Formats.migrer : format de départ illisible (' + de + ').');
+      throw new TypeError(I18n.t('socle.migrer.formats_migrer_format_depart', { de }));
     }
     if (de >= vers) { return { base: base, journal: [], etapes: [] }; }
     let courante = base;
@@ -268,7 +267,7 @@ const Formats = (function () {
     if (entree instanceof Uint8Array) { return entree; }
     if (entree instanceof ArrayBuffer) { return new Uint8Array(entree); }
     if (ArrayBuffer.isView(entree)) { return new Uint8Array(entree.buffer, entree.byteOffset, entree.byteLength); }
-    throw new TypeError('Formats.manifeste : octets attendus (Uint8Array ou ArrayBuffer).');
+    throw new TypeError(I18n.t('socle.en_octets.formats_manifeste_octets_attendus'));
   }
 
   function hexadecimal(tampon) {

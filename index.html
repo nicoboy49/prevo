@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0B1226">
-  <title>Prévo — GMAO</title>
+  <title data-i18n="socle.page.prevo_gmao">Prévo — GMAO</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script src="js/prechargement.js"></script>
   <!-- Charte commune, puis la mise en page propre à chaque module (ARCHITECTURE.md §9) -->
@@ -41,7 +41,7 @@
 <div id="ecran-chargement" class="ecran-plein">
   <div class="boite-demarrage centre">
     <span data-ui="logo" data-classe="grand"></span>
-    <div class="chargement" role="status">Chargement de Prévo…</div>
+    <div class="chargement" role="status" data-i18n="socle.ecran_chargement.chargement_prevo">Chargement de Prévo…</div>
   </div>
 </div>
 
@@ -51,49 +51,48 @@
     <div class="marque">
       <span data-ui="logo" data-classe="grand"></span>
       <div>
-        <h1>Prévo</h1>
-        <p>GMAO libre pour l'atelier : demandes, ordres de travail, parc.</p>
+        <h1 data-i18n="socle.ecran_demarrage.prevo">Prévo</h1>
+        <p data-i18n="socle.ecran_demarrage.gmao_libre_atelier_demandes">GMAO libre pour l'atelier : demandes, ordres de travail, parc.</p>
       </div>
     </div>
 
     <div id="alerte-navigateur" hidden></div>
 
-    <h2 class="sous-titre" id="titre-donnees">Où sont vos données ?</h2>
+    <h2 class="sous-titre" id="titre-donnees" data-i18n="socle.titre_donnees.ou_sont_donnees">Où sont vos données ?</h2>
     <!-- Version web seulement (App.versionWeb, démo en ligne) : remplace le titre ci-dessus -->
-    <h2 class="sous-titre" id="titre-donnees-demo" hidden>Où sont les données de cette démo ?</h2>
-    <p class="note" id="note-donnees-demo" hidden>Nulle part : elles vivent dans cette page et disparaissent
-      quand vous la fermez. Sur votre installation, ce sont des fichiers CSV sur votre PC, lisibles dans Excel.</p>
+    <h2 class="sous-titre" id="titre-donnees-demo" hidden data-i18n="socle.titre_donnees_demo.ou_sont_donnees_demo">Où sont les données de cette démo ?</h2>
+    <p class="note" id="note-donnees-demo" hidden data-i18n="socle.note_donnees_demo.nulle_part_elles_vivent">Nulle part : elles vivent dans cette page et disparaissent quand vous la fermez. Sur votre installation, ce sont des fichiers CSV sur votre PC, lisibles dans Excel.</p>
     <div class="pile-gros">
       <button type="button" class="btn btn-primaire btn-gros" id="btn-dossier">
         <span data-icone="document"></span>
-        <span>Choisir le dossier de données<small>Les fichiers CSV restent sur ce PC (Chrome ou Edge)</small></span>
+        <span><span data-i18n="socle.btn_dossier.choisir_dossier_donnees">Choisir le dossier de données</span><small data-i18n="socle.btn_dossier.fichiers_csv_restent_pc">Les fichiers CSV restent sur ce PC (Chrome ou Edge)</small></span>
       </button>
       <button type="button" class="btn btn-secondaire btn-gros" id="btn-reprendre" hidden>
         <span data-icone="actualiser"></span>
-        <span>Reprendre le dossier précédent<small id="nom-dossier-precedent"></small></span>
+        <span><span data-i18n="socle.btn_reprendre.reprendre_dossier_precedent">Reprendre le dossier précédent</span><small id="nom-dossier-precedent"></small></span>
       </button>
       <button type="button" class="btn btn-secondaire btn-gros" id="btn-demo">
         <span data-icone="engrenage"></span>
-        <span>Essayer avec les données de démo<small>Atelier fictif, rien n'est enregistré</small></span>
+        <span><span data-i18n="socle.btn_demo.essayer_donnees_demo">Essayer avec les données de démo</span><small data-i18n="socle.btn_demo.atelier_fictif_rien_enregistre">Atelier fictif, rien n'est enregistré</small></span>
       </button>
       <!-- Version web seulement (App.versionWeb, démo en ligne) : remplace le mode dossier et le mode serveur -->
       <a class="btn btn-secondaire btn-gros" id="btn-telecharger" href="https://github.com/nicoboy49/prevo/releases/latest"
         target="_blank" rel="noopener" hidden>
         <span data-icone="export"></span>
-        <span>Télécharger Prévo<small>Gratuit et libre : installez-le pour travailler sur vos propres données.</small></span>
+        <span><span data-i18n="socle.btn_telecharger.telecharger_prevo">Télécharger Prévo</span><small data-i18n="socle.btn_telecharger.gratuit_libre_installez_travailler">Gratuit et libre : installez-le pour travailler sur vos propres données.</small></span>
       </a>
     </div>
 
     <label class="depot" id="zone-depot">
       <span data-icone="export"></span>
-      <b>Déposer des fichiers CSV ici</b>
-      <span class="note">ou cliquer pour les choisir : démo avec vos propres fichiers, rien n'est enregistré</span>
+      <b data-i18n="socle.zone_depot.deposer_fichiers_csv_ici">Déposer des fichiers CSV ici</b>
+      <span class="note" data-i18n="socle.zone_depot.cliquer_choisir_demo_propres">ou cliquer pour les choisir : démo avec vos propres fichiers, rien n'est enregistré</span>
       <input type="file" id="fichiers-csv" class="visuellement-cache" accept=".csv,text/csv" multiple>
     </label>
 
-    <p class="note" id="note-mode-serveur">Plusieurs postes et des téléphones ? Lancez <b>Lancer_GMAO.bat</b> (Windows) ou
-      <b>lancer.sh</b> (Mac, Linux) : le mode serveur est reconnu tout seul.</p>
-    <p class="demarrage-pied">Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS</p>
+    <!-- Phrase balisée : remplie au démarrage par js/app.js (remplirPhrasesBalisees) -->
+    <p class="note" id="note-mode-serveur"></p>
+    <p class="demarrage-pied"><span data-i18n="socle.ecran_demarrage.developpe_claude_anthropic_demande">Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS</span></p>
   </div>
 </div>
 
@@ -103,22 +102,22 @@
     <div class="marque">
       <span data-ui="logo" data-classe="grand"></span>
       <div>
-        <h1>Aucune donnée pour l'instant</h1>
-        <p id="texte-base-vide">Aucun des 23 fichiers de Prévo n'a été trouvé.</p>
+        <h1 data-i18n="socle.ecran_base_vide.aucune_donnee_instant">Aucune donnée pour l'instant</h1>
+        <p id="texte-base-vide" data-i18n="socle.texte_base_vide.aucun_23_fichiers_prevo">Aucun des 23 fichiers de Prévo n'a été trouvé.</p>
       </div>
     </div>
     <div class="pile-gros">
       <button type="button" class="btn btn-primaire btn-gros" id="btn-base-demo">
         <span data-icone="engrenage"></span>
-        <span>Partir des données de démo<small>Un atelier fictif complet, que vous pourrez modifier ou remplacer</small></span>
+        <span><span data-i18n="socle.btn_base_demo.partir_donnees_demo">Partir des données de démo</span><small data-i18n="socle.btn_base_demo.atelier_fictif_complet_pourrez">Un atelier fictif complet, que vous pourrez modifier ou remplacer</small></span>
       </button>
       <button type="button" class="btn btn-secondaire btn-gros" id="btn-base-vide">
         <span data-icone="document"></span>
-        <span>Créer une base vide<small>23 fichiers CSV avec leurs seuls en-têtes de colonnes</small></span>
+        <span><span data-i18n="socle.btn_base_vide.creer_base_vide">Créer une base vide</span><small data-i18n="socle.btn_base_vide.23_fichiers_csv_seuls">23 fichiers CSV avec leurs seuls en-têtes de colonnes</small></span>
       </button>
     </div>
-    <!-- Lot 7 (§22.10) : visible sur le PC serveur tant que l'installation n'est pas faite (js/app.js) -->
-    <p class="note lien-installation" hidden><a href="#/installation">Installer Prévo (assistant)</a> : comptes, https, téléphones, démarrage avec le PC.</p>
+    <!-- Lot 7 (§22.10) : visible sur le PC serveur tant que l'installation n'est pas faite (js/app.js, qui la remplit) -->
+    <p class="note lien-installation" hidden></p>
   </div>
 </div>
 
@@ -128,59 +127,59 @@
     <div class="marque">
       <span data-ui="logo" data-classe="grand"></span>
       <div>
-        <h1>Qui utilise ce poste ?</h1>
-        <p>Le profil adapte les écrans ; ce n'est pas une sécurité.</p>
+        <h1 data-i18n="socle.ecran_profil.utilise_poste">Qui utilise ce poste ?</h1>
+        <p data-i18n="socle.ecran_profil.profil_adapte_ecrans_pas">Le profil adapte les écrans ; ce n'est pas une sécurité.</p>
       </div>
     </div>
 
     <div class="champ champ-poste">
-      <label class="libelle" for="profil-poste">Nom de ce poste</label>
+      <label class="libelle" for="profil-poste" data-i18n="socle.ecran_profil.nom_poste">Nom de ce poste</label>
       <input type="text" id="profil-poste" autocomplete="off" spellcheck="false" maxlength="60">
-      <p class="aide">Inscrit dans le journal avec chaque modification.</p>
+      <p class="aide" data-i18n="socle.ecran_profil.inscrit_journal_chaque_modification">Inscrit dans le journal avec chaque modification.</p>
     </div>
 
     <div class="pile-gros" id="profil-choix">
       <button type="button" class="btn btn-secondaire btn-gros" id="profil-demandeur">
         <span data-icone="demandes"></span>
-        <span>Demandeur<small>Signaler un problème, suivre mes demandes</small></span>
+        <span><span data-i18n="socle.profil_demandeur.demandeur">Demandeur</span><small data-i18n="socle.profil_demandeur.signaler_probleme_suivre_mes">Signaler un problème, suivre mes demandes</small></span>
       </button>
       <button type="button" class="btn btn-secondaire btn-gros" id="profil-technicien">
         <span data-icone="ordres"></span>
-        <span>Technicien<small>Mes ordres de travail, comptes rendus</small></span>
+        <span><span data-i18n="socle.profil_technicien.technicien">Technicien</span><small data-i18n="socle.profil_technicien.mes_ordres_travail_comptes">Mes ordres de travail, comptes rendus</small></span>
       </button>
       <button type="button" class="btn btn-secondaire btn-gros" id="profil-responsable">
         <span data-icone="parametres"></span>
-        <span>Responsable<small>Tout le suivi : demandes, OT, parc, paramètres</small></span>
+        <span><span data-i18n="socle.profil_responsable.responsable">Responsable</span><small data-i18n="socle.profil_responsable.tout_suivi_demandes_ot">Tout le suivi : demandes, OT, parc, paramètres</small></span>
       </button>
     </div>
 
     <form id="profil-panneau-demandeur" class="carte form-colonne" hidden novalidate>
       <div class="champ">
-        <label class="libelle" for="profil-nom">Votre nom <span class="requis" aria-hidden="true">*</span></label>
+        <label class="libelle" for="profil-nom"><span data-i18n="socle.profil_panneau_demandeur.nom">Votre nom</span> <span class="requis" aria-hidden="true">*</span></label>
         <input type="text" id="profil-nom" name="nom" required aria-required="true" autocomplete="name"
           maxlength="80" aria-describedby="profil-nom-erreur">
         <p class="erreur-champ" id="profil-nom-erreur" hidden></p>
       </div>
       <div class="actions">
-        <button type="button" class="btn btn-fantome" data-retour>Retour</button>
+        <button type="button" class="btn btn-fantome" data-retour data-i18n="socle.profil_panneau_demandeur.retour">Retour</button>
         <span class="espace"></span>
-        <button type="submit" class="btn btn-primaire">Continuer</button>
+        <button type="submit" class="btn btn-primaire" data-i18n="commun.bouton.continuer">Continuer</button>
       </div>
     </form>
 
     <div id="profil-panneau-technicien" class="carte" hidden>
-      <h2>Choisissez votre nom</h2>
+      <h2 data-i18n="socle.profil_panneau_technicien.choisissez_nom">Choisissez votre nom</h2>
       <div class="pile-gros" id="profil-techniciens"></div>
       <div class="actions">
-        <button type="button" class="btn btn-fantome" data-retour>Retour</button>
+        <button type="button" class="btn btn-fantome" data-retour data-i18n="socle.profil_panneau_demandeur.retour">Retour</button>
       </div>
     </div>
 
     <div class="actions">
-      <button type="button" class="btn btn-fantome" id="profil-annuler" hidden>Annuler</button>
+      <button type="button" class="btn btn-fantome" id="profil-annuler" hidden data-i18n="commun.bouton.annuler">Annuler</button>
     </div>
-    <!-- Lot 7 (§22.10) : visible sur le PC serveur tant que l'installation n'est pas faite (js/app.js) -->
-    <p class="note lien-installation" hidden><a href="#/installation">Installer Prévo (assistant)</a> : comptes, https, téléphones, démarrage avec le PC.</p>
+    <!-- Lot 7 (§22.10) : visible sur le PC serveur tant que l'installation n'est pas faite (js/app.js, qui la remplit) -->
+    <p class="note lien-installation" hidden></p>
   </div>
 </div>
 
@@ -190,8 +189,8 @@
     <div class="marque">
       <span data-ui="logo" data-classe="grand"></span>
       <div>
-        <h1 id="connexion-titre">Connexion</h1>
-        <p id="connexion-sous-titre">Chaque personne a son compte ; le serveur vérifie les droits.</p>
+        <h1 id="connexion-titre" data-i18n="socle.connexion_titre.connexion">Connexion</h1>
+        <p id="connexion-sous-titre" data-i18n="socle.connexion_sous_titre.chaque_personne_compte_serveur">Chaque personne a son compte ; le serveur vérifie les droits.</p>
       </div>
     </div>
 
@@ -200,73 +199,72 @@
     <!-- Compte : identifiant, mot de passe, « rester connecté sur cet appareil » (POST /api/connexion) -->
     <form id="connexion-formulaire" class="carte form-colonne connexion-panneau" novalidate hidden>
       <div class="champ">
-        <label class="libelle" for="connexion-identifiant">Identifiant</label>
+        <label class="libelle" for="connexion-identifiant" data-i18n="socle.connexion_formulaire.identifiant">Identifiant</label>
         <input type="text" id="connexion-identifiant" name="identifiant" autocomplete="username" autocapitalize="none"
           spellcheck="false" maxlength="80" required aria-required="true">
-        <p class="aide">De la forme prenom.nom, donné par le responsable.</p>
+        <p class="aide" data-i18n="socle.connexion_formulaire.forme_prenom_nom_donne">De la forme prenom.nom, donné par le responsable.</p>
       </div>
       <div class="champ">
-        <label class="libelle" for="connexion-mot-de-passe">Mot de passe</label>
+        <label class="libelle" for="connexion-mot-de-passe" data-i18n="socle.connexion_formulaire.mot_passe">Mot de passe</label>
         <input type="password" id="connexion-mot-de-passe" name="mot_de_passe" autocomplete="current-password"
           maxlength="256" required aria-required="true">
       </div>
       <div class="champ">
         <label class="case" for="connexion-rester">
           <input type="checkbox" id="connexion-rester" name="rester">
-          <span>Rester connecté sur cet appareil</span>
+          <span data-i18n="socle.connexion_formulaire.rester_connecte_appareil">Rester connecté sur cet appareil</span>
         </label>
         <p class="aide" id="connexion-rester-aide"></p>
       </div>
       <p class="erreur-champ" id="connexion-erreur" role="alert" hidden></p>
       <div class="actions">
-        <button type="submit" class="btn btn-primaire" id="connexion-valider">Se connecter</button>
+        <button type="submit" class="btn btn-primaire" id="connexion-valider" data-i18n="socle.connexion_valider.connecter">Se connecter</button>
       </div>
     </form>
 
     <!-- Appareil enrôlé (page ouverte sur #/enroler/<jeton>) : « Entrez votre nom » (POST /api/enroler) -->
     <form id="connexion-enrolement" class="carte form-colonne connexion-panneau" novalidate hidden>
-      <h2>Entrez votre nom</h2>
-      <p class="note">Votre nom est inscrit sur vos demandes ; cet appareil restera reconnu sans mot de passe.</p>
+      <h2 data-i18n="socle.connexion_enrolement.entrez_nom">Entrez votre nom</h2>
+      <p class="note" data-i18n="socle.connexion_enrolement.nom_inscrit_demandes_appareil">Votre nom est inscrit sur vos demandes ; cet appareil restera reconnu sans mot de passe.</p>
       <div class="champ">
-        <label class="libelle" for="connexion-nom">Votre nom <span class="requis" aria-hidden="true">*</span></label>
+        <label class="libelle" for="connexion-nom"><span data-i18n="socle.profil_panneau_demandeur.nom">Votre nom</span> <span class="requis" aria-hidden="true">*</span></label>
         <input type="text" id="connexion-nom" name="nom" autocomplete="name" maxlength="60" required aria-required="true"
           aria-describedby="connexion-enrolement-erreur">
       </div>
       <p class="erreur-champ" id="connexion-enrolement-erreur" role="alert" hidden></p>
       <div class="actions">
-        <button type="submit" class="btn btn-primaire" id="connexion-enroler">Continuer</button>
-        <button type="button" class="btn btn-fantome" id="connexion-avec-compte">J'ai un compte</button>
+        <button type="submit" class="btn btn-primaire" id="connexion-enroler" data-i18n="commun.bouton.continuer">Continuer</button>
+        <button type="button" class="btn btn-fantome" id="connexion-avec-compte" data-i18n="socle.connexion_avec_compte.ai_compte">J'ai un compte</button>
       </div>
     </form>
 
     <!-- Mot de passe provisoire : à choisir avant tout (POST /api/mot-de-passe) -->
     <form id="connexion-mot-de-passe-panneau" class="carte form-colonne connexion-panneau" novalidate hidden>
-      <p class="note connexion-regles">12 caractères au moins, 256 au plus, aucune règle de composition : une phrase de
-        passe de plusieurs mots est conseillée.</p>
+      <p class="note connexion-regles" data-i18n="socle.connexion_mot_de_passe_panneau.12_caracteres_moins_256">12 caractères au moins, 256 au plus, aucune règle de composition : une phrase de passe de plusieurs mots est conseillée.</p>
       <div class="champ">
-        <label class="libelle" for="connexion-actuel">Mot de passe actuel (provisoire)</label>
+        <label class="libelle" for="connexion-actuel" data-i18n="socle.connexion_mot_de_passe_panneau.mot_passe_actuel_provisoire">Mot de passe actuel (provisoire)</label>
         <input type="password" id="connexion-actuel" name="actuel" autocomplete="current-password" maxlength="256"
           required aria-required="true">
       </div>
       <div class="champ">
-        <label class="libelle" for="connexion-nouveau">Nouveau mot de passe</label>
+        <label class="libelle" for="connexion-nouveau" data-i18n="socle.connexion_mot_de_passe_panneau.nouveau_mot_passe">Nouveau mot de passe</label>
         <input type="password" id="connexion-nouveau" name="nouveau" autocomplete="new-password" minlength="12"
           maxlength="256" required aria-required="true" aria-describedby="connexion-force">
         <p class="aide" id="connexion-force" aria-live="polite"></p>
       </div>
       <div class="champ">
-        <label class="libelle" for="connexion-confirmation">Confirmation</label>
+        <label class="libelle" for="connexion-confirmation" data-i18n="socle.connexion_mot_de_passe_panneau.confirmation">Confirmation</label>
         <input type="password" id="connexion-confirmation" name="confirmation" autocomplete="new-password"
           maxlength="256" required aria-required="true">
       </div>
       <p class="erreur-champ" id="connexion-mdp-erreur" role="alert" hidden></p>
       <div class="actions">
-        <button type="submit" class="btn btn-primaire" id="connexion-changer">Enregistrer et continuer</button>
-        <button type="button" class="btn btn-fantome" id="connexion-mdp-deconnexion">Se déconnecter</button>
+        <button type="submit" class="btn btn-primaire" id="connexion-changer" data-i18n="socle.connexion_changer.enregistrer_continuer">Enregistrer et continuer</button>
+        <button type="button" class="btn btn-fantome" id="connexion-mdp-deconnexion" data-i18n="socle.connexion_mdp_deconnexion.deconnecter">Se déconnecter</button>
       </div>
     </form>
 
-    <p class="demarrage-pied">Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS</p>
+    <p class="demarrage-pied"><span data-i18n="socle.ecran_demarrage.developpe_claude_anthropic_demande">Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS</span></p>
   </div>
 </div>
 
@@ -276,15 +274,15 @@
     <div class="marque">
       <span data-ui="logo" data-classe="grand"></span>
       <div>
-        <h1>Installer Prévo</h1>
-        <p id="installation-premiere-ligne">Tant que l'installation n'est pas terminée, Prévo n'est joignable que sur ce PC.</p>
+        <h1 data-i18n="socle.ecran_installation.installer_prevo">Installer Prévo</h1>
+        <p id="installation-premiere-ligne" data-i18n="socle.installation_premiere_ligne.tant_installation_pas_terminee">Tant que l'installation n'est pas terminée, Prévo n'est joignable que sur ce PC.</p>
       </div>
     </div>
     <div id="installation-alertes" hidden></div>
     <!-- Les étapes (js/modules/installation-ecrans.js) : progression, étape courante ou page unique de l'informaticien -->
-    <div id="installation-contenu"><p class="chargement" role="status">Lecture de l'état de l'installation…</p></div>
-    <p class="installation-quitter"><a href="#/accueil" id="installation-quitter">Ouvrir Prévo sans terminer l'installation (il reste joignable sur ce PC seulement)</a></p>
-    <p class="demarrage-pied">Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS</p>
+    <div id="installation-contenu"><p class="chargement" role="status" data-i18n="socle.installation_contenu.lecture_etat_installation">Lecture de l'état de l'installation…</p></div>
+    <p class="installation-quitter"><a href="#/accueil" id="installation-quitter" data-i18n="socle.installation_quitter.ouvrir_prevo_sans_terminer">Ouvrir Prévo sans terminer l'installation (il reste joignable sur ce PC seulement)</a></p>
+    <p class="demarrage-pied"><span data-i18n="socle.ecran_demarrage.developpe_claude_anthropic_demande">Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS</span></p>
   </div>
 </div>
 
@@ -292,26 +290,26 @@
 <div class="coque" id="app" hidden>
 
   <!-- menu latéral (≥ 641 px ; icônes seules de 641 à 1099 px) -->
-  <aside class="menu-lateral" aria-label="Menu">
+  <aside class="menu-lateral" aria-label="Menu" data-i18n-attr="aria-label:socle.app.menu">
     <div class="menu-tete">
       <span data-ui="logo"></span>
-      <div class="titre"><b>Prévo</b><small>GMAO</small></div>
+      <div class="titre"><b data-i18n="socle.ecran_demarrage.prevo">Prévo</b><small data-i18n="socle.app.gmao">GMAO</small></div>
       <button type="button" class="btn btn-fantome btn-icone menu-replier" id="btn-replier"
-        aria-label="Replier le menu" aria-expanded="true"><span data-icone="replier"></span></button>
+        aria-label="Replier le menu" aria-expanded="true" data-i18n-attr="aria-label:socle.btn_replier.replier_menu"><span data-icone="replier"></span></button>
       <span class="nom-entreprise" id="nom-entreprise" hidden></span>
     </div>
-    <nav class="menu" id="menu" aria-label="Navigation principale"></nav>
-    <button type="button" class="etat-poste" id="etat-poste" title="Changer de profil">
+    <nav class="menu" id="menu" aria-label="Navigation principale" data-i18n-attr="aria-label:socle.menu.navigation_principale"></nav>
+    <button type="button" class="etat-poste" id="etat-poste" title="Changer de profil" data-i18n-attr="title:socle.etat_poste.changer_profil">
       <span data-icone="utilisateur"></span>
-      <span class="libelle"><span id="libelle-profil"></span> <span class="changer">changer</span></span>
+      <span class="libelle"><span id="libelle-profil"></span> <span class="changer" data-i18n="socle.etat_poste.changer">changer</span></span>
     </button>
-    <button type="button" class="etat-poste lien-explications" id="btn-explications" title="Revoir l'explication de cet écran">
+    <button type="button" class="etat-poste lien-explications" id="btn-explications" title="Revoir l'explication de cet écran" data-i18n-attr="title:socle.btn_explications.revoir_explication_ecran">
       <span data-icone="apropos"></span>
-      <span class="libelle">Explications</span>
+      <span class="libelle" data-i18n="socle.btn_explications.explications">Explications</span>
     </button>
-    <a class="signature" href="#/apropos" title="À propos">
+    <a class="signature" href="#/apropos" title="À propos" data-i18n-attr="title:socle.app.propos">
       <span data-icone="apropos"></span>
-      <span class="libelle">Développé par <b>Claude (Anthropic)</b> à la demande de <b>Nicolas Briand — SELECTIS</b></span>
+      <span class="libelle"></span><!-- phrase balisée, remplie au démarrage par js/app.js -->
     </a>
   </aside>
 
@@ -319,20 +317,20 @@
     <!-- en-tête mobile (≤ 640 px) -->
     <header class="entete-mobile">
       <span data-ui="logo"></span>
-      <span class="titre" id="titre-mobile">Prévo</span>
-      <button type="button" class="btn btn-fantome btn-icone" id="btn-explications-mobile" aria-label="Explications de cet écran"><span data-icone="apropos"></span></button>
-      <button type="button" class="btn btn-fantome btn-icone" id="btn-profil-mobile" aria-label="Changer de profil"><span data-icone="utilisateur"></span></button>
+      <span class="titre" id="titre-mobile" data-i18n="socle.ecran_demarrage.prevo">Prévo</span>
+      <button type="button" class="btn btn-fantome btn-icone" id="btn-explications-mobile" aria-label="Explications de cet écran" data-i18n-attr="aria-label:socle.btn_explications_mobile.explications_ecran"><span data-icone="apropos"></span></button>
+      <button type="button" class="btn btn-fantome btn-icone" id="btn-profil-mobile" aria-label="Changer de profil" data-i18n-attr="aria-label:socle.etat_poste.changer_profil"><span data-icone="utilisateur"></span></button>
     </header>
 
     <div class="bandeau-demo" id="bandeau-demo" role="status" hidden>
       <span data-icone="alerte"></span>
-      <span class="libelle-bandeau">Démo — rien n'est enregistré</span>
-      <button type="button" class="btn btn-secondaire" id="btn-export-demo" aria-label="Exporter en ZIP"><span data-icone="export"></span><span class="libelle">Exporter en ZIP</span></button>
+      <span class="libelle-bandeau" data-i18n="socle.bandeau_demo.demo_rien_enregistre">Démo — rien n'est enregistré</span>
+      <button type="button" class="btn btn-secondaire" id="btn-export-demo" aria-label="Exporter en ZIP" data-i18n-attr="aria-label:socle.btn_export_demo.exporter_zip"><span data-icone="export"></span><span class="libelle" data-i18n="socle.btn_export_demo.exporter_zip">Exporter en ZIP</span></button>
     </div>
     <div class="bandeau-changement" id="bandeau-changement" role="status" hidden>
       <span data-icone="actualiser"></span>
-      <span class="libelle-bandeau">Des données ont changé sur un autre poste</span>
-      <button type="button" class="btn btn-primaire" id="btn-actualiser">Actualiser</button>
+      <span class="libelle-bandeau" data-i18n="socle.bandeau_changement.donnees_ont_change_autre">Des données ont changé sur un autre poste</span>
+      <button type="button" class="btn btn-primaire" id="btn-actualiser" data-i18n="commun.bouton.actualiser">Actualiser</button>
     </div>
     <div class="alertes alertes-app" id="alertes-app" hidden></div>
 
@@ -340,7 +338,7 @@
   </div>
 
   <!-- barre du bas (≤ 640 px) : 4 entrées + « Plus » -->
-  <nav class="barre-bas" id="barre-bas" aria-label="Navigation principale"></nav>
+  <nav class="barre-bas" id="barre-bas" aria-label="Navigation principale" data-i18n-attr="aria-label:socle.menu.navigation_principale"></nav>
 </div>
 
 <!-- Zone d'impression (bon de travail) : enfant direct de <body>, seule imprimée quand elle est remplie -->

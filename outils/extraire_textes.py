@@ -210,7 +210,8 @@ def lire_schema(racine):
     colonnes = set(re.findall(r"(?:champ|choix|reference|codeDefaillance|booleen)\('([a-z_0-9]+)'", src))
     colonnes |= {'id', 'actif'}
     valeurs = set()
-    for m in re.finditer(r"choix\('[a-z_]+',\s*'[^']*',\s*(\[[^\]]*\]|[A-Z_]+)", src, re.S):
+    # choix(nom, [valeurs]) ; avant T238, choix(nom, 'Libellé', [valeurs]) (libellé facultatif, lu dans fr.js depuis)
+    for m in re.finditer(r"choix\('[a-z_]+',\s*(?:'[^']*',\s*)?(\[[^\]]*\]|[A-Z_]+)", src, re.S):
         if m.group(1).startswith('['):
             valeurs |= set(re.findall(r"'([^']*)'", m.group(1)))
     for nom in ('CRITICITES', 'PRIORITES'):

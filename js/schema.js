@@ -14,30 +14,32 @@ const Schema = (function () {
   // Petites fabriques de champs (pour que les tables restent lisibles)
   // ---------------------------------------------------------------------------
 
-  // Champ générique : nom, type, libellé, puis options facultatives
+  // Champ générique : nom, type, puis options facultatives
   // (obligatoire, defaut, protege, synonymes, valeurs, retirees, table, champCible, filtre, depuisVersion).
-  function champ(nom, type, libelle, options) {
-    return Object.assign({ nom: nom, type: type, libelle: libelle }, options || {});
+  // Le libellé n'est pas écrit ici : il est lu dans js/i18n/fr.js (schema.<table>.<champ>) à chaque lecture de
+  // champ.libelle (voir « Libellés » plus bas).
+  function champ(nom, type, options) {
+    return Object.assign({ nom: nom, type: type }, options || {});
   }
 
   function identifiantChamp() {
-    return champ('id', 'id', 'Identifiant');
+    return champ('id', 'id');
   }
 
   // Champ « choix » : liste fermée de valeurs canoniques. Option `retirees` : valeurs qui ne sont plus proposées ni
   // permises, mais encore lues sans erreur dans une ancienne ligne (Donnees la signale par le contrôle de sa table).
-  function choix(nom, libelle, valeurs, options) {
-    return champ(nom, 'choix', libelle, Object.assign({ valeurs: valeurs }, options || {}));
+  function choix(nom, valeurs, options) {
+    return champ(nom, 'choix', Object.assign({ valeurs: valeurs }, options || {}));
   }
 
   // Champ « ref » : référence vers la clé d'une autre table.
-  function reference(nom, libelle, table, options) {
-    return champ(nom, 'ref', libelle, Object.assign({ table: table }, options || {}));
+  function reference(nom, table, options) {
+    return champ(nom, 'ref', Object.assign({ table: table }, options || {}));
   }
 
   // Champ « ref » vers codes_defaillance.code, filtré sur une famille (symptôme, cause, remède).
-  function codeDefaillance(nom, libelle, famille) {
-    return reference(nom, libelle, 'codes_defaillance', {
+  function codeDefaillance(nom, famille) {
+    return reference(nom, 'codes_defaillance', {
       champCible: 'code',
       filtre: { famille: famille },
     });
@@ -45,12 +47,12 @@ const Schema = (function () {
 
   // Champ « actif » commun à plusieurs tables : une ligne n'est jamais supprimée.
   function champActif() {
-    return champ('actif', 'booleen', 'Actif', { defaut: '1' });
+    return champ('actif', 'booleen', { defaut: '1' });
   }
 
   // Champ booléen (0/1), faux par défaut.
-  function booleen(nom, libelle) {
-    return champ(nom, 'booleen', libelle, { defaut: '0' });
+  function booleen(nom) {
+    return champ(nom, 'booleen', { defaut: '0' });
   }
 
   // Marque un champ ajouté par une version du format après la première (ARCHITECTURE.md §14.1).
@@ -74,303 +76,303 @@ const Schema = (function () {
   const tables = {
 
     localisations: {
-      fichier: 'localisations.csv', libelle: 'Localisations',
+      fichier: 'localisations.csv',
       cle: 'id',
       identifiant: { prefixe: 'LOC-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        champ('libelle', 'texte', 'Libellé', { obligatoire: true, synonymes: ['nom', 'lieu', 'zone'] }),
-        reference('parent_id', 'Localisation parente', 'localisations'),
-        choix('type', 'Type', ['site', 'atelier', 'ligne'], { obligatoire: true }),
+        champ('libelle', 'texte', { obligatoire: true, synonymes: ['nom', 'lieu', 'zone'] }),
+        reference('parent_id', 'localisations'),
+        choix('type', ['site', 'atelier', 'ligne'], { obligatoire: true }),
       ],
     },
 
     equipements: {
-      fichier: 'equipements.csv', libelle: 'Équipements',
+      fichier: 'equipements.csv',
       cle: 'id',
       identifiant: { prefixe: 'EQ-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        champ('repere', 'texte', 'Repère', {
+        champ('repere', 'texte', {
           protege: true, obligatoire: true,
           synonymes: ['code machine', 'tag', 'référence machine', 'code équipement', 'n° machine', 'repère machine'],
         }),
-        champ('designation', 'texte', 'Désignation', {
+        champ('designation', 'texte', {
           obligatoire: true,
           synonymes: ['désignation', 'nom', 'machine', 'équipement', 'libellé', 'description machine'],
         }),
-        reference('localisation_id', 'Localisation', 'localisations', {
+        reference('localisation_id', 'localisations', {
           synonymes: ['localisation', 'atelier', 'ligne', 'emplacement', 'zone', 'site'],
         }),
-        reference('parent_id', 'Équipement parent', 'equipements', {
+        reference('parent_id', 'equipements', {
           synonymes: ['parent', 'ensemble', 'machine mère'],
         }),
-        champ('marque', 'texte', 'Marque', { synonymes: ['fabricant', 'constructeur'] }),
-        champ('modele', 'texte', 'Modèle', { synonymes: ['modèle', 'type', 'référence constructeur'] }),
-        champ('num_serie', 'texte', 'Numéro de série', {
+        champ('marque', 'texte', { synonymes: ['fabricant', 'constructeur'] }),
+        champ('modele', 'texte', { synonymes: ['modèle', 'type', 'référence constructeur'] }),
+        champ('num_serie', 'texte', {
           protege: true, synonymes: ['n° de série', 'numéro de série', 'n° série', 'serial', 'série', 'sn'],
         }),
-        champ('date_mes', 'date', 'Date de mise en service', {
+        champ('date_mes', 'date', {
           synonymes: ['mise en service', 'date de mise en service', 'mes', 'date mes', 'année de mise en service'],
         }),
-        choix('criticite', 'Criticité', CRITICITES, {
+        choix('criticite', CRITICITES, {
           defaut: 'B', synonymes: ['criticité', 'classe', 'priorité machine'],
         }),
-        choix('statut', 'Statut', ['en service', 'arrêt', 'rebut'], {
+        choix('statut', ['en service', 'arrêt', 'rebut'], {
           defaut: 'en service', synonymes: ['état', 'etat'],
         }),
-        champ('heures_fonct_jour', 'decimal', 'Heures de fonctionnement par jour', {
+        champ('heures_fonct_jour', 'decimal', {
           synonymes: ['heures par jour', 'h/jour', 'heures de fonctionnement'],
         }),
-        champ('habilitation_requise', 'texte', 'Habilitation requise', {
+        champ('habilitation_requise', 'texte', {
           synonymes: ['habilitation', 'habilitations requises'],
         }),
-        champ('consignation', 'texte_long', 'Consignation', {
+        champ('consignation', 'texte_long', {
           synonymes: ['procédure de consignation', 'consignation énergies'],
         }),
-        champ('document', 'document', 'Document'),
+        champ('document', 'document'),
         champActif(),
         // Version 2 du format (ARCHITECTURE.md §14.1)
-        depuisVersion(2, champ('valeur_remplacement', 'decimal', 'Valeur de remplacement (€ HT)', {
+        depuisVersion(2, champ('valeur_remplacement', 'decimal', {
           synonymes: ['valeur de remplacement', 'valeur à neuf', 'prix de remplacement'],
         })),
       ],
     },
 
     demandes: {
-      fichier: 'demandes.csv', libelle: 'Demandes d\'intervention',
+      fichier: 'demandes.csv',
       cle: 'id',
       identifiant: { prefixe: 'DI-', chiffres: 4, annuel: true },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        champ('date_heure', 'date_heure', 'Date et heure de la demande'),
-        champ('demandeur', 'texte', 'Demandeur'),
-        reference('equipement_id', 'Équipement', 'equipements', { obligatoire: true }),
-        champ('symptome', 'texte_long', 'Symptôme observé', { obligatoire: true }),
-        choix('impact', 'Impact', ['sécurité', 'arrêt', 'dégradé', 'gêne'], { obligatoire: true }),
-        champ('description', 'texte_long', 'Description'),
-        champ('photo', 'document', 'Photo'),
-        choix('statut', 'Statut', ['Nouvelle', 'Acceptée', 'Regroupée', 'Différée', 'Refusée'], {
+        champ('date_heure', 'date_heure'),
+        champ('demandeur', 'texte'),
+        reference('equipement_id', 'equipements', { obligatoire: true }),
+        champ('symptome', 'texte_long', { obligatoire: true }),
+        choix('impact', ['sécurité', 'arrêt', 'dégradé', 'gêne'], { obligatoire: true }),
+        champ('description', 'texte_long'),
+        champ('photo', 'document'),
+        choix('statut', ['Nouvelle', 'Acceptée', 'Regroupée', 'Différée', 'Refusée'], {
           defaut: 'Nouvelle',
         }),
-        champ('motif_decision', 'texte_long', 'Motif de la décision'),
-        champ('date_decision', 'date_heure', 'Date de la décision'),
-        reference('ot_id', 'Ordre de travail lié', 'ordres_travail'),
+        champ('motif_decision', 'texte_long'),
+        champ('date_decision', 'date_heure'),
+        reference('ot_id', 'ordres_travail'),
         // Version 2 du format (ARCHITECTURE.md §14.1)
-        depuisVersion(2, codeDefaillance('symptome_code', 'Code symptôme', 'symptôme')),
-        depuisVersion(2, reference('ot_origine_id', 'OT d\'origine (préventif)', 'ordres_travail')),
+        depuisVersion(2, codeDefaillance('symptome_code', 'symptôme')),
+        depuisVersion(2, reference('ot_origine_id', 'ordres_travail')),
       ],
     },
 
     ordres_travail: {
-      fichier: 'ordres_travail.csv', libelle: 'Ordres de travail',
+      fichier: 'ordres_travail.csv',
       cle: 'id',
       identifiant: { prefixe: 'OT-', chiffres: 4, annuel: true },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        choix('origine', 'Origine', ['DI', 'préventif', 'urgence', 'manuel']),
-        reference('di_id', 'Demande d\'intervention', 'demandes'),
-        reference('gamme_id', 'Gamme de préventif', 'gammes'),
-        reference('equipement_id', 'Équipement', 'equipements', { obligatoire: true }),
-        choix('type', 'Type', [
+        choix('origine', ['DI', 'préventif', 'urgence', 'manuel']),
+        reference('di_id', 'demandes'),
+        reference('gamme_id', 'gammes'),
+        reference('equipement_id', 'equipements', { obligatoire: true }),
+        choix('type', [
           'correctif immédiat', 'correctif différé', 'préventif systématique',
           'préventif conditionnel', 'amélioration', 'réglementaire',
         ], { obligatoire: true }),
-        choix('priorite', 'Priorité', PRIORITES, { obligatoire: true }),
-        choix('statut', 'Statut', [
+        choix('priorite', PRIORITES, { obligatoire: true }),
+        choix('statut', [
           'Créé', 'Préparé', 'Planifié', 'En cours', 'En attente',
           'Clôturé techniquement', 'Clôturé administrativement', 'Annulé',
         ], { obligatoire: true, defaut: 'Créé' }),
-        champ('motif_attente', 'texte_long', 'Motif de mise en attente'),
-        champ('titre', 'texte', 'Titre', { obligatoire: true }),
-        champ('travail_a_faire', 'texte_long', 'Travail à faire'),
-        champ('consignes', 'texte_long', 'Consignes'),
-        champ('date_creation', 'date_heure', 'Date de création'),
-        champ('date_prevue', 'date', 'Date prévue'),
-        reference('technicien_id', 'Technicien', 'techniciens'),
-        champ('temps_prevu_h', 'decimal', 'Temps prévu (heures)'),
-        champ('date_debut', 'date_heure', 'Date de début'),
-        champ('date_fin', 'date_heure', 'Date de fin'),
-        booleen('arret_production', 'Arrêt de production'),
-        champ('duree_arret_h', 'decimal', 'Durée d\'arrêt (heures)'),
-        codeDefaillance('symptome_code', 'Code symptôme', 'symptôme'),
-        codeDefaillance('cause_code', 'Code cause', 'cause'),
-        codeDefaillance('remede_code', 'Code remède', 'remède'),
-        champ('compte_rendu', 'texte_long', 'Compte rendu'),
-        booleen('remise_service', 'Remis en service en sécurité'),
-        champ('cout_soustraitance', 'decimal', 'Coût de sous-traitance'),
-        champ('date_cloture_tech', 'date_heure', 'Date de clôture technique'),
-        champ('date_cloture_admin', 'date_heure', 'Date de clôture administrative'),
-        champ('motif_annulation', 'texte_long', 'Motif d\'annulation'),
-        reference('ot_lie_id', 'Ordre de travail lié', 'ordres_travail'),
+        champ('motif_attente', 'texte_long'),
+        champ('titre', 'texte', { obligatoire: true }),
+        champ('travail_a_faire', 'texte_long'),
+        champ('consignes', 'texte_long'),
+        champ('date_creation', 'date_heure'),
+        champ('date_prevue', 'date'),
+        reference('technicien_id', 'techniciens'),
+        champ('temps_prevu_h', 'decimal'),
+        champ('date_debut', 'date_heure'),
+        champ('date_fin', 'date_heure'),
+        booleen('arret_production'),
+        champ('duree_arret_h', 'decimal'),
+        codeDefaillance('symptome_code', 'symptôme'),
+        codeDefaillance('cause_code', 'cause'),
+        codeDefaillance('remede_code', 'remède'),
+        champ('compte_rendu', 'texte_long'),
+        booleen('remise_service'),
+        champ('cout_soustraitance', 'decimal'),
+        champ('date_cloture_tech', 'date_heure'),
+        champ('date_cloture_admin', 'date_heure'),
+        champ('motif_annulation', 'texte_long'),
+        reference('ot_lie_id', 'ordres_travail'),
         // Version 2 du format (ARCHITECTURE.md §14.1)
-        depuisVersion(2, booleen('anomalie_constatee', 'Anomalie constatée')),
+        depuisVersion(2, booleen('anomalie_constatee')),
         // Version 3 du format (ARCHITECTURE.md §20.2, D110) : facultative, jamais exigée à la clôture
-        depuisVersion(3, champ('astuce', 'texte_long', 'Astuce pour la prochaine fois')),
+        depuisVersion(3, champ('astuce', 'texte_long')),
       ],
     },
 
     ot_operations: {
-      fichier: 'ot_operations.csv', libelle: 'Opérations d\'ordre de travail',
+      fichier: 'ot_operations.csv',
       cle: 'id',
       identifiant: { prefixe: 'OTO-', chiffres: 6, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        reference('ot_id', 'Ordre de travail', 'ordres_travail'),
-        champ('ordre', 'entier', 'Ordre'),
-        champ('operation', 'texte', 'Opération'),
-        champ('valeur_attendue', 'texte', 'Valeur attendue'),
-        booleen('fait', 'Fait'),
-        champ('valeur_mesuree', 'texte', 'Valeur mesurée'),
+        reference('ot_id', 'ordres_travail'),
+        champ('ordre', 'entier'),
+        champ('operation', 'texte'),
+        champ('valeur_attendue', 'texte'),
+        booleen('fait'),
+        champ('valeur_mesuree', 'texte'),
       ],
     },
 
     ot_pieces: {
-      fichier: 'ot_pieces.csv', libelle: 'Pièces prévues d\'ordre de travail',
+      fichier: 'ot_pieces.csv',
       cle: 'id',
       identifiant: { prefixe: 'OTP-', chiffres: 6, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        reference('ot_id', 'Ordre de travail', 'ordres_travail'),
-        reference('article_id', 'Article', 'articles'),
-        champ('quantite_prevue', 'decimal', 'Quantité prévue'),
+        reference('ot_id', 'ordres_travail'),
+        reference('article_id', 'articles'),
+        champ('quantite_prevue', 'decimal'),
       ],
     },
 
     ot_temps: {
-      fichier: 'ot_temps.csv', libelle: 'Temps passés sur ordre de travail',
+      fichier: 'ot_temps.csv',
       cle: 'id',
       identifiant: { prefixe: 'OTT-', chiffres: 6, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        reference('ot_id', 'Ordre de travail', 'ordres_travail'),
-        reference('technicien_id', 'Technicien', 'techniciens'),
-        champ('date', 'date', 'Date'),
-        champ('heures', 'decimal', 'Heures'),
+        reference('ot_id', 'ordres_travail'),
+        reference('technicien_id', 'techniciens'),
+        champ('date', 'date'),
+        champ('heures', 'decimal'),
       ],
     },
 
     gammes: {
-      fichier: 'gammes.csv', libelle: 'Gammes de préventif',
+      fichier: 'gammes.csv',
       cle: 'id',
       identifiant: { prefixe: 'GAM-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        reference('equipement_id', 'Équipement', 'equipements'),
-        champ('libelle', 'texte', 'Libellé'),
-        choix('declencheur', 'Déclencheur', ['date', 'compteur', 'seuil'], { defaut: 'date' }),
-        champ('periodicite_jours', 'entier', 'Périodicité (jours)'),
-        reference('compteur_id', 'Compteur', 'compteurs'),
-        champ('periodicite_unites', 'decimal', 'Périodicité (unités du compteur)'),
-        champ('seuil', 'decimal', 'Seuil'),
-        champ('avance_jours', 'entier', 'Avance (jours)'),
-        champ('derniere_realisation', 'date', 'Dernière réalisation'),
-        champ('releve_derniere_realisation', 'decimal', 'Relevé à la dernière réalisation'),
-        champ('prochaine_echeance', 'date', 'Prochaine échéance'),
-        champ('temps_prevu_h', 'decimal', 'Temps prévu (heures)'),
-        champ('consignes', 'texte_long', 'Consignes'),
+        reference('equipement_id', 'equipements'),
+        champ('libelle', 'texte'),
+        choix('declencheur', ['date', 'compteur', 'seuil'], { defaut: 'date' }),
+        champ('periodicite_jours', 'entier'),
+        reference('compteur_id', 'compteurs'),
+        champ('periodicite_unites', 'decimal'),
+        champ('seuil', 'decimal'),
+        champ('avance_jours', 'entier'),
+        champ('derniere_realisation', 'date'),
+        champ('releve_derniere_realisation', 'decimal'),
+        champ('prochaine_echeance', 'date'),
+        champ('temps_prevu_h', 'decimal'),
+        champ('consignes', 'texte_long'),
         champActif(),
       ],
     },
 
     gamme_operations: {
-      fichier: 'gamme_operations.csv', libelle: 'Opérations de gamme',
+      fichier: 'gamme_operations.csv',
       cle: 'id',
       identifiant: { prefixe: 'GOP-', chiffres: 6, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        reference('gamme_id', 'Gamme', 'gammes'),
-        champ('ordre', 'entier', 'Ordre'),
-        champ('operation', 'texte', 'Opération'),
-        champ('valeur_attendue', 'texte', 'Valeur attendue'),
+        reference('gamme_id', 'gammes'),
+        champ('ordre', 'entier'),
+        champ('operation', 'texte'),
+        champ('valeur_attendue', 'texte'),
       ],
     },
 
     articles: {
-      fichier: 'articles.csv', libelle: 'Articles (pièces détachées)',
+      fichier: 'articles.csv',
       cle: 'id',
       identifiant: { prefixe: 'ART-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        champ('reference', 'texte', 'Référence', {
+        champ('reference', 'texte', {
           protege: true, obligatoire: true,
           synonymes: ['référence', 'réf', 'ref', 'code article', 'code'],
         }),
-        champ('designation', 'texte', 'Désignation', {
+        champ('designation', 'texte', {
           obligatoire: true, synonymes: ['désignation', 'libellé', 'article', 'description'],
         }),
-        champ('fabricant', 'texte', 'Fabricant', { synonymes: ['marque', 'constructeur'] }),
-        champ('ref_fabricant', 'texte', 'Référence fabricant', {
+        champ('fabricant', 'texte', { synonymes: ['marque', 'constructeur'] }),
+        champ('ref_fabricant', 'texte', {
           protege: true, synonymes: ['réf fabricant', 'réf. fabricant', 'référence constructeur', 'ref constructeur'],
         }),
-        champ('emplacement', 'texte', 'Emplacement', {
+        champ('emplacement', 'texte', {
           synonymes: ['rayon', 'casier', 'étagère', 'localisation magasin'],
         }),
-        champ('unite', 'texte', 'Unité', { synonymes: ['unité', 'u'] }),
-        champ('stock', 'decimal', 'Stock', { synonymes: ['quantité en stock', 'qté stock', 'stock actuel'] }),
-        champ('stock_securite', 'decimal', 'Stock de sécurité', { synonymes: ['stock mini', 'stock minimum'] }),
-        champ('point_commande', 'decimal', 'Point de commande', { synonymes: ['seuil de commande'] }),
-        champ('qte_commande', 'decimal', 'Quantité à commander', { synonymes: ['quantité de commande', 'qté commande'] }),
-        champ('delai_jours', 'entier', 'Délai d\'approvisionnement (jours)', { synonymes: ['délai', 'délai livraison'] }),
-        champ('prix_unitaire', 'decimal', 'Prix unitaire', { synonymes: ['prix', 'pu', 'prix achat', 'prix d\'achat'] }),
-        reference('fournisseur_id', 'Fournisseur', 'fournisseurs', { synonymes: ['fournisseur'] }),
-        booleen('critique', 'Article critique'),
+        champ('unite', 'texte', { synonymes: ['unité', 'u'] }),
+        champ('stock', 'decimal', { synonymes: ['quantité en stock', 'qté stock', 'stock actuel'] }),
+        champ('stock_securite', 'decimal', { synonymes: ['stock mini', 'stock minimum'] }),
+        champ('point_commande', 'decimal', { synonymes: ['seuil de commande'] }),
+        champ('qte_commande', 'decimal', { synonymes: ['quantité de commande', 'qté commande'] }),
+        champ('delai_jours', 'entier', { synonymes: ['délai', 'délai livraison'] }),
+        champ('prix_unitaire', 'decimal', { synonymes: ['prix', 'pu', 'prix achat', 'prix d\'achat'] }),
+        reference('fournisseur_id', 'fournisseurs', { synonymes: ['fournisseur'] }),
+        booleen('critique'),
         champActif(),
       ],
     },
 
     article_equipement: {
-      fichier: 'article_equipement.csv', libelle: 'Articles par équipement',
+      fichier: 'article_equipement.csv',
       cle: 'id',
       identifiant: { prefixe: 'AEQ-', chiffres: 5, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        reference('article_id', 'Article', 'articles'),
-        reference('equipement_id', 'Équipement', 'equipements'),
-        champ('quantite', 'decimal', 'Quantité'),
+        reference('article_id', 'articles'),
+        reference('equipement_id', 'equipements'),
+        champ('quantite', 'decimal'),
       ],
     },
 
     mouvements_stock: {
-      fichier: 'mouvements_stock.csv', libelle: 'Mouvements de stock',
+      fichier: 'mouvements_stock.csv',
       cle: 'id',
       identifiant: { prefixe: 'MVT-', chiffres: 6, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        champ('date', 'date_heure', 'Date et heure'),
-        reference('article_id', 'Article', 'articles'),
-        choix('type', 'Type', ['entrée', 'sortie', 'inventaire', 'retour']),
-        champ('quantite', 'decimal', 'Quantité'),
-        reference('ot_id', 'Ordre de travail', 'ordres_travail'),
-        champ('utilisateur', 'texte', 'Utilisateur'),
-        champ('commentaire', 'texte_long', 'Commentaire'),
+        champ('date', 'date_heure'),
+        reference('article_id', 'articles'),
+        choix('type', ['entrée', 'sortie', 'inventaire', 'retour']),
+        champ('quantite', 'decimal'),
+        reference('ot_id', 'ordres_travail'),
+        champ('utilisateur', 'texte'),
+        champ('commentaire', 'texte_long'),
       ],
     },
 
     techniciens: {
-      fichier: 'techniciens.csv', libelle: 'Techniciens',
+      fichier: 'techniciens.csv',
       cle: 'id',
       identifiant: { prefixe: 'TEC-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        champ('nom', 'texte', 'Nom', { obligatoire: true, synonymes: ['nom de famille', 'technicien'] }),
-        champ('prenom', 'texte', 'Prénom', { synonymes: ['prénom'] }),
-        champ('metier', 'texte', 'Métier', { synonymes: ['métier', 'fonction', 'spécialité', 'poste'] }),
-        champ('taux_horaire', 'decimal', 'Taux horaire', { synonymes: ['coût horaire', 'tarif horaire', '€/h'] }),
-        champ('capacite_h_semaine', 'decimal', 'Capacité (heures par semaine)', {
+        champ('nom', 'texte', { obligatoire: true, synonymes: ['nom de famille', 'technicien'] }),
+        champ('prenom', 'texte', { synonymes: ['prénom'] }),
+        champ('metier', 'texte', { synonymes: ['métier', 'fonction', 'spécialité', 'poste'] }),
+        champ('taux_horaire', 'decimal', { synonymes: ['coût horaire', 'tarif horaire', '€/h'] }),
+        champ('capacite_h_semaine', 'decimal', {
           synonymes: ['capacité', 'heures par semaine', 'h/semaine'],
         }),
         champActif(),
@@ -378,136 +380,136 @@ const Schema = (function () {
     },
 
     habilitations: {
-      fichier: 'habilitations.csv', libelle: 'Habilitations',
+      fichier: 'habilitations.csv',
       cle: 'id',
       identifiant: { prefixe: 'HAB-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        reference('technicien_id', 'Technicien', 'techniciens'),
-        champ('intitule', 'texte', 'Intitulé', { synonymes: ['habilitation', 'intitulé', 'titre'] }),
-        champ('date_obtention', 'date', 'Date d\'obtention', { synonymes: ['obtenue le', 'date obtention'] }),
-        champ('date_echeance', 'date', 'Date d\'échéance', {
+        reference('technicien_id', 'techniciens'),
+        champ('intitule', 'texte', { synonymes: ['habilitation', 'intitulé', 'titre'] }),
+        champ('date_obtention', 'date', { synonymes: ['obtenue le', 'date obtention'] }),
+        champ('date_echeance', 'date', {
           synonymes: ['échéance', 'valable jusqu\'au', 'date d\'expiration', 'expiration'],
         }),
       ],
     },
 
     compteurs: {
-      fichier: 'compteurs.csv', libelle: 'Compteurs',
+      fichier: 'compteurs.csv',
       cle: 'id',
       identifiant: { prefixe: 'CPT-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        reference('equipement_id', 'Équipement', 'equipements'),
-        champ('libelle', 'texte', 'Libellé'),
-        champ('unite', 'texte', 'Unité'),
+        reference('equipement_id', 'equipements'),
+        champ('libelle', 'texte'),
+        champ('unite', 'texte'),
       ],
     },
 
     releves: {
-      fichier: 'releves.csv', libelle: 'Relevés de compteur',
+      fichier: 'releves.csv',
       cle: 'id',
       identifiant: { prefixe: 'REL-', chiffres: 6, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        reference('compteur_id', 'Compteur', 'compteurs'),
-        champ('date', 'date', 'Date'),
-        champ('valeur', 'decimal', 'Valeur'),
-        champ('utilisateur', 'texte', 'Utilisateur'),
+        reference('compteur_id', 'compteurs'),
+        champ('date', 'date'),
+        champ('valeur', 'decimal'),
+        champ('utilisateur', 'texte'),
       ],
     },
 
     controles_reglementaires: {
-      fichier: 'controles_reglementaires.csv', libelle: 'Contrôles réglementaires',
+      fichier: 'controles_reglementaires.csv',
       cle: 'id',
       identifiant: { prefixe: 'CTR-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        reference('equipement_id', 'Équipement', 'equipements'),
-        champ('nature', 'texte', 'Nature du contrôle'),
-        champ('texte_reference', 'texte', 'Texte de référence'),
-        champ('periodicite_mois', 'entier', 'Périodicité (mois)'),
-        champ('organisme', 'texte', 'Organisme de contrôle'),
-        champ('derniere_date', 'date', 'Date du dernier contrôle'),
-        champ('prochaine_date', 'date', 'Date du prochain contrôle'),
-        champ('rapport', 'document', 'Rapport'),
-        champ('observations', 'texte_long', 'Observations'),
-        booleen('observations_levees', 'Observations levées'),
+        reference('equipement_id', 'equipements'),
+        champ('nature', 'texte'),
+        champ('texte_reference', 'texte'),
+        champ('periodicite_mois', 'entier'),
+        champ('organisme', 'texte'),
+        champ('derniere_date', 'date'),
+        champ('prochaine_date', 'date'),
+        champ('rapport', 'document'),
+        champ('observations', 'texte_long'),
+        booleen('observations_levees'),
       ],
     },
 
     codes_defaillance: {
-      fichier: 'codes_defaillance.csv', libelle: 'Codes de défaillance',
+      fichier: 'codes_defaillance.csv',
       cle: 'id',
       identifiant: { prefixe: 'CD-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        choix('famille', 'Famille', ['symptôme', 'cause', 'remède'], { obligatoire: true }),
-        champ('code', 'texte', 'Code', { obligatoire: true }),
-        champ('libelle', 'texte', 'Libellé', { obligatoire: true }),
+        choix('famille', ['symptôme', 'cause', 'remède'], { obligatoire: true }),
+        champ('code', 'texte', { obligatoire: true }),
+        champ('libelle', 'texte', { obligatoire: true }),
       ],
     },
 
     fournisseurs: {
-      fichier: 'fournisseurs.csv', libelle: 'Fournisseurs',
+      fichier: 'fournisseurs.csv',
       cle: 'id',
       identifiant: { prefixe: 'FOU-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        champ('nom', 'texte', 'Nom', { synonymes: ['fournisseur', 'raison sociale', 'société'] }),
-        champ('contact', 'texte', 'Contact', { synonymes: ['interlocuteur', 'nom du contact'] }),
-        champ('telephone', 'texte', 'Téléphone', { protege: true, synonymes: ['téléphone', 'tél', 'tel', 'portable'] }),
-        champ('email', 'texte', 'E-mail', { synonymes: ['e-mail', 'mail', 'courriel', 'adresse mail'] }),
+        champ('nom', 'texte', { synonymes: ['fournisseur', 'raison sociale', 'société'] }),
+        champ('contact', 'texte', { synonymes: ['interlocuteur', 'nom du contact'] }),
+        champ('telephone', 'texte', { protege: true, synonymes: ['téléphone', 'tél', 'tel', 'portable'] }),
+        champ('email', 'texte', { synonymes: ['e-mail', 'mail', 'courriel', 'adresse mail'] }),
       ],
     },
 
     achats: {
-      fichier: 'achats.csv', libelle: 'Achats',
+      fichier: 'achats.csv',
       cle: 'id',
       identifiant: { prefixe: 'ACH-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       champs: [
         identifiantChamp(),
-        champ('date', 'date', 'Date'),
-        reference('article_id', 'Article', 'articles'),
-        reference('fournisseur_id', 'Fournisseur', 'fournisseurs'),
-        champ('quantite', 'decimal', 'Quantité'),
-        champ('prix_unitaire', 'decimal', 'Prix unitaire'),
-        choix('statut', 'Statut', ['demandée', 'commandée', 'reçue'], { defaut: 'demandée' }),
-        champ('date_reception', 'date', 'Date de réception'),
+        champ('date', 'date'),
+        reference('article_id', 'articles'),
+        reference('fournisseur_id', 'fournisseurs'),
+        champ('quantite', 'decimal'),
+        champ('prix_unitaire', 'decimal'),
+        choix('statut', ['demandée', 'commandée', 'reçue'], { defaut: 'demandée' }),
+        champ('date_reception', 'date'),
       ],
     },
 
     parametres: {
-      fichier: 'parametres.csv', libelle: 'Paramètres',
+      fichier: 'parametres.csv',
       cle: 'cle',                      // pas d'identifiant calculé : la clé est saisie
       ajoutSeul: false,
       champs: [
-        champ('cle', 'id', 'Clé'),
-        champ('valeur', 'texte', 'Valeur'),
+        champ('cle', 'id'),
+        champ('valeur', 'texte'),
       ],
     },
 
     journal: {
-      fichier: 'journal.csv', libelle: 'Journal des modifications',
+      fichier: 'journal.csv',
       cle: 'id',
       // J-AAAAMMJJHHMMSS-XXXX : « chiffres » = nombre de caractères aléatoires finaux.
       identifiant: { prefixe: 'J-', chiffres: 4, annuel: false, horodate: true },
       ajoutSeul: true,                 // écriture par ajout (ARCHITECTURE.md §5.4)
       champs: [
         identifiantChamp(),
-        champ('date_heure', 'date_heure', 'Date et heure'),
-        champ('poste', 'texte', 'Poste'),
-        champ('profil', 'texte', 'Profil'),
-        champ('table', 'texte', 'Table'),
-        champ('id_ligne', 'texte', 'Identifiant de la ligne'),
-        champ('action', 'texte', 'Action'),
+        champ('date_heure', 'date_heure'),
+        champ('poste', 'texte'),
+        champ('profil', 'texte'),
+        champ('table', 'texte'),
+        champ('id_ligne', 'texte'),
+        champ('action', 'texte'),
       ],
     },
 
@@ -517,66 +519,91 @@ const Schema = (function () {
     // trois types de textes ; « mode » est retiré (une panne est une page calculée) : une ancienne ligne de ce
     // type reste lue, signalée « type de page retiré ». `cause_code` reste une colonne du format 3, inutilisée.
     wiki_pages: {
-      fichier: 'wiki_pages.csv', libelle: 'Pages du wiki',
+      fichier: 'wiki_pages.csv',
       cle: 'id',
       identifiant: { prefixe: 'WP-', chiffres: 4, annuel: false },
       ajoutSeul: false,
       depuisVersion: 3,
       champs: [
         identifiantChamp(),
-        choix('type', 'Type', ['équipement', 'composant', 'savoir-faire'], { obligatoire: true, retirees: ['mode'] }),
-        champ('titre', 'texte', 'Titre', { obligatoire: true }),
-        champ('cle', 'texte', 'Clé (titre comparable)'),
-        reference('equipement_id', 'Équipement', 'equipements'),
-        reference('article_id', 'Article', 'articles'),
-        codeDefaillance('cause_code', 'Code cause', 'cause'),
-        reference('rattache_a', 'Rattaché à la page', 'wiki_pages'),
-        champ('texte', 'texte_long', 'Texte'),
-        champ('ot_cites', 'texte', 'OT cités'),
-        champ('liens', 'texte', 'Pages liées'),
-        champ('version', 'entier', 'Version', { defaut: '0' }),
-        choix('origine', 'Origine', ['IA', 'manuel', 'IA et manuel']),
-        champ('modele', 'texte', 'Modèle'),
-        reference('derniere_entree', 'Dernière entrée appliquée', 'wiki_journal'),
-        champ('valide_par', 'texte', 'Validé par'),
-        champ('valide_le', 'date_heure', 'Validé le'),
-        champ('cree_le', 'date_heure', 'Créée le'),
-        champ('modifie_le', 'date_heure', 'Modifiée le'),
-        choix('statut', 'Statut', ['active', 'archivée'], { defaut: 'active' }),
+        choix('type', ['équipement', 'composant', 'savoir-faire'], { obligatoire: true, retirees: ['mode'] }),
+        champ('titre', 'texte', { obligatoire: true }),
+        champ('cle', 'texte'),
+        reference('equipement_id', 'equipements'),
+        reference('article_id', 'articles'),
+        codeDefaillance('cause_code', 'cause'),
+        reference('rattache_a', 'wiki_pages'),
+        champ('texte', 'texte_long'),
+        champ('ot_cites', 'texte'),
+        champ('liens', 'texte'),
+        champ('version', 'entier', { defaut: '0' }),
+        choix('origine', ['IA', 'manuel', 'IA et manuel']),
+        champ('modele', 'texte'),
+        reference('derniere_entree', 'wiki_journal'),
+        champ('valide_par', 'texte'),
+        champ('valide_le', 'date_heure'),
+        champ('cree_le', 'date_heure'),
+        champ('modifie_le', 'date_heure'),
+        choix('statut', ['active', 'archivée'], { defaut: 'active' }),
       ],
     },
 
     // Journal du wiki (§20.2) : une ligne par OT ingéré, par écriture à la main et par décision sur une
     // contradiction. Les changements et les contradictions sont du JSON dans un champ texte long.
     wiki_journal: {
-      fichier: 'wiki_journal.csv', libelle: 'Journal du wiki',
+      fichier: 'wiki_journal.csv',
       cle: 'id',
       identifiant: { prefixe: 'WJ-', chiffres: 5, annuel: false },
       ajoutSeul: false,
       depuisVersion: 3,
       champs: [
         identifiantChamp(),
-        choix('nature', 'Nature', ['ingestion', 'manuel', 'décision'], { obligatoire: true }),
-        reference('ot_id', 'Ordre de travail', 'ordres_travail'),
-        champ('date_intervention', 'date_heure', 'Date d\'intervention'),
-        choix('statut', 'Statut', ['en file', 'à valider', 'validée', 'rejetée', 'à refaire', 'refusée',
+        choix('nature', ['ingestion', 'manuel', 'décision'], { obligatoire: true }),
+        reference('ot_id', 'ordres_travail'),
+        champ('date_intervention', 'date_heure'),
+        choix('statut', ['en file', 'à valider', 'validée', 'rejetée', 'à refaire', 'refusée',
           'rien à ajouter', 'appliquée'], { obligatoire: true }),
-        booleen('anterieure', 'Intervention antérieure'),
-        champ('ordre', 'entier', 'Rang de traitement'),
-        champ('pages', 'texte', 'Pages concernées'),
-        champ('changements', 'texte_long', 'Changements'),
-        champ('contradictions', 'texte_long', 'Contradictions'),
-        champ('raisons', 'texte_long', 'Raisons du refus'),
-        champ('modele', 'texte', 'Modèle'),
-        champ('essais', 'entier', 'Essais', { defaut: '0' }),
-        champ('cree_le', 'date_heure', 'Créée le'),
-        champ('traite_le', 'date_heure', 'Traitée le'),
-        champ('decide_par', 'texte', 'Décidé par'),
-        champ('decide_le', 'date_heure', 'Décidé le'),
-        champ('motif', 'texte_long', 'Motif'),
+        booleen('anterieure'),
+        champ('ordre', 'entier'),
+        champ('pages', 'texte'),
+        champ('changements', 'texte_long'),
+        champ('contradictions', 'texte_long'),
+        champ('raisons', 'texte_long'),
+        champ('modele', 'texte'),
+        champ('essais', 'entier', { defaut: '0' }),
+        champ('cree_le', 'date_heure'),
+        champ('traite_le', 'date_heure'),
+        champ('decide_par', 'texte'),
+        champ('decide_le', 'date_heure'),
+        champ('motif', 'texte_long'),
       ],
     },
   };
+
+  // ---------------------------------------------------------------------------
+  // Libellés (chantier multilingue, contrat du Lot 2) : lus dans la langue active à chaque lecture, jamais figés
+  // au chargement — schema.tables.<table> (table) et schema.<table>.<champ> (champ) dans js/i18n/<langue>.js.
+  // Accesseurs énumérables : JSON.stringify(Schema.tables) et Object.assign({}, champ) les lisent comme une
+  // propriété ordinaire. Un champ « choix » porte aussi nomTable (le nom de sa table), qui suit ses copies :
+  // l'affichage de ses valeurs passe par libelleValeur (D155).
+  // ---------------------------------------------------------------------------
+
+  Object.keys(tables).forEach(function (nomTable) {
+    const description = tables[nomTable];
+    Object.defineProperty(description, 'libelle', {
+      enumerable: true,
+      configurable: true,
+      get: function () { return I18n.t('schema.tables.' + nomTable); },
+    });
+    description.champs.forEach(function (champDefini) {
+      Object.defineProperty(champDefini, 'libelle', {
+        enumerable: true,
+        configurable: true,
+        get: function () { return I18n.t('schema.' + nomTable + '.' + champDefini.nom); },
+      });
+      if (champDefini.type === 'choix') { champDefini.nomTable = nomTable; }
+    });
+  });
 
   // ---------------------------------------------------------------------------
   // Fonctions pures d'accès
@@ -599,11 +626,23 @@ const Schema = (function () {
     return Object.keys(tables);
   }
 
+  // Texte affiché d'une valeur stockée d'une liste (D155) : la valeur écrite dans les fichiers ne change jamais, seul
+  // son affichage passe par valeurs.<table>.<champ>.<valeur>. Une valeur hors de la liste du champ (vide, inconnue,
+  // ou champ qui n'est pas un « choix ») est rendue telle quelle ; une valeur retirée garde son libellé.
+  function libelleValeur(nomTable, nomChamp, valeur) {
+    const texte = valeur === null || valeur === undefined ? '' : String(valeur);
+    const champTrouve = champDeTable(nomTable, nomChamp);
+    if (!champTrouve || champTrouve.type !== 'choix') { return texte; }
+    if (champTrouve.valeurs.concat(champTrouve.retirees || []).indexOf(texte) < 0) { return texte; }
+    return I18n.t('valeurs.' + nomTable + '.' + nomChamp + '.' + texte);
+  }
+
   return {
     version: 3,                        // version du format des fichiers (ARCHITECTURE.md §14.1, §20.2)
     tables: tables,
     table: table,
     champ: champDeTable,
     nomsTables: nomsTables,
+    libelleValeur: libelleValeur,
   };
 })();

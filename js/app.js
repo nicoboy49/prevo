@@ -64,7 +64,6 @@ const App = (() => {
   const CLE_VERROU_ONGLET = 'prevo.verrouOnglet';   // sessionStorage : poste du verrou posé par cet onglet
   const ROUTE_ACCUEIL = '#/accueil';
   const TYPES_PROFIL = ['demandeur', 'technicien', 'responsable'];
-  const LIBELLES_TYPE = { demandeur: 'Demandeur', technicien: 'Technicien', responsable: 'Responsable' };
   const ENTREES_BARRE_BAS = 4;
   // Mode Solo (D132, §22.11) : réglage mode_solo de parametres.csv, profil responsable seulement. Ces écrans
   // passent sous « Plus » (repliable dans le menu latéral, feuille « Plus » au téléphone) ; leurs routes restent.
@@ -133,7 +132,7 @@ const App = (() => {
     const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let suffixe = '';
     for (let i = 0; i < 4; i += 1) suffixe += caracteres[Math.floor(Math.random() * caracteres.length)];
-    return 'Poste-' + suffixe;
+    return I18n.t('socle.poste_aleatoire.poste_suffixe', { suffixe });
   }
 
   // (Donnees.ErreurLectureSeule est une ErreurStockage : son message est montré tel quel.)
@@ -155,13 +154,13 @@ const App = (() => {
   function messageErreur(erreur) {
     if (!(erreur instanceof Donnees.ErreurFichierAbime)) return (erreur && erreur.message) || String(erreur);
     if (!estResponsable()) {
-      return 'Fichier abîmé : prévenez le responsable. Rien n\'a été enregistré ; votre saisie est restée dans le '
-        + 'formulaire.';
+      return I18n.t('socle.message_erreur.fichier_abime_prevenez_responsable');
     }
     const fichier = fichierAbimeDe(erreur);
-    return 'Fichier abîmé' + (fichier ? ' (' + fichier + ')' : '') + ' : rien n\'a été enregistré, pour ne rien perdre ; '
-      + 'votre saisie est restée dans le formulaire. Restaurez la sauvegarde du jour (Paramètres › Sauvegardes) ou '
-      + 'importez un ZIP ; le détail est dans Paramètres › Contrôle de la base.';
+    if (!fichier) {
+      return I18n.t('socle.message_erreur.fichier_abime_rien_ete');
+    }
+    return I18n.t('socle.message_erreur.fichier_abime_rien_ete_avec_fichier', { fichier });
   }
 
   /**
@@ -169,12 +168,14 @@ const App = (() => {
    * de l'erreur (« erreur inconnue » sans erreur), sauf fichier abîmé (texte court selon le rôle, T201).
    */
   function raisonErreur(erreur) {
-    if (erreur === undefined || erreur === null) return 'erreur inconnue';
+    if (erreur === undefined || erreur === null) return I18n.t('commun.message.erreur_inconnue');
     if (!(erreur instanceof Donnees.ErreurFichierAbime)) return erreur.message || String(erreur);
-    if (!estResponsable()) return 'fichier abîmé : prévenez le responsable';
+    if (!estResponsable()) return I18n.t('socle.raison_erreur.fichier_abime_prevenez_responsable');
     const fichier = fichierAbimeDe(erreur);
-    return 'fichier abîmé' + (fichier ? ' (' + fichier + ')' : '') + ', rien n\'y a été enregistré : restaurez la '
-      + 'sauvegarde du jour ou importez un ZIP ; le détail est dans Paramètres › Contrôle de la base';
+    if (!fichier) {
+      return I18n.t('socle.raison_erreur.fichier_abime_rien_ete');
+    }
+    return I18n.t('socle.raison_erreur.fichier_abime_rien_ete_avec_fichier', { fichier });
   }
 
   /** Erreur gérée : message à l'utilisateur (toast, messageErreur) et trace console.warn (jamais console.error). */
@@ -182,6 +183,13 @@ const App = (() => {
     UI.toast(messageErreur(erreur), 'erreur');
     console.warn('Prévo' + (contexte ? ' (' + contexte + ')' : '') + ' : ' + ((erreur && erreur.message) || String(erreur)),
       erreur);
+  }
+
+  // Phrases de index.html qui ont du balisage au milieu (data-i18n n'y pose que du texte) : remplies ici, au démarrage.
+  function remplirPhrasesBalisees() {
+    UI.remplir(UI.$('#note-mode-serveur'), UI.html`${I18n.html('socle.remplir_phrases_balisees.plusieurs_postes_telephones_lancez')}`);
+    UI.$$('.lien-installation').forEach((lien) => UI.remplir(lien, UI.html`${I18n.html('socle.remplir_phrases_balisees.installer_prevo_assistant_comptes')}`));
+    UI.remplir(UI.$('.signature .libelle'), UI.html`${I18n.html('socle.remplir_phrases_balisees.developpe_claude_anthropic_demande')}`);
   }
 
   // Remplace <span data-icone="nom"> et <span data-ui="logo"> par les dessins de UI.
@@ -222,6 +230,7 @@ const App = (() => {
 
   async function demarrer() {
     I18n.appliquer(document);          // textes statiques de index.html (data-i18n, data-i18n-attr)
+    remplirPhrasesBalisees();
     remplacerIcones(document);
     installerEcouteurs();
     poste = lireMemoire(CLE_POSTE) || posteAleatoire();
@@ -290,9 +299,7 @@ const App = (() => {
     zoneAlerte.textContent = '';
     zoneAlerte.hidden = dossierPossible || VERSION_WEB;
     if (!dossierPossible && !VERSION_WEB) {
-      zoneAlerte.appendChild(UI.bandeau('attention', UI.html`<b>Ce navigateur ne sait pas ouvrir un dossier.</b>
-        Pour travailler sur vos fichiers, utilisez Chrome ou Edge sur un ordinateur. En attendant,
-        la démo fonctionne ici.`));
+      zoneAlerte.appendChild(UI.bandeau('attention', UI.html`${I18n.html('socle.demarrage.navigateur_sait_pas_ouvrir')}`));
     }
     preparerVersionWeb();
     montrer('ecran-demarrage', 'demarrage');
@@ -322,7 +329,7 @@ const App = (() => {
   async function reprendreDossier() {
     const poignee = await StockageDossier.reprendre();
     if (!poignee) {
-      UI.toast('L\'accès au dossier précédent n\'a pas été accordé. Choisissez le dossier à nouveau.', 'attention');
+      UI.toast(I18n.t('socle.reprendre_dossier.acces_dossier_precedent_pas'), 'attention');
       return;
     }
     await ouvrirAvecGarde(await StockageDossier.creer(poignee, { poste }));
@@ -339,11 +346,11 @@ const App = (() => {
     const resultat = await StockageDemo.depuisFichiers(liste);
     const ignores = resultat.fichiersIgnores;
     if (ignores.length === liste.length) {
-      UI.toast('Aucun fichier reconnu : les fichiers doivent s\'appeler equipements.csv, demandes.csv, ordres_travail.csv…', 'attention');
+      UI.toast(I18n.t('socle.ouvrir_fichiers_deposes.aucun_fichier_reconnu_fichiers'), 'attention');
       return;
     }
     await ouvrirAvecGarde(resultat.adaptateur);
-    if (ignores.length) UI.toast('Fichiers ignorés (nom inconnu ou en double) : ' + ignores.join(', '), 'attention');
+    if (ignores.length) UI.toast(I18n.t('socle.ouvrir_fichiers_deposes.fichiers_ignores_nom_inconnu', { fichiers: ignores.join(', ') }), 'attention');
   }
 
   // Ouvre un adaptateur choisi sur l'écran de démarrage ; en cas d'échec, on y revient.
@@ -369,7 +376,7 @@ const App = (() => {
         script.onload = () => resoudre();
         script.onerror = () => {
           promesseScriptDemo = null;
-          rejeter(new Error('Le jeu de démo (js/demo-donnees.js) n\'a pas pu être chargé.'));
+          rejeter(new Error(I18n.t('socle.charger_script_demo.jeu_demo_js_demo')));
         };
         document.head.appendChild(script);
       });
@@ -393,7 +400,7 @@ const App = (() => {
         script.onerror = () => {
           promesseSheetJS = null;
           script.remove();
-          rejeter(new Error('La bibliothèque de lecture des fichiers Excel (js/lib/xlsx.full.min.js) n\'a pas pu être chargée.'));
+          rejeter(new Error(I18n.t('socle.charger_sheet_js.bibliotheque_lecture_fichiers_excel')));
         };
         document.head.appendChild(script);
       });
@@ -411,7 +418,7 @@ const App = (() => {
         script.onerror = () => {
           promesseEcharts = null;
           script.remove();
-          rejeter(new Error('La bibliothèque des graphiques (js/lib/echarts.min.js) n\'a pas pu être chargée.'));
+          rejeter(new Error(I18n.t('socle.charger_echarts.bibliotheque_graphiques_js_lib')));
         };
         document.head.appendChild(script);
       });
@@ -499,8 +506,8 @@ const App = (() => {
       await adaptateur.sauvegarderAvantMiseAJour(VERSION);
     } catch (erreur) {
       signalerErreur(erreur, 'sauvegarde avant la mise à jour de Prévo');
-      alertesCoque.push(UI.bandeau('attention', UI.html`<b>La sauvegarde « avant la mise à jour de Prévo » n'a pas pu être faite.</b>
-        ${(erreur && erreur.message) || ''} Elle sera retentée à la prochaine ouverture.`));
+      const message = (erreur && erreur.message) || '';
+      alertesCoque.push(UI.bandeau('attention', UI.html`${I18n.html('socle.sauvegarder_avant_mise_ajour.sauvegarde_avant_mise_jour', { message })}`));
     }
   }
 
@@ -536,28 +543,23 @@ const App = (() => {
         return false;
       }
       signalerErreur(erreur, 'passage au format ' + Schema.version + ' des fichiers');
-      alertesCoque.push(UI.bandeau('attention', UI.html`<b>Les fichiers n'ont pas pu passer au format ${Schema.version}.</b>
-        ${(erreur && erreur.message) || ''} D'ici là, les OT préventifs échus ne sont pas générés automatiquement.`));
+      const message = (erreur && erreur.message) || '';
+      alertesCoque.push(UI.bandeau('attention', UI.html`${I18n.html('socle.passer_au_format_courant.fichiers_ont_pas_pu', { version: Schema.version, message })}`));
       return false;
     }
   }
 
   // Mode serveur, base pas au format courant (le serveur n'a pas pu la mettre à jour à son démarrage).
   function bandeauFormatEnAttente(etat) {
-    return UI.bandeau('attention', UI.html`<b>Les fichiers de données ne sont pas encore au format ${etat.courant}</b>
-      (format ${etat.depart} trouvé). C'est le serveur Prévo qui les met à jour, à son démarrage, après une sauvegarde ;
-      ce navigateur n'y touche pas. Si ce message reste affiché, fermez Excel (et tout programme qui a ouvert un
-      fichier de données), puis relancez Prévo. D'ici là, les OT préventifs échus ne sont pas générés automatiquement.`);
+    return UI.bandeau('attention', UI.html`${I18n.html('socle.bandeau_format_en_attente.fichiers_donnees_sont_pas', { courant: etat.courant, depart: etat.depart })}`);
   }
 
   // Tables laissées telles quelles par le passage au format courant (en-tête illisible, ou fichier abîmé qu'une
   // réécriture ferait perdre en partie) : jamais réécrites.
   function bandeauFichiersLaisses(tables) {
     const fichiers = tables.map((nomTable) => (Schema.table(nomTable) || {}).fichier || nomTable + '.csv').join(', ');
-    const titre = tables.length > 1 ? 'Fichiers abîmés laissés tels quels' : 'Fichier abîmé laissé tel quel';
-    return UI.bandeau('attention', UI.html`<b>${titre} : ${fichiers}.</b> En-tête illisible, ou lignes qu'une
-      réécriture ferait perdre : Prévo ne le réécrit pas pour le passer au format ${Schema.version}. Corrigez le
-      fichier, ou restaurez une sauvegarde ; le détail est dans Paramètres › Contrôle de la base.`);
+    const titre = tables.length > 1 ? I18n.t('socle.bandeau_fichiers_laisses.fichiers_abimes_laisses_tels') : I18n.t('socle.bandeau_fichiers_laisses.fichier_abime_laisse_tel');
+    return UI.bandeau('attention', UI.html`${I18n.html('socle.bandeau_fichiers_laisses.tete_illisible_lignes_reecriture', { titre, fichiers, version: Schema.version })}`);
   }
 
   // Fichiers abîmés (T197, défaut trouvé par la recette T193) : Prévo ne les enregistre plus (ErreurFichierAbime).
@@ -565,17 +567,15 @@ const App = (() => {
   // T206 : pour le responsable, depuis quand chaque fichier est abîmé (fichierAbimeDepuis).
   function bandeauFichiersAbimes(tables) {
     const plusieurs = tables.length > 1;
-    const titre = plusieurs ? 'Fichiers abîmés' : 'Fichier abîmé';
+    const titre = plusieurs ? I18n.t('socle.bandeau_fichiers_abimes.fichiers_abimes') : I18n.t('socle.bandeau_fichiers_abimes.fichier_abime');
     if (!estResponsable()) {
       const suite = plusieurs
-        ? 'Tant qu\'ils ne sont pas réparés, Prévo refuse les enregistrements qui les touchent, sans rien perdre.'
-        : 'Tant qu\'il n\'est pas réparé, Prévo refuse les enregistrements qui le touchent, sans rien perdre.';
-      return UI.bandeau('attention', UI.html`<b>${titre} : prévenez le responsable.</b> ${suite}`);
+        ? I18n.t('socle.bandeau_fichiers_abimes.tant_ils_sont_pas')
+        : I18n.t('socle.bandeau_fichiers_abimes.tant_pas_repare_prevo');
+      return UI.bandeau('attention', UI.html`${I18n.html('socle.bandeau_fichiers_abimes.prevenez_responsable', { titre, suite })}`);
     }
     const fichiers = tables.map(fichierAbimeDepuis).join(' ; ');
-    return UI.bandeau('attention', UI.html`<b>${titre} : ${fichiers}.</b> En-tête coupé, guillemet non fermé ou
-      valeurs au-delà de l'en-tête : Prévo ne l'enregistre plus, pour ne rien perdre. Corrigez le fichier,
-      restaurez une sauvegarde ou importez un ZIP ; le détail est dans Paramètres › Contrôle de la base.`);
+    return UI.bandeau('attention', UI.html`${I18n.html('socle.bandeau_fichiers_abimes.tete_coupe_guillemet_non', { titre, fichiers })}`);
   }
 
   // T206 (contrat, point 4) : depuis quand chaque table est abîmée ({ table: 'AAAA-MM-JJTHH:MM:SS' }). Mode dossier
@@ -603,8 +603,8 @@ const App = (() => {
     const jour = new Date();
     const jours = lu ? Math.round((Date.UTC(jour.getFullYear(), jour.getMonth(), jour.getDate())
       - Date.UTC(+lu[1], lu[2] - 1, +lu[3])) / 86400000) : 0;
-    if (jours <= 0) return fichier + ', repéré aujourd\'hui';
-    return fichier + ', depuis le ' + UI.dateFr(lu[0].slice(0, 10)) + ' (' + jours + (jours === 1 ? ' jour)' : ' jours)');
+    if (jours <= 0) return I18n.t('socle.fichier_abime_depuis.repere_aujourd_hui', { fichier });
+    return I18n.t('socle.fichier_abime_depuis.depuis_le', { fichier, date: UI.dateFr(lu[0].slice(0, 10)), n: jours });
   }
 
   // Bandeau « Fichier abîmé » pour une table pas encore signalée (ni à l'ouverture, ni par le passage au format) :
@@ -629,9 +629,7 @@ const App = (() => {
     }
     if (present) return;
     const format = Donnees.etatDuFormat().base;
-    const bandeau = UI.bandeau('important', UI.html`<b>Lecture seule : ces données viennent d'une version plus récente
-      de Prévo</b> (format ${format} des fichiers ; cette version lit jusqu'au format ${Schema.version}). Vous pouvez
-      les consulter, mais rien n'est enregistré. Ouvrez-les avec la dernière version de Prévo.`);
+    const bandeau = UI.bandeau('important', UI.html`${I18n.html('socle.lecture_seule.lecture_seule_donnees_viennent', { format, version: Schema.version })}`);
     bandeau.id = 'bandeau-lecture-seule';
     zone.prepend(bandeau);
     zone.hidden = false;
@@ -678,8 +676,8 @@ const App = (() => {
   }
 
   function demanderBaseVide() {
-    UI.$('#texte-base-vide').textContent = 'Aucun des ' + Schema.nomsTables().length + ' fichiers de Prévo n\'a été trouvé ('
-      + (adaptateur.libelle || mode) + '). Par quoi voulez-vous commencer ?';
+    UI.$('#texte-base-vide').textContent = I18n.t('socle.demander_base_vide.aucun_fichier_trouve',
+      { n: Schema.nomsTables().length, stockage: adaptateur.libelle || mode });
     montrer('ecran-base-vide', 'demarrage');
     return new Promise((resoudre) => { resoudreBaseVide = resoudre; });
   }
@@ -710,9 +708,7 @@ const App = (() => {
     let verrouDeCetOnglet = false;
     try { verrouDeCetOnglet = window.sessionStorage.getItem(CLE_VERROU_ONGLET) === poste; } catch (erreur) { /* sans mémoire */ }
     if (autre && !(verrouDeCetOnglet && autre.poste === poste)) {
-      alertesCoque.push(UI.bandeau('attention', UI.html`<b>Ce dossier semble déjà ouvert sur « ${autre.poste} »</b>
-        (dernier signe de vie : ${autre.heure}). Deux postes qui écrivent dans le même dossier peuvent se gêner :
-        fermez l'autre session si possible.`));
+      alertesCoque.push(UI.bandeau('attention', UI.html`${I18n.html('socle.verifier_verrou_dossier.dossier_semble_deja_ouvert', { poste: autre.poste, heure: autre.heure })}`));
     }
     await adaptateur.demarrerVerrou();
     try { window.sessionStorage.setItem(CLE_VERROU_ONGLET, poste); } catch (erreur) { /* sans mémoire */ }
@@ -806,7 +802,7 @@ const App = (() => {
   async function deconnecter() {
     if (!comptesExiges || !session || promesseConnexion) return;
     if (session.appareil) {
-      UI.toast('Cet appareil est enrôlé sans mot de passe : seul le responsable peut le révoquer (Équipe › Accès).', 'attention');
+      UI.toast(I18n.t('socle.deconnecter.appareil_enrole_sans_mot'), 'attention');
       return;
     }
     try {
@@ -825,15 +821,15 @@ const App = (() => {
     const appareil = comptesExiges && Boolean(session) && session.appareil;
     const bouton = UI.$('#etat-poste');
     const changer = UI.$('#etat-poste .changer');
-    changer.textContent = comptesExiges ? 'se déconnecter' : 'changer';
+    changer.textContent = comptesExiges ? I18n.t('socle.mettre_ajour_boutons_profil.deconnecter') : I18n.t('socle.etat_poste.changer');
     changer.hidden = appareil;
     bouton.disabled = appareil;
-    bouton.title = appareil ? 'Appareil enrôlé : ' + libelleAffiche(profil)
-      : comptesExiges ? 'Connecté : ' + libelleCompte(profil) + '. Cliquer pour se déconnecter.'
-        : 'Profil : ' + libelleAffiche(profil) + ' — poste « ' + poste + ' ». Cliquer pour changer.';
+    bouton.title = appareil ? I18n.t('socle.mettre_ajour_boutons_profil.appareil_enrole', { libelleAffiche: libelleAffiche(profil) })
+      : comptesExiges ? I18n.t('socle.mettre_ajour_boutons_profil.connecte_cliquer_deconnecter', { libelleCompte: libelleCompte(profil) })
+        : I18n.t('socle.mettre_ajour_boutons_profil.profil_poste_cliquer_changer', { libelleAffiche: libelleAffiche(profil), poste });
     const mobile = UI.$('#btn-profil-mobile');
     mobile.hidden = appareil;
-    mobile.setAttribute('aria-label', comptesExiges ? 'Se déconnecter' : 'Changer de profil');
+    mobile.setAttribute('aria-label', comptesExiges ? I18n.t('socle.mettre_ajour_boutons_profil.deconnecter_bouton') : I18n.t('socle.mettre_ajour_boutons_profil.changer_profil'));
   }
 
   // ===========================================================================================
@@ -867,23 +863,33 @@ const App = (() => {
     return ((technicien.prenom || '') + ' ' + (technicien.nom || '')).trim() || technicien.id;
   }
 
+  // Libellé d'un type de profil (lu à chaque affichage, jamais figé au chargement) ; type inconnu : undefined.
+  function libelleType(type) {
+    switch (type) {
+      case 'demandeur': return I18n.t('socle.libelle_type.demandeur');
+      case 'technicien': return I18n.t('socle.libelle_type.technicien');
+      case 'responsable': return I18n.t('socle.libelle_type.responsable');
+      default: return undefined;
+    }
+  }
+
   // Texte inscrit au journal : « Responsable », « Demandeur Lucie Martin », « Technicien TEC-0002 ».
   function libelleJournal(p) {
-    if (p.type === 'demandeur') return 'Demandeur ' + p.nom;
-    if (p.type === 'technicien') return 'Technicien ' + p.technicienId;
-    return LIBELLES_TYPE[p.type];
+    if (p.type === 'demandeur') return I18n.t('socle.libelle_journal.demandeur_p_nom', { nom: p.nom });
+    if (p.type === 'technicien') return I18n.t('socle.libelle_journal.technicien_technicien_id', { technicienId: p.technicienId });
+    return libelleType(p.type);
   }
 
   // Texte affiché dans le menu : « Technicien · Julien Moreau ».
   function libelleAffiche(p) {
     if (!p) return '';
-    return p.type === 'responsable' ? LIBELLES_TYPE.responsable : LIBELLES_TYPE[p.type] + ' · ' + p.nom;
+    return p.type === 'responsable' ? libelleType('responsable') : libelleType(p.type) + ' · ' + p.nom;
   }
 
   // Texte du menu en mode comptes : « Nicolas Briand · Responsable » (le compte fait foi, pas le poste).
   function libelleCompte(p) {
     if (!p) return '';
-    return (p.nom ? p.nom + ' · ' : '') + LIBELLES_TYPE[p.type];
+    return (p.nom ? p.nom + ' · ' : '') + libelleType(p.type);
   }
 
   function appliquerProfil(nouveau) {
@@ -917,7 +923,7 @@ const App = (() => {
       .sort((a, b) => nomTechnicien(a).localeCompare(nomTechnicien(b), 'fr'));
     const zone = UI.$('#profil-techniciens');
     if (!actifs.length) {
-      UI.remplir(zone, UI.html`<p class="note">Aucun technicien actif dans techniciens.csv : choisissez un autre profil.</p>`);
+      UI.remplir(zone, UI.html`<p class="note">${I18n.t('socle.remplir_liste_techniciens.aucun_technicien_actif_techniciens')}</p>`);
       return;
     }
     UI.remplir(zone, UI.html`${actifs.map((t) => UI.html`
@@ -950,7 +956,7 @@ const App = (() => {
     const nom = champNom.value.trim().replace(/[;\r\n]+/g, ' ');
     if (!nom) {
       const erreur = UI.$('#profil-nom-erreur');
-      erreur.textContent = 'Indiquez votre nom : il permet de retrouver vos demandes.';
+      erreur.textContent = I18n.t('socle.valider_demandeur.indiquez_nom_permet_retrouver');
       erreur.hidden = false;
       champNom.setAttribute('aria-invalid', 'true');
       champNom.focus();
@@ -969,7 +975,7 @@ const App = (() => {
     const nouveau = await demanderProfil(true);
     if (nouveau) {
       appliquerProfil(nouveau);
-      UI.toast('Profil : ' + libelleAffiche(profil) + '.', 'succes');
+      UI.toast(I18n.t('socle.changer_profil.profil_libelle_affiche', { libelleAffiche: libelleAffiche(profil) }), 'succes');
     }
     await ouvrirCoque();
   }
@@ -1017,7 +1023,7 @@ const App = (() => {
   function afficherAlertesCoque() {
     const zone = UI.$('#alertes-app');
     alertesCoque.splice(0).forEach((bandeau) => {
-      const fermer = UI.element(UI.html`<button type="button" class="btn btn-fantome">Fermer</button>`);
+      const fermer = UI.element(UI.html`<button type="button" class="btn btn-fantome">${I18n.t('commun.bouton.fermer')}</button>`);
       fermer.addEventListener('click', () => {
         bandeau.remove();
         zone.hidden = zone.children.length === 0;
@@ -1042,7 +1048,7 @@ const App = (() => {
     UI.$('#app').classList.toggle('replie', replie);
     const bouton = UI.$('#btn-replier');
     bouton.setAttribute('aria-expanded', String(!replie));
-    bouton.setAttribute('aria-label', replie ? 'Déplier le menu' : 'Replier le menu');
+    bouton.setAttribute('aria-label', replie ? I18n.t('socle.appliquer_repli.deplier_menu') : I18n.t('socle.appliquer_repli.replier_menu'));
   }
 
   function basculerRepli() {
@@ -1096,7 +1102,7 @@ const App = (() => {
     // Mode Solo : groupe « Plus » repliable (bouton réel, aria-expanded) ; replié par défaut.
     if (sousPlus.length) {
       morceaux.push(UI.html`<div class="menu-plus">
-        <button type="button" class="menu-plus-bouton" id="btn-menu-plus" aria-expanded="false" aria-controls="menu-plus-liste" title="Plus">${UI.icone('plus')}<span class="libelle">Plus</span></button>
+        <button type="button" class="menu-plus-bouton" id="btn-menu-plus" aria-expanded="false" aria-controls="menu-plus-liste" title="${I18n.t('socle.construire_menus.plus')}">${UI.icone('plus')}<span class="libelle">${I18n.t('socle.construire_menus.plus')}</span></button>
         <div class="menu-plus-liste" id="menu-plus-liste" hidden>${sousPlus.map(lienMenu)}</div>
       </div>`);
     }
@@ -1106,7 +1112,7 @@ const App = (() => {
 
     const enBas = principales.slice(0, ENTREES_BARRE_BAS);
     UI.remplir(UI.$('#barre-bas'), UI.html`${enBas.map((ecran) => UI.html`<a href="${lienEntree(ecran)}" data-ecran="${ecran.id}">${UI.icone(ecran.menu.icone || 'chevron')}<span class="libelle">${ecran.menu.court || ecran.menu.libelle}</span></a>`)}
-      <button type="button" id="btn-plus" aria-haspopup="dialog">${UI.icone('plus')}<span class="libelle">Plus</span></button>`);
+      <button type="button" id="btn-plus" aria-haspopup="dialog">${UI.icone('plus')}<span class="libelle">${I18n.t('socle.construire_menus.plus')}</span></button>`);
     UI.$('#btn-plus').addEventListener('click', ouvrirPlus);
     allumerMenus();
   }
@@ -1152,12 +1158,12 @@ const App = (() => {
     const appareil = comptesExiges && Boolean(session) && session.appareil;
     const contenu = UI.element(UI.html`<ul class="liste-plus">
       ${reste.map((ecran) => UI.html`<li><a href="${lienEntree(ecran)}" class="${ecran.id === idActif ? 'actif' : ''}">${UI.icone(ecran.menu.icone || 'chevron')}${ecran.menu.libelle}</a></li>`)}
-      ${appareil ? '' : UI.html`<li><a href="#" data-action="profil">${UI.icone('utilisateur')}${comptesExiges ? 'Se déconnecter (' + libelleCompte(profil) + ')' : 'Changer de profil (' + libelleAffiche(profil) + ')'}</a></li>`}
-      ${mode === 'demo' ? UI.html`<li><a href="#" data-action="zip">${UI.icone('export')}Exporter en ZIP</a></li>` : ''}
+      ${appareil ? '' : UI.html`<li><a href="#" data-action="profil">${UI.icone('utilisateur')}${comptesExiges ? I18n.t('socle.ouvrir_plus.deconnecter_libelle_compte', { libelleCompte: libelleCompte(profil) }) : I18n.t('socle.ouvrir_plus.changer_profil', { libelleAffiche: libelleAffiche(profil) })}</a></li>`}
+      ${mode === 'demo' ? UI.html`<li><a href="#" data-action="zip">${UI.icone('export')}${I18n.t('socle.ouvrir_plus.exporter_zip')}</a></li>` : ''}
     </ul>`);
     UI.fenetre({
-      titre: 'Plus', classe: 'feuille', contenu,
-      boutons: [{ libelle: 'Fermer', valeur: null, classe: 'btn-secondaire', defaut: true }],
+      titre: I18n.t('socle.construire_menus.plus'), classe: 'feuille', contenu,
+      boutons: [{ libelle: I18n.t('commun.bouton.fermer'), valeur: null, classe: 'btn-secondaire', defaut: true }],
       surOuverture(dialogue, fermer) {
         contenu.addEventListener('click', (evenement) => {
           const lien = evenement.target.closest('a');
@@ -1179,10 +1185,10 @@ const App = (() => {
   /** Enregistre un écran (voir le contrat en tête de fichier). */
   function ecran(definition) {
     if (!definition || !definition.id || !(definition.route instanceof RegExp) || typeof definition.afficher !== 'function') {
-      throw new Error('App.ecran : id, route (RegExp) et afficher(conteneur, parametres) sont obligatoires.');
+      throw new Error(I18n.t('socle.ecran.app_ecran_id_route'));
     }
     if (ecrans.some((e) => e.id === definition.id)) {
-      throw new Error('App.ecran : l\'écran « ' + definition.id + ' » est déjà enregistré.');
+      throw new Error(I18n.t('socle.ecran.app_ecran_ecran_deja', { definitionId: definition.id }));
     }
     ecrans.push(definition);
     if (coqueVisible()) construireMenus();
@@ -1230,14 +1236,14 @@ const App = (() => {
     const { chemin, requete } = analyserHash(location.hash);
     const trouve = trouverEcran(chemin);
     if (!trouve || !ecranAutorise(trouve.ecran)) {
-      if (trouve) UI.toast('L\'écran « ' + trouve.ecran.titre + ' » n\'est pas disponible pour le profil ' + LIBELLES_TYPE[profil.type] + '.', 'attention');
+      if (trouve) UI.toast(I18n.t('socle.route.ecran_pas_disponible_profil', { ecranTitre: trouve.ecran.titre, profil: libelleType(profil.type) }), 'attention');
       const accueil = trouverEcran(ROUTE_ACCUEIL);
       if (chemin !== ROUTE_ACCUEIL && accueil && ecranAutorise(accueil.ecran)) {
         remplacerRoute(ROUTE_ACCUEIL);
         await afficherRoute(false);
       } else {
         ecranCourant = null;
-        UI.remplir(UI.$('#contenu'), UI.vide('Écran introuvable', 'Aucun écran ne correspond à cette adresse.'));
+        UI.remplir(UI.$('#contenu'), UI.vide(I18n.t('socle.route.ecran_introuvable'), I18n.t('socle.route.aucun_ecran_correspond_adresse')));
       }
       return;
     }
@@ -1264,7 +1270,8 @@ const App = (() => {
     } catch (erreur) {
       if (numero === numeroAffichage) {
         UI.remplir(conteneur, UI.html`<div class="entete-page"><h1>${ecranAAfficher.titre}</h1></div>`);
-        conteneur.appendChild(UI.bandeau('important', UI.html`<b>Cet écran n'a pas pu s'afficher.</b> ${(erreur && erreur.message) || ''}`));
+        const message = (erreur && erreur.message) || '';
+        conteneur.appendChild(UI.bandeau('important', UI.html`${I18n.html('socle.rendre.ecran_pas_pu_afficher', { message })}`));
       }
       if (!estErreurDonnees(erreur)) throw erreur;     // défaut du code : il doit se voir
       signalerErreur(erreur, 'affichage de « ' + ecranAAfficher.titre + ' »');
@@ -1285,9 +1292,8 @@ const App = (() => {
 
   /** Titre de l'onglet et de l'en-tête mobile (un écran peut le préciser : « OT-2026-0107 »). */
   function definirTitre(texte) {
-    const titre = texte || 'Prévo';
-    document.title = titre === 'Prévo' ? 'Prévo — GMAO' : titre + ' — Prévo';
-    UI.$('#titre-mobile').textContent = titre;
+    document.title = texte ? I18n.t('socle.definir_titre.texte_prevo', { texte }) : I18n.t('socle.definir_titre.prevo_gmao');
+    UI.$('#titre-mobile').textContent = texte || I18n.t('socle.definir_titre.prevo');
   }
 
   /**

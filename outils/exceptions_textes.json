@@ -33,6 +33,11 @@
       "raison": "Les dictionnaires eux-mêmes (fr.js, langues.js, aide/fr.js) : leurs valeurs sont les textes extraits."
     },
     {
+      "chemin": "js/i18n.js",
+      "classe": "D157",
+      "raison": "Le moteur de traduction lui-même (T238) : ses erreurs d'appel (code de langue, déclaration ou dictionnaire attendus) et ses avertissements de console sont pour qui maintient l'appli, et ne peuvent pas passer par lui (une clé absente y produit l'avertissement) ; « aide. » est un préfixe de clé."
+    },
+    {
       "chemin": "js/lib/*",
       "classe": "identifiants",
       "raison": "Bibliothèques tierces, jamais modifiées."
@@ -82,6 +87,24 @@
       "argument": 2,
       "classe": "D156",
       "raison": "Action écrite dans le journal par Donnees.journaliser(table, id, action) et relue telle quelle."
+    },
+    {
+      "appel": "etape",
+      "argument": 2,
+      "fichiers": [
+        "js/formats.js"
+      ],
+      "classe": "D157",
+      "raison": "Description d'une étape du registre des formats (Formats.ETAPES, T238) : documentation pour qui maintient l'appli (colonnes et tables ajoutées, vérifiées par test_formats_js), jamais affichée."
+    },
+    {
+      "appel": "entreeJournal",
+      "argument": 3,
+      "fichiers": [
+        "js/donnees.js"
+      ],
+      "classe": "D156",
+      "raison": "Action écrite au journal par Donnees.modifier et le passage au format (« création », « modification : <champs> », T238) : relue par le code (indicateurs : /^création\b/)."
     }
   ],
   "cles": [
@@ -166,6 +189,23 @@
       ],
       "classe": "D156",
       "raison": "Ligne du journal « passage au format 2 du fichier » écrite par Formats.migrer et relue par la suggestion S4 (test_formats_js lit la constante) (T241)."
+    },
+    {
+      "variable": "TONS_STATUT",
+      "fichiers": [
+        "js/interface.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Tons des badges de statut (T238) : des classes CSS (« neutre barre »), sous des valeurs stockées (D155)."
+    },
+    {
+      "variable": "NOM_APPLICATION",
+      "fichiers": [
+        "js/formats.js",
+        "js/stockage-serveur.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de l'application dans le manifeste des sauvegardes et dans la réponse de /api/ping (T238) : un identifiant du protocole, comparé tel quel à celui de serveur.py."
     }
   ],
   "textes": [
@@ -258,6 +298,14 @@
       ],
       "classe": "D155",
       "raison": "État d'une habilitation calculé par Equipe (« valide », « à renouveler », « échue »…) : code compté par l'accueil du wiki, jamais affiché tel quel (T241)."
+    },
+    {
+      "texte": "passage au format {} du fichier",
+      "classe": "D156",
+      "fichiers": [
+        "js/formats.js"
+      ],
+      "raison": "Ligne de journal « passage au format N du fichier » (Formats, T238) : relue telle quelle par la suggestion S4 (MARQUE_FORMAT_2) et écrite de même par serveur.py."
     }
   ]
 }

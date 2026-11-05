@@ -20,7 +20,7 @@ const Donnees = (() => {
   // versionActuelle : la version que le stockage a trouvée (null si inconnue).
   class ErreurConflit extends Error {
     constructor(message, versionActuelle) {
-      super(message || 'Le fichier a été modifié en même temps sur un autre poste.');
+      super(message || I18n.t('socle.constructor.fichier_ete_modifie_meme'));
       this.name = 'ErreurConflit';
       this.versionActuelle = versionActuelle === undefined ? null : versionActuelle;
     }
@@ -30,7 +30,7 @@ const Donnees = (() => {
   // Une ErreurValidation n'est jamais réessayée.
   class ErreurValidation extends Error {
     constructor(message) {
-      super(message || 'Action refusée.');
+      super(message || I18n.t('socle.constructor.action_refusee'));
       this.name = 'ErreurValidation';
     }
   }
@@ -39,7 +39,7 @@ const Donnees = (() => {
   // cause : l'erreur d'origine, gardée pour le diagnostic (facultative).
   class ErreurStockage extends Error {
     constructor(message, cause) {
-      super(message || 'Lecture ou écriture du fichier impossible.');
+      super(message || I18n.t('socle.constructor.lecture_ecriture_fichier_impossible'));
       this.name = 'ErreurStockage';
       this.cause = cause === undefined ? null : cause;
     }
@@ -50,9 +50,7 @@ const Donnees = (() => {
   // Sous-classe d'ErreurStockage : partout où une erreur de stockage est montrée telle quelle, ce message l'est aussi.
   class ErreurLectureSeule extends ErreurStockage {
     constructor(format) {
-      super('Ces données viennent d\'une version plus récente de Prévo (format ' + format + ' des fichiers ; '
-        + 'cette version lit jusqu\'au format ' + Schema.version + ') : elles sont ouvertes en lecture seule et '
-        + 'rien n\'est enregistré. Ouvrez-les avec la dernière version de Prévo.');
+      super(I18n.t('socle.constructor.donnees_viennent_version_plus', { format, version: Schema.version }));
       this.name = 'ErreurLectureSeule';
       this.format = format;
     }
@@ -66,9 +64,7 @@ const Donnees = (() => {
   // par laquelle passent toutes les écritures. Sous-classe d'ErreurStockage : le message est montré tel quel.
   class ErreurFichierAbime extends ErreurStockage {
     constructor(nomTable, fichier) {
-      super('Le fichier ' + (fichier || nomTable + '.csv') + ' est abîmé (en-tête coupé, guillemet non fermé ou '
-        + 'valeurs au-delà de l\'en-tête) : Prévo ne l\'enregistre plus, pour ne rien perdre. Corrigez-le, '
-        + 'restaurez une sauvegarde ou importez un ZIP (Paramètres) ; le détail est dans Paramètres › Contrôle de la base.');
+      super(I18n.t('socle.constructor.fichier_abime_tete_coupe', { fichier: (fichier || nomTable + '.csv') }));
       this.name = 'ErreurFichierAbime';
       this.table = nomTable;
     }
@@ -136,9 +132,8 @@ const Donnees = (() => {
   async function documentAffichable(nom, blob) {
     if (!blob || !/\.html$/i.test(enTexte(nom))) return blob;
     const echapper = (texte) => texte.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const page = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + echapper(nom) + '</title>'
-      + '<style>html,body{margin:0;height:100%;background:#fff}iframe{border:0;display:block;width:100%;height:100%}</style>'
-      + '</head><body><iframe sandbox="allow-modals" title="' + echapper(nom) + '" srcdoc="' + echapper(await blob.text()) + '"></iframe></body></html>';
+    const contenu = await blob.text();
+    const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${echapper(nom)}</title><style>html,body{margin:0;height:100%;background:#fff}iframe{border:0;display:block;width:100%;height:100%}</style></head><body><iframe sandbox="allow-modals" title="${echapper(nom)}" srcdoc="${echapper(contenu)}"></iframe></body></html>`;
     return new Blob([page], { type: 'text/html;charset=utf-8' });
   }
 
@@ -333,7 +328,7 @@ const Donnees = (() => {
     if (entree instanceof ArrayBuffer) { return new Uint8Array(entree); }
     if (ArrayBuffer.isView(entree)) { return new Uint8Array(entree.buffer, entree.byteOffset, entree.byteLength); }
     if (Array.isArray(entree)) { return Uint8Array.from(entree); }
-    throw new TypeError('Donnees.csv : octets attendus (Uint8Array ou ArrayBuffer).');
+    throw new TypeError(I18n.t('socle.en_octets.donnees_csv_octets_attendus'));
   }
 
   // Octets d'un fichier → { texte, encodage } (encodage : 'utf-8' ou 'windows-1252').
@@ -369,7 +364,7 @@ const Donnees = (() => {
 
   function descriptionTable(nomTable) {
     const description = Schema.table(nomTable);
-    if (!description) { throw new Error('Donnees.csv : table inconnue « ' + nomTable + ' ».'); }
+    if (!description) { throw new Error(I18n.t('socle.description_table.donnees_csv_table_inconnue', { nomTable })); }
     return description;
   }
 
@@ -473,13 +468,17 @@ const Donnees = (() => {
   // Messages d'aide pour une valeur illisible, selon le type du champ.
   function explicationValeurIllisible(champ) {
     switch (champ.type) {
-      case 'date': return "n'est pas une date valide (formats acceptés : 2024-03-15 ou 15/03/2024)";
-      case 'date_heure': return "n'est pas une date et heure valide (formats acceptés : 2024-03-15 08:30 ou 15/03/2024 08:30)";
-      case 'decimal': return "n'est pas un nombre (exemples acceptés : 7,5 ou 7.5)";
-      case 'entier': return "n'est pas un nombre entier";
-      case 'booleen': return "n'est pas reconnu comme oui ou non (valeurs acceptées : 1, 0, oui, non, vrai, faux, x)";
-      case 'choix': return "ne fait pas partie des valeurs possibles (" + (champ.valeurs || []).join(', ') + ')';
-      default: return 'est illisible';
+      case 'date': return I18n.t('socle.explication_valeur_illisible.pas_date_valide_formats');
+      case 'date_heure': return I18n.t('socle.explication_valeur_illisible.pas_date_heure_valide');
+      case 'decimal': return I18n.t('socle.explication_valeur_illisible.pas_nombre_exemples_acceptes');
+      case 'entier': return I18n.t('socle.explication_valeur_illisible.pas_nombre_entier');
+      case 'booleen': return I18n.t('socle.explication_valeur_illisible.pas_reconnu_comme_oui');
+      case 'choix': {
+        // Valeurs stockées (D155), telles qu'elles doivent être écrites dans le fichier.
+        const valeurs = (champ.valeurs || []).join(', ');
+        return I18n.t('socle.explication_valeur_illisible.fait_pas_partie_valeurs', { valeurs });
+      }
+      default: return I18n.t('socle.explication_valeur_illisible.illisible');
     }
   }
 
@@ -496,13 +495,11 @@ const Donnees = (() => {
         // Une valeur protégée par apostrophe (« '1,5E+3 ») est voulue : seule une cellule brute sans apostrophe est suspecte.
         if (!brut.startsWith("'") && MOTIF_NOTATION_SCIENTIFIQUE_EXCEL.test(valeur)) {
           return { valeur: valeur, probleme: { gravite: 'attention', type: 'excel',
-            explication: "valeur probablement abîmée par Excel (nombre long transformé en notation scientifique). "
-              + "Retrouvez la valeur d'origine et saisissez-la précédée d'une apostrophe, par exemple '123456789012345" } };
+            explication: I18n.t('socle.lire_cellule.valeur_probablement_abimee_excel') } };
         }
         if (MOTIF_ERREUR_FORMULE_EXCEL.test(valeur)) {
           return { valeur: valeur, probleme: { gravite: 'attention', type: 'excel',
-            explication: "valeur probablement abîmée par Excel (texte commençant par « = », « + » ou « - » pris pour une formule). "
-              + "Retrouvez le texte d'origine et saisissez-le précédé d'une apostrophe" } };
+            explication: I18n.t('socle.lire_cellule.valeur_probablement_abimee_excel_formule') } };
         }
         return { valeur: valeur, probleme: null };
       }
@@ -524,7 +521,7 @@ const Donnees = (() => {
     }
     if (resultat.ok) { return { valeur: resultat.valeur, probleme: null }; }
     return { valeur: resultat.valeur, probleme: { gravite: 'erreur', type: 'valeur',
-      explication: explicationValeurIllisible(champ) + '. Valeur conservée telle quelle : à corriger' } };
+      explication: I18n.t('socle.lire_cellule.valeur_conservee_telle_quelle', { explicationValeurIllisible: explicationValeurIllisible(champ) }) } };
   }
 
   // Fabrique d'un problème (forme commune à tout Donnees, ARCHITECTURE.md §5.2).
@@ -573,14 +570,13 @@ const Donnees = (() => {
         const contientDesValeurs = enregistrements.some((e) => (e.cellules[index] || '').trim() !== '');
         if (!contientDesValeurs) { colonnes.push({ ignoree: true }); return; }
       }
-      const nomConserve = nomInconnuLibre(nomColonne === '' ? 'colonne ' + (index + 1) : nomColonne);
+      const numero = index + 1;
+      const nomConserve = nomInconnuLibre(nomColonne === '' ? I18n.t('socle.associer_colonnes.colonne_numero', { numero }) : nomColonne);
       colonnes.push({ inconnue: nomConserve });
       inconnues.push(nomConserve);
       const message = champ
-        ? description.libelle + ' : la colonne « ' + nomColonne + ' » apparaît deux fois dans ' + description.fichier
-          + ' ; la seconde est conservée à part sous le nom « ' + nomConserve + ' » et n\'est pas utilisée par Prévo.'
-        : description.libelle + ' : la colonne « ' + nomConserve + ' » de ' + description.fichier
-          + ' ne fait pas partie de Prévo ; elle est conservée telle quelle (réécrite en fin de fichier).';
+        ? I18n.t('socle.associer_colonnes.colonne_apparait_deux_fois', { descriptionLibelle: description.libelle, nomColonne, fichier: description.fichier, nomConserve })
+        : I18n.t('socle.associer_colonnes.colonne_fait_pas_partie', { descriptionLibelle: description.libelle, nomConserve, fichier: description.fichier });
       problemes.push(probleme(champ ? 'attention' : 'info', 'colonne', nomTable, 1, null, nomConserve, null, message));
     });
 
@@ -599,16 +595,14 @@ const Donnees = (() => {
   function problemeColonneAbsente(description, nomTable, champ) {
     if (champ.depuisVersion !== undefined) {
       return probleme('info', 'colonne', nomTable, 1, null, champ.nom, null,
-        description.libelle + ' : colonne « ' + champ.nom + ' » ajoutée par la version ' + champ.depuisVersion
-        + ' du format, écrite au prochain enregistrement.');
+        I18n.t('socle.probleme_colonne_absente.colonne_ajoutee_version_format', { descriptionLibelle: description.libelle, champNom: champ.nom, depuisVersion: champ.depuisVersion }));
     }
     const valeurParDefaut = champ.defaut === undefined ? '' : champ.defaut;
     const suite = valeurParDefaut === ''
-      ? 'la valeur est laissée vide'
-      : 'la valeur par défaut « ' + valeurParDefaut + ' » est utilisée';
+      ? I18n.t('socle.probleme_colonne_absente.valeur_laissee_vide')
+      : I18n.t('socle.probleme_colonne_absente.valeur_defaut_utilisee', { valeurParDefaut });
     return probleme('attention', 'colonne', nomTable, 1, null, champ.nom, null,
-      description.libelle + ' : la colonne « ' + champ.nom + ' » (' + champ.libelle + ') est absente de '
-      + description.fichier + ' ; ' + suite + '. Elle sera ajoutée à la prochaine modification de la table.');
+      I18n.t('socle.probleme_colonne_absente.colonne_absente_sera_ajoutee', { descriptionLibelle: description.libelle, champNom: champ.nom, champLibelle: champ.libelle, fichier: description.fichier, suite }));
   }
 
   // Octets (ou texte) d'un fichier CSV → { lignes, colonnesInconnues, problemes, encodage, separateur, entete }.
@@ -629,9 +623,7 @@ const Donnees = (() => {
 
     if (decode.encodage === 'windows-1252') {
       problemes.push(probleme('info', 'encodage', nomTable, null, null, null, null,
-        description.libelle + ' : ' + description.fichier + " n'est pas en UTF-8 (sans doute enregistré par Excel au format "
-        + '« CSV (séparateur : point-virgule) ») ; il a été lu en Windows-1252. '
-        + 'Il sera réécrit en UTF-8 à la prochaine modification de la table.'));
+        I18n.t('socle.analyser.pas_utf_8_sans', { descriptionLibelle: description.libelle, fichier: description.fichier })));
     }
     if (texte.trim() === '') { return resultat; }      // fichier vide : table vide, rien à signaler
 
@@ -653,9 +645,7 @@ const Donnees = (() => {
     for (const erreur of decoupage.erreurs) {
       resultat.abime = true;
       problemes.push(probleme('erreur', 'valeur', nomTable, erreur.numero, null, null, null,
-        description.libelle + ', ligne ' + erreur.numero + ' de ' + description.fichier
-        + ' : structure du fichier abîmée (' + erreur.message + '), par exemple un guillemet non fermé. '
-        + 'Les valeurs de cette ligne et des suivantes peuvent être décalées.'));
+        I18n.t('socle.analyser.ligne_structure_fichier_abimee', { descriptionLibelle: description.libelle, numero: erreur.numero, fichier: description.fichier, erreurMessage: erreur.message })));
     }
 
     for (const enregistrement of donnees) {
@@ -674,8 +664,7 @@ const Donnees = (() => {
           if (lu.probleme) {
             problemes.push(probleme(lu.probleme.gravite, lu.probleme.type, nomTable, numero, identifiant,
               colonne.champ.nom, lu.valeur,
-              reperage + ' : « ' + colonne.champ.libelle + ' » contient « ' + lu.valeur + ' », '
-              + lu.probleme.explication + '.'));
+              I18n.t('socle.analyser.reperage_champ_libelle_contient_lu_valeur', { reperage, champLibelle: colonne.champ.libelle, luValeur: lu.valeur, explication: lu.probleme.explication })));
           }
         } else if (colonne.inconnue !== undefined) {
           ligne[colonne.inconnue] = relireValeur(CHAMP_INCONNU, brut).replace(MOTIF_FIN_PARASITE, '');
@@ -686,9 +675,9 @@ const Donnees = (() => {
       for (let index = colonnes.length; index < cellules.length; index += 1) {
         if (cellules[index].trim() !== '') {
           resultat.abime = true;
+          const [valeurIgnoree, colonneIgnoree] = [cellules[index], index + 1];
           problemes.push(probleme('attention', 'colonne', nomTable, numero, identifiant, null, cellules[index],
-            reperage + ' : cette ligne contient plus de valeurs que l\'en-tête n\'a de colonnes ; '
-            + 'la valeur « ' + cellules[index] + ' » (colonne ' + (index + 1) + ') est ignorée.'));
+            I18n.t('socle.analyser.ligne_contient_plus_valeurs', { reperage, valeurIgnoree, colonneIgnoree })));
         }
       }
       resultat.lignes.push(ligne);
@@ -820,7 +809,7 @@ const Donnees = (() => {
 
   function verifierInitialise() {
     if (!adaptateurActif) {
-      throw new Error('Donnees : appelez Donnees.initialiser(adaptateur, …) avant de lire ou d\'écrire.');
+      throw new Error(I18n.t('socle.verifier_initialise.donnees_appelez_donnees_initialiser'));
     }
   }
 
@@ -985,7 +974,8 @@ const Donnees = (() => {
   // Repère d'une ligne pour les messages : son identifiant, sinon sa position.
   function reperageLigne(description, ligne, position) {
     const cle = ligne[description.cle];
-    return cle ? cle : 'ligne de données n° ' + (position + 1) + ' (sans identifiant)';
+    const numero = position + 1;
+    return cle ? cle : I18n.t('socle.reperage_ligne.ligne_donnees_sans_identifiant', { numero });
   }
 
   function decrireFiltre(filtre) {
@@ -1020,16 +1010,12 @@ const Donnees = (() => {
       const cle = ligne[description.cle];
       if (cle === '' || cle === undefined) {
         resultat.push(probleme('erreur', 'identifiant', nomTable, null, null, description.cle, null,
-          description.libelle + ' : la ' + reperageLigne(description, ligne, position) + ' de '
-          + description.fichier + ' n\'a pas d\'identifiant (colonne « ' + description.cle + ' » vide). '
-          + 'Complétez-le ou supprimez la ligne dans le fichier.'));
+          I18n.t('socle.controler_identifiants.pas_identifiant_colonne_vide', { descriptionLibelle: description.libelle, reperageLigne: reperageLigne(description, ligne, position), fichier: description.fichier, cle: description.cle })));
         return;
       }
       if (vus.has(cle)) {
         resultat.push(probleme('erreur', 'doublon', nomTable, null, cle, description.cle, cle,
-          description.libelle + ' : l\'identifiant « ' + cle + ' » apparaît plusieurs fois dans '
-          + description.fichier + ' (ligne de données n° ' + (position + 1) + '). Seule la première ligne est '
-          + 'retrouvée par Prévo : donnez un identifiant unique aux autres.'));
+          I18n.t('socle.controler_identifiants.identifiant_apparait_plusieurs_fois', { descriptionLibelle: description.libelle, cle, fichier: description.fichier, numero: (position + 1) })));
       }
       vus.add(cle);
     });
@@ -1050,14 +1036,14 @@ const Donnees = (() => {
         if (ligneSansFiltre && cibles.filtre) {
           const familleTrouvee = Object.keys(cibles.filtre)
             .map((nomChamp) => nomChamp + ' « ' + ligneSansFiltre[nomChamp] + ' »').join(', ');
-          explication = 'existe dans ' + descriptionCible.libelle + ' mais avec ' + familleTrouvee
-            + ' au lieu de ' + decrireFiltre(cibles.filtre);
+          explication = I18n.t('socle.controler_references.existe_mais_lieu', { descriptionCibleLibelle: descriptionCible.libelle, familleTrouvee, filtre: decrireFiltre(cibles.filtre) });
         } else {
-          explication = 'n\'existe pas dans ' + descriptionCible.libelle
-            + (cibles.filtre ? ' (' + decrireFiltre(cibles.filtre) + ')' : '');
+          explication = cibles.filtre
+            ? I18n.t('socle.controler_references.existe_pas', { descriptionCibleLibelle: descriptionCible.libelle, filtre: decrireFiltre(cibles.filtre) })
+            : I18n.t('socle.controler_references.existe_pas_sans_filtre', { descriptionCibleLibelle: descriptionCible.libelle });
         }
         resultat.push(probleme('erreur', 'reference', nomTable, null, ligne[description.cle], champ.nom, valeur,
-          reperage + ' : « ' + champ.libelle + ' » vaut « ' + valeur + ' », qui ' + explication + '.'));
+          I18n.t('socle.controler_references.reperage_champ_libelle_vaut_valeur', { reperage, champLibelle: champ.libelle, valeur, explication })));
       });
     }
   }
@@ -1070,12 +1056,10 @@ const Donnees = (() => {
       if (demande.statut !== 'Acceptée') { continue; }
       if (demande.ot_id === '') {
         resultat.push(probleme('erreur', 'incoherence', 'demandes', null, demande.id, 'ot_id', '',
-          'Demande ' + (demande.id || '(sans identifiant)') + ' : elle est « Acceptée » mais aucun ordre de travail '
-          + 'ne lui est lié. Rouvrez-la ou liez-la à son ordre de travail.'));
+          I18n.t('socle.controler_coherence.demande_acceptee_mais_aucun', { id: (demande.id || I18n.t('socle.controler_coherence.sans_identifiant')) })));
       } else if (!indexOrdres.has(demande.ot_id)) {
         resultat.push(probleme('erreur', 'incoherence', 'demandes', null, demande.id, 'ot_id', demande.ot_id,
-          'Demande ' + (demande.id || '(sans identifiant)') + ' : elle est « Acceptée » mais son ordre de travail « '
-          + demande.ot_id + ' » n\'existe pas.'));
+          I18n.t('socle.controler_coherence.demande_acceptee_mais_ordre', { id: (demande.id || I18n.t('socle.controler_coherence.sans_identifiant')), ot_id: demande.ot_id })));
       }
     }
     for (const ordre of entreeDe('ordres_travail').lignes) {
@@ -1085,9 +1069,7 @@ const Donnees = (() => {
         // Cas d'une acceptation interrompue (l'OT est créé avant la DI, §5.3) : accepter de nouveau
         // la demande réutilise cet OT. Pas bloquant, d'où « attention ».
         resultat.push(probleme('attention', 'incoherence', 'ordres_travail', null, ordre.id, 'di_id', ordre.di_id,
-          'Ordre de travail ' + (ordre.id || '(sans identifiant)') + ' : il vient de la demande « ' + ordre.di_id
-          + ' », qui est « ' + demande.statut + ' » (ni acceptée ni regroupée). Acceptez ou regroupez la demande, '
-          + 'ou annulez l\'ordre de travail.'));
+          I18n.t('socle.controler_coherence.ordre_travail_vient_demande', { id: (ordre.id || I18n.t('socle.controler_coherence.sans_identifiant')), di_id: ordre.di_id, statut: Schema.libelleValeur('demandes', 'statut', demande.statut) })));
       }
     }
   }
@@ -1120,39 +1102,39 @@ const Donnees = (() => {
     const typesRetires = (descriptionTable('wiki_pages').champs.find((champ) => champ.nom === 'type') || {}).retirees || [];
     const parCle = new Map();
     const signaler = (gravite, page, champ, valeur, message) => resultat.push(probleme(gravite, 'wiki', 'wiki_pages', null,
-      page.id, champ, valeur, 'Page du wiki ' + (page.id || '(sans identifiant)') + ' (« ' + page.titre + ' ») : ' + message));
+      page.id, champ, valeur, I18n.t('socle.controler_wiki.page_wiki', { id: (page.id || I18n.t('socle.controler_coherence.sans_identifiant')), pageTitre: page.titre, message })));
     for (const page of pages.lignes.filter((ligne) => ligne.statut !== 'archivée')) {
       for (const lien of listeDe(page.liens)) {
         const prefixe = Object.keys(cibles).find((debut) => lien.startsWith(debut));
         const cible = prefixe ? cibles[prefixe].get(lien) : null;
         if (!cible || (prefixe === 'WP-' && cible.statut === 'archivée')) {
-          signaler('attention', page, 'liens', lien, 'lien vers une page inexistante ou archivée (« ' + lien + ' »).');
+          signaler('attention', page, 'liens', lien, I18n.t('socle.controler_wiki.lien_vers_page_inexistante', { lien }));
         }
       }
       for (const ot of listeDe(page.ot_cites)) {
-        if (!ordres.has(ot)) { signaler('attention', page, 'ot_cites', ot, 'elle cite l\'OT « ' + ot + ' », qui n\'existe pas.'); }
+        if (!ordres.has(ot)) { signaler('attention', page, 'ot_cites', ot, I18n.t('socle.controler_wiki.cite_ot_existe_pas', { ot })); }
       }
       if (enTexte(page.texte).trim() && !listeDe(page.ot_cites).length) {
-        signaler('info', page, 'ot_cites', '', 'elle ne cite aucun OT.');
+        signaler('info', page, 'ot_cites', '', I18n.t('socle.controler_wiki.cite_aucun_ot'));
       }
       // Type retiré par la refonte 2 (§20.12 : « mode », une panne est une page calculée) : la ligne reste lue, à archiver.
       if (typesRetires.includes(page.type)) {
-        signaler('attention', page, 'type', page.type, 'type de page retiré (« ' + page.type + ' » : une panne est une page '
-          + 'calculée par Prévo) ; archivez-la.');
+        signaler('attention', page, 'type', page.type, I18n.t('socle.controler_wiki.type_page_retire_panne', { pageType: page.type }));
       }
       // Rattachement (sous-page, §20.4 : sa mère, de même type ; savoir-faire) vers une page archivée. Une page absente
       // est déjà une référence cassée ; une sous-page n'a pas d'ancrage propre (ni equipement_id ni article_id).
       const mere = enTexte(page.rattache_a).trim() ? pages.index.get(enTexte(page.rattache_a).trim()) : null;
       if (mere && mere.statut === 'archivée') {
-        signaler('attention', page, 'rattache_a', mere.id, (mere.type === page.type ? 'sous-page de la page archivée « '
-          : 'rattachée à la page archivée « ') + mere.titre + ' » (' + mere.id + ').');
+        signaler('attention', page, 'rattache_a', mere.id, mere.type === page.type
+          ? I18n.t('socle.controler_wiki.sous_page_page_archivee', { mereTitre: mere.titre, mereId: mere.id })
+          : I18n.t('socle.controler_wiki.rattachee_page_archivee', { mereTitre: mere.titre, mereId: mere.id }));
       }
       const cle = enTexte(page.cle).trim();
       if (cle) { parCle.set(cle, (parCle.get(cle) || []).concat([page])); }
     }
     parCle.forEach((memes) => {
       if (memes.length > 1) {
-        signaler('attention', memes[1], 'cle', memes[1].cle, 'même titre que la page ' + memes[0].id + ' (deux pages actives de même clé).');
+        signaler('attention', memes[1], 'cle', memes[1].cle, I18n.t('socle.controler_wiki.meme_titre_page_deux', { page: memes[0].id }));
       }
     });
     const ancienne = typeof Wiki !== 'undefined' && Wiki.SEUILS ? Wiki.SEUILS.contradictionAncienneJours : 30;
@@ -1161,20 +1143,18 @@ const Donnees = (() => {
       let contradictions = [];
       try { changements = JSON.parse(entree.changements || '[]') || []; } catch (erreur) { changements = null; }
       try { contradictions = JSON.parse(entree.contradictions || '[]') || []; } catch (erreur) { contradictions = []; }
-      const absents = changements === null ? ['(changements illisibles)'] : changements.filter((c) => {
+      const absents = changements === null ? [I18n.t('socle.controler_wiki.changements_illisibles')] : changements.filter((c) => {
         const page = c && c.page ? pages.index.get(c.page) : null;
         return !page || (Number(page.version) || 0) < (Number(c.version_avant) || 0) + 1;
       }).map((c) => (c && (c.page || c.titre)) || '?');
       if (absents.length) {
         resultat.push(probleme('attention', 'wiki', 'wiki_journal', null, entree.id, 'changements', absents.join(', '),
-          'Entrée ' + entree.id + ' du journal du wiki : elle est « validée » mais ses changements ne sont pas dans les pages ('
-          + absents.join(', ') + ').'));
+          I18n.t('socle.controler_wiki.entree_journal_wiki_validee', { entreeId: entree.id, pages: absents.join(', ') })));
       }
       contradictions.filter((c) => c && c.statut === 'ouverte'
         && joursDepuis(entree.decide_le || entree.traite_le) > ancienne).forEach((c) => {
         resultat.push(probleme('info', 'wiki', 'wiki_journal', null, entree.id, 'contradictions', enTexte(c.page),
-          'Entrée ' + entree.id + ' du journal du wiki : contradiction ouverte depuis plus de ' + ancienne + ' jours sur la page « '
-          + enTexte(c.page) + ' ».'));
+          I18n.t('socle.controler_wiki.entree_journal_wiki_contradiction', { entreeId: entree.id, n: ancienne, page: enTexte(c.page) })));
       });
     }
   }
@@ -1279,7 +1259,7 @@ const Donnees = (() => {
     const description = descriptionTable(nomTable);
     const format = description.identifiant;
     if (!format) {
-      throw new Error('Donnees.nouvelId : la table « ' + nomTable + ' » n\'a pas d\'identifiant calculé.');
+      throw new Error(I18n.t('socle.nouvel_id.donnees_nouvel_id_table_pas', { nomTable }));
     }
     const existantes = lignesExistantes || lignes(nomTable);
     if (format.horodate) {
@@ -1398,7 +1378,7 @@ const Donnees = (() => {
   }
 
   function messageConflitPersistant(nomTable) {
-    return 'Le fichier ' + nomTable + ' est modifié en même temps sur un autre poste. Réessayez dans un instant.';
+    return I18n.t('socle.message_conflit_persistant.fichier_modifie_meme_temps', { nomTable });
   }
 
   // Chemin d'écriture d'une table entière (modifier et passage au format courant) : en lecture seule,
@@ -1737,7 +1717,7 @@ const Donnees = (() => {
 
   function exigerFormats() {
     if (typeof Formats === 'undefined') {
-      throw new Error('Donnees : le registre des formats (js/formats.js) doit être chargé avant js/donnees.js.');
+      throw new Error(I18n.t('socle.exiger_formats.donnees_registre_formats_js'));
     }
   }
 
@@ -1789,12 +1769,10 @@ const Donnees = (() => {
   function problemeTableLaissee(nomTable) {
     const description = descriptionTable(nomTable);
     const raison = raisonDeLaisser(nomTable, entreeDe(nomTable)) === 'entete'
-      ? 'la ligne d\'en-tête de ' + description.fichier + ' est incomplète ou illisible (des colonnes du format 1 y manquent)'
-      : description.fichier + ' est abîmé (structure du fichier, ou valeurs au-delà de l\'en-tête : voir ses autres '
-        + 'problèmes) et le réécrire en perdrait une partie';
+      ? I18n.t('socle.probleme_table_laissee.ligne_tete_incomplete_illisible', { fichier: description.fichier })
+      : I18n.t('socle.probleme_table_laissee.abime_structure_fichier_valeurs', { fichier: description.fichier });
     return probleme('erreur', 'colonne', nomTable, 1, null, null, null,
-      description.libelle + ' : ' + raison + ' ; Prévo ne réécrit pas ce fichier pour le passer au format '
-      + Schema.version + ' et le laisse tel quel. Corrigez-le, ou restaurez une sauvegarde.');
+      I18n.t('socle.probleme_table_laissee.prevo_reecrit_pas_fichier', { descriptionLibelle: description.libelle, raison, version: Schema.version }));
   }
 
   function problemesFormatActuels() {
@@ -1812,16 +1790,16 @@ const Donnees = (() => {
   // ne sait pas sauvegarder ou ne confirme pas la sauvegarde (aucun nom renvoyé).
   async function sauvegarderAvantFormat(versionCible) {
     if (typeof adaptateurActif.sauvegarder !== 'function') {
-      throw new Error('ce mode de stockage ne sait pas faire de sauvegarde');
+      throw new Error(I18n.t('socle.sauvegarder_avant_format.mode_stockage_sait_pas'));
     }
     const nom = await adaptateurActif.sauvegarder('avant-format-v' + versionCible);
-    if (!nom) { throw new Error("le stockage n'a pas confirmé la sauvegarde (aucun nom renvoyé)"); }
+    if (!nom) { throw new Error(I18n.t('socle.sauvegarder_avant_format.stockage_pas_confirme_sauvegarde')); }
     return nom;
   }
 
   // Message d'une erreur sans point final (pour l'insérer au milieu d'une phrase).
   function messageSansPointFinal(erreur) {
-    return String((erreur && erreur.message) || 'erreur inconnue').replace(/[\s.]+$/, '');
+    return String((erreur && erreur.message) || I18n.t('commun.message.erreur_inconnue')).replace(/[\s.]+$/, '');
   }
 
   // Étapes du passage depuis `depart`, calculées en mémoire par Formats.migrer sur les en-têtes des tables données
@@ -1923,8 +1901,7 @@ const Donnees = (() => {
       try {
         resultat.sauvegarde = await sauvegarderAvantFormat(courant);
       } catch (erreur) {
-        throw new ErreurStockage('Sauvegarde avant le passage au format ' + courant + ' impossible : '
-          + messageSansPointFinal(erreur) + ' ; la mise à jour sera retentée à la prochaine ouverture.', erreur);
+        throw new ErreurStockage(I18n.t('socle.migrer_au_format_courant.sauvegarde_avant_passage_format', { courant, messageSansPointFinal: messageSansPointFinal(erreur) }), erreur);
       }
     }
 
@@ -1953,7 +1930,7 @@ const Donnees = (() => {
     }, { journal: false });
 
     // 5. Le journal : une ligne par étape.
-    const suite = resultat.sauvegarde ? 'sauvegarde ' + resultat.sauvegarde + ' faite juste avant' : 'sans sauvegarde (démo)';
+    const suite = resultat.sauvegarde ? I18n.t('socle.migrer_au_format_courant.sauvegarde_faite_juste_avant', { sauvegarde: resultat.sauvegarde }) : I18n.t('socle.migrer_au_format_courant.sans_sauvegarde_demo');
     const identifiantsPris = new Set();
     const entrees = [];
     for (const etape of etapes) {
