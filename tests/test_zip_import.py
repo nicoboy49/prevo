@@ -703,6 +703,9 @@ class TestServeur(CasImport):
             nouveaux = [o for chemin, o in apres.items() if chemin.startswith("documents/") and chemin not in avant]
             self.assertEqual(nouveaux, [premier])
             self.fermer_fenetre(page, "import-zip-echec")
+            # Fermer la fenêtre redessine Paramètres, qui relance ses requêtes de fond (/api/installation/journal) :
+            # les laisser finir avant d'arrêter le serveur, sinon Chrome note « ERR_CONNECTION_RESET » (vu 1 fois sur 20).
+            page.wait_for_load_state("networkidle")
 
 
 # ---------------------------------------------------------------------------
