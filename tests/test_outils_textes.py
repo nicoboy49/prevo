@@ -347,6 +347,34 @@ class TestExtraction(unittest.TestCase):
         self.assertEqual(res.nouvelles['commun'], {'commun.liste_interventions': 'Liste des interventions'})
         self.assertIn("I18n.t('commun.liste_interventions')", self.lire('js/modules/planning-essai.js'))
 
+    def test_commun_existant_reprend_sans_creer(self):
+        """T257 : --commun-existant reprend une clé commun.* déjà écrite, n'en crée aucune, même pour un texte
+        répété dans deux domaines (les domaines extraits en parallèle ne touchent pas la section commun)."""
+        ecrire(self.racine, 'js/i18n/fr.js', "// ==== section commun ====\n"
+                                              "I18n.ajouter('fr', {\n"
+                                              "  'commun.titre.liste': 'Liste des interventions',\n});\n"
+                                              "// ==== fin commun ====\n\n// ==== section planning ====\n"
+                                              "I18n.ajouter('fr', {\n});\n// ==== fin planning ====\n")
+        ecrire(self.racine, 'js/modules/causes-essai.js', "'use strict';\nconst C = (() => {\n"
+                                                           "  function f() { return 'Fiche de l\\'équipement'; }\n"
+                                                           "  return { f };\n})();\n")
+        avant_commun = self.lire('js/i18n/fr.js').split('// ==== fin commun ====')[0]
+        res = extraire(self.racine, fichiers=('js/modules/planning-essai.js',), commun_existant=True)
+        self.assertNotIn('commun', res.nouvelles)
+        self.assertEqual(self.lire('js/i18n/fr.js').split('// ==== fin commun ====')[0], avant_commun)
+        module = self.lire('js/modules/planning-essai.js')
+        self.assertIn("I18n.t('commun.titre.liste')", module)
+        self.assertNotIn("'Liste des interventions'", module)
+        self.assertEqual([u.cle for u in res.unites if u.commun], ['commun.titre.liste'])
+        texte = ext.rapport(res)
+        self.assertIn('== Clés commun.* employées (1)', texte)
+        self.assertIn('commun.titre.liste = ', texte)
+        # répété dans deux domaines mais absent de la section commun : clé du domaine, jamais commun.*
+        fiche = [u for u in res.unites if 'Fiche de l' in str(u.valeur)]
+        self.assertEqual(len(fiche), 1)
+        self.assertFalse(fiche[0].commun)
+        self.assertTrue(fiche[0].cle.startswith('planning.'), fiche[0].cle)
+
 
 class TestControle(unittest.TestCase):
 

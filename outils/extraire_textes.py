@@ -9,6 +9,9 @@ Options :
   --dictionnaire CHEM  dictionnaire à compléter (défaut js/i18n/fr.js ; js/i18n/aide/fr.js pour l'aide longue,
                        domaine à part « aide-longue » : js/modules/aide-ecrans-textes.js) ;
   --commun             un texte répété dans plusieurs domaines prend une clé commun.* (section commun) ;
+  --commun-existant    un texte identique à une valeur de la section commun reprend sa clé, sans jamais créer de
+                       clé commun.* (domaines extraits en parallèle, T257) ; chaque reprise est listée au rapport,
+                       pour vérifier même sens ET même rôle (sinon : clé du domaine, à la main) ;
   --rapport CHEM       écrit aussi le rapport dans ce fichier ; --racine, --exceptions : pour les essais.
 
 Ce que fait l'outil (contrat du Lot 2, .chantier) :
@@ -2398,7 +2401,8 @@ class Extracteur:
             analyse = AnalyseFichier(self, rel, source, section)
         return analyse, analyse.rendre(), source, bom
 
-    def extraire(self, section, fichiers, essai=False, dictionnaire=DICTIONNAIRE, commun=False):
+    def extraire(self, section, fichiers, essai=False, dictionnaire=DICTIONNAIRE, commun=False,
+                 commun_existant=False):
         res = Resultat()
         res.essai = essai
         res.section = section
@@ -2424,7 +2428,7 @@ class Extracteur:
             for position, ligne, texte, raison in analyse.relectures:
                 res.relectures.append((rel, ligne, texte, raison))
         repetes = self.textes_repetes(section) if commun else {}
-        self.attribuer(res, dictionnaire, repetes, commun)
+        self.attribuer(res, dictionnaire, repetes, commun, commun_existant)
         # remplacement des marqueurs et écriture
         for rel, analyse, nouveau, source, bom in rendus:
             for unite in analyse.unites:
@@ -2462,21 +2466,23 @@ class Extracteur:
         self.toutes_unites = sauvegarde
         return repetes
 
-    def attribuer(self, res, dictionnaire, repetes, commun):
-        """Clés des unités, dans l'ordre des fichiers et des positions ; collisions résolues par _2, _3…"""
+    def attribuer(self, res, dictionnaire, repetes, commun, commun_existant=False):
+        """Clés des unités, dans l'ordre des fichiers et des positions ; collisions résolues par _2, _3…
+        commun_existant : reprend une clé commun.* déjà écrite pour un texte identique, n'en crée jamais."""
         existantes = {}
         sections_existantes = lire_dictionnaire(self.racine / dictionnaire)
         for section, (langue, entrees) in sections_existantes.items():
             for cle, valeur in entrees.items():
                 existantes[cle] = valeur
         par_fichier = {}
-        communes = {canon(v): c for c, v in sections_existantes.get('commun', ('fr', {}))[1].items()} if commun else {}
+        communes = ({canon(v): c for c, v in sections_existantes.get('commun', ('fr', {}))[1].items()}
+                    if commun or commun_existant else {})
         for unite in sorted(self.toutes_unites, key=lambda u: (u.fichier, u.position)):
             vk = canon(unite.valeur)
             if (unite.fichier, unite.section, vk) in par_fichier:
                 unite.cle = par_fichier[(unite.fichier, unite.section, vk)]
                 continue
-            if commun and vk in communes:
+            if (commun or commun_existant) and vk in communes:
                 unite.cle = communes[vk]
                 unite.commun = True
                 continue
@@ -2567,6 +2573,13 @@ def rapport(res):
         lignes.append('== À relire (rien n\'est réécrit) ==')
         for rel, ligne, texte, raison in res.relectures:
             lignes.append('%s:%d [%s] « %s »' % (rel, ligne, raison, texte))
+    communes = [u for u in res.unites if u.commun]
+    if communes:
+        lignes.append('')
+        lignes.append('== Clés commun.* employées (%d) : vérifier même sens ET même rôle, sinon clé du domaine '
+                      'à la main ==' % len(communes))
+        for u in communes:
+            lignes.append('%s:%d %s = %s' % (u.fichier, u.ligne, u.cle, affichage(u.valeur)))
     if res.collisions:
         lignes.append('')
         lignes.append('== Collisions de clés résolues ==')
@@ -2596,6 +2609,8 @@ def main(argv=None):
     parser.add_argument('--dictionnaire', help='défaut : celui du domaine (js/i18n/fr.js ; js/i18n/aide/fr.js pour '
                                                'aide-longue)')
     parser.add_argument('--commun', action='store_true', help='clé commun.* pour un texte de plusieurs domaines')
+    parser.add_argument('--commun-existant', action='store_true',
+                        help='reprend les clés commun.* existantes pour un texte identique, sans en créer')
     parser.add_argument('--rapport', help='écrit aussi le rapport dans ce fichier')
     parser.add_argument('--racine', default=str(RACINE_DEPOT))
     parser.add_argument('--exceptions')
@@ -2615,7 +2630,7 @@ def main(argv=None):
     extracteur = Extracteur(racine, args.exceptions)
     try:
         res = extracteur.extraire(section, fichiers, essai=args.essai, dictionnaire=dictionnaire or DICTIONNAIRE,
-                                  commun=args.commun)
+                                  commun=args.commun, commun_existant=args.commun_existant)
     except ValueError as erreur:
         parser.error(str(erreur))
     texte = rapport(res)

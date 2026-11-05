@@ -9,6 +9,38 @@
 
 // ==== section commun ====
 I18n.ajouter('fr', {
+  'commun.bouton.actualiser': 'Actualiser',
+  'commun.bouton.ajouter': 'Ajouter',
+  'commun.bouton.annuler': 'Annuler',
+  'commun.bouton.continuer': 'Continuer',
+  'commun.bouton.desactiver': 'Désactiver',
+  'commun.bouton.enregistrer': 'Enregistrer',
+  'commun.bouton.fermer': 'Fermer',
+  'commun.bouton.imprimer': 'Imprimer',
+  'commun.bouton.modifier': 'Modifier',
+  'commun.champ.article': 'Article',
+  'commun.champ.commentaire': 'Commentaire',
+  'commun.champ.criticite': 'Criticité',
+  'commun.champ.date': 'Date',
+  'commun.champ.designation': 'Désignation',
+  'commun.champ.equipement': 'Équipement',
+  'commun.champ.prenom': 'Prénom',
+  'commun.champ.priorite': 'Priorité',
+  'commun.champ.prix_unitaire': 'Prix unitaire',
+  'commun.champ.quantite': 'Quantité',
+  'commun.champ.reference': 'Référence',
+  'commun.champ.repere': 'Repère',
+  'commun.champ.statut': 'Statut',
+  'commun.champ.symptome': 'Symptôme',
+  'commun.champ.technicien': 'Technicien',
+  'commun.liste.non_choisi': '(non choisi)',
+  'commun.message.aucune_modification': 'Aucune modification à enregistrer.',
+  'commun.message.champ_obligatoire': 'champ obligatoire',
+  'commun.message.erreur_inconnue': 'erreur inconnue',
+  'commun.message.fichier_trop_volumineux': 'Ce fichier est trop volumineux (9 Mo au maximum).',
+  'commun.message.ot_introuvable': 'L\'ordre de travail {otId} est introuvable.',
+  'commun.message.saisi_sur_autre_poste': 'Il a peut-être été saisi sur un autre poste : actualisez.',
+  'commun.message.serveur_a_repondu': 'Le serveur a répondu « {status} ».',
 });
 // ==== fin commun ====
 
