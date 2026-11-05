@@ -1,0 +1,103 @@
+{
+  "description": "Textes qui ne sont JAMAIS extraits vers js/i18n/fr.js, chacun avec sa classe et sa raison. Lu par outils/extraire_textes.py et outils/controler_textes.py (critère CS147 : aucun texte visible en dur hors de ces exceptions). Les motifs de fichiers et d'appels suivent fnmatch (* = n'importe quoi). Ajouter une exception = une entrée justifiée, relue comme du code.",
+  "classes": {
+    "D146": "Données : on traduit l'interface, jamais les données (jeu de démonstration compris).",
+    "D155": "Valeurs stockées des listes (statuts, types, priorités…) : codes français fixes, affichés par valeurs.<table>.<champ>.<valeur>.",
+    "D156": "Marqueurs écrits dans les données et relus par le code (actions du journal, « Pièce : », « Ancien n° : »…) : fixes, traduits à l'affichage.",
+    "D157": "Console et lanceurs : messages pour qui maintient l'appli, pas pour l'écran.",
+    "D159": "Consignes envoyées à l'assistant IA : gardées en français (avec « réponds en <langue> »).",
+    "identifiants": "Identifiants, noms de fichiers, en-têtes CSV, codes, sélecteurs : reconnus automatiquement par l'outil (classe « technique »), aucune entrée nécessaire.",
+    "synonymes": "Synonymes de titres de colonnes reconnus à l'import (D155) : ce sont des données d'entrée, pas des textes affichés."
+  },
+  "regles": [
+    {
+      "regle": "valeurs-schema",
+      "classe": "D155",
+      "raison": "Valeurs des listes lues dans js/schema.js (choix(nom, libellé, [valeurs]), CRITICITES, PRIORITES) : un littéral égal à l'une d'elles est une valeur stockée."
+    }
+  ],
+  "fichiers": [
+    {
+      "chemin": "js/modules/ia-prompts.js",
+      "classe": "D159",
+      "raison": "Consignes envoyées au modèle, jamais affichées (inventaire du Lot 0 : 240 chaînes)."
+    },
+    {
+      "chemin": "js/demo-donnees.js",
+      "classe": "D146",
+      "raison": "Jeu de données de démonstration (des données, pas l'interface)."
+    },
+    {
+      "chemin": "js/i18n/*",
+      "classe": "identifiants",
+      "raison": "Les dictionnaires eux-mêmes (fr.js, langues.js, aide/fr.js) : leurs valeurs sont les textes extraits."
+    },
+    {
+      "chemin": "js/lib/*",
+      "classe": "identifiants",
+      "raison": "Bibliothèques tierces, jamais modifiées."
+    }
+  ],
+  "appels": [
+    {
+      "appel": "console.*",
+      "classe": "D157",
+      "raison": "Messages de la console du navigateur (console.log, warn, error…)."
+    },
+    {
+      "appel": "V",
+      "argument": 4,
+      "fichiers": [
+        "js/modules/import-regles.js"
+      ],
+      "classe": "synonymes",
+      "raison": "Cinquième argument de V(…) : titres de colonnes reconnus à l'import (« a|b|c »)."
+    },
+    {
+      "appel": "Donnees.journaliser",
+      "argument": 2,
+      "classe": "D156",
+      "raison": "Action écrite dans le journal par Donnees.journaliser(table, id, action) et relue telle quelle."
+    }
+  ],
+  "cles": [
+    {
+      "cle": "synonymes",
+      "classe": "synonymes",
+      "raison": "Synonymes de titres de colonnes (js/schema.js, import) reconnus à l'import."
+    },
+    {
+      "cle": "action",
+      "appel": "Donnees.*",
+      "classe": "D156",
+      "raison": "Action écrite dans le journal par Donnees.modifier(…, { action }) et relue telle quelle."
+    }
+  ],
+  "variables": [
+    {
+      "variable": "action",
+      "classe": "D156",
+      "raison": "Variable « action » passée en { action } à Donnees.modifier ou à Donnees.journaliser : texte du journal."
+    }
+  ],
+  "textes": [
+    {
+      "texte": "Pièce : ",
+      "classe": "D156",
+      "raison": "Début du motif de mise en attente « Pièce : … », relu par le code (RG3)."
+    },
+    {
+      "texte": "Ancien n° : ",
+      "classe": "D156",
+      "raison": "Ligne « Ancien n° : <numéro> » d'un compte rendu importé, relue pour retrouver l'ancien numéro."
+    },
+    {
+      "texte": "Réception ",
+      "classe": "D156",
+      "fichiers": [
+        "js/modules/magasin-ecritures.js"
+      ],
+      "raison": "Commentaire « Réception ACH-… » du mouvement de stock, relu pour rattacher la réception à l'achat."
+    }
+  ]
+}
