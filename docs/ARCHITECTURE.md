@@ -191,10 +191,19 @@ const Schema = {
 Types : `id`, `texte`, `texte_long`, `entier`, `decimal`, `date`, `date_heure`, `booleen`,
 `choix` (avec `valeurs`), `ref` (avec `table`, et `champCible` si ce n'est pas la clé — ex. les
 `*_code` des OT visent `codes_defaillance.code` filtré par `famille`, attribut `filtre`), `document`
-(nom de fichier dans `donnees/documents/`). Champs facultatifs : `libelle` (toujours renseigné, en
-français), `obligatoire`, `defaut`, `protege`, `synonymes` (pour l'assistant d'import futur),
+(nom de fichier dans `donnees/documents/`). Champs facultatifs : `libelle` (toujours renseigné ; texte du dictionnaire, voir plus bas), `obligatoire`, `defaut`, `protege`, `synonymes` (pour l'assistant d'import futur),
 `depuisVersion` (version du format qui a ajouté le champ : `2` pour les quatre champs du §14.1 ;
 absent pour les champs du brief).
+
+**Libellés traduits (Lot 2 multilingue, §24).** Les `libelle` ne sont plus écrits dans `js/schema.js` : à la fin du
+fichier, une boucle remplace chacun par un accesseur énumérable qui lit `schema.<table>.<champ>` à chaque lecture
+(le nom d'une table, `schema.tables.<table>`) ; les lectures `.libelle` du code, ainsi que `JSON.stringify` et
+`Object.assign` sur une description de champ, voient donc le texte de la langue active sans rien changer.
+`Schema.libelleValeur(table, champ, valeur)` donne le texte affiché d'une valeur stockée d'un champ `choix`
+(clé `valeurs.<table>.<champ>.<valeur>`) ; une valeur vide, inconnue ou d'un autre type de champ est rendue telle
+quelle, une valeur retirée (`retirees`) garde son libellé. Chaque champ `choix` porte `nomTable`, le nom de sa table,
+qui suit ses copies. Les colonnes de `UI.tableau` ont une option `table` : avec `cle`, la cellule est une valeur
+stockée affichée par `Schema.libelleValeur(table, cle, valeur)`.
 
 **Format v2 (lot 2).** Quatre champs sont ajoutés **en fin de table**, après ceux du brief :
 `equipements.valeur_remplacement`, `demandes.symptome_code`, `demandes.ot_origine_id`,
@@ -4286,3 +4295,149 @@ Un encart d'explication à la première visite de chaque écran, dans la démo c
   l'écran » : case `#poste-aide-active`, bouton `#btn-revoir-aide`.
 - **Tests** : `tests/test_aide_ecrans.py`. Les autres tests coupent l'aide (`CasNavigateur.AIDE_ECRANS = False` :
   `prevo.aideActive = '0'` posé avant le chargement de chaque contexte), comme `outils/generer_captures.py`.
+
+## 24. Textes de l'interface (multilingue, Lot 2)
+
+Chantier multilingue, Lot 2 (« extraction des textes », décisions D145 à D166 du cahier des charges du chantier) :
+tout texte visible passe par le moteur `I18n`, et le dictionnaire français est la référence. Règle du lot : **l'écran
+ne change en rien** (CS148) et **aucun texte visible ne reste en dur** (CS147). Le Lot 2 ne livre que le français ;
+les autres langues et le choix de la langue viennent aux lots 3 et 4. Le chargement de la langue active est décrit
+au §1 (`js/i18n-chargeur.js`), l'aide longue générée au §23, les messages du serveur au §7.
+
+### 24.1 Le moteur (`js/i18n.js`, objet global `I18n`)
+
+Script classique, compatible `file://`. Interface :
+
+- `I18n.t(cle, valeurs)` renvoie un texte brut. Les `{nom}` sont remplacés par `valeurs.nom`.
+- `I18n.html(cle, valeurs)` renvoie un fragment sûr pour `UI.html` et `UI.remplir` : le balisage écrit dans le
+  dictionnaire est gardé, chaque valeur interpolée est échappée. Il sert aux phrases qui ont du HTML au milieu
+  (un lien, un mot en gras).
+- **Pluriels** : si l'entrée du dictionnaire est un objet `{ one: '{n} cas', other: '{n} cas' }` (les autres
+  catégories CLDR sont permises), la forme est choisie par `Intl.PluralRules` de la langue active d'après
+  `valeurs.n` ; une catégorie absente se replie sur `other`. Règle de Nicolas : dès qu'un nombre précède un nom,
+  on écrit une entrée de pluriel, même si le français ne change pas (« {n} cas », « {n} mois »), pour que les
+  langues futures puissent accorder.
+- **Repli** : langue active, puis français ; une clé absente partout renvoie la clé elle-même et fait un
+  `console.warn`, une seule fois par clé. Les clés `aide.*` (aide longue) se replient sur le français **sans**
+  avertissement ni erreur (décision de Nicolas : une langue peut n'avoir traduit que l'interface).
+- `I18n.ajouter(code, dictionnaire)` fusionne des clés dans une langue (appels répétables) ;
+  `I18n.declarer(langue)` enregistre une langue ; `I18n.choisir(code)` change la langue active ;
+  `I18n.appliquer(racine)` remplit les éléments `data-i18n="cle"` (texte) et
+  `data-i18n-attr="title:cle1;placeholder:cle2"` (attributs) de `index.html` ; `I18n.langue` (code actif, `'fr'`)
+  et `I18n.langues` (copie des langues déclarées) sont en lecture seule.
+
+### 24.2 Les fichiers et leur ordre de chargement
+
+- `js/i18n/langues.js` : les langues déclarées, par exemple
+  `I18n.declarer({ code: 'fr', nom: 'Français', locale: 'fr-FR', statut: 'reference' })`.
+- `js/i18n/<code>.js` : le dictionnaire d'une langue, **un bloc par section**, pour que des tâches menées en parallèle
+  ne touchent jamais les mêmes lignes :
+
+  ```js
+  // ==== section planning ====
+  I18n.ajouter('fr', {
+    'planning.liste.vide': { one: '{n} intervention', other: '{n} interventions' },
+    'planning.semaine.titre': 'Semaine du {date}',
+  });
+  // ==== fin planning ====
+  ```
+
+  Clés triées dans chaque bloc, une par ligne, chaînes entre apostrophes simples. Les échappements JS restent tels
+  que dans la source : jamais d'espace insécable écrite en clair (`test_depot` la refuse), on garde ` ` et
+  ` `.
+- `js/i18n/aide/<code>.js` : l'aide longue, un bloc par générateur (« aide », « acces »…). Elle est à part parce
+  qu'elle est produite par des outils (`outils/generer_aide_ecrans.py`, `outils/generer_acces_textes.py`, §23) et
+  repliée en silence.
+- **Ordre** : `js/i18n.js`, `js/i18n/langues.js`, `js/i18n/fr.js`, `js/i18n/aide/fr.js`, `js/i18n-chargeur.js`, puis
+  `js/schema.js` et la suite (ordre exact au §1). `acces/porte.html` charge aussi le moteur et `fr.js` avant son
+  script. Les fichiers d'une autre langue sont ajoutés par le chargeur, de façon synchrone, juste après le français
+  et avant `js/schema.js`.
+
+### 24.3 Les clés
+
+- Forme générale : `<section>.<composant ou écran>.<élément>`, en minuscules, avec des points et des soulignés.
+  La section d'un fichier est celle de son domaine (préfixe de `js/modules/`, plus le socle). Sections actuelles :
+  commun, schema, valeurs, socle, planning, causes, dictee, mise, aide, ordres, demandes, parc, preventif, controles,
+  wiki, suggestions, import, magasin, indicateurs, rapport, accueil, equipe, acces, connexion, poste, apropos,
+  installation, porte, parametres, sauvegardes, zip, serveur, ia.
+- Une clé n'est renommée que si elle est fausse ou trompeuse (le contrôle la signale).
+- `schema.tables.<table>` : nom d'une table ; `schema.<table>.<champ>` : libellé d'un champ (§4).
+- `valeurs.<table>.<champ>.<valeur stockée>` : affichage d'une valeur de liste (D155, voir 24.5).
+- `serveur.<code>` : message de `serveur.py` traduit par le navigateur (§7).
+- **`commun.*`** : mots courants (Annuler, Enregistrer, jours, mois…) décidés une fois, uniquement pour des textes
+  de **même sens et même rôle** : un bouton « Enregistrer » et un titre « Enregistrer » ne partagent pas forcément
+  leur clé. En cas de doute, clé propre au domaine. Depuis T257 la section `commun` est **figée** : les extractions
+  de domaines menées en parallèle ne la modifient plus. L'option `--commun-existant` de `outils/extraire_textes.py`
+  reprend la clé existante pour un texte identique, sans jamais en créer, et liste chaque reprise au rapport pour que
+  l'on vérifie le sens et le rôle.
+
+### 24.4 Jamais de texte figé au chargement
+
+Un texte traduit n'est jamais calculé une fois pour toutes quand un module se charge : il est lu au moment de
+l'affichage, sinon le changement de langue (Lot 3) exigerait de recharger la page. Conséquences dans le code :
+
+- une constante qui contenait des textes devient une **fonction** (`Indicateurs.libellesPeriodes()` à la place de
+  `PERIODES`) ou un **accesseur** `get` (`get titre()`, `menu: { get libelle() }` pour `App.ecran`, `id` en premier) ;
+- une phrase à choix de mot (hausse ou baisse) est coupée en phrases complètes, une par cas ;
+- **piège d'`Object.assign`** : `Object.assign(cible, source)` lit chaque accesseur de `source` **une seule fois** et
+  copie la valeur, qui reste figée dans la cible. Pour assembler un objet à accesseurs, on utilise
+  `Object.defineProperties(cible, Object.getOwnPropertyDescriptors(source))`, qui garde les accesseurs (cas de
+  `wiki-regles.js`, `wiki-calculs.js`, `wiki-ingestion.js`) ;
+- les constantes recopiées d'un module à l'autre au chargement (`X: Module.CONSTANTE`) sont invisibles pour l'outil :
+  on les cherche à la main.
+
+### 24.5 Ce qui n'est jamais traduit
+
+Chaque exception est inscrite dans `outils/exceptions_textes.json`, avec sa classe et sa raison ; le contrôle ne la
+signale jamais.
+
+- **D146** : les données (jeu de démonstration compris) ne sont pas traduites, seulement l'interface.
+- **D155** : les valeurs stockées des listes (statuts, types, priorités) sont des codes français fixes ; seul leur
+  affichage passe par `valeurs.*`. Même classe pour les **synonymes** de titres de colonnes reconnus à l'import
+  (données d'entrée, non affichées).
+- **D156** : les marqueurs écrits dans les données et relus par le code (actions du journal, « Pièce : »,
+  « Réception ACH- », « Ancien n° : »…) restent fixes ; seul le détail qui les suit est traduit.
+- **D157** : la console et les lanceurs (messages pour qui maintient l'application).
+- **D159** : les consignes envoyées à l'assistant IA restent en français (avec « réponds en <langue> »).
+- **identifiants** : identifiants, noms de fichiers, en-têtes CSV, codes, sélecteurs, reconnus automatiquement par
+  l'outil. **titre-initial** : le `<title>` nu de `index.html` avant le chargement des scripts, remplacé ensuite par
+  `App.definirTitre`.
+
+### 24.6 Ajouter un texte, pas à pas
+
+1. Écrire l'appel là où le texte s'affiche : `I18n.t('planning.semaine.titre', { date: d })`, ou `I18n.html(…)` s'il
+   contient du HTML ; en HTML statique, `data-i18n` ou `data-i18n-attr`. Dans une constante ou un objet, passer par
+   une fonction ou un accesseur (24.4).
+2. Ajouter la clé dans le bon bloc de `js/i18n/fr.js`, à sa place triée. Si un nombre précède un nom, écrire l'entrée
+   de pluriel `{ one, other }` avec la variable `n`. Les variables portent un nom parlant (pas `{v1}`).
+3. Pour un mot courant déjà présent dans `commun`, reprendre sa clé seulement si sens et rôle sont les mêmes.
+4. Lancer `py -X utf8 outils/controler_textes.py --domaine <domaine>` : il doit répondre 0.
+5. Lancer les tests du domaine et la photographie des écrans (24.7) : l'écran doit être identique.
+
+Pour extraire en masse, on remet d'abord à la main les cas du rapport en forme saine, puis
+`py -X utf8 outils/extraire_textes.py --domaine <d> --essai` (rapport sans écriture), puis la même commande sans
+`--essai`, et l'on ne renomme que ce que le contrôle signale. Un nouveau message de `serveur.py` s'écrit
+`traduisible(…)` (§7). Une valeur de liste du schéma reçoit sa clé `valeurs.…`.
+
+### 24.7 Les outils et ce qu'ils vérifient
+
+- `outils/extraire_textes.py` : classe les textes visibles d'un fichier ou d'un domaine, écrit les clés et réécrit
+  les appels. Les cas douteux vont au rapport de relecture, ils ne sont pas extraits.
+- `outils/controler_textes.py` (**CS147**) : aucun texte visible en dur hors exceptions ; clés manquantes ou orphelines
+  (une clé calculée ne couvre plus tout le dictionnaire depuis T262) ; variables `{…}` identiques entre l'appel et la
+  valeur, noms génériques refusés ; texte de `index.html` sous `data-i18n` égal à la valeur du dictionnaire. Code
+  retour 0 si rien à signaler. `--domaine` limite aux fichiers d'un domaine (répétable).
+- `outils/textes_serveur.py` : le même contrôle pour `serveur.py` (module `ast`), appelé par le précédent pour le
+  domaine « serveur » ; `--ecrire` complète la section serveur de `fr.js`.
+- `outils/photographier_ecrans.py` (**CS148**) : relève les textes visibles et les attributs de chaque écran, pour
+  chaque profil, en **démo** (`index.html` en `file://`) et en **mode serveur** (serveur sur une copie du jeu de
+  démo, base vide, porte des téléphones), et les compare aux relevés de référence de
+  `tests/fixtures/ecrans-reference/` (`demo.json`, `serveur.json`). Options utiles : `--mode`, `--ecrans`
+  (expression régulière), `--captures` et `--comparer-captures` pour les images.
+- Les tests existants ne changent pas : les textes qu'ils attendent sont ceux d'avant le chantier.
+
+### 24.8 Messages du serveur
+
+`serveur.py` envoie les messages affichables avec leur code (`"erreur_code"`, `"erreur_valeurs"`) à côté du
+français ; le navigateur affiche la clé `serveur.<code>` (`StockageServeur.texte` pour les modules qui font leur
+propre `fetch`). Écriture, règles et contrôle : §7 et `outils/textes_serveur.py`.
