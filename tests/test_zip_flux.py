@@ -1,17 +1,20 @@
 """ZipFlux (js/modules/zip-flux.js, T226, morceau 1 de T215 « ZIP par morceaux ») : lecture d'un ZIP par tranches
 (Blob.slice) et décompression en flux contrôlée, écriture en Blob composé sans ZIP64. Module bas niveau, sans écran
-ni stockage : l'import (T227) et l'export (T228) s'en serviront.
+ni stockage : l'import (T227) et l'export (T228) s'en servent.
 
-Les ZIP sont fabriqués ici (zipfile, ou JSZip et ZipFlux dans la page) à partir d'octets fictifs, dans un dossier
-temporaire : jamais de données réelles. La page est tests/fixtures/page-vide.html en file:// (charger_scripts) ; un
+Les ZIP sont fabriqués ici (zipfile, ou ZipFlux dans la page) à partir d'octets fictifs, dans un dossier temporaire :
+jamais de données réelles. Ceux de JSZip 3.10.2, la bibliothèque des versions 1.2 à 2.0 bêta 2 (retirée en T229), sont
+des octets figés : tests/fixtures/zip-jszip/jszip-flux*.zip, produits une fois (T229) par le JSZip de l'étiquette
+v2.0.0-beta.2 à partir d'ENTREES_JSZIP (photo stockée, le reste en deflate, streamFiles faux puis vrai). La page est tests/fixtures/page-vide.html en file:// (charger_scripts) ; un
 ZIP y arrive par un <input type="file"> (un vrai File), ou y est produit ; les octets passent en base64.
 
     1. crc32 : « 123456789 » → 0xCBF43926 ; par morceaux = d'un seul tenant (= zlib.crc32) ;
     2. écriture → relue par zipfile (testzip, noms dont non ASCII, contenus, stocké et deflate, fichier vide, aucune
-       entrée de dossier, pas de bit 3, drapeau UTF-8, date DOS), par JSZip et par ZipFlux ; sortie déterministe
+       entrée de dossier, pas de bit 3, drapeau UTF-8, date DOS) et par ZipFlux (la relecture par JSZip, celle de la
+       bêta 2, est dans tests/test_zip_export_morceaux.py) ; sortie déterministe
        (deux écritures, et des ajouts lancés sans attendre, identiques à l'octet) ;
-    3. ZIP de zipfile (deflate, stocké, ZIP64 local par force_zip64, ZIP64 complet) et de JSZip (avec et sans
-       descripteurs de données) → lireRepertoire et contenu rendent les noms, tailles, CRC, positions et octets de
+    3. ZIP de zipfile (deflate, stocké, ZIP64 local par force_zip64, ZIP64 complet) et de JSZip (octets figés, avec
+       et sans descripteurs de données) → lireRepertoire et contenu rendent les noms, tailles, CRC, positions et octets de
        zipfile ; nom qui n'est pas de l'UTF-8 → nom null, octets bruts gardés ;
     4. entrées hostiles : bombe (taille déclarée plus petite que la réelle : 'bombe', décompression arrêtée avant la
        fin des données compressées), CRC faux, taille déclarée trop grande, deflate corrompu ('abime'), données hors
@@ -40,9 +43,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from commun import CasNavigateur, charger_scripts  # noqa: E402
+from commun import RACINE, CasNavigateur, charger_scripts  # noqa: E402
 
-SCRIPTS = ["js/lib/jszip.min.js", "js/modules/zip-flux.js"]
+SCRIPTS = ["js/modules/zip-flux.js"]
 MIO = 1024 * 1024
 DATE = (2026, 11, 5, 14, 30, 42)
 MESSAGE_NAVIGATEUR = ("Ce navigateur est trop ancien pour lire ou écrire un ZIP de Prévo. Mettez-le à jour (Chrome, "
@@ -189,6 +192,10 @@ ENTREES_LECTURE = [
     ("vide.csv", b""),
     ("documents/photo-pompe.jpg", octets_pseudo_aleatoires(300_000, 7)),
 ]
+# Entrées des ZIP figés de JSZip (tests/fixtures/zip-jszip/jszip-flux.zip, sans descripteurs de données, et
+# jszip-flux-descripteurs.zip, avec) : celles d'ENTREES_LECTURE, la photo réduite à 30 000 octets.
+ENTREES_JSZIP = ENTREES_LECTURE[:4] + [("documents/photo-pompe.jpg", octets_pseudo_aleatoires(30_000, 7))]
+ZIP_JSZIP = RACINE / "tests" / "fixtures" / "zip-jszip"
 
 
 def zip_python(entrees, compression=zipfile.ZIP_DEFLATED, zip64=False):
@@ -437,21 +444,11 @@ class TestEcriture(CasZipFlux):
         self.assertEqual(premier, second, "même entrées, même date : mêmes octets")
         self.assertEqual(premier, sans_attendre, "ajouts lancés sans attendre : même ordre, mêmes octets")
 
-    def test_relu_par_jszip_et_par_zipflux(self):
+    def test_relu_par_zipflux(self):
+        # T229 : JSZip retiré du dépôt ; la relecture par JSZip (l'import de la bêta 2, étiquette v2.0.0-beta.2) d'un
+        # ZIP de l'export est vérifiée par tests/test_zip_export_morceaux.py.
         ecrit = self.ecrire()
         octets = base64.b64decode(ecrit["zip"])
-        jszip = self.page.evaluate("""async () => {
-          const archive = await JSZip.loadAsync(window.dernierZip, { checkCRC32: true });
-          const sortie = {};
-          for (const nom of Object.keys(archive.files)) {
-            sortie[nom] = { dossier: archive.files[nom].dir, base64: enBase64(await archive.files[nom].async('uint8array')) };
-          }
-          return sortie;
-        }""")
-        self.assertEqual(list(jszip), [nom for nom, _, _ in ENTREES_ECRITURE])
-        for nom, contenu, _ in ENTREES_ECRITURE:
-            self.assertFalse(jszip[nom]["dossier"])
-            self.assertEqual(base64.b64decode(jszip[nom]["base64"]), contenu, nom)
         lu = self.page.evaluate("async () => lireTout(window.dernierZip)")
         self.comparer(octets, lu)
 
@@ -474,7 +471,7 @@ class TestEcriture(CasZipFlux):
 
 
 # ---------------------------------------------------------------------------
-# 3. Lecture de ZIP écrits par zipfile et par JSZip
+# 3. Lecture de ZIP écrits par zipfile et par JSZip (octets figés)
 # ---------------------------------------------------------------------------
 
 class TestLecture(CasZipFlux):
@@ -511,30 +508,22 @@ class TestLecture(CasZipFlux):
         self.assertEqual(base64.b64decode(lu["entrees"][0]["contenu"]), b"a;b\r\n")
         self.assertEqual(lu["entrees"][1]["nom"], "y.csv")
 
-    def zip_jszip(self, descripteurs):
-        fichiers = [[nom, b64(octets), nom.endswith(".jpg")] for nom, octets in ENTREES_LECTURE
-                    if not nom.endswith("/")]
-        return self.page.evaluate("""async ([fichiers, streamFiles]) => {
-          const zip = new JSZip();
-          for (const [nom, texte, stocker] of fichiers) {
-            zip.file(nom, depuisBase64(texte), stocker ? { compression: 'STORE' } : {});
-          }
-          const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', streamFiles: streamFiles });
-          return { zip: enBase64(new Uint8Array(await blob.arrayBuffer())), lu: await lireTout(blob) };
-        }""", [fichiers, descripteurs])
-
     def test_zip_jszip(self):
-        for descripteurs in (False, True):
-            with self.subTest(descripteurs=descripteurs):
-                resultat = self.zip_jszip(descripteurs)
-                octets = base64.b64decode(resultat["zip"])
-                self.comparer(octets, resultat["lu"])
-                drapeaux = [entree["drapeaux"] & 0x08 for entree in resultat["lu"]["entrees"]]
+        """ZIP de JSZip 3.10.2 figés (voir l'en-tête) : sans descripteurs de données (comme les exports 1.2 à bêta 2),
+        et avec (streamFiles)."""
+        for fichier, descripteurs in (("jszip-flux.zip", False), ("jszip-flux-descripteurs.zip", True)):
+            with self.subTest(fichier=fichier):
+                octets = (ZIP_JSZIP / fichier).read_bytes()
+                lu = self.lire_tout(octets)
+                self.comparer(octets, lu)
+                drapeaux = [entree["drapeaux"] & 0x08 for entree in lu["entrees"]]
                 self.assertEqual(any(drapeaux), descripteurs, "descripteurs de données (bit 3) de JSZip")
-                self.assertIn("documents/", [entree["nom"] for entree in resultat["lu"]["entrees"]])
-                lus = {entree["nom"]: base64.b64decode(entree["contenu"]) for entree in resultat["lu"]["entrees"]}
-                for nom, contenu in ENTREES_LECTURE:
+                self.assertIn("documents/", [entree["nom"] for entree in lu["entrees"]])
+                lus = {entree["nom"]: base64.b64decode(entree["contenu"]) for entree in lu["entrees"]}
+                for nom, contenu in ENTREES_JSZIP:
                     self.assertEqual(lus[nom], contenu, nom)
+                methodes = {entree["nom"]: entree["methode"] for entree in lu["entrees"]}
+                self.assertEqual((methodes["documents/photo-pompe.jpg"], methodes["parametres.csv"]), (0, 8))
 
 
 # ---------------------------------------------------------------------------

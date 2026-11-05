@@ -1,21 +1,25 @@
 """Lecture et contrôle d'un ZIP de données (chantier « socle de données », T190 ; décision D172) : ZipLecture.lire de
 js/modules/zip-lecture.js, qui ne doit RIEN écrire (ni stockage, ni réseau).
 
-Les ZIP sont fabriqués ici (zipfile, ou JSZip et Formats.manifeste dans la page, comme l'export) dans un dossier
-temporaire, à partir des jeux de tests/fixtures/formats/ (jeux_formats.copier_jeu) : jamais de données réelles. La
-page est tests/fixtures/page-vide.html en file:// (charger_scripts) ; le ZIP y arrive par un <input type="file"> (un
-vrai File), sauf les cas ArrayBuffer et Blob.
+Les ZIP sont fabriqués ici (zipfile, ou ZipFlux et Formats.manifeste dans la page, comme l'export) dans un dossier
+temporaire, à partir des jeux de tests/fixtures/formats/ (jeux_formats.copier_jeu) : jamais de données réelles. Les
+ZIP de JSZip 3.10.2 (exports publiés 1.2 à 2.0 bêta 2 ; JSZip retiré du dépôt en T229) sont des octets figés :
+tests/fixtures/zip-jszip/export-1.2.zip et export-beta2.zip, produits une fois (T229) par le JSZip et le formats.js de
+l'étiquette v2.0.0-beta.2, avec les options de chaque version. La page est tests/fixtures/page-vide.html en file://
+(charger_scripts) ; le ZIP y arrive par un <input type="file"> (un vrai File), sauf les cas ArrayBuffer et Blob.
 
-    acceptés : export complet avec manifeste exact ; exports 1.2 et 2.0 bêta sans manifeste ; ZIP fait par JSZip et
-               Formats.manifeste (ArrayBuffer et Blob) ; ZIP de JSZip avec et sans entrée « documents/ » (exports 1.2
-               et bêta 1, bêta 2) ; variantes (stocké, ZIP64 local, dossier documents/) ; format 2
+    acceptés : export complet avec manifeste exact ; exports 1.2 et 2.0 bêta sans manifeste ; ZIP fait par ZipFlux et
+               Formats.manifeste comme l'export (deflate et stocké, ArrayBuffer et Blob) ; ZIP de JSZip figés :
+               export 1.2 et bêta 1 (entrée « documents/ », sans manifeste), bêta 2 (sans entrée de dossier, avec
+               manifeste), en File, ArrayBuffer et Blob ; variantes (stocké, ZIP64 local, dossier documents/) ; format 2
                et format 1 migrés en mémoire, lignes intactes champ à champ ; fichier au format 2 dans une base au
                format 3 ; tables absentes ; 10 000 entrées ; aucune écriture ni requête pendant la lecture ;
     refusés  : chemins hostiles (../x.csv, /x.csv, C:/x.csv, documents/../../x.csv, a\\b.csv, segment vide, caractère
                de contrôle…) ; noms non admis (acces/comptes.json, virus.exe…) ; doublons ; bombe (60 Mo de zéros) ;
                taille réelle plus grande que la taille annoncée ; contenu abîmé (CRC) ; 10 001 entrées ; CSV de 51 Mo ;
                document de 10 Mo et un octet (10 Mo pile accepté) ;
-               plus de 1 Go décompressé ; plus de 400 Mo ; empreinte fausse, fichier ajouté ou manquant ; manifeste
+               plus de 4 Go décompressés (tailles annoncées ; 4 Go pile passent ce contrôle) ; fichier de plus de 4 Go
+               moins 2 octets (taille annoncée d'un Blob, rien n'est lu ; la limite pile passe ce contrôle) ; empreinte fausse, fichier ajouté ou manquant ; manifeste
                illisible ; format plus récent ; ZIP sans CSV ; fichier non ZIP ; CSV illisible (format 0) ; entrée
                chiffrée ou méthode inconnue ;
     deux passes (T205) : le résultat ne garde aucun octet de document (nom, taille, empreinte), un seul document
@@ -23,7 +27,7 @@ vrai File), sauf les cas ArrayBuffer et Blob.
                entre les deux passes (même CRC-32 : empreinte ; CRC-32 faux : abîmé), avec et sans manifeste ;
     par morceaux (T227) : ZIP de 30 Mo lu par ZipFlux sans jamais être chargé en entier (Blob.prototype épié :
                aucune lecture de plus de 4 Mo ; memoire().zip = 0) ; navigateur sans « deflate-raw » : refus
-               MESSAGE_NAVIGATEUR avant toute lecture, pas de JSZip en secours ; fichier remplacé ou retiré sur le
+               MESSAGE_NAVIGATEUR avant toute lecture, pas de JSZip en secours (retiré du dépôt en T229) ; fichier remplacé ou retiré sur le
                disque entre les deux passes (refus clair), ou avant la lecture (« Lecture du fichier impossible ») ;
     règle des noms de documents : copie conforme à serveur.py (listes et décisions sur une batterie de noms).
 
@@ -39,6 +43,7 @@ import io
 import json
 import random
 import shutil
+import struct
 import sys
 import tempfile
 import unittest
@@ -52,8 +57,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from commun import RACINE, CasNavigateur, charger_scripts  # noqa: E402
 from jeux_formats import copier_jeu  # noqa: E402
 
-SCRIPTS = ["js/lib/papaparse.min.js", "js/lib/jszip.min.js", "js/schema.js", "js/formats.js", "js/donnees.js",
+SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/formats.js", "js/donnees.js",
            "js/modules/zip-tables.js", "js/modules/zip-flux.js", "js/modules/zip-lecture.js"]
+ZIP_JSZIP = RACINE / "tests" / "fixtures" / "zip-jszip"
 FORMAT_COURANT = 3
 MIO = 1024 * 1024
 DATE = (2026, 11, 4, 12, 0, 0)
@@ -189,6 +195,16 @@ def entrees_centrales(octets):
 def modifier_entier(octets, position, taille, valeur):
     tampon = bytearray(octets)
     tampon[position:position + taille] = valeur.to_bytes(taille, "little")
+    return bytes(tampon)
+
+
+def annoncer_tailles(octets, tailles):
+    """Le même ZIP où la taille décompressée ANNONCÉE au répertoire central change ({nom : taille}) : les tailles
+    annoncées sont contrôlées avant toute décompression (contrôle 3), sans produire de gros fichier."""
+    positions = entrees_centrales(octets)
+    tampon = bytearray(octets)
+    for nom, taille in tailles.items():
+        struct.pack_into("<I", tampon, positions[nom] + 24, taille)
     return bytes(tampon)
 
 
@@ -374,54 +390,69 @@ class TestZipAcceptes(CasZip):
                 self.assertEqual(resultat["absentes"], [])
                 self.assertEqual(len(resultat["documents"]), len(DOCUMENTS))
 
-    def test_zip_fait_par_jszip_et_formats_manifeste_comme_l_export(self):
+    def test_zip_fait_par_zipflux_et_formats_manifeste_comme_l_export(self):
+        """Comme l'export depuis T228 : ZipFlux.ecrivain et Formats.manifeste ; deflate, puis stocké ; lu en
+        ArrayBuffer et en Blob."""
         fichiers = dict(fichiers_du_jeu("f3-v1.2.0"), **DOCUMENTS)
         en_base64 = {nom: base64.b64encode(octets).decode("ascii") for nom, octets in fichiers.items()}
-        for compression in ("DEFLATE", "STORE"):
-            with self.subTest(compression=compression):
-                resultats = self.page.evaluate("""async ([fichiers, compression]) => {
-                  const archive = new JSZip();
+        for stocker in (False, True):
+            with self.subTest(stocker=stocker):
+                resultats = self.page.evaluate("""async ([fichiers, stocker]) => {
+                  const ecrivain = ZipFlux.ecrivain({ date: new Date(2026, 10, 4, 12, 0, 0) });
                   const decrits = [];
                   for (const [nom, texte] of Object.entries(fichiers)) {
                     const octets = depuisBase64(texte);
-                    archive.file(nom, octets);
+                    await ecrivain.ajouter(nom, octets, { stocker: stocker });
                     decrits.push({ nom: nom, octets: octets });
                   }
                   const manifeste = await Formats.manifeste(decrits, { version_appli: '2.0.0', format: Formats.courant,
                     date: '2026-11-04', motif: 'export', mode: 'dossier' });
-                  archive.file('manifeste.json', JSON.stringify(manifeste, null, 2));
-                  const octets = await archive.generateAsync({ type: 'uint8array', compression: compression });
-                  const tampon = octets.buffer.slice(octets.byteOffset, octets.byteOffset + octets.byteLength);
-                  return [await resumer(await ZipLecture.lire(tampon)),
-                          await resumer(await ZipLecture.lire(new Blob([octets], { type: 'application/zip' })))];
-                }""", [en_base64, compression])
+                  await ecrivain.ajouter('manifeste.json', new TextEncoder().encode(JSON.stringify(manifeste, null, 2)));
+                  const blob = ecrivain.terminer();
+                  return [await resumer(await ZipLecture.lire(await blob.arrayBuffer())),
+                          await resumer(await ZipLecture.lire(blob))];
+                }""", [en_base64, stocker])
                 for resultat in resultats:
                     self.assertTrue(resultat["ok"], resultat["refus"])
                     self.assertEqual(len(resultat["manifeste"]["fichiers"]), len(fichiers))
                     self.assertFalse(resultat["migre"])
                     self.assertEqual(len(resultat["documents"]), len(DOCUMENTS))
 
-    def test_zip_de_jszip_avec_et_sans_entree_de_dossier(self):
-        """Exports 1.2 et 2.0 bêta 1 (JSZip, createFolders par défaut : entrée « documents/ ») et bêta 2 (ZipDonnees :
-        createFolders: false), en Blob comme l'export, deflate, sans manifeste : lus."""
-        en_base64 = {nom: base64.b64encode(octets).decode("ascii")
-                     for nom, octets in dict(fichiers_du_jeu("f3-v1.2.0"), **DOCUMENTS).items()}
-        for dossiers in (True, False):
-            with self.subTest(dossiers=dossiers):
-                sortie = self.page.evaluate("""async ([fichiers, dossiers]) => {
-                  const archive = new JSZip();
-                  for (const [nom, texte] of Object.entries(fichiers)) {
-                    archive.file(nom, depuisBase64(texte), { createFolders: dossiers });
-                  }
-                  const blob = await archive.generateAsync({ type: 'blob', compression: 'DEFLATE',
-                    mimeType: 'application/zip' });
-                  return { noms: (await ZipFlux.lireRepertoire(blob)).entrees.map((e) => e.nom),
-                    resume: await resumer(await ZipLecture.lire(blob)) };
-                }""", [en_base64, dossiers])
-                self.assertEqual("documents/" in sortie["noms"], dossiers)
-                self.assertTrue(sortie["resume"]["ok"], sortie["resume"]["refus"])
-                self.assertIsNone(sortie["resume"]["manifeste"])
-                self.assertEqual(len(sortie["resume"]["documents"]), len(DOCUMENTS))
+    def test_exports_de_jszip_octets_figes(self):
+        """ZIP de JSZip 3.10.2 figés (voir l'en-tête) : export-1.2.zip comme les versions 1.2 et 2.0 bêta 1
+        (archive.file sans option : entrée « documents/ » ; deflate ; sans manifeste ; jeu f3-v1.2.0) ; export-beta2.zip
+        comme la bêta 2 (createFolders: false, deflate, mimeType, manifeste de Formats.manifeste ; jeu f3-v2.0.0). Lus
+        en File, en ArrayBuffer et en Blob."""
+        for fichier, nom_jeu, dossier, avec_manifeste in (("export-1.2.zip", "f3-v1.2.0", True, False),
+                                                           ("export-beta2.zip", "f3-v2.0.0", False, True)):
+            with self.subTest(fichier=fichier):
+                octets = (ZIP_JSZIP / fichier).read_bytes()
+                with zipfile.ZipFile(io.BytesIO(octets)) as archive:
+                    self.assertIsNone(archive.testzip())
+                    self.assertEqual("documents/" in archive.namelist(), dossier)
+                    self.assertFalse([i.filename for i in archive.infolist() if i.flag_bits & 0x08], "pas de bit 3")
+                    contenus = {i.filename: archive.read(i) for i in archive.infolist() if not i.is_dir()}
+                manifeste_zip = contenus.pop("manifeste.json", None)
+                self.assertEqual(manifeste_zip is not None, avec_manifeste)
+                attendus = dict(fichiers_du_jeu(nom_jeu), **DOCUMENTS)
+                self.assertEqual(contenus, attendus)                  # le jeu et les documents, à l'octet
+                resultats = [self.accepte(octets)] + self.page.evaluate("""async (texte) => {
+                  const octets = depuisBase64(texte);
+                  return [await resumer(await ZipLecture.lire(octets.buffer)),
+                          await resumer(await ZipLecture.lire(new Blob([octets], { type: 'application/zip' })))];
+                }""", base64.b64encode(octets).decode("ascii"))
+                for resultat in resultats:
+                    self.assertTrue(resultat["ok"], resultat["refus"])
+                    self.assertEqual(resultat["manifeste"], json.loads(manifeste_zip) if avec_manifeste else None)
+                    self.assertEqual(resultat["formatOrigine"], FORMAT_COURANT)
+                    self.assertFalse(resultat["migre"])
+                    self.assertEqual(resultat["absentes"], [])
+                    self.assertEqual({d["nom"]: base64.b64decode(d["base64"]) for d in resultat["documents"]},
+                                     {nom[len("documents/"):]: o for nom, o in DOCUMENTS.items()})
+                    for nom_fichier, contenu in attendus.items():
+                        if "/" not in nom_fichier:
+                            self.assertEqual(resultat["tables"][nom_fichier[:-4]]["lignes"],
+                                             len(lire_table(contenu)[1]), nom_fichier)
 
     def test_variantes_acceptees(self):
         jeu = dict(fichiers_du_jeu("f3-v1.2.0"), **DOCUMENTS)
@@ -567,11 +598,11 @@ class TestDeuxPasses(CasZip):
 
 
 # ---------------------------------------------------------------------------
-# Lecture par morceaux (T227, morceau 2 de T215) : ZipFlux, jamais le fichier entier, pas de JSZip
+# Lecture par morceaux (T227, morceau 2 de T215) : ZipFlux, jamais le fichier entier, pas de JSZip (retiré en T229)
 # ---------------------------------------------------------------------------
 
 # Lectures de Blob épiées (window.lectures : [quoi, octets]) : slice → octets de la tranche ; arrayBuffer, stream,
-# text, bytes → taille du Blob lu (d'un coup, ou en flux) ; JSZip.loadAsync → 0 (il ne doit plus servir).
+# text, bytes → taille du Blob lu (d'un coup, ou en flux).
 ESPION_LECTURES_JS = """() => {
   window.lectures = [];
   const espionner = (objet, nom, libelle, mesure) => {
@@ -588,7 +619,6 @@ ESPION_LECTURES_JS = """() => {
   for (const nom of ['arrayBuffer', 'stream', 'text', 'bytes']) {
     if (Blob.prototype[nom]) { espionner(Blob.prototype, nom, nom, (blob) => blob.size); }
   }
-  if (window.JSZip) { espionner(JSZip, 'loadAsync', 'JSZip.loadAsync', () => 0); }
 }"""
 
 GROS_ZIP_JS = """async () => {
@@ -653,7 +683,6 @@ class TestParMorceaux(CasZip):
         self.assertIsNone(sortie["refus"])
         self.assertEqual(sortie["taille"], chemin.stat().st_size)
         for quoi, taille in sortie["toutes"]:
-            self.assertNotEqual(quoi, "JSZip.loadAsync")
             self.assertLess(taille, 4 * MIO, quoi)
         tranches = [taille for quoi, taille in sortie["toutes"] if quoi == "slice"]
         self.assertGreaterEqual(max(tranches), 3 * MIO)                  # les documents : une tranche chacun, en flux
@@ -821,22 +850,57 @@ class TestZipRefuses(CasZip):
         trop = octets_zip(dict(csv_de_base(), **{"documents/trop.pdf": pile + b"x"}))
         self.refus(trop, "« documents/trop.pdf »", "10 Mo au plus par document")
 
-    def test_plus_de_1_go_decompresse(self):
-        # 1 100 fichiers de 1 Mo de zéros (chacun sous le seuil du taux) : 1 100 Mo annoncés en tout.
-        entrees = dict(csv_de_base())
-        zeros = bytes(MIO)
-        entrees.update({"documents/z%04d.txt" % numero: zeros for numero in range(1100)})
-        self.refus(octets_zip(entrees), "1 Go au plus")
+    def test_plus_de_4_go_decompresses(self):
+        # T229 : 4 Go décompressés au plus (LIMITES.total), contrôlés sur les tailles ANNONCÉES, avant toute
+        # décompression : 4 200 documents d'un octet, annoncés 1 Mo au plus chacun au répertoire central (sous le seuil
+        # du taux), et deux CSV. Aucun gros fichier n'est produit.
+        base = csv_de_base()
+        racine = sum(len(octets) for octets in base.values())
+        noms = ["documents/z%04d.txt" % numero for numero in range(4200)]
+        octets = octets_zip(dict(base, **{nom: b"x" for nom in noms}), compression=zipfile.ZIP_STORED)
 
-    def test_zip_de_plus_de_400_mo_refuse_sans_etre_lu(self):
-        resultat = self.page.evaluate("""async () => {
-          const morceau = new Blob([new Uint8Array(1024 * 1024)]);
-          return resumer(await ZipLecture.lire(new Blob(new Array(401).fill(morceau))));
+        def annonce(total):                    # total décompressé annoncé : 1 Mo par document, puis 0
+            reste, tailles = total - racine, {}
+            for nom in noms:
+                tailles[nom] = min(MIO, reste)
+                reste -= tailles[nom]
+            self.assertEqual(reste, 0)
+            return annoncer_tailles(octets, tailles)
+
+        quatre_go = 4096 * MIO
+        pile = self.refus(annonce(quatre_go))  # 4 Go pile : passe ce contrôle (refusé plus loin : tailles fausses)
+        self.assertNotIn("une fois décompressé", pile)
+        self.assertEqual(self.refus(annonce(quatre_go + 1)),
+                         "Ce ZIP fait plus de 4 Go une fois décompressé : 4 Go au plus. Il est refusé.")
+        self.assertEqual(self.refus(annonce(4200 * MIO)),
+                         "Ce ZIP fait 4,1 Go une fois décompressé : 4 Go au plus. Il est refusé.")
+
+    def test_zip_de_plus_de_4_go_refuse_sans_etre_lu(self):
+        """T229 : 4 Go au plus, sans ZIP64 (LIMITES.zip = ZipFlux.LIMITES.octets : 4 Go moins 2 octets). La taille du
+        fichier est contrôlée avant toute lecture : Blob à la taille annoncée (aucun gros fichier produit), lectures
+        épiées. La limite pile passe ce contrôle (le contenu, vide, est alors lu et refusé comme illisible)."""
+        self.page.evaluate(ESPION_LECTURES_JS)
+        sortie = self.page.evaluate("""async () => {
+          class TailleAnnoncee extends Blob {
+            constructor(taille) { super([]); this.taille = taille; }
+            get size() { return this.taille; }
+          }
+          const essai = async (taille) => {
+            window.lectures = [];
+            const resume = await resumer(await ZipLecture.lire(new TailleAnnoncee(taille)));
+            return { refus: resume.refus, cles: resume.cles, lectures: window.lectures.length };
+          };
+          return { limites: [ZipLecture.LIMITES.zip, ZipFlux.LIMITES.octets, ZipLecture.enMo(ZipLecture.LIMITES.zip)],
+            pile: await essai(0xFFFFFFFE), unOctetDeTrop: await essai(0xFFFFFFFF), gros: await essai(4.5 * 1024 ** 3) };
         }""")
-        self.assertFalse(resultat["ok"])
-        self.assertEqual(resultat["cles"], ["ok", "refus"])
-        self.assertIn("401 Mo", resultat["refus"])
-        self.assertIn("400 Mo", resultat["refus"])
+        self.assertEqual(sortie["limites"], [0xFFFFFFFE, 0xFFFFFFFE, "4 Go"])
+        self.assertEqual(sortie["unOctetDeTrop"], {"cles": ["ok", "refus"], "lectures": 0, "refus":
+                         "Ce fichier fait plus de 4 Go : un ZIP de données ne peut pas dépasser 4 Go. Il est refusé."})
+        self.assertEqual(sortie["gros"], {"cles": ["ok", "refus"], "lectures": 0, "refus":
+                         "Ce fichier fait 4,5 Go : un ZIP de données ne peut pas dépasser 4 Go. Il est refusé."})
+        self.assertEqual(sortie["pile"]["cles"], ["ok", "refus"])
+        self.assertNotIn("ne peut pas dépasser", sortie["pile"]["refus"])
+        self.assertGreater(sortie["pile"]["lectures"], 0)
 
     def test_empreinte_fausse_fichier_ajoute_ou_manquant(self):
         fichiers = dict(fichiers_du_jeu("f3-v1.2.0"), **DOCUMENTS)

@@ -54,7 +54,7 @@ MIO = 1024 * 1024
 TAILLE_DOCUMENT = 4 * MIO
 LONG_MS = 120000
 ETIQUETTE_BETA2 = "v2.0.0-beta.2"
-# Scripts de la page de l'import (ceux de tests/test_zip_lecture.py, inchangés depuis la bêta 2).
+# Scripts de la page de l'import de la bêta 2 (tirés de l'étiquette, JSZip compris : il n'est plus dans le dépôt).
 SCRIPTS_IMPORT = ["js/lib/papaparse.min.js", "js/lib/jszip.min.js", "js/schema.js", "js/formats.js", "js/donnees.js",
                   "js/modules/zip-tables.js", "js/modules/zip-lecture.js"]
 CSV = sorted(table + ".csv" for table in TABLES)

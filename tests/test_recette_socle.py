@@ -154,9 +154,8 @@ INSTANTANE_OPFS_JS = """async (nom) => {
 PROBLEMES_JS = """(table) => Donnees.problemes().filter((p) => p.table === table)
   .map((p) => ({ gravite: p.gravite, type: p.type, message: p.message }))"""
 
-SCRIPTS_LECTURE_ZIP = ["js/lib/papaparse.min.js", "js/lib/jszip.min.js", "js/schema.js", "js/formats.js",
-                       "js/donnees.js", "js/modules/zip-tables.js", "js/modules/zip-flux.js",
-                       "js/modules/zip-lecture.js"]
+SCRIPTS_LECTURE_ZIP = ["js/lib/papaparse.min.js", "js/schema.js", "js/formats.js", "js/donnees.js",
+                       "js/modules/zip-tables.js", "js/modules/zip-flux.js", "js/modules/zip-lecture.js"]
 LIRE_ZIP_JS = """async () => {
   const r = await ZipLecture.lire(document.getElementById('zip-recette').files[0]);
   if (!r.ok) { return { ok: false, refus: r.refus }; }

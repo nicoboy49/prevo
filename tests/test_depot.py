@@ -21,7 +21,6 @@ EMPREINTES = {
     "js/lib/papaparse.min.js": "4d5d2d6e3282b66aafaa5e6de8ca3ae06f8d3440111ae99c6a30f6c00cfac33e",
     "js/lib/qrcode.js": "79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c",
     "js/lib/jsQR.js": "bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859",
-    "js/lib/jszip.min.js": "7f839b2d4688b845c105ebf5d2f9803075f91ea0fe72bdaac176c3a04dd3d2c1",
     "js/lib/echarts.min.js": "e84270bd0cd5bdf60fefc26d00c2a391cb2e81f4d26a7a9ee16185a54773a3cf",
     # SheetJS CE 0.20.3 (lot 5), CDN officiel cdn.sheetjs.com, téléchargé le 2026-10-21
     "js/lib/xlsx.full.min.js": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41",
@@ -68,7 +67,7 @@ LIGNES_MAX_MODULE = 700   # décision D28 : aucun fichier de js/modules/ au-del�
 # Ordre exact des scripts du socle dans index.html, avant ceux de js/modules/ : RECOPIE de docs/ARCHITECTURE.md §1
 # (« Ordre de chargement dans index.html »). js/formats.js juste après js/schema.js (chantier socle de données, T183).
 ORDRE_SOCLE = [
-    "js/lib/papaparse.min.js", "js/lib/qrcode.js", "js/lib/jsQR.js", "js/lib/jszip.min.js",
+    "js/lib/papaparse.min.js", "js/lib/qrcode.js", "js/lib/jsQR.js",
     "js/schema.js", "js/formats.js", "js/donnees.js",
     "js/stockage-serveur.js", "js/stockage-dossier.js", "js/stockage-demo.js", "js/interface.js",
 ]
@@ -98,14 +97,21 @@ class TestBibliotheques(unittest.TestCase):
                 reelle = hashlib.sha256(fichier.read_bytes()).hexdigest()
                 self.assertEqual(reelle, attendue)
 
+    def test_jszip_retire(self):
+        # T229 : le ZIP est lu et écrit par js/modules/zip-flux.js (T226 à T228) ; JSZip n'est plus embarqué.
+        self.assertFalse((RACINE / "js" / "lib" / "jszip.min.js").exists())
+        for chemin in ("index.html", "js/lib/LICENCES.txt", "js/modules/apropos.js", "README.md"):
+            with self.subTest(fichier=chemin):
+                self.assertNotIn("jszip", lire(chemin).lower())
+
 
 class TestLicences(unittest.TestCase):
     def test_licences_tierces(self):
         texte = lire("js/lib/LICENCES.txt")
         attendus = [
-            "PapaParse 5.7.0", "qrcode-generator 2.0.4", "jsQR 1.4.0", "JSZip 3.10.2",
+            "PapaParse 5.7.0", "qrcode-generator 2.0.4", "jsQR 1.4.0",
             "Apache ECharts 5.5.1", "Sora", "MIT License", "Apache License",
-            "Version 2.0", "The Apache Software Foundation", "SIL OPEN FONT LICENSE", "pako",
+            "Version 2.0", "The Apache Software Foundation", "SIL OPEN FONT LICENSE",
         ]
         for attendu in attendus:
             with self.subTest(attendu=attendu):

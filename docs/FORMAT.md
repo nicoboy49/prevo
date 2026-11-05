@@ -170,15 +170,20 @@ Le manifeste sert à contrôler qu'une sauvegarde ou un ZIP est complet et intac
 ## 10. Export et import ZIP
 
 **Export** (en un clic) : tous les CSV, les documents cités, les rapports figés et `manifeste.json`. **Jamais**
-`acces/`. Variante « données seules (sans les documents) » (T214) : les CSV et `manifeste.json` seulement
+`acces/`. Le ZIP est écrit **par morceaux** (T228) : un document à la fois, jamais tout le ZIP en mémoire JavaScript ;
+photos et documents déjà compressés y sont stockés tels quels. Un navigateur trop ancien pour compresser par morceaux
+(sans « deflate-raw ») refuse l'export avec un message clair, qui propose de copier le dossier de données.
+Variante « données seules (sans les documents) » (T214) : les CSV et `manifeste.json` seulement
 (`"documents": "exclus"`, aucun document listé manquant), `prevo-export-AAAA-MM-JJ-sans-documents.zip`, importable
 comme l'export complet : les tables sont remplacées, les documents déjà présents gardés tels quels (jamais supprimés),
 et la confirmation dit combien de documents cités par les données importées manquent.
 
 **Règle (T208) : tout ce que Prévo exporte, Prévo peut le réimporter.** Limites de l'import, écrites à un seul endroit
-(`LIMITES` de `js/modules/zip-lecture.js`) : ZIP 400 Mo, 10 000 entrées (T212), 50 Mo par CSV, 10 Mo par document, 1 Go
-décompressé ; `serveur.py` les suit (envoi d'une table 50 Mo, d'un document 10 Mo). L'export les contrôle avant de
-produire le ZIP : s'il en dépasse une, il dit quoi (fichier, taille, limite) et ne produit rien.
+(`LIMITES` de `js/modules/zip-lecture.js`) : ZIP de 4 Go au plus, sans ZIP64 (T229 : la plus grande taille que
+l'écriture par morceaux produit, 4 Go moins 2 octets), 10 000 entrées (T212), 50 Mo par CSV, 10 Mo par document, 4 Go
+décompressés (T229) ; `serveur.py` suit les deux qui le concernent (envoi d'une table 50 Mo, d'un document 10 Mo).
+L'export les contrôle avant de produire le ZIP : s'il en dépasse une, il dit quoi (fichier, taille, limite) et ne
+produit rien.
 
 **Import** : remplacement complet seulement (pas de fusion).
 
@@ -288,13 +293,16 @@ processus du navigateur de test seulement, relevés toutes les 100 ms) sur la gr
 | Export, mode dossier (cette base, après rechargement) | 385 Mo | 1,3 → 3,1 Go | 2,2 Go | 51 s |
 | Export, mode serveur, 9 925 documents | 390 Mo, 9 950 entrées | 0,7 → 2,8 Go | 2,4 Go | 170 s |
 
-Ces mesures datent d'avant T228 : l'export gardait tous les documents en mémoire, puis JSZip produisait le ZIP par
-morceaux et un fichier final, et l'onglet montait à 5 ou 6 fois la taille du ZIP (depuis T228, l'export écrit le ZIP
-par `zip-flux.js`, un document à la fois : mémoire JavaScript bornée aux tables plus un document, à remesurer).
-**Pour un PC de 4 Go, ce n'est pas raisonnable près de la limite** : Windows et
-le navigateur y laissent souvent moins de 1,5 Go libres, l'onglet peut se fermer (rien n'est perdu, rien n'est
-exporté). Par extrapolation (non mesuré), un ZIP de 100 à 150 Mo y reste possible ; un PC de 8 Go passe les limites.
-Parades : l'export « données seules » (sans les documents, T214), que l'export complet propose lui-même dans une
-fenêtre quand ses fichiers dépassent 150 Mo avant compression (T222, `ZipDonnees.AVERTISSEMENT` : données seules,
-export complet quand même, ou annuler) ; la lecture et l'écriture du ZIP par morceaux (T215, avant la 2.0.0 finale)
-bornera la mémoire aux tables plus un ou deux documents.
+Ces mesures datent d'avant la lecture et l'écriture par morceaux (T227, T228) : l'import lisait tout le ZIP avec
+JSZip, l'export gardait tous les documents en mémoire puis JSZip produisait le ZIP, et l'onglet montait à 5 ou 6 fois
+la taille du ZIP. Elles valent pour la bêta 2 : **sur un PC de 4 Go, ce n'était pas raisonnable près de la limite
+d'alors (400 Mo)** ; Windows et le navigateur y laissent souvent moins de 1,5 Go libres, l'onglet pouvait se fermer
+(rien n'est perdu, rien n'est exporté ni importé).
+
+Depuis T227 et T228, le ZIP est lu et écrit **par morceaux** (`js/modules/zip-flux.js`, sans JSZip, retiré en T229) :
+mémoire JavaScript bornée aux tables plus UN document (10 Mo au plus) ; le ZIP en cours d'écriture est un Blob composé,
+tenu par le navigateur hors de la mémoire JavaScript. D'où les limites de T229 : 4 Go par ZIP, 4 Go décompressés. La
+mémoire réelle (onglet et navigateur, gros ZIP, PC de 4 Go) n'est pas encore mesurée : c'est la recette de T215. En
+attendant, l'avertissement de l'export complet (T222, `ZipDonnees.AVERTISSEMENT` : au-delà de 150 Mo avant
+compression, données seules, export complet quand même, ou annuler) reste tel quel, et l'export « données seules »
+(sans les documents, T214) reste la parade.

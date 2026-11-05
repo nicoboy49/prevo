@@ -7,6 +7,20 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Modifié
+
+- **ZIP jusqu'à 4 Go** : l'export et l'import lisent et écrivent le ZIP par morceaux, un document à la fois, au lieu
+  de tout charger en mémoire. Un ZIP peut maintenant faire 4 Go (4 Go une fois décompressé, 10 000 fichiers au plus ;
+  toujours 50 Mo par table et 10 Mo par document).
+- **Navigateur trop ancien** : lire ou écrire un ZIP par morceaux demande un navigateur récent (Chrome, Edge, Firefox
+  ou Safari). Un navigateur trop ancien refuse l'export et l'import ZIP avec un message clair : mettez-le à jour, ou
+  copiez simplement votre dossier de données pour le sauvegarder ou le transporter.
+
+### Retiré
+
+- **JSZip** : Prévo n'embarque plus cette bibliothèque, qui gardait tout le ZIP en mémoire ; il lit et écrit les ZIP
+  lui-même. Les ZIP exportés par les versions précédentes (1.2 et bêtas de la 2.0) restent lisibles.
+
 ## [2.0.0-beta.2] - 2026-11-05
 
 Deuxième bêta de la 2.0 (pré-version : pour essayer, pas pour la production ; la version stable reste la 1.2.1).

@@ -290,8 +290,8 @@ preuves, lot par lot, sont détaillées dans [docs/PILOTAGE.md](docs/PILOTAGE.md
 Code sous licence MIT (voir `LICENSE`), Copyright (c) 2026 Nicolas Briand — SELECTIS. Pour les
 bibliothèques tierces et la police, voir `NOTICE`.
 
-Prévo embarque, sans modification, PapaParse, qrcode-generator, jsQR, JSZip (et pako) et Apache
-ECharts, ainsi que la police Sora (SIL Open Font License 1.1). Leurs licences sont reproduites dans
+Prévo embarque, sans modification, PapaParse, qrcode-generator, jsQR et Apache ECharts, ainsi
+que la police Sora (SIL Open Font License 1.1). Leurs licences sont reproduites dans
 `js/lib/LICENCES.txt`.
 
 ## Contact

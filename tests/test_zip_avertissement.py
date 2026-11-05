@@ -111,7 +111,7 @@ class TestCalcul(CasNavigateur):
             "sansDocuments: s })", [tailles, refus, sans_documents])
 
     def test_seuil_de_150_mo_message_exact_donnees_seules_et_refus_sans_avertissement(self):
-        charger_scripts(self.page, ["js/modules/zip-lecture.js", "js/modules/zip-donnees.js"])
+        charger_scripts(self.page, ["js/modules/zip-flux.js", "js/modules/zip-lecture.js", "js/modules/zip-donnees.js"])
         # Seuil : 150 Mo (157 286 400 octets), gelé.
         self.assertEqual(self.page.evaluate(
             "[ZipDonnees.AVERTISSEMENT.contenu, Object.isFrozen(ZipDonnees.AVERTISSEMENT)]"), [SEUIL, True])

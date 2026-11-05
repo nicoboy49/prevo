@@ -4,13 +4,14 @@ l'export (js/modules/zip-donnees.js) les contrôle AVANT de produire le ZIP.
 
     un seul endroit  serveur.py : TAILLE_MAX_CORPS_CSV et TAILLE_MAX_CELLULE_CSV = LIMITES.racine (50 Mo),
                      TAILLE_MAX_CORPS = LIMITES.document (10 Mo) ; zip-donnees.js ne recopie aucune limite et les
-                     messages de zip-lecture.js les tirent de LIMITES ;
+                     messages de zip-lecture.js les tirent de LIMITES ; T229 (décisions de Nicolas du 05/11) :
+                     LIMITES.zip = ZipFlux.LIMITES.octets (4 Go sans ZIP64), 4 Go décompressés, 10 000 entrées ;
     serveur          envoi d'une table (PUT csv/<table>, POST csv/<table>/ajout) : 11 Mo (ordres_travail.csv de
                      20 000 OT) et 12 Mo d'ajout au journal acceptés, 50 Mo annoncés lus (corps incomplet : 400, pas
                      413), 50 Mo et un octet refusés (413) ; documents et autres routes : toujours 10 Mo (audit F2) ;
     calcul           ZipDonnees.depassements : rien aux limites exactes ; un octet de trop (CSV, document, total),
-                     une entrée de trop, des photos qui feraient à elles seules un ZIP trop gros : la phrase qui dit
-                     quoi (fichier, taille, limite) ;
+                     une entrée de trop, des photos qui feraient un ZIP trop gros (depuis T229, toujours avec le total
+                     décompressé) : la phrase qui dit quoi (fichier, taille, limite) ;
     aller-retour     grosse base proche des limites : jeu de charge (outils/generer_demo.py --volume 500,20000 :
                      ordres_travail.csv de 11 Mo), journal grossi à 45 Mo (5 ans), 49 Mo de documents fictifs
                      incompressibles (30 photos, 7 PDF dont un de 10 Mo pile) ; serveur : export (vrai bouton) puis
@@ -51,6 +52,7 @@ MIO = 1024 * 1024
 BOM = codecs.BOM_UTF8
 TABLES = tzi.TABLES                                             # les 24 tables du format 3
 ZIP_LECTURE = RACINE / "js" / "modules" / "zip-lecture.js"
+ZIP_FLUX = RACINE / "js" / "modules" / "zip-flux.js"
 ZIP_DONNEES = RACINE / "js" / "modules" / "zip-donnees.js"
 GENERATEUR = RACINE / "outils" / "generer_demo.py"
 NOM_DOSSIER = "donnees-zip-limites"
@@ -67,14 +69,28 @@ def charger_serveur():
 SERVEUR = charger_serveur()
 
 
+def octets_max_zip_flux():
+    """ZipFlux.LIMITES.octets (js/modules/zip-flux.js), lue dans le fichier : « octets: MAX_32 - N »."""
+    texte = ZIP_FLUX.read_text(encoding="utf-8")
+    max_32 = re.search(r"const MAX_32 = (0x[0-9A-Fa-f]+);", texte)
+    moins = re.search(r"const LIMITES = Object\.freeze\(\{ octets: MAX_32 - (\d+),", texte)
+    if max_32 is None or moins is None:
+        raise AssertionError("LIMITES.octets introuvable dans zip-flux.js")
+    return int(max_32.group(1), 16) - int(moins.group(1))
+
+
 def limites_js():
-    """{nom: valeur} de LIMITES (js/modules/zip-lecture.js), lues dans le fichier : « nom: N * MO, » ou « nom: N, »."""
+    """{nom: valeur} de LIMITES (js/modules/zip-lecture.js), lues dans le fichier : « nom: N * MO, », « nom: N, » ou
+    « nom: ZipFlux.LIMITES.octets, » (T229 : la taille du ZIP)."""
     texte = ZIP_LECTURE.read_text(encoding="utf-8")
     bloc = re.search(r"const LIMITES = Object\.freeze\(\{(.*?)\}\);", texte, re.S)
     if bloc is None:
         raise AssertionError("LIMITES introuvable dans zip-lecture.js")
-    return {nom: int(nombre) * (MIO if fois_mo else 1)
-            for nom, nombre, fois_mo in re.findall(r"^\s*(\w+): (\d+)( \* MO)?,", bloc.group(1), re.M)}
+    limites = {nom: int(nombre) * (MIO if fois_mo else 1)
+               for nom, nombre, fois_mo in re.findall(r"^\s*(\w+): (\d+)( \* MO)?,", bloc.group(1), re.M)}
+    limites.update({nom: octets_max_zip_flux()
+                    for nom in re.findall(r"^\s*(\w+): ZipFlux\.LIMITES\.octets,", bloc.group(1), re.M)})
+    return limites
 
 
 LIMITES = limites_js()
@@ -277,14 +293,24 @@ class TestUnSeulEndroit(unittest.TestCase):
         for route in SERVEUR.ROUTES_CORPS_CSV:
             self.assertIn(route, SERVEUR.ROUTES_API)
 
+    def test_limites_decidees_par_nicolas(self):
+        # T229 (05/11) : ZIP de 4 Go au plus sans ZIP64 (la limite de l'écrivain de zip-flux.js, lue, pas recopiée),
+        # 4 Go décompressés, 10 000 entrées (T212) ; racine et document inchangées (T208).
+        self.assertIn("zip: ZipFlux.LIMITES.octets,", ZIP_LECTURE.read_text(encoding="utf-8"))
+        self.assertEqual(sorted(LIMITES), ["document", "entrees", "racine", "taux", "total", "zip"])
+        self.assertEqual((LIMITES["zip"], LIMITES["total"], LIMITES["entrees"]), (0xFFFFFFFE, 4096 * MIO, 10000))
+        self.assertEqual((LIMITES["racine"], LIMITES["document"]), (50 * MIO, 10 * MIO))
+
     def test_l_export_lit_les_limites_sans_les_recopier(self):
         code = ZIP_DONNEES.read_text(encoding="utf-8")
         self.assertIn("ZipLecture.LIMITES", code)
-        self.assertIsNone(re.search(r"\d+\s*\*\s*(1024|MO)\b|\b(400|200|50|10)\s*Mo\b|\b(10 ?000|2 ?000)\b|\b1 ?Go\b", code))
+        self.assertIsNone(re.search(r"\d+\s*\*\s*(1024|MO)\b|\b(400|200|50|10)\s*Mo\b|\b(10 ?000|2 ?000)\b|\b1 ?Go\b"
+                                    r"|0x[0-9A-Fa-f]{6,}|\b4096\b|\b4 ?294 ?967", code))
 
     def test_les_messages_de_l_import_tirent_leurs_nombres_de_limites(self):
         code = ZIP_LECTURE.read_text(encoding="utf-8")
-        for fige in ("dépasser 400 Mo", "10 Mo au plus", "50 Mo au plus", "1 Go au plus", "10 000 au plus"):
+        for fige in ("dépasser 400 Mo", "dépasser 4 Go", "10 Mo au plus", "50 Mo au plus", "1 Go au plus",
+                     "4 Go au plus", "10 000 au plus"):
             self.assertFalse(fige in code, fige)
 
 
@@ -371,9 +397,12 @@ class TestDepassements(CasNavigateur):
         return self.page.evaluate("([e, i]) => ZipDonnees.depassements(e, i)", [entrees, incomplet])
 
     def test_rien_aux_limites_exactes_une_phrase_par_depassement(self):
-        charger_scripts(self.page, ["js/modules/zip-lecture.js", "js/modules/zip-donnees.js"])
+        charger_scripts(self.page, ["js/modules/zip-flux.js", "js/modules/zip-lecture.js", "js/modules/zip-donnees.js"])
         self.assertEqual(self.page.evaluate("Object.assign({}, ZipLecture.LIMITES)"),
                          dict(LIMITES, seuilTaux=MIO))
+        self.assertEqual(self.page.evaluate("[ZipLecture.LIMITES.zip === ZipFlux.LIMITES.octets, "
+                                            "ZipLecture.enMo(ZipLecture.LIMITES.zip), ZipLecture.enMo(ZipLecture.LIMITES.total)]"),
+                         [True, "4 Go", "4 Go"])
         csv = [{"nom": "journal.csv", "taille": LIMITES["racine"]}]
         document = [{"nom": "documents/notice.pdf", "taille": LIMITES["document"]}]
         manifeste = [{"nom": "manifeste.json", "taille": 0}]
@@ -391,17 +420,26 @@ class TestDepassements(CasNavigateur):
         self.assertEqual(self.depassements(petits + manifeste), ["le ZIP compterait 10 001 fichiers (10 000 au plus)"])
         self.assertEqual(self.depassements(petits + manifeste, True),
                          ["le ZIP compterait au moins 10 001 fichiers (10 000 au plus)"])
-        # Total décompressé : 1 Go pile passe, 1,1 Go non (documents de 10 Mo, sous leur limite).
-        dix = [{"nom": "documents/n%03d.pdf" % n, "taille": LIMITES["document"]} for n in range(110)]
-        self.assertEqual(self.depassements(dix[:102] + [{"nom": "documents/reste.pdf", "taille": 4 * MIO}]), [])
+        # Total décompressé (T229 : 4 Go) : 4 Go pile passe ; un octet de plus, « plus de 4 Go » ; 4,1 Go non
+        # (documents de 10 Mo, sous leur limite ; des tailles seulement, aucun contenu).
+        dix = [{"nom": "documents/n%03d.pdf" % n, "taille": LIMITES["document"]} for n in range(420)]
+        pile = dix[:409] + [{"nom": "documents/reste.pdf", "taille": 6 * MIO}]
+        self.assertEqual(sum(e["taille"] for e in pile), LIMITES["total"])
+        self.assertEqual(self.depassements(pile), [])
+        self.assertEqual(self.depassements(pile + [{"nom": "documents/octet.txt", "taille": 1}]),
+                         ["le contenu ferait plus de 4 Go une fois décompressé (4 Go au plus)"])
         self.assertEqual(self.depassements(dix),
-                         ["le contenu ferait 1,1 Go une fois décompressé (1 Go au plus)"])
-        # Taille du ZIP : 460 photos de 1 Mo (JPEG, déjà compressées) en font au moins 414 Mo ; 460 PDF, rien d'avance.
-        photos = [{"nom": "documents/p%03d.jpg" % n, "taille": MIO} for n in range(460)]
+                         ["le contenu ferait 4,1 Go une fois décompressé (4 Go au plus)"])
+        # Taille du ZIP : depuis T229 (ZIP de 4 Go, 4 Go décompressés), des photos ne font un ZIP trop gros qu'au-delà
+        # du total décompressé (90 % de leur taille au moins) : les deux phrases. 500 photos de 10 Mo (JPEG, déjà
+        # compressées) : 4,9 Go décompressés, un ZIP d'au moins 4,4 Go ; 500 PDF : le total seul, rien d'avance.
+        photos = [{"nom": "documents/p%03d.jpg" % n, "taille": 10 * MIO} for n in range(500)]
         self.assertEqual(self.depassements(photos),
-                         ["le ZIP ferait au moins 414 Mo, photos et documents déjà compressés (400 Mo au plus)"])
-        self.assertEqual(self.depassements([{"nom": e["nom"].replace(".jpg", ".pdf"), "taille": MIO} for e in photos]),
-                         [])
+                         ["le contenu ferait 4,9 Go une fois décompressé (4 Go au plus)",
+                          "le ZIP ferait au moins 4,4 Go, photos et documents déjà compressés (4 Go au plus)"])
+        self.assertEqual(self.depassements([{"nom": e["nom"].replace(".jpg", ".pdf"), "taille": 10 * MIO}
+                                            for e in photos]),
+                         ["le contenu ferait 4,9 Go une fois décompressé (4 Go au plus)"])
 
 
 # ---------------------------------------------------------------------------

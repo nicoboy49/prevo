@@ -50,19 +50,23 @@
 // seules », T214) et des documents dans le ZIP : refusé ; (11) CSV illisible (format 0 : des colonnes du format 1
 // manquent à l'en-tête) ou abîmé (l'écrire en perdrait une partie) : on ne remplace pas une base par un fichier
 // illisible, sauf fichier marqué « abime » au manifeste, à l'empreinte juste (T213 : ZipTables, rendu dans `abimes`).
-// Dépendances : ZipFlux (zip-flux.js ; plus de JSZip depuis T227), Schema, Formats, Donnees (csv.analyser),
-// ZipTables ; crypto.subtle pour un ZIP avec manifeste (contexte sécurisé : file://, https, 127.0.0.1).
+// Dépendances : ZipFlux (zip-flux.js ; plus de JSZip depuis T227, retiré du dépôt en T229 ; lu dès le chargement pour
+// LIMITES.zip : zip-flux.js se charge juste avant, §15.1), Schema, Formats, Donnees (csv.analyser), ZipTables ;
+// crypto.subtle pour un ZIP avec manifeste (contexte sécurisé : file://, https, 127.0.0.1).
 
 const ZipLecture = (function () {
 
-  // Limites de l'import, écrites ICI seulement (T208 ; T212 : ZIP 400 Mo, 10 000 entrées, en attendant T215) : l'export (ZipDonnees) les contrôle ; serveur.py en suit deux.
+  // Limites de l'import, écrites ICI seulement (T208) : l'export (ZipDonnees) les contrôle ; serveur.py en suit deux
+  // (racine et document). T229 (décisions de Nicolas du 05/11, ZIP lu et écrit par morceaux depuis T227 et T228) :
+  // ZIP limité à 4 Go, sans ZIP64 ; 4 Go décompressés ; 10 000 entrées (T212).
   const MO = 1024 * 1024;
   const LIMITES = Object.freeze({
-    zip: 400 * MO,          // taille du fichier ZIP
+    zip: ZipFlux.LIMITES.octets,  // taille du fichier ZIP : 4 Go moins 2 octets, le plus grand ZIP que l'écrivain de
+                                  // zip-flux.js produit (0xFFFFFFFF annoncerait un ZIP64) ; affichée « 4 Go »
     entrees: 10000,         // entrées du ZIP (fichiers et dossiers)
     racine: 50 * MO,        // un fichier à la racine (CSV, manifeste), décompressé ; = envoi d'un CSV au serveur
     document: 10 * MO,      // un document (documents/<nom>), décompressé ; = envoi d'un document au serveur
-    total: 1024 * MO,       // tout le contenu décompressé
+    total: 4096 * MO,       // tout le contenu décompressé : 4 Go
     taux: 100,              // taux de compression d'une entrée : taille décompressée / taille compressée
     seuilTaux: MO,          // le taux n'est contrôlé qu'au-delà de 1 Mo décompressé
   });
@@ -103,6 +107,11 @@ const ZipLecture = (function () {
     const go = octets >= 1024 * MO;
     return String(Math.round(octets / (go ? 1024 * MO : MO) * 10) / 10).replace('.', ',') + (go ? ' Go' : ' Mo');
   }
+  // Taille refusée, face à sa limite : « plus de 4 Go » quand l'arrondi égalerait la limite (T229, comme ZipDonnees).
+  function enMoFace(octets, limite) {
+    const texte = enMo(octets);
+    return texte === enMo(limite) ? 'plus de ' + texte : texte;
+  }
 
   function estControle(code) { return code < 0x20 || (code >= 0x7f && code <= 0x9f); }
 
@@ -133,8 +142,8 @@ const ZipLecture = (function () {
     const taille = tailleDe(source);
     if (taille === null) { refuser('Aucun fichier à lire : choisissez le fichier ZIP exporté par Prévo.'); }
     if (taille > LIMITES.zip) {
-      refuser('Ce fichier fait ' + enMo(taille) + ' : un ZIP de données ne peut pas dépasser ' + enMo(LIMITES.zip)
-        + '. Il est refusé.');
+      refuser('Ce fichier fait ' + enMoFace(taille, LIMITES.zip) + ' : un ZIP de données ne peut pas dépasser '
+        + enMo(LIMITES.zip) + '. Il est refusé.');
     }
     if (typeof Blob !== 'undefined' && source instanceof Blob) { return source; }
     const octets = source instanceof ArrayBuffer ? new Uint8Array(source)
@@ -260,13 +269,13 @@ const ZipLecture = (function () {
       const [limite, quoi] = entree.nom.indexOf('/') < 0 ? [LIMITES.racine, 'fichier de données']
         : [LIMITES.document, 'document'];
       if (entree.decompresse > limite) {
-        refuser('« ' + afficher(entree.nom) + ' » fait ' + enMo(entree.decompresse) + ' une fois décompressé : '
-          + enMo(limite) + ' au plus par ' + quoi + '. Le ZIP est refusé.');
+        refuser('« ' + afficher(entree.nom) + ' » fait ' + enMoFace(entree.decompresse, limite)
+          + ' une fois décompressé : ' + enMo(limite) + ' au plus par ' + quoi + '. Le ZIP est refusé.');
       }
       total += entree.decompresse;
     }
     if (total > LIMITES.total) {
-      refuser('Ce ZIP fait ' + enMo(total) + ' une fois décompressé : ' + enMo(LIMITES.total)
+      refuser('Ce ZIP fait ' + enMoFace(total, LIMITES.total) + ' une fois décompressé : ' + enMo(LIMITES.total)
         + ' au plus. Il est refusé.');
     }
   }

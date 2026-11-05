@@ -51,8 +51,9 @@ tests/                     tests automatisés (unittest + Playwright) ; tests/fi
 ```
 
 **Ordre de chargement dans `index.html`** (scripts classiques, jamais `type="module"`) :
-`js/lib/papaparse.min.js`, `js/lib/qrcode.js`, `js/lib/jsQR.js`, `js/lib/jszip.min.js`,
-`js/schema.js`, `js/formats.js` (juste après le schéma, dont il dépend seul : chantier « socle de données »),
+`js/lib/papaparse.min.js`, `js/lib/qrcode.js`, `js/lib/jsQR.js` (JSZip, retiré en T229, n'y est plus : le ZIP
+passe par `zip-flux.js`), `js/schema.js`, `js/formats.js` (juste après le schéma, dont il dépend seul :
+chantier « socle de données »),
 `js/donnees.js`, `js/stockage-serveur.js`, `js/stockage-dossier.js`,
 `js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
 §15.1 (il remplace, depuis le lot 3, celui du §14.2 ; le lot 3 bis y insère `suggestions-regles.js` et
@@ -1346,9 +1347,9 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   `brancherAcces`).
   Chantier socle de données (T189, D171 ; T228 : ZIP écrit par `ZipFlux`, un document à la fois, limites de l'import contrôlées sur les tailles des documents avant toute lecture, photos stockées sans compression, plus de `JSZip.generateAsync`) : `zip-donnees.js` (objet `ZipDonnees`, export ZIP complet : 24 CSV, documents
   cités, rapports figés, `manifeste.json`, jamais `acces/` ; `App.exporterZip` délègue) se charge après `rapport-ecrans.js`.
-  Socle de données (T190, D172) : `zip-lecture.js` (objet `ZipLecture`, `lire(source)` : lecture et contrôles stricts d'un ZIP de données, migration en mémoire, sans rien écrire) se charge après `zip-donnees.js`. Lecture en deux passes (T205) : `lire` décompresse chaque document pour le contrôler puis l'oublie (le résultat n'en garde que nom, taille et empreinte SHA-256) ; `lireDocument(lu, nom)` le relit depuis le même fichier, taille, CRC-32 et empreinte revérifiés, au moment de l'écrire (`parametres-zip.js`, un document à la fois) ; pic de mémoire : les tables + un document (`memoire()` : mesure de la dernière lecture, pour les tests). Lecture par morceaux (T227, morceau 2 de T215) : le ZIP est lu par `ZipFlux` (tranches, décompression contrôlée), jamais en entier ni gardé ; plus de JSZip (contrôle 4 retiré, les autres numéros gardés) ; navigateur sans « deflate-raw » : refus `ZipFlux.MESSAGE_NAVIGATEUR` avant toute lecture.
+  Socle de données (T190, D172) : `zip-lecture.js` (objet `ZipLecture`, `lire(source)` : lecture et contrôles stricts d'un ZIP de données, migration en mémoire, sans rien écrire) se charge après `zip-donnees.js`. Lecture en deux passes (T205) : `lire` décompresse chaque document pour le contrôler puis l'oublie (le résultat n'en garde que nom, taille et empreinte SHA-256) ; `lireDocument(lu, nom)` le relit depuis le même fichier, taille, CRC-32 et empreinte revérifiés, au moment de l'écrire (`parametres-zip.js`, un document à la fois) ; pic de mémoire : les tables + un document (`memoire()` : mesure de la dernière lecture, pour les tests). Lecture par morceaux (T227, morceau 2 de T215) : le ZIP est lu par `ZipFlux` (tranches, décompression contrôlée), jamais en entier ni gardé ; plus de JSZip (contrôle 4 retiré, les autres numéros gardés) ; navigateur sans « deflate-raw » : refus `ZipFlux.MESSAGE_NAVIGATEUR` avant toute lecture. Limites (T229, décisions de Nicolas du 05/11) : ZIP de 4 Go au plus sans ZIP64 (`LIMITES.zip` = `ZipFlux.LIMITES.octets`, 4 Go moins 2 octets, lu au chargement : `zip-flux.js` doit se charger avant), 4 Go décompressés, 10 000 entrées ; un message de refus dit « plus de 4 Go » quand l'arrondi égalerait la limite.
   Socle de données (T213) : `zip-tables.js` (objet `ZipTables`, `lire(contenus, fichiersTables, deja, manifeste)` : étape 11 de `ZipLecture`, les tables du ZIP lues, CSV illisibles refusés sauf fichier marqué « abime » au manifeste à l'empreinte juste, rendu dans `abimes` ; format d'origine, migration en mémoire, tables absentes) se charge juste avant `zip-lecture.js`, qui l'appelle : sorti de `zip-lecture.js`, arrivé à 700 lignes.
-  Socle de données (T226, morceau 1 de T215 « ZIP par morceaux ») : `zip-flux.js` (objet `ZipFlux`, module bas niveau sans écran ni stockage : `lireRepertoire(blob)` lit le répertoire central par tranches (`Blob.slice`, jamais le fichier entier), `contenu(blob, entree)` décompresse une entrée en flux (`DecompressionStream` « deflate-raw »), taille réelle et CRC-32 contrôlés pendant et après ; `ecrivain({ date })` écrit un ZIP en Blob composé (`CompressionStream`), sans descripteur de données ni ZIP64, 4 Go et 65 534 entrées au plus ; erreurs `ErreurZip` à code ; pas de JSZip en secours : sans « deflate-raw », `MESSAGE_NAVIGATEUR`) se charge juste avant `zip-lecture.js`. L'import (T227) et l'export (T228) s'en serviront à la place de JSZip.
+  Socle de données (T226, morceau 1 de T215 « ZIP par morceaux ») : `zip-flux.js` (objet `ZipFlux`, module bas niveau sans écran ni stockage : `lireRepertoire(blob)` lit le répertoire central par tranches (`Blob.slice`, jamais le fichier entier), `contenu(blob, entree)` décompresse une entrée en flux (`DecompressionStream` « deflate-raw »), taille réelle et CRC-32 contrôlés pendant et après ; `ecrivain({ date })` écrit un ZIP en Blob composé (`CompressionStream`), sans descripteur de données ni ZIP64, 4 Go et 65 534 entrées au plus ; erreurs `ErreurZip` à code ; pas de JSZip en secours : sans « deflate-raw », `MESSAGE_NAVIGATEUR`) se charge juste avant `zip-lecture.js`. L'import (T227) et l'export (T228) s'en servent à la place de JSZip, retiré du dépôt en T229 (`js/lib/jszip.min.js`, sa balise, sa licence et sa ligne d'« À propos »).
   Socle de données (T191, D172) : `parametres-zip.js` (objet `ParametresZip`, bouton « Importer un ZIP… » de la carte « Sauvegardes » : import par remplacement complet, §22.11 « Import ZIP » ; relié à `Parametres.interne` par les relais `blocImportZip` et `brancherImportZip`) se charge juste après `parametres-sauvegardes.js`.
   Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
   fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
@@ -4110,10 +4111,10 @@ fusion ; aucune route serveur nouvelle (D172) : le navigateur lit le ZIP et écr
   mode dossier), le profil qui ouvre Paramètres. Démo : bouton inactif, note `#note-import-zip` « indisponible en
   démo ». Lecture seule (D169) : fenêtre `#import-zip-refus` dès le clic, et pour un fichier donné quand même.
 - **Contrôles, avant toute écriture** : `ZipLecture.lire` (`zip-lecture.js`, §15.1 ; détail dans son en-tête) : taille
-  du fichier (400 Mo), nombre d'entrées (10 000) (T212), répertoire central lu par Prévo (noms hostiles : absolus, « .. », « . »,
+  du fichier (4 Go sans ZIP64, T229), nombre d'entrées (10 000) (T212), répertoire central lu par Prévo (noms hostiles : absolus, « .. », « . »,
   barre inverse, segment vide, caractère de contrôle, UTF-8 invalide ; doublons ; chiffrement ; méthode), tailles
   déclarées puis réelles (CRC-32), taux de compression (bombe), 50 Mo par CSV et 10 Mo par document (T208),
-  1 Go décompressé, noms admis (CSV des
+  4 Go décompressés (T229), noms admis (CSV des
   tables à la racine, `documents/<nom>` à la règle des noms du serveur, `manifeste.json`), manifeste et empreintes
   SHA-256 (aucun fichier ajouté, manquant ou modifié), format plus récent refusé, CSV illisible ou abîmé refusé. Un ZIP
   plus ancien est migré en mémoire. Refus : fenêtre `#import-zip-refus` (message de `ZipLecture`), rien d'écrit.
@@ -4165,8 +4166,9 @@ fusion ; aucune route serveur nouvelle (D172) : le navigateur lit le ZIP et écr
 - Écart retenu : les tables ne passent pas par `Donnees.modifier`, qui ne garde que les colonnes inconnues de la table
   actuelle (celles du ZIP seraient perdues sans le dire, CS140) et journaliserait chaque ligne ; c'est le chemin de
   `Import.annuler` (lot 5, §18.7) : sérialisation de `Donnees`, adaptateur protégé, version contrôlée.
-- **Risques restants** : le ZIP entier reste en mémoire le temps de l'import (jusqu'à 400 Mo lus, 1 Go décompressé :
-  un poste à court de mémoire peut fermer l'onglet ; rien n'est écrit avant la confirmation) ; le contenu des documents
+- **Risques restants** : le ZIP est lu par morceaux (T227), jamais en entier : mémoire bornée aux tables plus un
+  document, pas encore mesurée sur un gros ZIP (recette T215) ; un poste à court de mémoire pourrait encore fermer
+  l'onglet (rien n'est écrit avant la confirmation) ; le contenu des documents
   n'est pas analysé au-delà des signatures d'image contrôlées par le serveur (`verifier_signature_image` ; aucune en
   mode dossier) : un document reste servi isolé (`Content-Security-Policy: sandbox`, enveloppe sans script hors
   serveur, §15.1) ; en http par le réseau (contexte non sécurisé), un ZIP avec manifeste est refusé faute de
