@@ -2465,7 +2465,6 @@ I18n.ajouter('fr', {
   'wiki.texte_origine.redige_ia': 'Rédigé avec l\'IA à partir des OT cités',
   'wiki.texte_origine.redige_ia_modele': 'Rédigé avec l\'IA ({modele}) à partir des OT cités',
   'wiki.texte_origine.responsable': 'le responsable',
-  'wiki.titre.ecrire_wiki': 'Écrire dans le wiki',
   'wiki.titre_fiche.fiche_article': 'Fiche de l\'article',
   'wiki.titre_fiche.fiche_intervention': 'Fiche de l\'intervention',
   'wiki.titre_fiche.fiche_machine': 'Fiche de la machine',

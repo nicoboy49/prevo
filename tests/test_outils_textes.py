@@ -423,6 +423,24 @@ class TestControle(unittest.TestCase):
         self.assertIn('appel { autre }, valeur { nom }', [s.message.split(' : ', 1)[1] for s in
                                                           controle.signalements if s.genre == 'variables'][0])
 
+    def test_cle_calculee_ne_couvre_plus_tout_le_dictionnaire(self):
+        """T262 : un I18n.t(cle) entièrement calculé faisait passer toutes les clés pour employées ; seules comptent
+        désormais les clés écrites en chaîne dans le code (passées ensuite par une variable) et les préfixes littéraux."""
+        ext.Extracteur(self.racine).extraire('causes', ['js/modules/causes-essai.js'])
+        ext.Extracteur(self.racine).extraire('socle', ['index.html'])
+        module = (self.racine / 'js/modules/causes-essai.js').read_text(encoding='utf-8')
+        module = module.replace("return { titre, bloc };",
+                                "function dates() { return ['causes.essai.debut'].map((cle) => I18n.t(cle)); }\n"
+                                "  return { titre, bloc, dates };")
+        ecrire(self.racine, 'js/modules/causes-essai.js', module)
+        dico = (self.racine / 'js/i18n/fr.js').read_text(encoding='utf-8')
+        ecrire(self.racine, 'js/i18n/fr.js', dico.replace(
+            "I18n.ajouter('fr', {\n", "I18n.ajouter('fr', {\n  'causes.essai.debut': 'Début',\n"
+                                      "  'causes.essai.inutile': 'X',\n", 1))
+        controle = controler(self.racine)
+        orphelines = [s.message for s in controle.signalements if s.genre == 'orpheline']
+        self.assertEqual(orphelines, ['clé jamais employée : causes.essai.inutile'])
+
     def test_page_differente_du_dictionnaire(self):
         ext.Extracteur(self.racine).extraire('socle', ['index.html'])
         page = (self.racine / 'index.html').read_text(encoding='utf-8')

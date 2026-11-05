@@ -148,8 +148,13 @@ def _cles_html(texte, rel, ligne, res):
                                        fonction='data-i18n-attr'))
 
 
-def cles_utilisees(racine, fichiers):
-    """Utilisation de clés dans les fichiers (JS : I18n.t, I18n.html, data-i18n dans les chaînes ; HTML : data-i18n)."""
+RE_CLE_LITTERALE = re.compile(r'^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+$')
+
+
+def cles_utilisees(racine, fichiers, litterales=None):
+    """Utilisation de clés dans les fichiers (JS : I18n.t, I18n.html, data-i18n dans les chaînes ; HTML : data-i18n).
+    litterales (ensemble, facultatif) : reçoit chaque chaîne du JS qui a la forme d'une clé (« wiki.fait.fin ») ; une
+    clé écrite ainsi puis passée à I18n.t par une variable compte comme employée (T262)."""
     res = []
     erreurs = []
     for rel in fichiers:
@@ -173,6 +178,10 @@ def cles_utilisees(racine, fichiers):
             n = seq[i]
             if isinstance(n, Jeton) and n.genre in ('chaine', 'gabarit') and 'data-i18n' in n.valeur:
                 _cles_html(n.valeur, rel, ligne(n.debut), res)
+            if litterales is not None and isinstance(n, Jeton) and n.genre == 'chaine':
+                valeur = decoder(n.valeur)
+                if RE_CLE_LITTERALE.match(valeur):
+                    litterales.add(valeur)
             if not (ext.est_nom(n, 'I18n') and i + 3 < len(seq) and ext.est_ponct(seq[i + 1], '.')
                     and ext.est_nom(seq[i + 2], 't', 'html') and ext.est_groupe(seq[i + 3], '(')):
                 return
@@ -256,7 +265,8 @@ class Controle:
         for cle, rel in francais.doublons:
             self.signaler('doublon', rel, None, 'clé définie deux fois : %s' % cle)
         tous_fichiers = sorted({f for fichiers in tous.values() for f in fichiers})
-        utilisations, erreurs = cles_utilisees(self.racine, tous_fichiers)
+        litterales = set()
+        utilisations, erreurs = cles_utilisees(self.racine, tous_fichiers, litterales)
         self.erreurs.extend(erreurs)
         retenus = set(self.fichiers)
         for u in utilisations:
@@ -279,8 +289,10 @@ class Controle:
                 self.signaler('variables', u.fichier, u.ligne, '%s : appel { %s }, valeur { %s }' % (
                     u.cle, ', '.join(sorted(passees)) or '—', ', '.join(sorted(attendues)) or '—'))
         # orphelines : clés des sections contrôlées qu'aucun fichier du dépôt n'emploie
-        employees = {u.cle for u in utilisations if u.cle is not None}
-        prefixes = {u.prefixe for u in utilisations if u.prefixe is not None}
+        # une clé entièrement calculée (I18n.t(cle)) ne couvre plus tout le dictionnaire (T262) : seules comptent les
+        # clés écrites en chaîne quelque part dans le code (litterales) et les préfixes littéraux (« valeurs. » + x)
+        employees = {u.cle for u in utilisations if u.cle is not None} | litterales
+        prefixes = {u.prefixe for u in utilisations if u.prefixe}
         sections = {ext.section_du_domaine(d) for d in choisis} if self.domaines != sorted(tous) else None
         for cle, (section, valeur, rel) in sorted(francais.entrees.items()):
             if sections is not None and section not in sections:
