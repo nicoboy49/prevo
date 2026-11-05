@@ -23,27 +23,35 @@
 //       problemes     : problèmes de lecture des CSV, tables absentes, documents manquants à l'export (forme des
 //                       problèmes de Donnees, ARCHITECTURE.md §5.2).
 // La promesse n'est rejetée que sur un défaut du code (dépendance absente) : tout ZIP refusé donne { ok: false }.
-// Deux passes (T205), mémoire bornée au ZIP (gardé par le résultat) + les tables + UN document : lire contrôle chaque
-// document (étapes 9, 10) puis l'oublie ; lireDocument(lu, nom) le relit du même ZIP (taille, CRC-32, empreinte
-// revérifiés) → Promise de Uint8Array, rejetée (Error au message clair) s'il a changé. memoire() : mesure (tests).
+// Lecture PAR MORCEAUX (T227, morceau 2 de T215) : le ZIP n'est jamais lu en entier ni gardé ; ZipFlux (zip-flux.js) en
+// lit des tranches (Blob.slice : fin et répertoire central, en-têtes locaux, données d'une entrée à la fois, en flux).
+// Un File ou un Blob est lu tel quel ; un ArrayBuffer ou une vue typée, sans copie (chaque tranche lue devient un
+// Blob).
+// Navigateur sans « deflate-raw » (ZipFlux.disponible() faux) : refus ZipFlux.MESSAGE_NAVIGATEUR avant toute lecture,
+// pas de JSZip en secours (décision de Nicolas). Fichier illisible (changé, retiré) : refus « Lecture du fichier
+// impossible ».
+// Deux passes (T205), mémoire bornée aux tables + UN document : lire contrôle chaque document (étapes 9, 10) puis
+// l'oublie ; lireDocument(lu, nom) le relit du même fichier (taille, CRC-32, empreinte revérifiés) → Promise de
+// Uint8Array, rejetée (Error au message clair) s'il a changé ou n'est plus lisible. memoire() : mesure (tests).
 //
 // Contrôles, dans l'ordre (le premier qui échoue donne le refus) : (1) taille du fichier avant de le lire ;
-// (2) répertoire central lu ICI, pas par JSZip (qui assainit les noms et fusionne les doublons) : nombre d'entrées,
-// noms hostiles (absolu « / » ou « C: », segment « .. » ou « . », barre inverse, segment vide, caractère de contrôle,
-// UTF-8 invalide), doublons (casse ignorée), entrée chiffrée, méthode autre que « stocké » et « deflate », données
-// hors du fichier ; (3) tailles DÉCLARÉES, avant toute décompression : taux de compression (au-delà de 1 Mo
-// décompressé : en dessous, aucune bombe possible), fichier à la racine (CSV, manifeste), document, total ; (4) JSZip voit les
-// mêmes fichiers sous les mêmes noms ; (5) manifeste illisible ; (6) format plus récent que Formats.courant
+// (2) répertoire central lu par ZipFlux, noms bruts (rien d'assaini ni de fusionné) : nombre d'entrées (avant de lire
+// le répertoire), noms hostiles (absolu « / » ou « C: », segment « .. » ou « . », barre inverse, segment vide,
+// caractère de contrôle, UTF-8 invalide), doublons (casse ignorée), entrée chiffrée, méthode autre que « stocké » et
+// « deflate », données hors du fichier (ZipFlux.positionDonnees, bornée au répertoire central) ; (3) tailles
+// DÉCLARÉES, avant toute décompression : taux de compression (au-delà de 1 Mo décompressé : en dessous, aucune bombe
+// possible), fichier à la racine (CSV, manifeste), document, total ; (4) retiré (T227 : il vérifiait que JSZip voyait
+// les mêmes fichiers, et JSZip ne lit plus rien) ; (5) manifeste illisible ; (6) format plus récent que Formats.courant
 // (manifeste, ou version_schema de parametres.csv) ; (7) noms admis : <table>.csv à la racine (table de Schema),
 // documents/<nom> au nom admis par serveur.py, manifeste.json, le dossier documents/ lui-même, rien d'autre ;
-// (8) au moins un CSV de table ; (9) décompression : taille RÉELLE contrôlée pendant (arrêt dès qu'elle dépasse la
-// taille déclarée) et après (égale, CRC-32 juste) ; (10) manifeste : chaque fichier y figure avec sa taille et son
-// empreinte SHA-256, et réciproquement ; un manifeste « documents »: « exclus » (export « données seules », T214)
-// et des documents dans le ZIP : refusé ; (11) CSV illisible (format 0 : des colonnes du format 1 manquent à
-// l'en-tête) ou abîmé (l'écrire en perdrait une partie) : on ne remplace pas une base par un fichier illisible, sauf
-// fichier marqué « abime » au manifeste, à l'empreinte juste (T213 : ZipTables, rendu dans `abimes`).
-// Dépendances : JSZip (js/lib/jszip.min.js), Schema, Formats, Donnees (csv.analyser), ZipTables ; crypto.subtle
-// pour un ZIP avec manifeste (contexte sécurisé : file://, https, 127.0.0.1).
+// (8) au moins un CSV de table ; (9) décompression (ZipFlux.contenu) : taille RÉELLE contrôlée pendant (arrêt dès
+// qu'elle dépasse la taille déclarée) et après (égale, CRC-32 juste) ; (10) manifeste : chaque fichier y figure avec
+// sa taille et son empreinte SHA-256, et réciproquement ; un manifeste « documents »: « exclus » (export « données
+// seules », T214) et des documents dans le ZIP : refusé ; (11) CSV illisible (format 0 : des colonnes du format 1
+// manquent à l'en-tête) ou abîmé (l'écrire en perdrait une partie) : on ne remplace pas une base par un fichier
+// illisible, sauf fichier marqué « abime » au manifeste, à l'empreinte juste (T213 : ZipTables, rendu dans `abimes`).
+// Dépendances : ZipFlux (zip-flux.js ; plus de JSZip depuis T227), Schema, Formats, Donnees (csv.analyser),
+// ZipTables ; crypto.subtle pour un ZIP avec manifeste (contexte sécurisé : file://, https, 127.0.0.1).
 
 const ZipLecture = (function () {
 
@@ -84,8 +92,6 @@ const ZipLecture = (function () {
 
   function refuser(message) { throw new Refus(message); }
 
-  const PAS_UN_ZIP = 'Ce fichier n\'est pas un ZIP lisible. Choisissez le fichier ZIP exporté par Prévo '
-    + '(« prevo-export-AAAA-MM-JJ.zip »).';
   const ZIP_ABIME = 'Ce ZIP est abîmé (structure illisible ou incohérente) : il est refusé. Refaites l\'export, '
     + 'ou choisissez un autre fichier.';
   const MANIFESTE_ILLISIBLE = 'Le manifeste du ZIP (manifeste.json) est illisible : le ZIP a été abîmé ou modifié '
@@ -113,7 +119,7 @@ const ZipLecture = (function () {
       message: message };
   }
 
-  // --- 1. Octets du fichier (taille contrôlée avant de lire) -------------------------------------------------------
+  // --- 1. Source lue par tranches (taille contrôlée avant toute lecture) -------------------------------------------
 
   function tailleDe(source) {
     if (source instanceof ArrayBuffer || ArrayBuffer.isView(source)) { return source.byteLength; }
@@ -121,123 +127,77 @@ const ZipLecture = (function () {
     return null;
   }
 
-  async function lireOctets(source) {
+  // Source à lire par ZipFlux (size, slice) : un File ou un Blob tel quel ; un ArrayBuffer ou une vue typée, enveloppé
+  // SANS COPIE : chaque tranche demandée devient un Blob de ses seuls octets, lus à ce moment-là (comme d'un fichier).
+  function sourceParTranches(source) {
     const taille = tailleDe(source);
     if (taille === null) { refuser('Aucun fichier à lire : choisissez le fichier ZIP exporté par Prévo.'); }
     if (taille > LIMITES.zip) {
       refuser('Ce fichier fait ' + enMo(taille) + ' : un ZIP de données ne peut pas dépasser ' + enMo(LIMITES.zip)
         + '. Il est refusé.');
     }
-    if (source instanceof ArrayBuffer) { return new Uint8Array(source); }
-    if (ArrayBuffer.isView(source)) { return new Uint8Array(source.buffer, source.byteOffset, source.byteLength); }
-    try {
-      return new Uint8Array(await source.arrayBuffer());
-    } catch (erreur) {
-      return refuser('Lecture du fichier impossible (' + ((erreur && erreur.message) || 'erreur inconnue') + ').');
-    }
+    if (typeof Blob !== 'undefined' && source instanceof Blob) { return source; }
+    const octets = source instanceof ArrayBuffer ? new Uint8Array(source)
+      : new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+    return { size: octets.byteLength,
+      slice: function (debut, fin) { return new Blob([octets.subarray(debut, fin)]); } };
   }
 
-  // --- 2. Répertoire central (APPNOTE de PKWARE), lu avant toute décompression -------------------------------------
+  // Chaque lecture d'une tranche de fichier coûte un aller-retour (près d'une milliseconde) : un ZIP de 10 000 petites
+  // entrées en demanderait 30 000 (en-têtes locaux, puis données). Pendant lire, les tranches de FENETRE octets au plus
+  // sont donc servies depuis une fenêtre de FENETRE octets lue d'un coup (une seule gardée) ; les autres sont lues
+  // directement (ZipFlux.contenu les lit en flux). lireDocument prend une fenêtre neuve à chaque appel : il relit
+  // bien le fichier (en-tête local et petit document en une seule lecture).
+  const FENETRE = 64 * 1024;
 
-  const SIGNATURES = Object.freeze({ fin: 0x06054b50, localisateur64: 0x07064b50, fin64: 0x06064b50,
-    centrale: 0x02014b50, locale: 0x04034b50 });
-  const MAX_16 = 0xFFFF;
-  const MAX_32 = 0xFFFFFFFF;
-  const CHAMP_ZIP64 = 0x0001;
-  const ATTRIBUT_DOSSIER = 0x10;
-  const decodeurNoms = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
-
-  function lecteur(octets) {
-    const vue = new DataView(octets.buffer, octets.byteOffset, octets.byteLength);
+  function lecteurAFenetre(blob) {
+    let fenetre = { debut: 0, octets: new Uint8Array(0) };
+    async function octets(debut, fin) {
+      let lue = fenetre;
+      if (debut < lue.debut || fin > lue.debut + lue.octets.length) {
+        const finLue = Math.min(blob.size, Math.max(fin, debut + FENETRE));
+        lue = fenetre = { debut: debut, octets: new Uint8Array(await blob.slice(debut, finLue).arrayBuffer()) };
+      }
+      return lue.octets.slice(debut - lue.debut, fin - lue.debut);       // copie : la fenêtre peut changer
+    }
     return {
-      u16: function (position) { return vue.getUint16(position, true); },
-      u32: function (position) { return vue.getUint32(position, true); },
-      u64: function (position) { return vue.getUint32(position, true) + vue.getUint32(position + 4, true) * 0x100000000; },
+      size: blob.size,
+      slice: function (debutDemande, finDemandee) {
+        const debut = Math.max(0, Math.min(blob.size, debutDemande));
+        const fin = Math.max(debut, Math.min(blob.size, finDemandee));
+        if (fin - debut > FENETRE) { return blob.slice(debut, fin); }
+        return {
+          size: fin - debut,
+          arrayBuffer: async function () { return (await octets(debut, fin)).buffer; },
+          stream: function () {
+            return new ReadableStream({ pull: async function (controleur) {
+              const morceau = await octets(debut, fin);
+              if (morceau.length) { controleur.enqueue(morceau); }
+              controleur.close();
+            } });
+          },
+        };
+      },
     };
   }
 
-  // Nom d'une entrée : UTF-8 (comme JSZip) ; null si les octets n'en sont pas.
-  function decoderNom(octetsNom) {
-    try { return decodeurNoms.decode(octetsNom); } catch (erreur) { return null; }
+  // Erreur de lecture du fichier lui-même (changé, déplacé ou retiré depuis son choix), et non du ZIP : ZipFlux la
+  // laisse passer telle quelle.
+  function estErreurDeFichier(erreur) {
+    return Boolean(erreur) && (erreur.name === 'NotReadableError' || erreur.name === 'NotFoundError');
   }
 
-  // Dernière signature de fin du répertoire central (comme JSZip), ou -1.
-  function trouverFin(octets, lire) {
-    const premier = Math.max(0, octets.length - 22 - MAX_16);
-    for (let position = octets.length - 22; position >= premier; position -= 1) {
-      if (lire.u32(position) === SIGNATURES.fin) { return position; }
-    }
-    return -1;
-  }
+  // --- 2. Répertoire central (ZipFlux : fin et répertoire lus par tranches), avant toute décompression -------------
 
-  // Tailles et position sur 64 bits (champ « ZIP64 » des données en plus) quand le champ sur 32 bits est saturé.
-  function lireZip64(lire, debut, longueur, entree) {
-    if (entree.decompresse !== MAX_32 && entree.compresse !== MAX_32 && entree.local !== MAX_32) { return; }
-    const finExtra = debut + longueur;
-    for (let position = debut; position + 4 <= finExtra; position += 4 + lire.u16(position + 2)) {
-      if (lire.u16(position) !== CHAMP_ZIP64) { continue; }
-      const finChamp = Math.min(finExtra, position + 4 + lire.u16(position + 2));
-      let curseur = position + 4;
-      for (const cle of ['decompresse', 'compresse', 'local']) {
-        if (entree[cle] === MAX_32 && curseur + 8 <= finChamp) { entree[cle] = lire.u64(curseur); curseur += 8; }
+  // { entrees: [{ nom, dossier, drapeaux, methode, crc, compresse, decompresse, local, octetsNom }], debut, taille,
+  // nombre } ; le nombre d'entrées est contrôlé AVANT la lecture du répertoire (rien n'en est lu ni analysé au-delà).
+  function lireRepertoire(blob) {
+    return ZipFlux.lireRepertoire(blob, function (fin) {
+      if (fin.nombre > LIMITES.entrees) {
+        refuser('Ce ZIP contient ' + enChiffres(fin.nombre) + ' entrées : ' + enChiffres(LIMITES.entrees)
+          + ' au plus. Il est refusé.');
       }
-      return;
-    }
-  }
-
-  // Position, taille et nombre d'entrées du répertoire central (fin « ZIP64 » comprise).
-  function lireFin(octets, lire) {
-    const fin = trouverFin(octets, lire);
-    if (fin < 0) { refuser(PAS_UN_ZIP); }
-    if (lire.u16(fin + 4) !== 0 || lire.u16(fin + 6) !== 0) {
-      refuser('Ce ZIP est en plusieurs parties : il est refusé. Choisissez le ZIP exporté par Prévo, en un seul fichier.');
-    }
-    const resultat = { nombre: lire.u16(fin + 10), taille: lire.u32(fin + 12), debut: lire.u32(fin + 16) };
-    if (resultat.nombre === MAX_16 || resultat.taille === MAX_32 || resultat.debut === MAX_32) {
-      const localisateur = fin - 20;
-      if (localisateur < 0 || lire.u32(localisateur) !== SIGNATURES.localisateur64) { refuser(ZIP_ABIME); }
-      const fin64 = lire.u64(localisateur + 8);
-      if (fin64 + 56 > octets.length || lire.u32(fin64) !== SIGNATURES.fin64) { refuser(ZIP_ABIME); }
-      resultat.nombre = lire.u64(fin64 + 32);
-      resultat.taille = lire.u64(fin64 + 40);
-      resultat.debut = lire.u64(fin64 + 48);
-    }
-    return resultat;
-  }
-
-  // Entrées du répertoire central : { entrees: [{ nom, dossier, drapeaux, methode, crc, compresse, decompresse,
-  // local }], debut, lire }.
-  function lireRepertoire(octets) {
-    if (octets.length < 22) { refuser(PAS_UN_ZIP); }
-    const lire = lecteur(octets);
-    const fin = lireFin(octets, lire);
-    if (fin.nombre > LIMITES.entrees) {
-      refuser('Ce ZIP contient ' + enChiffres(fin.nombre) + ' entrées : ' + enChiffres(LIMITES.entrees)
-        + ' au plus. Il est refusé.');
-    }
-    const finRepertoire = fin.debut + fin.taille;
-    if (finRepertoire > octets.length) { refuser(ZIP_ABIME); }
-    const entrees = [];
-    let position = fin.debut;
-    for (let numero = 0; numero < fin.nombre; numero += 1) {
-      if (position + 46 > finRepertoire || lire.u32(position) !== SIGNATURES.centrale) { refuser(ZIP_ABIME); }
-      const longueurNom = lire.u16(position + 28);
-      const longueurExtra = lire.u16(position + 30);
-      const suivante = position + 46 + longueurNom + longueurExtra + lire.u16(position + 32);
-      if (suivante > finRepertoire) { refuser(ZIP_ABIME); }
-      const nom = decoderNom(octets.subarray(position + 46, position + 46 + longueurNom));
-      const entree = {
-        nom: nom,
-        // Dossier : nom en « / » ou attribut « dossier » (même règle que JSZip).
-        dossier: nom !== null && (nom.endsWith('/') || (lire.u32(position + 38) & ATTRIBUT_DOSSIER) !== 0),
-        drapeaux: lire.u16(position + 8), methode: lire.u16(position + 10), crc: lire.u32(position + 16),
-        compresse: lire.u32(position + 20), decompresse: lire.u32(position + 24), local: lire.u32(position + 42),
-      };
-      lireZip64(lire, position + 46 + longueurNom, longueurExtra, entree);
-      entrees.push(entree);
-      position = suivante;
-    }
-    return { entrees: entrees, debut: fin.debut, lire: lire };
+    });
   }
 
   // Raison pour laquelle un nom d'entrée est hostile, ou null.
@@ -256,8 +216,7 @@ const ZipLecture = (function () {
   }
 
   // Noms hostiles, doublons, chiffrement, méthode, données hors du fichier, puis tailles déclarées.
-  function controlerEntrees(repertoire) {
-    const lire = repertoire.lire;
+  async function controlerEntrees(lecteur, repertoire) {
     const vus = new Set();
     for (const entree of repertoire.entrees) {
       const raison = raisonHostile(entree.nom);
@@ -281,10 +240,8 @@ const ZipLecture = (function () {
         refuser('« ' + afficher(entree.nom) + ' » est compressé par une méthode que Prévo ne lit pas (méthode '
           + entree.methode + ') : ZIP refusé. Refaites l\'export.');
       }
-      const local = entree.local;
-      if (local + 30 > repertoire.debut || lire.u32(local) !== SIGNATURES.locale) { refuser(ZIP_ABIME); }
-      const donnees = local + 30 + lire.u16(local + 26) + lire.u16(local + 28);
-      if (donnees + entree.compresse > repertoire.debut) { refuser(ZIP_ABIME); }
+      // En-tête local (30 octets lus) et données avant le répertoire central, sinon 'format' (ZIP abîmé).
+      await ZipFlux.positionDonnees(lecteur, entree, repertoire.debut);
     }
     controlerTaillesDeclarees(repertoire.entrees);
   }
@@ -314,88 +271,35 @@ const ZipLecture = (function () {
     }
   }
 
-  // --- 4 et 9. JSZip : mêmes fichiers, puis décompression sous contrôle --------------------------------------------
-
-  async function ouvrirAvecJszip(octets, fichiers) {
-    let archive = null;
-    try {
-      archive = await JSZip.loadAsync(octets, { checkCRC32: false, createFolders: false });
-    } catch (erreur) {
-      refuser(ZIP_ABIME);
-    }
-    const vusParJszip = Object.keys(archive.files).filter(function (nom) { return !archive.files[nom].dir; });
-    if (vusParJszip.length !== fichiers.length) { refuser(ZIP_ABIME); }
-    for (const entree of fichiers) {
-      const objet = archive.files[entree.nom];
-      if (!objet || objet.dir || (objet.unsafeOriginalName !== undefined && objet.unsafeOriginalName !== entree.nom)) {
-        refuser(ZIP_ABIME);
-      }
-      entree.objet = objet;
-    }
-  }
-
-  const TABLE_CRC = (function () {
-    const table = new Int32Array(256);
-    for (let n = 0; n < 256; n += 1) {
-      let valeur = n;
-      for (let bit = 0; bit < 8; bit += 1) { valeur = (valeur & 1) ? (0xEDB88320 ^ (valeur >>> 1)) : (valeur >>> 1); }
-      table[n] = valeur;
-    }
-    return table;
-  })();
-
-  function crc32(octets) {
-    let crc = -1;
-    for (let i = 0; i < octets.length; i += 1) { crc = (crc >>> 8) ^ TABLE_CRC[(crc ^ octets[i]) & 0xFF]; }
-    return (crc ^ -1) >>> 0;
-  }
+  // --- 9. Décompression sous contrôle : ZipFlux.contenu -------------------------------------------------------------
+  // Tableau neuf de la taille DÉCLARÉE (bornée à l'étape 3), taille RÉELLE contrôlée pendant la décompression : dès
+  // qu'elle dépasse la taille déclarée (bombe qui ment sur sa taille), la lecture s'arrête et le ZIP est refusé ; à la
+  // fin, taille et CRC-32 doivent être ceux du répertoire central.
 
   function abime(entree) {
     return '« ' + afficher(entree.nom) + ' » est abîmé dans ce ZIP (contenu illisible, ou différent de ce que le ZIP '
       + 'annonce) : il est refusé. Refaites l\'export.';
   }
 
-  // Contenu décompressé d'une entrée (copie neuve, de la taille déclarée : bornée à l'étape 3, et sans seconde copie
-  // à la fin). Taille RÉELLE contrôlée pendant la décompression : dès qu'elle dépasse la taille déclarée (bombe qui
-  // ment sur sa taille), la lecture s'arrête et le ZIP est refusé ; à la fin, taille et CRC-32 doivent être ceux du
-  // répertoire central.
-  function decompresser(entree) {
-    return new Promise(function (resoudre, rejeter) {
-      const contenu = new Uint8Array(entree.decompresse);
-      let recu = 0;
-      let fini = false;
-      let flux = null;
-      function arreter(message) {
-        if (fini) { return; }
-        fini = true;
-        try { if (flux) { flux.pause(); } } catch (erreur) { /* flux déjà arrêté */ }
-        rejeter(new Refus(message));
-      }
-      try {
-        flux = entree.objet.internalStream('uint8array');
-      } catch (erreur) {
-        arreter(abime(entree));
-        return;
-      }
-      flux.on('data', function (morceau) {
-        if (fini) { return; }
-        if (recu + morceau.length > entree.decompresse) {
-          arreter('« ' + afficher(entree.nom) + ' » se décompresse plus gros que ce que le ZIP annonce : bombe de '
-            + 'décompression probable. Le ZIP est refusé.');
-          return;
-        }
-        contenu.set(morceau, recu);
-        recu += morceau.length;
-      });
-      flux.on('error', function () { arreter(abime(entree)); });
-      flux.on('end', function () {
-        if (fini) { return; }
-        if (recu !== entree.decompresse || crc32(contenu) !== entree.crc) { arreter(abime(entree)); return; }
-        fini = true;
-        resoudre(contenu);
-      });
-      flux.resume();
-    });
+  function bombe(entree) {
+    return '« ' + afficher(entree.nom) + ' » se décompresse plus gros que ce que le ZIP annonce : bombe de '
+      + 'décompression probable. Le ZIP est refusé.';
+  }
+
+  // Erreur venue de ZipFlux → refus au message de ce module : 'bombe' et 'abime' (entrée en cause : erreur.nom),
+  // 'format' (messages repris d'ici) et 'navigateur' tels quels ; fichier illisible → « Lecture du fichier
+  // impossible ». Toute autre erreur (défaut du code) passe telle quelle.
+  function traduire(erreur) {
+    if (erreur instanceof Refus) { return erreur; }
+    if (erreur instanceof ZipFlux.ErreurZip) {
+      const entree = { nom: typeof erreur.nom === 'string' ? erreur.nom : '?' };
+      if (erreur.code === 'bombe') { return new Refus(bombe(entree)); }
+      return new Refus(erreur.code === 'abime' ? abime(entree) : erreur.message);
+    }
+    if (estErreurDeFichier(erreur)) {
+      return new Refus('Lecture du fichier impossible (' + (erreur.message || 'erreur inconnue') + ').');
+    }
+    return erreur;
   }
 
   // --- 5, 6 et 10. Manifeste et format ------------------------------------------------------------------------------
@@ -524,7 +428,7 @@ const ZipLecture = (function () {
   // --- Lecture complète --------------------------------------------------------------------------------------------
 
   function exigerDependances() {
-    const manquantes = [['JSZip', typeof JSZip], ['Schema', typeof Schema], ['Formats', typeof Formats],
+    const manquantes = [['ZipFlux', typeof ZipFlux], ['Schema', typeof Schema], ['Formats', typeof Formats],
       ['Donnees', typeof Donnees], ['ZipTables', typeof ZipTables]]
       .filter(function (paire) { return paire[1] === 'undefined'; });
     if (manquantes.length) {
@@ -533,11 +437,12 @@ const ZipLecture = (function () {
     }
   }
 
-  // Répertoire central lu et contrôlé (étapes 2 et 3) ; une lecture hors du fichier (positions fausses) : ZIP abîmé.
-  function repertoireControle(octets) {
+  // Répertoire central lu et contrôlé (étapes 2 et 3 ; en-têtes locaux lus par `lecteur`, à fenêtre) ; une lecture
+  // hors des octets lus (positions fausses) : ZIP abîmé.
+  async function repertoireControle(blob, lecteur) {
     try {
-      const repertoire = lireRepertoire(octets);
-      controlerEntrees(repertoire);
+      const repertoire = await lireRepertoire(blob);
+      await controlerEntrees(lecteur, repertoire);
       return repertoire;
     } catch (erreur) {
       if (erreur instanceof RangeError) { refuser(ZIP_ABIME); }
@@ -545,27 +450,30 @@ const ZipLecture = (function () {
     }
   }
 
-  const DOCUMENTS_DES_RESULTATS = new WeakMap();   // résultat accepté → documents (leurs entrées gardent le ZIP)
-  // Mesure de la dernière lecture (tests) : ZIP, racine (tables, manifeste), documents gardés à la fois, plus gros.
+  // Résultat accepté → { blob, documents } : la source (un File n'est qu'une poignée, ses octets restent sur le disque)
+  // et ses documents (nom sans « documents/ » → { entree, resume }), pour la seconde passe.
+  const LECTURES = new WeakMap();
+  // Mesure de la dernière lecture (tests) : zip (octets du ZIP gardés en mémoire : 0 depuis T227, il est lu par
+  // tranches), racine (tables, manifeste), documents gardés à la fois, plus gros document.
   let memoire = { zip: 0, racine: 0, documentsGardesMax: 0, documentMax: 0 };
 
   // Document décompressé et résumé dans sa propre trame (une fois finie, plus rien ne le garde) → résumé.
-  async function resumerDocument(entree) {
-    const contenu = await decompresser(entree);
+  async function resumerDocument(lecteur, entree) {
+    const contenu = await ZipFlux.contenu(lecteur, entree);
     memoire.documentMax = Math.max(memoire.documentMax, contenu.byteLength);
     return resumer(contenu);
   }
 
   async function lireEtControler(source) {
-    const octets = await lireOctets(source);
-    memoire = { zip: octets.length, racine: 0, documentsGardesMax: 0, documentMax: 0 };
-    const repertoire = repertoireControle(octets);
+    const blob = sourceParTranches(source);
+    const lecteur = lecteurAFenetre(blob);
+    memoire = { zip: 0, racine: 0, documentsGardesMax: 0, documentMax: 0 };
+    const repertoire = await repertoireControle(blob, lecteur);
     const fichiers = repertoire.entrees.filter(function (entree) { return !entree.dossier; });
-    await ouvrirAvecJszip(octets, fichiers);
     const parNom = new Map(fichiers.map(function (entree) { return [entree.nom, entree]; }));
     const contenus = new Map();               // fichiers de la racine (LIMITES.racine au plus chacun), gardés
     async function contenuDe(nom) {
-      if (!contenus.has(nom)) { contenus.set(nom, await decompresser(parNom.get(nom))); }
+      if (!contenus.has(nom)) { contenus.set(nom, await ZipFlux.contenu(lecteur, parNom.get(nom))); }
       return contenus.get(nom);
     }
     const manifeste = parNom.has(NOM_MANIFESTE) ? lireManifeste(await contenuDe(NOM_MANIFESTE)) : null;
@@ -583,7 +491,8 @@ const ZipLecture = (function () {
       if (nom === NOM_MANIFESTE || resumes.has(nom) || !parNom.has(nom)) { continue; }
       const document = genreDe(parNom.get(nom), fichiersTables) === 'document';
       memoire.documentsGardesMax = Math.max(memoire.documentsGardesMax, gardes += document ? 1 : 0);
-      resumes.set(nom, document ? await resumerDocument(parNom.get(nom)) : await resumer(await contenuDe(nom)));
+      resumes.set(nom, document ? await resumerDocument(lecteur, parNom.get(nom))
+        : await resumer(await contenuDe(nom)));
       gardes -= document ? 1 : 0;             // document oublié : relu par lireDocument
       if (document) {
         documents.set(nom.slice(DOSSIER_DOCUMENTS.length), { entree: parNom.get(nom), resume: resumes.get(nom) });
@@ -605,19 +514,28 @@ const ZipLecture = (function () {
       documents: Array.from(documents, function (paire) { return Object.assign({ nom: paire[0] }, paire[1].resume); }),
       problemes: lues.problemes.concat(problemesManquants(manifeste)),
     };
-    DOCUMENTS_DES_RESULTATS.set(resultat, documents);
+    LECTURES.set(resultat, { blob: blob, documents: documents });
     return resultat;
   }
 
-  // Seconde passe (voir l'en-tête) : document `nom` (sans « documents/ ») d'un résultat accepté, relu et revérifié ;
-  // taille et CRC-32 le sont pendant la décompression. Le contenu rendu (copie neuve) est à oublier après usage.
+  // Seconde passe (voir l'en-tête) : document `nom` (sans « documents/ ») d'un résultat accepté, relu du même fichier
+  // et revérifié ; taille et CRC-32 le sont pendant la décompression. Le contenu rendu (copie neuve) est à oublier
+  // après usage. Fichier devenu illisible (modifié, déplacé, supprimé) : refus clair, le document n'est pas importé.
   async function lireDocument(lu, nom) {
-    const document = (DOCUMENTS_DES_RESULTATS.get(lu) || new Map()).get(nom);
+    const lecture = LECTURES.get(lu);
+    const document = lecture ? lecture.documents.get(nom) : undefined;
     if (!document) {
       throw new Error('ZipLecture.lireDocument : « ' + afficher(String(nom)) + ' » n\'est pas un document d\'un ZIP '
         + 'accepté par ZipLecture.lire.');
     }
-    const contenu = await decompresser(document.entree);
+    let contenu = null;
+    try {
+      contenu = await ZipFlux.contenu(lecteurAFenetre(lecture.blob), document.entree);   // fenêtre neuve : relu
+    } catch (erreur) {
+      if (!estErreurDeFichier(erreur)) { throw traduire(erreur); }
+      refuser('« ' + afficher(document.entree.nom) + ' » ne peut plus être relu : le fichier ZIP a été modifié, '
+        + 'déplacé ou supprimé depuis son contrôle. Il n\'est pas importé.');
+    }
     if (document.resume.empreinte !== null && (await resumer(contenu)).empreinte !== document.resume.empreinte) {
       refuser('« ' + afficher(document.entree.nom) + ' » a changé depuis le contrôle du ZIP (son empreinte ne '
         + 'correspond plus) : il n\'est pas importé.');
@@ -628,10 +546,12 @@ const ZipLecture = (function () {
   // Lit et contrôle un ZIP de données (voir l'en-tête) ; rien n'est écrit nulle part.
   async function lire(source) {
     exigerDependances();
+    if (!ZipFlux.disponible()) { return { ok: false, refus: ZipFlux.MESSAGE_NAVIGATEUR }; }
     try {
       return await lireEtControler(source);
     } catch (erreur) {
-      if (erreur instanceof Refus) { return { ok: false, refus: erreur.message }; }
+      const refus = traduire(erreur);
+      if (refus instanceof Refus) { return { ok: false, refus: refus.message }; }
       throw erreur;
     }
   }

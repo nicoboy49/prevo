@@ -185,8 +185,10 @@ produire le ZIP : s'il en dépasse une, il dit quoi (fichier, taille, limite) et
 - Réservé au **responsable** (ou à toute personne si l'installation n'a pas de comptes).
 - Contrôles avant d'écrire quoi que ce soit : taille totale, nombre d'entrées, taux de compression (bombe de
   décompression), chemins (aucun `..`, aucun chemin absolu), noms de fichiers admis, empreintes du manifeste, format.
-- Lecture en **deux passes** : chaque document est décompressé pour le contrôle puis oublié, puis relu depuis le ZIP
-  (empreinte revérifiée) juste avant d'être écrit. Pic de mémoire : le ZIP (400 Mo au plus) + les tables + UN document.
+- Lecture en **deux passes** : chaque document est décompressé pour le contrôle puis oublié, puis relu depuis le
+  fichier ZIP (empreinte revérifiée) juste avant d'être écrit. Le ZIP est lu **par morceaux**, jamais en entier (T227) :
+  pic de mémoire, les tables + UN document. Un navigateur trop ancien pour décompresser par morceaux (sans
+  « deflate-raw ») refuse l'import avec un message clair.
 - Une **sauvegarde `avant-import-zip`** est faite d'abord (documents compris) ; une confirmation liste ce qui sera
   remplacé.
 - `acces/` n'est jamais remplacé.

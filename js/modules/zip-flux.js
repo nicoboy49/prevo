@@ -20,7 +20,9 @@
 //     compresse, decompresse, local }], comme lireRepertoire de zip-lecture.js (nom décodé en UTF-8, null si les
 //     octets n'en sont pas ; octetsNom : les octets bruts). Fin du répertoire cherchée dans les 65 557 derniers
 //     octets, fin ZIP64 lue (localisateur, puis fin ZIP64), répertoire central lu d'une seule tranche. N'a pas
-//     besoin des flux : fonctionne même si disponible() est faux.
+//     besoin des flux : fonctionne même si disponible() est faux. lireRepertoire(blob, controlerFin) : controlerFin
+//     ({ debut, taille, nombre }) est appelée AVANT la lecture du répertoire, et peut lever (T227 : zip-lecture.js y
+//     refuse un nombre d'entrées trop grand, sans lire ni analyser le répertoire).
 //   positionDonnees(blob, entree, limite) → Promise de la position des données d'une entrée (en-tête local lu :
 //     30 octets) ; 'format' si l'en-tête ou les données sortent de [0, limite) (limite : blob.size par défaut ; le
 //     début du répertoire central pour le contrôle 2 de zip-lecture.js).
@@ -217,8 +219,9 @@ const ZipFlux = (() => {
   }
 
   // Répertoire central (voir l'en-tête), lu d'une seule tranche, avant toute décompression.
-  async function lireRepertoire(blob) {
+  async function lireRepertoire(blob, controlerFin) {
     const fin = await lireFin(blob);
+    if (controlerFin) { controlerFin({ debut: fin.debut, taille: fin.taille, nombre: fin.nombre }); }
     const octets = await lireTranche(blob, fin.debut, fin.taille);
     const lire = lecteur(octets);
     const entrees = [];
