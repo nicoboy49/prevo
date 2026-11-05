@@ -2,10 +2,11 @@
 
 **La GMAO libre et gratuite des PME industrielles.**
 
-> **Prévo 2.0.0 bêta 1 (pré-version).** La 2.0 apporte l'assistant d'installation, les
+> **Prévo 2.0.0 bêta 2 (pré-version).** La 2.0 apporte l'assistant d'installation, les
 > comptes et l'accès depuis le téléphone ; elle n'a pas encore été éprouvée sur le terrain.
 > La version stable est la [1.2.1](https://github.com/nicoboy49/prevo/releases/tag/v1.2.1), qui corrige un défaut de
-> perte de données sur fichier abîmé ; la bêta 1 en est atteinte : ne modifiez pas ses fichiers CSV dans un tableur.
+> perte de données sur fichier abîmé ; la [bêta 2](https://github.com/nicoboy49/prevo/releases/tag/v2.0.0-beta.2) a la même
+> protection (la bêta 1 en était atteinte : si vous l'avez encore, ne modifiez pas ses fichiers CSV dans un tableur).
 > Sauvegardez régulièrement votre dossier de données, et signalez tout problème dans
 > l'onglet *Issues*.
 
@@ -33,7 +34,7 @@ embarquées et aucun appel vers Internet (sauf l'assistant IA en ligne, s'il est
 - **Guide d'utilisation** : [GUIDE.html](GUIDE.html), à ouvrir dans le navigateur (imprimable).
 - **Format des fichiers** : [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md).
 
-Cette version, la **2.0.0 bêta 1**, contient les **lots 1 à 7** du cahier des charges, dont le wiki de maintenance, la reprise des données
+Cette version, la **2.0.0 bêta 2**, contient les **lots 1 à 7** du cahier des charges, dont le wiki de maintenance, la reprise des données
 existantes (lot 5) et l'accès sécurisé avec son assistant d'installation (lot 7) ; les nouveautés de chaque version sont dans
 [CHANGELOG.md](CHANGELOG.md).
 
@@ -49,7 +50,7 @@ en ZIP.
 
 ## Installation
 
-1. **Dézippez** le zip de [Prévo 2.0.0 bêta 1](https://github.com/nicoboy49/prevo/releases/tag/v2.0.0-beta.1) et placez son
+1. **Dézippez** le zip de [Prévo 2.0.0 bêta 2](https://github.com/nicoboy49/prevo/releases/tag/v2.0.0-beta.2) et placez son
    dossier en `C:\Prevo` (conseillé ; ailleurs, l'assistant propose de l'y déplacer).
 2. **Double-cliquez sur `Lancer_GMAO.bat`** : Python est dans le zip, il n'y a rien d'autre à installer. Sur Mac
    ou Linux : `./lancer.sh` (Python 3.11 ou plus récent).
