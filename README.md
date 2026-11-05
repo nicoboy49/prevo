@@ -2,13 +2,19 @@
 
 **La GMAO libre et gratuite des PME industrielles.**
 
-> **Prévo 2.0.0 bêta 2 (pré-version).** La 2.0 apporte l'assistant d'installation, les
-> comptes et l'accès depuis le téléphone ; elle n'a pas encore été éprouvée sur le terrain.
-> La version stable est la [1.2.1](https://github.com/nicoboy49/prevo/releases/tag/v1.2.1), qui corrige un défaut de
-> perte de données sur fichier abîmé ; la [bêta 2](https://github.com/nicoboy49/prevo/releases/tag/v2.0.0-beta.2) a la même
-> protection (la bêta 1 en était atteinte : si vous l'avez encore, ne modifiez pas ses fichiers CSV dans un tableur).
-> Sauvegardez régulièrement votre dossier de données, et signalez tout problème dans
-> l'onglet *Issues*.
+> **Version stable : [Prévo 1.2.1](https://github.com/nicoboy49/prevo/releases/tag/v1.2.1).** C'est celle à
+> télécharger pour travailler au quotidien. Elle corrige un défaut de perte de données sur fichier abîmé.
+>
+> **Aperçu pour volontaires : [Prévo 2.0.0 bêta 2](https://github.com/nicoboy49/prevo/releases/tag/v2.0.0-beta.2)
+> (pré-version).** Par rapport à la 1.2.1, la 2.0 apporte l'assistant d'installation et les comptes (rôles
+> vérifiés par le serveur), et simplifie les téléphones : https sans rien acheter (lecture des étiquettes QR par la
+> caméra et dictée vocale dans Prévo), demandeurs invités par un QR sans mot de passe, accès hors de l'atelier par
+> Tailscale. Elle n'a pas encore été éprouvée sur le terrain. **Ne l'utilisez pas pour votre production**, et
+> sauvegardez votre dossier de données avant de l'essayer. Elle a la même protection que la 1.2.1 contre la perte de données ; la bêta 1 en
+> était atteinte : si vous l'avez encore, ne modifiez pas ses fichiers CSV dans un tableur.
+>
+> Signalez tout problème dans l'onglet *Issues*, **sans y joindre de données de votre entreprise** : les issues
+> sont publiques.
 
 ## Pour qui, pourquoi
 
@@ -34,7 +40,7 @@ embarquées et aucun appel vers Internet (sauf l'assistant IA en ligne, s'il est
 - **Guide d'utilisation** : [GUIDE.html](GUIDE.html), à ouvrir dans le navigateur (imprimable).
 - **Format des fichiers** : [FICHE_TECHNIQUE_CSV.md](FICHE_TECHNIQUE_CSV.md).
 
-Cette version, la **2.0.0 bêta 2**, contient les **lots 1 à 7** du cahier des charges, dont le wiki de maintenance, la reprise des données
+La **2.0.0 bêta 2** contient les **lots 1 à 7** du cahier des charges, dont le wiki de maintenance, la reprise des données
 existantes (lot 5) et l'accès sécurisé avec son assistant d'installation (lot 7) ; les nouveautés de chaque version sont dans
 [CHANGELOG.md](CHANGELOG.md).
 
@@ -50,6 +56,23 @@ en ZIP.
 
 ## Installation
 
+### Version stable : Prévo 1.2.1 (conseillée)
+
+1. **Téléchargez** [prevo-1.2.1.zip](https://github.com/nicoboy49/prevo/releases/download/v1.2.1/prevo-1.2.1.zip)
+   (page de la [version 1.2.1](https://github.com/nicoboy49/prevo/releases/tag/v1.2.1)) et dézippez-le dans un
+   dossier de votre choix.
+2. **Un seul poste** : ouvrez `index.html` dans Chrome ou Edge, puis cliquez sur « Choisir le dossier de données ».
+   **Plusieurs postes et téléphones** : double-cliquez sur `Lancer_GMAO.bat` (Python 3.8 ou plus récent ; s'il
+   manque, le lanceur propose de l'installer, avec votre accord) ; sur Mac ou Linux : `./lancer.sh`.
+
+Le détail (mode dossier, mode serveur, pare-feu, téléphones) est dans
+[le README de la 1.2.1](https://github.com/nicoboy49/prevo/blob/v1.2.1/README.md#installation).
+
+### Aperçu pour volontaires : Prévo 2.0.0 bêta 2
+
+Pour essayer la 2.0 en connaissance de cause : pas pour la production, et après une sauvegarde de votre dossier de
+données.
+
 1. **Dézippez** le zip de [Prévo 2.0.0 bêta 2](https://github.com/nicoboy49/prevo/releases/tag/v2.0.0-beta.2) et placez son
    dossier en `C:\Prevo` (conseillé ; ailleurs, l'assistant propose de l'y déplacer).
 2. **Double-cliquez sur `Lancer_GMAO.bat`** : Python est dans le zip, il n'y a rien d'autre à installer. Sur Mac
@@ -60,14 +83,12 @@ en ZIP.
 Tant que l'installation n'est pas terminée, Prévo n'est joignable que sur ce PC. Au-delà de ce PC, comptes et
 https sont obligatoires : Prévo refuse de démarrer autrement. Tout se refait ensuite dans Paramètres › Accès et
 installation, sur le PC serveur. Le guide détaille chaque étape ([GUIDE.html](GUIDE.html), chapitres 2 et 8).
-Vous aviez Prévo 1.2 ? Mettez la nouvelle version dans le même dossier : le zip n'a pas de dossier `donnees/`,
-vos fichiers CSV restent, et l'assistant n'en remplace aucun.
+Vous aviez Prévo 1.2 ? Sauvegardez d'abord votre dossier de données, puis mettez la bêta dans le même dossier : le
+zip n'a pas de dossier `donnees/`, vos fichiers CSV restent, et l'assistant n'en remplace aucun.
 
-Vous préférez la version stable ? La [1.2.1](https://github.com/nicoboy49/prevo/releases/tag/v1.2.1) n'a ni
-assistant ni comptes : elle s'installe comme décrit dans [son README](https://github.com/nicoboy49/prevo/blob/v1.2.1/README.md)
-(mode dossier dans Chrome ou Edge, ou mode serveur avec Python 3.8 ou plus récent).
+Les sections suivantes, jusqu'au mode dossier, décrivent la 2.0 ; pour la 1.2.1, voir son README (lien ci-dessus).
 
-### Quelle installation pour vous ?
+### Quelle installation pour vous ? (Prévo 2)
 
 | | Solo | Atelier | Intranet | Hébergé |
 | --- | --- | --- | --- | --- |
@@ -113,6 +134,9 @@ aux fichiers de Chrome et d'Edge ; Firefox et Safari ne la proposent pas. Pour t
 téléphones ou avec l'assistant IA, installez Prévo (ci-dessus) : même seul sur un PC, c'est le mode conseillé.
 
 ## Fonctions par module
+
+Cette liste décrit la 2.0 (le code de cette page) ; celle de la 1.2.1, sans comptes ni assistant d'installation,
+est dans [son README](https://github.com/nicoboy49/prevo/blob/v1.2.1/README.md).
 
 - **Trois modes de stockage** : dossier, serveur Python local, démo en mémoire. Écritures concurrentes
   gérées : en cas de conflit, la modification est rejouée sur la version la plus récente du fichier
@@ -225,6 +249,8 @@ signale un fichier verrouillé, et le mode dossier détecte le conflit.
 Pour lancer les tests ou contribuer : voir CONTRIBUTING.md.
 
 ## Limites connues
+
+Celles de la 2.0 ; celles de la 1.2.1 sont dans [son README](https://github.com/nicoboy49/prevo/blob/v1.2.1/README.md).
 
 - **Un certificat à reconnaître par appareil.** Sur le Wi-Fi de l'atelier, chaque téléphone et chaque autre poste
   fait confiance au PC atelier une fois, guidé par la page de Prévo ; d'ici là, il reste sur cette page et n'ouvre
