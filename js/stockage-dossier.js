@@ -255,17 +255,37 @@ const StockageDossier = (() => {
     return new Donnees.ErreurStockage(message, cause);
   }
 
+  // T232 : fichier ouvert dans Excel ou un autre logiciel, que le navigateur refuse de remplacer
+  // (NoModificationAllowedError au createWritable, InvalidStateError à l'écriture ou à la fermeture).
+  function estFichierOuvert(erreur) {
+    return Boolean(erreur) && (erreur.name === 'NoModificationAllowedError' || erreur.name === 'InvalidStateError');
+  }
+
+  // Texte de Nicolas (T232), mêmes mots que serveur.py (message_fichier_verrouille) : le nom du fichier (celui que
+  // montre la fenêtre d'Excel) s'il est connu, sinon le repli.
+  function messageFichierOuvert(nomFichier) {
+    if (!nomFichier) {
+      return 'Un fichier du dossier de données est ouvert dans Excel ou un autre logiciel : fermez-le, puis réessayez.';
+    }
+    return 'Le fichier « ' + nomFichier + ' » est ouvert dans Excel ou un autre logiciel : fermez-le, puis réessayez.';
+  }
+
+  // Refus « fichier ouvert » d'une écriture de `nomFichier` → ErreurStockage qui le nomme ; toute autre erreur
+  // est rendue telle quelle (traduireErreur s'en charge plus haut).
+  function nommerFichierOuvert(erreur, nomFichier) {
+    return estFichierOuvert(erreur) ? erreurStockage(messageFichierOuvert(nomFichier), erreur) : erreur;
+  }
+
   // Les erreurs de Prévo passent telles quelles (ErreurFichierAbime et ErreurLectureSeule sont des ErreurStockage) ;
   // les erreurs du navigateur sont traduites en ErreurStockage avec un message en français (la cause d'origine est
-  // conservée).
+  // conservée). Un fichier ouvert ailleurs est nommé dès son écriture (ecrireFichier) : ici, il ne reste que le repli.
   function traduireErreur(erreur, action) {
     if (erreur instanceof Donnees.ErreurConflit || erreur instanceof Donnees.ErreurStockage) {
       return erreur;
     }
     const nom = erreur && erreur.name;
-    if (nom === 'NoModificationAllowedError' || nom === 'InvalidStateError') {
-      return erreurStockage('Impossible d\'écrire dans le dossier de données (' + action
-        + ') : un fichier est sans doute ouvert dans Excel. Fermez-le puis réessayez.', erreur);
+    if (estFichierOuvert(erreur)) {
+      return erreurStockage(messageFichierOuvert(null), erreur);
     }
     if (nom === 'NotAllowedError' || nom === 'SecurityError') {
       return erreurStockage('Accès refusé au dossier de données (' + action
@@ -354,11 +374,17 @@ const StockageDossier = (() => {
   //     l'écriture visible) ; si elle lève une erreur, rien n'est écrit. C'est la fenêtre la plus
   //     courte possible entre le dernier contrôle et l'écriture effective.
   // Si le fichier venait d'être créé et que l'écriture échoue, il est supprimé s'il est encore vide.
+  // T232 : un refus « fichier ouvert » (Excel) devient une ErreurStockage qui nomme ce fichier (nommerFichierOuvert).
   async function ecrireFichier(dossier, nom, contenu, reglages) {
     const options = reglages || {};
     const ajout = options.enFin !== undefined;
     const existait = ajout || (await trouverFichier(dossier, nom)) !== null;
-    const poigneeFichier = await dossier.getFileHandle(nom, { create: !ajout });
+    let poigneeFichier;
+    try {
+      poigneeFichier = await dossier.getFileHandle(nom, { create: !ajout });
+    } catch (erreur) {
+      throw nommerFichierOuvert(erreur, nom);
+    }
     let flux = null;
     try {
       flux = await poigneeFichier.createWritable({ keepExistingData: ajout });
@@ -369,7 +395,7 @@ const StockageDossier = (() => {
     } catch (erreur) {
       if (flux) { try { await flux.abort(); } catch (erreurAbandon) { /* déjà fermé */ } }
       if (!existait) { await supprimerSiToujoursVide(dossier, nom, poigneeFichier); }
-      throw erreur;
+      throw nommerFichierOuvert(erreur, nom);
     }
   }
 

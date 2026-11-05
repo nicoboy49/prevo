@@ -885,7 +885,9 @@ class TestFichierVerrouille(CasAvecServeur):
             reponse = self.mettre_csv('achats', BOM + entete('achats') + b'\r\nACH-0001\r\n', version)
             duree = time.time() - debut
         self.assertEqual(reponse.statut, 423)
-        self.assertIn('Excel', reponse.json()['erreur'])
+        # T232 : le message nomme le fichier et dit quoi faire (texte de Nicolas, le même dans le mode dossier).
+        self.assertEqual(reponse.json()['erreur'], 'Le fichier « achats.csv » est ouvert dans Excel ou un autre '
+                                                   'logiciel : fermez-le, puis réessayez.')
         self.assertGreaterEqual(duree, 0.2)    # 3 essais espacés de 100 ms
         self.assertEqual(self.lire_fichier(chemin), BOM + entete('achats') + b'\r\n')
         self.assertEqual(self.fichiers_temporaires_restants(), [])
@@ -903,6 +905,9 @@ class TestFichierVerrouille(CasAvecServeur):
         corps = reponse.json()
         self.assertTrue(corps['copie_securite'].endswith('_avant-restauration'))
         self.assertIn(corps['copie_securite'], corps['erreur'])
+        self.assertTrue(corps['erreur'].startswith('Le fichier « achats.csv » est ouvert dans Excel ou un autre '
+                                                   'logiciel : fermez-le, puis réessayez. Restauration interrompue'),
+                        corps['erreur'])
         self.assertTrue(os.path.isdir(self.chemin_donnee('sauvegardes', corps['copie_securite'])))
 
 

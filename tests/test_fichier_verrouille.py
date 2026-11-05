@@ -1,11 +1,13 @@
 """CSV verrouillé par Excel au moment d'une écriture : parcours de bout en bout dans les deux modes (chantier
-i18n-socle, tâche T231). AUCUN changement de l'application : ce test épingle le comportement existant.
+i18n-socle, tâche T231 ; messages de T232). T231 épinglait le comportement existant ; T232 (décision de Nicolas du
+05/11) a changé le message, dans les deux modes : sans jargon, il nomme le fichier et dit quoi faire.
 
 Excel garde ouvert le CSV qu'il affiche ; Windows refuse alors de le remplacer. Les pièces sont déjà testées une à une :
-serveur.py remplacer_avec_essais (3 essais, puis 423 et MESSAGE_FICHIER_VERROUILLE ; tests/test_serveur.py,
-test_fichier_ouvert_ailleurs_423), js/stockage-dossier.js traduireErreur (NoModificationAllowedError ou
-InvalidStateError → ErreurStockage ; tests/test_stockage_dossier.py), js/stockage-serveur.js (un 423 rend le message du
-serveur). Ici, le parcours réel du responsable dans l'écran, pour chaque mode :
+serveur.py remplacer_avec_essais (3 essais, puis 423 et message_fichier_verrouille(cible) ; tests/test_serveur.py,
+test_fichier_ouvert_ailleurs_423), js/stockage-dossier.js ecrireFichier (NoModificationAllowedError ou
+InvalidStateError → ErreurStockage qui nomme le fichier, nommerFichierOuvert ; repli dans traduireErreur ;
+tests/test_stockage_dossier.py), js/stockage-serveur.js (un 423 rend le message du serveur). Ici, le parcours réel du
+responsable dans l'écran, pour chaque mode :
     1. base d'essai ouverte (copie de f3-v1.2.0), fiche de EQ-0005 › « Modifier », désignation changée ;
     2. equipements.csv verrouillé, puis « Enregistrer » ;
     3. un message clair, dans le toast d'erreur (zone #toast, role="status", classes « erreur » et « visible » ; ni
@@ -20,22 +22,19 @@ serveur). Ici, le parcours réel du responsable dans l'écran, pour chaque mode 
 
     a. TestVerrouServeur : ServeurPrevo sur une copie ; verrou RÉEL : le test tient open(equipements.csv, 'r+b')
        pendant l'enregistrement (comme test_serveur : Windows refuse alors os.replace) ; le serveur essaie 3 fois puis
-       répond 423. Message montré :
-       « Le fichier est verrouillé par un autre programme (probablement Excel) : fermez le fichier dans Excel puis
-       réessayez. »
+       répond 423. Message montré (T232) :
+       « Le fichier « equipements.csv » est ouvert dans Excel ou un autre logiciel : fermez-le, puis réessayez. »
     b. TestVerrouDossier : dossier simulé (OPFS du navigateur de test, installer_dossier_simule). Le refus du
        navigateur est SIMULÉ sur le seul fichier <dossier>/equipements.csv (FileSystemFileHandle.createWritable remplacé
        avant le chargement de la page) : NoModificationAllowedError au createWritable, puis, dans un second test,
-       InvalidStateError au write (les deux noms d'erreur que traduireErreur attribue à un fichier ouvert dans Excel ;
+       InvalidStateError au write (les deux noms d'erreur que Prévo attribue à un fichier ouvert dans Excel ;
        le refus est vu une seule fois : aucun nouvel essai automatique). Le vrai verrou d'Excel n'est pas reproductible
        en automatique dans ce mode : il faudrait le sélecteur de dossier natif (showDirectoryPicker sur un vrai dossier
        du disque), qu'aucun test sans personne devant l'écran ne peut passer, et l'OPFS ne voit pas les verrous de
-       Windows. Message montré :
-       « Impossible d'écrire dans le dossier de données (enregistrement de la table) : un fichier est sans doute ouvert
-       dans Excel. Fermez-le puis réessayez. »
+       Windows. Message montré (T232) : le même que celui du serveur, mot pour mot.
 
-Constat, sans correction (la consigne de T231 n'en demande pas) : aucun des deux messages ne nomme le fichier à fermer
-(equipements.csv) ; dans le mode dossier, « (enregistrement de la table) » est un terme technique.
+Constat de T231, corrigé par T232 : les anciens messages ne nommaient pas le fichier à fermer (equipements.csv) et, dans
+le mode dossier, « (enregistrement de la table) » était un terme technique.
 
 Règle numéro un : jamais de données réelles (copie du jeu tests/fixtures/formats/f3-v1.2.0 dans un dossier temporaire,
 ou dans l'OPFS du navigateur de test).
@@ -56,11 +55,10 @@ JOURNAL = "journal.csv"
 VERROU_DU_DOSSIER = "verrou.txt"        # présence du poste, réécrit de temps en temps (mode dossier) : non comparé
 NOUVELLE_DESIGNATION = "Pompe de refroidissement (essai Excel)"
 
-# Textes attendus (comportement existant, relevé par T231).
-MESSAGE_SERVEUR = ("Le fichier est verrouillé par un autre programme (probablement Excel) : fermez le fichier dans "
-                   "Excel puis réessayez.")
-MESSAGE_DOSSIER = ("Impossible d'écrire dans le dossier de données (enregistrement de la table) : un fichier est sans "
-                   "doute ouvert dans Excel. Fermez-le puis réessayez.")
+# Textes attendus (T232, texte validé par Nicolas) : le même dans les deux modes, avec le vrai nom du fichier.
+MESSAGE_SERVEUR = ("Le fichier « equipements.csv » est ouvert dans Excel ou un autre logiciel : fermez-le, puis "
+                   "réessayez.")
+MESSAGE_DOSSIER = MESSAGE_SERVEUR
 SUCCES = "Équipement enregistré."
 ACTION_DU_JOURNAL = "modification : designation — modification de l'équipement"
 

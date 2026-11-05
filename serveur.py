@@ -314,9 +314,17 @@ class ErreurHttp(Exception):
         self.champs_supplementaires = champs_supplementaires
 
 
-MESSAGE_FICHIER_VERROUILLE = (
-    'Le fichier est verrouillé par un autre programme (probablement Excel) : '
-    'fermez le fichier dans Excel puis réessayez.')
+# T232 (texte de Nicolas, mêmes mots que js/stockage-dossier.js messageFichierOuvert) : fichier tenu par Excel ou un
+# autre logiciel (423). Le message nomme le fichier ; le repli ne sert que si son nom n'est pas connu.
+MESSAGE_FICHIER_VERROUILLE = 'Le fichier « %s » est ouvert dans Excel ou un autre logiciel : fermez-le, puis réessayez.'
+MESSAGE_FICHIER_VERROUILLE_SANS_NOM = ('Un fichier du dossier de données est ouvert dans Excel ou un autre logiciel : '
+                                       'fermez-le, puis réessayez.')
+
+
+def message_fichier_verrouille(chemin):
+    """Message du 423 pour ce fichier : son nom de base (celui que montre la fenêtre d'Excel), ou le repli."""
+    nom = os.path.basename(str(chemin or ''))
+    return MESSAGE_FICHIER_VERROUILLE % nom if nom else MESSAGE_FICHIER_VERROUILLE_SANS_NOM
 
 
 # ---------------------------------------------------------------------------
@@ -3434,7 +3442,7 @@ def remplacer_avec_essais(source, cible):
             return
         except PermissionError:
             if numero_essai == ESSAIS_SI_VERROUILLE:
-                raise ErreurHttp(423, MESSAGE_FICHIER_VERROUILLE)
+                raise ErreurHttp(423, message_fichier_verrouille(cible))
             time.sleep(PAUSE_ENTRE_ESSAIS_S)
 
 
@@ -3926,7 +3934,7 @@ def copier_documents_dans_sauvegarde(config, dossier_sauvegarde):
         try:
             shutil.copy2(chemin, os.path.join(cible, nom))
         except PermissionError:
-            raise ErreurHttp(423, MESSAGE_FICHIER_VERROUILLE)
+            raise ErreurHttp(423, message_fichier_verrouille(nom))
         copies += 1
     return copies
 
@@ -3950,7 +3958,7 @@ def copier_tables_dans_sauvegarde(config, nom_sauvegarde, complement=None):
                 shutil.copy2(os.path.join(config.dossier_donnees, nom_fichier),
                              os.path.join(dossier_temporaire, nom_fichier))
             except PermissionError:
-                raise ErreurHttp(423, MESSAGE_FICHIER_VERROUILLE)
+                raise ErreurHttp(423, message_fichier_verrouille(nom_fichier))
         copier_acces_dans_sauvegarde(config, dossier_temporaire)      # lot 7 : comptes, appareils, journal
         if motif_du_nom_de_sauvegarde(nom_sauvegarde) in MOTIFS_AVEC_DOCUMENTS:
             copier_documents_dans_sauvegarde(config, dossier_temporaire)
