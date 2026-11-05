@@ -3301,7 +3301,8 @@ qui contourne ces règles.
 
 Fichier à côté de `serveur.py` (jamais dans `donnees/`, jamais sauvegardé ni exporté), JSON UTF-8, écrit de façon
 atomique ; priorité : ligne de commande > fichier > défauts. `serveur.py --aide` imprime chaque clé, sa valeur par
-défaut et son texte d'aide (le même que `js/modules/acces-textes.js`).
+défaut et son texte d'aide (le même que `js/modules/acces-textes.js`, dont les textes sont dans
+`js/i18n/aide/<langue>.js`, clés `aide.acces.*`, depuis T247).
 
 | Clé | Type, défaut | Rôle |
 | --- | --- | --- |
@@ -4262,8 +4263,11 @@ Un encart d'explication à la première visite de chaque écran, dans la démo c
 - **Modules** : `js/modules/aide-ecrans-textes.js` (objet `AideEcransTextes`, une entrée par identifiant d'écran
   d'`App.ecran` : `titre`, `ancre` de `GUIDE.html`, `texte` et `essayez`, ou `profils` { responsable, technicien,
   demandeur } ; `demo` = phrase de la version web) et `js/modules/aide-ecrans.js` (objet `AideEcrans`). Textes
-  validés par Nicolas (dossier de conception du site, `AIDE-ECRANS.md` § 2), produits par un script ; à modifier à la
-  source.
+  validés par Nicolas (dossier de conception du site, `AIDE-ECRANS.md` § 2), produits par
+  `outils/generer_aide_ecrans.py` ; à modifier à la source. Depuis T247 (chantier multilingue), le module ne garde
+  que des clés (accesseurs `get … () { return I18n.t('aide.ecran.…'); }`) : les textes sont dans le fichier d'aide de
+  chaque langue, `js/i18n/aide/<langue>.js` (bloc « aide » ; le bloc « acces » porte ceux d'`AccesTextes`, produits
+  par `outils/generer_acces_textes.py`) ; une langue sans fichier d'aide affiche l'aide française, sans erreur.
 - **Branchement** : `App.rendre`, après un affichage réussi d'un écran nouveau (pas sur une erreur d'affichage),
   appelle `AideEcrans.apresAffichage(ecran, conteneur)` ; l'encart (`UI.bandeau('info')`, `#aide-ecran`,
   `role="status"`, titre en `h2`) se place après `.entete-page` s'il existe, sinon en tête de `#contenu` ; il ne

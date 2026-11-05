@@ -20,7 +20,7 @@
     {
       "chemin": "js/modules/ia-prompts.js",
       "classe": "D159",
-      "raison": "Consignes envoyées au modèle, jamais affichées (inventaire du Lot 0 : 240 chaînes)."
+      "raison": "Consignes envoyées au modèle, jamais affichées (inventaire du Lot 0 : 240 chaînes). Les messages affichés de ce fichier (proposition refusée, check-list ou commentaire refusés) passent par I18n.t, repris à la main (T247)."
     },
     {
       "chemin": "js/demo-donnees.js",
@@ -223,6 +223,14 @@
     }
   ],
   "textes": [
+    {
+      "texte": "Bearer ",
+      "fichiers": [
+        "js/modules/ia.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Schéma d'authentification de l'en-tête HTTP Authorization (« Bearer <clé> ») envoyé au fournisseur d'IA, jamais affiché (T247)."
+    },
     {
       "texte": "Pièce : ",
       "classe": "D156",

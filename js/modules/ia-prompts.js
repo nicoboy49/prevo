@@ -111,9 +111,9 @@ Object.assign(Ia, (() => {
   // Texte proposé par l'IA : non vide, 4 000 caractères au plus (sinon aucune proposition).
   function textePropose(valeur) {
     const proposition = texte(valeur);
-    if (!proposition) throw new Ia.IaReponseInvalide('L\'IA n\'a rien proposé.');
+    if (!proposition) throw new Ia.IaReponseInvalide(I18n.t('ia.proposition.vide'));
     if (proposition.length > Ia.TEXTE_MAX) {
-      throw new Ia.IaReponseInvalide('La proposition de l\'IA dépasse 4\u00a0000 caractères : elle est ignorée.');
+      throw new Ia.IaReponseInvalide(I18n.t('ia.proposition.trop_longue'));
     }
     return proposition;
   }
@@ -324,7 +324,7 @@ Object.assign(Ia, (() => {
       const titres = new Set(liste(d.colonnes).map((c) => texte(c)));
       const champs = new Set(liste(d.champs).map((c) => texte(c.cle)));
       const [vues, pris, colonnes, rejetes] = [new Set(), new Set(), [], []];
-      if (!o || !Array.isArray(o.colonnes)) throw new Ia.IaReponseInvalide('La proposition de l\'IA ne contient pas de liste de colonnes.');
+      if (!o || !Array.isArray(o.colonnes)) throw new Ia.IaReponseInvalide(I18n.t('ia.colonnes_import.sans_liste'));
       o.colonnes.forEach((entree) => {
         const entete = texte(entree && entree.entete);
         const champ = texte(entree && entree.champ);
@@ -590,7 +590,7 @@ Object.assign(Ia, (() => {
     // Mise en forme puis contrôles du §20.6 (Wiki.lireIngestion) ; refus = IaReponseInvalide avec ses raisons.
     verifier(o, d) {
       if (typeof Wiki === 'undefined' || typeof Wiki.lireIngestion !== 'function') {
-        throw new Error('ingestionWiki : le module Wiki n\'est pas chargé.');
+        throw new Error(I18n.t('ia.ingestion_wiki.module_absent'));
       }
       return Wiki.lireIngestion(o, d);
     },
@@ -625,23 +625,23 @@ Object.assign(Ia, (() => {
   }
 
   function refusCheckList(raison) {
-    return { ok: false, operations: [], raison: 'Check-list refusée : ' + raison + '.' };
+    return { ok: false, operations: [], raison };
   }
 
   /** Check-list proposée → { ok, operations: [{ operation, valeur_attendue }], raison } (1 à 20 opérations). */
   function checkListe(objet) {
     const liste = objet && typeof objet === 'object' && Array.isArray(objet.operations) ? objet.operations : null;
-    if (!liste) return refusCheckList('la réponse ne contient pas de liste d\'opérations');
-    if (!liste.length) return refusCheckList('aucune opération proposée');
-    if (liste.length > OPERATIONS_MAX) return refusCheckList('plus de ' + OPERATIONS_MAX + ' opérations proposées');
+    if (!liste) return refusCheckList(I18n.t('ia.check_list.refus_sans_liste'));
+    if (!liste.length) return refusCheckList(I18n.t('ia.check_list.refus_aucune'));
+    if (liste.length > OPERATIONS_MAX) return refusCheckList(I18n.t('ia.check_list.refus_trop', { n: OPERATIONS_MAX }));
     const operations = [];
     for (const element of liste) {
       const operation = texte(element && element.operation);
       const valeurAttendue = texte(element && element.valeur_attendue);
-      if (!operation) return refusCheckList('une opération est vide');
-      if (operation.length > OPERATION_MAX) return refusCheckList('une opération dépasse ' + OPERATION_MAX + ' caractères');
+      if (!operation) return refusCheckList(I18n.t('ia.check_list.refus_operation_vide'));
+      if (operation.length > OPERATION_MAX) return refusCheckList(I18n.t('ia.check_list.refus_operation_longue', { n: OPERATION_MAX }));
       if (valeurAttendue.length > VALEUR_ATTENDUE_MAX) {
-        return refusCheckList('une valeur attendue dépasse ' + VALEUR_ATTENDUE_MAX + ' caractères');
+        return refusCheckList(I18n.t('ia.check_list.refus_valeur_longue', { n: VALEUR_ATTENDUE_MAX }));
       }
       operations.push({ operation, valeur_attendue: valeurAttendue });
     }
@@ -649,7 +649,7 @@ Object.assign(Ia, (() => {
   }
 
   function refusCommentaire(raison) {
-    return { ok: false, texte: '', raison: 'Commentaire refusé : ' + raison + '.' };
+    return { ok: false, texte: '', raison };
   }
 
   /**
@@ -659,25 +659,25 @@ Object.assign(Ia, (() => {
   function commentaire(texteIa, jetons) {
     const source = typeof texteIa === 'string' ? texteIa.trim() : '';
     const valeurs = jetons && typeof jetons === 'object' ? jetons : {};
-    if (!source) return refusCommentaire('le commentaire est vide');
-    if (source.length > Ia.TEXTE_MAX) return refusCommentaire('le commentaire dépasse 4\u00a0000 caractères');
+    if (!source) return refusCommentaire(I18n.t('ia.commentaire.refus_vide'));
+    if (source.length > Ia.TEXTE_MAX) return refusCommentaire(I18n.t('ia.commentaire.refus_trop_long'));
     const inconnus = [];
     const sansJetons = source.replace(MOTIF_JETON, (jeton, nom) => {
       if (!Object.prototype.hasOwnProperty.call(valeurs, nom.trim())) inconnus.push(jeton);
       return ' ';
     });
-    if (inconnus.length) return refusCommentaire('jeton inconnu ' + inconnus[0]);
-    if (/[{}]/.test(sansJetons)) return refusCommentaire('accolade sans jeton complet');
+    if (inconnus.length) return refusCommentaire(I18n.t('ia.commentaire.refus_jeton_inconnu', { jeton: inconnus[0] }));
+    if (/[{}]/.test(sansJetons)) return refusCommentaire(I18n.t('ia.commentaire.refus_accolade'));
     const chiffre = /\p{Nd}[\p{Nd}\s.,%]*/u.exec(sansJetons);
     if (chiffre) {
-      return refusCommentaire('chiffre écrit en clair (« ' + chiffre[0].trim() + ' ») : seuls les jetons {…} portent les chiffres');
+      return refusCommentaire(I18n.t('ia.commentaire.refus_chiffre', { chiffre: chiffre[0].trim() }));
     }
     const nombre = MOTIF_NOMBRE_EN_LETTRES.exec(sansJetons);
     if (nombre) {
-      return refusCommentaire('nombre écrit en lettres (« ' + nombre[0] + ' ») : seuls les jetons {…} portent les chiffres');
+      return refusCommentaire(I18n.t('ia.commentaire.refus_nombre_lettres', { nombre: nombre[0] }));
     }
     const final = source.replace(MOTIF_JETON, (jeton, nom) => texte(valeurs[nom.trim()]));
-    if (final.length > Ia.TEXTE_MAX) return refusCommentaire('le commentaire dépasse 4\u00a0000 caractères');
+    if (final.length > Ia.TEXTE_MAX) return refusCommentaire(I18n.t('ia.commentaire.refus_trop_long'));
     return { ok: true, texte: final, raison: '' };
   }
 

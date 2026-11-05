@@ -738,5 +738,77 @@ class TestExceptionPendantDesParametres(unittest.TestCase):
             self.assertEqual((res.erreurs, len(res.unites), len(res.relectures)), ([], 0, 0), domaine)
 
 
+# Aide longue (T247) : js/i18n/aide/fr.js a un bloc de section par outil (« acces » : outils/generer_acces_textes.py,
+# « aide » : outils/generer_aide_ecrans.py) ; les outils le lisent et le complètent comme js/i18n/fr.js : le contrôle des
+# domaines aide-longue et acces voit ses clés (manquantes, orphelines), l'extraction écrit dans son bloc.
+AIDE_FR = """'use strict';
+// Aide longue d'essai.
+
+// ==== section aide ====
+I18n.ajouter('fr', {
+  'aide.ecran.accueil.titre': 'Accueil',
+});
+// ==== fin aide ====
+"""
+MODULE_AIDE_LONGUE = """'use strict';
+const EssaiAideTextes = {
+  accueil: {
+    get titre() { return I18n.t('aide.ecran.accueil.titre'); },
+    ancre: 'accueil',
+  },
+};
+"""
+
+
+class TestAideLongueParLangue(unittest.TestCase):
+
+    def setUp(self):
+        self.dossier = tempfile.TemporaryDirectory()
+        self.racine = Path(self.dossier.name)
+        ecrire(self.racine, 'js/i18n/aide/fr.js', AIDE_FR)
+        ecrire(self.racine, 'js/modules/aide-ecrans-textes.js', MODULE_AIDE_LONGUE)
+
+    def tearDown(self):
+        self.dossier.cleanup()
+
+    def test_le_depot_a_un_bloc_par_outil(self):
+        blocs = ext.lire_dictionnaire(RACINE / 'js/i18n/aide/fr.js')
+        self.assertEqual(sorted(blocs), ['acces', 'aide'])
+        for section, prefixe in (('acces', 'aide.acces.'), ('aide', 'aide.ecran.')):
+            langue, entrees = blocs[section]
+            self.assertEqual(langue, 'fr')
+            self.assertGreater(len(entrees), 80, section)
+            self.assertEqual([cle for cle in entrees if not cle.startswith(prefixe)], [], section)
+        # l'aide courte (aide.encart.*) reste dans js/i18n/fr.js, jamais dans le fichier de l'aide longue
+        courte = ext.lire_dictionnaire(RACINE / 'js/i18n/fr.js')['aide'][1]
+        self.assertTrue(courte and all(cle.startswith('aide.encart.') for cle in courte))
+
+    def test_controle_lit_le_dictionnaire_de_l_aide(self):
+        self.assertEqual(controler(self.racine, ['aide-longue']).signalements, [])
+        ecrire(self.racine, 'js/modules/aide-ecrans-textes.js', MODULE_AIDE_LONGUE.replace(
+            "    ancre: 'accueil',\n", "    ancre: 'accueil',\n    get texte() { return I18n.t('aide.ecran.accueil.texte'); },\n"
+            "    essayez: 'Cliquez sur le compteur des demandes.',\n"))
+        ecrire(self.racine, 'js/i18n/aide/fr.js', AIDE_FR.replace(
+            "  'aide.ecran.accueil.titre'", "  'aide.ecran.oublie.titre': 'Oublié',\n  'aide.ecran.accueil.titre'"))
+        signalements = sorted((s.genre, s.message) for s in controler(self.racine, ['aide-longue']).signalements)
+        self.assertEqual([genre for genre, _ in signalements], ['dur', 'manquante', 'orpheline'])
+        self.assertTrue(signalements[0][1].startswith('« Cliquez sur le compteur des demandes. »'))
+        self.assertEqual(signalements[1][1], 'clé absente du dictionnaire : aide.ecran.accueil.texte')
+        self.assertEqual(signalements[2][1], 'clé jamais employée : aide.ecran.oublie.titre')
+
+    def test_extraction_complete_le_bloc_de_l_aide(self):
+        ecrire(self.racine, 'js/modules/aide-ecrans-textes.js', MODULE_AIDE_LONGUE.replace(
+            "const EssaiAideTextes", "function phraseDemo() {\n  return 'Vous êtes dans la démo.';\n}\nconst EssaiAideTextes"))
+        res = ext.Extracteur(self.racine).extraire(ext.section_du_domaine('aide-longue'), ['js/modules/aide-ecrans-textes.js'],
+                                                   dictionnaire=ext.dictionnaire_du_domaine('aide-longue'))
+        self.assertEqual(len(res.unites), 1)
+        texte = (self.racine / 'js/i18n/aide/fr.js').read_text(encoding='utf-8')
+        self.assertEqual(texte.count("I18n.ajouter('fr', {"), 1)
+        langue, entrees = ext.lire_dictionnaire(self.racine / 'js/i18n/aide/fr.js')['aide']
+        self.assertEqual(entrees[res.unites[0].cle], 'Vous êtes dans la démo.')
+        self.assertIn('aide.ecran.accueil.titre', entrees)
+        self.assertEqual(controler(self.racine, ['aide-longue']).signalements, [])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -4,6 +4,9 @@ Nicolas du 2026-10-25, démo et version installée).
 Ce qui est vérifié :
     textes        chaque entrée vise un écran enregistré par un module et une ancre de GUIDE.html ; chaque variante a
                   son texte et son geste ; À propos n'a pas d'entrée ;
+    à jour        js/modules/aide-ecrans-textes.js et le bloc « aide » de js/i18n/aide/fr.js (textes français, clés
+                  aide.ecran.*, T247) sont ce que produit outils/generer_aide_ecrans.py ; un second passage ne change
+                  aucun octet ; le module ne contient que des clés ;
     première fois l'encart est en tête du contenu, après l'en-tête, non bloquant ; « Compris » le retire et le retient ;
                   la visite suivante n'affiche rien ; Échap ferme sans retenir ;
     profils       l'accueil change de texte avec le profil ; la page du wiki a la variante du demandeur ;
@@ -11,26 +14,41 @@ Ce qui est vérifié :
     Ce poste      la case coupe l'aide ; « Revoir toutes les explications » la remet ; le lien « Explications » du menu
                   rouvre l'encart de l'écran courant ;
     sans mémoire  localStorage refusé : l'encart s'affiche, aucune erreur JavaScript ;
-    démo web      la phrase de la démo est en tête de l'accueil et dans le journal du wiki.
+    démo web      la phrase de la démo est en tête de l'accueil et dans le journal du wiki ;
+    langue sans aide  une langue déclarée sans js/i18n/aide/<code>.js : l'aide s'affiche en français, sans erreur
+                  JavaScript ni avertissement pour les clés aide.* (décision de Nicolas du 2026-11-05, T247).
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_aide_ecrans.py" -v
 """
-import json
+import importlib.util
 import re
+import shutil
+import tempfile
 import unittest
+from pathlib import Path
 
 from commun import RACINE, CasNavigateur, ServeurStatique, attendre_pret, preregler_profil, url_fichier
 from test_version_web import demo_web_construite
 
 TEXTES = RACINE / "js" / "modules" / "aide-ecrans-textes.js"
+AIDE = RACINE / "js" / "i18n" / "aide" / "fr.js"
+OUTIL = RACINE / "outils" / "generer_aide_ecrans.py"
 ENCART = "#aide-ecran"
 
 
+def charger_outil():
+    specification = importlib.util.spec_from_file_location("generer_aide_ecrans_test", OUTIL)
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    return module
+
+
 def lire_textes():
-    contenu = TEXTES.read_text(encoding="utf-8")
-    debut = contenu.index("const AideEcransTextes = ") + len("const AideEcransTextes = ")
-    return json.loads(contenu[debut:contenu.rindex(";")])
+    """Textes français de l'aide, sous la forme d'AideEcransTextes : depuis T247, le module ne garde que des clés et
+    les textes sont dans js/i18n/aide/fr.js ; ce sont ceux de l'outil (test_fichiers_a_jour : les deux fichiers en
+    sortent tels quels)."""
+    return charger_outil().ECRANS
 
 
 def ecrans_enregistres():
@@ -62,6 +80,24 @@ class TestTextes(unittest.TestCase):
         self.assertEqual(textes["wiki-page"]["profils"]["demandeur"]["essayez"], "cherchez votre machine.")
         self.assertIn("démo", textes["accueil"]["demo"])
         self.assertIn("démo", textes["wiki-journal"]["demo"])
+
+    def test_fichiers_a_jour(self):
+        outil = charger_outil()
+        self.assertEqual(TEXTES.read_bytes().decode("utf-8"), outil.contenu(),
+                         "js/modules/aide-ecrans-textes.js n'est pas à jour : py outils/generer_aide_ecrans.py")
+        aide = AIDE.read_bytes().decode("utf-8")
+        self.assertIn(outil.bloc(), aide, "js/i18n/aide/fr.js n'est pas à jour : py outils/generer_aide_ecrans.py")
+        # second passage : aucun octet ne change ; le module ne contient plus aucun texte, seulement des clés aide.ecran.*
+        # (jamais aide.encart.*, l'aide courte de js/i18n/fr.js)
+        self.assertEqual(outil.texte_aide(aide, "aide", outil.entrees()), aide)
+        self.assertEqual(set(re.findall(r"I18n\.t\('([^']+)'\)", outil.contenu())), set(outil.entrees()))
+        self.assertTrue(all(cle.startswith("aide.ecran.") for cle in outil.entrees()))
+        # l'ancien fichier, sans bloc : réécrit avec l'en-tête et le bloc, puis stable
+        ancien = "'use strict';\nI18n.ajouter('fr', {\n});\n"
+        neuf = outil.texte_aide(ancien, "aide", outil.entrees())
+        self.assertTrue(neuf.startswith(outil.ENTETE_AIDE) and neuf.endswith(outil.bloc()))
+        self.assertEqual(neuf.count("I18n.ajouter("), 1)
+        self.assertEqual(outil.texte_aide(neuf, "aide", outil.entrees()), neuf)
 
 
 class CasAide(CasNavigateur):
@@ -249,6 +285,59 @@ class TestDemoWeb(CasAide):
         self.aller("#/wiki-journal")
         page.wait_for_selector(ENCART)
         self.assertIn("l'assistant IA est coupé", self.texte_encart())
+
+
+# Langue d'essai « xx » déclarée, avec son fichier de textes mais SANS fichier d'aide (js/i18n/aide/xx.js absent) : copie
+# de l'application dans un dossier temporaire, le dépôt n'est jamais modifié.
+DECLARATION_XX = "I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'fr-FR', statut: 'automatique' });\n"
+TEXTES_XX = "'use strict';\nI18n.ajouter('xx', {\n  'commun.bouton.annuler': 'Annuler (xx)',\n});\n"
+
+
+class TestLangueSansFichierDAide(CasAide):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.dossier = Path(tempfile.mkdtemp(prefix="prevo-aide-sans-langue-"))
+        cls.addClassCleanup(shutil.rmtree, cls.dossier, True)
+        for nom in ("index.html", "favicon.svg"):
+            shutil.copyfile(RACINE / nom, cls.dossier / nom)
+        for nom in ("css", "js"):
+            shutil.copytree(RACINE / nom, cls.dossier / nom)
+        i18n = cls.dossier / "js" / "i18n"
+        with open(i18n / "langues.js", "a", encoding="utf-8", newline="\n") as fichier:
+            fichier.write(DECLARATION_XX)
+        (i18n / "xx.js").write_text(TEXTES_XX, encoding="utf-8", newline="\n")
+
+    def test_aide_en_francais_sans_erreur(self):
+        self.assertFalse((self.dossier / "js" / "i18n" / "aide" / "xx.js").exists())
+        avertissements = []
+        self.page.on("console", lambda message: avertissements.append(message.text) if message.type == "warning" else None)
+        # Seule erreur permise : le navigateur note en console le fichier d'aide introuvable (pas une erreur JavaScript).
+        self.autoriser_erreur(re.compile(r"ERR_FILE_NOT_FOUND \(file:///.*/js/i18n/aide/xx\.js"))
+        preregler_profil(self.contexte, "responsable")
+        self.contexte.add_init_script("try { localStorage.setItem('prevo.langue', 'xx'); } catch (erreur) {}")
+        page = self.page
+        page.goto(url_fichier(self.dossier / "index.html"))
+        page.click("#btn-demo")
+        attendre_pret(page)
+        page.wait_for_selector(ENCART)
+        # la langue d'essai est active (son fichier de textes est lu)…
+        self.assertEqual(page.evaluate("[I18n.langue, I18n.t('commun.bouton.annuler')]"), ["xx", "Annuler (xx)"])
+        # … et l'aide, sans fichier dans cette langue, est en français : encart de l'écran et textes de l'accès
+        self.assertIn("Votre tableau de bord", self.texte_encart())
+        self.assertIn("Essayez :", self.texte_encart())
+        self.assertEqual(page.text_content(ENCART + " .aide-ecran-compris").strip(), "Compris")
+        self.assertEqual(page.text_content(ENCART + " .aide-ecran-titre").strip(), "Accueil")
+        self.assertEqual(page.evaluate("AccesTextes.situations.seul"), "Moi seul")
+        self.assertIn("127.0.0.1", page.evaluate("AccesTextes.options.ecoute.aide"))
+        page.click(ENCART + " .aide-ecran-compris")
+        self.aller("#/parc")
+        page.wait_for_selector(ENCART)
+        self.assertIn("arborescence", self.texte_encart())
+        # aucun avertissement pour une clé aide.* (les autres clés absentes en « xx » en ont un, une fois chacune)
+        self.assertEqual([texte for texte in avertissements if "« aide." in texte], [])
+        self.assertTrue(any("absente en « xx »" in texte for texte in avertissements))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Produit js/modules/acces-textes.js : les textes d'aide de l'accès et de l'installation, en une seule source
-(lot 7, D131, CS124, CS130 ; ARCHITECTURE.md §22.2 et §22.10).
+"""Produit les textes d'aide de l'accès et de l'installation, en une seule source (lot 7, D131, CS124, CS130 ;
+ARCHITECTURE.md §22.2 et §22.10) : js/modules/acces-textes.js (objet AccesTextes, sans aucun texte : chaque texte est
+un accesseur qui le lit par I18n.t dans la langue active) et le bloc « acces » de js/i18n/aide/fr.js (les textes
+français, clés aide.acces.*), un fichier d'aide par langue comme l'aide à l'écran (contrat du Lot 2, T247 ; écriture
+commune : outils/generer_aide_ecrans.py).
 
 - « options » : le texte du « ? » de chaque clé de prevo.config.json, repris tel quel de CLES_CONFIGURATION de
   serveur.py (le même texte sert à « serveur.py --aide », à l'assistant, à Paramètres et au guide) ;
@@ -10,15 +13,22 @@
 
 Lancer depuis la racine du dépôt, après toute modification d'un texte :
     py outils/generer_acces_textes.py
-tests/test_acces_textes.py vérifie que le fichier produit est à jour.
+tests/test_acces_textes.py vérifie que les deux fichiers sont à jour (un second passage ne change aucun octet).
 """
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
-RACINE = Path(__file__).resolve().parent.parent
-CIBLE = RACINE / "js" / "modules" / "acces-textes.js"
+ICI = Path(__file__).resolve().parent
+if str(ICI) not in sys.path:
+    sys.path.insert(0, str(ICI))
+import extraire_textes as ext  # noqa: E402
+from generer_aide_ecrans import AIDE, accesseur, chaine_js, ecrire_aide, nom_js, texte_aide, valeur_js  # noqa: E402
+
+RACINE = ICI.parent
+MODULE = "js/modules/acces-textes.js"
+CIBLE = RACINE / MODULE
+SECTION = "acces"
 
 SITUATIONS = {
     "seul": "Moi seul",
@@ -151,21 +161,82 @@ def charger_serveur():
     return module
 
 
-def contenu():
+def donnees():
+    """Les textes français, sous la forme d'AccesTextes : { situations, choix, options: { cle: { aide, defaut, genre } } }."""
     serveur = charger_serveur()
     options = {cle: {"aide": aide, "defaut": defaut, "genre": genre}
                for cle, genre, defaut, aide in serveur.CLES_CONFIGURATION}
-    donnees = {"situations": SITUATIONS, "choix": CHOIX, "options": options}
-    return ("'use strict';\n"
-            "// AccesTextes : textes d'aide de l'accès et de l'installation, une seule source pour l'assistant, Paramètres,\n"
-            "// Équipe › Accès et le guide (lot 7, CS124, CS130). Produit par outils/generer_acces_textes.py à partir de\n"
-            "// CLES_CONFIGURATION de serveur.py (options) et des textes de l'étude validée (choix) : ne pas retoucher à la main.\n\n"
-            "const AccesTextes = " + json.dumps(donnees, ensure_ascii=False, indent=2) + ";\n")
+    return {"situations": SITUATIONS, "choix": CHOIX, "options": options}
+
+
+def entrees(textes=None):
+    """{clé: valeur au format du dictionnaire} du bloc « acces » de js/i18n/aide/fr.js."""
+    textes = textes or donnees()
+    res = {}
+    for cle, texte in textes["situations"].items():
+        res["aide.acces.situation." + cle] = chaine_js(texte)
+    for nom, choix in textes["choix"].items():
+        for champ, valeur in choix.items():
+            if champ == "conseil":
+                for situation, conseil in valeur.items():
+                    res["aide.acces.choix.%s.conseil.%s" % (nom, situation)] = chaine_js(conseil)
+            else:
+                res["aide.acces.choix.%s.%s" % (nom, champ)] = chaine_js(valeur)
+    for cle, option in textes["options"].items():
+        res["aide.acces.option." + cle] = chaine_js(option["aide"])
+    return res
+
+
+def bloc():
+    return ext.ecrire_bloc(SECTION, "fr", entrees())
+
+
+def contenu():
+    """Texte de js/modules/acces-textes.js."""
+    textes = donnees()
+    lignes = [
+        "'use strict';",
+        "// AccesTextes : textes d'aide de l'accès et de l'installation, une seule source pour l'assistant, Paramètres,",
+        "// Équipe › Accès et le guide (lot 7, CS124, CS130). Produit par outils/generer_acces_textes.py à partir de",
+        "// CLES_CONFIGURATION de serveur.py (options) et des textes de l'étude validée (choix) : ne pas retoucher à la main.",
+        "// Les textes sont dans js/i18n/aide/<langue>.js (clés aide.acces.*) : chaque accesseur les lit dans la langue",
+        "// active au moment de l'affichage (repli français sans avertissement, js/i18n.js).",
+        "",
+        "const AccesTextes = {",
+        "  situations: {",
+    ]
+    lignes.extend("    " + accesseur(cle, "aide.acces.situation." + cle) for cle in textes["situations"])
+    lignes += ["  },", "  choix: {"]
+    for nom, choix in textes["choix"].items():
+        lignes.append("    %s: {" % nom_js(nom))
+        for champ, valeur in choix.items():
+            if champ == "conseil":
+                lignes.append("      conseil: {")
+                lignes.extend("        " + accesseur(situation, "aide.acces.choix.%s.conseil.%s" % (nom, situation))
+                              for situation in valeur)
+                lignes.append("      },")
+            else:
+                lignes.append("      " + accesseur(champ, "aide.acces.choix.%s.%s" % (nom, champ)))
+        lignes.append("    },")
+    lignes += ["  },", "  options: {"]
+    for cle, option in textes["options"].items():
+        lignes.append("    %s: {" % nom_js(cle))
+        lignes.append("      " + accesseur("aide", "aide.acces.option." + cle))
+        lignes.append("      defaut: %s," % valeur_js(option["defaut"]))
+        lignes.append("      genre: %s," % valeur_js(option["genre"]))
+        lignes.append("    },")
+    lignes += ["  },", "};"]
+    return "\n".join(lignes) + "\n"
+
+
+def ecrire(racine=RACINE):
+    (Path(racine) / MODULE).write_bytes(contenu().encode("utf-8"))
+    ecrire_aide(racine, SECTION, entrees())
 
 
 def main():
-    CIBLE.write_bytes(contenu().encode("utf-8"))
-    print("Écrit : %s" % CIBLE.relative_to(RACINE))
+    ecrire()
+    print("Écrit : %s et le bloc « %s » de %s" % (MODULE, SECTION, AIDE))
 
 
 if __name__ == "__main__":
