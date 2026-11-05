@@ -1331,7 +1331,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   indicateurs-regles.js  indicateurs-series.js  indicateurs-graphiques.js  indicateurs-ecrans.js
   rapport-contenu.js  rapport-ecrans.js
   zip-donnees.js
-  zip-tables.js  zip-lecture.js
+  zip-tables.js  zip-flux.js  zip-lecture.js
   parametres.js  parametres-codes.js  parametres-solo.js  parametres-sauvegardes.js  parametres-zip.js  parametres-acces.js  (puis import-*.js, §18.1, et wiki-*.js, §20 ; puis js/app.js)
   ```
   Écart retenu (T43) : `indicateurs-series.js` (séries des graphiques) s'insère après
@@ -1348,6 +1348,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   cités, rapports figés, `manifeste.json`, jamais `acces/` ; `App.exporterZip` délègue) se charge après `rapport-ecrans.js`.
   Socle de données (T190, D172) : `zip-lecture.js` (objet `ZipLecture`, `lire(source)` : lecture et contrôles stricts d'un ZIP de données, migration en mémoire, sans rien écrire) se charge après `zip-donnees.js`. Lecture en deux passes (T205) : `lire` décompresse chaque document pour le contrôler puis l'oublie (le résultat n'en garde que nom, taille et empreinte SHA-256) ; `lireDocument(lu, nom)` le relit depuis le même ZIP, taille, CRC-32 et empreinte revérifiés, au moment de l'écrire (`parametres-zip.js`, un document à la fois) ; pic de mémoire : le ZIP + les tables + un document (`memoire()` : mesure de la dernière lecture, pour les tests).
   Socle de données (T213) : `zip-tables.js` (objet `ZipTables`, `lire(contenus, fichiersTables, deja, manifeste)` : étape 11 de `ZipLecture`, les tables du ZIP lues, CSV illisibles refusés sauf fichier marqué « abime » au manifeste à l'empreinte juste, rendu dans `abimes` ; format d'origine, migration en mémoire, tables absentes) se charge juste avant `zip-lecture.js`, qui l'appelle : sorti de `zip-lecture.js`, arrivé à 700 lignes.
+  Socle de données (T226, morceau 1 de T215 « ZIP par morceaux ») : `zip-flux.js` (objet `ZipFlux`, module bas niveau sans écran ni stockage : `lireRepertoire(blob)` lit le répertoire central par tranches (`Blob.slice`, jamais le fichier entier), `contenu(blob, entree)` décompresse une entrée en flux (`DecompressionStream` « deflate-raw »), taille réelle et CRC-32 contrôlés pendant et après ; `ecrivain({ date })` écrit un ZIP en Blob composé (`CompressionStream`), sans descripteur de données ni ZIP64, 4 Go et 65 534 entrées au plus ; erreurs `ErreurZip` à code ; pas de JSZip en secours : sans « deflate-raw », `MESSAGE_NAVIGATEUR`) se charge juste avant `zip-lecture.js`. L'import (T227) et l'export (T228) s'en serviront à la place de JSZip.
   Socle de données (T191, D172) : `parametres-zip.js` (objet `ParametresZip`, bouton « Importer un ZIP… » de la carte « Sauvegardes » : import par remplacement complet, §22.11 « Import ZIP » ; relié à `Parametres.interne` par les relais `blocImportZip` et `brancherImportZip`) se charge juste après `parametres-sauvegardes.js`.
   Objets globaux nouveaux : `Equipe`, `Controles`, `Planning`, `Indicateurs`, `Rapport` (premier
   fichier de chaque préfixe) ; `parc-etiquettes.js` complète `Parc`, `parametres-codes.js` complète
