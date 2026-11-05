@@ -45,7 +45,7 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 
-from commun import RACINE, CasNavigateur, ServeurPrevo
+from commun import RACINE, SCRIPTS_TRADUCTION, CasNavigateur, ServeurPrevo
 from jeux_formats import copier_jeu
 
 FORMAT_COURANT = 3
@@ -493,7 +493,9 @@ class TestCasLimites(CasJeux):
 # 3. L'adaptateur du navigateur (js/stockage-serveur.js) : seul contrôle avec un navigateur
 # ---------------------------------------------------------------------------
 
-SCRIPTS_ADAPTATEUR = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/stockage-serveur.js"]
+# Moteur de traduction d'abord, comme dans index.html (Lot 2).
+SCRIPTS_ADAPTATEUR = SCRIPTS_TRADUCTION + ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js",
+                                           "js/stockage-serveur.js"]
 PAGE_VIDE_HTML = ("<!DOCTYPE html><html lang=\"fr\"><head><meta charset=\"UTF-8\">"
                   "<title>Test T185</title></head><body></body></html>")
 ESSAYER_LES_ECRITURES_JS = """async () => {

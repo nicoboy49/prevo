@@ -80,7 +80,7 @@ import zlib
 from datetime import datetime
 from pathlib import Path
 
-from commun import (RACINE, SCRIPT_SANS_AIDE, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule,
+from commun import (RACINE, SCRIPT_SANS_AIDE, SCRIPTS_TRADUCTION, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule,
                     preregler_profil)
 
 RECETTE = os.environ.get("PREVO_RECETTE_LOURDE") == "1"
@@ -1176,7 +1176,8 @@ class TestZipParMorceaux(unittest.TestCase):
             with Navigateur(self, self.temporaire / "profil-10", self.temporaire / "telechargements") as nav:
                 page = nav.page
                 page.goto(self.statique.url + "/tests/fixtures/page-vide.html")
-                page.add_script_tag(url=self.statique.url + "/js/modules/zip-flux.js")
+                for chemin in SCRIPTS_TRADUCTION + ["js/modules/zip-flux.js"]:   # moteur de traduction d'abord
+                    page.add_script_tag(url=self.statique.url + "/" + chemin)
                 page.evaluate("() => { const c = document.createElement('input'); c.type = 'file'; c.id = 'source'; "
                               "document.body.appendChild(c); }")
                 page.set_input_files("#source", str(source))
@@ -1215,7 +1216,8 @@ class TestZipParMorceaux(unittest.TestCase):
         with Navigateur(self, self.temporaire / "profil-11", self.temporaire / "telechargements") as nav:
             page = nav.page
             page.goto(self.statique.url + "/tests/fixtures/page-vide.html")
-            page.add_script_tag(url=self.statique.url + "/js/modules/zip-flux.js")
+            for chemin in SCRIPTS_TRADUCTION + ["js/modules/zip-flux.js"]:   # moteur de traduction d'abord
+                page.add_script_tag(url=self.statique.url + "/" + chemin)
             octets_page = bytes(page.evaluate("""async ([entrees, date]) => {
               const ecrivain = ZipFlux.ecrivain({ date: new Date(...date) });
               for (const [nom, octets] of entrees) {

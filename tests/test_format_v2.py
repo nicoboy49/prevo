@@ -31,7 +31,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from commun import DOSSIER_DEMO, RACINE, CasNavigateur, ServeurPrevo, charger_scripts
+from commun import DOSSIER_DEMO, RACINE, SCRIPTS_TRADUCTION, CasNavigateur, ServeurPrevo, charger_scripts
 
 DOSSIER_V1 = RACINE / "tests" / "fixtures" / "v1"
 BOM = b"\xef\xbb\xbf"
@@ -52,7 +52,7 @@ MESSAGE_INFO = "ajoutée par la version %d du format, écrite au prochain enregi
 VERSION_COLONNE = {"astuce": 3}   # depuisVersion du schéma (js/schema.js) ; les autres colonnes : version 2
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js"]
-SCRIPTS_SERVEUR = SCRIPTS + ["js/stockage-serveur.js"]
+SCRIPTS_SERVEUR = SCRIPTS_TRADUCTION + SCRIPTS + ["js/stockage-serveur.js"]   # moteur de traduction d'abord (Lot 2)
 
 # Page vide servie (par interception Playwright) à l'adresse du serveur de test : les appels
 # /api/… de StockageServeur partent ainsi de la même origine, sans dépendre d'index.html ni des

@@ -76,6 +76,10 @@ def lire_schema():
         try:
             page = navigateur.new_page()
             page.set_content("<!doctype html><title>schéma</title>")
+            # Moteur de traduction et textes français avant schema.js, comme dans index.html (Lot 2 : les libellés du
+            # schéma passent par I18n.t).
+            for nom in ("js/i18n.js", "js/i18n/langues.js", "js/i18n/fr.js"):
+                page.add_script_tag(content=(RACINE / nom).read_text(encoding="utf-8"))
             page.add_script_tag(content=(RACINE / "js" / "schema.js").read_text(encoding="utf-8"))
             texte = page.evaluate("() => JSON.stringify({ version: Schema.version, ordre: Schema.nomsTables(), tables: Schema.tables })")
         finally:
