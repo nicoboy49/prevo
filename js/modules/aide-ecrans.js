@@ -85,10 +85,10 @@ const AideEcrans = (() => {
     const encart = UI.bandeau('info', UI.html`
       ${avant}<h2 class="aide-ecran-titre">${c.titre}</h2>
       <p class="aide-ecran-texte">${c.texte}${apres}</p>
-      <p class="aide-ecran-essayez"><b>Essayez :</b> ${c.essayez}</p>
+      <p class="aide-ecran-essayez">${I18n.html('aide.encart.essayez', { essayez: c.essayez })}</p>
       <div class="aide-ecran-actions">
-        <button type="button" class="btn btn-secondaire aide-ecran-compris">Compris</button>
-        <a class="aide-ecran-guide" href="GUIDE.html#${c.ancre}" target="_blank" rel="noopener">En savoir plus<span class="visuellement-cache"> (nouvel onglet)</span></a>
+        <button type="button" class="btn btn-secondaire aide-ecran-compris">${I18n.t('aide.encart.compris')}</button>
+        <a class="aide-ecran-guide" href="GUIDE.html#${c.ancre}" target="_blank" rel="noopener">${I18n.html('aide.encart.en_savoir_plus')}</a>
       </div>`);
     encart.id = ID_ENCART;
     encart.classList.add('aide-ecran');

@@ -13,19 +13,40 @@ const Dictee = (() => {
 
   const LANGUE = 'fr-FR';
   const CLE_REGLAGES = 'prevo.dictee';
-  const AVERTISSEMENT_NUAGE = 'Dans Chrome et Edge, la voix est envoyée aux serveurs de Google ou Microsoft pour être transcrite.';
-  const AVERTISSEMENT_LOCAL = 'La voix est transcrite sur ce PC : elle n\'est envoyée nulle part.';
-  const AIDE_CLAVIER = 'Dictée : utilisez le micro du clavier de votre téléphone.';
-  const MESSAGES_ERREUR = {
-    'not-allowed': 'Micro refusé : autorisez le micro pour cette page, puis réessayez.',
-    'service-not-allowed': 'Micro refusé : autorisez le micro pour cette page, puis réessayez.',
-    'audio-capture': 'Aucun micro trouvé sur cet appareil.',
-    network: 'Dictée impossible : pas de connexion au service de reconnaissance.',
-    'no-speech': 'Aucune parole entendue : la dictée s\'est arrêtée.',
-    'language-not-supported': 'Le français n\'est pas proposé par la reconnaissance de ce navigateur.',
-  };
 
   let ecoute = null;       // { reconnaissance, champ, bouton } : une seule dictée à la fois
+
+  // Textes lus au moment de les montrer (jamais figés au chargement du module).
+  function avertissementNuage() {
+    return I18n.t('dictee.avertissement_nuage.chrome_edge_voix_envoyee');
+  }
+
+  function avertissementLocal() {
+    return I18n.t('dictee.avertissement_local.voix_transcrite_pc_envoyee');
+  }
+
+  function aideClavier() {
+    return I18n.t('dictee.aide_clavier.dictee_utilisez_micro_clavier');
+  }
+
+  /** Message d'une erreur de la reconnaissance (evenement.error), ou null si le code n'a pas de message à lui. */
+  function messageErreur(code) {
+    switch (code) {
+      case 'not-allowed':
+      case 'service-not-allowed':
+        return I18n.t('dictee.message_erreur.micro_refuse_autorisez_micro');
+      case 'audio-capture':
+        return I18n.t('dictee.message_erreur.aucun_micro_trouve_appareil');
+      case 'network':
+        return I18n.t('dictee.message_erreur.dictee_impossible_pas_connexion');
+      case 'no-speech':
+        return I18n.t('dictee.message_erreur.aucune_parole_entendue_dictee');
+      case 'language-not-supported':
+        return I18n.t('dictee.message_erreur.francais_pas_propose_reconnaissance');
+      default:
+        return null;
+    }
+  }
 
   // ===========================================================================================
   // 1. Réglages du poste
@@ -94,7 +115,7 @@ const Dictee = (() => {
 
   function boutonPour(champ) {
     const bouton = UI.element(UI.html`<button type="button" class="btn btn-fantome btn-icone dictee-bouton"
-      aria-pressed="false" title="Dicter" aria-label="Dicter dans ce champ">${UI.icone('micro')}<span class="dictee-libelle">Dicter</span></button>`);
+      aria-pressed="false" title="${I18n.t('dictee.bouton_pour.dicter')}" aria-label="${I18n.t('dictee.bouton_pour.dicter_champ')}">${UI.icone('micro')}<span class="dictee-libelle">${I18n.t('dictee.bouton_pour.dicter')}</span></button>`);
     bouton.addEventListener('click', () => basculer(champ, bouton));
     return bouton;
   }
@@ -114,7 +135,7 @@ const Dictee = (() => {
     if (!disponible()) {
       const aideUtile = reglages().active && appareilTactile() && !prisEnCharge();
       if (aideUtile && !zone.querySelector('.dictee-aide')) {
-        champs[0].insertAdjacentElement('afterend', UI.element(UI.html`<p class="aide dictee-aide">${AIDE_CLAVIER}</p>`));
+        champs[0].insertAdjacentElement('afterend', UI.element(UI.html`<p class="aide dictee-aide">${aideClavier()}</p>`));
       }
       return;
     }
@@ -160,18 +181,18 @@ const Dictee = (() => {
   /** Première utilisation sur le poste : « Continuer » (vrai), « Désactiver la dictée » ou fermeture (faux). */
   async function avertir(locale) {
     const choix = await UI.fenetre({
-      titre: 'Dictée vocale',
+      titre: I18n.t('dictee.avertir.dictee_vocale'),
       contenu: UI.element(UI.html`<div class="form-colonne dictee-avertissement">
-        <p><b>${locale ? AVERTISSEMENT_LOCAL : AVERTISSEMENT_NUAGE}</b></p>
-        <p>Vous pouvez désactiver la dictée sur ce poste maintenant, ou plus tard dans « Ce poste ».</p>
+        <p><b>${locale ? avertissementLocal() : avertissementNuage()}</b></p>
+        <p>${I18n.t('dictee.avertir.pouvez_desactiver_dictee_poste')}</p>
       </div>`),
-      boutons: [{ libelle: 'Désactiver la dictée', valeur: 'desactiver', classe: 'btn-fantome' },
-        { libelle: 'Continuer', valeur: 'continuer', classe: 'btn-primaire', defaut: true }],
+      boutons: [{ libelle: I18n.t('dictee.avertir.desactiver_dictee'), valeur: 'desactiver', classe: 'btn-fantome' },
+        { libelle: I18n.t('dictee.avertir.continuer'), valeur: 'continuer', classe: 'btn-primaire', defaut: true }],
     });
     if (choix === 'desactiver') {
       enregistrerReglages({ active: false });
       retirerBoutons();
-      UI.toast('Dictée désactivée sur ce poste (réactivable dans « Ce poste »).', 'info');
+      UI.toast(I18n.t('dictee.avertir.dictee_desactivee_poste_reactivable'), 'info');
       return false;
     }
     if (choix !== 'continuer') return false;
@@ -194,7 +215,7 @@ const Dictee = (() => {
     bouton.setAttribute('aria-pressed', actif ? 'true' : 'false');
     bouton.classList.toggle('dictee-active', actif);
     const libelle = bouton.querySelector('.dictee-libelle');
-    if (libelle) libelle.textContent = actif ? 'Arrêter' : 'Dicter';
+    if (libelle) libelle.textContent = actif ? I18n.t('dictee.marquer.arreter') : I18n.t('dictee.bouton_pour.dicter');
   }
 
   function demarrer(champ, bouton, locale) {
@@ -221,7 +242,7 @@ const Dictee = (() => {
       ecrire(joindre(debut, definitif + provisoire));
     };
     reconnaissance.onerror = (evenement) => {
-      UI.toast(MESSAGES_ERREUR[evenement.error] || 'Dictée interrompue (' + evenement.error + ').', 'attention');
+      UI.toast(messageErreur(evenement.error) || I18n.t('dictee.demarrer.dictee_interrompue', { error: evenement.error }), 'attention');
     };
     reconnaissance.onend = () => {
       rebaser();
@@ -236,7 +257,7 @@ const Dictee = (() => {
     } catch (erreur) {
       ecoute = null;
       marquer(bouton, false);
-      UI.toast('Dictée impossible : ' + ((erreur && erreur.message) || 'erreur inconnue') + '.', 'attention');
+      UI.toast(I18n.t('dictee.demarrer.dictee_impossible', { raison: (erreur && erreur.message) || I18n.t('dictee.demarrer.erreur_inconnue') }), 'attention');
     }
   }
 
@@ -265,7 +286,11 @@ const Dictee = (() => {
   }
 
   return {
-    LANGUE, AVERTISSEMENT_NUAGE, AVERTISSEMENT_LOCAL, AIDE_CLAVIER,
+    LANGUE,
+    /** Textes de l'avertissement et de l'aide, lus dans la langue du moment (accesseurs). */
+    get AVERTISSEMENT_NUAGE() { return avertissementNuage(); },
+    get AVERTISSEMENT_LOCAL() { return avertissementLocal(); },
+    get AIDE_CLAVIER() { return aideClavier(); },
     reglages, enregistrerReglages, prisEnCharge, disponible, transcriptionLocale, equiper, surveiller, retirerBoutons,
     arreter, arreterDans,
   };

@@ -14,11 +14,11 @@ Object.assign(Planning, (() => {
 
   /** Contrôles faits avant d'écrire (sur les tables en mémoire) : date lisible, technicien actif. */
   function verifierDemande(technicienId, date) {
-    if (!MOTIF_DATE.test(date)) throw ErreurValidation('Choisissez une date prévue valide.');
+    if (!MOTIF_DATE.test(date)) throw ErreurValidation(I18n.t('planning.verifier_demande.choisissez_date_prevue_valide'));
     const technicien = Donnees.trouver('techniciens', technicienId);
-    if (!technicien) throw ErreurValidation('Choisissez un technicien.');
+    if (!technicien) throw ErreurValidation(I18n.t('planning.verifier_demande.choisissez_technicien'));
     if (texte(technicien.actif) === '0') {
-      throw ErreurValidation('Le technicien ' + technicienId + ' est désactivé : choisissez un technicien actif.');
+      throw ErreurValidation(I18n.t('planning.verifier_demande.technicien_desactive_choisissez_technicien', { technicienId }));
     }
   }
 
@@ -38,15 +38,15 @@ Object.assign(Planning, (() => {
       + technicienId + ' le ' + date + (statutAttendu === 'Préparé' ? ' (Préparé → Planifié)' : '');
     const statut = await Donnees.modifier('ordres_travail', (lignes) => {
       const ligne = lignes.find((candidate) => candidate.id === otId);
-      if (!ligne) throw ErreurValidation('L\'ordre de travail ' + otId + ' est introuvable.');
+      if (!ligne) throw ErreurValidation(I18n.t('planning.planifier.ordre_travail_introuvable', { otId }));
       if (ligne.statut !== statutAttendu) {
-        throw ErreurValidation('L\'OT ' + otId + ' est passé « ' + ligne.statut + ' » sur un autre poste. Actualisez puis recommencez.');
+        throw ErreurValidation(I18n.t('planning.planifier.ot_passe_autre_poste', { otId, ligneStatut: ligne.statut }));
       }
       if (ligne.statut === 'Créé') {
-        throw ErreurValidation('L\'OT ' + otId + ' est « Créé » : préparez-le d\'abord (fiche OT, onglet Préparation), puis planifiez-le.');
+        throw ErreurValidation(I18n.t('planning.planifier.ot_cree_preparez_abord', { otId }));
       }
       if (ligne.statut !== 'Préparé' && ligne.statut !== 'Planifié') {
-        throw ErreurValidation('Seul un OT « Préparé » ou « Planifié » se place sur le planning : ' + otId + ' est « ' + ligne.statut + ' ».');
+        throw ErreurValidation(I18n.t('planning.planifier.seul_ot_prepare_planifie', { otId, ligneStatut: ligne.statut }));
       }
       if (ligne.statut === 'Préparé') {
         const verification = Ordres.verifierPassage(Object.assign({}, ligne, { technicien_id: technicienId, date_prevue: date }), 'Planifié');
@@ -67,7 +67,7 @@ Object.assign(Planning, (() => {
     const message = Ordres.verifierHabilitation(ot && ot.equipement_id, technicienId, date);
     const avertissements = [];
     if (message) {
-      avertissements.push('Avertissement habilitation : ' + message + '.');
+      avertissements.push(I18n.t('planning.planifier.avertissement_habilitation', { message }));
       await Donnees.journaliser('ordres_travail', otId, 'avertissement habilitation : ' + message);
     }
     return { statut, avertissements };

@@ -602,8 +602,8 @@ class TestDepotReel(unittest.TestCase):
                                                                     dict(sorted(raisons.items()))))
         apres = {f: hashlib.sha256((RACINE / f).read_bytes()).hexdigest() for f in avant}
         self.assertEqual(apres, avant)
-        print('\nDomaine pilote (essai) : %d extraits, %d à relire' % (total_extraits, total_relire))
-        print('\n'.join(lignes))
+        # le pilote est extrait (T237) : plus rien à extraire ni à relire, et il le reste
+        self.assertEqual((total_extraits, total_relire), (0, 0), '\n'.join(lignes))
 
 
 if __name__ == '__main__':

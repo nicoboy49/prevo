@@ -632,13 +632,23 @@ def installer_dossier_simule(contexte, nom="donnees-test"):
     contexte.add_init_script(script)
 
 
+# Moteur de traduction et textes français, chargés avant js/schema.js dans index.html (contrat du Lot 2) : les modules
+# lisent leurs textes par I18n.t au moment de les montrer.
+SCRIPTS_TRADUCTION = ["js/i18n.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js"]
+
+
 def charger_scripts(page, chemins):
     """Ouvre tests/fixtures/page-vide.html en file:// et y ajoute les scripts du projet, dans l'ordre.
 
     chemins : chemins relatifs à la racine du projet, ex. ['js/schema.js', 'js/donnees.js'].
-    Les scripts sont chargés comme de vrais <script src> classiques (donc comme dans index.html).
+    Les scripts sont chargés comme de vrais <script src> classiques (donc comme dans index.html). Comme dans
+    index.html, le moteur de traduction et le français (SCRIPTS_TRADUCTION) passent d'abord, sauf si la liste
+    charge déjà js/i18n.js elle-même ou ne contient aucun script de js/ hors des bibliothèques (js/lib/).
     """
     page.goto(url_fichier(PAGE_VIDE))
+    if "js/i18n.js" not in chemins and any(str(chemin).startswith("js/") and not str(chemin).startswith("js/lib/")
+                                          for chemin in chemins):
+        chemins = SCRIPTS_TRADUCTION + list(chemins)
     for chemin in chemins:
         fichier = (RACINE / chemin)
         if not fichier.is_file():

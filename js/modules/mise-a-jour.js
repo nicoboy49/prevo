@@ -157,10 +157,11 @@ window.MiseAJour = (function () {
 
   /** Bandeau de l'accueil du responsable : version, date, nouveautés, lien de téléchargement, « Ignorer ». */
   function bandeau(fichier) {
-    const bloc = UI.bandeau('info', UI.html`<b>Prévo ${fichier.version} est disponible${fichier.date ? ' (' + UI.dateFr(fichier.date) + ')' : ''}.</b>
+    const bloc = UI.bandeau('info', UI.html`<b>${fichier.date ? I18n.t('mise.bandeau.disponible_date', { version: fichier.version, date: UI.dateFr(fichier.date) })
+      : I18n.t('mise.bandeau.disponible', { version: fichier.version })}</b>
       ${fichier.nouveautes.length ? UI.html`<span class="maj-nouveautes">${fichier.nouveautes.join(' · ')}</span>` : ''}
-      <a href="${fichier.adresse}" target="_blank" rel="noopener" class="maj-telecharger">Télécharger</a>
-      <button type="button" class="btn btn-fantome maj-ignorer">Ignorer cette version</button>`);
+      <a href="${fichier.adresse}" target="_blank" rel="noopener" class="maj-telecharger">${I18n.t('mise.bandeau.telecharger')}</a>
+      <button type="button" class="btn btn-fantome maj-ignorer">${I18n.t('mise.bandeau.ignorer_version')}</button>`);
     bloc.id = 'maj-bandeau';
     bloc.querySelector('.maj-ignorer').addEventListener('click', () => { ignorer(fichier.version); bloc.remove(); });
     return bloc;
@@ -177,18 +178,21 @@ window.MiseAJour = (function () {
 
   /** Ligne « Mise à jour » de la page À propos (fragment UI.html). */
   function ligneApropos() {
-    if (typeof App !== 'undefined' && App.versionWeb) return UI.html`Démo en ligne : aucune vérification.`;
-    if (!responsable()) return UI.html`Signalée au responsable, sur l'accueil et ici.`;
-    if (!autorisee()) return UI.html`Non vérifiée : le responsable peut l'autoriser dans Paramètres (« Me signaler les nouvelles versions »).`;
+    if (typeof App !== 'undefined' && App.versionWeb) return UI.html`${I18n.t('mise.ligne_apropos.demo_ligne_aucune_verification')}`;
+    if (!responsable()) return UI.html`${I18n.t('mise.ligne_apropos.signalee_responsable_accueil_ici')}`;
+    if (!autorisee()) return UI.html`${I18n.t('mise.ligne_apropos.non_verifiee_responsable_peut')}`;
     const fichier = disponible();
     if (fichier) {
-      return UI.html`<b>Prévo ${fichier.version} est disponible</b>${fichier.date ? ' (' + UI.dateFr(fichier.date) + ')' : ''} —
-        <a href="${fichier.adresse}" target="_blank" rel="noopener">télécharger</a>`;
+      // Phrase balisée (lien au milieu) : I18n.html, balisage écrit dans le dictionnaire, valeurs échappées.
+      return fichier.date
+        ? I18n.html('mise.ligne_apropos.disponible_date', { version: fichier.version, date: UI.dateFr(fichier.date),
+          adresse: fichier.adresse })
+        : I18n.html('mise.ligne_apropos.disponible', { version: fichier.version, adresse: fichier.adresse });
     }
     const lecture = lectureDuJour();
-    if (!lecture) return UI.html`Vérification en cours…`;
-    if (!lecture.fichier) return UI.html`Vérification impossible aujourd'hui (prevo.pro injoignable) : rien d'autre à faire.`;
-    return UI.html`Prévo est à jour (vérifié le ${UI.dateFr(lecture.date)}).`;
+    if (!lecture) return UI.html`${I18n.t('mise.ligne_apropos.verification_cours')}`;
+    if (!lecture.fichier) return UI.html`${I18n.t('mise.ligne_apropos.verification_impossible_aujourd_hui')}`;
+    return UI.html`${I18n.t('mise.ligne_apropos.prevo_jour_verifie', { date: UI.dateFr(lecture.date) })}`;
   }
 
   return { adresse, verifier, disponible, ignorer, afficherSiPossible, ligneApropos, nombres, plusRecente, aSignaler,
