@@ -26,7 +26,7 @@
 // T222 (décision de Nicolas du 05/11, mesure T212 de docs/FORMAT.md §13, faite quand JSZip construisait le ZIP en
 // mémoire : 5 à 6 fois sa taille) : avant un export complet dont les fichiers dépassent AVERTISSEMENT.contenu
 // (150 Mo), une fenêtre (#export-zip-avertissement) propose les données seules, l'export complet quand même, ou
-// d'annuler. Gardée telle quelle par T228 (seuil et texte), jusqu'à une nouvelle mesure (T229).
+// d'annuler. Gardée telle quelle par T228 (seuil et texte), jusqu'à la mesure de la recette (T215).
 // T228 (T215 « ZIP par morceaux », morceau 3) : le ZIP est écrit par ZipFlux (zip-flux.js), un document à la fois,
 // sans JSZip. Mémoire JavaScript bornée aux CSV (les tables, déjà en mémoire) plus UN document, en deux passes :
 //   1. préparation (contenu) : chaque document cité est demandé à l'adaptateur pour sa TAILLE seulement (Blob.size,
@@ -240,7 +240,7 @@ const ZipDonnees = (() => {
   // --- Avertissement avant un gros export (T222) ---------------------------------------------------------------------
   // Seuil sur les octets des fichiers à mettre dans le ZIP (CSV et documents, avant compression) : pour un ZIP de 385
   // à 390 Mo, l'onglet montait à 2,1-2,4 Go (mesure T212, ZIP construit par JSZip), trop pour un PC de 4 Go ; 150 Mo
-  // en demandaient 750 à 900 Mo. Inchangé par T228, en attendant de mesurer l'écriture par morceaux (T229).
+  // en demandaient 750 à 900 Mo. Inchangé par T228, en attendant la mesure de l'écriture par morceaux (recette T215).
   // Écrit 150 × 1 048 576 (1 Mo) : ce fichier ne recopie aucune limite de l'import (garde-fou de test_zip_limites.py).
   const AVERTISSEMENT = Object.freeze({ contenu: 150 * 1048576 });
 
