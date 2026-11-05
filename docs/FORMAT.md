@@ -320,13 +320,17 @@ les 9 888 photos) : avec la grosse base de T212, la recette n'aurait pas tenu au
 | Import du ZIP du serveur, mode serveur (quota des documents relevé) | 2 091 Mo | 0,2 → 0,5 Go | 0,3 Go | 100 à 119 s |
 | ZIP écrit dans la page (`ZipFlux.ecrivain`), 40 entrées de 97,5 Mo | 3 900 Mo, 40 entrées | 0,1 → 0,4 Go | 0,2 Go | 73 à 96 s |
 
+Toutes ces mesures ont été faites sous Chrome (Chromium) seulement : Edge et Firefox n'ont pas été mesurés.
+
 - **L'onglet ne dépend plus de la taille du ZIP** : 0,2 à 0,3 Go de 330 Mo à 3,9 Go (contre 2,1 à 2,4 Go pour 385 Mo).
   Sauf pour des milliers de petites entrées : 0,9 à 1 Go pour 9 913 entrées (objets de chaque entrée en attente du
   ramasse-miettes).
 - **L'import est borné** : 0,5 Go de Chromium au plus pour un ZIP de 2 Go, en mode dossier comme en mode serveur.
-  En mode serveur, le dossier des documents est plafonné à 2 Go par défaut (`quota_documents_mo`, 2 048) : un ZIP qui
-  apporte plus de 2 Go de documents (un export du mode dossier, qui n'a pas de plafond) y est refusé proprement
-  (« Dossier des documents plein… », tables intactes, sauvegarde faite) tant que ce réglage n'est pas relevé.
+  En mode serveur, le dossier des documents est plafonné à 4 Go par défaut (`quota_documents_mo`, 4 096 depuis T250 ;
+  2 048 lors de cette mesure, d'où « quota relevé ») : autant que l'import ZIP, pour qu'un export du mode dossier, qui
+  n'a pas de plafond, se réimporte en mode serveur. Au-delà, l'import est refusé proprement (« Dossier des documents
+  plein… », tables intactes, sauvegarde faite) ; le message dit où agrandir la place des documents (Paramètres ›
+  Accès et installation, sur le PC serveur).
 - **L'export reste proportionnel à la taille du ZIP, mais dans le processus principal du navigateur** : le ZIP en
   cours d'écriture est un Blob composé dont Chromium garde en mémoire chaque morceau de moins de 5 Mo et les 5 premiers
   Mo des autres (le reste va dans le dossier du profil : 1 Go sur le disque pour le ZIP de 2 Go). Chromium entier

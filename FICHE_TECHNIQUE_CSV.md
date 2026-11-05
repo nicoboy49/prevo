@@ -721,7 +721,7 @@ Ce que la version 2 (lot 7) change pour qui ouvre le dossier des données. Le fo
 
 - **Nom imposé par le serveur** : en mode serveur, chaque document envoyé est enregistré sous `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules), et c'est ce nom qui est écrit dans la colonne (type `document`). Les documents déjà présents gardent leur nom ; en mode dossier, le nom n'a pas de préfixe.
 - **Extensions acceptées** : `.csv`, `.docx`, `.gif`, `.html`, `.jpeg`, `.jpg`, `.ods`, `.odt`, `.pdf`, `.png`, `.txt`, `.webp`, `.xlsx`. Toute autre est refusée, dont `.doc` et `.xls` depuis Prévo 2 : enregistrez en `.docx` ou `.xlsx`.
-- **Place** : 2048 Mo au plus pour tout le dossier, par défaut (`quota_documents_mo` de `prevo.config.json`).
+- **Place** : 4096 Mo au plus pour tout le dossier, par défaut (`quota_documents_mo` de `prevo.config.json`).
 
 ### 5.3 Nouveaux réglages de `parametres.csv`
 

@@ -430,7 +430,7 @@ par `--hote` — sinon 403 (un suffixe quelconque permettrait le « DNS rebindin
 | `PUT /api/csv/<table>` | en-tête `X-Version-Attendue: <version>` ou `aucune` ; 200 `{"version"}` · 409 `{"erreur", "version_actuelle"}` · 409 `{"erreur", "code": "fichier_abime", "table"}` si le fichier en place est abîmé (T200 ; en-tête `X-Prevo-Remplacer-Abime: 1` pour le remplacer quand même : import ZIP seulement ; avec les comptes, 403 si la session n'est pas celle d'un responsable) · 423 si le fichier est verrouillé (Excel ouvert) |
 | `POST /api/csv/<table>/ajout` | corps = en-tête + lignes (UTF-8 sans BOM) ; ajoute en fin de fichier (crée le fichier avec BOM s'il n'existe pas) ; 409 si l'en-tête ou l'encodage du fichier existant diffère · 409 `{"erreur", "code": "fichier_abime", "table"}` si le fichier en place finit dans un guillemet ouvert (T200) |
 | `GET /api/documents/<nom>` | octets, type MIME d'après l'extension, `Content-Security-Policy: sandbox`, `Content-Disposition: attachment; filename="<nom>"` hors images (jpg, jpeg, png, gif, webp), PDF et rapport figé en html (ouvert dans un onglet, `sandbox`) (audit F4, §22.12) ; 404 ; 415 extension inconnue |
-| `PUT /api/documents/<nom>` | 201 `{"nom"}` avec le **nom imposé par le serveur** `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules : le navigateur garde ce nom, jamais celui qu'il a demandé) · 400 nom refusé, ou image dont le contenu n'a pas la signature de son format (`verifier_signature_image` : `FF D8 FF`, `89 50 4E 47 0D 0A 1A 0A`, `GIF87a`/`GIF89a`, `RIFF…WEBP`) · 409 même nom demandé dans la même seconde (jamais d'écrasement) · 413 dossier `documents/` plein (`quota_documents_mo`, 2048 par défaut, mesuré à chaque envoi) · 415 extension inconnue (`.doc` et `.xls` retirés) ; rien n'est écrit en cas de refus |
+| `PUT /api/documents/<nom>` | 201 `{"nom"}` avec le **nom imposé par le serveur** `AAAAMMJJ-HHMMSS-<nom demandé>` (horodatage du serveur, extension en minuscules : le navigateur garde ce nom, jamais celui qu'il a demandé) · 400 nom refusé, ou image dont le contenu n'a pas la signature de son format (`verifier_signature_image` : `FF D8 FF`, `89 50 4E 47 0D 0A 1A 0A`, `GIF87a`/`GIF89a`, `RIFF…WEBP`) · 409 même nom demandé dans la même seconde (jamais d'écrasement) · 413 dossier `documents/` plein (`quota_documents_mo`, 4096 par défaut depuis T250, mesuré à chaque envoi) · 415 extension inconnue (`.doc` et `.xls` retirés) ; rien n'est écrit en cas de refus |
 | `POST /api/sauvegarde` | corps vide → sauvegarde manuelle `{"sauvegarde": "AAAA-MM-JJ_HHMMSS"}` ; corps JSON facultatif `{"motif": "avant-format-v2"}` → `{"sauvegarde": "AAAA-MM-JJ_HHMMSS_avant-format-v2"}` (motif `avant-import` depuis le lot 5, §18.1) ; motif hors de la liste fermée `MOTIFS_SAUVEGARDE`, corps qui n'est pas un objet JSON, JSON invalide ou trop imbriqué → 400 (contrôlé avant toute écriture) |
 | `GET /api/sauvegardes` | `{"sauvegardes": [{"nom", "tables": [...]}]}` |
 | `POST /api/restauration` | corps `{"sauvegarde": "…", "tables": [...] (facultatif)}` → `{"restaurees", "copie_securite"}` |
@@ -3306,7 +3306,7 @@ défaut et son texte d'aide (le même que `js/modules/acces-textes.js`).
 | `demarrage` | `aucun` \| `systeme` \| `session` | tâche planifiée (§22.9) |
 | `veille_desactivee` | booléen | réglages `powercfg` appliqués |
 | `copie_sauvegardes` | chemin, `""` | copie externe nocturne (§22.11) |
-| `quota_documents_mo` | 2048 | plafond du dossier `documents/` |
+| `quota_documents_mo` | 4096 (T250 ; 2048 avant) | plafond du dossier `documents/`, autant que l'import ZIP (4 Go) |
 | `ia_fournisseur`, `ia_url`, `ia_cle`, `ia_en_ligne` | `ollama` \| `openai`, `http://localhost:11434`, `""`, faux | fournisseur d'IA côté serveur (§22.12) ; la variable `PREVO_IA_CLE` passe avant `ia_cle` |
 | `_aide` | texte | commentaire d'en-tête pour qui ouvre le fichier |
 
@@ -4198,10 +4198,11 @@ tour, ni refusée ni perdue, une seule limite pour la porte et l'application ;
 corps lu après le contrôle de session (`traiter`, T151) ; délai IA fixé par le serveur (`DELAI_IA_S`, T158) ; une
 sauvegarde manuelle par minute, 429 (T175) ; quota du dossier `documents/` : avant d'écrire, sous `VERROU_ECRITURE`,
 taille du dossier (`taille_des_documents`, parcours `os.scandir` à chaque envoi : un compteur en mémoire se tromperait
-dès qu'on fait de la place à la main) + taille du corps ≤ `quota_documents_mo` × 1 Mo, sinon 413 « Dossier des
-documents plein (… Mo sur … Mo avec ce document) : faites de la place ou augmentez quota_documents_mo. » et rien
-d'écrit ; F4 (précisé à T159) `.doc`/`.xls` retirés de `TYPES_DOCUMENTS` (415 « Type de document refusé » pour toute
-extension inconnue, à la lecture comme à l'écriture ; `docx`, `xlsx`, `odt`, `ods` restent ; les listes du navigateur,
+dès qu'on fait de la place à la main) + taille du corps ≤ `quota_documents_mo` × 1 Mo (4 096 par défaut depuis
+T250, comme l'import ZIP), sinon 413 « Dossier des documents plein (… Mo sur … Mo avec ce document) : faites de la
+place, ou agrandissez la place des documents dans Paramètres › Accès et installation, sur le PC serveur. » (T250 :
+le refus dit où se règle le quota) et rien d'écrit ; F4 (précisé à T159) `.doc`/`.xls` retirés de `TYPES_DOCUMENTS`
+(415 « Type de document refusé » pour toute extension inconnue, à la lecture comme à l'écriture ; `docx`, `xlsx`, `odt`, `ods` restent ; les listes du navigateur,
 `parc-formulaires.js` et `stockage-dossier.js`, suivent), `Content-Disposition: attachment; filename="<nom>"` sur
 tout document qui n'est ni une image (`TYPES_AFFICHABLES` : jpg, jpeg, png, gif, webp), ni un PDF, ni le rapport
 figé en html (que « Ouvrir » affiche dans un onglet : `sandbox` y interdit déjà scripts et formulaires, un

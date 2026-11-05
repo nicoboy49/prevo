@@ -201,7 +201,11 @@ class TestQuotaDocuments(unittest.TestCase):
         message = second.json()["erreur"]
         self.assertTrue(message.startswith("Dossier des documents plein ("), message)
         self.assertIn("sur 1 Mo", message)
-        self.assertIn("faites de la place ou augmentez quota_documents_mo", message)
+        # T250 : le refus dit où se règle le quota, sans le nom de la clé.
+        self.assertTrue(message.endswith(" avec ce document) : faites de la place, ou agrandissez la place des "
+                                         "documents dans Paramètres › Accès et installation, sur le PC serveur."),
+                        message)
+        self.assertNotIn("quota_documents_mo", message)
         self.assertEqual(fichiers(self.documents), [nom_premier], "rien ne doit être écrit, pas même un temporaire")
         # Un petit document tient encore dans le quota.
         petit = requete(self.serveur.port, "PUT", "/api/documents/petit.pdf", PDF + bytes(100 * 1024))

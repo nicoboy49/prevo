@@ -151,7 +151,7 @@ Recopie fidèle de `serveur.py --aide` (le défaut est écrit comme dans le fich
 | `demarrage` | un parmi aucun, systeme, session | `"aucun"` | Prévo démarre avec le PC (systeme), à l'ouverture de session (session), ou à la main (aucun). |
 | `veille_desactivee` | booleen | `false` | Le PC ne se met plus en veille quand il est sur secteur. |
 | `copie_sauvegardes` | texte | `""` | Dossier où la sauvegarde du jour est copiée chaque nuit (clé USB, NAS, dossier synchronisé) ; vide : aucune copie. |
-| `quota_documents_mo` | entier | `2048` | Place maximale des documents joints, en mégaoctets. |
+| `quota_documents_mo` | entier | `4096` | Place maximale des documents joints, en mégaoctets. |
 | `ia_fournisseur` | un parmi ollama, openai | `"ollama"` | Type du service d'IA : ollama (Ollama) ou openai (toute API compatible OpenAI : LM Studio, Mistral…). |
 | `ia_url` | texte | `"http://localhost:11434"` | Adresse du service d'IA que tous les postes utilisent. Réglée ici seulement, jamais sur un téléphone. |
 | `ia_cle` | texte | `""` | Clé du service d'IA, gardée sur ce PC, jamais envoyée aux navigateurs. La variable d'environnement PREVO_IA_CLE passe avant ; jamais en ligne de commande. |
@@ -171,6 +171,11 @@ Précisions :
   adresse IP, `localhost`, le nom du PC ou l'un de ces noms. Sinon, refus (403).
 - **`copie_sauvegardes`** : un chemin relatif part du dossier de Prévo. Le dossier doit exister et ne pas être
   rangé dans `donnees/`.
+- **`quota_documents_mo`** : 4 096 Mo (4 Go) par défaut, autant que le plus gros ZIP que Prévo importe : un export
+  de Prévo, même du mode dossier (qui n'a pas de plafond), se réimporte en mode serveur. Au-delà, l'envoi d'un
+  document (ou l'import d'un ZIP) est refusé, « Dossier des documents plein », et rien n'est écrit. Pour l'agrandir :
+  Paramètres › Accès et installation, sur le PC serveur (section « Comptes des demandeurs, durées de session,
+  documents », puis « Appliquer et relancer »), ou cette clé.
 - **IA** : la clé du service ne passe jamais par l'écran ni par la ligne de commande (elle serait visible dans la
   liste des processus). Mettez-la dans `ia_cle` (fichier protégé) ou dans la variable d'environnement
   `PREVO_IA_CLE` du compte qui lance Prévo.

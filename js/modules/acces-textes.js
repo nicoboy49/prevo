@@ -198,7 +198,7 @@ const AccesTextes = {
     },
     "quota_documents_mo": {
       "aide": "Place maximale des documents joints, en mégaoctets.",
-      "defaut": 2048,
+      "defaut": 4096,
       "genre": "entier"
     },
     "ia_fournisseur": {

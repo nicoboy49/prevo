@@ -394,6 +394,10 @@ POLITIQUE_PORTE = ("default-src 'self'; script-src 'self'; style-src 'self' 'uns
 MESSAGE_SANS_AUTORITE = ('Aucune autorité locale sur ce serveur : le certificat a été fourni par votre informaticien, '
                          'demandez-lui comment le faire reconnaître par le téléphone.')
 
+# T250 : 4 Go par défaut, comme l'import ZIP (4 Go) : tout ce que Prévo exporte, Prévo peut le réimporter, d'un mode
+# à l'autre (un export du mode dossier, qui n'a pas de plafond, entre dans le dossier des documents du serveur).
+QUOTA_DOCUMENTS_MO_PAR_DEFAUT = 4096
+
 # (clé, type, défaut, texte d'aide) : la même liste sert à lire le fichier, à --aide et au contrat.
 CLES_CONFIGURATION = [
     ('portee', 'choix:ce-pc|atelier|dehors', 'ce-pc',
@@ -428,7 +432,8 @@ CLES_CONFIGURATION = [
     ('veille_desactivee', 'booleen', False, "Le PC ne se met plus en veille quand il est sur secteur."),
     ('copie_sauvegardes', 'texte', '',
      "Dossier où la sauvegarde du jour est copiée chaque nuit (clé USB, NAS, dossier synchronisé) ; vide : aucune copie."),
-    ('quota_documents_mo', 'entier', 2048, "Place maximale des documents joints, en mégaoctets."),
+    ('quota_documents_mo', 'entier', QUOTA_DOCUMENTS_MO_PAR_DEFAUT,
+     "Place maximale des documents joints, en mégaoctets."),
     ('ia_fournisseur', 'choix:ollama|openai', 'ollama',
      "Type du service d'IA : ollama (Ollama) ou openai (toute API compatible OpenAI : LM Studio, Mistral…)."),
     ('ia_url', 'texte', 'http://localhost:11434',
@@ -5341,13 +5346,16 @@ def taille_des_documents(config):
 
 
 def verifier_quota_documents(config, taille_ajoutee):
-    """Audit F2 : 413 si le dossier documents/ et le document envoyé dépassent quota_documents_mo (2 Go par défaut).
-    À appeler en tenant VERROU_ECRITURE, avant d'écrire."""
-    quota_mo = config.reglages.get('quota_documents_mo', 2048)
+    """Audit F2 : 413 si le dossier documents/ et le document envoyé dépassent quota_documents_mo (4 Go par défaut
+    depuis T250). Le refus dit où se règle le quota (T250) : Paramètres › Accès et installation, sur le PC serveur
+    (carte du responsable, section « Comptes des demandeurs, durées de session, documents ») ; aussi dans
+    prevo.config.json. À appeler en tenant VERROU_ECRITURE, avant d'écrire."""
+    quota_mo = config.reglages.get('quota_documents_mo', QUOTA_DOCUMENTS_MO_PAR_DEFAUT)
     occupe = taille_des_documents(config) + taille_ajoutee
     if occupe > quota_mo * 1024 * 1024:
-        raise ErreurHttp(413, 'Dossier des documents plein (%s Mo sur %d Mo avec ce document) : faites de la place '
-                              'ou augmentez quota_documents_mo.'
+        raise ErreurHttp(413, 'Dossier des documents plein (%s Mo sur %d Mo avec ce document) : faites de la place, '
+                              'ou agrandissez la place des documents dans Paramètres › Accès et installation, sur le '
+                              'PC serveur.'
                          % (('%.1f' % (occupe / (1024 * 1024))).replace('.', ','), quota_mo))
 
 

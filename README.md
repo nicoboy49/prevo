@@ -247,6 +247,7 @@ Pour lancer les tests ou contribuer : voir CONTRIBUTING.md.
 - **Python.** Le zip embarque Python pour Windows 64 bits ; ailleurs, il faut Python 3.11 ou plus récent (et, pour
   le certificat de l'atelier, le mkcert du système : voir [docs/INSTALLATION.md](docs/INSTALLATION.md)).
 - **Chrome ou Edge requis pour le mode dossier** (API d'accès aux fichiers).
+- **Mémoire de l'export et de l'import ZIP mesurée sous Chrome seulement** : Edge et Firefox n'ont pas été mesurés.
 - **Coût des pièces au prix actuel.** Le coût d'un OT utilise le prix actuel de l'article ; une
   réception d'achat ne change pas ce prix (le responsable le modifie à la main), mais un changement
   de prix modifie aussi le coût des OT passés, et donc les indicateurs de coût. Un rapport mensuel

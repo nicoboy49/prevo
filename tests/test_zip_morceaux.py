@@ -44,9 +44,9 @@ bas relevé), place des Blob sur le disque du profil (blob_storage) ; à la fin,
          ligne de l'import) ;
   07     export du mode dossier (navigateur relancé, même OPFS) : ZIP contrôlé de même ; tenté seulement si la
          mémoire libre le permet (comme 05) ;
-  08     ce ZIP-là (sinon celui de l'étape 05) importé en mode serveur (copie du jeu f3) : avec les réglages par
-         défaut, refus propre (documents plafonnés à 2 Go par quota_documents_mo : « Dossier des documents plein »,
-         tables inchangées) ; avec quota_documents_mo à 4 096 (et les comptes, que demande un fichier de réglages),
+  08     ce ZIP-là (sinon celui de l'étape 05) importé en mode serveur (copie du jeu f3) : avec quota_documents_mo à
+         2 048, l'ancien défaut (et les comptes, que demande un fichier de réglages), refus propre (« Dossier des
+         documents plein », tables inchangées) ; avec les réglages par défaut (4 096 depuis T250, comme l'import ZIP),
          documents (renommés par le serveur) et tables identiques ;
   09     le ZIP de plus de 2 Go de l'étape 05 ouvert par Python (zipfile.testzip), tar (bsdtar de Windows : -tf, puis
          -xf de la première entrée et de la plus lointaine) et « Extraire tout » (moteur ZIP du Shell de Windows, le
@@ -1081,11 +1081,13 @@ class TestZipParMorceaux(unittest.TestCase):
         source = self.temporaire / "source-f3"
         copier_jeu("f3-v1.2.0", source)
 
-        # a. Réglages par défaut : le dossier des documents du serveur est plafonné à 2 Go (quota_documents_mo, audit
-        #    F2) ; 2 090 Mo de documents n'y entrent pas : l'import s'arrête proprement, sans toucher aux tables.
+        # a. Dossier des documents plafonné à 2 Go (quota_documents_mo à 2 048, l'ancien défaut, audit F2 ; fichier de
+        #    configuration : avec les comptes, le responsable importe) : 2 090 Mo de documents n'y entrent pas :
+        #    l'import s'arrête proprement, sans toucher aux tables.
         def refuse():
-            with ServeurPrevo(source=source) as serveur:
+            with ServeurPrevo(source=source, comptes=True, reglages={"quota_documents_mo": 2048}) as serveur:
                 with Navigateur(self, self.temporaire / "profil-08", self.temporaire / "telechargements") as nav:
+                    serveur.poser_session(nav.contexte, "responsable")
                     page = self.ouvrir_serveur(nav, serveur)
                     avant = {table: (serveur.dossier / (table + ".csv")).read_bytes() for table in tzl.TABLES}
                     debut = time.monotonic()
@@ -1103,17 +1105,16 @@ class TestZipParMorceaux(unittest.TestCase):
             return {"duree_s": duree, "message": texte[:400], "documents_copies": copies,
                     "tables_inchangees": avant == apres}
 
-        refus = self.etape("08_serveur_import_2go_quota_defaut", refuse)
-        noter("08_serveur_import_2go_quota_defaut", refus)
+        refus = self.etape("08_serveur_import_2go_quota_2048", refuse)
+        noter("08_serveur_import_2go_quota_2048", refus)
         self.assertIn("Dossier des documents plein", refus["message"])
         self.assertIn("aucune donnée n'a changé", refus["message"])
         self.assertTrue(refus["tables_inchangees"])
 
-        # b. quota_documents_mo relevé à 4 096 (fichier de configuration : avec les comptes, le responsable importe).
+        # b. Réglages par défaut (T250 : quota_documents_mo à 4 096, comme l'import ZIP) : tout entre.
         def deroule():
-            with ServeurPrevo(source=source, comptes=True, reglages={"quota_documents_mo": 4096}) as serveur:
+            with ServeurPrevo(source=source) as serveur:
                 with Navigateur(self, self.temporaire / "profil-08", self.temporaire / "telechargements") as nav:
-                    serveur.poser_session(nav.contexte, "responsable")
                     page = self.ouvrir_serveur(nav, serveur)
                     mesure, termine = self.mesurer(nav, lambda: self.importer(page, chemin, DOCUMENTS_2GO))
                     page.goto("about:blank")

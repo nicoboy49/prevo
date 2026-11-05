@@ -91,9 +91,10 @@ def setUpModule():
 # Configurations attendues, écrites en dur d'après l'étude §6.1 (jamais déduites de serveur.py)
 # ---------------------------------------------------------------------------
 
+# T250 : quota_documents_mo passe de 2048 à 4096 (4 Go, comme l'import ZIP), décision de Nicolas du 05/11.
 DEFAUTS_COMMUNS = {
     "port_http": 8080, "port_https": 8443, "certificat": "", "cle": "", "session_heures": 12,
-    "session_longue_jours": 30, "invitation_heures": 24, "quota_documents_mo": 2048, "ia_fournisseur": "ollama",
+    "session_longue_jours": 30, "invitation_heures": 24, "quota_documents_mo": 4096, "ia_fournisseur": "ollama",
     "ia_url": "http://localhost:11434", "ia_cle": "", "ia_en_ligne": False,
 }
 ATTENDU_SOLO_CE_PC = dict(DEFAUTS_COMMUNS, portee="ce-pc", ecoute="127.0.0.1", noms=[], certificat_auto=False,
