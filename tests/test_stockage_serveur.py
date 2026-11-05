@@ -561,5 +561,84 @@ class TestReponsesAnormales(CasStockageServeur):
         self.assertTrue(erreur["estStockage"], erreur)
 
 
+class TestMessagesTraduits(CasStockageServeur):
+    """T246 (D157) : un message du serveur arrive avec son code et ses valeurs ; le navigateur affiche la clé
+    serveur.<code> de la langue active, le français reçu quand il ne connaît pas le code. Une « autre langue » est
+    simulée en remplaçant la valeur française d'une clé (I18n.ajouter)."""
+
+    def setUp(self):
+        super().setUp()
+        self.statique = ServeurStatique(RACINE)
+        self.statique.demarrer()
+        self.addCleanup(self.statique.arreter)
+        self.page.goto(self.statique.url + CHEMIN_PAGE)
+        self.page.wait_for_function("typeof StockageServeur === 'object'")
+        self.page.evaluate(TestReponsesAnormales.FETCH_SIMULE)
+
+    def reponses(self, *reponses):
+        self.page.evaluate("(liste) => { window.reponses.push(...liste); }", list(reponses))
+
+    def autre_langue(self, cles):
+        self.page.evaluate("(cles) => I18n.ajouter('fr', cles)", cles)
+
+    def test_en_francais_le_message_du_dictionnaire_est_celui_du_serveur(self):
+        corps = {"erreur": "Table inconnue : zz.", "erreur_code": "csv.table_inconnue",
+                 "erreur_valeurs": {"table": "zz"}}
+        self.assertEqual(self.page.evaluate("(d) => StockageServeur.texte(d, 'erreur')", corps),
+                         "Table inconnue : zz.")
+
+    def test_erreur_traduite_par_son_code_sinon_le_francais_recu(self):
+        self.autre_langue({"serveur.csv.table_inconnue": "Unknown table: {table}."})
+        self.reponses({"statut": 404, "corps": json.dumps({"erreur": "Table inconnue : zz.",
+                                                          "erreur_code": "csv.table_inconnue",
+                                                          "erreur_valeurs": {"table": "zz"}})})
+        self.assertEqual(self.executer_erreur("return await stockage.charger('zz');")["message"],
+                         "Unknown table: zz.")
+        # Code que ce navigateur ne connaît pas (serveur plus récent) : le français reçu, tel quel.
+        self.reponses({"statut": 400, "corps": json.dumps({"erreur": "Message d'un serveur plus récent.",
+                                                          "erreur_code": "essai.code_inconnu"})})
+        self.assertEqual(self.executer_erreur("return await stockage.charger('zz');")["message"],
+                         "Message d'un serveur plus récent.")
+
+    def test_valeurs_message_imbrique_liste_pluriel_et_point_final(self):
+        self.autre_langue({"serveur.acces.ajout_seulement": "Refused: {raison}",
+                           "serveur.demandes.numero_pris": "number {numero} is taken.",
+                           "serveur.demandes.non_supprimable": "a request cannot be deleted ({demandes}).",
+                           "serveur.demandes.sans_numero": "no number",
+                           "serveur.sauvegardes.plafond_manuelles": {"one": "wait {n} second.",
+                                                                     "other": "wait {n} seconds."},
+                           "serveur.tailscale.lancement_impossible": "tailscale could not start ({erreur})."})
+        texte = "(d) => StockageServeur.texte(d, Object.keys(d)[0])"
+        imbrique = {"erreur": "fr", "erreur_code": "acces.ajout_seulement",
+                    "erreur_valeurs": {"raison": {"code": "demandes.numero_pris", "texte": "fr",
+                                                  "valeurs": {"numero": "DI-7"}}}}
+        self.assertEqual(self.page.evaluate(texte, imbrique), "Refused: number DI-7 is taken.")
+        liste = {"erreur": "fr", "erreur_code": "demandes.non_supprimable",
+                 "erreur_valeurs": {"demandes": ["DI-1", {"code": "demandes.sans_numero", "texte": "sans numéro"}]}}
+        self.assertEqual(self.page.evaluate(texte, liste), "a request cannot be deleted (DI-1, no number).")
+        for n, attendu in ((1, "wait 1 second."), (50, "wait 50 seconds.")):
+            pluriel = {"erreur": "fr", "erreur_code": "sauvegardes.plafond_manuelles", "erreur_valeurs": {"n": n}}
+            self.assertEqual(self.page.evaluate(texte, pluriel), attendu)
+        sans_point = {"raison": "fr", "raison_code": "tailscale.lancement_impossible",
+                      "raison_valeurs": {"erreur": "x"}, "raison_sans_point": True}
+        self.assertEqual(self.page.evaluate(texte, sans_point), "tailscale could not start (x)")
+        self.assertEqual(self.page.evaluate(texte, {"message": "sans code"}), "sans code")
+
+    def test_copie_externe_et_test_d_une_sauvegarde_traduits(self):
+        self.autre_langue({"serveur.copie.dossier_introuvable": "Copy folder « {nom} » not found.",
+                           "serveur.sauvegardes.test_vide": "Empty file."})
+        self.reponses({"statut": 200, "corps": json.dumps({"adresses_reseau": [], "port": 8080, "copie_externe": {
+            "derniere_reussie": None, "jours_sans_copie": None, "erreur": "Dossier de copie « Cle » introuvable.",
+            "erreur_code": "copie.dossier_introuvable", "erreur_valeurs": {"nom": "Cle"}}})})
+        self.assertEqual(self.executer_ok("return (await stockage.info()).copieExterne.erreur;"),
+                         "Copy folder « Cle » not found.")
+        self.reponses({"statut": 200, "corps": json.dumps({"nom": "s", "ok": False, "tables": [
+            {"table": "fournisseurs", "lignes": None, "erreur": "Fichier vide : la ligne d'en-tête manque.",
+             "erreur_code": "sauvegardes.test_vide"},
+            {"table": "demandes", "lignes": 2, "erreur": None}]})})
+        tables = self.executer_ok("return (await stockage.testerSauvegarde('s')).tables;")
+        self.assertEqual([table["erreur"] for table in tables], ["Empty file.", None])
+
+
 if __name__ == "__main__":
     unittest.main()

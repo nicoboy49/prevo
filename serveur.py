@@ -299,6 +299,148 @@ SEMAPHORE_CONNEXIONS = threading.BoundedSemaphore(CONNEXIONS_MAX)
 
 
 # ---------------------------------------------------------------------------
+# Messages pour le navigateur (D157, T246)
+# ---------------------------------------------------------------------------
+# Un message que le navigateur peut afficher s'écrit traduisible('<code>', '<français>', nom=valeur…). Le français
+# est la valeur de la clé serveur.<code> de js/i18n/fr.js, au caractère près (« py -X utf8 outils/controler_textes.py
+# --domaine serveur » le vérifie) ; {nom} y est remplacé par la valeur, comme I18n.t. Le résultat est une chaîne
+# (Traduisible, sous-classe de str) : le français d'avant, à l'identique, partout où le message était une chaîne
+# (réponse, tests, console, journal). envoyer_json ajoute à côté de chaque champ qui en porte un « <champ>_code » et
+# « <champ>_valeurs » (avec_codes) ; le navigateur affiche la clé dans sa langue, et le français reçu quand il ne
+# connaît pas le code (StockageServeur.texte, js/stockage-serveur.js). Seules les valeurs écrites dans le français
+# partent avec le code : la réponse n'en dit jamais plus qu'avant.
+# Hors codes, par règle (outils/textes_serveur.py) : la console, le journal du serveur et les lanceurs (D157, Lot 4),
+# les textes écrits dans les données (D156) et les marqueurs relus par le code.
+# Le nom « traduisible » n'est jamais celui d'une variable locale (le contrôle le vérifie) : « texte » l'est souvent.
+MOTIF_VARIABLE_TEXTE = re.compile(r'\{([A-Za-z_][A-Za-z0-9_]*)\}')     # MOTIF_VARIABLE de js/i18n.js
+SUFFIXES_DU_CODE = ('_code', '_valeurs', '_sans_point')              # champs ajoutés à côté d'un message
+
+
+class Traduisible(str):
+    """Message pour le navigateur : le texte français (la chaîne elle-même), son code (clé serveur.<code>) et ses
+    valeurs. sans_point : point final retiré (forme_sans_point), le navigateur le retire aussi de sa traduction."""
+    code = None
+    valeurs = None
+    sans_point = False
+
+
+def forme_du_pluriel_fr(n):
+    """Catégorie du pluriel en français, celle de Intl.PluralRules('fr') pour one et other (0 et 1 au singulier)."""
+    try:
+        return 'one' if int(abs(float(n))) in (0, 1) else 'other'
+    except (TypeError, ValueError):
+        return 'other'
+
+
+def valeur_gardee(valeur):
+    """Valeur d'un message telle qu'elle part : un Traduisible (traduit à son tour par le navigateur), un entier, une
+    liste (jointe par « , » dans le message) ; sinon sa forme écrite dans le message (str)."""
+    if isinstance(valeur, Traduisible) or (isinstance(valeur, int) and not isinstance(valeur, bool)):
+        return valeur
+    if isinstance(valeur, (list, tuple)):
+        return [element if isinstance(element, Traduisible) else str(element) for element in valeur]
+    return str(valeur)
+
+
+def traduisible(code, modele, **valeurs):
+    """Message « code » : modele (le français, ou un pluriel {'one': …, 'other': …} choisi sur valeurs['n'], gardé
+    pour le navigateur) où chaque {nom} est remplacé par sa valeur ; une variable sans valeur reste écrite, une valeur
+    sans variable n'est pas gardée (elle ne part jamais)."""
+    if isinstance(modele, dict):
+        gabarit = modele.get(forme_du_pluriel_fr(valeurs.get('n')), modele['other'])
+        noms = {nom for forme in modele.values() for nom in MOTIF_VARIABLE_TEXTE.findall(forme)} | {'n'}
+    else:
+        gabarit = modele
+        noms = set(MOTIF_VARIABLE_TEXTE.findall(modele))
+    gardees = {nom: valeur_gardee(valeur) for nom, valeur in valeurs.items() if nom in noms}
+
+    def remplacer(trouve):
+        valeur = gardees.get(trouve.group(1))
+        if valeur is None:
+            return trouve.group(0)
+        return ', '.join(valeur) if isinstance(valeur, list) else str(valeur)
+    resultat = Traduisible(MOTIF_VARIABLE_TEXTE.sub(remplacer, gabarit))
+    resultat.code, resultat.valeurs = code, gardees
+    return resultat
+
+
+def forme_sans_point(message):
+    """Le message sans son point final (une raison mise entre parenthèses) ; un Traduisible garde son code et ses
+    valeurs, marqué sans_point."""
+    if not isinstance(message, Traduisible):
+        return str(message).rstrip('.')
+    resultat = Traduisible(message.rstrip('.'))
+    resultat.code, resultat.valeurs, resultat.sans_point = message.code, message.valeurs, True
+    return resultat
+
+
+def traduisible_de(erreur):
+    """Message d'une exception levée avec un Traduisible (str(erreur) en ferait une chaîne sans code)."""
+    message = erreur.args[0] if erreur.args else None
+    return message if isinstance(message, Traduisible) else str(erreur)
+
+
+def objet_du_message(message):
+    """{"code", "texte" (le français), "valeurs"?, "sans_point"?} : un message dans une valeur ou dans une liste."""
+    objet = {'code': message.code, 'texte': str(message)}
+    if message.valeurs:
+        objet['valeurs'] = valeurs_json(message.valeurs)
+    if message.sans_point:
+        objet['sans_point'] = True
+    return objet
+
+
+def valeurs_json(valeurs):
+    """Valeurs d'un message pour la réponse : chaque Traduisible (seul ou dans une liste) devient objet_du_message."""
+    def convertir(valeur):
+        return objet_du_message(valeur) if isinstance(valeur, Traduisible) else valeur
+    return {nom: [convertir(element) for element in valeur] if isinstance(valeur, list) else convertir(valeur)
+            for nom, valeur in (valeurs or {}).items()}
+
+
+def champs_du_message(champ, message):
+    """{"<champ>_code", "<champ>_valeurs" (s'il en a), "<champ>_sans_point" (si vrai)} d'un Traduisible ; {} sinon."""
+    if not isinstance(message, Traduisible) or not message.code:
+        return {}
+    champs = {champ + '_code': message.code}
+    if message.valeurs:
+        champs[champ + '_valeurs'] = valeurs_json(message.valeurs)
+    if message.sans_point:
+        champs[champ + '_sans_point'] = True
+    return champs
+
+
+def avec_codes(donnees):
+    """Copie de donnees où chaque champ qui porte un Traduisible est suivi de son code et de ses valeurs
+    (champs_du_message) ; une liste qui en porte (« rappels ») reçoit « <champ>_codes », un objet_du_message par
+    élément (null pour une simple chaîne)."""
+    if isinstance(donnees, dict):
+        resultat = {}
+        for cle, valeur in donnees.items():
+            resultat[cle] = avec_codes(valeur)
+            if isinstance(cle, str) and isinstance(valeur, Traduisible):
+                resultat.update(champs_du_message(cle, valeur))
+            elif isinstance(cle, str) and isinstance(valeur, (list, tuple)) \
+                    and any(isinstance(element, Traduisible) for element in valeur):
+                resultat[cle + '_codes'] = [objet_du_message(element) if isinstance(element, Traduisible) else None
+                                            for element in valeur]
+        return resultat
+    if isinstance(donnees, (list, tuple)):
+        return [avec_codes(element) for element in donnees]
+    return donnees
+
+
+def traduisible_relu(message, code, valeurs):
+    """Message relu dans un fichier d'état (copie-externe.json, écrit par avec_codes) : le français, son code et ses
+    valeurs ; le français seul sans code."""
+    if not isinstance(message, str) or not isinstance(code, str) or not code:
+        return message
+    resultat = Traduisible(message)
+    resultat.code, resultat.valeurs = code, valeurs if isinstance(valeurs, dict) else {}
+    return resultat
+
+
+# ---------------------------------------------------------------------------
 # Erreurs HTTP
 # ---------------------------------------------------------------------------
 
@@ -316,15 +458,16 @@ class ErreurHttp(Exception):
 
 # T232 (texte de Nicolas, mêmes mots que js/stockage-dossier.js messageFichierOuvert) : fichier tenu par Excel ou un
 # autre logiciel (423). Le message nomme le fichier ; le repli ne sert que si son nom n'est pas connu.
-MESSAGE_FICHIER_VERROUILLE = 'Le fichier « %s » est ouvert dans Excel ou un autre logiciel : fermez-le, puis réessayez.'
-MESSAGE_FICHIER_VERROUILLE_SANS_NOM = ('Un fichier du dossier de données est ouvert dans Excel ou un autre logiciel : '
-                                       'fermez-le, puis réessayez.')
-
-
 def message_fichier_verrouille(chemin):
     """Message du 423 pour ce fichier : son nom de base (celui que montre la fenêtre d'Excel), ou le repli."""
     nom = os.path.basename(str(chemin or ''))
-    return MESSAGE_FICHIER_VERROUILLE % nom if nom else MESSAGE_FICHIER_VERROUILLE_SANS_NOM
+    if nom:
+        return traduisible('fichier.verrouille',
+                           'Le fichier « {nom} » est ouvert dans Excel ou un autre logiciel : fermez-le, puis '
+                           'réessayez.', nom=nom)
+    return traduisible('fichier.verrouille_sans_nom',
+                       'Un fichier du dossier de données est ouvert dans Excel ou un autre logiciel : fermez-le, '
+                       'puis réessayez.')
 
 
 # ---------------------------------------------------------------------------
@@ -392,8 +535,9 @@ NOM_FICHIER_CERTIFICAT_AUTORITE = 'prevo-ca.crt'
 # La politique de la porte n'autorise au dehors que l'origine https du même hôte (le ping de porte.js).
 POLITIQUE_PORTE = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
                    "connect-src 'self' %s; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
-MESSAGE_SANS_AUTORITE = ('Aucune autorité locale sur ce serveur : le certificat a été fourni par votre informaticien, '
-                         'demandez-lui comment le faire reconnaître par le téléphone.')
+MESSAGE_SANS_AUTORITE = traduisible('porte.sans_autorite',
+                                    'Aucune autorité locale sur ce serveur : le certificat a été fourni par votre '
+                                    'informaticien, demandez-lui comment le faire reconnaître par le téléphone.')
 
 # T250 : 4 Go par défaut, comme l'import ZIP (4 Go) : tout ce que Prévo exporte, Prévo peut le réimporter, d'un mode
 # à l'autre (un export du mode dossier, qui n'a pas de plafond, entre dans le dossier des documents du serveur).
@@ -476,7 +620,9 @@ def valeur_valide(cle, genre, valeur):
     elif genre.startswith('choix:'):
         if valeur in genre[len('choix:'):].split('|'):
             return valeur
-    raise ErreurConfiguration('Configuration : la valeur de « %s » est invalide (%r).' % (cle, valeur))
+    raise ErreurConfiguration(traduisible('config.valeur_invalide',
+                                          'Configuration : la valeur de « {cle} » est invalide ({valeur}).',
+                                          cle=cle, valeur=repr(valeur)))
 
 
 def lire_configuration(chemin):
@@ -560,27 +706,35 @@ def verifier_regles_portee(reglages, responsable_existe):
     avertissements = []
     https = bool(reglages.get('certificat') and reglages.get('cle')) or bool(reglages.get('_https_auto'))
     if bool(reglages.get('certificat')) != bool(reglages.get('cle')):
-        raise ErreurConfiguration('Certificat et clé vont ensemble : donnez les deux fichiers PEM, ou aucun.')
+        raise ErreurConfiguration(traduisible('config.certificat_et_cle',
+                                              'Certificat et clé vont ensemble : donnez les deux fichiers PEM, ou '
+                                              'aucun.'))
     if reglages['ecoute'] != '127.0.0.1':
         if not reglages['comptes']:
             raise ErreurConfiguration(
-                'Prévo refuse d\'écouter sur le réseau sans mot de passe. Activez les comptes (« comptes »: true) '
-                'ou revenez à « ecoute »: "127.0.0.1" ; l\'assistant d\'installation fait les deux (ouvrez Prévo sur ce PC).')
+                traduisible('config.reseau_sans_comptes',
+                            'Prévo refuse d\'écouter sur le réseau sans mot de passe. Activez les comptes '
+                            '(« comptes »: true) ou revenez à « ecoute »: "127.0.0.1" ; l\'assistant '
+                            'd\'installation fait les deux (ouvrez Prévo sur ce PC).'))
         if not https and not reglages['mandataire']:
             raise ErreurConfiguration(
-                'Prévo refuse d\'écouter sur le réseau sans https. Donnez un certificat (« certificat » et « cle »), '
-                'laissez Prévo fabriquer le sien (« certificat_auto ») ou placez-le derrière un mandataire ; '
-                'l\'assistant d\'installation le fait pour vous.')
+                traduisible('config.reseau_sans_https',
+                            'Prévo refuse d\'écouter sur le réseau sans https. Donnez un certificat (« certificat » '
+                            'et « cle »), laissez Prévo fabriquer le sien (« certificat_auto ») ou placez-le '
+                            'derrière un mandataire ; l\'assistant d\'installation le fait pour vous.'))
     if reglages['mandataire'] and not reglages['comptes']:
         raise ErreurConfiguration(
-            'Derrière un mandataire, les comptes sont obligatoires (« comptes »: true) : le mandataire rend Prévo '
-            'joignable au-delà de ce PC.')
+            traduisible('config.mandataire_sans_comptes',
+                        'Derrière un mandataire, les comptes sont obligatoires (« comptes »: true) : le mandataire '
+                        'rend Prévo joignable au-delà de ce PC.'))
     if reglages['comptes'] and not responsable_existe and reglages['ecoute'] != '127.0.0.1':
         reglages['ecoute'] = '127.0.0.1'
-        avertissements.append('Aucun compte responsable : Prévo n\'écoute que sur ce PC tant que l\'installation '
-                              'n\'est pas terminée.')
+        avertissements.append(traduisible('config.ecoute_ce_pc_sans_responsable',
+                                          'Aucun compte responsable : Prévo n\'écoute que sur ce PC tant que '
+                                          'l\'installation n\'est pas terminée.'))
     for cle in reglages.get('_inconnues', []):
-        avertissements.append('Configuration : clé inconnue « %s » ignorée.' % cle)
+        avertissements.append(traduisible('config.cle_inconnue', 'Configuration : clé inconnue « {cle} » ignorée.',
+                                          cle=cle))
     return avertissements
 
 
@@ -672,7 +826,8 @@ def hacher_mot_de_passe(mot_de_passe, sel=None, algo=None):
     elif algo == ALGO_PBKDF2:
         empreinte = hashlib.pbkdf2_hmac('sha256', octets, sel, 600000, dklen=32)
     else:
-        raise ErreurCompte('Algorithme de mot de passe inconnu : %s.' % algo)
+        raise ErreurCompte(traduisible('comptes.algorithme_inconnu',
+                                       'Algorithme de mot de passe inconnu : {algo}.', algo=algo))
     return algo, base64.b64encode(sel).decode('ascii'), base64.b64encode(empreinte).decode('ascii')
 
 
@@ -690,10 +845,17 @@ def mot_de_passe_juste(compte, mot_de_passe):
 def verifier_mot_de_passe_choisi(mot_de_passe):
     """12 à 256 caractères, aucune règle de composition (CNIL 2022, ANSSI R21, R22)."""
     if not isinstance(mot_de_passe, str) or len(mot_de_passe) < LONGUEUR_MIN_MOT_DE_PASSE:
-        raise ErreurCompte('Le mot de passe doit faire au moins %d caractères ; une phrase de quelques mots est le '
-                           'plus simple à retenir.' % LONGUEUR_MIN_MOT_DE_PASSE)
+        raise ErreurCompte(traduisible('comptes.mot_de_passe_trop_court',
+                                       {'one': 'Le mot de passe doit faire au moins {n} caractères ; une phrase de '
+                                               'quelques mots est le plus simple à retenir.',
+                                        'other': 'Le mot de passe doit faire au moins {n} caractères ; une phrase '
+                                                 'de quelques mots est le plus simple à retenir.'},
+                                       n=LONGUEUR_MIN_MOT_DE_PASSE))
     if len(mot_de_passe) > LONGUEUR_MAX_MOT_DE_PASSE:
-        raise ErreurCompte('Le mot de passe fait plus de %d caractères.' % LONGUEUR_MAX_MOT_DE_PASSE)
+        raise ErreurCompte(traduisible('comptes.mot_de_passe_trop_long',
+                                       {'one': 'Le mot de passe fait plus de {n} caractères.',
+                                        'other': 'Le mot de passe fait plus de {n} caractères.'},
+                                       n=LONGUEUR_MAX_MOT_DE_PASSE))
 
 
 def mot_de_passe_provisoire():
@@ -743,11 +905,12 @@ def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_ch
     origine : (adresse, agent, Tailscale) de la ligne du journal (T152 : la requête du responsable), vide sinon."""
     prenom, nom = (prenom or '').strip(), (nom or '').strip()
     if not prenom:
-        raise ErreurCompte('Le prénom est obligatoire.')
+        raise ErreurCompte(traduisible('comptes.prenom_obligatoire', 'Le prénom est obligatoire.'))
     if role not in ROLES_COMPTES:
-        raise ErreurCompte('Rôle inconnu : %s.' % role)
+        raise ErreurCompte(traduisible('comptes.role_inconnu', 'Rôle inconnu : {role}.', role=role))
     if role == 'technicien' and not technicien_id:
-        raise ErreurCompte('Un compte de technicien est lié à un technicien de l\'équipe.')
+        raise ErreurCompte(traduisible('comptes.technicien_obligatoire',
+                                       'Un compte de technicien est lié à un technicien de l\'équipe.'))
     verifier_mot_de_passe_choisi(mot_de_passe)
     with VERROU_ACCES:
         comptes = lire_comptes(config)
@@ -755,7 +918,9 @@ def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_ch
         if identifiant:
             identifiant = identifiant.strip().lower()
             if identifiant in pris:
-                raise ErreurCompte('L\'identifiant « %s » est déjà pris.' % identifiant)
+                raise ErreurCompte(traduisible('comptes.identifiant_pris',
+                                               'L\'identifiant « {identifiant} » est déjà pris.',
+                                               identifiant=identifiant))
         else:
             identifiant = identifiant_depuis(prenom, nom, pris)
         algo, sel, empreinte = hacher_mot_de_passe(mot_de_passe)
@@ -783,7 +948,8 @@ def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal=
         comptes = lire_comptes(config)
         compte = trouver_compte(comptes, identifiant)
         if compte is None:
-            raise ErreurCompte('Compte introuvable : %s.' % identifiant)
+            raise ErreurCompte(traduisible('comptes.introuvable',
+                                           'Compte introuvable : {identifiant}.', identifiant=identifiant))
         compte['algo'], compte['sel'], compte['empreinte'] = hacher_mot_de_passe(nouveau)
         compte['a_changer'] = bool(a_changer)
         compte['modifie_le'] = compte['mot_de_passe_le'] = maintenant_iso(config)
@@ -795,8 +961,9 @@ def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal=
 def reinitialiser_compte(config, identifiant, origine=('', '', '')):
     """Mot de passe provisoire (16 caractères, à changer à la première connexion) ; rendu une seule fois."""
     if not os.path.isfile(chemin_comptes(config)):
-        raise ErreurCompte('Aucun compte dans %s : rien à réinitialiser. Terminez d\'abord l\'installation.'
-                           % dossier_acces(config))
+        raise ErreurCompte(traduisible('comptes.aucun_compte',
+                                       'Aucun compte dans {dossier} : rien à réinitialiser. Terminez d\'abord '
+                                       'l\'installation.', dossier=dossier_acces(config)))
     provisoire = mot_de_passe_provisoire()
     changer_mot_de_passe(config, identifiant, provisoire, a_changer=True, journal='reinitialisation', origine=origine)
     return provisoire
@@ -809,17 +976,21 @@ def modifier_compte(config, identifiant, origine=('', '', ''), **champs):
         comptes = lire_comptes(config)
         compte = trouver_compte(comptes, identifiant)
         if compte is None:
-            raise ErreurCompte('Compte introuvable : %s.' % identifiant)
+            raise ErreurCompte(traduisible('comptes.introuvable',
+                                           'Compte introuvable : {identifiant}.', identifiant=identifiant))
         for cle, valeur in champs.items():
             if cle not in permis:
-                raise ErreurCompte('Champ non modifiable : %s.' % cle)
+                raise ErreurCompte(traduisible('comptes.champ_non_modifiable',
+                                               'Champ non modifiable : {champ}.', champ=cle))
             if cle == 'role' and valeur not in ROLES_COMPTES:
-                raise ErreurCompte('Rôle inconnu : %s.' % valeur)
+                raise ErreurCompte(traduisible('comptes.role_inconnu', 'Rôle inconnu : {role}.', role=valeur))
             compte[cle] = bool(valeur) if cle == 'actif' else valeur
         if compte['role'] == 'technicien' and not compte.get('technicien_id'):
-            raise ErreurCompte('Un compte de technicien est lié à un technicien de l\'équipe.')
+            raise ErreurCompte(traduisible('comptes.technicien_obligatoire',
+                                           'Un compte de technicien est lié à un technicien de l\'équipe.'))
         if not any(c['role'] == 'responsable' and c.get('actif') for c in comptes):
-            raise ErreurCompte('Il faut garder au moins un compte responsable actif.')
+            raise ErreurCompte(traduisible('comptes.dernier_responsable',
+                                           'Il faut garder au moins un compte responsable actif.'))
         compte['modifie_le'] = maintenant_iso(config)
         ecrire_comptes(config, comptes)
     if not compte.get('actif'):
@@ -907,14 +1078,18 @@ QUI_INCONNU = '(inconnu)'               # journal : un identifiant sans compte n
                                         # tapé dans la mauvaise case y finirait en clair)
 SEL_FACTICE = bytes(16)                 # empreinte factice d'un identifiant inconnu : même calcul, même durée
 CHAMPS_SESSION = ('identifiant', 'role', 'prenom', 'nom', 'technicien_id', 'a_changer', 'appareil')
-MESSAGE_CONNEXION_REFUSEE = 'Identifiant ou mot de passe incorrect.'
-MESSAGE_SESSION_ABSENTE = 'Connexion nécessaire : votre session est absente ou a expiré.'
-MESSAGE_MOT_DE_PASSE_PROVISOIRE = 'Mot de passe provisoire : choisissez votre mot de passe d\'abord.'
-MESSAGE_ACTUEL_FAUX = 'Mot de passe actuel incorrect.'
-MESSAGE_SANS_COMPTES = ('Les comptes ne sont pas activés sur ce serveur (portée « ce PC ») : aucune connexion '
-                        'n\'est nécessaire.')
-MESSAGE_COMPTES_ILLISIBLES = ('Fichier des comptes illisible (donnees/acces/comptes.json) : remettez-le depuis une '
-                              'sauvegarde.')
+MESSAGE_CONNEXION_REFUSEE = traduisible('sessions.connexion_refusee', 'Identifiant ou mot de passe incorrect.')
+MESSAGE_SESSION_ABSENTE = traduisible('sessions.absente',
+                                      'Connexion nécessaire : votre session est absente ou a expiré.')
+MESSAGE_MOT_DE_PASSE_PROVISOIRE = traduisible('sessions.mot_de_passe_provisoire',
+                                              'Mot de passe provisoire : choisissez votre mot de passe d\'abord.')
+MESSAGE_ACTUEL_FAUX = traduisible('sessions.mot_de_passe_actuel_faux', 'Mot de passe actuel incorrect.')
+MESSAGE_SANS_COMPTES = traduisible('sessions.sans_comptes',
+                                   'Les comptes ne sont pas activés sur ce serveur (portée « ce PC ») : aucune '
+                                   'connexion n\'est nécessaire.')
+MESSAGE_COMPTES_ILLISIBLES = traduisible('comptes.fichier_illisible',
+                                         'Fichier des comptes illisible (donnees/acces/comptes.json) : remettez-le '
+                                         'depuis une sauvegarde.')
 VERROU_SESSIONS = threading.Lock()
 
 
@@ -1106,11 +1281,15 @@ LONGUEUR_MAX_LIBELLE_APPAREIL = 80
 OUBLI_APPAREILS_JOURS = 30              # invitations finies, appareils révoqués ou expirés : oubliés après 30 jours
 PREFIXE_INVITATION, PREFIXE_APPAREIL = 'INV-', 'AP-'
 CHEMIN_ENROLEMENT = '/#/enroler/'       # lien d'une invitation : adresse http de la porte + ce chemin + le jeton
-MESSAGE_INVITATION_REFUSEE = 'Invitation inconnue, expirée ou révoquée : demandez-en une nouvelle au responsable.'
-MESSAGE_ENROLEMENT_DESACTIVE = ('Enrôlement d\'appareils désactivé sur ce serveur (demandeurs_avec_compte) : chaque '
-                                'demandeur se connecte avec son compte.')
-MESSAGE_APPAREIL_REFUSE = ('Cet appareil n\'est plus autorisé (révoqué, expiré ou enrôlement désactivé) : demandez '
-                           'une nouvelle invitation au responsable.')
+MESSAGE_INVITATION_REFUSEE = traduisible('appareils.invitation_refusee',
+                                         'Invitation inconnue, expirée ou révoquée : demandez-en une nouvelle au '
+                                         'responsable.')
+MESSAGE_ENROLEMENT_DESACTIVE = traduisible('appareils.enrolement_desactive',
+                                           'Enrôlement d\'appareils désactivé sur ce serveur '
+                                           '(demandeurs_avec_compte) : chaque demandeur se connecte avec son compte.')
+MESSAGE_APPAREIL_REFUSE = traduisible('appareils.refuse',
+                                      'Cet appareil n\'est plus autorisé (révoqué, expiré ou enrôlement désactivé) : '
+                                      'demandez une nouvelle invitation au responsable.')
 VERROU_APPAREILS = threading.Lock()
 
 
@@ -1207,8 +1386,9 @@ def creer_invitation(config, heures=None):
         heures = (getattr(config, 'reglages', None) or {}).get('invitation_heures', 24)
     if (isinstance(heures, bool) or not isinstance(heures, int)
             or not INVITATION_HEURES_MIN <= heures <= INVITATION_HEURES_MAX):
-        raise ErreurHttp(400, '« heures » : un entier de %d à %d est attendu.'
-                         % (INVITATION_HEURES_MIN, INVITATION_HEURES_MAX))
+        raise ErreurHttp(400, traduisible('appareils.invitation_heures',
+                                          '« heures » : un entier de {minimum} à {maximum} est attendu.',
+                                          minimum=INVITATION_HEURES_MIN, maximum=INVITATION_HEURES_MAX))
     jeton = secrets.token_urlsafe(32)
     maintenant = maintenant_s(config)
     with VERROU_APPAREILS:
@@ -1229,7 +1409,10 @@ def enroler_appareil(config, jeton_invitation, nom, agent):
         raise ErreurHttp(403, MESSAGE_ENROLEMENT_DESACTIVE)
     nom = ' '.join(str(nom or '').split())
     if not nom or len(nom) > LONGUEUR_MAX_NOM_DEMANDEUR:
-        raise ErreurHttp(400, 'Votre nom est attendu (%d caractères au plus).' % LONGUEUR_MAX_NOM_DEMANDEUR)
+        raise ErreurHttp(400, traduisible('appareils.nom_attendu',
+                                          {'one': 'Votre nom est attendu ({n} caractères au plus).',
+                                           'other': 'Votre nom est attendu ({n} caractères au plus).'},
+                                          n=LONGUEUR_MAX_NOM_DEMANDEUR))
     if not isinstance(jeton_invitation, str) or not MOTIF_JETON.fullmatch(jeton_invitation):
         raise ErreurHttp(401, MESSAGE_INVITATION_REFUSEE)
     cle = empreinte_jeton(jeton_invitation)
@@ -1297,7 +1480,8 @@ def revoquer(config, genre, identifiant=None):
                     element[champ] = True
                     revoques.append(str(element.get('id', '')))
         if identifiant is not None and not trouves:
-            raise ErreurHttp(404, 'Introuvable : %s.' % str(identifiant)[:40])
+            raise ErreurHttp(404, traduisible('appareils.introuvable',
+                                              'Introuvable : {identifiant}.', identifiant=str(identifiant)[:40]))
         if revoques:
             ecrire_appareils(config, contenu)
     return revoques
@@ -1387,8 +1571,12 @@ def empreinte_factice(mot_de_passe):
 def erreur_blocage(reste):
     """429 avec le temps restant : champ « attente_secondes » et en-tête Retry-After."""
     secondes = max(1, int(-(-reste // 1)))
-    erreur = ErreurHttp(429, 'Trop d\'essais : la connexion est bloquée pour cet identifiant. Réessayez dans %d min.'
-                        % -(-secondes // 60), attente_secondes=secondes)
+    erreur = ErreurHttp(429, traduisible('sessions.trop_d_essais',
+                                         {'one': 'Trop d\'essais : la connexion est bloquée pour cet identifiant. '
+                                                 'Réessayez dans {n} min.',
+                                          'other': 'Trop d\'essais : la connexion est bloquée pour cet '
+                                                   'identifiant. Réessayez dans {n} min.'},
+                                         n=-(-secondes // 60)), attente_secondes=secondes)
     erreur.entetes = {'Retry-After': str(secondes)}
     return erreur
 
@@ -1475,11 +1663,14 @@ def empreinte_fichier(chemin):
 def verifier_empreinte(chemin, attendue):
     """ErreurConfiguration si le fichier manque ou si son SHA-256 n'est pas celui attendu (rien n'est exécuté)."""
     if not os.path.isfile(chemin):
-        raise ErreurConfiguration('Outil introuvable : %s.' % chemin)
+        raise ErreurConfiguration(traduisible('mkcert.outil_introuvable',
+                                              'Outil introuvable : {chemin}.', chemin=chemin))
     obtenue = empreinte_fichier(chemin)
     if not hmac.compare_digest(obtenue, (attendue or '').lower()):
-        raise ErreurConfiguration('Empreinte inattendue pour %s : le fichier a été modifié ou n\'est pas celui livré '
-                                  'avec Prévo. Il n\'a pas été exécuté.' % os.path.basename(chemin))
+        raise ErreurConfiguration(traduisible('mkcert.empreinte_inattendue',
+                                              'Empreinte inattendue pour {fichier} : le fichier a été modifié ou '
+                                              'n\'est pas celui livré avec Prévo. Il n\'a pas été exécuté.',
+                                              fichier=os.path.basename(chemin)))
 
 
 def trouver_mkcert(empreintes=None, dossier=None, nom=None):
@@ -1488,7 +1679,8 @@ def trouver_mkcert(empreintes=None, dossier=None, nom=None):
     nom = nom or nom_binaire_mkcert(empreintes['mkcert']['version'])
     fiche = empreintes['mkcert']['fichiers'].get(nom)
     if fiche is None:
-        raise ErreurConfiguration('Aucun mkcert prévu pour ce système (%s).' % nom)
+        raise ErreurConfiguration(traduisible('mkcert.systeme_non_prevu',
+                                              'Aucun mkcert prévu pour ce système ({systeme}).', systeme=nom))
     chemin = os.path.join(dossier or DOSSIER_OUTILS_TIERS, nom)
     verifier_empreinte(chemin, fiche['sha256'])
     return chemin
@@ -1502,7 +1694,9 @@ def executable_mkcert():
     if variable:
         if os.path.isfile(variable):
             return variable
-        raise ErreurConfiguration('mkcert introuvable (%s = %s).' % (VARIABLE_MKCERT, variable))
+        raise ErreurConfiguration(traduisible('mkcert.introuvable',
+                                              'mkcert introuvable ({variable} = {chemin}).',
+                                              variable=VARIABLE_MKCERT, chemin=variable))
     return trouver_mkcert()
 
 
@@ -1512,7 +1706,8 @@ def telecharger_mkcert(empreintes=None, dossier=None, nom=None, adresse=None):
     nom = nom or nom_binaire_mkcert(empreintes['mkcert']['version'])
     fiche = empreintes['mkcert']['fichiers'].get(nom)
     if fiche is None:
-        raise ErreurConfiguration('Aucun mkcert prévu pour ce système (%s).' % nom)
+        raise ErreurConfiguration(traduisible('mkcert.systeme_non_prevu',
+                                              'Aucun mkcert prévu pour ce système ({systeme}).', systeme=nom))
     dossier = dossier or DOSSIER_OUTILS_TIERS
     os.makedirs(dossier, exist_ok=True)
     cible = os.path.join(dossier, nom)
@@ -1524,8 +1719,10 @@ def telecharger_mkcert(empreintes=None, dossier=None, nom=None, adresse=None):
         verifier_empreinte(temporaire, fiche['sha256'])
         os.replace(temporaire, cible)
     except (OSError, urllib.error.URLError) as erreur:
-        raise ErreurConfiguration('Téléchargement de mkcert impossible (%s) : vérifiez la connexion à Internet, ou '
-                                  'utilisez le zip de Prévo qui le contient.' % erreur)
+        raise ErreurConfiguration(traduisible('mkcert.telechargement_impossible',
+                                              'Téléchargement de mkcert impossible ({erreur}) : vérifiez la '
+                                              'connexion à Internet, ou utilisez le zip de Prévo qui le contient.',
+                                              erreur=erreur))
     finally:
         if os.path.exists(temporaire):
             os.remove(temporaire)
@@ -1559,10 +1756,12 @@ def lancer_mkcert(executable, arguments, autorite):
     try:
         resultat = subprocess.run(commande, capture_output=True, timeout=DELAI_MKCERT_S, env=environnement)
     except (OSError, subprocess.TimeoutExpired) as erreur:
-        raise ErreurConfiguration('mkcert n\'a pas pu être lancé (%s).' % erreur)
+        raise ErreurConfiguration(traduisible('mkcert.lancement_impossible',
+                                              'mkcert n\'a pas pu être lancé ({erreur}).', erreur=erreur))
     sortie = (resultat.stdout + resultat.stderr).decode('utf-8', 'replace')
     if resultat.returncode != 0:
-        raise ErreurConfiguration('mkcert a échoué : %s' % sortie.strip()[-400:])
+        raise ErreurConfiguration(traduisible('mkcert.echec',
+                                              'mkcert a échoué : {sortie}', sortie=sortie.strip()[-400:]))
     return sortie
 
 
@@ -1587,7 +1786,8 @@ def preparer_certificat_local(config, executable, adresses=None, forcer=False, n
             pass
     lancer_mkcert(executable, ['-cert-file', certificat, '-key-file', cle] + noms, autorite)
     if not (os.path.isfile(certificat) and os.path.isfile(cle)):
-        raise ErreurConfiguration('mkcert n\'a pas produit le certificat attendu.')
+        raise ErreurConfiguration(traduisible('mkcert.certificat_absent',
+                                              'mkcert n\'a pas produit le certificat attendu.'))
     ecrire_atomique(fiche, json.dumps({'noms': noms, 'cree_le': maintenant_iso(config)}, ensure_ascii=False).encode('utf-8'))
     return certificat, cle, noms
 
@@ -1839,19 +2039,33 @@ def lancer_script_powershell(script, eleve=True):
     l'assistant) ou Demarrage_session.ps1 sans eux ; rend {"ok", "code", "message"}. Jamais appelée par les tests
     (config.lancer_eleve y est remplacée) : elle demande l'élévation et change le système."""
     if not sys.platform.startswith('win'):
-        return {'ok': False, 'code': None, 'message': 'Scripts PowerShell : Windows seulement.'}
+        return {'ok': False, 'code': None,
+                'message': traduisible('powershell.windows_seulement', 'Scripts PowerShell : Windows seulement.')}
     try:
         resultat = subprocess.run(commande_powershell(script, eleve), capture_output=True, timeout=DELAI_ELEVATION_S)
     except (OSError, subprocess.TimeoutExpired) as erreur:
-        return {'ok': False, 'code': None, 'message': 'PowerShell n\'a pas pu lancer %s (%s).'
-                                                     % (os.path.basename(script), erreur)}
+        return {'ok': False, 'code': None,
+                'message': traduisible('powershell.lancement_impossible',
+                                       'PowerShell n\'a pas pu lancer {script} ({erreur}).',
+                                       script=os.path.basename(script), erreur=erreur)}
     sortie = (resultat.stdout + resultat.stderr).decode('utf-8', 'replace').strip()
     if resultat.returncode != 0:
-        return {'ok': False, 'code': resultat.returncode,
-                'message': ('Élévation refusée ou script en échec (%s, code %d) : rien n\'a été installé. Vous pouvez '
-                            'relancer, ou choisir « à l\'ouverture de session » (sans droits d\'administrateur).'
-                            % (os.path.basename(script), resultat.returncode)) + ('\n' + sortie[-300:] if sortie else '')}
-    return {'ok': True, 'code': 0, 'message': sortie[-300:] or 'Script exécuté.'}
+        if sortie:
+            message = traduisible('powershell.echec_sortie',
+                                  'Élévation refusée ou script en échec ({script}, code {code}) : rien n\'a été '
+                                  'installé. Vous pouvez relancer, ou choisir « à l\'ouverture de session » (sans '
+                                  'droits d\'administrateur).\n{sortie}',
+                                  script=os.path.basename(script), code=resultat.returncode, sortie=sortie[-300:])
+        else:
+            message = traduisible('powershell.echec',
+                                  'Élévation refusée ou script en échec ({script}, code {code}) : rien n\'a été '
+                                  'installé. Vous pouvez relancer, ou choisir « à l\'ouverture de session » (sans '
+                                  'droits d\'administrateur).',
+                                  script=os.path.basename(script), code=resultat.returncode)
+        return {'ok': False, 'code': resultat.returncode, 'message': message}
+    # La sortie du script (Write-Output du lanceur, D157 : Lot 4) est rendue telle quelle.
+    return {'ok': True, 'code': 0,
+            'message': sortie[-300:] or traduisible('powershell.script_execute', 'Script exécuté.')}
 
 
 def certificat_de_l_autorite(config):
@@ -1892,10 +2106,13 @@ CHEMINS_TAILSCALE = {
 COMMANDES_TAILSCALE_INTERDITES = ('up', 'down', 'login', 'logout', 'install', 'update')   # jamais lancées par Prévo
 VERROU_TAILSCALE = threading.Lock()     # une détection à la fois ; config.tailscale lu et posé sous ce verrou
 RAPPELS_TAILSCALE = (
-    'Désactivez l\'expiration de clé de ce PC dans la console Tailscale (%s : Machines › ce PC › Disable key expiry) ; '
-    'sinon, au bout de quelques mois, les téléphones ne joignent plus Prévo.' % CONSOLE_TAILSCALE,
-    'Empêchez la veille du PC serveur (Démarrer avec la machine, D130) : un PC en veille ne répond plus, Tailscale '
-    'ou pas.',
+    traduisible('tailscale.rappel_expiration',
+                'Désactivez l\'expiration de clé de ce PC dans la console Tailscale ({adresse} : Machines › ce PC › '
+                'Disable key expiry) ; sinon, au bout de quelques mois, les téléphones ne joignent plus Prévo.',
+                adresse=CONSOLE_TAILSCALE),
+    traduisible('tailscale.rappel_veille',
+                'Empêchez la veille du PC serveur (Démarrer avec la machine, D130) : un PC en veille ne répond plus, '
+                'Tailscale ou pas.'),
 )
 
 
@@ -1925,19 +2142,28 @@ def lancer_tailscale(executable, arguments, delai=DELAI_TAILSCALE_S):
     délai ou rend un code non nul."""
     arguments = [str(argument) for argument in arguments]
     if not arguments or arguments[0] in COMMANDES_TAILSCALE_INTERDITES:
-        raise ErreurTailscale('Prévo ne lance jamais « tailscale %s » : c\'est à vous de le faire.' % ' '.join(arguments))
+        raise ErreurTailscale(traduisible('tailscale.commande_interdite',
+                                          'Prévo ne lance jamais « tailscale {commande} » : c\'est à vous de le '
+                                          'faire.', commande=' '.join(arguments)))
     commande = ([sys.executable, executable] if executable.endswith('.py') else [executable]) + arguments
     options = {'creationflags': subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, 'CREATE_NO_WINDOW') else {}
     try:
         resultat = subprocess.run(commande, capture_output=True, timeout=delai, **options)
     except subprocess.TimeoutExpired:
-        raise ErreurTailscale('tailscale %s ne répond pas (délai de %s s dépassé).' % (arguments[0], delai))
+        raise ErreurTailscale(traduisible('tailscale.delai_depasse',
+                                          {'one': 'tailscale {commande} ne répond pas (délai de {n} s dépassé).',
+                                           'other': 'tailscale {commande} ne répond pas (délai de {n} s dépassé).'},
+                                          commande=arguments[0], n=delai))
     except OSError as erreur:
-        raise ErreurTailscale('tailscale n\'a pas pu être lancé (%s).' % erreur)
+        raise ErreurTailscale(traduisible('tailscale.lancement_impossible',
+                                          'tailscale n\'a pas pu être lancé ({erreur}).', erreur=erreur))
     if resultat.returncode != 0:
         sortie = (resultat.stderr or resultat.stdout).decode('utf-8', 'replace').strip()
-        raise ErreurTailscale('tailscale %s a échoué : %s' % (' '.join(arguments),
-                                                              sortie[-300:] or 'code %d' % resultat.returncode))
+        if sortie:
+            raise ErreurTailscale(traduisible('tailscale.echec', 'tailscale {commande} a échoué : {sortie}',
+                                              commande=' '.join(arguments), sortie=sortie[-300:]))
+        raise ErreurTailscale(traduisible('tailscale.echec_code', 'tailscale {commande} a échoué : code {code}',
+                                          commande=' '.join(arguments), code=resultat.returncode))
     return resultat.stdout.decode('utf-8', 'replace')
 
 
@@ -1983,17 +2209,19 @@ def detecter_tailscale(executable=None, delai=DELAI_TAILSCALE_S, maintenant=None
     try:
         chemin = executable_tailscale(executable)
         if not chemin:
-            return {'present': False, 'raison': 'Tailscale introuvable sur ce PC'}
+            return {'present': False,
+                    'raison': traduisible('tailscale.raison_introuvable', 'Tailscale introuvable sur ce PC')}
         version = lancer_tailscale(chemin, ['version'], delai).strip().splitlines()
         resultat = {'present': True, 'version': version[0].strip() if version else '', 'connecte': False, 'nom': None,
                     'expiration_cle': None, 'jours_avant_expiration': None, 'serve': None, 'raison': None}
         try:
             etat = lire_json_tailscale(lancer_tailscale(chemin, ['status', '--json'], delai))
         except ErreurTailscale as erreur:
-            resultat['raison'] = str(erreur)
+            resultat['raison'] = traduisible_de(erreur)
             return resultat
         if etat is None:
-            resultat['raison'] = 'tailscale status --json : réponse illisible'
+            resultat['raison'] = traduisible('tailscale.raison_status_illisible',
+                                             'tailscale status --json : réponse illisible')
             return resultat
         soi = etat.get('Self') if isinstance(etat.get('Self'), dict) else {}
         nom = soi.get('DNSName') if isinstance(soi.get('DNSName'), str) else ''
@@ -2007,9 +2235,10 @@ def detecter_tailscale(executable=None, delai=DELAI_TAILSCALE_S, maintenant=None
             resultat['serve'] = None
         return resultat
     except ErreurTailscale as erreur:
-        return {'present': False, 'raison': str(erreur).rstrip('.')}
+        return {'present': False, 'raison': forme_sans_point(traduisible_de(erreur))}
     except Exception as erreur:         # jamais d'exception vers l'appelant
-        return {'present': False, 'raison': 'détection impossible (%s)' % erreur}
+        return {'present': False, 'raison': traduisible('tailscale.raison_detection_impossible',
+                                                        'détection impossible ({erreur})', erreur=erreur)}
 
 
 def tailscale_attendu(reglages):
@@ -2117,33 +2346,45 @@ def appliquer_tailscale(config, executable=None, delai=DELAI_TAILSCALE_S, reglag
     refus = {'ok': False, 'serve': None, 'nom': detection.get('nom'), 'adresse': proposition.get('adresse'),
              'noms': proposition.get('noms')}
     if not proposition['present']:
-        return dict(refus, message='Tailscale non détecté (%s) : installez-le et connectez-vous, puis réessayez.'
-                    % (detection.get('raison') or 'inconnu'))
+        if detection.get('raison'):
+            return dict(refus, message=traduisible('tailscale.non_detecte',
+                                                   'Tailscale non détecté ({raison}) : installez-le et '
+                                                   'connectez-vous, puis réessayez.', raison=detection['raison']))
+        return dict(refus, message=traduisible('tailscale.non_detecte_inconnu',
+                                               'Tailscale non détecté (inconnu) : installez-le et connectez-vous, '
+                                               'puis réessayez.'))
     if not detection.get('nom') or not detection.get('connecte'):
-        return dict(refus, message='Tailscale n\'est pas connecté sur ce PC : ouvrez Tailscale, connectez-vous, puis '
-                                   'réessayez.')
+        return dict(refus, message=traduisible('tailscale.non_connecte',
+                                               'Tailscale n\'est pas connecté sur ce PC : ouvrez Tailscale, '
+                                               'connectez-vous, puis réessayez.'))
     if ecrire:
         chemin = config.reglages.get('_fichier') or os.path.join(DOSSIER_APPLICATION, NOM_FICHIER_CONFIGURATION)
         try:
             modifier_configuration(chemin, {'noms': proposition['noms'], 'mandataire': True})
         except (OSError, ValueError) as erreur:
-            return dict(refus, message='Configuration non écrite (%s) : rien n\'a été lancé.' % erreur)
+            return dict(refus, message=traduisible('tailscale.configuration_non_ecrite',
+                                                   'Configuration non écrite ({erreur}) : rien n\'a été lancé.',
+                                                   erreur=erreur))
     port_http = reglages.get('port_http', PORT_PAR_DEFAUT)
     chemin_tailscale = executable_tailscale(executable)
     try:
         lancer_tailscale(chemin_tailscale, proposition['arguments_serve'], delai)
         serve = lire_json_tailscale(lancer_tailscale(chemin_tailscale, ['serve', 'status', '--json'], delai))
     except ErreurTailscale as erreur:
-        return dict(refus, message=str(erreur))
+        return dict(refus, message=traduisible_de(erreur))
     detection['serve'] = serve
     with VERROU_TAILSCALE:
         config.tailscale, config.tailscale_lu_a = detection, maintenant_s(config)
     resultat = dict(refus, serve=serve)
     if cible_serve_tailscale(serve, port_http) is None:
-        return dict(resultat, message='« tailscale serve status » ne montre pas http://127.0.0.1:%d : vérifiez la '
-                                      'commande « %s » sur ce PC.' % (port_http, proposition['serve']))
-    return dict(resultat, ok=True, message='Tailscale relaie %s vers http://127.0.0.1:%d ; la configuration vaut au '
-                                           'prochain démarrage de Prévo.' % (proposition['adresse'], port_http))
+        return dict(resultat, message=traduisible('tailscale.serve_absent',
+                                                  '« tailscale serve status » ne montre pas http://127.0.0.1:{port} : '
+                                                  'vérifiez la commande « {commande} » sur ce PC.',
+                                                  port=port_http, commande=proposition['serve']))
+    return dict(resultat, ok=True, message=traduisible('tailscale.relais_en_place',
+                                                       'Tailscale relaie {adresse} vers http://127.0.0.1:{port} ; la '
+                                                       'configuration vaut au prochain démarrage de Prévo.',
+                                                       adresse=proposition['adresse'], port=port_http))
 
 
 def activer_unattended(executable=None, delai=DELAI_TAILSCALE_S):
@@ -2151,12 +2392,14 @@ def activer_unattended(executable=None, delai=DELAI_TAILSCALE_S):
     sur ce clic explicite de l'assistant, jamais par appliquer_tailscale. Rend {"ok", "message"}."""
     chemin = executable_tailscale(executable)
     if not chemin:
-        return {'ok': False, 'message': 'Tailscale introuvable sur ce PC.'}
+        return {'ok': False, 'message': traduisible('tailscale.introuvable', 'Tailscale introuvable sur ce PC.')}
     try:
         lancer_tailscale(chemin, ['set', '--unattended=true'], delai)
     except ErreurTailscale as erreur:
-        return {'ok': False, 'message': str(erreur)}
-    return {'ok': True, 'message': 'Tailscale reste connecté même sans session Windows ouverte (« Run unattended »).'}
+        return {'ok': False, 'message': traduisible_de(erreur)}
+    return {'ok': True, 'message': traduisible('tailscale.unattended',
+                                               'Tailscale reste connecté même sans session Windows ouverte (« Run '
+                                               'unattended »).')}
 
 
 # ---------------------------------------------------------------------------
@@ -2204,9 +2447,12 @@ MOTIF_TABLE_DU_JEU_DE_DEMO = re.compile(r'^    ([a-z_]+): ')
 MOTIF_DATE_DU_JEU_DE_DEMO = re.compile(r'^  dateReference: "([0-9]{4}-[0-9]{2}-[0-9]{2})",?$')
 PREFIXE_MORCEAUX_DU_JEU_DE_DEMO = "((m, s) => s.map((r) => m[r]).join(''))("
 MOTIF_DEBUT_DE_DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')     # comme MOTIF_DATE de js/stockage-demo.js
-MESSAGE_JEU_DE_DEMO_ILLISIBLE = 'Jeu de démo illisible (js/demo-donnees.js) : commencez vide, ou remettez le fichier du zip.'
-MESSAGE_ADRESSE_INCONNUE = 'Adresse inconnue dans l\'API.'
-MESSAGE_SANS_BROUILLON = 'Commencez par dire qui utilise Prévo (étape « situation »).'
+MESSAGE_JEU_DE_DEMO_ILLISIBLE = traduisible('installation.demo_illisible',
+                                            'Jeu de démo illisible (js/demo-donnees.js) : commencez vide, ou remettez '
+                                            'le fichier du zip.')
+MESSAGE_ADRESSE_INCONNUE = traduisible('requete.adresse_inconnue', 'Adresse inconnue dans l\'API.')
+MESSAGE_SANS_BROUILLON = traduisible('installation.sans_brouillon',
+                                     'Commencez par dire qui utilise Prévo (étape « situation »).')
 # Clés du brouillon = celles de la configuration, sauf la clé du fournisseur d'IA (un secret : jamais ici).
 CLES_DU_BROUILLON = tuple(cle for cle, _, _, _ in CLES_CONFIGURATION if cle != 'ia_cle')
 VERROU_INSTALLATION = threading.Lock()  # une étape à la fois (mkcert, Tailscale, copie : le brouillon reste cohérent)
@@ -2379,7 +2625,10 @@ def valeur_du_brouillon(cle, valeur):
         return valeur_valide(cle, genres[cle], valeur)
     except ErreurConfiguration as erreur:
         bornes = BORNES_ENTIERS.get(cle)
-        raise ErreurHttp(400, str(erreur) + (' Bornes : %d à %d.' % bornes if bornes else ''))
+        if not bornes:
+            raise ErreurHttp(400, traduisible_de(erreur))
+        raise ErreurHttp(400, traduisible('config.valeur_invalide_bornes', '{erreur} Bornes : {minimum} à {maximum}.',
+                                          erreur=traduisible_de(erreur), minimum=bornes[0], maximum=bornes[1]))
 
 
 def mkcert_disponible():
@@ -2517,7 +2766,9 @@ def technicien_moi(config, prenom, nom):
     colonnes = {}
     for nom_colonne in ('id', 'nom', 'prenom', 'actif'):
         if nom_colonne not in cles:
-            raise ErreurHttp(500, 'techniciens.csv sans colonne « %s » : impossible d\'y ajouter votre fiche.' % nom_colonne)
+            raise ErreurHttp(500, traduisible('technicien.colonne_absente',
+                                              'techniciens.csv sans colonne « {colonne} » : impossible d\'y ajouter '
+                                              'votre fiche.', colonne=nom_colonne))
         colonnes[nom_colonne] = cles.index(nom_colonne)
     voulu = (forme_de_nom(nom), forme_de_nom(prenom))
     numero = 0
@@ -2549,7 +2800,8 @@ def poser_mode_solo(config, technicien_id=''):
         entete, lignes = list(COLONNES_PAR_TABLE['parametres']), []
     cles = [cle_entete(colonne) for colonne in entete]
     if 'cle' not in cles or 'valeur' not in cles:
-        raise ErreurHttp(500, 'parametres.csv sans colonnes « cle » et « valeur » : mode Solo non posé.')
+        raise ErreurHttp(500, traduisible('parametres.colonnes_absentes',
+                                          'parametres.csv sans colonnes « cle » et « valeur » : mode Solo non posé.'))
     position_cle, position_valeur = cles.index('cle'), cles.index('valeur')
     valeurs = {'mode_solo': '1', 'cloture_une_etape': '1'}
     if technicien_id:
@@ -2576,17 +2828,21 @@ def verifier_dossier_de_copie(config, dossier):
     chemin = os.path.abspath(os.path.expanduser(dossier.strip()))
     nom = nom_du_dossier(chemin)
     if not os.path.isdir(chemin):
-        raise ErreurHttp(400, 'Dossier de copie « %s » introuvable : branchez la clé ou créez le dossier, puis '
-                              'réessayez.' % nom)
+        raise ErreurHttp(400, traduisible('copie.dossier_introuvable_branchez',
+                                          'Dossier de copie « {nom} » introuvable : branchez la clé ou créez le '
+                                          'dossier, puis réessayez.', nom=nom))
     if est_sous_dossier(os.path.realpath(chemin), config.dossier_donnees):
-        raise ErreurHttp(400, 'Le dossier de copie ne peut pas être dans le dossier des données de Prévo : une panne '
-                              'du disque emporterait les données et leur copie.')
+        raise ErreurHttp(400, traduisible('copie.dossier_dans_donnees',
+                                          'Le dossier de copie ne peut pas être dans le dossier des données de '
+                                          'Prévo : une panne du disque emporterait les données et leur copie.'))
     try:
         descripteur, temoin = tempfile.mkstemp(prefix='.prevo-temoin-', dir=chemin)
         os.close(descripteur)
         os.remove(temoin)
     except OSError as erreur:
-        raise ErreurHttp(400, 'Dossier de copie « %s » : écriture impossible (%s).' % (nom, erreur.strerror or erreur))
+        raise ErreurHttp(400, traduisible('copie.ecriture_impossible',
+                                          'Dossier de copie « {nom} » : écriture impossible ({erreur}).',
+                                          nom=nom, erreur=erreur.strerror or erreur))
     return chemin
 
 
@@ -2594,15 +2850,20 @@ def verifier_dossier_cible(source, cible):
     """Cible de « deplacer » : un chemin absolu qui n'est ni le dossier de Prévo, ni dedans, ni au-dessus, et qui
     n'existe pas encore ou est vide ; 400 sinon."""
     if not os.path.isabs(cible):
-        raise ErreurHttp(400, 'Donnez un chemin complet (par exemple %s).' % DOSSIER_CONSEILLE_WINDOWS)
+        raise ErreurHttp(400, traduisible('deplacement.chemin_complet',
+                                          'Donnez un chemin complet (par exemple {exemple}).',
+                                          exemple=DOSSIER_CONSEILLE_WINDOWS))
     source_reelle, cible_reelle = os.path.realpath(source), os.path.realpath(cible)
     if chemins_egaux(source_reelle, cible_reelle):
-        raise ErreurHttp(400, 'Prévo est déjà dans ce dossier.')
+        raise ErreurHttp(400, traduisible('deplacement.deja_dans_ce_dossier', 'Prévo est déjà dans ce dossier.'))
     if est_sous_dossier(cible_reelle, source_reelle) or est_sous_dossier(source_reelle, cible_reelle):
-        raise ErreurHttp(400, 'Le dossier de destination ne peut être ni dans le dossier de Prévo ni au-dessus.')
+        raise ErreurHttp(400, traduisible('deplacement.dossier_interdit',
+                                          'Le dossier de destination ne peut être ni dans le dossier de Prévo ni '
+                                          'au-dessus.'))
     if os.path.exists(cible) and (not os.path.isdir(cible) or os.listdir(cible)):
-        raise ErreurHttp(400, 'Le dossier « %s » existe déjà et n\'est pas vide : choisissez un dossier vide ou '
-                              'nouveau.' % cible)
+        raise ErreurHttp(400, traduisible('deplacement.dossier_non_vide',
+                                          'Le dossier « {dossier} » existe déjà et n\'est pas vide : choisissez un '
+                                          'dossier vide ou nouveau.', dossier=cible))
 
 
 def copier_prevo(source, cible):
@@ -2623,13 +2884,17 @@ def copier_prevo(source, cible):
                 shutil.copy2(origine, copie)
                 if (os.path.getsize(origine) != os.path.getsize(copie)
                         or empreinte_fichier(origine) != empreinte_fichier(copie)):
-                    raise ErreurHttp(500, 'Copie incomplète (%s) : l\'ancien dossier est intact, rien n\'a été relancé.'
-                                     % os.path.relpath(origine, source))
+                    raise ErreurHttp(500, traduisible('deplacement.copie_incomplete',
+                                                      'Copie incomplète ({fichier}) : l\'ancien dossier est intact, '
+                                                      'rien n\'a été relancé.',
+                                                      fichier=os.path.relpath(origine, source)))
                 nombre += 1
     except OSError as erreur:
         if cree:
             shutil.rmtree(cible, ignore_errors=True)
-        raise ErreurHttp(500, 'Copie impossible (%s) : l\'ancien dossier est intact, rien n\'a été relancé.' % erreur)
+        raise ErreurHttp(500, traduisible('deplacement.copie_impossible',
+                                          'Copie impossible ({erreur}) : l\'ancien dossier est intact, rien n\'a '
+                                          'été relancé.', erreur=erreur))
     except ErreurHttp:
         if cree:
             shutil.rmtree(cible, ignore_errors=True)
@@ -2686,8 +2951,9 @@ def deplacer_installation(config, cible, brouillon=None):
     n'est jamais supprimé : l'utilisateur l'efface à la main ensuite."""
     source = os.path.abspath(config.dossier_application)
     if not est_sous_dossier(os.path.realpath(config.dossier_donnees), source):
-        raise ErreurHttp(400, 'Le dossier des données n\'est pas dans le dossier de Prévo (option --donnees) : '
-                              'déplacez Prévo à la main.')
+        raise ErreurHttp(400, traduisible('deplacement.donnees_hors_prevo',
+                                          'Le dossier des données n\'est pas dans le dossier de Prévo (option '
+                                          '--donnees) : déplacez Prévo à la main.'))
     verifier_dossier_cible(source, cible)               # chemin complet exigé : jamais résolu depuis le dossier courant
     cible = os.path.abspath(cible)
     nombre = copier_prevo(source, cible)
@@ -2879,9 +3145,12 @@ RESEAUX_ATELIER = tuple(ipaddress.ip_network(reseau) for reseau in (
     '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16',      # adresses privées IPv4
     'fc00::/7', 'fe80::/10'))                                               # adresses privées IPv6
 MOTIF_NOM_LOCAL = re.compile(r'[a-z0-9_-]+(\.[a-z0-9_-]+)*\.local', re.ASCII)     # mDNS : pc-atelier.local
-MESSAGE_DISTANT_REFUSE = 'Les fournisseurs d\'IA en ligne ne sont pas autorisés sur le PC serveur.'
-MESSAGE_REGLE_SUR_LE_SERVEUR = ('Demande refusée : seuls « chemin », « methode » et « corps » sont acceptés ; '
-                                'l\'adresse et la clé du fournisseur sont réglées sur le PC serveur.')
+MESSAGE_DISTANT_REFUSE = traduisible('ia.en_ligne_refuse',
+                                     'Les fournisseurs d\'IA en ligne ne sont pas autorisés sur le PC serveur.')
+MESSAGE_REGLE_SUR_LE_SERVEUR = traduisible('ia.demande_refusee',
+                                           'Demande refusée : seuls « chemin », « methode » et « corps » sont '
+                                           'acceptés ; l\'adresse et la clé du fournisseur sont réglées sur le PC '
+                                           'serveur.')
 LIBELLES_FOURNISSEURS_IA = {'ollama': 'Ollama', 'openai': 'API compatible OpenAI'}
 
 
@@ -2890,19 +3159,22 @@ def adresse_fournisseur(url):
     paramètres, ni fragment, ni espace ou caractère de contrôle. ErreurHttp(400) sinon (le message
     ne reprend jamais l'adresse)."""
     if not isinstance(url, str) or not url.strip():
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA manquante.')
+        raise ErreurHttp(400, traduisible('ia.adresse_manquante', 'Adresse du fournisseur d\'IA manquante.'))
     texte = url.strip()
     if any(caractere.isspace() or ord(caractere) < 0x20 or ord(caractere) == 0x7f for caractere in texte):
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide (espace ou caractère de contrôle).')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide_espace',
+                                          'Adresse du fournisseur d\'IA invalide (espace ou caractère de contrôle).'))
     try:
         morceaux = urlsplit(texte)
         morceaux.port                               # lève ValueError si le port est illisible
     except ValueError:
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide.')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide', 'Adresse du fournisseur d\'IA invalide.'))
     if morceaux.scheme not in ('http', 'https') or not morceaux.hostname:
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide (http:// ou https:// attendu).')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide_protocole',
+                                          'Adresse du fournisseur d\'IA invalide (http:// ou https:// attendu).'))
     if '@' in morceaux.netloc or morceaux.query or morceaux.fragment or '?' in texte or '#' in texte:
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide (ni identifiant, ni paramètres).')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide_parametres',
+                                          'Adresse du fournisseur d\'IA invalide (ni identifiant, ni paramètres).'))
     return texte.rstrip('/')
 
 
@@ -2927,17 +3199,19 @@ def lire_demande_ia(corps, reglages):
     try:
         demande = json.loads(corps.decode('utf-8'))
     except (UnicodeDecodeError, ValueError):
-        raise ErreurHttp(400, 'Demande illisible (JSON attendu).')
+        raise ErreurHttp(400, traduisible('ia.demande_illisible', 'Demande illisible (JSON attendu).'))
     if not isinstance(demande, dict):
-        raise ErreurHttp(400, 'Demande illisible (objet JSON attendu).')
+        raise ErreurHttp(400, traduisible('ia.demande_pas_un_objet', 'Demande illisible (objet JSON attendu).'))
     if any(nom not in CLES_DEMANDE_IA for nom in demande):
         raise ErreurHttp(400, MESSAGE_REGLE_SUR_LE_SERVEUR)
     chemin = demande.get('chemin')
     if chemin not in CHEMINS_IA:
-        raise ErreurHttp(400, 'Chemin non autorisé pour l\'IA (' + ', '.join(CHEMINS_IA) + ').')
+        raise ErreurHttp(400, traduisible('ia.chemin_non_autorise', 'Chemin non autorisé pour l\'IA ({chemins}).',
+                                          chemins=', '.join(CHEMINS_IA)))
     methode = demande.get('methode', 'POST')
     if methode not in ('GET', 'POST'):
-        raise ErreurHttp(400, 'Méthode non autorisée pour l\'IA (GET ou POST).')
+        raise ErreurHttp(400, traduisible('ia.methode_non_autorisee',
+                                          'Méthode non autorisée pour l\'IA (GET ou POST).'))
     entetes = {'Accept': 'application/json'}
     octets = None
     if methode == 'POST':
@@ -2946,7 +3220,9 @@ def lire_demande_ia(corps, reglages):
     cle = cle_ia(reglages)
     if cle:
         if not cle_ia_lisible(cle):
-            raise ErreurHttp(400, 'Clé du fournisseur d\'IA illisible (réglage du PC serveur : caractères ASCII seulement).')
+            raise ErreurHttp(400, traduisible('ia.cle_illisible',
+                                              'Clé du fournisseur d\'IA illisible (réglage du PC serveur : '
+                                              'caractères ASCII seulement).'))
         entetes['Authorization'] = 'Bearer ' + cle
     return {'cible': adresse_fournisseur(reglages.get('ia_url')) + '/' + chemin, 'methode': methode, 'octets': octets,
             'entetes': entetes, 'delai': DELAI_IA_S}
@@ -3062,18 +3338,20 @@ def appeler_fournisseur(demande):
             reponse.close()
     except urllib.error.URLError as erreur:
         if isinstance(erreur.reason, (socket.timeout, TimeoutError)):
-            raise ErreurHttp(504, 'Le fournisseur d\'IA n\'a pas répondu dans le délai.')
-        raise ErreurHttp(502, 'Fournisseur d\'IA injoignable.')
+            raise ErreurHttp(504, traduisible('ia.delai_depasse',
+                                              'Le fournisseur d\'IA n\'a pas répondu dans le délai.'))
+        raise ErreurHttp(502, traduisible('ia.injoignable', 'Fournisseur d\'IA injoignable.'))
     except (socket.timeout, TimeoutError):
-        raise ErreurHttp(504, 'Le fournisseur d\'IA n\'a pas répondu dans le délai.')
+        raise ErreurHttp(504, traduisible('ia.delai_depasse', 'Le fournisseur d\'IA n\'a pas répondu dans le délai.'))
     except OSError:
-        raise ErreurHttp(502, 'Fournisseur d\'IA injoignable.')
+        raise ErreurHttp(502, traduisible('ia.injoignable', 'Fournisseur d\'IA injoignable.'))
     except http.client.InvalidURL:
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide.')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide', 'Adresse du fournisseur d\'IA invalide.'))
     except http.client.HTTPException:                   # IncompleteRead, BadStatusLine, LineTooLong…
-        raise ErreurHttp(502, 'Réponse du fournisseur d\'IA incomplète ou illisible.')
+        raise ErreurHttp(502, traduisible('ia.reponse_illisible',
+                                          'Réponse du fournisseur d\'IA incomplète ou illisible.'))
     except ValueError:          # adresse que le réseau ne sait pas écrire (nom vide « a..b », non ASCII…)
-        raise ErreurHttp(400, 'Adresse du fournisseur d\'IA invalide.')
+        raise ErreurHttp(400, traduisible('ia.adresse_invalide', 'Adresse du fournisseur d\'IA invalide.'))
     return statut, octets
 
 
@@ -3093,8 +3371,9 @@ def creer_contexte_ssl(certificat, cle):
     try:
         contexte.load_cert_chain(certfile=certificat, keyfile=cle)
     except (OSError, ssl.SSLError, ValueError) as erreur:
-        raise SystemExit('Certificat ou clé illisible (%s) : vérifiez les deux fichiers PEM '
-                         'passés à --certificat et --cle.' % erreur)
+        raise SystemExit(traduisible('certificat.illisible',
+                                     'Certificat ou clé illisible ({erreur}) : vérifiez les deux fichiers PEM '
+                                     'passés à --certificat et --cle.', erreur=erreur))
     return contexte
 
 
@@ -3201,8 +3480,9 @@ def hote_autorise(valeur_host, config):
 
 ADRESSES_DE_CE_PC = ('127.0.0.1', '::1')
 PROTOCOLES_MANDATES = ('http', 'https')
-MESSAGE_HOTE_ORIGINE_REFUSE = ('Nom d\'hôte d\'origine refusé (X-Forwarded-Host) : ajoutez-le aux noms acceptés '
-                               '(« noms » de la configuration).')
+MESSAGE_HOTE_ORIGINE_REFUSE = traduisible('requete.hote_origine_refuse',
+                                          'Nom d\'hôte d\'origine refusé (X-Forwarded-Host) : ajoutez-le aux noms '
+                                          'acceptés (« noms » de la configuration).')
 
 
 def origine_mandatee(gestionnaire):
@@ -3249,20 +3529,20 @@ def analyser_chemin(chemin_brut):
     """
     chemin_brut = chemin_brut.split('?', 1)[0].split('#', 1)[0]
     if not chemin_brut.startswith('/'):
-        raise ErreurHttp(400, 'Chemin refusé.')
+        raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     if '\\' in chemin_brut or '%5c' in chemin_brut.lower():
-        raise ErreurHttp(400, 'Chemin refusé.')
+        raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     chemin_decode = unquote(chemin_brut)
     # « % » restant = double encodage (« %252e ») : refusé par prudence.
     if '\\' in chemin_decode or '%' in chemin_decode:
-        raise ErreurHttp(400, 'Chemin refusé.')
+        raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     for chemin in (chemin_brut, chemin_decode):
         morceaux = chemin[1:].split('/')
         if morceaux == ['']:
             continue                     # « / » tout seul : la page d'accueil
         for morceau in morceaux:
             if morceau == '' or segment_dangereux(morceau):
-                raise ErreurHttp(400, 'Chemin refusé.')
+                raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     return chemin_decode[1:].split('/')
 
 
@@ -3285,15 +3565,15 @@ def chemin_sous(dossier, *morceaux):
     base = os.path.realpath(dossier)
     chemin = os.path.realpath(os.path.join(base, *morceaux))
     if chemins_egaux(chemin, base) or not est_sous_dossier(chemin, base):
-        raise ErreurHttp(400, 'Chemin refusé.')
+        raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     # Après résolution (raccourcis Windows « GIT~1 », liens…), aucun morceau caché.
     try:
         relatif = os.path.relpath(chemin, base)
     except ValueError:                  # « nul », « con »… : périphériques Windows, autre « lecteur »
-        raise ErreurHttp(400, 'Chemin refusé.')
+        raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     for morceau in relatif.split(os.sep):
         if morceau.startswith('.'):
-            raise ErreurHttp(400, 'Chemin refusé.')
+            raise ErreurHttp(400, traduisible('chemin.refuse', 'Chemin refusé.'))
     return chemin
 
 
@@ -3341,7 +3621,7 @@ def morceaux_resolus(chemin, dossier):
 def chemin_table(config, table):
     """Chemin du CSV d'une table ; 404 si la table n'est pas une des 24 du schéma."""
     if table not in TABLES:
-        raise ErreurHttp(404, 'Table inconnue : %s.' % table)
+        raise ErreurHttp(404, traduisible('csv.table_inconnue', 'Table inconnue : {table}.', table=table))
     return chemin_sous(config.dossier_donnees, table + '.csv')
 
 
@@ -3355,12 +3635,14 @@ def verifier_nom_document(nom, demande=False):
     d'horodatage facultatif que le serveur impose depuis le lot 7 (MOTIF_NOM_DOCUMENT_ENREGISTRE)."""
     motif = MOTIF_NOM_DOCUMENT if demande else MOTIF_NOM_DOCUMENT_ENREGISTRE
     if not motif.fullmatch(nom) or '..' in nom:
-        raise ErreurHttp(400, 'Nom de document refusé : lettres, chiffres, « . », « _ » ou « - ».')
+        raise ErreurHttp(400, traduisible('documents.nom_refuse',
+                                          'Nom de document refusé : lettres, chiffres, « . », « _ » ou « - ».'))
     if extension(nom) not in TYPES_DOCUMENTS:
-        raise ErreurHttp(415, 'Type de document refusé. Types acceptés : %s.'
-                         % ', '.join(sorted(TYPES_DOCUMENTS)))
+        raise ErreurHttp(415, traduisible('documents.type_refuse',
+                                          'Type de document refusé. Types acceptés : {types}.',
+                                          types=', '.join(sorted(TYPES_DOCUMENTS))))
     if nom.split('.', 1)[0].lower() in NOMS_RESERVES_WINDOWS:
-        raise ErreurHttp(400, 'Nom de document réservé par Windows.')
+        raise ErreurHttp(400, traduisible('documents.nom_reserve_windows', 'Nom de document réservé par Windows.'))
 
 
 def verifier_signature_image(nom, octets):
@@ -3374,12 +3656,13 @@ def verifier_signature_image(nom, octets):
     if type_image == 'webp':
         reconnue = reconnue and octets[8:12] == b'WEBP'
     if not reconnue:
-        raise ErreurHttp(400, "Le contenu n'est pas une image %s." % type_image)
+        raise ErreurHttp(400, traduisible('documents.pas_une_image',
+                                          'Le contenu n\'est pas une image {format}.', format=type_image))
 
 
 def verifier_nom_sauvegarde(nom):
     if not isinstance(nom, str) or not MOTIF_NOM_SAUVEGARDE.fullmatch(nom):
-        raise ErreurHttp(400, 'Nom de sauvegarde invalide.')
+        raise ErreurHttp(400, traduisible('sauvegardes.nom_invalide', 'Nom de sauvegarde invalide.'))
 
 
 def lire_objet_json(corps):
@@ -3391,9 +3674,9 @@ def lire_objet_json(corps):
     try:
         demande = json.loads(corps.decode('utf-8'))
     except (UnicodeDecodeError, ValueError, RecursionError):
-        raise ErreurHttp(400, 'Corps JSON invalide.')
+        raise ErreurHttp(400, traduisible('requete.json_invalide', 'Corps JSON invalide.'))
     if not isinstance(demande, dict):
-        raise ErreurHttp(400, 'Corps JSON invalide.')
+        raise ErreurHttp(400, traduisible('requete.json_invalide', 'Corps JSON invalide.'))
     return demande
 
 
@@ -3411,8 +3694,9 @@ def lire_motif_sauvegarde(corps):
     if motif is None:
         return None
     if not isinstance(motif, str) or motif not in MOTIFS_SAUVEGARDE:
-        raise ErreurHttp(400, 'Motif de sauvegarde refusé. Motifs acceptés : %s.'
-                         % ', '.join(MOTIFS_SAUVEGARDE))
+        raise ErreurHttp(400, traduisible('sauvegardes.motif_refuse',
+                                          'Motif de sauvegarde refusé. Motifs acceptés : {motifs}.',
+                                          motifs=', '.join(MOTIFS_SAUVEGARDE)))
     return motif
 
 
@@ -3825,7 +4109,6 @@ HEURE_COPIE_EXTERNE = 2                 # la copie de la nuit part à la premiè
 ESSAIS_NOM_HORODATE = 25                # nom pris : la seconde suivante est attendue (5 s au plus)
 NOM_ETAT_COPIE_EXTERNE = 'copie-externe.json'
 PREFIXE_COPIE_EN_COURS = '.prevo-copie-en-cours-'
-MESSAGE_PLAFOND_MANUELLES = 'Une sauvegarde manuelle par minute au plus : réessayez dans %d s.'
 # T187 (D170, docs/FORMAT.md §8 et §9) : quotidiennes de plus de 30 jours supprimées à chaque nouvelle quotidienne
 # (« avant-… » jamais) ; manifeste.json dans chaque sauvegarde ; documents/ dans la seule « avant-import-zip » ;
 # sauvegarde « avant-mise-a-jour » au premier démarrage d'une autre version (donnees/derniere-version.json).
@@ -4164,7 +4447,9 @@ def nouveau_nom_horodate(config, suffixe=''):
         if not os.path.exists(os.path.join(config.dossier_sauvegardes, nom)):
             return nom
         time.sleep(0.2)
-    raise ErreurHttp(503, 'Sauvegarde impossible : aucun nom horodaté libre (l\'horloge du serveur n\'avance plus ?).')
+    raise ErreurHttp(503, traduisible('sauvegardes.aucun_nom_libre',
+                                      'Sauvegarde impossible : aucun nom horodaté libre (l\'horloge du serveur '
+                                      'n\'avance plus ?).'))
 
 
 def sauvegardes_manuelles(config):
@@ -4197,7 +4482,12 @@ def verifier_plafond_manuelles(config):
     ecoule = maintenant_s(config) - instant
     if 0 <= ecoule < DELAI_ENTRE_MANUELLES_S:
         secondes = max(1, int(-(-(DELAI_ENTRE_MANUELLES_S - ecoule) // 1)))
-        erreur = ErreurHttp(429, MESSAGE_PLAFOND_MANUELLES % secondes, attente_secondes=secondes)
+        erreur = ErreurHttp(429, traduisible('sauvegardes.plafond_manuelles',
+                                             {'one': 'Une sauvegarde manuelle par minute au plus : réessayez dans '
+                                                     '{n} s.',
+                                              'other': 'Une sauvegarde manuelle par minute au plus : réessayez dans '
+                                                       '{n} s.'}, n=secondes),
+                            attente_secondes=secondes)
         erreur.entetes = {'Retry-After': str(secondes)}
         raise erreur
 
@@ -4236,12 +4526,14 @@ def tables_a_restaurer(dossier_sauvegarde, tables_demandees):
     if tables_demandees is None:
         return disponibles
     if not isinstance(tables_demandees, list):
-        raise ErreurHttp(400, '« tables » doit être une liste de noms de tables.')
+        raise ErreurHttp(400, traduisible('restauration.tables_liste',
+                                          '« tables » doit être une liste de noms de tables.'))
     for table in tables_demandees:
         if not isinstance(table, str) or table not in TABLES:
-            raise ErreurHttp(400, 'Table inconnue : %s.' % table)
+            raise ErreurHttp(400, traduisible('csv.table_inconnue', 'Table inconnue : {table}.', table=table))
         if table not in disponibles:
-            raise ErreurHttp(400, 'La table %s est absente de cette sauvegarde.' % table)
+            raise ErreurHttp(400, traduisible('restauration.table_absente',
+                                              'La table {table} est absente de cette sauvegarde.', table=table))
     return [table for table in TABLES if table in tables_demandees]
 
 
@@ -4253,7 +4545,8 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
     verifier_nom_sauvegarde(nom_sauvegarde)
     dossier_sauvegarde = chemin_sous(config.dossier_sauvegardes, nom_sauvegarde)
     if not sauvegarde_complete(dossier_sauvegarde):
-        raise ErreurHttp(404, 'Sauvegarde introuvable ou incomplète : %s.' % nom_sauvegarde)
+        raise ErreurHttp(404, traduisible('sauvegardes.introuvable',
+                                          'Sauvegarde introuvable ou incomplète : {nom}.', nom=nom_sauvegarde))
     tables = tables_a_restaurer(dossier_sauvegarde, tables_demandees)
     copie_securite = nouveau_nom_horodate(config, '_avant-restauration')
     copier_tables_dans_sauvegarde(config, copie_securite)
@@ -4264,12 +4557,20 @@ def restaurer(config, nom_sauvegarde, tables_demandees):
             ecrire_fichier_de_donnees(config, table, octets, remplacer_abime=True, sauvegarde_du_jour=False)
         except ErreurHttp as erreur:
             # Restauration partielle : on le dit clairement, avec la copie de sécurité à utiliser.
-            raise ErreurHttp(
-                erreur.statut,
-                '%s Restauration interrompue à la table %s ; tables déjà restaurées : %s. '
-                "L'état d'avant la restauration est dans la sauvegarde %s."
-                % (erreur.message, table, ', '.join(restaurees) or 'aucune', copie_securite),
-                restaurees=restaurees, copie_securite=copie_securite)
+            if restaurees:
+                message = traduisible('restauration.interrompue',
+                                      '{erreur} Restauration interrompue à la table {table} ; tables déjà '
+                                      'restaurées : {tables}. L\'état d\'avant la restauration est dans la '
+                                      'sauvegarde {copie}.',
+                                      erreur=erreur.message, table=table, tables=', '.join(restaurees),
+                                      copie=copie_securite)
+            else:
+                message = traduisible('restauration.interrompue_aucune',
+                                      '{erreur} Restauration interrompue à la table {table} ; tables déjà '
+                                      'restaurées : aucune. L\'état d\'avant la restauration est dans la '
+                                      'sauvegarde {copie}.',
+                                      erreur=erreur.message, table=table, copie=copie_securite)
+            raise ErreurHttp(erreur.statut, message, restaurees=restaurees, copie_securite=copie_securite)
         restaurees.append(table)
     noter_fichiers_abimes(config)
     return {'restaurees': restaurees, 'copie_securite': copie_securite}
@@ -4312,21 +4613,24 @@ def tester_table_de_sauvegarde(table, chemin):
         with open(chemin, 'rb') as fichier:
             entete, lignes = lire_csv_tolerant(fichier.read())
     except OSError as erreur:
-        resultat['erreur'] = 'Fichier illisible (%s).' % (erreur.strerror or erreur.__class__.__name__)
+        resultat['erreur'] = traduisible('sauvegardes.test_illisible', 'Fichier illisible ({erreur}).',
+                                         erreur=erreur.strerror or erreur.__class__.__name__)
         return resultat
     except csv.Error as erreur:
-        resultat['erreur'] = 'Fichier illisible (%s).' % erreur
+        resultat['erreur'] = traduisible('sauvegardes.test_illisible', 'Fichier illisible ({erreur}).',
+                                         erreur=erreur)
         return resultat
     if not entete:
-        resultat['erreur'] = 'Fichier vide : la ligne d\'en-tête manque.'
+        resultat['erreur'] = traduisible('sauvegardes.test_vide', 'Fichier vide : la ligne d\'en-tête manque.')
         return resultat
     resultat['lignes'] = len(lignes)
     presentes = {cle_entete(nom) for nom in entete}
     manquantes = [colonne for colonne in COLONNES_PAR_TABLE[table] if cle_entete(colonne) not in presentes]
     if not set(manquantes) <= set(COLONNES_DES_FORMATS_SUIVANTS.get(table, ())):
-        resultat['erreur'] = ('Colonne%s du schéma absente%s de l\'en-tête : %s.'
-                              % ('s' if len(manquantes) > 1 else '', 's' if len(manquantes) > 1 else '',
-                                 ', '.join(manquantes)))
+        resultat['erreur'] = traduisible('sauvegardes.test_colonnes_absentes',
+                                         {'one': 'Colonne du schéma absente de l\'en-tête : {colonnes}.',
+                                          'other': 'Colonnes du schéma absentes de l\'en-tête : {colonnes}.'},
+                                         n=len(manquantes), colonnes=', '.join(manquantes))
     return resultat
 
 
@@ -4337,7 +4641,8 @@ def tester_sauvegarde(config, nom):
     verifier_nom_sauvegarde(nom)
     dossier = chemin_sous(config.dossier_sauvegardes, nom)
     if not sauvegarde_complete(dossier):
-        raise ErreurHttp(404, 'Sauvegarde introuvable ou incomplète : %s.' % nom)
+        raise ErreurHttp(404, traduisible('sauvegardes.introuvable',
+                                          'Sauvegarde introuvable ou incomplète : {nom}.', nom=nom))
     tables = [tester_table_de_sauvegarde(table, os.path.join(dossier, table + '.csv'))
               for table in tables_presentes(dossier)]
     return {'nom': nom, 'ok': bool(tables) and all(table['erreur'] is None for table in tables), 'tables': tables}
@@ -4381,8 +4686,8 @@ def lire_etat_copie_externe(config):
 
 def ecrire_etat_copie_externe(config, etat):
     try:
-        ecrire_atomique(chemin_etat_copie_externe(config),
-                        (json.dumps(etat, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+        ecrire_atomique(chemin_etat_copie_externe(config),          # D157 : l'erreur garde son code et ses valeurs
+                        (json.dumps(avec_codes(etat), ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
     except (OSError, ErreurHttp) as erreur:
         afficher('Copie externe des sauvegardes : état non enregistré (%s).' % getattr(erreur, 'message', erreur))
 
@@ -4428,11 +4733,14 @@ def copier_vers_l_exterieur(config, cible):
     dans la copie, ou None s'il n'y a encore aucune sauvegarde quotidienne. ErreurCopieExterne sinon."""
     nom_cible = nom_du_dossier(cible)
     if est_sous_dossier(os.path.realpath(cible), config.dossier_donnees):
-        raise ErreurCopieExterne('Le dossier de copie « %s » est dans le dossier des données de Prévo : choisissez une '
-                                 'clé USB, un NAS ou un dossier synchronisé.' % nom_cible)
+        raise ErreurCopieExterne(traduisible('copie.dossier_dans_donnees_nom',
+                                             'Le dossier de copie « {nom} » est dans le dossier des données de '
+                                             'Prévo : choisissez une clé USB, un NAS ou un dossier synchronisé.',
+                                             nom=nom_cible))
     if not os.path.isdir(cible):
-        raise ErreurCopieExterne('Dossier de copie « %s » introuvable (clé USB absente ou partage réseau '
-                                 'injoignable ?).' % nom_cible)
+        raise ErreurCopieExterne(traduisible('copie.dossier_introuvable',
+                                             'Dossier de copie « {nom} » introuvable (clé USB absente ou partage '
+                                             'réseau injoignable ?).', nom=nom_cible))
     nom = derniere_sauvegarde_quotidienne(config)
     if nom is None or os.path.isdir(os.path.join(cible, nom)):
         return nom
@@ -4443,11 +4751,16 @@ def copier_vers_l_exterieur(config, cible):
                         dirs_exist_ok=True)
         os.rename(temporaire, os.path.join(cible, nom))
     except shutil.Error as erreur:
-        raise ErreurCopieExterne('Copie vers « %s » incomplète : %d fichier(s) non copié(s) (disque plein ou fichier '
-                                 'verrouillé ?).' % (nom_cible, len(erreur.args[0]) if erreur.args else 0))
+        raise ErreurCopieExterne(traduisible('copie.incomplete',
+                                             {'one': 'Copie vers « {nom} » incomplète : {n} fichier(s) non '
+                                                     'copié(s) (disque plein ou fichier verrouillé ?).',
+                                              'other': 'Copie vers « {nom} » incomplète : {n} fichier(s) non '
+                                                       'copié(s) (disque plein ou fichier verrouillé ?).'},
+                                             nom=nom_cible, n=len(erreur.args[0]) if erreur.args else 0))
     except OSError as erreur:
-        raise ErreurCopieExterne('Copie vers « %s » impossible : %s.'
-                                 % (nom_cible, erreur.strerror or erreur.__class__.__name__))
+        raise ErreurCopieExterne(traduisible('copie.impossible',
+                                             'Copie vers « {nom} » impossible : {erreur}.',
+                                             nom=nom_cible, erreur=erreur.strerror or erreur.__class__.__name__))
     finally:
         if temporaire and os.path.isdir(temporaire):
             shutil.rmtree(temporaire, ignore_errors=True)
@@ -4474,10 +4787,12 @@ def faire_copie_externe(config):
         return None
     try:
         etat = lire_etat_copie_externe(config)
+        for suffixe in SUFFIXES_DU_CODE:                                # code de l'erreur précédente (D157)
+            etat.pop('erreur' + suffixe, None)
         try:
             nom = copier_vers_l_exterieur(config, cible)
         except ErreurCopieExterne as erreur:
-            etat['erreur'] = str(erreur)
+            etat['erreur'] = traduisible_de(erreur)
             noter_au_journal_serveur(config, 'Copie externe des sauvegardes impossible vers %r : %s' % (cible, erreur))
         else:
             etat['erreur'] = None
@@ -4532,7 +4847,8 @@ def etat_copie_externe_public(config):
         return None
     etat = lire_etat_copie_externe(config)
     derniere = etat.get('derniere_reussie') if est_une_date(etat.get('derniere_reussie')) else None
-    erreur = etat.get('erreur') if isinstance(etat.get('erreur'), str) else None
+    erreur = traduisible_relu(etat.get('erreur'), etat.get('erreur_code'), etat.get('erreur_valeurs')) \
+        if isinstance(etat.get('erreur'), str) else None
     jours = None
     if derniere is not None:
         copiee = etat.get('sauvegarde_copiee') if isinstance(etat.get('sauvegarde_copiee'), str) else ''
@@ -4575,9 +4891,6 @@ CODE_FORMAT_PLUS_RECENT = 'format_plus_recent'
 # une table (« compte » en Solo, « terminer » en Solo ou avec la démo) le vérifient elles-mêmes, avant toute écriture.
 ROUTES_ECRITURE_DES_DONNEES = (('PUT', 'csv/<table>'), ('POST', 'csv/<table>/ajout'), ('PUT', 'documents/<nom>'),
                                ('POST', 'restauration'))
-MESSAGE_FORMAT_PLUS_RECENT = (
-    'Lecture seule : ces données viennent d\'une version plus récente de Prévo (format %s des fichiers ; ce serveur '
-    'lit jusqu\'au format %d). Rien n\'est enregistré : mettez Prévo à jour sur le PC serveur, puis relancez-le.')
 PREFIXE_CONSOLE_FORMAT = 'Format des données : '
 POSTE_DU_SERVEUR = 'Serveur Prévo'          # colonne « poste » des lignes de journal écrites par le serveur
 CARACTERES_ID_JOURNAL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'     # CARACTERES_ALEATOIRES de js/donnees.js
@@ -4588,8 +4901,9 @@ RAISONS_DE_LAISSER = {
 }
 # Pertes d'une réécriture (lire_fichier_de_donnees) que le navigateur compte aussi (entree.abime) : celles de la garde
 # « fichier abîmé » (raisons_fichier_abime, T200).
-PERTE_STRUCTURE = 'structure du fichier abîmée (guillemet non fermé, ou texte collé à un guillemet)'
-PERTE_AU_DELA_DE_L_ENTETE = 'valeurs au-delà de l\'en-tête'
+PERTE_STRUCTURE = traduisible('abime.perte_structure',
+                              'structure du fichier abîmée (guillemet non fermé, ou texte collé à un guillemet)')
+PERTE_AU_DELA_DE_L_ENTETE = traduisible('abime.perte_au_dela_entete', 'valeurs au-delà de l\'en-tête')
 
 
 def texte_du_format(format):
@@ -4602,7 +4916,12 @@ def verifier_ecriture_permise(config):
     démarrage des données d'un format plus récent que le sien ; rien sinon (ni avant le démarrage, ni hors de main)."""
     etat = getattr(config, 'format_donnees', None)
     if etat and etat.get('plus_recent'):
-        raise ErreurHttp(409, MESSAGE_FORMAT_PLUS_RECENT % (texte_du_format(etat['base']), VERSION_SCHEMA_CSV),
+        raise ErreurHttp(409, traduisible('format.plus_recent',
+                                          'Lecture seule : ces données viennent d\'une version plus récente de Prévo '
+                                          '(format {format} des fichiers ; ce serveur lit jusqu\'au format '
+                                          '{courant}). Rien n\'est enregistré : mettez Prévo à jour sur le PC '
+                                          'serveur, puis relancez-le.',
+                                          format=texte_du_format(etat['base']), courant=VERSION_SCHEMA_CSV),
                          code=CODE_FORMAT_PLUS_RECENT, format=etat['base'])
 
 
@@ -5082,25 +5401,35 @@ def verifier_contenu_csv(table, octets, corps_d_ajout=False, entete_libre=False)
     """UTF-8, en-tête qui commence par les colonnes du schéma, aucune cellule dangereuse sans apostrophe ; 400 sinon.
     entete_libre (T213) : l'en-tête n'est pas comparé au schéma (CSV abîmé importé tel quel, enregistrer_csv)."""
     if not est_utf8(octets):
-        raise ErreurHttp(400, 'Le fichier %s.csv doit être encodé en UTF-8.' % table)
+        raise ErreurHttp(400, traduisible('csv.encodage',
+                                          'Le fichier {table}.csv doit être encodé en UTF-8.', table=table))
     texte = octets.decode('utf-8')
     if texte.startswith('﻿'):
         texte = texte[1:]
     try:
         lignes = list(csv.reader(io.StringIO(texte, newline=''), delimiter=';'))
     except csv.Error as erreur:
-        raise ErreurHttp(400, 'Le fichier %s.csv est illisible (%s).' % (table, erreur))
+        raise ErreurHttp(400, traduisible('csv.illisible',
+                                          'Le fichier {table}.csv est illisible ({erreur}).',
+                                          table=table, erreur=erreur))
     if not lignes:
-        raise ErreurHttp(400, 'Le fichier %s.csv est vide : la ligne d\'en-tête manque.' % table)
+        raise ErreurHttp(400, traduisible('csv.vide',
+                                          'Le fichier {table}.csv est vide : la ligne d\'en-tête manque.',
+                                          table=table))
     attendues = list(COLONNES_PAR_TABLE.get(table, ()))
     recues = [nom.strip() for nom in lignes[0]]
     if not entete_libre and recues[:len(attendues)] != attendues:
-        raise ErreurHttp(400, 'En-tête de %s.csv inattendu : il doit commencer par %s.' % (table, ';'.join(attendues)))
+        raise ErreurHttp(400, traduisible('csv.entete_inattendu',
+                                          'En-tête de {table}.csv inattendu : il doit commencer par {colonnes}.',
+                                          table=table, colonnes=';'.join(attendues)))
     for numero, ligne in enumerate(lignes[1:], 2):
         for cellule in ligne:
             if MOTIF_CELLULE_DANGEREUSE.match(cellule):
-                raise ErreurHttp(400, 'Ligne %d de %s.csv : une cellule commence par un caractère de formule '
-                                      '(« %s ») ; Prévo la protège par une apostrophe.' % (numero, table, cellule[:1]))
+                raise ErreurHttp(400, traduisible('csv.formule',
+                                                  'Ligne {numero} de {table}.csv : une cellule commence par un '
+                                                  'caractère de formule (« {caractere} ») ; Prévo la protège par '
+                                                  'une apostrophe.',
+                                                  numero=numero, table=table, caractere=cellule[:1]))
 
 
 # ---------------------------------------------------------------------------
@@ -5124,13 +5453,6 @@ def verifier_contenu_csv(table, octets, corps_d_ajout=False, entete_libre=False)
 CODE_FICHIER_ABIME = 'fichier_abime'
 ENTETE_REMPLACER_ABIME = 'X-Prevo-Remplacer-Abime'
 ENTETE_ABIME_DEPUIS = 'X-Prevo-Abime-Depuis'   # T213 : CSV abîmé importé tel quel (avec la dérogation) et sa date
-SUITE_FICHIER_ABIME = ('Corrigez-le, restaurez une sauvegarde ou importez un ZIP (Paramètres) ; le détail est dans '
-                       'Paramètres › Contrôle de la base.')
-MESSAGE_FICHIER_ABIME = ('Le fichier %s.csv est abîmé (%s) : Prévo ne l\'enregistre plus, pour ne rien perdre. '
-                         + SUITE_FICHIER_ABIME)
-MESSAGE_GUILLEMET_OUVERT = ('Le fichier %s.csv se termine au milieu d\'un texte entre guillemets (guillemet jamais '
-                            'fermé) : Prévo n\'y ajoute plus rien, pour ne rien perdre (les lignes ajoutées seraient '
-                            'avalées dans ce texte). ' + SUITE_FICHIER_ABIME)
 MOTIF_PREMIERE_LIGNE_NON_VIDE_OCTETS = re.compile(rb'[^\r\n]*\S[^\r\n]*')
 A_LIRE = object()           # ecrire_fichier_de_donnees : le fichier en place est lu par la fonction elle-même
 
@@ -5202,12 +5524,22 @@ def verifier_fichier_en_place(table, actuel, ajout=False, remplacer_abime=False)
         return
     if ajout:
         if finit_dans_un_guillemet_ouvert(actuel):
-            raise ErreurHttp(409, MESSAGE_GUILLEMET_OUVERT % table, code=CODE_FICHIER_ABIME, table=table)
+            raise ErreurHttp(409, traduisible('abime.guillemet_ouvert',
+                                              'Le fichier {table}.csv se termine au milieu d\'un texte entre '
+                                              'guillemets (guillemet jamais fermé) : Prévo n\'y ajoute plus rien, '
+                                              'pour ne rien perdre (les lignes ajoutées seraient avalées dans ce '
+                                              'texte). Corrigez-le, restaurez une sauvegarde ou importez un ZIP '
+                                              '(Paramètres) ; le détail est dans Paramètres › Contrôle de la base.',
+                                              table=table), code=CODE_FICHIER_ABIME, table=table)
         return
     raisons = [] if remplacer_abime else raisons_fichier_abime(actuel)
     if raisons:
-        raise ErreurHttp(409, MESSAGE_FICHIER_ABIME % (table, ', '.join(raisons)), code=CODE_FICHIER_ABIME,
-                         table=table)
+        raise ErreurHttp(409, traduisible('abime.fichier',
+                                          'Le fichier {table}.csv est abîmé ({raisons}) : Prévo ne l\'enregistre '
+                                          'plus, pour ne rien perdre. Corrigez-le, restaurez une sauvegarde ou '
+                                          'importez un ZIP (Paramètres) ; le détail est dans Paramètres › Contrôle '
+                                          'de la base.', table=table, raisons=raisons),
+                         code=CODE_FICHIER_ABIME, table=table)
 
 
 def ecrire_fichier_de_donnees(config, table, octets, actuel=A_LIRE, *, ajout=False, remplacer_abime=False,
@@ -5251,11 +5583,12 @@ def enregistrer_csv(config, table, octets, version_attendue, controle=None, remp
     attendue = None if version_attendue == 'aucune' else version_attendue
     if attendue != version_actuelle:
         if version_actuelle is None:
-            message = 'Le fichier %s.csv n\'existe plus.' % table
+            message = traduisible('csv.n_existe_plus', 'Le fichier {table}.csv n\'existe plus.', table=table)
         elif attendue is None:
-            message = 'Le fichier %s.csv existe déjà.' % table
+            message = traduisible('csv.existe_deja', 'Le fichier {table}.csv existe déjà.', table=table)
         else:
-            message = 'Le fichier %s.csv a été modifié par un autre poste.' % table
+            message = traduisible('csv.modifie_ailleurs', 'Le fichier {table}.csv a été modifié par un autre poste.',
+                                  table=table)
         raise ErreurHttp(409, message, version_actuelle=version_actuelle)
     if controle is not None:
         octets = controle(octets, actuel)
@@ -5269,12 +5602,13 @@ def enregistrer_csv(config, table, octets, version_attendue, controle=None, remp
 def decouper_corps_ajout(corps):
     """Corps d'un ajout = ligne d'en-tête + lignes de données (UTF-8 sans BOM)."""
     if not est_utf8(corps):
-        raise ErreurHttp(400, 'Le corps doit être encodé en UTF-8.')
+        raise ErreurHttp(400, traduisible('csv.corps_encodage', 'Le corps doit être encodé en UTF-8.'))
     if corps.startswith(BOM_UTF8):
         corps = corps[len(BOM_UTF8):]
     entete, lignes = premiere_ligne(corps)
     if not entete:
-        raise ErreurHttp(400, 'Le corps doit commencer par la ligne d\'en-tête.')
+        raise ErreurHttp(400, traduisible('csv.corps_sans_entete',
+                                          'Le corps doit commencer par la ligne d\'en-tête.'))
     return corps, entete, lignes
 
 
@@ -5298,10 +5632,12 @@ def ajouter_au_csv(config, table, corps, controle=None):
     if actuel is None or not actuel.replace(BOM_UTF8, b'', 1).strip():
         return ecrire_fichier_de_donnees(config, table, BOM_UTF8 + corps, actuel, ajout=True, sauvegarde_du_jour=False)
     if not est_utf8(actuel):
-        raise ErreurHttp(409, 'Le fichier %s.csv n\'est pas en UTF-8 (réenregistré par Excel ?).'
-                         % table, version_actuelle=empreinte(actuel))
+        raise ErreurHttp(409, traduisible('csv.ajout_encodage',
+                                          'Le fichier {table}.csv n\'est pas en UTF-8 (réenregistré par Excel ?).',
+                                          table=table), version_actuelle=empreinte(actuel))
     if premiere_ligne(actuel)[0] != entete:
-        raise ErreurHttp(409, 'L\'en-tête de %s.csv est différent.' % table,
+        raise ErreurHttp(409, traduisible('csv.ajout_entete_different',
+                                          'L\'en-tête de {table}.csv est différent.', table=table),
                          version_actuelle=empreinte(actuel))
     if not lignes:
         return empreinte(actuel)
@@ -5355,10 +5691,11 @@ def verifier_quota_documents(config, taille_ajoutee):
     quota_mo = config.reglages.get('quota_documents_mo', QUOTA_DOCUMENTS_MO_PAR_DEFAUT)
     occupe = taille_des_documents(config) + taille_ajoutee
     if occupe > quota_mo * 1024 * 1024:
-        raise ErreurHttp(413, 'Dossier des documents plein (%s Mo sur %d Mo avec ce document) : faites de la place, '
-                              'ou agrandissez la place des documents dans Paramètres › Accès et installation, sur le '
-                              'PC serveur.'
-                         % (('%.1f' % (occupe / (1024 * 1024))).replace('.', ','), quota_mo))
+        raise ErreurHttp(413, traduisible('documents.dossier_plein',
+                                          'Dossier des documents plein ({occupe} Mo sur {quota} Mo avec ce '
+                                          'document) : faites de la place, ou agrandissez la place des documents '
+                                          'dans Paramètres › Accès et installation, sur le PC serveur.',
+                                          occupe=('%.1f' % (occupe / (1024 * 1024))).replace('.', ','), quota=quota_mo))
 
 
 def enregistrer_document(config, nom_demande, octets):
@@ -5369,7 +5706,7 @@ def enregistrer_document(config, nom_demande, octets):
     nom = nom_de_document_impose(config, nom_demande)
     chemin = chemin_document(config, nom)
     if os.path.exists(chemin):
-        raise ErreurHttp(409, 'Le document %s existe déjà.' % nom)
+        raise ErreurHttp(409, traduisible('documents.existe_deja', 'Le document {nom} existe déjà.', nom=nom))
     verifier_quota_documents(config, len(octets))
     ecrire_atomique(chemin, octets)
     return nom
@@ -5529,9 +5866,7 @@ LIGNES_CACHEES_PAR_ROLE = {
 # Demande créée par le demandeur : statut « Nouvelle », champs de la décision du responsable vides.
 STATUT_DEMANDE_NOUVELLE = 'Nouvelle'
 CHAMPS_DE_DECISION = ('motif_decision', 'date_decision', 'ot_id')
-MESSAGE_RESERVE_AU_RESPONSABLE = 'Accès refusé : réservé au responsable.'
-MESSAGE_AJOUT_SEULEMENT = ('Accès refusé : le demandeur ne peut qu\'ajouter une demande (statut « Nouvelle », sans '
-                           'décision) ; %s')
+MESSAGE_RESERVE_AU_RESPONSABLE = traduisible('acces.reserve_au_responsable', 'Accès refusé : réservé au responsable.')
 
 
 def role_effectif(identite):
@@ -5589,16 +5924,23 @@ def message_refus(identite, route, segment):
     if ROLES_PAR_ROUTE.get(route) == RESPONSABLE:
         return MESSAGE_RESERVE_AU_RESPONSABLE
     if motif == 'csv/<table>' and methode == 'GET':
-        return 'Accès refusé : la table « %s » n\'est pas ouverte au %s.' % (segment, role)
+        return traduisible('acces.table_fermee', 'Accès refusé : la table « {table} » n\'est pas ouverte au {role}.',
+                           table=segment, role=role)
     if motif.startswith('csv/') and role == 'technicien':
-        return 'Accès refusé : la table « %s » ne se modifie que par le responsable.' % segment
+        return traduisible('acces.table_du_responsable',
+                           'Accès refusé : la table « {table} » ne se modifie que par le responsable.', table=segment)
     if motif.startswith('csv/'):
-        return ('Accès refusé : le %s ne peut que créer une demande (et la ligne du journal qui va avec).' % role)
+        return traduisible('acces.demande_seulement',
+                           'Accès refusé : le {role} ne peut que créer une demande (et la ligne du journal qui va '
+                           'avec).', role=role)
     if motif == 'documents/<nom>' and methode == 'PUT':
-        return 'Accès refusé : le %s ne joint que la photo d\'une demande.' % role
+        return traduisible('acces.photo_seulement', 'Accès refusé : le {role} ne joint que la photo d\'une demande.',
+                           role=role)
     if motif == 'documents/<nom>':
-        return 'Accès refusé : ce document n\'est pas ouvert au %s.' % role
-    return 'Accès refusé : votre rôle (%s) ne permet pas cette action.' % role
+        return traduisible('acces.document_ferme', 'Accès refusé : ce document n\'est pas ouvert au {role}.',
+                           role=role)
+    return traduisible('acces.role_refuse', 'Accès refusé : votre rôle ({role}) ne permet pas cette action.',
+                       role=role)
 
 
 def verifier_role(config, identite, route, segment):
@@ -5646,7 +5988,9 @@ def lire_tableau(table, octets):
     try:
         return lire_csv_tolerant(octets)
     except csv.Error as erreur:
-        raise ErreurHttp(500, 'Le fichier %s.csv est illisible (%s).' % (table, erreur))
+        raise ErreurHttp(500, traduisible('csv.illisible',
+                                          'Le fichier {table}.csv est illisible ({erreur}).',
+                                          table=table, erreur=erreur))
 
 
 def dictionnaires_csv(octets, table=''):
@@ -5731,7 +6075,10 @@ def remettre_colonnes_cachees(table, octets_recus, octets_actuels, colonnes):
 
 
 def refus_ajout_seulement(raison):
-    return ErreurHttp(403, MESSAGE_AJOUT_SEULEMENT % raison)
+    """403 d'une écriture de demandes.csv par le demandeur ; raison : un message (traduisible) en minuscule."""
+    return ErreurHttp(403, traduisible('acces.ajout_seulement',
+                                       'Accès refusé : le demandeur ne peut qu\'ajouter une demande (statut '
+                                       '« Nouvelle », sans décision) ; {raison}', raison=raison))
 
 
 def verifier_demande_nouvelle(ligne, deja_prises):
@@ -5739,14 +6086,19 @@ def verifier_demande_nouvelle(ligne, deja_prises):
     sinon. deja_prises : ids du fichier et des nouvelles lignes déjà vues (complété ici)."""
     identifiant = ligne.get('id', '').strip()
     if not identifiant:
-        raise refus_ajout_seulement('une nouvelle demande doit avoir un numéro.')
+        raise refus_ajout_seulement(traduisible('demandes.numero_obligatoire',
+                                                'une nouvelle demande doit avoir un numéro.'))
     if identifiant in deja_prises:
-        raise refus_ajout_seulement('le numéro %s est déjà pris.' % identifiant)
+        raise refus_ajout_seulement(traduisible('demandes.numero_pris',
+                                                'le numéro {numero} est déjà pris.', numero=identifiant))
     deja_prises.add(identifiant)
     if ligne.get('statut', '').strip() != STATUT_DEMANDE_NOUVELLE:
-        raise refus_ajout_seulement('une nouvelle demande a le statut « %s ».' % STATUT_DEMANDE_NOUVELLE)
+        raise refus_ajout_seulement(traduisible('demandes.statut_nouvelle',
+                                                'une nouvelle demande a le statut « {statut} ».',
+                                                statut=STATUT_DEMANDE_NOUVELLE))
     if any(ligne.get(cle_entete(champ), '').strip() for champ in CHAMPS_DE_DECISION):
-        raise refus_ajout_seulement('la décision (motif, date, ordre de travail) revient au responsable.')
+        raise refus_ajout_seulement(traduisible('demandes.decision_reservee',
+                                                'la décision (motif, date, ordre de travail) revient au responsable.'))
 
 
 def garder_les_demandes_actuelles(octets_recus, octets_actuels):
@@ -5778,13 +6130,18 @@ def garder_les_demandes_actuelles(octets_recus, octets_actuels):
         if retrouvee is not None:
             candidates.remove(retrouvee)
         elif identifiant in prises:
-            raise refus_ajout_seulement('la demande %s existe déjà : elle ne se modifie pas ici.' % identifiant)
+            raise refus_ajout_seulement(traduisible('demandes.non_modifiable',
+                                                    'la demande {numero} existe déjà : elle ne se modifie pas ici.',
+                                                    numero=identifiant))
         else:
             verifier_demande_nouvelle(recue, prises)
             nouvelles.append(brute)
-    manquantes = [identifiant or 'sans numéro' for identifiant, reste in restantes.items() if reste]
+    manquantes = [identifiant or traduisible('demandes.sans_numero', 'sans numéro')
+                  for identifiant, reste in restantes.items() if reste]
     if manquantes:
-        raise refus_ajout_seulement('une demande ne se supprime pas (%s).' % ', '.join(sorted(manquantes)[:5]))
+        raise refus_ajout_seulement(traduisible('demandes.non_supprimable',
+                                                'une demande ne se supprime pas ({demandes}).',
+                                                demandes=sorted(manquantes)[:5]))
     gardees = [[ancienne.get(cle, '') for cle in cles] for ancienne in actuelles]
     return ecrire_tableau_csv(entete, gardees + nouvelles)
 
@@ -5855,18 +6212,24 @@ def champs_de_compte(config, demande, obligatoires=()):
     champs = {}
     for cle, valeur in demande.items():
         if cle not in CHAMPS_COMPTE_MODIFIABLES:
-            raise ErreurHttp(400, 'Champ inconnu ou non modifiable ici : « %s » (prenom, nom, role, technicien_id).'
-                             % str(cle)[:60])
+            raise ErreurHttp(400, traduisible('comptes.champ_inconnu',
+                                              'Champ inconnu ou non modifiable ici : « {champ} » (prenom, nom, '
+                                              'role, technicien_id).', champ=str(cle)[:60]))
         if not isinstance(valeur, str):
-            raise ErreurHttp(400, '« %s » : un texte est attendu.' % cle)
+            raise ErreurHttp(400, traduisible('comptes.texte_attendu',
+                                              '« {champ} » : un texte est attendu.', champ=cle))
         champs[cle] = valeur.strip()
     for cle in obligatoires:
         if not champs.get(cle):
-            raise ErreurHttp(400, '« %s » est obligatoire.' % cle)
+            raise ErreurHttp(400, traduisible('comptes.champ_obligatoire', '« {champ} » est obligatoire.', champ=cle))
     if 'role' in champs and champs['role'] not in ROLES_COMPTES:
-        raise ErreurHttp(400, 'Rôle inconnu : « %s » (responsable, technicien ou demandeur).' % champs['role'][:60])
+        raise ErreurHttp(400, traduisible('comptes.role_inconnu_liste',
+                                          'Rôle inconnu : « {role} » (responsable, technicien ou demandeur).',
+                                          role=champs['role'][:60]))
     if champs.get('technicien_id') and not technicien_existe(config, champs['technicien_id']):
-        raise ErreurHttp(400, 'Technicien inconnu : « %s » (voir Équipe).' % champs['technicien_id'][:60])
+        raise ErreurHttp(400, traduisible('comptes.technicien_inconnu',
+                                          'Technicien inconnu : « {technicien} » (voir Équipe).',
+                                          technicien=champs['technicien_id'][:60]))
     return champs
 
 
@@ -5959,7 +6322,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.mandat = origine_mandatee(self)        # §22.7 : None pour un client direct
         try:
             if not hote_autorise(self.headers.get('Host'), self.config):
-                raise ErreurHttp(403, 'Nom d\'hôte refusé. Utilisez l\'adresse IP du PC.')
+                raise ErreurHttp(403, traduisible('requete.hote_refuse',
+                                                  'Nom d\'hôte refusé. Utilisez l\'adresse IP du PC.'))
             if self.mandat is not None and not hote_autorise(self.mandat['hote'], self.config):
                 raise ErreurHttp(403, MESSAGE_HOTE_ORIGINE_REFUSE)
             morceaux = analyser_chemin(self.path)
@@ -5983,14 +6347,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             elif methode == 'GET':
                 self.servir_statique(morceaux)
             else:
-                raise ErreurHttp(405, 'Méthode non autorisée.')
+                raise ErreurHttp(405, traduisible('requete.methode_non_autorisee', 'Méthode non autorisée.'))
         except ErreurHttp as erreur:
             self.envoyer_erreur(erreur)
         except (ConnectionError, socket.timeout):
             pass                        # le navigateur a fermé la connexion
         except Exception:               # bogue : on le trace sans arrêter le serveur
             traceback.print_exc()
-            self.envoyer_erreur(ErreurHttp(500, 'Erreur interne du serveur.'))
+            self.envoyer_erreur(ErreurHttp(500, traduisible('requete.erreur_interne', 'Erreur interne du serveur.')))
 
     def traiter_api(self, methode, morceaux, corps):
         """Aiguillage d'après ROUTES_API (chemin après /api/) : 404 adresse inconnue, 405 autre méthode. Le segment
@@ -6006,7 +6370,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             chemin_document(self.config, segment)
         fonction = ROUTES_API.get((methode, motif))
         if fonction is None:
-            raise ErreurHttp(405, 'Méthode non autorisée.')
+            raise ErreurHttp(405, traduisible('requete.methode_non_autorisee', 'Méthode non autorisée.'))
         if (methode, motif) in ROUTES_ECRITURE_DES_DONNEES:
             verifier_ecriture_permise(self.config)          # T185 (D169) : données plus récentes, 409
         getattr(self, fonction)(segment, corps)
@@ -6120,7 +6484,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         https://<même hôte>:<ce port>/api/ping ; le port vient toujours de la page servie)."""
         octets = lire_octets(PAGE_PORTE)
         if octets is None:
-            raise ErreurHttp(500, 'Page de porte introuvable (acces/porte.html).')
+            raise ErreurHttp(500, traduisible('porte.page_introuvable',
+                                              'Page de porte introuvable (acces/porte.html).'))
         attribut = 'data-port-https="%d"' % self.config.port_https
         return octets.replace(ATTRIBUT_PORT_HTTPS.encode('ascii'), attribut.encode('ascii'), 1)
 
@@ -6153,28 +6518,31 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     def verifier_entete_prevo(self):
         """X-Prevo: 1 obligatoire : une page d'un autre site ne peut pas l'envoyer."""
         if self.headers.get('X-Prevo') != '1':
-            raise ErreurHttp(403, 'En-tête X-Prevo manquant.')
+            raise ErreurHttp(403, traduisible('requete.entete_prevo_manquant', 'En-tête X-Prevo manquant.'))
 
     def lire_corps(self):
         """Lit le corps : Content-Length obligatoire (411) et au plus TAILLE_MAX_CORPS (413), TAILLE_MAX_CORPS_CSV pour
         l'envoi d'une table (ROUTES_CORPS_CSV, T208)."""
         longueur_texte = self.headers.get('Content-Length')
         if longueur_texte is None:
-            raise ErreurHttp(411, 'En-tête Content-Length obligatoire.')
+            raise ErreurHttp(411, traduisible('requete.longueur_obligatoire', 'En-tête Content-Length obligatoire.'))
         try:
             longueur = int(longueur_texte)
         except ValueError:
-            raise ErreurHttp(400, 'En-tête Content-Length invalide.')
+            raise ErreurHttp(400, traduisible('requete.longueur_invalide', 'En-tête Content-Length invalide.'))
         if longueur < 0:
-            raise ErreurHttp(400, 'En-tête Content-Length invalide.')
+            raise ErreurHttp(400, traduisible('requete.longueur_invalide', 'En-tête Content-Length invalide.'))
         morceaux = analyser_chemin(self.path)          # déjà contrôlé par traiter
         route = (self.command, motif_de_route(morceaux[1:])) if morceaux[0] == 'api' else None
         limite = TAILLE_MAX_CORPS_CSV if route in ROUTES_CORPS_CSV else TAILLE_MAX_CORPS
         if longueur > limite:
-            raise ErreurHttp(413, 'Envoi trop gros (%d Mo au maximum).' % (limite // (1024 * 1024)))
+            raise ErreurHttp(413, traduisible('requete.envoi_trop_gros',
+                                              {'one': 'Envoi trop gros ({n} Mo au maximum).',
+                                               'other': 'Envoi trop gros ({n} Mo au maximum).'},
+                                              n=limite // (1024 * 1024)))
         corps = self.rfile.read(longueur)
         if len(corps) != longueur:
-            raise ErreurHttp(400, 'Corps de la requête incomplet.')
+            raise ErreurHttp(400, traduisible('requete.corps_incomplet', 'Corps de la requête incomplet.'))
         return corps
 
     # --- Fonctions de l'API (appelées avec le segment variable du chemin, ou None, et le corps) ------
@@ -6231,8 +6599,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         identifiant, mot_de_passe = demande.get('identifiant'), demande.get('mot_de_passe')
         rester = demande.get('rester', False)
         if not (isinstance(identifiant, str) and isinstance(mot_de_passe, str) and isinstance(rester, bool)):
-            raise ErreurHttp(400, 'Connexion : « identifiant » et « mot_de_passe » (textes) sont attendus, '
-                                  '« rester » vaut vrai ou faux.')
+            raise ErreurHttp(400, traduisible('sessions.connexion_champs',
+                                              'Connexion : « identifiant » et « mot_de_passe » (textes) sont '
+                                              'attendus, « rester » vaut vrai ou faux.'))
         compte = verifier_tentative(self.config, identifiant, mot_de_passe, self.origine(),
                                     ErreurHttp(401, MESSAGE_CONNEXION_REFUSEE))
         if self.session is not None:
@@ -6256,20 +6625,22 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         demande = lire_objet_json(corps)
         actuel, nouveau = demande.get('actuel'), demande.get('nouveau')
         if not (isinstance(actuel, str) and isinstance(nouveau, str)):
-            raise ErreurHttp(400, 'Mot de passe : « actuel » et « nouveau » (textes) sont attendus.')
+            raise ErreurHttp(400, traduisible('sessions.mot_de_passe_champs',
+                                              'Mot de passe : « actuel » et « nouveau » (textes) sont attendus.'))
         try:
             verifier_mot_de_passe_choisi(nouveau)
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         if nouveau == actuel:
-            raise ErreurHttp(400, 'Choisissez un mot de passe différent de l\'actuel.')
+            raise ErreurHttp(400, traduisible('sessions.mot_de_passe_identique',
+                                              'Choisissez un mot de passe différent de l\'actuel.'))
         identifiant, origine = self.session['identifiant'], self.origine()
         verifier_tentative(self.config, identifiant, actuel, origine, ErreurHttp(403, MESSAGE_ACTUEL_FAUX),
                            journal_reussite=None)
         try:
             changer_mot_de_passe(self.config, identifiant, nouveau, origine=origine)
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         compte = trouver_compte(comptes_du_serveur(self.config), identifiant)
         self.repondre_avec_session(compte, self.session['longue'])
 
@@ -6281,7 +6652,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         demande = lire_objet_json(corps)
         invitation, nom = demande.get('invitation'), demande.get('nom')
         if not (isinstance(invitation, str) and isinstance(nom, str)):
-            raise ErreurHttp(400, 'Enrôlement : « invitation » et « nom » (textes) sont attendus.')
+            raise ErreurHttp(400, traduisible('appareils.enrolement_champs',
+                                              'Enrôlement : « invitation » et « nom » (textes) sont attendus.'))
         jeton, appareil = enroler_appareil(self.config, invitation, nom, self.headers.get('User-Agent', ''))
         self.session = identite_de_l_appareil(appareil, empreinte_jeton(jeton))
         adresse, agent, tailscale = self.origine()
@@ -6297,14 +6669,18 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         demande = lire_objet_json(corps) if corps.strip() else {}
         cible = demande.get('identifiant', self.session['identifiant'])
         if not isinstance(cible, str) or not cible.strip():
-            raise ErreurHttp(400, '« identifiant » : l\'identifiant d\'un compte est attendu.')
+            raise ErreurHttp(400, traduisible('sessions.identifiant_attendu',
+                                              '« identifiant » : l\'identifiant d\'un compte est attendu.'))
         cible = cible.strip().lower()
         soi_meme = cible == self.session['identifiant']
         if not soi_meme:
             if self.session['role'] != 'responsable':
-                raise ErreurHttp(403, 'Réservé au responsable : vous ne pouvez fermer que vos propres sessions.')
+                raise ErreurHttp(403, traduisible('sessions.reserve_au_responsable',
+                                                  'Réservé au responsable : vous ne pouvez fermer que vos propres '
+                                                  'sessions.'))
             if trouver_compte(comptes_du_serveur(self.config), cible) is None:
-                raise ErreurHttp(404, 'Compte introuvable : %s.' % cible)
+                raise ErreurHttp(404, traduisible('comptes.introuvable',
+                                                  'Compte introuvable : {identifiant}.', identifiant=cible))
         nombre = fermer_sessions_de(self.config, cible)
         adresse, agent, tailscale = self.origine()
         ecrire_journal_acces(self.config, cible, adresse, agent, 'deconnexion', tailscale)
@@ -6328,7 +6704,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                                   technicien_id=champs.get('technicien_id', ''), a_changer=True,
                                   origine=self.origine())
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         self.envoyer_json(200, {'compte': compte, 'mot_de_passe_provisoire': provisoire})
 
     def api_compte_changer(self, identifiant, corps):
@@ -6339,13 +6715,17 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         demande = lire_objet_json(corps)
         action = demande.pop('action', None)
         if action not in ACTIONS_COMPTE:
-            raise ErreurHttp(400, '« action » attendue : %s.' % ', '.join(ACTIONS_COMPTE))
+            raise ErreurHttp(400, traduisible('comptes.action_attendue',
+                                              '« action » attendue : {actions}.', actions=', '.join(ACTIONS_COMPTE)))
         if action != 'modifier' and demande:
-            raise ErreurHttp(400, 'L\'action « %s » ne prend aucun autre champ.' % action)
+            raise ErreurHttp(400, traduisible('comptes.action_sans_champ',
+                                              'L\'action « {action} » ne prend aucun autre champ.', action=action))
         champs = champs_de_compte(self.config, demande) if action == 'modifier' else {}
         cible = trouver_compte(comptes_du_serveur(self.config), identifiant)
         if cible is None:
-            raise ErreurHttp(404, 'Compte introuvable : %s.' % identifiant[:LONGUEUR_MAX_IDENTIFIANT])
+            raise ErreurHttp(404, traduisible('comptes.introuvable',
+                                              'Compte introuvable : {identifiant}.',
+                                              identifiant=identifiant[:LONGUEUR_MAX_IDENTIFIANT]))
         reponse = {}
         try:
             if action == 'reinitialiser':
@@ -6358,7 +6738,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
                 compte = modifier_compte(self.config, cible['identifiant'], origine=self.origine(),
                                          actif=(action == 'activer'))
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         reponse['compte'] = compte
         self.envoyer_json(200, reponse)
 
@@ -6392,7 +6772,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         demande = lire_objet_json(corps) if corps.strip() else {}
         inconnus = sorted(set(demande) - {'heures'})
         if inconnus:
-            raise ErreurHttp(400, 'Champ inconnu : « %s » (« heures » seulement).' % str(inconnus[0])[:60])
+            raise ErreurHttp(400, traduisible('appareils.champ_inconnu',
+                                              'Champ inconnu : « {champ} » (« heures » seulement).',
+                                              champ=str(inconnus[0])[:60]))
         jeton, invitation = creer_invitation(self.config, demande.get('heures'))
         adresse, agent, tailscale = self.origine()
         ecrire_journal_acces(self.config, self.session['identifiant'], adresse, agent, 'invitation', tailscale)
@@ -6439,7 +6821,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             raise ErreurHttp(403, MESSAGE_DISTANT_REFUSE)
         statut, octets = appeler_fournisseur(demande)
         if len(octets) > TAILLE_MAX_REPONSE_IA:
-            raise ErreurHttp(502, 'Réponse du fournisseur d\'IA trop grande (2 Mo au maximum).')
+            raise ErreurHttp(502, traduisible('ia.reponse_trop_grande',
+                                              'Réponse du fournisseur d\'IA trop grande (2 Mo au maximum).'))
         octets = sans_la_cle(octets, cle_ia(self.config.reglages))
         self.envoyer_json(200, {'statut': statut, 'corps': corps_lisible(octets)})
 
@@ -6463,26 +6846,31 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         with VERROU_ECRITURE:
             octets = lire_octets(chemin)
         if octets is None:
-            raise ErreurHttp(404, 'Le fichier %s.csv n\'existe pas encore.' % table)
+            raise ErreurHttp(404, traduisible('csv.absent',
+                                              'Le fichier {table}.csv n\'existe pas encore.', table=table))
         self.envoyer(200, filtrer_csv_pour(self.session, table, octets), 'text/csv; charset=utf-8',
                      {'X-Version': empreinte(octets)})
 
     def api_csv_ecrire(self, table, corps):
         version_attendue = self.headers.get('X-Version-Attendue')
         if not version_attendue:
-            raise ErreurHttp(400, 'En-tête X-Version-Attendue manquant.')
+            raise ErreurHttp(400, traduisible('csv.version_manquante', 'En-tête X-Version-Attendue manquant.'))
         # T200 : « X-Prevo-Remplacer-Abime: 1 » (import ZIP) permet de remplacer un fichier abîmé ; aucun droit de plus.
         # Avec les comptes, l'import ZIP est réservé au responsable (D172) : la dérogation aussi (403 sinon, rien écrit).
         remplacer_abime = (self.headers.get(ENTETE_REMPLACER_ABIME) or '').strip() == '1'
         if remplacer_abime and self.session is not None and role_effectif(self.session) != 'responsable':
-            raise ErreurHttp(403, 'Accès refusé : seul le responsable remplace un fichier abîmé (import ZIP).')
+            raise ErreurHttp(403, traduisible('csv.remplacer_abime_reserve',
+                                              'Accès refusé : seul le responsable remplace un fichier abîmé (import '
+                                              'ZIP).'))
         # T213 : « X-Prevo-Abime-Depuis: AAAA-MM-JJTHH:MM:SS », seulement avec la dérogation (400 sinon, rien écrit).
         abime_depuis = self.headers.get(ENTETE_ABIME_DEPUIS)
         if abime_depuis is not None:
             abime_depuis = abime_depuis.strip()
             if not remplacer_abime or not MOTIF_DATE_DEPUIS.fullmatch(abime_depuis):
-                raise ErreurHttp(400, 'En-tête %s refusé : une date AAAA-MM-JJTHH:MM:SS, avec %s: 1.'
-                                 % (ENTETE_ABIME_DEPUIS, ENTETE_REMPLACER_ABIME))
+                raise ErreurHttp(400, traduisible('csv.entete_abime_depuis',
+                                                  'En-tête {entete} refusé : une date AAAA-MM-JJTHH:MM:SS, avec '
+                                                  '{derogation}: 1.',
+                                                  entete=ENTETE_ABIME_DEPUIS, derogation=ENTETE_REMPLACER_ABIME))
         with VERROU_ECRITURE:
             version = enregistrer_csv(self.config, table, corps, version_attendue.strip(),
                                       controle_d_ecriture(self.session, table), remplacer_abime=remplacer_abime,
@@ -6498,7 +6886,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         chemin = chemin_document(self.config, nom)          # 400 si nom refusé, 415 si type refusé
         octets = lire_octets(chemin)
         if octets is None:
-            raise ErreurHttp(404, 'Document introuvable : %s.' % nom)
+            raise ErreurHttp(404, traduisible('documents.introuvable', 'Document introuvable : {nom}.', nom=nom))
         # nosniff + sandbox : un document ne peut jamais s'exécuter comme une page. Hors images et PDF (audit F4) :
         # en téléchargement, jamais affiché dans la page (le nom ne contient que lettres, chiffres, « . », « _ », « - »).
         entetes = {'Content-Security-Policy': 'sandbox'}
@@ -6594,7 +6982,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         """{"situation": seul | equipe | informaticien} : brouillon réinitialisé aux défauts de cette situation."""
         situation = demande.get('situation')
         if situation not in SITUATIONS:
-            raise ErreurHttp(400, 'Situation inconnue : « seul », « equipe » ou « informaticien ».')
+            raise ErreurHttp(400, traduisible('installation.situation_inconnue',
+                                              'Situation inconnue : « seul », « equipe » ou « informaticien ».'))
         return self.garder_brouillon(brouillon_neuf(self.config, situation))
 
     # --- Paramètres › Accès et installation (T170 ; D131 dernier point, CS130) : chaque réglage refaisable -----
@@ -6607,8 +6996,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if brouillon is not None:
             return {'brouillon': brouillon, 'etapes': brouillon.get('etapes'), 'repris': False}
         if not self.config.reglages.get('_present'):
-            raise ErreurHttp(400, 'L\'installation n\'est pas terminée : réglez l\'accès par l\'assistant (%s).'
-                             % ROUTE_INSTALLATION)
+            raise ErreurHttp(400, traduisible('installation.non_terminee',
+                                              'L\'installation n\'est pas terminée : réglez l\'accès par '
+                                              'l\'assistant ({adresse}).', adresse=ROUTE_INSTALLATION))
         return dict(self.garder_brouillon(brouillon_depuis_configuration(self.config)), repris=True)
 
     def installation_reglages(self, brouillon, demande):
@@ -6616,10 +7006,13 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         "quota_documents_mo"?} (CLES_REGLAGES_SIMPLES, une au moins) : chaque valeur contrôlée comme dans le fichier
         (bornes de CLES_CONFIGURATION ; 400 au message, qui cite les bornes) ; toute autre clé 400."""
         if not demande:
-            raise ErreurHttp(400, 'Aucun réglage reçu : %s.' % ', '.join(CLES_REGLAGES_SIMPLES))
+            raise ErreurHttp(400, traduisible('installation.aucun_reglage',
+                                              'Aucun réglage reçu : {cles}.', cles=', '.join(CLES_REGLAGES_SIMPLES)))
         for cle, valeur in demande.items():
             if cle not in CLES_REGLAGES_SIMPLES:
-                raise ErreurHttp(400, 'Réglage inconnu « %s » : %s.' % (cle, ', '.join(CLES_REGLAGES_SIMPLES)))
+                raise ErreurHttp(400, traduisible('installation.reglage_inconnu',
+                                                  'Réglage inconnu « {cle} » : {cles}.',
+                                                  cle=cle, cles=', '.join(CLES_REGLAGES_SIMPLES)))
             brouillon[cle] = valeur_du_brouillon(cle, valeur)
         return self.garder_brouillon(brouillon)
 
@@ -6628,14 +7021,18 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         d'IA côté serveur (§22.12). La clé ne passe jamais par l'API (400 si elle est envoyée) : ia_cle du fichier ou
         PREVO_IA_CLE, comme à T158 ; la réponse dit seulement si une clé est réglée."""
         if not demande:
-            raise ErreurHttp(400, 'Aucun réglage reçu : fournisseur, url, en_ligne.')
+            raise ErreurHttp(400, traduisible('installation.ia_aucun_reglage',
+                                              'Aucun réglage reçu : fournisseur, url, en_ligne.'))
         for nom, valeur in demande.items():
             if nom not in CLES_IA_DU_CORPS:
-                raise ErreurHttp(400, 'Réglage inconnu « %s » : fournisseur, url, en_ligne. La clé se règle dans le fichier '
-                                      'de configuration (ia_cle) ou par PREVO_IA_CLE, jamais par l\'API.' % nom)
+                raise ErreurHttp(400, traduisible('installation.ia_reglage_inconnu',
+                                                  'Réglage inconnu « {cle} » : fournisseur, url, en_ligne. La clé '
+                                                  'se règle dans le fichier de configuration (ia_cle) ou par '
+                                                  'PREVO_IA_CLE, jamais par l\'API.', cle=nom))
             brouillon[CLES_IA_DU_CORPS[nom]] = valeur_du_brouillon(CLES_IA_DU_CORPS[nom], valeur)
         if not brouillon.get('ia_url'):
-            raise ErreurHttp(400, 'Donnez l\'adresse du service d\'IA (« url »).')
+            raise ErreurHttp(400, traduisible('installation.ia_adresse',
+                                              'Donnez l\'adresse du service d\'IA (« url »).'))
         return dict(self.garder_brouillon(brouillon), cle_reglee=bool(cle_ia(self.config.reglages)))
 
     def installation_annuler(self, brouillon, demande):
@@ -6648,12 +7045,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         aucun mandataire ; au-delà ⇒ comptes exigés ; ports et noms contrôlés comme dans le fichier (400 sinon)."""
         portee = demande.get('portee')
         if portee not in PORTEES:
-            raise ErreurHttp(400, 'Portée inconnue : « ce-pc », « atelier » ou « dehors ».')
+            raise ErreurHttp(400, traduisible('installation.portee_inconnue',
+                                              'Portée inconnue : « ce-pc », « atelier » ou « dehors ».'))
         for cle in ('port_http', 'port_https', 'noms'):
             if cle in demande:
                 brouillon[cle] = valeur_du_brouillon(cle, demande[cle])
         if brouillon['port_http'] == brouillon['port_https']:
-            raise ErreurHttp(400, 'Les ports http et https doivent être différents.')
+            raise ErreurHttp(400, traduisible('installation.ports_identiques',
+                                              'Les ports http et https doivent être différents.'))
         brouillon['portee'] = portee
         if portee == 'ce-pc':
             brouillon['comptes'] = False
@@ -6672,13 +7071,15 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         nom = demande.get('nom') if isinstance(demande.get('nom'), str) else ''
         prenom, nom = prenom.strip(), nom.strip()
         if not prenom:
-            raise ErreurHttp(400, 'Le prénom est obligatoire.')
+            raise ErreurHttp(400, traduisible('comptes.prenom_obligatoire', 'Le prénom est obligatoire.'))
         solo = bool(brouillon.get('mode_solo'))
         if solo:
             verifier_ecriture_permise(self.config)          # T185 : techniciens.csv serait écrit (lecture seule)
         if brouillon.get('portee') == 'ce-pc':
             if not solo:
-                raise ErreurHttp(400, 'Sur ce PC seulement, aucun compte n\'est nécessaire : passez cette étape.')
+                raise ErreurHttp(400, traduisible('installation.compte_inutile',
+                                                  'Sur ce PC seulement, aucun compte n\'est nécessaire : passez '
+                                                  'cette étape.'))
             with VERROU_ECRITURE:
                 technicien_id = technicien_moi(self.config, prenom, nom)
             brouillon['solo_technicien_id'] = technicien_id
@@ -6687,12 +7088,14 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         existant = next((c for c in comptes_du_serveur(self.config) if c.get('role') == 'responsable' and c.get('actif')),
                         None)
         if existant is not None:
-            raise ErreurHttp(409, 'Un compte responsable existe déjà (« %s ») : passez cette étape, ou réinitialisez '
-                                  'son mot de passe par %s.' % (existant['identifiant'], NOM_SCRIPT_REINITIALISATION))
+            raise ErreurHttp(409, traduisible('installation.responsable_existe',
+                                              'Un compte responsable existe déjà (« {identifiant} ») : passez cette '
+                                              'étape, ou réinitialisez son mot de passe par {script}.',
+                                              identifiant=existant['identifiant'], script=NOM_SCRIPT_REINITIALISATION))
         try:
             verifier_mot_de_passe_choisi(demande.get('mot_de_passe'))
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         technicien_id = ''
         if solo:
             with VERROU_ECRITURE:
@@ -6701,7 +7104,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             compte = creer_compte(self.config, prenom, nom, 'responsable', demande['mot_de_passe'],
                                   technicien_id=technicien_id, origine=self.origine())
         except ErreurCompte as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         brouillon['solo_technicien_id'] = technicien_id
         reponse = self.garder_brouillon(brouillon, 'compte')
         return dict(reponse, compte=compte, technicien_id=technicien_id)
@@ -6713,39 +7116,49 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         https (mandataire sur ce PC) ; mandataire ⇒ noms obligatoires. Rend ce que la fiche d'accès montrera."""
         mode = demande.get('mode')
         if mode not in MODES_CERTIFICAT:
-            raise ErreurHttp(400, 'Mode inconnu : « automatique », « reseau_prive », « fichiers » ou « mandataire ».')
+            raise ErreurHttp(400, traduisible('installation.certificat_mode_inconnu',
+                                              'Mode inconnu : « automatique », « reseau_prive », « fichiers » ou '
+                                              '« mandataire ».'))
         if brouillon.get('portee') == 'ce-pc':
-            raise ErreurHttp(400, 'Sur ce PC seulement, Prévo reste en http : aucun certificat à préparer.')
+            raise ErreurHttp(400, traduisible('installation.certificat_inutile',
+                                              'Sur ce PC seulement, Prévo reste en http : aucun certificat à '
+                                              'préparer.'))
         noms_certificat = []
         if mode == 'automatique':
             try:
                 executable = executable_mkcert()
             except ErreurConfiguration as erreur:
-                raise ErreurHttp(503, 'Certificat automatique impossible : %s Remettez mkcert dans le dossier '
-                                      'outils-tiers/ (il est dans le zip de Prévo), ou choisissez le réseau privé ou vos '
-                                      'propres fichiers.' % erreur)
+                raise ErreurHttp(503, traduisible('installation.certificat_sans_mkcert',
+                                                  'Certificat automatique impossible : {erreur} Remettez mkcert '
+                                                  'dans le dossier outils-tiers/ (il est dans le zip de Prévo), ou '
+                                                  'choisissez le réseau privé ou vos propres fichiers.',
+                                                  erreur=traduisible_de(erreur)))
             try:
                 _, _, noms_certificat = preparer_certificat_local(self.config, executable,
                                                                   noms_acceptes=brouillon.get('noms', []))
             except ErreurConfiguration as erreur:
-                raise ErreurHttp(503, 'Certificat automatique impossible : %s' % erreur)
+                raise ErreurHttp(503, traduisible('installation.certificat_impossible',
+                                                  'Certificat automatique impossible : {erreur}',
+                                                  erreur=traduisible_de(erreur)))
             brouillon.update(certificat_auto=True, certificat='', cle='')
         elif mode == 'fichiers':
             certificat, cle = demande.get('certificat'), demande.get('cle')
             if not (isinstance(certificat, str) and certificat.strip() and isinstance(cle, str) and cle.strip()):
-                raise ErreurHttp(400, 'Donnez les deux fichiers PEM : « certificat » et « cle ».')
+                raise ErreurHttp(400, traduisible('installation.certificat_fichiers',
+                                                  'Donnez les deux fichiers PEM : « certificat » et « cle ».'))
             certificat, cle = os.path.abspath(certificat.strip()), os.path.abspath(cle.strip())
             try:
                 creer_contexte_ssl(certificat, cle)
             except SystemExit as erreur:
-                raise ErreurHttp(400, str(erreur))
+                raise ErreurHttp(400, traduisible_de(erreur))
             brouillon.update(certificat=certificat, cle=cle, certificat_auto=False, mandataire=False)
         elif mode == 'reseau_prive':
             brouillon.update(certificat_auto=False, certificat='', cle='', mandataire=True)
         else:
             noms = valeur_du_brouillon('noms', demande['noms']) if 'noms' in demande else brouillon.get('noms', [])
             if not noms:
-                raise ErreurHttp(400, 'Donnez le nom par lequel le mandataire appelle Prévo (« noms »).')
+                raise ErreurHttp(400, traduisible('installation.mandataire_noms',
+                                                  'Donnez le nom par lequel le mandataire appelle Prévo (« noms »).'))
             brouillon.update(noms=noms, certificat_auto=False, certificat='', cle='', mandataire=True)
         reponse = self.garder_brouillon(brouillon, 'certificat')
         return dict(reponse, mode=mode, noms_certificat=noms_certificat,
@@ -6758,7 +7171,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         (503 si refusé) ; plus tard ⇒ rien, étape à faire. Jamais « up », jamais d'installation (T165)."""
         action = demande.get('action')
         if action not in ACTIONS_TAILSCALE:
-            raise ErreurHttp(400, 'Action inconnue : « detecter », « appliquer », « unattended » ou « plus_tard ».')
+            raise ErreurHttp(400, traduisible('installation.tailscale_action_inconnue',
+                                              'Action inconnue : « detecter », « appliquer », « unattended » ou '
+                                              '« plus_tard ».'))
         if action == 'detecter':
             detection = detecter_tailscale(maintenant=maintenant_s(self.config))
             proposition = preparer_tailscale(self.config, detection, systeme=self.config.systeme, reglages=brouillon)
@@ -6787,13 +7202,15 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         rien n'était à lancer ou si le script a réussi ; à faire si l'élévation a été refusée (repli proposé)."""
         demarrage = demande.get('demarrage')
         if demarrage not in ('systeme', 'session', 'aucun'):
-            raise ErreurHttp(400, 'Démarrage inconnu : « systeme », « session » ou « aucun ».')
+            raise ErreurHttp(400, traduisible('installation.demarrage_inconnu',
+                                              'Démarrage inconnu : « systeme », « session » ou « aucun ».'))
         veille = demande.get('veille_desactivee', False)
         if not isinstance(veille, bool):
-            raise ErreurHttp(400, '« veille_desactivee » : vrai ou faux attendu.')
+            raise ErreurHttp(400, traduisible('installation.veille_booleen',
+                                              '« veille_desactivee » : vrai ou faux attendu.'))
         retirer = demande.get('retirer', False)
         if not isinstance(retirer, bool):
-            raise ErreurHttp(400, '« retirer » : vrai ou faux attendu.')
+            raise ErreurHttp(400, traduisible('installation.retirer_booleen', '« retirer » : vrai ou faux attendu.'))
         retirer = retirer and demarrage == 'aucun'
         brouillon.update(demarrage=demarrage, veille_desactivee=veille)
         mkcert = None
@@ -6831,7 +7248,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         dans les données (400 sinon) ; brouillon copie_sauvegardes."""
         dossier = demande.get('dossier', '')
         if not isinstance(dossier, str):
-            raise ErreurHttp(400, '« dossier » : un chemin (texte) est attendu, vide pour plus tard.')
+            raise ErreurHttp(400, traduisible('installation.sauvegardes_dossier',
+                                              '« dossier » : un chemin (texte) est attendu, vide pour plus tard.'))
         brouillon['copie_sauvegardes'] = verifier_dossier_de_copie(self.config, dossier) if dossier.strip() else ''
         return self.garder_brouillon(brouillon, 'sauvegardes')
 
@@ -6842,7 +7260,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         supprimé. Rend {copie, vers, relance}. {"rester": true} (« Rester ici ») : refus mémorisé dans le brouillon
         (deplacement_refuse), l'étape reste à faire et l'écran ne la propose plus."""
         if not self.config.systeme.startswith('win'):
-            raise ErreurHttp(400, 'Le déplacement vers %s n\'existe que sous Windows.' % DOSSIER_CONSEILLE_WINDOWS)
+            raise ErreurHttp(400, traduisible('installation.deplacement_windows',
+                                              'Le déplacement vers {dossier} n\'existe que sous Windows.',
+                                              dossier=DOSSIER_CONSEILLE_WINDOWS))
         if demande.get('rester') is True:
             brouillon['deplacement_refuse'] = True
             return self.garder_brouillon(brouillon, 'deplacer', ETAT_A_FAIRE)
@@ -6850,7 +7270,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if not isinstance(vers, str) or not vers.strip():
             vers = DOSSIER_CONSEILLE_WINDOWS
         if not os.path.isabs(vers.strip()):
-            raise ErreurHttp(400, 'Donnez un chemin complet (par exemple %s).' % DOSSIER_CONSEILLE_WINDOWS)
+            raise ErreurHttp(400, traduisible('deplacement.chemin_complet',
+                                              'Donnez un chemin complet (par exemple {exemple}).',
+                                              exemple=DOSSIER_CONSEILLE_WINDOWS))
         brouillon.pop('deplacement_refuse', None)
         self.garder_brouillon(brouillon, 'deplacer')          # noté avant la copie : le brouillon copié le sait
         try:
@@ -6870,10 +7292,13 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         relance, base}."""
         base = demande.get('base', 'vide')
         if base not in BASES_AU_DEPART:
-            raise ErreurHttp(400, 'Base de départ inconnue : « vide » ou « demo ».')
+            raise ErreurHttp(400, traduisible('installation.base_inconnue',
+                                              'Base de départ inconnue : « vide » ou « demo ».'))
         if base == 'demo' and brouillon.get('base_presente', True):
-            raise ErreurHttp(400, 'Des fichiers de données sont déjà là : la démonstration ne remplace jamais une base '
-                                  'existante. Terminez avec « vide » (vos fichiers sont gardés).')
+            raise ErreurHttp(400, traduisible('installation.demo_sur_donnees',
+                                              'Des fichiers de données sont déjà là : la démonstration ne remplace '
+                                              'jamais une base existante. Terminez avec « vide » (vos fichiers sont '
+                                              'gardés).'))
         if base == 'demo' or brouillon.get('mode_solo'):
             verifier_ecriture_permise(self.config)          # T185 : tables écrites (lecture seule), avant la config
         reglages = reglages_par_defaut()
@@ -6882,14 +7307,18 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         reglages['_https_auto'] = bool(reglages['certificat_auto']) and not reglages['certificat']
         responsable = responsable_actif_existe(self.config)
         if reglages['comptes'] and not responsable:
-            raise ErreurHttp(400, 'Aucun compte responsable : créez-le (étape « compte ») avant de terminer.')
+            raise ErreurHttp(400, traduisible('installation.sans_responsable',
+                                              'Aucun compte responsable : créez-le (étape « compte ») avant de '
+                                              'terminer.'))
         try:
             verifier_regles_portee(dict(reglages), responsable)
         except ErreurConfiguration as erreur:
-            raise ErreurHttp(400, str(erreur))
+            raise ErreurHttp(400, traduisible_de(erreur))
         if reglages['ecoute'] != '127.0.0.1' and reglages['_https_auto'] and not mkcert_disponible():
-            raise ErreurHttp(400, 'Certificat automatique impossible sans mkcert (outils-tiers/) : Prévo refuserait de '
-                                  'démarrer sur le réseau. Faites l\'étape « certificat » autrement.')
+            raise ErreurHttp(400, traduisible('installation.certificat_auto_sans_mkcert',
+                                              'Certificat automatique impossible sans mkcert (outils-tiers/) : '
+                                              'Prévo refuserait de démarrer sur le réseau. Faites l\'étape '
+                                              '« certificat » autrement.'))
         chemin = self.config.reglages.get('_fichier') or os.path.join(self.config.dossier_application,
                                                                       NOM_FICHIER_CONFIGURATION)
         a_ecrire = {cle: reglages[cle] for cle in CLES_DU_BROUILLON}
@@ -6902,7 +7331,9 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             else:
                 ecrire_configuration(chemin, reglages)
         except (OSError, ValueError) as erreur:
-            raise ErreurHttp(500, 'Configuration non écrite (%s) : rien n\'a changé.' % erreur)
+            raise ErreurHttp(500, traduisible('installation.configuration_non_ecrite',
+                                              'Configuration non écrite ({erreur}) : rien n\'a changé.',
+                                              erreur=erreur))
         if brouillon.get('mode_solo'):
             with VERROU_ECRITURE:
                 poser_mode_solo(self.config, brouillon.get('solo_technicien_id', ''))
@@ -6919,25 +7350,25 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if morceaux == ['']:
             morceaux = ['index.html']
         if morceaux[0].lower() == 'donnees':
-            raise ErreurHttp(403, 'Accès refusé.')
+            raise ErreurHttp(403, traduisible('statique.acces_refuse', 'Accès refusé.'))
         if [morceau.lower() for morceau in morceaux] == CHEMIN_CERTIFICAT_AUTORITE:
             self.servir_certificat_autorite()
             return
         servir_tests = self.config.servir_tests
         # Hors liste blanche : même réponse qu'un fichier absent (on ne dit pas qu'il existe).
         if not chemin_public(morceaux, servir_tests):
-            raise ErreurHttp(404, 'Fichier introuvable.')
+            raise ErreurHttp(404, traduisible('statique.introuvable', 'Fichier introuvable.'))
         chemin = chemin_sous(DOSSIER_APPLICATION, *morceaux)
         if not chemin_public(morceaux_resolus(chemin, DOSSIER_APPLICATION), servir_tests):
-            raise ErreurHttp(404, 'Fichier introuvable.')
+            raise ErreurHttp(404, traduisible('statique.introuvable', 'Fichier introuvable.'))
         for dossier_interdit in self.config.dossiers_interdits_statique:
             if est_sous_dossier(chemin, dossier_interdit):
-                raise ErreurHttp(403, 'Accès refusé.')
+                raise ErreurHttp(403, traduisible('statique.acces_refuse', 'Accès refusé.'))
         if not os.path.isfile(chemin):
-            raise ErreurHttp(404, 'Fichier introuvable.')
+            raise ErreurHttp(404, traduisible('statique.introuvable', 'Fichier introuvable.'))
         octets = lire_octets(chemin)
         if octets is None:
-            raise ErreurHttp(404, 'Fichier introuvable.')
+            raise ErreurHttp(404, traduisible('statique.introuvable', 'Fichier introuvable.'))
         if entetes is None:
             entetes = None if morceaux[0].lower() == 'tests' else self.entetes_securite()
         self.envoyer(200, octets, TYPES_STATIQUES.get(extension(chemin), TYPE_PAR_DEFAUT), entetes)
@@ -6978,7 +7409,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             pass
 
     def envoyer_json(self, statut, donnees, entetes_supplementaires=None):
-        octets = json.dumps(donnees, ensure_ascii=False).encode('utf-8')
+        octets = json.dumps(avec_codes(donnees), ensure_ascii=False).encode('utf-8')     # D157 : codes des messages
         self.envoyer(statut, octets, 'application/json; charset=utf-8', entetes_supplementaires)
 
     def envoyer_erreur(self, erreur):

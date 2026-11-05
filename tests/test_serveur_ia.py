@@ -35,7 +35,8 @@ from faux_fournisseur_ia import FauxFournisseur
 from test_ia_regles import taire_coupures
 
 CLE = "sk-test-cle-secrete-123456"
-REFUS_DISTANT = {"erreur": "Les fournisseurs d'IA en ligne ne sont pas autorisés sur le PC serveur."}
+REFUS_DISTANT = {"erreur": "Les fournisseurs d'IA en ligne ne sont pas autorisés sur le PC serveur.",
+                 "erreur_code": "ia.en_ligne_refuse"}                       # D157 : le message et son code
 REGLE_SUR_LE_SERVEUR = "réglées sur le PC serveur"
 BOM = b"\xef\xbb\xbf"
 

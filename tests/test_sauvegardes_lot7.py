@@ -335,7 +335,9 @@ class TestCopieExterne(CasDansLeProcessus):
         self.assertEqual(etat["erreur"], "Dossier de copie « Sauvegardes Prevo » introuvable (clé USB absente ou "
                                          "partage réseau injoignable ?).")
         self.assertEqual(self.copie_externe_de_info(), {"derniere_reussie": "2026-06-10", "jours_sans_copie": 3,
-                                                        "erreur": etat["erreur"]})
+                                                        "erreur": etat["erreur"],
+                                                        "erreur_code": "copie.dossier_introuvable",
+                                                        "erreur_valeurs": {"nom": "Sauvegardes Prevo"}})
         reponse = self.serveur.requete("GET", "/api/info").octets.decode("utf-8")
         self.assertNotIn("Cle USB", reponse)                    # jamais le chemin complet aux autres postes
         self.assertNotIn(self.racine.name, reponse)
@@ -421,7 +423,8 @@ class TestPlafondEtAcces(CasDansLeProcessus):
         refus = s.requete("POST", "/api/sauvegarde")
         self.assertEqual(refus.statut, 429, refus.octets)
         self.assertEqual(refus.entetes["retry-after"], "50")
-        self.assertEqual(refus.json(), {"erreur": MESSAGE_PLAFOND % 50, "attente_secondes": 50})
+        self.assertEqual(refus.json(), {"erreur": MESSAGE_PLAFOND % 50, "erreur_code": "sauvegardes.plafond_manuelles",
+                                        "erreur_valeurs": {"n": 50}, "attente_secondes": 50})
         self.assertEqual(manuelles(self.sauvegardes), ["2026-06-15_095950"])   # rien de créé par le refus
         # Une sauvegarde à motif n'est jamais limitée (avant un import, avant un changement de format).
         for motif in ("avant-import", "avant-format-v3"):
@@ -489,7 +492,9 @@ class TestServeurReel(unittest.TestCase):
             self.assertEqual(seconde.statut, 429, seconde.octets)
             attente = int(seconde.entetes["retry-after"])
             self.assertTrue(1 <= attente <= 60, attente)
-            self.assertEqual(seconde.json(), {"erreur": MESSAGE_PLAFOND % attente, "attente_secondes": attente})
+            self.assertEqual(seconde.json(), {"erreur": MESSAGE_PLAFOND % attente,
+                                              "erreur_code": "sauvegardes.plafond_manuelles",
+                                              "erreur_valeurs": {"n": attente}, "attente_secondes": attente})
             self.assertEqual(manuelles(reel.dossier / "sauvegardes"), [premiere.json()["sauvegarde"]])
             # Un corps sans motif (ou motif null) est une sauvegarde manuelle, limitée elle aussi.
             self.assertEqual(requete(reel.port, "POST", "/api/sauvegarde", {"motif": None}).statut, 429)
@@ -548,7 +553,8 @@ class TestServeurReel(unittest.TestCase):
                                                                           "designation, localisation_id"),
                             par_table["equipements"]["erreur"])
             self.assertEqual(par_table["fournisseurs"], {"table": "fournisseurs", "lignes": None,
-                                                         "erreur": "Fichier vide : la ligne d'en-tête manque."})
+                                                         "erreur": "Fichier vide : la ligne d'en-tête manque.",
+                                                         "erreur_code": "sauvegardes.test_vide"})
             self.assertEqual(par_table["demandes"], {"table": "demandes", "lignes": attendu["demandes"], "erreur": None})
 
             # Sauvegarde d'un format plus ancien, réenregistrée par Excel : acceptée (lecture tolérante).

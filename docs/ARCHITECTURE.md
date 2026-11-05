@@ -427,7 +427,10 @@ refaite) — le serveur applique la même règle.
 
 ## 7. API du serveur (`serveur.py`)
 
-Réponses JSON `{"erreur": "message en français"}` en cas d'erreur. Toute requête qui écrit
+Réponses JSON `{"erreur": "message en français"}` en cas d'erreur. D157 (T246) : le message porte aussi son code
+et ses valeurs, `"erreur_code"` (clé `serveur.<code>` de `js/i18n/fr.js`) et `"erreur_valeurs"` s'il en a ; le
+navigateur affiche la clé dans sa langue, le français reçu sinon (`StockageServeur.texte`). Même règle pour tout champ
+qui porte un message (`message`, `raison`… ; une liste de messages : `<champ>_codes`). Toute requête qui écrit
 (`PUT`, `POST`) exige l'en-tête **`X-Prevo: 1`** (sinon 403). Corps limité à **10 Mo**, **50 Mo** pour
 l'envoi d'une table (`PUT /api/csv/<table>`, `POST /api/csv/<table>/ajout` : T208, `TAILLE_MAX_CORPS_CSV`)
 (`Content-Length` obligatoire : 411 sinon, 413 au-delà). En-tête `Host` accepté seulement pour

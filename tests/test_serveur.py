@@ -234,7 +234,7 @@ class CasAvecServeur(unittest.TestCase):
         """GET chemin → 404 « Fichier introuvable. », sans aucun octet du fichier du projet."""
         reponse = self.requete('GET', chemin)
         self.assertEqual(reponse.statut, 404, 'GET %s → %d' % (chemin, reponse.statut))
-        self.assertEqual(reponse.json(), {'erreur': 'Fichier introuvable.'})
+        self.assertEqual(reponse.json(), {'erreur': 'Fichier introuvable.', 'erreur_code': 'statique.introuvable'})
         fichier = os.path.join(DOSSIER_PROJET, *chemin.lstrip('/').split('/'))
         if os.path.isfile(fichier):
             debut = self.lire_fichier(fichier)[:64]
@@ -686,7 +686,7 @@ class TestApiServeur(CasAvecServeur):
         """Lot 2 (§14.7) : serveur.py n'est plus public (il l'était au lot 1)."""
         reponse = self.requete('GET', '/serveur.py')
         self.assertEqual(reponse.statut, 404)
-        self.assertEqual(reponse.json(), {'erreur': 'Fichier introuvable.'})
+        self.assertEqual(reponse.json(), {'erreur': 'Fichier introuvable.', 'erreur_code': 'statique.introuvable'})
         self.assertNotIn(self.lire_fichier(SCRIPT_SERVEUR)[:64], reponse.corps)
         self.assertNotIn(b'VERROU_ECRITURE', reponse.corps)
         self.assertEqual(reponse.entetes['content-type'], 'application/json; charset=utf-8')
@@ -712,7 +712,7 @@ class TestApiServeur(CasAvecServeur):
         # « .gitattributes » commence par « . » : refusé avant même la liste blanche (400, §7).
         reponse = self.requete('GET', '/.gitattributes')
         self.assertTrue(400 <= reponse.statut < 500, reponse.statut)
-        self.assertEqual(set(reponse.json()), {'erreur'})
+        self.assertEqual(set(reponse.json()), {'erreur', 'erreur_code'})          # D157 : le message et son code
         chemin = os.path.join(DOSSIER_PROJET, '.gitattributes')
         if os.path.isfile(chemin):
             self.assertNotIn(self.lire_fichier(chemin)[:64], reponse.corps)

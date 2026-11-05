@@ -67,6 +67,43 @@ const StockageServeur = (() => {
     return I18n.t('socle.message_reponse_inattendue.reponse_inattendue_serveur_operation');
   }
 
+  // ===========================================================================
+  // Messages du serveur (D157, T246)
+  // ===========================================================================
+
+  // Un message du serveur arrive avec son code et ses valeurs, à côté du texte français :
+  // { erreur: '<français>', erreur_code: 'csv.table_inconnue', erreur_valeurs: { table: 'x' } } (même suffixe pour
+  // « message », « raison »… ; « _sans_point » : point final retiré). Une valeur peut être elle-même un message
+  // ({ code, valeurs, texte }) ou une liste (jointe par « , »). Le texte affiché est la clé serveur.<code> de la langue
+  // active (js/i18n/fr.js) ; le français reçu quand le navigateur ne connaît pas le code (serveur plus récent).
+  function messageTraduit(code, valeurs, repli, sansPoint) {
+    if (typeof code !== 'string' || !code) return repli;
+    const lues = {};
+    if (valeurs && typeof valeurs === 'object' && !Array.isArray(valeurs)) {
+      Object.keys(valeurs).forEach((nom) => { lues[nom] = valeurDuMessage(valeurs[nom]); });
+    }
+    const traduit = I18n.t('serveur.' + code, lues);
+    if (traduit === 'serveur.' + code) return repli;    // code inconnu de ce navigateur
+    return sansPoint ? traduit.replace(/\.+$/, '') : traduit;
+  }
+
+  function valeurDuMessage(valeur) {
+    if (Array.isArray(valeur)) return valeur.map(valeurDuMessage).join(', ');
+    if (valeur && typeof valeur === 'object') {
+      return messageTraduit(valeur.code, valeur.valeurs, String(valeur.texte || ''), valeur.sans_point === true);
+    }
+    return valeur;
+  }
+
+  // Texte du champ `champ` d'une réponse du serveur (« erreur », « message », « raison »…), dans la langue active.
+  function texteDuServeur(donnees, champ) {
+    if (!donnees || typeof donnees !== 'object' || typeof donnees[champ] !== 'string') {
+      return donnees && typeof donnees === 'object' ? donnees[champ] : undefined;
+    }
+    return messageTraduit(donnees[champ + '_code'], donnees[champ + '_valeurs'], donnees[champ],
+      donnees[champ + '_sans_point'] === true);
+  }
+
   // Transforme une réponse en erreur (409 → ErreurConflit, autre code ≥ 400 → ErreurStockage, avec le code HTTP
   // dans `codeHttp`). Lot 7 (§22.4, §22.5) : 401 = session absente ou expirée, appareil refusé → l'événement
   // EVENEMENT_SESSION_ABSENTE est émis sur document (l'écran de connexion, T155, l'écoute et s'affiche ; sans
@@ -79,7 +116,7 @@ const StockageServeur = (() => {
   // réessayé par Donnees.modifier, avec un faux message).
   async function erreurDepuisReponse(reponse) {
     const donnees = await lireJsonOuNull(reponse);
-    const message = (donnees && donnees.erreur)
+    const message = (donnees && donnees.erreur && texteDuServeur(donnees, 'erreur'))      // D157 : traduit par son code
       || I18n.t('socle.erreur_depuis_reponse.serveur_refuse_demande_code', { status: reponse.status });
     if (reponse.status === 409 && donnees && donnees.code === CODE_FORMAT_PLUS_RECENT
       && typeof Donnees.ErreurLectureSeule === 'function') {
@@ -190,7 +227,7 @@ const StockageServeur = (() => {
     return {
       derniereReussie: typeof copie.derniere_reussie === 'string' ? copie.derniere_reussie : null,
       joursSansCopie: typeof copie.jours_sans_copie === 'number' ? copie.jours_sans_copie : null,
-      erreur: typeof copie.erreur === 'string' && copie.erreur ? copie.erreur : null,
+      erreur: typeof copie.erreur === 'string' && copie.erreur ? texteDuServeur(copie, 'erreur') : null,
     };
   }
 
@@ -388,15 +425,21 @@ const StockageServeur = (() => {
     }
 
     // « Tester une sauvegarde » (lot 7, D133) : le serveur relit chaque CSV de la sauvegarde et compte ses lignes,
-    // sans rien écrire → { nom, ok, tables: [{ table, lignes, erreur }] } ; nom refusé ou sauvegarde absente →
-    // ErreurStockage. Propre au mode serveur (les autres adaptateurs n'ont pas cette méthode).
+    // sans rien écrire → { nom, ok, tables: [{ table, lignes, erreur }] } (erreur dans la langue active, D157) ; nom
+    // refusé ou sauvegarde absente → ErreurStockage. Propre au mode serveur (les autres adaptateurs n'ont pas cette
+    // méthode).
     async function testerSauvegarde(nom) {
       const reponse = await appelerOuErreur(base + '/api/sauvegarde/tester', {
         method: 'POST',
         headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, entetesEcriture),
         body: JSON.stringify({ nom: nom }),
       });
-      return lireJson(reponse);
+      const donnees = await lireJson(reponse);
+      if (Array.isArray(donnees.tables)) {
+        donnees.tables = donnees.tables.map((table) => (table && typeof table.erreur === 'string'
+          ? Object.assign({}, table, { erreur: texteDuServeur(table, 'erreur') }) : table));
+      }
+      return donnees;
     }
 
     // Lot 7 (§22.4) : GET /api/session → { comptes: bool, session: null | { identifiant, role, prenom, nom,
@@ -460,6 +503,7 @@ const StockageServeur = (() => {
   return {
     detecter: detecter,
     creer: creer,
+    texte: texteDuServeur,     // D157 : message d'une réponse du serveur dans la langue active (modules à fetch propre)
     EVENEMENT_SESSION_ABSENTE: EVENEMENT_SESSION_ABSENTE,
   };
 })();

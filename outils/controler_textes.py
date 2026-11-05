@@ -12,7 +12,9 @@ Ce qui est contrôlé :
 2. clés utilisées (I18n.t, I18n.html, data-i18n, data-i18n-attr) et clés définies (js/i18n/fr.js,
    js/i18n/aide/fr.js) : clés manquantes, clés orphelines, variables {…} différentes entre un appel et sa valeur,
    variables au nom générique ({v1}, {pourcent2} : le traducteur ne saurait pas ce qu'elles contiennent) ;
-3. index.html : le texte laissé dans la page sous un data-i18n est bien la valeur du dictionnaire.
+3. index.html : le texte laissé dans la page sous un data-i18n est bien la valeur du dictionnaire ;
+4. serveur.py (domaine « serveur », T246, D157) : contrôle en Python de outils/textes_serveur.py (messages
+   traduisible(…) et section serveur de fr.js, textes en dur hors des règles de la console et des données).
 
 Le lien domaine → fichiers est celui de extraire_textes.py (préfixes de js/modules, plus le socle, schema, porte ;
 l'aide longue générée, js/modules/aide-ecrans-textes.js, est le domaine à part « aide-longue », hors du domaine
@@ -31,6 +33,7 @@ ICI = Path(__file__).resolve().parent
 if str(ICI) not in sys.path:
     sys.path.insert(0, str(ICI))
 import extraire_textes as ext  # noqa: E402
+import textes_serveur  # noqa: E402
 from jslex import ErreurAnalyse, Groupe, Jeton, Lignes, construire_arbre, decoder  # noqa: E402
 
 DICTIONNAIRES = ('js/i18n/fr.js', 'js/i18n/aide/fr.js')
@@ -217,10 +220,18 @@ class Controle:
         else:
             choisis = tous
         self.domaines = sorted(choisis)
-        self.fichiers = sorted({f for fichiers in choisis.values() for f in fichiers})
+        # serveur.py : contrôle en Python (T246, outils/textes_serveur.py), pour le domaine serveur ou tout le dépôt.
+        serveur = (not domaines or textes_serveur.SECTION in domaines) \
+            and (self.racine / textes_serveur.FICHIER).is_file()
+        if serveur:
+            self.domaines = sorted(set(self.domaines) | {textes_serveur.SECTION})
+        self.fichiers = sorted({f for fichiers in choisis.values() for f in fichiers}
+                               | ({textes_serveur.FICHIER} if serveur else set()))
         self.textes_en_dur(choisis)
         self.cles(choisis, tous)
         self.page_html()
+        if serveur:
+            self.signalements.extend(textes_serveur.controler(self.racine)[0])
         self.signalements.sort(key=lambda s: (s.genre, s.fichier, s.ligne or 0, s.message))
         return self.signalements
 
@@ -326,6 +337,8 @@ TITRES = {
     'doublon': 'Clés définies deux fois',
     'page': 'Texte de la page différent de sa valeur (data-i18n)',
     'nommer': 'Variables au nom générique dans le dictionnaire (à renommer)',
+    'appel': 'Appels de traduisible mal écrits (serveur.py)',
+    'differente': 'Valeur du dictionnaire différente du français de serveur.py',
 }
 
 
@@ -335,7 +348,7 @@ def rapport(controle):
     par_genre = {}
     for s in controle.signalements:
         par_genre.setdefault(s.genre, []).append(s)
-    for genre in ('dur', 'manquante', 'orpheline', 'variables', 'nommer', 'doublon', 'page'):
+    for genre in ('dur', 'manquante', 'orpheline', 'variables', 'nommer', 'doublon', 'page', 'appel', 'differente'):
         liste = par_genre.get(genre, [])
         lignes.append('%s : %d' % (TITRES[genre], len(liste)))
         for s in liste:

@@ -184,7 +184,8 @@ class TestDerriereLeMandataire(unittest.TestCase):
             for methode, chemin in (("GET", "/api/ping"), ("GET", "/"), ("POST", "/api/connexion")):
                 with self.subTest(chemin=chemin):
                     refus = requete(mandataire.url, methode, chemin, {} if methode == "POST" else None)
-                    self.assertEqual((refus.statut, refus.json()), (403, {"erreur": serveur.MESSAGE_HOTE_ORIGINE_REFUSE}))
+                    self.assertEqual((refus.statut, refus.json()), (403, {"erreur": serveur.MESSAGE_HOTE_ORIGINE_REFUSE,
+                                                                         "erreur_code": "requete.hote_origine_refuse"}))
         # Un nom accepté avec son port, et l'adresse IP du PC, passent comme pour Host.
         with MandataireTest(self.serveur.url, hote=NOM_ORIGINE + ":8443", protocole="https") as mandataire:
             cookie = connecter(mandataire.url).cookie

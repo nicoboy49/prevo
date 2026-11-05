@@ -745,10 +745,12 @@ class TestVuDuReseau(CasAssistant):
         for methode, etape in ROUTES_DE_L_ASSISTANT:
             with self.subTest(route="%s %s" % (methode, etape)):
                 reponse = reseau.get(etape) if methode == "GET" else reseau.post(etape, {"situation": "seul"})
-                self.assertEqual((reponse.statut, reponse.json()), (404, {"erreur": MESSAGE_INCONNUE}))
+                self.assertEqual((reponse.statut, reponse.json()), (404, {"erreur": MESSAGE_INCONNUE,
+                                                                          "erreur_code": "requete.adresse_inconnue"}))
         self.assertEqual(reseau.requete("GET", "/api/installation").statut, 404)
         self.assertEqual(reseau.requete("POST", "/api/installation/situation", b"{}", prevo=False).statut, 404)
-        self.assertEqual(reseau.requete("GET", "/api/inexistante").json(), {"erreur": MESSAGE_INCONNUE})  # identique
+        self.assertEqual(reseau.requete("GET", "/api/inexistante").json(), {"erreur": MESSAGE_INCONNUE,
+                                                                            "erreur_code": "requete.adresse_inconnue"})  # identique
         self.assertFalse(Path(instance.config.dossier_donnees, "installation.json").exists())
         self.assertEqual(client.get("etat").statut, 200)                                   # le PC lui-même, oui
 
@@ -767,7 +769,8 @@ class TestVuDuReseau(CasAssistant):
                 with self.subTest(route="%s %s" % (methode, etape)):
                     reponse = (relais.get(etape, cookie=responsable) if methode == "GET"
                                else relais.post(etape, {"situation": "seul"}, cookie=responsable))
-                    self.assertEqual((reponse.statut, reponse.json()), (404, {"erreur": MESSAGE_INCONNUE}))
+                    self.assertEqual((reponse.statut, reponse.json()), (404, {"erreur": MESSAGE_INCONNUE,
+                                                                              "erreur_code": "requete.adresse_inconnue"}))
         self.assertEqual(client.get("etat").statut, 401)                                  # sans session
         self.assertEqual(client.post("situation", {"situation": "seul"}).statut, 401)
         refus = client.get("etat", cookie=technicien)
