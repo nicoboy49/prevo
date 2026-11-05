@@ -634,5 +634,47 @@ class TestDepotReel(unittest.TestCase):
         self.assertEqual((total_extraits, total_relire), (0, 0), '\n'.join(lignes))
 
 
+# Import (T242) : les valeurs d'exemple des modèles à remplir (données de démo, D146) et les synonymes de titres
+# reconnus à l'import ne sont jamais extraits (exceptions propres à js/modules/import-regles.js : S(…) 2e argument,
+# V(…) 4e argument, SITE, CHEMIN) ; le libellé, lu par une fonction, l'est.
+MODULE_IMPORT = r"""'use strict';
+const EssaiImport = (() => {
+  const SITE = 'Site des Trois Vallées';
+  const CHEMIN = 'chemin|chemin de localisation|emplacement';
+  const S = (table, exemples) => exemples;
+  const V = (cle, libelle, type, exemple, liste) => ({ cle, get libelle() { return libelle(); }, type, exemple, liste });
+  const TYPES = {
+    equipements: [V('chemin', () => 'Localisation', 'texte', SITE + ' > Atelier Usinage', CHEMIN),
+      S('equipements', { designation: "Machine d'exemple", criticite: ['B', 'classe de criticité'] })],
+  };
+  return { TYPES };
+})();
+"""
+
+
+class TestExceptionsDeLImport(unittest.TestCase):
+    MODULE = 'js/modules/import-regles.js'
+
+    def setUp(self):
+        self.dossier = tempfile.TemporaryDirectory()
+        self.racine = Path(self.dossier.name)
+        ecrire(self.racine, self.MODULE, MODULE_IMPORT)
+
+    def tearDown(self):
+        self.dossier.cleanup()
+
+    def test_exemples_et_synonymes_jamais_extraits(self):
+        res = ext.Extracteur(self.racine).extraire('import', [self.MODULE])
+        source = (self.racine / self.MODULE).read_text(encoding='utf-8')
+        self.assertEqual(([u.texte for u in res.unites], res.relectures), (['Localisation'], []))
+        for garde in ("'Site des Trois Vallées'", "'chemin|chemin de localisation|emplacement'", "' > Atelier Usinage'",
+                      "\"Machine d'exemple\"", "'classe de criticité'"):
+            self.assertIn(garde, source)
+
+    def test_domaine_import_extrait_sur_le_depot(self):
+        res = ext.Extracteur(RACINE).extraire('import', ext.fichiers_du_domaine(RACINE, 'import'), essai=True)
+        self.assertEqual((res.erreurs, len(res.unites), len(res.relectures)), ([], 0, 0))
+
+
 if __name__ == '__main__':
     unittest.main()

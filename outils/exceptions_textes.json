@@ -60,6 +60,24 @@
       "raison": "Cinquième argument de V(…) : titres de colonnes reconnus à l'import (« a|b|c »)."
     },
     {
+      "appel": "V",
+      "argument": 3,
+      "fichiers": [
+        "js/modules/import-regles.js"
+      ],
+      "classe": "D146",
+      "raison": "Quatrième argument de V(…) : valeur d'exemple des modèles à remplir, valable sur la base de démo (une donnée, pas l'interface ; lot0-textes.md §3)."
+    },
+    {
+      "appel": "S",
+      "argument": 1,
+      "fichiers": [
+        "js/modules/import-regles.js"
+      ],
+      "classe": "D146",
+      "raison": "Second argument de S(table, { champ: exemple | [exemple, 'synonymes', options] }) : valeurs d'exemple des modèles à remplir (données de démo) et synonymes de titres reconnus à l'import (« a|b|c »)."
+    },
+    {
       "appel": "Donnees.journaliser",
       "argument": 2,
       "classe": "D156",
@@ -84,6 +102,22 @@
       "variable": "action",
       "classe": "D156",
       "raison": "Variable « action » passée en { action } à Donnees.modifier ou à Donnees.journaliser : texte du journal."
+    },
+    {
+      "variable": "SITE",
+      "fichiers": [
+        "js/modules/import-regles.js"
+      ],
+      "classe": "D146",
+      "raison": "Site de la base de démo repris dans les valeurs d'exemple des modèles à remplir (une donnée)."
+    },
+    {
+      "variable": "CHEMIN",
+      "fichiers": [
+        "js/modules/import-regles.js"
+      ],
+      "classe": "synonymes",
+      "raison": "Synonymes du titre de colonne « chemin » reconnus à l'import (« a|b|c »)."
     }
   ],
   "textes": [

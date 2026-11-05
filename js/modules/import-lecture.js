@@ -53,8 +53,8 @@ Object.assign(Import, (() => {
     return false;
   }
 
-  const MESSAGE_CHIFFRE = 'Ce fichier est protégé par un mot de passe : ouvrez-le dans Excel, enregistrez-le sans '
-    + 'mot de passe, puis recommencez.';
+  // Message d'un classeur chiffré (lu à l'affichage).
+  const messageChiffre = () => I18n.t('import.lecture.chiffre');
 
   /** Contrôle commun des plafonds et du contenu ; supprime les lignes et colonnes vides en fin de feuille. */
   function nettoyer(feuilles) {
@@ -68,11 +68,10 @@ Object.assign(Import, (() => {
         }
       });
       if (lignes.length > PLAFONDS.lignes + 1) {
-        throw erreur('Fichier trop long : la feuille « ' + feuille.nom + ' » a plus de ' + UI.nombreFr(PLAFONDS.lignes)
-          + ' lignes. Découpez-le en plusieurs fichiers.');
+        throw erreur(I18n.t('import.lecture.trop_long_feuille', { feuille: feuille.nom, n: PLAFONDS.lignes, lignes: UI.nombreFr(PLAFONDS.lignes) }));
       }
       if (largeur > PLAFONDS.colonnes) {
-        throw erreur('Trop de colonnes : la feuille « ' + feuille.nom + ' » en a plus de ' + PLAFONDS.colonnes + '.');
+        throw erreur(I18n.t('import.lecture.trop_colonnes', { feuille: feuille.nom, colonnes: PLAFONDS.colonnes }));
       }
       return { nom: feuille.nom, lignes: lignes.map((ligne) => {
         const complete = ligne.slice(0, largeur);
@@ -80,7 +79,7 @@ Object.assign(Import, (() => {
         return complete;
       }) };
     }).filter((feuille) => feuille.lignes.some((ligne) => ligne.some((cellule) => cellule.trim() !== '')));
-    if (!gardees.length) throw erreur('Le fichier ne contient aucune donnée.');
+    if (!gardees.length) throw erreur(I18n.t('import.lecture.aucune_donnee'));
     return gardees;
   }
 
@@ -127,7 +126,7 @@ Object.assign(Import, (() => {
     });
     const lignes = resultat.data.filter((ligne, rang, toutes) => !(rang === toutes.length - 1 && ligne.length === 1 && ligne[0] === ''));
     if (lignes.length > PLAFONDS.lignes + 50) {
-      throw erreur('Fichier trop long : plus de ' + UI.nombreFr(PLAFONDS.lignes) + ' lignes. Découpez-le en plusieurs fichiers.');
+      throw erreur(I18n.t('import.lecture.trop_long', { n: PLAFONDS.lignes, lignes: UI.nombreFr(PLAFONDS.lignes) }));
     }
     return { nom, format, encodage, feuilles: nettoyer([{ nom: nom, lignes }]) };
   }
@@ -203,7 +202,7 @@ Object.assign(Import, (() => {
         if (attribut(trouve[3], 'office:value-type') !== null) {
           ligneRemplie = true;
           if (colonne + fois > PLAFONDS.colonnes) {
-            throw erreur('Trop de colonnes : la feuille « ' + feuille + ' » en a plus de ' + PLAFONDS.colonnes + '.');
+            throw erreur(I18n.t('import.lecture.trop_colonnes', { feuille: feuille, colonnes: PLAFONDS.colonnes }));
           }
         }
         colonne += fois;
@@ -211,15 +210,14 @@ Object.assign(Import, (() => {
       if (trouve[0] === '</table:table-row>' || (trouve[1] !== undefined && trouve[2] === '/')) {
         if (ligneRemplie) lignes += repetitionLigne;
         if (lignes > PLAFONDS.lignes + 1) {
-          throw erreur('Fichier trop long : la feuille « ' + feuille + ' » a plus de ' + UI.nombreFr(PLAFONDS.lignes)
-            + ' lignes. Découpez-le en plusieurs fichiers.');
+          throw erreur(I18n.t('import.lecture.trop_long_feuille', { feuille: feuille, n: PLAFONDS.lignes, lignes: UI.nombreFr(PLAFONDS.lignes) }));
         }
       }
     }
   }
 
   async function lireTableur(octets, nom, format) {
-    if (estChiffre(octets)) throw erreur(MESSAGE_CHIFFRE);
+    if (estChiffre(octets)) throw erreur(messageChiffre());
     const bibliotheque = await App.chargerSheetJS();
     if (estZip(octets)) controlerOds(octets, bibliotheque);
     let classeur;
@@ -228,16 +226,15 @@ Object.assign(Import, (() => {
         type: 'array', dense: true, cellNF: true, cellDates: false, cellText: true, sheetRows: PLAFONDS.lignes + 2,
       });
     } catch (cause) {
-      if (/password|encrypt|protect/i.test(String(cause && cause.message))) throw erreur(MESSAGE_CHIFFRE);
-      throw erreur('Fichier illisible (' + (cause && cause.message ? cause.message : 'format inconnu') + ').');
+      if (/password|encrypt|protect/i.test(String(cause && cause.message))) throw erreur(messageChiffre());
+      throw erreur(I18n.t('import.lecture.illisible', { raison: cause && cause.message ? cause.message : I18n.t('import.lecture.format_inconnu') }));
     }
     const date1904 = Boolean(classeur.Workbook && classeur.Workbook.WBProps && classeur.Workbook.WBProps.date1904);
     const feuilles = classeur.SheetNames.map((nomFeuille) => {
       const feuille = classeur.Sheets[nomFeuille];
       const donnees = feuille['!data'] || [];
       if (donnees.length > PLAFONDS.lignes + 1) {
-        throw erreur('Fichier trop long : la feuille « ' + nomFeuille + ' » a plus de ' + UI.nombreFr(PLAFONDS.lignes)
-          + ' lignes. Découpez-le en plusieurs fichiers.');
+        throw erreur(I18n.t('import.lecture.trop_long_feuille', { feuille: nomFeuille, n: PLAFONDS.lignes, lignes: UI.nombreFr(PLAFONDS.lignes) }));
       }
       // Array.from et non map : une ligne de SheetJS peut avoir des trous (cellules absentes), que map garderait.
       const lignes = Array.from(donnees, (ligne) => Array.from(ligne || [], (cellule) => texteCellule(cellule, date1904, bibliotheque)));
@@ -248,27 +245,27 @@ Object.assign(Import, (() => {
 
   /** Lit un fichier ou un collage : voir l'en-tête du fichier. */
   async function lire(source) {
-    if (!source) throw erreur('Aucun fichier à lire.');
+    if (!source) throw erreur(I18n.t('import.lecture.aucun_fichier'));
     if (typeof source.texte === 'string') {
-      if (!source.texte.trim()) throw erreur('Le collage est vide.');
-      return lireTexte(source.texte, source.nom || 'Collage', 'collage', null);
+      if (!source.texte.trim()) throw erreur(I18n.t('import.lecture.collage_vide'));
+      return lireTexte(source.texte, source.nom || I18n.t('import.lecture.collage'), 'collage', null);
     }
-    const nom = source.name || source.nom || 'fichier';
+    const nom = source.name || source.nom || I18n.t('import.lire.fichier');
     const format = extension(nom);
     if (typeof source.size === 'number' && source.size > PLAFONDS.octets) {
-      throw erreur('Fichier trop grand (plus de ' + PLAFONDS.octets / 1024 / 1024 + ' Mo). Découpez-le en plusieurs fichiers.');
+      throw erreur(I18n.t('import.lecture.trop_grand', { n: PLAFONDS.octets / 1024 / 1024 }));
     }
     const octets = new Uint8Array(await source.arrayBuffer());
     if (octets.length > PLAFONDS.octets) {
-      throw erreur('Fichier trop grand (plus de ' + PLAFONDS.octets / 1024 / 1024 + ' Mo). Découpez-le en plusieurs fichiers.');
+      throw erreur(I18n.t('import.lecture.trop_grand', { n: PLAFONDS.octets / 1024 / 1024 }));
     }
-    if (!octets.length) throw erreur('Le fichier est vide.');
+    if (!octets.length) throw erreur(I18n.t('import.lecture.fichier_vide'));
     if (TABLEURS.includes(format) || estZip(octets) || estOle(octets)) return lireTableur(octets, nom, format || 'tableur');
     if (TEXTES.includes(format) || format === '') {
       const decode = Donnees.csv.decoder(octets);
       return lireTexte(decode.texte, nom, format || 'csv', decode.encodage);
     }
-    throw erreur('Format non reconnu (« .' + format + ' ») : Prévo lit les fichiers .csv, .tsv, .txt, .xlsx, .xls et .ods.');
+    throw erreur(I18n.t('import.lecture.format_non_reconnu', { format }));
   }
 
   // --- Ligne d'en-tête ------------------------------------------------------------------------

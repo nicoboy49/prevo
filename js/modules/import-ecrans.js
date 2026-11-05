@@ -9,20 +9,22 @@
 //
 // Outils partagés avec import-apercu.js (interne au module, pas une API) : Import.assistant = { etat(),
 //   allerA(numero), recommencer(), section(numero, titre, intro), navigation(options), entetes(), donnees(),
-//   numeroPremiereLigne(), correspondanceValidee(), colonnesIa(), pluriel(n, singulier, pluriel),
-//   etapes: { numero: rendu(zone) }, calculerApercu (posé par import-apercu.js) }.
+//   numeroPremiereLigne(), correspondanceValidee(), colonnesIa(), etapes: { numero: rendu(zone) },
+//   calculerApercu (posé par import-apercu.js) }.
 
 Object.assign(Import, (() => {
 
+  // Titres et libellés lus à l'affichage (accesseurs : jamais figés au chargement du module).
   const ETAPES = [
-    { numero: 1, titre: 'Quoi' }, { numero: 2, titre: 'D\'où' }, { numero: 3, titre: 'Colonnes' },
-    { numero: 4, titre: 'Aperçu' }, { numero: 5, titre: 'Importer' },
+    { numero: 1, get titre() { return I18n.t('import.etapes.quoi'); } }, { numero: 2, get titre() { return I18n.t('import.etapes.ou'); } },
+    { numero: 3, get titre() { return I18n.t('import.etapes.colonnes'); } }, { numero: 4, get titre() { return I18n.t('import.etapes.apercu'); } },
+    { numero: 5, get titre() { return I18n.t('import.etapes.importer'); } },
   ];
   const EXTENSIONS = '.xlsx,.xlsm,.xls,.ods,.csv,.tsv,.txt';
   const STATUTS = {
-    sure: { libelle: 'Sûre', ton: 'ok' },
-    a_confirmer: { libelle: 'À confirmer', ton: 'attention' },
-    non_utilisee: { libelle: 'Non utilisée', ton: 'neutre' },
+    sure: { get libelle() { return I18n.t('import.statut_colonne.sure'); }, ton: 'ok' },
+    a_confirmer: { get libelle() { return I18n.t('import.statut_colonne.a_confirmer'); }, ton: 'attention' },
+    non_utilisee: { get libelle() { return I18n.t('import.statut_colonne.non_utilisee'); }, ton: 'neutre' },
   };
   const EXTRAIT_LIGNES = 8;
   const EXTRAIT_COLONNES = 30;
@@ -48,7 +50,6 @@ Object.assign(Import, (() => {
   // ===========================================================================================
 
   const texte = (valeur) => (valeur === null || valeur === undefined ? '' : String(valeur).trim());
-  const pluriel = (nombre, singulier, plurielDonne) => nombre + ' ' + (nombre > 1 ? (plurielDonne || singulier + 's') : singulier);
   const ligneRemplie = (ligne) => (ligne || []).some((cellule) => texte(cellule) !== '');
   // Même règle que la lecture (import-lecture.js) : nombres, dates ISO ou JJ/MM/AAAA.
   const estNombreOuDate = (valeur) => /^[-+]?[\d\s.,]+$/.test(valeur) || /^\d{4}-\d{2}-\d{2}/.test(valeur)
@@ -63,15 +64,15 @@ Object.assign(Import, (() => {
 
   function couper(valeur, longueur) {
     const brut = texte(valeur).replace(/\s+/g, ' ');
-    return brut.length > longueur ? brut.slice(0, longueur - 1) + '…' : brut;
+    return brut.length > longueur ? I18n.t('import.texte_coupe', { debut: brut.slice(0, longueur - 1) }) : brut;
   }
 
   const description = () => Import.TYPES[etat.type];
   // Un champ obligatoire, ou une clé naturelle (une clé vide refuse la ligne) ; l'ancien numéro d'OT de
   // l'historique est une clé de doublon, pas une obligation.
   const obligatoire = (champ) => champ.obligatoire || (champ.cleNaturelle && etat.type !== 'historique');
-  const libelleChamp = (champ) => champ.libelle + (obligatoire(champ) ? ' (obligatoire)' : '');
-  const nomColonne = (entree) => entree.entete || 'colonne ' + lettreColonne(entree.colonne);
+  const libelleChamp = (champ) => (obligatoire(champ) ? I18n.t('import.colonnes.champ_obligatoire', { champ: champ.libelle }) : champ.libelle);
+  const nomColonne = (entree) => entree.entete || I18n.t('import.nom_colonne.colonne_lettre_colonne', { lettreColonne: lettreColonne(entree.colonne) });
 
   // --- Lignes de la feuille choisie : en-têtes, données (sous l'en-tête), numéro de leur 1re ligne ----------
 
@@ -108,11 +109,11 @@ Object.assign(Import, (() => {
     racine = conteneur;
     UI.remplir(conteneur, UI.html`
       <div class="entete-page"><div>
-        <div class="fil"><a href="#/parametres">Paramètres</a> › <span>Importer des données</span></div>
-        <h1>Importer des données</h1>
-        <p>Reprenez vos listes existantes (Excel, OpenDocument, CSV) en cinq étapes : rien n'est écrit dans Prévo avant la dernière, « Importer ».</p>
+        <div class="fil">${I18n.html('import.ecran.parametres_importer_donnees')}</div>
+        <h1>${I18n.t('import.ecran.importer_donnees')}</h1>
+        <p>${I18n.t('import.ecran.reprenez_listes_existantes_excel')}</p>
       </div></div>
-      <ol class="etapes import-fil" aria-label="Étapes de l'import">
+      <ol class="etapes import-fil" aria-label="${I18n.t('import.ecran.etapes_import')}">
         ${ETAPES.map((e) => UI.html`<li data-etape="${e.numero}">${e.numero}. ${e.titre}</li>`)}
       </ol>
       <p class="import-etape-courte"></p>
@@ -142,7 +143,7 @@ Object.assign(Import, (() => {
       if (numero === etat.etape) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
     });
     const courante = ETAPES.find((e) => e.numero === etat.etape);
-    UI.$('.import-etape-courte', racine).textContent = 'Étape ' + etat.etape + ' sur ' + ETAPES.length + ' : ' + courante.titre;
+    UI.$('.import-etape-courte', racine).textContent = I18n.t('import.rendre.etape_courante', { numero: etat.etape, total: ETAPES.length, titre: courante.titre });
     zone.textContent = '';
     assistant.etapes[etat.etape](zone);
     if (focaliser) {
@@ -167,13 +168,13 @@ Object.assign(Import, (() => {
    */
   function navigation(options) {
     const barre = UI.element(UI.html`<div class="actions import-navigation">
-      ${options.retour ? UI.html`<button type="button" class="btn btn-fantome" id="import-retour">${UI.icone('retour')}Retour</button>` : ''}
+      ${options.retour ? UI.html`<button type="button" class="btn btn-fantome" id="import-retour">${UI.icone('retour')}${I18n.t('import.navigation.retour')}</button>` : ''}
       <span class="espace"></span>
     </div>`);
     if (options.retour) UI.$('#import-retour', barre).addEventListener('click', () => allerA(options.retour));
     (options.boutons || []).forEach((bouton) => barre.appendChild(bouton));
     if (options.continuer) {
-      const bouton = UI.element(UI.html`<button type="button" class="btn btn-primaire" id="import-continuer">${options.continuer.libelle || 'Continuer'}${UI.icone('chevron')}</button>`);
+      const bouton = UI.element(UI.html`<button type="button" class="btn btn-primaire" id="import-continuer">${options.continuer.libelle || I18n.t('commun.bouton.continuer')}${UI.icone('chevron')}</button>`);
       bouton.disabled = options.continuer.actif === false;
       bouton.addEventListener('click', () => options.continuer.action(bouton));
       barre.appendChild(bouton);
@@ -190,23 +191,20 @@ Object.assign(Import, (() => {
   // ===========================================================================================
 
   function etapeQuoi(zone) {
-    const element = section(1, 'Que voulez-vous importer ?', 'Un import = un type de données. Pour reprendre tout un atelier, '
-      + 'commencez par les localisations et les équipements, puis les fournisseurs et les articles, les techniciens et leurs '
-      + 'habilitations, les codes, compteurs, contrôles et gammes ; l\'historique des interventions en dernier.');
+    const element = section(1, I18n.t('import.etape_quoi.voulez_importer'), I18n.t('import.etape_quoi.import_type_donnees_reprendre'));
     const types = Object.values(Import.TYPES);
     element.appendChild(UI.element(UI.html`<fieldset class="import-types">
-      <legend class="visuellement-cache">Type de données</legend>
+      <legend class="visuellement-cache">${I18n.t('import.etape_quoi.type_donnees')}</legend>
       ${types.map((type) => UI.html`<label class="import-type">
         <input type="radio" name="import-type" value="${type.cle}"${type.cle === etat.type ? UI.brut(' checked') : ''}>
         <span><b>${type.libelle}</b><small class="import-type-aide">${type.aide}</small></span>
       </label>`)}
     </fieldset>`));
     const modeles = UI.element(UI.html`<div class="import-modeles">
-      <p class="note">Pas encore de fichier ? Téléchargez un modèle à remplir : les titres des colonnes, une ligne d'exemple et,
-        dans le classeur, une feuille d'aide (champs obligatoires, valeurs permises, formats).</p>
+      <p class="note">${I18n.t('import.etape_quoi.pas_encore_fichier_telechargez')}</p>
       <div class="actions">
-        <button type="button" class="btn btn-secondaire" id="import-modele-xlsx">${UI.icone('export')}Modèle .xlsx</button>
-        <button type="button" class="btn btn-secondaire" id="import-modele-csv">${UI.icone('export')}Modèle .csv</button>
+        <button type="button" class="btn btn-secondaire" id="import-modele-xlsx">${UI.icone('export')}${I18n.t('import.etape_quoi.modele_xlsx')}</button>
+        <button type="button" class="btn btn-secondaire" id="import-modele-csv">${UI.icone('export')}${I18n.t('import.etape_quoi.modele_csv')}</button>
       </div>
     </div>`);
     element.appendChild(modeles);
@@ -256,21 +254,20 @@ Object.assign(Import, (() => {
   // ===========================================================================================
 
   function etapeOu(zone) {
-    const element = section(2, 'D\'où viennent les données ?', UI.html`Type choisi : <b>${description().libelle}</b>. Déposez le
-      fichier exporté de votre tableur ou de l'autre logiciel, ou collez les cellules copiées dans Excel.`);
+    const element = section(2, I18n.t('import.etape_ou.ou_viennent_donnees'), I18n.html('import.etape_ou.type_choisi', { type: description().libelle }));
     element.appendChild(UI.element(UI.html`<div class="import-sources">
       <label class="depot import-depot" id="import-depot">
         ${UI.icone('document')}
-        <b>Déposez le fichier ici</b>
-        <span class="btn btn-secondaire import-choisir">Choisir un fichier</span>
-        <small>Excel (.xlsx, .xls), OpenDocument (.ods), CSV ou texte (.csv, .tsv, .txt) ; 10 Mo et 20 000 lignes au plus.</small>
+        <b>${I18n.t('import.etape_ou.deposez_fichier')}</b>
+        <span class="btn btn-secondaire import-choisir">${I18n.t('import.etape_ou.choisir_fichier')}</span>
+        <small>${I18n.t('import.etape_ou.formats_lus')}</small>
         <input type="file" id="import-fichier" class="visuellement-cache" accept="${EXTENSIONS}">
       </label>
       <div class="champ import-collage">
-        <label class="libelle" for="import-collage">Ou collez les cellules copiées dans votre tableur</label>
-        <textarea id="import-collage" rows="6" spellcheck="false" placeholder="Titres des colonnes compris"></textarea>
-        <p class="aide">Sélectionnez les cellules dans Excel ou LibreOffice (avec la ligne des titres), copiez, collez ici.</p>
-        <div class="actions"><button type="button" class="btn btn-secondaire" id="import-lire-collage">Lire le collage</button></div>
+        <label class="libelle" for="import-collage">${I18n.t('import.etape_ou.collez_cellules_copiees_tableur')}</label>
+        <textarea id="import-collage" rows="6" spellcheck="false" placeholder="${I18n.t('import.etape_ou.titres_colonnes_compris')}"></textarea>
+        <p class="aide">${I18n.t('import.etape_ou.selectionnez_cellules_excel_libre_office')}</p>
+        <div class="actions"><button type="button" class="btn btn-secondaire" id="import-lire-collage">${I18n.t('import.etape_ou.lire_collage')}</button></div>
       </div>
     </div>`));
     element.appendChild(UI.element(UI.html`<div class="alertes import-erreur" id="import-erreur" hidden></div>`));
@@ -295,8 +292,8 @@ Object.assign(Import, (() => {
     });
     UI.$('#import-lire-collage', element).addEventListener('click', () => {
       const colle = UI.$('#import-collage', element).value;
-      if (!colle.trim()) { afficherErreur('Le collage est vide : copiez des cellules dans votre tableur, puis collez-les ici.'); return; }
-      lire({ texte: colle, nom: 'Collage' });
+      if (!colle.trim()) { afficherErreur(I18n.t('import.etape_ou.collage_vide_copiez_cellules')); return; }
+      lire({ texte: colle, nom: I18n.t('import.lecture.collage') });
     });
     afficherLecture();
   }
@@ -315,7 +312,7 @@ Object.assign(Import, (() => {
     const zoneLu = UI.$('#import-lu', racine);
     afficherErreur('');
     zoneLu.hidden = false;
-    UI.remplir(zoneLu, UI.chargement('Lecture de « ' + (source.name || source.nom || 'fichier') + ' »…'));
+    UI.remplir(zoneLu, UI.chargement(I18n.t('import.lire.lecture', { nom: source.name || source.nom || I18n.t('import.lire.fichier') })));
     const bouton = boutonContinuer();
     if (bouton) bouton.disabled = true;
     try {
@@ -333,7 +330,7 @@ Object.assign(Import, (() => {
       afficherLecture();
       if (!(erreur instanceof Import.ErreurImport)) console.warn('Prévo (import) : lecture impossible (' + (erreur && erreur.message) + ').', erreur);
       afficherErreur(erreur instanceof Import.ErreurImport ? erreur.message
-        : 'Fichier illisible : ' + ((erreur && erreur.message) || 'erreur inconnue') + '.');
+        : I18n.t('import.lire.fichier_illisible', { raison: (erreur && erreur.message) || I18n.t('commun.message.erreur_inconnue') }));
     }
   }
 
@@ -342,19 +339,18 @@ Object.assign(Import, (() => {
     const ligne = lignesFeuille()[etat.rangEntete] || [];
     const textes = ligne.map(texte).filter((cellule) => cellule && !estNombreOuDate(cellule));
     if (!textes.length) {
-      return 'Aucune ligne d\'en-tête trouvée : la ligne ' + (etat.rangEntete + 1) + ' ne contient que des nombres, des dates '
-        + 'ou rien. Prévo reconnaît les colonnes par leur titre : ajoutez en haut du fichier une ligne de titres (par exemple '
-        + '« Repère », « Désignation »), ou indiquez ci-dessous la ligne qui les porte.';
+      return I18n.t('import.probleme_entete.aucune_ligne_entete', { numero: etat.rangEntete + 1 });
     }
-    if (!donnees().some(ligneRemplie)) return 'Aucune ligne de données sous la ligne d\'en-tête (ligne ' + (etat.rangEntete + 1) + ').';
+    if (!donnees().some(ligneRemplie)) return I18n.t('import.probleme_entete.aucune_ligne_donnees', { numero: etat.rangEntete + 1 });
     return '';
   }
 
   function decrireSource(lecture) {
-    if (lecture.format === 'collage') return 'collage';
+    if (lecture.format === 'collage') return I18n.t('import.source.collage');
     const feuilles = lecture.feuilles.length;
-    const nature = ['xlsx', 'xlsm', 'xls', 'ods', 'tableur'].includes(lecture.format) ? 'classeur' : 'fichier texte';
-    return nature + (lecture.encodage ? ' ' + lecture.encodage : '') + (feuilles > 1 ? ', ' + feuilles + ' feuilles' : '');
+    const nature = ['xlsx', 'xlsm', 'xls', 'ods', 'tableur'].includes(lecture.format) ? I18n.t('import.source.classeur') : I18n.t('import.source.fichier_texte');
+    const source = lecture.encodage ? I18n.t('import.source.encodage', { nature, encodage: lecture.encodage }) : nature;
+    return feuilles > 1 ? I18n.t('import.source.feuilles', { source, n: feuilles }) : source;
   }
 
   function afficherLecture() {
@@ -374,16 +370,16 @@ Object.assign(Import, (() => {
       <h3>${UI.icone('document')}<span>${lecture.nom}</span> <small>(${decrireSource(lecture)})</small></h3>
       <div class="form-ligne import-reglages">
         ${lecture.feuilles.length > 1 ? UI.html`<div class="champ">
-          <label class="libelle" for="import-feuille">Feuille</label>
+          <label class="libelle" for="import-feuille">${I18n.t('import.lecture.feuille')}</label>
           <select id="import-feuille">${lecture.feuilles.map((feuille, rang) => UI.html`<option value="${rang}"${rang === etat.feuille ? UI.brut(' selected') : ''}>${feuille.nom}</option>`)}</select>
         </div>` : ''}
         <div class="champ">
-          <label class="libelle" for="import-ligne-entete">Ligne d'en-tête (titres des colonnes)</label>
+          <label class="libelle" for="import-ligne-entete">${I18n.t('import.lecture.ligne_tete_titres_colonnes')}</label>
           <input type="number" id="import-ligne-entete" min="1" max="${maximum}" step="1" inputmode="numeric" value="${etat.rangEntete + 1}">
-          <p class="aide">Proposée par Prévo : ligne ${etat.rangPropose + 1}.</p>
+          <p class="aide">${I18n.t('import.lecture.ligne_proposee', { numero: etat.rangPropose + 1 })}</p>
         </div>
         <label class="case import-deux-lignes"><input type="checkbox" id="import-deux-lignes"${etat.deuxLignes ? UI.brut(' checked') : ''}>
-          <span>En-tête sur deux lignes (titres fusionnés)</span></label>
+          <span>${I18n.t('import.lecture.tete_deux_lignes_titres')}</span></label>
       </div>
       <div class="import-resume-lecture"></div>`);
     const feuille = UI.$('#import-feuille', zoneLu);
@@ -432,14 +428,13 @@ Object.assign(Import, (() => {
     const extrait = lignes.slice(0, Math.max(EXTRAIT_LIGNES, finEntete + 4));
     const largeur = Math.min(EXTRAIT_COLONNES, Math.max(1, ...extrait.map((l) => l.length)));
     UI.remplir(zone, UI.html`
-      <p class="import-titres" id="import-titres"><b>${pluriel(titres.length, 'colonne')} :</b>
-        ${titres.map((titre, rang) => UI.html`${rang ? ', ' : ''}<span>« ${titre || '(sans titre)'} »</span>`)}</p>
-      ${probleme ? '' : UI.html`<p class="note">${pluriel(remplies, 'ligne de données', 'lignes de données')}, à partir de la ligne ${premiere}
-        du fichier ; les lignes vides sont ignorées.</p>`}
-      <div class="table-defile import-extrait" tabindex="0" role="region" aria-label="Début du fichier">
+      <p class="import-titres" id="import-titres"><b>${I18n.t('import.resume_lecture.colonnes', { n: titres.length })}</b>
+        ${titres.map((titre, rang) => UI.html`${rang ? ', ' : ''}<span>${I18n.t('import.resume_lecture.titre', { titre: titre || I18n.t('import.resume_lecture.sans_titre') })}</span>`)}</p>
+      ${probleme ? '' : UI.html`<p class="note">${I18n.t('import.resume_lecture.lignes_donnees', { n: remplies, premiere })}</p>`}
+      <div class="table-defile import-extrait" tabindex="0" role="region" aria-label="${I18n.t('import.resume_lecture.debut_fichier')}">
         <table class="table">
-          <caption class="visuellement-cache">Début du fichier : la ligne d'en-tête est mise en évidence</caption>
-          <thead><tr><th scope="col" class="num">Ligne</th>${Array.from({ length: largeur }, (_, rang) => UI.html`<th scope="col">${lettreColonne(rang)}</th>`)}</tr></thead>
+          <caption class="visuellement-cache">${I18n.t('import.resume_lecture.debut_fichier_ligne_tete')}</caption>
+          <thead><tr><th scope="col" class="num">${I18n.t('import.resume_lecture.ligne')}</th>${Array.from({ length: largeur }, (_, rang) => UI.html`<th scope="col">${lettreColonne(rang)}</th>`)}</tr></thead>
           <tbody>${extrait.map((cellules, rang) => {
             const classe = rang >= etat.rangEntete && rang <= finEntete ? 'import-ligne-entete' : (rang < etat.rangEntete ? 'import-ligne-ignoree' : '');
             return UI.html`<tr class="${classe}"><td class="num">${rang + 1}</td>${Array.from({ length: largeur }, (_, colonne) => UI.html`<td>${couper(cellules[colonne], 40)}</td>`)}</tr>`;
@@ -465,18 +460,17 @@ Object.assign(Import, (() => {
 
   function etapeColonnes(zone) {
     if (!etat.correspondance) preparerCorrespondance();
-    const element = section(3, 'Quelles colonnes importer ?', 'Prévo a rapproché chaque colonne d\'un champ d\'après son titre. '
-      + 'Vérifiez le champ choisi pour chaque colonne : une colonne « non utilisée » n\'est pas importée.');
+    const element = section(3, I18n.t('import.etape_colonnes.quelles_colonnes_importer'), I18n.t('import.etape_colonnes.prevo_rapproche_chaque_colonne'));
     element.appendChild(UI.element(UI.html`<div class="alertes" id="import-alertes-colonnes"></div>`));
     const zoneIa = UI.element(UI.html`<div class="import-zone-ia" id="import-zone-ia"></div>`);
     if (typeof Ia !== 'undefined' && typeof Ia.emplacement === 'function') {
-      zoneIa.appendChild(Ia.emplacement('Proposer avec l\'IA', () => demanderIa(zoneIa)));
+      zoneIa.appendChild(Ia.emplacement(I18n.t('import.etape_colonnes.proposer_ia'), () => demanderIa(zoneIa)));
     }
     element.appendChild(zoneIa);
     element.appendChild(UI.element(UI.html`<div class="import-cadre-colonnes">
       <table class="table import-colonnes">
-        <caption class="visuellement-cache">Correspondance des colonnes du fichier avec les champs de Prévo</caption>
-        <thead><tr><th scope="col">Colonne du fichier</th><th scope="col">Exemples</th><th scope="col">Champ de Prévo</th><th scope="col">Statut</th></tr></thead>
+        <caption class="visuellement-cache">${I18n.t('import.etape_colonnes.correspondance_colonnes_fichier_champs')}</caption>
+        <thead><tr><th scope="col">${I18n.t('import.etape_colonnes.colonne_fichier')}</th><th scope="col">${I18n.t('import.etape_colonnes.exemples')}</th><th scope="col">${I18n.t('import.etape_colonnes.champ_prevo')}</th><th scope="col">${I18n.t('commun.champ.statut')}</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>`));
@@ -504,15 +498,15 @@ Object.assign(Import, (() => {
     const titre = nomColonne(entree);
     const valeurs = exemples(entree.colonne);
     return UI.html`<tr data-colonne="${entree.colonne}" class="import-${entree.statut}">
-      <td data-titre="Colonne du fichier"><b class="import-entete">${entree.entete || '(sans titre)'}</b>
-        <small class="import-lettre">colonne ${lettreColonne(entree.colonne)}</small></td>
-      <td data-titre="Exemples">${valeurs.length ? UI.html`<ul class="import-exemples">${valeurs.map((v) => UI.html`<li>${v}</li>`)}</ul>`
-        : UI.html`<span class="import-sans-exemple">(colonne vide)</span>`}</td>
-      <td data-titre="Champ de Prévo"><select class="import-champ" data-colonne="${entree.colonne}" aria-label="Champ de Prévo pour « ${titre} »">
-        <option value="">— Ne pas importer —</option>
+      <td data-titre="${I18n.t('import.etape_colonnes.colonne_fichier')}">${I18n.html('import.ligne_colonne.entete_lettre', { entete: entree.entete || I18n.t('import.resume_lecture.sans_titre'),
+        lettre: lettreColonne(entree.colonne) })}</td>
+      <td data-titre="${I18n.t('import.etape_colonnes.exemples')}">${valeurs.length ? UI.html`<ul class="import-exemples">${valeurs.map((v) => UI.html`<li>${v}</li>`)}</ul>`
+        : UI.html`<span class="import-sans-exemple">${I18n.t('import.ligne_colonne.colonne_vide')}</span>`}</td>
+      <td data-titre="${I18n.t('import.etape_colonnes.champ_prevo')}"><select class="import-champ" data-colonne="${entree.colonne}" aria-label="${I18n.t('import.ligne_colonne.champ_prevo', { titre })}">
+        <option value="">${I18n.t('import.ligne_colonne.pas_importer')}</option>
         ${description().champs.map((champ) => UI.html`<option value="${champ.cle}"${champ.cle === entree.champ ? UI.brut(' selected') : ''}>${libelleChamp(champ)}</option>`)}
       </select></td>
-      <td data-titre="Statut"><span class="badge ${statut.ton} import-statut">${statut.libelle}</span>
+      <td data-titre="${I18n.t('commun.champ.statut')}"><span class="badge ${statut.ton} import-statut">${statut.libelle}</span>
         ${entree.raison ? UI.html`<small class="import-raison">${entree.raison}</small>` : ''}</td>
     </tr>`;
   }
@@ -534,19 +528,17 @@ Object.assign(Import, (() => {
     zone.textContent = '';
     const utilisees = etat.correspondance.filter((e) => e.champ && e.statut !== 'non_utilisee');
     if (!utilisees.length) {
-      zone.appendChild(UI.bandeau(insister ? 'important' : 'attention', 'Aucune colonne n\'est importée : choisissez le champ de Prévo d\'au moins une colonne.'));
+      zone.appendChild(UI.bandeau(insister ? 'important' : 'attention', I18n.t('import.alertes_colonnes.aucune_colonne_importee_choisissez')));
       return;
     }
     const pris = new Set(utilisees.map((e) => e.champ));
     const manquants = description().champs.filter((champ) => obligatoire(champ) && !pris.has(champ.cle));
     if (manquants.length) {
-      zone.appendChild(UI.bandeau('attention', UI.html`<b>Sans colonne :</b> ${manquants.map((c) => c.libelle).join(', ')}.
-        Les lignes qui créeraient une fiche sans ${manquants.length > 1 ? 'ces champs obligatoires' : 'ce champ obligatoire'} seront refusées.`));
+      zone.appendChild(UI.bandeau('attention', I18n.html('import.alertes_colonnes.sans_colonne', { n: manquants.length, champs: manquants.map((c) => c.libelle).join(', ') })));
     }
     const aConfirmer = etat.correspondance.filter((e) => e.statut === 'a_confirmer' && e.champ).length;
     if (aConfirmer) {
-      zone.appendChild(UI.bandeau('info', UI.html`<b>${pluriel(aConfirmer, 'colonne à confirmer', 'colonnes à confirmer')} :</b>
-        vérifiez le champ choisi. En continuant, ${aConfirmer > 1 ? 'elles sont importées' : 'elle est importée'} telle${aConfirmer > 1 ? 's' : ''} quelle${aConfirmer > 1 ? 's' : ''}.`));
+      zone.appendChild(UI.bandeau('info', I18n.html('import.alertes_colonnes.a_confirmer', { n: aConfirmer })));
     }
   }
 
@@ -557,12 +549,12 @@ Object.assign(Import, (() => {
     if (champ) {
       etat.correspondance.forEach((autre) => {
         if (autre !== entree && autre.champ === champ) {
-          Object.assign(autre, { champ: '', statut: 'non_utilisee', raison: 'champ repris par la colonne « ' + nomColonne(entree) + ' »', origine: '' });
+          Object.assign(autre, { champ: '', statut: 'non_utilisee', raison: I18n.t('import.choisir_champ.champ_repris_colonne', { nomColonne: nomColonne(entree) }), origine: '' });
         }
       });
     }
-    Object.assign(entree, champ ? { champ, statut: 'sure', raison: 'choisi à la main', origine: '' }
-      : { champ: '', statut: 'non_utilisee', raison: 'écartée à la main', origine: '' });
+    Object.assign(entree, champ ? { champ, statut: 'sure', raison: I18n.t('import.choisir_champ.choisi_main'), origine: '' }
+      : { champ: '', statut: 'non_utilisee', raison: I18n.t('import.choisir_champ.ecartee_main'), origine: '' });
     oublierApercu();
     rendreColonnes(colonne);
   }
@@ -591,7 +583,7 @@ Object.assign(Import, (() => {
   function demanderIa(apres) {
     const candidates = etat.correspondance.filter((e) => e.statut !== 'sure' && e.entete);
     if (!candidates.length) {
-      UI.toast('Toutes les colonnes sont reconnues : rien à demander à l\'IA.', 'info');
+      UI.toast(I18n.t('import.demander_ia.toutes_colonnes_sont_reconnues'), 'info');
       return;
     }
     const titres = Array.from(new Set(candidates.map((e) => e.entete))).slice(0, TITRES_IA_MAX);
@@ -601,20 +593,18 @@ Object.assign(Import, (() => {
     Ia.ouvrirEncadre({
       apres, fonction: 'colonnesImport', donnees: { type: description().libelle, champs, colonnes: titres },
       rendu: (resultat) => renduIa(resultat),
-      boutons: [{ libelle: 'Appliquer (à confirmer)', valeur: 'appliquer', classe: 'btn-primaire',
+      boutons: [{ libelle: I18n.t('import.demander_ia.appliquer_confirmer'), valeur: 'appliquer', classe: 'btn-primaire',
         action: (resultat, reponse) => appliquerIa(resultat, reponse.modele) }],
     });
   }
 
   function renduIa(resultat) {
     const libelle = (cle) => (Import.interne.champDe(description(), cle) || { libelle: cle }).libelle;
-    return UI.html`<p class="note">Seuls les titres des colonnes non reconnues ont été envoyés, jamais le contenu des cellules.
-      Chaque proposition reste « à confirmer ».</p>
+    return UI.html`<p class="note">${I18n.t('import.rendu_ia.seuls_titres_colonnes_non')}</p>
       ${resultat.colonnes.length
-        ? UI.html`<ul class="ia-liste">${resultat.colonnes.map((c) => UI.html`<li>« ${c.entete} » → <b>${libelle(c.champ)}</b></li>`)}</ul>`
-        : UI.html`<p>L'IA ne rapproche aucune de ces colonnes d'un champ de Prévo.</p>`}
-      ${resultat.rejetes.length ? UI.html`<p class="note">${pluriel(resultat.rejetes.length, 'proposition écartée', 'propositions écartées')}
-        (champ inconnu, titre non envoyé ou en double).</p>` : ''}`;
+        ? UI.html`<ul class="ia-liste">${resultat.colonnes.map((c) => UI.html`<li>${I18n.html('import.rendu_ia.entete_libelle', { entete: c.entete, libelle: libelle(c.champ) })}</li>`)}</ul>`
+        : UI.html`<p>${I18n.t('import.rendu_ia.ia_rapproche_aucune_colonnes')}</p>`}
+      ${resultat.rejetes.length ? UI.html`<p class="note">${I18n.t('import.rendu_ia.propositions_ecartees', { n: resultat.rejetes.length })}</p>` : ''}`;
   }
 
   function appliquerIa(resultat, modele) {
@@ -627,10 +617,10 @@ Object.assign(Import, (() => {
       if (etat.correspondance.some((e) => e !== entree && e.statut === 'sure' && e.champ === champ)) return;
       etat.correspondance.forEach((autre) => {
         if (autre !== entree && autre.champ === champ) {
-          Object.assign(autre, { champ: '', statut: 'non_utilisee', raison: 'champ proposé par l\'IA pour « ' + entete + ' »', origine: '' });
+          Object.assign(autre, { champ: '', statut: 'non_utilisee', raison: I18n.t('import.appliquer_ia.champ_propose_ia', { entete }), origine: '' });
         }
       });
-      Object.assign(entree, { champ, statut: 'a_confirmer', raison: 'proposée par l\'IA (' + modele + ') : à confirmer', origine: 'ia' });
+      Object.assign(entree, { champ, statut: 'a_confirmer', raison: I18n.t('import.appliquer_ia.proposee_ia_confirmer', { modele }), origine: 'ia' });
       appliquees += 1;
     });
     if (appliquees) {
@@ -638,8 +628,8 @@ Object.assign(Import, (() => {
       oublierApercu();
     }
     rendreColonnes();
-    UI.toast(appliquees ? pluriel(appliquees, 'colonne proposée', 'colonnes proposées') + ' par l\'IA : vérifiez-les.'
-      : 'Aucune proposition de l\'IA à appliquer.', appliquees ? 'succes' : 'info');
+    UI.toast(appliquees ? I18n.t('import.appliquer_ia.colonnes_proposees', { n: appliquees })
+      : I18n.t('import.appliquer_ia.aucune_proposition_ia_appliquer'), appliquees ? 'succes' : 'info');
     return true;
   }
 
@@ -649,7 +639,7 @@ Object.assign(Import, (() => {
 
   const assistant = {
     etat: () => etat, allerA, recommencer, section, navigation, entetes, donnees, numeroPremiereLigne, correspondanceValidee,
-    colonnesIa, pluriel, etapes: { 1: etapeQuoi, 2: etapeOu, 3: etapeColonnes }, calculerApercu: null,
+    colonnesIa, etapes: { 1: etapeQuoi, 2: etapeOu, 3: etapeColonnes }, calculerApercu: null,
   };
 
   // App est chargé après les modules : l'écran est enregistré une fois la page lue.
@@ -657,7 +647,7 @@ Object.assign(Import, (() => {
     App.ecran({
       id: 'import',
       route: /^#\/import$/,
-      titre: 'Importer des données',
+      get titre() { return I18n.t('import.ecran.titre'); },
       parent: 'parametres',
       profils: ['responsable'],
       tables: [],

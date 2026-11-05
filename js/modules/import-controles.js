@@ -44,8 +44,15 @@ Object.assign(Import, (() => {
     localisations: [(l) => l.libelle], equipements: [(l) => l.repere], articles: [(l) => l.reference], fournisseurs: [(l) => l.nom],
     techniciens: [(l) => texte(l.nom) + ' ' + texte(l.prenom)], codes_defaillance: [(l) => texte(l.code).toUpperCase(), (l) => l.libelle],
   };
-  // Raison d'une ligne qui cite une fiche qu'une ligne refusée devait créer (même texte que la cascade de T80).
-  const DEPENDANCES = { equipements: 'équipement parent refusé', localisations: 'localisation parente refusée', gammes: 'gamme refusée' };
+  // Raison d'une ligne qui cite une fiche qu'une ligne refusée (numéro) devait créer (même texte que la cascade de T80).
+  function dependance(table, numero) {
+    switch (table) {
+      case 'equipements': return I18n.t('import.dependance.equipement_parent_refuse_ligne', { numero });
+      case 'localisations': return I18n.t('import.dependance.localisation_parente_refusee_ligne', { numero });
+      case 'gammes': return I18n.t('import.dependance.gamme_refusee_ligne', { numero });
+      default: return I18n.t('import.dependance.fiche_liee_refusee_ligne', { numero });
+    }
+  }
 
   // ===== État vu par les formulaires ==========================================================
   const nouvelEtat = (contexte) => ({ contexte, provisoires: new Map(), pris: new Set(), tables: new Map(), prevues: new Map() });
@@ -53,7 +60,8 @@ Object.assign(Import, (() => {
   function provisoire(etat, objet) {
     if (!etat.provisoires.has(objet)) {
       const entree = etat.contexte.entrees.get(objet);
-      const base = entree && entree.ligne ? 'ligne ' + entree.ligne.numero + ' du fichier' : "créée par l'import, n° " + (etat.provisoires.size + 1);
+      const base = entree && entree.ligne ? I18n.t('import.provisoire.ligne_fichier', { numero: entree.ligne.numero })
+        : I18n.t('import.provisoire.creee_import', { numero: etat.provisoires.size + 1 });
       let id = base;
       for (let n = 2; etat.pris.has(id); n += 1) id = base + ' (' + n + ')';
       etat.pris.add(id);
@@ -144,7 +152,8 @@ Object.assign(Import, (() => {
     const champ = contexte.description.champs.find((c) => (c.champ === erreur.nom && c.table === contexte.table) || c.ecrit === erreur.nom)
       || Schema.champ(contexte.table, erreur.nom);
     const libelle = champ ? texte(champ.libelle) : '';
-    return !libelle || comparable(erreur.message).includes(comparable(libelle)) ? erreur.message : libelle + ' : ' + erreur.message;
+    return !libelle || comparable(erreur.message).includes(comparable(libelle)) ? erreur.message
+      : I18n.t('import.raison.champ_message', { champ: libelle, message: erreur.message });
   }
   // Ligne gardée qui cite, directement ou par une référence créée, une fiche qu'une ligne refusée devait créer : refusée
   // à son tour, jusqu'à stabilité (même mécanisme que la cascade des parents de T80).
@@ -168,8 +177,8 @@ Object.assign(Import, (() => {
         const refusee = valeurs.map((valeur) => source(ligne, valeur, vus)).find(Boolean);
         if (!refusee) continue;
         // Note de la seconde passe que le refus contredit (opération d'une gamme refusée).
-        if (ligne._tete) ligne.raisons = ligne.raisons.filter((r) => r !== 'opération ajoutée à la gamme de la ligne ' + ligne._tete.numero);
-        refuser(ligne, (DEPENDANCES[refusee.table] || 'fiche liée refusée') + ' (ligne ' + refusee.ligne.numero + ')');
+        if (ligne._tete) ligne.raisons = ligne.raisons.filter((r) => r !== I18n.t('import.seconde_gamme.operation_ajoutee', { numero: ligne._tete.numero }));
+        refuser(ligne, dependance(refusee.table, refusee.ligne.numero));
         change = true;
       }
     }

@@ -51,8 +51,7 @@ Object.assign(Import, (() => {
   }
 
   function erreurPerime(nouveau) {
-    const erreur = new Import.ErreurImport('Les données ont changé sur un autre poste depuis l\'aperçu : il a été '
-      + 'recalculé. Vérifiez-le, puis relancez l\'import.');
+    const erreur = new Import.ErreurImport(I18n.t('import.erreur_perime.donnees_ont_change_autre'));
     erreur.perime = true;
     erreur.apercu = nouveau;
     return erreur;
@@ -69,7 +68,7 @@ Object.assign(Import, (() => {
       apercu = frais;
     }
     const tablesTouchees = ORDRE_ECRITURE.filter((nomTable) => ecrituresDe(apercu, nomTable));
-    if (!tablesTouchees.length) throw new Import.ErreurImport('Rien à importer : aucune ligne à créer ni à mettre à jour.');
+    if (!tablesTouchees.length) throw new Import.ErreurImport(I18n.t('import.importer.rien_importer_aucune_ligne'));
 
     // 1. Sauvegarde juste avant (rien n'est écrit si elle échoue) ; instantané en démo.
     let sauvegarde = null;
@@ -82,10 +81,9 @@ Object.assign(Import, (() => {
       try {
         sauvegarde = await App.adaptateur.sauvegarder('avant-import');
       } catch (erreur) {
-        throw new Import.ErreurImport('Sauvegarde avant l\'import impossible (' + texte(erreur && erreur.message)
-          + ') : rien n\'a été importé.');
+        throw new Import.ErreurImport(I18n.t('import.importer.sauvegarde_impossible_raison', { raison: texte(erreur && erreur.message) }));
       }
-      if (!sauvegarde) throw new Import.ErreurImport('Sauvegarde avant l\'import impossible : rien n\'a été importé.');
+      if (!sauvegarde) throw new Import.ErreurImport(I18n.t('import.importer.sauvegarde_impossible'));
     }
 
     // 2. Écriture table par table, dans l'ordre des références. Si une table échoue en cours de route,
@@ -115,8 +113,7 @@ Object.assign(Import, (() => {
       const parId = new Map(lignes.map((ligne) => [ligne.id, ligne]));
       ecritures.creer.forEach((nouvelle) => {
         if (parId.has(nouvelle.id)) {
-          throw new Import.ErreurImport('L\'identifiant ' + nouvelle.id + ' vient d\'être pris sur un autre poste : '
-            + 'relancez l\'aperçu.');
+          throw new Import.ErreurImport(I18n.t('import.ecrire_table.identifiant_vient_etre_pris', { nouvelleId: nouvelle.id }));
         }
         const copie = Object.assign({}, nouvelle);
         lignes.push(copie);
@@ -137,7 +134,7 @@ Object.assign(Import, (() => {
 
   async function annuler(resultat) {
     if (!resultat || !resultat.tablesTouchees || !resultat.tablesTouchees.length) {
-      throw new Import.ErreurImport('Aucun import à annuler.');
+      throw new Import.ErreurImport(I18n.t('import.annuler.aucun_import_annuler'));
     }
     const tables = resultat.tablesTouchees.slice();
     const instantane = instantanes.get(resultat);
@@ -148,7 +145,7 @@ Object.assign(Import, (() => {
       }
       instantanes.delete(resultat);
     } else {
-      if (!resultat.sauvegarde) throw new Import.ErreurImport('Aucune sauvegarde de cet import : rien à restaurer.');
+      if (!resultat.sauvegarde) throw new Import.ErreurImport(I18n.t('import.annuler.aucune_sauvegarde_import_rien'));
       await App.adaptateur.restaurer(resultat.sauvegarde, tables);
       await Donnees.chargerTout();
     }

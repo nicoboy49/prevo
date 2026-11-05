@@ -137,10 +137,14 @@ def remarques(champ):
 # nombres, tableaux, objets), « + », appels, Object.assign et fonctions fléchées à une expression. Les constantes
 # et fonctions du fichier sont relues de la même façon ; S, V et type, qui assemblent les champs, sont reproduites
 # ci-dessous (mêmes règles que dans import-regles.js : libellé, type et synonymes du schéma, synonymes ajoutés,
-# options). Une construction inconnue arrête la génération avec un message clair : jamais de fiche fausse.
+# options). Libellés et aides des types et des champs propres à l'import sont des fonctions « () => I18n.t('clé') »
+# (lues à l'affichage, T242) : leur texte est lu dans le dictionnaire français, js/i18n/fr.js.
+# Une construction inconnue arrête la génération avec un message clair : jamais de fiche fausse.
 
 FICHIER_IMPORT = RACINE / "js" / "modules" / "import-regles.js"
 FICHIER_LECTURE = RACINE / "js" / "modules" / "import-lecture.js"
+FICHIER_FRANCAIS = RACINE / "js" / "i18n" / "fr.js"
+MOTIF_ENTREE = re.compile(r"^\s*'([\w.]+)': '((?:[^'\\]|\\.)*)',\s*$", re.MULTILINE)
 DEBUT_TYPES = "// ===== 2."            # section de import-regles.js qui définit TYPES
 FIN_TYPES = "// ===== 3."
 
@@ -329,6 +333,15 @@ def appeler(fonction, arguments):
     raise ErreurLectureImport("appel d'autre chose qu'une fonction dans %s" % FICHIER_IMPORT.name)
 
 
+def lire_textes_francais():
+    """Entrées simples du dictionnaire français (js/i18n/fr.js) : { clé: texte }, échappements JS décodés."""
+    def decoder(valeur):
+        return re.sub(r"\\(u[0-9a-fA-F]{4}|.)",
+                      lambda m: chr(int(m.group(1)[1:], 16)) if len(m.group(1)) == 5 else ECHAPPEMENTS.get(m.group(1), m.group(1)),
+                      valeur)
+    return {cle: decoder(valeur) for cle, valeur in MOTIF_ENTREE.findall(FICHIER_FRANCAIS.read_text(encoding="utf-8"))}
+
+
 def lire_types_import(schema):
     """Import.TYPES relu dans js/modules/import-regles.js : { cle: { cle, libelle, aide, tables, champs, refs } }."""
     texte = FICHIER_IMPORT.read_text(encoding="utf-8")
@@ -419,8 +432,20 @@ def lire_types_import(schema):
             resultat.append(fiche)
         return resultat
 
+    textes = lire_textes_francais()
+
+    def traduire(cle, valeurs=None):
+        """I18n.t(clé) relu : texte français de la clé (une clé absente arrête la génération)."""
+        if cle not in textes:
+            raise ErreurLectureImport("clé « %s » absente de %s (citée par %s)" % (cle, FICHIER_FRANCAIS.name, FICHIER_IMPORT.name))
+        return textes[cle]
+
+    def texte_lu(valeur):
+        """Libellé ou aide : texte, ou fonction « () => I18n.t('clé') » appelée ici."""
+        return appeler(valeur, []) if isinstance(valeur, Fleche) else valeur
+
     def champ_virtuel(cle, libelle, genre, exemple, liste=None, options=None):
-        fiche = {"cle": cle, "libelle": libelle, "table": None, "champ": None, "type": genre, "valeurs": None,
+        fiche = {"cle": cle, "libelle": texte_lu(libelle), "table": None, "champ": None, "type": genre, "valeurs": None,
                  "obligatoire": False, "protege": False, "defaut": None, "cleNaturelle": False, "exemple": exemple}
         fiche.update(avec_synonymes(options, liste))
         return fiche
@@ -431,7 +456,7 @@ def lire_types_import(schema):
             champs.extend(groupe if isinstance(groupe, list) else [groupe])
         refs = [{"champ": c["cle"], "table": c["ref"], "creee": c["ref"] in ("localisations", "fournisseurs")}
                 for c in champs if c.get("ref")]
-        return {"cle": cle, "libelle": libelle, "aide": aide, "tables": tables_ecrites, "champs": champs, "refs": refs}
+        return {"cle": cle, "libelle": texte_lu(libelle), "aide": texte_lu(aide), "tables": tables_ecrites, "champs": champs, "refs": refs}
 
     def assigner(cible, *sources):
         for source in sources:
@@ -439,7 +464,7 @@ def lire_types_import(schema):
         return cible
 
     globales = {"S": champs_du_schema, "V": champ_virtuel, "type": type_de_donnees, "avecSynonymes": avec_synonymes,
-                "Object": {"assign": assigner}}
+                "Object": {"assign": assigner}, "I18n": {"t": traduire}}
     valeurs = {}
 
     def chercher(nom):
