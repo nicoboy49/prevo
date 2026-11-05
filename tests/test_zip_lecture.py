@@ -719,15 +719,15 @@ class TestParMorceaux(CasZip):
         disque depuis le contrôle, il ne se relit plus : refus clair, le document n'est pas importé. Retiré entre le
         choix et la lecture : « Lecture du fichier impossible »."""
         octets = octets_zip(dict(csv_de_base(), **DOCUMENTS))
-        attendu = (" ne peut plus être relu : le fichier ZIP a été modifié, déplacé ou supprimé depuis son contrôle. "
-                   "Il n'est pas importé.")
+        debut = "Le fichier « essai-%d.zip » a été modifié, déplacé ou supprimé depuis sa vérification : il n'est pas importé. Relancez l'import."
         self.assertTrue(self.lire(octets)["ok"])
         chemin = self.temporaire / ("essai-%d.zip" % self.numero)
+        debut = debut % self.numero
         chemin.write_bytes(octets + bytes(10))                            # remplacé : autre taille, autre date
-        self.assertEqual(self.page.evaluate(RELIRE_JS, "photo-pompe.jpg"), "« documents/photo-pompe.jpg »" + attendu)
-        chemin.unlink()                                                   # retiré
+        self.assertEqual(self.page.evaluate(RELIRE_JS, "photo-pompe.jpg"), debut)
+        chemin.unlink()                                                   # supprimé
         self.assertEqual(self.page.evaluate(RELIRE_JS, "20260101-120000-notice.pdf"),
-                         "« documents/20260101-120000-notice.pdf »" + attendu)
+                         debut + " Vérifiez qu'il est toujours à sa place.")
         retire = self.temporaire / "retire.zip"
         retire.write_bytes(octets)
         self.page.set_input_files("#zip", str(retire))

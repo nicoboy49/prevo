@@ -542,8 +542,10 @@ const ZipLecture = (function () {
       contenu = await ZipFlux.contenu(lecteurAFenetre(lecture.blob), document.entree);   // fenêtre neuve : relu
     } catch (erreur) {
       if (!estErreurDeFichier(erreur)) { throw traduire(erreur); }
-      refuser('« ' + afficher(document.entree.nom) + ' » ne peut plus être relu : le fichier ZIP a été modifié, '
-        + 'déplacé ou supprimé depuis son contrôle. Il n\'est pas importé.');
+      const nomZip = typeof lecture.blob.name === 'string' && lecture.blob.name !== '' ? lecture.blob.name : null;
+      refuser((nomZip === null ? 'Le fichier ZIP' : 'Le fichier « ' + afficher(nomZip) + ' »') + ' a été modifié, '
+        + 'déplacé ou supprimé depuis sa vérification : il n\'est pas importé. Relancez l\'import.'
+        + (erreur.name === 'NotFoundError' ? ' Vérifiez qu\'il est toujours à sa place.' : ''));
     }
     if (document.resume.empreinte !== null && (await resumer(contenu)).empreinte !== document.resume.empreinte) {
       refuser('« ' + afficher(document.entree.nom) + ' » a changé depuis le contrôle du ZIP (son empreinte ne '
