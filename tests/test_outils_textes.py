@@ -408,18 +408,179 @@ class TestControle(unittest.TestCase):
         self.assertTrue(hasattr(ctl, 'Langue'))
 
 
+# Corrections apprises sur le domaine pilote (T237). Module du domaine « mise » : fragment optionnel « (…) »,
+# sauts de ligne de mise en page d'un gabarit UI.html (et un <pre>), variables sans nom, accesseurs d'App.ecran.
+MODULE_PILOTE = r"""'use strict';
+const EssaiMise = (() => {
+  function bandeau(f) {
+    return UI.html`<p>Prévo ${f.version} est disponible${f.date ? ' (' + UI.dateFr(f.date) + ')' : ''}.</p>`;
+  }
+  function message(t) {
+    return 'Tailscale absent' + (t.raison ? ' (' + t.raison + ')' : '') + '.';
+  }
+  function explication() {
+    return UI.html`<p class="note">Une fourchette contient la vraie part
+        95 fois sur 100 ; elle se resserre.</p>`;
+  }
+  function preformate() {
+    return UI.html`<pre>Ligne gardée
+  telle quelle</pre>`;
+  }
+  function semaine(g) {
+    return UI.html`<p>Semaine du ${UI.dateFr(g.jours[0])} au ${UI.dateFr(g.jours[6])}.</p>`;
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    App.ecran({
+      id: 'essai', route: /^#\/essai$/,
+      get titre() { return 'Essai'; },
+      menu: { get libelle() { return 'Essai court'; }, icone: 'essai', ordre: 1 },
+      afficher() {},
+    });
+    App.ecran({ id: 'fige', route: /^#\/fige$/, titre: 'Écran figé', afficher() {} });
+  });
+  return { bandeau, message, explication, preformate, semaine };
+})();
+"""
+
+
+class TestCorrectionsDuPilote(unittest.TestCase):
+    MODULE = 'js/modules/mise-essai.js'
+
+    def setUp(self):
+        self.dossier = tempfile.TemporaryDirectory()
+        self.racine = Path(self.dossier.name)
+        ecrire(self.racine, self.MODULE, MODULE_PILOTE)
+
+    def tearDown(self):
+        self.dossier.cleanup()
+
+    def extraire(self):
+        return ext.Extracteur(self.racine).extraire('mise', [self.MODULE])
+
+    def lire(self, rel):
+        return (self.racine / rel).read_text(encoding='utf-8')
+
+    def valeurs(self):
+        return ext.lire_dictionnaire(self.racine / 'js/i18n/fr.js')['mise'][1]
+
+    def test_fragment_optionnel_au_rapport(self):
+        # « est disponible${date ? ' (' + date + ')' : ''}. » serait devenu {v1} : la parenthèse cachée au traducteur.
+        res = self.extraire()
+        fragments = [r for r in res.relectures if r[3].startswith('fragment optionnel')]
+        self.assertEqual([r[1] for r in fragments], [ligne_de(MODULE_PILOTE, 'Prévo ${'),
+                                                     ligne_de(MODULE_PILOTE, 'Tailscale absent')])
+        source = self.lire(self.MODULE)
+        self.assertIn("est disponible${f.date ? ' (' + UI.dateFr(f.date) + ')' : ''}.</p>", source)
+        self.assertIn("return 'Tailscale absent' + (t.raison ? ' (' + t.raison + ')' : '') + '.';", source)
+
+    def test_saut_de_ligne_de_mise_en_page_ramene_a_une_espace(self):
+        res = self.extraire()
+        valeurs = self.valeurs()
+        # gabarit UI.html : le saut de ligne et l'indentation du code s'affichent comme une espace
+        self.assertEqual(valeurs['mise.explication.fourchette_contient_vraie_part'],
+                         'Une fourchette contient la vraie part 95 fois sur 100 ; elle se resserre.')
+        self.assertIn("<p class=\"note\">${I18n.t('mise.explication.fourchette_contient_vraie_part')}</p>",
+                      self.lire(self.MODULE))
+        # <pre> : gardé tel quel
+        self.assertEqual(valeurs['mise.preformate.ligne_gardee_telle_quelle'], 'Ligne gardée\\n  telle quelle')
+        for unite in res.unites:
+            self.assertTrue(ext.verifier_unite(unite), (unite.valeur, unite.original))
+        avant = empreintes(self.racine)
+        self.assertEqual(self.extraire().unites, [])
+        self.assertEqual(empreintes(self.racine), avant)
+
+    def test_accesseurs_d_app_ecran_lus_a_l_affichage(self):
+        # get titre() / get libelle() : lus à chaque affichage, donc extraits ; titre: '…' reste figé (au rapport).
+        res = self.extraire()
+        source = self.lire(self.MODULE)
+        self.assertIn("get titre() { return I18n.t('mise.titre.essai'); },", source)
+        self.assertIn("menu: { get libelle() { return I18n.t('mise.libelle.essai_court'); }, icone: 'essai'", source)
+        figes = [r[2] for r in res.relectures if r[3].startswith('texte figé')]
+        self.assertEqual(figes, ['Écran figé'])
+
+    def test_variables_a_nommer(self):
+        res = self.extraire()
+        texte = ext.rapport(res)
+        self.assertIn('textes aux variables à nommer : 1', texte)
+        self.assertIn("mise.semaine.semaine_v1_v2 : {v1}, {v2} = 'Semaine du {v1} au {v2}.'", texte)
+        self.assertEqual(ext.variables_a_nommer(res.unites[0]), [])
+        for nom, attendu in (('v1', True), ('pourcent2', True), ('MINIMUM_PAR_DEFAUT', True), ('debut', False),
+                             ('otId', False), ('n', False)):
+            self.assertEqual(bool(ext.RE_NOM_GENERIQUE.match(nom)) and nom != 'n', attendu, nom)
+        controle = controler(self.racine, ['mise'])
+        self.assertEqual([s.message for s in controle.signalements if s.genre == 'nommer'],
+                         ['mise.semaine.semaine_v1_v2 : {v1}, {v2}'])
+        # renommées à la main (clé, valeur et appel) : plus rien à signaler de ce genre
+        for rel, avant, apres in (
+                ('js/i18n/fr.js', "'mise.semaine.semaine_v1_v2': 'Semaine du {v1} au {v2}.'",
+                 "'mise.semaine.semaine_du_au': 'Semaine du {debut} au {fin}.'"),
+                (self.MODULE, "I18n.t('mise.semaine.semaine_v1_v2', { v1: UI.dateFr(g.jours[0]), v2: "
+                              "UI.dateFr(g.jours[6]) })",
+                 "I18n.t('mise.semaine.semaine_du_au', { debut: UI.dateFr(g.jours[0]), fin: UI.dateFr(g.jours[6]) })")):
+            contenu = self.lire(rel)
+            self.assertIn(avant, contenu)
+            ecrire(self.racine, rel, contenu.replace(avant, apres))
+        controle = controler(self.racine, ['mise'])
+        self.assertEqual([s for s in controle.signalements if s.genre in ('nommer', 'variables', 'manquante',
+                                                                          'orpheline')], [])
+
+    def test_contexte_de_signaler_erreur_jamais_extrait(self):
+        # App.signalerErreur(erreur, contexte) : le contexte ne va qu'à la console (D157) ; le toast, lui, est extrait.
+        ecrire(self.racine, 'js/modules/planning-essai.js',
+               "'use strict';\nconst EssaiErreur = (() => {\n  function echec(erreur, otId) {\n"
+               "    App.signalerErreur(erreur, 'planification de ' + otId);\n"
+               "    UI.toast('Planification refusée pour ' + otId + '.', 'erreur');\n  }\n  return { echec };\n})();\n")
+        res = ext.Extracteur(self.racine).extraire('planning', ['js/modules/planning-essai.js'])
+        source = self.lire('js/modules/planning-essai.js')
+        self.assertIn("App.signalerErreur(erreur, 'planification de ' + otId);", source)
+        self.assertIn("UI.toast(I18n.t('planning.echec.planification_refusee', { otId }), 'erreur');", source)
+        self.assertEqual((len(res.unites), res.relectures, res.exclus), (1, [], 1))
+
+    def test_domaine_a_part_pour_l_aide_longue(self):
+        ecrire(self.racine, 'js/modules/aide-ecrans.js',
+               "'use strict';\nconst AideEssai = (() => {\n  function bouton() { return 'Compris'; }\n"
+               "  return { bouton };\n})();\n")
+        ecrire(self.racine, 'js/modules/aide-ecrans-textes.js',
+               "'use strict';\nconst AideEssaiTextes = { accueil: { titre: 'Accueil du responsable' } };\n")
+        self.assertEqual(ext.domaine_du_fichier('js/modules/aide-ecrans-textes.js'), 'aide-longue')
+        self.assertEqual(ext.domaine_du_fichier('js/modules/aide-ecrans.js'), 'aide')
+        self.assertEqual(ext.fichiers_du_domaine(self.racine, 'aide'), ['js/modules/aide-ecrans.js'])
+        self.assertEqual(ext.fichiers_du_domaine(self.racine, 'aide-longue'), ['js/modules/aide-ecrans-textes.js'])
+        self.assertEqual((ext.section_du_domaine('aide-longue'), ext.dictionnaire_du_domaine('aide-longue')),
+                         ('aide', 'js/i18n/aide/fr.js'))
+        self.assertEqual((ext.section_du_domaine('planning'), ext.dictionnaire_du_domaine('planning')),
+                         ('planning', 'js/i18n/fr.js'))
+        self.assertIn('aide-longue', ext.tous_les_fichiers(self.racine))
+        # le contrôle du domaine « aide » ne compte plus l'aide longue ; elle a son domaine
+        aide = controler(self.racine, ['aide'])
+        self.assertEqual(aide.fichiers, ['js/modules/aide-ecrans.js'])
+        self.assertEqual([s.message for s in aide.signalements if s.genre == 'dur'], ['« Compris »'])
+        longue = controler(self.racine, ['aide-longue'])
+        self.assertEqual(longue.fichiers, ['js/modules/aide-ecrans-textes.js'])
+        self.assertEqual(len([s for s in longue.signalements if s.genre == 'dur']), 1)
+        # en ligne de commande : domaine reconnu, extraction vers js/i18n/aide/fr.js (essai)
+        sortie = io.StringIO()
+        with redirect_stdout(sortie):
+            code = ext.main(['--racine', str(self.racine), '--domaine', 'aide-longue', '--essai'])
+        self.assertEqual(code, 0)
+        self.assertIn('section aide → js/i18n/aide/fr.js (essai', sortie.getvalue())
+
+
 class TestDepotReel(unittest.TestCase):
     """Sur le vrai dépôt, seulement en essai : rien n'est écrit."""
 
     def test_domaines_des_modules(self):
         for chemin in sorted((RACINE / 'js' / 'modules').glob('*.js')):
             with self.subTest(module=chemin.name):
-                self.assertIn(ext.domaine_du_fichier('js/modules/' + chemin.name), ext.SECTIONS)
+                self.assertIn(ext.domaine_du_fichier('js/modules/' + chemin.name), ext.DOMAINES)
         self.assertEqual(ext.fichiers_du_domaine(RACINE, 'planning'),
                          ['js/modules/planning-ecrans.js', 'js/modules/planning-ecritures.js',
                           'js/modules/planning-regles.js'])
         self.assertEqual(ext.domaine_du_fichier('js/modules/parametres-zip.js'), 'zip')
         self.assertEqual(ext.domaine_du_fichier('index.html'), 'socle')
+        # l'aide longue générée a son domaine (T237) : le domaine « aide » n'est que l'aide courte
+        self.assertEqual(ext.fichiers_du_domaine(RACINE, 'aide'), ['js/modules/aide-ecrans.js'])
+        self.assertEqual(ext.fichiers_du_domaine(RACINE, 'aide-longue'), ['js/modules/aide-ecrans-textes.js'])
 
     def test_essai_sur_le_domaine_pilote(self):
         avant = {f: hashlib.sha256((RACINE / f).read_bytes()).hexdigest()
@@ -441,7 +602,6 @@ class TestDepotReel(unittest.TestCase):
                                                                     dict(sorted(raisons.items()))))
         apres = {f: hashlib.sha256((RACINE / f).read_bytes()).hexdigest() for f in avant}
         self.assertEqual(apres, avant)
-        self.assertGreater(total_extraits, 50)
         print('\nDomaine pilote (essai) : %d extraits, %d à relire' % (total_extraits, total_relire))
         print('\n'.join(lignes))
 

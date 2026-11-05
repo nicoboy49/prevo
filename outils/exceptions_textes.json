@@ -45,6 +45,12 @@
       "raison": "Messages de la console du navigateur (console.log, warn, error…)."
     },
     {
+      "appel": "*signalerErreur",
+      "argument": 1,
+      "classe": "D157",
+      "raison": "Contexte de App.signalerErreur(erreur, contexte) : écrit seulement dans la console (console.warn de js/app.js) ; l'écran ne montre que le message de l'erreur (T237)."
+    },
+    {
       "appel": "V",
       "argument": 4,
       "fichiers": [

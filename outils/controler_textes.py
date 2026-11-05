@@ -10,10 +10,13 @@ Ce qui est contrôlé :
 1. textes visibles restés en dur : le même classement que outils/extraire_textes.py (un texte qu'il extrairait ou
    qu'il mettrait au rapport de relecture est signalé ; outils/exceptions_textes.json n'est jamais signalé) ;
 2. clés utilisées (I18n.t, I18n.html, data-i18n, data-i18n-attr) et clés définies (js/i18n/fr.js,
-   js/i18n/aide/fr.js) : clés manquantes, clés orphelines, variables {…} différentes entre un appel et sa valeur ;
+   js/i18n/aide/fr.js) : clés manquantes, clés orphelines, variables {…} différentes entre un appel et sa valeur,
+   variables au nom générique ({v1}, {pourcent2} : le traducteur ne saurait pas ce qu'elles contiennent) ;
 3. index.html : le texte laissé dans la page sous un data-i18n est bien la valeur du dictionnaire.
 
-Le lien domaine → fichiers est celui de extraire_textes.py (préfixes de js/modules, plus le socle, schema, porte).
+Le lien domaine → fichiers est celui de extraire_textes.py (préfixes de js/modules, plus le socle, schema, porte ;
+l'aide longue générée, js/modules/aide-ecrans-textes.js, est le domaine à part « aide-longue », hors du domaine
+« aide »).
 
 Lot 3 (préparé, pas fait) : comparer chaque langue au français (clés manquantes ou orphelines par langue,
 mêmes variables, catégories de pluriel) — voir la classe Langue et la note « Lot 3 » plus bas.
@@ -207,7 +210,7 @@ class Controle:
     def lancer(self, domaines=None):
         tous = ext.tous_les_fichiers(self.racine)
         if domaines:
-            inconnus = [d for d in domaines if d not in ext.SECTIONS]
+            inconnus = [d for d in domaines if d not in ext.DOMAINES]
             if inconnus:
                 raise ValueError('domaine inconnu : %s' % ', '.join(inconnus))
             choisis = {d: tous.get(d, []) for d in domaines}
@@ -227,7 +230,8 @@ class Controle:
         for domaine in sorted(choisis):
             if not choisis[domaine]:
                 continue
-            res = extracteur.extraire(domaine, choisis[domaine], essai=True)
+            res = extracteur.extraire(ext.section_du_domaine(domaine), choisis[domaine], essai=True,
+                                      dictionnaire=ext.dictionnaire_du_domaine(domaine))
             for rel, message in res.erreurs:
                 self.erreurs.append((rel, message))
             for u in res.unites:
@@ -266,10 +270,14 @@ class Controle:
         # orphelines : clés des sections contrôlées qu'aucun fichier du dépôt n'emploie
         employees = {u.cle for u in utilisations if u.cle is not None}
         prefixes = {u.prefixe for u in utilisations if u.prefixe is not None}
-        sections = set(choisis) if self.domaines != sorted(tous) else None
+        sections = {ext.section_du_domaine(d) for d in choisis} if self.domaines != sorted(tous) else None
         for cle, (section, valeur, rel) in sorted(francais.entrees.items()):
             if sections is not None and section not in sections:
                 continue
+            # variable au nom qui ne dit rien au traducteur ({v1}, {pourcent2}, {MINIMUM}) : à renommer (T237)
+            generiques = sorted(nom for nom in variables_de(valeur) if nom != 'n' and ext.RE_NOM_GENERIQUE.match(nom))
+            if generiques:
+                self.signaler('nommer', rel, None, '%s : {%s}' % (cle, '}, {'.join(generiques)))
             if cle in employees or any(cle.startswith(p) for p in prefixes):
                 continue
             self.signaler('orpheline', rel, None, 'clé jamais employée : %s' % cle)
@@ -317,6 +325,7 @@ TITRES = {
     'variables': 'Variables {…} différentes entre un appel et sa valeur',
     'doublon': 'Clés définies deux fois',
     'page': 'Texte de la page différent de sa valeur (data-i18n)',
+    'nommer': 'Variables au nom générique dans le dictionnaire (à renommer)',
 }
 
 
@@ -326,7 +335,7 @@ def rapport(controle):
     par_genre = {}
     for s in controle.signalements:
         par_genre.setdefault(s.genre, []).append(s)
-    for genre in ('dur', 'manquante', 'orpheline', 'variables', 'doublon', 'page'):
+    for genre in ('dur', 'manquante', 'orpheline', 'variables', 'nommer', 'doublon', 'page'):
         liste = par_genre.get(genre, [])
         lignes.append('%s : %d' % (TITRES[genre], len(liste)))
         for s in liste:

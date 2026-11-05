@@ -6,7 +6,8 @@ Bibliothèque standard seulement. Depuis la racine du dépôt :
   py -X utf8 outils/extraire_textes.py --domaine planning --essai
 Options :
   --essai              rien n'est écrit : seulement le rapport de ce qui serait fait ;
-  --dictionnaire CHEM  dictionnaire à compléter (défaut js/i18n/fr.js ; js/i18n/aide/fr.js pour l'aide longue) ;
+  --dictionnaire CHEM  dictionnaire à compléter (défaut js/i18n/fr.js ; js/i18n/aide/fr.js pour l'aide longue,
+                       domaine à part « aide-longue » : js/modules/aide-ecrans-textes.js) ;
   --commun             un texte répété dans plusieurs domaines prend une clé commun.* (section commun) ;
   --rapport CHEM       écrit aussi le rapport dans ce fichier ; --racine, --exceptions : pour les essais.
 
@@ -52,8 +53,14 @@ SECTIONS = ('commun', 'schema', 'valeurs', 'socle', 'planning', 'causes', 'dicte
             'demandes', 'parc', 'preventif', 'controles', 'wiki', 'suggestions', 'import', 'magasin',
             'indicateurs', 'rapport', 'accueil', 'equipe', 'acces', 'connexion', 'poste', 'apropos',
             'installation', 'porte', 'parametres', 'sauvegardes', 'zip', 'serveur', 'ia')
-# Domaine d'un module js/modules/<préfixe>-….js ou <préfixe>.js : son préfixe, sauf ces deux-là.
-MODULES_PARTICULIERS = {'parametres-sauvegardes.js': 'sauvegardes', 'parametres-zip.js': 'zip'}
+# Domaine d'un module js/modules/<préfixe>-….js ou <préfixe>.js : son préfixe, sauf ceux-là.
+MODULES_PARTICULIERS = {'parametres-sauvegardes.js': 'sauvegardes', 'parametres-zip.js': 'zip',
+                        'aide-ecrans-textes.js': 'aide-longue'}
+# Domaines qui ne sont pas une section de fr.js : domaine → (section, dictionnaire). L'aide longue générée
+# (aide-ecrans-textes.js) va dans js/i18n/aide/fr.js (clés aide.*, T247) : un domaine à part, pour que le contrôle
+# du domaine « aide » (aide courte, aide-ecrans.js) ne la compte pas (T237).
+DOMAINES_A_PART = {'aide-longue': ('aide', 'js/i18n/aide/fr.js')}
+DOMAINES = SECTIONS + tuple(sorted(DOMAINES_A_PART))
 # Fichiers hors de js/modules (le socle et deux domaines à part).
 FICHIERS_HORS_MODULES = {
     'socle': ('index.html', 'js/app.js', 'js/interface.js', 'js/donnees.js', 'js/formats.js', 'js/prechargement.js',
@@ -65,8 +72,19 @@ FICHIERS_HORS_MODULES = {
 DOMAINE_PILOTE = ('planning', 'causes', 'dictee', 'mise', 'aide')
 
 
+def section_du_domaine(domaine):
+    """Section du dictionnaire où vont les textes d'un domaine (le domaine lui-même, sauf DOMAINES_A_PART)."""
+    return DOMAINES_A_PART[domaine][0] if domaine in DOMAINES_A_PART else domaine
+
+
+def dictionnaire_du_domaine(domaine):
+    """Dictionnaire que complètent les textes d'un domaine (js/i18n/fr.js, sauf DOMAINES_A_PART)."""
+    return DOMAINES_A_PART[domaine][1] if domaine in DOMAINES_A_PART else DICTIONNAIRE
+
+
 def domaine_du_fichier(rel):
-    """Domaine (section de fr.js) d'un fichier du dépôt, ou None (données de démo, bibliothèques, dictionnaires)."""
+    """Domaine (section de fr.js, ou domaine à part) d'un fichier du dépôt, ou None (données de démo, bibliothèques,
+    dictionnaires)."""
     rel = rel.replace('\\', '/')
     for domaine, fichiers in FICHIERS_HORS_MODULES.items():
         if rel in fichiers:
@@ -96,7 +114,7 @@ def fichiers_du_domaine(racine, domaine):
 def tous_les_fichiers(racine):
     """{domaine: [fichiers]} pour tous les domaines qui ont des fichiers."""
     res = {}
-    for domaine in SECTIONS:
+    for domaine in DOMAINES:
         fichiers = fichiers_du_domaine(racine, domaine)
         if fichiers:
             res[domaine] = fichiers
@@ -160,6 +178,10 @@ INVISIBLES = {' ', ' ', ' ', '​', '‌', '‍', '⁠', '﻿', '­', ' '
               ' ', ' ', ' ', ' '}
 PONCTUATION_FIN = '.!?:;…'
 CATEGORIES_PLURIEL = ('zero', 'one', 'two', 'few', 'many', 'other')
+# Saut de ligne de mise en page (avec les espaces et tabulations qui l'entourent) dans un texte entre balises d'un
+# gabarit UI.html : rendu comme une espace (white-space normal) ; jamais dans <pre> ni <textarea>.
+RE_SAUT_DE_MISE_EN_PAGE = re.compile(r'[ \t]*\n[ \t\n]*')
+BALISES_ESPACES_GARDES = {'pre', 'textarea', 'listing', 'plaintext', 'xmp'}
 SENTINELLE = 0xE000           # ${…} d'un gabarit pendant le découpage HTML (zone d'usage privé)
 FORMATEURS = {'dateFr', 'nombreFr', 'heures', 'texte', 'String', 'Number', 'dateHeureFr', 'montantFr', 'heureFr',
               'echapper', 'trim', 'nombre', 'pourcentage', 'montant'}
@@ -584,7 +606,7 @@ class Morceau:
     """txt (brut, guillemet) ; var (noeuds de l'expression) ; choix (pluriel : compte, un, autre) ; bar (gardé hors
     de la phrase : choix de textes, fragment HTML, balise à variable) ; balise (balisage gardé dans la valeur)."""
     __slots__ = ('genre', 'brut', 'guillemet', 'noeuds', 'debut', 'fin', 'a', 'b', 'un', 'autre', 'compte',
-                 'nom', 'fermante', 'partenaire', 'op', 'force_n', 'k')
+                 'nom', 'fermante', 'partenaire', 'op', 'force_n', 'k', 'espaces')
 
     def __init__(self, genre, **kw):
         self.genre = genre
@@ -1264,6 +1286,31 @@ class AnalyseFichier:
             return 'choix_texte'
         return 'var'
 
+    @classmethod
+    def fragment_optionnel(cls, noeuds):
+        """Variable de phrase « cond ? ' (' + x + ')' : '' » (parenthèses comprises) : une branche vide, l'autre avec
+        un littéral de ponctuation. Devenue {v1}, elle cacherait au traducteur un morceau de la phrase (T237)."""
+        while len(noeuds) == 1 and est_groupe(noeuds[0], '('):
+            noeuds = noeuds[0].enfants
+        t = cls.ternaire(noeuds)
+        if not t:
+            return False
+
+        def vide(branche):
+            return len(branche) == 1 and isinstance(branche[0], Jeton) and branche[0].genre in ('chaine', 'gabarit') \
+                and decoder(branche[0].valeur if branche[0].genre == 'chaine' else branche[0].valeur[1:-1]) == ''
+
+        def ponctuation(branche):
+            for n in branche:
+                if isinstance(n, Jeton) and n.genre in ('chaine', 'gabarit'):
+                    brut = n.valeur if n.genre == 'chaine' else re.sub(r'\$\{[^}]*\}', '', n.valeur[1:-1])
+                    if decoder(brut).strip():
+                        return True
+            return False
+
+        _, oui, non = t
+        return (vide(non) and ponctuation(oui)) or (vide(oui) and ponctuation(non))
+
     @staticmethod
     def texte_visible_dans(noeuds):
         """Une branche contient-elle un littéral qui ressemble à du texte (au premier niveau) ?"""
@@ -1494,7 +1541,10 @@ class AnalyseFichier:
     # -- découpage d'une phrase (bords et barrières) -----------------------------------------------------
     @staticmethod
     def brut_de(m, texte_html):
-        return m.brut if texte_html is None else texte_html[m.a:m.b]
+        if texte_html is None:
+            return m.brut
+        brut = texte_html[m.a:m.b]
+        return RE_SAUT_DE_MISE_EN_PAGE.sub(' ', brut) if m.espaces else brut
 
     def texte_morceaux(self, ms, texte_html=None, variables=True):
         """Texte affiché (décodé) des morceaux ; {} à la place des variables ; forme « autre » des pluriels."""
@@ -1567,7 +1617,7 @@ class AnalyseFichier:
                 droite.insert(0, m)
 
         if x.genre == 'txt':
-            s = self.brut_de(x, texte_html)
+            s = x.brut if texte_html is None else texte_html[x.a:x.b]      # positions : texte d'origine
             reste = s.lstrip(' \t\n\r') if a_gauche else s.rstrip(' \t\n\r')
             n = len(s) - len(reste)
             if n == 0 or (not a_gauche and reste.endswith('\\')):
@@ -1579,11 +1629,11 @@ class AnalyseFichier:
                 bord = Morceau('txt', brut=s[:n] if a_gauche else s[len(s) - n:], guillemet=x.guillemet, op=x.op)
                 interieur = Morceau('txt', brut=reste, guillemet=x.guillemet, op=x.op)
             elif a_gauche:
-                bord = Morceau('txt', a=x.a, b=x.a + n, guillemet='`')
-                interieur = Morceau('txt', a=x.a + n, b=x.b, guillemet='`')
+                bord = Morceau('txt', a=x.a, b=x.a + n, guillemet='`', espaces=x.espaces)
+                interieur = Morceau('txt', a=x.a + n, b=x.b, guillemet='`', espaces=x.espaces)
             else:
-                bord = Morceau('txt', a=x.b - n, b=x.b, guillemet='`')
-                interieur = Morceau('txt', a=x.a, b=x.b - n, guillemet='`')
+                bord = Morceau('txt', a=x.b - n, b=x.b, guillemet='`', espaces=x.espaces)
+                interieur = Morceau('txt', a=x.a, b=x.b - n, guillemet='`', espaces=x.espaces)
             ranger(bord)
             ms[i] = interieur
             return True
@@ -1661,6 +1711,9 @@ class AnalyseFichier:
             if m.genre == 'var' and len(m.noeuds) == 1 and est_nom(m.noeuds[0]) and m.noeuds[0].valeur in self.calcules:
                 return ('relire', "mot choisi par le code au milieu d'une phrase (« %s » : accord, texte calculé)"
                         % m.noeuds[0].valeur)
+            if m.genre == 'var' and self.fragment_optionnel(m.noeuds):
+                return ('relire', "fragment optionnel au milieu d'une phrase (x ? ' (' + y + ')' : '' : une clé "
+                                  "par forme de la phrase)")
         if texte_html is not None:
             pile = []
             for m in milieu:
@@ -1840,6 +1893,10 @@ class AnalyseFichier:
             return self.gabarit_tel_quel(noeud, ci)
         html_permis = mode == 'html'
         visibilite = 'html' if mode == 'html' or any(el.genre == 'balise' for el in elements) else 'js'
+        # Gabarit UI.html sans <pre> ni <textarea> : un saut de ligne de mise en page dans un texte entre balises
+        # s'affiche comme une espace ; la valeur du dictionnaire le garde en une espace (T237).
+        espaces = mode == 'html' and not any(el.genre == 'balise' and el.nom.lower() in BALISES_ESPACES_GARDES
+                                             for el in elements)
         mode_expr = 'html' if mode == 'html' else 'chaine'
 
         def tel_quel(a, b):
@@ -1882,7 +1939,7 @@ class AnalyseFichier:
             suites.append(courant)
         for suite in suites:
             a, b = suite[0].a, suite[-1].b
-            morceaux, probleme = self.morceaux_html(suite, texte, noeud, mode_expr)
+            morceaux, probleme = self.morceaux_html(suite, texte, noeud, mode_expr, espaces)
             if morceaux is None:
                 signaler(a, b, probleme)
                 continue
@@ -1982,15 +2039,16 @@ class AnalyseFichier:
             return False
         return self.classement.visible_html(net)
 
-    def morceaux_html(self, suite, texte, noeud, mode_expr):
-        """Morceaux d'une suite (textes et balises en ligne) d'un gabarit ; (None, raison) si illisible."""
+    def morceaux_html(self, suite, texte, noeud, mode_expr, espaces=False):
+        """Morceaux d'une suite (textes et balises en ligne) d'un gabarit ; (None, raison) si illisible. espaces :
+        les sauts de ligne de mise en page des textes deviennent une espace dans la valeur (gabarit UI.html)."""
         morceaux = []
         pile = []
         for el in suite:
             if el.genre == 'texte':
                 for p0, p1, k in self.decouper_sentinelles(texte, el.a, el.b):
                     if k is None:
-                        morceaux.append(Morceau('txt', a=p0, b=p1, guillemet='`'))
+                        morceaux.append(Morceau('txt', a=p0, b=p1, guillemet='`', espaces=espaces))
                         continue
                     m = self.morceau_expr(noeud.exprs[k][0], mode_expr)
                     if m is None:
@@ -2463,6 +2521,15 @@ def verifier_unite(unite):
 # Rapport
 # ---------------------------------------------------------------------------------------------------------
 
+RE_NOM_GENERIQUE = re.compile(r'^(v\d+|\w*[A-Za-z_]\d+|[A-Z][A-Z0-9_]+)$')
+
+
+def variables_a_nommer(unite):
+    """Variables d'une unité dont le nom ne dit rien au traducteur : v1, v2 (expression sans nom), pourcent2
+    (doublon numéroté), MINIMUM (constante en capitales). Le pluriel {n} est un nom convenu (T237)."""
+    return sorted(nom for nom in (unite.vars or {}) if nom != 'n' and RE_NOM_GENERIQUE.match(nom))
+
+
 def rapport(res):
     lignes = []
     titre = 'Extraction des textes — section %s → %s' % (res.section, res.dictionnaire)
@@ -2478,8 +2545,10 @@ def rapport(res):
     nb_entrees = sum(len(v) for v in res.nouvelles.values())
     lignes.append('Textes extraits : %d (%s) ; entrées nouvelles dans le dictionnaire : %d'
                   % (len(res.unites), detail or 'aucun', nb_entrees))
-    lignes.append('Exceptions (jamais extraites) : %d ; cas à relire : %d ; collisions résolues : %d'
-                  % (res.exclus, len(res.relectures), len(res.collisions)))
+    a_nommer = [(u, noms) for u in res.unites for noms in [variables_a_nommer(u)] if noms]
+    lignes.append('Exceptions (jamais extraites) : %d ; cas à relire : %d ; collisions résolues : %d ; '
+                  'textes aux variables à nommer : %d'
+                  % (res.exclus, len(res.relectures), len(res.collisions), len(a_nommer)))
     for rel, classe in res.fichiers_exclus:
         lignes.append('Fichier exclu en entier (%s) : %s' % (classe, rel))
     if res.relectures:
@@ -2503,6 +2572,12 @@ def rapport(res):
         lignes.append('== Collisions de clés résolues ==')
         for base, cle, rel, ligne, valeur in res.collisions:
             lignes.append('%s:%d %s déjà prise par un autre texte → %s = %s' % (rel, ligne, base, cle, valeur))
+    if a_nommer:
+        lignes.append('')
+        lignes.append('== Variables à nommer (nom donné faute de mieux, à renommer à la main dans la clé et '
+                      "l'appel) ==")
+        for u, noms in a_nommer:
+            lignes.append('%s:%d %s : {%s} = %s' % (u.fichier, u.ligne, u.cle, '}, {'.join(noms), affichage(u.valeur)))
     if res.unites:
         lignes.append('')
         lignes.append('== Extraits ==')
@@ -2518,7 +2593,8 @@ def main(argv=None):
     parser.add_argument('--section', help='section du dictionnaire (planning, socle, commun…)')
     parser.add_argument('--domaine', help='prend les fichiers du domaine (et sa section par défaut)')
     parser.add_argument('--essai', action='store_true', help="n'écrit rien, rapport seulement")
-    parser.add_argument('--dictionnaire', default=DICTIONNAIRE)
+    parser.add_argument('--dictionnaire', help='défaut : celui du domaine (js/i18n/fr.js ; js/i18n/aide/fr.js pour '
+                                               'aide-longue)')
     parser.add_argument('--commun', action='store_true', help='clé commun.* pour un texte de plusieurs domaines')
     parser.add_argument('--rapport', help='écrit aussi le rapport dans ce fichier')
     parser.add_argument('--racine', default=str(RACINE_DEPOT))
@@ -2527,16 +2603,18 @@ def main(argv=None):
     racine = Path(args.racine)
     fichiers = list(args.fichiers)
     section = args.section
+    dictionnaire = args.dictionnaire
     if args.domaine:
-        if args.domaine not in SECTIONS:
+        if args.domaine not in DOMAINES:
             parser.error('domaine inconnu : %s' % args.domaine)
         fichiers += fichiers_du_domaine(racine, args.domaine)
-        section = section or args.domaine
+        section = section or section_du_domaine(args.domaine)
+        dictionnaire = dictionnaire or dictionnaire_du_domaine(args.domaine)
     if not section or not fichiers:
         parser.error('donnez une section et des fichiers (ou --domaine)')
     extracteur = Extracteur(racine, args.exceptions)
     try:
-        res = extracteur.extraire(section, fichiers, essai=args.essai, dictionnaire=args.dictionnaire,
+        res = extracteur.extraire(section, fichiers, essai=args.essai, dictionnaire=dictionnaire or DICTIONNAIRE,
                                   commun=args.commun)
     except ValueError as erreur:
         parser.error(str(erreur))
