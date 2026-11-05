@@ -594,7 +594,6 @@ I18n.ajouter('fr', {
   'socle.ouvrir_plus.changer_profil': 'Changer de profil ({libelleAffiche})',
   'socle.ouvrir_plus.deconnecter_libelle_compte': 'Se déconnecter ({libelleCompte})',
   'socle.ouvrir_plus.exporter_zip': 'Exporter en ZIP',
-  'socle.page.prevo_gmao': 'Prévo — GMAO',
   'socle.passer_au_format_courant.fichiers_ont_pas_pu': '<b>Les fichiers n\'ont pas pu passer au format {version}.</b> {message} D\'ici là, les OT préventifs échus ne sont pas générés automatiquement.',
   'socle.poste_aleatoire.poste_suffixe': 'Poste-{suffixe}',
   'socle.probleme_colonne_absente.colonne_absente_sera_ajoutee': '{descriptionLibelle} : la colonne « {champNom} » ({champLibelle}) est absente de {fichier} ; {suite}. Elle sera ajoutée à la prochaine modification de la table.',

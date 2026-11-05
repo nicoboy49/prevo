@@ -306,6 +306,14 @@
         "js/formats.js"
       ],
       "raison": "Ligne de journal « passage au format N du fichier » (Formats, T238) : relue telle quelle par la suggestion S4 (MARQUE_FORMAT_2) et écrite de même par serveur.py."
+    },
+    {
+      "texte": "Prévo — GMAO",
+      "classe": "titre-initial",
+      "fichiers": [
+        "index.html"
+      ],
+      "raison": "Titre de l'onglet avant le chargement des scripts (balise <title> nue, relue par test_acces_mandataire) ; App.definirTitre le remplace par I18n.t('socle.definir_titre.prevo_gmao') à chaque écran dès le démarrage (T260)."
     }
   ]
 }
