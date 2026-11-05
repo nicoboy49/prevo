@@ -395,7 +395,7 @@ Object.assign(Wiki, (() => {
   function etatDuStock(article, stock) {
     const pointCommande = Donnees.nombre(article.point_commande);
     if (stock <= 0) return 'rupture';
-    return pointCommande !== null && stock <= pointCommande ? 'sous le seuil' : 'en stock';
+    return pointCommande !== null && stock <= pointCommande ? 'sous le seuil' : 'en stock';   // codes (D155), libellés : wiki.etat_stock.*
   }
 
   // ===========================================================================================
@@ -418,8 +418,8 @@ Object.assign(Wiki, (() => {
     });
     return assembler(ctx, {
       id: identifiant, type: 'panne', titre: libelleCode(ctx, 'symptôme', code),
-      faits: [fait('Code', code), fait('Cas', cas.length), fait('Machines touchées', machines.size),
-        fait('Premier cas', jours.length ? jours[0] : ''), fait('Dernier cas', jours.length ? jours[jours.length - 1] : '')],
+      faits: [fait(I18n.t('wiki.fait.code'), code), fait(I18n.t('wiki.fait.cas'), cas.length), fait(I18n.t('wiki.fait.machines_touchees'), machines.size),
+        fait(I18n.t('wiki.fait.premier_cas'), jours.length ? jours[0] : ''), fait(I18n.t('wiki.fait.dernier_cas'), jours.length ? jours[jours.length - 1] : '')],
       sections: {
         machines: Array.from(machines.values()).sort((a, b) => b.cas - a.cas || parTitre('equipementId')(a, b)),
         causes: compterCodes(ctx, cas, 'cause_code', 'cause'), remedes: compterCodes(ctx, cas, 'remede_code', 'remède'),
@@ -445,9 +445,9 @@ Object.assign(Wiki, (() => {
     const ordres = ordresDe(ctx.parTechnicien.get(id));
     return assembler(ctx, {
       id, type: 'technicien', titre: nomTechnicien(technicien),
-      faits: [fait('Métier', texte(technicien.metier)), fait('Capacité (h par semaine)', Donnees.nombre(technicien.capacite_h_semaine)),
-        fait('Heures pointées', heuresDe(id)), fait('Interventions', ordres.length), fait('Actif', texte(technicien.actif) !== '0')]
-        .concat(ctx.profil === 'responsable' ? [fait('Taux horaire', Donnees.nombre(technicien.taux_horaire))] : []),
+      faits: [fait(I18n.t('wiki.fait.metier'), texte(technicien.metier)), fait(I18n.t('wiki.fait.capacite_semaine'), Donnees.nombre(technicien.capacite_h_semaine)),
+        fait(I18n.t('wiki.fait.heures_pointees'), heuresDe(id)), fait(I18n.t('wiki.fait.interventions'), ordres.length), fait(I18n.t('wiki.fait.actif'), texte(technicien.actif) !== '0')]
+        .concat(ctx.profil === 'responsable' ? [fait(I18n.t('wiki.fait.taux_horaire'), Donnees.nombre(technicien.taux_horaire))] : []),
       sections: { habilitations: habilitationsDe(ctx, id), interventions: ordres.map((ot) => elementOt(ctx, ot)) },
     }, null, null);
   }
@@ -482,17 +482,17 @@ Object.assign(Wiki, (() => {
     const technicien = refTechnicien(ctx, texte(ot.technicien_id));
     const panne = refPanne(ctx, ot.symptome_code);
     const demande = demandeDe(ot);
-    const valeurs = [['Type', 'type'], ['Priorité', 'priorite'], ['Statut', 'statut']].map(([libelle, champ]) => fait(libelle, texte(ot[champ])));
-    const dates = [['Créé le', 'date_creation'], ['Prévu le', 'date_prevue'], ['Début', 'date_debut'], ['Fin', 'date_fin']]
+    const valeurs = [[I18n.t('wiki.fait.type'), 'type'], [I18n.t('commun.champ.priorite'), 'priorite'], [I18n.t('commun.champ.statut'), 'statut']].map(([libelle, champ]) => fait(libelle, texte(ot[champ])));
+    const dates = [[I18n.t('wiki.fait.cree_le'), 'date_creation'], [I18n.t('wiki.fait.prevu_le'), 'date_prevue'], [I18n.t('wiki.fait.debut'), 'date_debut'], [I18n.t('wiki.fait.fin'), 'date_fin']]
       .map(([libelle, champ]) => fait(libelle, texte(ot[champ])));
     return assembler(ctx, {
       id, type: 'intervention', titre: texte(ot.titre) || id,
-      faits: [fait('Machine', machine ? machine.titre : texte(ot.equipement_id), machine && machine.lien)].concat(valeurs,
-        [fait('Technicien', technicien ? technicien.nom : '', technicien && technicien.lien)], dates, [
-          fait('Arrêt de production', texte(ot.arret_production) === '1'), fait('Durée d\'arrêt (h)', Donnees.nombre(ot.duree_arret_h)),
-          fait('Panne', panne ? panne.libelle : '', panne && panne.lien), fait('Cause', libelleCode(ctx, 'cause', ot.cause_code)),
-          fait('Remède', libelleCode(ctx, 'remède', ot.remede_code)), fait('Demande d\'origine', demande ? demande.id : ''),
-          fait('Clôture technique', texte(ot.date_cloture_tech)), fait('Clôture administrative', texte(ot.date_cloture_admin))]),
+      faits: [fait(I18n.t('wiki.fait.machine'), machine ? machine.titre : texte(ot.equipement_id), machine && machine.lien)].concat(valeurs,
+        [fait(I18n.t('commun.champ.technicien'), technicien ? technicien.nom : '', technicien && technicien.lien)], dates, [
+          fait(I18n.t('wiki.fait.arret_production'), texte(ot.arret_production) === '1'), fait(I18n.t('wiki.fait.duree_arret'), Donnees.nombre(ot.duree_arret_h)),
+          fait(I18n.t('wiki.fait.panne'), panne ? panne.libelle : '', panne && panne.lien), fait(I18n.t('wiki.fait.cause'), libelleCode(ctx, 'cause', ot.cause_code)),
+          fait(I18n.t('wiki.fait.remede'), libelleCode(ctx, 'remède', ot.remede_code)), fait(I18n.t('wiki.fait.demande_origine'), demande ? demande.id : ''),
+          fait(I18n.t('wiki.fait.cloture_technique'), texte(ot.date_cloture_tech)), fait(I18n.t('wiki.fait.cloture_administrative'), texte(ot.date_cloture_admin))]),
       sections: {
         demande, travail: texte(ot.travail_a_faire), compteRendu: texte(ot.compte_rendu), astuce: texte(ot.astuce),
         motifAttente: texte(ot.motif_attente), motifAnnulation: texte(ot.motif_annulation),
@@ -519,8 +519,8 @@ Object.assign(Wiki, (() => {
     const rattachement = Wiki.interne.rattachementDe(ligne);
     return assembler(ctx, {
       id: page.id, type: 'savoir-faire', titre: page.titre,
-      faits: [fait('Rattaché à', rattachement ? rattachement.titre : '', rattachement && rattachement.lien)]
-        .concat(page.mere ? [fait('Sous-page de', page.mere.titre, page.mere.id)] : []),
+      faits: [fait(I18n.t('wiki.fait.rattache_a'), rattachement ? rattachement.titre : '', rattachement && rattachement.lien)]
+        .concat(page.mere ? [fait(I18n.t('wiki.fait.sous_page_de'), page.mere.titre, page.mere.id)] : []),
       sections: { entete: page.entete, rattachement, mere: page.mere, sousPages: page.sousPages },
     }, textesDe(ligne, 'savoir-faire'), null, { aTrancher: page.contradictions, enAttente: page.enAttente });
   }

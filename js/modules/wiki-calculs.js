@@ -21,11 +21,11 @@
 //   pas de couche calculée ; ses sous-pages, la mère les liste par titre dans l'ordre alphabétique français, comme
 //   l'index du wiki (ce n'est pas un calcul de tests/calcul_wiki.py).
 
-Object.assign(Wiki, (() => {
+Object.defineProperties(Wiki, Object.getOwnPropertyDescriptors((() => {   // garde les accesseurs get (Object.assign les figerait)
 
   const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
-  const PHRASE_SAVOIR_FAIRE = 'Ce savoir-faire ne remplace pas la consignation de l\'équipement';
-  const PHRASE_SOUS_PAGE = 'Cette page ne remplace pas la consignation de l\'équipement';
+  const phraseSavoirFaire = () => I18n.t('wiki.phrase_savoir_faire.savoir_faire_remplace_pas');
+  const phraseSousPage = () => I18n.t('wiki.phrase_sous_page.page_remplace_pas_consignation');
   const MILLISECONDES_PAR_JOUR = 86400000;
   const ORDRE_FRANCAIS = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
 
@@ -288,9 +288,9 @@ Object.assign(Wiki, (() => {
     const equipements = premieres.concat(machinesLiees(ligne)
       .filter((liee) => !premieres.some((machine) => machine.equipementId === liee.equipementId)));
     if (fiche && equipements.length === 1) {
-      return { consignation: consignationDe(fiche), equipements, phrase: PHRASE_SAVOIR_FAIRE };
+      return { consignation: consignationDe(fiche), equipements, phrase: phraseSavoirFaire() };
     }
-    return { consignation: null, equipements, phrase: PHRASE_SAVOIR_FAIRE };
+    return { consignation: null, equipements, phrase: phraseSavoirFaire() };
   }
 
   // ===========================================================================================
@@ -314,7 +314,7 @@ Object.assign(Wiki, (() => {
     const equipementId = texte(mere.equipement_id);
     const fiche = equipement(equipementId);
     return { consignation: fiche ? consignationDe(fiche) : null,
-      equipements: fiche ? [{ equipementId, repere: texte(fiche.repere) }] : [], phrase: PHRASE_SOUS_PAGE };
+      equipements: fiche ? [{ equipementId, repere: texte(fiche.repere) }] : [], phrase: phraseSousPage() };
   }
 
   /** Sous-pages actives d'une ligne : [{ id, titre }], par titre (ordre alphabétique français) puis identifiant. */
@@ -546,13 +546,13 @@ Object.assign(Wiki, (() => {
     return socle.assembler(ctx, {
       id, type: 'machine', titre,
       faits: [
-        fait('Repère', texte(fiche.repere)), fait('Lieu', socle.lieuDe(ctx, fiche.localisation_id)),
-        fait('Marque et modèle', [texte(fiche.marque), texte(fiche.modele)].filter(Boolean).join(' ')),
-        fait('N° de série', texte(fiche.num_serie)), fait('Mise en service', jour(fiche.date_mes)),
-        fait('Criticité', texte(fiche.criticite)), fait('État', texte(fiche.statut)),
-        fait('Habilitation requise', texte(fiche.habilitation_requise)),
-      ].concat(parent ? [fait('Fait partie de', mere ? mere.titre : parent, mere && mere.lien)] : [],
-        [fait('Interventions', ordres.length)]),
+        fait(I18n.t('commun.champ.repere'), texte(fiche.repere)), fait(I18n.t('wiki.fait.lieu'), socle.lieuDe(ctx, fiche.localisation_id)),
+        fait(I18n.t('wiki.fait.marque_modele'), [texte(fiche.marque), texte(fiche.modele)].filter(Boolean).join(' ')),
+        fait(I18n.t('wiki.fait.numero_serie'), texte(fiche.num_serie)), fait(I18n.t('wiki.fait.mise_en_service'), jour(fiche.date_mes)),
+        fait(I18n.t('commun.champ.criticite'), texte(fiche.criticite)), fait(I18n.t('wiki.fait.etat'), texte(fiche.statut)),
+        fait(I18n.t('wiki.fait.habilitation_requise'), texte(fiche.habilitation_requise)),
+      ].concat(parent ? [fait(I18n.t('wiki.fait.fait_partie_de'), mere ? mere.titre : parent, mere && mere.lien)] : [],
+        [fait(I18n.t('wiki.fait.interventions'), ordres.length)]),
       sections: {
         consignation: consignationDe(fiche),
         sousEnsembles: Donnees.lignes('equipements').filter((autre) => texte(autre.parent_id) === id && texte(autre.id) !== id)
@@ -598,13 +598,13 @@ Object.assign(Wiki, (() => {
     return socle.assembler(ctx, {
       id, type: 'article', titre,
       faits: [
-        fait('Référence', texte(article.reference)), fait('Fabricant', texte(article.fabricant)),
-        fait('Référence du fabricant', texte(article.ref_fabricant)), fait('Emplacement', texte(article.emplacement)),
-        fait('Stock', temps.stock), fait('Unité', texte(article.unite)), fait('État du stock', socle.etatDuStock(article, temps.stock)),
-        fait('Stock de sécurité', nombre('stock_securite')), fait('Point de commande', nombre('point_commande')),
-        fait('Quantité de commande', nombre('qte_commande')), fait('Délai (jours)', nombre('delai_jours')),
-        fait('Fournisseur', nomFournisseur(article.fournisseur_id)),
-      ].concat(prix ? [fait('Prix unitaire', nombre('prix_unitaire'))] : [], [fait('Critique', texte(article.critique) === '1')]),
+        fait(I18n.t('commun.champ.reference'), texte(article.reference)), fait(I18n.t('wiki.fait.fabricant'), texte(article.fabricant)),
+        fait(I18n.t('wiki.fait.reference_fabricant'), texte(article.ref_fabricant)), fait(I18n.t('wiki.fait.emplacement'), texte(article.emplacement)),
+        fait(I18n.t('wiki.fait.stock'), temps.stock), fait(I18n.t('wiki.fait.unite'), texte(article.unite)), fait(I18n.t('wiki.fait.etat_stock'), socle.etatDuStock(article, temps.stock)),
+        fait(I18n.t('wiki.fait.stock_securite'), nombre('stock_securite')), fait(I18n.t('wiki.fait.point_commande'), nombre('point_commande')),
+        fait(I18n.t('wiki.fait.quantite_commande'), nombre('qte_commande')), fait(I18n.t('wiki.fait.delai_jours'), nombre('delai_jours')),
+        fait(I18n.t('wiki.fait.fournisseur'), nomFournisseur(article.fournisseur_id)),
+      ].concat(prix ? [fait(I18n.t('commun.champ.prix_unitaire'), nombre('prix_unitaire'))] : [], [fait(I18n.t('wiki.fait.critique'), texte(article.critique) === '1')]),
       sections: {
         commandes: Donnees.lignes('achats').filter((achat) => texte(achat.article_id) === id)
           .sort((a, b) => comparer(texte(a.date), texte(b.date)) || comparer(texte(a.id), texte(b.id)))
@@ -670,8 +670,10 @@ Object.assign(Wiki, (() => {
   }
 
   return {
-    page, pageComposant, pageMode, catalogue, PHRASE_SAVOIR_FAIRE, PHRASE_SOUS_PAGE,
+    page, pageComposant, pageMode, catalogue,
+    get PHRASE_SAVOIR_FAIRE() { return phraseSavoirFaire(); },
+    get PHRASE_SOUS_PAGE() { return phraseSousPage(); },
     // Usage interne du wiki (pas une API) : complété par wiki-entites.js (socle de l'encyclopédie).
     interne: { entiteMachine, entiteArticle, rattachementDe, listeMachines, listeSavoirFaire, retoursDe },
   };
-})());
+})()));

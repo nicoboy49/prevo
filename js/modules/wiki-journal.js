@@ -39,7 +39,6 @@
 Object.assign(Wiki, (() => {
 
   const DECISIONS = ['ancien', 'nouveau', 'les deux'];
-  const MESSAGE_RESERVE = 'Réservé au responsable : le wiki se valide et s\'écrit depuis son profil.';
   const { cleDeLigne, idCanonique, titreEquipement, titreArticle } = Wiki;      // clés, titres : wiki-ingestion.js
 
   function texte(valeur) {
@@ -66,13 +65,15 @@ Object.assign(Wiki, (() => {
     return typeof App !== 'undefined' && Boolean(App) && typeof App.estResponsable === 'function' && App.estResponsable();
   }
 
-  const exigerResponsable = () => { if (!estResponsable()) throw ErreurValidation(MESSAGE_RESERVE); };
+  const exigerResponsable = () => {
+    if (!estResponsable()) throw ErreurValidation(I18n.t('wiki.exiger_responsable.reserve_responsable_wiki_valide'));
+  };
 
   function nomDuResponsable() {
     const profil = typeof App !== 'undefined' && App ? App.profil : null;
     if (profil && texte(profil.nom)) return texte(profil.nom);
     return (typeof App !== 'undefined' && App && typeof App.libelleProfil === 'function' && texte(App.libelleProfil()))
-      || 'Responsable';
+      || I18n.t('wiki.nom_du_responsable.responsable');
   }
 
   /** Ligne de wiki_pages d'un changement ou d'une clé (null si la page n'a pas encore de ligne). */
@@ -139,9 +140,10 @@ Object.assign(Wiki, (() => {
   /** Ancienne page d'avant la refonte 2 (§20.12) → ce qu'elle est (« mode », « sous-page d'équipement »…), sinon ''. */
   function typeRetire(ligne) {
     const type = texte(ligne && ligne.type);
-    if (!Wiki.RUBRIQUES[type]) return type || 'sans type';
+    if (!Wiki.RUBRIQUES[type]) return type || I18n.t('wiki.type_retire.sans_type');
     const mere = type !== 'savoir-faire' && texte(ligne.rattache_a) ? Donnees.trouver('wiki_pages', texte(ligne.rattache_a)) : null;
-    return mere && texte(mere.type) === type ? 'sous-page ' + (type === 'équipement' ? 'd\'équipement' : 'de composant') : '';
+    if (!(mere && texte(mere.type) === type)) return '';
+    return type === 'équipement' ? I18n.t('wiki.type_retire.sous_page_equipement') : I18n.t('wiki.type_retire.sous_page_composant');
   }
 
   function liensDuTexte(valeur, index) {
@@ -187,9 +189,9 @@ Object.assign(Wiki, (() => {
       const article = Donnees.trouver('articles', cle.slice(4)) || { id: cle.slice(4) };
       Object.assign(ligne, { type: 'composant', article_id: cle.slice(4), titre: titreArticle(article) });
     } else if (ligne.type !== 'savoir-faire') {     // proposition d'avant la refonte 2 (§20.12 : mode, composant libre, sous-page)
-      throw ErreurValidation('« ' + ligne.titre + ' » : seule une page savoir-faire se crée (proposition d\'avant la refonte 2) : rejetez-la.');
+      throw ErreurValidation(I18n.t('wiki.nouvelle_ligne.seule_page_savoir_faire', { ligneTitre: ligne.titre }));
     } else if (vise && typeVise === ligne.type) {
-      if (!mere) throw ErreurValidation('La page mère de « ' + ligne.titre + ' » n\'a pas encore de texte : écrivez-la d\'abord.');
+      if (!mere) throw ErreurValidation(I18n.t('wiki.nouvelle_ligne.page_mere_pas_encore', { ligneTitre: ligne.titre }));
       ligne.rattache_a = mere.id;
     } else if (vise.startsWith('EQ-')) ligne.equipement_id = vise;
     else if (vise.startsWith('ART-')) ligne.article_id = vise;
@@ -279,7 +281,7 @@ Object.assign(Wiki, (() => {
         const trouvees = changements.map((c) => ligneDeCle(lignes, c.cle, c.page));
         trouvees.forEach((ligne, n) => {
           if ((ligne ? Number(ligne.version) || 0 : 0) !== (Number(changements[n].version_avant) || 0)) {
-            const erreur = ErreurValidation('La page « ' + texte(changements[n].titre) + ' » a changé depuis la proposition.');
+            const erreur = ErreurValidation(I18n.t('wiki.appliquer.page_change_depuis_proposition', { titre: texte(changements[n].titre) }));
             erreur.pageChangee = true;
             throw erreur;
           }
@@ -312,19 +314,20 @@ Object.assign(Wiki, (() => {
     exigerResponsable();
     await rattraper({ relire: true });
     const choisis = Array.from(new Set((ids || []).map(texte).filter(Boolean)));
-    if (!choisis.length) throw ErreurValidation('Aucune proposition choisie.');
+    if (!choisis.length) throw ErreurValidation(I18n.t('wiki.valider.aucune_proposition_choisie'));
     const journal = Donnees.lignes('wiki_journal');
     const entrees = choisis.map((id) => {
       const entree = journal.find((e) => e.id === id);
       if (!entree || texte(entree.statut) !== 'à valider') {
-        throw ErreurValidation('La proposition ' + id + ' n\'est pas « à valider »' + (entree ? ' (' + entree.statut + ')' : '') + '.');
+        throw ErreurValidation(entree ? I18n.t('wiki.valider.proposition_pas_valider', { id, entreeStatut: entree.statut })
+          : I18n.t('wiki.valider.proposition_pas_valider_sans_statut', { id }));
       }
       return entree;
     }).sort(parRang);
     if (entrees.length > 1) {
       const avec = entrees.filter((e) => contradictionsDe(e).length).map((e) => e.id);
       if (avec.length) {
-        throw ErreurValidation('Propositions avec une contradiction, à valider une à une : ' + avec.join(', ') + '.');
+        throw ErreurValidation(I18n.t('wiki.valider.propositions_contradiction_valider', { propositions: avec.join(', ') }));
       }
     }
     const lignesPages = Donnees.lignes('wiki_pages');
@@ -332,8 +335,7 @@ Object.assign(Wiki, (() => {
       const avant = journal.filter((e) => texte(e.statut) === 'à valider' && !choisis.includes(e.id) && rang(e) < rang(entree)
         && depend(entree, pagesDe(e, lignesPages), lignesPages));
       if (avant.length) {
-        throw ErreurValidation('Validez d\'abord ' + avant.map((e) => e.id).join(', ') + ' : ' + entree.id + ' a été construite sur '
-          + (avant.length > 1 ? 'leurs changements' : 'ses changements') + ' (propositions enchaînées).');
+        throw ErreurValidation(I18n.t('wiki.valider.validez_abord_ete_construite', { n: avant.length, precedentes: avant.map((e) => e.id).join(', '), entreeId: entree.id }));
       }
     });
     const par = nomDuResponsable();
@@ -351,9 +353,9 @@ Object.assign(Wiki, (() => {
           const deja = appliqueeDans(ligne, lignesFraiches);          // validée entre-temps sur un autre poste
           if (deja) { marquerValidee(ligne, deja, ''); return { validee: true, aRefaire: [] }; }
           const { changees, creees } = pagesDe(ligne, lignesFraiches);
-          const motif = 'à refaire : une page a changé depuis la proposition';
+          const motif = I18n.t('wiki.valider.refaire_page_change_depuis');
           Object.assign(ligne, { statut: 'à refaire', motif, changements: '', contradictions: '', ordre: '', traite_le: outils.maintenant() });
-          return { aRefaire: [ligne.id].concat(cascade(lignes, changees, rang(entree), 'à refaire : suit ' + ligne.id, outils.maintenant(), creees)) };
+          return { aRefaire: [ligne.id].concat(cascade(lignes, changees, rang(entree), I18n.t('wiki.valider.refaire_suit', { ligneId: ligne.id }), outils.maintenant(), creees)) };
         }, { journal: false });
         if (issue.validee) bilan.validees.push(entree.id);
         bilan.aRefaire.push(...issue.aRefaire);
@@ -368,7 +370,7 @@ Object.assign(Wiki, (() => {
         Object.assign(ligne, { statut: 'validée', decide_par: par, decide_le: outils.maintenant(), ordre: fraiche.ordre,
           contradictions: fraiche.contradictions,
           changements: JSON.stringify(changementsDe(fraiche).map((c, n) => Object.assign({}, c, { page: pages[n] }))) });
-        if (autre) ligne.motif = 'validée ici alors qu\'un autre poste l\'avait passée « ' + autre + ' » : son texte est publié';
+        if (autre) ligne.motif = I18n.t('wiki.valider.validee_ici_alors_autre', { autre });
       }, { journal: false });
       bilan.validees.push(entree.id);
     }
@@ -381,25 +383,24 @@ Object.assign(Wiki, (() => {
    */
   async function rejeter(id, motif) {
     exigerResponsable();
-    if (!texte(motif)) throw ErreurValidation('Le motif du rejet est obligatoire.');
+    if (!texte(motif)) throw ErreurValidation(I18n.t('wiki.rejeter.motif_rejet_obligatoire'));
     const par = nomDuResponsable();
     await Donnees.rechargerTable('wiki_pages');
     const lignesPages = Donnees.lignes('wiki_pages');
     const resultat = await Donnees.modifier('wiki_journal', (lignes, outils) => {
       const ligne = lignes.find((e) => e.id === texte(id));
       if (!ligne || texte(ligne.statut) !== 'à valider') {
-        throw ErreurValidation('La proposition ' + texte(id) + ' n\'est pas « à valider ».');
+        throw ErreurValidation(I18n.t('wiki.valider.proposition_pas_valider_sans_statut', { id: texte(id) }));
       }
       const deja = appliqueeDans(ligne, lignesPages);
       if (deja) { marquerValidee(ligne, deja, ''); return { dejaValidee: true }; }
       const maintenant = outils.maintenant();
       const { changees, creees } = pagesDe(ligne, lignesPages);
       Object.assign(ligne, { statut: 'rejetée', motif: texte(motif), decide_par: par, decide_le: maintenant });
-      return { rejetee: ligne.id, aRefaire: cascade(lignes, changees, rang(ligne), 'à refaire : ' + ligne.id + ' rejetée', maintenant, creees) };
+      return { rejetee: ligne.id, aRefaire: cascade(lignes, changees, rang(ligne), I18n.t('wiki.rejeter.refaire_rejetee', { ligneId: ligne.id }), maintenant, creees) };
     }, { journal: false });
     if (resultat.dejaValidee) {
-      throw ErreurValidation('La proposition ' + texte(id) + ' vient d\'être validée (sans doute sur un autre poste) : son texte '
-        + 'est publié, elle ne se rejette plus. Corrigez la page à la main si besoin.');
+      throw ErreurValidation(I18n.t('wiki.rejeter.proposition_vient_etre_validee', { id: texte(id) }));
     }
     return resultat;
   }
@@ -410,15 +411,15 @@ Object.assign(Wiki, (() => {
     return Donnees.modifier('wiki_journal', (lignes, outils) => {
       const ligne = lignes.find((e) => e.id === texte(id));
       if (!ligne || texte(ligne.nature) !== 'ingestion' || !['rejetée', 'refusée'].includes(texte(ligne.statut))) {
-        throw ErreurValidation('Seul l\'OT d\'une proposition rejetée ou refusée se remet en file.');
+        throw ErreurValidation(I18n.t('wiki.remettre_en_file.seul_ot_proposition_rejetee'));
       }
       const autre = lignes.find((e) => e !== ligne && texte(e.ot_id) === texte(ligne.ot_id) && texte(e.nature) === 'ingestion'
         && !['rejetée', 'refusée'].includes(texte(e.statut)));
-      if (autre) throw ErreurValidation('L\'OT ' + ligne.ot_id + ' a déjà une entrée « ' + autre.statut + ' » (' + autre.id + ').');
+      if (autre) throw ErreurValidation(I18n.t('wiki.remettre_en_file.ot_deja_entree', { ot_id: ligne.ot_id, autreStatut: autre.statut, autreId: autre.id }));
       const ot = Donnees.trouver('ordres_travail', texte(ligne.ot_id)) || {};
       const nouvelle = { id: outils.nouvelId(lignes), nature: 'ingestion', ot_id: ligne.ot_id,
         date_intervention: texte(ot.date_fin) || texte(ligne.date_intervention), statut: 'en file', anterieure: '0', essais: '0',
-        motif: 'relancé après ' + ligne.id, cree_le: outils.maintenant() };
+        motif: I18n.t('wiki.remettre_en_file.relance_apres', { ligneId: ligne.id }), cree_le: outils.maintenant() };
       lignes.push(nouvelle);
       return nouvelle.id;
     }, { journal: false });
@@ -434,20 +435,20 @@ Object.assign(Wiki, (() => {
     const id = texte(cible && cible.pageId);
     if (id.startsWith('WP-')) {
       const ligne = lignesPages.find((l) => l.id === id);
-      if (!ligne) throw ErreurValidation('Page du wiki introuvable : ' + id + '.');
-      if (!estActive(ligne)) throw ErreurValidation('La page « ' + texte(ligne.titre) + ' » est archivée.');
+      if (!ligne) throw ErreurValidation(I18n.t('wiki.cible_de.page_wiki_introuvable', { id }));
+      if (!estActive(ligne)) throw ErreurValidation(I18n.t('wiki.cible_de.page_archivee', { ligneTitre: texte(ligne.titre) }));
       return { ligne, cle: cleDeLigne(ligne), type: texte(ligne.type), titre: texte(ligne.titre) };
     }
     if (id.startsWith('EQ-') || id.startsWith('ART-')) {
       const equipement = id.startsWith('EQ-') && Donnees.trouver('equipements', id);
       const article = id.startsWith('ART-') && Donnees.trouver('articles', id);
-      if (!equipement && !article) throw ErreurValidation('Équipement ou article introuvable : ' + id + '.');
+      if (!equipement && !article) throw ErreurValidation(I18n.t('wiki.cible_de.equipement_article_introuvable', { id }));
       const cle = (equipement ? 'EQ:' : 'ART:') + id;
       return { ligne: ligneDeCle(lignesPages, cle, ''), cle, type: equipement ? 'équipement' : 'composant',
         titre: equipement ? titreEquipement(equipement) : titreArticle(article) };
     }
     const nouvelle = cible && cible.nouvelle;
-    if (!nouvelle) throw ErreurValidation('Page à écrire non précisée.');
+    if (!nouvelle) throw ErreurValidation(I18n.t('wiki.cible_de.page_ecrire_non_precisee'));
     // Seul un savoir-faire se crée (§20.12) : les contrôles refusent un autre type, avec la raison.
     return { ligne: null, nouvelle: true, cle: 'TITRE:' + Wiki.comparable(nouvelle.titre), type: texte(nouvelle.type),
       titre: texte(nouvelle.titre), rattache: texte(nouvelle.rattacheA) };
@@ -464,7 +465,7 @@ Object.assign(Wiki, (() => {
 
   function controlerEcriture(page, valeur) {
     const retire = page.ligne ? typeRetire(page.ligne) : '';
-    if (retire) throw ErreurValidation('Page « ' + page.titre + ' » (' + retire + ') : type de page retiré : archivez-la.');
+    if (retire) throw ErreurValidation(I18n.t('wiki.controler_ecriture.page_type_page_retire', { pageTitre: page.titre, retire }));
     const avant = page.ligne ? page.ligne.texte || '' : '';
     const rattachement = page.rattache ? pageEnvoyee(page.rattache) : null;
     // Une sous-page modifiée porte sa mère : ses refus de longueur ne conseillent pas de la découper (un seul niveau).
@@ -482,7 +483,7 @@ Object.assign(Wiki, (() => {
       catalogue: Wiki.catalogue().concat(pannes()).map((p) => ({ titre: p.titre, type: p.type || 'panne' })),
       otPermis: permis, sources });
     if (!controle.ok) {
-      const erreur = ErreurValidation('Texte refusé : ' + controle.raisons.join(' '));
+      const erreur = ErreurValidation(I18n.t('wiki.controler_ecriture.texte_refuse', { raisons: controle.raisons.join(' ') }));
       erreur.raisons = controle.raisons;
       throw erreur;
     }
@@ -499,12 +500,12 @@ Object.assign(Wiki, (() => {
     await rattraper({ relire: true });           // pages relues ; une validation interrompue est d'abord rattrapée
     const page = cibleDe(cible);
     const archiver = Boolean(opts.archiver);
-    if (archiver && !page.ligne) throw ErreurValidation('Seule une page qui a un texte s\'archive.');
+    if (archiver && !page.ligne) throw ErreurValidation(I18n.t('wiki.ecrire.seule_page_texte_archive'));
     const nouveau = archiver ? (page.ligne.texte || '') : String(valeur === null || valeur === undefined ? '' : valeur).trim();
     if (!archiver) controlerEcriture(page, nouveau);
     const version = page.ligne ? Number(page.ligne.version) || 0 : 0;
     const attendue = opts.version === undefined || opts.version === null ? version : Number(opts.version) || 0;
-    if (attendue !== version) throw ErreurValidation('La page a été modifiée entre-temps : rechargez-la puis recommencez.');
+    if (attendue !== version) throw ErreurValidation(I18n.t('wiki.ecrire.page_ete_modifiee_entre'));
     const par = nomDuResponsable();
     const avant = page.ligne ? page.ligne.texte || '' : '';
     const entreeId = await Donnees.modifier('wiki_journal', (lignes, outils) => {
@@ -515,16 +516,16 @@ Object.assign(Wiki, (() => {
         changements: JSON.stringify([{ page: page.ligne ? page.ligne.id : '', cle: page.cle, type: page.type, titre: page.titre,
           creation: !page.ligne, archivage: archiver, version_avant: version, avant, apres: nouveau }]),
         contradictions: '[]', cree_le: maintenant, traite_le: maintenant, decide_par: par, decide_le: maintenant, motif: texte(opts.motif) });
-      cascade(lignes, new Set([page.cle]), -Infinity, 'à refaire : page écrite à la main (' + id + ')', maintenant);
+      cascade(lignes, new Set([page.cle]), -Infinity, I18n.t('wiki.ecrire.refaire_page_ecrite_main', { id }), maintenant);
       return id;
     }, { journal: false });
     try {
       const ligneId = await Donnees.modifier('wiki_pages', (lignes, outils) => {
         let ligne = page.ligne ? lignes.find((l) => l.id === page.ligne.id) : ligneDeCle(lignes, page.cle, '');
         if ((ligne ? Number(ligne.version) || 0 : 0) !== version) {
-          throw ErreurValidation('La page a été modifiée entre-temps (sans doute sur un autre poste) : rechargez-la puis recommencez.');
+          throw ErreurValidation(I18n.t('wiki.ecrire.page_ete_modifiee_autre_poste'));
         }
-        if (page.nouvelle && ligne) throw ErreurValidation('Une page de ce titre existe déjà.');
+        if (page.nouvelle && ligne) throw ErreurValidation(I18n.t('wiki.ecrire.page_titre_existe_deja'));
         if (!ligne) ligne = nouvelleLigne(lignes, outils, page.cle, { type: page.type, titre: page.titre }, texte(page.rattache));
         const contexte = { index: indexDesLiens(lignes), parIa: false, entreeId, par, maintenant: outils.maintenant() };
         poserTexte(ligne, nouveau, contexte);
@@ -555,14 +556,14 @@ Object.assign(Wiki, (() => {
    */
   async function trancher(entreeId, rangContradiction, decision, note) {
     exigerResponsable();
-    if (!DECISIONS.includes(decision)) throw ErreurValidation('Décision inconnue : ' + decision + ' (ancien, nouveau ou les deux).');
+    if (!DECISIONS.includes(decision)) throw ErreurValidation(I18n.t('wiki.trancher.decision_inconnue_ancien_nouveau', { decision }));
     const par = nomDuResponsable();
     const resultat = await Donnees.modifier('wiki_journal', (lignes, outils) => {
       const entree = lignes.find((e) => e.id === texte(entreeId));
-      if (!entree || texte(entree.statut) !== 'validée') throw ErreurValidation('Contradiction introuvable sur une proposition validée.');
+      if (!entree || texte(entree.statut) !== 'validée') throw ErreurValidation(I18n.t('wiki.trancher.contradiction_introuvable_proposition_validee'));
       const contradictions = contradictionsDe(entree);
       const contradiction = contradictions[Number(rangContradiction)];
-      if (!contradiction || texte(contradiction.statut) !== 'ouverte') throw ErreurValidation('Cette contradiction n\'est pas ouverte.');
+      if (!contradiction || texte(contradiction.statut) !== 'ouverte') throw ErreurValidation(I18n.t('wiki.trancher.contradiction_pas_ouverte'));
       const maintenant = outils.maintenant();
       Object.assign(contradiction, { statut: 'fermée', decision, decide_par: par, decide_le: maintenant, note: texte(note) });
       entree.contradictions = JSON.stringify(contradictions);
@@ -612,7 +613,7 @@ Object.assign(Wiki, (() => {
         const anterieure = texte(entree.anterieure) === '1';
         return { entreeId: entree.id, rang: n, ot: (contradiction.ot || []).slice(), otSource: texte(entree.ot_id),
           phrase: texte(contradiction.phrase), observation: texte(contradiction.observation), anterieure,
-          libelle: anterieure ? 'Observation antérieure aux faits de la page' : 'Ce que dit le nouvel OT',
+          libelle: anterieure ? I18n.t('wiki.contradictions_de_page.observation_anterieure_faits_page') : I18n.t('wiki.contradictions_de_page.dit_nouvel_ot'),
           depuis: texte(entree.decide_le) || texte(entree.traite_le) };
       });
   }
@@ -659,29 +660,29 @@ Object.assign(Wiki, (() => {
       let plusRecente = '';
       suite.forEach(({ entree, changement }) => {
         if ((changement.avant || '') !== precedent) {
-          ecarts.push({ page: nom, entree: entree.id, message: 'son « avant » n\'est pas le texte laissé par l\'entrée précédente' });
+          ecarts.push({ page: nom, entree: entree.id, message: I18n.t('wiki.verifier_integrite.avant_pas_texte_laisse') });
         }
         precedent = changement.apres || '';
         if (texte(entree.nature) !== 'ingestion' || texte(entree.anterieure) === '1') return;
         const date = texte(entree.date_intervention);
         if (plusRecente && date && date < plusRecente) {
-          ecarts.push({ page: nom, entree: entree.id, message: 'OT ' + entree.ot_id + ' intégré après un OT plus récent' });
+          ecarts.push({ page: nom, entree: entree.id, message: I18n.t('wiki.verifier_integrite.ot_integre_apres_ot', { ot_id: entree.ot_id }) });
         }
         if (date > plusRecente) plusRecente = date;
       });
-      if (!ligne) ecarts.push({ page: nom, entree: suite[suite.length - 1].entree.id, message: 'page absente de wiki_pages' });
+      if (!ligne) ecarts.push({ page: nom, entree: suite[suite.length - 1].entree.id, message: I18n.t('wiki.verifier_integrite.page_absente_wiki_pages') });
       else if ((ligne.texte || '') !== precedent) {
-        ecarts.push({ page: nom, entree: suite[suite.length - 1].entree.id, message: 'le texte de la page n\'est pas l\'« après » de sa dernière entrée' });
+        ecarts.push({ page: nom, entree: suite[suite.length - 1].entree.id, message: I18n.t('wiki.verifier_integrite.texte_page_pas_apres') });
       }
     });
     lignesPages.filter((ligne) => texte(ligne.texte) && !parPage.has(ligne.id))
-      .forEach((ligne) => ecarts.push({ page: texte(ligne.titre), entree: '', message: 'texte sans entrée au journal' }));
+      .forEach((ligne) => ecarts.push({ page: texte(ligne.titre), entree: '', message: I18n.t('wiki.verifier_integrite.texte_sans_entree_journal') }));
     const envois = (options && options.envois) || [];
     envois.forEach((a, n) => envois.slice(n + 1).forEach((b) => {
       const communes = (a.cles || []).filter((cle) => (b.cles || []).includes(cle));
       const ensemble = a.debut < (b.fin === null ? Infinity : b.fin) && b.debut < (a.fin === null ? Infinity : a.fin);
       if (communes.length && ensemble) {
-        ecarts.push({ page: communes.join(', '), entree: '', message: 'envois simultanés de ' + a.ot + ' et ' + b.ot });
+        ecarts.push({ page: communes.join(', '), entree: '', message: I18n.t('wiki.verifier_integrite.envois_simultanes', { premier: a.ot, second: b.ot }) });
       }
     }));
     return { ok: ecarts.length === 0, ecarts };

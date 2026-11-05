@@ -43,15 +43,9 @@
 
 Object.assign(Wiki, (() => {
 
-  const MESSAGE_SANS_CONSIGNATION = 'Aucune consignation saisie pour cet équipement';
-  const MESSAGE_SANS_TEXTE = 'Aucun texte validé pour l\'instant.';
-  const PHRASE_SAVOIR_FAIRE = 'Ce savoir-faire ne remplace pas la consignation de l\'équipement';   // = Wiki.PHRASE_SAVOIR_FAIRE
-  const DECISIONS = [['ancien', 'L\'ancien reste'], ['nouveau', 'Le nouveau remplace'], ['les deux', 'Les deux sont vrais']];
-  const FICHES = { machine: 'Fiche de la machine', panne: 'Fiche de la panne', article: 'Fiche de l\'article',
-    technicien: 'Fiche du technicien', intervention: 'Fiche de l\'intervention', 'savoir-faire': 'Fiche du savoir-faire' };
   const TYPE_TEXTE = { machine: 'équipement', article: 'composant', 'savoir-faire': 'savoir-faire' };   // Wiki.RUBRIQUES
-  const PROSE = ['En bref', 'À quoi il sert'];          // rubriques lues comme un paragraphe ; les autres en liste
-  const EN_EUROS = { 'Prix unitaire': '', 'Taux horaire': ' / h' };
+  // Rubriques lues comme un paragraphe (« En bref », « À quoi il sert » : marqueurs, D156) ; les autres en liste.
+  const PROSE = [Wiki.RUBRIQUES['équipement'][0], Wiki.RUBRIQUES.composant[0]];
   const ETATS_STOCK = { 'en stock': 'ok', 'sous le seuil': 'attention', rupture: 'ko' };
   const MOTIF_JETON = /\[\[([^[\]]+)\]\]|\s*\[(OT-\d{4}-\d{4,})\]/g;
 
@@ -65,13 +59,35 @@ Object.assign(Wiki, (() => {
   const titreMachine = (ligne) => [texte(ligne.repere), texte(ligne.designation)].filter(Boolean).join(' — ');
   const titreArticle = (ligne) => texte(ligne.designation) || texte(ligne.reference) || texte(ligne.id);
 
+  /** Boutons pour trancher une contradiction : [décision (code stocké), libellé], lus à l'affichage. */
+  const decisions = () => [['ancien', I18n.t('wiki.decisions.bouton_ancien')], ['nouveau', I18n.t('wiki.decisions.bouton_nouveau')], ['les deux', I18n.t('wiki.decisions.bouton_deux')]];
+
+  /** Titre (caché) de la fiche des faits d'un type de page. */
+  function titreFiche(type) {
+    switch (type) {
+      case 'machine': return I18n.t('wiki.titre_fiche.fiche_machine');
+      case 'panne': return I18n.t('wiki.titre_fiche.fiche_panne');
+      case 'article': return I18n.t('wiki.titre_fiche.fiche_article');
+      case 'technicien': return I18n.t('wiki.titre_fiche.fiche_technicien');
+      case 'intervention': return I18n.t('wiki.titre_fiche.fiche_intervention');
+      default: return I18n.t('wiki.titre_fiche.fiche_savoir_faire');
+    }
+  }
+
+  /** Montant d'un fait en euros (prix unitaire ; taux horaire, suivi de « / h ») ; null pour un autre nombre. */
+  function enEuros(fait, valeur) {
+    if (fait.libelle === I18n.t('commun.champ.prix_unitaire')) return UI.euro(valeur);
+    return fait.libelle === I18n.t('wiki.fait.taux_horaire') ? I18n.t('wiki.fiche.montant_par_heure', { montant: UI.euro(valeur) }) : null;
+  }
+
   /** Valeur d'un fait à l'écran (précisions en tête) ; null si le fait est vide. */
   function valeurFait(fait) {
     const valeur = fait.valeur;
     if (valeur === null || valeur === undefined || valeur === '') return null;
-    if (typeof valeur === 'boolean') return valeur ? 'oui' : 'non';
+    if (typeof valeur === 'boolean') return valeur ? I18n.t('wiki.fiche.oui') : I18n.t('wiki.fiche.non');
     if (typeof valeur === 'number') {
-      return Object.prototype.hasOwnProperty.call(EN_EUROS, fait.libelle) ? UI.euro(valeur) + EN_EUROS[fait.libelle] : UI.nombreFr(valeur);
+      const montant = enEuros(fait, valeur);
+      return montant === null ? UI.nombreFr(valeur) : montant;
     }
     const chaine = String(valeur);
     if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(chaine)) return UI.dateHeureFr(chaine);
@@ -143,7 +159,7 @@ Object.assign(Wiki, (() => {
     function fragment(ot) {
       const n = numero(ot);
       const lien = detail(ot).lien;
-      const nom = 'Référence ' + n + ' : ' + bulle(ot);
+      const nom = I18n.t('wiki.creer_references.reference_n_bulle', { n, bulle: bulle(ot) });
       return lien
         ? UI.html`<sup class="wiki-ref" data-ot="${ot}"><a href="${outils().adresse(lien)}" title="${bulle(ot)}" aria-label="${nom}">${n}</a></sup>`
         : UI.html`<sup class="wiki-ref" data-ot="${ot}"><button type="button" class="wiki-ref-numero" title="${bulle(ot)}"
@@ -156,7 +172,7 @@ Object.assign(Wiki, (() => {
     function section() {
       const o = outils();
       return UI.element(UI.html`<section class="wiki-section wiki-references" id="wiki-references" aria-labelledby="wiki-titre-references">
-        <h2 id="wiki-titre-references">Références <span class="wiki-compte">${numeros.size}</span></h2>
+        <h2 id="wiki-titre-references">${I18n.html('wiki.creer_references.references_numeros_size', { numerosSize: numeros.size })}</h2>
         <ol class="wiki-refs">${Array.from(numeros, ([ot, numero]) => {
           const reference = detail(ot);
           return UI.html`<li id="wiki-ref-${numero}" data-ot="${ot}">${o.joindre([o.lienEntite(reference.lien, ot),
@@ -218,7 +234,7 @@ Object.assign(Wiki, (() => {
       const titre = jeton[1].trim();
       const id = contexte.resoudre(titre);
       conteneur.appendChild(UI.element(id ? UI.html`<a class="wiki-lien-page" href="${outils().adresse(id)}">${titre}</a>`
-        : UI.html`<span class="wiki-lien-absent" title="Page introuvable dans le wiki">${titre}</span>`));
+        : UI.html`<span class="wiki-lien-absent" title="${I18n.t('wiki.poser_phrase.page_introuvable_wiki')}">${titre}</span>`));
     }
     ajouterTexte(conteneur, valeur.slice(position));
     return conteneur;
@@ -227,13 +243,14 @@ Object.assign(Wiki, (() => {
   /** Bandeau d'origine (§20.9, CS103). */
   function texteOrigine(textes) {
     const modele = texte(textes.modele);
-    const ia = 'Rédigé avec l\'IA' + (modele ? ' (' + modele + ')' : '') + ' à partir des OT cités';
+    const ia = modele ? I18n.t('wiki.texte_origine.redige_ia_modele', { modele }) : I18n.t('wiki.texte_origine.redige_ia');
     const date = UI.dateFr(texte(textes.valideLe));
-    const par = (texte(textes.validePar) || 'le responsable') + (date ? ' le ' + date : '');
-    if (textes.origine === 'IA') return ia + ' — validé par ' + par;
-    if (textes.origine === 'manuel') return 'Écrit par ' + par;
-    if (textes.origine === 'IA et manuel') return ia + ', puis modifié à la main — validé par ' + par;
-    return 'Origine non renseignée' + (texte(textes.validePar) ? ' — validé par ' + par : '');
+    const qui = texte(textes.validePar) || I18n.t('wiki.texte_origine.responsable');
+    const par = date ? I18n.t('wiki.texte_origine.qui_date', { qui, date }) : qui;
+    if (textes.origine === 'IA') return I18n.t('wiki.texte_origine.ia_valide_par', { ia, par });
+    if (textes.origine === 'manuel') return I18n.t('wiki.texte_origine.ecrit_par', { par });
+    if (textes.origine === 'IA et manuel') return I18n.t('wiki.texte_origine.puis_modifie_main_valide', { ia, par });
+    return texte(textes.validePar) ? I18n.t('wiki.texte_origine.origine_non_renseignee_validee', { par }) : I18n.t('wiki.texte_origine.origine_non_renseignee');
   }
 
   /**
@@ -253,8 +270,8 @@ Object.assign(Wiki, (() => {
     if (!rubriques.length) {
       const titre = groupe.titreVide || groupe.textes[0];
       bloc.appendChild(UI.element(UI.html`<section class="wiki-section wiki-texte" data-rubrique="${titre}">
-        <h2>${titre}</h2><p class="wiki-sans-texte"><b>${MESSAGE_SANS_TEXTE}</b></p>
-        <p class="aide">Il s'écrit à partir des interventions clôturées administrativement, puis le responsable le valide.</p></section>`));
+        <h2>${titre}</h2><p class="wiki-sans-texte"><b>${I18n.t('wiki.bloc_textes.aucun_texte_valide_instant')}</b></p>
+        <p class="aide">${I18n.t('wiki.bloc_textes.ecrit_partir_interventions_cloturees')}</p></section>`));
       return bloc;
     }
     rubriques.forEach((rubrique, rang) => {
@@ -316,7 +333,7 @@ Object.assign(Wiki, (() => {
     try {
       const resultat = await Wiki.trancher(contradiction.entreeId, contradiction.rang, decision, UI.$('.wiki-note', element).value);
       App.marquerSaisie(false);
-      UI.toast('Décision enregistrée au journal du wiki.', 'succes');
+      UI.toast(I18n.t('wiki.enregistrer_decision.decision_enregistree_journal_wiki'), 'succes');
       if (decision === 'nouveau' && resultat && resultat.pageId) {
         App.naviguer('#/wiki-ecrire/' + encodeURIComponent(resultat.pageId));
         return;
@@ -324,7 +341,7 @@ Object.assign(Wiki, (() => {
       await App.reafficher();
     } catch (erreur) {
       console.warn('Prévo (wiki) : décision non enregistrée (' + (erreur && erreur.message) + ').', erreur);
-      UI.toast('Décision non enregistrée : ' + App.raisonErreur(erreur), 'erreur');
+      UI.toast(I18n.t('wiki.enregistrer_decision.decision_non_enregistree', { raisonErreur: App.raisonErreur(erreur) }), 'erreur');
       boutons.forEach((autre) => { autre.disabled = false; });
       bouton.removeAttribute('aria-busy');
     }
@@ -337,15 +354,15 @@ Object.assign(Wiki, (() => {
     const element = UI.element(UI.html`<li class="wiki-contradiction" data-entree="${contradiction.entreeId}"
         data-rang="${contradiction.rang}" data-anterieure="${anterieure ? 'oui' : 'non'}">
       <div class="wiki-cotes">
-        <div class="wiki-cote wiki-cote-page"><h3>Ce que dit la page</h3><p class="wiki-phrase"></p></div>
-        <div class="wiki-cote wiki-cote-ot"><h3>${anterieure ? 'Observation antérieure aux faits de la page' : 'Ce que dit le nouvel OT'}</h3>
+        <div class="wiki-cote wiki-cote-page"><h3>${I18n.t('wiki.contradiction_element.dit_page')}</h3><p class="wiki-phrase"></p></div>
+        <div class="wiki-cote wiki-cote-ot"><h3>${anterieure ? I18n.t('wiki.contradiction_element.observation_anterieure_faits_page') : I18n.t('wiki.contradiction_element.dit_nouvel_ot')}</h3>
           <p class="wiki-observation"><span class="wiki-observation-texte">${contradiction.observation}</span></p></div>
       </div>
-      ${contradiction.depuis ? UI.html`<p class="aide wiki-depuis">Signalée le ${UI.dateFr(contradiction.depuis)}.</p>` : ''}
-      ${contexte.responsable ? UI.html`<div class="wiki-trancher" role="group" aria-label="Trancher cette contradiction">
-        <div class="champ"><label class="libelle" for="${idNote}">Note (facultative)</label>
+      ${contradiction.depuis ? UI.html`<p class="aide wiki-depuis">${I18n.t('wiki.contradiction_element.signalee_depuis', { depuis: UI.dateFr(contradiction.depuis) })}</p>` : ''}
+      ${contexte.responsable ? UI.html`<div class="wiki-trancher" role="group" aria-label="${I18n.t('wiki.contradiction_element.trancher_contradiction')}">
+        <div class="champ"><label class="libelle" for="${idNote}">${I18n.t('wiki.contradiction_element.note_facultative')}</label>
           <textarea id="${idNote}" class="wiki-note" rows="2" maxlength="500"></textarea></div>
-        <div class="actions">${DECISIONS.map(([decision, libelle]) => UI.html`<button type="button"
+        <div class="actions">${decisions().map(([decision, libelle]) => UI.html`<button type="button"
           class="btn ${decision === 'nouveau' ? 'btn-primaire' : 'btn-secondaire'}" data-decision="${decision}">${libelle}</button>`)}</div>
       </div>` : ''}
     </li>`);
@@ -360,8 +377,8 @@ Object.assign(Wiki, (() => {
 
   function blocContradictions(entite, contexte) {
     const section = UI.element(UI.html`<section class="wiki-encadre wiki-a-trancher" id="wiki-a-trancher" aria-labelledby="wiki-titre-trancher">
-      <h2 id="wiki-titre-trancher">${UI.icone('alerte')}À trancher <span class="badge attention">${entite.aTrancher.length}</span></h2>
-      <p class="aide">Un OT dit autre chose que la page. La page reste telle quelle tant que le responsable n'a pas tranché.</p>
+      <h2 id="wiki-titre-trancher">${UI.icone('alerte')}${I18n.html('wiki.bloc_contradictions.trancher_nb_atrancher', { nbATrancher: entite.aTrancher.length })}</h2>
+      <p class="aide">${I18n.t('wiki.bloc_contradictions.ot_dit_autre_chose')}</p>
       <ul class="wiki-contradictions"></ul>
     </section>`);
     entite.aTrancher.forEach((contradiction) => UI.$('.wiki-contradictions', section).appendChild(contradictionElement(contradiction, contexte)));
@@ -385,11 +402,11 @@ Object.assign(Wiki, (() => {
         ${reglages.phrase ? UI.html`<p class="wiki-entete-phrase"><b>${reglages.phrase}</b></p>` : ''}
         ${texte(valeur.texte)
           ? UI.html`<div class="wiki-consignation-texte"></div>
-            <p class="aide">Procédure de la fiche de l'équipement, telle qu'elle a été saisie ; jamais écrite par l'IA.</p>`
-          : UI.html`<p class="wiki-sans-consignation"><b>${MESSAGE_SANS_CONSIGNATION}</b></p>
+            <p class="aide">${I18n.t('wiki.bloc_consignation.procedure_fiche_equipement_telle')}</p>`
+          : UI.html`<p class="wiki-sans-consignation"><b>${I18n.t('wiki.bloc_consignation.aucune_consignation_saisie_equipement')}</b></p>
             ${reglages.responsable && !reglages.phrase ? UI.html`<p><a class="btn btn-secondaire" id="wiki-modifier-consignation"
-              href="#/equipement/${encodeURIComponent(reglages.equipementId)}/modifier">${UI.icone('cle')}Saisir la consignation dans la fiche</a></p>` : ''}`}
-        ${nomDocument ? UI.html`<p class="wiki-consignation-document">Document : <span class="wiki-document">${nomDocument}</span></p>` : ''}
+              href="#/equipement/${encodeURIComponent(reglages.equipementId)}/modifier">${UI.icone('cle')}${I18n.t('wiki.bloc_consignation.saisir_consignation_fiche')}</a></p>` : ''}`}
+        ${nomDocument ? UI.html`<p class="wiki-consignation-document">${I18n.html('wiki.bloc_consignation.document_nom_document', { nomDocument })}</p>` : ''}
       </section>`);
     const zoneTexte = UI.$('.wiki-consignation-texte', section);
     if (zoneTexte) zoneTexte.textContent = valeur.texte;      // tel quel : jamais interprété
@@ -398,7 +415,7 @@ Object.assign(Wiki, (() => {
       adresseDocument(nomDocument).then((adresse) => {
         UI.remplir(zoneDocument, adresse
           ? UI.html`<a class="wiki-lien-document" href="${adresse}" target="_blank" rel="noopener">${UI.icone('document')} ${nomDocument}</a>`
-          : UI.html`${nomDocument} <span class="badge attention">fichier introuvable</span>`);
+          : UI.html`${I18n.html('wiki.bloc_consignation.fichier_introuvable', { nomDocument })}`);
       });
     }
     return section;
@@ -407,27 +424,26 @@ Object.assign(Wiki, (() => {
   /** En tête de page : la consignation d'une machine, l'en-tête d'un savoir-faire (null pour les autres types). */
   function consignationDe(entite, contexte) {
     if (entite.type === 'machine') {
-      return blocConsignation(entite.sections.consignation, { id: 'wiki-consignation', titre: 'Consignation de '
-        + (faitDe(entite, 'Repère') || entite.titre), equipementId: entite.id, responsable: contexte.responsable });
+      return blocConsignation(entite.sections.consignation, { id: 'wiki-consignation', titre: I18n.t('wiki.consignation_de.consignation_repere', { repere: (faitDe(entite, I18n.t('commun.champ.repere')) || entite.titre) }), equipementId: entite.id, responsable: contexte.responsable });
     }
     if (entite.type !== 'savoir-faire') return null;
-    const entete = entite.sections.entete || { consignation: null, equipements: [], phrase: PHRASE_SAVOIR_FAIRE };
+    const entete = entite.sections.entete || { consignation: null, equipements: [], phrase: Wiki.PHRASE_SAVOIR_FAIRE };
     const rattachement = entite.sections.rattachement;
     // Savoir-faire commun à plusieurs machines (D116) : la liste de ces machines, comme pour un article.
     const commun = !(rattachement && rattachement.type === 'article') && entete.equipements.length > 1;
     if (rattachement && rattachement.type === 'machine' && !commun) {
       const fiche = Donnees.trouver('equipements', rattachement.id);
       const repere = (entete.equipements[0] && entete.equipements[0].repere) || texte(fiche && fiche.repere) || rattachement.titre;
-      return blocConsignation(entete.consignation, { id: 'wiki-entete', titre: 'Consignation de ' + repere,
-        phrase: entete.phrase || PHRASE_SAVOIR_FAIRE, equipementId: rattachement.id, responsable: contexte.responsable });
+      return blocConsignation(entete.consignation, { id: 'wiki-entete', titre: I18n.t('wiki.consignation_de.consignation_repere', { repere }),
+        phrase: entete.phrase || Wiki.PHRASE_SAVOIR_FAIRE, equipementId: rattachement.id, responsable: contexte.responsable });
     }
     return UI.element(UI.html`<section class="wiki-encadre wiki-consignation wiki-entete-sf" id="wiki-entete" aria-labelledby="wiki-entete-titre">
-      <h2 id="wiki-entete-titre">${UI.icone('alerte')} Consignation des équipements</h2>
-      <p class="wiki-entete-phrase"><b>${entete.phrase || PHRASE_SAVOIR_FAIRE}</b></p>
-      ${entete.equipements.length ? UI.html`<p>${commun ? 'Ce savoir-faire sert sur ces machines' : 'Cet article est monté sur ces machines'} ; la consignation de chacune est en tête de sa page :</p>
+      <h2 id="wiki-entete-titre">${UI.icone('alerte')} ${I18n.t('wiki.consignation_de.consignation_equipements')}</h2>
+      <p class="wiki-entete-phrase"><b>${entete.phrase || Wiki.PHRASE_SAVOIR_FAIRE}</b></p>
+      ${entete.equipements.length ? UI.html`<p>${commun ? I18n.t('wiki.consignation_de.savoir_faire_sert_machines') : I18n.t('wiki.consignation_de.article_monte_machines')}</p>
         <ul class="wiki-jumeaux wiki-entete-equipements">${entete.equipements.map((monte) => UI.html`<li><a class="wiki-lien-page"
           href="${outils().adresse(monte.equipementId)}">${monte.repere || monte.equipementId}</a></li>`)}</ul>`
-        : UI.html`<p class="aide">Aucune machine connue pour ce savoir-faire : voir la consignation de la machine sur sa fiche.</p>`}
+        : UI.html`<p class="aide">${I18n.t('wiki.consignation_de.aucune_machine_connue_savoir')}</p>`}
     </section>`);
   }
 
@@ -437,50 +453,54 @@ Object.assign(Wiki, (() => {
 
   /** Nom court dans le fil d'Ariane : repère d'une machine, référence d'un article, numéro d'un OT, sinon le titre. */
   function nomCourt(entite) {
-    if (entite.type === 'machine') return texte(faitDe(entite, 'Repère')) || entite.titre;
-    if (entite.type === 'article') return texte(faitDe(entite, 'Référence')) || entite.titre;
+    if (entite.type === 'machine') return texte(faitDe(entite, I18n.t('commun.champ.repere'))) || entite.titre;
+    if (entite.type === 'article') return texte(faitDe(entite, I18n.t('commun.champ.reference'))) || entite.titre;
     return entite.type === 'intervention' ? entite.id : entite.titre;
   }
 
   function sousTitre(entite) {
     const o = outils();
     const fait = (libelle) => entite.faits.find((element) => element.libelle === libelle) || { valeur: '', lien: null };
-    if (entite.type === 'machine') return texte(faitDe(entite, 'Lieu'));
+    if (entite.type === 'machine') return texte(faitDe(entite, I18n.t('wiki.fait.lieu')));
     if (entite.type === 'panne') {
-      return o.pluriel(faitDe(entite, 'Cas'), 'cas', 'cas') + ' sur ' + o.pluriel(faitDe(entite, 'Machines touchées'), 'machine', 'machines');
+      const cas = I18n.t('wiki.compte.cas', { n: faitDe(entite, I18n.t('wiki.fait.cas')) });
+      const machines = I18n.t('wiki.compte.machines', { n: faitDe(entite, I18n.t('wiki.fait.machines_touchees')) });
+      return I18n.t('wiki.sous_titre.cas_machines', { cas, machines });
     }
     if (entite.type === 'article') {
-      return o.joindre([texte(faitDe(entite, 'Référence')), texte(faitDe(entite, 'Emplacement')) ? 'rangé ' + faitDe(entite, 'Emplacement') : ''], ' · ');
+      return o.joindre([texte(faitDe(entite, I18n.t('commun.champ.reference'))), texte(faitDe(entite, I18n.t('wiki.fait.emplacement'))) ? I18n.t('wiki.article.range_emplacement', { emplacement: faitDe(entite, I18n.t('wiki.fait.emplacement')) }) : ''], ' · ');
     }
-    if (entite.type === 'technicien') return o.joindre([texte(faitDe(entite, 'Métier')), faitDe(entite, 'Actif') === false ? 'inactif' : ''], ' · ');
+    if (entite.type === 'technicien') return o.joindre([texte(faitDe(entite, I18n.t('wiki.fait.metier'))), faitDe(entite, I18n.t('wiki.fait.actif')) === false ? I18n.t('wiki.sous_titre.inactif') : ''], ' · ');
     if (entite.type === 'intervention') {
-      const date = ['Fin', 'Début', 'Prévu le', 'Créé le'].map((libelle) => texte(faitDe(entite, libelle))).find(Boolean);
-      const machine = fait('Machine');
+      const date = ['wiki.fait.fin', 'wiki.fait.debut', 'wiki.fait.prevu_le', 'wiki.fait.cree_le'].map((cle) => texte(faitDe(entite, I18n.t(cle))))
+        .find(Boolean);
+      const machine = fait(I18n.t('wiki.fait.machine'));
       return o.joindre([UI.dateFr(date), texte(machine.valeur) ? o.lienEntite(machine.lien, machine.valeur) : ''], ' · ');
     }
     const rattachement = entite.sections.rattachement;
-    return rattachement ? ['Rattaché à ', o.lienEntite(rattachement.lien, rattachement.titre)] : 'Sans rattachement';
+    return rattachement ? I18n.html('wiki.sous_titre.rattache_a', { lien: o.lienEntite(rattachement.lien, rattachement.titre) })
+      : I18n.t('wiki.sous_titre.sans_rattachement');
   }
 
   /** « Sous-page de <mère> » : lien vers la mère ; sans lien si elle est archivée (elle reste nommée). */
   function mereHtml(mere) {
     const ligne = Donnees.trouver('wiki_pages', mere.id);
     const archivee = Boolean(ligne) && texte(ligne.statut) === 'archivée';
-    return UI.html`<p class="wiki-mere" id="wiki-mere">Sous-page de ${archivee
-      ? UI.html`<b class="wiki-mere-archivee">${mere.titre}</b> <span class="badge attention">page archivée</span>`
-      : UI.html`<a class="wiki-lien-mere" href="${outils().adresse(mere.id)}">${mere.titre}</a>`}</p>`;
+    return UI.html`<p class="wiki-mere" id="wiki-mere">${I18n.html('wiki.mere.sous_page_de', { mere: archivee
+      ? I18n.html('wiki.mere.page_archivee', { mereTitre: mere.titre })
+      : UI.html`<a class="wiki-lien-mere" href="${outils().adresse(mere.id)}">${mere.titre}</a>` })}</p>`;
   }
 
   function actionsHtml(entite, contexte) {
     const actions = [];
     const bouton = (id, adresse, icone, libelle) => UI.html`<a class="btn btn-secondaire" id="${id}" href="${adresse}">${UI.icone(icone)}${libelle}</a>`;
-    if (entite.type === 'machine') actions.push(bouton('wiki-lien-fiche', '#/equipement/' + encodeURIComponent(entite.id), 'parc', 'Fiche de l\'équipement'));
+    if (entite.type === 'machine') actions.push(bouton('wiki-lien-fiche', '#/equipement/' + encodeURIComponent(entite.id), 'parc', I18n.t('wiki.actions.fiche_equipement')));
     if (entite.type === 'article' && contexte.profil !== 'demandeur') {
-      actions.push(bouton('wiki-lien-fiche', '#/magasin/article/' + encodeURIComponent(entite.id), 'magasin', 'Fiche de l\'article'));
+      actions.push(bouton('wiki-lien-fiche', '#/magasin/article/' + encodeURIComponent(entite.id), 'magasin', I18n.t('wiki.titre_fiche.fiche_article')));
     }
-    if (entite.type === 'intervention' && entite.sections.ficheOT) actions.push(bouton('wiki-fiche-ot', entite.sections.ficheOT, 'ordres', 'Ouvrir la fiche OT'));
+    if (entite.type === 'intervention' && entite.sections.ficheOT) actions.push(bouton('wiki-fiche-ot', entite.sections.ficheOT, 'ordres', I18n.t('wiki.actions.ouvrir_fiche_ot')));
     if (contexte.responsable && TYPE_TEXTE[entite.type]) {
-      actions.push(bouton('wiki-modifier', '#/wiki-ecrire/' + encodeURIComponent(entite.id), 'cle', 'Modifier'));
+      actions.push(bouton('wiki-modifier', '#/wiki-ecrire/' + encodeURIComponent(entite.id), 'cle', I18n.t('commun.bouton.modifier')));
     }
     return actions.length ? UI.html`<div class="actions wiki-actions">${actions}</div>` : '';
   }
@@ -502,7 +522,7 @@ Object.assign(Wiki, (() => {
   /** Ligne des techniciens d'une intervention (précisions en tête) : un lien par technicien, en texte sans lien. */
   function ligneTechniciens(techniciens) {
     const o = outils();
-    return UI.html`<dt data-fait="Technicien" data-section="techniciens">${techniciens.length > 1 ? 'Techniciens' : 'Technicien'}</dt>
+    return UI.html`<dt data-fait="Technicien" data-section="techniciens">${I18n.t('wiki.ligne_techniciens.techniciens', { n: techniciens.length })}</dt>
       <dd>${o.joindre(techniciens.map((technicien) => o.lienEntite(technicien.lien, technicien.nom)), ', ')}</dd>`;
   }
 
@@ -510,19 +530,19 @@ Object.assign(Wiki, (() => {
   function ficheHtml(entite) {
     const o = outils();
     const techniciens = entite.type === 'intervention' ? entite.sections.techniciens || [] : [];
-    const deTechniciens = (fait) => techniciens.length > 0 && fait.libelle === 'Technicien';
+    const deTechniciens = (fait) => techniciens.length > 0 && fait.libelle === I18n.t('commun.champ.technicien');
     const lignes = entite.faits.map((fait) => ({ fait, valeur: valeurFait(fait) })).filter((ligne) => ligne.valeur !== null || deTechniciens(ligne.fait))
       .map(({ fait, valeur }) => (deTechniciens(fait) ? ligneTechniciens(techniciens)
         : UI.html`<dt data-fait="${fait.libelle}">${fait.libelle}</dt><dd>${fait.lien ? o.lienEntite(fait.lien, valeur)
-          : (fait.libelle === 'État du stock' ? UI.html`<span class="badge ${ETATS_STOCK[valeur] || 'neutre'}">${valeur}</span>` : valeur)}</dd>`));
+          : (fait.libelle === I18n.t('wiki.fait.etat_stock') ? UI.html`<span class="badge ${ETATS_STOCK[valeur] || 'neutre'}">${o.libelleEtatStock(valeur)}</span>` : valeur)}</dd>`));
     const sousEnsembles = entite.type === 'machine' ? entite.sections.sousEnsembles || [] : [];
     if (sousEnsembles.length) {
-      const rang = entite.faits.filter((fait) => valeurFait(fait) !== null).findIndex((fait) => fait.libelle === 'Interventions');
-      lignes.splice(rang < 0 ? lignes.length : rang, 0, UI.html`<dt data-fait="Sous-ensembles" data-section="sousEnsembles">Sous-ensembles</dt>
+      const rang = entite.faits.filter((fait) => valeurFait(fait) !== null).findIndex((fait) => fait.libelle === I18n.t('wiki.fait.interventions'));
+      lignes.splice(rang < 0 ? lignes.length : rang, 0, UI.html`<dt data-fait="Sous-ensembles" data-section="sousEnsembles">${I18n.t('wiki.fiche.sous_ensembles')}</dt>
         <dd>${o.joindre(sousEnsembles.map((machine) => o.lienMachine(machine)), ', ')}</dd>`);
     }
     return UI.html`<aside class="bento-tuile wiki-fiche" id="wiki-faits" aria-labelledby="wiki-faits-titre">
-      <h2 id="wiki-faits-titre" class="wiki-fiche-titre">${o.puce(entite.type)}<span class="visuellement-cache">${FICHES[entite.type]}</span></h2>
+      <h2 id="wiki-faits-titre" class="wiki-fiche-titre">${o.puce(entite.type)}<span class="visuellement-cache">${titreFiche(entite.type)}</span></h2>
       <dl class="valeurs wiki-fiche-faits">${lignes}</dl>
     </aside>`;
   }
@@ -532,10 +552,10 @@ Object.assign(Wiki, (() => {
     const vues = new Set();
     const propositions = entite.enAttente.filter((proposition) => !vues.has(proposition.entreeId) && vues.add(proposition.entreeId));
     return UI.element(UI.html`<section class="wiki-section" id="wiki-en-attente" aria-labelledby="wiki-titre-attente">
-      <h2 id="wiki-titre-attente">Propositions en attente sur cette page <span class="wiki-compte">${propositions.length}</span></h2>
-      <p class="aide">Propositions de l'IA pas encore validées : vous seul les voyez, la page montre l'état validé.</p>
+      <h2 id="wiki-titre-attente">${I18n.html('wiki.bloc_en_attente.propositions_attente_page', { nbPropositions: propositions.length })}</h2>
+      <p class="aide">${I18n.t('wiki.bloc_en_attente.propositions_ia_pas_encore')}</p>
       <ul class="wiki-lignes wiki-attente">${propositions.map((proposition) => UI.html`<li data-entree="${proposition.entreeId}">
-        <div class="wiki-ligne-tete"><a class="wiki-lien-proposition" href="#/wiki-journal?entree=${encodeURIComponent(proposition.entreeId)}">Proposition ${proposition.entreeId}</a>
+        <div class="wiki-ligne-tete"><a class="wiki-lien-proposition" href="#/wiki-journal?entree=${encodeURIComponent(proposition.entreeId)}">${I18n.t('wiki.bloc_en_attente.proposition_entree_id', { entreeId: proposition.entreeId })}</a>
           ${proposition.ot ? o.lienEntite(proposition.ot, proposition.ot) : ''}</div></li>`)}</ul>
     </section>`);
   }
@@ -552,7 +572,7 @@ Object.assign(Wiki, (() => {
       telephone: UI.estTelephone(), refs: creerReferences(entite), resoudre: resolveur(reglages.profil) };
     const machine = entite.type === 'machine' ? entite.id : '';
     const mere = entite.type === 'savoir-faire' && entite.sections.mere ? entite.sections.mere.id : '';
-    App.definirTitre('Wiki ' + nomCourt(entite));
+    App.definirTitre(I18n.t('wiki.rendre_entite.wiki_nom_court', { nomCourt: nomCourt(entite) }));
     UI.remplir(conteneur, UI.html`<div class="wiki wiki-page wiki-entite" data-page="${entite.id}" data-type="${entite.type}"
         data-equipement="${machine}" data-mere="${mere}">
       ${enteteHtml(entite, contexte)}

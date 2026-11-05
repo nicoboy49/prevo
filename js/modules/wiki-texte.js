@@ -53,7 +53,7 @@ Object.assign(Wiki, (() => {
 
   const SEUILS = Wiki.SEUILS;
   const TYPES = Object.keys(Wiki.RUBRIQUES);
-  const PARTICULARITES = Wiki.comparable('Particularités par machine');   // rubrique des savoir-faire (D116)
+  const PARTICULARITES = Wiki.comparable(Wiki.RUBRIQUES['savoir-faire'][4]);   // « Particularités par machine » (D116)
   const MOTIF_RUBRIQUE = /^##\s+(.+?)\s*$/;
   const MOTIF_PHRASE = /^-\s+(.*)$/;
   const MOTIF_CITATION = /\[(OT-\d{4}-\d{4,})\]/g;
@@ -71,22 +71,21 @@ Object.assign(Wiki, (() => {
   const MOTIF_ANNEE = new RegExp('(?:^| )(?:19|20)\\d{2}(?= |$)(?! (?:' + UNITES + ')(?: |$))');
   const MOTIF_DATE_CHIFFRES = /(?:^|[^\d/.-])(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{2,4}|\d{2}[/.]\d{2})(?![\d/.])/;
   const MOTIF_NUMERO_OT = /\bOT-\d{4}-\d{4,}\b/g;
-  const MESSAGE_SECURITE = { ia: Wiki.MESSAGE_SECURITE_IA, manuel: Wiki.MESSAGE_SECURITE_MAIN };
+  const messageSecurite = (manuel) => (manuel ? Wiki.MESSAGE_SECURITE_MAIN : Wiki.MESSAGE_SECURITE_IA);   // lu à l'appel
   // Même geste (D116) : savoir-faire envoyés avec un OT parce que leur titre (le geste et l'organe) est dans son texte.
   const MEME_GESTE = Object.freeze({ motsMin: 2, partMin: 0.6, pagesMax: 2 });
   // Où un nombre d'une proposition de l'IA a été cherché, dit dans son refus (texte de référence, précisions en tête).
-  const SOURCE_DES_NOMBRES = {
-    modifiee: 'de l\'OT intégré et du texte d\'avant de cette page',
-    creee: 'de l\'OT intégré, seule source des nombres d\'une page créée',
-    sousPage: 'de l\'OT intégré, du texte et du titre de sa page mère',
-  };
+  function sourceDesNombres(page, titreMere) {
+    if (page.action === 'modifier') return I18n.t('wiki.source_des_nombres.ot_integre_texte_avant');
+    return titreMere ? I18n.t('wiki.source_des_nombres.ot_integre_texte_titre') : I18n.t('wiki.source_des_nombres.ot_integre_seule_source');
+  }
   // Refus de la création d'un texte ancré (§20.12) : il existe toujours, sur la page de sa machine ou de son article.
-  const TEXTE_DE_SA_PAGE = {
-    'équipement': 'une page d\'équipement ne se crée pas : le texte d\'une machine s\'écrit sur sa page, qui existe toujours '
-      + '(seul un savoir-faire se crée).',
-    'composant': 'une page de composant ne se crée pas : le texte d\'un article s\'écrit sur sa page, qui existe toujours '
-      + '(seul un savoir-faire se crée).',
-  };
+  function texteDeSaPage(type, nom) {
+    if (type === 'équipement') {
+      return I18n.t('wiki.texte_de_sa_page.page_equipement_cree_pas', { nom });
+    }
+    return I18n.t('wiki.texte_de_sa_page.page_composant_cree_pas', { nom });
+  }
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -98,12 +97,12 @@ Object.assign(Wiki, (() => {
 
   function court(valeur) {
     const propre = texte(valeur).replace(/\s+/g, ' ');
-    return propre.length > 70 ? propre.slice(0, 69) + '…' : propre;
+    return propre.length > 70 ? I18n.t('wiki.court.coupe', { debut: propre.slice(0, 69) }) : propre;
   }
 
   /** Refus d'un type hors de Wiki.RUBRIQUES (« mode », retiré par la refonte 2 : une panne est une page calculée). */
   function typeInconnu(type) {
-    return 'type « ' + type + ' » inconnu (' + TYPES.join(', ') + ').';
+    return I18n.t('wiki.type_inconnu.type_inconnu', { type, types: TYPES.join(', ') });
   }
 
   // ===========================================================================================
@@ -161,8 +160,8 @@ Object.assign(Wiki, (() => {
         courante.phrases.push({ texte: contenu, propre: propre(contenu), ot: citationsDe(contenu), liens: liensDe(contenu) });
         return;
       }
-      erreurs.push({ ligne: rang + 1, message: phrase ? 'phrase écrite avant toute rubrique'
-        : 'ligne hors de la forme (« ## Rubrique » ou « - phrase [OT-…] »)' });
+      erreurs.push({ ligne: rang + 1, message: phrase ? I18n.t('wiki.lire_texte.phrase_ecrite_avant_toute')
+        : I18n.t('wiki.lire_texte.ligne_hors_forme_rubrique') });
     });
     return { rubriques, erreurs };
   }
@@ -326,7 +325,7 @@ Object.assign(Wiki, (() => {
   function controlerDates(phrase, nom, raisons) {
     const forme = Wiki.comparable(sansReferences(phrase.texte));
     if (MOTIF_MOIS.test(forme) || MOTIF_ANNEE.test(forme) || MOTIF_DATE_CHIFFRES.test(sansReferences(phrase.texte))) {
-      raisons.push(nom + ' : aucune date dans le wiki (les OT cités portent les leurs) — « ' + court(phrase.propre) + ' ».');
+      raisons.push(I18n.t('wiki.controler_dates.aucune_date_wiki_ot', { nom, court: court(phrase.propre) }));
     }
   }
 
@@ -354,26 +353,24 @@ Object.assign(Wiki, (() => {
     const titre = texte(page.titre);
     const nomMere = '« ' + texte(mere.titre) + ' »';
     if (!ctx.envoyeeDe.has(Wiki.comparable(mere.titre))) {
-      raisons.push(nom + ' : sa page mère ' + nomMere + ' n\'a pas été envoyée (une sous-page se crée sous une page reçue).');
+      raisons.push(I18n.t('wiki.controler_sous_page.page_mere_pas_ete', { nom, nomMere }));
       return;
     }
     if (texte(mere.mere)) {
-      raisons.push(nom + ' : sa page mère ' + nomMere + ' est elle-même une sous-page (de « ' + texte(mere.mere)
-        + ' ») : un seul niveau, une sous-page ne se découpe pas.');
+      raisons.push(I18n.t('wiki.controler_sous_page.page_mere_meme_sous', { nom, nomMere, mere: texte(mere.mere) }));
     }
     if (!ctx.manuel) {
       const modifiee = ctx.modifiees.get(Wiki.comparable(mere.titre));
-      const renvoi = '[[' + titre + ']] qui cite les OT des phrases déplacées';
+      const renvoi = I18n.t('wiki.controler_sous_page.cite_ot_phrases_deplacees', { titre });
       if (!modifiee) {
-        raisons.push(nom + ' : sa page mère ' + nomMere + ' n\'est pas modifiée par la proposition (elle garde une phrase de '
-          + 'renvoi ' + renvoi + ').');
+        raisons.push(I18n.t('wiki.controler_sous_page.page_mere_pas_modifiee', { nom, nomMere, renvoi }));
       } else if (!liensDe(modifiee.texte).some((lien) => Wiki.comparable(lien) === Wiki.comparable(titre))) {
-        raisons.push(nom + ' : sa page mère ' + nomMere + ' ne renvoie pas à elle (phrase de renvoi ' + renvoi + ' attendue).');
+        raisons.push(I18n.t('wiki.controler_sous_page.page_mere_renvoie_pas', { nom, nomMere, renvoi }));
       }
     }
     const prefixe = prefixeSousPage(mere);
     if (!suitLePrefixe(titre, prefixe)) {
-      raisons.push(nom + ' : le titre d\'une sous-page commence par « ' + prefixe + ' — » suivi de son sujet.');
+      raisons.push(I18n.t('wiki.controler_sous_page.titre_sous_page_commence', { nom, prefixe }));
     }
   }
 
@@ -388,22 +385,24 @@ Object.assign(Wiki, (() => {
       const limite = limites.rubriques[rubrique];
       const mesure = mesures.get(Wiki.comparable(rubrique)) || { phrases: 0, mots: 0 };
       if (mesure.phrases > limite.phrases) {
-        raisons.push(nom + ' : « ' + rubrique + ' » : ' + mesure.phrases + ' phrases, ' + limite.phrases + ' au plus.');
+        raisons.push(I18n.t('wiki.controler_longueurs.phrases_plus', { nom, rubrique, n: mesure.phrases, limite: limite.phrases }));
       }
       if (limite.mots !== null && mesure.mots > limite.mots) {
-        raisons.push(nom + ' : « ' + rubrique + ' » : ' + mesure.mots + ' mots, ' + limite.mots + ' au plus (citations non comptées).');
+        raisons.push(I18n.t('wiki.controler_longueurs.mots_plus_citations_non', { nom, rubrique, n: mesure.mots, limite: limite.mots }));
       }
     });
     if (!limites.page) return;
-    const decoupe = sousPage ? '' : 'au-delà, la page se découpe en sous-pages';
     const mesure = mesureDe(lu);
-    if (mesure.phrases > limites.page.phrases) {
-      raisons.push(nom + ' : ' + mesure.phrases + ' phrases, ' + limites.page.phrases + ' au plus'
-        + (decoupe ? ' (' + decoupe + ')' : '') + '.');
+    const phrases = mesure.phrases;
+    const mots = mesure.mots;
+    const plafond = limites.page;
+    if (phrases > plafond.phrases) {
+      raisons.push(sousPage ? I18n.t('wiki.controler_longueurs.phrases_plus_sous_page', { nom, n: phrases, limite: plafond.phrases })
+        : I18n.t('wiki.controler_longueurs.phrases_plus_dela_page', { nom, n: phrases, limite: plafond.phrases }));
     }
-    if (mesure.mots > limites.page.mots) {
-      raisons.push(nom + ' : ' + mesure.mots + ' mots, ' + limites.page.mots + ' au plus (rubriques comprises, citations non comptées'
-        + (decoupe ? ' ; ' + decoupe : '') + ').');
+    if (mots > plafond.mots) {
+      raisons.push(sousPage ? I18n.t('wiki.controler_longueurs.mots_plus_rubriques_comprises', { nom, n: mots, limite: plafond.mots })
+        : I18n.t('wiki.controler_longueurs.mots_plus_dela_page', { nom, n: mots, limite: plafond.mots }));
     }
   }
 
@@ -432,11 +431,11 @@ Object.assign(Wiki, (() => {
     const pages = (proposition && proposition.pages) || [];
     const contradictions = (proposition && proposition.contradictions) || [];
     if (proposition && proposition.rien && (pages.length || contradictions.length)) {
-      raisons.push('« Rien à ajouter » avec des pages ou des contradictions : la réponse se contredit.');
+      raisons.push(I18n.t('wiki.controler_proposition.rien_ajouter_pages_contradictions'));
     }
     const creees = pages.filter((page) => page.action === 'creer');
     if (creees.length > SEUILS.pagesCreeesMax) {
-      raisons.push('Proposition : ' + creees.length + ' pages créées, ' + SEUILS.pagesCreeesMax + ' au plus par OT.');
+      raisons.push(I18n.t('wiki.controler_proposition.proposition_pages_creees_plus', { n: creees.length, maximum: SEUILS.pagesCreeesMax }));
     }
     const connus = (ctx.catalogue || []).concat(envoyees).map((page) => texte(page.titre));
     const titresExistants = new Set(connus.map(Wiki.comparable));
@@ -453,27 +452,28 @@ Object.assign(Wiki, (() => {
       sources: ctx.sources || {}, anterieure: Boolean(ctx.anterieure),
     }, raisons));
     contradictions.forEach((contradiction) => {
-      const nom = 'Contradiction sur la page « ' + texte(contradiction.page) + ' »';
+      const nom = I18n.t('wiki.controler_proposition.contradiction_page', { page: texte(contradiction.page) });
       const envoyee = envoyeeDe.get(Wiki.comparable(contradiction.page));
-      if (!envoyee) { raisons.push(nom + ' : cette page n\'a pas été envoyée.'); return; }
+      if (!envoyee) { raisons.push(I18n.t('wiki.controler_proposition.page_pas_ete_envoyee', { nom })); return; }
       const existantes = new Set(phrasesDe(lireTexte(envoyee.texte)).map((phrase) => identitePhrase(phrase.texte)));
       if (!existantes.has(identitePhrase(contradiction.phrase))) {
-        raisons.push(nom + ' : la phrase contredite n\'existe pas sur la page — « ' + court(contradiction.phrase) + ' ».');
+        raisons.push(I18n.t('wiki.controler_proposition.phrase_contredite_existe_pas', { nom, court: court(contradiction.phrase) }));
       }
       const ot = ((contradiction.ot) || []).map(texte).filter(Boolean);
       if (!otIngere || !ot.length || ot.some((id) => id !== otIngere.id)) {
-        raisons.push(nom + ' : elle doit citer l\'OT ingéré' + (otIngere ? ' (' + otIngere.id + ')' : '') + ', et lui seul.');
+        raisons.push(otIngere ? I18n.t('wiki.controler_proposition.doit_citer_ot_ingere', { nom, otIngereId: otIngere.id })
+          : I18n.t('wiki.controler_proposition.doit_citer_ot_ingere_sans_numero', { nom }));
       }
-      if (!texte(contradiction.observation)) raisons.push(nom + ' : l\'observation est vide.');
+      if (!texte(contradiction.observation)) raisons.push(I18n.t('wiki.controler_proposition.observation_vide', { nom }));
       const termes = Wiki.termesDeSecurite(contradiction.observation);
-      if (termes.length) raisons.push(nom + ' : ' + MESSAGE_SECURITE[manuel ? 'manuel' : 'ia'] + ' (« ' + termes.join(' », « ') + ' »).');
+      if (termes.length) raisons.push(I18n.t('wiki.controler_page.securite', { nom, message: messageSecurite(manuel), termes: termes.join(' », « ') }));
     });
     return { ok: raisons.length === 0, raisons };
   }
 
   function controlerPage(page, ctx, raisons) {
     const titre = texte(page.titre);
-    const nom = 'Page « ' + (titre || '(sans titre)') + ' »';
+    const nom = I18n.t('wiki.controler_page.nom_page', { titre: (titre || I18n.t('wiki.controler_page.sans_titre')) });
     const envoyee = ctx.envoyeeDe.get(Wiki.comparable(titre));
     let type = texte(page.type);
     let avant = '';
@@ -482,7 +482,7 @@ Object.assign(Wiki, (() => {
     let sousPage = false;
     if (page.action === 'modifier') {
       if (!envoyee) {
-        raisons.push(nom + ' : cette page n\'a pas été envoyée, elle ne peut pas être modifiée.');
+        raisons.push(I18n.t('wiki.controler_page.page_pas_ete_envoyee', { nom }));
         return;
       }
       type = texte(envoyee.type);
@@ -498,8 +498,7 @@ Object.assign(Wiki, (() => {
       // sous-pages (§20.12) : le texte d'une machine ou d'un article est celui de sa page, qui existe toujours.
       sousPage = Boolean(visee && texte(visee.type) === type);
       if (type !== 'savoir-faire') {
-        raisons.push(nom + ' : ' + (sousPage ? 'une sous-page n\'existe que pour un savoir-faire (seul un savoir-faire se crée).'
-          : TEXTE_DE_SA_PAGE[type]));
+        raisons.push(sousPage ? I18n.t('wiki.controler_page.sous_page_existe_savoir', { nom }) : texteDeSaPage(type, nom));
         return;
       }
       if (sousPage) {
@@ -507,16 +506,15 @@ Object.assign(Wiki, (() => {
         if (rattachement) { origine = rattachement.texte || ''; titreMere = texte(rattachement.titre); }
       }
       if (!sousPage && !(rattachement && ['équipement', 'composant'].includes(rattachement.type))) {
-        raisons.push(nom + ' : un savoir-faire se rattache à une page envoyée (équipement ou composant).');
+        raisons.push(I18n.t('wiki.controler_page.savoir_faire_rattache_page', { nom }));
       } else if (!sousPage && texte(rattachement.mere)) {
         // Rattaché à une sous-page, il perdrait l'ancrage de l'équipement : ni envoyé avec ses OT, ni consignation.
-        raisons.push(nom + ' : un savoir-faire se rattache à la page mère « ' + texte(rattachement.mere)
-          + ' », jamais à une sous-page.');
+        raisons.push(I18n.t('wiki.controler_page.savoir_faire_rattache_mere', { nom, mere: texte(rattachement.mere) }));
       }
       if (ctx.titresExistants.has(Wiki.comparable(titre))) {
-        raisons.push(nom + ' : une page de ce titre existe déjà.');
+        raisons.push(I18n.t('wiki.controler_page.page_titre_existe_deja', { nom }));
       } else if (ctx.formes.has(formeDuTitre(titre))) {
-        raisons.push(nom + ' : titre trop proche de « ' + ctx.formes.get(formeDuTitre(titre)) + ' ».');
+        raisons.push(I18n.t('wiki.controler_page.titre_trop_proche', { nom, titre: ctx.formes.get(formeDuTitre(titre)) }));
       } else if (!sousPage) {
         // Même geste (D116) : l'organe d'un savoir-faire connu (son titre sans son premier mot, 2 mots au moins) est
         // tout entier dans le titre créé (« Changer une garniture mécanique » face à « Remplacer une garniture mécanique »).
@@ -526,13 +524,13 @@ Object.assign(Wiki, (() => {
           return organe.length >= 2 && organe.every((mot) => mots.has(mot));
         });
         if (meme) {
-          raisons.push(nom + ' : même geste que le savoir-faire « ' + meme + ' » (un seul par geste) : '
-            + (ctx.envoyeeDe.has(Wiki.comparable(meme)) ? 'complète-le' : 'mets un lien [[' + meme + ']]') + ' au lieu d\'en créer un.');
+          raisons.push(ctx.envoyeeDe.has(Wiki.comparable(meme)) ? I18n.t('wiki.controler_page.meme_geste_completer', { nom, meme })
+            : I18n.t('wiki.controler_page.meme_geste_lien', { nom, meme }));
         }
       }
       ctx.formes.set(formeDuTitre(titre), titre);
     } else {
-      raisons.push(nom + ' : action « ' + texte(page.action) + ' » inconnue.');
+      raisons.push(I18n.t('wiki.controler_page.action_inconnue', { nom, action: texte(page.action) }));
       return;
     }
     const lu = lireTexte(page.texte);
@@ -540,19 +538,19 @@ Object.assign(Wiki, (() => {
     const rubriquesDuType = (Wiki.RUBRIQUES[type] || []).map(Wiki.comparable);
     lu.rubriques.forEach((rubrique) => {
       if (!rubriquesDuType.includes(Wiki.comparable(rubrique.nom))) {
-        raisons.push(nom + ' : rubrique « ' + rubrique.nom + ' » inconnue pour une page ' + type + '.');
+        raisons.push(I18n.t('wiki.controler_page.rubrique_inconnue_page', { nom, rubriqueNom: rubrique.nom, type }));
       }
     });
     const phrases = phrasesDe(lu);
-    if (!phrases.length) raisons.push(nom + ' : aucune phrase.');
+    if (!phrases.length) raisons.push(I18n.t('wiki.controler_page.aucune_phrase', { nom }));
     controlerLongueurs(lu, type, nom, sousPage, raisons);
     phrases.forEach((phrase) => {
-      if (!phrase.propre) raisons.push(nom + ' : phrase vide (réduite à ses citations).');
-      if (!phrase.ot.length) raisons.push(nom + ' : phrase sans OT cité — « ' + court(phrase.propre) + ' ».');
+      if (!phrase.propre) raisons.push(I18n.t('wiki.controler_page.phrase_vide_reduite_citations', { nom }));
+      if (!phrase.ot.length) raisons.push(I18n.t('wiki.controler_page.phrase_sans_ot_cite', { nom, court: court(phrase.propre) }));
       const horsListe = phrase.ot.filter((id) => !ctx.permis.has(id));
-      if (horsListe.length) raisons.push(nom + ' : OT cité hors des OT permis : ' + horsListe.join(', ') + '.');
+      if (horsListe.length) raisons.push(I18n.t('wiki.controler_page.ot_cite_hors_ot', { nom, ot: horsListe.join(', ') }));
       phrase.liens.filter((lien) => !ctx.titresConnus.has(Wiki.comparable(lien)))
-        .forEach((lien) => raisons.push(nom + ' : lien vers une page inconnue « ' + lien + ' ».'));
+        .forEach((lien) => raisons.push(I18n.t('wiki.controler_page.lien_vers_page_inconnue', { nom, lien })));
     });
     // « Particularités par machine » (D116) : chaque phrase relie sa machine ([[repère — nom]]), sans quoi le savoir-faire
     // n'est ni envoyé avec les OT de cette machine ni listé sur sa page. Pour l'IA seulement.
@@ -561,8 +559,7 @@ Object.assign(Wiki, (() => {
         rubrique.phrases.filter((phrase) => !phrase.liens.some((lien) => {
           const cible = ctx.connuesDe.get(Wiki.comparable(lien));
           return cible && texte(cible.type) === 'équipement';
-        })).forEach((phrase) => raisons.push(nom + ' : « Particularités par machine » : phrase sans lien [[…]] vers sa '
-          + 'machine (titre exact du catalogue) — « ' + court(phrase.propre) + ' ».'));
+        })).forEach((phrase) => raisons.push(I18n.t('wiki.controler_page.particularites_machine_phrase_sans', { nom, court: court(phrase.propre) })));
       });
     }
     // Non-retrait (D106) : seulement pour l'IA ; le responsable peut retirer. Sous-page créée : ses phrases se comparent
@@ -577,11 +574,11 @@ Object.assign(Wiki, (() => {
         filtrerRubriques(page.texte, horsReecrites));
       const anciennes = nonRetrait(filtrerRubriques(avant, (rubrique) => !rubriquesDuType.includes(rubrique)), page.texte);
       const perdus = sansDoublon(gardees.perdus.concat(anciennes.perdus));
-      if (perdus.length) raisons.push(nom + ' : OT cité retiré de la page : ' + perdus.join(', ') + '.');
+      if (perdus.length) raisons.push(I18n.t('wiki.controler_page.ot_cite_retire_page', { nom, ot: perdus.join(', ') }));
       gardees.retirees.concat(anciennes.retirees)
-        .forEach((phrase) => raisons.push(nom + ' : phrase retirée — « ' + court(phrase.propre) + ' ».'));
+        .forEach((phrase) => raisons.push(I18n.t('wiki.controler_page.phrase_retiree', { nom, court: court(phrase.propre) })));
       gardees.manquants.concat(anciennes.manquants).forEach(({ ancienne, ot }) =>
-        raisons.push(nom + ' : OT retiré de la phrase « ' + court(ancienne.propre) + ' » : ' + ot.join(', ') + '.'));
+        raisons.push(I18n.t('wiki.controler_page.ot_retire_phrase', { nom, court: court(ancienne.propre), ot: ot.join(', ') })));
     }
     // Phrases à contrôler en entier : nouvelles et reprises (une phrase identique à avant a déjà été contrôlée), et toutes
     // celles d'une rubrique réécrite (D117).
@@ -592,28 +589,27 @@ Object.assign(Wiki, (() => {
       : (ctx.otIngere && ctx.otIngere.sourceTexte) || '') + '\n' + origine + '\n' + titreMere;
     const nombresConnus = new Set(nombresDe(sansReferences(reference)));
     // Le refus dit où le nombre a été cherché : la raison d'une relance doit permettre de corriger (T140).
-    const source = ctx.manuel ? null : SOURCE_DES_NOMBRES[page.action === 'modifier' ? 'modifiee' : (titreMere ? 'sousPage' : 'creee')];
+    const source = ctx.manuel ? null : sourceDesNombres(page, titreMere);
     const nombresTitre = page.action === 'creer' ? nombresDe(sansReferences(titre)) : [];
     nombresTitre.filter((nombre) => !nombresConnus.has(nombre))
-      .forEach((nombre) => raisons.push(nom + ' : nombre « ' + nombre + ' » du titre absent ' + (source || 'des OT') + '.'));
+      .forEach((nombre) => raisons.push(I18n.t('wiki.controler_page.nombre_titre_absent', { nom, nombre, source: (source || I18n.t('wiki.controler_page.ot')) })));
     aControler.forEach((phrase) => {
       nombresDe(sansReferences(phrase.texte)).filter((nombre) => !nombresConnus.has(nombre)).forEach((nombre) =>
-        raisons.push(nom + ' : nombre « ' + nombre + ' » absent ' + (source || 'des OT cités') + ' — « ' + court(phrase.propre) + ' ».'));
+        raisons.push(I18n.t('wiki.controler_page.nombre_absent', { nom, nombre, source: (source || I18n.t('wiki.controler_page.ot_cites')), court: court(phrase.propre) })));
       if (MOTIF_COMPTAGE.test(Wiki.comparable(sansReferences(phrase.texte)))) {
-        raisons.push(nom + ' : comptage interdit (les nombres de cas sont calculés par Prévo) — « ' + court(phrase.propre) + ' ».');
+        raisons.push(I18n.t('wiki.controler_page.comptage_interdit_nombres_cas', { nom, court: court(phrase.propre) }));
       }
       controlerDates(phrase, nom, raisons);
       if (ctx.anterieure && ctx.otIngere && phrase.ot.includes(ctx.otIngere.id)
         && plusRecent(phrase.ot, ctx.dates) === ctx.otIngere.id) {
         const mots = contientUnMot(sansReferences(phrase.texte), Wiki.VOCABULAIRE_NOUVEAUTE);
         if (mots.length) {
-          raisons.push(nom + ' : intervention antérieure à des faits déjà intégrés, elle ne peut pas être présentée comme '
-            + 'la plus récente (« ' + mots.join(' », « ') + ' ») — « ' + court(phrase.propre) + ' ».');
+          raisons.push(I18n.t('wiki.controler_page.intervention_anterieure_faits_deja', { nom, mots: mots.join(' », « '), court: court(phrase.propre) }));
         }
       }
     });
     const termes = Wiki.termesDeSecurite(titre + '\n' + (page.texte || ''));
-    if (termes.length) raisons.push(nom + ' : ' + MESSAGE_SECURITE[ctx.manuel ? 'manuel' : 'ia'] + ' (« ' + termes.join(' », « ') + ' »).');
+    if (termes.length) raisons.push(I18n.t('wiki.controler_page.securite', { nom, message: messageSecurite(ctx.manuel), termes: termes.join(' », « ') }));
   }
 
   return {

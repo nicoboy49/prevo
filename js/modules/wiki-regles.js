@@ -86,9 +86,13 @@ const Wiki = (() => {
     'dernier', 'derniere', 'derniers', 'dernieres', 'nouvelle cause', 'nouveau remede',
   ]);
 
-  const MESSAGE_SECURITE_IA = 'L\'IA ne rédige jamais de consigne de sécurité : voir la consignation de l\'équipement';
-  const MESSAGE_SECURITE_MAIN = 'Le wiki ne contient pas de consigne de sécurité : elle se saisit dans la '
-    + 'consignation de l\'équipement';
+  // Raison du refus d'un texte qui touche à la sécurité (IA, à la main) : lue à l'affichage, jamais figée.
+  function messageSecuriteIa() {
+    return I18n.t('wiki.message_securite_ia.ia_redige_jamais_consigne');
+  }
+  function messageSecuriteMain() {
+    return I18n.t('wiki.message_securite_main.wiki_contient_pas_consigne');
+  }
 
   // Citation d'un OT dans une phrase : « [OT-2026-0042] ».
   const MOTIF_CITATION = /\[(OT-\d{4}-\d{4,})\]/g;
@@ -142,7 +146,9 @@ const Wiki = (() => {
   }
 
   return {
-    SEUILS, RUBRIQUES, RUBRIQUES_REECRITES, LIMITES, VOCABULAIRE_SECURITE, VOCABULAIRE_NOUVEAUTE, MESSAGE_SECURITE_IA, MESSAGE_SECURITE_MAIN,
+    SEUILS, RUBRIQUES, RUBRIQUES_REECRITES, LIMITES, VOCABULAIRE_SECURITE, VOCABULAIRE_NOUVEAUTE,
+    get MESSAGE_SECURITE_IA() { return messageSecuriteIa(); },
+    get MESSAGE_SECURITE_MAIN() { return messageSecuriteMain(); },
     comparable, citations, sansCitations, nombreDeMots, termesDeSecurite,
   };
 })();
@@ -163,7 +169,7 @@ const Wiki = (() => {
 //   espaces ni casse (règle de CausesFrequentes, reprise ici : elle y est interne).
 // Les tris départagent les égalités par l'ordre des caractères (reproductible par tests/calcul_wiki.py).
 
-Object.assign(Wiki, (() => {
+Object.defineProperties(Wiki, Object.getOwnPropertyDescriptors((() => {   // garde les accesseurs get (Object.assign les figerait)
 
   const SEUILS = Wiki.SEUILS;
   const STATUTS_CLOTURES = ['Clôturé techniquement', 'Clôturé administrativement'];
@@ -370,7 +376,7 @@ Object.assign(Wiki, (() => {
   function extrait(valeur) {
     const caracteres = Array.from(texte(valeur).replace(/\s+/g, ' '));
     if (caracteres.length <= EXTRAIT_MAX) return caracteres.join('');
-    return caracteres.slice(0, EXTRAIT_MAX - 1).join('').trimEnd() + '…';
+    return I18n.t('wiki.extrait.coupe', { debut: caracteres.slice(0, EXTRAIT_MAX - 1).join('').trimEnd() });
   }
 
   /** Les `dernieres` OT clôturés les plus récents (date de fin, puis identifiant ; sans date de fin : en dernier). */
@@ -464,5 +470,10 @@ Object.assign(Wiki, (() => {
       || comparer(a.equipementId, b.equipementId));
   }
 
-  return { pageEquipement, listePages, MENTION_STATISTIQUE: CausesFrequentes.MENTION, MENTION_PISTE: CausesFrequentes.MENTION_PISTE };
-})());
+  return {
+    pageEquipement, listePages,
+    // Mentions des causes fréquentes, lues dans la langue du moment (accesseurs : jamais recopiées au chargement).
+    get MENTION_STATISTIQUE() { return CausesFrequentes.MENTION; },
+    get MENTION_PISTE() { return CausesFrequentes.MENTION_PISTE; },
+  };
+})()));
