@@ -23,6 +23,10 @@
 // T208 (règle de Nicolas : tout ce que Prévo exporte, Prévo peut le réimporter) : avant de produire le ZIP, l'export
 // contrôle les limites de l'import (ZipLecture.LIMITES, lues, jamais recopiées) ; s'il en dépasse une, rien n'est
 // produit et une fenêtre dit quoi (depassements, refusDe).
+// T222 (décision de Nicolas du 05/11, mesure T212 de docs/FORMAT.md §13) : construire le ZIP en mémoire coûte 5 à 6
+// fois sa taille ; avant un export complet dont les fichiers dépassent AVERTISSEMENT.contenu (150 Mo), une fenêtre
+// (#export-zip-avertissement) propose les données seules, l'export complet quand même, ou d'annuler. En attendant
+// T215 (ZIP par morceaux, avant la 2.0.0 finale).
 // Avec les comptes (mode serveur), l'export est réservé au responsable : un technicien ou un demandeur reçoit des
 // tables filtrées par le serveur (export partiel). En lecture seule (D169), l'export reste permis : il n'écrit rien.
 // Dépendances : JSZip (js/lib/jszip.min.js), Schema, Formats, Donnees, UI ; App et ZipLecture (lus à l'appel,
@@ -203,6 +207,41 @@ const ZipDonnees = (() => {
     UI.fenetre({ titre: 'Export ZIP impossible', contenu: contenu });
   }
 
+  // --- Avertissement avant un gros export (T222) ---------------------------------------------------------------------
+  // Seuil sur les octets des fichiers à mettre dans le ZIP (CSV et documents, avant compression) : pour un ZIP de 385
+  // à 390 Mo, l'onglet montait à 2,1-2,4 Go (mesure T212), trop pour un PC de 4 Go ; 150 Mo en demandent 750 à 900 Mo.
+  // Écrit 150 × 1 048 576 (1 Mo) : ce fichier ne recopie aucune limite de l'import (garde-fou de test_zip_limites.py).
+  const AVERTISSEMENT = Object.freeze({ contenu: 150 * 1048576 });
+
+  /**
+   * Message de l'avertissement pour un résultat de contenu(), ou null : seulement pour un export complet, sans refus,
+   * dont les fichiers dépassent AVERTISSEMENT.contenu.
+   */
+  function avertissement(resultat) {
+    if (resultat.refus || resultat.sansDocuments) return null;
+    const octets = resultat.fichiers.reduce((somme, fichier) => somme + fichier.octets.length, 0);
+    if (octets <= AVERTISSEMENT.contenu) return null;
+    return 'Ce ZIP contiendrait ' + taille(octets, AVERTISSEMENT.contenu) + ' de données et de documents. Le '
+      + 'construire demande 5 à 6 fois cette taille en mémoire : sur un PC de 4 Go, le navigateur peut ralentir '
+      + 'fortement, voire s\'arrêter. L\'export des données seules (sans les documents) est bien plus léger et '
+      + 's\'importe comme l\'export complet : les documents déjà présents sont alors gardés tels quels.';
+  }
+
+  // Fenêtre de l'avertissement (#export-zip-avertissement) → 'seules', 'complet', ou null (Annuler, Échap, croix).
+  function demanderSiGros(texte) {
+    const contenu = UI.element(UI.html`<div class="form-colonne" id="export-zip-avertissement"></div>`);
+    contenu.appendChild(UI.bandeau('attention', texte));
+    return UI.fenetre({
+      titre: 'Export ZIP volumineux',
+      contenu: contenu,
+      boutons: [
+        { libelle: 'Annuler', valeur: null, classe: 'btn-fantome' },
+        { libelle: 'Continuer l\'export complet', valeur: 'complet', classe: 'btn-secondaire' },
+        { libelle: 'Exporter les données seules', valeur: 'seules', classe: 'btn-primaire', defaut: true },
+      ],
+    });
+  }
+
   // T213 : l'entrée du manifeste d'un CSV abîmé porte aussi « abime_depuis » (AAAA-MM-JJTHH:MM:SS, depuis quand Prévo
   // le voit abîmé : adaptateur.abimesDepuis, fichiers-abimes.json), que l'import garde telle quelle ; absente si
   // inconnue (démo, date illisible, lecture impossible : l'export n'échoue pas pour autant).
@@ -301,6 +340,9 @@ const ZipDonnees = (() => {
    * T208 : si l'import refuserait le ZIP (contenu().refus, puis la taille réelle du ZIP construit), rien n'est
    * téléchargé : fenêtre #export-zip-refus qui dit quoi (fichier, taille, limite) ; le résultat porte `refus`.
    * options.sansDocuments (T214) : données seules, sans les documents (mêmes contrôles des limites).
+   * T222 : avant un export complet de plus de AVERTISSEMENT.contenu, fenêtre #export-zip-avertissement (avertissement,
+   * demanderSiGros) : « données seules » refait le contenu sans les documents ; « Annuler » ne produit rien (résultat
+   * `annule` vrai, `fichiers` vidé) ; « Continuer l'export complet » construit le ZIP comme avant.
    */
   async function exporter(options) {
     const droit = exportPermis();
@@ -310,7 +352,16 @@ const ZipDonnees = (() => {
     } catch (erreur) {
       console.warn('Prévo : rafraîchissement avant export impossible (' + (erreur && erreur.message) + ').', erreur);
     }
-    const resultat = await contenu({ sansDocuments: Boolean(options) && options.sansDocuments === true });
+    let resultat = await contenu({ sansDocuments: Boolean(options) && options.sansDocuments === true });
+    const texte = avertissement(resultat);
+    if (texte) {
+      const choix = await demanderSiGros(texte);
+      if (choix === null) return Object.assign(resultat, { fichiers: [], annule: true });
+      if (choix === 'seules') {
+        resultat = null;                               // les documents lus peuvent être libérés
+        resultat = await contenu({ sansDocuments: true });
+      }
+    }
     if (!resultat.refus) {
       const archive = new JSZip();
       // createFolders : false → aucune entrée « documents/ » de dossier, seulement les fichiers (lus par ZipLecture).
@@ -332,10 +383,12 @@ const ZipDonnees = (() => {
   return {
     CHAMPS_DOCUMENTS,
     NOM_MANIFESTE,
+    AVERTISSEMENT,
     nomDocumentValide,
     nomsDocuments,
     exportPermis,
     depassements,
+    avertissement,
     contenu,
     exporter,
   };
