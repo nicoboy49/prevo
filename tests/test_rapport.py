@@ -238,6 +238,9 @@ class TestRevisions(CasRapport):
         self.ouvrir()
         premier = self.figer_depuis_l_accueil()
         nom = self.rapport(NOM).name
+        # Après « figer », l'accueil est réaffiché (App.reafficher) et la tuile disparaît : l'attendre avant d'injecter
+        # l'onglet, sinon ce réaffichage peut le remplacer sous la charge (T259 ; même attente que TestFiger).
+        self.page.wait_for_function("!document.querySelector('#bandeau-rapport')")
         # Onglet « Rapports mensuels » affiché dans la page (indépendamment de l'écran Indicateurs)
         self.page.evaluate("Rapport.afficherOnglet(document.querySelector('#contenu'))")
         self.assertEqual(self.page.locator('.rapports-liste tr[data-nom="%s"]' % nom).count(), 1)
