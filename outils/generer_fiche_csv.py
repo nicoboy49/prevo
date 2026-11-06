@@ -604,6 +604,9 @@ ROLES_PARAMETRES_LOT_7 = {
                           " Posé à `1` avec le mode Solo ; réglable dans Paramètres, section Ordres de travail."),
     "solo_technicien_id": ("Identifiant (`TEC-…`) du technicien « moi » du mode Solo, pré-rempli sur les OT ; il reste"
                            " dans l'équipe si l'on quitte ce mode."),
+    "langue_defaut": ("Langue de l'installation (chantier multilingue, D149) : langue des postes qui n'ont pas choisi la"
+                      " leur, et des textes que Prévo écrit dans les données (journal, motifs, rapport figé). Code d'une"
+                      " langue déclarée ; réglable dans Paramètres, section Entreprise."),
 }
 CLE_IA_DISTANT = "ia_distant_autorise"
 
@@ -642,8 +645,13 @@ def lire_reglages_parametres(cles):
             libelle_texte = re.sub(r"\\(.)", r"\1", libelle.group(1)) if libelle else None
         if not libelle_texte or not defaut:
             raise ErreurLectureLot7("réglage « %s » sans libellé ou sans défaut dans %s" % (cle, FICHIER_PARAMETRES.name))
-        trouves[cle] = {"libelle": libelle_texte, "defaut": defaut.group(1),
-                        "valeurs": re.findall(r"'([^']*)'", valeurs.group(1)) if valeurs else []}
+        if valeurs:
+            liste = re.findall(r"'([^']*)'", valeurs.group(1))
+        elif "langues: true" in corps:          # langue_defaut (T295) : les codes des langues déclarées
+            liste = re.findall(r"code: '([^']+)'", (RACINE / "js" / "i18n" / "langues.js").read_text(encoding="utf-8"))
+        else:
+            liste = []
+        trouves[cle] = {"libelle": libelle_texte, "defaut": defaut.group(1), "valeurs": liste}
     manquants = [cle for cle in cles if cle not in trouves]
     if manquants:
         raise ErreurLectureLot7("réglages absents de %s : %s" % (FICHIER_PARAMETRES.name, ", ".join(manquants)))
