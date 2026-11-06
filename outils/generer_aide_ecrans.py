@@ -679,7 +679,7 @@ ECRANS_EN = {
         "essayez": "run the check.",
     },
     "poste": {
-        "titre": "This computer",
+        "titre": "This workstation",
         "texte": (
             "Settings for this browser only: workstation name and profile, AI assistant (provider, address, key, "
             "connection test), voice dictation, dark or light theme, and the on-screen help you are reading. "

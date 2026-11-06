@@ -179,7 +179,7 @@ I18n.ajouter('en', {
   'aide.ecran.planning.titre': 'Planning',
   'aide.ecran.poste.essayez': 'switch profile to see a technician\'s screens.',
   'aide.ecran.poste.texte': 'Settings for this browser only: workstation name and profile, AI assistant (provider, address, key, connection test), voice dictation, dark or light theme, and the on-screen help you are reading. Nothing here changes the other workstations.',
-  'aide.ecran.poste.titre': 'This computer',
+  'aide.ecran.poste.titre': 'This workstation',
   'aide.ecran.preventif.essayez': 'open a task list and read its checklist.',
   'aide.ecran.preventif.texte': 'The task lists: maintenance to be repeated regularly, triggered by a date, a meter or a measurement threshold, with its checklist. Each overdue task list creates a single work order when Prévo opens, or with “Generate overdue WOs”. The Calendar tab shows the next twelve weeks; the Suggestions tab, what the history recommends.',
   'aide.ecran.preventif.titre': 'Preventive',

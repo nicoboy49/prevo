@@ -62,6 +62,14 @@ Autres règles :
 | remis en service en sécurité | returned to service safely | case à cocher de l'OT. |
 | sous-traitance | subcontracting | coût de sous-traitance : subcontracting cost. |
 | OT lié | linked work order | |
+| ordre (d'une opération) | sequence | colonne « Ordre » des opérations ; pas « order » ni « position ». |
+| repères (fiche d'un OT) | key details | bloc de la fiche OT ; sans rapport avec « repère » (tag) d'un équipement. |
+| origine « DI » (liste des OT) | Request | valeur d'origine d'un OT né d'une demande. |
+| RAS | NTR | « RAS » refusé sur un correctif : « NTR » ; le contrôle accepte aussi « nothing to report ». |
+| prise en charge (d'un OT) | taken on | |
+| poste (ligne du tableau de coûts d'un OT) | cost line | pas « item » : réservé à l'article du magasin. |
+| bon de travail | work order sheet | fiche imprimée de l'OT ; pas « job sheet ». |
+| geste (wiki) | task | un geste ou une méthode (page savoir-faire). |
 | regrouper | merge | une demande « Regroupée » est fusionnée dans une autre. |
 | différer | defer | demande « Différée ». |
 
@@ -92,6 +100,8 @@ Autres règles :
 | compteur | meter | heures de marche, cycles, etc. |
 | relevé (de compteur) | meter reading | |
 | fiche (d'un équipement, d'un OT) | record | « la fiche de l'équipement » : the equipment record. Pas « sheet ». |
+| fiche technique | data sheet | document d'un équipement. |
+| menus courts « Parc », « Contrôles » | Equipment, Inspections | la forme longue (parc) reste « equipment register ». |
 | document (d'un équipement) | document | |
 | articles par équipement | parts by equipment | table de liaison article / équipement. |
 | actif (case) | active | un enregistrement inactif est « inactive », jamais « deleted ». |
@@ -122,6 +132,12 @@ Autres règles :
 | texte de référence | reference text | le texte réglementaire (ex. arrêté, norme). |
 | observations levées | observations cleared | |
 | rapport (d'un contrôle) | report | |
+| rapport mensuel | monthly report | « Report » seul reste réservé au rapport (contrôle ou mensuel) : le menu « Signaler » est « Report a problem ». |
+| nature du contrôle | type of inspection | pas « nature of the inspection ». |
+| check-list (d'une gamme) | checklist | un seul mot. |
+| levée d'observations | clearing | action de lever les observations d'un contrôle. |
+| figer (un rapport), rapport figé | finalise, finalised report | |
+| fait marquant | highlight | rapport mensuel. |
 | suggestion | suggestion | propositions S1 à S4 de l'écran préventif. |
 
 ## 5. Sécurité et habilitations
@@ -170,6 +186,10 @@ Autres règles :
 | prix unitaire | unit price | |
 | valeur du stock | stock value | |
 | quantité | quantity | |
+| emplacement (d'un article) | bin location | partout : colonne, fiche, étiquette, wiki (pas « bin », « position » ni « storage location »). « Rayon et casier » : aisle and bin. |
+| rupture (de stock) | out of stock / stock-out | « out of stock » comme état ou libellé ; « stock-out » comme nom compté (« 2 stock-outs »). |
+| écart (d'inventaire) | variance | |
+| nomenclature | bill of materials | articles montés sur une machine. |
 
 ## 7. Équipe et accès
 
@@ -187,11 +207,27 @@ Autres règles :
 | mot de passe | password | |
 | se connecter / se déconnecter | sign in / sign out | pas « log in ». |
 | compte | account | |
-| poste (autre ordinateur) | workstation | « changé sur un autre poste » : on another workstation. Ne désigne jamais un emploi. |
+| poste (cet ordinateur ou un autre) | workstation | « Ce poste » : This workstation ; « Nom du poste » : Workstation name ; « changé sur un autre poste » : on another workstation. Jamais « computer » ni « this PC » pour le poste. « PC » reste « PC » quand le français dit PC (le PC atelier, le PC serveur). Ne désigne jamais un emploi. |
 | accès | access | |
 | paramètres | settings | |
 | sauvegarde | backup | |
 | journal des modifications | change log | table `journal`. |
+| appareil | device | téléphone ou navigateur enrôlé ; ne pas confondre avec « poste » (workstation). |
+| enrôler, enrôlement, appareil enrôlé | enrol, enrolment, enrolled device | orthographe britannique (un seul « l » à enrol, deux à enrolled). |
+| révoquer | revoke | |
+| fiche d'accès | access record | pas « access sheet ». |
+| journal des connexions | sign-in log | |
+| mandataire (inverse) | proxy (reverse proxy) | |
+| tâche planifiée | scheduled task | tâche Windows de démarrage. |
+| portée (de l'accès : « ce PC », atelier, dehors) | scope | |
+| empreinte (d'un fichier, manifeste) | fingerprint | |
+| copie de sécurité | safety copy | copie faite avant une restauration ; « Copie des sauvegardes » (dossier externe) : backup copy. |
+| bombe de décompression | decompression bomb | |
+| porte d'entrée | front door | accès réseau de Prévo ; « page de porte » : gateway page. |
+| élévation (de droits) | elevation | |
+| Mode Solo | Solo mode | |
+| Appliquer et relancer | Apply and restart | |
+| Démarrer avec la machine / avec le PC | Starting with the PC | libellé réel du réglage : « Starting with the PC, and sleep » ; question de l'assistant : « Start with the PC? ». |
 
 ## 8. Indicateurs
 
@@ -209,6 +245,7 @@ Autres règles :
 | coût | cost | main-d'œuvre : labour ; pièces : parts. |
 | période | period | |
 | non calculable | cannot be calculated | |
+| pointage (temps) | time entry | ligne de temps passé sur un OT. |
 
 ## 9. Wiki
 
@@ -229,6 +266,17 @@ Autres règles :
 | à refaire | to be redone | |
 | rien à ajouter | nothing to add | |
 | archivée | archived | |
+| rubrique | heading | titre `## …` d'une page ; pas « section » (réservé à l'écran). |
+| ancrage | anchor | |
+| requête (envoyée à l'IA) | AI request | pour ne pas confondre avec la demande (work request). |
+| savoir-faire (pages) | know-how pages | |
+| tranchée / à trancher | settled / to be settled | contradictions du wiki. |
+| rang de traitement | processing order | colonne du journal du wiki. |
+| Créée le / Traitée le / Décidé par | Created on / Processed on / Decided by | journal du wiki ; pour une suggestion, « Traitée le » : Dealt with on. |
+| essai(s) | attempt(s) | pas « try » ni « trial ». |
+| faits (suggestions) | events | pannes, anomalies, visites. |
+| suggestion traitée | dealt with | |
+| refus (de l'IA) | rejected | refus automatique ; comparer « refusée » : declined. |
 
 ## 10. Interface et actions courantes
 
@@ -263,6 +311,12 @@ Autres règles :
 | dossier de données | data folder | |
 | dictée | dictation | saisie vocale. |
 | signaler un problème | report a problem | |
+| menu « Signaler » | Report a problem | le menu court a le même libellé que l'écran, pour ne pas entrer en collision avec « Report » (rapport). |
+| lots 1 à 4 (À propos) | phases 1 to 4 | pas « batch ». |
+| ligne (d'un fichier ou d'un tableau) | row | « line » reste pour la ligne de production, une ligne de journal ou de commande. |
+| ligne refusée (import) | rejected | |
+| doublon sûr / supposé | certain / probable duplicate | |
+| feuilles du modèle | Data, Help | |
 | aucun… pour le moment | no … yet | « Aucune demande pour le moment » : No requests yet. |
 | (non choisi) | (none selected) | |
 | champ obligatoire | required field | |
