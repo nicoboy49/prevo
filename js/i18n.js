@@ -4,7 +4,8 @@
 // Les langues sont déclarées par js/i18n/langues.js (I18n.declarer) ; chaque langue enregistre ses textes par
 // js/i18n/<code>.js (I18n.ajouter, un bloc par section) et son aide longue, à part, par js/i18n/aide/<code>.js (clés
 // aide.*). Le français est la langue de référence et de repli. La langue active (autre que le français) est chargée
-// avant js/schema.js par js/i18n-chargeur.js.
+// avant js/schema.js par js/i18n-chargeur.js, qui choisit la langue à afficher (I18n.langueAAfficher : choix du poste,
+// sinon langue de l'installation, sinon français) et note la langue de l'installation (I18n.noterInstallation).
 //
 // Règles :
 // - script classique, sans dépendance, compatible file:// ;
@@ -32,6 +33,7 @@ const I18n = (function () {
   const reglesPluriel = Object.create(null);    // locale → Intl.PluralRules
   const averties = new Set();                   // clés déjà signalées par console.warn
   let langueActive = LANGUE_DE_REFERENCE;
+  let langueInstallation = LANGUE_DE_REFERENCE; // langue_defaut de parametres.csv (D149), vérifiée ; 'fr' sans elle
 
   // ===========================================================================================
   // Langues et dictionnaires
@@ -66,6 +68,11 @@ const I18n = (function () {
     return declarees.find((langue) => langue.code === code) || null;
   }
 
+  // Code bien formé et déclaré (le français l'est toujours) ; toute autre valeur (vide, inconnue, mal formée) : faux.
+  function estDeclaree(code) {
+    return typeof code === 'string' && MOTIF_CODE.test(code) && (code === LANGUE_DE_REFERENCE || Boolean(declaration(code)));
+  }
+
   /**
    * Rend `code` langue active s'il est déclaré (le français l'est toujours) ; vrai si c'est fait, faux sinon (la
    * langue active ne change pas). L'attribut lang de <html> prend ce code (D147 ; 'fr' par défaut, écrit dans la
@@ -77,6 +84,28 @@ const I18n = (function () {
     langueActive = code;
     if (typeof document !== 'undefined' && document.documentElement) document.documentElement.lang = code;
     return true;
+  }
+
+  // ===========================================================================================
+  // Langue à afficher et langue de l'installation (Lot 4, T295 ; D148, D149)
+  // ===========================================================================================
+
+  /**
+   * Langue à afficher (D148, sans la langue du compte) : le choix du poste, sinon la langue de l'installation, sinon le
+   * français. Chaque code est vérifié contre les langues déclarées : vide, inconnu ou mal formé, il est ignoré. Sert à
+   * js/i18n-chargeur.js (avant js/schema.js), à js/app.js (paramètres lus) et au sélecteur de langue.
+   */
+  function langueAAfficher(choixDuPoste, installation) {
+    return [choixDuPoste, installation].find(estDeclaree) || LANGUE_DE_REFERENCE;
+  }
+
+  /**
+   * Note la langue de l'installation (langue_defaut de parametres.csv, D149), celle des textes écrits dans les
+   * données (D156) ; valeur vide, inconnue ou mal formée : le français. Rend le code retenu.
+   */
+  function noterInstallation(code) {
+    langueInstallation = estDeclaree(code) ? code : LANGUE_DE_REFERENCE;
+    return langueInstallation;
   }
 
   // ===========================================================================================
@@ -174,9 +203,10 @@ const I18n = (function () {
   // Textes écrits dans les données (D156) : langue de l'installation, jamais celle de l'écran
   // ===========================================================================================
 
-  // D156 ; au Lot 4, langue de l'installation (langue_defaut) : d'ici là, la langue de référence.
+  // D156 (Lot 4, T295) : la langue de l'installation si son dictionnaire est chargé dans la page (js/i18n-chargeur.js
+  // le charge aussi quand elle n'est pas la langue affichée), sinon le français, sans erreur.
   function langueDesDonnees() {
-    return LANGUE_DE_REFERENCE;
+    return dictionnaires[langueInstallation] ? langueInstallation : LANGUE_DE_REFERENCE;
   }
 
   /**
@@ -184,7 +214,8 @@ const I18n = (function () {
    * titres et motifs pré-remplis, raisons du journal du wiki…), quelle que soit la langue de l'écran (D156).
    */
   function donnees(cle, valeurs) {
-    return reference(cle, valeurs);       // D156 ; au Lot 4, langue de l'installation (langue_defaut)
+    if (langueDesDonnees() === LANGUE_DE_REFERENCE) return reference(cle, valeurs);
+    return enLangueDesDonnees(() => t(cle, valeurs));
   }
 
   /**
@@ -281,6 +312,12 @@ const I18n = (function () {
     enLangueDesDonnees: enLangueDesDonnees,
     html: html,
     appliquer: appliquer,
+    langueAAfficher: langueAAfficher,
+    noterInstallation: noterInstallation,
+    /** Code de la langue de l'installation notée ('fr' tant que rien n'en note une autre). */
+    get installation() { return langueInstallation; },
+    /** Langue des textes écrits dans les données : celle de l'installation si son dictionnaire est chargé, sinon 'fr'. */
+    get langueDesDonnees() { return langueDesDonnees(); },
     /** Code de la langue active ('fr' tant que rien n'en choisit une autre). */
     get langue() { return langueActive; },
     /** Locale Intl de la langue active (nombres, montants, dates), 'fr-FR' si la langue n'en déclare pas. */

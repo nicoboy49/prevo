@@ -70,12 +70,14 @@ le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-co
 `acces-textes.js` juste après `mise-a-jour.js` (§23, §22.2), `ia-serveur.js` juste après `ia-encadre.js` (§22.12),
 `parametres-solo.js` juste après `parametres-codes.js` et `parametres-sauvegardes.js` juste après `parametres-solo.js`
 (§22.11)), `js/app.js` (en dernier).
-Langue active (T234) : `js/i18n-chargeur.js` lit `localStorage` « prevo.langue » (écrit par le sélecteur de langue,
-§24.10 ; la langue du compte viendra au lot 4 du chantier multilingue) ; une langue déclarée par `js/i18n/langues.js`,
-autre que le français, devient la langue active (`I18n.choisir`, qui donne aussi l'attribut `lang` de `<html>`) et ses
-deux fichiers (`js/i18n/<code>.js`, `js/i18n/aide/<code>.js`) sont
+Langue active (T234, T295) : `js/i18n-chargeur.js` lit `localStorage` « prevo.langue » (le choix du poste, écrit par
+le sélecteur de langue, §24.10) puis « prevo.langue.installation » (la langue de l'installation, §24.11 ; la langue du
+compte viendra plus tard) ; la première des deux déclarée par `js/i18n/langues.js` (sinon le français) est la langue
+à afficher. Autre que le français, elle devient la langue active (`I18n.choisir`, qui donne aussi l'attribut `lang`
+de `<html>`) et ses deux fichiers (`js/i18n/<code>.js`, `js/i18n/aide/<code>.js`) sont
 écrits par `document.write` pendant l'analyse de la page : chargés et exécutés avant `js/schema.js`, en `file://` comme
-en http. Valeur absente, non déclarée ou mal formée, stockage refusé : français, sans erreur. `acces/porte.html`
+en http ; le dictionnaire de l'installation s'y ajoute quand elle n'est ni le français ni la langue affichée. Valeur
+absente, non déclarée ou mal formée, stockage refusé : ignorée (français), sans erreur. `acces/porte.html`
 charge `js/i18n.js`, `js/i18n/langues.js` et `js/i18n/fr.js` avant `acces/porte.js` (servis par la porte :
 `fichier_de_la_porte`, §22.6). `App` applique les attributs `data-i18n` et `data-i18n-attr` de `index.html` au
 démarrage (`I18n.appliquer(document)`).
@@ -4331,7 +4333,8 @@ Script classique, compatible `file://`. Interface :
   pré-remplis, profil inscrit, raisons du wiki) passe par `I18n.donnees(cle, valeurs)`, jamais `I18n.t` : la langue de
   l'installation, pas celle de l'écran. Un texte composé ailleurs (rapport figé, raison d'une gamme, contrôle d'une
   réponse de l'IA) s'écrit dans `I18n.enLangueDesDonnees(fonction)` (synchrone : `t`, `html`, `locale` y rendent
-  cette langue). Jusqu'au Lot 4 : le français ; au Lot 4 : la langue de l'installation (`langue_defaut`, D149).
+  cette langue). Depuis le Lot 4 (T295) : la langue de l'installation (`langue_defaut`, D149, §24.11) si son
+  dictionnaire est chargé dans la page, sinon le français, sans erreur.
 
 ### 24.2 Les fichiers et leur ordre de chargement
 
@@ -4475,8 +4478,31 @@ du dictionnaire), sans drapeau, la langue active choisie. Deux emplacements, une
 pour ce poste. ») ; le pied du menu latéral, sous « Explications » (`#menu-langue`, rempli par `js/app.js` ; la liste
 seule, nommée par son `aria-label`), caché quand le menu n'a que ses icônes (tablette, menu replié) et, comme tout le
 menu, au téléphone. Au changement (D148, sans compte) : le choix est retenu par le navigateur du poste
-(`localStorage` « prevo.langue » ; le français retire la clé), puis la page est rechargée (`location.reload()`) :
+(`localStorage` « prevo.langue » ; la langue qu'aurait le poste sans choix, celle de l'installation, retire la clé,
+§24.11), puis la page est rechargée (`location.reload()`) :
 `js/i18n-chargeur.js` charge la langue avant `js/schema.js`. Pas de changement de langue sans rechargement. Stockage
 refusé : message court, la liste revient à la langue active, la page reste dans sa langue. En démo, le rechargement
 ramène à l'écran de démarrage (la démo vit dans la page). Viennent au Lot 4 : la langue du compte et la bascule à la
 connexion (D148), la langue du navigateur (`navigator.language`) pour la démo (D150).
+
+### 24.11 Langue de l'installation (Lot 4, T295)
+
+`langue_defaut` (D149) est une ligne de `parametres.csv` (code d'une langue déclarée, `fr` par défaut), réglée dans
+Paramètres, section « Entreprise » (« Langue de l'installation », les langues sous leur nom dans leur langue), dans
+tous les modes ; une ligne de plus, pas une colonne : le format des fichiers (`version_schema`) ne change pas, et le
+serveur l'accepte comme toute clé (`parametres` est une table clé-valeur). Elle sert à deux choses :
+
+- **Langue affichée** (D148, sans la langue du compte) : 1. le choix de ce poste (« prevo.langue ») ; 2. sinon la
+  langue de l'installation ; 3. sinon le français (`I18n.langueAAfficher`). Toute valeur est vérifiée contre les
+  langues déclarées : vide, inconnue ou mal formée, elle est ignorée. Le chargeur tourne avant toute lecture des
+  données : la langue de l'installation lui vient de `localStorage` « prevo.langue.installation », que `js/app.js`
+  écrit chaque fois qu'il lit `parametres.csv` (ouverture des données, changement sur ce poste ou un autre ;
+  `suivreLangueInstallation`). Si la page n'est alors pas dans la langue à afficher, ou n'a pas le dictionnaire de
+  l'installation, elle se recharge **une fois** : la raison est notée dans `sessionStorage` (« prevo.langue.rechargement »)
+  et jamais deux rechargements de suite pour la même (sans `sessionStorage`, aucun). Un changement venu d'un autre
+  poste n'interrompt pas une saisie en cours. Démo et fichiers déposés : la langue est notée pour les données, rien
+  n'est retenu ni rechargé (un rechargement perdrait les données, qui vivent dans la page).
+- **Textes écrits dans les données** (D156) : `I18n.donnees` et `I18n.enLangueDesDonnees` écrivent dans la langue de
+  l'installation (`I18n.noterInstallation`, `I18n.langueDesDonnees`), quelle que soit la langue de l'écran ; le
+  chargeur charge aussi `js/i18n/<code>.js` de l'installation (sans son aide longue) quand elle n'est ni le français
+  ni la langue affichée ; dictionnaire absent : le français.

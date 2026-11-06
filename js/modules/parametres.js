@@ -22,6 +22,11 @@ const Parametres = (() => {
   const REGLAGES = [
     { cle: 'entreprise_nom', type: 'texte', get libelle() { return I18n.t('parametres.libelle.nom_entreprise'); }, defaut: '', large: true, get section() { return I18n.t('parametres.section.entreprise'); },
       get aide() { return I18n.t('parametres.aide.affiche_menu_bons_travail'); } },
+    // Chantier multilingue, Lot 4 (T295, D149) : langue des postes sans choix et des textes écrits dans les données
+    // (D156). Valeurs : les langues déclarées (js/i18n/langues.js), affichées sous leur nom dans leur langue.
+    { cle: 'langue_defaut', type: 'choix', get valeurs() { return I18n.langues.map((langue) => langue.code); }, defaut: 'fr', langues: true,
+      get libelle() { return I18n.t('parametres.libelle.langue_installation'); },
+      get aide() { return I18n.t('parametres.aide.langue_proposee_postes_textes'); } },
     { cle: 'delai_p1_h', type: 'entier', get libelle() { return I18n.t('parametres.libelle.delai_p_1_heures'); }, defaut: '0', min: 0, max: 8760, get section() { return I18n.t('parametres.section.delais_priorite'); },
       get aide() { return I18n.t('parametres.aide.date_prevue_demande_p'); } },
     { cle: 'delai_p2_h', type: 'entier', get libelle() { return I18n.t('parametres.libelle.delai_p_2_heures'); }, defaut: '24', min: 0, max: 8760,
@@ -314,9 +319,12 @@ const Parametres = (() => {
     reglagesDuFormulaire().forEach((reglage) => {
       if (reglage.section) formulaire.appendChild(UI.element(UI.html`<h3 class="large parametres-section">${reglage.section}</h3>`));
       const surServeur = decideSurLeServeur(reglage);
-      const bloc = UI.champ({ nom: reglage.cle, type: reglage.type, libelle: reglage.libelle, valeurs: reglage.valeurs },
+      // Langues : liste de UI.champ (type ref) sous le nom de chaque langue dans sa langue, lu dans sa langue.
+      const langues = reglage.langues ? I18n.langues : null;
+      const bloc = UI.champ({ nom: reglage.cle, type: langues ? 'ref' : reglage.type, libelle: reglage.libelle, valeurs: reglage.valeurs },
         valeurAffichee(reglage), { aide: surServeur ? noteDecideSurLeServeur() + ' ' + reglage.aide : reglage.aide,
-          lectureSeule: surServeur });
+          lectureSeule: surServeur, liste: langues && langues.map((langue) => ({ valeur: langue.code, libelle: langue.nom })) });
+      if (langues) UI.$$('option', bloc).forEach((option) => { if (reglage.valeurs.includes(option.value)) option.lang = option.value; });
       if (reglage.large) bloc.classList.add('large');
       formulaire.appendChild(bloc);
     });

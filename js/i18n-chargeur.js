@@ -1,26 +1,34 @@
 'use strict';
-// Chargeur de la langue active (chantier multilingue, contrat du Lot 2 ; docs/ARCHITECTURE.md §1).
-// Placé dans index.html juste après js/i18n/fr.js et js/i18n/aide/fr.js, avant js/schema.js. Si la langue demandée
-// n'est pas le français et qu'elle est déclarée par js/i18n/langues.js, elle devient la langue active et ses deux
-// fichiers (js/i18n/<code>.js puis js/i18n/aide/<code>.js : toute langue déclarée fournit les deux) sont écrits dans la
-// page par document.write pendant son analyse : le navigateur les charge et les exécute aussitôt, de façon synchrone,
-// AVANT js/schema.js, en file:// comme en http (un <script src> du même dossier : permis par la politique de sécurité
-// du contenu, script-src 'self').
-// La langue demandée vient de localStorage « prevo.langue », écrit par le sélecteur de langue (UI.selecteurLangue,
-// Lot 3 : écran « Ce poste » et pied du menu ; la langue du compte viendra au Lot 4). Valeur absente, non déclarée ou
-// mal formée, stockage refusé : français, sans erreur. La langue choisie donne aussi l'attribut lang de <html>
+// Chargeur de la langue active (chantier multilingue, contrat du Lot 2 ; docs/ARCHITECTURE.md §1 et §24.11).
+// Placé dans index.html juste après js/i18n/fr.js et js/i18n/aide/fr.js, avant js/schema.js. Il choisit la langue à
+// afficher (D148, Lot 4, T295 ; I18n.langueAAfficher) : 1. le choix de ce poste ; 2. sinon la langue de l'installation ;
+// 3. sinon le français. Chaque valeur est vérifiée contre les langues déclarées par js/i18n/langues.js : absente,
+// non déclarée ou mal formée, stockage refusé, elle est ignorée, sans erreur. Si la langue à afficher n'est pas le
+// français, elle devient la langue active et ses deux fichiers (js/i18n/<code>.js puis js/i18n/aide/<code>.js : toute
+// langue déclarée fournit les deux, sauf « aide: false ») sont écrits dans la page par document.write pendant son
+// analyse : le navigateur les charge et les exécute aussitôt, de façon synchrone, AVANT js/schema.js, en file:// comme
+// en http (un <script src> du même dossier : permis par la politique de sécurité du contenu, script-src 'self').
+// La langue de l'installation est notée (I18n.noterInstallation) : c'est celle des textes écrits dans les données
+// (D156) ; si elle n'est ni le français ni la langue affichée, son dictionnaire (js/i18n/<code>.js, sans l'aide
+// longue) est écrit aussi, pour que I18n.donnees la trouve.
+// Le choix du poste vient de localStorage « prevo.langue », écrit par le sélecteur de langue (UI.selecteurLangue,
+// écran « Ce poste » et pied du menu ; la langue du compte viendra plus tard). La langue de l'installation vient de
+// localStorage « prevo.langue.installation », écrit par js/app.js chaque fois qu'il lit parametres.csv (langue_defaut,
+// D149) : le chargeur tourne avant toute lecture des données ; si la page n'est pas dans la bonne langue une fois les
+// paramètres lus, js/app.js la recharge une fois. La langue choisie donne aussi l'attribut lang de <html>
 // (I18n.choisir).
 // Ajouté à une page déjà analysée (document.write l'effacerait) : rien n'est fait, la page reste en français.
 // Aucun objet global : seulement I18n (js/i18n.js).
 (function () {
   const CLE_LANGUE = 'prevo.langue';
-  const MOTIF_CODE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
+  const CLE_INSTALLATION = 'prevo.langue.installation';
+  const LANGUE_DE_REFERENCE = 'fr';
   const REMPLACEMENTS = { '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' };
 
-  function langueDemandee() {
+  function lire(cle) {
     try {
-      return localStorage.getItem(CLE_LANGUE) || '';
-    } catch (erreur) {               // stockage refusé (navigation privée stricte, file:// verrouillé) : français
+      return localStorage.getItem(cle) || '';
+    } catch (erreur) {               // stockage refusé (navigation privée stricte, file:// verrouillé) : ignorée
       return '';
     }
   }
@@ -29,16 +37,22 @@
     return '<script src="' + adresse.replace(/[&"<>]/g, (caractere) => REMPLACEMENTS[caractere]) + '"><\/script>';
   }
 
-  const code = langueDemandee();
-  if (!code || code === 'fr' || !MOTIF_CODE.test(code)) return;
-  if (!I18n.langues.some((langue) => langue.code === code)) return;
   const script = document.currentScript;
   if (document.readyState !== 'loading' || !script || !script.src) return;
+  // Valeurs vérifiées par I18n : une langue non déclarée ou mal formée donne le français.
+  const installation = I18n.noterInstallation(lire(CLE_INSTALLATION));
+  const code = I18n.langueAAfficher(lire(CLE_LANGUE), installation);
   // Dossier de ce fichier (js/), quelle que soit l'adresse de la page : index.html à la racine, ou une autre page.
   const dossier = script.src.replace(/[?#].*$/, '').replace(/[^/]*$/, '') + 'i18n/';
-  const avecAide = I18n.langues.find((langue) => langue.code === code).aide !== false;
-  I18n.choisir(code);
-  document.write(balise(dossier + code + '.js') + (avecAide ? balise(dossier + 'aide/' + code + '.js') : ''));
+  let balises = '';
+  let avecAide = true;
+  if (code !== LANGUE_DE_REFERENCE) {
+    avecAide = I18n.langues.find((langue) => langue.code === code).aide !== false;
+    I18n.choisir(code);
+    balises += balise(dossier + code + '.js') + (avecAide ? balise(dossier + 'aide/' + code + '.js') : '');
+  }
+  if (installation !== LANGUE_DE_REFERENCE && installation !== code) balises += balise(dossier + installation + '.js');
+  if (balises) document.write(balises);
   // Langue sans aide longue traduite (« aide: false » dans langues.js) : une seule ligne, une fois (T308, Nicolas).
   if (!avecAide) console.info('Prévo : pas d\'aide longue en « ' + code + ' » ; elle s\'affiche en français.');
 })();

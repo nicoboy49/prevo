@@ -62,6 +62,13 @@ const App = (() => {
   const CLE_POSTE = 'prevo.poste';
   const CLE_MENU_REPLIE = 'prevo.menuReplie';
   const CLE_VERROU_ONGLET = 'prevo.verrouOnglet';   // sessionStorage : poste du verrou posé par cet onglet
+  // Langue (Lot 4 du chantier multilingue, T295 ; D148, D149) : choix du poste (écrit par UI.selecteurLangue) et
+  // langue de l'installation (écrite ici), lus par js/i18n-chargeur.js avant js/schema.js ; raison du dernier
+  // rechargement pour la langue (sessionStorage, cet onglet : jamais deux de suite pour la même).
+  const CLE_LANGUE_POSTE = 'prevo.langue';
+  const CLE_LANGUE_INSTALLATION = 'prevo.langue.installation';
+  const CLE_RECHARGEMENT_LANGUE = 'prevo.langue.rechargement';
+  const PARAMETRE_LANGUE = 'langue_defaut';
   const ROUTE_ACCUEIL = '#/accueil';
   const TYPES_PROFIL = ['demandeur', 'technicien', 'responsable'];
   const ENTREES_BARRE_BAS = 4;
@@ -460,6 +467,7 @@ const App = (() => {
     }
     montrerLienInstallation();
     await Donnees.chargerTout();
+    if (suivreLangueInstallation()) return;              // T295 : page dans une autre langue, rechargée une fois
     await sauvegarderAvantMiseAJour();                   // D170 : avant toute écriture (base vide, format courant)
 
     if (mode !== 'demo' && Donnees.baseVide()) {
@@ -467,6 +475,7 @@ const App = (() => {
       montrer('ecran-chargement', 'chargement');
       await remplirBaseVide(choix);
       await Donnees.chargerTout();
+      if (suivreLangueInstallation()) return;
     }
     const formatAJour = await passerAuFormatCourant();   // avant TOUTE autre écriture, pour tous les profils
     const lectureSeule = Donnees.lectureSeule();
@@ -496,6 +505,41 @@ const App = (() => {
     // En démo, les données repartent du jeu d'origine à chaque ouverture : la génération a lieu à chaque
     // fois, et sa notification n'apprendrait rien (T89, brief : pas de toast à chaque ouverture de la démo).
     if (otPreventifs.length && mode !== 'demo') UI.toast(Preventif.texteGeneration(otPreventifs.length) + '.', 'succes');
+  }
+
+  // Langue de l'installation (Lot 4 du chantier multilingue, T295 ; D148, D149, D156), à chaque lecture de
+  // parametres.csv (ouverture des données, changement de parametres sur ce poste ou un autre) : langue_defaut est notée
+  // (I18n.noterInstallation : langue des textes écrits dans les données) et, en mode serveur ou dossier, retenue par ce
+  // navigateur pour js/i18n-chargeur.js. Si la page n'est pas dans la langue à afficher (choix du poste, sinon
+  // installation, sinon français) ou n'a pas le dictionnaire de l'installation, elle se recharge, une fois : la raison
+  // est notée pour cet onglet et jamais deux rechargements de suite pour la même ; sans sessionStorage, aucun. Démo et
+  // fichiers déposés : langue notée, rien de retenu ni de rechargé (les données vivent dans la page). Une saisie en
+  // cours (rechargementPermis faux) attend le prochain changement ou la prochaine ouverture. Vrai si la page se recharge.
+  function suivreLangueInstallation(rechargementPermis) {
+    const installation = I18n.noterInstallation(Donnees.parametre(PARAMETRE_LANGUE, ''));
+    // Pendant l'usage, le profil inscrit au journal suit (D156) ; à l'ouverture, appliquerProfil le pose ensuite.
+    if (profil && coqueVisible()) Donnees.definirIdentite({ poste, profil: libelleJournal(profil) });
+    if (mode !== 'serveur' && mode !== 'dossier') return false;
+    ecrireMemoire(CLE_LANGUE_INSTALLATION, installation);
+    const attendue = I18n.langueAAfficher(lireMemoire(CLE_LANGUE_POSTE), installation);
+    const raison = attendue + '/' + installation;
+    try {
+      const derniere = window.sessionStorage.getItem(CLE_RECHARGEMENT_LANGUE);
+      if (attendue === I18n.langue && I18n.langueDesDonnees === installation) {
+        if (derniere !== null) window.sessionStorage.removeItem(CLE_RECHARGEMENT_LANGUE);
+        return false;
+      }
+      if (rechargementPermis === false) return false;
+      if (derniere === raison) {
+        console.warn('Prévo : page déjà rechargée pour la langue « ' + raison + ' » ; elle reste en « ' + I18n.langue + ' ».');
+        return false;
+      }
+      window.sessionStorage.setItem(CLE_RECHARGEMENT_LANGUE, raison);
+    } catch (erreur) {               // sans mémoire d'onglet, pas de garde-fou : pas de rechargement
+      return false;
+    }
+    window.location.reload();
+    return true;
   }
 
   // Mode dossier, nouvelle version de Prévo (D170) : une fois les tables chargées, AVANT toute écriture (base vide,
@@ -798,6 +842,7 @@ const App = (() => {
     } catch (erreur) {
       signalerErreur(erreur, 'lecture des données après la connexion');
     }
+    if (suivreLangueInstallation()) return;
     await ouvrirCoque();
   }
 
@@ -1338,6 +1383,8 @@ const App = (() => {
     const detail = evenement.detail || {};
     const tables = detail.tables || [];
     if (tables.includes('parametres')) {
+      // langue_defaut a pu changer : un changement d'un autre poste n'interrompt pas une saisie en cours.
+      if (suivreLangueInstallation(detail.origine !== 'distant' || !saisieEnCours)) return;
       mettreAJourEntreprise();
       // mode_solo a pu changer (ce poste ou un autre) : le menu suit.
       if (coqueVisible() && profil) construireMenus();

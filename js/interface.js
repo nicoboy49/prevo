@@ -1510,14 +1510,15 @@ const UI = (function () {
   }
 
   const CLE_LANGUE = 'prevo.langue';          // lue par js/i18n-chargeur.js avant js/schema.js
-  const LANGUE_DE_REFERENCE = 'fr';           // sans clé : français
+  const CLE_LANGUE_INSTALLATION = 'prevo.langue.installation';   // écrite par js/app.js (langue_defaut, T295)
 
   /**
    * Sélecteur de langue (D147, D148) : <select> des langues déclarées (I18n.langues, ordre de js/i18n/langues.js),
    * chacune sous son nom dans sa langue (jamais traduit, sans drapeau), la langue active choisie. Au changement, le
-   * choix est retenu par ce navigateur (localStorage « prevo.langue » ; le français retire la clé), puis la page est
-   * rechargée : js/i18n-chargeur.js y charge la langue avant js/schema.js. Stockage refusé : message court, la liste
-   * revient à la langue active, la page reste dans sa langue.
+   * choix est retenu par ce navigateur (localStorage « prevo.langue »), puis la page est rechargée : js/i18n-chargeur.js
+   * y charge la langue avant js/schema.js. La langue qu'aurait le poste sans choix (celle de l'installation retenue
+   * par ce navigateur, sinon le français : I18n.langueAAfficher, T295) retire la clé : le poste suit alors
+   * l'installation. Stockage refusé : message court, la liste revient à la langue active, la page reste dans sa langue.
    * reglages : { id, classe, libelle (aria-label, quand aucun <label> visible ne nomme la liste) }.
    */
   function selecteurLangue(reglages) {
@@ -1536,7 +1537,8 @@ const UI = (function () {
       const code = liste.value;
       if (code === I18n.langue) return;
       try {
-        if (code === LANGUE_DE_REFERENCE) window.localStorage.removeItem(CLE_LANGUE);
+        const sansChoix = I18n.langueAAfficher('', window.localStorage.getItem(CLE_LANGUE_INSTALLATION));
+        if (code === sansChoix) window.localStorage.removeItem(CLE_LANGUE);
         else window.localStorage.setItem(CLE_LANGUE, code);
       } catch (erreur) {                        // navigation privée stricte, réglage du navigateur
         liste.value = I18n.langue;
