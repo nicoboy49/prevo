@@ -172,12 +172,65 @@ const UI = (function () {
   const ESPACE_FINE = /\u202F/g;
   const ESPACE_INSECABLE = '\u00A0';
 
+  // Devise de l'installation (T304, D152) : clé `devise` de parametres.csv (code ISO 4217), lue à chaque formatage ;
+  // EUR si elle manque, est illisible ou inconnue d'Intl, ou si la page n'a pas Donnees. Elle ne convertit aucun montant.
+  const DEVISE_PAR_DEFAUT = 'EUR';
+  const devisesConnues = {};
+  const symbolesDevise = {};
+
+  /** Vrai si `code` est un code ISO 4217 (3 lettres majuscules) connu d'Intl. */
+  function deviseConnue(code) {
+    if (typeof code !== 'string' || !/^[A-Z]{3}$/.test(code)) return false;
+    if (!(code in devisesConnues)) {
+      let connue = false;
+      try {
+        if (typeof Intl.supportedValuesOf === 'function') connue = Intl.supportedValuesOf('currency').includes(code);
+        else connue = new Intl.DisplayNames(['en'], { type: 'currency' }).of(code) !== code;
+      } catch (erreur) { connue = false; }
+      devisesConnues[code] = connue;
+    }
+    return devisesConnues[code];
+  }
+
+  /** Code de la devise réglée (« EUR » par défaut). */
+  function devise() {
+    let code = DEVISE_PAR_DEFAUT;
+    try {
+      if (typeof Donnees !== 'undefined' && Donnees && typeof Donnees.parametre === 'function') {
+        code = String(Donnees.parametre('devise', DEVISE_PAR_DEFAUT)).trim().toUpperCase();
+      }
+    } catch (erreur) { code = DEVISE_PAR_DEFAUT; }
+    return deviseConnue(code) ? code : DEVISE_PAR_DEFAUT;
+  }
+
+  /** Nom de la devise dans la langue active (« euro », « Swiss Franc ») ; le code lui-même si Intl l'ignore. */
+  function nomDevise(code) {
+    try { return new Intl.DisplayNames([I18n.locale], { type: 'currency' }).of(code) || code; } catch (erreur) { return code; }
+  }
+
+  /** Symbole court de la devise réglée, pour les libellés (« € », « CHF », « £ »). */
+  function symboleDevise() {
+    const code = devise();
+    const cle = I18n.locale + '/' + code;
+    if (!symbolesDevise[cle]) {
+      let symbole = code;
+      try {
+        const parties = new Intl.NumberFormat(I18n.locale, { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' }).formatToParts(0);
+        const partie = parties.find((p) => p.type === 'currency');
+        if (partie) symbole = partie.value;
+      } catch (erreur) { symbole = code; }
+      symbolesDevise[cle] = symbole;
+    }
+    return symbolesDevise[cle];
+  }
+
   function formateurNombre(decimalesMin, decimalesMax, style) {
     const locale = I18n.locale;
-    const cle = locale + '/' + decimalesMin + '/' + decimalesMax + '/' + (style || '');
+    const monnaie = style === 'euro' ? devise() : '';
+    const cle = locale + '/' + decimalesMin + '/' + decimalesMax + '/' + (style || '') + '/' + monnaie;
     if (!formateursNombre[cle]) {
       const options = { minimumFractionDigits: decimalesMin, maximumFractionDigits: decimalesMax };
-      if (style === 'euro') { options.style = 'currency'; options.currency = 'EUR'; }
+      if (style === 'euro') { options.style = 'currency'; options.currency = monnaie; }
       const intl = new Intl.NumberFormat(locale, options);
       formateursNombre[cle] = { format: (nombre) => intl.format(nombre).replace(ESPACE_FINE, ESPACE_INSECABLE) };
     }
@@ -231,7 +284,7 @@ const UI = (function () {
     return formateurNombre(decimales, decimales).format(nombre);
   }
 
-  /** Montant en euros : '1234.5' → '1 234,50 €' (2 décimales par défaut). Absent → '–'. */
+  /** Montant dans la devise réglée (EUR par défaut) : '1234.5' → '1 234,50 €' (2 décimales par défaut). Absent → '–'. */
   function euro(valeur, decimales) {
     const nombre = enNombre(valeur);
     if (nombre === null) return TIRET_VALEUR_ABSENTE;
@@ -1562,7 +1615,7 @@ const UI = (function () {
     // sélecteurs et HTML sûr
     $, $$, echapper, html, brut, estSur, remplir, element, identifiantUnique, normaliserRecherche, comparerTextes,
     // formats français
-    dateFr, dateHeureFr, nombreFr, euro, heures, enNombre,
+    dateFr, dateHeureFr, nombreFr, euro, montant: euro, devise, deviseConnue, nomDevise, symboleDevise, heures, enNombre,
     // badges, icônes, logo
     badgePriorite, badgeStatut, badgeValeur, icone, nomsIcones, logo,
     // notifications

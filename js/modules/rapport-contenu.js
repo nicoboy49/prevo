@@ -98,7 +98,7 @@ const Rapport = (() => {
     if (cle === 'cout') {
       if (reference === 0) {
         return valeur === 0 ? { sens: 'stable', texte: I18n.t('rapport.comparer.stable_rapport', { libelleReference }) }
-          : { sens: 'hausse', texte: I18n.t('rapport.comparer.hausse_0', { libelleReference }) };
+          : { sens: 'hausse', texte: I18n.t('rapport.comparer.hausse_0', { libelleReference, devise: UI.symboleDevise() }) };
       }
       const ecart = (valeur - reference) / reference * 100;
       if (Math.abs(ecart) < 0.5) return { sens: 'stable', texte: I18n.t('rapport.comparer.stable_rapport', { libelleReference }) };

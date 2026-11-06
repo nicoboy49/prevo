@@ -406,7 +406,7 @@ Object.assign(Magasin, (() => {
     champ('ref_fabricant');
     champ('emplacement', { aide: I18n.t('magasin.formulaire_article.rayon_casier_ex_1') });
     champ('unite', { placeholder: I18n.t('magasin.formulaire_article.u') });
-    champ('prix_unitaire', { aide: I18n.t('magasin.formulaire_article.prix_actuel_ht_reception') });
+    champ('prix_unitaire', { aide: I18n.t('magasin.formulaire_article.prix_actuel_ht_reception', { devise: UI.symboleDevise() }) });
     champ('fournisseur_id', { liste: listeFournisseurs() });
     champ('stock_securite');
     champ('delai_jours');

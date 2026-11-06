@@ -400,8 +400,8 @@ const Ordres = (() => {
   }
 
   /**
-   * Coût d'un OT (RG7) en euros : { heures, pieces, soustraitance, total, detail }.
-   *   heures : Σ heures passées × taux horaire du technicien (main-d'œuvre, en €) ;
+   * Coût d'un OT (RG7), dans la devise réglée : { heures, pieces, soustraitance, total, detail }.
+   *   heures : Σ heures passées × taux horaire du technicien (main-d'œuvre, dans la devise réglée) ;
    *   pieces : Σ (sorties − retours de stock imputées à l'OT) × prix unitaire de l'article ;
    *   soustraitance : cout_soustraitance ; total : la somme.
    *   detail : { nombreHeures, temps: [{ technicien_id, date, heures, taux, montant }],

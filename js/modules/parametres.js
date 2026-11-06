@@ -27,6 +27,10 @@ const Parametres = (() => {
     { cle: 'langue_defaut', type: 'choix', get valeurs() { return I18n.langues.map((langue) => langue.code); }, defaut: 'fr', langues: true,
       get libelle() { return I18n.t('parametres.libelle.langue_installation'); },
       get aide() { return I18n.t('parametres.aide.langue_proposee_postes_textes'); } },
+    // Devise (T304, D152) : code ISO 4217 ; la liste courte, ou « autre » avec un champ (devise_autre) ; n'affecte que l'affichage.
+    { cle: 'devise', type: 'choix', valeurs: ['EUR', 'CHF', 'GBP', 'USD', 'TRY'], defaut: 'EUR', devises: true,
+      get libelle() { return I18n.t('parametres.libelle.devise'); },
+      get aide() { return I18n.t('parametres.aide.devise_affichage_seulement'); } },
     { cle: 'delai_p1_h', type: 'entier', get libelle() { return I18n.t('parametres.libelle.delai_p_1_heures'); }, defaut: '0', min: 0, max: 8760, get section() { return I18n.t('parametres.section.delais_priorite'); },
       get aide() { return I18n.t('parametres.aide.date_prevue_demande_p'); } },
     { cle: 'delai_p2_h', type: 'entier', get libelle() { return I18n.t('parametres.libelle.delai_p_2_heures'); }, defaut: '24', min: 0, max: 8760,
@@ -321,12 +325,19 @@ const Parametres = (() => {
       const surServeur = decideSurLeServeur(reglage);
       // Langues : liste de UI.champ (type ref) sous le nom de chaque langue dans sa langue, lu dans sa langue.
       const langues = reglage.langues ? I18n.langues : null;
-      const bloc = UI.champ({ nom: reglage.cle, type: langues ? 'ref' : reglage.type, libelle: reglage.libelle, valeurs: reglage.valeurs },
-        valeurAffichee(reglage), { aide: surServeur ? noteDecideSurLeServeur() + ' ' + reglage.aide : reglage.aide,
-          lectureSeule: surServeur, liste: langues && langues.map((langue) => ({ valeur: langue.code, libelle: langue.nom })) });
+      // Devise : « code — nom » dans la langue active, puis « autre » (champ devise_autre sous la liste).
+      const actuelle = valeurAffichee(reglage);
+      const devises = reglage.devises ? reglage.valeurs.map((code) => ({ valeur: code, libelle: code + ' — ' + UI.nomDevise(code) }))
+        .concat([{ valeur: 'autre', libelle: I18n.t('parametres.devise.autre') }]) : null;
+      const bloc = UI.champ({ nom: reglage.cle, type: langues || devises ? 'ref' : reglage.type, libelle: reglage.libelle, valeurs: reglage.valeurs },
+        devises && !reglage.valeurs.includes(actuelle) ? 'autre' : actuelle, { aide: surServeur ? noteDecideSurLeServeur() + ' ' + reglage.aide : reglage.aide,
+          lectureSeule: surServeur, liste: devises || (langues && langues.map((langue) => ({ valeur: langue.code, libelle: langue.nom }))) });
       if (langues) UI.$$('option', bloc).forEach((option) => { if (reglage.valeurs.includes(option.value)) option.lang = option.value; });
+      if (devises) { const vide = UI.$('option[value=""]', bloc); if (vide) vide.remove(); }
       if (reglage.large) bloc.classList.add('large');
       formulaire.appendChild(bloc);
+      if (devises) formulaire.appendChild(UI.champ({ nom: 'devise_autre', type: 'texte', libelle: I18n.t('parametres.libelle.devise_autre') },
+        reglage.valeurs.includes(actuelle) ? '' : actuelle, { placeholder: 'SEK', attributs: { maxlength: '3', autocapitalize: 'characters' } }));
     });
     formulaire.appendChild(UI.element(UI.html`<div class="actions"><span class="espace"></span>
       <button type="submit" class="btn btn-primaire">${UI.icone('valider')}${I18n.t('commun.bouton.enregistrer')}</button></div>`));
@@ -339,6 +350,7 @@ const Parametres = (() => {
 
   /** Message d'erreur d'un réglage (nombre hors bornes, entier attendu, choix inconnu), sinon ''. */
   function erreurReglage(reglage, valeur) {
+    if (reglage.devises) return UI.deviseConnue(valeur) ? '' : I18n.t('parametres.erreur_reglage.devise_inconnue');
     if (reglage.valeurs) return reglage.valeurs.includes(valeur) ? '' : I18n.t('parametres.erreur_reglage.choisissez_parmi', { join: reglage.valeurs.join(', ') });
     if (reglage.min === undefined) return '';
     const nombre = Donnees.nombre(valeur);
@@ -354,11 +366,14 @@ const Parametres = (() => {
     const syntaxe = UI.verifierFormulaire(formulaire);
     const valeurs = UI.lireFormulaire(formulaire);
     let erreurs = syntaxe.length;
+    // Devise : « autre » prend le code saisi (majuscules) ; devise_autre n'est pas un réglage.
+    const autreDevise = valeurs.devise === 'autre';
+    if (autreDevise) valeurs.devise = String(valeurs.devise_autre || '').toUpperCase();
     reglagesEnregistres().forEach((reglage) => {
       if (syntaxe.some((e) => e.nom === reglage.cle)) return;
       const message = erreurReglage(reglage, valeurs[reglage.cle]);
       if (message) {
-        UI.erreurChamp(formulaire, reglage.cle, message);
+        UI.erreurChamp(formulaire, reglage.devises && autreDevise ? 'devise_autre' : reglage.cle, message);
         erreurs += 1;
       }
     });

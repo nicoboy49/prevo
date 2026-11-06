@@ -310,7 +310,7 @@ Object.assign(Ordres, (() => {
     placer('date_fin', champOt('date_fin', ot.date_fin));
     placer('arret_production', champOt('arret_production', ot.arret_production, { libelle: I18n.t('ordres.execution.arret_production_pendant_intervention') }));
     placer('duree_arret_h', champOt('duree_arret_h', ot.duree_arret_h));
-    placer('cout_soustraitance', champOt('cout_soustraitance', ot.cout_soustraitance, { libelle: I18n.t('ordres.execution.cout_sous_traitance') }));
+    placer('cout_soustraitance', champOt('cout_soustraitance', ot.cout_soustraitance, { libelle: I18n.t('ordres.execution.cout_sous_traitance', { devise: UI.symboleDevise() }) }));
     if (modifiable) {
       const blocDateFin = UI.$('[data-champ="date_fin"]', formulaire);
       const maintenant = UI.element(UI.html`<button type="button" class="lien-bouton ot-maintenant">${I18n.t('ordres.execution.maintenant')}</button>`);

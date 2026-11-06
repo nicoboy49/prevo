@@ -607,6 +607,10 @@ ROLES_PARAMETRES_LOT_7 = {
     "langue_defaut": ("Langue de l'installation (chantier multilingue, D149) : langue des postes qui n'ont pas choisi la"
                       " leur, et des textes que Prévo écrit dans les données (journal, motifs, rapport figé). Code d'une"
                       " langue déclarée ; réglable dans Paramètres, section Entreprise."),
+    "devise": ("Devise d'affichage des montants (chantier multilingue, D152) : code ISO 4217, `EUR` par défaut. La liste de"
+               " Paramètres propose ces codes et « Autre code ISO 4217 » : tout code ISO connu s'écrit ici. Change seulement"
+               " l'affichage : aucun montant des fichiers n'est converti (les montants des CSV restent des nombres sans"
+               " symbole). Réglable dans Paramètres, section Entreprise."),
 }
 CLE_IA_DISTANT = "ia_distant_autorise"
 

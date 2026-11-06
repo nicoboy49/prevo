@@ -51,7 +51,7 @@ Object.assign(Parc, (() => {
       </section>`;
   }
 
-  /** « 12 500,00 € HT » ; vide si la valeur n'est pas renseignée (ou illisible). */
+  /** « 12 500,00 € HT » (devise réglée) (devise réglée) ; vide si la valeur n'est pas renseignée (ou illisible). */
   function valeurRemplacement(equipement) {
     const montant = UI.enNombre(equipement.valeur_remplacement);
     return montant === null ? '' : UI.euro(montant) + ' HT';

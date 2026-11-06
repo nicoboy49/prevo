@@ -599,7 +599,11 @@ const Schema = (function () {
       Object.defineProperty(champDefini, 'libelle', {
         enumerable: true,
         configurable: true,
-        get: function () { return I18n.t('schema.' + nomTable + '.' + champDefini.nom); },
+        // {devise} : symbole de la devise réglée (T304) dans les libellés de montants ; « € » si UI n'est pas chargé.
+        get: function () {
+          return I18n.t('schema.' + nomTable + '.' + champDefini.nom,
+            { devise: typeof UI !== 'undefined' && UI.symboleDevise ? UI.symboleDevise() : '€' });
+        },
       });
       if (champDefini.type === 'choix') { champDefini.nomTable = nomTable; }
     });

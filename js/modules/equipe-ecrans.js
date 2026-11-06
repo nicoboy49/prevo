@@ -253,7 +253,7 @@ Object.assign(Equipe, (() => {
     ajouter(UI.champ(definitionChamp('techniciens', 'metier'), valeur('metier'), { placeholder: I18n.t('equipe.formulaire_technicien.ex_electricien_mecanicien') }));
     ajouter(UI.champ(definitionChamp('techniciens', 'capacite_h_semaine'), technicien ? technicien.capacite_h_semaine : CAPACITE_PAR_DEFAUT,
       { aide: I18n.t('equipe.formulaire_technicien.heures_disponibles_maintenance_chaque', { maximum: CAPACITE_MAX_H }) }));
-    ajouter(UI.champ(definitionChamp('techniciens', 'taux_horaire', { libelle: I18n.t('equipe.formulaire_technicien.taux_horaire_ht_h') }), valeur('taux_horaire'),
+    ajouter(UI.champ(definitionChamp('techniciens', 'taux_horaire', { libelle: I18n.t('equipe.formulaire_technicien.taux_horaire_ht_h', { devise: UI.symboleDevise() }) }), valeur('taux_horaire'),
       { aide: I18n.t('equipe.formulaire_technicien.cout_heure_technicien_sert') }));
     if (technicien) {
       ajouter(UI.champ(definitionChamp('techniciens', 'actif'), technicien.actif,

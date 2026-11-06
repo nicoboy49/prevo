@@ -253,7 +253,10 @@ Object.assign(Rapport, (() => {
 
   /** Point du rapport envoyé à l'IA sans chiffre ni montant (§17.3 : aucun coût ; D71 : l'IA n'écrit aucun chiffre). */
   function sansChiffres(point) {
-    return texte(point).replace(/\d[\d\s\u00a0\u202f.,]*(?:\s?(?:€|%|h\b|j\b))?/g, I18n.t('rapport.sans_chiffres.texte') + ' ').replace(/\s+/g, ' ').trim();
+    // Montants dans la devise réglée (T304) : son symbole et son code s'ajoutent à « € ».
+    const unites = ['€', UI.symboleDevise(), UI.devise()].map((u) => u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const chiffres = new RegExp('\\d[\\d\\s\\u00a0\\u202f.,]*(?:\\s?(?:' + unites + '|%|h\\b|j\\b))?', 'g');
+    return texte(point).replace(chiffres, I18n.t('rapport.sans_chiffres.texte') + ' ').replace(/\s+/g, ' ').trim();
   }
 
   /** Fige (ou recalcule) puis réaffiche l'onglet avec le message de réussite. */
