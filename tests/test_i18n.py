@@ -3,7 +3,7 @@ contrat du Lot 2 ; ARCHITECTURE.md §1 ; D147).
 
 Sans navigateur :
     - fichiers : js/i18n/fr.js a un bloc par section du contrat, dans l'ordre et bien formé ; js/i18n/aide/fr.js ;
-      js/i18n/langues.js déclare le français ;
+      js/i18n/langues.js déclare le français puis l'anglais (en-GB, T278) ;
     - chargement : index.html charge js/i18n.js, langues.js, fr.js, aide/fr.js et js/i18n-chargeur.js juste avant
       js/schema.js ; acces/porte.html charge le moteur, les langues et fr.js avant porte.js ;
     - serveur.py : js/i18n/… et js/i18n/aide/… dans la liste blanche ; la porte sert js/i18n.js et js/i18n/, rien
@@ -23,7 +23,11 @@ Dans Chromium :
       chargement), en http, en file:// et sous la vraie politique de sécurité du contenu (script-src 'self') ; langue
       non déclarée ou mal formée : français, sans erreur ni requête ; chargeur ajouté après l'analyse : page intacte ;
       I18n.appliquer(document) au démarrage de l'application ;
-    - index.html en file:// et avec serveur.py (ServeurPrevo), acces/porte.html servie : sans erreur console.
+    - index.html en file:// et avec serveur.py (ServeurPrevo), acces/porte.html servie : sans erreur console ;
+    - sélecteur de langue (T278, D147, D148) : au pied du menu et à l'écran « Ce poste », les langues déclarées sous
+      leur nom dans leur langue ; English choisi → page rechargée en anglais (lang="en", menu, nombres en-GB), sans
+      erreur ni clé absente ; Français → page française (lang="fr", clé retirée) ; stockage refusé : message, la page
+      reste dans sa langue, sans erreur.
 
 Lancer depuis la racine du projet :
     py -X utf8 -m unittest discover -s tests -p "test_i18n.py" -v
@@ -45,7 +49,12 @@ SECTIONS = ("commun schema valeurs socle planning causes dictee mise aide ordres
             "porte parametres sauvegardes zip serveur ia").split()
 SCRIPTS_I18N = ["js/i18n.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js", "js/i18n-chargeur.js"]
 SCRIPTS_PORTE = ["/js/i18n.js", "/js/i18n/langues.js", "/js/i18n/fr.js", "/acces/porte.js"]
-FICHIERS_I18N = ["js/i18n.js", "js/i18n-chargeur.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js"]
+FICHIERS_I18N = ["js/i18n.js", "js/i18n-chargeur.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js",
+                 "js/i18n/en.js", "js/i18n/aide/en.js"]
+# Langues déclarées par js/i18n/langues.js (T278), dans l'ordre du sélecteur : code, nom dans sa langue, locale, statut.
+LANGUES = [{"code": "fr", "nom": "Français", "locale": "fr-FR", "statut": "reference"},
+           {"code": "en", "nom": "English", "locale": "en-GB", "statut": "complete"}]
+CODES = [langue["code"] for langue in LANGUES]
 ERREUR_PING_ABSENT = re.compile(r"status of 404.*/api/ping")      # serveur statique : pas de /api/ping
 ERREUR_SANS_AUTORITE = re.compile(r"status of 404.*/acces/ca\.crt")   # porte sans autorité locale (MESSAGE_SANS_AUTORITE)
 
@@ -132,8 +141,10 @@ class TestFichiers(unittest.TestCase):
         self.assertTrue(aide.startswith("'use strict';\n"))
         self.assertIn("I18n.ajouter('fr', {\n", aide)
         langues = (RACINE / "js" / "i18n" / "langues.js").read_text(encoding="utf-8")
-        self.assertIn("I18n.declarer({ code: 'fr', nom: 'Français', locale: 'fr-FR', statut: 'reference' });", langues)
-        self.assertEqual(langues.count("I18n.declarer("), 1)          # Lot 2 : le français seul
+        declarations = re.findall(r"^I18n\.declarer\(\{ code: '([^']*)', nom: '([^']*)', locale: '([^']*)', "
+                                  r"statut: '([^']*)' \}\);$", langues, re.MULTILINE)
+        self.assertEqual(declarations, [tuple(langue.values()) for langue in LANGUES])
+        self.assertEqual(langues.count("I18n.declarer("), len(LANGUES))
 
     def test_index_charge_la_traduction_juste_avant_le_schema(self):
         scripts = scripts_de_la_page((RACINE / "index.html").read_text(encoding="utf-8"))
@@ -211,8 +222,7 @@ class TestMoteur(CasNavigateur):
                                               "Semaine du {date}", "Semaine du ", "Semaine du 0", "Rien à remplacer",
                                               "Semaine du <b>&"])
         self.assertEqual(resultat["langue"], "fr")
-        self.assertEqual(resultat["langues"], [{"code": "fr", "nom": "Français", "locale": "fr-FR",
-                                                "statut": "reference"}])
+        self.assertEqual(resultat["langues"], LANGUES)
         self.assertEqual(self.avertissements(), [])
 
     def test_pluriels_francais_et_langue_d_essai(self):
@@ -524,8 +534,8 @@ class TestChargement(CasNavigateur):
         self.page.goto(url_fichier("index.html"))
         self.attendre_etat(self.page, "demarrage")
         etat = self.page.evaluate("() => ({ langue: I18n.langue, langues: I18n.langues.map((l) => l.code), "
-                                  "t: typeof I18n.t })")
-        self.assertEqual(etat, {"langue": "fr", "langues": ["fr"], "t": "function"})
+                                  "t: typeof I18n.t, lang: document.documentElement.lang })")
+        self.assertEqual(etat, {"langue": "fr", "langues": CODES, "t": "function", "lang": "fr"})
 
     def test_mode_serveur_application_et_porte_sans_erreur(self):
         page = self.page
@@ -546,7 +556,145 @@ class TestChargement(CasNavigateur):
             page.wait_for_load_state("load")
             etat = page.evaluate("() => ({ langue: I18n.langue, langues: I18n.langues.map((l) => l.code), "
                                  "titre: document.title })")
-            self.assertEqual(etat, {"langue": "fr", "langues": ["fr"], "titre": "Prévo — Bienvenue"})
+            self.assertEqual(etat, {"langue": "fr", "langues": CODES, "titre": "Prévo — Bienvenue"})
+
+
+# ---------------------------------------------------------------------------
+# Navigateur : le sélecteur de langue (T278 ; D147, D148)
+# ---------------------------------------------------------------------------
+
+MENU_LANGUE = "#menu-langue-liste"
+POSTE_LANGUE = "#poste-langue-liste"
+# Les deux listes et la page : options (valeur, nom, lang), choix, nom accessible ; lang de <html>, langue active, clé
+# retenue ; entrée « Ce poste » du menu et titre de l'écran (affiché, texte de la langue active, texte français) ;
+# un nombre formaté.
+ETAT_LANGUE_JS = """() => {
+  const options = (liste) => [...liste.options].map((o) => [o.value, o.textContent, o.lang]);
+  const menu = document.querySelector('#menu-langue-liste');
+  const poste = document.querySelector('#poste-langue-liste');
+  const lien = document.querySelector('#menu a[data-ecran="poste"] .libelle');
+  let retenue;
+  try { retenue = localStorage.getItem('prevo.langue'); } catch (erreur) { retenue = 'illisible'; }
+  return {
+    lang: document.documentElement.lang, langue: I18n.langue, locale: I18n.locale, retenue,
+    menu: options(menu), poste: options(poste), choix: [menu.value, poste.value],
+    menuVisible: menu.getClientRects().length > 0,
+    nomMenu: [menu.getAttribute('aria-label'), I18n.t('socle.selecteur_langue.langue_ecran'),
+              I18n.reference('socle.selecteur_langue.langue_ecran')],
+    nomPoste: [...poste.labels].map((l) => [l.textContent.trim(), I18n.t('poste.carte_affichage.langue_ecran')]),
+    entree: [lien.textContent.trim(), I18n.t('poste.menu.libelle'), I18n.reference('poste.menu.libelle')],
+    titre: [document.querySelector('#contenu h1').textContent.trim(), I18n.t('poste.ecran.poste'),
+            I18n.reference('poste.ecran.poste')],
+    nombre: UI.nombreFr(1234567.5),
+  };
+}"""
+# Stockage refusé pour la langue seule (navigation privée stricte, réglage du navigateur) : le reste de Prévo garde le
+# sien, pour que seul le sélecteur soit éprouvé.
+REFUS_LANGUE_JS = """(() => {
+  for (const methode of ['setItem', 'removeItem']) {
+    const avant = Storage.prototype[methode];
+    Storage.prototype[methode] = function (cle, ...reste) {
+      if (cle === 'prevo.langue') throw new DOMException('Stockage refusé (test)', 'SecurityError');
+      return avant.call(this, cle, ...reste);
+    };
+  }
+})();"""
+
+
+class TestSelecteurDeLangue(CasNavigateur):
+
+    def setUp(self):
+        super().setUp()
+        self.cles_absentes = []          # console.warn du moteur : « Prévo (traduction) : clé … »
+        self.page.on("console", lambda message: self.cles_absentes.append(message.text)
+                     if message.type == "warning" and "(traduction)" in message.text else None)
+
+    def changer_de_langue(self, selecteur, code):
+        """Choisit `code` dans la liste : la page se recharge ; état relu sur l'écran « Ce poste » rouvert."""
+        with self.page.expect_navigation():
+            self.page.select_option(selecteur, code)
+        attendre_pret(self.page)
+        self.page.wait_for_selector(POSTE_LANGUE)
+        return self.page.evaluate(ETAT_LANGUE_JS)
+
+    def verifier_dans_sa_langue(self, etat, code):
+        options = [[langue["code"], langue["nom"], langue["code"]] for langue in LANGUES]
+        self.assertEqual((etat["menu"], etat["poste"]), (options, options))      # noms jamais traduits
+        self.assertEqual(etat["choix"], [code, code])
+        self.assertTrue(etat["menuVisible"])
+        self.assertEqual(etat["nomMenu"][0], etat["nomMenu"][1])
+        self.assertEqual(len(etat["nomPoste"]), 1)                              # un seul <label for>
+        self.assertEqual(etat["nomPoste"][0][0], etat["nomPoste"][0][1])
+        for zone in ("entree", "titre"):
+            self.assertEqual(etat[zone][0], etat[zone][1], zone)
+
+    def test_au_menu_et_a_ce_poste_anglais_puis_francais(self):
+        page = self.page
+        preregler_profil(self.contexte, "responsable", "Nicolas Briand")
+        with ServeurPrevo() as serveur:
+            page.goto(serveur.url + "/#/poste")
+            attendre_pret(page)
+            page.wait_for_selector(POSTE_LANGUE)
+            francais = page.evaluate(ETAT_LANGUE_JS)
+            self.verifier_dans_sa_langue(francais, "fr")
+            self.assertEqual((francais["lang"], francais["langue"], francais["retenue"]), ("fr", "fr", None))
+
+            # English, choisi au pied du menu : page rechargée en anglais.
+            anglais = self.changer_de_langue(MENU_LANGUE, "en")
+            self.verifier_dans_sa_langue(anglais, "en")
+            self.assertEqual((anglais["lang"], anglais["langue"], anglais["locale"], anglais["retenue"]),
+                             ("en", "en", "en-GB", "en"))
+            for zone in ("entree", "titre", "nomMenu"):
+                self.assertNotEqual(anglais[zone][0], anglais[zone][2], zone)      # pas le texte français
+            self.assertEqual(anglais["nombre"], "1,234,567.5")
+            # Un autre écran en anglais (accueil), puis retour à « Ce poste ».
+            page.evaluate("location.hash = '#/accueil'")
+            page.wait_for_function("App.ecranCourant && App.ecranCourant.id === 'accueil'")
+            self.assertEqual(page.evaluate("document.documentElement.lang"), "en")
+            page.evaluate("location.hash = '#/poste'")
+            page.wait_for_selector(POSTE_LANGUE)
+
+            # Français, choisi à l'écran « Ce poste » : page française, clé retirée.
+            retour = self.changer_de_langue(POSTE_LANGUE, "fr")
+            self.verifier_dans_sa_langue(retour, "fr")
+            self.assertEqual((retour["lang"], retour["langue"], retour["locale"], retour["retenue"]),
+                             ("fr", "fr", "fr-FR", None))
+            for zone in ("entree", "titre", "nomMenu", "nombre"):
+                self.assertEqual(retour[zone], francais[zone], zone)
+        self.assertEqual(self.cles_absentes, [])
+
+    def test_stockage_refuse_message_et_page_dans_sa_langue(self):
+        page = self.page
+        self.contexte.add_init_script(REFUS_LANGUE_JS)
+        preregler_profil(self.contexte, "responsable", "Nicolas Briand")
+        page.goto(url_fichier("index.html"))
+        page.click("#btn-demo")
+        attendre_pret(page)
+        page.evaluate("window.memePage = true")
+        page.select_option(MENU_LANGUE, "en")
+        page.wait_for_selector("#toast.visible")
+        etat = page.evaluate("""() => ({ memePage: window.memePage === true, langue: I18n.langue,
+          lang: document.documentElement.lang, choix: document.querySelector('#menu-langue-liste').value,
+          message: document.querySelector('#toast').textContent.trim(),
+          attendu: I18n.t('socle.selecteur_langue.choix_non_retenu') })""")
+        self.assertEqual({cle: etat[cle] for cle in ("memePage", "langue", "lang", "choix")},
+                         {"memePage": True, "langue": "fr", "lang": "fr", "choix": "fr"})
+        self.assertEqual(etat["message"], etat["attendu"])
+        # La liste du menu tient dans le menu ; menu en icônes seules (tablette) ou caché (téléphone) : liste cachée,
+        # rien ne déborde.
+        dans_le_menu = page.evaluate("""() => {
+          const liste = document.querySelector('#menu-langue-liste').getBoundingClientRect();
+          const menu = document.querySelector('.menu-lateral').getBoundingClientRect();
+          return liste.width > 0 && liste.left >= menu.left && liste.right <= menu.right; }""")
+        self.assertTrue(dans_le_menu)
+        for largeur in (900, 375):
+            with self.subTest(largeur=largeur):
+                page.set_viewport_size({"width": largeur, "height": 800})
+                etat = page.evaluate("""() => ({
+                  visible: document.querySelector('#menu-langue-liste').getClientRects().length > 0,
+                  deborde: document.documentElement.scrollWidth > document.documentElement.clientWidth })""")
+                self.assertEqual(etat, {"visible": False, "deborde": False})
+        self.assertEqual(self.cles_absentes, [])
 
 
 if __name__ == "__main__":

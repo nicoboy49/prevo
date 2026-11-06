@@ -1,7 +1,7 @@
 'use strict';
 // Poste — écran « Ce poste » (#/poste, tous les profils ; ARCHITECTURE.md §17.7) : identité du poste
-// et profil, assistant IA, dictée, affichage (thème sombre ou clair). Les réglages propres au poste
-// restent dans son navigateur (localStorage : prevo.ia, prevo.dictee, prevo.theme) ; le réglage
+// et profil, assistant IA, dictée, affichage (thème sombre ou clair, langue de l'écran). Les réglages propres au poste
+// restent dans son navigateur (localStorage : prevo.ia, prevo.dictee, prevo.theme, prevo.langue) ; le réglage
 // partagé « fournisseurs d'IA en ligne autorisés » est dans Paramètres (responsable ; en mode serveur, il
 // est décidé sur le PC serveur, comme le fournisseur, son adresse et sa clé).
 //
@@ -522,7 +522,8 @@ const Poste = (() => {
   }
 
   // ===========================================================================================
-  // 6. Carte « Affichage » : thème sombre ou clair, appliqué tout de suite
+  // 6. Carte « Affichage » : thème sombre ou clair, appliqué tout de suite ; langue de l'écran (UI.selecteurLangue :
+  //    le choix est retenu par ce navigateur, puis la page est rechargée)
   // ===========================================================================================
 
   function carteAffichage() {
@@ -534,10 +535,16 @@ const Poste = (() => {
         <label class="case"><input type="radio" name="theme" value="clair" id="poste-theme-clair"><span>${I18n.t('poste.carte_affichage.piece_lumineuse_plein_jour', { clair: THEMES.clair })}</span></label>
       </fieldset>
       <p class="note">${I18n.t('poste.carte_affichage.reglage_navigateur_seulement_impression')}</p>
+      <div class="champ poste-langue" id="poste-langue">
+        <label class="libelle" for="poste-langue-liste">${I18n.t('poste.carte_affichage.langue_ecran')}</label>
+        <p class="aide">${I18n.t('poste.carte_affichage.choix_garde_navigateur_poste')}</p>
+      </div>
     </article>`;
   }
 
   function brancherAffichage(conteneur) {
+    const langue = UI.$('#poste-langue', conteneur);
+    langue.insertBefore(UI.selecteurLangue({ id: 'poste-langue-liste' }), langue.querySelector('.aide'));
     const actuel = themeMemorise();
     UI.$$('input[name=theme]', conteneur).forEach((bouton) => {
       bouton.checked = bouton.value === actuel;

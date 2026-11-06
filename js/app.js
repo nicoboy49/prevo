@@ -1007,6 +1007,7 @@ const App = (() => {
     afficherLectureSeule();
     appliquerRepli(lireMemoire(CLE_MENU_REPLIE) === '1');
     mettreAJourEntreprise();
+    placerSelecteurLangue();
     if (!location.hash || location.hash === '#' || location.hash === '#/'
         || (typeof Connexion !== 'undefined' && Connexion.estRouteEnrolement(location.hash))) remplacerRoute(ROUTE_ACCUEIL);
     construireMenus();
@@ -1042,6 +1043,15 @@ const App = (() => {
     zone.textContent = nom;
     zone.title = nom;
     zone.hidden = !nom;
+  }
+
+  // Pied du menu latéral (D147, T278) : la liste des langues seule, nommée par son aria-label ; même liste que l'écran
+  // « Ce poste » (UI.selecteurLangue). Refaite à chaque ouverture de la coque. Cachée quand le menu n'a que ses icônes.
+  function placerSelecteurLangue() {
+    const zone = UI.$('#menu-langue');
+    if (!zone) return;
+    UI.remplir(zone, UI.selecteurLangue({ id: 'menu-langue-liste',
+      libelle: I18n.t('socle.selecteur_langue.langue_ecran') }));
   }
 
   function appliquerRepli(replie) {

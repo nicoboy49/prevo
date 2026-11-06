@@ -68,12 +68,14 @@ const I18n = (function () {
 
   /**
    * Rend `code` langue active s'il est déclaré (le français l'est toujours) ; vrai si c'est fait, faux sinon (la
-   * langue active ne change pas). Sert à js/i18n-chargeur.js ; le changement de langue en cours de route (nouveau
-   * rendu des écrans) viendra avec le sélecteur (Lot 3).
+   * langue active ne change pas). L'attribut lang de <html> prend ce code (D147 ; 'fr' par défaut, écrit dans la
+   * page). Sert à js/i18n-chargeur.js : le sélecteur de langue (UI.selecteurLangue) retient le choix puis recharge
+   * la page, il ne change pas de langue en cours de route.
    */
   function choisir(code) {
     if (code !== LANGUE_DE_REFERENCE && !declaration(code)) return false;
     langueActive = code;
+    if (typeof document !== 'undefined' && document.documentElement) document.documentElement.lang = code;
     return true;
   }
 

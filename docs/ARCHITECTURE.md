@@ -70,9 +70,10 @@ le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-co
 `acces-textes.js` juste après `mise-a-jour.js` (§23, §22.2), `ia-serveur.js` juste après `ia-encadre.js` (§22.12),
 `parametres-solo.js` juste après `parametres-codes.js` et `parametres-sauvegardes.js` juste après `parametres-solo.js`
 (§22.11)), `js/app.js` (en dernier).
-Langue active (T234) : `js/i18n-chargeur.js` lit `localStorage` « prevo.langue » (rien ne l'écrit encore : le choix
-viendra aux lots 3 et 4 du chantier multilingue) ; une langue déclarée par `js/i18n/langues.js`, autre que le français,
-devient la langue active (`I18n.choisir`) et ses deux fichiers (`js/i18n/<code>.js`, `js/i18n/aide/<code>.js`) sont
+Langue active (T234) : `js/i18n-chargeur.js` lit `localStorage` « prevo.langue » (écrit par le sélecteur de langue,
+§24.10 ; la langue du compte viendra au lot 4 du chantier multilingue) ; une langue déclarée par `js/i18n/langues.js`,
+autre que le français, devient la langue active (`I18n.choisir`, qui donne aussi l'attribut `lang` de `<html>`) et ses
+deux fichiers (`js/i18n/<code>.js`, `js/i18n/aide/<code>.js`) sont
 écrits par `document.write` pendant l'analyse de la page : chargés et exécutés avant `js/schema.js`, en `file://` comme
 en http. Valeur absente, non déclarée ou mal formée, stockage refusé : français, sans erreur. `acces/porte.html`
 charge `js/i18n.js`, `js/i18n/langues.js` et `js/i18n/fr.js` avant `acces/porte.js` (servis par la porte :
@@ -4301,7 +4302,7 @@ Un encart d'explication à la première visite de chaque écran, dans la démo c
 Chantier multilingue, Lot 2 (« extraction des textes », décisions D145 à D166 du cahier des charges du chantier) :
 tout texte visible passe par le moteur `I18n`, et le dictionnaire français est la référence. Règle du lot : **l'écran
 ne change en rien** (CS148) et **aucun texte visible ne reste en dur** (CS147). Le Lot 2 ne livre que le français ;
-les autres langues et le choix de la langue viennent aux lots 3 et 4. Le chargement de la langue active est décrit
+le Lot 3 ajoute l'anglais et le sélecteur de langue (§24.10), le Lot 4 la langue du compte. Le chargement de la langue active est décrit
 au §1 (`js/i18n-chargeur.js`), l'aide longue générée au §23, les messages du serveur au §7.
 
 ### 24.1 Le moteur (`js/i18n.js`, objet global `I18n`)
@@ -4321,7 +4322,8 @@ Script classique, compatible `file://`. Interface :
   `console.warn`, une seule fois par clé. Les clés `aide.*` (aide longue) se replient sur le français **sans**
   avertissement ni erreur (décision de Nicolas : une langue peut n'avoir traduit que l'interface).
 - `I18n.ajouter(code, dictionnaire)` fusionne des clés dans une langue (appels répétables) ;
-  `I18n.declarer(langue)` enregistre une langue ; `I18n.choisir(code)` change la langue active ;
+  `I18n.declarer(langue)` enregistre une langue ; `I18n.choisir(code)` change la langue active et l'attribut `lang`
+  de `<html>` (`'fr'` par défaut, écrit dans `index.html`) ;
   `I18n.appliquer(racine)` remplit les éléments `data-i18n="cle"` (texte) et
   `data-i18n-attr="title:cle1;placeholder:cle2"` (attributs) de `index.html` ; `I18n.langue` (code actif, `'fr'`)
   et `I18n.langues` (copie des langues déclarées) sont en lecture seule.
@@ -4456,3 +4458,19 @@ n'a aucune clé (repli voulu sur le français) ; une valeur identique au frança
 limite aux sections de ces domaines (traduire groupe par groupe) ; `--langue fr` : le contrôle du français seul.
 Sans option, le français et chaque langue déclarée dans `js/i18n/langues.js` sont contrôlés : une langue n'entre
 dans le contrôle par défaut qu'une fois déclarée. `js/i18n/en.js` a les sections de `fr.js`, dans le même ordre.
+
+### 24.10 Choix de la langue (Lot 3, T278)
+
+Langues déclarées (`js/i18n/langues.js`, dans l'ordre du sélecteur) : français (référence, `fr-FR`) et anglais
+britannique (`en`, locale `en-GB`, D151). Le sélecteur (`UI.selecteurLangue`, `js/interface.js`, D147) est une liste
+déroulante native : chaque langue sous son nom dans sa langue (« Français », « English », tirés de `langues.js`, jamais
+du dictionnaire), sans drapeau, la langue active choisie. Deux emplacements, une seule construction : l'écran
+« Ce poste », carte « Affichage » (ligne « Langue de l'écran », `<label for>`, phrase « Choix gardé par ce navigateur,
+pour ce poste. ») ; le pied du menu latéral, sous « Explications » (`#menu-langue`, rempli par `js/app.js` ; la liste
+seule, nommée par son `aria-label`), caché quand le menu n'a que ses icônes (tablette, menu replié) et, comme tout le
+menu, au téléphone. Au changement (D148, sans compte) : le choix est retenu par le navigateur du poste
+(`localStorage` « prevo.langue » ; le français retire la clé), puis la page est rechargée (`location.reload()`) :
+`js/i18n-chargeur.js` charge la langue avant `js/schema.js`. Pas de changement de langue sans rechargement. Stockage
+refusé : message court, la liste revient à la langue active, la page reste dans sa langue. En démo, le rechargement
+ramène à l'écran de démarrage (la démo vit dans la page). Viennent au Lot 4 : la langue du compte et la bascule à la
+connexion (D148), la langue du navigateur (`navigator.language`) pour la démo (D150).

@@ -1,7 +1,7 @@
 'use strict';
 // UI : helpers d'écran communs à tous les modules de Prévo (ARCHITECTURE.md §9).
 // Échappement HTML, formats français, badges, notifications, fenêtres, tableaux triables,
-// champs de formulaire, sélecteur d'équipement, QR codes, photos, onglets, bandeaux, icônes.
+// champs de formulaire, sélecteur d'équipement, QR codes, photos, onglets, bandeaux, icônes, sélecteur de langue.
 //
 // Règles :
 // - aucune dépendance à Donnees ni aux modules : tout ce qu'il faut est passé en paramètre ;
@@ -1456,6 +1456,45 @@ const UI = (function () {
     return window.matchMedia('(max-width: 640px)').matches;
   }
 
+  const CLE_LANGUE = 'prevo.langue';          // lue par js/i18n-chargeur.js avant js/schema.js
+  const LANGUE_DE_REFERENCE = 'fr';           // sans clé : français
+
+  /**
+   * Sélecteur de langue (D147, D148) : <select> des langues déclarées (I18n.langues, ordre de js/i18n/langues.js),
+   * chacune sous son nom dans sa langue (jamais traduit, sans drapeau), la langue active choisie. Au changement, le
+   * choix est retenu par ce navigateur (localStorage « prevo.langue » ; le français retire la clé), puis la page est
+   * rechargée : js/i18n-chargeur.js y charge la langue avant js/schema.js. Stockage refusé : message court, la liste
+   * revient à la langue active, la page reste dans sa langue.
+   * reglages : { id, classe, libelle (aria-label, quand aucun <label> visible ne nomme la liste) }.
+   */
+  function selecteurLangue(reglages) {
+    const options = reglages || {};
+    const liste = document.createElement('select');
+    if (options.id) liste.id = options.id;
+    if (options.classe) liste.className = options.classe;
+    if (options.libelle) liste.setAttribute('aria-label', options.libelle);
+    I18n.langues.forEach((langue) => {
+      const option = new Option(langue.nom, langue.code);
+      option.lang = langue.code;                // lu dans sa langue par un lecteur d'écran
+      liste.appendChild(option);
+    });
+    liste.value = I18n.langue;
+    liste.addEventListener('change', () => {
+      const code = liste.value;
+      if (code === I18n.langue) return;
+      try {
+        if (code === LANGUE_DE_REFERENCE) window.localStorage.removeItem(CLE_LANGUE);
+        else window.localStorage.setItem(CLE_LANGUE, code);
+      } catch (erreur) {                        // navigation privée stricte, réglage du navigateur
+        liste.value = I18n.langue;
+        toast(I18n.t('socle.selecteur_langue.choix_non_retenu'), 'erreur');
+        return;
+      }
+      window.location.reload();
+    });
+    return liste;
+  }
+
   return Object.freeze({
     // sélecteurs et HTML sûr
     $, $$, echapper, html, brut, estSur, remplir, element, identifiantUnique, normaliserRecherche,
@@ -1473,7 +1512,7 @@ const UI = (function () {
     selecteurEquipement, identifiantDepuisQR, cameraDisponible, scannerQR, qrSvg,
     // fichiers
     redimensionnerPhoto, nomFichierUnique, telecharger,
-    // mise en page
-    onglets, estTelephone,
+    // mise en page, langue de l'écran
+    onglets, estTelephone, selecteurLangue,
   });
 })();

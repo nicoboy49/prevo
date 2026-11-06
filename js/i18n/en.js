@@ -7,7 +7,7 @@
 // pluriel { one, other } là où le français en a un, un texte simple ailleurs. Vocabulaire : docs/GLOSSAIRE.md.
 // Clé absente : texte français affiché (avertissement dans la console). L'aide longue (aide.*) ira dans
 // js/i18n/aide/en.js. Contrôle : py -X utf8 outils/controler_textes.py --langue en [--domaine <domaine>].
-// L'anglais n'est pas encore déclaré dans js/i18n/langues.js : rien ne charge ce fichier pour l'instant.
+// Déclaré dans js/i18n/langues.js (T278) : js/i18n-chargeur.js charge ce fichier quand l'anglais est choisi.
 
 // ==== section commun ====
 I18n.ajouter('en', {
@@ -645,6 +645,8 @@ I18n.ajouter('en', {
   'socle.selecteur_equipement.rechercher_equipement': 'Search for equipment',
   'socle.selecteur_equipement.repere_nom': 'Tag or name',
   'socle.selecteur_equipement.scanner': 'Scan',
+  'socle.selecteur_langue.choix_non_retenu': 'Language not kept: this browser refuses to save its settings.',
+  'socle.selecteur_langue.langue_ecran': 'Screen language',
   'socle.suffixe_du_motif.motif_sauvegarde_refuse_motifs': 'Backup reason refused. Accepted reasons: {motifs}.',
   'socle.tableau.aucune_ligne_afficher': 'No rows to display.',
   'socle.texte_base_vide.aucun_23_fichiers_prevo': 'None of the 23 Prévo files was found.',
@@ -3919,6 +3921,8 @@ I18n.ajouter('en', {
   'poste.brancher_dictee.dictee_activee_poste': 'Dictation enabled on this computer.',
   'poste.brancher_dictee.dictee_desactivee_poste': 'Dictation disabled on this computer.',
   'poste.carte_affichage.affichage': 'Display',
+  'poste.carte_affichage.choix_garde_navigateur_poste': 'Choice kept by this browser, for this computer.',
+  'poste.carte_affichage.langue_ecran': 'Screen language',
   'poste.carte_affichage.piece_lumineuse_plein_jour': '{clair}: bright room, full daylight',
   'poste.carte_affichage.reglage_navigateur_seulement_impression': 'Setting for this browser only. Printing stays black on white.',
   'poste.carte_affichage.sombre_defaut': '{sombre} (default)',

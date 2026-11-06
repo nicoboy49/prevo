@@ -6,8 +6,10 @@
 // page par document.write pendant son analyse : le navigateur les charge et les exécute aussitôt, de façon synchrone,
 // AVANT js/schema.js, en file:// comme en http (un <script src> du même dossier : permis par la politique de sécurité
 // du contenu, script-src 'self').
-// Lot 2 : la langue demandée vient seulement de localStorage « prevo.langue », que rien n'écrit encore (le choix de la
-// langue viendra aux Lots 3 et 4). Valeur absente, non déclarée ou mal formée, stockage refusé : français, sans erreur.
+// La langue demandée vient de localStorage « prevo.langue », écrit par le sélecteur de langue (UI.selecteurLangue,
+// Lot 3 : écran « Ce poste » et pied du menu ; la langue du compte viendra au Lot 4). Valeur absente, non déclarée ou
+// mal formée, stockage refusé : français, sans erreur. La langue choisie donne aussi l'attribut lang de <html>
+// (I18n.choisir).
 // Ajouté à une page déjà analysée (document.write l'effacerait) : rien n'est fait, la page reste en français.
 // Aucun objet global : seulement I18n (js/i18n.js).
 (function () {
