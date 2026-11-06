@@ -1,4 +1,5 @@
-"""Tests des outils de textes du chantier i18n (T236) : outils/extraire_textes.py et outils/controler_textes.py.
+"""Tests des outils de textes du chantier i18n (T236) : outils/extraire_textes.py et outils/controler_textes.py
+(avec outils/textes_langues.py : comparaison d'une langue au français, T264).
 
 Sans navigateur, bibliothèque standard seulement. Petits fichiers d'essai écrits dans un dossier temporaire ;
 sur le vrai dépôt, seulement des essais (--essai : rien n'est écrit). Lancer depuis la racine du projet :
@@ -10,7 +11,7 @@ import shutil
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -18,6 +19,7 @@ sys.path.insert(0, str(RACINE / 'outils'))
 import controler_textes as ctl  # noqa: E402
 import extraire_textes as ext  # noqa: E402
 import jslex  # noqa: E402
+import textes_langues  # noqa: E402
 
 # Module d'essai (domaine planning : le nom de fichier commence par « planning- »).
 MODULE = r"""'use strict';
@@ -448,11 +450,6 @@ class TestControle(unittest.TestCase):
         controle = controler(self.racine, ['socle'])
         self.assertEqual([s.genre for s in controle.signalements if s.genre == 'page'], ['page'])
 
-    def test_lot3_prevu_mais_pas_fait(self):
-        # La comparaison des langues (Lot 3) n'existe pas encore : aucune fonction factice ne fait semblant.
-        self.assertFalse(hasattr(ctl, 'comparer_langue'))
-        self.assertTrue(hasattr(ctl, 'Langue'))
-
 
 # Corrections apprises sur le domaine pilote (T237). Module du domaine « mise » : fragment optionnel « (…) »,
 # sauts de ligne de mise en page d'un gabarit UI.html (et un <pre>), variables sans nom, accesseurs d'App.ecran.
@@ -826,6 +823,226 @@ class TestAideLongueParLangue(unittest.TestCase):
         self.assertEqual(entrees[res.unites[0].cle], 'Vous êtes dans la démo.')
         self.assertIn('aide.ecran.accueil.titre', entrees)
         self.assertEqual(controler(self.racine, ['aide-longue']).signalements, [])
+
+
+# Comparaison d'une langue au français (Lot 3, T264) : petits dictionnaires d'essai, langue « en ».
+def bloc(code, section, *entrees):
+    return "// ==== section %s ====\nI18n.ajouter('%s', {\n%s});\n// ==== fin %s ====\n" % (
+        section, code, ''.join('  %s,\n' % e for e in entrees), section)
+
+
+FR_COMMUN = ("'commun.bouton.fermer': 'Fermer'", "'commun.sigle.mtbf': 'MTBF'")
+FR_PLANNING = ("'planning.ordres.nombre': { one: '{n} ordre', other: '{n} ordres' }",
+               "'planning.ordres.vide': 'Aucun ordre'", "'planning.semaine.titre': 'Semaine du {date}'")
+FR_AIDE = ("'aide.ecran.accueil.texte': 'Le tableau de bord.'", "'aide.ecran.accueil.titre': 'Accueil'")
+# Traduction complète ; « MTBF » est le même mot qu'en français : ce n'est pas un écart.
+EN_COMMUN = ("'commun.bouton.fermer': 'Close'", "'commun.sigle.mtbf': 'MTBF'")
+EN_PLANNING = ("'planning.ordres.nombre': { one: '{n} order', other: '{n} orders' }",
+               "'planning.ordres.vide': 'No order'", "'planning.semaine.titre': 'Week of {date}'")
+DECLARER = "I18n.declarer({ code: '%s', nom: '%s', locale: '%s', statut: '%s' });\n"
+
+
+class TestComparaisonDesLangues(unittest.TestCase):
+
+    def setUp(self):
+        self.dossier = tempfile.TemporaryDirectory()
+        self.racine = Path(self.dossier.name)
+        ecrire(self.racine, 'js/i18n/fr.js', "'use strict';\n" + bloc('fr', 'commun', *FR_COMMUN) + '\n'
+               + bloc('fr', 'planning', *FR_PLANNING))
+        ecrire(self.racine, 'js/i18n/aide/fr.js', "'use strict';\n" + bloc('fr', 'aide', *FR_AIDE))
+        self.declarer()
+
+    def tearDown(self):
+        self.dossier.cleanup()
+
+    def declarer(self, *codes):
+        ecrire(self.racine, 'js/i18n/langues.js', "'use strict';\n// I18n.declarer({ code: 'zz' }) en commentaire\n"
+               + DECLARER % ('fr', 'Français', 'fr-FR', 'reference')
+               + ''.join(DECLARER % (code, code, code, 'complete') for code in codes))
+
+    def anglais(self, commun=EN_COMMUN, planning=EN_PLANNING, code='en', suite=''):
+        ecrire(self.racine, 'js/i18n/%s.js' % code, "'use strict';\n" + bloc(code, 'commun', *commun) + '\n'
+               + bloc(code, 'planning', *planning) + suite)
+
+    def comparer(self, code='en', domaines=None, langues=None):
+        controle = ctl.Controle(self.racine)
+        controle.lancer(domaines, [code] if langues is None else langues)
+        return controle
+
+    def ecarts(self, controle=None):
+        controle = controle or self.comparer()
+        return [(s.genre, s.message) for c in controle.comparaisons for s in c.signalements]
+
+    def code(self, *args):
+        sortie = io.StringIO()
+        with redirect_stdout(sortie):
+            code = ctl.main(['--racine', str(self.racine)] + list(args))
+        return code, sortie.getvalue()
+
+    def test_traduction_complete_et_valeur_identique_au_francais(self):
+        self.anglais()
+        controle = self.comparer()
+        self.assertEqual(self.ecarts(controle), [])
+        self.assertEqual(controle.comparaisons[0].repli_aide, ['aide.ecran.accueil.texte', 'aide.ecran.accueil.titre'])
+        code, texte = self.code('--langue', 'en')
+        self.assertEqual(code, 0, texte)
+        self.assertIn('Langue en comparée au français — js/i18n/en.js (js/i18n/aide/en.js absent) ; sections : '
+                      'toutes ; pluriels requis : one, other', texte)
+        self.assertIn('Avertissement (en) : 2 clé(s) de l\'aide longue sans traduction', texte)
+        self.assertIn('Résultat : rien à signaler.', texte)
+
+    def test_manquante_orpheline_et_code_retour(self):
+        self.anglais(planning=(EN_PLANNING[0], "'planning.ordres.inutile': 'X'", EN_PLANNING[2]))
+        self.assertEqual(self.ecarts(), [
+            ('manquante', 'planning.ordres.vide — absente (section planning)'),
+            ('orpheline', 'planning.ordres.inutile — absente du français')])
+        code, texte = self.code('--langue', 'en')
+        self.assertEqual(code, 1, texte)
+        ligne = ligne_de((self.racine / 'js/i18n/en.js').read_text(encoding='utf-8'), "'planning.ordres.inutile'")
+        self.assertIn('  js/i18n/en.js:%d  planning.ordres.inutile — absente du français' % ligne, texte)
+        self.assertIn('Clés du français absentes de la langue (en) : 1\n  planning.ordres.vide — absente', texte)
+        self.assertIn('Résultat : 2 point(s) à reprendre.', texte)
+
+    def test_rapport_plafonne(self):
+        self.anglais(commun=(), planning=())
+        ancien, textes_langues.PLAFOND = textes_langues.PLAFOND, 2
+        try:
+            texte = self.code('--langue', 'en')[1]
+        finally:
+            textes_langues.PLAFOND = ancien
+        self.assertIn('Clés du français absentes de la langue (en) : 5\n', texte)
+        self.assertIn('  … et 3 de plus\n', texte)
+
+    def test_variables_differentes(self):
+        self.anglais(planning=EN_PLANNING[:2] + ("'planning.semaine.titre': 'Week of {jour}'",))
+        self.assertEqual(self.ecarts(), [('variables', 'planning.semaine.titre — manque {date} ; en trop {jour}')])
+
+    def test_pluriels(self):
+        cas = {
+            "'{n} orders'": 'planning.ordres.nombre — pluriel en français, texte simple ici (attendu : { one, other })',
+            "{ one: '{n} order', few: '{n} orders', other: '{n} orders' }":
+                'planning.ordres.nombre — catégorie en trop : few (requises en en : one, other)',
+            "{ other: '{n} orders' }": 'planning.ordres.nombre — catégorie manquante : one',
+        }
+        for valeur, message in cas.items():
+            with self.subTest(valeur=valeur):
+                self.anglais(planning=("'planning.ordres.nombre': " + valeur,) + EN_PLANNING[1:])
+                self.assertEqual(self.ecarts(), [('pluriel', message)])
+        self.anglais(planning=(EN_PLANNING[0], "'planning.ordres.vide': { one: 'No order', other: 'No orders' }",
+                               EN_PLANNING[2]))
+        self.assertEqual(self.ecarts(), [('pluriel', 'planning.ordres.vide — texte simple en français, pluriel ici')])
+
+    def test_categories_requises_par_langue(self):
+        for code in ('fr', 'en', 'tr', 'it', 'pt-PT'):
+            self.assertEqual(textes_langues.categories_requises(code), ('one', 'other'), code)
+        self.assertEqual(textes_langues.categories_requises('xx'), ('one', 'other'))   # repli : code inconnu
+
+    def test_section_differente(self):
+        self.anglais(commun=EN_COMMUN[1:], planning=(EN_COMMUN[0],) + EN_PLANNING)
+        attendu = [('section', 'commun.bouton.fermer — section planning, en français : section commun')]
+        self.assertEqual(self.ecarts(), attendu)
+        # une clé rangée dans une section choisie par --domaine est vue, même si sa section française ne l'est pas
+        self.assertEqual(self.ecarts(self.comparer(domaines=['planning'])), attendu)
+        # une clé de l'aide longue écrite dans js/i18n/en.js au lieu de js/i18n/aide/en.js
+        self.anglais(planning=("'aide.ecran.accueil.titre': 'Home'",) + EN_PLANNING)
+        self.assertEqual(self.ecarts(), [('section', 'aide.ecran.accueil.titre — section planning, en français : '
+                                                     'section aide de js/i18n/aide/en.js')])
+
+    def test_doublons(self):
+        self.anglais(planning=EN_PLANNING + ("'planning.ordres.vide': 'Nothing'",),
+                     suite='\n' + bloc('en', 'wiki', EN_COMMUN[0]))
+        ecarts = self.ecarts()
+        self.assertIn(('doublon', 'planning.ordres.vide — définie deux fois'), ecarts)
+        self.assertIn(('doublon', 'commun.bouton.fermer — définie deux fois'), ecarts)
+
+    def test_blocs_mal_ecrits(self):
+        # bloc recopié du français sans changer la langue : chargé, il écraserait le français
+        self.anglais(commun=())
+        texte = (self.racine / 'js/i18n/en.js').read_text(encoding='utf-8')
+        ecrire(self.racine, 'js/i18n/en.js', texte.replace(bloc('en', 'commun'), bloc('fr', 'commun', *EN_COMMUN)))
+        self.assertEqual(self.ecarts(), [('bloc', 'section commun : bloc écrit pour la langue « fr » (attendu : « en »)')])
+        # I18n.ajouter hors d'une section : ses clés ne sont pas lues (donc manquantes)
+        self.anglais(commun=(), suite="I18n.ajouter('en', {\n  'commun.bouton.fermer': 'Close',\n});\n")
+        ecarts = self.ecarts()
+        self.assertIn(('bloc', "I18n.ajouter hors d'une section « // ==== section … ==== » : ses clés ne sont pas lues"),
+                      ecarts)
+        self.assertEqual(sorted(genre for genre, _ in ecarts), ['bloc', 'manquante', 'manquante'])
+
+    def test_aide_longue_avertissement_puis_erreur(self):
+        self.anglais()
+        self.assertEqual(self.ecarts(), [])                                  # sans js/i18n/aide/en.js : repli voulu
+        ecrire(self.racine, 'js/i18n/aide/en.js', "'use strict';\n" + bloc('en', 'aide'))
+        self.assertEqual(self.ecarts(), [])                                  # fichier sans clé : repli voulu aussi
+        ecrire(self.racine, 'js/i18n/aide/en.js', "'use strict';\n" + bloc('en', 'aide', "'aide.ecran.accueil.titre': 'Home'"))
+        controle = self.comparer()
+        self.assertEqual(self.ecarts(controle), [
+            ('manquante', 'aide.ecran.accueil.texte — absente (section aide de js/i18n/aide/en.js)')])
+        self.assertEqual(controle.comparaisons[0].repli_aide, [])
+
+    def test_langue_non_declaree_controlee_par_option(self):
+        self.anglais(planning=EN_PLANNING[:2])
+        code, texte = self.code('--langue', 'en')
+        self.assertEqual(code, 1, texte)
+        self.assertIn('planning.semaine.titre — absente (section planning)', texte)
+        self.assertNotIn('Textes visibles restés en dur', texte)            # --langue en : le français n'est pas contrôlé
+        erreur = io.StringIO()
+        with redirect_stderr(erreur), self.assertRaises(SystemExit) as arret:
+            self.code('--langue', 'de')
+        self.assertEqual(arret.exception.code, 2)
+        self.assertIn('langue « de » : js/i18n/de.js introuvable', erreur.getvalue())
+
+    def test_sans_option_seulement_les_langues_declarees(self):
+        self.anglais(planning=EN_PLANNING[:2])
+        controle = ctl.Controle(self.racine)
+        controle.lancer()
+        self.assertEqual(controle.comparaisons, [])                          # en pas déclarée : pas contrôlée
+        self.assertIn('Autres langues : aucune déclarée par js/i18n/langues.js', ctl.rapport(controle))
+        self.declarer('en', 'it')
+        self.assertEqual(textes_langues.langues_declarees(self.racine), ['fr', 'en', 'it'])
+        controle = ctl.Controle(self.racine)
+        controle.lancer()
+        self.assertEqual([c.code for c in controle.comparaisons], ['en'])
+        self.assertEqual(self.ecarts(controle), [('manquante', 'planning.semaine.titre — absente (section planning)')])
+        self.assertEqual(controle.erreurs, [('js/i18n/it.js', 'introuvable : la langue « it » est déclarée par '
+                                                              'js/i18n/langues.js')])
+
+    def test_domaine_limite_les_sections(self):
+        self.anglais(planning=())
+        self.assertEqual(self.ecarts(self.comparer(domaines=['commun'])), [])
+        self.assertEqual(len(self.ecarts(self.comparer(domaines=['planning']))), 3)
+        code, texte = self.code('--langue', 'en', '--domaine', 'commun')
+        self.assertEqual(code, 0, texte)
+        self.assertIn('sections : commun ;', texte)
+
+
+class TestLanguesDuDepot(unittest.TestCase):
+    """Le vrai dépôt : js/i18n/en.js en squelette (T264), l'anglais pas encore déclaré (T278)."""
+
+    def test_squelette_anglais_aux_sections_du_francais(self):
+        def sections(rel, code):
+            texte = (RACINE / rel).read_text(encoding='utf-8')
+            blocs = list(ext.RE_BLOC.finditer(texte))
+            for m in blocs:
+                self.assertIn("I18n.ajouter('%s', {" % code, m.group(2), m.group(1))
+            return [m.group(1) for m in blocs]
+        self.assertEqual(sections('js/i18n/en.js', 'en'), sections('js/i18n/fr.js', 'fr'))
+        self.assertEqual(ctl.Langue('en', RACINE, ['js/i18n/en.js']).entrees, {})
+
+    def test_anglais_tout_manquant_et_controle_sans_option_a_zero(self):
+        francais = ctl.Langue('fr', RACINE, ctl.DICTIONNAIRES)
+        controle = ctl.Controle(RACINE)
+        controle.lancer(langues=['en'])
+        comparaison, = controle.comparaisons
+        self.assertEqual(sorted(s.message.split(' — ')[0] for s in comparaison.signalements),
+                         sorted(c for c, (_, _, rel) in francais.entrees.items() if rel == 'js/i18n/fr.js'))
+        self.assertEqual({s.genre for s in comparaison.signalements}, {'manquante'})
+        self.assertEqual(len(comparaison.repli_aide),
+                         sum(1 for _, _, rel in francais.entrees.values() if rel == 'js/i18n/aide/fr.js'))
+        sortie = io.StringIO()
+        with redirect_stdout(sortie):
+            self.assertEqual(ctl.main(['--langue', 'en']), 1)
+            self.assertNotIn('en', textes_langues.langues_declarees(RACINE))
+            self.assertEqual(ctl.main([]), 0, sortie.getvalue()[-3000:])
 
 
 if __name__ == '__main__':

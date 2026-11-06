@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Contrôle des textes de Prévo (chantier i18n, Lot 2, T236 ; critère CS147).
+"""Contrôle des textes de Prévo (chantier i18n, Lot 2, T236 ; critère CS147 ; Lot 3, T264 : CS149, CS151).
 
 Bibliothèque standard seulement. Depuis la racine du dépôt :
-  py -X utf8 outils/controler_textes.py                      # tout le dépôt
+  py -X utf8 outils/controler_textes.py                      # le français et chaque langue déclarée
   py -X utf8 outils/controler_textes.py --domaine planning   # répétable : limite aux fichiers de ces domaines
+  py -X utf8 outils/controler_textes.py --langue en          # répétable : cette langue seule, déclarée ou non
+                                                             # (--langue fr : le contrôle du français seul)
 Code retour : 0 si rien n'est à signaler, 1 sinon (2 : fichier illisible ou usage incorrect).
 
 Ce qui est contrôlé :
@@ -14,14 +16,14 @@ Ce qui est contrôlé :
    variables au nom générique ({v1}, {pourcent2} : le traducteur ne saurait pas ce qu'elles contiennent) ;
 3. index.html : le texte laissé dans la page sous un data-i18n est bien la valeur du dictionnaire ;
 4. serveur.py (domaine « serveur », T246, D157) : contrôle en Python de outils/textes_serveur.py (messages
-   traduisible(…) et section serveur de fr.js, textes en dur hors des règles de la console et des données).
+   traduisible(…) et section serveur de fr.js, textes en dur hors des règles de la console et des données) ;
+5. les autres langues (Lot 3, T264) : chacune comparée au français par outils/textes_langues.py (clés manquantes ou
+   orphelines, variables, pluriels requis par la langue, sections, doublons). Sans --langue : chaque langue déclarée
+   par js/i18n/langues.js autre que le français ; une langue pas encore déclarée ne l'est que par --langue.
 
 Le lien domaine → fichiers est celui de extraire_textes.py (préfixes de js/modules, plus le socle, schema, porte ;
 l'aide longue générée, js/modules/aide-ecrans-textes.js, est le domaine à part « aide-longue », hors du domaine
 « aide »).
-
-Lot 3 (préparé, pas fait) : comparer chaque langue au français (clés manquantes ou orphelines par langue,
-mêmes variables, catégories de pluriel) — voir la classe Langue et la note « Lot 3 » plus bas.
 """
 import argparse
 import html
@@ -33,26 +35,14 @@ ICI = Path(__file__).resolve().parent
 if str(ICI) not in sys.path:
     sys.path.insert(0, str(ICI))
 import extraire_textes as ext  # noqa: E402
+import textes_langues  # noqa: E402
 import textes_serveur  # noqa: E402
+from textes_langues import Langue, Signalement, variables_de  # noqa: E402
 from jslex import ErreurAnalyse, Groupe, Jeton, Lignes, construire_arbre, decoder  # noqa: E402
 
 DICTIONNAIRES = ('js/i18n/fr.js', 'js/i18n/aide/fr.js')
 RE_DATA_I18N = re.compile(r'\bdata-i18n="([^"]*)"')
 RE_DATA_I18N_ATTR = re.compile(r'\bdata-i18n-attr="([^"]*)"')
-RE_VARIABLE = re.compile(r'\{(\w+)\}')
-
-
-class Signalement:
-    __slots__ = ('genre', 'fichier', 'ligne', 'message')
-
-    def __init__(self, genre, fichier, ligne, message):
-        self.genre = genre
-        self.fichier = fichier
-        self.ligne = ligne
-        self.message = message
-
-    def __repr__(self):
-        return 'Signalement(%s, %s:%s, %s)' % (self.genre, self.fichier, self.ligne, self.message)
 
 
 class Utilisation:
@@ -67,36 +57,6 @@ class Utilisation:
         self.prefixe = prefixe
         self.variables = variables
         self.fonction = fonction
-
-
-# ---------------------------------------------------------------------------------------------------------
-# Dictionnaires (structure prête pour les autres langues du Lot 3)
-# ---------------------------------------------------------------------------------------------------------
-
-class Langue:
-    """Entrées d'une langue : {clé: (section, valeur, fichier)} ; valeur brute entre apostrophes ou
-    {catégorie: valeur} pour un pluriel."""
-
-    def __init__(self, code, racine, fichiers):
-        self.code = code
-        self.entrees = {}
-        self.doublons = []
-        for rel in fichiers:
-            for section, (langue, entrees) in ext.lire_dictionnaire(Path(racine) / rel).items():
-                for cle, valeur in entrees.items():
-                    if cle in self.entrees:
-                        self.doublons.append((cle, rel))
-                    self.entrees[cle] = (section, valeur, rel)
-
-
-def variables_de(valeur):
-    formes = valeur.values() if isinstance(valeur, dict) else [valeur]
-    return {nom for forme in formes for nom in RE_VARIABLE.findall(decoder(forme))}
-
-
-# Lot 3 : la comparaison d'une langue avec le français (clés manquantes ou orphelines, variables {…} différentes,
-# catégories de pluriel attendues par Intl.PluralRules de la langue) viendra ici, avec ses tests ; le Lot 2 n'a que
-# le français. La classe Langue et variables_de() ci-dessus lui serviront telles quelles.
 
 
 # ---------------------------------------------------------------------------------------------------------
@@ -215,16 +175,68 @@ class Controle:
         self.erreurs = []
         self.fichiers = []
         self.domaines = []
+        self.langues = None             # codes de --langue (None : le français et les langues déclarées)
+        self.francais = True            # le français est contrôlé (sans --langue, ou --langue fr)
+        self.comparaisons = []          # une par autre langue (textes_langues.Comparaison)
 
     def signaler(self, genre, fichier, ligne, message):
         self.signalements.append(Signalement(genre, fichier, ligne, message))
 
-    def lancer(self, domaines=None):
-        tous = ext.tous_les_fichiers(self.racine)
+    def nombre(self):
+        """Nombre total d'écarts : français et autres langues."""
+        return len(self.signalements) + sum(len(c.signalements) for c in self.comparaisons)
+
+    def lancer(self, domaines=None, langues=None):
+        """Contrôle du français (sauf --langue sans fr), puis comparaison de chaque autre langue au français."""
         if domaines:
             inconnus = [d for d in domaines if d not in ext.DOMAINES]
             if inconnus:
                 raise ValueError('domaine inconnu : %s' % ', '.join(inconnus))
+        self.langues = langues
+        codes = self.langues_a_comparer(langues)
+        self.francais = langues is None or textes_langues.REFERENCE in langues
+        if self.francais:
+            self.controler_francais(domaines)
+        if codes:
+            francais = Langue(textes_langues.REFERENCE, self.racine, DICTIONNAIRES)
+            sections = {ext.section_du_domaine(d) for d in domaines} if domaines else None
+            for code in codes:
+                comparaison = textes_langues.comparer(self.racine, code, francais, sections)
+                self.comparaisons.append(comparaison)
+                self.erreurs.extend(comparaison.erreurs)
+        return self.signalements
+
+    def langues_a_comparer(self, langues):
+        """Codes des langues à comparer au français : ceux de --langue (déclarés ou non, fichier requis), sinon chaque
+        langue déclarée par js/i18n/langues.js autre que le français (fichier absent : erreur)."""
+        codes = []
+        if langues is None:
+            for code in textes_langues.langues_declarees(self.racine):
+                principal = textes_langues.fichiers_de(code)[0]
+                if code == textes_langues.REFERENCE or code in codes:
+                    continue
+                if (self.racine / principal).is_file():
+                    codes.append(code)
+                else:
+                    self.erreurs.append((principal, 'introuvable : la langue « %s » est déclarée par %s' % (
+                        code, textes_langues.DECLARATIONS)))
+            return codes
+        for code in langues:
+            principal = textes_langues.fichiers_de(code)[0]
+            if not textes_langues.RE_CODE.match(code):
+                raise ValueError('code de langue invalide : %s' % code)
+            if code == textes_langues.REFERENCE or code in codes:
+                continue
+            if not (self.racine / principal).is_file():
+                raise ValueError('langue « %s » : %s introuvable (il faut le fichier de la langue pour la comparer au '
+                                 'français)' % (code, principal))
+            codes.append(code)
+        return codes
+
+    # 0. le français : textes en dur, clés, page, serveur.py ------------------------------------------------
+    def controler_francais(self, domaines):
+        tous = ext.tous_les_fichiers(self.racine)
+        if domaines:
             choisis = {d: tous.get(d, []) for d in domaines}
         else:
             choisis = tous
@@ -242,7 +254,6 @@ class Controle:
         if serveur:
             self.signalements.extend(textes_serveur.controler(self.racine)[0])
         self.signalements.sort(key=lambda s: (s.genre, s.fichier, s.ligne or 0, s.message))
-        return self.signalements
 
     # 1. textes visibles restés en dur ---------------------------------------------------------------
     def textes_en_dur(self, choisis):
@@ -262,8 +273,8 @@ class Controle:
     # 2. clés -----------------------------------------------------------------------------------
     def cles(self, choisis, tous):
         francais = Langue('fr', self.racine, DICTIONNAIRES)
-        for cle, rel in francais.doublons:
-            self.signaler('doublon', rel, None, 'clé définie deux fois : %s' % cle)
+        for cle, rel, ligne in francais.doublons:
+            self.signaler('doublon', rel, ligne, 'clé définie deux fois : %s' % cle)
         tous_fichiers = sorted({f for fichiers in tous.values() for f in fichiers})
         litterales = set()
         utilisations, erreurs = cles_utilisees(self.racine, tous_fichiers, litterales)
@@ -355,41 +366,56 @@ TITRES = {
 
 
 def rapport(controle):
-    lignes = ['Contrôle des textes — domaines : %s (%d fichiers)' % (', '.join(controle.domaines) or 'aucun',
-                                                                     len(controle.fichiers))]
+    if controle.francais:
+        lignes = ['Contrôle des textes — domaines : %s (%d fichiers)' % (', '.join(controle.domaines) or 'aucun',
+                                                                         len(controle.fichiers))]
+    else:
+        lignes = ['Contrôle des textes — langues : %s (français non contrôlé : ajouter --langue fr)' % ', '.join(
+            c.code for c in controle.comparaisons)]
     par_genre = {}
     for s in controle.signalements:
         par_genre.setdefault(s.genre, []).append(s)
     for genre in ('dur', 'manquante', 'orpheline', 'variables', 'nommer', 'doublon', 'page', 'appel', 'differente'):
+        if not controle.francais:
+            break
         liste = par_genre.get(genre, [])
         lignes.append('%s : %d' % (TITRES[genre], len(liste)))
         for s in liste:
             lieu = s.fichier + (':%d' % s.ligne if s.ligne else '')
             lignes.append('  %s  %s' % (lieu, s.message))
+    if controle.langues is None and not controle.comparaisons:
+        lignes.append('Autres langues : aucune déclarée par %s (une langue pas encore déclarée se contrôle par '
+                      '--langue <code>).' % textes_langues.DECLARATIONS)
+    for comparaison in controle.comparaisons:
+        lignes.extend(textes_langues.rapport(comparaison))
     for rel, message in controle.erreurs:
         lignes.append('ERREUR %s : %s' % (rel, message))
-    if controle.signalements:
-        lignes.append('Résultat : %d point(s) à reprendre.' % len(controle.signalements))
+    if controle.nombre():
+        lignes.append('Résultat : %d point(s) à reprendre.' % controle.nombre())
     else:
         lignes.append('Résultat : rien à signaler.')
     return '\n'.join(lignes) + '\n'
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='Contrôle des textes : en dur, clés manquantes ou orphelines.')
-    parser.add_argument('--domaine', action='append', help='limite aux fichiers de ce domaine (répétable)')
+    parser = argparse.ArgumentParser(description='Contrôle des textes : en dur, clés manquantes ou orphelines, '
+                                                 'autres langues comparées au français.')
+    parser.add_argument('--domaine', action='append', help='limite aux fichiers de ce domaine (répétable) ; avec '
+                                                           '--langue : aux sections de ces domaines')
+    parser.add_argument('--langue', action='append', help='compare cette langue au français, déclarée ou non '
+                                                          '(répétable) ; fr : le contrôle du français seul')
     parser.add_argument('--racine', default=str(ext.RACINE_DEPOT))
     parser.add_argument('--exceptions')
     args = parser.parse_args(argv)
     controle = Controle(args.racine, args.exceptions)
     try:
-        controle.lancer(args.domaine)
+        controle.lancer(args.domaine, args.langue)
     except ValueError as erreur:
         parser.error(str(erreur))
     sys.stdout.write(rapport(controle))
     if controle.erreurs:
         return 2
-    return 1 if controle.signalements else 0
+    return 1 if controle.nombre() else 0
 
 
 if __name__ == '__main__':

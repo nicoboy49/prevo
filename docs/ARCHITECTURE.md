@@ -4441,3 +4441,18 @@ Pour extraire en masse, on remet d'abord à la main les cas du rapport en forme 
 `serveur.py` envoie les messages affichables avec leur code (`"erreur_code"`, `"erreur_valeurs"`) à côté du
 français ; le navigateur affiche la clé `serveur.<code>` (`StockageServeur.texte` pour les modules qui font leur
 propre `fetch`). Écriture, règles et contrôle : §7 et `outils/textes_serveur.py`.
+
+### 24.9 Contrôle d'une langue (Lot 3, T264)
+
+`py -X utf8 outils/controler_textes.py --langue <code>` (répétable ; module `outils/textes_langues.py`, **CS149**,
+**CS151**) compare `js/i18n/<code>.js` et `js/i18n/aide/<code>.js` au français, que la langue soit déclarée ou non
+(le fichier de la langue est requis) : clés manquantes ou orphelines, mêmes variables `{…}` (toutes catégories
+réunies), même section, clés définies deux fois, bloc `I18n.ajouter` d'une autre langue. Une entrée plurielle en
+français l'est dans la langue avec exactement les catégories requises, une entrée simple reste simple. Catégories
+requises (entiers, CLDR) : `one, other` pour fr, en, tr, it et pt-PT, et pour un code absent de la table ; `many`
+(fr, it, pt) n'est pas requis, il ne sert qu'aux multiples d'un million et à la notation compacte, que Prévo
+n'affiche pas. Les clés de l'aide longue manquantes ne sont qu'un avertissement tant que `js/i18n/aide/<code>.js`
+n'a aucune clé (repli voulu sur le français) ; une valeur identique au français n'est pas un écart. `--domaine`
+limite aux sections de ces domaines (traduire groupe par groupe) ; `--langue fr` : le contrôle du français seul.
+Sans option, le français et chaque langue déclarée dans `js/i18n/langues.js` sont contrôlés : une langue n'entre
+dans le contrôle par défaut qu'une fois déclarée. `js/i18n/en.js` a les sections de `fr.js`, dans le même ordre.
