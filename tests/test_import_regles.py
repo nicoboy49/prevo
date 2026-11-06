@@ -117,7 +117,8 @@ def lire_entier(valeur):
     return canon(t.split(".")[0]) if re.fullmatch(r"[+-]?\d+(\.0*)?", t) else None
 
 
-BOOLEENS = {"1": "1", "0": "0", "vrai": "1", "faux": "0", "oui": "1", "non": "0", "true": "1", "false": "0", "x": "1"}
+BOOLEENS = {"1": "1", "0": "0", "vrai": "1", "faux": "0", "oui": "1", "non": "0", "true": "1", "false": "0",
+            "yes": "1", "no": "0", "x": "1"}   # yes / no : T287 (même lecture quelle que soit la langue)
 EQUIVALENCES = {("statut", "a l arret"): "arrêt"}   # seules équivalences de table utilisées par ces grilles
 
 

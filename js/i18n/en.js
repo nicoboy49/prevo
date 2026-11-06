@@ -550,7 +550,7 @@ I18n.ajouter('en', {
   'socle.explication_valeur_illisible.pas_date_valide_formats': 'is not a valid date (accepted formats: 2024-03-15 or 15/03/2024)',
   'socle.explication_valeur_illisible.pas_nombre_entier': 'is not a whole number',
   'socle.explication_valeur_illisible.pas_nombre_exemples_acceptes': 'is not a number (accepted examples: 7.5 or 7,5)',
-  'socle.explication_valeur_illisible.pas_reconnu_comme_oui': 'is not recognised as yes or no (accepted values: 1, 0, oui, non, vrai, faux, x)',
+  'socle.explication_valeur_illisible.pas_reconnu_comme_oui': 'is not recognised as yes or no (accepted values: 1, 0, yes, no, true, false, x)',
   'socle.fichier_abime_depuis.depuis_le': { one: '{fichier}, since {date} ({n} day)', other: '{fichier}, since {date} ({n} days)' },
   'socle.fichier_abime_depuis.repere_aujourd_hui': '{fichier}, spotted today',
   'socle.html.ui_html_utilise_comme': 'UI.html is used as a template tag: UI.html`…`',

@@ -201,7 +201,8 @@ class TestRegles(CasOrdres):
             for attendu in ("date de fin", "temps passé", "code cause", "code remède", "10 caractères", "remis en service"):
                 self.assertIn(attendu, texte)
             # « RAS » refusé sur un correctif (même long), accepté sur un préventif
-            for compte_rendu in ("RAS", "R.A.S.", "RAS, rien à signaler", "Rien à signaler."):
+            for compte_rendu in ("RAS", "R.A.S.", "RAS, rien à signaler", "Rien à signaler.",
+                                 "NTR", "N/A", "Nothing to report.", "None"):     # anglais aussi (T287)
                 with self.subTest(compte_rendu=compte_rendu):
                     manques = self.page.evaluate(verifier, [dict(complet, compte_rendu=compte_rendu), temps])
                     self.assertEqual(len(manques), 1, manques)

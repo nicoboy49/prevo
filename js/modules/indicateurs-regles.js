@@ -506,7 +506,7 @@ const Indicateurs = (() => {
   }
 
   function estUniteHeure(unite) {
-    return /^(h|heures?)$/.test(texte(unite).toLowerCase().replace(/\.$/, ''));
+    return /^(h|heures?|hours?|hrs?)$/.test(texte(unite).toLowerCase().replace(/\.$/, ''));   // anglais aussi (T287)
   }
 
   /** Période d'une gamme en jours (date : periodicite_jours ; compteur en heures :

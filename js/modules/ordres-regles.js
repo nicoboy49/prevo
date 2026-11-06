@@ -232,10 +232,12 @@ const Ordres = (() => {
     }
   }
 
-  /** « RAS », « R.A.S. », « rien à signaler »… (seuls, sans autre information). */
+  /** « RAS », « R.A.S. », « rien à signaler »… (seuls, sans autre information) ; leurs équivalents anglais aussi
+   *  (« NTR », « nothing to report », « N/A », « none », « nil ») : la règle est la même quelle que soit la langue de
+   *  l'écran (D146), le compte rendu étant une donnée (T287). */
   function estRienASignaler(compteRendu) {
     const compact = texteSimple(compteRendu).replace(/ /g, '');
-    return compact !== '' && /^(ras|rienasignaler)+$/.test(compact);
+    return compact !== '' && /^(ras|rienasignaler|ntr|nothingtoreport|na|none|nil)+$/.test(compact);
   }
 
   /** Pièces prévues d'un OT cumulées par article (quantité > 0 seulement) : Map article → quantité. */

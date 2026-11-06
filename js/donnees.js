@@ -92,6 +92,7 @@ const Donnees = (() => {
     'vrai': '1', 'faux': '0',
     'oui': '1', 'non': '0',
     'true': '1', 'false': '0',
+    'yes': '1', 'no': '0',                 // anglais aussi : même lecture quelle que soit la langue (T287)
     'x': '1',
   };
 
