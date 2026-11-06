@@ -230,6 +230,9 @@ const App = (() => {
 
   async function demarrer() {
     I18n.appliquer(document);          // textes statiques de index.html (data-i18n, data-i18n-attr)
+    // Titre de l'onglet dans la langue active dès le démarrage (avant le premier écran) : la balise <title>
+    // d'index.html reste nue (relue telle quelle par test_acces_mandataire et test_version_web, T260, T294).
+    document.title = I18n.t('socle.definir_titre.prevo_gmao');
     remplirPhrasesBalisees();
     remplacerIcones(document);
     installerEcouteurs();
