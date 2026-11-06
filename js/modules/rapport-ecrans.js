@@ -18,7 +18,8 @@ Object.assign(Rapport, (() => {
   /** « de septembre 2026 », « d'octobre 2026 », « d'août 2026 » (élision devant une voyelle). */
   function deMois(mois) {
     const libelle = libelleMois(mois);
-    return (/^[aeiouyàâéèêîôû]/i.test(libelle) ? 'd\'' : I18n.t('rapport.de_mois.de') + ' ') + libelle;
+    // Les deux formes sont dans le dictionnaire (« for September 2026 » en anglais, T289).
+    return I18n.t(/^[aeiouyàâéèêîôû]/i.test(libelle) ? 'rapport.de_mois.elision' : 'rapport.de_mois.de', { mois: libelle });
   }
 
   // ===========================================================================================

@@ -20,9 +20,11 @@ const Rapport = (() => {
   // 1. Petits outils
   // ===========================================================================================
 
-  // Fonction (et non constante) : les noms de mois sont lus au moment de l'écriture du rapport, jamais figés au chargement.
+  // Noms des mois dans la langue de l'écran, par Intl (I18n.locale : « septembre » en fr-FR, « September » en en-GB) ;
+  // lus au moment de l'écriture du rapport, jamais figés au chargement (T289 : neuf mois étaient restés en dur).
   function nomsMois() {
-    return ['janvier', I18n.t('rapport.noms_mois.fevrier'), 'mars', 'avril', 'mai', 'juin', 'juillet', I18n.t('rapport.noms_mois.aout'), 'septembre', 'octobre', 'novembre', I18n.t('rapport.noms_mois.decembre')];
+    const format = new Intl.DateTimeFormat(I18n.locale, { month: 'long', timeZone: 'UTC' });
+    return Array.from({ length: 12 }, (_, index) => format.format(new Date(Date.UTC(2026, index, 1))));
   }
   const COULEURS_SERIES = ['#2F5BD3', '#A86A12', '#6B7280'];     // impression sur blanc : bleu, ocre, gris
   const PREFIXE_FICHIER = 'rapport-mensuel-';
