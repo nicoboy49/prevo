@@ -116,10 +116,11 @@ CAUSES_MONTREES = 5          # raisons de refus regroupées données dans le bil
 # (1,0043 $ / 40 = 0,02511 $) = 1,578.
 FACTEUR_CROISSANCE_SUITE = 1.578
 # Moteur de traduction et textes français d'abord, comme dans index.html (Lot 2) : les modules lisent leurs textes par
-# I18n.t, certains dès leur chargement (wiki-regles.js lit CausesFrequentes.MENTION).
+# I18n.t, certains dès leur chargement (wiki-regles.js lit CausesFrequentes.MENTION). js/interface.js ensuite, comme dans
+# index.html : la recherche du wiki plie ses mots par UI.normaliserRecherche (D154, T300 ; T312).
 SCRIPTS = [
     'js/i18n.js', 'js/i18n/langues.js', 'js/i18n/fr.js', 'js/i18n/aide/fr.js',
-    'js/lib/papaparse.min.js','js/schema.js', 'js/donnees.js', 'js/stockage-demo.js',
+    'js/lib/papaparse.min.js','js/schema.js', 'js/donnees.js', 'js/stockage-demo.js', 'js/interface.js',
     'js/modules/causes-frequentes.js', 'js/modules/indicateurs-regles.js', 'js/modules/ia.js', 'js/modules/ia-prompts.js',
     'js/modules/wiki-regles.js', 'js/modules/wiki-calculs.js', 'js/modules/wiki-entites.js', 'js/modules/wiki-texte.js',
     'js/modules/wiki-recherche.js',
