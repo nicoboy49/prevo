@@ -27,16 +27,60 @@ Joignez ensuite ce zip à la release GitHub créée à partir de la même étiqu
 
 ## Signaler la nouvelle version (version.json)
 
+Cette section est la **seule source** des règles de `version.json` (décision du 06/11/2026) : le site prevo.pro les
+applique à chaque sortie.
+
 Le script écrit aussi `dist/version.json` à côté du zip : le numéro, la date, l'adresse de la release GitHub et
 les deux premières nouveautés du CHANGELOG de cette version. Prévo le lit (si le responsable l'a autorisé dans
 Paramètres, au plus une fois par jour et par poste, ARCHITECTURE.md §21) pour signaler la nouvelle version sur
-l'accueil du responsable et dans « À propos ». À chaque release :
+l'accueil du responsable et dans « À propos ». Prévo ne fait qu'une simple lecture du fichier : il n'envoie rien
+(ni identifiant, ni numéro d'installation, ni statistique, ni cookie), seulement sur le poste du responsable, jamais
+dans la démo en ligne.
 
-1. publier `dist/version.json` à la racine du site, à l'adresse exacte `https://prevo.pro/version.json` ;
-2. le servir avec l'en-tête `Access-Control-Allow-Origin: *` (nginx : `add_header Access-Control-Allow-Origin *;`
-   dans le `location = /version.json`) : sans cet en-tête, le navigateur refuse la lecture depuis le poste et
-   Prévo ne signale rien ;
-3. vérifier : `curl -I https://prevo.pro/version.json` montre `200`, `application/json` et l'en-tête.
+### À chaque release
+
+1. **Seulement pour une version stable déjà publiée** : `version.json` annonce uniquement la **dernière version
+   stable publiée**, jamais une version qui n'est pas encore sur GitHub (la release d'abord, `version.json`
+   ensuite), jamais une bêta (`x.y.z-beta.N`).
+2. Publier `dist/version.json` à la racine du site, à l'adresse exacte `https://prevo.pro/version.json` (HTTPS).
+3. Le servir avec `Content-Type: application/json` et l'en-tête `Access-Control-Allow-Origin: *` (nginx :
+   `add_header Access-Control-Allow-Origin *;` dans le `location = /version.json`) : Prévo le lit depuis le
+   navigateur, même ouvert en fichier local ; sans cet en-tête, la lecture est refusée et Prévo ne signale rien.
+   `Cache-Control: no-cache` conseillé.
+4. Vérifier : `curl -I https://prevo.pro/version.json` montre `200`, `application/json` et l'en-tête ;
+   `curl -s https://prevo.pro/version.json` montre la bonne version.
+
+### Champs
+
+| champ | obligatoire | règle |
+|---|---|---|
+| `version` | oui | version stable `x.y.z` seulement (chaque nombre de 1 à 4 chiffres), jamais `-beta.N` : une 1.2.x ignore tout le fichier si la forme est autre (aucun bandeau). Une bêta 2.0 installée est prévenue de la finale. |
+| `adresse` | oui | `https://…`, la page de la release ou de téléchargement ; à partir de la 2.0.0, sur `prevo.pro` ou `github.com/nicoboy49/prevo` seulement, sinon aucun bandeau. |
+| `date` | non | `AAAA-MM-JJ`, date de publication, affichée dans le bandeau. |
+| `nouveautes` | non | liste de 3 phrases au plus (les suivantes sont ignorées), 200 caractères au plus chacune (au-delà : coupée), texte brut sans HTML, en **français**. |
+| `nouveautes_en` | non | mêmes règles que `nouveautes`, en **anglais** : une installation en anglais l'affiche s'il existe, sinon `nouveautes` en français. Lu à partir de la 2.0.0, ignoré par les 1.2.x ; pas encore écrit par le script (à ajouter à la main). |
+
+Tout autre champ est ignoré : on peut en ajouter sans casser ni les 1.2.x ni la 2.0.
+
+Exemple complet :
+
+```json
+{
+  "version": "2.0.0",
+  "date": "2026-11-20",
+  "adresse": "https://github.com/nicoboy49/prevo/releases/tag/v2.0.0",
+  "nouveautes": [
+    "Prévo en anglais : choisissez la langue à l'écran « Ce poste ».",
+    "Deuxième nouveauté, en une phrase.",
+    "Troisième nouveauté, en une phrase."
+  ],
+  "nouveautes_en": [
+    "Prévo in English: choose the language on the “This workstation” screen.",
+    "Second new feature, in one sentence.",
+    "Third new feature, in one sentence."
+  ]
+}
+```
 
 Rien ne s'installe tout seul : le bandeau mène à la page de la release, l'installation reste celle du guide.
 
