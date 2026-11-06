@@ -79,7 +79,7 @@ Object.assign(Magasin, (() => {
 
   function listeFournisseurs() {
     return Donnees.lignes('fournisseurs').map((f) => ({ valeur: f.id, libelle: f.nom || f.id }))
-      .sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr'));
+      .sort((a, b) => UI.comparerTextes(a.libelle, b.libelle));
   }
 
   /** Définition de champ pour UI.champ : celle du schéma, sinon une définition simple. */
@@ -303,7 +303,7 @@ Object.assign(Magasin, (() => {
     const categories = new Map();
     toutes.forEach((l) => categories.set(l.categorie.code, l.categorie.libelle));
     const optionsCategories = [{ valeur: '', libelle: I18n.t('magasin.onglet_articles.toutes_categories') }].concat(Array.from(categories.entries())
-      .map(([code, libelle]) => ({ valeur: code, libelle })).sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr')));
+      .map(([code, libelle]) => ({ valeur: code, libelle })).sort((a, b) => UI.comparerTextes(a.libelle, b.libelle)));
     UI.remplir(panneau, UI.html`
       <form class="filtres magasin-filtres" id="magasin-filtres-articles" data-hors-saisie role="search" aria-label="${I18n.t('magasin.onglet_articles.filtrer_articles')}">
         <label class="visuellement-cache" for="magasin-recherche-article">${I18n.t('magasin.onglet_articles.rechercher_article')}</label>

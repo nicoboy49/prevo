@@ -112,9 +112,9 @@ Object.assign(Wiki, (() => {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
   }
 
-  /** Forme comparable : minuscules, sans accents, tout ce qui n'est ni lettre ni chiffre → espace. */
+  /** Forme comparable : pliage de toute recherche (UI.normaliserRecherche, D154), ni lettre ni chiffre → espace. */
   function comparable(valeur) {
-    return texte(valeur).normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase()
+    return UI.normaliserRecherche(valeur)
       .replace(/œ/g, 'oe').replace(/æ/g, 'ae')
       .replace(/[^a-z0-9]+/g, ' ').trim();
   }

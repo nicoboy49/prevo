@@ -187,7 +187,7 @@ Object.assign(Magasin, (() => {
         <label class="visuellement-cache" for="magasin-inventaire-categorie">${I18n.t('magasin.onglet_inventaire.categorie')}</label>
         <select id="magasin-inventaire-categorie" name="categorie">${optionsHtml([{ valeur: '', libelle: I18n.t('magasin.onglet_inventaire.toutes_categories') }]
           .concat(Array.from(categories.entries()).map(([valeur, libelle]) => ({ valeur, libelle }))
-            .sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr'))), filtres.categorie)}</select>
+            .sort((a, b) => UI.comparerTextes(a.libelle, b.libelle))), filtres.categorie)}</select>
       </form>
       <div class="carte magasin-inventaire"><div class="table-defile"><table class="table magasin-table-inventaire">
         <caption class="visuellement-cache">${I18n.t('magasin.onglet_inventaire.inventaire_stock_compte_article')}</caption>

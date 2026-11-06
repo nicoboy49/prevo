@@ -79,7 +79,7 @@ const Planning = (() => {
 
   /** Ordre des techniciens : par nom, puis prénom (l'affichage reste « Prénom Nom »). */
   function ordreDesNoms(a, b) {
-    return (texte(a.nom) + ' ' + texte(a.prenom)).localeCompare(texte(b.nom) + ' ' + texte(b.prenom), 'fr')
+    return UI.comparerTextes(texte(a.nom) + ' ' + texte(a.prenom), texte(b.nom) + ' ' + texte(b.prenom))
       || texte(a.id).localeCompare(texte(b.id), 'fr', { numeric: true });
   }
 

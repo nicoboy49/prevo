@@ -95,7 +95,7 @@ Object.assign(Indicateurs, (() => {
       compte.set(code, (compte.get(code) || 0) + 1);
     });
     const lignes = Array.from(compte, ([code, total]) => ({ code, libelle: code ? (libelles.get(code) || code) : I18n.t('indicateurs.causes.sans_code'), nombre: total }));
-    return lignes.filter((ligne) => ligne.code).sort((a, b) => b.nombre - a.nombre || a.libelle.localeCompare(b.libelle, 'fr'))
+    return lignes.filter((ligne) => ligne.code).sort((a, b) => b.nombre - a.nombre || UI.comparerTextes(a.libelle, b.libelle))
       .concat(lignes.filter((ligne) => !ligne.code));
   }
 
@@ -107,7 +107,7 @@ Object.assign(Indicateurs, (() => {
     const semaines = [];
     for (let rang = 0; rang < (n || 4); rang += 1) semaines.push(ajouterJours(premier, 7 * rang));
     return Donnees.lignes('techniciens').filter((technicien) => texte(technicien.actif) !== '0')
-      .sort((a, b) => (texte(a.nom) + ' ' + texte(a.prenom)).localeCompare(texte(b.nom) + ' ' + texte(b.prenom), 'fr'))
+      .sort((a, b) => UI.comparerTextes(texte(a.nom) + ' ' + texte(a.prenom), texte(b.nom) + ' ' + texte(b.prenom)))
       .map((technicien) => ({
         technicien,
         semaines: semaines.map((debut) => ({ lundi: debut, charge: Planning.chargeSemaine(technicien.id, debut), capacite: nombre(technicien.capacite_h_semaine) })),

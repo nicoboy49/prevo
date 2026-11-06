@@ -45,12 +45,18 @@ const Parc = (() => {
     return ligne.actif !== '0';
   }
 
-  function comparerTextes(a, b) {
+  /** Codes, repères, références, dates ISO : ordre fixe, le même dans toutes les langues (D154). */
+  function comparerCodes(a, b) {
     return String(a || '').localeCompare(String(b || ''), 'fr', { numeric: true, sensitivity: 'base' });
   }
 
+  /** Libellés affichés (localisations, gammes…) : ordre de la langue active (UI.comparerTextes, D154). */
+  function comparerLibelles(a, b) {
+    return UI.comparerTextes(a || '', b || '', { numeric: true, sensitivity: 'base' });
+  }
+
   function parRepere(a, b) {
-    return comparerTextes(a.repere, b.repere);
+    return comparerCodes(a.repere, b.repere);
   }
 
   /** « Site › Atelier › Ligne » d'une localisation. Identifiant inconnu : l'identifiant lui-même. */
@@ -303,7 +309,7 @@ const Parc = (() => {
     // Usage interne au module : outils prêtés aux fichiers parc-*.js, qui y ajoutent les leurs par
     // Object.assign(Parc.interne, …). Pas une API : son contenu peut changer à tout moment.
     interne: {
-      estActif, comparerTextes, parRepere, identifiantsDescendants, remonteSurSoi, abreger,
+      estActif, comparerCodes, comparerLibelles, parRepere, identifiantsDescendants, remonteSurSoi, abreger,
       badgeCriticite, badgesEquipement, listeAdaptative,
       dernierReleveDe, verifierReleve, estEnBaisse,
     },

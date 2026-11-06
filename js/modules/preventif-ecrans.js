@@ -36,8 +36,14 @@ Object.assign(Preventif, (() => {
   // 9. Petits outils d'affichage
   // ===========================================================================================
 
-  function comparerTextes(a, b) {
+  /** Identifiants et dates ISO : ordre fixe, le même dans toutes les langues (D154). */
+  function comparerCodes(a, b) {
     return String(a).localeCompare(String(b), 'fr', { numeric: true, sensitivity: 'base' });
+  }
+
+  /** Libellés affichés : ordre de la langue active (UI.comparerTextes, D154). */
+  function comparerLibelles(a, b) {
+    return UI.comparerTextes(a, b, { numeric: true, sensitivity: 'base' });
   }
 
   function repere(equipementId) {
@@ -101,8 +107,8 @@ Object.assign(Preventif, (() => {
     const contexte = contexteCalcul();
     const rang = (entree) => RANGS_ETAT.indexOf(entree.etat.statut);
     return Donnees.lignes('gammes').map((gamme) => ({ gamme, etat: evaluerGamme(gamme, jour, contexte) }))
-      .sort((a, b) => rang(a) - rang(b) || comparerTextes(a.etat.echeance || '9999', b.etat.echeance || '9999')
-        || comparerTextes(a.gamme.id, b.gamme.id));
+      .sort((a, b) => rang(a) - rang(b) || comparerCodes(a.etat.echeance || '9999', b.etat.echeance || '9999')
+        || comparerCodes(a.gamme.id, b.gamme.id));
   }
 
   function optionsHtml(liste, valeurChoisie) {
@@ -199,7 +205,7 @@ Object.assign(Preventif, (() => {
     const identifiants = new Set(toutes.map((e) => e.gamme.equipement_id));
     if (memoire.equipement) identifiants.add(memoire.equipement);
     const equipements = Array.from(identifiants).map((id) => ({ valeur: id, libelle: libelleEquipement(id) }))
-      .sort((a, b) => comparerTextes(a.libelle, b.libelle));
+      .sort((a, b) => comparerLibelles(a.libelle, b.libelle));
     return UI.html`
       <form class="filtres pv-filtres" id="pv-filtres" data-hors-saisie role="search" aria-label="${I18n.t('preventif.barre_filtres.filtrer_gammes')}">
         <label class="visuellement-cache" for="pv-filtre-statut">${I18n.t('commun.champ.statut')}</label>
@@ -296,13 +302,13 @@ Object.assign(Preventif, (() => {
   function listeEquipements(valeur) {
     return Donnees.lignes('equipements').filter((e) => e.actif !== '0' || e.id === valeur)
       .map((e) => ({ valeur: e.id, libelle: libelleEquipement(e.id) }))
-      .sort((a, b) => comparerTextes(a.libelle, b.libelle));
+      .sort((a, b) => comparerLibelles(a.libelle, b.libelle));
   }
 
   function listeCompteurs() {
     return Donnees.lignes('compteurs')
       .map((c) => ({ valeur: c.id, libelle: repere(c.equipement_id) + ' — ' + texte(c.libelle) + (c.unite ? ' (' + c.unite + ')' : '') + ' · ' + c.id }))
-      .sort((a, b) => comparerTextes(a.libelle, b.libelle));
+      .sort((a, b) => comparerLibelles(a.libelle, b.libelle));
   }
 
   function formulaireGamme(gamme, valeursInitiales) {
@@ -429,7 +435,7 @@ Object.assign(Preventif, (() => {
 
   function afficherOtsDeLaGamme(section, gammeId) {
     const ots = Donnees.lignes('ordres_travail').filter((ot) => ot.gamme_id === gammeId)
-      .sort((a, b) => comparerTextes(b.date_creation, a.date_creation) || comparerTextes(b.id, a.id));
+      .sort((a, b) => comparerCodes(b.date_creation, a.date_creation) || comparerCodes(b.id, a.id));
     UI.remplir(section, UI.html`<div class="entete-carte"><h2 id="pv-titre-ots">${I18n.t('preventif.ots_de_la_gamme.ot_gamme')}</h2><span class="badge neutre">${ots.length}</span></div>`);
     section.appendChild(UI.tableau({
       colonnes: [

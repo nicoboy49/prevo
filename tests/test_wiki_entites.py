@@ -35,7 +35,7 @@ from commun import CasNavigateur, charger_scripts
 RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
 SCRIPTS = [
-    "js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/stockage-demo.js",
+    "js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/stockage-demo.js", "js/interface.js",
     "js/modules/causes-frequentes.js", "js/modules/indicateurs-regles.js", "js/modules/equipe-regles.js",
     "js/modules/wiki-regles.js", "js/modules/wiki-calculs.js", "js/modules/wiki-entites.js",
 ]

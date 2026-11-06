@@ -142,7 +142,7 @@ const Ordres = (() => {
     return Donnees.lignes('techniciens')
       .filter((t) => t.actif !== '0' || t.id === idActuel)
       .map((t) => ({ valeur: t.id, libelle: nomTechnicien(t.id) + (t.metier ? ' — ' + t.metier : '') }))
-      .sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr'));
+      .sort((a, b) => UI.comparerTextes(a.libelle, b.libelle));
   }
 
   function libelleArticle(article) {

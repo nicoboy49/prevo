@@ -263,7 +263,7 @@ Object.assign(Magasin, (() => {
     const responsable = App.estResponsable();
     const nombreArticles = (id) => Donnees.lignes('articles').filter((article) => article.fournisseur_id === id).length;
     const lignes = Donnees.lignes('fournisseurs').map((f) => Object.assign({}, f, { articles: nombreArticles(f.id) }))
-      .sort((a, b) => texte(a.nom).localeCompare(texte(b.nom), 'fr'));
+      .sort((a, b) => UI.comparerTextes(texte(a.nom), texte(b.nom)));
     const telephone = (f) => (f.telephone ? UI.html`<a href="tel:${f.telephone.replace(/[^0-9+]/g, '')}">${f.telephone}</a>` : '');
     const email = (f) => (f.email ? UI.html`<a href="mailto:${f.email}">${f.email}</a>` : '');
     const bouton = (f) => (responsable ? UI.html`<button type="button" class="btn btn-secondaire" data-action="modifier-fournisseur" data-fournisseur="${f.id}">${I18n.t('commun.bouton.modifier')}</button>` : '');

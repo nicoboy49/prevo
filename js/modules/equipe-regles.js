@@ -73,7 +73,7 @@ const Equipe = (() => {
 
   /** Ordre des techniciens : par nom, puis prénom (l'affichage reste « Prénom Nom »). */
   function ordreDesNoms(a, b) {
-    return (texte(a.nom) + ' ' + texte(a.prenom)).localeCompare(texte(b.nom) + ' ' + texte(b.prenom), 'fr')
+    return UI.comparerTextes(texte(a.nom) + ' ' + texte(a.prenom), texte(b.nom) + ' ' + texte(b.prenom))
       || texte(a.id).localeCompare(texte(b.id), 'fr', { numeric: true });
   }
 
@@ -134,7 +134,7 @@ const Equipe = (() => {
         if (!actuelle || compteAvant(habilitation, actuelle)) parIntitule.set(cle, habilitation);
       });
     return Array.from(parIntitule.values())
-      .sort((a, b) => texte(a.intitule).localeCompare(texte(b.intitule), 'fr', { sensitivity: 'base' }));
+      .sort((a, b) => UI.comparerTextes(texte(a.intitule), texte(b.intitule), { sensitivity: 'base' }));
   }
 
   /**
@@ -154,7 +154,7 @@ const Equipe = (() => {
     });
     return resultat.sort((a, b) => (a.etat.joursRestants - b.etat.joursRestants)
       || ordreDesNoms(a.technicien, b.technicien)
-      || texte(a.habilitation.intitule).localeCompare(texte(b.habilitation.intitule), 'fr'));
+      || UI.comparerTextes(texte(a.habilitation.intitule), texte(b.habilitation.intitule)));
   }
 
   return {

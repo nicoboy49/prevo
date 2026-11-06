@@ -29,7 +29,7 @@ Object.assign(Indicateurs, (() => {
 
   function ateliers() {
     return Donnees.lignes('localisations').filter((localisation) => texte(localisation.type) === 'atelier')
-      .sort((a, b) => texte(a.libelle).localeCompare(texte(b.libelle), 'fr'));
+      .sort((a, b) => UI.comparerTextes(texte(a.libelle), texte(b.libelle)));
   }
 
   /** Réglages lus dans l'adresse ; une valeur inconnue est ignorée. */

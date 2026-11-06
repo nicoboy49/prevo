@@ -116,11 +116,47 @@ const UI = (function () {
     return modele.content.firstElementChild;
   }
 
-  /** Texte comparable pour une recherche : minuscules, sans accents, espaces simplifiés. */
+  /**
+   * Texte comparable pour une recherche, un seul pliage quelle que soit la langue (D154) : ı et İ ramenés à i (I l'est
+   * par les minuscules), ß à ss, accents retirés, minuscules, espaces simplifiés (« İSTANBUL » → « istanbul »,
+   * « ırmak » et « IRMAK » → « irmak »). Toute recherche de l'application passe par ici (le wiki aussi).
+   */
   function normaliserRecherche(texte) {
     return String(texte === null || texte === undefined ? '' : texte)
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[ıİ]/g, 'i').replace(/[ßẞ]/g, 'ss')
+      .normalize('NFD').replace(/\p{M}+/gu, '')
       .toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  // Tri des listes affichées (D154) : ordre de la langue active, Intl.Collator de I18n.locale (en turc : « Çelik » entre
+  // « Cem » et « Dede », « Işık » avant « İnce »), un par locale et par réglages, gardé. Codes, identifiants, dates ISO,
+  // noms de fichiers et en-têtes CSV n'y passent pas : leur ordre reste le même dans toutes les langues.
+  const collateurs = new Map();
+
+  function collateur(numeric, sensitivity) {
+    const locale = I18n.locale;
+    const cle = locale + ' ' + numeric + ' ' + sensitivity;
+    if (!collateurs.has(cle)) {
+      const reglages = { numeric, sensitivity };
+      let nouveau;
+      try {
+        nouveau = new Intl.Collator(locale, reglages);
+      } catch (erreur) {                         // locale refusée par Intl : ordre du français
+        nouveau = new Intl.Collator('fr-FR', reglages);
+      }
+      collateurs.set(cle, nouveau);
+    }
+    return collateurs.get(cle);
+  }
+
+  function enChaine(valeur) {
+    return String(valeur === null || valeur === undefined ? '' : valeur);
+  }
+
+  /** Compare deux libellés dans l'ordre de la langue active ; options d'Intl.Collator : { numeric, sensitivity }. */
+  function comparerTextes(a, b, options) {
+    const reglages = options || {};
+    return collateur(Boolean(reglages.numeric), reglages.sensitivity || 'variant').compare(enChaine(a), enChaine(b));
   }
 
   // ===========================================================================================
@@ -639,7 +675,8 @@ const UI = (function () {
   // Tableau triable
   // ===========================================================================================
 
-  const comparateurTexte = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
+  // Ordre des codes (repères, identifiants, dates ISO) : fixe, le même dans toutes les langues (D154).
+  const ordreDesCodes = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
 
   /**
    * Tableau HTML triable par clic sur l'en-tête. Renvoie un élément <div class="table-defile">.
@@ -657,7 +694,8 @@ const UI = (function () {
    * rendu(ligne) peut rendre un texte (échappé), un fragment UI.html ou un nœud DOM. Sans rendu, `table` (nom de
    * table du schéma) affiche une valeur de liste par son libellé (Schema.libelleValeur, D155) : { cle: 'statut',
    * libelle: 'Statut', table: 'demandes' }.
-   * type 'nombre' : tri numérique et alignement à droite. Les cellules vides vont toujours à la fin.
+   * type 'nombre' : tri numérique et alignement à droite ; type 'date' : ordre des codes ; sinon ordre de la langue
+   * active (UI.comparerTextes). Les cellules vides vont toujours à la fin.
    * element.mettreAJour(nouvellesLignes) réaffiche le tableau en gardant le tri.
    */
   function tableau(options) {
@@ -684,7 +722,8 @@ const UI = (function () {
         const nombreB = enNombre(valeurB);
         ecart = (nombreA === null ? 0 : nombreA) - (nombreB === null ? 0 : nombreB);
       } else {
-        ecart = comparateurTexte.compare(String(valeurA), String(valeurB));
+        ecart = colonne.type === 'date' ? ordreDesCodes.compare(String(valeurA), String(valeurB))
+          : comparerTextes(valeurA, valeurB, { numeric: true, sensitivity: 'base' });
       }
       return sens === 'desc' ? -ecart : ecart;
     }
@@ -1089,7 +1128,7 @@ const UI = (function () {
       const trouves = equipements
         .filter((e) => e.actif !== '0')
         .filter((e) => mots.every((mot) => textePourRecherche(e).includes(mot)))
-        .sort((a, b) => comparateurTexte.compare(a.repere || '', b.repere || ''));
+        .sort((a, b) => ordreDesCodes.compare(a.repere || '', b.repere || ''));
       listeResultats.innerHTML = String(html`${trouves.slice(0, maxResultats).map((e) => html`
         <li><button type="button" class="selecteur-option" data-id="${e.id}">
           <b>${e.repere || e.id}</b><span>${e.designation}</span>${libelleLocalisation(e) ? html`<small>${libelleLocalisation(e)}</small>` : ''}
@@ -1511,7 +1550,7 @@ const UI = (function () {
 
   return Object.freeze({
     // sélecteurs et HTML sûr
-    $, $$, echapper, html, brut, estSur, remplir, element, identifiantUnique, normaliserRecherche,
+    $, $$, echapper, html, brut, estSur, remplir, element, identifiantUnique, normaliserRecherche, comparerTextes,
     // formats français
     dateFr, dateHeureFr, nombreFr, euro, heures, enNombre,
     // badges, icônes, logo

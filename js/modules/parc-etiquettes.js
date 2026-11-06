@@ -17,7 +17,7 @@
 Object.assign(Parc, (() => {
 
   // Outils de parc-regles.js.
-  const { estActif, comparerTextes, parRepere, identifiantsDescendants, badgeCriticite } = Parc.interne;
+  const { estActif, comparerCodes, comparerLibelles, parRepere, identifiantsDescendants, badgeCriticite } = Parc.interne;
   const { cheminLocalisation } = Parc;
 
   /** Les deux formats de planche A4 (dimensions d'une étiquette en mm). */
@@ -59,7 +59,7 @@ Object.assign(Parc, (() => {
         && (!zone || zone.has(e.localisation_id))
         && (!criticite || e.criticite === criticite)
         && (!choisis || choisis.has(e.id)))
-      .sort((a, b) => parRepere(a, b) || comparerTextes(a.id, b.id));
+      .sort((a, b) => parRepere(a, b) || comparerCodes(a.id, b.id));
   }
 
   // Millimètres écrits pour le CSS : point décimal, deux décimales au plus (« 12.5 »).
@@ -237,7 +237,7 @@ Object.assign(Parc, (() => {
   function optionsLocalisations(valeur) {
     const localisations = Donnees.lignes('localisations')
       .map((l) => ({ id: l.id, chemin: cheminLocalisation(l.id) }))
-      .sort((a, b) => comparerTextes(a.chemin, b.chemin));
+      .sort((a, b) => comparerLibelles(a.chemin, b.chemin));
     return UI.html`<option value="">${I18n.t('parc.options_localisations.tout_parc')}</option>${localisations.map((l) => UI.html`<option value="${l.id}" ${l.id === valeur ? UI.brut('selected') : ''}>${l.chemin}</option>`)}`;
   }
 

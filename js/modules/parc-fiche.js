@@ -10,7 +10,7 @@ Object.assign(Parc, (() => {
 
   // Règles, outils et écrans des fichiers précédents (parc-regles.js à parc-formulaires.js).
   const { cheminLocalisation, libelleEquipement, afficherListe, afficherFormulaire, afficherEtiquettes } = Parc;
-  const { estActif, comparerTextes, parRepere, abreger, badgeCriticite, badgesEquipement,
+  const { estActif, comparerCodes, comparerLibelles, parRepere, abreger, badgeCriticite, badgesEquipement,
     listeAdaptative, dernierReleveDe, ouvrirFenetreReleve } = Parc.interne;
 
   const LIMITE_HISTORIQUE = 20;                       // lignes montrées avant « Voir les autres »
@@ -164,7 +164,7 @@ Object.assign(Parc, (() => {
     const gammes = Donnees.lignes('gammes').filter((g) => g.equipement_id === equipement.id)
       .map((gamme) => ({ gamme, etat: Preventif.etatGamme(gamme, jour) }))
       .sort((a, b) => rangs.indexOf(a.etat.statut) - rangs.indexOf(b.etat.statut)
-        || comparerTextes(a.gamme.libelle, b.gamme.libelle));
+        || comparerLibelles(a.gamme.libelle, b.gamme.libelle));
     const lignes = gammes.map(({ gamme, etat }) => {
       const libelle = gamme.libelle || gamme.id;
       const estimee = gamme.declencheur === 'compteur';
@@ -194,7 +194,7 @@ Object.assign(Parc, (() => {
     const controles = Donnees.lignes('controles_reglementaires').filter((c) => c.equipement_id === equipement.id)
       .map((controle) => ({ controle, etat: Controles.etat(controle, jour) }))
       .sort((a, b) => Controles.STATUTS.indexOf(a.etat.statut) - Controles.STATUTS.indexOf(b.etat.statut)
-        || comparerTextes(a.etat.prochaine, b.etat.prochaine));
+        || comparerCodes(a.etat.prochaine, b.etat.prochaine));
     const lignes = controles.map(({ controle, etat }) => UI.html`<li>
         <div class="parc-gamme-tete">
           <a href="#/controles/${encodeURIComponent(controle.id)}">${controle.nature || controle.id}</a>
@@ -237,7 +237,7 @@ Object.assign(Parc, (() => {
         stock: article ? Donnees.stockArticle(article.id) : null,
         stockSecurite: article ? UI.enNombre(article.stock_securite) : null,
       };
-    }).sort((a, b) => comparerTextes(a.reference, b.reference));
+    }).sort((a, b) => comparerCodes(a.reference, b.reference));
 
     function etatStock(ligne) {
       if (ligne.stock === null) return '';
@@ -291,7 +291,7 @@ Object.assign(Parc, (() => {
 
   function carteHistoriqueOt(equipement) {
     const ordres = Donnees.lignes('ordres_travail').filter((o) => o.equipement_id === equipement.id)
-      .sort((a, b) => comparerTextes(b.date_creation, a.date_creation) || comparerTextes(b.id, a.id));
+      .sort((a, b) => comparerCodes(b.date_creation, a.date_creation) || comparerCodes(b.id, a.id));
     return carteHistorique(I18n.t('parc.carte_historique_ot.historique_ordres_travail'), ordres, (lignes) => listeAdaptative({
       lignes,
       vide: I18n.t('parc.carte_historique_ot.aucun_ordre_travail_equipement'),
@@ -314,7 +314,7 @@ Object.assign(Parc, (() => {
 
   function carteHistoriqueDi(equipement) {
     const demandes = Donnees.lignes('demandes').filter((d) => d.equipement_id === equipement.id)
-      .sort((a, b) => comparerTextes(b.date_heure, a.date_heure) || comparerTextes(b.id, a.id));
+      .sort((a, b) => comparerCodes(b.date_heure, a.date_heure) || comparerCodes(b.id, a.id));
     return carteHistorique(I18n.t('parc.carte_historique_di.historique_demandes_intervention'), demandes, (lignes) => listeAdaptative({
       lignes,
       vide: I18n.t('parc.carte_historique_di.aucune_demande_intervention_equipement'),

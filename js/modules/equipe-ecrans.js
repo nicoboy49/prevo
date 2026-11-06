@@ -188,7 +188,7 @@ Object.assign(Equipe, (() => {
     const zone = UI.$('.equipe-liste', conteneur);
     const formulaire = UI.$('#equipe-filtres', conteneur);
     const techniciens = Donnees.lignes('techniciens').slice()
-      .sort((a, b) => (texte(a.nom) + ' ' + texte(a.prenom)).localeCompare(texte(b.nom) + ' ' + texte(b.prenom), 'fr'));
+      .sort((a, b) => UI.comparerTextes(texte(a.nom) + ' ' + texte(a.prenom), texte(b.nom) + ' ' + texte(b.prenom)));
 
     function garder(technicien) {
       if (filtres.etat === 'actifs' && !estActif(technicien)) return false;
@@ -324,7 +324,7 @@ Object.assign(Equipe, (() => {
     const connus = new Set();
     Donnees.lignes('habilitations').forEach((h) => { if (texte(h.intitule)) connus.add(texte(h.intitule)); });
     Donnees.lignes('equipements').forEach((e) => texte(e.habilitation_requise).split(',').map(texte).filter(Boolean).forEach((i) => connus.add(i)));
-    return Array.from(connus).sort((a, b) => a.localeCompare(b, 'fr'));
+    return Array.from(connus).sort((a, b) => UI.comparerTextes(a, b));
   }
 
   function champsHabilitation(habilitation, avecIntitule) {
@@ -380,7 +380,7 @@ Object.assign(Equipe, (() => {
   function carteHabilitations(technicien, responsable, jour) {
     const liste = habilitationsAvecEtat(technicien.id, jour)
       .sort((a, b) => STATUTS_HABILITATION.indexOf(a.etat.statut) - STATUTS_HABILITATION.indexOf(b.etat.statut)
-        || texte(a.habilitation.intitule).localeCompare(texte(b.habilitation.intitule), 'fr'));
+        || UI.comparerTextes(texte(a.habilitation.intitule), texte(b.habilitation.intitule)));
     return UI.html`<article class="carte equipe-carte-habilitations">
       <div class="entete-carte"><h2>${I18n.html('equipe.carte_habilitations.habilitations_nb_liste', { nbListe: liste.length })}</h2>
         ${responsable ? UI.html`<button type="button" class="btn btn-secondaire" id="equipe-ajouter-habilitation">${UI.icone('ajouter')}${I18n.t('equipe.ouvrir_ajout.ajouter_habilitation')}</button>` : ''}</div>
@@ -400,7 +400,7 @@ Object.assign(Equipe, (() => {
   function carteHistorique(technicien) {
     const comptent = new Set(habilitationsQuiComptent(technicien.id).map((h) => h.id));
     const lignes = Donnees.lignes('habilitations').filter((h) => h.technicien_id === technicien.id)
-      .sort((a, b) => texte(a.intitule).localeCompare(texte(b.intitule), 'fr', { sensitivity: 'base' })
+      .sort((a, b) => UI.comparerTextes(texte(a.intitule), texte(b.intitule), { sensitivity: 'base' })
         || texte(b.date_obtention).localeCompare(texte(a.date_obtention)) || texte(b.id).localeCompare(texte(a.id), 'fr', { numeric: true }));
     return UI.html`<article class="carte equipe-historique"><h2>${I18n.html('equipe.carte_historique.historique_habilitations', { nbLignes: lignes.length })}</h2>
       ${lignes.length ? UI.html`<ul class="equipe-lignes">${lignes.map((h) => UI.html`<li>

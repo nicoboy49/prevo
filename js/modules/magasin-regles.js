@@ -86,9 +86,9 @@ const Magasin = (() => {
     return valeurFichier(valeur).replace('.', ',');
   }
 
-  /** Texte comparable : minuscules, sans accents, espaces simplifiés (« Écrou  M8 » → « ecrou m8 »). */
+  /** Texte comparable : le pliage de toute recherche (UI.normaliserRecherche, D154 ; « Écrou  M8 » → « ecrou m8 »). */
   function normaliser(valeur) {
-    return texte(valeur).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ');
+    return UI.normaliserRecherche(valeur);
   }
 
   // Catégorie d'un article = préfixe de sa référence (« ROU-001 » → ROU). Les préfixes connus ont

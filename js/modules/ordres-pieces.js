@@ -77,7 +77,7 @@ Object.assign(Ordres, (() => {
     const stock = (article) => UI.nombreFr(Donnees.stockArticle(article.id));
     const articlesPrevus = Array.from(prevues.keys()).map((id) => Donnees.trouver('articles', id)).filter(Boolean);
     const autres = Donnees.lignes('articles').filter((a) => texte(a.actif) !== '0' && !prevues.has(a.id))
-      .sort((a, b) => libelleArticle(a).localeCompare(libelleArticle(b), 'fr'));
+      .sort((a, b) => UI.comparerTextes(libelleArticle(a), libelleArticle(b)));
     return UI.html`<option value=""${articlesPrevus.length ? '' : UI.brut(' selected')}>${I18n.t('ordres.options_sortie.choisir_article')}</option>
       ${articlesPrevus.length ? UI.html`<optgroup label="${I18n.t('ordres.options_sortie.pieces_prevues_ot')}">${articlesPrevus.map((a, rang) => UI.html`
         <option value="${a.id}"${rang === 0 ? UI.brut(' selected') : ''}>${I18n.t('ordres.options_sortie.prevu_stock', { libelleArticle: libelleArticle(a), prevu: UI.nombreFr(prevues.get(a.id)), stock: stock(a) })}</option>`)}</optgroup>` : ''}

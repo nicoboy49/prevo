@@ -184,7 +184,7 @@ Object.assign(Ordres, (() => {
   function optionsArticles(ot) {
     const liees = new Set(Donnees.lignes('article_equipement').filter((l) => l.equipement_id === ot.equipement_id).map((l) => l.article_id));
     const actifs = Donnees.lignes('articles').filter((a) => a.actif !== '0')
-      .sort((a, b) => libelleArticle(a).localeCompare(libelleArticle(b), 'fr'));
+      .sort((a, b) => UI.comparerTextes(libelleArticle(a), libelleArticle(b)));
     const option = (a) => UI.html`<option value="${a.id}">${I18n.t('ordres.options_articles.libelle_article_stock_stock_article', { libelleArticle: libelleArticle(a), stockArticle: UI.nombreFr(Donnees.stockArticle(a.id)) })}</option>`;
     const pourEquipement = actifs.filter((a) => liees.has(a.id));
     return UI.html`<option value="">${I18n.t('ordres.options_articles.choisir_article')}</option>

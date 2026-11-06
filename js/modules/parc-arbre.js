@@ -6,7 +6,7 @@
 Object.assign(Parc, (() => {
 
   // Outils de parc-regles.js.
-  const { estActif, comparerTextes, parRepere, remonteSurSoi, badgesEquipement } = Parc.interne;
+  const { estActif, comparerLibelles, parRepere, remonteSurSoi, badgesEquipement } = Parc.interne;
 
   // Fenêtre de localisation : dans parc-formulaires.js, chargé APRÈS ce fichier ; elle est
   // cherchée au moment de l'appel, pas au chargement.
@@ -82,7 +82,7 @@ Object.assign(Parc, (() => {
     const localisationsParId = new Map(localisations.map((l) => [l.id, l]));
     const sousLocalisations = new Map();
     const racinesLocalisations = [];
-    localisations.slice().sort((a, b) => comparerTextes(a.libelle, b.libelle)).forEach((localisation) => {
+    localisations.slice().sort((a, b) => comparerLibelles(a.libelle, b.libelle)).forEach((localisation) => {
       const parent = localisationsParId.get(localisation.parent_id);
       if (parent && !remonteSurSoi(localisation.id, localisationsParId)) {
         if (!sousLocalisations.has(parent.id)) sousLocalisations.set(parent.id, []);

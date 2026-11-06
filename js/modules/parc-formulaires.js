@@ -8,7 +8,7 @@ Object.assign(Parc, (() => {
 
   // Règles et outils de parc-regles.js.
   const { cheminLocalisation, libelleEquipement, verifierEquipement, verifierLocalisation } = Parc;
-  const { comparerTextes, parRepere, identifiantsDescendants, dernierReleveDe, verifierReleve,
+  const { comparerLibelles, parRepere, identifiantsDescendants, dernierReleveDe, verifierReleve,
     estEnBaisse } = Parc.interne;
 
   const TAILLE_MAX_DOCUMENT = 9 * 1024 * 1024;        // le serveur refuse plus de 10 Mo
@@ -43,7 +43,7 @@ Object.assign(Parc, (() => {
     if (existante) exclus.add(existante.id);
     const parents = Donnees.lignes('localisations').filter((l) => !exclus.has(l.id))
       .map((l) => ({ valeur: l.id, libelle: cheminLocalisation(l.id) }))
-      .sort((a, b) => comparerTextes(a.libelle, b.libelle));
+      .sort((a, b) => comparerLibelles(a.libelle, b.libelle));
 
     const contenu = UI.element(UI.html`<div class="form-colonne parc-formulaire-localisation"></div>`);
     contenu.appendChild(UI.champ(definition('libelle'), existante ? existante.libelle : '', { attributs: { maxlength: '80' } }));
@@ -148,7 +148,7 @@ Object.assign(Parc, (() => {
     // Listes déroulantes : localisations (avec leur chemin) et équipements parents possibles.
     const listeLocalisations = Donnees.lignes('localisations')
       .map((l) => ({ valeur: l.id, libelle: cheminLocalisation(l.id) }))
-      .sort((a, b) => comparerTextes(a.libelle, b.libelle));
+      .sort((a, b) => comparerLibelles(a.libelle, b.libelle));
     const interdits = existant ? identifiantsDescendants('equipements', existant.id) : new Set();
     if (existant) interdits.add(existant.id);
     const listeParents = Donnees.lignes('equipements').filter((e) => !interdits.has(e.id))

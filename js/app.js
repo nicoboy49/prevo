@@ -924,7 +924,7 @@ const App = (() => {
 
   function remplirListeTechniciens() {
     const actifs = Donnees.lignes('techniciens').filter((t) => t.actif !== '0')
-      .sort((a, b) => nomTechnicien(a).localeCompare(nomTechnicien(b), 'fr'));
+      .sort((a, b) => UI.comparerTextes(nomTechnicien(a), nomTechnicien(b)));
     const zone = UI.$('#profil-techniciens');
     if (!actifs.length) {
       UI.remplir(zone, UI.html`<p class="note">${I18n.t('socle.remplir_liste_techniciens.aucun_technicien_actif_techniciens')}</p>`);
