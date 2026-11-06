@@ -17551,6 +17551,7 @@
 "Démo — rien n'est enregistré": 1,
 "Dérive de réglage": 1,
 "En savoir plus": 1,
+"English": 1,
 "Enregistrer": 1,
 "Entreprise": 1,
 "Erreur de manœuvre": 1,
@@ -17561,6 +17562,7 @@
 "Famille": 1,
 "Filtre colmaté": 1,
 "Flexible percé": 1,
+"Français": 1,
 "Fréquence de lecture des changements faits sur les autres postes.": 1,
 "Fuite": 1,
 "Gammes « compteur » seulement : estime l'échéance d'un équipement sans heures par jour. Jamais utilisé par les indicateurs.": 1,
@@ -17571,6 +17573,8 @@
 "Importer des données": 2,
 "Importer un ZIP…": 1,
 "Indisponible en démo : rien n'est enregistré, il n'y a donc rien à sauvegarder. Le bouton « Exporter en ZIP » permet de garder une copie des données.": 1,
+"Langue de l'installation": 1,
+"Langue proposée aux postes qui n'ont pas choisi la leur, et langue des textes que Prévo écrit dans les données (journal, motifs, rapport figé).": 1,
 "Les pannes comptées sont celles de ces derniers mois.": 1,
 "Les réglages partagés par tous les postes : nom de l'entreprise, délais par priorité, seuils du préventif et des suggestions, seuil « réparer ou remplacer », codes de défaillance. Et les outils de la base : sauvegardes et restauration, contrôle de la base, import depuis Excel ou CSV, export en ZIP des 24 fichiers.": 1,
 "Les textes envoyés (descriptions, comptes rendus, désignations) quittent alors l'atelier. L'IA locale (Ollama) reste toujours possible.": 1,
@@ -17665,7 +17669,7 @@
 "« Importer un ZIP… » remplace toutes les données par celles d'un ZIP exporté par Prévo (« Exporter en ZIP »), après confirmation et une sauvegarde complète faite juste avant. Les comptes et l'accès ne sont pas touchés.": 1,
 "Échanges entre postes": 1,
 "Échauffement": 1,
-"—": 1
+"—": 2
 },
 "attributs": {
 "aria-label=Causes": 1,
