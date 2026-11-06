@@ -226,8 +226,23 @@ const I18n = (function () {
    * s'exécuterait après le retour à la langue de l'écran.
    */
   function enLangueDesDonnees(fonction) {
+    return executerEn(langueDesDonnees(), fonction, 'enLangueDesDonnees');
+  }
+
+  /**
+   * Comme enLangueDesDonnees, pour la langue déclarée `code` dont le dictionnaire est chargé (T302 : rapport mensuel
+   * figé dans la langue choisie ; I18n.chargerLangue la charge au besoin). Langue non déclarée ou dictionnaire absent :
+   * erreur, plutôt qu'un texte écrit dans une autre langue.
+   */
+  function enLangue(code, fonction) {
+    if (!estDeclaree(code)) throw new TypeError('I18n.enLangue : langue non déclarée (' + String(code) + ').');
+    if (!dictionnaires[code]) throw new Error('I18n.enLangue : dictionnaire « ' + code + ' » non chargé (I18n.chargerLangue).');
+    return executerEn(code, fonction, 'enLangue');
+  }
+
+  function executerEn(code, fonction, nom) {
     const ecran = langueActive;
-    langueActive = langueDesDonnees();
+    langueActive = code;
     let resultat;
     try {
       resultat = fonction();
@@ -235,9 +250,46 @@ const I18n = (function () {
       langueActive = ecran;
     }
     if (resultat && typeof resultat.then === 'function') {
-      throw new TypeError('I18n.enLangueDesDonnees : fonction synchrone attendue.');
+      throw new TypeError('I18n.' + nom + ' : fonction synchrone attendue.');
     }
     return resultat;
+  }
+
+  // Dossier de js/i18n.js, relevé pendant l'analyse du script (document.currentScript n'existe plus ensuite) : c'est là
+  // que sont js/i18n/<code>.js, comme pour js/i18n-chargeur.js.
+  const dossierDesLangues = (typeof document !== 'undefined' && document.currentScript && document.currentScript.src)
+    ? document.currentScript.src.replace(/[?#].*$/, '').replace(/[^/]*$/, '') + 'i18n/' : '';
+  const chargements = Object.create(null);      // code → Promise du chargement en cours ou fait
+
+  /**
+   * Charge à la demande le dictionnaire de la langue déclarée `code` (balise <script src="js/i18n/<code>.js"> ajoutée à
+   * la page) → Promise résolue quand il est là ; rien à faire s'il l'est déjà. Rejetée avec une erreur claire si la
+   * langue n'est pas déclarée, si le fichier ne se charge pas ou ne fournit pas de dictionnaire.
+   */
+  function chargerLangue(code) {
+    if (!estDeclaree(code)) return Promise.reject(new Error('I18n.chargerLangue : langue non déclarée (' + String(code) + ').'));
+    if (dictionnaires[code]) return Promise.resolve();
+    if (chargements[code]) return chargements[code];
+    const promesse = new Promise((resolve, reject) => {
+      if (!dossierDesLangues || typeof document === 'undefined') {
+        reject(new Error('I18n.chargerLangue : dossier des langues inconnu, « ' + code + ' » ne peut pas être chargé.'));
+        return;
+      }
+      const balise = document.createElement('script');
+      balise.src = dossierDesLangues + code + '.js';
+      balise.onload = () => {
+        if (dictionnaires[code]) resolve();
+        else reject(new Error('I18n.chargerLangue : js/i18n/' + code + '.js ne fournit pas de dictionnaire.'));
+      };
+      balise.onerror = () => {
+        balise.remove();
+        reject(new Error('I18n.chargerLangue : js/i18n/' + code + '.js ne s\'est pas chargé.'));
+      };
+      document.head.appendChild(balise);
+    });
+    chargements[code] = promesse;
+    promesse.catch(() => { delete chargements[code]; });      // un nouvel essai reste possible
+    return promesse;
   }
 
   const REMPLACEMENTS_HTML = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -310,6 +362,8 @@ const I18n = (function () {
     reference: reference,
     donnees: donnees,
     enLangueDesDonnees: enLangueDesDonnees,
+    enLangue: enLangue,
+    chargerLangue: chargerLangue,
     html: html,
     appliquer: appliquer,
     langueAAfficher: langueAAfficher,

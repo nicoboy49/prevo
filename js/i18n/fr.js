@@ -3540,6 +3540,7 @@ I18n.ajouter('fr', {
   'rapport.onglet.figer_rapport': 'Figer le rapport',
   'rapport.onglet.figer_rapport_mensuel': 'Figer un rapport mensuel',
   'rapport.onglet.figez_mois_ecoule_garder': 'Figez le mois écoulé pour garder sa photographie.',
+  'rapport.onglet.langue_du_rapport': 'Langue du rapport',
   'rapport.onglet.mois': 'Mois',
   'rapport.onglet.ouvrir': 'Ouvrir',
   'rapport.onglet.page_4_direction_disponibilite': 'Une page A4 pour la direction : disponibilité, coût, part du préventif (comparés au mois précédent et à l\'année précédente), faits marquants, décisions proposées. Le rapport est enregistré dans les documents (fichier HTML rouvrable sans Prévo, imprimable en PDF) et n\'est jamais écrasé : « Recalculer » crée une révision.',

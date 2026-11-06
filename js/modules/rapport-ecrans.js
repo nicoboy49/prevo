@@ -9,7 +9,7 @@
 
 Object.assign(Rapport, (() => {
 
-  const { texte, nomDemande, libelleMois, decalerMois, lienCourriel, estCouvert } = Rapport.interne;
+  const { enLangueDuRapport, texte, nomDemande, libelleMois, decalerMois, lienCourriel, estCouvert } = Rapport.interne;
   const ESSAIS_DE_NOM = 50;
   const CLE_PLUS_TARD = 'prevo.rapport.plusTard';     // sessionStorage : mois reporté à plus tard
   // Appliqué au nom demandé (nomDemande de rapport-contenu.js : préfixe d'horodatage du serveur retiré, audit F4).
@@ -45,8 +45,11 @@ Object.assign(Rapport, (() => {
   async function figer(mois, options) {
     if (!/^\d{4}-\d{2}$/.test(texte(mois))) throw new Donnees.ErreurValidation(I18n.t('rapport.figer.mois_invalide', { mois }));
     const reglages = options || {};
-    const rapport = Rapport.donnees(mois, reglages.aujourdhui, reglages.maintenant);
-    const page = await Rapport.html(mois, { donnees: rapport, commentaire: reglages.commentaire });
+    // Langue du rapport (D160) : choisie au moment de figer, sinon celle de l'installation ; son dictionnaire est chargé au besoin.
+    const langue = reglages.langue || '';
+    if (langue) await I18n.chargerLangue(langue);
+    const rapport = Rapport.donnees(mois, reglages.aujourdhui, reglages.maintenant, langue);
+    const page = await Rapport.html(mois, { donnees: rapport, commentaire: reglages.commentaire, langue });
     const dejaFiges = Rapport.rapportsFiges().map(nomDemande);
     let revision = 1;
     while (dejaFiges.includes(nomFichier(mois, revision))) revision += 1;
@@ -136,6 +139,8 @@ Object.assign(Rapport, (() => {
         ${proposables.length ? UI.html`<form class="rapports-formulaire" data-hors-saisie>
           <div class="champ"><label class="libelle" for="rapports-mois">${I18n.t('rapport.onglet.mois')}</label>
             <select id="rapports-mois">${proposables.map((mois) => UI.html`<option value="${mois}">${libelleMois(mois)}</option>`)}</select></div>
+          <div class="champ"><label class="libelle" for="rapports-langue">${I18n.t('rapport.onglet.langue_du_rapport')}</label>
+            <select id="rapports-langue">${I18n.langues.map((langue) => UI.html`<option value="${langue.code}" ${langue.code === I18n.installation ? 'selected' : ''}>${langue.nom}</option>`)}</select></div>
           <div class="champ large"><label class="libelle" for="rapports-commentaire">${I18n.t('rapport.onglet.commentaire_mois_facultatif')}</label>
             <textarea id="rapports-commentaire" rows="4" maxlength="4000" data-dictee></textarea></div>
           <button type="submit" class="btn btn-primaire">${I18n.t('rapport.onglet.figer_rapport')}</button>
@@ -169,7 +174,7 @@ Object.assign(Rapport, (() => {
         const ecart = commentaire.texte ? ecartDeMois(zoneCommentaire, mois) : '';
         if (ecart) { message('important', ecart); return; }            // rien n'est figé
         await executer(formulaire.querySelector('button[type=submit]'), async () => {
-          const resultat = await figer(mois, { commentaire });
+          const resultat = await figer(mois, { commentaire, langue: formulaire.querySelector('#rapports-langue').value });
           if (commentaire.texte && commentaire.aideIa) {
             try {
               await Ia.tracerUtilisation('parametres', 'rapports_mensuels', I18n.donnees('rapport.onglet.commentaire_rapport', { resultatNom: resultat.nom }), zoneCommentaire.dataset.iaModele);
@@ -189,7 +194,8 @@ Object.assign(Rapport, (() => {
         telecharger: () => telecharger(bouton.dataset.nom),
       };
       if (bouton.dataset.action === 'recalculer') {
-        await executer(bouton, () => figer(bouton.dataset.mois), conteneur, message);
+        const choixLangue = racine.querySelector('#rapports-langue');       // recalculer : dans la langue proposée au formulaire
+        await executer(bouton, () => figer(bouton.dataset.mois, choixLangue ? { langue: choixLangue.value } : {}), conteneur, message);
       } else if (actions[bouton.dataset.action]) {
         try { await actions[bouton.dataset.action](); } catch (erreur) { App.signalerErreur(erreur, 'rapport ' + bouton.dataset.nom); }
       }
@@ -218,7 +224,7 @@ Object.assign(Rapport, (() => {
     });
     const zone = Ia.emplacement(I18n.t('rapport.brancher_commentaire_ia.proposer_commentaire'), () => {
       const mois = formulaire.querySelector('#rapports-mois').value;
-      const rapport = Rapport.donnees(mois);
+      const langue = formulaire.querySelector('#rapports-langue').value;
       const remplir = (resultat, reponse, retoucher) => {
         zoneCommentaire.value = resultat.texte;
         zoneCommentaire.dataset.iaModele = reponse.modele;
@@ -226,10 +232,14 @@ Object.assign(Rapport, (() => {
         avertirMois();
         if (retoucher) zoneCommentaire.focus();
       };
-      // Le commentaire est imprimé dans le rapport figé : l'IA reçoit la langue de l'installation (D156), comme le rapport.
-      Ia.ouvrirEncadre({ apres: zone, fonction: 'commentaireRapport',
-        donnees: I18n.enLangueDesDonnees(() => ({ mois: libelleMois(mois), jetons: Rapport.jetonsCommentaire(rapport), points: rapport.faits.concat(rapport.decisions).map(sansChiffres) })),
-        utiliser: (resultat, reponse) => remplir(resultat, reponse, false), modifier: (resultat, reponse) => remplir(resultat, reponse, true) });
+      // Le commentaire est imprimé dans le rapport figé : les données envoyées à l'IA sont dans la langue du rapport (D160).
+      // A FAIRE (T303) : la demande à l'IA ne dit pas encore la langue à écrire ; la passer ici (`langue`) quand elle le saura.
+      I18n.chargerLangue(langue).then(() => {
+        const rapport = Rapport.donnees(mois, undefined, undefined, langue);
+        Ia.ouvrirEncadre({ apres: zone, fonction: 'commentaireRapport',
+          donnees: enLangueDuRapport(langue, () => ({ mois: libelleMois(mois), jetons: Rapport.jetonsCommentaire(rapport), points: rapport.faits.concat(rapport.decisions).map(sansChiffres) })),
+          utiliser: (resultat, reponse) => remplir(resultat, reponse, false), modifier: (resultat, reponse) => remplir(resultat, reponse, true) });
+      }).catch((erreur) => App.signalerErreur(erreur, 'commentaire du rapport'));
     });
     zoneCommentaire.closest('.champ').insertAdjacentElement('afterend', zone);
   }

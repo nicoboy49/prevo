@@ -3542,6 +3542,7 @@ I18n.ajouter('en', {
   'rapport.onglet.figer_rapport': 'Finalise report',
   'rapport.onglet.figer_rapport_mensuel': 'Finalise a monthly report',
   'rapport.onglet.figez_mois_ecoule_garder': 'Finalise the month just ended to keep a snapshot of it.',
+  'rapport.onglet.langue_du_rapport': 'Report language',
   'rapport.onglet.mois': 'Month',
   'rapport.onglet.ouvrir': 'Open',
   'rapport.onglet.page_4_direction_disponibilite': 'One A4 page for management: availability, cost, preventive share (compared with the previous month and the previous year), highlights, proposed decisions. The report is saved in the documents (an HTML file that reopens without Prévo and can be printed to PDF) and is never overwritten: “Recalculate” creates a revision.',

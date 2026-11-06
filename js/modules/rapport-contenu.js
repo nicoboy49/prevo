@@ -16,7 +16,8 @@
 // Langue (D156) : le rapport figé est un document enregistré, écrit dans la langue de l'installation (textes, mois,
 // nombres, raisons des indicateurs) quelle que soit la langue de l'écran : Rapport.donnees et Rapport.html travaillent
 // dans I18n.enLangueDesDonnees. Ce qu'on en montre avant de figer (courriel, commentaire proposé par l'IA) est donc
-// ce qui sera enregistré.
+// ce qui sera enregistré. Exception voulue (T302, D160) : le responsable peut choisir une autre langue déclarée au
+// moment de figer (option `langue`, dictionnaire chargé par I18n.chargerLangue) ; la langue de l'installation est proposée.
 
 const Rapport = (() => {
 
@@ -185,10 +186,16 @@ const Rapport = (() => {
   /**
    * Données du rapport d'un mois 'AAAA-MM', calculées à la date `aujourdhui` (date de génération,
    * qui sert aux retards) : { mois, libelleMois, genereLe, entreprise, tuiles, faits, decisions,
-   * pareto, heures12Mois, nonCalculables, comprendre, courriel }. Dans la langue de l'installation (D156).
+   * pareto, heures12Mois, nonCalculables, comprendre, courriel }. Dans la langue de l'installation (D156), ou dans
+   * `langue` (code déclaré dont le dictionnaire est chargé : celle choisie pour le rapport, T302).
    */
-  function donnees(mois, aujourdhui, maintenant) {
-    return I18n.enLangueDesDonnees(() => donneesDuMois(mois, aujourdhui, maintenant));
+  function donnees(mois, aujourdhui, maintenant, langue) {
+    return enLangueDuRapport(langue, () => donneesDuMois(mois, aujourdhui, maintenant));
+  }
+
+  /** `fonction` dans la langue choisie du rapport, à défaut dans celle de l'installation. */
+  function enLangueDuRapport(langue, fonction) {
+    return langue ? I18n.enLangue(langue, fonction) : I18n.enLangueDesDonnees(fonction);
   }
 
   function donneesDuMois(mois, aujourdhui, maintenant) {
@@ -357,9 +364,9 @@ figure { margin: 0; } figcaption { font-weight: 600; margin-bottom: 2px; }
    */
   async function html(mois, options) {
     const reglages = options || {};
-    const rapport = reglages.donnees || donnees(mois, reglages.aujourdhui, reglages.maintenant);
+    const rapport = reglages.donnees || donnees(mois, reglages.aujourdhui, reglages.maintenant, reglages.langue);
     const lib = await App.chargerEcharts();
-    return I18n.enLangueDesDonnees(() => pageDuRapport(rapport, reglages, lib));        // document enregistré (D156)
+    return enLangueDuRapport(reglages.langue, () => pageDuRapport(rapport, reglages, lib));        // document enregistré (D156)
   }
 
   function pageDuRapport(rapport, reglages, lib) {
@@ -418,6 +425,6 @@ ${rapport.nonCalculables.length ? UI.html`<section class="non-calculable"><h2>${
     donnees, moisAProposer, texteCourriel, rapportsFiges, jetonsCommentaire,
     html,
     // Usage interne au module (pas une API).
-    interne: { texte, nomDemande, decalerMois, libelleMois, lienCourriel, estCouvert, debutHistorique },
+    interne: { enLangueDuRapport, texte, nomDemande, decalerMois, libelleMois, lienCourriel, estCouvert, debutHistorique },
   };
 })();
