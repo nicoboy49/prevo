@@ -353,6 +353,23 @@ class TestMoteur(CasNavigateur):
         self.assertEqual(resultat["scripts"], 0)
         self.assertEqual(resultat["imbrique"], "Bonjour <b>Bonjour <b>&lt;script&gt;x&lt;/script&gt;</b></b>")
 
+    def test_formats_de_nombres_suivent_la_locale_de_la_langue_active(self):
+        self.ouvrir("js/i18n/langues.js", "js/interface.js")
+        resultat = self.page.evaluate("""() => {
+          const lire = () => [UI.nombreFr(1234567.5), UI.nombreFr(1234.5, 2), UI.euro(1234.5)];
+          const francais = lire();
+          I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'en-GB', statut: 'automatique' });
+          I18n.choisir('xx');
+          const anglais = lire();
+          const locale = I18n.locale;
+          I18n.choisir('fr');
+          return { francais, anglais, locale, retour: lire() };
+        }""")
+        self.assertEqual(resultat["francais"], ["1 234 567,5", "1 234,50", "1 234,50 €"])
+        self.assertEqual(resultat["locale"], "en-GB")
+        self.assertEqual(resultat["anglais"], ["1,234,567.5", "1,234.50", "€1,234.50"])
+        self.assertEqual(resultat["retour"], resultat["francais"])
+
     def test_data_i18n_et_data_i18n_attr(self):
         self.ouvrir()
         resultat = self.page.evaluate("""() => {

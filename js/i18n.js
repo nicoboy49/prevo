@@ -229,6 +229,11 @@ const I18n = (function () {
     appliquer: appliquer,
     /** Code de la langue active ('fr' tant que rien n'en choisit une autre). */
     get langue() { return langueActive; },
+    /** Locale Intl de la langue active (nombres, montants, dates), 'fr-FR' si la langue n'en déclare pas. */
+    get locale() {
+      const langue = declarees.find((l) => l.code === langueActive);
+      return (langue && langue.locale) || 'fr-FR';
+    },
     /** Copie des langues déclarées par js/i18n/langues.js, dans l'ordre. */
     get langues() { return declarees.map((langue) => Object.assign({}, langue)); },
   };

@@ -27,8 +27,8 @@ Object.assign(Accueil, (() => {
   const RANG_PRIORITE = { P1: 1, P2: 2, P3: 3, P4: 4 };
   const DATE_VIDE = '9999';                     // une date absente passe après toutes les autres
   const TONS_IMPACT = { 'sécurité': 'rouge', 'arrêt': 'ambre', 'dégradé': 'bleu' };
-  const FORMAT_DATE = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const FORMAT_DATE_COURTE = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+  const OPTIONS_DATE = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' };
+  const OPTIONS_DATE_COURTE = { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' };
 
   // Les chiffres défilent à l'ouverture de l'écran (démarrage, changement d'adresse), pas quand il est
   // réaffiché parce que des données ont changé.
@@ -107,7 +107,7 @@ Object.assign(Accueil, (() => {
   /** '2026-10-19' → « Lundi 19 octobre 2026 » (ou « Lundi 19 octobre » sans l'année). */
   function dateEnLettres(dateIso, avecAnnee) {
     const [annee, mois, jour] = dateIso.split('-').map(Number);
-    const texte = (avecAnnee ? FORMAT_DATE : FORMAT_DATE_COURTE).format(new Date(Date.UTC(annee, mois - 1, jour)));
+    const texte = new Intl.DateTimeFormat(I18n.locale, avecAnnee ? OPTIONS_DATE : OPTIONS_DATE_COURTE).format(new Date(Date.UTC(annee, mois - 1, jour)));
     return texte.charAt(0).toUpperCase() + texte.slice(1);
   }
 

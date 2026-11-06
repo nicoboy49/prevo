@@ -218,7 +218,7 @@ Object.assign(Indicateurs, (() => {
   /** « oct. 25 » pour '2025-10'. */
   function moisCourt(mois) {
     const date = new Date(Date.UTC(Number(mois.slice(0, 4)), Number(mois.slice(5, 7)) - 1, 1));
-    return new Intl.DateTimeFormat('fr-FR', { month: 'short', year: '2-digit', timeZone: 'UTC' }).format(date);
+    return new Intl.DateTimeFormat(I18n.locale, { month: 'short', year: '2-digit', timeZone: 'UTC' }).format(date);
   }
 
   /** Heures par mois, empilées : correctif, préventif, autres. lignes : Indicateurs.heuresParMois. */

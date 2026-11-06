@@ -137,11 +137,12 @@ const UI = (function () {
   const ESPACE_INSECABLE = '\u00A0';
 
   function formateurNombre(decimalesMin, decimalesMax, style) {
-    const cle = decimalesMin + '/' + decimalesMax + '/' + (style || '');
+    const locale = I18n.locale;
+    const cle = locale + '/' + decimalesMin + '/' + decimalesMax + '/' + (style || '');
     if (!formateursNombre[cle]) {
       const options = { minimumFractionDigits: decimalesMin, maximumFractionDigits: decimalesMax };
       if (style === 'euro') { options.style = 'currency'; options.currency = 'EUR'; }
-      const intl = new Intl.NumberFormat('fr-FR', options);
+      const intl = new Intl.NumberFormat(locale, options);
       formateursNombre[cle] = { format: (nombre) => intl.format(nombre).replace(ESPACE_FINE, ESPACE_INSECABLE) };
     }
     return formateursNombre[cle];
