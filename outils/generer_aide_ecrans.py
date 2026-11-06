@@ -205,7 +205,7 @@ ECRANS = {
             "avec les valeurs attendues, et ses derniers passages. À la clôture de l'ordre, la gamme repart de "
             "la date réelle de fin."
         ),
-        "essayez": "le bouton « Générer l'OT » si la gamme est échue.",
+        "essayez": "le bouton « Générer les OT échus » si la gamme est échue.",
     },
     "magasin": {
         "titre": "Magasin",
@@ -563,7 +563,7 @@ ECRANS_EN = {
             "the expected values, and its latest visits. When the work order is closed, the task list restarts "
             "from the actual finish date."
         ),
-        "essayez": "the “Generate WO” button, if the task list is overdue.",
+        "essayez": "the “Generate overdue WOs” button, if the task list is overdue.",
     },
     "magasin": {
         "titre": "Stores",

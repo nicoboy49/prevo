@@ -181,7 +181,7 @@ I18n.ajouter('fr', {
   'aide.ecran.preventif.essayez': 'ouvrez une gamme et lisez sa check-list.',
   'aide.ecran.preventif.texte': 'Les gammes : une maintenance à refaire régulièrement, déclenchée par une date, un compteur ou un seuil de mesure, avec sa check-list. Chaque gamme échue crée un seul ordre de travail à l\'ouverture de Prévo, ou avec « Générer les OT échus ». L\'onglet Calendrier montre les douze prochaines semaines ; l\'onglet Suggestions, ce que l\'historique conseille.',
   'aide.ecran.preventif.titre': 'Préventif',
-  'aide.ecran.preventif_gamme.essayez': 'le bouton « Générer l\'OT » si la gamme est échue.',
+  'aide.ecran.preventif_gamme.essayez': 'le bouton « Générer les OT échus » si la gamme est échue.',
   'aide.ecran.preventif_gamme.texte': 'Une gamme : son équipement, son déclencheur (jours, heures de marche ou mesure), sa check-list avec les valeurs attendues, et ses derniers passages. À la clôture de l\'ordre, la gamme repart de la date réelle de fin.',
   'aide.ecran.preventif_gamme.titre': 'Gamme de préventif',
   'aide.ecran.wiki.essayez': 'cherchez « fuite ».',

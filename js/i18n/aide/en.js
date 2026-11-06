@@ -183,7 +183,7 @@ I18n.ajouter('en', {
   'aide.ecran.preventif.essayez': 'open a task list and read its checklist.',
   'aide.ecran.preventif.texte': 'The task lists: maintenance to be repeated regularly, triggered by a date, a meter or a measurement threshold, with its checklist. Each overdue task list creates a single work order when Prévo opens, or with “Generate overdue WOs”. The Calendar tab shows the next twelve weeks; the Suggestions tab, what the history recommends.',
   'aide.ecran.preventif.titre': 'Preventive',
-  'aide.ecran.preventif_gamme.essayez': 'the “Generate WO” button, if the task list is overdue.',
+  'aide.ecran.preventif_gamme.essayez': 'the “Generate overdue WOs” button, if the task list is overdue.',
   'aide.ecran.preventif_gamme.texte': 'A task list: its equipment, its trigger (days, running hours or a measurement), its checklist with the expected values, and its latest visits. When the work order is closed, the task list restarts from the actual finish date.',
   'aide.ecran.preventif_gamme.titre': 'Preventive task list',
   'aide.ecran.wiki.essayez': 'search for “leak”.',
