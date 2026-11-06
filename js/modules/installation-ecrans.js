@@ -77,7 +77,7 @@ const Installation = (() => {
     }
     const donnees = await reponse.json().catch(() => null);
     const message = donnees && typeof donnees.erreur === 'string' && donnees.erreur
-      ? donnees.erreur : I18n.t('commun.message.serveur_a_repondu', { status: reponse.status });
+      ? StockageServeur.texte(donnees, 'erreur') : I18n.t('commun.message.serveur_a_repondu', { status: reponse.status });
     return { statut: reponse.status, donnees: donnees, message: reponse.ok ? '' : message };
   }
 
@@ -338,7 +338,7 @@ const Installation = (() => {
     if (!d.present || !d.connecte) {
       let probleme = I18n.t('installation.appliquer_tailscale.tailscale_installe_mais_pas');
       if (!d.present) {
-        probleme = d.raison ? I18n.t('installation.appliquer_tailscale.tailscale_toujours_pas_detecte_raison', { raison: d.raison })
+        probleme = d.raison ? I18n.t('installation.appliquer_tailscale.tailscale_toujours_pas_detecte_raison', { raison: StockageServeur.texte(d, 'raison') })
           : I18n.t('installation.appliquer_tailscale.tailscale_toujours_pas_detecte');
       }
       montrerErreur(etape.cle, probleme);
@@ -348,7 +348,7 @@ const Installation = (() => {
     if (!application.statut || application.statut >= 400) { montrerErreur(etape.cle, application.message); return; }
     reprendre(application.donnees);
     const resultat = UI.$('#inst-tailscale-resultat', section);
-    const publie = application.donnees.message || I18n.t('installation.appliquer_tailscale.tailscale_publie_prevo');
+    const publie = StockageServeur.texte(application.donnees, 'message') || I18n.t('installation.appliquer_tailscale.tailscale_publie_prevo');
     const adresse = application.donnees.adresse || '';
     UI.remplir(resultat, UI.html`<p>${I18n.html('installation.appliquer_tailscale.publie_adresse_adresse', { publie, adresse })}</p>
       <ul>${(proposition.rappels || []).map((rappel) => UI.html`<li>${rappel}</li>`)}</ul>
@@ -360,7 +360,7 @@ const Installation = (() => {
       unattended.addEventListener('click', () => pendant(unattended, async () => {
         const reponse = await appeler('tailscale', { action: 'unattended' });
         if (!reponse.statut || reponse.statut >= 400) { montrerErreur(etape.cle, reponse.message); return; }
-        UI.toast(reponse.donnees.message || I18n.t('installation.appliquer_tailscale.fait'), 'succes');
+        UI.toast(StockageServeur.texte(reponse.donnees, 'message') || I18n.t('installation.appliquer_tailscale.fait'), 'succes');
         unattended.hidden = true;
       }));
     }

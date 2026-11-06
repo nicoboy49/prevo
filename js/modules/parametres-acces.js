@@ -71,7 +71,7 @@ const ParametresAcces = (() => {
     }
     const donnees = await reponse.json().catch(() => null);
     const message = donnees && typeof donnees.erreur === 'string' && donnees.erreur
-      ? donnees.erreur : I18n.t('commun.message.serveur_a_repondu', { status: reponse.status });
+      ? StockageServeur.texte(donnees, 'erreur') : I18n.t('commun.message.serveur_a_repondu', { status: reponse.status });
     return { statut: reponse.status, donnees: donnees, message: reponse.ok ? '' : message };
   }
 
@@ -139,7 +139,7 @@ const ParametresAcces = (() => {
   // ===========================================================================================
 
   function texteTailscale(t) {
-    if (!t || !t.present) return t && t.raison ? I18n.t('parametres.texte_tailscale.non_detecte_pc', { raison: t.raison }) : I18n.t('parametres.texte_tailscale.non_detecte_pc_2');
+    if (!t || !t.present) return t && t.raison ? I18n.t('parametres.texte_tailscale.non_detecte_pc', { raison: StockageServeur.texte(t, 'raison') }) : I18n.t('parametres.texte_tailscale.non_detecte_pc_2');
     if (!t.connecte) return I18n.t('parametres.texte_tailscale.installe_mais_pas_connecte');
     const jours = t.jours_avant_expiration;
     const nom = t.nom || I18n.t('parametres.texte_tailscale.nom_inconnu');
@@ -152,7 +152,7 @@ const ParametresAcces = (() => {
   function texteCopie(copie, dossier) {
     if (!dossier) return I18n.t('parametres.texte_copie.aucune_copie_reglee_sauvegarde');
     const derniere = copie && copie.derniere_reussie ? I18n.t('parametres.texte_copie.derniere_copie_reussie', { derniere_reussie: UI.dateFr(copie.derniere_reussie) }) : I18n.t('parametres.texte_copie.aucune_copie_reussie_instant');
-    const erreur = copie && copie.erreur ? ' ' + I18n.t('parametres.texte_copie.dernier_echec', { erreur: copie.erreur }) : '';
+    const erreur = copie && copie.erreur ? ' ' + I18n.t('parametres.texte_copie.dernier_echec', { erreur: StockageServeur.texte(copie, 'erreur') }) : '';
     return UI.html`${dossier} — ${derniere}${erreur}`;
   }
 
@@ -413,7 +413,7 @@ const ParametresAcces = (() => {
     const donnees = reponse.donnees || {};
     if (corps.retirer && donnees.lance && !donnees.lance.ok) {
       montrerErreur(section.cle, donnees.lance.message
-        ? I18n.t('parametres.enregistrer.retrait_ete_refuse_echoue', { lanceMessage: donnees.lance.message })
+        ? I18n.t('parametres.enregistrer.retrait_ete_refuse_echoue', { lanceMessage: StockageServeur.texte(donnees.lance, 'message') })
         : I18n.t('parametres.enregistrer.retrait_ete_refuse_echoue_2', { lanceCode: donnees.lance.code }));
       return;
     }
@@ -435,7 +435,7 @@ const ParametresAcces = (() => {
     const d = detection.donnees.detection || {};
     const proposition = detection.donnees.proposition || {};
     if (!d.present || !d.connecte) {
-      montrerErreur('tailscale', !d.present ? (d.raison ? I18n.t('parametres.appliquer_tailscale.tailscale_toujours_pas_detecte', { raison: d.raison })
+      montrerErreur('tailscale', !d.present ? (d.raison ? I18n.t('parametres.appliquer_tailscale.tailscale_toujours_pas_detecte', { raison: StockageServeur.texte(d, 'raison') })
           : I18n.t('parametres.appliquer_tailscale.tailscale_toujours_pas_detecte_2'))
         : I18n.t('parametres.appliquer_tailscale.tailscale_installe_mais_pas'));
       await jeterSiNeuf(brouillon);
@@ -448,7 +448,7 @@ const ParametresAcces = (() => {
     rendreContenu(carte);
     const resultat = UI.$('#inst-tailscale-resultat', carte);
     if (!resultat) return;
-    UI.remplir(resultat, UI.html`<p>${I18n.html('parametres.appliquer_tailscale.resultat_adresse', { message: application.donnees.message || I18n.t('parametres.appliquer_tailscale.tailscale_publie_prevo'), adresse: application.donnees.adresse || '' })}</p>
+    UI.remplir(resultat, UI.html`<p>${I18n.html('parametres.appliquer_tailscale.resultat_adresse', { message: StockageServeur.texte(application.donnees, 'message') || I18n.t('parametres.appliquer_tailscale.tailscale_publie_prevo'), adresse: application.donnees.adresse || '' })}</p>
       <ul>${(proposition.rappels || []).map((rappel) => UI.html`<li>${rappel}</li>`)}</ul>
       ${proposition.unattended ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire" id="inst-tailscale-unattended">${I18n.t('parametres.appliquer_tailscale.rester_connecte_meme_sans')}</button></div>` : ''}`);
     resultat.hidden = false;
@@ -457,7 +457,7 @@ const ParametresAcces = (() => {
       unattended.addEventListener('click', () => pendant(unattended, 'Tailscale sans session', async () => {
         const reponse = await etape('tailscale', { action: 'unattended' });
         if (!reponse.statut || reponse.statut >= 400) { montrerErreur('tailscale', reponse.message); return; }
-        UI.toast(reponse.donnees.message || I18n.t('parametres.appliquer_tailscale.fait'), 'succes');
+        UI.toast(StockageServeur.texte(reponse.donnees, 'message') || I18n.t('parametres.appliquer_tailscale.fait'), 'succes');
         unattended.hidden = true;
       }));
     }

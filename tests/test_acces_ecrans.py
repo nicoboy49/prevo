@@ -119,6 +119,24 @@ class CasConnexion(CasNavigateur):
 
 class TestConnexion(CasConnexion):
 
+    def test_refus_de_connexion_affiche_dans_la_langue_de_l_ecran(self):
+        """T285 (D157) : l'écran lit le message du serveur par son code (StockageServeur.texte) ; en français, inchangé."""
+        page = self.page
+        self.autoriser_erreur(ERREUR_401_CONNEXION)
+        page.goto(self.serveur.url + "/")
+        self.attendre_etat("connexion")
+        page.evaluate("""() => {
+          I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'en-GB', statut: 'automatique' });
+          I18n.ajouter('xx', { 'serveur.sessions.connexion_refusee': 'Refus (essai xx)' });
+          I18n.choisir('xx');
+        }""")
+        self.connecter("nicolas.briand", "pas le bon mot de passe")
+        page.wait_for_function("document.getElementById('connexion-erreur').textContent.includes('Refus (essai xx)')")
+        self.assertNotIn("Identifiant ou mot de passe", page.inner_text("#connexion-erreur"))
+        page.evaluate("I18n.choisir('fr')")
+        self.connecter("nicolas.briand", "pas le bon mot de passe")
+        page.wait_for_function("document.getElementById('connexion-erreur').textContent.includes('Identifiant ou mot de passe incorrect.')")
+
     def test_responsable_a_1280_px_rester_connecte_profil_deduit_et_a_propos(self):
         page = self.page
         self.autoriser_erreur(ERREUR_401_CONNEXION)

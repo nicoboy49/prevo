@@ -68,7 +68,7 @@ const Connexion = (() => {
     }
     const donnees = await reponse.json().catch(() => null);
     const message = donnees && typeof donnees.erreur === 'string' && donnees.erreur
-      ? donnees.erreur : I18n.t('commun.message.serveur_a_repondu', { status: reponse.status });
+      ? StockageServeur.texte(donnees, 'erreur') : I18n.t('commun.message.serveur_a_repondu', { status: reponse.status });
     // 429 : temps restant dans le corps (attente_secondes), sinon l'en-tête Retry-After, sinon une minute.
     let attente = donnees && typeof donnees.attente_secondes === 'number' ? donnees.attente_secondes : 0;
     if (!attente) attente = Number(reponse.headers.get('Retry-After')) || ATTENTE_PAR_DEFAUT_S;

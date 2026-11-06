@@ -97,7 +97,7 @@ const EquipeAcces = (() => {
   }
 
   function messageDe(donnees, statut) {
-    if (donnees && typeof donnees.erreur === 'string' && donnees.erreur) return donnees.erreur;
+    if (donnees && typeof donnees.erreur === 'string' && donnees.erreur) return StockageServeur.texte(donnees, 'erreur');
     return I18n.t('commun.message.serveur_a_repondu', { status: statut });
   }
 

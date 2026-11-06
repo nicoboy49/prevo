@@ -129,7 +129,7 @@ const InstallationFiche = (() => {
     const donnees = await reponse.json().catch(() => null);
     if (!reponse.ok) {
       throw new Error(reponse.status === 404 ? I18n.t('installation.lire.fiche_acces_consulte_pc')
-        : (donnees && donnees.erreur) || I18n.t('commun.message.serveur_a_repondu', { status: reponse.status }));
+        : (donnees && StockageServeur.texte(donnees, 'erreur')) || I18n.t('commun.message.serveur_a_repondu', { status: reponse.status }));
     }
     return donnees;
   }

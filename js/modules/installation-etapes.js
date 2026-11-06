@@ -224,7 +224,7 @@ const InstallationEtapes = (() => {
     const b = c.brouillon();
     const nomPc = t.nom || I18n.t('installation.formulaire_tailscale.nom_inconnu');
     let ligne = I18n.t('installation.formulaire_tailscale.tailscale_installe_mais_pas');
-    if (!t.present) ligne = t.raison ? I18n.t('installation.formulaire_tailscale.tailscale_pas_detecte_pc_raison', { raison: t.raison }) : I18n.t('installation.formulaire_tailscale.tailscale_pas_detecte_pc');
+    if (!t.present) ligne = t.raison ? I18n.t('installation.formulaire_tailscale.tailscale_pas_detecte_pc_raison', { raison: StockageServeur.texte(t, 'raison') }) : I18n.t('installation.formulaire_tailscale.tailscale_pas_detecte_pc');
     else if (t.connecte) ligne = I18n.t('installation.formulaire_tailscale.tailscale_installe_connecte_pc', { nomPc });
     const port = b.port_http || 8080;
     return {
@@ -270,7 +270,7 @@ const InstallationEtapes = (() => {
       },
       echec(donnees) {
         if (!donnees.lance || donnees.lance.ok) return '';
-        const raison = donnees.lance.message || I18n.t('installation.formulaire_demarrage.code', { code: donnees.lance.code });
+        const raison = StockageServeur.texte(donnees.lance, 'message') || I18n.t('installation.formulaire_demarrage.code', { code: donnees.lance.code });
         return I18n.t('installation.formulaire_demarrage.invite_administrateur_ete_refusee', { raison });
         return '';
       },

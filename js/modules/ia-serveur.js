@@ -113,7 +113,7 @@ Object.assign(Ia, (() => {
     }
     if (reponse.status === 403) lireReglagesServeur();
     if (reponse.status !== 200 || !donnees || typeof donnees !== 'object') {
-      const erreur = donnees && typeof donnees === 'object' && donnees.erreur;
+      const erreur = donnees && typeof donnees === 'object' && StockageServeur.texte(donnees, 'erreur');
       if (erreur) throw new Ia.IaIndisponible(I18n.t('ia.appel_relais.serveur_refuse_erreur', { erreur }));
       throw new Ia.IaIndisponible(I18n.t('ia.appel_relais.serveur_refuse_code', { status: reponse.status }));
     }
