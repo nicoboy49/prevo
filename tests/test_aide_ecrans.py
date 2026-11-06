@@ -33,6 +33,7 @@ from test_version_web import demo_web_construite
 
 TEXTES = RACINE / "js" / "modules" / "aide-ecrans-textes.js"
 AIDE = RACINE / "js" / "i18n" / "aide" / "fr.js"
+AIDE_EN = RACINE / "js" / "i18n" / "aide" / "en.js"
 OUTIL = RACINE / "outils" / "generer_aide_ecrans.py"
 ENCART = "#aide-ecran"
 
@@ -92,6 +93,11 @@ class TestTextes(unittest.TestCase):
         self.assertEqual(outil.texte_aide(aide, "aide", outil.entrees()), aide)
         self.assertEqual(set(re.findall(r"I18n\.t\('([^']+)'\)", outil.contenu())), set(outil.entrees()))
         self.assertTrue(all(cle.startswith("aide.ecran.") for cle in outil.entrees()))
+        # l'anglais (T277) : même mécanisme, mêmes clés que le français
+        aide_en = AIDE_EN.read_bytes().decode("utf-8")
+        self.assertIn(outil.bloc("en"), aide_en, "js/i18n/aide/en.js n'est pas à jour : py outils/generer_aide_ecrans.py")
+        self.assertEqual(outil.texte_aide(aide_en, "aide", outil.entrees("en"), "en"), aide_en)
+        self.assertEqual(set(outil.entrees("en")), set(outil.entrees()))
         # l'ancien fichier, sans bloc : réécrit avec l'en-tête et le bloc, puis stable
         ancien = "'use strict';\nI18n.ajouter('fr', {\n});\n"
         neuf = outil.texte_aide(ancien, "aide", outil.entrees())

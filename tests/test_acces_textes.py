@@ -25,6 +25,7 @@ from commun import RACINE, CasNavigateur, attendre_pret, preregler_profil, url_f
 OUTIL = RACINE / "outils" / "generer_acces_textes.py"
 CIBLE = RACINE / "js" / "modules" / "acces-textes.js"
 AIDE = RACINE / "js" / "i18n" / "aide" / "fr.js"
+AIDE_EN = RACINE / "js" / "i18n" / "aide" / "en.js"
 
 
 def charger(chemin, nom):
@@ -53,6 +54,12 @@ class TestSource(unittest.TestCase):
         self.assertEqual(outil.texte_aide(aide, "acces", outil.entrees()), aide)
         self.assertEqual(set(re.findall(r"I18n\.t\('([^']+)'\)", outil.contenu())), set(outil.entrees()))
         self.assertTrue(all(cle.startswith("aide.acces.") for cle in outil.entrees()))
+        # l'anglais (T277) : même mécanisme, mêmes clés que le français
+        aide_en = AIDE_EN.read_bytes().decode("utf-8")
+        self.assertIn(outil.bloc("en"), aide_en, "js/i18n/aide/en.js n'est pas à jour : py outils/generer_acces_textes.py")
+        self.assertEqual(outil.texte_aide(aide_en, "acces", outil.entrees(langue="en"), "en"), aide_en)
+        self.assertEqual(set(outil.entrees(langue="en")), set(outil.entrees()))
+        self.assertEqual(set(outil.OPTIONS_EN), set(outil.donnees()["options"]))
 
     def test_options_identiques_a_serveur_aide(self):
         serveur = charger(RACINE / "serveur.py", "serveur_prevo_textes_test")
