@@ -111,7 +111,7 @@ Autres règles :
 | fr | en | remarque |
 |---|---|---|
 | préventif | preventive | adjectif et nom (« le préventif » : preventive maintenance). Pas d'abréviation PM/PPM. |
-| gamme (de préventif) | task list | modèle récurrent de travail. Pluriel : task lists. Voir « À trancher ». |
+| gamme (de préventif) | task list | modèle récurrent de travail. Pluriel : task lists. Choix tranché (voir la dernière section). |
 | opération (d'une gamme / d'un OT) | task | une ligne de la gamme. |
 | préventif systématique | fixed-interval preventive | déclenché par le calendrier. |
 | préventif conditionnel | condition-based preventive | déclenché par un compteur ou un seuil. |
@@ -144,12 +144,12 @@ Autres règles :
 
 | fr | en | remarque |
 |---|---|---|
-| consignation | isolation | mise en sécurité d'une machine avant intervention (énergies coupées, cadenassées). Voir « À trancher ». |
+| consignation | isolation | mise en sécurité d'une machine avant intervention (énergies coupées, cadenassées). Choix tranché (voir la dernière section). |
 | déconsignation | de-isolation | remise sous énergie. |
 | procédure de consignation | isolation procedure | champ « Consignation » de l'équipement : isolation. |
 | cadenas | padlock | |
 | consigne (de sécurité) | safety instruction | « consignes » d'une gamme ou d'un OT : instructions. |
-| habilitation | authorisation | autorisation nominative (ex. habilitation électrique). Voir « À trancher ». |
+| habilitation | authorisation | autorisation nominative (ex. habilitation électrique). Choix tranché (voir la dernière section). |
 | date d'obtention | date obtained | |
 | date d'échéance (habilitation) | expiry date | pour une habilitation ; « due date » reste pour le préventif. |
 | intitulé | name | nom de l'habilitation. |
@@ -347,9 +347,9 @@ Autres règles :
 | décision / ingestion / manuel | decision / ingestion / manual | nature d'une entrée du journal du wiki. |
 | IA / IA et manuel / manuel | AI / AI and manual / manual | origine d'une page du wiki. |
 
-## À trancher par Nicolas
+## Choix tranchés par Nicolas (06/11/2026)
 
-Le glossaire ci-dessus applique déjà le choix par défaut.
+Nicolas a retenu les choix par défaut ci-dessous ; le glossaire ci-dessus les applique. L'autre option reste notée pour mémoire.
 
 1. **consignation** : défaut « isolation » ; autre « lockout/tagout (LOTO) ». « Isolation » est le terme britannique (isolation, lock-off) ; LOTO est surtout américain.
 2. **habilitation** : défaut « authorisation » ; autre « qualification » ou « certification ». « Authorised person » est l'usage britannique pour l'électricité ; « qualification » ferait penser à un diplôme.
