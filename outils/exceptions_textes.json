@@ -250,6 +250,14 @@
       "raison": "Schéma d'authentification de l'en-tête HTTP Authorization (« Bearer <clé> ») envoyé au fournisseur d'IA, jamais affiché (T247)."
     },
     {
+      "texte": " securite",
+      "fichiers": [
+        "js/modules/demandes-signaler.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Classe CSS de la tuile « sécurité » du signalement d'une demande, jamais affichée (passée par erreur dans le dictionnaire au Lot 2, T239 ; T286)."
+    },
+    {
       "texte": "Pièce : ",
       "classe": "D156",
       "raison": "Début du motif de mise en attente « Pièce : … », relu par le code (RG3)."

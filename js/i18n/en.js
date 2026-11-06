@@ -1228,7 +1228,6 @@ I18n.ajouter('en', {
   'demandes.nouvelle.priorite_affiche_quand_impact': 'The priority is shown once the impact is chosen.',
   'demandes.nouvelle.priorite_calculee': 'Calculated priority:',
   'demandes.nouvelle.retirer_photo': 'Remove the photo',
-  'demandes.nouvelle.securite': 'securite',
   'demandes.nouvelle.signaler_probleme': 'Report a problem',
   'demandes.nouvelle.suggestions_symptomes': 'Symptom suggestions',
   'demandes.panneau_decision.accepter_cree_ordre_travail': 'Accept<small>creates a work order</small>',

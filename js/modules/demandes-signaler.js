@@ -72,7 +72,7 @@ Object.assign(Demandes, (() => {
               <span class="libelle" id="${idSymptome}-impact">${I18n.t('demandes.nouvelle.3_quel_impact')} <span class="requis" aria-hidden="true">*</span></span>
               <fieldset class="tuiles di-impacts" aria-labelledby="${idSymptome}-impact">
                 ${Demandes.impacts().map((entree) => UI.html`
-                  <label class="tuile${entree.valeur === 'sécurité' ? ' ' + I18n.t('demandes.nouvelle.securite') : ''}">
+                  <label class="tuile${entree.valeur === 'sécurité' ? ' securite' : ''}">
                     <input type="radio" name="impact" value="${entree.valeur}">
                     <span>${entree.libelle}<small>${entree.explication}</small></span>
                   </label>`)}
