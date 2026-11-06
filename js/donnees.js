@@ -1283,10 +1283,15 @@ const Donnees = (() => {
 
   function entreeJournal(identifiantsPris, nomTable, idLigne, action) {
     const descriptionJournal = descriptionTable('journal');
-    // Horodatage + 4 caractères aléatoires : on ne vérifie l'unicité que dans le lot en cours
-    // (relire tout le journal à chaque entrée coûterait trop cher ; une collision est improbable).
+    // Horodatage + 4 caractères aléatoires : unicité vérifiée dans le lot en cours ET dans le journal déjà lu ou
+    // écrit par ce poste (index du cache : aucun coût). Avant T261, seul le lot comptait : deux lots écrits dans la
+    // même seconde pouvaient tirer les mêmes caractères, et le contrôle de la base signalait à jamais le doublon.
+    // Reste possible : un autre poste qui écrit dans la même seconde, avant de relire nos lignes (une chance sur
+    // 1,7 million pour deux entrées de la même seconde).
+    const journalLu = cache.get('journal');
+    const dejaEcrit = (id) => Boolean(journalLu && journalLu.index && journalLu.index.has(id));
     let identifiant = nouvelId('journal', []);
-    while (identifiantsPris.has(identifiant)) { identifiant = nouvelId('journal', []); }
+    while (identifiantsPris.has(identifiant) || dejaEcrit(identifiant)) { identifiant = nouvelId('journal', []); }
     identifiantsPris.add(identifiant);
     const ligne = {};
     for (const champ of descriptionJournal.champs) { ligne[champ.nom] = ''; }
