@@ -60,10 +60,10 @@ Object.assign(Controles, (() => {
 
   /** Lien « Créer un OT » : formulaire de l'OT pré-rempli (rien n'est créé sans validation). Titre
    *  (D40) : « Levée des observations — <nature> » s'il en reste à lever, sinon « Accompagnement du
-   *  contrôle — <nature> » ; l'équipement est déjà dans son propre champ. */
+   *  contrôle — <nature> » ; l'équipement est déjà dans son propre champ. Titre pré-rempli : langue de l'installation (D156). */
   function adresseNouvelOt(controle) {
-    const titre = (observationsALever(controle) ? I18n.t('controles.adresse_nouvel_ot.levee_observations') + ' ' : I18n.t('controles.adresse_nouvel_ot.accompagnement_controle') + ' ')
-      + (texte(controle.nature) || I18n.t('controles.adresse_nouvel_ot.controle_reglementaire'));
+    const titre = (observationsALever(controle) ? I18n.donnees('controles.adresse_nouvel_ot.levee_observations') + ' ' : I18n.donnees('controles.adresse_nouvel_ot.accompagnement_controle') + ' ')
+      + (texte(controle.nature) || I18n.donnees('controles.adresse_nouvel_ot.controle_reglementaire'));
     return '#/ot/nouveau?equipement=' + encodeURIComponent(controle.equipement_id)
       + '&type=' + encodeURIComponent('réglementaire') + '&titre=' + encodeURIComponent(titre);
   }

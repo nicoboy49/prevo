@@ -403,7 +403,7 @@ const Import = (() => {
     const reglages = options || {};
     return { type, description: type ? typeDonnees(type) : null, table: type ? REGLES[type].table : null, mettreAJour: reglages.mettreAJour !== false,
       premierNumero: Number.isInteger(reglages.numeroPremiereLigne) ? reglages.numeroPremiereLigne : 2,
-      maintenant: texte(reglages.maintenant) || Donnees.maintenant(), utilisateur: reglages.utilisateur === undefined ? I18n.t('import.nouveau_contexte.responsable') : texte(reglages.utilisateur),
+      maintenant: texte(reglages.maintenant) || Donnees.maintenant(), utilisateur: reglages.utilisateur === undefined ? I18n.donnees('import.nouveau_contexte.responsable') : texte(reglages.utilisateur),
       colonnes: new Map(), lignes: [], crees: [], entrees: new Map(), cles: new Map(), vus: new Map(), index: new Map(), fournisseurs: new Map(), etats: new Map(), arbre: null };
   }
   /** Ligne complète d'une table : valeurs données, sinon `defaut` du schéma, sinon vide. */

@@ -407,7 +407,8 @@ Object.assign(Suggestions, (() => {
   }
 
   /**
-   * Marque la suggestion suivie « traitée » au journal, une seule fois. Un échec est signalé par un
+   * Marque la suggestion suivie « traitée » au journal, une seule fois (ceQuiAEteFait : texte du journal, dans la langue de
+   * l'installation, D156). Un échec est signalé par un
    * message « attention » et ne défait rien de ce qui a été enregistré ; vrai si c'est marqué.
    */
   async function marquer(ceQuiAEteFait, messageReussite) {
@@ -442,7 +443,8 @@ Object.assign(Suggestions, (() => {
       return { valeurs, rappel: rappelHorsSuivi(cle, I18n.t('suggestions.preparer_creation.suggestion_plus_ouverte_deja')) };
     }
     suivi = { cle, gammeId: '', equipementId: s.equipementId, signature: '' };
-    valeurs.libelle = I18n.t('suggestions.preparer_creation.prevenir_minuscule_initiale', { minusculeInitiale: minusculeInitiale(s.causeLibelle) });
+    valeurs.libelle = I18n.donnees('suggestions.preparer_creation.prevenir_minuscule_initiale', {   // libellé pré-rempli (D156)
+      minusculeInitiale: minusculeInitiale(s.causeLibelle) });
     return { valeurs, rappel: rappelElement(cle, s, I18n.t('suggestions.preparer_creation.rien_ecrit_tant_avez')) };
   }
 
@@ -450,7 +452,7 @@ Object.assign(Suggestions, (() => {
   async function apresCreationGamme(gammeId) {
     const gamme = Donnees.trouver('gammes', gammeId);
     if (!suivi.cle || !gamme || gamme.equipement_id !== suivi.equipementId) return;
-    await marquer(I18n.t('suggestions.apres_creation_gamme.gamme_creee', { gammeId }),
+    await marquer(I18n.donnees('suggestions.apres_creation_gamme.gamme_creee', { gammeId }),
       I18n.t('suggestions.apres_creation_gamme.gamme_creee_suggestion_marquee', { gammeId }));
   }
 
@@ -472,13 +474,13 @@ Object.assign(Suggestions, (() => {
   /** Après un enregistrement de la gamme : marquée traitée s'il y a au moins un champ changé. */
   async function apresModificationGamme(gammeId, changes) {
     if (!suivi.cle || suivi.gammeId !== gammeId || !changes || !changes.length) return;
-    await marquer(I18n.t('suggestions.apres_modification_gamme.gamme_modifiee', { changements: changes.join(', ') }), I18n.t('suggestions.apres_modification_gamme.gamme_enregistree_suggestion_marquee'));
+    await marquer(I18n.donnees('suggestions.apres_modification_gamme.gamme_modifiee', { changements: changes.join(', ') }), I18n.t('suggestions.apres_modification_gamme.gamme_enregistree_suggestion_marquee'));
   }
 
   /** Après une action sur la check-list : marquée traitée si la check-list a changé depuis l'arrivée. */
   async function apresCheckListe(gammeId) {
     if (!suivi.cle || suivi.gammeId !== gammeId || signatureCheckListe(gammeId) === suivi.signature) return;
-    await marquer(I18n.t('suggestions.apres_check_liste.check_list_modifiee'));
+    await marquer(I18n.donnees('suggestions.apres_check_liste.check_list_modifiee'));
   }
 
   return {

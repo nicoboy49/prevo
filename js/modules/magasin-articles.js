@@ -457,7 +457,7 @@ Object.assign(Magasin, (() => {
         return;
       }
       const id = await Magasin.creerArticle(valeurs);
-      if (stockInitial) await Magasin.inventorier([{ articleId: id, quantite: stockInitial }], I18n.t('magasin.formulaire_article.stock_initial'));
+      if (stockInitial) await Magasin.inventorier([{ articleId: id, quantite: stockInitial }], I18n.donnees('magasin.formulaire_article.stock_initial'));   // commentaire du mouvement (D156)
       App.marquerSaisie(false);
       UI.toast(I18n.t('magasin.enregistrer_article.article_cree'), 'succes');
       App.naviguer('#/magasin/article/' + encodeURIComponent(id));

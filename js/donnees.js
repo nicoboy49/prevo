@@ -1930,8 +1930,8 @@ const Donnees = (() => {
       return true;
     }, { journal: false });
 
-    // 5. Le journal : une ligne par étape.
-    const suite = resultat.sauvegarde ? I18n.t('socle.migrer_au_format_courant.sauvegarde_faite_juste_avant', { sauvegarde: resultat.sauvegarde }) : I18n.t('socle.migrer_au_format_courant.sans_sauvegarde_demo');
+    // 5. Le journal : une ligne par étape (texte dans la langue de l'installation, D156).
+    const suite = resultat.sauvegarde ? I18n.donnees('socle.migrer_au_format_courant.sauvegarde_faite_juste_avant', { sauvegarde: resultat.sauvegarde }) : I18n.donnees('socle.migrer_au_format_courant.sans_sauvegarde_demo');
     const identifiantsPris = new Set();
     const entrees = [];
     for (const etape of etapes) {

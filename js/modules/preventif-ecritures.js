@@ -68,16 +68,17 @@ Object.assign(Preventif, (() => {
       .filter((candidat) => candidat.etat.statut === 'echue');
   }
 
-  /** Ligne d'OT préventif d'une gamme échue (§14.3). Date prévue : l'échéance si elle est future, sinon le jour. */
+  /** Ligne d'OT préventif d'une gamme échue (§14.3). Date prévue : l'échéance si elle est future, sinon le jour. Titre et
+   *  travail à faire dans la langue de l'installation (D156). */
   function nouvelOtPreventif(gamme, etat, jour, id, maintenant) {
     const nombreOperations = operationsDeGamme(gamme.id).length;
     return {
       id, origine: 'préventif', gamme_id: gamme.id, equipement_id: gamme.equipement_id,
       type: texte(gamme.declencheur) === 'seuil' ? 'préventif conditionnel' : 'préventif systématique',
       priorite: prioritePreventif(), statut: 'Créé',
-      titre: texte(gamme.libelle) || I18n.t('preventif.nouvel_ot_preventif.gamme_gamme_id', { gammeId: gamme.id }),
-      travail_a_faire: (nombreOperations ? I18n.t('preventif.nouvel_ot_preventif.realiser_operations_check_list', { n: nombreOperations }) + ' '
-        : I18n.t('preventif.nouvel_ot_preventif.realiser_gamme') + ' ') + I18n.t('preventif.nouvel_ot_preventif.gamme_id_declenchement_raison', { gammeId: gamme.id, raison: etat.raison }),
+      titre: texte(gamme.libelle) || I18n.donnees('preventif.nouvel_ot_preventif.gamme_gamme_id', { gammeId: gamme.id }),
+      travail_a_faire: (nombreOperations ? I18n.donnees('preventif.nouvel_ot_preventif.realiser_operations_check_list', { n: nombreOperations }) + ' '
+        : I18n.donnees('preventif.nouvel_ot_preventif.realiser_gamme') + ' ') + I18n.donnees('preventif.nouvel_ot_preventif.gamme_id_declenchement_raison', { gammeId: gamme.id, raison: etat.raison }),
       consignes: gamme.consignes, temps_prevu_h: gamme.temps_prevu_h,
       date_creation: maintenant, date_prevue: etat.echeance > jour ? etat.echeance : jour,
       arret_production: '0', remise_service: '0', anomalie_constatee: '0',
@@ -131,7 +132,8 @@ Object.assign(Preventif, (() => {
     const jour = dateDuJour(options && options.aujourdhui);
     let crees = [];
     if (gammesEchuesSansOt(Donnees.lignes('ordres_travail'), jour).length) {
-      crees = await Donnees.modifier('ordres_travail', (lignes, outils) => {
+      // Langue de l'installation pour tout ce qui s'écrit dans les OT, raison du déclenchement (etat.raison) comprise (D156).
+      crees = await Donnees.modifier('ordres_travail', (lignes, outils) => I18n.enLangueDesDonnees(() => {
         const identifiants = [];
         gammesEchuesSansOt(lignes, jour).forEach(({ gamme, etat }) => {
           // Un seul parcours des OT existants : les suivants partent du dernier créé (même année).
@@ -141,7 +143,7 @@ Object.assign(Preventif, (() => {
           identifiants.push(id);
         });
         return identifiants;
-      }, { action: 'génération du préventif (RG5)' });
+      }), { action: 'génération du préventif (RG5)' });
     }
     await copierOperations(crees);
     return crees;

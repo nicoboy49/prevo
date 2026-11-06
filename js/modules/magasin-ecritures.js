@@ -51,13 +51,13 @@ Object.assign(Magasin, (() => {
 
   /**
    * Utilisateur inscrit dans un mouvement : le libellé du profil (App.profil) — le nom du
-   * technicien (« Julien Moreau », comme dans le jeu de démo) ou « Responsable ».
+   * technicien (« Julien Moreau », comme dans le jeu de démo) ou « Responsable » (langue de l'installation, D156).
    */
   function utilisateurCourant() {
     const profil = typeof App !== 'undefined' ? App.profil : null;
     if (!profil) return '';
-    if (profil.type === 'responsable') return I18n.t('magasin.utilisateur_courant.responsable');
-    return texte(profil.nom) || texte(profil.technicienId) || (profil.type === 'technicien' ? I18n.t('magasin.utilisateur_courant.technicien') : I18n.t('magasin.utilisateur_courant.demandeur'));
+    if (profil.type === 'responsable') return I18n.donnees('magasin.utilisateur_courant.responsable');
+    return texte(profil.nom) || texte(profil.technicienId) || (profil.type === 'technicien' ? I18n.donnees('magasin.utilisateur_courant.technicien') : I18n.donnees('magasin.utilisateur_courant.demandeur'));
   }
 
   function articleExistant(articleId) {
@@ -201,7 +201,7 @@ Object.assign(Magasin, (() => {
       return { article, quantite: quantiteValide(comptage.quantite, true, I18n.t('magasin.inventorier.stock_compte', { reference: texte(article.reference) })) };
     });
     if (!liste.length) throw ErreurValidation(I18n.t('magasin.inventorier.inventaire_vide_saisissez_stock'));
-    const remarque = texte(commentaire) || I18n.t('magasin.inventorier.inventaire');
+    const remarque = texte(commentaire) || I18n.donnees('magasin.inventorier.inventaire');      // écrit dans le mouvement (D156)
     const ids = await Donnees.modifier('mouvements_stock', (lignes, outils) => liste.map((comptage) => nouveauMouvement(lignes, outils, {
       articleId: comptage.article.id, type: 'inventaire', quantite: comptage.quantite, commentaire: remarque,
     })), { action: 'inventaire de ' + liste.length + ' article(s)' });
@@ -285,9 +285,10 @@ Object.assign(Magasin, (() => {
     }, { action: 'réception de ' + nombreTexte(recue) + ' (achat ' + achatId + ')' });
     const achat = etat.achat;
     const commandee = Donnees.nombre(achat.quantite);
-    // « Réception ACH-… » est un marqueur relu par le code (D156) : il reste fixe ; seul le détail est traduit.
+    // « Réception ACH-… » est un marqueur relu par le code (D156) : il reste fixe ; le détail est écrit dans la langue de
+    // l'installation.
     const detail = commandee !== null && commandee !== recue
-      ? ' ' + I18n.t('magasin.recevoir.recu_commande', { recu: nombreTexte(recue), commande: nombreTexte(commandee) }) : '';
+      ? ' ' + I18n.donnees('magasin.recevoir.recu_commande', { recu: nombreTexte(recue), commande: nombreTexte(commandee) }) : '';
     const commentaire = 'Réception ' + achat.id + detail;
     const mouvementId = await Donnees.modifier('mouvements_stock', (lignes, outils) => {
       if (lignes.some((mouvement) => estReceptionDe(mouvement, achat))) return null;

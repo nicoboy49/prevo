@@ -616,11 +616,12 @@ const StockageDossier = (() => {
   // ===========================================================================
 
   // poignee : FileSystemDirectoryHandle du dossier de données (rendu par choisir() ou reprendre()).
-  // options.poste : nom du poste, écrit dans verrou.txt.
+  // options.poste : nom du poste, écrit dans verrou.txt (à défaut, « poste inconnu » dans la langue de l'installation,
+  // D156 : relu par les autres postes).
   async function creer(poignee, options) {
     const racine = poignee;
-    const poste = String((options && options.poste) || I18n.t('socle.creer.poste_inconnu')).replace(/[;\r\n]+/g, ' ').trim()
-      || I18n.t('socle.creer.poste_inconnu');
+    const poste = String((options && options.poste) || I18n.donnees('socle.creer.poste_inconnu')).replace(/[;\r\n]+/g, ' ').trim()
+      || I18n.donnees('socle.creer.poste_inconnu');
     const idSession = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12);
     const urlsDocuments = new Map();            // nom → URL d'objet déjà fabriquée
     let minuteurVerrou = null;

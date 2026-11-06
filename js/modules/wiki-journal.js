@@ -69,11 +69,11 @@ Object.assign(Wiki, (() => {
     if (!estResponsable()) throw ErreurValidation(I18n.t('wiki.exiger_responsable.reserve_responsable_wiki_valide'));
   };
 
-  function nomDuResponsable() {
+  function nomDuResponsable() {      // écrit dans decide_par : langue de l'installation (D156), comme les motifs ci-dessous
     const profil = typeof App !== 'undefined' && App ? App.profil : null;
     if (profil && texte(profil.nom)) return texte(profil.nom);
-    return (typeof App !== 'undefined' && App && typeof App.libelleProfil === 'function' && texte(App.libelleProfil()))
-      || I18n.t('wiki.nom_du_responsable.responsable');
+    return (typeof App !== 'undefined' && App && typeof App.libelleProfil === 'function' && texte(I18n.enLangueDesDonnees(App.libelleProfil)))
+      || I18n.donnees('wiki.nom_du_responsable.responsable');
   }
 
   /** Ligne de wiki_pages d'un changement ou d'une clé (null si la page n'a pas encore de ligne). */
@@ -353,9 +353,9 @@ Object.assign(Wiki, (() => {
           const deja = appliqueeDans(ligne, lignesFraiches);          // validée entre-temps sur un autre poste
           if (deja) { marquerValidee(ligne, deja, ''); return { validee: true, aRefaire: [] }; }
           const { changees, creees } = pagesDe(ligne, lignesFraiches);
-          const motif = I18n.t('wiki.valider.refaire_page_change_depuis');
+          const motif = I18n.donnees('wiki.valider.refaire_page_change_depuis');
           Object.assign(ligne, { statut: 'à refaire', motif, changements: '', contradictions: '', ordre: '', traite_le: outils.maintenant() });
-          return { aRefaire: [ligne.id].concat(cascade(lignes, changees, rang(entree), I18n.t('wiki.valider.refaire_suit', { ligneId: ligne.id }), outils.maintenant(), creees)) };
+          return { aRefaire: [ligne.id].concat(cascade(lignes, changees, rang(entree), I18n.donnees('wiki.valider.refaire_suit', { ligneId: ligne.id }), outils.maintenant(), creees)) };
         }, { journal: false });
         if (issue.validee) bilan.validees.push(entree.id);
         bilan.aRefaire.push(...issue.aRefaire);
@@ -370,7 +370,7 @@ Object.assign(Wiki, (() => {
         Object.assign(ligne, { statut: 'validée', decide_par: par, decide_le: outils.maintenant(), ordre: fraiche.ordre,
           contradictions: fraiche.contradictions,
           changements: JSON.stringify(changementsDe(fraiche).map((c, n) => Object.assign({}, c, { page: pages[n] }))) });
-        if (autre) ligne.motif = I18n.t('wiki.valider.validee_ici_alors_autre', { autre });
+        if (autre) ligne.motif = I18n.donnees('wiki.valider.validee_ici_alors_autre', { autre });
       }, { journal: false });
       bilan.validees.push(entree.id);
     }
@@ -397,7 +397,7 @@ Object.assign(Wiki, (() => {
       const maintenant = outils.maintenant();
       const { changees, creees } = pagesDe(ligne, lignesPages);
       Object.assign(ligne, { statut: 'rejetée', motif: texte(motif), decide_par: par, decide_le: maintenant });
-      return { rejetee: ligne.id, aRefaire: cascade(lignes, changees, rang(ligne), I18n.t('wiki.rejeter.refaire_rejetee', { ligneId: ligne.id }), maintenant, creees) };
+      return { rejetee: ligne.id, aRefaire: cascade(lignes, changees, rang(ligne), I18n.donnees('wiki.rejeter.refaire_rejetee', { ligneId: ligne.id }), maintenant, creees) };
     }, { journal: false });
     if (resultat.dejaValidee) {
       throw ErreurValidation(I18n.t('wiki.rejeter.proposition_vient_etre_validee', { id: texte(id) }));
@@ -419,7 +419,7 @@ Object.assign(Wiki, (() => {
       const ot = Donnees.trouver('ordres_travail', texte(ligne.ot_id)) || {};
       const nouvelle = { id: outils.nouvelId(lignes), nature: 'ingestion', ot_id: ligne.ot_id,
         date_intervention: texte(ot.date_fin) || texte(ligne.date_intervention), statut: 'en file', anterieure: '0', essais: '0',
-        motif: I18n.t('wiki.remettre_en_file.relance_apres', { ligneId: ligne.id }), cree_le: outils.maintenant() };
+        motif: I18n.donnees('wiki.remettre_en_file.relance_apres', { ligneId: ligne.id }), cree_le: outils.maintenant() };
       lignes.push(nouvelle);
       return nouvelle.id;
     }, { journal: false });
@@ -516,16 +516,16 @@ Object.assign(Wiki, (() => {
         changements: JSON.stringify([{ page: page.ligne ? page.ligne.id : '', cle: page.cle, type: page.type, titre: page.titre,
           creation: !page.ligne, archivage: archiver, version_avant: version, avant, apres: nouveau }]),
         contradictions: '[]', cree_le: maintenant, traite_le: maintenant, decide_par: par, decide_le: maintenant, motif: texte(opts.motif) });
-      cascade(lignes, new Set([page.cle]), -Infinity, I18n.t('wiki.ecrire.refaire_page_ecrite_main', { id }), maintenant);
+      cascade(lignes, new Set([page.cle]), -Infinity, I18n.donnees('wiki.ecrire.refaire_page_ecrite_main', { id }), maintenant);
       return id;
     }, { journal: false });
     try {
       const ligneId = await Donnees.modifier('wiki_pages', (lignes, outils) => {
         let ligne = page.ligne ? lignes.find((l) => l.id === page.ligne.id) : ligneDeCle(lignes, page.cle, '');
         if ((ligne ? Number(ligne.version) || 0 : 0) !== version) {
-          throw ErreurValidation(I18n.t('wiki.ecrire.page_ete_modifiee_autre_poste'));
+          throw Object.assign(ErreurValidation(I18n.t('wiki.ecrire.page_ete_modifiee_autre_poste')), { raison: I18n.donnees('wiki.ecrire.page_ete_modifiee_autre_poste') });
         }
-        if (page.nouvelle && ligne) throw ErreurValidation(I18n.t('wiki.ecrire.page_titre_existe_deja'));
+        if (page.nouvelle && ligne) throw Object.assign(ErreurValidation(I18n.t('wiki.ecrire.page_titre_existe_deja')), { raison: I18n.donnees('wiki.ecrire.page_titre_existe_deja') });
         if (!ligne) ligne = nouvelleLigne(lignes, outils, page.cle, { type: page.type, titre: page.titre }, texte(page.rattache));
         const contexte = { index: indexDesLiens(lignes), parIa: false, entreeId, par, maintenant: outils.maintenant() };
         poserTexte(ligne, nouveau, contexte);
@@ -543,7 +543,7 @@ Object.assign(Wiki, (() => {
     } catch (erreur) {
       await Donnees.modifier('wiki_journal', (lignes) => {
         const ligne = lignes.find((e) => e.id === entreeId);
-        if (ligne) Object.assign(ligne, { statut: 'refusée', raisons: (erreur && erreur.message) || String(erreur) });
+        if (ligne) Object.assign(ligne, { statut: 'refusée', raisons: (erreur && (erreur.raison || erreur.message)) || String(erreur) });   // raison : D156
       }, { journal: false }).catch(() => {});
       throw erreur;
     }

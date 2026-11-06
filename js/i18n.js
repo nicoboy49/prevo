@@ -170,6 +170,45 @@ const I18n = (function () {
     return texte === null ? String(cle) : interpoler(texte, valeurs, enTexte);
   }
 
+  // ===========================================================================================
+  // Textes écrits dans les données (D156) : langue de l'installation, jamais celle de l'écran
+  // ===========================================================================================
+
+  // D156 ; au Lot 4, langue de l'installation (langue_defaut) : d'ici là, la langue de référence.
+  function langueDesDonnees() {
+    return LANGUE_DE_REFERENCE;
+  }
+
+  /**
+   * Texte brut de la clé dans la langue de l'installation, pour ce que l'appli écrit dans les données (journal,
+   * titres et motifs pré-remplis, raisons du journal du wiki…), quelle que soit la langue de l'écran (D156).
+   */
+  function donnees(cle, valeurs) {
+    return reference(cle, valeurs);       // D156 ; au Lot 4, langue de l'installation (langue_defaut)
+  }
+
+  /**
+   * Exécute `fonction` (synchrone) avec la langue de l'installation pour langue active, puis rend la langue de
+   * l'écran, même sur une erreur : I18n.t, I18n.html et I18n.locale y donnent ce qui s'écrit dans les données.
+   * Pour un texte composé par d'autres fonctions (rapport figé, raisons d'un contrôle, nombres mis en forme) ; un
+   * texte d'une seule clé passe par I18n.donnees. Une fonction asynchrone est refusée (TypeError) : sa suite
+   * s'exécuterait après le retour à la langue de l'écran.
+   */
+  function enLangueDesDonnees(fonction) {
+    const ecran = langueActive;
+    langueActive = langueDesDonnees();
+    let resultat;
+    try {
+      resultat = fonction();
+    } finally {
+      langueActive = ecran;
+    }
+    if (resultat && typeof resultat.then === 'function') {
+      throw new TypeError('I18n.enLangueDesDonnees : fonction synchrone attendue.');
+    }
+    return resultat;
+  }
+
   const REMPLACEMENTS_HTML = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
   function echapper(valeur) {
@@ -238,6 +277,8 @@ const I18n = (function () {
     choisir: choisir,
     t: t,
     reference: reference,
+    donnees: donnees,
+    enLangueDesDonnees: enLangueDesDonnees,
     html: html,
     appliquer: appliquer,
     /** Code de la langue active ('fr' tant que rien n'en choisit une autre). */

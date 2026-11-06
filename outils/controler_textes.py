@@ -11,7 +11,7 @@ Code retour : 0 si rien n'est à signaler, 1 sinon (2 : fichier illisible ou usa
 Ce qui est contrôlé :
 1. textes visibles restés en dur : le même classement que outils/extraire_textes.py (un texte qu'il extrairait ou
    qu'il mettrait au rapport de relecture est signalé ; outils/exceptions_textes.json n'est jamais signalé) ;
-2. clés utilisées (I18n.t, I18n.html, data-i18n, data-i18n-attr) et clés définies (js/i18n/fr.js,
+2. clés utilisées (I18n.t, I18n.html, I18n.donnees, data-i18n, data-i18n-attr) et clés définies (js/i18n/fr.js,
    js/i18n/aide/fr.js) : clés manquantes, clés orphelines, variables {…} différentes entre un appel et sa valeur,
    variables au nom générique ({v1}, {pourcent2} : le traducteur ne saurait pas ce qu'elles contiennent) ;
 3. index.html : le texte laissé dans la page sous un data-i18n est bien la valeur du dictionnaire ;
@@ -112,7 +112,8 @@ RE_CLE_LITTERALE = re.compile(r'^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+$')
 
 
 def cles_utilisees(racine, fichiers, litterales=None):
-    """Utilisation de clés dans les fichiers (JS : I18n.t, I18n.html, data-i18n dans les chaînes ; HTML : data-i18n).
+    """Utilisation de clés dans les fichiers (JS : I18n.t, I18n.html, I18n.donnees — D156 —, data-i18n dans les
+    chaînes ; HTML : data-i18n).
     litterales (ensemble, facultatif) : reçoit chaque chaîne du JS qui a la forme d'une clé (« wiki.fait.fin ») ; une
     clé écrite ainsi puis passée à I18n.t par une variable compte comme employée (T262)."""
     res = []
@@ -143,7 +144,7 @@ def cles_utilisees(racine, fichiers, litterales=None):
                 if RE_CLE_LITTERALE.match(valeur):
                     litterales.add(valeur)
             if not (ext.est_nom(n, 'I18n') and i + 3 < len(seq) and ext.est_ponct(seq[i + 1], '.')
-                    and ext.est_nom(seq[i + 2], 't', 'html') and ext.est_groupe(seq[i + 3], '(')):
+                    and ext.est_nom(seq[i + 2], 't', 'html', 'donnees') and ext.est_groupe(seq[i + 3], '(')):
                 return
             args = ext.couper_virgules(seq[i + 3].enfants)
             premier = args[0]

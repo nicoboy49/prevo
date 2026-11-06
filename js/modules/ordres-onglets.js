@@ -109,12 +109,12 @@ Object.assign(Ordres, (() => {
       travail_a_faire: valeurs.travail_a_faire, consignes: valeurs.consignes, technicien_id: valeurs.technicien_id,
       date_prevue: valeurs.date_prevue, temps_prevu_h: valeurs.temps_prevu_h,
     };
-    const changes = await pendant(UI.$('button[type=submit]', formulaire), () => modifierOt(ot.id, changements, I18n.t('ordres.enregistrer_preparation.preparation')), I18n.t('ordres.enregistrer_preparation.preparation'));
+    const changes = await pendant(UI.$('button[type=submit]', formulaire), () => modifierOt(ot.id, changements, I18n.donnees('ordres.enregistrer_preparation.preparation')), I18n.t('ordres.enregistrer_preparation.preparation'));
     if (changes === undefined) return false;
     const affectation = changes.includes('technicien_id') || changes.includes('date_prevue');
     const habilitation = verifierHabilitation(ot.equipement_id, valeurs.technicien_id, valeurs.date_prevue);
     if (affectation && habilitation) {
-      await journaliserHabilitation(ot.id, habilitation);
+      await journaliserHabilitation(ot.id, verifierHabilitation(ot.equipement_id, valeurs.technicien_id, valeurs.date_prevue, true));
       return I18n.t('ordres.enregistrer_preparation.preparation_enregistree_avertissement_habilitation', { habilitation });
     }
     return true;
@@ -175,7 +175,7 @@ Object.assign(Ordres, (() => {
           valeur_attendue: nouvelle.valeur_attendue.trim(), fait: '0', valeur_mesuree: '' });
       }
       return true;
-    }, { action: I18n.t('ordres.enregistrer_operations.operations_ot_id', { otId: ot.id }) }), I18n.t('ordres.enregistrer_operations.operations'));
+    }, { action: I18n.donnees('ordres.enregistrer_operations.operations_ot_id', { otId: ot.id }) }), I18n.t('ordres.enregistrer_operations.operations'));
     return resultat === true;
   }
 
@@ -263,7 +263,7 @@ Object.assign(Ordres, (() => {
         else lignes.push({ id: outils.nouvelId(lignes), ot_id: ot.id, article_id: article, quantite_prevue: String(quantiteNouvelle) });
       }
       return true;
-    }, { action: I18n.t('ordres.enregistrer_pieces.pieces_prevues', { otId: ot.id }) }), I18n.t('ordres.enregistrer_pieces.pieces_prevues_nom'));
+    }, { action: I18n.donnees('ordres.enregistrer_pieces.pieces_prevues', { otId: ot.id }) }), I18n.t('ordres.enregistrer_pieces.pieces_prevues_nom'));
     return resultat === true;
   }
 
@@ -349,7 +349,7 @@ Object.assign(Ordres, (() => {
     const changes = await pendant(bouton, () => modifierOt(ot.id, {
       date_fin: valeurs.date_fin, arret_production: valeurs.arret_production,
       duree_arret_h: valeurs.duree_arret_h, cout_soustraitance: valeurs.cout_soustraitance,
-    }, I18n.t('ordres.enregistrer_execution.execution')), I18n.t('ordres.enregistrer_execution.execution'));
+    }, I18n.donnees('ordres.enregistrer_execution.execution')), I18n.t('ordres.enregistrer_execution.execution'));
     if (changes === undefined) return false;
     if (!checkListe.length) return true;
     const resultat = await pendant(bouton, () => modifierLieeAOt(ot.id, 'ot_operations', (lignes) => {
@@ -403,7 +403,7 @@ Object.assign(Ordres, (() => {
     const resultat = await pendant(UI.$('button[type=submit]', formulaire), () => modifierLieeAOt(ot.id, 'ot_temps', (lignes, outils) => {
       lignes.push({ id: outils.nouvelId(lignes), ot_id: ot.id, technicien_id: valeurs.technicien_id, date: valeurs.date, heures: String(heures) });
       return true;
-    }, { action: I18n.t('ordres.ajouter_temps.temps_passe', { otId: ot.id }) }), I18n.t('ordres.ajouter_temps.temps_passe_nom'));
+    }, { action: I18n.donnees('ordres.ajouter_temps.temps_passe', { otId: ot.id }) }), I18n.t('ordres.ajouter_temps.temps_passe_nom'));
     return resultat === true;
   }
 
@@ -468,7 +468,7 @@ Object.assign(Ordres, (() => {
     const changes = await pendant(UI.$('button[type=submit]', formulaire), () => modifierOt(ot.id, {
       symptome_code: valeurs.symptome_code, cause_code: valeurs.cause_code, remede_code: valeurs.remede_code,
       compte_rendu: valeurs.compte_rendu, remise_service: valeurs.remise_service, astuce: valeurs.astuce,
-    }, I18n.t('ordres.enregistrer_compte_rendu.compte_rendu')), I18n.t('ordres.enregistrer_compte_rendu.compte_rendu'));
+    }, I18n.donnees('ordres.enregistrer_compte_rendu.compte_rendu')), I18n.t('ordres.enregistrer_compte_rendu.compte_rendu'));
     if (changes === undefined) return false;
     if (ia) await ia.apresEnregistrement(changes, valeurs);
     return true;

@@ -350,14 +350,16 @@ const Ordres = (() => {
   /**
    * RG8 : message d'avertissement si le technicien n'a pas une habilitation requise valide à la
    * date (date prévue, sinon aujourd'hui), sinon null. equipement : ligne ou identifiant.
-   * Ex. « TEC-0004 sans BR valide au 2026-10-21 ».
+   * Ex. « TEC-0004 sans BR valide au 2026-10-21 ». pourLesDonnees : texte écrit au journal (« avertissement
+   * habilitation : … »), dans la langue de l'installation (D156) ; sinon celle de l'écran.
    */
-  function verifierHabilitation(equipement, technicienId, dateReference) {
+  function verifierHabilitation(equipement, technicienId, dateReference, pourLesDonnees) {
     const ligne = typeof equipement === 'string' ? Donnees.trouver('equipements', equipement) : equipement;
     if (!ligne || !technicienId) return null;
     const date = texte(dateReference).slice(0, 10) || aujourdhui();
     const manquantes = habilitationsManquantes(ligne, technicienId, date);
     if (!manquantes.length) return null;
+    if (pourLesDonnees) return I18n.donnees('ordres.verifier_habilitation.sans_valide', { technicienId, join: manquantes.join(', '), date });
     return I18n.t('ordres.verifier_habilitation.sans_valide', { technicienId, join: manquantes.join(', '), date });
   }
 

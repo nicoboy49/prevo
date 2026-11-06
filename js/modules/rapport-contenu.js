@@ -13,6 +13,10 @@
 // Les chiffres viennent des mêmes règles que l'écran Indicateurs (Indicateurs.global sur le mois) :
 // le rapport et l'écran disent donc la même chose. Une valeur non calculable est dite, jamais
 // remplacée par un chiffre. Le texte venant des données est échappé (UI.html).
+// Langue (D156) : le rapport figé est un document enregistré, écrit dans la langue de l'installation (textes, mois,
+// nombres, raisons des indicateurs) quelle que soit la langue de l'écran : Rapport.donnees et Rapport.html travaillent
+// dans I18n.enLangueDesDonnees. Ce qu'on en montre avant de figer (courriel, commentaire proposé par l'IA) est donc
+// ce qui sera enregistré.
 
 const Rapport = (() => {
 
@@ -20,8 +24,9 @@ const Rapport = (() => {
   // 1. Petits outils
   // ===========================================================================================
 
-  // Noms des mois dans la langue de l'écran, par Intl (I18n.locale : « septembre » en fr-FR, « September » en en-GB) ;
-  // lus au moment de l'écriture du rapport, jamais figés au chargement (T289 : neuf mois étaient restés en dur).
+  // Noms des mois dans la langue active, par Intl (I18n.locale : « septembre » en fr-FR, « September » en en-GB) : celle
+  // de l'installation dans le rapport (D156), celle de l'écran dans la liste des rapports figés ; lus au moment de
+  // l'écriture, jamais figés au chargement (T289 : neuf mois étaient restés en dur).
   function nomsMois() {
     const format = new Intl.DateTimeFormat(I18n.locale, { month: 'long', timeZone: 'UTC' });
     return Array.from({ length: 12 }, (_, index) => format.format(new Date(Date.UTC(2026, index, 1))));
@@ -180,9 +185,13 @@ const Rapport = (() => {
   /**
    * Données du rapport d'un mois 'AAAA-MM', calculées à la date `aujourdhui` (date de génération,
    * qui sert aux retards) : { mois, libelleMois, genereLe, entreprise, tuiles, faits, decisions,
-   * pareto, heures12Mois, nonCalculables, comprendre, courriel }.
+   * pareto, heures12Mois, nonCalculables, comprendre, courriel }. Dans la langue de l'installation (D156).
    */
   function donnees(mois, aujourdhui, maintenant) {
+    return I18n.enLangueDesDonnees(() => donneesDuMois(mois, aujourdhui, maintenant));
+  }
+
+  function donneesDuMois(mois, aujourdhui, maintenant) {
     const jour = /^\d{4}-\d{2}-\d{2}$/.test(texte(aujourdhui).slice(0, 10)) ? texte(aujourdhui).slice(0, 10) : Donnees.aujourdhui();
     const periode = Indicateurs.periodeDuMois(mois);
     const global = Indicateurs.global(periode, {}, jour);
@@ -349,15 +358,19 @@ figure { margin: 0; } figcaption { font-weight: 600; margin-bottom: 2px; }
   async function html(mois, options) {
     const reglages = options || {};
     const rapport = reglages.donnees || donnees(mois, reglages.aujourdhui, reglages.maintenant);
+    const lib = await App.chargerEcharts();
+    return I18n.enLangueDesDonnees(() => pageDuRapport(rapport, reglages, lib));        // document enregistré (D156)
+  }
+
+  function pageDuRapport(rapport, reglages, lib) {
     // Lot 4 (§17.5) : commentaire du responsable, éventuellement proposé par l'IA (mention alors imprimée).
     const commentaire = reglages.commentaire && texte(reglages.commentaire.texte) ? reglages.commentaire : null;
-    const lib = await App.chargerEcharts();
     const dessins = graphiques(lib, rapport);
     const titre = I18n.t('rapport.texte_courriel.rapport_mensuel_maintenance_2', { libelleMois: rapport.libelleMois });
     const mttr = rapport.mttr.valeur === null ? '' : UI.html`<p class="pied">${I18n.html('rapport.html.mttr_v1', { duree: UI.heures(Math.round(rapport.mttr.valeur * 10) / 10) })}${rapport.attentePieces.valeur === null ? ''
       : UI.html`${I18n.html('rapport.html.dont_attente_pieces_panne', { n: rapport.attentePieces.effectif, duree: UI.heures(Math.round(rapport.attentePieces.valeur * 10) / 10) })}`}.</p>`;
     const page = UI.html`<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><title>${rapport.entreprise ? titre + ' — ' + rapport.entreprise : titre}</title>
+<html lang="${I18n.langue}"><head><meta charset="utf-8"><title>${rapport.entreprise ? titre + ' — ' + rapport.entreprise : titre}</title>
 <style>${UI.brut(STYLE)}</style></head>
 <body><main class="page">
 <header><h1>${titre}</h1>

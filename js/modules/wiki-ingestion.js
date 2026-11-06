@@ -47,8 +47,8 @@ Object.defineProperties(Wiki, Object.getOwnPropertyDescriptors((() => {   // gar
   const STATUTS_FILE = ['en file', 'à refaire'];
   const STATUTS_DEJA = ['en file', 'à refaire', 'à valider', 'validée', 'rien à ajouter', 'refusée'];
   const ESSAIS_COLLISION_MAX = 3;
-  const motifCollision = () => I18n.t('wiki.motif_collision.rejoue_page_creee_entre');               // écrits au journal (D156) : lus à l'écriture
-  const motifPagesChangees = () => I18n.t('wiki.motif_pages_changees.rejoue_pages_changees_pendant');
+  const motifCollision = () => I18n.donnees('wiki.motif_collision.rejoue_page_creee_entre');     // écrits au journal : langue de l'installation (D156)
+  const motifPagesChangees = () => I18n.donnees('wiki.motif_pages_changees.rejoue_pages_changees_pendant');
 
   function texte(valeur) {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
@@ -459,7 +459,7 @@ Object.defineProperties(Wiki, Object.getOwnPropertyDescriptors((() => {   // gar
   function lireIngestion(objet, donnees) {
     if (!objet || typeof objet !== 'object' || !Array.isArray(objet.pages) || !Array.isArray(objet.contradictions)
       || typeof objet.rien_a_ajouter !== 'boolean') {
-      throw new Ia.IaReponseInvalide(I18n.t('wiki.lire_ingestion.reponse_ia_hors_forme'));
+      throw Object.assign(new Ia.IaReponseInvalide(I18n.t('wiki.lire_ingestion.reponse_ia_hors_forme')), { raisons: [I18n.donnees('wiki.lire_ingestion.reponse_ia_hors_forme')] });
     }
     const envoyeeDe = new Map(liste(donnees.pages).map((page) => [Wiki.comparable(page.titre), page]));
     const pages = objet.pages.map((item) => {
@@ -480,10 +480,10 @@ Object.defineProperties(Wiki, Object.getOwnPropertyDescriptors((() => {   // gar
     const changees = pages.filter((page) => !(page.action === 'modifier' && envoyeeDe.has(Wiki.comparable(page.titre))
       && page.texte === Wiki.ecrireTexte(Wiki.lireTexte(page.avant).rubriques, page.type)));
     const rien = objet.rien_a_ajouter || (!changees.length && !contradictions.length);
-    const controle = Wiki.controlerProposition({ rien: objet.rien_a_ajouter, pages: changees, contradictions }, {
+    // Raisons écrites au journal du wiki et renvoyées à l'IA : dans la langue de l'installation (D156).
+    const controle = I18n.enLangueDesDonnees(() => Wiki.controlerProposition({ rien: objet.rien_a_ajouter, pages: changees, contradictions }, {
       otIngere: { id: donnees.ot.id, dateIntervention: donnees.ot.dateIntervention, sourceTexte: sourceDe(donnees.ot) },
-      anterieure: Boolean(donnees.anterieure), pagesEnvoyees: liste(donnees.pages), catalogue: liste(donnees.catalogue),
-    });
+      anterieure: Boolean(donnees.anterieure), pagesEnvoyees: liste(donnees.pages), catalogue: liste(donnees.catalogue) }));
     if (!controle.ok) {
       const erreur = new Ia.IaReponseInvalide(I18n.t('wiki.lire_ingestion.proposition_refusee', { raisons: controle.raisons.join(' ') }));
       erreur.raisons = controle.raisons;
@@ -577,8 +577,8 @@ Object.defineProperties(Wiki, Object.getOwnPropertyDescriptors((() => {   // gar
       if (changees.length || collision || apparues) {
         const motif = collision ? motifCollision() : motifPagesChangees();
         if (Number(essais) > ESSAIS_COLLISION_MAX) {
-          Object.assign(ligne, { statut: 'refusée', motif, raisons: collision ? I18n.t('wiki.ecrire_resultat.page_creee_meme_temps', { n: essais })
-            : I18n.t('wiki.ecrire_resultat.pages_changees_pendant_envoi', { n: essais }) });
+          Object.assign(ligne, { statut: 'refusée', motif, raisons: collision ? I18n.donnees('wiki.ecrire_resultat.page_creee_meme_temps', { n: essais })
+            : I18n.donnees('wiki.ecrire_resultat.pages_changees_pendant_envoi', { n: essais }) });
           return 'refusée';
         }
         Object.assign(ligne, { statut: 'en file', motif });
@@ -625,7 +625,7 @@ Object.defineProperties(Wiki, Object.getOwnPropertyDescriptors((() => {   // gar
         lu = Ia.lireReponse('ingestionWiki', reponse && reponse.contenu, donnees);
       } catch (erreur) {
         if (!erreur || erreur.name !== 'IaReponseInvalide') throw erreur;
-        raisons = erreur.raisons || [erreur.message];
+        raisons = erreur.raisons || [I18n.donnees('ia.module.reponse_ia_illisible_aucune')];   // sans raisons : réponse illisible
       }
       if (lu) return ecrireResultat(entree, { donnees, etat, empreinte, lu, modele, essais: String(essais), raisons: premierRefus });
       if (relances >= SEUILS.relancesMax) {

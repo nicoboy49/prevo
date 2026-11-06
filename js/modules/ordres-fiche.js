@@ -122,7 +122,7 @@ Object.assign(Ordres, (() => {
         type: urgence ? 'correctif immédiat' : valeurs.type, priorite: urgence ? 'P1' : valeurs.priorite,
         travail_a_faire: valeurs.travail_a_faire, technicien_id: valeurs.technicien_id, date_prevue: valeurs.date_prevue,
       });
-      const habilitation = verifierHabilitation(selecteur.valeur(), valeurs.technicien_id, valeurs.date_prevue);
+      const habilitation = verifierHabilitation(selecteur.valeur(), valeurs.technicien_id, valeurs.date_prevue, true);   // journal (D156)
       if (habilitation) await journaliserHabilitation(id, habilitation);
       App.marquerSaisie(false);
       UI.toast(I18n.t('ordres.valider_nouvel_ot.ordre_travail_cree', { id }), 'succes');
@@ -499,9 +499,9 @@ Object.assign(Ordres, (() => {
   async function mettreEnAttentePiece(ot) {
     const actuel = Donnees.trouver('ordres_travail', ot.id) || ot;
     const manquantes = piecesManquantes(actuel.id);
-    const proposition = MARQUEUR_PIECE + (manquantes.length
+    const proposition = MARQUEUR_PIECE + I18n.enLangueDesDonnees(() => (manquantes.length      // motif pré-rempli (D156)
       ? manquantes.map((p) => p.libelle + ' (' + detailManque(p) + ')').join(' ; ')
-      : I18n.t('ordres.mettre_en_attente_piece.stock_insuffisant')) + '.';
+      : I18n.donnees('ordres.mettre_en_attente_piece.stock_insuffisant'))) + '.';
     const motif = await UI.demanderMotif(I18n.t('ordres.mettre_en_attente_piece.mettre_attente', { actuelId: actuel.id }), I18n.t('ordres.demander_complement.motif_mise_attente'), { valeur: proposition });
     if (motif === null) return;
     const reussi = await pendant(null, () => changerStatut(actuel.id, actuel.statut, 'En attente', { motif_attente: motif }), I18n.t('ordres.mettre_en_attente_piece.mise_attente'));

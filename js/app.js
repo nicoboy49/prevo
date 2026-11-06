@@ -132,7 +132,7 @@ const App = (() => {
     const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let suffixe = '';
     for (let i = 0; i < 4; i += 1) suffixe += caracteres[Math.floor(Math.random() * caracteres.length)];
-    return I18n.t('socle.poste_aleatoire.poste_suffixe', { suffixe });
+    return I18n.donnees('socle.poste_aleatoire.poste_suffixe', { suffixe });     // écrit au journal et dans verrou.txt (D156)
   }
 
   // (Donnees.ErreurLectureSeule est une ErreurStockage : son message est montré tel quel.)
@@ -876,11 +876,12 @@ const App = (() => {
     }
   }
 
-  // Texte inscrit au journal : « Responsable », « Demandeur Lucie Martin », « Technicien TEC-0002 ».
+  // Texte inscrit au journal : « Responsable », « Demandeur Lucie Martin », « Technicien TEC-0002 » ; dans la langue de
+  // l'installation, jamais celle de l'écran (D156).
   function libelleJournal(p) {
-    if (p.type === 'demandeur') return I18n.t('socle.libelle_journal.demandeur_p_nom', { nom: p.nom });
-    if (p.type === 'technicien') return I18n.t('socle.libelle_journal.technicien_technicien_id', { technicienId: p.technicienId });
-    return libelleType(p.type);
+    if (p.type === 'demandeur') return I18n.donnees('socle.libelle_journal.demandeur_p_nom', { nom: p.nom });
+    if (p.type === 'technicien') return I18n.donnees('socle.libelle_journal.technicien_technicien_id', { technicienId: p.technicienId });
+    return I18n.enLangueDesDonnees(() => libelleType(p.type));
   }
 
   // Texte affiché dans le menu : « Technicien · Julien Moreau ».

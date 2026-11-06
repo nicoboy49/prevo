@@ -77,7 +77,7 @@ Object.assign(Demandes, (() => {
     if (!impact) throw new Donnees.ErreurValidation(I18n.t('demandes.creer.choisissez_impact_securite_arret'));
     verifierCodeSymptome(symptomeCode);
     if (otOrigineId) await verifierOtOrigine(otOrigineId);
-    const demandeur = texte(v.demandeur) || nomDuProfil();
+    const demandeur = texte(v.demandeur) || I18n.enLangueDesDonnees(nomDuProfil);    // nom écrit dans la DI (D156)
     const description = texte(v.description);
     const photo = texte(v.photo);
 
@@ -145,8 +145,8 @@ Object.assign(Demandes, (() => {
     if (![TYPE_IMMEDIAT, TYPE_DIFFERE].includes(type)) {
       throw new Donnees.ErreurValidation(I18n.t('demandes.accepter.type_ordre_travail_inconnu', { type }));
     }
-    const changementPriorite = priorite !== calculee
-      ? I18n.t('demandes.accepter.priorite_calculee_priorite_motif_priorite', { calculee, priorite, motifPriorite }) : '';
+    const changementPriorite = priorite !== calculee      // écrit au journal et dans la DI (D156)
+      ? I18n.donnees('demandes.accepter.priorite_calculee_priorite_motif_priorite', { calculee, priorite, motifPriorite }) : '';
 
     // (1) L'OT : réutilisé s'il existe déjà pour cette DI (essai précédent interrompu, autre poste),
     //     sinon créé. Idempotent : rejoué sans risque sur conflit. Le code symptôme de la DI est
@@ -194,7 +194,7 @@ Object.assign(Demandes, (() => {
 
   /** Annule l'OT créé pour une DI finalement traitée sur un autre poste (s'il est encore « Créé »). */
   async function annulerOtOrphelin(diId, otId) {
-    const motif = I18n.t('demandes.annuler_ot_orphelin.di_traitee_autre_poste');
+    const motif = I18n.donnees('demandes.annuler_ot_orphelin.di_traitee_autre_poste');      // écrit dans l'OT (D156)
     try {
       await Donnees.modifier('ordres_travail', (lignes) => {
         const ot = lignes.find((l) => l.id === otId);
@@ -224,7 +224,7 @@ Object.assign(Demandes, (() => {
       ligne.statut = 'Regroupée';
       ligne.ot_id = otId;
       ligne.date_decision = outils.maintenant();
-      ligne.motif_decision = I18n.t('demandes.regrouper.regroupee_deja_ouvert_equipement', { otId });
+      ligne.motif_decision = I18n.donnees('demandes.regrouper.regroupee_deja_ouvert_equipement', { otId });
     }, { action: 'regroupée avec ' + otId });
     return otId;
   }

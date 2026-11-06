@@ -172,7 +172,7 @@ Object.assign(Rapport, (() => {
           const resultat = await figer(mois, { commentaire });
           if (commentaire.texte && commentaire.aideIa) {
             try {
-              await Ia.tracerUtilisation('parametres', 'rapports_mensuels', I18n.t('rapport.onglet.commentaire_rapport', { resultatNom: resultat.nom }), zoneCommentaire.dataset.iaModele);
+              await Ia.tracerUtilisation('parametres', 'rapports_mensuels', I18n.donnees('rapport.onglet.commentaire_rapport', { resultatNom: resultat.nom }), zoneCommentaire.dataset.iaModele);
             } catch (erreur) {                                            // le rapport est figé : on le dit quand même
               console.warn('Prévo (rapport) : trace de la proposition IA non écrite (' + (erreur && erreur.message) + ').', erreur);
             }
@@ -226,8 +226,9 @@ Object.assign(Rapport, (() => {
         avertirMois();
         if (retoucher) zoneCommentaire.focus();
       };
+      // Le commentaire est imprimé dans le rapport figé : l'IA reçoit la langue de l'installation (D156), comme le rapport.
       Ia.ouvrirEncadre({ apres: zone, fonction: 'commentaireRapport',
-        donnees: { mois: libelleMois(mois), jetons: Rapport.jetonsCommentaire(rapport), points: rapport.faits.concat(rapport.decisions).map(sansChiffres) },
+        donnees: I18n.enLangueDesDonnees(() => ({ mois: libelleMois(mois), jetons: Rapport.jetonsCommentaire(rapport), points: rapport.faits.concat(rapport.decisions).map(sansChiffres) })),
         utiliser: (resultat, reponse) => remplir(resultat, reponse, false), modifier: (resultat, reponse) => remplir(resultat, reponse, true) });
     });
     zoneCommentaire.closest('.champ').insertAdjacentElement('afterend', zone);

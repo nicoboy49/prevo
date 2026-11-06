@@ -68,7 +68,8 @@ Object.assign(Planning, (() => {
     const avertissements = [];
     if (message) {
       avertissements.push(I18n.t('planning.planifier.avertissement_habilitation', { message }));
-      await Donnees.journaliser('ordres_travail', otId, 'avertissement habilitation : ' + message);
+      await Donnees.journaliser('ordres_travail', otId, 'avertissement habilitation : '        // journal : langue de l'installation (D156)
+        + Ordres.verifierHabilitation(ot && ot.equipement_id, technicienId, date, true));
     }
     return { statut, avertissements };
   }

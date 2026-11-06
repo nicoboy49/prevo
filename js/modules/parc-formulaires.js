@@ -274,11 +274,11 @@ Object.assign(Parc, (() => {
     return UI.nombreFr(valeur) + (unite ? ' ' + unite : '');
   }
 
-  /** Nom inscrit dans le relevé : celui du technicien (ou du demandeur), sinon « Responsable ». */
+  /** Nom inscrit dans le relevé : celui du technicien (ou du demandeur), sinon « Responsable » (langue de l'installation, D156). */
   function utilisateurCourant() {
     const profil = App.profil;
     if (!profil) return '';
-    if (profil.type === 'responsable') return I18n.t('parc.utilisateur_courant.responsable');
+    if (profil.type === 'responsable') return I18n.donnees('parc.utilisateur_courant.responsable');
     return String(profil.nom || profil.technicienId || '').trim();
   }
 

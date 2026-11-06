@@ -61,8 +61,10 @@ const ParametresZip = (() => {
   }
 
   // Nom du fichier choisi, pour les messages et le journal : sans caractère de contrôle, 120 caractères au plus.
-  function nomAffiche(nom) {
+  // pourLesDonnees : le nom écrit au journal, dans la langue de l'installation (D156).
+  function nomAffiche(nom, pourLesDonnees) {
     const propre = texte(nom).replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ');
+    if (pourLesDonnees) return (propre.length > 120 ? I18n.donnees('zip.afficher.nom_tronque', { texte: propre.slice(0, 119) }) : propre) || I18n.donnees('zip.nom_affiche.fichier_sans_nom');
     return (propre.length > 120 ? I18n.t('zip.afficher.nom_tronque', { texte: propre.slice(0, 119) }) : propre) || I18n.t('zip.nom_affiche.fichier_sans_nom');
   }
 
@@ -514,7 +516,7 @@ const ParametresZip = (() => {
     Donnees.arreterSurveillance();                         // aucune relecture au milieu des écritures
     let resultat;
     try {
-      resultat = await executer(lu, nomFichier);
+      resultat = await executer(lu, nomAffiche(fichier && fichier.name, true));      // nom écrit au journal (D156)
     } finally {
       if (!resultat || !resultat.ok) Donnees.demarrerSurveillance();
     }

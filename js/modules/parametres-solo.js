@@ -73,7 +73,7 @@ Object.assign(Parametres.interne, (() => {
         const existant = technicienExistant(valeurs);
         const technicienId = existant ? existant.id
           : await Equipe.creerTechnicien({ prenom: valeurs.prenom, nom: valeurs.nom, metier: valeurs.metier });
-        await ecrireParametres({ mode_solo: '1', solo_technicien_id: technicienId, cloture_une_etape: '1' }, I18n.t('parametres.passer_en_solo.passage_mode_solo'));
+        await ecrireParametres({ mode_solo: '1', solo_technicien_id: technicienId, cloture_une_etape: '1' }, I18n.donnees('parametres.passer_en_solo.passage_mode_solo'));   // journal (D156)
       },
     });
     if (!fait) return;
@@ -83,7 +83,7 @@ Object.assign(Parametres.interne, (() => {
   }
 
   async function quitterSolo() {
-    await ecrireParametres({ mode_solo: '0' }, I18n.t('parametres.quitter_solo.fin_mode_solo'));
+    await ecrireParametres({ mode_solo: '0' }, I18n.donnees('parametres.quitter_solo.fin_mode_solo'));      // journal (D156)
     App.marquerSaisie(false);
     UI.toast(I18n.t('parametres.quitter_solo.mode_solo_quitte_rien'), 'succes');
     await App.reafficher();

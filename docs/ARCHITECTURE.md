@@ -4327,6 +4327,11 @@ Script classique, compatible `file://`. Interface :
   `I18n.appliquer(racine)` remplit les éléments `data-i18n="cle"` (texte) et
   `data-i18n-attr="title:cle1;placeholder:cle2"` (attributs) de `index.html` ; `I18n.langue` (code actif, `'fr'`)
   et `I18n.langues` (copie des langues déclarées) sont en lecture seule.
+- **Textes écrits dans les données (D156, T292)** : ce que l'appli écrit elle-même (journal, titres et motifs
+  pré-remplis, profil inscrit, raisons du wiki) passe par `I18n.donnees(cle, valeurs)`, jamais `I18n.t` : la langue de
+  l'installation, pas celle de l'écran. Un texte composé ailleurs (rapport figé, raison d'une gamme, contrôle d'une
+  réponse de l'IA) s'écrit dans `I18n.enLangueDesDonnees(fonction)` (synchrone : `t`, `html`, `locale` y rendent
+  cette langue). Jusqu'au Lot 4 : le français ; au Lot 4 : la langue de l'installation (`langue_defaut`, D149).
 
 ### 24.2 Les fichiers et leur ordre de chargement
 
@@ -4398,7 +4403,8 @@ signale jamais.
   affichage passe par `valeurs.*`. Même classe pour les **synonymes** de titres de colonnes reconnus à l'import
   (données d'entrée, non affichées).
 - **D156** : les marqueurs écrits dans les données et relus par le code (actions du journal, « Pièce : »,
-  « Réception ACH- », « Ancien n° : »…) restent fixes ; seul le détail qui les suit est traduit.
+  « Réception ACH- », « Ancien n° : »…) restent fixes ; le détail qui les suit s'écrit dans la langue de
+  l'installation (§24.1, `I18n.donnees`), jamais dans celle de l'écran.
 - **D157** : la console et les lanceurs (messages pour qui maintient l'application).
 - **D159** : les consignes envoyées à l'assistant IA restent en français (avec « réponds en <langue> »).
 - **identifiants** : identifiants, noms de fichiers, en-têtes CSV, codes, sélecteurs, reconnus automatiquement par

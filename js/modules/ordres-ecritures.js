@@ -166,7 +166,7 @@ Object.assign(Ordres, (() => {
     if (!origine) throw ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
     return creer({
       origine: 'manuel', equipement_id: origine.equipement_id, type: origine.type, priorite: origine.priorite,
-      titre: I18n.t('ordres.creer_ot_lie.reprise_origine_id', { origineId: origine.id, titre: texte(origine.titre).slice(0, 120) }),
+      titre: I18n.donnees('ordres.creer_ot_lie.reprise_origine_id', { origineId: origine.id, titre: texte(origine.titre).slice(0, 120) }),
       travail_a_faire: origine.travail_a_faire, consignes: origine.consignes,
       date_prevue: datePrevueParDefaut(origine.priorite), ot_lie_id: origine.id,
     });
@@ -254,7 +254,7 @@ Object.assign(Ordres, (() => {
       await modifierLieeAOt(actuel.id, 'ot_temps', (lignes, outils) => {
         lignes.push({ id: outils.nouvelId(lignes), ot_id: actuel.id, technicien_id: valeurs.technicien_id,
           date: texte(valeurs.date_temps) || texte(champs.date_fin).slice(0, 10) || outils.aujourdhui(), heures: String(heures) });
-      }, { action: I18n.t('ordres.clore.temps_passe', { actuelId: actuel.id }) });
+      }, { action: I18n.donnees('ordres.clore.temps_passe', { actuelId: actuel.id }) });     // journal : D156
     }
     const saisis = await Donnees.modifier('ordres_travail', (lignes, outils) => {
       const ligne = ligneOt(lignes, actuel.id, true);

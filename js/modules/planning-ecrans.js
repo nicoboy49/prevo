@@ -248,8 +248,8 @@ Object.assign(Planning, (() => {
     const ot = Donnees.trouver('ordres_travail', otId);
     if (!ot) return;
     const manquantes = Ordres.piecesManquantes(otId);
-    const proposition = MARQUEUR_PIECE + (manquantes.length ? manquantes.map(detailPiece).join(' ; ')
-      : I18n.t('planning.mettre_en_attente_piece.stock_insuffisant')) + '.';
+    const proposition = MARQUEUR_PIECE + I18n.enLangueDesDonnees(() => (manquantes.length ? manquantes.map(detailPiece).join(' ; ')
+      : I18n.donnees('planning.mettre_en_attente_piece.stock_insuffisant'))) + '.';      // motif pré-rempli (D156)
     const motif = await UI.demanderMotif(I18n.t('planning.mettre_en_attente_piece.mettre_attente', { otId }), I18n.t('planning.mettre_en_attente_piece.motif_mise_attente'), { valeur: proposition });
     if (motif === null) return;
     try {
