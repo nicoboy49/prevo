@@ -183,7 +183,7 @@ Object.assign(Accueil, (() => {
         return { icone: 'alerte', ton: 'rouge', titre: equipement, detail: element.symptome, lien: '#/di/',
           pastille: UI.html`<span class="badge ko">${I18n.t('accueil.reglages_premier.securite')}</span>`, action: I18n.t('accueil.reglages_premier.traiter_demande') };
       case 'p1':
-        return { icone: 'alerte', ton: 'rouge', titre: element.titre, detail: equipement + ' · ' + element.statut, lien: '#/ot/',
+        return { icone: 'alerte', ton: 'rouge', titre: element.titre, detail: equipement + ' · ' + Schema.libelleValeur('ordres_travail', 'statut', element.statut), lien: '#/ot/',
           pastille: UI.badgePriorite('P1'), action: I18n.t('accueil.reglages_premier.ouvrir_ordre_travail') };
       case 'retard':
         return { icone: 'horloge', ton: 'ambre', titre: element.titre, lien: '#/ot/',

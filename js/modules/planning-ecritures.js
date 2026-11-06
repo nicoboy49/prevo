@@ -40,13 +40,13 @@ Object.assign(Planning, (() => {
       const ligne = lignes.find((candidate) => candidate.id === otId);
       if (!ligne) throw ErreurValidation(I18n.t('planning.planifier.ordre_travail_introuvable', { otId }));
       if (ligne.statut !== statutAttendu) {
-        throw ErreurValidation(I18n.t('planning.planifier.ot_passe_autre_poste', { otId, ligneStatut: ligne.statut }));
+        throw ErreurValidation(I18n.t('planning.planifier.ot_passe_autre_poste', { otId, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
       }
       if (ligne.statut === 'Créé') {
         throw ErreurValidation(I18n.t('planning.planifier.ot_cree_preparez_abord', { otId }));
       }
       if (ligne.statut !== 'Préparé' && ligne.statut !== 'Planifié') {
-        throw ErreurValidation(I18n.t('planning.planifier.seul_ot_prepare_planifie', { otId, ligneStatut: ligne.statut }));
+        throw ErreurValidation(I18n.t('planning.planifier.seul_ot_prepare_planifie', { otId, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
       }
       if (ligne.statut === 'Préparé') {
         const verification = Ordres.verifierPassage(Object.assign({}, ligne, { technicien_id: technicienId, date_prevue: date }), 'Planifié');

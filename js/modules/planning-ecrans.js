@@ -90,7 +90,7 @@ Object.assign(Planning, (() => {
       <div class="pl-ot-meta"><span>${repere(ot.equipement_id)}</span><span>${temps}</span>${reglages.avecTechnicien && texte(ot.technicien_id)
         ? UI.html`<span>${nomTechnicien(ot.technicien_id)}</span>` : ''}${reglages.avecDate && texte(ot.date_prevue)
         ? UI.html`<span>${I18n.t('planning.carte_ot.prevu_date_prevue', { date_prevue: UI.dateFr(ot.date_prevue) })}</span>` : ''}</div>
-      <div class="pl-ot-badges">${ot.statut !== 'Planifié' ? UI.badgeStatut(ot.statut) : ''}${enRetard
+      <div class="pl-ot-badges">${ot.statut !== 'Planifié' ? UI.badgeValeur('ordres_travail', 'statut', ot.statut) : ''}${enRetard
         ? UI.html`<span class="badge ko">${I18n.t('planning.carte_ot.retard')}</span>` : ''}</div>
       ${deplacable ? UI.html`<button type="button" class="btn btn-secondaire pl-planifier" data-action="planifier" data-ot="${ot.id}">${I18n.t('planning.carte_ot.planifier')}</button>` : ''}
     </div>`;

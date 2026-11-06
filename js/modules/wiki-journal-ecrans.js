@@ -93,7 +93,7 @@ Object.assign(Wiki, (() => {
   }
 
   function badge(statut) {
-    return UI.badgeStatut(statut, TONS[texte(statut)] || 'neutre');
+    return UI.badgeValeur('wiki_journal', 'statut', statut, TONS[texte(statut)] || 'neutre');
   }
 
   function lienOt(id) {
@@ -198,7 +198,7 @@ Object.assign(Wiki, (() => {
     const genre = c.archivage ? I18n.t('wiki.changement.page_archivee') : (c.creation ? I18n.t('wiki.changement.page_creee') : I18n.t('wiki.changement.page_modifiee'));
     return UI.html`<section class="wj-changement" data-cle="${texte(c.cle)}" data-creation="${c.creation ? 'oui' : 'non'}">
       <h4><span class="wj-page-titre">${texte(c.titre) || texte(c.cle)}</span>
-        <span class="badge ${c.creation ? 'violet' : 'neutre'}">${genre}</span>${texte(c.type) ? UI.html` <span class="wj-type">${c.type}</span>` : ''}</h4>
+        <span class="badge ${c.creation ? 'violet' : 'neutre'}">${genre}</span>${texte(c.type) ? UI.html` <span class="wj-type">${Schema.libelleValeur('wiki_pages', 'type', c.type)}</span>` : ''}</h4>
       ${c.archivage ? UI.html`<p class="aide">${I18n.t('wiki.changement.page_sort_wiki_texte')}</p>`
         : (c.creation ? texteEntierHtml(c.apres) : diffHtml(c.avant || '', c.apres || ''))}
     </section>`;

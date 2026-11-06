@@ -104,7 +104,7 @@ Object.assign(Parc, (() => {
           <details open>
             <summary>
               <b>${localisation.libelle || localisation.id}</b>
-              <span class="type" title="${I18n.t('parc.construire_arbre.n_equipements', { n: nombre })}">${I18n.html('parc.construire_arbre.v1_n_equipements', { n: nombre, type: localisation.type || '' })}</span>
+              <span class="type" title="${I18n.t('parc.construire_arbre.n_equipements', { n: nombre })}">${I18n.html('parc.construire_arbre.v1_n_equipements', { n: nombre, type: Schema.libelleValeur('localisations', 'type', localisation.type) })}</span>
               ${responsable ? UI.html`<button type="button" class="btn btn-fantome parc-modifier-localisation" data-localisation="${localisation.id}"
                 aria-label="${I18n.t('parc.construire_arbre.modifier_localisation', { localisationLibelle: localisation.libelle })}">${UI.icone('cle')}<span class="parc-libelle-bouton">${I18n.t('commun.bouton.modifier')}</span></button>` : ''}
             </summary>

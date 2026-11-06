@@ -151,7 +151,7 @@ Object.assign(Demandes, (() => {
     // sera pas marqué : le bandeau le dit avant l'envoi.
     if (otDemande) {
       const suite = origineValable && Ordres.estVerrouille(otOrigine)
-        ? UI.html`${I18n.t('demandes.nouvelle.demande_sera_liee_ot', { otDemande, otOrigineStatut: otOrigine.statut })}`
+        ? UI.html`${I18n.t('demandes.nouvelle.demande_sera_liee_ot', { otDemande, otOrigineStatut: Schema.libelleValeur('ordres_travail', 'statut', otOrigine.statut) })}`
         : UI.html`${I18n.t('demandes.nouvelle.demande_sera_liee_ot_2')}`;
       UI.$('.di-origine', conteneur).appendChild(origineValable
         ? UI.bandeau('info', UI.html`<b>${I18n.t('demandes.nouvelle.anomalie_constatee_pendant_ot')} ${lienOt(otDemande)}</b><br>${suite}`)
@@ -200,7 +200,7 @@ Object.assign(Demandes, (() => {
       }
       const priorite = prioriteCalculee(equipement ? equipement.criticite : '', impact);
       UI.remplir(zonePriorite, UI.html`${I18n.t('demandes.nouvelle.priorite_calculee')} ${UI.badgePriorite(priorite)}
-        <span class="aide">${equipement ? I18n.t('demandes.nouvelle.criticite_impact', { criticite: (equipement.criticite || 'B'), impact })
+        <span class="aide">${equipement ? I18n.t('demandes.nouvelle.criticite_impact', { criticite: Schema.libelleValeur('equipements', 'criticite', equipement.criticite || 'B'), impact: Schema.libelleValeur('demandes', 'impact', impact) })
           : I18n.t('demandes.nouvelle.choisissez_equipement_affiner')}</span>`);
     }
     UI.$$('input[name=impact]', formulaire).forEach((bouton) => bouton.addEventListener('change', () => {
@@ -403,7 +403,7 @@ Object.assign(Demandes, (() => {
       const garde = resultat.impact && resultat.impact !== 'sécurité' && !impactRetenu(resultat.impact);
       return UI.html`<ul class="ia-liste">
         <li>${I18n.html('demandes.brancher_ia.symptome_symptome', { symptome: resultat.symptome })}</li>
-        <li>${I18n.t('demandes.brancher_ia.impact')} ${resultat.impact ? UI.html`<b>${resultat.impact}</b>` : I18n.t('demandes.brancher_ia.aucun_impact_liste_propose')}${garde ? ' ' + I18n.t('demandes.brancher_ia.securite_choisi_garde') : ''}</li>
+        <li>${I18n.t('demandes.brancher_ia.impact')} ${resultat.impact ? UI.html`<b>${Schema.libelleValeur('demandes', 'impact', resultat.impact)}</b>` : I18n.t('demandes.brancher_ia.aucun_impact_liste_propose')}${garde ? ' ' + I18n.t('demandes.brancher_ia.securite_choisi_garde') : ''}</li>
       </ul>`;
     }
 
@@ -456,7 +456,7 @@ Object.assign(Demandes, (() => {
     // OT d'origine verrouillé (lu après l'écriture : la marque l'a relu s'il a changé ailleurs).
     const otOrigine = demande.ot_origine_id ? Donnees.trouver('ordres_travail', demande.ot_origine_id) : null;
     const origineVerrouillee = Ordres.estVerrouille(otOrigine)
-      ? UI.html`<br>${I18n.t('demandes.confirmation.ot_verrouille_pas_ete', { ot_origine_id: demande.ot_origine_id, otOrigineStatut: otOrigine.statut })}` : '';
+      ? UI.html`<br>${I18n.t('demandes.confirmation.ot_verrouille_pas_ete', { ot_origine_id: demande.ot_origine_id, otOrigineStatut: Schema.libelleValeur('ordres_travail', 'statut', otOrigine.statut) })}` : '';
     App.definirTitre(I18n.t('demandes.confirmation.demande_envoyee'));
     UI.remplir(conteneur, UI.html`
       <div class="di-confirmation" role="status">

@@ -110,7 +110,7 @@ Object.assign(Wiki, (() => {
   // ===========================================================================================
 
   function carteIntervention(ot) {
-    const contenu = UI.html`<div class="carte-tete"><b>${ot.id}</b>${UI.badgeStatut(ot.statut)}</div>
+    const contenu = UI.html`<div class="carte-tete"><b>${ot.id}</b>${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}</div>
       <div class="carte-titre">${ot.titre}</div>
       <div class="carte-meta"><span>${UI.dateFr(ot.date)}</span>${ot.machine ? UI.html`<span>${o().repere(ot.machine)}</span>` : ''}${ot.panne
         ? UI.html`<span>${ot.panne.libelle}</span>` : ''}${ot.techniciens.length ? UI.html`<span>${ot.techniciens.map((t) => t.nom).join(', ')}</span>` : ''}</div>`;
@@ -122,8 +122,8 @@ Object.assign(Wiki, (() => {
     const lien = o();
     return UI.html`<tr class="wiki-intervention" data-id="${ot.id}">
       <td class="sans-coupure">${UI.dateFr(ot.date)}</td><td class="sans-coupure">${lien.lienEntite(ot.lien, ot.id)}</td>
-      <td class="wiki-cellule-titre">${ot.titre}<br>${UI.badgeStatut(ot.statut)}</td>
-      <td>${ot.panne ? lien.lienEntite(ot.panne.lien, ot.panne.libelle) : UI.html`<span class="wiki-discret">${ot.type}</span>`}</td>
+      <td class="wiki-cellule-titre">${ot.titre}<br>${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}</td>
+      <td>${ot.panne ? lien.lienEntite(ot.panne.lien, ot.panne.libelle) : UI.html`<span class="wiki-discret">${Schema.libelleValeur('ordres_travail', 'type', ot.type)}</span>`}</td>
       ${sansMachine ? '' : UI.html`<td>${lien.lienMachine(ot.machine)}</td>`}
       <td>${lien.joindre(ot.techniciens.map((t) => lien.lienEntite(t.lien, t.nom)), ', ')}</td></tr>`;
   }
@@ -197,7 +197,7 @@ Object.assign(Wiki, (() => {
   function blocPreventif(sections) {
     if (!sections.gammes.length && !sections.controles.length) return null;
     const gammes = sections.gammes.map((gamme) => ({ id: gamme.id, nom: nom(gamme.libelle),
-      sous: gamme.periodiciteJours ? I18n.t('wiki.bloc_preventif.tous_jours', { n: gamme.periodiciteJours, jours: UI.nombreFr(gamme.periodiciteJours) }) : I18n.t('wiki.bloc_preventif.selon_declencheur', { declencheur: (gamme.declencheur || I18n.t('wiki.bloc_preventif.declencheur')) }),
+      sous: gamme.periodiciteJours ? I18n.t('wiki.bloc_preventif.tous_jours', { n: gamme.periodiciteJours, jours: UI.nombreFr(gamme.periodiciteJours) }) : I18n.t('wiki.bloc_preventif.selon_declencheur', { declencheur: (Schema.libelleValeur('gammes', 'declencheur', gamme.declencheur) || I18n.t('wiki.bloc_preventif.declencheur')) }),
       droite: gamme.prochaine ? I18n.t('wiki.bloc_preventif.prochaine_prochaine', { prochaine: UI.dateFr(gamme.prochaine) }) : I18n.t('wiki.bloc_preventif.sans_echeance') }));
     const controles = sections.controles.map((controle) => ({ id: controle.id, nom: nom(controle.nature),
       sous: o().joindre([controle.organisme, controle.derniere ? I18n.t('wiki.bloc_preventif.dernier_derniere', { derniere: UI.dateFr(controle.derniere) }) : ''], ' · '),
@@ -284,7 +284,7 @@ Object.assign(Wiki, (() => {
     const evenements = [].concat(
       sections.commandes.map((commande) => ({ date: commande.date, type: 'commande', id: commande.id,
         texte: texteCommande(commande, quantite(commande.quantite)),
-        droite: commande.reception ? I18n.t('wiki.bloc_stock.recu_reception', { reception: UI.dateFr(commande.reception) }) : commande.statut })),
+        droite: commande.reception ? I18n.t('wiki.bloc_stock.recu_reception', { reception: UI.dateFr(commande.reception) }) : Schema.libelleValeur('achats', 'statut', commande.statut) })),
       sections.sorties.map((mouvement) => ({ date: mouvement.date, type: mouvement.type, id: mouvement.id,
         texte: texteMouvement(mouvement, quantite(mouvement.quantite)),
         droite: I18n.t('wiki.bloc_stock.reste_quantite', { quantite: quantite(mouvement.stock) }) })),
@@ -329,7 +329,7 @@ Object.assign(Wiki, (() => {
     yield sectionListe('wiki-habilitations', I18n.t('wiki.technicien.habilitations'), habilitations.length, habilitations.map((habilitation) => ({
       id: habilitation.id, nom: nom(habilitation.intitule), sous: habilitation.obtention ? I18n.t('wiki.technicien.obtenue_obtention', { obtention: UI.dateFr(habilitation.obtention) }) : '',
       droite: [habilitation.echeance ? I18n.t('wiki.technicien.jusqu_au', { date: UI.dateFr(habilitation.echeance) }) : I18n.t('wiki.bloc_preventif.sans_echeance'), ' ',
-        UI.badgeStatut(habilitation.etat, TONS_HABILITATION[habilitation.etat])] })),
+        UI.badgeStatut(habilitation.etat, TONS_HABILITATION[habilitation.etat], Equipe.libelleStatut(habilitation.etat))] })),
     { nom: 'habilitations', vide: I18n.t('wiki.technicien.aucune_habilitation_enregistree') });
     yield blocInterventions('wiki-interventions', I18n.t('wiki.machine.interventions'), entite.sections.interventions, contexte,
       { aide: I18n.t('wiki.technicien.celles_dont_technicien_ou') });
@@ -348,7 +348,7 @@ Object.assign(Wiki, (() => {
     yield demande ? section('wiki-demande', I18n.t('wiki.intervention.demande_origine'), null, UI.html`<p class="wiki-texte-ot">${I18n.t('wiki.intervention.symptome', { symptome: demande.symptome })}</p>
       ${demande.description ? UI.html`<p class="wiki-texte-ot">${demande.description}</p>` : ''}
       <p class="wiki-meta">${lien.joindre([demande.id, UI.dateHeureFr(demande.date), demande.demandeur ? I18n.t('wiki.intervention.demandeur', { demandeur: demande.demandeur }) : '',
-        demande.statut], ' · ')}</p>`) : null;
+        Schema.libelleValeur('demandes', 'statut', demande.statut)], ' · ')}</p>`) : null;
     yield ecrit('wiki-travail', I18n.t('wiki.intervention.travail_demande'), sections.travail, I18n.t('wiki.intervention.aucun_travail_decrit'));
     yield ecrit('wiki-compte-rendu', I18n.t('wiki.intervention.compte_rendu'), sections.compteRendu, I18n.t('wiki.intervention.pas_encore_compte_rendu'));
     yield sections.astuce ? section('wiki-astuce', I18n.t('wiki.intervention.astuce_prochaine_fois'), null, UI.html`<p class="wiki-texte-ot">${sections.astuce}</p>

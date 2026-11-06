@@ -118,7 +118,7 @@ const Accueil = (() => {
   // Impact d'une demande : couleur de la charte ET libellé.
   function badgeImpact(impact) {
     const tons = { 'sécurité': 'ko', 'arrêt': 'attention', 'dégradé': 'info', 'gêne': 'neutre' };
-    return UI.html`<span class="badge ${tons[impact] || 'neutre'}">${impact || '—'}</span>`;
+    return UI.html`<span class="badge ${tons[impact] || 'neutre'}">${Schema.libelleValeur('demandes', 'impact', impact) || '—'}</span>`;
   }
 
   function carteDemande(di, avecMotif) {
@@ -126,7 +126,7 @@ const Accueil = (() => {
       ? UI.html`<p class="accueil-motif"><b>${di.statut === 'Refusée' ? I18n.t('accueil.carte_demande.motif_refus') : I18n.t('accueil.carte_demande.motif_report')} :</b> ${di.motif_decision}</p>`
       : '';
     return UI.html`<li><a href="#/di/${encodeURIComponent(di.id)}" class="${di.impact === 'sécurité' ? 'accent-p1' : ''}">
-      <div class="carte-tete"><b>${di.id}</b>${avecMotif ? UI.badgeStatut(di.statut) : badgeImpact(di.impact)}</div>
+      <div class="carte-tete"><b>${di.id}</b>${avecMotif ? UI.badgeValeur('demandes', 'statut', di.statut) : badgeImpact(di.impact)}</div>
       <div class="carte-titre">${di.symptome}</div>
       <div class="carte-meta"><span>${libelleEquipement(di.equipement_id)}</span>${avecMotif ? '' : UI.html`<span>${di.demandeur}</span>`}<span>${UI.dateHeureFr(di.date_heure)}</span></div>
       ${motif}
@@ -138,7 +138,7 @@ const Accueil = (() => {
     const retard = enRetard ? UI.html`<span class="accueil-retard">${I18n.t('accueil.carte_ordre.retard_jours', { n: joursEntre(ot.date_prevue, aujourdhui) })}</span>` : '';
     const prevu = ot.date_prevue ? UI.html`<span>${I18n.t('accueil.carte_ordre.prevu_date_prevue', { date_prevue: UI.dateFr(ot.date_prevue) })}</span>` : UI.html`<span>${I18n.t('accueil.carte_ordre.pas_date_prevue')}</span>`;
     return UI.html`<li><a href="#/ot/${encodeURIComponent(ot.id)}" class="${ot.priorite === 'P1' ? 'accent-p1' : (ot.priorite === 'P2' ? 'accent-p2' : '')}">
-      <div class="carte-tete"><b>${ot.id}</b>${UI.badgePriorite(ot.priorite)}${UI.badgeStatut(ot.statut)}</div>
+      <div class="carte-tete"><b>${ot.id}</b>${UI.badgePriorite(ot.priorite)}${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}</div>
       <div class="carte-titre">${ot.titre}</div>
       <div class="carte-meta"><span>${libelleEquipement(ot.equipement_id)}</span>${prevu}${retard}</div>
     </a></li>`;

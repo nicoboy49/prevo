@@ -180,9 +180,9 @@ Object.assign(Ordres, (() => {
         let classe = '';
         if (rang < rangCourant || (rang === rangCourant && horsEtape)) classe = 'fait';
         if (rang === rangCourant && !horsEtape) classe = 'courant';
-        return UI.html`<li class="${classe}"${classe === 'courant' ? UI.brut(' aria-current="step"') : ''}>${etape}</li>`;
+        return UI.html`<li class="${classe}"${classe === 'courant' ? UI.brut(' aria-current="step"') : ''}>${Schema.libelleValeur('ordres_travail', 'statut', etape)}</li>`;
       })}
-      ${horsEtape ? UI.html`<li class="hors" aria-current="step">${ot.statut}</li>` : ''}
+      ${horsEtape ? UI.html`<li class="hors" aria-current="step">${Schema.libelleValeur('ordres_travail', 'statut', ot.statut)}</li>` : ''}
     </ol>`;
   }
 
@@ -193,8 +193,8 @@ Object.assign(Ordres, (() => {
         <div>
           <div class="fil">${I18n.html('ordres.entete_fiche.ordres_travail', { otId: ot.id })}</div>
           <h1><span class="ot-numero">${ot.id}</span> ${ot.titre}</h1>
-          <div class="ot-badges">${UI.badgePriorite(ot.priorite)} ${UI.badgeStatut(ot.statut)}${badgeRetard(ot)}${badgeAnomalie(ot)}
-            <span class="badge neutre">${ot.type}</span>
+          <div class="ot-badges">${UI.badgePriorite(ot.priorite)} ${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}${badgeRetard(ot)}${badgeAnomalie(ot)}
+            <span class="badge neutre">${Schema.libelleValeur('ordres_travail', 'type', ot.type)}</span>
             ${equipement ? UI.html`<a class="ot-lien-equipement" href="#/equipement/${encodeURIComponent(equipement.id)}">${libelleEquipement(equipement.id)}</a>` : ''}
           </div>
         </div>
@@ -231,8 +231,8 @@ Object.assign(Ordres, (() => {
       <dt>${I18n.t('commun.champ.repere')}</dt><dd><a href="#/equipement/${encodeURIComponent(equipement.id)}">${equipement.repere || equipement.id}</a></dd>
       <dt>${I18n.t('commun.champ.designation')}</dt><dd>${equipement.designation}</dd>
       <dt>${I18n.t('ordres.equipement.localisation')}</dt><dd>${cheminLocalisation(equipement.localisation_id)}</dd>
-      <dt>${I18n.t('commun.champ.criticite')}</dt><dd>${equipement.criticite}</dd>
-      <dt>${I18n.t('ordres.equipement.etat')}</dt><dd>${equipement.statut ? UI.badgeStatut(equipement.statut) : ''}</dd>
+      <dt>${I18n.t('commun.champ.criticite')}</dt><dd>${Schema.libelleValeur('equipements', 'criticite', equipement.criticite)}</dd>
+      <dt>${I18n.t('ordres.equipement.etat')}</dt><dd>${equipement.statut ? UI.badgeValeur('equipements', 'statut', equipement.statut) : ''}</dd>
       <dt>${I18n.t('ordres.equipement.habilitation_requise')}</dt><dd>${equipement.habilitation_requise || 'aucune'}</dd>
     </dl>`;
   }
@@ -275,7 +275,7 @@ Object.assign(Ordres, (() => {
         <div class="actions"><a class="btn btn-secondaire" id="ot-signaler-anomalie" href="${adresse}">${UI.icone('alerte')}${I18n.t('ordres.anomalie.signaler_anomalie_di_liee')}</a></div>`}
       <h3 class="ot-sous-titre">${I18n.t('ordres.anomalie.demandes_liees', { nbLiees: liees.length })}</h3>
       ${liees.length ? UI.html`<ul class="ot-di-liees">${liees.map((di) => UI.html`<li>
-          <a href="#/di/${encodeURIComponent(di.id)}">${di.id}</a> ${UI.badgeStatut(di.statut)} <span>${di.symptome}</span></li>`)}</ul>`
+          <a href="#/di/${encodeURIComponent(di.id)}">${di.id}</a> ${UI.badgeValeur('demandes', 'statut', di.statut)} <span>${di.symptome}</span></li>`)}</ul>`
         : UI.html`<p class="muted">${I18n.t('ordres.anomalie.aucune_demande_liee_ot')}</p>`}
     </section>`;
   }
@@ -462,7 +462,7 @@ Object.assign(Ordres, (() => {
     // Clôture d'un préventif dont la gamme n'a pas pu être mise à jour (RG5) : l'avertissement
     // reste affiché au-dessus des onglets, et le toast le redit au lieu du succès.
     const avertissementGamme = lireAvertissementGamme(actuel.id);
-    UI.toast(avertissementGamme || actuel.id + ' : ' + cible + '.', avertissementGamme ? 'attention' : 'succes');
+    UI.toast(avertissementGamme || actuel.id + ' : ' + Schema.libelleValeur('ordres_travail', 'statut', cible) + '.', avertissementGamme ? 'attention' : 'succes');
     const avertissements = verification.avertissements.concat(avertissementGamme ? [avertissementGamme] : []);
     if (avertissements.length) afficherMessage('attention', avertissements.join(' '));
   }
@@ -482,8 +482,8 @@ Object.assign(Ordres, (() => {
 
   function afficherRefus(ot, cible, verification) {
     const titre = cible === 'Clôturé techniquement'
-      ? I18n.t('ordres.refus.cloture_technique_impossible_statut', { otStatut: ot.statut })
-      : I18n.t('ordres.refus.passage_refuse_statut_reste', { cible, otStatut: ot.statut });
+      ? I18n.t('ordres.refus.cloture_technique_impossible_statut', { otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) })
+      : I18n.t('ordres.refus.passage_refuse_statut_reste', { cible: Schema.libelleValeur('ordres_travail', 'statut', cible), otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) });
     const bandeau = afficherMessage('important', listeErreursHtml(titre, verification.erreurs));
     if (bandeau && verification.piecesManquantes.length && transitionsPossibles(ot).includes('En attente') && actionAutorisee(ot, 'En attente')) {
       bandeau.querySelector('.alerte-texte').appendChild(UI.element(UI.html`<div class="actions">
@@ -514,7 +514,7 @@ Object.assign(Ordres, (() => {
     const contenu = UI.element(UI.html`<div class="form-colonne">
       <p>${I18n.t('ordres.demander_priorite.priorite_actuelle')} ${UI.badgePriorite(ot.priorite)}${I18n.t('ordres.demander_priorite.changement_trace_journal_motif')}</p>
       <div class="champ"><label class="libelle" for="ot-nouvelle-priorite">${I18n.t('ordres.demander_priorite.nouvelle_priorite')}</label>
-        <select id="ot-nouvelle-priorite">${optionsHtml(PRIORITES.map((p) => ({ valeur: p, libelle: p })), ot.priorite)}</select></div>
+        <select id="ot-nouvelle-priorite">${optionsHtml(PRIORITES.map((p) => ({ valeur: p, libelle: Schema.libelleValeur('ordres_travail', 'priorite', p) })), ot.priorite)}</select></div>
       <div class="champ"><label class="libelle" for="ot-motif-priorite">${I18n.t('ordres.demander_priorite.motif')} <span class="requis" aria-hidden="true">*</span></label>
         <textarea id="ot-motif-priorite" rows="3" data-dictee required aria-required="true"></textarea>
         <p class="erreur-champ" hidden></p></div></div>`);
@@ -537,7 +537,7 @@ Object.assign(Ordres, (() => {
     const reussi = await pendant(null, () => changerPriorite(ot.id, nouvelle, motif), I18n.t('ordres.demander_priorite.changement_priorite'));
     if (reussi === undefined) return;
     await apresEnregistrement();
-    UI.toast(I18n.t('ordres.demander_priorite.priorite_enregistree', { priorite: ot.priorite, nouvelle }), 'succes');
+    UI.toast(I18n.t('ordres.demander_priorite.priorite_enregistree', { priorite: Schema.libelleValeur('ordres_travail', 'priorite', ot.priorite), nouvelle: Schema.libelleValeur('ordres_travail', 'priorite', nouvelle) }), 'succes');
   }
 
   async function lancerOtLie(ot) {

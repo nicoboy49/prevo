@@ -48,7 +48,7 @@ Object.assign(Suggestions, (() => {
 
   function badgeCriticite(criticite) {
     return criticite
-      ? UI.html`<span class="badge ${TONS_CRITICITE[criticite] || 'neutre'} sg-criticite">${I18n.t('suggestions.badge_criticite.criticite_criticite', { criticite })}</span>`
+      ? UI.html`<span class="badge ${TONS_CRITICITE[criticite] || 'neutre'} sg-criticite">${I18n.t('suggestions.badge_criticite.criticite_criticite', { criticite: Schema.libelleValeur('equipements', 'criticite', criticite) })}</span>`
       : UI.html`<span class="badge neutre sg-criticite">${I18n.t('suggestions.badge_criticite.criticite_non_renseignee')}</span>`;
   }
 
@@ -286,7 +286,9 @@ Object.assign(Suggestions, (() => {
   }
 
   function decisionHtml(d) {
-    return UI.html`${UI.badgeStatut(d.decision, d.decision === 'traitée' ? 'ok' : 'neutre')}${d.revenue
+    // Décision relue dans le journal (marqueur fixe « ignorée » ou « traitée », D156) : traduite à l'affichage.
+    const libelle = d.decision === 'traitée' ? I18n.t('suggestions.decision.traitee') : I18n.t('suggestions.decision.ignoree');
+    return UI.html`${UI.badgeStatut(d.decision, d.decision === 'traitée' ? 'ok' : 'neutre', libelle)}${d.revenue
       ? UI.html` <span class="badge attention sg-revenue" title="${I18n.t('suggestions.decision.nouveaux_faits_ont_nouveau')}">${I18n.t('suggestions.decision.revenue')}</span>` : ''}`;
   }
 

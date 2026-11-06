@@ -496,5 +496,6 @@ Object.assign(Equipe, (() => {
     });
   });
 
-  return {};
+  // libelleStatut : libellé d'un état calculé d'habilitation, aussi pour le wiki (fiche d'un technicien).
+  return { libelleStatut };
 })());

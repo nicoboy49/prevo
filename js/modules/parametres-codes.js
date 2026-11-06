@@ -73,14 +73,14 @@ Object.assign(Parametres, (() => {
       erreurs.push({ nom: 'code', message: I18n.t('parametres.verifier_code.code_ecrit_lettres_chiffres') });
     } else {
       const double = lignes.find((ligne) => ligne.id !== idCourant && codeNormalise(ligne.code) === code);
-      if (double) erreurs.push({ nom: 'code', message: I18n.t('parametres.verifier_code.code_existe_deja', { code, famille: double.famille, doubleLibelle: double.libelle }) });
+      if (double) erreurs.push({ nom: 'code', message: I18n.t('parametres.verifier_code.code_existe_deja', { code, famille: Schema.libelleValeur('codes_defaillance', 'famille', double.famille), doubleLibelle: double.libelle }) });
     }
     const libelle = texte(valeurs.libelle);
     if (!libelle) erreurs.push({ nom: 'libelle', message: I18n.t('parametres.verifier_code.libelle_obligatoire_ex_joint') });
     else if (famille) {
       const double = lignes.find((ligne) => ligne.id !== idCourant && ligne.famille === famille.famille
         && UI.normaliserRecherche(ligne.libelle) === UI.normaliserRecherche(libelle));
-      if (double) erreurs.push({ nom: 'libelle', message: I18n.t('parametres.verifier_code.libelle_existe_deja_famille', { famille: famille.famille, doubleCode: double.code }) });
+      if (double) erreurs.push({ nom: 'libelle', message: I18n.t('parametres.verifier_code.libelle_existe_deja_famille', { famille: Schema.libelleValeur('codes_defaillance', 'famille', famille.famille), doubleCode: double.code }) });
     }
     return erreurs;
   }
@@ -196,7 +196,7 @@ Object.assign(Parametres, (() => {
 
   async function ouvrirModification(ligne, zone) {
     const champ = UI.champ(Schema.champ('codes_defaillance', 'libelle'), ligne.libelle, { attributs: { maxlength: '80' } });
-    const contenu = UI.element(UI.html`<div class="form-colonne"><p>${I18n.html('parametres.ouvrir_modification.code_ot_citent_afficheront', { ligneCode: ligne.code, famille: ligne.famille })}</p></div>`);
+    const contenu = UI.element(UI.html`<div class="form-colonne"><p>${I18n.html('parametres.ouvrir_modification.code_ot_citent_afficheront', { ligneCode: ligne.code, famille: Schema.libelleValeur('codes_defaillance', 'famille', ligne.famille) })}</p></div>`);
     contenu.appendChild(champ);
     let fait = false;
     let fermer = null;

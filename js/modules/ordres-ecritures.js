@@ -25,7 +25,7 @@ Object.assign(Ordres, (() => {
     const ligne = lignes.find((l) => l.id === otId);
     if (!ligne) throw ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
     if (modifiable && estVerrouille(ligne)) {
-      throw ErreurValidation(I18n.t('ordres.ligne_ot.ot_peut_plus_etre', { otId, ligneStatut: ligne.statut }));
+      throw ErreurValidation(I18n.t('ordres.ligne_ot.ot_peut_plus_etre', { otId, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
     }
     return ligne;
   }
@@ -83,7 +83,7 @@ Object.assign(Ordres, (() => {
     return Donnees.modifier('ordres_travail', (lignes, outils) => {
       const ligne = ligneOt(lignes, otId, false);
       if (ligne.statut !== statutAttendu) {
-        throw ErreurValidation(I18n.t('ordres.ecrire_statut.ot_passe_autre_poste', { otId, ligneStatut: ligne.statut }));
+        throw ErreurValidation(I18n.t('ordres.ecrire_statut.ot_passe_autre_poste', { otId, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
       }
       const verification = verifierPassage(Object.assign({}, ligne, ajout), cible);
       if (!verification.ok) throw ErreurValidation(verification.erreurs.join(' '));
@@ -141,7 +141,7 @@ Object.assign(Ordres, (() => {
     return Donnees.modifier('ordres_travail', (lignes) => {
       const ligne = ligneOt(lignes, otId, true);
       if (ligne.origine !== 'préventif') {
-        throw ErreurValidation(I18n.t('ordres.changer_anomalie.anomalie_constatee_concerne_ot', { otId, origine: ligne.origine }));
+        throw ErreurValidation(I18n.t('ordres.changer_anomalie.anomalie_constatee_concerne_ot', { otId, origine: Schema.libelleValeur('ordres_travail', 'origine', ligne.origine) }));
       }
       if (texte(ligne.anomalie_constatee) === valeur) return false;
       ligne.anomalie_constatee = valeur;
@@ -183,7 +183,7 @@ Object.assign(Ordres, (() => {
     const ot = Donnees.trouver('ordres_travail', otId);
     if (!ot) throw ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
     if (estVerrouille(ot) || ot.statut === 'Clôturé techniquement') {
-      throw ErreurValidation(I18n.t('ordres.verifier_ot_modifiable.ot_sans_doute_autre', { otId, otStatut: ot.statut }));
+      throw ErreurValidation(I18n.t('ordres.verifier_ot_modifiable.ot_sans_doute_autre', { otId, otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) }));
     }
   }
 
@@ -221,7 +221,7 @@ Object.assign(Ordres, (() => {
   function verifierClore(ot, champs, heures) {
     if (!clotureUneEtape()) throw ErreurValidation(I18n.t('ordres.verifier_clore.cloture_etape_pas_activee'));
     if (!Ordres.transitionsPossibles(ot).includes('Clôturé techniquement')) {
-      throw ErreurValidation(I18n.t('ordres.verifier_clore.ot_peut_pas_etre', { otId: ot.id, otStatut: ot.statut }));
+      throw ErreurValidation(I18n.t('ordres.verifier_clore.ot_peut_pas_etre', { otId: ot.id, otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) }));
     }
     const longueur = Array.from(champs.astuce || '').length;
     if (longueur > ASTUCE_MAX) throw ErreurValidation(I18n.t('ordres.verifier_clore.astuce_trop_longue_caracteres', { n: longueur, max: ASTUCE_MAX }));
@@ -259,7 +259,7 @@ Object.assign(Ordres, (() => {
     const saisis = await Donnees.modifier('ordres_travail', (lignes, outils) => {
       const ligne = ligneOt(lignes, actuel.id, true);
       if (ligne.statut !== statutAttendu) {
-        throw ErreurValidation(I18n.t('ordres.clore.ot_passe_autre_poste', { actuelId: actuel.id, ligneStatut: ligne.statut }));
+        throw ErreurValidation(I18n.t('ordres.clore.ot_passe_autre_poste', { actuelId: actuel.id, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
       }
       const changes = Object.keys(champs).filter((nom) => texte(ligne[nom]) !== champs[nom]);
       changes.forEach((nom) => { ligne[nom] = champs[nom]; });

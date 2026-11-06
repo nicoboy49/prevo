@@ -202,7 +202,7 @@ const Demandes = (() => {
   /** Badge d'impact (le texte est toujours affiché, la couleur aide seulement). */
   function badgeImpact(impact) {
     const tons = { 'sécurité': 'ko', 'arrêt': 'attention', 'dégradé': 'cyan', 'gêne': 'neutre' };
-    return UI.html`<span class="badge ${tons[impact] || 'neutre'}">${impact || '—'}</span>`;
+    return UI.html`<span class="badge ${tons[impact] || 'neutre'}">${Schema.libelleValeur('demandes', 'impact', impact) || '—'}</span>`;
   }
 
   return {

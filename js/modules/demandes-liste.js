@@ -97,7 +97,7 @@ Object.assign(Demandes, (() => {
         { cle: 'symptome', libelle: I18n.t('commun.champ.symptome'), classe: 'di-col-symptome', rendu: celluleSymptome },
         { cle: 'impact', libelle: I18n.t('demandes.liste.impact'), rendu: (l) => badgeImpact(l.impact) },
         { cle: 'priorite', libelle: I18n.t('demandes.liste.priorite_calculee'), valeurTri: (l) => prioriteDeLaDemande(l), rendu: (l) => UI.badgePriorite(prioriteDeLaDemande(l)) },
-        { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (l) => UI.badgeStatut(l.statut) },
+        { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (l) => UI.badgeValeur('demandes', 'statut', l.statut) },
         { cle: 'motif_decision', libelle: I18n.t('demandes.liste.motif_refus_report'), classe: 'di-col-motif',
           rendu: (l) => (['Refusée', 'Différée'].includes(l.statut) ? celluleTexte(l.motif_decision) : '') },
       ],
@@ -134,9 +134,9 @@ Object.assign(Demandes, (() => {
       const priorite = prioriteDeLaDemande(demande);
       const motifVisible = ['Refusée', 'Différée'].includes(demande.statut) && demande.motif_decision;
       return UI.html`<li><a href="#/di/${encodeURIComponent(demande.id)}" class="${priorite === 'P1' || priorite === 'P2' ? 'accent-' + priorite.toLowerCase() : ''}">
-        <div class="carte-tete"><b>${demande.id}</b>${UI.badgePriorite(priorite)}${UI.badgeStatut(demande.statut)}</div>
+        <div class="carte-tete"><b>${demande.id}</b>${UI.badgePriorite(priorite)}${UI.badgeValeur('demandes', 'statut', demande.statut)}</div>
         <div class="carte-titre">${demande.symptome}${mentionOrigine(demande)}</div>
-        <div class="carte-meta"><span>${libelleEquipement(demande.equipement_id)}</span><span>${UI.dateHeureFr(demande.date_heure)}</span><span>${demande.impact}</span></div>
+        <div class="carte-meta"><span>${libelleEquipement(demande.equipement_id)}</span><span>${UI.dateHeureFr(demande.date_heure)}</span><span>${Schema.libelleValeur('demandes', 'impact', demande.impact)}</span></div>
         ${motifVisible ? UI.html`<div class="di-motif">${I18n.html('demandes.liste.motif_motif_decision', { motif_decision: demande.motif_decision })}</div>` : ''}
       </a></li>`;
     }

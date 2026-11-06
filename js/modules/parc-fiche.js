@@ -80,7 +80,7 @@ Object.assign(Parc, (() => {
           <dt>${I18n.t('parc.carte_caracteristiques.numero_serie')}</dt><dd>${equipement.num_serie}</dd>
           <dt>${I18n.t('parc.carte_caracteristiques.mise_service')}</dt><dd>${UI.dateFr(equipement.date_mes)}</dd>
           <dt>${I18n.t('commun.champ.criticite')}</dt><dd>${equipement.criticite ? badgeCriticite(equipement.criticite) : ''}</dd>
-          <dt>${I18n.t('commun.champ.statut')}</dt><dd>${equipement.statut ? UI.badgeStatut(equipement.statut) : ''}</dd>
+          <dt>${I18n.t('commun.champ.statut')}</dt><dd>${equipement.statut ? UI.badgeValeur('equipements', 'statut', equipement.statut) : ''}</dd>
           <dt>${I18n.t('parc.carte_caracteristiques.heures_jour')}</dt><dd>${heures === null ? '' : UI.heures(heures)}</dd>
           <dt>${I18n.t('parc.carte_caracteristiques.valeur_remplacement')}</dt><dd class="parc-valeur-remplacement">${valeurRemplacement(equipement)}</dd>
           <dt>${I18n.t('parc.carte_caracteristiques.habilitation_requise')}</dt><dd>${equipement.habilitation_requise}</dd>
@@ -198,7 +198,7 @@ Object.assign(Parc, (() => {
     const lignes = controles.map(({ controle, etat }) => UI.html`<li>
         <div class="parc-gamme-tete">
           <a href="#/controles/${encodeURIComponent(controle.id)}">${controle.nature || controle.id}</a>
-          <span class="controles-statuts" data-controle="${controle.id}">${UI.badgeStatut(etat.statut)}${etat.secondaires.map((statut) => UI.html` ${UI.badgeStatut(statut)}`)}</span>
+          <span class="controles-statuts" data-controle="${controle.id}">${UI.badgeStatut(etat.statut, '', Controles.libelleStatut(etat.statut))}${etat.secondaires.map((statut) => UI.html` ${UI.badgeStatut(statut, '', Controles.libelleStatut(statut))}`)}</span>
         </div>
         <div class="parc-gamme-detail"><span class="parc-gamme-raison">${etat.raison}</span>${controle.organisme ? UI.html`<span>${controle.organisme}</span>` : ''}</div>
       </li>`);
@@ -300,15 +300,15 @@ Object.assign(Parc, (() => {
       colonnes: [
         { cle: 'id', libelle: 'N°', rendu: (o) => UI.html`<a href="#/ot/${encodeURIComponent(o.id)}">${o.id}</a>` },
         { cle: 'date_creation', libelle: I18n.t('commun.champ.date'), rendu: (o) => UI.dateFr(o.date_creation), classe: 'sans-coupure' },
-        { cle: 'type', libelle: I18n.t('parc.carte_historique_ot.type') },
+        { cle: 'type', libelle: I18n.t('parc.carte_historique_ot.type'), table: 'ordres_travail' },
         { cle: 'priorite', libelle: I18n.t('commun.champ.priorite'), rendu: (o) => UI.badgePriorite(o.priorite) },
-        { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (o) => UI.badgeStatut(o.statut) },
+        { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (o) => UI.badgeValeur('ordres_travail', 'statut', o.statut) },
         { cle: 'titre', libelle: I18n.t('parc.carte_historique_ot.titre') },
       ],
       carte: (o) => UI.html`<a href="#/ot/${encodeURIComponent(o.id)}">
-        <div class="carte-tete"><b>${o.id}</b>${UI.badgePriorite(o.priorite)}${UI.badgeStatut(o.statut)}</div>
+        <div class="carte-tete"><b>${o.id}</b>${UI.badgePriorite(o.priorite)}${UI.badgeValeur('ordres_travail', 'statut', o.statut)}</div>
         <div class="carte-titre">${o.titre}</div>
-        <div class="carte-meta"><span>${UI.dateFr(o.date_creation)}</span><span>${o.type}</span></div></a>`,
+        <div class="carte-meta"><span>${UI.dateFr(o.date_creation)}</span><span>${Schema.libelleValeur('ordres_travail', 'type', o.type)}</span></div></a>`,
     }));
   }
 
@@ -324,10 +324,10 @@ Object.assign(Parc, (() => {
         { cle: 'id', libelle: 'N°', rendu: (d) => UI.html`<a href="#/di/${encodeURIComponent(d.id)}">${d.id}</a>` },
         { cle: 'date_heure', libelle: I18n.t('commun.champ.date'), rendu: (d) => UI.dateFr(d.date_heure), classe: 'sans-coupure' },
         { cle: 'symptome', libelle: I18n.t('commun.champ.symptome'), rendu: (d) => abreger(d.symptome, 110) },
-        { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (d) => UI.badgeStatut(d.statut) },
+        { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (d) => UI.badgeValeur('demandes', 'statut', d.statut) },
       ],
       carte: (d) => UI.html`<a href="#/di/${encodeURIComponent(d.id)}">
-        <div class="carte-tete"><b>${d.id}</b>${UI.badgeStatut(d.statut)}</div>
+        <div class="carte-tete"><b>${d.id}</b>${UI.badgeValeur('demandes', 'statut', d.statut)}</div>
         <div class="carte-titre">${abreger(d.symptome, 110)}</div>
         <div class="carte-meta"><span>${UI.dateFr(d.date_heure)}</span></div></a>`,
     }));
@@ -396,7 +396,7 @@ Object.assign(Parc, (() => {
           <div>
             <div class="fil"><a href="#/parc">${I18n.t('parc.fiche.parc')}</a>${equipement.localisation_id ? UI.html` <span aria-hidden="true">›</span> <span>${cheminLocalisation(equipement.localisation_id)}</span>` : ''}</div>
             <h1>${libelleEquipement(equipement.id)}</h1>
-            <p class="parc-badges-fiche">${badgeCriticite(equipement.criticite)} ${equipement.statut ? UI.badgeStatut(equipement.statut) : ''}
+            <p class="parc-badges-fiche">${badgeCriticite(equipement.criticite)} ${equipement.statut ? UI.badgeValeur('equipements', 'statut', equipement.statut) : ''}
               ${actif ? '' : UI.html`<span class="badge neutre barre">${I18n.t('parc.fiche.inactif')}</span>`}</p>
             <p><a id="lien-wiki-equipement" href="#/wiki/${idUrl}">${UI.icone('wiki')}${I18n.t('parc.fiche.wiki_equipement')}</a></p>
           </div>

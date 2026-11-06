@@ -423,7 +423,7 @@ Object.assign(Preventif, (() => {
       <dt>${I18n.t('preventif.colonnes_liste.echeance')}</dt><dd>${echeanceHtml(gamme, etat)}</dd>
       <dt>${I18n.t('preventif.description.temps_prevu')}</dt><dd>${gamme.temps_prevu_h ? UI.heures(gamme.temps_prevu_h) : ''}</dd>
       <dt>${I18n.t('preventif.description.consignes')}</dt><dd class="pv-texte">${gamme.consignes}</dd>
-      <dt>${I18n.t('preventif.description.active')}</dt><dd>${gamme.actif === '0' ? 'non' : 'oui'}</dd>
+      <dt>${I18n.t('preventif.description.active')}</dt><dd>${gamme.actif === '0' ? I18n.t('preventif.description.non') : I18n.t('preventif.description.oui')}</dd>
     </dl>`;
   }
 
@@ -434,7 +434,7 @@ Object.assign(Preventif, (() => {
     section.appendChild(UI.tableau({
       colonnes: [
         { cle: 'id', libelle: 'N°', rendu: (ot) => lienOt(ot.id) },
-        { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (ot) => UI.badgeStatut(ot.statut) },
+        { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (ot) => UI.badgeValeur('ordres_travail', 'statut', ot.statut) },
         { cle: 'date_prevue', libelle: I18n.t('preventif.ots_de_la_gamme.prevu'), rendu: (ot) => UI.dateFr(ot.date_prevue) },
         { cle: 'date_fin', libelle: I18n.t('preventif.ots_de_la_gamme.realise'), rendu: (ot) => UI.dateFr(ot.date_fin) },
       ],

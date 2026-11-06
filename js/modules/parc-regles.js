@@ -113,15 +113,15 @@ const Parc = (() => {
 
   function badgeCriticite(criticite) {
     const tons = { A: 'ko', B: 'attention', C: 'neutre' };
-    const libelles = { A: I18n.t('parc.badge_criticite.tres_critique'), B: 'critique', C: I18n.t('parc.badge_criticite.peu_critique') };
+    const libelles = { A: I18n.t('parc.badge_criticite.tres_critique'), B: I18n.t('parc.badge_criticite.critique'), C: I18n.t('parc.badge_criticite.peu_critique') };
     if (!tons[criticite]) return UI.html`<span class="badge neutre" title="${I18n.t('parc.badge_criticite.criticite_non_renseignee')}">${I18n.t('parc.badge_criticite.crit')}</span>`;
-    return UI.html`<span class="badge ${tons[criticite]}" title="${I18n.t('parc.badge_criticite.criticite_criticite_v1', { criticite, libelle: libelles[criticite] })}">${I18n.t('parc.badge_criticite.crit_criticite', { criticite })}</span>`;
+    return UI.html`<span class="badge ${tons[criticite]}" title="${I18n.t('parc.badge_criticite.criticite_criticite_v1', { criticite: Schema.libelleValeur('equipements', 'criticite', criticite), libelle: libelles[criticite] })}">${I18n.t('parc.badge_criticite.crit_criticite', { criticite: Schema.libelleValeur('equipements', 'criticite', criticite) })}</span>`;
   }
 
   // Badges d'une ligne de l'arbre : criticité, statut s'il n'est pas « en service », mention inactif.
   function badgesEquipement(equipement) {
     return UI.html`${badgeCriticite(equipement.criticite)}
-      ${equipement.statut && equipement.statut !== 'en service' ? UI.badgeStatut(equipement.statut) : ''}
+      ${equipement.statut && equipement.statut !== 'en service' ? UI.badgeValeur('equipements', 'statut', equipement.statut) : ''}
       ${estActif(equipement) ? '' : UI.html`<span class="badge neutre barre" title="${I18n.t('parc.badges_equipement.equipement_desactive')}">${I18n.t('parc.badges_equipement.inactif')}</span>`}`;
   }
 

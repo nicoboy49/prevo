@@ -391,6 +391,7 @@ const Import = (() => {
   }
   // Texte montré pour une valeur (référence : chemin, repère, nom ou libellé de la fiche visée).
   function afficher(contexte, champ, valeur) {
+    if (champ && champ.type === 'choix' && champ.table) return Schema.libelleValeur(champ.table, champ.champ, valeur);   // D155
     if (!champ || !champ.ref || champ.ref === 'codes_defaillance') return valeur;
     const ligne = valeur && (typeof valeur === 'object' ? valeur : Donnees.trouver(champ.ref, valeur));
     if (!ligne) return valeur ? String(valeur) : '';

@@ -373,8 +373,8 @@ const Ordres = (() => {
     if (!ot) return { ok: false, erreurs: [I18n.t('ordres.verifier_passage.ordre_travail_introuvable')], avertissements, piecesManquantes: manquantes };
     if (!transitionsPossibles(ot).includes(cible)) {
       erreurs.push(estVerrouille(ot)
-        ? I18n.t('ordres.verifier_passage.ot_verrouille_reprise_fait', { otStatut: ot.statut })
-        : I18n.t('ordres.verifier_passage.passage_impossible', { otStatut: ot.statut, cible }));
+        ? I18n.t('ordres.verifier_passage.ot_verrouille_reprise_fait', { otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) })
+        : I18n.t('ordres.verifier_passage.passage_impossible', { otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut), cible: Schema.libelleValeur('ordres_travail', 'statut', cible) }));
     } else if (cible === 'En attente' && !texte(ot.motif_attente)) {
       erreurs.push(I18n.t('ordres.verifier_passage.motif_mise_attente_obligatoire'));
     } else if (cible === 'Annulé' && !texte(ot.motif_annulation)) {

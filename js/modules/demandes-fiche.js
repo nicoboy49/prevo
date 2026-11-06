@@ -47,7 +47,7 @@ Object.assign(Demandes, (() => {
         <div>
           <div class="fil">${I18n.html('demandes.fiche.demandes_demande_id', { demandeId: demande.id })}</div>
           <h1>${demande.symptome || demande.id}</h1>
-          <p class="di-entete-badges"><b>${demande.id}</b> ${UI.badgeStatut(demande.statut)} ${UI.badgePriorite(priorite)} ${badgeImpact(demande.impact)}</p>
+          <p class="di-entete-badges"><b>${demande.id}</b> ${UI.badgeValeur('demandes', 'statut', demande.statut)} ${UI.badgePriorite(priorite)} ${badgeImpact(demande.impact)}</p>
         </div>
       </div>
       <div class="di-zone-securite"></div>
@@ -62,7 +62,7 @@ Object.assign(Demandes, (() => {
             ${demande.ot_origine_id ? UI.html`<dt>${I18n.t('demandes.fiche.origine')}</dt><dd class="di-origine-fiche">${lienOrigine(demande.ot_origine_id)}</dd>` : ''}
             <dt>${I18n.t('demandes.fiche.impact')}</dt><dd>${badgeImpact(demande.impact)}</dd>
             <dt>${I18n.t('demandes.fiche.priorite_calculee')}</dt><dd>${UI.badgePriorite(priorite)}
-              <span class="aide">${I18n.t('demandes.fiche.criticite_impact', { criticite: (equipement && equipement.criticite) || 'B', impact: demande.impact || '—' })}</span></dd>
+              <span class="aide">${I18n.t('demandes.fiche.criticite_impact', { criticite: Schema.libelleValeur('equipements', 'criticite', (equipement && equipement.criticite) || 'B'), impact: Schema.libelleValeur('demandes', 'impact', demande.impact) || '—' })}</span></dd>
             <dt>${I18n.t('demandes.fiche.precisions')}</dt><dd class="di-texte-long">${demande.description}</dd>
             <dt>${I18n.t('demandes.fiche.demandeur')}</dt><dd>${demande.demandeur}</dd>
             <dt>${I18n.t('demandes.fiche.signalee')}</dt><dd>${UI.dateHeureFr(demande.date_heure)}</dd>
@@ -75,12 +75,12 @@ Object.assign(Demandes, (() => {
         <aside class="c4 di-cote">
           <article class="carte di-suivi">
             <h2>${I18n.t('demandes.fiche.suivi')}</h2>
-            <p>${UI.badgeStatut(demande.statut)} ${texteSuivi(demande)}</p>
+            <p>${UI.badgeValeur('demandes', 'statut', demande.statut)} ${texteSuivi(demande)}</p>
             <dl class="valeurs">
               ${demande.date_decision ? UI.html`<dt>${I18n.t('demandes.fiche.decision')}</dt><dd>${UI.dateHeureFr(demande.date_decision)}</dd>` : ''}
               ${demande.motif_decision ? UI.html`<dt>${I18n.t('demandes.fiche.motif')}</dt><dd class="di-motif-fiche">${demande.motif_decision}</dd>` : ''}
               ${demande.ot_id ? UI.html`<dt>${I18n.t('demandes.fiche.ordre_travail')}</dt><dd>${lienOt(demande.ot_id)}
-                ${ot ? UI.html` ${UI.badgeStatut(ot.statut)}` : ''}</dd>` : ''}
+                ${ot ? UI.html` ${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}` : ''}</dd>` : ''}
             </dl>
           </article>
           <div class="di-decision"></div>
@@ -186,7 +186,7 @@ Object.assign(Demandes, (() => {
         <div class="champ">
           <label class="libelle" for="${idPriorite}">${I18n.t('commun.champ.priorite')}</label>
           <select id="${idPriorite}" name="priorite">
-            ${PRIORITES.map((p) => UI.html`<option value="${p}" ${p === priorite ? UI.brut('selected') : ''}>${p}${p === priorite ? ' ' + I18n.t('demandes.decision_accepter.calculee') : ''}</option>`)}
+            ${PRIORITES.map((p) => UI.html`<option value="${p}" ${p === priorite ? UI.brut('selected') : ''}>${Schema.libelleValeur('ordres_travail', 'priorite', p)}${p === priorite ? ' ' + I18n.t('demandes.decision_accepter.calculee') : ''}</option>`)}
           </select>
         </div>
         <div class="champ di-champ-motif" hidden>
@@ -197,8 +197,8 @@ Object.assign(Demandes, (() => {
         <div class="champ">
           <label class="libelle" for="${idType}">${I18n.t('demandes.decision_accepter.type_ordre_travail')}</label>
           <select id="${idType}" name="type">
-            <option value="${TYPE_IMMEDIAT}">${TYPE_IMMEDIAT}</option>
-            <option value="${TYPE_DIFFERE}">${TYPE_DIFFERE}</option>
+            <option value="${TYPE_IMMEDIAT}">${Schema.libelleValeur('ordres_travail', 'type', TYPE_IMMEDIAT)}</option>
+            <option value="${TYPE_DIFFERE}">${Schema.libelleValeur('ordres_travail', 'type', TYPE_DIFFERE)}</option>
           </select>
         </div>
         <p class="note di-date-prevue"></p>
@@ -216,7 +216,7 @@ Object.assign(Demandes, (() => {
       blocMotif.hidden = choisie === priorite;
       if (!typeTouche) choixType.value = typePropose(choisie);
       const date = datePrevue(choisie);
-      zoneDate.textContent = date ? I18n.t('demandes.decision_accepter.date_prevue_delai_priorite', { date: UI.dateFr(date), choisie })
+      zoneDate.textContent = date ? I18n.t('demandes.decision_accepter.date_prevue_delai_priorite', { date: UI.dateFr(date), choisie: Schema.libelleValeur('ordres_travail', 'priorite', choisie) })
         : I18n.t('demandes.decision_accepter.date_prevue_prochain_arret');
     }
     choixPriorite.addEventListener('change', mettreAJour);
@@ -257,7 +257,7 @@ Object.assign(Demandes, (() => {
         <fieldset class="di-choix-ot"><legend class="visuellement-cache">${I18n.t('demandes.fiche.ordre_travail')}</legend>
           ${otOuverts.map((ot, rang) => UI.html`
             <label class="case di-option-ot"><input type="radio" name="${nomGroupe}" value="${ot.id}" ${rang === 0 ? UI.brut('checked') : ''}>
-              <span><b>${ot.id}</b> ${UI.badgePriorite(ot.priorite)} ${UI.badgeStatut(ot.statut)}<br><span class="aide">${ot.titre}</span></span></label>`)}
+              <span><b>${ot.id}</b> ${UI.badgePriorite(ot.priorite)} ${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}<br><span class="aide">${ot.titre}</span></span></label>`)}
         </fieldset>
       </div>`);
     const choix = await UI.fenetre({

@@ -319,7 +319,7 @@ Object.assign(Wiki, (() => {
     const entrees = choisis.map((id) => {
       const entree = journal.find((e) => e.id === id);
       if (!entree || texte(entree.statut) !== 'à valider') {
-        throw ErreurValidation(entree ? I18n.t('wiki.valider.proposition_pas_valider', { id, entreeStatut: entree.statut })
+        throw ErreurValidation(entree ? I18n.t('wiki.valider.proposition_pas_valider', { id, entreeStatut: Schema.libelleValeur('wiki_journal', 'statut', entree.statut) })
           : I18n.t('wiki.valider.proposition_pas_valider_sans_statut', { id }));
       }
       return entree;
@@ -415,7 +415,7 @@ Object.assign(Wiki, (() => {
       }
       const autre = lignes.find((e) => e !== ligne && texte(e.ot_id) === texte(ligne.ot_id) && texte(e.nature) === 'ingestion'
         && !['rejetée', 'refusée'].includes(texte(e.statut)));
-      if (autre) throw ErreurValidation(I18n.t('wiki.remettre_en_file.ot_deja_entree', { ot_id: ligne.ot_id, autreStatut: autre.statut, autreId: autre.id }));
+      if (autre) throw ErreurValidation(I18n.t('wiki.remettre_en_file.ot_deja_entree', { ot_id: ligne.ot_id, autreStatut: Schema.libelleValeur('wiki_journal', 'statut', autre.statut), autreId: autre.id }));
       const ot = Donnees.trouver('ordres_travail', texte(ligne.ot_id)) || {};
       const nouvelle = { id: outils.nouvelId(lignes), nature: 'ingestion', ot_id: ligne.ot_id,
         date_intervention: texte(ot.date_fin) || texte(ligne.date_intervention), statut: 'en file', anterieure: '0', essais: '0',

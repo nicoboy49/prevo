@@ -240,11 +240,25 @@ const UI = (function () {
     'valide': 'ok', 'à renouveler': 'attention', 'échue': 'ko',
   };
 
-  /** Badge de statut (texte toujours affiché ; la couleur aide seulement). `ton` force la couleur. */
-  function badgeStatut(statut, ton) {
+  /**
+   * Badge de statut (texte toujours affiché ; la couleur aide seulement). `ton` force la couleur. `libelle` : texte
+   * affiché à la place du statut (état calculé traduit), la couleur restant choisie sur le statut.
+   */
+  function badgeStatut(statut, ton, libelle) {
     const texte = String(statut === null || statut === undefined ? '' : statut).trim();
     const tonChoisi = ton || TONS_STATUT[texte.toLowerCase()] || 'neutre';
-    return html`<span class="badge statut ${tonChoisi}">${texte || '—'}</span>`;
+    return html`<span class="badge statut ${tonChoisi}">${(libelle === undefined ? texte : libelle) || '—'}</span>`;
+  }
+
+  /**
+   * Badge d'une valeur stockée d'une liste du schéma (D155) : la couleur se choisit sur la valeur brute (TONS_STATUT,
+   * comme badgeStatut), le texte est son libellé dans la langue de l'écran (Schema.libelleValeur). `ton` force la
+   * couleur. UI.badgeValeur('ordres_travail', 'statut', ot.statut).
+   */
+  function badgeValeur(nomTable, nomChamp, valeur, ton) {
+    const texte = String(valeur === null || valeur === undefined ? '' : valeur).trim();
+    const tonChoisi = ton || TONS_STATUT[texte.toLowerCase()] || 'neutre';
+    return html`<span class="badge statut ${tonChoisi}">${Schema.libelleValeur(nomTable, nomChamp, texte) || '—'}</span>`;
   }
 
   // ===========================================================================================
@@ -1501,7 +1515,7 @@ const UI = (function () {
     // formats français
     dateFr, dateHeureFr, nombreFr, euro, heures, enNombre,
     // badges, icônes, logo
-    badgePriorite, badgeStatut, icone, nomsIcones, logo,
+    badgePriorite, badgeStatut, badgeValeur, icone, nomsIcones, logo,
     // notifications
     toast, bandeau, vide, chargement,
     // fenêtres

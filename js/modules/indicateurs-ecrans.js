@@ -107,7 +107,7 @@ Object.assign(Indicateurs, (() => {
         <label class="champ indicateurs-date" hidden><span class="libelle">${I18n.t('indicateurs.tableau_de_bord.au')}</span>
           <input type="date" id="indicateurs-au" name="au" value="${reglages.au}"></label>
         <label class="champ"><span class="libelle">${I18n.t('commun.champ.criticite')}</span>
-          <select id="indicateurs-criticite" name="criticite">${options([['', I18n.t('indicateurs.tableau_de_bord.toutes')]].concat(CRITICITES.map((c) => [c, I18n.t('indicateurs.tableau_de_bord.criticite_c', { c })])), reglages.criticite)}</select></label>
+          <select id="indicateurs-criticite" name="criticite">${options([['', I18n.t('indicateurs.tableau_de_bord.toutes')]].concat(CRITICITES.map((c) => [c, I18n.t('indicateurs.tableau_de_bord.criticite_c', { c: Schema.libelleValeur('equipements', 'criticite', c) })])), reglages.criticite)}</select></label>
         <label class="champ"><span class="libelle">${I18n.t('indicateurs.tableau_de_bord.atelier')}</span>
           <select id="indicateurs-atelier" name="atelier">${options([['', I18n.t('indicateurs.tableau_de_bord.tous_ateliers')]].concat(ateliers().map((l) => [l.id, l.libelle || l.id])), reglages.atelier)}</select></label>
       </form>
@@ -169,7 +169,7 @@ Object.assign(Indicateurs, (() => {
 
   function resumeFiltres(filtres) {
     const morceaux = [];
-    if (filtres.criticite) morceaux.push(I18n.t('indicateurs.resume_filtres.criticite_criticite', { criticite: filtres.criticite }));
+    if (filtres.criticite) morceaux.push(I18n.t('indicateurs.resume_filtres.criticite_criticite', { criticite: Schema.libelleValeur('equipements', 'criticite', filtres.criticite) }));
     if (filtres.atelier) {
       const atelier = Donnees.trouver('localisations', filtres.atelier);
       morceaux.push((atelier && atelier.libelle) || filtres.atelier);
@@ -457,7 +457,7 @@ Object.assign(Indicateurs, (() => {
         { cle: 'repere', libelle: I18n.t('commun.champ.equipement'), valeurTri: (l) => texte(l.equipement.repere) || l.equipement.id,
           rendu: (l) => UI.html`<a href="#/equipement/${encodeURIComponent(l.equipement.id)}">${texte(l.equipement.repere) || l.equipement.id}</a>
             <small class="indicateurs-designation">${l.equipement.designation || ''}</small>` },
-        { cle: 'criticite', libelle: I18n.t('commun.champ.criticite'), valeurTri: (l) => l.equipement.criticite, rendu: (l) => l.equipement.criticite || '' },
+        { cle: 'criticite', libelle: I18n.t('commun.champ.criticite'), valeurTri: (l) => l.equipement.criticite, rendu: (l) => Schema.libelleValeur('equipements', 'criticite', l.equipement.criticite) },
         { cle: 'pannes', libelle: I18n.t('indicateurs.graphe_paretos.pannes'), type: 'nombre', valeurTri: (l) => l.pannes.valeur, rendu: (l) => String(l.pannes.valeur) },
         { cle: 'arret', libelle: I18n.t('indicateurs.tableau_equipements.arret_h'), type: 'nombre', valeurTri: (l) => valeurTri(l.dureeArret), rendu: (l) => cellule(l.dureeArret, heures) },
         { cle: 'mtbf', libelle: I18n.t('indicateurs.tableau_equipements.mtbf_h'), type: 'nombre', valeurTri: (l) => valeurTri(l.mtbf), rendu: (l) => cellule(l.mtbf, heures) },

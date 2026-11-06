@@ -1120,7 +1120,7 @@ const Donnees = (() => {
       }
       // Type retiré par la refonte 2 (§20.12 : « mode », une panne est une page calculée) : la ligne reste lue, à archiver.
       if (typesRetires.includes(page.type)) {
-        signaler('attention', page, 'type', page.type, I18n.t('socle.controler_wiki.type_page_retire_panne', { pageType: page.type }));
+        signaler('attention', page, 'type', page.type, I18n.t('socle.controler_wiki.type_page_retire_panne', { pageType: Schema.libelleValeur('wiki_pages', 'type', page.type) }));
       }
       // Rattachement (sous-page, §20.4 : sa mère, de même type ; savoir-faire) vers une page archivée. Une page absente
       // est déjà une référence cassée ; une sous-page n'a pas d'ancrage propre (ni equipement_id ni article_id).

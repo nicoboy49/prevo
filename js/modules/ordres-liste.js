@@ -78,7 +78,7 @@ Object.assign(Ordres, (() => {
         <label class="visuellement-cache" for="ot-filtre-technicien">${I18n.t('commun.champ.technicien')}</label>
         <select id="ot-filtre-technicien" name="technicien">${optionsHtml(optionsTechnicienFiltre(), filtres.technicien)}</select>
         <label class="visuellement-cache" for="ot-filtre-type">${I18n.t('ordres.barre_filtres.type')}</label>
-        <select id="ot-filtre-type" name="type">${optionsHtml([{ valeur: '', libelle: I18n.t('ordres.barre_filtres.tous_types') }].concat(TYPES.map((t) => ({ valeur: t, libelle: t }))), filtres.type)}</select>
+        <select id="ot-filtre-type" name="type">${optionsHtml([{ valeur: '', libelle: I18n.t('ordres.barre_filtres.tous_types') }].concat(TYPES.map((t) => ({ valeur: t, libelle: Schema.libelleValeur('ordres_travail', 'type', t) }))), filtres.type)}</select>
       </form>`;
   }
 
@@ -93,24 +93,24 @@ Object.assign(Ordres, (() => {
 
   function origineHtml(ot) {
     if (ot.origine === 'DI' && ot.di_id) return UI.html`${I18n.t('ordres.origine_courte.di')} <a href="#/di/${encodeURIComponent(ot.di_id)}">${ot.di_id}</a>`;
-    return ot.origine || '';
+    return Schema.libelleValeur('ordres_travail', 'origine', ot.origine);
   }
 
   // Origine dans la liste : le n° de DI (lien) ou le mot (préventif, urgence, manuel).
   function origineCourte(ot) {
     if (ot.origine === 'DI' && ot.di_id) return UI.html`<a href="#/di/${encodeURIComponent(ot.di_id)}" title="${I18n.t('ordres.origine_courte.demande_intervention')}">${ot.di_id}</a>`;
-    return ot.origine || '';
+    return Schema.libelleValeur('ordres_travail', 'origine', ot.origine);
   }
 
   function colonnesListe() {
     return [
       { cle: 'id', libelle: I18n.t('ordres.colonnes_liste.numero'), rendu: (ot) => UI.html`<a href="#/ot/${encodeURIComponent(ot.id)}">${ot.id}</a>` },
       { cle: 'priorite', libelle: I18n.t('commun.champ.priorite'), rendu: (ot) => UI.badgePriorite(ot.priorite) },
-      { cle: 'statut', libelle: I18n.t('commun.champ.statut'), valeurTri: (ot) => String(STATUTS.indexOf(ot.statut)), rendu: (ot) => UI.badgeStatut(ot.statut) },
+      { cle: 'statut', libelle: I18n.t('commun.champ.statut'), valeurTri: (ot) => String(STATUTS.indexOf(ot.statut)), rendu: (ot) => UI.badgeValeur('ordres_travail', 'statut', ot.statut) },
       { cle: 'equipement', libelle: I18n.t('commun.champ.equipement'), valeurTri: (ot) => repereEquipement(ot.equipement_id),
         rendu: (ot) => UI.html`<b class="sans-coupure">${repereEquipement(ot.equipement_id)}</b>` },
       { cle: 'titre', libelle: I18n.t('ordres.colonnes_liste.titre'), classe: 'ot-col-titre', rendu: (ot) => UI.html`${ot.titre}${badgeAnomalie(ot)}` },
-      { cle: 'type', libelle: I18n.t('ordres.barre_filtres.type') },
+      { cle: 'type', libelle: I18n.t('ordres.barre_filtres.type'), table: 'ordres_travail' },
       { cle: 'technicien', libelle: I18n.t('commun.champ.technicien'), valeurTri: (ot) => nomTechnicien(ot.technicien_id), rendu: (ot) => nomTechnicien(ot.technicien_id) },
       { cle: 'date_prevue', libelle: I18n.t('ordres.colonnes_liste.prevu'), classe: 'ot-col-date', rendu: (ot) => UI.html`<span class="sans-coupure">${UI.dateFr(ot.date_prevue)}</span>${badgeRetard(ot)}` },
       { cle: 'origine', libelle: I18n.t('ordres.colonnes_liste.origine'), classe: 'ot-col-origine', rendu: origineCourte },
@@ -121,11 +121,11 @@ Object.assign(Ordres, (() => {
     if (!ordres.length) return UI.vide(I18n.t('ordres.cartes.aucun_ordre_travail'), I18n.t('ordres.cartes.aucun_ot_correspond_filtres'), 'ordres');
     return UI.html`<ul class="liste-cartes">${ordres.map((ot) => UI.html`
       <li><a href="#/ot/${encodeURIComponent(ot.id)}" class="${ot.priorite === 'P1' || ot.priorite === 'P2' ? 'accent-' + ot.priorite.toLowerCase() : ''}">
-        <div class="carte-tete"><b>${ot.id}</b>${UI.badgePriorite(ot.priorite)}${UI.badgeStatut(ot.statut)}${badgeRetard(ot)}${badgeAnomalie(ot)}</div>
+        <div class="carte-tete"><b>${ot.id}</b>${UI.badgePriorite(ot.priorite)}${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}${badgeRetard(ot)}${badgeAnomalie(ot)}</div>
         <div class="carte-titre">${ot.titre}</div>
         <div class="carte-meta"><span>${repereEquipement(ot.equipement_id)}</span>
           ${ot.date_prevue ? UI.html`<span>${I18n.t('ordres.cartes.prevu_date_prevue', { date_prevue: UI.dateFr(ot.date_prevue) })}</span>` : ''}
-          <span>${nomTechnicien(ot.technicien_id) || I18n.t('ordres.cartes.non_affecte')}</span><span>${ot.type}</span></div>
+          <span>${nomTechnicien(ot.technicien_id) || I18n.t('ordres.cartes.non_affecte')}</span><span>${Schema.libelleValeur('ordres_travail', 'type', ot.type)}</span></div>
       </a></li>`)}</ul>`;
   }
 

@@ -221,7 +221,9 @@ Object.assign(Import.assistant, (() => {
 
   function fiche(ligne) {
     const etat = A.etat();
-    const valeurs = (FICHE[etat.type] || []).map((cle) => texte(ligne.valeurs && ligne.valeurs[cle])).filter(Boolean)
+    // Famille d'un code : valeur stockée de la liste, affichée par son libellé (D155).
+    const valeurs = (FICHE[etat.type] || []).map((cle) => (etat.type === 'codes' && cle === 'famille'
+      ? Schema.libelleValeur('codes_defaillance', 'famille', texte(ligne.valeurs && ligne.valeurs.famille)) : texte(ligne.valeurs && ligne.valeurs[cle]))).filter(Boolean)
       .map((valeur) => (valeur.length > 60 ? I18n.t('import.texte_coupe', { debut: valeur.slice(0, 59) }) : valeur));
     const cible = ligne.cible && !ligne.doublon && ligne.action !== 'refusee' ? ligne.cible : '';
     return UI.html`${valeurs.length ? UI.html`<b>${valeurs[0]}</b>${valeurs.slice(1).map((v) => UI.html`<span class="import-fiche-suite">${v}</span>`)}` : '—'}

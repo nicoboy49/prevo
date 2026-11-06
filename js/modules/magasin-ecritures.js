@@ -73,8 +73,8 @@ Object.assign(Magasin, (() => {
     if (!ot) throw ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
     if (!Ordres.estOuvert(ot)) {
       throw ErreurValidation(mouvement === 'sortie'
-        ? I18n.t('magasin.verifier_ot_ouvert.ot_peut_etre_autre', { otId, otStatut: ot.statut })
-        : I18n.t('magasin.verifier_ot_ouvert.ot_peut_etre_autre_2', { otId, otStatut: ot.statut }));
+        ? I18n.t('magasin.verifier_ot_ouvert.ot_peut_etre_autre', { otId, otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) })
+        : I18n.t('magasin.verifier_ot_ouvert.ot_peut_etre_autre_2', { otId, otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) }));
     }
     return ot;
   }
@@ -248,7 +248,7 @@ Object.assign(Magasin, (() => {
     return Donnees.modifier('achats', (lignes) => {
       const achat = ligneAchat(lignes, achatId);
       if (achat.statut !== 'demandée') {
-        throw ErreurValidation(I18n.t('magasin.commander.achat_deja_sans_doute', { achatId, achatStatut: achat.statut }));
+        throw ErreurValidation(I18n.t('magasin.commander.achat_deja_sans_doute', { achatId, achatStatut: Schema.libelleValeur('achats', 'statut', achat.statut) }));
       }
       achat.statut = 'commandée';
       return achat.statut;
@@ -277,7 +277,7 @@ Object.assign(Magasin, (() => {
       if (!Donnees.trouver('articles', achat.article_id)) throw ErreurValidation(I18n.t('magasin.recevoir.article_achat_introuvable', { article_id: achat.article_id, achatId }));
       if (achat.statut === 'reçue') return { achat: Object.assign({}, achat), dejaRecu: true };
       if (achat.statut !== 'commandée') {
-        throw ErreurValidation(I18n.t('magasin.recevoir.achat_commandez_avant_receptionner', { achatId, achatStatut: achat.statut }));
+        throw ErreurValidation(I18n.t('magasin.recevoir.achat_commandez_avant_receptionner', { achatId, achatStatut: Schema.libelleValeur('achats', 'statut', achat.statut) }));
       }
       achat.statut = 'reçue';
       achat.date_reception = outils.aujourdhui();

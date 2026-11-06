@@ -279,7 +279,7 @@ Object.assign(Wiki, (() => {
       const section = UI.element(UI.html`<section class="wiki-section wiki-texte" data-rubrique="${rubrique.nom}" aria-labelledby="${id}">
         <h2 id="${id}">${rubrique.nom}</h2>
         ${rang ? '' : UI.html`<p class="wiki-origine" data-origine="${textes.origine}">${textes.origine.includes('IA')
-          ? UI.html`<span class="wiki-origine-ia">IA</span> ` : ''}<span>${texteOrigine(textes)}</span></p>`}
+          ? UI.html`<span class="wiki-origine-ia">${Schema.libelleValeur('wiki_pages', 'origine', 'IA')}</span> ` : ''}<span>${texteOrigine(textes)}</span></p>`}
         ${PROSE.includes(rubrique.nom) ? UI.html`<p class="wiki-prose"></p>` : UI.html`<ul class="wiki-phrases"></ul>`}</section>`);
       const zone = UI.$('.wiki-prose, .wiki-phrases', section);
       rubrique.phrases.forEach((phrase, n) => {

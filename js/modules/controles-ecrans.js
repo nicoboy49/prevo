@@ -14,7 +14,7 @@ Object.assign(Controles, (() => {
   // Règles et outils de controles-regles.js et controles-ecritures.js.
   const { texte, dateIso, observationsALever, equipementSuivi, verifierRealisation, verifierLevee,
     verifierFichierRapport, EXTENSIONS_RAPPORT } = Controles.interne;
-  const { STATUTS, etat, sous30Jours } = Controles;
+  const { STATUTS, etat, sous30Jours, libelleStatut } = Controles;
 
   const FILTRE_30J = '30j';
   // Instruments de la liste : statut, libellé, couleur du trait (le libellé dit toujours le statut).
@@ -55,7 +55,7 @@ Object.assign(Controles, (() => {
 
   /** Statut principal puis statuts secondaires (badges : texte toujours affiché, la couleur aide). */
   function badgesStatut(controle, etatCalcule) {
-    return UI.html`<span class="controles-statuts" data-controle="${controle.id}">${UI.badgeStatut(etatCalcule.statut)}${etatCalcule.secondaires.map((statut) => UI.html` <span class="controles-secondaire" title="${I18n.t('controles.badges_statut.aussi_statut', { statut })}">${UI.badgeStatut(statut)}</span>`)}</span>`;
+    return UI.html`<span class="controles-statuts" data-controle="${controle.id}">${UI.badgeStatut(etatCalcule.statut, '', libelleStatut(etatCalcule.statut))}${etatCalcule.secondaires.map((statut) => UI.html` <span class="controles-secondaire" title="${I18n.t('controles.badges_statut.aussi_statut', { statut: libelleStatut(statut) })}">${UI.badgeStatut(statut, '', libelleStatut(statut))}</span>`)}</span>`;
   }
 
   /** Lien « Créer un OT » : formulaire de l'OT pré-rempli (rien n'est créé sans validation). Titre
@@ -159,7 +159,7 @@ Object.assign(Controles, (() => {
 
   function optionsStatut() {
     return [{ valeur: '', libelle: I18n.t('controles.options_statut.tous_statuts') }, { valeur: FILTRE_30J, libelle: I18n.t('controles.options_statut.sous_30_jours_retards') }]
-      .concat(STATUTS.map((statut) => ({ valeur: statut, libelle: statut.charAt(0).toUpperCase() + statut.slice(1) })));
+      .concat(STATUTS.map((statut) => ({ valeur: statut, libelle: libelleStatut(statut).charAt(0).toUpperCase() + libelleStatut(statut).slice(1) })));
   }
 
   function colonnesListe() {
@@ -426,11 +426,49 @@ Object.assign(Controles, (() => {
       .sort((a, b) => texte(b.date_creation).localeCompare(texte(a.date_creation)) || texte(b.id).localeCompare(texte(a.id)));
     return UI.html`<article class="carte controles-ot"><h2>${I18n.html('controles.carte_ordres.ot_reglementaires_equipement', { nbOrdres: ordres.length })}</h2>
       ${ordres.length ? UI.html`<ul class="controles-liens">${ordres.map((ot) => UI.html`<li>
-        <a href="#/ot/${encodeURIComponent(ot.id)}">${ot.id}</a> ${UI.badgeStatut(ot.statut)}
+        <a href="#/ot/${encodeURIComponent(ot.id)}">${ot.id}</a> ${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}
         <span class="controles-titre-ot">${ot.titre}</span>
         <span class="muted">${ot.date_prevue ? I18n.t('controles.carte_ordres.prevu_date_prevue', { date_prevue: UI.dateFr(ot.date_prevue) }) : I18n.t('controles.carte_ordres.cree_date_creation', { date_creation: UI.dateFr(ot.date_creation) })}</span></li>`)}</ul>`
         : UI.html`<p class="muted">${I18n.t('controles.carte_ordres.aucun_ot_reglementaire_equipement')}</p>`}
     </article>`;
+  }
+
+  // Action d'une ligne du journal (D156) : écrite en français par Prévo (Donnees.modifier : « création » ou
+  // « modification : champs », puis « — » et le complément de controles-ecritures.js ou de l'import). Ces marqueurs
+  // fixes sont traduits ici, à l'affichage ; une action inconnue s'affiche telle quelle.
+  const MOTIF_REALISATION = /^contrôle réalisé le (.+?)(?: par (.+?))? ; (?:rapport : (.+?)|(sans rapport joint)) ; (?:observations : ([\s\S]+)|(sans observation))$/;
+  const MOTIF_LEVEE = /^observations levées le (.+?) : ([\s\S]*)$/;
+  const MOTIF_IMPORT = /^import (.+)$/;
+
+  function complementJournal(complement) {
+    if (complement === 'création du contrôle réglementaire') return I18n.t('controles.journal.creation_controle');
+    if (complement === 'modification du contrôle réglementaire') return I18n.t('controles.journal.modification_controle');
+    let trouve = MOTIF_REALISATION.exec(complement);
+    if (trouve) {
+      return I18n.t('controles.journal.realisation', {
+        realise: trouve[2] ? I18n.t('controles.journal.realise_le_par', { date: trouve[1], organisme: trouve[2] })
+          : I18n.t('controles.journal.realise_le', { date: trouve[1] }),
+        rapport: trouve[4] ? I18n.t('controles.journal.sans_rapport') : I18n.t('controles.journal.rapport', { rapport: trouve[3] }),
+        observations: trouve[6] ? I18n.t('controles.journal.sans_observation')
+          : I18n.t('controles.journal.observations', { observations: trouve[5] }),
+      });
+    }
+    trouve = MOTIF_LEVEE.exec(complement);
+    if (trouve) return I18n.t('controles.journal.observations_levees', { date: trouve[1], commentaire: trouve[2] });
+    trouve = MOTIF_IMPORT.exec(complement);
+    return trouve ? I18n.t('controles.journal.import', { fichier: trouve[1] }) : null;
+  }
+
+  function actionJournal(action) {
+    const brute = texte(action);
+    const coupure = brute.indexOf(' — ');
+    const debut = coupure < 0 ? brute : brute.slice(0, coupure);
+    let base = null;
+    if (debut === 'création') base = I18n.t('controles.journal.creation');
+    else if (debut.startsWith('modification : ')) base = I18n.t('controles.journal.modification', { champs: debut.slice(15) });
+    if (base === null || coupure < 0) return base === null ? brute : base;
+    const complement = complementJournal(brute.slice(coupure + 3));
+    return complement === null ? brute : I18n.t('controles.journal.action_complement', { action: base, complement });
   }
 
   function carteHistorique(controle) {
@@ -440,7 +478,7 @@ Object.assign(Controles, (() => {
     return UI.html`<article class="carte controles-historique"><h2>${I18n.html('controles.carte_historique.historique_nb_entrees', { nbEntrees: entrees.length })}</h2>
       ${entrees.length ? UI.html`<ol class="controles-journal">${entrees.slice(0, LIMITE_HISTORIQUE).map((entree) => UI.html`<li>
         <span class="controles-quand">${UI.dateHeureFr(entree.date_heure)}</span>
-        <span class="controles-action">${entree.action}</span>
+        <span class="controles-action">${actionJournal(entree.action)}</span>
         <span class="muted">${[entree.profil, entree.poste].filter(Boolean).join(' · ')}</span></li>`)}</ol>
         ${entrees.length > LIMITE_HISTORIQUE ? UI.html`<p class="note">${I18n.t('controles.carte_historique.plus_recentes_reste_journal', { limite: LIMITE_HISTORIQUE, nbEntrees: entrees.length })}</p>` : ''}`
         : UI.html`<p class="muted">${I18n.t('controles.carte_historique.aucune_modification_enregistree_prevo')}</p>`}

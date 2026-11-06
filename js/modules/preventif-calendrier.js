@@ -51,7 +51,7 @@ Object.assign(Preventif, (() => {
       <span class="pv-date sans-coupure">${UI.dateFr(element.date)}</span>
       <span class="pv-quoi"><b>${repere(element.equipementId)}</b> ${titre}</span>
       <span class="pv-marques">
-        ${ot ? UI.html`<a class="pv-lien-ot" href="#/ot/${encodeURIComponent(ot.id)}">${ot.id}</a>${UI.badgeStatut(ot.statut)}`
+        ${ot ? UI.html`<a class="pv-lien-ot" href="#/ot/${encodeURIComponent(ot.id)}">${ot.id}</a>${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}`
           : UI.html`<span class="badge info">${I18n.t('preventif.element.echeance')}</span>`}
         ${element.estimee ? UI.html`<span class="badge neutre" title="${I18n.t('preventif.element.date_estimee_apres_heures')}">${I18n.t('preventif.element.estimee')}</span>` : ''}
         ${enRetard ? UI.html`<span class="badge ko">${I18n.t('preventif.element.retard')}</span>` : ''}

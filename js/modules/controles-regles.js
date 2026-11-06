@@ -27,6 +27,12 @@ const Controles = (() => {
 
   /** Statuts calculés (RG9), dans l'ordre de priorité : le premier vrai est le statut affiché. */
   const STATUTS = Object.freeze(['en retard', 'observations à lever', 'à planifier', 'à jour']);
+  // Libellé affiché d'un statut calculé (controles.statut_calcule.*) : le statut reste la valeur des filtres et adresses.
+  const CLES_STATUT = Object.freeze({ 'en retard': 'en_retard', 'observations à lever': 'observations_a_lever',
+    'à planifier': 'a_planifier', 'à jour': 'a_jour' });
+  function libelleStatut(statut) {
+    return CLES_STATUT[statut] ? I18n.t('controles.statut_calcule.' + CLES_STATUT[statut]) : statut;
+  }
 
   // Un contrôle est « à planifier » quand sa prochaine date tombe dans les 30 jours (RG9).
   const HORIZON_A_PLANIFIER_JOURS = 30;
@@ -183,7 +189,7 @@ const Controles = (() => {
   }
 
   return {
-    STATUTS,
+    STATUTS, libelleStatut,
     // règles pures (ARCHITECTURE.md §15.7)
     ajouterMois, prochaineDate, etat, sous30Jours,
     // Usage interne au module (pas une API).

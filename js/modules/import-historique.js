@@ -86,9 +86,9 @@ Object.assign(Import, (() => {
   function construireOt(contexte, o, ligne, equipement) {
     const [v, raisons] = [ligne.valeurs, ligne.raisons];
     const type = v.type || TYPE_DEFAUT;
-    if (!v.type) raisons.push(I18n.t('import.construire_ot.type_absent', { type: TYPE_DEFAUT }));
+    if (!v.type) raisons.push(I18n.t('import.construire_ot.type_absent', { type: Schema.libelleValeur('ordres_travail', 'type', TYPE_DEFAUT) }));
     const priorite = v.priorite || PRIORITE_DEFAUT;
-    if (!v.priorite) raisons.push(I18n.t('import.construire_ot.priorite_absente', { priorite: PRIORITE_DEFAUT }));
+    if (!v.priorite) raisons.push(I18n.t('import.construire_ot.priorite_absente', { priorite: Schema.libelleValeur('ordres_travail', 'priorite', PRIORITE_DEFAUT) }));
     const titre = v.titre || titreDe(v.compte_rendu, o);
     if (!v.titre) raisons.push(I18n.t('import.construire_ot.titre_absent_debut_compte'));
     const dateCreation = v.date_creation || v.date_debut;

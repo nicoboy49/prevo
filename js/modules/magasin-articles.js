@@ -523,7 +523,7 @@ Object.assign(Magasin, (() => {
         const ot = Donnees.trouver('ordres_travail', l.otId);
         const equipement = ot ? Donnees.trouver('equipements', ot.equipement_id) : null;
         return UI.html`<li>${lienOt(l.otId)} <span>${equipement ? equipement.repere : ''}</span>
-          ${ot ? UI.badgeStatut(ot.statut) : ''} <span class="muted">${I18n.t('magasin.carte_ot_consommateurs.derniere_net_quantite_unite', { derniere: UI.dateFr(l.derniere), quantiteUnite: quantiteUnite(l.net, article.unite) })}</span></li>`;
+          ${ot ? UI.badgeValeur('ordres_travail', 'statut', ot.statut) : ''} <span class="muted">${I18n.t('magasin.carte_ot_consommateurs.derniere_net_quantite_unite', { derniere: UI.dateFr(l.derniere), quantiteUnite: quantiteUnite(l.net, article.unite) })}</span></li>`;
       })}</ul>` : UI.html`<p class="muted">${I18n.t('magasin.carte_ot_consommateurs.aucun_ordre_travail_consomme')}</p>`}</article>`;
   }
 
@@ -532,7 +532,7 @@ Object.assign(Magasin, (() => {
       .sort((a, b) => texte(b.date).localeCompare(texte(a.date)) || texte(b.id).localeCompare(texte(a.id)));
     return UI.html`<article class="carte"><h2>${I18n.html('magasin.carte_achats_article.achats_nb_achats', { nbAchats: achats.length })}</h2>
       ${achats.length ? UI.html`<ul class="magasin-liens">${achats.slice(0, LIMITE_FICHE).map((achat) => UI.html`<li>
-        <b>${achat.id}</b> ${UI.badgeStatut(achat.statut)} <span>${UI.nombreFr(achat.quantite)} × ${UI.euro(achat.prix_unitaire)}</span>
+        <b>${achat.id}</b> ${UI.badgeValeur('achats', 'statut', achat.statut)} <span>${UI.nombreFr(achat.quantite)} × ${UI.euro(achat.prix_unitaire)}</span>
         <span class="muted">${UI.dateFr(achat.date)}${achat.date_reception ? ' ' + I18n.t('magasin.carte_achats_article.recu_date_reception', { date_reception: UI.dateFr(achat.date_reception) }) : ''} · ${libelleFournisseur(achat.fournisseur_id)}</span></li>`)}</ul>`
         : UI.html`<p class="muted">${I18n.t('magasin.carte_achats_article.aucun_achat_article')}</p>`}</article>`;
   }
@@ -566,7 +566,7 @@ Object.assign(Magasin, (() => {
           </div>` : ''}
         </div>
         ${enCours.length ? UI.html`<div class="alertes"><div class="alerte" role="status">${UI.icone('apropos')}<div class="alerte-texte">
-          ${I18n.t('magasin.fiche_article.achat_cours')} ${enCours.map((achat) => UI.html`<b>${achat.id}</b> (${achat.statut}, ${UI.nombreFr(achat.quantite)}) `)}
+          ${I18n.t('magasin.fiche_article.achat_cours')} ${enCours.map((achat) => UI.html`<b>${achat.id}</b> (${Schema.libelleValeur('achats', 'statut', achat.statut)}, ${UI.nombreFr(achat.quantite)}) `)}
           ${I18n.html('magasin.fiche_article.voir_achats')}</div></div></div>` : ''}
         ${instrumentsFiche(article, stock)}
         <div class="magasin-zone-article"></div>

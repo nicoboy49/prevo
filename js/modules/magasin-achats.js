@@ -30,7 +30,7 @@ Object.assign(Magasin, (() => {
   // ===========================================================================================
 
   function enCoursHtml(achats) {
-    return UI.html`${achats.map((achat) => UI.html`<span class="magasin-achat-en-cours">${achat.id} ${UI.badgeStatut(achat.statut)}
+    return UI.html`${achats.map((achat) => UI.html`<span class="magasin-achat-en-cours">${achat.id} ${UI.badgeValeur('achats', 'statut', achat.statut)}
       <span class="muted">${UI.nombreFr(achat.quantite)}</span></span> `)}`;
   }
 
@@ -157,7 +157,7 @@ Object.assign(Magasin, (() => {
     return listeAdaptative({
       lignes: achats, libelle: I18n.t('magasin.liste_achats.achats'), vide: I18n.t('magasin.liste_achats.aucun_achat'), colonnes,
       carte: (a) => UI.html`<div class="carte-ligne">
-        <div class="carte-tete"><b>${a.id}</b>${UI.badgeStatut(a.statut)}</div>
+        <div class="carte-tete"><b>${a.id}</b>${UI.badgeValeur('achats', 'statut', a.statut)}</div>
         <div class="carte-titre">${article(a) ? libelleArticle(article(a)) : a.article_id}</div>
         <div class="carte-meta">${I18n.html('magasin.liste_achats.date_quantite_quantite_euro', { date: UI.dateFr(a.date), quantite: UI.nombreFr(a.quantite), euro: UI.euro(montant(a)) })}${a.fournisseur_id ? UI.html`<span>${libelleFournisseur(a.fournisseur_id)}</span>` : ''}
           ${a.date_reception ? UI.html`<span>${I18n.t('magasin.liste_achats.recu_date_reception', { date_reception: UI.dateFr(a.date_reception) })}</span>` : ''}</div>

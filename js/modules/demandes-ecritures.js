@@ -21,7 +21,7 @@ Object.assign(Demandes, (() => {
   function verifierATraiter(demande, diId) {
     if (!demande) throw new Donnees.ErreurValidation(I18n.t('demandes.verifier_atraiter.demande_introuvable', { diId }));
     if (!STATUTS_A_TRAITER.includes(demande.statut)) {
-      throw new Donnees.ErreurValidation(I18n.t('demandes.verifier_atraiter.statut_actuel', { messageDejaTraitee: messageDejaTraitee(), demandeStatut: demande.statut }));
+      throw new Donnees.ErreurValidation(I18n.t('demandes.verifier_atraiter.statut_actuel', { messageDejaTraitee: messageDejaTraitee(), demandeStatut: Schema.libelleValeur('demandes', 'statut', demande.statut) }));
     }
   }
 
@@ -214,7 +214,7 @@ Object.assign(Demandes, (() => {
     const ordres = await Donnees.rechargerTable('ordres_travail');
     const ot = ordres.find((ligne) => ligne.id === otId);
     if (!ot) throw new Donnees.ErreurValidation(I18n.t('commun.message.ot_introuvable', { otId }));
-    if (!estOuvert(ot)) throw new Donnees.ErreurValidation(I18n.t('demandes.regrouper.ordre_travail_plus_ouvert', { otId, otStatut: ot.statut }));
+    if (!estOuvert(ot)) throw new Donnees.ErreurValidation(I18n.t('demandes.regrouper.ordre_travail_plus_ouvert', { otId, otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) }));
     if (ot.equipement_id !== demande.equipement_id) {
       throw new Donnees.ErreurValidation(I18n.t('demandes.regrouper.ordre_travail_concerne_autre', { otId }));
     }

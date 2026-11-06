@@ -342,7 +342,7 @@ const Preventif = (() => {
     if (otOuvert) {
       etat.statut = 'ot_ouvert';
       etat.otOuvertId = otOuvert.id;
-      etat.raison = otOuvert.id + ' ouvert (' + otOuvert.statut + ')';
+      etat.raison = I18n.t('preventif.evaluer_gamme.ot_ouvert_statut', { otId: otOuvert.id, statut: Schema.libelleValeur('ordres_travail', 'statut', otOuvert.statut) });
     }
     return etat;
   }

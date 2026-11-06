@@ -293,7 +293,7 @@ Object.assign(Wiki, (() => {
     article: (e) => [e.reference, e.emplacement ? I18n.t('wiki.article.range_emplacement', { emplacement: e.emplacement }) : ''],
     technicien: (e) => [e.metier],
     'savoir-faire': (e) => [e.rattachement ? e.rattachement.titre : ''],
-    intervention: (e) => [UI.dateFr(e.date), e.statut],
+    intervention: (e) => [UI.dateFr(e.date), Schema.libelleValeur('ordres_travail', 'statut', e.statut)],
   };
 
   function entiteTrouvee(type, entite) {
@@ -528,7 +528,7 @@ Object.assign(Wiki, (() => {
 
   function carteIntervention(ot) {
     return UI.html`<li class="wiki-carte-intervention" data-id="${ot.id}"><a href="${adresse(ot.lien)}">
-      <div class="carte-tete"><b>${ot.id}</b>${UI.badgeStatut(ot.statut)}</div>
+      <div class="carte-tete"><b>${ot.id}</b>${UI.badgeValeur('ordres_travail', 'statut', ot.statut)}</div>
       <div class="carte-titre">${ot.titre}</div>
       <div class="carte-meta"><span>${UI.dateFr(ot.date)}</span>${ot.machine ? UI.html`<span>${repere(ot.machine)}</span>` : ''}${ot.panne ? UI.html`<span>${ot.panne.libelle}</span>` : ''}</div>
     </a></li>`;
@@ -606,7 +606,7 @@ Object.assign(Wiki, (() => {
           { cle: 'date', libelle: I18n.t('commun.champ.date'), rendu: (ot) => UI.dateFr(ot.date) },
           { cle: 'id', libelle: 'N°', classe: 'sans-coupure', rendu: (ot) => lienEntite(ot.lien, ot.id) },
           { cle: 'titre', libelle: I18n.t('wiki.libelle.intervention'), classe: 'wiki-cellule-titre' },
-          { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (ot) => UI.badgeStatut(ot.statut) },
+          { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (ot) => UI.badgeValeur('ordres_travail', 'statut', ot.statut) },
           { cle: 'machine', libelle: I18n.t('wiki.libelle.machine'), valeurTri: (ot) => repere(ot.machine), rendu: (ot) => lienMachine(ot.machine) },
           { cle: 'panne', libelle: I18n.t('wiki.libelle.panne'), valeurTri: (ot) => (ot.panne ? ot.panne.libelle : ''),
             rendu: (ot) => (ot.panne ? lienEntite(ot.panne.lien, ot.panne.libelle) : '') },

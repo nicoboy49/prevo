@@ -41,22 +41,22 @@ Object.assign(Ordres, (() => {
         <div>
           <div class="bt-entreprise">${entreprise ? I18n.t('ordres.bon_de_travail.entreprise_prevo', { entreprise }) : I18n.t('ordres.bon_de_travail.prevo')}</div>
           <h1>${I18n.t('ordres.bon_de_travail.bon_travail')}</h1>
-          <div class="bt-numero">${ot.id} <span class="bt-priorite">${ot.priorite}</span></div>
-          <div class="bt-meta">${I18n.html('ordres.bon_de_travail.type_statut_prevu_technicien', { otType: ot.type, otStatut: ot.statut, datePrevue: UI.dateFr(ot.date_prevue) || '—', technicien: nomTechnicien(ot.technicien_id) || '—', tempsPrevu: ot.temps_prevu_h ? UI.heures(ot.temps_prevu_h) : '—' })}</div>
+          <div class="bt-numero">${ot.id} <span class="bt-priorite">${Schema.libelleValeur('ordres_travail', 'priorite', ot.priorite)}</span></div>
+          <div class="bt-meta">${I18n.html('ordres.bon_de_travail.type_statut_prevu_technicien', { otType: Schema.libelleValeur('ordres_travail', 'type', ot.type), otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut), datePrevue: UI.dateFr(ot.date_prevue) || '—', technicien: nomTechnicien(ot.technicien_id) || '—', tempsPrevu: ot.temps_prevu_h ? UI.heures(ot.temps_prevu_h) : '—' })}</div>
         </div>
         <div class="bt-qr">${qrBon(equipementDe(ot))}</div>
       </header>
       <div class="bt-colonnes">
         <section class="bt-equipement"><h2>${I18n.t('commun.champ.equipement')}</h2>
           <dl class="valeurs"><dt>${I18n.t('commun.champ.repere')}</dt><dd>${equipement.repere || ot.equipement_id}</dd><dt>${I18n.t('commun.champ.designation')}</dt><dd>${equipement.designation || ''}</dd>
-            <dt>${I18n.t('ordres.bon_de_travail.localisation')}</dt><dd>${cheminLocalisation(equipement.localisation_id)}</dd><dt>${I18n.t('commun.champ.criticite')}</dt><dd>${equipement.criticite || ''}</dd>
+            <dt>${I18n.t('ordres.bon_de_travail.localisation')}</dt><dd>${cheminLocalisation(equipement.localisation_id)}</dd><dt>${I18n.t('commun.champ.criticite')}</dt><dd>${Schema.libelleValeur('equipements', 'criticite', equipement.criticite)}</dd>
             <dt>${I18n.t('ordres.bon_de_travail.habilitation')}</dt><dd>${equipement.habilitation_requise || 'aucune'}</dd></dl>
         </section>
         <section class="bt-travail"><h2>${I18n.t('ordres.bon_de_travail.travail_faire')}</h2>
           <p class="bt-texte">${ot.titre}</p>
           ${ot.travail_a_faire ? UI.html`<p class="bt-texte">${ot.travail_a_faire}</p>` : ''}
           ${ot.consignes ? UI.html`<p class="bt-texte">${I18n.html('ordres.bon_de_travail.consignes_consignes', { consignes: ot.consignes })}</p>` : ''}
-          ${di ? UI.html`<p>${I18n.html('ordres.bon_de_travail.demande_di_id', { diId: di.id, symptome: texte(di.symptome).replace(/[.\s]+$/, '') })}${di.impact ? ' ' + I18n.t('ordres.bon_de_travail.impact', { impact: di.impact }) : ''}</p>` : ''}
+          ${di ? UI.html`<p>${I18n.html('ordres.bon_de_travail.demande_di_id', { diId: di.id, symptome: texte(di.symptome).replace(/[.\s]+$/, '') })}${di.impact ? ' ' + I18n.t('ordres.bon_de_travail.impact', { impact: Schema.libelleValeur('demandes', 'impact', di.impact) }) : ''}</p>` : ''}
         </section>
       </div>
       <section class="bt-consignation"><h2>${I18n.t('ordres.bon_de_travail.consignation')}</h2>

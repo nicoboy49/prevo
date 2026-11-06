@@ -44,7 +44,7 @@ Object.assign(Ordres, (() => {
 
   // Pourquoi le bloc est en lecture seule (aucun bouton).
   function raisonLectureSeule(ot) {
-    if (!estOuvert(ot)) return I18n.t('ordres.raison_lecture_seule.ot_plus_aucune_sortie', { otStatut: ot.statut });
+    if (!estOuvert(ot)) return I18n.t('ordres.raison_lecture_seule.ot_plus_aucune_sortie', { otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) });
     return I18n.t('ordres.raison_lecture_seule.sorties_retours_sont_saisis');
   }
 

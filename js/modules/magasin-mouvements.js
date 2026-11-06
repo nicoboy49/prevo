@@ -19,7 +19,7 @@ Object.assign(Magasin, (() => {
 
   /** Badge du type de mouvement (texte toujours affiché ; la couleur aide seulement). */
   function badgeMouvement(type) {
-    return UI.badgeStatut(type, TONS_MOUVEMENT[type] || 'neutre');
+    return UI.badgeValeur('mouvements_stock', 'type', type, TONS_MOUVEMENT[type] || 'neutre');
   }
 
   function articleDe(mouvement) {
@@ -83,7 +83,7 @@ Object.assign(Magasin, (() => {
       <form class="filtres magasin-filtres" id="magasin-filtres-mouvements" data-hors-saisie role="search" aria-label="${I18n.t('magasin.onglet_mouvements.filtrer_mouvements')}">
         <label class="visuellement-cache" for="magasin-filtre-type">${I18n.t('magasin.onglet_mouvements.type_mouvement')}</label>
         <select id="magasin-filtre-type" name="type">${optionsHtml([{ valeur: '', libelle: I18n.t('magasin.onglet_mouvements.tous_types') }]
-          .concat(TYPES_MOUVEMENT.map((type) => ({ valeur: type, libelle: type }))), filtres.type)}</select>
+          .concat(TYPES_MOUVEMENT.map((type) => ({ valeur: type, libelle: Schema.libelleValeur('mouvements_stock', 'type', type) }))), filtres.type)}</select>
         <label class="visuellement-cache" for="magasin-filtre-article">${I18n.t('commun.champ.article')}</label>
         <select id="magasin-filtre-article" name="article">${optionsHtml(optionsArticles, filtres.article)}</select>
         <label class="visuellement-cache" for="magasin-filtre-ot">${I18n.t('magasin.onglet_mouvements.ordre_travail')}</label>
