@@ -1016,9 +1016,10 @@ class TestComparaisonDesLangues(unittest.TestCase):
 
 
 class TestLanguesDuDepot(unittest.TestCase):
-    """Le vrai dépôt : js/i18n/en.js en squelette (T264), l'anglais pas encore déclaré (T278)."""
+    """Le vrai dépôt : js/i18n/en.js aux mêmes sections que fr.js (squelette T264), rempli par les traductions
+    T267-T276 : complet ; l'aide longue anglaise (js/i18n/aide/en.js, T277) compte dès qu'elle existe (T290)."""
 
-    def test_squelette_anglais_aux_sections_du_francais(self):
+    def test_anglais_aux_sections_du_francais(self):
         def sections(rel, code):
             texte = (RACINE / rel).read_text(encoding='utf-8')
             blocs = list(ext.RE_BLOC.finditer(texte))
@@ -1026,24 +1027,20 @@ class TestLanguesDuDepot(unittest.TestCase):
                 self.assertIn("I18n.ajouter('%s', {" % code, m.group(2), m.group(1))
             return [m.group(1) for m in blocs]
         self.assertEqual(sections('js/i18n/en.js', 'en'), sections('js/i18n/fr.js', 'fr'))
-        self.assertEqual(ctl.Langue('en', RACINE, ['js/i18n/en.js']).entrees, {})
 
-    def test_anglais_tout_manquant_et_controle_sans_option_a_zero(self):
+    def test_anglais_complet_et_controle_sans_option_a_zero(self):
         francais = ctl.Langue('fr', RACINE, ctl.DICTIONNAIRES)
         controle = ctl.Controle(RACINE)
         controle.lancer(langues=['en'])
         comparaison, = controle.comparaisons
-        self.assertEqual(sorted(s.message.split(' — ')[0] for s in comparaison.signalements),
-                         sorted(c for c, (_, _, rel) in francais.entrees.items() if rel == 'js/i18n/fr.js'))
-        self.assertEqual({s.genre for s in comparaison.signalements}, {'manquante'})
-        self.assertEqual(len(comparaison.repli_aide),
-                         sum(1 for _, _, rel in francais.entrees.values() if rel == 'js/i18n/aide/fr.js'))
+        self.assertEqual([(s.genre, s.message) for s in comparaison.signalements], [])
+        aide_anglaise = ctl.Langue('en', RACINE, ['js/i18n/aide/en.js']).entrees
+        attendu = 0 if aide_anglaise else sum(1 for _, _, rel in francais.entrees.values() if rel == 'js/i18n/aide/fr.js')
+        self.assertEqual(len(comparaison.repli_aide), attendu)
         sortie = io.StringIO()
         with redirect_stdout(sortie):
-            self.assertEqual(ctl.main(['--langue', 'en']), 1)
-            self.assertNotIn('en', textes_langues.langues_declarees(RACINE))
+            self.assertEqual(ctl.main(['--langue', 'en']), 0, sortie.getvalue()[-3000:])
             self.assertEqual(ctl.main([]), 0, sortie.getvalue()[-3000:])
-
 
 if __name__ == '__main__':
     unittest.main()
