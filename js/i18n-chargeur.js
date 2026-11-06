@@ -36,6 +36,9 @@
   if (document.readyState !== 'loading' || !script || !script.src) return;
   // Dossier de ce fichier (js/), quelle que soit l'adresse de la page : index.html à la racine, ou une autre page.
   const dossier = script.src.replace(/[?#].*$/, '').replace(/[^/]*$/, '') + 'i18n/';
+  const avecAide = I18n.langues.find((langue) => langue.code === code).aide !== false;
   I18n.choisir(code);
-  document.write(balise(dossier + code + '.js') + balise(dossier + 'aide/' + code + '.js'));
+  document.write(balise(dossier + code + '.js') + (avecAide ? balise(dossier + 'aide/' + code + '.js') : ''));
+  // Langue sans aide longue traduite (« aide: false » dans langues.js) : une seule ligne, une fois (T308, Nicolas).
+  if (!avecAide) console.info('Prévo : pas d\'aide longue en « ' + code + ' » ; elle s\'affiche en français.');
 })();

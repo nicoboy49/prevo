@@ -295,7 +295,7 @@ class TestDemoWeb(CasAide):
 
 # Langue d'essai « xx » déclarée, avec son fichier de textes mais SANS fichier d'aide (js/i18n/aide/xx.js absent) : copie
 # de l'application dans un dossier temporaire, le dépôt n'est jamais modifié.
-DECLARATION_XX = "I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'fr-FR', statut: 'automatique' });\n"
+DECLARATION_XX = "I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'fr-FR', statut: 'automatique', aide: false });\n"
 TEXTES_XX = "'use strict';\nI18n.ajouter('xx', {\n  'commun.bouton.annuler': 'Annuler (xx)',\n});\n"
 
 
@@ -318,9 +318,10 @@ class TestLangueSansFichierDAide(CasAide):
     def test_aide_en_francais_sans_erreur(self):
         self.assertFalse((self.dossier / "js" / "i18n" / "aide" / "xx.js").exists())
         avertissements = []
+        informations = []
         self.page.on("console", lambda message: avertissements.append(message.text) if message.type == "warning" else None)
-        # Seule erreur permise : le navigateur note en console le fichier d'aide introuvable (pas une erreur JavaScript).
-        self.autoriser_erreur(re.compile(r"ERR_FILE_NOT_FOUND \(file:///.*/js/i18n/aide/xx\.js"))
+        self.page.on("console", lambda message: informations.append(message.text) if message.type == "info" else None)
+        # « aide: false » : le fichier d'aide n'est pas demandé (aucune erreur de chargement) ; une ligne le dit (T308).
         preregler_profil(self.contexte, "responsable")
         self.contexte.add_init_script("try { localStorage.setItem('prevo.langue', 'xx'); } catch (erreur) {}")
         page = self.page
@@ -344,6 +345,9 @@ class TestLangueSansFichierDAide(CasAide):
         # aucun avertissement pour une clé aide.* (les autres clés absentes en « xx » en ont un, une fois chacune)
         self.assertEqual([texte for texte in avertissements if "« aide." in texte], [])
         self.assertTrue(any("absente en « xx »" in texte for texte in avertissements))
+        # une seule ligne, une fois, même après un second écran (T308, décision de Nicolas du 06/11)
+        self.assertEqual([texte for texte in informations if "aide longue" in texte],
+                         ["Prévo : pas d'aide longue en « xx » ; elle s'affiche en français."])
 
 
 if __name__ == "__main__":
