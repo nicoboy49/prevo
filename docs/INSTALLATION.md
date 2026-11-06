@@ -75,6 +75,13 @@ Les trois parcours de l'assistant :
 Tant que l'installation n'est pas terminée, Prévo n'écoute que sur ce PC. Rien n'est écrit dans
 `prevo.config.json` avant « Terminer » ; Prévo se relance alors avec la configuration.
 
+Sans données au départ, la dernière étape demande par quoi commencer (vide, ou les données de démonstration) et la
+**langue de Prévo** (proposée d'après la langue du navigateur : français ou anglais aujourd'hui). « Terminer »
+l'écrit dans `parametres.csv` (`langue_defaut`) : c'est la langue des postes qui n'ont pas choisi la leur et des
+textes que Prévo écrit dans les données ; elle se change ensuite dans Paramètres, section « Entreprise ». Des
+données déjà là (Prévo 1.2) ne sont pas touchées : leur langue reste le français tant que Paramètres ne la change
+pas.
+
 ### 3.2 Linux ou macOS
 
 Il faut Python 3.11 ou plus récent (bibliothèque standard seulement). Le zip n'embarque ni Python ni mkcert pour

@@ -1565,6 +1565,24 @@ const UI = (function () {
   const CLE_LANGUE = 'prevo.langue';          // lue par js/i18n-chargeur.js avant js/schema.js
   const CLE_LANGUE_INSTALLATION = 'prevo.langue.installation';   // écrite par js/app.js (langue_defaut, T295)
 
+  /** Langue de ce navigateur ramenée à une langue déclarée (I18n.langueDuNavigateur, D150 : sinon l'anglais). */
+  function langueDuNavigateur() {
+    let langues = [];
+    try {
+      langues = Array.from(navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]);
+    } catch (erreur) { /* navigateur sans langue lisible : anglais */ }
+    return I18n.langueDuNavigateur(langues);
+  }
+
+  /**
+   * Options (fragment sûr) des langues déclarées, chacune sous son nom dans sa langue (lang posé, jamais traduit, sans
+   * drapeau), « choisie » sélectionnée : liste « Langue de Prévo » d'une base neuve (T296 ; assistant d'installation,
+   * écran « base vide »), proposée d'après le navigateur (langueDuNavigateur).
+   */
+  function optionsLangues(choisie) {
+    return html`${I18n.langues.map((langue) => html`<option value="${langue.code}" lang="${langue.code}" ${brut(langue.code === choisie ? 'selected' : '')}>${langue.nom}</option>`)}`;
+  }
+
   /**
    * Sélecteur de langue (D147, D148) : <select> des langues déclarées (I18n.langues, ordre de js/i18n/langues.js),
    * chacune sous son nom dans sa langue (jamais traduit, sans drapeau), la langue active choisie. Au changement, le
@@ -1629,6 +1647,6 @@ const UI = (function () {
     // fichiers
     redimensionnerPhoto, nomFichierUnique, telecharger,
     // mise en page, langue de l'écran
-    onglets, estTelephone, selecteurLangue,
+    onglets, estTelephone, selecteurLangue, langueDuNavigateur, optionsLangues,
   });
 })();

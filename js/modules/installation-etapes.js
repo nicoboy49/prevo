@@ -5,7 +5,9 @@
 // c.etat (GET etat), c.brouillon(), c.situation(), c.etatEtape(cle), c.blocTextes(choix), c.aideOption(cle).
 // Les réglages que l'API n'écrit pas (durées de session, IA, quota) sont montrés avec leur aide et renvoyés à
 // Paramètres › Accès et installation. Migration depuis 1.2 (T171) : les CSV présents sont annoncés dès l'étape 1 et
-// gardés ; sans CSV au départ (brouillon.base_presente faux), l'étape 8 demande par quoi commencer (vide ou démo) ;
+// gardés ; sans CSV au départ (brouillon.base_presente faux), l'étape 8 demande par quoi commencer (vide ou démo) et
+// la langue de Prévo (langue_defaut de la base neuve, proposée d'après le navigateur : UI.langueDuNavigateur, T296 ;
+// appliquée à la fin, quand Prévo s'ouvre sur la base créée) ;
 // dossier conseillé C:\Prevo proposé à l'étape 8 tant que le brouillon n'a pas deplacement_refuse (« Rester ici »).
 // Dépendances : UI, AccesTextes. Chargé avant installation-ecrans.js.
 
@@ -315,6 +317,11 @@ const InstallationEtapes = (() => {
             ${choixRadio('base', 'vide', true, I18n.t('installation.formulaire_recapitulatif.commencer_vide'), I18n.t('installation.formulaire_recapitulatif.equipements_demandes_ot_rien'))}
             ${choixRadio('base', 'demo', false, I18n.t('installation.formulaire_recapitulatif.commencer_donnees_demonstration'), I18n.t('installation.formulaire_recapitulatif.atelier_fictif_equipements_ot'))}
           </div>
+          <div class="champ installation-langue">
+            <label class="libelle" for="inst-langue_defaut">${I18n.t('installation.formulaire_recapitulatif.langue_prevo')}</label>
+            <select id="inst-langue_defaut" name="langue_defaut">${UI.optionsLangues(UI.langueDuNavigateur())}</select>
+            <p class="aide">${I18n.t('installation.formulaire_recapitulatif.langue_prevo_aide')}</p>
+          </div>
         </div>` : ''}
         ${deplacer ? UI.html`<div class="carte installation-dossier" id="inst-dossier">
           <h3>${I18n.t('installation.formulaire_recapitulatif.dossier_prevo')}</h3>
@@ -328,10 +335,13 @@ const InstallationEtapes = (() => {
         </div>` : ''}
         <div id="inst-fiche"><p class="chargement" role="status">${I18n.t('installation.formulaire_recapitulatif.lecture_fiche_acces')}</p></div>`,
       autrement: UI.html`${c.blocTextes('ia')}<p class="note">${notePlusTard()}</p>${['ia_fournisseur', 'ia_url', 'ia_en_ligne'].map((cle) => reglageLu(c, cle))}`,
-      // Corps de « terminer » : la base de départ quand elle a été demandée, rien sinon.
+      // Corps de « terminer » : la base de départ et sa langue (langue_defaut, T296) quand elles ont été demandées,
+      // rien sinon (base présente : sa langue ne change pas).
       lire(section) {
         const coche = UI.$('input[name="base"]:checked', section);
-        return coche ? { base: coche.value } : {};
+        const langue = UI.$('#inst-langue_defaut', section);
+        if (!coche) return {};
+        return langue ? { base: coche.value, langue_defaut: langue.value } : { base: coche.value };
       },
     };
   }

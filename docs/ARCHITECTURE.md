@@ -3906,17 +3906,22 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   reprend à l'étape 8), puis `config.relancer(cible)`. Rend `{"copie": nombre de fichiers, "vers", "relance": bool}`.
   L'ancien dossier n'est jamais supprimé. `{"rester": true}` (« Rester ici », T171) : `deplacement_refuse` vrai dans
   le brouillon, étape `a_faire`, rien de copié ; une demande de déplacement ultérieure l'efface.
-- `POST terminer` `{"base": "vide" | "demo"}` (défaut `vide` ; `demo` seulement si `base_presente` est faux dans le
-  brouillon, 400 sinon : les CSV existants ne sont jamais remplacés ; valeur inconnue 400) → réglages = défauts +
+- `POST terminer` `{"base": "vide" | "demo", "langue_defaut": code}` (`base` : défaut `vide` ; `demo` seulement si
+  `base_presente` est faux dans le brouillon, 400 sinon : les CSV existants ne sont jamais remplacés ; valeur inconnue
+  400 ; `langue_defaut` (T296) : défaut `fr`, sinon une langue déclarée par `js/i18n/langues.js` — `langues_declarees`
+  y lit chaque ligne `I18n.declarer({ code: '…'`, la liste même du navigateur, relue à chaque appel ; fichier illisible :
+  `fr` seul —, 400 `installation.langue_inconnue` sinon, rien d'écrit) → réglages = défauts +
   brouillon, `ecoute` dérivée, `_https_auto` ; 400 au message si `comptes`
   sans responsable actif, si `verifier_regles_portee` refuse (réseau sans https ni mandataire…) ou si le réseau
   compte sur mkcert absent (Prévo refuserait de démarrer) ; `demo` ⇒ `installer_jeu_de_demo` d'abord (un échec ne
   laisse rien d'écrit) ; puis `prevo.config.json` écrit **seulement ici**
   (`ecrire_configuration` s'il n'existe pas, `modifier_configuration` sinon : `_aide`, `ia_cle` et les clés inconnues
-  gardés) au chemin de `--config` (défaut : à côté de `serveur.py`) ; Solo ⇒ `poser_mode_solo` : `mode_solo` = 1,
-  `cloture_une_etape` = 1, `solo_technicien_id` dans `parametres.csv` (écriture de table normale, sauvegarde du
-  jour d'abord, toutes les autres lignes gardées ; fichier créé avec `version_schema` s'il manque, `version_schema`
-  jamais réécrit sinon) ; brouillon supprimé ; `config.relancer(None)`. Rend
+  gardés) au chemin de `--config` (défaut : à côté de `serveur.py`) ; puis `poser_parametres` dans `parametres.csv`
+  (écriture de table normale, sauvegarde du jour d'abord, toutes les autres lignes gardées ; fichier créé avec
+  `version_schema` en tête s'il manque, `version_schema` jamais réécrit sinon) : Solo ⇒ `mode_solo` = 1,
+  `cloture_une_etape` = 1, `solo_technicien_id` (`valeurs_du_mode_solo`) ; base absente au départ (`base_presente`
+  faux) ⇒ `langue_defaut` (T296), aussi après le jeu de démo ; une base présente au départ ne reçoit jamais de langue
+  ici (absente, elle vaut `fr`, §24.11) ; brouillon supprimé ; `config.relancer(None)`. Rend
   `{"configuration" (les clés écrites), "fichier", "relance": bool, "base"}`.
 - `GET fiche` → données de la fiche d'accès (T168 la met en page), d'après le brouillon, sinon le fichier de
   configuration (ce que `terminer` vient d'écrire), sinon les réglages du serveur : `{"situation", "portee",
@@ -4013,8 +4018,11 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   invite d'administrateur annoncée ; élévation refusée → message, l'étape reste ouverte ; commandes hors Windows),
   `sauvegardes` (dossier ou « Plus tard »), `deplacer` (carte `#inst-dossier` du récapitulatif quand l'étape est à
   faire et que le brouillon n'a pas `deplacement_refuse` : « Déplacer Prévo dans C:\Prevo (recommandé) » avec ce que
-  ça fait, ou « Rester ici » → `{"rester": true}`), `terminer` (avec `{"base"}` quand la carte `#inst-base` « Par quoi
-  commencer ? » est montrée : `base_presente` faux dans le brouillon) puis attente de la relance (`attendreRelance`
+  ça fait, ou « Rester ici » → `{"rester": true}`), `terminer` (avec `{"base", "langue_defaut"}` quand la carte
+  `#inst-base` « Par quoi commencer ? » est montrée : `base_presente` faux dans le brouillon ; la carte porte la liste
+  « Langue de Prévo » `#inst-langue_defaut`, T296 : les langues déclarées sous leur nom dans leur langue,
+  `UI.optionsLangues`, proposée = `UI.langueDuNavigateur()` ; l'assistant reste dans la langue de la page, la langue
+  choisie s'applique à la fin, quand Prévo s'ouvre sur la base créée) puis attente de la relance (`attendreRelance`
   interroge toutes les 2 s jusqu'à ce que le serveur relancé réponde : après `terminer`, `/api/info` avec
   `installation_a_faire` faux ou 401, rechargement sur `#/accueil` ; après `deplacer`, `GET etat` avec `dossier`
   égal au nouveau dossier, rechargement sur `#/installation` où l'assistant reprend à l'étape 8 ; message au bout de
@@ -4043,7 +4051,9 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
     les 24 tables (sauvegarde du jour d'abord), puis, en Solo, recrée le technicien « moi » dans la table de la démo
     (`technicien_moi` : TEC-0005, ou un technicien de la démo du même nom), met son identifiant dans le brouillon
     (`poser_mode_solo` le prend) et dans le compte responsable lié (`modifier_compte`). `vide` : rien de plus que ce
-    que Solo pose ; hors Solo la base reste sans CSV et la première ouverture propose « démo ou vide » comme en 1.2.
+    que Solo pose, et `langue_defaut` (T296) ; hors Solo, `parametres.csv` seul (`version_schema`, `langue_defaut`) :
+    la base existe, les autres tables manquent et se lisent vides (comme en Solo), la première ouverture ne repropose
+    plus « démo ou vide » (avant T296 : base sans CSV, « démo ou vide » comme en 1.2).
   - *Profils remplacés par la connexion* : avec `comptes`, `prevo.profil` mémorisé par 1.2 est ignoré (T155 : la
     session fait foi, l'écran de connexion s'affiche, `App.profil` vient de la session) ; sans comptes (Solo « ce
     PC »), le profil mémorisé reste valable. Prouvé par `test_installation_migration`.
@@ -4062,7 +4072,10 @@ Contrat de l'API (T167, `serveur.py` section « Assistant d'installation ») —
   `PREVO_MKCERT` et `PREVO_TAILSCALE` ; parcours Solo « ce PC » à 1280 px jusqu'à « Terminer » et le fichier écrit,
   Atelier à 375 px sans défilement horizontal et zones de 48 px, informaticien sur une page, les quatre textes de chaque
   étape comparés à `AccesTextes`, « Régler autrement », impression en média `print`, client du réseau sans assistant,
-  `/` sans configuration inchangé) ; `tests/test_installation_api.py` (serveur du processus avec `config.lancer_eleve`, `config.relancer`,
+  `/` sans configuration inchangé ; T296 : navigateur en-GB, English proposé, `langue_defaut` = en écrit, Prévo ouvert
+  en anglais sur un poste sans choix ; fr-FR : français) ; `tests/test_installation_migration.py` couvre aussi la langue
+  (T296 : base présente jamais touchée, `fr` sans le champ, démo et vide hors Solo avec la langue, « xx », « EN », vide,
+  null, nombre, liste : 400 par code et rien d'écrit) ; `tests/test_installation_api.py` (serveur du processus avec `config.lancer_eleve`, `config.relancer`,
   `dossier_application` et `systeme` injectés ; faux mkcert et faux tailscale par `PREVO_MKCERT` et `PREVO_TAILSCALE`,
   jamais hérités du poste : `tests/commun.py` ; les quatre parcours comparés clé à clé ; 404 vu du réseau par un
   serveur sur 0.0.0.0 et par `tests/mandataire_test.py` ; serveur réel au premier lancement) ;
@@ -4513,3 +4526,14 @@ serveur l'accepte comme toute clé (`parametres` est une table clé-valeur). Ell
   l'installation (`I18n.noterInstallation`, `I18n.langueDesDonnees`), quelle que soit la langue de l'écran ; le
   chargeur charge aussi `js/i18n/<code>.js` de l'installation (sans son aide longue) quand elle n'est ni le français
   ni la langue affichée ; dictionnaire absent : le français.
+
+**Base neuve** (T296 ; D149, D165) : partout où une base est créée, la liste « Langue de Prévo » (les langues
+déclarées sous leur nom dans leur langue, `UI.optionsLangues`) propose la langue du navigateur ramenée à une langue
+déclarée (`UI.langueDuNavigateur`, qui appelle `I18n.langueDuNavigateur` : sinon l'anglais) et la valeur va dans
+`parametres.csv` (`langue_defaut`) à la création. Trois chemins : l'assistant d'installation (étape 8, carte « Par
+quoi commencer ? » sur une base absente au départ ; `POST /api/installation/terminer` reçoit `langue_defaut`, §22.10 —
+Solo compris : même route) ; l'écran « base vide » (`#ecran-base-vide`, liste `#base-vide-langue`, mode serveur sans
+assistant et mode dossier : `remplirBaseVide` écrit `version_schema` et `langue_defaut`, ou ajoute `langue_defaut`
+aux lignes du jeu de démo). Tant que la base est vide, `suivreLangueInstallation` ne retient ni ne recharge rien : la
+page reste dans la langue du navigateur (sans cela, en mode dossier, un rechargement perdait le dossier choisi) ; la
+base créée, la langue choisie s'applique (un rechargement s'il le faut). Une base existante n'est jamais touchée.

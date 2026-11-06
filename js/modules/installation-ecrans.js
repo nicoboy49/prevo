@@ -11,7 +11,7 @@
 // Chaque étape écrit le brouillon par POST /api/installation/<etape> (fetch avec X-Prevo) ; une erreur du serveur
 // s'affiche telle quelle sous le bouton et l'étape reste ouverte. Le brouillon fait foi : GET etat replace
 // l'assistant à la première étape à faire. « Terminer et ouvrir Prévo » : POST terminer (base « vide » ou « demo »
-// quand aucun CSV n'était là au départ, T171), puis attente de la relance (/api/info toutes les 2 s, rechargement sur
+// et langue_defaut quand aucun CSV n'était là au départ, T171, T296), puis attente de la relance (/api/info toutes les 2 s, rechargement sur
 // #/accueil ; message au bout de 60 s). Dossier conseillé C:\Prevo (étape 8) : POST deplacer puis attente du serveur
 // relancé depuis la copie (GET etat : dossier), ou « Rester ici » mémorisé dans le brouillon. Un mot de passe n'est
 // jamais mémorisé ni réécrit dans la page. La première ligne (« Tant que l'installation n'est pas terminée… ») est

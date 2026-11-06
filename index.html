@@ -106,6 +106,12 @@
         <p id="texte-base-vide" data-i18n="socle.texte_base_vide.aucun_23_fichiers_prevo">Aucun des 23 fichiers de Prévo n'a été trouvé.</p>
       </div>
     </div>
+    <!-- Langue de la base neuve (T296) : options et langue proposée posées par js/app.js (demanderBaseVide) -->
+    <div class="champ">
+      <label class="libelle" for="base-vide-langue" data-i18n="socle.ecran_base_vide.langue_prevo">Langue de Prévo</label>
+      <select id="base-vide-langue"></select>
+      <p class="aide" data-i18n="socle.ecran_base_vide.langue_prevo_aide">Proposée d'après ce navigateur. Prévo s'ouvrira dans cette langue sur les postes qui n'ont pas choisi la leur ; c'est aussi celle des textes qu'il écrit dans les données. Elle se change ensuite dans Paramètres.</p>
+    </div>
     <div class="pile-gros">
       <button type="button" class="btn btn-primaire btn-gros" id="btn-base-demo">
         <span data-icone="engrenage"></span>

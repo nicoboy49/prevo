@@ -100,6 +100,8 @@
 .installation-dossier { margin: 0; }
 .installation-dossier h3 { margin: 0 0 .4rem; }
 .installation-dossier p { margin: 0; }
+/* Langue de Prévo d'une base neuve (T296), sous « Par quoi commencer ? » */
+.installation-langue { margin-top: 14px; }
 
 /* =========================================================================================
    3. Fiche d'accès (étape 8, #/installation/fiche, et la coque)

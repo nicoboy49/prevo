@@ -303,7 +303,8 @@ class TestReprise(CasRecette):
             page.wait_for_selector("#btn-base-vide", state="visible")
             page.click("#btn-base-vide")
             attendre_pret(page)
-            self.assertEqual(set(page.evaluate(COMPTES_JS).values()) - {0}, {1}, "base vide : seuls les paramètres")
+            # Base vide : seuls les paramètres, version_schema et langue_defaut (la langue de Prévo, T296).
+            self.assertEqual({t: n for t, n in page.evaluate(COMPTES_JS).items() if n}, {"parametres": 2})
 
             # 1. Les dix fichiers, dans l'ordre du LISEZMOI
             apercus, sauvegardes, bilans = {}, [], []

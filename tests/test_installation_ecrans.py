@@ -21,7 +21,10 @@ et la relance sont remplacées, jamais lancées ; faux mkcert et faux tailscale 
                   noms acceptés par « Régler autrement », certificat « mandataire » ;
     réseau       : un client qui ouvre l'adresse réseau du PC sur #/installation ne voit pas l'assistant ni le lien ;
                   la page « / » sans configuration montre l'écran de profil comme avant, avec le lien discret
-                  « Installer Prévo (assistant) » qui ouvre l'assistant.
+                  « Installer Prévo (assistant) » qui ouvre l'assistant ;
+    langue (T296) : base absente, navigateur en-GB : l'assistant en anglais, la liste « Langue de Prévo » de l'étape 8
+                  propose English (noms dans leur langue), « Terminer » écrit langue_defaut = en, Prévo s'ouvre ensuite
+                  en anglais sur un poste sans choix ; navigateur fr-FR : français proposé et écrit.
 Aucune commande d'administrateur, aucune sortie réseau, jamais le vrai mkcert ni le vrai tailscale, jamais donnees/ réel.
 
 Lancer depuis la racine du projet :
@@ -39,7 +42,9 @@ from unittest import mock
 import commun
 from commun import CasNavigateur
 from test_https import trouver_openssl
-from test_installation_api import FAUX_MKCERT, FAUX_TAILSCALE, NOM_TAILSCALE, Enregistreur, ServeurDuProcessus, configuration, serveur
+from test_installation_api import (FAUX_MKCERT, FAUX_TAILSCALE, NOM_TAILSCALE, Client, Enregistreur, ServeurDuProcessus,
+                                   configuration, parametres_de, serveur)
+from test_langue_installation import texte_du_dictionnaire
 
 MOT_DE_PASSE = "phrase de passe du responsable"
 LARGEURS_JS = "[document.documentElement.scrollWidth, document.documentElement.clientWidth]"
@@ -483,6 +488,96 @@ class TestOuverture(CasInstallation):
             page.wait_for_function("document.documentElement.dataset.etat === 'installation'")
             page.wait_for_selector('#installation-contenu section[data-etape="situation"]')
             self.assertTrue(page.is_hidden("#ecran-connexion"))
+
+
+# Liste « Langue de Prévo » de l'étape 8 : options (valeur, nom, lang), valeur, libellé et aide.
+LISTE_LANGUE_JS = """() => {
+  const liste = document.querySelector('#inst-base #inst-langue_defaut');
+  const bloc = liste.closest('.champ');
+  return { options: [...liste.options].map((o) => [o.value, o.textContent, o.lang]), valeur: liste.value,
+    libelle: bloc.querySelector('label').textContent.trim(), aide: bloc.querySelector('.aide').textContent.trim() };
+}"""
+ETAT_LANGUE_JS = """() => ({ langue: I18n.langue, lang: document.documentElement.lang, installation: I18n.installation,
+  poste: localStorage.getItem('prevo.langue'), retenue: localStorage.getItem('prevo.langue.installation') })"""
+
+
+class TestLangueDePrevo(CasInstallation):
+    """T296 (D149, D165) : sur une base absente au départ, l'étape 8 demande la langue de Prévo, proposée d'après le
+    navigateur ; « Terminer » l'écrit dans parametres.csv (langue_defaut) et Prévo s'ouvre ensuite dans cette langue
+    sur un poste sans choix."""
+
+    def nouveau_poste(self, locale):
+        self.contexte.close()
+        self.contexte = self.navigateur.new_context(locale=locale, viewport={"width": 1280, "height": 800})
+        self.contexte.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
+        self.page = self.contexte.new_page()
+        self.surveiller(self.page)
+
+    def solo_jusqu_au_recapitulatif(self):
+        self.cocher("situation", "seul")
+        self.continuer()
+        self.attendre_etape("portee")
+        self.continuer()
+        self.attendre_etape("compte")
+        self.page.fill("#inst-prenom", "Nicolas")
+        self.page.fill("#inst-nom", "Briand")
+        self.continuer()
+        self.attendre_etape("demarrage")
+        self.cocher("demarrage", "aucun")
+        self.continuer()
+        self.attendre_etape("sauvegardes")
+        self.page.click("#inst-sauvegardes-plus-tard")
+        self.attendre_etape("recapitulatif")
+
+    def terminer_puis_ouvrir(self, instance):
+        """« Terminer », puis le serveur « relancé » (installation faite) : Prévo s'ouvre sur l'écran de profil."""
+        page = self.page
+        page.click("#inst-terminer")
+        page.wait_for_selector("#inst-attente", state="visible")
+        page.wait_for_function("document.getElementById('inst-terminer').disabled")
+        parametres = parametres_de(instance.config.dossier_donnees)
+        instance.config.reglages["_present"] = True
+        page.wait_for_function("location.hash === '#/accueil' && document.documentElement.dataset.etat === 'profil'")
+        return parametres
+
+    def test_navigateur_anglais_english_propose_et_prevo_s_ouvre_en_anglais(self):
+        self.autoriser_erreur(ERREUR_404_TABLES)
+        self.nouveau_poste("en-GB")
+        page = self.page
+        instance = self.lancer()                                 # dossier de données vide : base absente
+        self.ouvrir_assistant(instance)
+        self.assertEqual(page.evaluate("I18n.langue"), "en")     # l'assistant dans la langue de la page (navigateur)
+        self.solo_jusqu_au_recapitulatif()
+        liste = page.evaluate(LISTE_LANGUE_JS)
+        self.assertEqual(liste["options"], [["fr", "Français", "fr"], ["en", "English", "en"]])
+        self.assertEqual(liste["valeur"], "en")
+        self.assertEqual(liste["libelle"], texte_du_dictionnaire("en", "installation.formulaire_recapitulatif.langue_prevo"))
+        self.assertEqual(liste["aide"], texte_du_dictionnaire("en", "installation.formulaire_recapitulatif.langue_prevo_aide"))
+        parametres = self.terminer_puis_ouvrir(instance)
+        self.assertEqual((parametres["langue_defaut"], parametres["mode_solo"]), ("en", "1"))
+        self.assertEqual(page.evaluate(ETAT_LANGUE_JS), {"langue": "en", "lang": "en", "installation": "en",
+                                                         "poste": None, "retenue": "en"})
+        self.assertEqual(page.inner_text("#ecran-profil h1").strip(),
+                         texte_du_dictionnaire("en", "socle.ecran_profil.utilise_poste"))
+
+    def test_navigateur_francais_francais_propose(self):
+        self.autoriser_erreur(ERREUR_404_TABLES)
+        page = self.page                                         # contexte des tests : fr-FR
+        instance = self.lancer()
+        client = Client(instance.url)                            # étapes 1 à 7 par l'API, comme l'assistant
+        for etape, corps in (("situation", {"situation": "seul"}), ("portee", {"portee": "ce-pc"}),
+                             ("compte", {"prenom": "Nicolas", "nom": "Briand"}),
+                             ("demarrage", {"demarrage": "aucun", "veille_desactivee": False}),
+                             ("sauvegardes", {"dossier": ""})):
+            self.assertEqual(client.post(etape, corps).statut, 200, etape)
+        self.ouvrir_assistant(instance)
+        self.attendre_etape("recapitulatif")
+        liste = page.evaluate(LISTE_LANGUE_JS)
+        self.assertEqual(liste["valeur"], "fr")
+        self.assertEqual(liste["libelle"], "Langue de Prévo")
+        parametres = self.terminer_puis_ouvrir(instance)
+        self.assertEqual(parametres["langue_defaut"], "fr")
+        self.assertEqual(page.evaluate(ETAT_LANGUE_JS)["langue"], "fr")
 
 
 if __name__ == "__main__":

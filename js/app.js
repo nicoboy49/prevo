@@ -520,6 +520,9 @@ const App = (() => {
     // Pendant l'usage, le profil inscrit au journal suit (D156) ; à l'ouverture, appliquerProfil le pose ensuite.
     if (profil && coqueVisible()) Donnees.definirIdentite({ poste, profil: libelleJournal(profil) });
     if (mode !== 'serveur' && mode !== 'dossier') return false;
+    // Base vide (T296) : pas encore de langue de l'installation ; la page garde la sienne (celle du navigateur, D150)
+    // pour l'écran « base vide », qui la demande ; elle est retenue une fois la base créée.
+    if (Donnees.baseVide()) return false;
     ecrireMemoire(CLE_LANGUE_INSTALLATION, installation);
     const attendue = I18n.langueAAfficher(lireMemoire(CLE_LANGUE_POSTE), installation);
     const raison = attendue + '/' + installation;
@@ -722,24 +725,33 @@ const App = (() => {
     return crees;
   }
 
+  // « Langue de Prévo » (T296, D149) : les langues déclarées, celle du navigateur proposée (UI.langueDuNavigateur).
   function demanderBaseVide() {
     UI.$('#texte-base-vide').textContent = I18n.t('socle.demander_base_vide.aucun_fichier_trouve',
       { n: Schema.nomsTables().length, stockage: adaptateur.libelle || mode });
+    UI.remplir(UI.$('#base-vide-langue'), UI.optionsLangues(UI.langueDuNavigateur()));
     montrer('ecran-base-vide', 'demarrage');
     return new Promise((resoudre) => { resoudreBaseVide = resoudre; });
   }
 
-  // Écrit les 23 fichiers (versionAttendue null : aucun ne doit exister, sinon ErreurConflit).
+  // Écrit les 23 fichiers (versionAttendue null : aucun ne doit exister, sinon ErreurConflit), avec langue_defaut
+  // dans parametres.csv : la langue choisie sur l'écran (T296), lue ensuite par suivreLangueInstallation.
   async function remplirBaseVide(choix) {
     const contenus = {};
+    const choisie = UI.$('#base-vide-langue').value;
+    const langue = I18n.langues.some((declaree) => declaree.code === choisie) ? choisie : 'fr';
     if (choix === 'demo') {
       await chargerScriptDemo();
-      Object.assign(contenus, StockageDemo.decalerDates(DEMO_DONNEES.tables, DEMO_DONNEES.dateReference));
+      // La ligne de la langue ajoutée au texte du jeu de démo (un code déclaré : rien à protéger), le reste tel quel.
+      const tables = Object.assign({}, DEMO_DONNEES.tables, { parametres:
+        DEMO_DONNEES.tables.parametres.replace(/(\r?\n)?$/, '\r\n') + PARAMETRE_LANGUE + ';' + langue + '\r\n' });
+      Object.assign(contenus, StockageDemo.decalerDates(tables, DEMO_DONNEES.dateReference));
     } else {
       Schema.nomsTables().forEach((nomTable) => { contenus[nomTable] = Donnees.csv.serialiser(nomTable, []); });
       // Une base neuve est écrite au format courant : pas de sauvegarde « avant-format-v2 » inutile
       // au premier démarrage (ARCHITECTURE.md §14.1).
-      contenus.parametres = Donnees.csv.serialiser('parametres', [{ cle: 'version_schema', valeur: String(Schema.version) }]);
+      contenus.parametres = Donnees.csv.serialiser('parametres', [{ cle: 'version_schema', valeur: String(Schema.version) },
+        { cle: PARAMETRE_LANGUE, valeur: langue }]);
     }
     for (const nomTable of Schema.nomsTables()) {
       if (contenus[nomTable]) await adaptateur.enregistrer(nomTable, contenus[nomTable], null);

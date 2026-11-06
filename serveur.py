@@ -2438,7 +2438,8 @@ NOM_SCRIPT_REINITIALISATION = 'Reinitialiser_mot_de_passe.bat'
 VERSION_SCHEMA_CSV = 3                  # « version » de js/schema.js (§14.1) : posée dans un parametres.csv créé ici
 DELAI_RELANCE_S = 2                     # le serveur s'arrête 2 s après la réponse de « terminer » ou « deplacer »
 ATTENTE_AVANT_RELANCE_S = 3             # le lanceur repart 3 s plus tard, une fois le port rendu
-# « terminer » sur une base absente au départ (T171) : rien de plus (« vide »), ou le jeu de démo, lu dans
+# « terminer » sur une base absente au départ (T171) : rien de plus (« vide » : parametres.csv seul, avec version_schema
+# et langue_defaut, T296), ou le jeu de démo, lu dans
 # js/demo-donnees.js — le seul jeu livré (§22.14 : le zip n'a pas de dossier donnees/), produit par
 # outils/generer_demo.py : une ligne par table (chaîne JSON, ou morceaux recollés pour le wiki) et la date de référence.
 BASES_AU_DEPART = ('vide', 'demo')
@@ -2447,6 +2448,12 @@ MOTIF_TABLE_DU_JEU_DE_DEMO = re.compile(r'^    ([a-z_]+): ')
 MOTIF_DATE_DU_JEU_DE_DEMO = re.compile(r'^  dateReference: "([0-9]{4}-[0-9]{2}-[0-9]{2})",?$')
 PREFIXE_MORCEAUX_DU_JEU_DE_DEMO = "((m, s) => s.map((r) => m[r]).join(''))("
 MOTIF_DEBUT_DE_DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')     # comme MOTIF_DATE de js/stockage-demo.js
+# Langue de Prévo d'une base neuve (T296 ; D149, D165) : « terminer » reçoit langue_defaut, une langue déclarée par
+# js/i18n/langues.js (une ligne « I18n.declarer({ code: 'xx', … }) » par langue, la même liste que le navigateur), le
+# français sans elle.
+FICHIER_LANGUES = os.path.join(DOSSIER_APPLICATION, 'js', 'i18n', 'langues.js')
+MOTIF_LANGUE_DECLAREE = re.compile(r"^I18n\.declarer\(\{\s*code:\s*'([^'\\]+)'", re.MULTILINE)
+LANGUE_PAR_DEFAUT = 'fr'
 MESSAGE_JEU_DE_DEMO_ILLISIBLE = traduisible('installation.demo_illisible',
                                             'Jeu de démo illisible (js/demo-donnees.js) : commencez vide, ou remettez '
                                             'le fichier du zip.')
@@ -2790,10 +2797,37 @@ def technicien_moi(config, prenom, nom):
     return identifiant
 
 
+def langues_declarees():
+    """Codes des langues déclarées par js/i18n/langues.js, dans l'ordre, relus à chaque appel (T296) ; fichier absent
+    ou illisible : le français seul."""
+    octets = lire_octets(FICHIER_LANGUES)
+    try:
+        codes = MOTIF_LANGUE_DECLAREE.findall(octets.decode('utf-8')) if octets is not None else []
+    except UnicodeDecodeError:
+        codes = []
+    return codes or [LANGUE_PAR_DEFAUT]
+
+
+def valeurs_du_mode_solo(technicien_id=''):
+    """Lignes de parametres.csv du mode Solo (D132, §22.11) : mode_solo = 1, cloture_une_etape = 1 et, s'il existe,
+    solo_technicien_id."""
+    valeurs = {'mode_solo': '1', 'cloture_une_etape': '1'}
+    if technicien_id:
+        valeurs['solo_technicien_id'] = technicien_id
+    return valeurs
+
+
 def poser_mode_solo(config, technicien_id=''):
-    """mode_solo = 1, cloture_une_etape = 1 et, s'il existe, solo_technicien_id dans parametres.csv (D132, §22.11), par
-    une écriture de table normale (sauvegarde du jour d'abord) ; le fichier est créé avec version_schema s'il manque
-    (le premier démarrage ne propose alors plus « démo ou vide » : la base existe). En tenant VERROU_ECRITURE."""
+    """Le mode Solo posé dans parametres.csv (valeurs_du_mode_solo, poser_parametres). En tenant VERROU_ECRITURE."""
+    poser_parametres(config, valeurs_du_mode_solo(technicien_id))
+
+
+def poser_parametres(config, valeurs):
+    """Lignes « valeurs » ({cle: texte}) de parametres.csv ajoutées ou remplacées, toutes les autres gardées (mode Solo,
+    D132 ; langue d'une base neuve, T296), par une écriture de table normale (sauvegarde du jour d'abord) ; le fichier
+    est créé avec version_schema s'il manque (le premier démarrage ne propose alors plus « démo ou vide » : la base
+    existe). En tenant VERROU_ECRITURE."""
+    valeurs = dict(valeurs)
     octets = lire_octets(chemin_table(config, 'parametres'))
     entete, lignes = lire_tableau('parametres', octets)
     if not entete:
@@ -2801,13 +2835,11 @@ def poser_mode_solo(config, technicien_id=''):
     cles = [cle_entete(colonne) for colonne in entete]
     if 'cle' not in cles or 'valeur' not in cles:
         raise ErreurHttp(500, traduisible('parametres.colonnes_absentes',
-                                          'parametres.csv sans colonnes « cle » et « valeur » : mode Solo non posé.'))
+                                          'parametres.csv sans colonnes « cle » et « valeur » : réglages de '
+                                          'l\'installation non posés.'))
     position_cle, position_valeur = cles.index('cle'), cles.index('valeur')
-    valeurs = {'mode_solo': '1', 'cloture_une_etape': '1'}
-    if technicien_id:
-        valeurs['solo_technicien_id'] = technicien_id
     if octets is None:
-        valeurs['version_schema'] = str(VERSION_SCHEMA_CSV)
+        valeurs = dict({'version_schema': str(VERSION_SCHEMA_CSV)}, **valeurs)      # en tête du fichier créé
     for ligne in lignes:
         while len(ligne) < len(entete):
             ligne.append('')
@@ -7283,23 +7315,32 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         return dict(resultat, etapes=brouillon['etapes'])
 
     def installation_terminer(self, brouillon, demande):
-        """{"base": "vide" | "demo"} (défaut vide ; demo seulement sur une base absente au départ, 400 sinon : les CSV
-        existants ne sont jamais remplacés). Règles de portée sur le brouillon (400 au message : comptes sans
+        """{"base": "vide" | "demo", "langue_defaut": code} (base : défaut vide ; demo seulement sur une base absente au
+        départ, 400 sinon : les CSV existants ne sont jamais remplacés ; langue_defaut : une langue déclarée par
+        js/i18n/langues.js, 400 sinon, défaut fr, T296). Règles de portée sur le brouillon (400 au message : comptes sans
         responsable, réseau sans https…), jeu de démo écrit s'il est demandé (installer_jeu_de_demo), puis
         prevo.config.json écrit (seulement ici : ecrire_configuration, ou modifier_configuration s'il existe déjà,
-        les clés inconnues gardées) ; Solo ⇒ mode_solo dans parametres.csv (les autres lignes gardées) ; brouillon
+        les clés inconnues gardées) ; Solo ⇒ mode_solo dans parametres.csv, base absente au départ ⇒ langue_defaut
+        (les autres lignes gardées ; une base présente au départ n'a jamais sa langue changée ici) ; brouillon
         supprimé ; puis le serveur se relance avec la configuration (config.relancer). Rend {configuration, fichier,
         relance, base}."""
         base = demande.get('base', 'vide')
         if base not in BASES_AU_DEPART:
             raise ErreurHttp(400, traduisible('installation.base_inconnue',
                                               'Base de départ inconnue : « vide » ou « demo ».'))
-        if base == 'demo' and brouillon.get('base_presente', True):
+        langue = demande.get('langue_defaut', LANGUE_PAR_DEFAUT)
+        declarees = langues_declarees()
+        if not isinstance(langue, str) or langue not in declarees:
+            raise ErreurHttp(400, traduisible('installation.langue_inconnue',
+                                              'Langue de Prévo inconnue : une langue déclarée est attendue '
+                                              '({langues}).', langues=declarees))
+        base_neuve = not brouillon.get('base_presente', True)
+        if base == 'demo' and not base_neuve:
             raise ErreurHttp(400, traduisible('installation.demo_sur_donnees',
                                               'Des fichiers de données sont déjà là : la démonstration ne remplace '
                                               'jamais une base existante. Terminez avec « vide » (vos fichiers sont '
                                               'gardés).'))
-        if base == 'demo' or brouillon.get('mode_solo'):
+        if base == 'demo' or brouillon.get('mode_solo') or base_neuve:
             verifier_ecriture_permise(self.config)          # T185 : tables écrites (lecture seule), avant la config
         reglages = reglages_par_defaut()
         reglages.update({cle: brouillon[cle] for cle in CLES_DU_BROUILLON if cle in brouillon})
@@ -7334,9 +7375,13 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             raise ErreurHttp(500, traduisible('installation.configuration_non_ecrite',
                                               'Configuration non écrite ({erreur}) : rien n\'a changé.',
                                               erreur=erreur))
-        if brouillon.get('mode_solo'):
+        # Après le jeu de démo (il change solo_technicien_id) : Solo, et la langue de la base neuve (T296).
+        a_poser = valeurs_du_mode_solo(brouillon.get('solo_technicien_id', '')) if brouillon.get('mode_solo') else {}
+        if base_neuve:
+            a_poser['langue_defaut'] = langue
+        if a_poser:
             with VERROU_ECRITURE:
-                poser_mode_solo(self.config, brouillon.get('solo_technicien_id', ''))
+                poser_parametres(self.config, a_poser)
         supprimer_brouillon(self.config)
         relance = bool(self.config.relancer(None))
         return {'configuration': a_ecrire, 'fichier': chemin, 'relance': relance, 'base': base}

@@ -16,7 +16,11 @@ Dans Chromium, mode serveur (serveur.py sur une copie du jeu de démo, profil re
       l'installation, quelle que soit la langue affichée : installation en + écran fr, installation en + écran en,
       installation fr + écran en ;
     - démo (file://) : la langue de l'installation retenue par le navigateur sert à l'affichage, celle de la démo aux
-      données ; rien n'est retenu ni rechargé.
+      données ; rien n'est retenu ni rechargé ;
+    - base neuve par l'écran « base vide » (T296) : liste « Langue de Prévo » (noms dans leur langue), proposée d'après
+      le navigateur ; serveur sans base, navigateur fr-FR, English choisi puis la démo : parametres.csv = lignes de la
+      démo + langue_defaut = en, un rechargement, l'anglais ; mode dossier (OPFS), navigateur en-GB : English proposé,
+      base vide avec version_schema et langue_defaut = en, aucun rechargement.
 Les textes attendus sont lus dans js/i18n/fr.js et js/i18n/en.js, pas par le moteur.
 
 Lancer depuis la racine du projet :
@@ -29,9 +33,24 @@ import time
 import unittest
 from pathlib import Path
 
-from commun import RACINE, CasNavigateur, ServeurPrevo, attendre_pret, preregler_profil, url_fichier
+from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule,
+                    preregler_profil, url_fichier)
 
 BOM = "﻿"
+# Base neuve (T296) : Chromium note en console.error les 404 attendus (CSV absents, pas de /api/ping en statique).
+ERREUR_CSV_ABSENT = re.compile(r"status of 404.*/api/csv/")
+ERREUR_PING_ABSENT = re.compile(r"status of 404.*/api/ping")
+NOM_DOSSIER_SIMULE = "donnees-test"
+LISTE_BASE_VIDE_JS = """() => {
+  const liste = document.querySelector('#ecran-base-vide #base-vide-langue');
+  const bloc = liste.closest('.champ');
+  return { options: [...liste.options].map((o) => [o.value, o.textContent, o.lang]), valeur: liste.value,
+    libelle: bloc.querySelector('label').textContent.trim(), aide: bloc.querySelector('.aide').textContent.trim() };
+}"""
+LIRE_OPFS_JS = """async ([dossier, fichier]) => {
+  const racine = await (await navigator.storage.getDirectory()).getDirectoryHandle(dossier);
+  return (await (await racine.getFileHandle(fichier)).getFile()).text();
+}"""
 FORMULAIRE = "#form-parametres "
 CHAMP_LANGUE = FORMULAIRE + "[name=langue_defaut]"
 POSTE_LANGUE = "#poste-langue-liste"
@@ -183,8 +202,7 @@ class TestLangueInstallation(CasNavigateur):
             self.assertEqual(champ["libelle"], texte_du_dictionnaire("fr", "parametres.libelle.langue_installation"))
             self.assertEqual(champ["aide"], texte_du_dictionnaire("fr", "parametres.aide.langue_proposee_postes_textes"))
             self.assertEqual(champ["section"], ["h3:" + texte_du_dictionnaire("fr", "parametres.section.entreprise"),
-                                                "entreprise_nom", "langue_defaut", "h3:" + texte_du_dictionnaire(
-                                                    "fr", "parametres.section.delais_priorite")])
+                                                "entreprise_nom", "langue_defaut", "devise"])    # devise : T304
 
             # English enregistré : écrit dans parametres.csv, page rechargée en anglais (ce poste n'a pas de choix).
             self.page.select_option(CHAMP_LANGUE, "en")
@@ -298,6 +316,61 @@ class TestLangueInstallation(CasNavigateur):
                                        "poste": None, "retenue": "en", "raison": None})
         self.assertEqual(self.page.evaluate("I18n.donnees('magasin.inventorier.inventaire')"),
                          texte_du_dictionnaire("fr", "magasin.inventorier.inventaire"))
+
+    # -- T296 : base neuve créée par l'écran « base vide » (mode serveur sans assistant, mode dossier) ------------
+
+    def nouveau_poste(self, locale):
+        """Remplace le contexte du test par un navigateur de la langue `locale` (profil responsable mémorisé)."""
+        self.contexte.close()
+        self.contexte = self.navigateur.new_context(locale=locale, viewport={"width": 1280, "height": 800})
+        self.contexte.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
+        preregler_profil(self.contexte, "responsable")
+        self.page = self.contexte.new_page()
+        self.surveiller(self.page)
+        self.chargements = 0
+        self.page.on("load", self._compter)
+
+    def liste_base_vide(self):
+        self.page.wait_for_selector("#ecran-base-vide", state="visible")
+        return self.page.evaluate(LISTE_BASE_VIDE_JS)
+
+    def test_base_vide_serveur_francais_propose_english_choisi_avec_la_demo(self):
+        self.autoriser_erreur(ERREUR_CSV_ABSENT)
+        with ServeurPrevo(source=None) as serveur:
+            self.page.goto(serveur.url + "/")
+            liste = self.liste_base_vide()
+            self.assertEqual(liste["options"], [["fr", "Français", "fr"], ["en", "English", "en"]])
+            self.assertEqual(liste["valeur"], "fr")                                          # navigateur fr-FR
+            self.assertEqual(liste["libelle"], texte_du_dictionnaire("fr", "socle.ecran_base_vide.langue_prevo"))
+            self.assertEqual(liste["aide"], texte_du_dictionnaire("fr", "socle.ecran_base_vide.langue_prevo_aide"))
+            self.page.select_option("#base-vide-langue", "en")
+            self.page.click("#btn-base-demo")
+            self.attendre_chargements(2)                       # la base écrite en anglais : un rechargement
+            self.assertEqual(self.etat(), {"langue": "en", "lang": "en", "installation": "en", "donnees": "en",
+                                           "poste": None, "retenue": "en", "raison": None})
+            # parametres.csv : les lignes du jeu de démo telles quelles, puis la langue choisie.
+            _, demo = lire_csv(RACINE / "donnees" / "demo" / "parametres.csv")
+            _, lignes = lire_csv(serveur.dossier / "parametres.csv")
+            self.assertEqual(lignes, demo + [{"cle": "langue_defaut", "valeur": "en"}])
+
+    def test_base_vide_dossier_navigateur_anglais_english_propose(self):
+        self.autoriser_erreur(ERREUR_PING_ABSENT)
+        self.nouveau_poste("en-GB")
+        installer_dossier_simule(self.contexte, NOM_DOSSIER_SIMULE)
+        with ServeurStatique(RACINE) as statique:
+            self.page.goto(statique.url + "/index.html")
+            self.page.wait_for_function("document.documentElement.dataset.etat === 'demarrage'")
+            self.page.click("#btn-dossier")
+            liste = self.liste_base_vide()
+            self.assertEqual(liste["valeur"], "en")
+            self.assertEqual(liste["libelle"], texte_du_dictionnaire("en", "socle.ecran_base_vide.langue_prevo"))
+            self.page.click("#btn-base-vide")
+            self.attendre_chargements(1)                       # page déjà en anglais : aucun rechargement
+            self.assertEqual(self.page.evaluate("App.mode"), "dossier")
+            self.assertEqual(self.etat(), {"langue": "en", "lang": "en", "installation": "en", "donnees": "en",
+                                           "poste": None, "retenue": "en", "raison": None})
+            texte = self.page.evaluate(LIRE_OPFS_JS, [NOM_DOSSIER_SIMULE, "parametres.csv"])
+            self.assertEqual(texte.lstrip(BOM).split("\r\n"), ["cle;valeur", "version_schema;'3", "langue_defaut;en", ""])
 
 
 if __name__ == "__main__":
