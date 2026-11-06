@@ -5,7 +5,7 @@
 // js/i18n/<code>.js (I18n.ajouter, un bloc par section) et son aide longue, à part, par js/i18n/aide/<code>.js (clés
 // aide.*). Le français est la langue de référence et de repli. La langue active (autre que le français) est chargée
 // avant js/schema.js par js/i18n-chargeur.js, qui choisit la langue à afficher (I18n.langueAAfficher : choix du poste,
-// sinon langue de l'installation, sinon français) et note la langue de l'installation (I18n.noterInstallation).
+// sinon langue de l'installation, sinon langue du navigateur ou anglais, D150) et note la langue de l'installation (I18n.noterInstallation).
 //
 // Règles :
 // - script classique, sans dépendance, compatible file:// ;
@@ -91,12 +91,41 @@ const I18n = (function () {
   // ===========================================================================================
 
   /**
-   * Langue à afficher (D148, sans la langue du compte) : le choix du poste, sinon la langue de l'installation, sinon le
-   * français. Chaque code est vérifié contre les langues déclarées : vide, inconnu ou mal formé, il est ignoré. Sert à
-   * js/i18n-chargeur.js (avant js/schema.js), à js/app.js (paramètres lus) et au sélecteur de langue.
+   * Langue à afficher (D148, D150, sans la langue du compte) : 1. le choix du poste ; 2. sinon la langue de
+   * l'installation ; 3. sinon, si `languesDuNavigateur` est donné (navigator.languages : « sans réglage », démo ou
+   * première ouverture), la langue du navigateur (langueDuNavigateur, anglais à défaut) ; 4. sinon le français. Chaque
+   * code est vérifié contre les langues déclarées : vide, inconnu ou mal formé, il est ignoré. Sert à
+   * js/i18n-chargeur.js (avant js/schema.js), à js/app.js (paramètres lus : sans 3e argument) et au sélecteur de langue.
    */
-  function langueAAfficher(choixDuPoste, installation) {
-    return [choixDuPoste, installation].find(estDeclaree) || LANGUE_DE_REFERENCE;
+  function langueAAfficher(choixDuPoste, installation, languesDuNavigateur) {
+    const retenue = [choixDuPoste, installation].find(estDeclaree);
+    if (retenue) return retenue;
+    return Array.isArray(languesDuNavigateur) ? langueDuNavigateur(languesDuNavigateur) : LANGUE_DE_REFERENCE;
+  }
+
+  // Langues du navigateur ramenées à une langue déclarée (D150) : toute variante du portugais (pt-BR…) va au
+  // portugais du Portugal. Clé : langue sans région, en minuscules.
+  const VARIANTES_RAMENEES = { pt: 'pt-PT' };
+  const LANGUE_SANS_REGLAGE = 'en';
+
+  /**
+   * Langue du navigateur (D150) : parcourt `langues` (navigator.languages, dans l'ordre de préférence) ; pour chacune,
+   * essaie le code exact (casse ignorée) puis la langue sans région (pt-* : pt-PT), et rend la première déclarée.
+   * Aucune ne l'est (ou liste vide, absente, valeurs non textuelles) : l'anglais. Fonction pure, aucune lecture du
+   * navigateur.
+   */
+  function langueDuNavigateur(langues) {
+    const declarations = declarees.map((langue) => langue.code);
+    const trouver = (candidat) => declarations.find((code) => code.toLowerCase() === String(candidat).toLowerCase());
+    const liste = Array.isArray(langues) ? langues : [];
+    for (const etiquette of liste) {
+      if (typeof etiquette !== 'string' || !etiquette.trim()) continue;
+      const exacte = etiquette.trim().replace(/_/g, '-');
+      const base = exacte.split('-')[0].toLowerCase();
+      const code = trouver(exacte) || trouver(VARIANTES_RAMENEES[base] || base);
+      if (code) return code;
+    }
+    return LANGUE_SANS_REGLAGE;
   }
 
   /**
@@ -367,6 +396,7 @@ const I18n = (function () {
     html: html,
     appliquer: appliquer,
     langueAAfficher: langueAAfficher,
+    langueDuNavigateur: langueDuNavigateur,
     noterInstallation: noterInstallation,
     /** Code de la langue de l'installation notée ('fr' tant que rien n'en note une autre). */
     get installation() { return langueInstallation; },

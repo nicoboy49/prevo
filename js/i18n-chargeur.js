@@ -40,8 +40,13 @@
   const script = document.currentScript;
   if (document.readyState !== 'loading' || !script || !script.src) return;
   // Valeurs vérifiées par I18n : une langue non déclarée ou mal formée donne le français.
-  const installation = I18n.noterInstallation(lire(CLE_INSTALLATION));
-  const code = I18n.langueAAfficher(lire(CLE_LANGUE), installation);
+  const retenue = lire(CLE_INSTALLATION);
+  const installation = I18n.noterInstallation(retenue);
+  let languesDuNavigateur = [];
+  try {
+    languesDuNavigateur = Array.from(navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]);
+  } catch (erreur) { /* navigateur sans langue lisible : anglais */ }
+  const code = I18n.langueAAfficher(lire(CLE_LANGUE), retenue, languesDuNavigateur);
   // Dossier de ce fichier (js/), quelle que soit l'adresse de la page : index.html à la racine, ou une autre page.
   const dossier = script.src.replace(/[?#].*$/, '').replace(/[^/]*$/, '') + 'i18n/';
   let balises = '';

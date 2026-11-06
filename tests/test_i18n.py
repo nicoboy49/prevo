@@ -672,6 +672,8 @@ class TestSelecteurDeLangue(CasNavigateur):
         attendre_pret(page)
         page.evaluate("window.memePage = true")
         page.select_option(MENU_LANGUE, "en")
+        # Démo : l'avertissement (T299) passe avant ; confirmé, le stockage refusé donne le message.
+        page.locator("dialog[open]").get_by_role("button", name="Changer").click()
         page.wait_for_selector("#toast.visible")
         etat = page.evaluate("""() => ({ memePage: window.memePage === true, langue: I18n.langue,
           lang: document.documentElement.lang, choix: document.querySelector('#menu-langue-liste').value,

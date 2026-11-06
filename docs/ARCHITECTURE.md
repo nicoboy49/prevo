@@ -4492,8 +4492,15 @@ Paramètres, section « Entreprise » (« Langue de l'installation », les langu
 tous les modes ; une ligne de plus, pas une colonne : le format des fichiers (`version_schema`) ne change pas, et le
 serveur l'accepte comme toute clé (`parametres` est une table clé-valeur). Elle sert à deux choses :
 
-- **Langue affichée** (D148, sans la langue du compte) : 1. le choix de ce poste (« prevo.langue ») ; 2. sinon la
-  langue de l'installation ; 3. sinon le français (`I18n.langueAAfficher`). Toute valeur est vérifiée contre les
+- **Langue affichée** (D148, D150, sans la langue du compte) : 1. le choix de ce poste (« prevo.langue ») ; 2. sinon la
+  langue de l'installation ; 3. sans réglage (ni l'un ni l'autre : démo, ou première ouverture avant toute base ; clé
+  « prevo.langue.installation » absente), la langue du navigateur (`navigator.languages`, dans l'ordre : code exact, puis
+  langue sans région ; toute variante `pt-*`, dont `pt-BR`, va à `pt-PT` ; `I18n.langueDuNavigateur`, T299), sinon
+  l'anglais ; 4. le français n'est atteint que par `I18n.langueAAfficher` appelée sans les langues du navigateur (`js/app.js`
+  une fois les paramètres lus). Aujourd'hui seuls `fr` et `en` sont déclarés : une langue non déclarée (de, tr, it, pt…) donne
+  l'anglais. Dans la démo, changer de langue recharge la page et efface ce qu'on y a modifié : `UI.selecteurLangue`
+  demande d'abord confirmation (`UI.confirmer`) ; Annuler remet la liste sur la langue actuelle. Hors démo, aucun
+  avertissement. (`I18n.langueAAfficher`) Toute valeur est vérifiée contre les
   langues déclarées : vide, inconnue ou mal formée, elle est ignorée. Le chargeur tourne avant toute lecture des
   données : la langue de l'installation lui vient de `localStorage` « prevo.langue.installation », que `js/app.js`
   écrit chaque fois qu'il lit `parametres.csv` (ouverture des données, changement sur ce poste ou un autre ;

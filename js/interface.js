@@ -1517,8 +1517,10 @@ const UI = (function () {
    * chacune sous son nom dans sa langue (jamais traduit, sans drapeau), la langue active choisie. Au changement, le
    * choix est retenu par ce navigateur (localStorage « prevo.langue »), puis la page est rechargée : js/i18n-chargeur.js
    * y charge la langue avant js/schema.js. La langue qu'aurait le poste sans choix (celle de l'installation retenue
-   * par ce navigateur, sinon le français : I18n.langueAAfficher, T295) retire la clé : le poste suit alors
+   * par ce navigateur, sinon, sans réglage, la langue du navigateur : I18n.langueAAfficher, T295 et T299) retire la clé : le poste suit alors
    * l'installation. Stockage refusé : message court, la liste revient à la langue active, la page reste dans sa langue.
+   * Dans la démo (App.mode « demo »), le rechargement efface ce qu'on y a modifié : une confirmation d'abord
+   * (UI.confirmer) ; Annuler remet la liste sur la langue active, rien n'est retenu.
    * reglages : { id, classe, libelle (aria-label, quand aucun <label> visible ne nomme la liste) }.
    */
   function selecteurLangue(reglages) {
@@ -1533,11 +1535,17 @@ const UI = (function () {
       liste.appendChild(option);
     });
     liste.value = I18n.langue;
-    liste.addEventListener('change', () => {
+    liste.addEventListener('change', async () => {
       const code = liste.value;
       if (code === I18n.langue) return;
+      if (typeof App !== 'undefined' && App.mode === 'demo') {
+        const accord = await confirmer(I18n.t('socle.selecteur_langue.recharge_demo'), {
+          titre: I18n.t('socle.selecteur_langue.changer_langue'), oui: I18n.t('socle.selecteur_langue.changer'), danger: true });
+        if (!accord) { liste.value = I18n.langue; return; }
+      }
       try {
-        const sansChoix = I18n.langueAAfficher('', window.localStorage.getItem(CLE_LANGUE_INSTALLATION));
+        const sansChoix = I18n.langueAAfficher('', window.localStorage.getItem(CLE_LANGUE_INSTALLATION),
+          Array.from(navigator.languages || [navigator.language]));
         if (code === sansChoix) window.localStorage.removeItem(CLE_LANGUE);
         else window.localStorage.setItem(CLE_LANGUE, code);
       } catch (erreur) {                        // navigation privée stricte, réglage du navigateur
