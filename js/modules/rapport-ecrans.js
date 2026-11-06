@@ -233,10 +233,10 @@ Object.assign(Rapport, (() => {
         if (retoucher) zoneCommentaire.focus();
       };
       // Le commentaire est imprimé dans le rapport figé : les données envoyées à l'IA sont dans la langue du rapport (D160).
-      // A FAIRE (T303) : la demande à l'IA ne dit pas encore la langue à écrire ; la passer ici (`langue`) quand elle le saura.
+      // Et la demande dit d'écrire dans cette langue (`langue`, D159), même si l'écran est dans une autre.
       I18n.chargerLangue(langue).then(() => {
         const rapport = Rapport.donnees(mois, undefined, undefined, langue);
-        Ia.ouvrirEncadre({ apres: zone, fonction: 'commentaireRapport',
+        Ia.ouvrirEncadre({ apres: zone, fonction: 'commentaireRapport', langue,
           donnees: enLangueDuRapport(langue, () => ({ mois: libelleMois(mois), jetons: Rapport.jetonsCommentaire(rapport), points: rapport.faits.concat(rapport.decisions).map(sansChiffres) })),
           utiliser: (resultat, reponse) => remplir(resultat, reponse, false), modifier: (resultat, reponse) => remplir(resultat, reponse, true) });
       }).catch((erreur) => App.signalerErreur(erreur, 'commentaire du rapport'));

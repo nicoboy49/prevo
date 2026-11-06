@@ -283,6 +283,16 @@ class TestCommentaireRapport(CasFonctions):
         self.assertTrue(attendre(lambda: any(l["action"].startswith("proposition IA utilisée (faux) : commentaire du rapport")
                                              for l in lire_csv(self.serveur.dossier, "journal.csv"))))
 
+    def test_commentaire_fige_en_anglais_demande_en_anglais_ecran_francais(self):
+        """T303 (D159, CS156) : la langue du rapport (liste « Langue du rapport ») est celle de la consigne, pas celle de l'écran."""
+        page = self.ouvrir_rapports()
+        page.select_option("#rapports-langue", "en")
+        page.click(".rapports-figer .ia-bouton")
+        page.wait_for_selector(".rapports-figer .ia-encadre .ia-texte")
+        systeme = self.faux.requetes_vers("/api/chat")[-1]["corps"]["messages"][0]["content"]
+        self.assertTrue(systeme.startswith("Fonction : commentaireRapport"))
+        self.assertTrue(systeme.endswith("Réponds en anglais (en)."), systeme[-80:])
+
     def test_commentaire_ecrit_a_la_main_sans_mention(self):
         page = self.ouvrir("#/indicateurs?onglet=rapports", ia=False)
         page.wait_for_selector("#rapports-commentaire")

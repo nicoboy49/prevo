@@ -957,6 +957,42 @@ class TestDemanderDirect(CasDemoIa):
         self.assertIn("passez par le mode serveur", resultat["message"])
 
 
+class TestConsigneDeLangue(CasDemoIa):
+    """T303 (D159, CS156) : chaque appel porte « Réponds en <langue> (<code>). » en dernière ligne du message système."""
+
+    def ouvrir_demo_en_anglais(self):
+        regler_ia(self.contexte, url=self.faux.url)
+        preregler_profil(self.contexte, "responsable", "Responsable")
+        self.page.goto(url_fichier("index.html"))
+        self.page.evaluate("localStorage.setItem('prevo.langue', 'en')")
+        self.page.reload()
+        self.page.wait_for_function("document.documentElement.dataset.etat === 'demarrage'")
+        self.page.click("#btn-demo")
+        attendre_pret(self.page)
+        self.page.wait_for_function("Ia.etat() !== 'inconnu'")
+        self.assertEqual(self.page.evaluate("I18n.langue"), "en")
+        return self.page
+
+    def test_ecran_en_anglais_requete_en_anglais_wiki_et_francais_restent_en_francais(self):
+        page = self.ouvrir_demo_en_anglais()
+        jeu = page.evaluate(DONNEES_DEMO_JS)
+        avant = len(self.faux.requetes)
+        self.assertTrue(self.demander("compteRendu", jeu["donnees"]["compteRendu"])["ok"])
+        corps = self.faux.requetes[avant:][0]["corps"]
+        systeme = corps["messages"][0]["content"]
+        self.assertTrue(systeme.startswith("Fonction : compteRendu\n"))
+        self.assertTrue(systeme.endswith("\n\nRéponds en anglais (en)."), systeme[-80:])
+        langues = page.evaluate("""() => {
+          const d = { ot: { id: 'OT-2026-0001', dateIntervention: '2026-03-10 10:00', type: 'correctif immédiat', titre: 'T',
+              equipement: { repere: 'PO-02', designation: 'Pompe' } }, pages: [], catalogue: [] };
+          const fin = (r) => r.messages[0].content.split('\\n\\n').pop();
+          return { wiki: fin(Ia.requete('ingestionWiki', d)), wikiForce: fin(Ia.requete('ingestionWiki', d, { langue: 'en' })),
+                   rapport: fin(Ia.requete('codes', {}, { langue: 'fr' })), ecran: fin(Ia.requete('codes', {})) };
+        }""")
+        self.assertEqual(langues, {"wiki": "Réponds en français (fr).", "wikiForce": "Réponds en anglais (en).",
+                                   "rapport": "Réponds en français (fr).", "ecran": "Réponds en anglais (en)."})
+
+
 # ---------------------------------------------------------------------------
 # Relais du serveur (mode serveur, /api/ia)
 # ---------------------------------------------------------------------------

@@ -11,7 +11,8 @@
 
 const Dictee = (() => {
 
-  const LANGUE = 'fr-FR';
+  // Langue de reconnaissance = locale de la langue active (fr-FR, en-GB, tr-TR…), lue à chaque écoute (D161).
+  const langueDictee = () => I18n.locale;
   const CLE_REGLAGES = 'prevo.dictee';
 
   let ecoute = null;       // { reconnaissance, champ, bouton } : une seule dictée à la fois
@@ -103,7 +104,7 @@ const Dictee = (() => {
     const Classe = classeReconnaissance();
     if (!Classe || typeof Classe.available !== 'function') return false;
     try {
-      return (await Classe.available({ langs: [LANGUE], processLocally: true })) === 'available';
+      return (await Classe.available({ langs: [langueDictee()], processLocally: true })) === 'available';
     } catch (erreur) {
       return false;
     }
@@ -221,7 +222,7 @@ const Dictee = (() => {
   function demarrer(champ, bouton, locale) {
     const Classe = classeReconnaissance();
     const reconnaissance = new Classe();
-    reconnaissance.lang = LANGUE;
+    reconnaissance.lang = langueDictee();
     reconnaissance.interimResults = true;
     reconnaissance.continuous = true;
     if (locale) reconnaissance.processLocally = true;
@@ -286,7 +287,7 @@ const Dictee = (() => {
   }
 
   return {
-    LANGUE,
+    get LANGUE() { return langueDictee(); },
     /** Textes de l'avertissement et de l'aide, lus dans la langue du moment (accesseurs). */
     get AVERTISSEMENT_NUAGE() { return avertissementNuage(); },
     get AVERTISSEMENT_LOCAL() { return avertissementLocal(); },

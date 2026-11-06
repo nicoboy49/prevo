@@ -597,12 +597,13 @@ const Ia = (() => {
    * exactement ce que Ia.demander envoie au fournisseur (même construction : demander l'appelle). Sert
    * aussi à exporter les requêtes de la démo (§20.8). Aucun appel réseau, rien n'est écrit.
    */
-  function requete(fonction, donnees) {
+  function requete(fonction, donnees, options) {
     const consigne = consigneDe(fonction, 'Ia.requete');
     const valeurs = valeursDe(donnees);
+    const langue = (options && options.langue) || consigne.langue || I18n.langue;      // D159
     return {
       fonction,
-      messages: [{ role: 'system', content: consigne.systeme }, { role: 'user', content: consigne.utilisateur(valeurs) }],
+      messages: [{ role: 'system', content: consigne.systeme + '\n\n' + Ia.consigneLangue(langue) }, { role: 'user', content: consigne.utilisateur(valeurs) }],
       schema: consigne.schema(valeurs),
       temperature: TEMPERATURE,
     };
@@ -620,13 +621,13 @@ const Ia = (() => {
   /**
    * Demande une proposition à l'IA pour une fonction de Ia.PROMPTS. Renvoie
    * { resultat, modele, fournisseur } (resultat contrôlé par Ia.PROMPTS[fonction].verifier) ; sinon une
-   * erreur nommée. options.signal : AbortSignal du bouton « Annuler ». Rien n'est écrit.
+   * erreur nommée. options.signal : AbortSignal du bouton « Annuler » ; options.langue : langue de la réponse (défaut : écran). Rien n'est écrit.
    */
   async function demander(fonction, donnees, options) {
     consigneDe(fonction, 'Ia.demander');
     await reglagesServeurLus();
     reglagesUtilisables();                        // refus (version web, IA inactive, portée D67) avant tout
-    const envoi = await envoyerRequete(requete(fonction, donnees), options && options.signal);
+    const envoi = await envoyerRequete(requete(fonction, donnees, options), options && options.signal);
     return { resultat: lireReponse(fonction, envoi.contenu, donnees), modele: envoi.modele, fournisseur: envoi.fournisseur };
   }
 

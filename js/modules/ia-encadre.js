@@ -13,7 +13,7 @@
 //     utilisable et le retire sinon, au fil des changements de l'IA (test d'ouverture fini, fournisseur
 //     injoignable, réglages du poste, autorisation du responsable), sans réafficher l'écran ; masqué
 //     (hidden) sans bouton.
-//   Ia.ouvrirEncadre({ apres, fonction, donnees, rendu, utiliser, modifier, boutons }) → Promise de
+//   Ia.ouvrirEncadre({ apres, fonction, donnees, langue, rendu, utiliser, modifier, boutons }) → Promise de
 //     l'issue { choix, resultat, modele, fournisseur, erreur } ; choix : 'utiliser' | 'modifier' |
 //     'ignorer' | 'annuler' | 'erreur' | 'ferme' | la `valeur` d'un bouton propre.
 //       apres     : élément après lequel l'encadré est placé (un seul encadré à la fois par élément) ;
@@ -133,7 +133,7 @@ Object.assign(Ia, (() => {
       repondre({ choix: 'erreur', erreur });
     }
 
-    Ia.demander(reglages.fonction, reglages.donnees, { signal: controleur.signal }).then((reponse) => {
+    Ia.demander(reglages.fonction, reglages.donnees, { signal: controleur.signal, langue: reglages.langue }).then((reponse) => {
       if (issueDonnee) return;
       clearInterval(minuteur);
       if (!encadre.isConnected) { retirer({ choix: 'ferme' }); return; }

@@ -108,6 +108,13 @@ Object.assign(Ia, (() => {
     return premiereLigne + '\n' + REGLES + '\n\nTâche : ' + tache + '\n\nForme de la réponse (JSON) : ' + forme;
   }
 
+  // Consigne de langue de TOUS les appels (Ia.requete, D159, CS156) : « Réponds en anglais (en). », nom de la langue en français.
+  function consigneLangue(code) {
+    let nom = code;
+    try { nom = new Intl.DisplayNames(['fr'], { type: 'language' }).of(code) || code; } catch (erreur) { /* code seul */ }
+    return 'Réponds en ' + nom + ' (' + code + ').';
+  }
+
   // Texte proposé par l'IA : non vide, 4 000 caractères au plus (sinon aucune proposition).
   function textePropose(valeur) {
     const proposition = texte(valeur);
@@ -450,6 +457,7 @@ Object.assign(Ia, (() => {
   }
 
   const ingestionWiki = {
+    langue: 'fr',                             // D159 : la rédaction du wiki par l'IA reste en français (traduite au Lot 5)
     systeme: systeme('Fonction : ingestionWiki',
       'intègre l\'ordre de travail (OT) ci-dessous au wiki de l\'atelier. Prévo calcule les faits (pannes, '
         + 'interventions, pièces, stock) ; tu rédiges seulement les textes reçus :\n'
@@ -685,7 +693,7 @@ Object.assign(Ia, (() => {
     PROMPTS: Object.freeze({ reformulerDI, compteRendu, codes, checkList, commentaireRapport, colonnesImport,
       ingestionWiki }),
     valider: Object.freeze({ codes: codesProposes, impact, checkList: checkListe, commentaire }),
-    codesConnus,
+    codesConnus, consigneLangue,
     jetonsRapport,
     masquer,
   };
