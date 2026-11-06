@@ -309,7 +309,7 @@ Object.assign(Indicateurs, (() => {
       <tbody>${PRIORITES.map((priorite) => {
         const ligne = parPriorite[priorite];
         return UI.html`<tr><td>${UI.badgePriorite(priorite)}</td>
-          <td class="num">${ligne.cible === null ? 'aucun' : formats.heures(ligne.cible)}</td>
+          <td class="num">${ligne.cible === null ? I18n.t('indicateurs.delais.aucun') : formats.heures(ligne.cible)}</td>
           <td class="num">${ligne.mediane === null ? '–' : formats.heures(ligne.mediane)}</td>
           <td class="num">${ligne.partDansLeDelai === null ? '–' : formats.pourcentage(ligne.partDansLeDelai)}</td>
           <td class="num">${ligne.effectif}</td></tr>`;

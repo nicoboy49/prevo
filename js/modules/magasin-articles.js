@@ -479,7 +479,7 @@ Object.assign(Magasin, (() => {
         { cle: 'date', libelle: I18n.t('commun.champ.date'), classe: 'sans-coupure', rendu: (m) => UI.dateHeureFr(m.date) },
         { cle: 'type', libelle: I18n.t('magasin.carte_mouvements_article.type'), rendu: (m) => Magasin.interne.badgeMouvement(m.type) },
         { cle: 'quantite', libelle: I18n.t('commun.champ.quantite'), type: 'nombre', rendu: (m) => UI.nombreFr(m.quantite) },
-        { cle: 'ot_id', libelle: 'OT', classe: 'sans-coupure', rendu: (m) => lienOt(m.ot_id) },
+        { cle: 'ot_id', libelle: I18n.t('magasin.carte_mouvements_article.ot'), classe: 'sans-coupure', rendu: (m) => lienOt(m.ot_id) },
         { cle: 'utilisateur', libelle: I18n.t('magasin.carte_mouvements_article.par') },
         { cle: 'commentaire', libelle: I18n.t('commun.champ.commentaire'), classe: 'magasin-col-commentaire' },
       ],

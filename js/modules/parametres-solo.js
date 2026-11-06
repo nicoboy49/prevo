@@ -43,7 +43,7 @@ Object.assign(Parametres.interne, (() => {
       <p>${reglage('mode_solo').aide}</p>
       ${actif ? UI.html`<dl class="valeurs">
           <dt>${reglage('solo_technicien_id').libelle}</dt>
-          <dd id="solo-technicien">${technicien ? UI.html`<a href="#/equipe/${encodeURIComponent(technicien.id)}">${nomTechnicien(technicien) || technicien.id}</a> (${technicien.id})` : 'aucun'}</dd>
+          <dd id="solo-technicien">${technicien ? UI.html`<a href="#/equipe/${encodeURIComponent(technicien.id)}">${nomTechnicien(technicien) || technicien.id}</a> (${technicien.id})` : I18n.t('parametres.carte_solo.aucun')}</dd>
         </dl>
         <p class="note">${I18n.t('parametres.carte_solo.profils_demandeur_technicien_restent', { aide: reglage('solo_technicien_id').aide })}</p>
         <div class="actions"><button type="button" class="btn btn-secondaire" id="btn-quitter-solo">${UI.icone('fermer')}${I18n.t('parametres.carte_solo.quitter_mode_solo')}</button></div>`

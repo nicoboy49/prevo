@@ -57,7 +57,7 @@ Object.assign(Magasin, (() => {
         rendu: (m) => (articleDe(m) ? UI.html`${lienArticle(articleDe(m))} <span class="muted">${articleDe(m).designation}</span>` : m.article_id) },
       { cle: 'type', libelle: I18n.t('magasin.colonnes_mouvements.type'), rendu: (m) => badgeMouvement(m.type) },
       { cle: 'quantite', libelle: I18n.t('commun.champ.quantite'), type: 'nombre', rendu: (m) => UI.nombreFr(m.quantite) },
-      { cle: 'ot_id', libelle: 'OT', classe: 'sans-coupure', rendu: (m) => lienOt(m.ot_id) },
+      { cle: 'ot_id', libelle: I18n.t('magasin.colonnes_mouvements.ot'), classe: 'sans-coupure', rendu: (m) => lienOt(m.ot_id) },
       { cle: 'utilisateur', libelle: I18n.t('magasin.colonnes_mouvements.par') },
       { cle: 'commentaire', libelle: I18n.t('commun.champ.commentaire'), classe: 'magasin-col-commentaire' },
     ];

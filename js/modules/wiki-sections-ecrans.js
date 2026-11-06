@@ -145,7 +145,7 @@ Object.assign(Wiki, (() => {
 
   function blocSavoirFaire(entite, contexte, vide_) {
     const savoirs = entite.sections.savoirFaire;
-    return section('wiki-savoir-faire', 'Savoir-faire', savoirs.length, UI.html`${savoirs.length
+    return section('wiki-savoir-faire', I18n.t('wiki.bloc_savoir_faire.savoir_faire'), savoirs.length, UI.html`${savoirs.length
       ? liste(savoirs.map((savoir) => ({ id: savoir.id, type: 'savoir-faire', nom: o().lienEntite(savoir.lien, savoir.titre) })))
       : vide(vide_)}${contexte.responsable ? UI.html`<p class="wiki-ecrire-lien"><a class="btn btn-fantome" id="wiki-ecrire-savoir-faire"
         href="#/wiki-ecrire/nouvelle?rattache=${encodeURIComponent(entite.id)}">${UI.icone('ajouter')}${I18n.t('wiki.bloc_savoir_faire.ecrire_savoir_faire')}</a></p>` : ''}`);
@@ -376,7 +376,7 @@ Object.assign(Wiki, (() => {
   function* savoirFaire(entite) {
     const sousPages = entite.sections.sousPages || [];
     yield { textes: Wiki.RUBRIQUES['savoir-faire'] || [], reste: true, toujours: true, titreVide: I18n.t('wiki.savoir_faire.savoir_faire') };
-    yield sousPages.length ? sectionListe('wiki-sous-pages', 'Sous-pages', sousPages.length, sousPages.map((sousPage) => ({
+    yield sousPages.length ? sectionListe('wiki-sous-pages', I18n.t('wiki.savoir_faire.sous_pages'), sousPages.length, sousPages.map((sousPage) => ({
       id: sousPage.id, type: 'savoir-faire', nom: o().lienEntite(sousPage.id, sousPage.titre) })),
     { nom: 'sous-pages', aide: I18n.t('wiki.savoir_faire.savoir_faire_decoupe_pages') }) : null;
     yield blocRetours(entite);

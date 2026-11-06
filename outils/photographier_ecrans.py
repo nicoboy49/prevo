@@ -78,6 +78,12 @@ AJOUTER UN ÉCRAN
     Une ligne E(...) dans ECRANS (route, profils, fenêtres), puis reprise de la référence (--reference) par le chef de
     chantier, sur un code dont les écrans sont tenus pour bons.
 
+UNE AUTRE LANGUE (chantier multilingue, Lot 3, T279)
+    Releveur(..., langue="en") pose la langue de Prévo dans localStorage « prevo.langue » avant chaque chargement de
+    page (comme le sélecteur de langue) : même parcours, mêmes horloges, mêmes masques, écrans dans la langue
+    demandée. Sert à tests/test_ecrans_anglais.py. Sans ce paramètre (défaut, ligne de commande, référence) : rien
+    n'est posé, la photographie reste celle de l'écran français.
+
 Bibliothèque standard + Playwright (Python). Aucune écriture dans donnees/ : démo en mémoire, serveurs de test sur
 des copies temporaires (tests/commun.py).
 """
@@ -255,6 +261,14 @@ SCRIPT_SURVEILLANCE = r"""
       return promesse.finally(() => { etat.requetes -= 1; });
     };
   }
+})();
+"""
+
+# Langue de Prévo posée avant tout script de la page (Releveur, paramètre langue) : clé du sélecteur de langue, lue par
+# js/i18n-chargeur.js au chargement.
+SCRIPT_LANGUE = """
+(() => {
+  try { localStorage.setItem('prevo.langue', %s); } catch (erreur) { /* page sans stockage : rien à faire */ }
 })();
 """
 
@@ -510,15 +524,18 @@ class Releveur:
     """Relevé d'un mode : un navigateur, un contexte par profil, les écrans dans l'ordre de ECRANS.
 
     captures : dossier où écrire les captures PNG des écrans principaux (profil Responsable), ou None.
-    filtre : expression régulière sur les noms d'écran (mise au point ; jamais pour la référence)."""
+    filtre : expression régulière sur les noms d'écran (mise au point ; jamais pour la référence).
+    langue : code de la langue de Prévo posée dans localStorage « prevo.langue » avant chaque chargement (« en »),
+    ou None (défaut : rien n'est posé, écrans en français)."""
 
-    def __init__(self, playwright, navigateur, mode, captures=None, filtre=None, journal=None):
+    def __init__(self, playwright, navigateur, mode, captures=None, filtre=None, journal=None, langue=None):
         self.playwright = playwright
         self.navigateur = navigateur
         self.mode = mode
         self.captures = Path(captures) if captures else None
         self.filtre = re.compile(filtre) if filtre else None
         self.journal = journal or (lambda texte: None)
+        self.langue = langue
         self.ecrans = []
         self.erreurs_js = []
         self.dossiers = []
@@ -547,6 +564,8 @@ class Releveur:
         contexte.set_default_timeout(DELAI_MS)
         contexte.clock.set_fixed_time(instant_fige() / 1000)
         contexte.add_init_script(SCRIPT_SURVEILLANCE)
+        if self.langue:
+            contexte.add_init_script(SCRIPT_LANGUE % json.dumps(self.langue))
         return contexte
 
     def nouvelle_page(self, contexte, nom):

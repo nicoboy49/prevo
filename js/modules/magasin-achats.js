@@ -273,7 +273,7 @@ Object.assign(Magasin, (() => {
         { cle: 'nom', libelle: I18n.t('magasin.onglet_fournisseurs.nom'), rendu: (f) => UI.html`<b>${f.nom || f.id}</b>` },
         { cle: 'contact', libelle: I18n.t('magasin.onglet_fournisseurs.contact') },
         { cle: 'telephone', libelle: I18n.t('magasin.onglet_fournisseurs.telephone'), classe: 'sans-coupure', rendu: telephone },
-        { cle: 'email', libelle: 'E-mail', rendu: email },
+        { cle: 'email', libelle: I18n.t('magasin.onglet_fournisseurs.email'), rendu: email },
         { cle: 'articles', libelle: I18n.t('magasin.onglet_fournisseurs.articles'), type: 'nombre' },
         { cle: 'action', libelle: '', triable: false, rendu: bouton },
       ],

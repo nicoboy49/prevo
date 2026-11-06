@@ -180,7 +180,7 @@ Object.assign(Wiki, (() => {
       return anciennes
         ? UI.html`<li class="wj-reprise"><span class="wj-etiquette">${I18n.t('wiki.diff.reprise')}</span> <ins>${phraseHtml(phrase)}</ins>
             <span class="wj-avant">${I18n.t('wiki.diff.avant')} ${anciennes.map((a) => UI.html`<del>${phraseHtml(a)}</del>`)}</span></li>`
-        : UI.html`<li class="wj-nouvelle"><span class="wj-etiquette">Nouvelle</span> <mark>${phraseHtml(phrase)}</mark></li>`;
+        : UI.html`<li class="wj-nouvelle"><span class="wj-etiquette">${I18n.t('wiki.diff.nouvelle')}</span> <mark>${phraseHtml(phrase)}</mark></li>`;
     };
     return UI.html`${groupes.map((g) => UI.html`<h5 class="wj-rubrique">${g.nom}</h5><ul class="wj-phrases">${g.phrases.map(ligne)}</ul>`)}
       ${c.retirees.length ? UI.html`<ul class="wj-phrases">${c.retirees.map((p) => UI.html`<li class="wj-retiree">

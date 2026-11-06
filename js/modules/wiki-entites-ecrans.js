@@ -62,7 +62,7 @@ Object.assign(Wiki, (() => {
   const TYPE_DE_LISTE = Object.fromEntries(Object.keys(TYPES).map((type) => [TYPES[type].liste, type]));
   const BRIQUES = ['machine', 'panne', 'article', 'technicien', 'savoir-faire'];
   const SUIVI = [
-    { vue: 'a-valider', champ: 'aValider', libelle: 'à valider', ton: 'attente' },
+    { vue: 'a-valider', champ: 'aValider', get libelle() { return I18n.t('wiki.libelle.a_valider'); }, ton: 'attente' },
     { vue: 'contradictions', champ: 'aTrancher', get libelle() { return I18n.t('wiki.libelle.trancher'); }, ton: 'urgent' },
     { vue: 'echecs', champ: 'enEchec', get libelle() { return I18n.t('wiki.libelle.echec'); }, ton: 'urgent' },
   ];
@@ -604,7 +604,7 @@ Object.assign(Wiki, (() => {
         libelle: I18n.t('wiki.pluriel.interventions'), vide: I18n.t('wiki.rendre_interventions.aucune_intervention'), nom: 'interventions', montres: LIGNES_MONTREES, lignes: interventions,
         colonnes: [
           { cle: 'date', libelle: I18n.t('commun.champ.date'), rendu: (ot) => UI.dateFr(ot.date) },
-          { cle: 'id', libelle: 'N°', classe: 'sans-coupure', rendu: (ot) => lienEntite(ot.lien, ot.id) },
+          { cle: 'id', libelle: I18n.t('commun.champ.numero'), classe: 'sans-coupure', rendu: (ot) => lienEntite(ot.lien, ot.id) },
           { cle: 'titre', libelle: I18n.t('wiki.libelle.intervention'), classe: 'wiki-cellule-titre' },
           { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (ot) => UI.badgeValeur('ordres_travail', 'statut', ot.statut) },
           { cle: 'machine', libelle: I18n.t('wiki.libelle.machine'), valeurTri: (ot) => repere(ot.machine), rendu: (ot) => lienMachine(ot.machine) },

@@ -65,7 +65,7 @@ Object.assign(Preventif, (() => {
     const declencheur = texte(gamme.declencheur) || 'date';
     if (declencheur === 'date') return gamme.periodicite_jours ? I18n.t('preventif.periodicite.tous_periodicite_jours', { n: UI.nombreFr(gamme.periodicite_jours) }) : '';
     if (declencheur === 'compteur') return gamme.periodicite_unites ? I18n.t('preventif.periodicite.toutes_avec_unite', { avecUnite: avecUnite(gamme.periodicite_unites, uniteCompteur(gamme)) }) : '';
-    return texte(gamme.seuil) ? 'seuil ' + avecUnite(gamme.seuil, uniteCompteur(gamme)) : '';
+    return texte(gamme.seuil) ? I18n.t('preventif.periodicite.seuil_avec_unite', { avecUnite: avecUnite(gamme.seuil, uniteCompteur(gamme)) }) : '';
   }
 
   /** Badge du statut calculé (texte toujours affiché ; la couleur aide seulement). */
@@ -433,7 +433,7 @@ Object.assign(Preventif, (() => {
     UI.remplir(section, UI.html`<div class="entete-carte"><h2 id="pv-titre-ots">${I18n.t('preventif.ots_de_la_gamme.ot_gamme')}</h2><span class="badge neutre">${ots.length}</span></div>`);
     section.appendChild(UI.tableau({
       colonnes: [
-        { cle: 'id', libelle: 'N°', rendu: (ot) => lienOt(ot.id) },
+        { cle: 'id', libelle: I18n.t('commun.champ.numero'), rendu: (ot) => lienOt(ot.id) },
         { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (ot) => UI.badgeValeur('ordres_travail', 'statut', ot.statut) },
         { cle: 'date_prevue', libelle: I18n.t('preventif.ots_de_la_gamme.prevu'), rendu: (ot) => UI.dateFr(ot.date_prevue) },
         { cle: 'date_fin', libelle: I18n.t('preventif.ots_de_la_gamme.realise'), rendu: (ot) => UI.dateFr(ot.date_fin) },

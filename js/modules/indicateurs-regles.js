@@ -41,8 +41,8 @@ const Indicateurs = (() => {
   // Fonction (et non constante) : les libellés sont lus au moment de l'affichage, jamais figés au chargement.
   function libellesPeriodes() {
     return {
-      mois: I18n.t('indicateurs.libelles_periodes.mois_cours'), 'mois-precedent': I18n.t('indicateurs.libelles_periodes.mois_precedent'), '3-mois': '3 derniers mois',
-      '12-mois': '12 derniers mois', 'du-au': I18n.t('indicateurs.libelles_periodes.periode_choisie'),
+      mois: I18n.t('indicateurs.libelles_periodes.mois_cours'), 'mois-precedent': I18n.t('indicateurs.libelles_periodes.mois_precedent'), '3-mois': I18n.t('indicateurs.libelles_periodes.trois_derniers_mois'),
+      '12-mois': I18n.t('indicateurs.libelles_periodes.douze_derniers_mois'), 'du-au': I18n.t('indicateurs.libelles_periodes.periode_choisie'),
     };
   }
   const MILLISECONDES_PAR_JOUR = 86400000;

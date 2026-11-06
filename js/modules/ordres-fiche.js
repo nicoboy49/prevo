@@ -233,7 +233,7 @@ Object.assign(Ordres, (() => {
       <dt>${I18n.t('ordres.equipement.localisation')}</dt><dd>${cheminLocalisation(equipement.localisation_id)}</dd>
       <dt>${I18n.t('commun.champ.criticite')}</dt><dd>${Schema.libelleValeur('equipements', 'criticite', equipement.criticite)}</dd>
       <dt>${I18n.t('ordres.equipement.etat')}</dt><dd>${equipement.statut ? UI.badgeValeur('equipements', 'statut', equipement.statut) : ''}</dd>
-      <dt>${I18n.t('ordres.equipement.habilitation_requise')}</dt><dd>${equipement.habilitation_requise || 'aucune'}</dd>
+      <dt>${I18n.t('ordres.equipement.habilitation_requise')}</dt><dd>${equipement.habilitation_requise || I18n.t('ordres.equipement.aucune_habilitation')}</dd>
     </dl>`;
   }
 

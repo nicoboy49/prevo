@@ -183,14 +183,15 @@ const Parametres = (() => {
   // « …_avant-mise-a-jour » (D170) : avant un import ZIP, avant la mise à jour de Prévo.
   function decrireSauvegarde(nom) {
     const lu = /^(\d{4}-\d{2}-\d{2})(?:_(\d{2})(\d{2})(\d{2}))?(?:(_avant-restauration)|_avant-format-v(\d+)|(_avant-import-zip)|(_avant-import)|(_avant-mise-a-jour))?$/.exec(nom);
-    if (!lu) return { date: nom, type: 'Sauvegarde', ton: 'neutre' };
+    if (!lu) return { date: nom, type: I18n.t('parametres.decrire_sauvegarde.sauvegarde'), ton: 'neutre' };
     const date = lu[2] ? I18n.t('parametres.decrire_sauvegarde.date_heure', { date: UI.dateFr(lu[1]), heures: lu[2], minutes: lu[3], secondes: lu[4] }) : UI.dateFr(lu[1]);
     if (lu[5]) return { date: date, type: I18n.t('parametres.decrire_sauvegarde.copie_securite'), ton: 'attention' };
     if (lu[6]) return { date: date, type: I18n.t('parametres.decrire_sauvegarde.avant_format', { version: Number(lu[6]) }), ton: 'info' };
     if (lu[7]) return { date: date, type: I18n.t('parametres.decrire_sauvegarde.avant_import_zip'), ton: 'info' };
     if (lu[8]) return { date: date, type: I18n.t('parametres.decrire_sauvegarde.avant_import'), ton: 'info' };
     if (lu[9]) return { date: date, type: I18n.t('parametres.decrire_sauvegarde.avant_mise_jour_prevo'), ton: 'info' };
-    return lu[2] ? { date: date, type: 'Manuelle', ton: 'info' } : { date: date, type: 'Quotidienne', ton: 'neutre' };
+    return lu[2] ? { date: date, type: I18n.t('parametres.decrire_sauvegarde.manuelle'), ton: 'info' }
+      : { date: date, type: I18n.t('parametres.decrire_sauvegarde.quotidienne'), ton: 'neutre' };
   }
 
   // { liste, indisponible } : la liste des sauvegardes, ou la raison pour laquelle elle n'existe pas.

@@ -298,7 +298,7 @@ Object.assign(Parc, (() => {
       libelle: I18n.t('parc.carte_historique_ot.ordres_travail_equipement'),
       lien: (o) => '#/ot/' + encodeURIComponent(o.id),
       colonnes: [
-        { cle: 'id', libelle: 'N°', rendu: (o) => UI.html`<a href="#/ot/${encodeURIComponent(o.id)}">${o.id}</a>` },
+        { cle: 'id', libelle: I18n.t('commun.champ.numero'), rendu: (o) => UI.html`<a href="#/ot/${encodeURIComponent(o.id)}">${o.id}</a>` },
         { cle: 'date_creation', libelle: I18n.t('commun.champ.date'), rendu: (o) => UI.dateFr(o.date_creation), classe: 'sans-coupure' },
         { cle: 'type', libelle: I18n.t('parc.carte_historique_ot.type'), table: 'ordres_travail' },
         { cle: 'priorite', libelle: I18n.t('commun.champ.priorite'), rendu: (o) => UI.badgePriorite(o.priorite) },
@@ -321,7 +321,7 @@ Object.assign(Parc, (() => {
       libelle: I18n.t('parc.carte_historique_di.demandes_intervention_equipement'),
       lien: (d) => '#/di/' + encodeURIComponent(d.id),
       colonnes: [
-        { cle: 'id', libelle: 'N°', rendu: (d) => UI.html`<a href="#/di/${encodeURIComponent(d.id)}">${d.id}</a>` },
+        { cle: 'id', libelle: I18n.t('commun.champ.numero'), rendu: (d) => UI.html`<a href="#/di/${encodeURIComponent(d.id)}">${d.id}</a>` },
         { cle: 'date_heure', libelle: I18n.t('commun.champ.date'), rendu: (d) => UI.dateFr(d.date_heure), classe: 'sans-coupure' },
         { cle: 'symptome', libelle: I18n.t('commun.champ.symptome'), rendu: (d) => abreger(d.symptome, 110) },
         { cle: 'statut', libelle: I18n.t('commun.champ.statut'), rendu: (d) => UI.badgeValeur('demandes', 'statut', d.statut) },

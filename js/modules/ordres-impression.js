@@ -50,7 +50,7 @@ Object.assign(Ordres, (() => {
         <section class="bt-equipement"><h2>${I18n.t('commun.champ.equipement')}</h2>
           <dl class="valeurs"><dt>${I18n.t('commun.champ.repere')}</dt><dd>${equipement.repere || ot.equipement_id}</dd><dt>${I18n.t('commun.champ.designation')}</dt><dd>${equipement.designation || ''}</dd>
             <dt>${I18n.t('ordres.bon_de_travail.localisation')}</dt><dd>${cheminLocalisation(equipement.localisation_id)}</dd><dt>${I18n.t('commun.champ.criticite')}</dt><dd>${Schema.libelleValeur('equipements', 'criticite', equipement.criticite)}</dd>
-            <dt>${I18n.t('ordres.bon_de_travail.habilitation')}</dt><dd>${equipement.habilitation_requise || 'aucune'}</dd></dl>
+            <dt>${I18n.t('ordres.bon_de_travail.habilitation')}</dt><dd>${equipement.habilitation_requise || I18n.t('ordres.equipement.aucune_habilitation')}</dd></dl>
         </section>
         <section class="bt-travail"><h2>${I18n.t('ordres.bon_de_travail.travail_faire')}</h2>
           <p class="bt-texte">${ot.titre}</p>
