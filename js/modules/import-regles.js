@@ -212,7 +212,9 @@ const Import = (() => {
 
   // ===== 4. Correspondance des colonnes (§18.4) et mémoire du poste =================================
   function nomsDuChamp(champ) {
-    const premiers = [champ.cle, champ.libelle, champ.champ].filter(Boolean).map(comparable);
+    // Libellé de la langue active et libellé français (D155) ; champs virtuels : libellé actif seul.
+    const enFrancais = champ.table ? I18n.reference(['schema', champ.table, champ.champ].join('.')) : '';
+    const premiers = [champ.cle, champ.libelle, enFrancais, champ.champ].filter(Boolean).map(comparable);
     return { champ, premiers, seconds: champ.synonymes.map(comparable).filter((nom) => nom && !premiers.includes(nom)) };
   }
   const MOTS_VIDES = new Set(['date', 'dans', 'pour', 'avec', 'code', 'type', 'numero', 'nombre']);

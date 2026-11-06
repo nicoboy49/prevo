@@ -88,7 +88,11 @@ const I18n = (function () {
   }
 
   // { valeur, langue } du texte à utiliser, ou null si la clé n'existe nulle part (la clé est alors affichée).
-  function trouver(cle) {
+  function trouver(cle, enReference) {
+    if (enReference) {
+      const base = dictionnaires[LANGUE_DE_REFERENCE];
+      return base && cle in base ? { valeur: base[cle], langue: LANGUE_DE_REFERENCE } : null;
+    }
     const active = dictionnaires[langueActive];
     if (active && cle in active) return { valeur: active[cle], langue: langueActive };
     const reference = dictionnaires[LANGUE_DE_REFERENCE];
@@ -127,8 +131,8 @@ const I18n = (function () {
   }
 
   // Texte du dictionnaire (balisage compris, variables pas encore remplacées) ; null si la clé n'existe nulle part.
-  function gabarit(cle, valeurs) {
-    const trouve = trouver(String(cle));
+  function gabarit(cle, valeurs, enReference) {
+    const trouve = trouver(String(cle), enReference);
     if (!trouve) return null;
     const entree = trouve.valeur;
     if (entree && typeof entree === 'object') return formePlurielle(entree, valeurs && valeurs.n, trouve.langue);
@@ -155,6 +159,12 @@ const I18n = (function () {
   /** Texte brut de la clé dans la langue active (repli : français, puis la clé). */
   function t(cle, valeurs) {
     const texte = gabarit(cle, valeurs);
+    return texte === null ? String(cle) : interpoler(texte, valeurs, enTexte);
+  }
+
+  /** Texte de la clé dans la langue de référence (français), quelle que soit la langue active, sans avertissement. */
+  function reference(cle, valeurs) {
+    const texte = gabarit(cle, valeurs, true);
     return texte === null ? String(cle) : interpoler(texte, valeurs, enTexte);
   }
 
@@ -225,6 +235,7 @@ const I18n = (function () {
     declarer: declarer,
     choisir: choisir,
     t: t,
+    reference: reference,
     html: html,
     appliquer: appliquer,
     /** Code de la langue active ('fr' tant que rien n'en choisit une autre). */

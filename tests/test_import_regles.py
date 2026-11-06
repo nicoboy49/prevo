@@ -980,6 +980,23 @@ class TestCorrespondance(CasImport):
         self.assertEqual([(r["champ"], r["statut"]) for r in resultat],
                          [("repere", "sure"), ("designation", "sure"), ("num_serie", "sure"), ("statut", "sure")])
 
+    def test_titres_francais_et_langue_de_l_ecran(self):
+        # T284 (D155) : le libellé français reste reconnu « sûr » quand l'écran est dans une autre langue.
+        self.page.evaluate("""() => {
+          I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'en-GB', statut: 'automatique' });
+          I18n.ajouter('xx', { 'schema.equipements.designation': 'Machine wording', 'schema.equipements.repere': 'Asset tag' });
+          I18n.choisir('xx');
+        }""")
+        try:
+            self.assertEqual(self.page.evaluate("() => I18n.reference('schema.equipements.designation')"), "Désignation")
+            self.assertEqual(self.page.evaluate("() => I18n.t('schema.equipements.designation')"), "Machine wording")
+            francais = self.correspondance_js("equipements", ["Désignation", "Repère"], [])
+            self.assertEqual([(r["champ"], r["statut"]) for r in francais], [("designation", "sure"), ("repere", "sure")])
+            essai = self.correspondance_js("equipements", ["Machine wording", "Asset tag"], [])
+            self.assertEqual([(r["champ"], r["statut"]) for r in essai], [("designation", "sure"), ("repere", "sure")])
+        finally:
+            self.page.evaluate("() => I18n.choisir('fr')")
+
     def test_ambigue_proche_et_echantillon(self):
         entetes = ["Code machine", "DESIGNATION", "Désignation", "n° de série", "Date MES", "Truc", "Marque du moteur", "", "Repère"]
         dates = [["A1", "x", "y", "123", "15/03/2021", "t", "m", "", "R1"], ["A2", "x", "y", "124", "2021-03-16", "t", "m", "", "R2"]]

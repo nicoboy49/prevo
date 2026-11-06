@@ -284,6 +284,23 @@ class TestMoteur(CasNavigateur):
                 self.assertIn("« %s »" % cle, avertissement)
         self.assertIn("absente en « xx »", avertissements[1])
 
+    def test_reference_rend_le_francais_quelle_que_soit_la_langue_active(self):
+        self.ouvrir()
+        resultat = self.page.evaluate("""() => {
+          I18n.ajouter('fr', { 'essai.ref': 'Bonjour {nom}', 'essai.refpl': { one: '{n} chose', other: '{n} choses' } });
+          I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'pl', statut: 'automatique' });
+          I18n.ajouter('xx', { 'essai.ref': 'Hello {nom}' });
+          I18n.choisir('xx');
+          const avant = window.avertissements.length;
+          const r = { active: I18n.t('essai.ref', { nom: 'A' }), ref: I18n.reference('essai.ref', { nom: 'A' }),
+                      pluriel: I18n.reference('essai.refpl', { n: 0 }), absente: I18n.reference('essai.nulle_part'),
+                      avertissements: window.avertissements.length - avant };
+          I18n.choisir('fr');
+          return r;
+        }""")
+        self.assertEqual(resultat, {"active": "Hello A", "ref": "Bonjour A", "pluriel": "0 chose",
+                                    "absente": "essai.nulle_part", "avertissements": 0})
+
     def test_aide_manquante_dans_une_langue_francais_sans_avertissement(self):
         self.ouvrir()
         resultat = self.page.evaluate("""() => {
