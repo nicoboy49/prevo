@@ -4,23 +4,31 @@
 
 const Apropos = (() => {
 
-  const CREDIT = 'Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS';
+  /** Crédit (signature) ; lu à l'affichage. */
+  function credit() {
+    return I18n.t('apropos.credit.developpe_claude_anthropic_demande');
+  }
 
-  // Bibliothèques embarquées dans js/lib/ (textes complets des licences dans js/lib/LICENCES.txt).
-  const BIBLIOTHEQUES = [
-    { nom: 'PapaParse', version: '5.7.0', licence: 'MIT', role: 'lecture des fichiers CSV' },
-    { nom: 'qrcode-generator', version: '2.0.4', licence: 'MIT', role: 'dessin des QR codes' },
-    { nom: 'jsQR', version: '1.4.0', licence: 'Apache-2.0', role: 'lecture des QR codes par la caméra' },
-    { nom: 'ECharts', version: '5.5.1', licence: 'Apache-2.0', role: 'graphiques des indicateurs' },
-    { nom: 'SheetJS CE', version: '0.20.3', licence: 'Apache-2.0', role: 'lecture des fichiers Excel et OpenDocument (import)' },
-    { nom: 'Police Sora', version: '', licence: 'OFL 1.1', role: 'police de caractères' },
-  ];
+  /** Bibliothèques embarquées dans js/lib/ (textes complets des licences dans js/lib/LICENCES.txt) ; lues à
+   *  l'affichage. */
+  function bibliotheques() {
+    return [
+      { nom: 'PapaParse', version: '5.7.0', licence: 'MIT', role: I18n.t('apropos.bibliotheques.lecture_fichiers_csv') },
+      { nom: 'qrcode-generator', version: '2.0.4', licence: 'MIT', role: I18n.t('apropos.bibliotheques.dessin_qr_codes') },
+      { nom: 'jsQR', version: '1.4.0', licence: 'Apache-2.0', role: I18n.t('apropos.bibliotheques.lecture_qr_codes_camera') },
+      { nom: 'ECharts', version: '5.5.1', licence: 'Apache-2.0', role: I18n.t('apropos.bibliotheques.graphiques_indicateurs') },
+      { nom: I18n.t('apropos.bibliotheques.sheet_js'), version: '0.20.3', licence: 'Apache-2.0', role: I18n.t('apropos.bibliotheques.lecture_fichiers_excel_open_document') },
+      { nom: I18n.t('apropos.bibliotheques.police_sora'), version: '', licence: I18n.t('apropos.bibliotheques.ofl_1_1'), role: I18n.t('apropos.bibliotheques.police_caracteres') },
+    ];
+  }
 
-  const MODES = {
-    serveur: 'Serveur',
-    dossier: 'Dossier',
-    demo: 'Démo',
-  };
+  /** Libellé d'un mode de stockage (serveur, dossier, demo) ; lu à l'affichage. */
+  function libelleMode(mode) {
+    if (mode === 'serveur') return I18n.t('apropos.libelle_mode.serveur');
+    if (mode === 'dossier') return I18n.t('apropos.libelle_mode.dossier');
+    if (mode === 'demo') return I18n.t('apropos.libelle_mode.demo');
+    return '';
+  }
 
   // Modèle qui a construit le wiki de la démo (lot 6, §20.10) : lu dans son journal, en mode démo seulement.
   function modeleWikiDemo(mode) {
@@ -35,67 +43,63 @@ const Apropos = (() => {
     // Lot 7 (D126) : avec les comptes exigés, le profil vient du compte et le serveur vérifie les droits ; la limite
     // « ce n'est pas une sécurité » ne vaut que sans comptes (portée « ce PC », modes dossier et démo).
     const comptesExiges = typeof App.comptesExiges === 'function' && App.comptesExiges();
+    const modeleWiki = modeleWikiDemo(mode);
     UI.remplir(conteneur, UI.html`
       <div class="entete-page">
         <div>
-          <h1>À propos de Prévo</h1>
-          <p>GMAO libre pour l'atelier : parc, demandes d'intervention, ordres de travail, préventif, magasin, planning, contrôles, indicateurs.</p>
+          <h1>${I18n.t('apropos.ecran.propos_prevo')}</h1>
+          <p>${I18n.t('apropos.ecran.gmao_libre_atelier_parc')}</p>
         </div>
       </div>
       <div class="grille">
         <article class="carte c6">
-          <h2>Version</h2>
+          <h2>${I18n.t('apropos.ecran.version')}</h2>
           <dl class="valeurs">
-            <dt>Application</dt><dd>Prévo — GMAO</dd>
-            <dt>Version</dt><dd>${App.version}</dd>
-            <dt>Date</dt><dd>${UI.dateFr(App.dateVersion)}</dd>
-            <dt>Mise à jour</dt><dd id="apropos-maj">${typeof MiseAJour !== 'undefined' ? MiseAJour.ligneApropos() : ''}</dd>
-            <dt>Contenu</dt><dd>Lots 1 à 4 : parc, demandes, ordres de travail, préventif et préventif suggéré, magasin, planning, contrôles réglementaires, équipe, indicateurs et rapport mensuel, assistant IA, dictée</dd>
-            <dt>Stockage actuel</dt><dd>${libelleStockage || MODES[mode] || '—'}</dd>
+            <dt>${I18n.t('apropos.ecran.application')}</dt><dd>${I18n.t('apropos.ecran.prevo_gmao')}</dd>
+            <dt>${I18n.t('apropos.ecran.version')}</dt><dd>${App.version}</dd>
+            <dt>${I18n.t('commun.champ.date')}</dt><dd>${UI.dateFr(App.dateVersion)}</dd>
+            <dt>${I18n.t('apropos.ecran.mise_jour')}</dt><dd id="apropos-maj">${typeof MiseAJour !== 'undefined' ? MiseAJour.ligneApropos() : ''}</dd>
+            <dt>${I18n.t('apropos.ecran.contenu')}</dt><dd>${I18n.t('apropos.ecran.lots_1_4_parc')}</dd>
+            <dt>${I18n.t('apropos.ecran.stockage_actuel')}</dt><dd>${libelleStockage || libelleMode(mode) || '—'}</dd>
           </dl>
         </article>
         <article class="carte c6">
-          <h2>Les trois modes de stockage</h2>
+          <h2>${I18n.t('apropos.ecran.trois_modes_stockage')}</h2>
           <ul class="apropos-liste">
-            <li><b>Serveur</b> : <code>Lancer_GMAO.bat</code> (ou <code>lancer.sh</code>) démarre un petit serveur sur ce PC.
-              Plusieurs postes et des téléphones travaillent ensemble sur le réseau local ; les QR codes ouvrent la fiche de l'équipement.</li>
-            <li><b>Dossier</b> : <code>index.html</code> ouvert dans Chrome ou Edge, avec un dossier de fichiers CSV choisi sur le PC.
-              Un seul poste, aucune installation.</li>
-            <li><b>Démo</b> : un atelier fictif en mémoire, pour découvrir l'outil. Rien n'est enregistré ;
-              l'export ZIP permet de garder une copie. Son wiki de maintenance a été construit par
-              Claude${modeleWikiDemo(mode) ? ' (' + modeleWikiDemo(mode) + ')' : ''} avec la consigne de Prévo, un agent par OT,
-              dans l'ordre des interventions ; la démo n'appelle aucune IA.</li>
+            <li>${I18n.html('apropos.ecran.serveur_lancer_gmao_bat')}</li>
+            <li>${I18n.html('apropos.ecran.dossier_index_html_ouvert')}</li>
+            <li>${modeleWiki ? I18n.html('apropos.modes.demo_modele', { modele: modeleWiki }) : I18n.html('apropos.modes.demo')}</li>
           </ul>
-          <p class="note">Dans tous les modes, les données sont des fichiers CSV (séparateur « ; », UTF-8) lisibles dans Excel.</p>
+          <p class="note">${I18n.t('apropos.ecran.tous_modes_donnees_sont')}</p>
         </article>
         <article class="carte c6">
-          <h2>Limites à connaître</h2>
+          <h2>${I18n.t('apropos.ecran.limites_connaitre')}</h2>
           <ul class="apropos-liste">
             ${comptesExiges ? UI.html`
-            <li>Chaque personne a son compte et son rôle ; le serveur vérifie les droits : un écran ou une donnée réservés à un autre rôle lui sont refusés.</li>
-            <li>Usage sur le réseau local ou par un réseau privé (Tailscale, VPN de l'entreprise) : ne jamais exposer le serveur directement sur Internet.</li>` : UI.html`
-            <li>Les profils adaptent les écrans, ce n'est pas une sécurité : n'importe qui peut choisir le profil Responsable.</li>
-            <li>Usage sur réseau local uniquement, sans authentification : ne jamais exposer le serveur sur Internet.</li>`}
-            <li>Assistant IA (facultatif, réglé dans « Ce poste ») : l'IA propose, vous validez ; rien n'est enregistré sans vous. Un fournisseur en ligne reçoit les textes envoyés : il faut l'autorisation du responsable.</li>
-            <li>Dictée : dans Chrome et Edge, la voix est en général transcrite par les serveurs de Google ou de Microsoft.</li>
+            <li>${I18n.t('apropos.ecran.chaque_personne_compte_role')}</li>
+            <li>${I18n.t('apropos.ecran.usage_reseau_local_reseau')}</li>` : UI.html`
+            <li>${I18n.t('apropos.ecran.profils_adaptent_ecrans_pas')}</li>
+            <li>${I18n.t('apropos.ecran.usage_reseau_local_uniquement')}</li>`}
+            <li>${I18n.t('apropos.ecran.assistant_ia_facultatif_regle')}</li>
+            <li>${I18n.t('apropos.ecran.dictee_chrome_edge_voix')}</li>
           </ul>
         </article>
         <article class="carte c6">
-          <h2>Aide</h2>
-          <p><a href="GUIDE.html" target="_blank" rel="noopener">Ouvrir le guide d'utilisation</a> : démarrer, chaque module, assistant IA, dictée, https, sauvegardes. Il s'imprime.</p>
+          <h2>${I18n.t('apropos.ecran.aide')}</h2>
+          <p>${I18n.html('apropos.ecran.ouvrir_guide_utilisation_demarrer')}</p>
         </article>
         <article class="carte c6">
-          <h2>Bibliothèques et licences</h2>
-          <p>Le code de Prévo est sous licence MIT. Il embarque ces composants libres, chacun sous sa licence :</p>
+          <h2>${I18n.t('apropos.ecran.bibliotheques_licences')}</h2>
+          <p>${I18n.t('apropos.ecran.code_prevo_sous_licence')}</p>
           <ul class="apropos-liste">
-            ${BIBLIOTHEQUES.map((b) => UI.html`<li><b>${b.nom}${b.version ? ' ' + b.version : ''}</b> — ${b.licence} (${b.role})</li>`)}
+            ${bibliotheques().map((b) => UI.html`<li><b>${b.nom}${b.version ? ' ' + b.version : ''}</b> — ${b.licence} (${b.role})</li>`)}
           </ul>
-          <p><a href="js/lib/LICENCES.txt" target="_blank" rel="noopener">Lire le texte complet des licences</a></p>
+          <p><a href="js/lib/LICENCES.txt" target="_blank" rel="noopener">${I18n.t('apropos.ecran.lire_texte_complet_licences')}</a></p>
         </article>
       </div>
       <article class="carte apropos-credit">
         ${UI.logo()}
-        <p>${CREDIT}</p>
+        <p>${credit()}</p>
       </article>`);
   }
 
@@ -104,13 +108,13 @@ const Apropos = (() => {
     App.ecran({
       id: 'apropos',
       route: /^#\/apropos$/,
-      titre: 'À propos',
-      menu: { libelle: 'À propos', icone: 'apropos', ordre: 100 },
+      get titre() { return I18n.t('apropos.ecran.titre'); },
+      menu: { get libelle() { return I18n.t('apropos.menu.libelle'); }, icone: 'apropos', ordre: 100 },
       profils: ['demandeur', 'technicien', 'responsable'],
       tables: [],
       afficher,
     });
   });
 
-  return { CREDIT, afficher };
+  return { get CREDIT() { return credit(); }, afficher };
 })();

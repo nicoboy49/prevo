@@ -26,17 +26,23 @@ const Connexion = (() => {
     enrolement: 'connexion-enrolement',
     motDePasse: 'connexion-mot-de-passe-panneau',
   };
-  const TITRES = {
-    connexion: ['Connexion', 'Chaque personne a son compte ; le serveur vérifie les droits.'],
-    enrolement: ['Bienvenue', 'Cet appareil va être reconnu comme demandeur : vous pourrez signaler un problème et suivre vos demandes.'],
-    motDePasse: ['Choisissez votre mot de passe', 'Votre mot de passe est provisoire : il faut en choisir un avant de continuer.'],
-  };
-  const MESSAGE_SERVEUR_INJOIGNABLE = 'Le serveur Prévo ne répond pas. Vérifiez que la fenêtre du serveur est ouverte sur le PC.';
-  const MESSAGE_CHAMPS_CONNEXION = 'Indiquez votre identifiant et votre mot de passe.';
-  const MESSAGE_NOM = 'Indiquez votre nom : il est inscrit sur vos demandes.';
-  const MESSAGE_ACTUEL = 'Indiquez le mot de passe actuel (le mot de passe provisoire reçu du responsable).';
-  const MESSAGE_CONFIRMATION = 'La confirmation ne correspond pas au nouveau mot de passe.';
-  const MESSAGE_IDENTIQUE = 'Choisissez un mot de passe différent de l\'actuel.';
+  /** Titre et sous-titre d'un panneau (connexion, enrolement, motDePasse) ; lus à l'affichage. */
+  function titres(nom) {
+    if (nom === 'enrolement') {
+      return [I18n.t('connexion.titres.bienvenue'), I18n.t('connexion.titres.appareil_va_etre_reconnu')];
+    }
+    if (nom === 'motDePasse') {
+      return [I18n.t('connexion.titres.choisissez_mot_passe'), I18n.t('connexion.titres.mot_passe_provisoire_faut')];
+    }
+    return [I18n.t('connexion.titres.connexion'), I18n.t('connexion.titres.chaque_personne_compte_serveur')];
+  }
+  // Messages de l'écran, lus à l'affichage.
+  const messageServeurInjoignable = () => I18n.t('connexion.message_serveur_injoignable.serveur_prevo_repond_pas');
+  const messageChampsConnexion = () => I18n.t('connexion.message_champs_connexion.indiquez_identifiant_mot_passe');
+  const messageNom = () => I18n.t('connexion.message_nom.indiquez_nom_inscrit_demandes');
+  const messageActuel = () => I18n.t('connexion.message_actuel.indiquez_mot_passe_actuel');
+  const messageConfirmation = () => I18n.t('connexion.message_confirmation.confirmation_correspond_pas_nouveau');
+  const messageIdentique = () => I18n.t('connexion.message_identique.choisissez_mot_passe_different');
 
   // --- État -------------------------------------------------------------------------------
   let resoudre = null;             // termine le Connexion.demander en cours (la session)
@@ -58,11 +64,11 @@ const Connexion = (() => {
         body: JSON.stringify(corps || {}),
       });
     } catch (erreur) {
-      return { statut: 0, donnees: null, message: MESSAGE_SERVEUR_INJOIGNABLE, attente: 0 };
+      return { statut: 0, donnees: null, message: messageServeurInjoignable(), attente: 0 };
     }
     const donnees = await reponse.json().catch(() => null);
     const message = donnees && typeof donnees.erreur === 'string' && donnees.erreur
-      ? donnees.erreur : 'Le serveur a répondu « ' + reponse.status + ' ».';
+      ? donnees.erreur : I18n.t('commun.message.serveur_a_repondu', { status: reponse.status });
     // 429 : temps restant dans le corps (attente_secondes), sinon l'en-tête Retry-After, sinon une minute.
     let attente = donnees && typeof donnees.attente_secondes === 'number' ? donnees.attente_secondes : 0;
     if (!attente) attente = Number(reponse.headers.get('Retry-After')) || ATTENTE_PAR_DEFAUT_S;
@@ -89,9 +95,10 @@ const Connexion = (() => {
 
   function montrerPanneau(nom) {
     Object.keys(PANNEAUX).forEach((cle) => { $(PANNEAUX[cle]).hidden = cle !== nom; });
-    $('connexion-titre').textContent = TITRES[nom][0];
-    $('connexion-sous-titre').textContent = TITRES[nom][1];
-    const premier = UI.$('#' + PANNEAUX[nom] + ' input');
+    const [titre, sousTitre] = titres(nom);
+    $('connexion-titre').textContent = titre;
+    $('connexion-sous-titre').textContent = sousTitre;
+    const premier = UI.$('input', $(PANNEAUX[nom]));
     if (premier) premier.focus();
   }
 
@@ -117,8 +124,7 @@ const Connexion = (() => {
     const zone = $('connexion-alertes');
     zone.textContent = '';
     if (reglages.appareilRefuse) {
-      const bandeau = UI.bandeau('important', UI.html`<b>Cet appareil n'est plus autorisé.</b> Demandez une nouvelle
-        invitation au responsable : son QR ou son lien ouvrira à nouveau Prévo sur cet appareil.`);
+      const bandeau = UI.bandeau('important', UI.html`${I18n.html('connexion.montrer_alertes.appareil_plus_autorise_demandez')}`);
       bandeau.id = 'connexion-appareil-refuse';
       zone.appendChild(bandeau);
     } else if (reglages.message) {
@@ -135,7 +141,7 @@ const Connexion = (() => {
     let reste = Math.max(1, Math.round(secondes));
     const zone = $(idZone);
     const afficher = () => {
-      zone.textContent = message + ' Nouvel essai possible dans ' + reste + ' s.';
+      zone.textContent = message + ' ' + I18n.t('connexion.bloquer.nouvel_essai_possible', { n: reste });
       zone.hidden = false;
     };
     bouton.disabled = true;
@@ -179,7 +185,7 @@ const Connexion = (() => {
     const identifiant = champIdentifiant.value.trim();
     const motDePasse = champMotDePasse.value;
     if (!identifiant || !motDePasse) {
-      montrerErreur('connexion-erreur', MESSAGE_CHAMPS_CONNEXION);
+      montrerErreur('connexion-erreur', messageChampsConnexion());
       (identifiant ? champMotDePasse : champIdentifiant).focus();
       return;
     }
@@ -203,7 +209,7 @@ const Connexion = (() => {
     const champNom = $('connexion-nom');
     const nom = champNom.value.trim().replace(/\s+/g, ' ');
     if (!nom) {
-      montrerErreur('connexion-enrolement-erreur', MESSAGE_NOM);
+      montrerErreur('connexion-enrolement-erreur', messageNom());
       champNom.focus();
       return;
     }
@@ -224,14 +230,13 @@ const Connexion = (() => {
   }
 
   function problemeDuNouveau(actuel, nouveau, confirmation) {
-    if (!actuel) return MESSAGE_ACTUEL;
+    if (!actuel) return messageActuel();
     if (nouveau.length < LONGUEUR_MIN_MOT_DE_PASSE) {
-      return 'Le nouveau mot de passe doit faire ' + LONGUEUR_MIN_MOT_DE_PASSE + ' caractères au moins (il en a '
-        + nouveau.length + ').';
+      return I18n.t('connexion.nouveau_mot_de_passe.trop_court', { n: LONGUEUR_MIN_MOT_DE_PASSE, longueur: nouveau.length });
     }
-    if (nouveau.length > LONGUEUR_MAX_MOT_DE_PASSE) return 'Le nouveau mot de passe doit faire ' + LONGUEUR_MAX_MOT_DE_PASSE + ' caractères au plus.';
-    if (nouveau === actuel) return MESSAGE_IDENTIQUE;
-    if (nouveau !== confirmation) return MESSAGE_CONFIRMATION;
+    if (nouveau.length > LONGUEUR_MAX_MOT_DE_PASSE) return I18n.t('connexion.nouveau_mot_de_passe.trop_long', { n: LONGUEUR_MAX_MOT_DE_PASSE });
+    if (nouveau === actuel) return messageIdentique();
+    if (nouveau !== confirmation) return messageConfirmation();
     return '';
   }
 
@@ -264,9 +269,9 @@ const Connexion = (() => {
   function indicationForce(valeur) {
     const longueur = valeur.length;
     if (!longueur) return '';
-    if (longueur < LONGUEUR_MIN_MOT_DE_PASSE) return longueur + ' caractère' + (longueur > 1 ? 's' : '') + ' : trop court (' + LONGUEUR_MIN_MOT_DE_PASSE + ' au moins).';
-    if (longueur < LONGUEUR_SOLIDE) return longueur + ' caractères : correct. Plus long, c\'est plus solide.';
-    return longueur + ' caractères : solide.';
+    if (longueur < LONGUEUR_MIN_MOT_DE_PASSE) return I18n.t('connexion.indication_force.trop_court', { n: longueur, minimum: LONGUEUR_MIN_MOT_DE_PASSE });
+    if (longueur < LONGUEUR_SOLIDE) return I18n.t('connexion.indication_force.correct', { n: longueur });
+    return I18n.t('connexion.indication_force.solide', { n: longueur });
   }
 
   // Session reçue : mot de passe provisoire → le choix du mot de passe d'abord ; sinon l'écran se termine.

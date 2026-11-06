@@ -12,25 +12,52 @@
 
 const EquipeAcces = (() => {
 
-  const ROLES = [
-    { valeur: 'responsable', libelle: 'Responsable' },
-    { valeur: 'technicien', libelle: 'Technicien' },
-    { valeur: 'demandeur', libelle: 'Demandeur' },
-  ];
-  const LIBELLES_ROLE = { responsable: 'Responsable', technicien: 'Technicien', demandeur: 'Demandeur' };
-  const DUREES_INVITATION = [
-    { heures: 1, libelle: '1 heure' },
-    { heures: 24, libelle: '24 heures' },
-    { heures: 72, libelle: '3 jours' },
-    { heures: 168, libelle: '7 jours' },
-  ];
+  // Rôles d'un compte : valeurs stockées par le serveur (D155), jamais traduites ; seul leur affichage passe par une clé.
+  const ROLES = ['responsable', 'technicien', 'demandeur'];
   const DUREE_PAR_DEFAUT_H = 24;
   const LIGNES_JOURNAL_AFFICHEES = 300;
-  const LIBELLES_RESULTAT = {
-    connexion: 'Connexion', echec: 'Échec', bloque: 'Bloqué', deconnexion: 'Déconnexion', appareil: 'Appareil enrôlé',
-    invitation: 'Invitation', revocation: 'Révocation', reinitialisation: 'Réinitialisation', creation: 'Compte créé',
-    modification: 'Compte modifié',
-  };
+
+  /** Libellé d'un rôle (tableau des comptes, fenêtre du mot de passe provisoire) ; '' pour un rôle inconnu. */
+  function libelleRole(role) {
+    if (role === 'responsable') return I18n.t('equipe.role.responsable');
+    if (role === 'technicien') return I18n.t('equipe.role.technicien');
+    if (role === 'demandeur') return I18n.t('equipe.role.demandeur');
+    return '';
+  }
+
+  /** Libellé d'un rôle dans la liste du formulaire de compte (en minuscules, comme la valeur qu'il montrait). */
+  function libelleRoleListe(role) {
+    if (role === 'responsable') return I18n.t('equipe.role_liste.responsable');
+    if (role === 'technicien') return I18n.t('equipe.role_liste.technicien');
+    return I18n.t('equipe.role_liste.demandeur');
+  }
+
+  /** Durées proposées pour une invitation ; libellés lus à l'affichage. */
+  function dureesInvitation() {
+    return [
+      { heures: 1, libelle: I18n.t('equipe.duree_invitation.heures', { n: 1 }) },
+      { heures: 24, libelle: I18n.t('equipe.duree_invitation.heures', { n: 24 }) },
+      { heures: 72, libelle: I18n.t('equipe.duree_invitation.jours', { n: 3 }) },
+      { heures: 168, libelle: I18n.t('equipe.duree_invitation.jours', { n: 7 }) },
+    ];
+  }
+
+  /** Libellé d'un résultat du journal des connexions (code écrit par le serveur) ; '' pour un code inconnu. */
+  function libelleResultat(cle) {
+    switch (cle) {
+      case 'connexion': return I18n.t('equipe.libelle_resultat.connexion');
+      case 'echec': return I18n.t('equipe.libelle_resultat.echec');
+      case 'bloque': return I18n.t('equipe.libelle_resultat.bloque');
+      case 'deconnexion': return I18n.t('equipe.libelle_resultat.deconnexion');
+      case 'appareil': return I18n.t('equipe.libelle_resultat.appareil_enrole');
+      case 'invitation': return I18n.t('equipe.libelle_resultat.invitation');
+      case 'revocation': return I18n.t('equipe.libelle_resultat.revocation');
+      case 'reinitialisation': return I18n.t('equipe.libelle_resultat.reinitialisation');
+      case 'creation': return I18n.t('equipe.libelle_resultat.compte_cree');
+      case 'modification': return I18n.t('equipe.libelle_resultat.compte_modifie');
+      default: return '';
+    }
+  }
   const TONS_RESULTAT = { connexion: 'ok', appareil: 'ok', creation: 'ok', echec: 'ko', bloque: 'ko', revocation: 'attention' };
   const NOM_FICHIER_JOURNAL = 'journal-acces.csv';
   const MARQUE_ORDRE_OCTETS = String.fromCharCode(0xFEFF);
@@ -53,7 +80,7 @@ const EquipeAcces = (() => {
       reponse = await fetch(chemin, { method: reglages.methode || 'GET', headers: entetes, body: corps,
         cache: 'no-store', credentials: 'same-origin' });
     } catch (erreur) {
-      throw new Donnees.ErreurStockage('Le serveur Prévo ne répond pas.', erreur);
+      throw new Donnees.ErreurStockage(I18n.t('equipe.appeler.serveur_prevo_repond_pas'), erreur);
     }
     if (reglages.texte) {
       if (!reponse.ok) throw await erreurDe(reponse);
@@ -71,7 +98,7 @@ const EquipeAcces = (() => {
 
   function messageDe(donnees, statut) {
     if (donnees && typeof donnees.erreur === 'string' && donnees.erreur) return donnees.erreur;
-    return 'Le serveur a répondu « ' + statut + ' ».';
+    return I18n.t('commun.message.serveur_a_repondu', { status: statut });
   }
 
   const api = {
@@ -101,8 +128,10 @@ const EquipeAcces = (() => {
     return trouve[3] + '/' + trouve[2] + '/' + trouve[1] + ' ' + trouve[4] + ':' + trouve[5];
   }
 
-  function badge(libelle, ton) {
-    return UI.html`<span class="badge ${ton || 'neutre'}">${libelle}</span>`;
+  /** Badge d'état ; barre : texte barré (révoqué, désactivé). */
+  function badge(libelle, ton, barre) {
+    return barre ? UI.html`<span class="badge ${ton || 'neutre'} barre">${libelle}</span>`
+      : UI.html`<span class="badge ${ton || 'neutre'}">${libelle}</span>`;
   }
 
   function nomDuTechnicien(id) {
@@ -112,7 +141,8 @@ const EquipeAcces = (() => {
   }
 
   function erreurHtml(erreur) {
-    return UI.bandeau('important', UI.html`<b>Lecture impossible :</b> ${(erreur && erreur.message) || 'erreur inconnue'}`);
+    const message = (erreur && erreur.message) || I18n.t('commun.message.erreur_inconnue');
+    return UI.bandeau('important', UI.html`${I18n.html('equipe.erreur.lecture_impossible', { message })}`);
   }
 
   /** Début de l'adresse mise dans les QR (« http://192.168.1.10:8080/ ») : la même que les étiquettes. */
@@ -157,26 +187,29 @@ const EquipeAcces = (() => {
 
   function champsCompte(compte) {
     const valeur = (nom) => (compte ? compte[nom] : undefined);
+    const champRole = UI.champ(definition('role', 'choix', I18n.t('equipe.champs_compte.role'), { valeurs: ROLES, obligatoire: true }),
+      valeur('role') || 'demandeur',
+      { aide: I18n.t('equipe.champs_compte.responsable_tout_reglages_compris') });
+    // Valeurs stockées (D155) : chaque option montre le libellé de son rôle, la valeur reste le code.
+    UI.$$('option', champRole).forEach((option) => { if (ROLES.includes(option.value)) option.textContent = libelleRoleListe(option.value); });
     return [
-      UI.champ(definition('prenom', 'texte', 'Prénom', { obligatoire: true }), valeur('prenom'), { attributs: { maxlength: '60' } }),
-      UI.champ(definition('nom', 'texte', 'Nom'), valeur('nom'), { attributs: { maxlength: '60' } }),
-      UI.champ(definition('role', 'choix', 'Rôle', { valeurs: ROLES.map((r) => r.valeur), obligatoire: true }),
-        valeur('role') || 'demandeur',
-        { aide: 'Responsable : tout, réglages compris. Technicien : les interventions, sans taux horaire ni prix. Demandeur : signaler et suivre ses demandes.' }),
-      UI.champ(definition('technicien_id', 'ref', 'Technicien lié'), valeur('technicien_id'),
-        { liste: listeTechniciens(), aide: 'Pour un compte technicien : sa fiche dans Équipe (temps passé, planning).' }),
+      UI.champ(definition('prenom', 'texte', I18n.t('commun.champ.prenom'), { obligatoire: true }), valeur('prenom'), { attributs: { maxlength: '60' } }),
+      UI.champ(definition('nom', 'texte', I18n.t('equipe.champs_compte.nom')), valeur('nom'), { attributs: { maxlength: '60' } }),
+      champRole,
+      UI.champ(definition('technicien_id', 'ref', I18n.t('equipe.champs_compte.technicien_lie')), valeur('technicien_id'),
+        { liste: listeTechniciens(), aide: I18n.t('equipe.champs_compte.compte_technicien_fiche_equipe') }),
     ];
   }
 
   function verifierCompte(valeurs) {
     const erreurs = [];
-    if (!texte(valeurs.prenom)) erreurs.push({ nom: 'prenom', message: 'Le prénom est obligatoire.' });
-    if (!LIBELLES_ROLE[texte(valeurs.role)]) erreurs.push({ nom: 'role', message: 'Choisissez un rôle.' });
+    if (!texte(valeurs.prenom)) erreurs.push({ nom: 'prenom', message: I18n.t('equipe.verifier_compte.prenom_obligatoire') });
+    if (!ROLES.includes(texte(valeurs.role))) erreurs.push({ nom: 'role', message: I18n.t('equipe.verifier_compte.choisissez_role') });
     if (texte(valeurs.role) === 'technicien' && !texte(valeurs.technicien_id)) {
-      erreurs.push({ nom: 'technicien_id', message: 'Un compte technicien est lié à une fiche de technicien.' });
+      erreurs.push({ nom: 'technicien_id', message: I18n.t('equipe.verifier_compte.compte_technicien_lie_fiche') });
     }
     if (texte(valeurs.role) !== 'technicien' && texte(valeurs.technicien_id)) {
-      erreurs.push({ nom: 'technicien_id', message: 'Seul un compte technicien est lié à une fiche de technicien.' });
+      erreurs.push({ nom: 'technicien_id', message: I18n.t('equipe.verifier_compte.seul_compte_technicien_lie') });
     }
     return erreurs;
   }
@@ -188,58 +221,57 @@ const EquipeAcces = (() => {
 
   /** Mot de passe provisoire montré une seule fois : à noter et à remettre en main propre. */
   function montrerMotDePasseProvisoire(compte, motDePasse, titre) {
+    const role = libelleRole(texte(compte.role)) || texte(compte.role);
     return UI.fenetre({
       titre: titre,
       classe: 'equipe-fenetre',
       contenu: UI.html`<div class="form-colonne acces-provisoire">
-        <p>Compte <b>${texte(compte.identifiant)}</b> (${LIBELLES_ROLE[texte(compte.role)] || texte(compte.role)}).</p>
-        <p>Mot de passe provisoire, montré <b>une seule fois</b> :</p>
+        <p>${I18n.html('equipe.montrer_mot_de_passe_provisoire.compte_identifiant_role', { identifiant: texte(compte.identifiant), role })}</p>
+        <p>${I18n.html('equipe.montrer_mot_de_passe_provisoire.mot_passe_provisoire_montre')}</p>
         <div class="champ"><input type="text" class="acces-mot-de-passe" id="acces-mot-de-passe-provisoire" readonly
-          value="${motDePasse}" aria-label="Mot de passe provisoire" spellcheck="false"></div>
-        <p class="note">Notez-le et donnez-le en main propre : il devra être changé à la première connexion. Prévo ne
-          l'écrit nulle part ; perdu, il se réinitialise d'ici (« Réinitialiser »).</p>
+          value="${motDePasse}" aria-label="${I18n.t('equipe.montrer_mot_de_passe_provisoire.mot_passe_provisoire')}" spellcheck="false"></div>
+        <p class="note">${I18n.t('equipe.montrer_mot_de_passe_provisoire.notez_donnez_main_propre')}</p>
       </div>`,
-      boutons: [{ libelle: 'J\'ai noté le mot de passe', valeur: 'ok', classe: 'btn-primaire', defaut: true }],
+      boutons: [{ libelle: I18n.t('equipe.montrer_mot_de_passe_provisoire.ai_note_mot_passe'), valeur: 'ok', classe: 'btn-primaire', defaut: true }],
     });
   }
 
   async function creerCompte(rafraichir) {
     let resultat = null;
     const cree = await UI.fenetreAction({
-      titre: 'Créer un compte',
-      introduction: 'L\'identifiant (prénom.nom) est donné par Prévo. Le mot de passe provisoire s\'affiche ensuite, une seule fois.',
+      titre: I18n.t('equipe.creer_compte.creer_compte'),
+      introduction: I18n.t('equipe.creer_compte.identifiant_prenom_nom_donne'),
       champs: champsCompte(null),
-      libelleValider: 'Créer le compte',
+      libelleValider: I18n.t('equipe.creer_compte.creer_le_compte'),
       verifier: verifierCompte,
       action: async (valeurs) => { resultat = await api.creerCompte(champsEnvoyes(valeurs)); },
     });
     if (!cree || !resultat) return;
     App.marquerSaisie(false);
-    await montrerMotDePasseProvisoire(resultat.compte || {}, texte(resultat.mot_de_passe_provisoire), 'Compte créé');
-    UI.toast('Compte créé.', 'succes');
+    await montrerMotDePasseProvisoire(resultat.compte || {}, texte(resultat.mot_de_passe_provisoire), I18n.t('equipe.creer_compte.titre_compte_cree'));
+    UI.toast(I18n.t('equipe.creer_compte.compte_cree'), 'succes');
     await rafraichir();
   }
 
   async function modifierCompte(compte, rafraichir) {
     const fait = await UI.fenetreAction({
-      titre: 'Modifier le compte ' + texte(compte.identifiant),
+      titre: I18n.t('equipe.modifier_compte.modifier_compte', { identifiant: texte(compte.identifiant) }),
       champs: champsCompte(compte),
-      libelleValider: 'Enregistrer',
+      libelleValider: I18n.t('commun.bouton.enregistrer'),
       verifier: verifierCompte,
       action: async (valeurs) => { await api.changerCompte(compte.identifiant, 'modifier', champsEnvoyes(valeurs)); },
     });
     if (!fait) return;
-    UI.toast('Compte enregistré. Un rôle changé vaut dès la prochaine requête de la personne.', 'succes');
+    UI.toast(I18n.t('equipe.modifier_compte.compte_enregistre_role_change'), 'succes');
     await rafraichir();
   }
 
   async function reinitialiserCompte(compte, bouton, rafraichir) {
-    const confirme = await UI.confirmer('Réinitialiser le mot de passe de ' + texte(compte.identifiant) + ' ? Ses sessions ouvertes '
-      + 'seront fermées ; un mot de passe provisoire s\'affichera une seule fois.', { titre: 'Réinitialiser le mot de passe', oui: 'Réinitialiser' });
+    const confirme = await UI.confirmer(I18n.t('equipe.reinitialiser_compte.reinitialiser_mot_passe_sessions', { identifiant: texte(compte.identifiant) }), { titre: I18n.t('equipe.reinitialiser_compte.reinitialiser_mot_passe'), oui: I18n.t('equipe.reinitialiser_compte.reinitialiser') });
     if (!confirme) return;
     await pendant(bouton, 'réinitialisation du mot de passe', async () => {
       const resultat = await api.changerCompte(compte.identifiant, 'reinitialiser');
-      await montrerMotDePasseProvisoire(resultat.compte || compte, texte(resultat.mot_de_passe_provisoire), 'Mot de passe réinitialisé');
+      await montrerMotDePasseProvisoire(resultat.compte || compte, texte(resultat.mot_de_passe_provisoire), I18n.t('equipe.reinitialiser_compte.mot_passe_reinitialise'));
       await rafraichir();
     });
   }
@@ -247,14 +279,13 @@ const EquipeAcces = (() => {
   async function changerActivation(compte, bouton, rafraichir) {
     const desactiver = texte(compte.actif) !== '0' && compte.actif !== false;
     if (desactiver) {
-      const confirme = await UI.confirmer('Désactiver ' + texte(compte.identifiant) + ' ? La personne ne pourra plus se connecter et ses '
-        + 'sessions ouvertes seront fermées ; le compte peut être réactivé plus tard.',
-      { titre: 'Désactiver le compte', oui: 'Désactiver', danger: true });
+      const confirme = await UI.confirmer(I18n.t('equipe.changer_activation.desactiver_personne_pourra_plus', { identifiant: texte(compte.identifiant) }),
+      { titre: I18n.t('equipe.changer_activation.desactiver_compte'), oui: I18n.t('commun.bouton.desactiver'), danger: true });
       if (!confirme) return;
     }
     await pendant(bouton, desactiver ? 'désactivation du compte' : 'activation du compte', async () => {
       await api.changerCompte(compte.identifiant, desactiver ? 'desactiver' : 'activer');
-      UI.toast(desactiver ? 'Compte désactivé.' : 'Compte activé.', 'succes');
+      UI.toast(desactiver ? I18n.t('equipe.changer_activation.compte_desactive') : I18n.t('equipe.changer_activation.compte_active'), 'succes');
       await rafraichir();
     });
   }
@@ -263,9 +294,9 @@ const EquipeAcces = (() => {
     const soiMeme = session && session.session && session.session.identifiant === compte.identifiant;
     const actif = compte.actif !== false && texte(compte.actif) !== '0';
     const groupe = UI.element(UI.html`<span class="acces-actions" data-compte="${compte.identifiant}">
-      <button type="button" class="btn btn-secondaire" data-action="modifier">Modifier…</button>
-      <button type="button" class="btn btn-secondaire" data-action="reinitialiser">Réinitialiser…</button>
-      ${soiMeme ? '' : UI.html`<button type="button" class="btn ${actif ? 'btn-danger' : 'btn-secondaire'}" data-action="${actif ? 'desactiver' : 'activer'}">${actif ? 'Désactiver' : 'Activer'}</button>`}
+      <button type="button" class="btn btn-secondaire" data-action="modifier">${I18n.t('equipe.actions_compte.modifier')}</button>
+      <button type="button" class="btn btn-secondaire" data-action="reinitialiser">${I18n.t('equipe.actions_compte.reinitialiser')}</button>
+      ${soiMeme ? '' : UI.html`<button type="button" class="btn ${actif ? 'btn-danger' : 'btn-secondaire'}" data-action="${actif ? 'desactiver' : 'activer'}">${actif ? I18n.t('commun.bouton.desactiver') : I18n.t('equipe.actions_compte.activer')}</button>`}
     </span>`);
     UI.$$('button', groupe).forEach((bouton) => bouton.addEventListener('click', () => {
       const action = bouton.dataset.action;
@@ -278,13 +309,13 @@ const EquipeAcces = (() => {
 
   function etatCompte(compte) {
     const actif = compte.actif !== false && texte(compte.actif) !== '0';
-    const morceaux = [badge(actif ? 'Actif' : 'Désactivé', actif ? 'ok' : 'neutre barre')];
-    if (compte.a_changer) morceaux.push(badge('Mot de passe provisoire', 'attention'));
+    const morceaux = [badge(actif ? I18n.t('equipe.etat_compte.actif') : I18n.t('equipe.etat_compte.desactive'), actif ? 'ok' : 'neutre', !actif)];
+    if (compte.a_changer) morceaux.push(badge(I18n.t('equipe.montrer_mot_de_passe_provisoire.mot_passe_provisoire'), 'attention'));
     return UI.html`<span class="equipe-statut">${morceaux}</span>`;
   }
 
   async function afficherComptes(panneau, session) {
-    UI.remplir(panneau, UI.html`<p class="muted">Chargement des comptes…</p>`);
+    UI.remplir(panneau, UI.html`<p class="muted">${I18n.t('equipe.comptes.chargement_comptes')}</p>`);
     let donnees;
     try {
       donnees = await api.comptes();
@@ -295,26 +326,24 @@ const EquipeAcces = (() => {
     const comptes = Array.isArray(donnees.comptes) ? donnees.comptes : [];
     const rafraichir = () => afficherComptes(panneau, session);
     const carte = UI.element(UI.html`<section class="carte acces-carte" id="acces-comptes">
-      <div class="entete-carte"><h2>Comptes <span class="acces-compteur">(${comptes.length})</span></h2>
-        <div class="actions"><button type="button" class="btn btn-primaire" id="acces-creer-compte">${UI.icone('ajouter')}Créer un compte</button></div></div>
-      <p class="note">Chaque personne a son identifiant (prénom.nom) et son rôle. Un compte créé ou réinitialisé reçoit un mot
-        de passe provisoire, montré une seule fois, à changer à la première connexion. Il reste toujours au moins un
-        responsable actif.</p>
+      <div class="entete-carte"><h2>${I18n.html('equipe.comptes.comptes_nb_comptes', { nbComptes: comptes.length })}</h2>
+        <div class="actions"><button type="button" class="btn btn-primaire" id="acces-creer-compte">${UI.icone('ajouter')}${I18n.t('equipe.creer_compte.creer_compte')}</button></div></div>
+      <p class="note">${I18n.t('equipe.comptes.chaque_personne_identifiant_prenom')}</p>
     </section>`);
     carte.appendChild(UI.tableau({
-      libelle: 'Comptes',
+      libelle: I18n.t('equipe.comptes.comptes'),
       colonnes: [
-        { cle: 'identifiant', libelle: 'Identifiant', rendu: (c) => UI.html`<b>${texte(c.identifiant)}</b>` },
-        { cle: 'nom', libelle: 'Personne', valeurTri: (c) => texte(c.nom) + ' ' + texte(c.prenom),
+        { cle: 'identifiant', libelle: I18n.t('equipe.comptes.identifiant'), rendu: (c) => UI.html`<b>${texte(c.identifiant)}</b>` },
+        { cle: 'nom', libelle: I18n.t('equipe.comptes.personne'), valeurTri: (c) => texte(c.nom) + ' ' + texte(c.prenom),
           rendu: (c) => (texte(c.prenom) + ' ' + texte(c.nom)).trim() },
-        { cle: 'role', libelle: 'Rôle', rendu: (c) => LIBELLES_ROLE[texte(c.role)] || texte(c.role) },
-        { cle: 'technicien_id', libelle: 'Technicien lié', rendu: (c) => nomDuTechnicien(c.technicien_id) },
-        { cle: 'actif', libelle: 'État', triable: false, rendu: (c) => etatCompte(c) },
+        { cle: 'role', libelle: I18n.t('equipe.champs_compte.role'), rendu: (c) => libelleRole(texte(c.role)) || texte(c.role) },
+        { cle: 'technicien_id', libelle: I18n.t('equipe.champs_compte.technicien_lie'), rendu: (c) => nomDuTechnicien(c.technicien_id) },
+        { cle: 'actif', libelle: I18n.t('equipe.comptes.etat'), triable: false, rendu: (c) => etatCompte(c) },
         { cle: 'actions', libelle: '', triable: false, rendu: (c) => actionsCompte(c, session, rafraichir) },
       ],
       lignes: comptes,
       triInitial: { cle: 'identifiant', sens: 'asc' },
-      vide: 'Aucun compte : terminez l\'installation (l\'assistant crée le premier responsable).',
+      vide: I18n.t('equipe.comptes.aucun_compte_terminez_installation'),
     }));
     UI.$('#acces-creer-compte', carte).addEventListener('click', () => creerCompte(rafraichir));
     UI.remplir(panneau, carte);
@@ -329,18 +358,15 @@ const EquipeAcces = (() => {
     const invitation = resultat.invitation || {};
     const lien = lienInvitation(resultat.chemin);
     const contenu = UI.element(UI.html`<div class="form-colonne acces-invitation">
-      <p>Le téléphone scanne ce QR (ou ouvre le lien), donne le nom de la personne et devient un appareil
-        <b>Demandeur</b>, sans mot de passe. Valable jusqu'au <b>${dateHeure(invitation.expire_le)}</b>, pour autant
-        d'appareils que nécessaire, révocable à tout moment.</p>
+      <p>${I18n.html('equipe.montrer_invitation.telephone_scanne_qr_ouvre', { dateHeure: dateHeure(invitation.expire_le) })}</p>
       <div class="acces-qr"><div class="acces-qr-image" id="acces-invitation-qr"></div>
-        <div class="acces-lien champ"><label for="acces-invitation-lien">Lien de l'invitation</label>
+        <div class="acces-lien champ"><label for="acces-invitation-lien">${I18n.t('equipe.montrer_invitation.lien_invitation')}</label>
           <input type="text" id="acces-invitation-lien" readonly value="${lien}" spellcheck="false"></div></div>
-      <p class="note">Ce QR n'est montré qu'une fois : fermez cette fenêtre quand les téléphones sont enrôlés, ou créez
-        une autre invitation plus tard.</p>
+      <p class="note">${I18n.t('equipe.montrer_invitation.qr_montre_fois_fermez')}</p>
     </div>`);
     UI.remplir(UI.$('#acces-invitation-qr', contenu), UI.qrSvg(lien, 220));
-    return UI.fenetre({ titre: 'Invitation ' + texte(invitation.id), classe: 'equipe-fenetre', contenu: contenu,
-      boutons: [{ libelle: 'Fermer', valeur: null, classe: 'btn-primaire', defaut: true }] });
+    return UI.fenetre({ titre: I18n.t('equipe.montrer_invitation.invitation_invitation_id', { invitationId: texte(invitation.id) }), classe: 'equipe-fenetre', contenu: contenu,
+      boutons: [{ libelle: I18n.t('commun.bouton.fermer'), valeur: null, classe: 'btn-primaire', defaut: true }] });
   }
 
   async function creerInvitation(selecteur, bouton, rafraichir) {
@@ -353,26 +379,27 @@ const EquipeAcces = (() => {
   }
 
   function etatInvitation(invitation) {
-    if (invitation.revoquee) return badge('Révoquée', 'neutre barre');
-    return invitation.valide ? badge('Valide', 'ok') : badge('Expirée', 'neutre');
+    if (invitation.revoquee) return badge(I18n.t('equipe.etat_invitation.revoquee'), 'neutre', true);
+    return invitation.valide ? badge(I18n.t('equipe.etat_invitation.valide'), 'ok') : badge(I18n.t('equipe.etat_invitation.expiree'), 'neutre');
   }
 
   function etatAppareil(appareil) {
-    if (appareil.revoque) return badge('Révoqué', 'neutre barre');
-    return appareil.valide ? badge('Actif', 'ok') : badge('Expiré', 'neutre');
+    if (appareil.revoque) return badge(I18n.t('equipe.etat_appareil.revoque'), 'neutre', true);
+    return appareil.valide ? badge(I18n.t('equipe.etat_compte.actif'), 'ok') : badge(I18n.t('equipe.etat_appareil.expire'), 'neutre');
   }
 
   function boutonRevoquer(genre, element, rafraichir) {
     if (!element.valide) return '';
-    const bouton = UI.element(UI.html`<button type="button" class="btn btn-danger" data-revoquer="${genre}" data-id="${element.id}">Révoquer</button>`);
+    const bouton = UI.element(UI.html`<button type="button" class="btn btn-danger" data-revoquer="${genre}" data-id="${element.id}">${I18n.t('equipe.bouton_revoquer.revoquer')}</button>`);
     bouton.addEventListener('click', async () => {
+      const nomAppareil = texte(element.nom_demandeur) || texte(element.libelle);
       const question = genre === 'invitation'
-        ? 'Révoquer l\'invitation ' + texte(element.id) + ' ? Plus personne ne pourra s\'enrôler avec ; les appareils déjà enrôlés restent.'
-        : 'Révoquer l\'appareil « ' + (texte(element.nom_demandeur) || texte(element.libelle)) + ' » ? Il perd l\'accès immédiatement et devra être enrôlé à nouveau.';
-      if (!await UI.confirmer(question, { titre: 'Révoquer', oui: 'Révoquer', danger: true })) return;
+        ? I18n.t('equipe.bouton_revoquer.revoquer_invitation_plus_personne', { elementId: texte(element.id) })
+        : I18n.t('equipe.bouton_revoquer.revoquer_appareil_perd_acces', { nomAppareil });
+      if (!await UI.confirmer(question, { titre: I18n.t('equipe.bouton_revoquer.revoquer'), oui: I18n.t('equipe.bouton_revoquer.revoquer'), danger: true })) return;
       await pendant(bouton, 'révocation', async () => {
         await (genre === 'invitation' ? api.revoquerInvitation(element.id) : api.revoquerAppareil(element.id));
-        UI.toast(genre === 'invitation' ? 'Invitation révoquée.' : 'Appareil révoqué.', 'succes');
+        UI.toast(genre === 'invitation' ? I18n.t('equipe.bouton_revoquer.invitation_revoquee') : I18n.t('equipe.bouton_revoquer.appareil_revoque'), 'succes');
         await rafraichir();
       });
     });
@@ -380,19 +407,18 @@ const EquipeAcces = (() => {
   }
 
   async function revoquerTous(bouton, rafraichir) {
-    const confirme = await UI.confirmer('Révoquer tous les appareils enrôlés ? Chacun perd l\'accès immédiatement ; les comptes et '
-      + 'les invitations ne sont pas touchés.', { titre: 'Révoquer tous les appareils', oui: 'Tout révoquer', danger: true });
+    const confirme = await UI.confirmer(I18n.t('equipe.revoquer_tous.revoquer_tous_appareils_enroles'), { titre: I18n.t('equipe.revoquer_tous.revoquer_tous_appareils'), oui: I18n.t('equipe.revoquer_tous.tout_revoquer'), danger: true });
     if (!confirme) return;
     await pendant(bouton, 'révocation de tous les appareils', async () => {
       const resultat = await api.revoquerTous();
       const nombre = Array.isArray(resultat.appareils_revoques) ? resultat.appareils_revoques.length : 0;
-      UI.toast(nombre ? nombre + ' appareil' + (nombre > 1 ? 's révoqués' : ' révoqué') + '.' : 'Aucun appareil à révoquer.', 'succes');
+      UI.toast(nombre ? I18n.t('equipe.revoquer_tous.appareils_revoques', { n: nombre }) : I18n.t('equipe.revoquer_tous.aucun_appareil_revoquer'), 'succes');
       await rafraichir();
     });
   }
 
   async function afficherAppareils(panneau) {
-    UI.remplir(panneau, UI.html`<p class="muted">Chargement des appareils…</p>`);
+    UI.remplir(panneau, UI.html`<p class="muted">${I18n.t('equipe.appareils.chargement_appareils')}</p>`);
     let donnees;
     try {
       donnees = await api.invitations();
@@ -406,17 +432,15 @@ const EquipeAcces = (() => {
     const rafraichir = () => afficherAppareils(panneau);
     const zone = UI.element(UI.html`<div class="form-colonne" id="acces-appareils"></div>`);
     if (!actif) {
-      zone.appendChild(UI.bandeau('info', UI.html`<b>Enrôlement désactivé :</b> les demandeurs ont un compte sur ce serveur
-        (réglage « demandeurs avec compte »). Les appareils déjà enrôlés ne sont plus reconnus.`));
+      zone.appendChild(UI.bandeau('info', UI.html`${I18n.html('equipe.appareils.enrolement_desactive_demandeurs_ont')}`));
     }
     const inviter = UI.element(UI.html`<section class="carte acces-carte" id="acces-inviter">
-      <div class="entete-carte"><h2>Inviter un appareil</h2></div>
-      <p>Une invitation donne un QR et un lien : le téléphone qui l'ouvre devient un appareil <b>Demandeur</b> (signaler,
-        suivre ses demandes, consulter le parc), sans mot de passe, pendant un an d'activité.</p>
+      <div class="entete-carte"><h2>${I18n.t('equipe.appareils.inviter_appareil')}</h2></div>
+      <p>${I18n.html('equipe.appareils.invitation_donne_qr_lien')}</p>
       <div class="acces-inviter-ligne">
-        <label class="champ"><span>Valable</span>
-          <select id="acces-duree-invitation">${DUREES_INVITATION.map((d) => UI.html`<option value="${String(d.heures)}" ${d.heures === DUREE_PAR_DEFAUT_H ? 'selected' : ''}>${d.libelle}</option>`)}</select></label>
-        <button type="button" class="btn btn-primaire" id="acces-creer-invitation" ${actif ? '' : 'disabled'}>${UI.icone('qr')}Créer une invitation</button>
+        <label class="champ"><span>${I18n.t('equipe.appareils.valable')}</span>
+          <select id="acces-duree-invitation">${dureesInvitation().map((d) => UI.html`<option value="${String(d.heures)}" ${d.heures === DUREE_PAR_DEFAUT_H ? 'selected' : ''}>${d.libelle}</option>`)}</select></label>
+        <button type="button" class="btn btn-primaire" id="acces-creer-invitation" ${actif ? '' : 'disabled'}>${UI.icone('qr')}${I18n.t('equipe.appareils.creer_invitation')}</button>
       </div>
     </section>`);
     UI.$('#acces-creer-invitation', inviter).addEventListener('click', (evenement) => {
@@ -425,39 +449,39 @@ const EquipeAcces = (() => {
     zone.appendChild(inviter);
 
     const carteInvitations = UI.element(UI.html`<section class="carte acces-carte" id="acces-invitations">
-      <div class="entete-carte"><h2>Invitations <span class="acces-compteur">(${invitations.length})</span></h2></div></section>`);
+      <div class="entete-carte"><h2>${I18n.html('equipe.appareils.invitations_nb_invitations', { nbInvitations: invitations.length })}</h2></div></section>`);
     carteInvitations.appendChild(UI.tableau({
-      libelle: 'Invitations',
+      libelle: I18n.t('equipe.appareils.invitations'),
       colonnes: [
-        { cle: 'id', libelle: 'Invitation', rendu: (i) => UI.html`<b>${texte(i.id)}</b>` },
-        { cle: 'cree_le', libelle: 'Créée le', rendu: (i) => dateHeure(i.cree_le) },
-        { cle: 'expire_le', libelle: 'Expire le', rendu: (i) => dateHeure(i.expire_le) },
-        { cle: 'valide', libelle: 'État', triable: false, rendu: (i) => etatInvitation(i) },
+        { cle: 'id', libelle: I18n.t('equipe.appareils.invitation'), rendu: (i) => UI.html`<b>${texte(i.id)}</b>` },
+        { cle: 'cree_le', libelle: I18n.t('equipe.appareils.creee'), rendu: (i) => dateHeure(i.cree_le) },
+        { cle: 'expire_le', libelle: I18n.t('equipe.appareils.expire'), rendu: (i) => dateHeure(i.expire_le) },
+        { cle: 'valide', libelle: I18n.t('equipe.comptes.etat'), triable: false, rendu: (i) => etatInvitation(i) },
         { cle: 'actions', libelle: '', triable: false, rendu: (i) => boutonRevoquer('invitation', i, rafraichir) },
       ],
       lignes: invitations,
       triInitial: { cle: 'cree_le', sens: 'desc' },
-      vide: 'Aucune invitation pour l\'instant.',
+      vide: I18n.t('equipe.appareils.aucune_invitation_instant'),
     }));
     zone.appendChild(carteInvitations);
 
     const valides = appareils.filter((a) => a.valide).length;
     const carteAppareils = UI.element(UI.html`<section class="carte acces-carte" id="acces-liste-appareils">
-      <div class="entete-carte"><h2>Appareils enrôlés <span class="acces-compteur">(${appareils.length})</span></h2>
-        <div class="actions">${valides ? UI.html`<button type="button" class="btn btn-danger" id="acces-revoquer-tous">Révoquer tous les appareils</button>` : ''}</div></div></section>`);
+      <div class="entete-carte"><h2>${I18n.html('equipe.appareils.appareils_enroles_nb', { nbAppareils: appareils.length })}</h2>
+        <div class="actions">${valides ? UI.html`<button type="button" class="btn btn-danger" id="acces-revoquer-tous">${I18n.t('equipe.revoquer_tous.revoquer_tous_appareils')}</button>` : ''}</div></div></section>`);
     carteAppareils.appendChild(UI.tableau({
-      libelle: 'Appareils enrôlés',
+      libelle: I18n.t('equipe.appareils.appareils_enroles'),
       colonnes: [
-        { cle: 'nom_demandeur', libelle: 'Personne', rendu: (a) => UI.html`<b>${texte(a.nom_demandeur)}</b>` },
-        { cle: 'libelle', libelle: 'Appareil', rendu: (a) => UI.html`${texte(a.libelle)} <span class="note">${texte(a.id)}</span>` },
-        { cle: 'cree_le', libelle: 'Enrôlé le', rendu: (a) => dateHeure(a.cree_le) },
-        { cle: 'vu_le', libelle: 'Dernière activité', rendu: (a) => dateHeure(a.vu_le) },
-        { cle: 'valide', libelle: 'État', triable: false, rendu: (a) => etatAppareil(a) },
+        { cle: 'nom_demandeur', libelle: I18n.t('equipe.comptes.personne'), rendu: (a) => UI.html`<b>${texte(a.nom_demandeur)}</b>` },
+        { cle: 'libelle', libelle: I18n.t('equipe.appareils.appareil'), rendu: (a) => UI.html`${texte(a.libelle)} <span class="note">${texte(a.id)}</span>` },
+        { cle: 'cree_le', libelle: I18n.t('equipe.appareils.enrole'), rendu: (a) => dateHeure(a.cree_le) },
+        { cle: 'vu_le', libelle: I18n.t('equipe.appareils.derniere_activite'), rendu: (a) => dateHeure(a.vu_le) },
+        { cle: 'valide', libelle: I18n.t('equipe.comptes.etat'), triable: false, rendu: (a) => etatAppareil(a) },
         { cle: 'actions', libelle: '', triable: false, rendu: (a) => boutonRevoquer('appareil', a, rafraichir) },
       ],
       lignes: appareils,
       triInitial: { cle: 'vu_le', sens: 'desc' },
-      vide: 'Aucun appareil enrôlé.',
+      vide: I18n.t('equipe.appareils.aucun_appareil_enrole'),
     }));
     const tout = UI.$('#acces-revoquer-tous', carteAppareils);
     if (tout) tout.addEventListener('click', () => revoquerTous(tout, rafraichir));
@@ -512,11 +536,11 @@ const EquipeAcces = (() => {
 
   function badgeResultat(resultat) {
     const cle = texte(resultat).toLowerCase();
-    return badge(LIBELLES_RESULTAT[cle] || texte(resultat), TONS_RESULTAT[cle] || 'neutre');
+    return badge(libelleResultat(cle) || texte(resultat), TONS_RESULTAT[cle] || 'neutre');
   }
 
   async function afficherJournal(panneau) {
-    UI.remplir(panneau, UI.html`<p class="muted">Chargement du journal…</p>`);
+    UI.remplir(panneau, UI.html`<p class="muted">${I18n.t('equipe.journal.chargement_journal')}</p>`);
     let contenu;
     try {
       contenu = await api.journal();
@@ -527,24 +551,23 @@ const EquipeAcces = (() => {
     const entrees = entreesJournal(contenu).reverse();
     const montrees = entrees.slice(0, LIGNES_JOURNAL_AFFICHEES);
     const carte = UI.element(UI.html`<section class="carte acces-carte" id="acces-journal">
-      <div class="entete-carte"><h2>Journal des connexions <span class="acces-compteur">(${entrees.length})</span></h2>
-        <div class="actions"><button type="button" class="btn btn-secondaire" id="acces-exporter-journal">${UI.icone('export')}Exporter (CSV)</button></div></div>
-      <p class="note">Connexions, échecs, blocages, comptes et appareils, avec l'adresse et le navigateur ; un an gardé
-        sur le PC serveur, jamais un mot de passe. ${entrees.length > montrees.length
-    ? UI.html`Les ${String(montrees.length)} lignes les plus récentes sont affichées ; l'export les contient toutes.` : ''}</p>
+      <div class="entete-carte"><h2>${I18n.html('equipe.journal.journal_connexions_nb', { nbEntrees: entrees.length })}</h2>
+        <div class="actions"><button type="button" class="btn btn-secondaire" id="acces-exporter-journal">${UI.icone('export')}${I18n.t('equipe.journal.exporter_csv')}</button></div></div>
+      <p class="note">${I18n.t('equipe.journal.connexions_echecs_blocages_comptes')} ${entrees.length > montrees.length
+    ? I18n.t('equipe.journal.lignes_plus_recentes', { n: montrees.length }) : ''}</p>
     </section>`);
     carte.appendChild(UI.tableau({
-      libelle: 'Journal des connexions',
+      libelle: I18n.t('equipe.journal.journal_connexions'),
       colonnes: [
-        { cle: 'date', libelle: 'Date', rendu: (l) => dateHeure(l.date) },
-        { cle: 'qui', libelle: 'Qui' },
-        { cle: 'resultat', libelle: 'Événement', rendu: (l) => badgeResultat(l.resultat) },
-        { cle: 'adresse', libelle: 'Adresse', rendu: (l) => UI.html`${texte(l.adresse)}${texte(l.tailscale) ? UI.html` <span class="note">${texte(l.tailscale)}</span>` : ''}` },
-        { cle: 'agent', libelle: 'Navigateur', triable: false, rendu: (l) => UI.html`<span class="acces-agent" title="${texte(l.agent)}">${texte(l.agent).slice(0, 60)}</span>` },
+        { cle: 'date', libelle: I18n.t('commun.champ.date'), rendu: (l) => dateHeure(l.date) },
+        { cle: 'qui', libelle: I18n.t('equipe.journal.qui') },
+        { cle: 'resultat', libelle: I18n.t('equipe.journal.evenement'), rendu: (l) => badgeResultat(l.resultat) },
+        { cle: 'adresse', libelle: I18n.t('equipe.journal.adresse'), rendu: (l) => UI.html`${texte(l.adresse)}${texte(l.tailscale) ? UI.html` <span class="note">${texte(l.tailscale)}</span>` : ''}` },
+        { cle: 'agent', libelle: I18n.t('equipe.journal.navigateur'), triable: false, rendu: (l) => UI.html`<span class="acces-agent" title="${texte(l.agent)}">${texte(l.agent).slice(0, 60)}</span>` },
       ],
       lignes: montrees,
       triInitial: { cle: 'date', sens: 'desc' },
-      vide: 'Aucune connexion enregistrée pour l\'instant.',
+      vide: I18n.t('equipe.journal.aucune_connexion_enregistree_instant'),
     }));
     UI.$('#acces-exporter-journal', carte).addEventListener('click', () => {
       UI.telecharger(NOM_FICHIER_JOURNAL, contenu, 'text/csv;charset=utf-8');
@@ -557,15 +580,14 @@ const EquipeAcces = (() => {
   // ===========================================================================================
 
   async function afficher(conteneur, parametres) {
-    App.definirTitre('Accès');
+    App.definirTitre(I18n.t('equipe.ecran.acces'));
     UI.remplir(conteneur, UI.html`<div class="equipe equipe-acces">
-      <div class="entete-page"><div><div class="fil"><a href="#/equipe">Équipe</a> <span aria-hidden="true">›</span> <span>Accès</span></div>
-        <h1>Accès</h1><p>Comptes, appareils enrôlés et journal des connexions du PC serveur.</p></div></div>
+      <div class="entete-page"><div><div class="fil">${I18n.html('equipe.ecran.equipe_acces')}</div>
+        <h1>${I18n.t('equipe.ecran.acces')}</h1><p>${I18n.t('equipe.ecran.comptes_appareils_enroles_journal')}</p></div></div>
       <div id="acces-contenu"></div></div>`);
     const zone = UI.$('#acces-contenu', conteneur);
     if (App.mode !== 'serveur') {
-      zone.appendChild(UI.bandeau('info', UI.html`<b>Rien à gérer ici :</b> les comptes et les appareils n'existent qu'avec le
-        serveur Prévo (mode serveur). En mode dossier ou démo, le profil se choisit à l'ouverture.`));
+      zone.appendChild(UI.bandeau('info', UI.html`${I18n.html('equipe.ecran.rien_gerer_ici_comptes')}`));
       return;
     }
     let session;
@@ -576,8 +598,7 @@ const EquipeAcces = (() => {
       return;
     }
     if (!session.comptes) {
-      zone.appendChild(UI.bandeau('info', UI.html`<b>Les comptes ne sont pas activés sur ce serveur</b> (portée « ce PC » : Prévo
-        n'est joignable que depuis ce PC, sans mot de passe). L'assistant d'installation les active quand Prévo s'ouvre au réseau.`));
+      zone.appendChild(UI.bandeau('info', UI.html`${I18n.html('equipe.ecran.comptes_sont_pas_actives')}`));
       return;
     }
     const requete = (parametres && parametres.requete) || new URLSearchParams();
@@ -586,16 +607,17 @@ const EquipeAcces = (() => {
     // a pu changer les choses) ; la première ouverture est remplie par UI.onglets lui-même.
     const ouverts = new Set();
     const onglets = UI.onglets(zone, [
-      { id: 'comptes', libelle: 'Comptes', afficher: (panneau) => afficherComptes(panneau, session) },
-      { id: 'appareils', libelle: 'Appareils', afficher: (panneau) => afficherAppareils(panneau) },
-      { id: 'journal', libelle: 'Journal des connexions', afficher: (panneau) => afficherJournal(panneau) },
+      { id: 'comptes', libelle: I18n.t('equipe.comptes.comptes'), afficher: (panneau) => afficherComptes(panneau, session) },
+      { id: 'appareils', libelle: I18n.t('equipe.ecran.appareils'), afficher: (panneau) => afficherAppareils(panneau) },
+      { id: 'journal', libelle: I18n.t('equipe.journal.journal_connexions'), afficher: (panneau) => afficherJournal(panneau) },
     ], { actif: ['comptes', 'appareils', 'journal'].includes(demande) ? demande : 'comptes',
       surChangement: (id) => { if (ouverts.has(id)) onglets.rafraichir(id); else ouverts.add(id); } });
   }
 
   document.addEventListener('DOMContentLoaded', () => {
     App.ecran({
-      id: 'equipe-acces', route: /^#\/equipe\/acces$/, titre: 'Accès', parent: 'equipe',
+      id: 'equipe-acces', route: /^#\/equipe\/acces$/, parent: 'equipe',
+      get titre() { return I18n.t('equipe.ecran.acces'); },
       profils: ['responsable'],
       tables: ['techniciens'],
       afficher: afficher,

@@ -26,23 +26,28 @@ const Installation = (() => {
   const MOTIF_ROUTE_FICHE = /^#\/installation\/fiche(\?.*)?$/;
   const INTERVALLE_RELANCE_MS = 2000;           // ping du serveur relancé
   const DELAI_RELANCE_MS = 60000;               // au-delà : message, le serveur ne revient pas
-  const MESSAGE_SERVEUR_INJOIGNABLE = 'Le serveur Prévo ne répond pas. Vérifiez que la fenêtre du serveur est ouverte sur le PC.';
-  const RAISONS_SANS_OBJET = {
-    compte: 'Prévo reste sur ce PC : aucun compte n\'est nécessaire.',
-    certificat: 'Prévo reste sur ce PC, en http : aucun certificat à préparer.',
-    tailscale: 'Prévo n\'est pas joignable hors de l\'atelier : rien à faire pour le réseau privé.',
-  };
+  const messageServeurInjoignable = () => I18n.t('installation.message_serveur_injoignable.serveur_prevo_repond_pas');
+
+  /** Pourquoi une étape est sans objet (compte, certificat, tailscale) ; '' pour une autre étape. Lu à l'affichage. */
+  function raisonSansObjet(cle) {
+    if (cle === 'compte') return I18n.t('installation.raison_sans_objet.prevo_reste_pc_aucun');
+    if (cle === 'certificat') return I18n.t('installation.raison_sans_objet.prevo_reste_pc_http');
+    if (cle === 'tailscale') return I18n.t('installation.raison_sans_objet.prevo_pas_joignable_hors');
+    return '';
+  }
+
   // Les huit étapes de l'étude §4.1 : clé de l'API (etat.etapes), question, choix d'AccesTextes (le premier porte
-  // les quatre textes de l'étape ; un second complète, ex. la veille sous « Démarrer avec le PC »).
+  // les quatre textes de l'étape ; un second complète, ex. la veille sous « Démarrer avec le PC »). Libellé court et
+  // titre : accesseurs, lus à l'affichage.
   const ETAPES = [
-    { cle: 'situation', court: 'Qui utilise', titre: 'Qui va utiliser Prévo ?', choix: ['installation'] },
-    { cle: 'portee', court: 'Depuis où', titre: 'D\'où faut-il pouvoir ouvrir Prévo ?', choix: ['exterieur', 'mot_de_passe'] },
-    { cle: 'compte', court: 'Votre compte', titre: 'Votre nom et un mot de passe', choix: ['mot_de_passe'] },
-    { cle: 'certificat', court: 'Certificat', titre: 'Pour que les téléphones vous fassent confiance (https)', choix: ['certificat'] },
-    { cle: 'tailscale', court: 'Hors de l\'atelier', titre: 'Comment joindre ce PC de dehors sans ouvrir votre box ?', choix: ['exterieur'] },
-    { cle: 'demarrage', court: 'Démarrage', titre: 'Prévo doit-il démarrer tout seul avec le PC ?', choix: ['demarrage', 'veille'] },
-    { cle: 'sauvegardes', court: 'Sauvegardes', titre: 'Où garder une copie de vos données ?', choix: ['sauvegardes'] },
-    { cle: 'recapitulatif', court: 'Récapitulatif', titre: 'Voilà comment on se connecte', choix: ['etiquettes'] },
+    { cle: 'situation', get court() { return I18n.t('installation.court.utilise'); }, get titre() { return I18n.t('installation.titre.va_utiliser_prevo'); }, choix: ['installation'] },
+    { cle: 'portee', get court() { return I18n.t('installation.court.depuis_ou'); }, get titre() { return I18n.t('installation.titre.ou_faut_pouvoir_ouvrir'); }, choix: ['exterieur', 'mot_de_passe'] },
+    { cle: 'compte', get court() { return I18n.t('installation.court.compte'); }, get titre() { return I18n.t('installation.titre.nom_mot_passe'); }, choix: ['mot_de_passe'] },
+    { cle: 'certificat', get court() { return I18n.t('installation.court.certificat'); }, get titre() { return I18n.t('installation.titre.telephones_fassent_confiance_https'); }, choix: ['certificat'] },
+    { cle: 'tailscale', get court() { return I18n.t('installation.court.hors_atelier'); }, get titre() { return I18n.t('installation.titre.comment_joindre_pc_dehors'); }, choix: ['exterieur'] },
+    { cle: 'demarrage', get court() { return I18n.t('installation.court.demarrage'); }, get titre() { return I18n.t('installation.titre.prevo_doit_demarrer_tout'); }, choix: ['demarrage', 'veille'] },
+    { cle: 'sauvegardes', get court() { return I18n.t('installation.court.sauvegardes'); }, get titre() { return I18n.t('installation.titre.ou_garder_copie_donnees'); }, choix: ['sauvegardes'] },
+    { cle: 'recapitulatif', get court() { return I18n.t('installation.court.recapitulatif'); }, get titre() { return I18n.t('installation.titre.voila_comment_connecte'); }, choix: ['etiquettes'] },
   ];
 
   // --- État -------------------------------------------------------------------------------
@@ -68,11 +73,11 @@ const Installation = (() => {
     try {
       reponse = await fetch('/api/installation/' + etape, options);
     } catch (erreur) {
-      return { statut: 0, donnees: null, message: MESSAGE_SERVEUR_INJOIGNABLE };
+      return { statut: 0, donnees: null, message: messageServeurInjoignable() };
     }
     const donnees = await reponse.json().catch(() => null);
     const message = donnees && typeof donnees.erreur === 'string' && donnees.erreur
-      ? donnees.erreur : 'Le serveur a répondu « ' + reponse.status + ' ».';
+      ? donnees.erreur : I18n.t('commun.message.serveur_a_repondu', { status: reponse.status });
     return { statut: reponse.status, donnees: donnees, message: reponse.ok ? '' : message };
   }
 
@@ -121,17 +126,17 @@ const Installation = (() => {
     return UI.html`<div class="installation-textes" data-choix="${cleChoix}">
       <h3>${choix.titre}</h3>
       <dl>
-        <div><dt>Qui est concerné</dt><dd data-texte="qui">${choix.qui}</dd></div>
-        <div><dt>Ce que ça change</dt><dd data-texte="change">${choix.change}</dd></div>
-        <div><dt>Pourquoi</dt><dd data-texte="pourquoi">${choix.pourquoi}</dd></div>
-        <div><dt>Ce que Prévo conseille</dt><dd data-texte="conseil">${conseil}</dd></div>
+        <div><dt>${I18n.t('installation.bloc_textes.concerne')}</dt><dd data-texte="qui">${choix.qui}</dd></div>
+        <div><dt>${I18n.t('installation.bloc_textes.ca_change')}</dt><dd data-texte="change">${choix.change}</dd></div>
+        <div><dt>${I18n.t('installation.bloc_textes.pourquoi')}</dt><dd data-texte="pourquoi">${choix.pourquoi}</dd></div>
+        <div><dt>${I18n.t('installation.bloc_textes.prevo_conseille')}</dt><dd data-texte="conseil">${conseil}</dd></div>
       </dl>
     </div>`;
   }
 
   function blocAutrement(contenu) {
     return UI.html`<details class="installation-autrement">
-      <summary>Régler autrement</summary>
+      <summary>${I18n.t('installation.bloc_autrement.regler_autrement')}</summary>
       <div class="installation-autrement-corps">${contenu}</div>
     </details>`;
   }
@@ -146,7 +151,7 @@ const Installation = (() => {
   // ===========================================================================================
 
   function progression() {
-    return UI.html`<ol class="installation-progression" aria-label="Étapes">${ETAPES.map((etape, i) => {
+    return UI.html`<ol class="installation-progression" aria-label="${I18n.t('installation.progression.etapes')}">${ETAPES.map((etape, i) => {
       const e = etape.cle === 'recapitulatif' ? 'a_faire' : etatEtape(etape.cle);
       const classe = i === index ? 'courante' : e === 'sans_objet' ? 'sans-objet' : e === 'fait' ? 'faite' : '';
       return UI.html`<li class="${classe}" ${UI.brut(i === index ? 'aria-current="step"' : '')}><span class="numero">${i + 1}</span><span class="libelle">${etape.court}</span></li>`;
@@ -161,28 +166,35 @@ const Installation = (() => {
     const recap = etape.cle === 'recapitulatif';
     let principal = '';
     if (!recap && unePage && !formulaire.propresBoutons && !formulaire.passer) {
-      principal = UI.html`<button type="button" class="btn btn-primaire" data-enregistrer="${etape.cle}">Enregistrer cette étape</button>`;
+      principal = UI.html`<button type="button" class="btn btn-primaire" data-enregistrer="${etape.cle}">${I18n.t('installation.section_etape.enregistrer_etape')}</button>`;
     } else if (!recap && !unePage && (!formulaire.propresBoutons || formulaire.passer)) {
-      principal = UI.html`<button type="button" class="btn btn-primaire" id="inst-continuer">${etape.cle === 'situation' ? 'Commencer' : 'Continuer'}</button>`;
+      principal = UI.html`<button type="button" class="btn btn-primaire" id="inst-continuer">${etape.cle === 'situation' ? I18n.t('installation.section_etape.commencer') : I18n.t('commun.bouton.continuer')}</button>`;
     }
     const corps = sansObjet
-      ? UI.html`<p class="installation-sautee">Sans objet : ${RAISONS_SANS_OBJET[etape.cle] || ''}</p>`
+      ? UI.html`<p class="installation-sautee">${I18n.t('installation.section_etape.sans_objet', { raison: raisonSansObjet(etape.cle) })}</p>`
       : UI.html`${formulaire.champs}
         <p class="erreur-champ installation-erreur" id="inst-erreur-${etape.cle}" role="alert" hidden></p>
         <div class="actions installation-actions">
-          ${!unePage && i > 0 ? UI.html`<button type="button" class="btn btn-fantome" id="inst-precedent">Précédent</button>` : ''}
+          ${!unePage && i > 0 ? UI.html`<button type="button" class="btn btn-fantome" id="inst-precedent">${I18n.t('installation.section_etape.precedent')}</button>` : ''}
           <span class="espace"></span>
           ${principal}
-          ${recap ? UI.html`<button type="button" class="btn btn-primaire" id="inst-terminer">Terminer et ouvrir Prévo</button>` : ''}
+          ${recap ? UI.html`<button type="button" class="btn btn-primaire" id="inst-terminer">${I18n.t('installation.section_etape.terminer_ouvrir_prevo')}</button>` : ''}
         </div>
         <div class="installation-attente" id="inst-attente" hidden></div>`;
     const faite = !recap && etatEtape(etape.cle) === 'fait';
     return UI.html`<section class="carte installation-etape" data-etape="${etape.cle}" data-numero="${i + 1}">
-      <h2><span class="installation-numero">Étape ${i + 1} sur ${ETAPES.length}${faite ? UI.html` <span class="installation-fait">Fait</span>` : ''}</span>${etape.titre}</h2>
+      <h2><span class="installation-numero">${I18n.t('installation.section_etape.etape_sur', { numero: i + 1, total: ETAPES.length })}${faite ? UI.html` <span class="installation-fait">${I18n.t('installation.section_etape.fait')}</span>` : ''}</span>${etape.titre}</h2>
       ${corps}
       ${etape.choix.map(blocTextes)}
       ${blocAutrement(formulaire.autrement)}
     </section>`;
+  }
+
+  /** « Étape « Certificat » sautée : … » (étape sans objet passée depuis la dernière étape montrée). */
+  function ligneSautee(cle) {
+    const etape = ETAPES.find((e) => e.cle === cle).court;
+    const raison = raisonSansObjet(cle) || I18n.t('installation.ligne_sautee.sans_objet');
+    return UI.html`<p class="installation-sautee">${I18n.t('installation.ligne_sautee.etape_sautee', { etape, raison })}</p>`;
   }
 
   function rendreEtape() {
@@ -190,7 +202,7 @@ const Installation = (() => {
     const formulaire = formulaireDe(etape);
     const zone = UI.$('#installation-contenu');
     UI.remplir(zone, UI.html`${progression()}
-      ${sautees.map((cle) => UI.html`<p class="installation-sautee">Étape « ${ETAPES.find((e) => e.cle === cle).court} » sautée : ${RAISONS_SANS_OBJET[cle] || 'sans objet.'}</p>`)}
+      ${sautees.map(ligneSautee)}
       ${sectionEtape(etape, formulaire, false)}`);
     zone.dataset.formulaire = etape.cle;
     poserEcouteursEtape(etape, formulaire, zone);
@@ -201,8 +213,7 @@ const Installation = (() => {
   // Informaticien : toutes les étapes sur une page, chacune avec ses appels ; rien d'automatique sans clic.
   function rendreUnePage() {
     const zone = UI.$('#installation-contenu');
-    UI.remplir(zone, UI.html`<p class="note installation-une-page">Situation « informaticien » : toutes les étapes sur cette page. Chaque étape s'enregistre par son bouton ;
-      « Terminer » écrit prevo.config.json et relance le serveur.</p>
+    UI.remplir(zone, UI.html`<p class="note installation-une-page">${I18n.t('installation.rendre_une_page.situation_informaticien_toutes_etapes')}</p>
       ${ETAPES.slice(1).map((etape) => sectionEtape(etape, formulaireDe(etape), true))}`);
     zone.dataset.formulaire = 'une-page';
     ETAPES.slice(1).forEach((etape) => poserEcouteursEtape(etape, () => formulaireDe(etape), zone, true));
@@ -267,7 +278,7 @@ const Installation = (() => {
     if (etape.cle === 'recapitulatif') return;
     if (formulaire.passer) { avancer(unePage); return; }
     const corps = formulaire.lire ? formulaire.lire(section) : {};
-    if (!corps) { montrerErreur(etape.cle, formulaire.message || 'Complétez cette étape.'); return; }
+    if (!corps) { montrerErreur(etape.cle, formulaire.message || I18n.t('installation.envoyer.completez_etape')); return; }
     if (corps.probleme) { montrerErreur(etape.cle, corps.probleme); return; }
     await poster(etape, etape.cle, corps, unePage, formulaire, section);
   }
@@ -325,25 +336,31 @@ const Installation = (() => {
     const d = detection.donnees.detection || {};
     const proposition = detection.donnees.proposition || {};
     if (!d.present || !d.connecte) {
-      montrerErreur(etape.cle, !d.present ? 'Tailscale n\'est toujours pas détecté' + (d.raison ? ' (' + d.raison + ')' : '') + ' : installez-le, connectez-vous, puis réessayez.'
-        : 'Tailscale est installé mais pas connecté : ouvrez Tailscale, connectez-vous, puis réessayez.');
+      let probleme = I18n.t('installation.appliquer_tailscale.tailscale_installe_mais_pas');
+      if (!d.present) {
+        probleme = d.raison ? I18n.t('installation.appliquer_tailscale.tailscale_toujours_pas_detecte_raison', { raison: d.raison })
+          : I18n.t('installation.appliquer_tailscale.tailscale_toujours_pas_detecte');
+      }
+      montrerErreur(etape.cle, probleme);
       return;
     }
     const application = await appeler('tailscale', { action: 'appliquer' });
     if (!application.statut || application.statut >= 400) { montrerErreur(etape.cle, application.message); return; }
     reprendre(application.donnees);
     const resultat = UI.$('#inst-tailscale-resultat', section);
-    UI.remplir(resultat, UI.html`<p><b>${application.donnees.message || 'Tailscale publie Prévo.'}</b> Adresse : <b>${application.donnees.adresse || ''}</b></p>
+    const publie = application.donnees.message || I18n.t('installation.appliquer_tailscale.tailscale_publie_prevo');
+    const adresse = application.donnees.adresse || '';
+    UI.remplir(resultat, UI.html`<p>${I18n.html('installation.appliquer_tailscale.publie_adresse_adresse', { publie, adresse })}</p>
       <ul>${(proposition.rappels || []).map((rappel) => UI.html`<li>${rappel}</li>`)}</ul>
-      ${proposition.unattended ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire" id="inst-tailscale-unattended">Rester connecté même sans session Windows ouverte</button></div>` : ''}
-      <div class="actions">${unePage ? '' : UI.html`<button type="button" class="btn btn-primaire" id="inst-tailscale-continuer">Continuer</button>`}</div>`);
+      ${proposition.unattended ? UI.html`<div class="actions"><button type="button" class="btn btn-secondaire" id="inst-tailscale-unattended">${I18n.t('installation.appliquer_tailscale.rester_connecte_meme_sans')}</button></div>` : ''}
+      <div class="actions">${unePage ? '' : UI.html`<button type="button" class="btn btn-primaire" id="inst-tailscale-continuer">${I18n.t('commun.bouton.continuer')}</button>`}</div>`);
     resultat.hidden = false;
     const unattended = UI.$('#inst-tailscale-unattended', resultat);
     if (unattended) {
       unattended.addEventListener('click', () => pendant(unattended, async () => {
         const reponse = await appeler('tailscale', { action: 'unattended' });
         if (!reponse.statut || reponse.statut >= 400) { montrerErreur(etape.cle, reponse.message); return; }
-        UI.toast(reponse.donnees.message || 'Fait.', 'succes');
+        UI.toast(reponse.donnees.message || I18n.t('installation.appliquer_tailscale.fait'), 'succes');
         unattended.hidden = true;
       }));
     }
@@ -369,7 +386,7 @@ const Installation = (() => {
     if (!reponse.statut || reponse.statut >= 400) { erreur.textContent = reponse.message; erreur.hidden = false; return; }
     const vers = reponse.donnees.vers;
     await attendreRelance(section, reponse.donnees.relance,
-      'Prévo a été copié (' + reponse.donnees.copie + ' fichiers) dans ' + vers + '. L\'ancien dossier (' + etat.dossier + ') n\'est pas supprimé : effacez-le à la main ensuite.',
+      I18n.t('installation.deplacer_prevo.prevo_ete_copie_fichiers', { copie: reponse.donnees.copie, vers, dossier: etat.dossier }),
       location.hash, serveurRelanceDepuis(vers));
   }
 
@@ -387,7 +404,7 @@ const Installation = (() => {
     const corps = formulaire && formulaire.lire ? formulaire.lire(section) : {};
     const reponse = await appeler('terminer', corps);
     if (!reponse.statut || reponse.statut >= 400) { montrerErreur('recapitulatif', reponse.message); return; }
-    await attendreRelance(section, reponse.donnees.relance, 'Configuration écrite dans ' + reponse.donnees.fichier + '.', '#/accueil', serveurConfigure);
+    await attendreRelance(section, reponse.donnees.relance, I18n.t('installation.terminer_installation.configuration_ecrite', { fichier: reponse.donnees.fichier }), '#/accueil', serveurConfigure);
   }
 
   // Après « terminer » : le serveur relancé répond à /api/info avec l'installation faite (ou 401 : comptes exigés,
@@ -412,7 +429,8 @@ const Installation = (() => {
     const zone = UI.$('#inst-attente', section) || UI.$('#inst-attente');
     UI.$$('.btn', section).forEach((bouton) => { bouton.disabled = true; });
     zone.hidden = false;
-    UI.remplir(zone, UI.html`<p class="chargement" role="status">${message} ${relance ? 'Prévo se relance : patientez…' : 'Relancez Prévo à la main (' + ((fiche && fiche.lanceur) || 'Lancer_GMAO.bat') + ') : cette page suivra.'}</p>`);
+    const lanceur = (fiche && fiche.lanceur) || 'Lancer_GMAO.bat';
+    UI.remplir(zone, UI.html`<p class="chargement" role="status">${message} ${relance ? I18n.t('installation.attendre_relance.prevo_relance_patientez') : I18n.t('installation.attendre_relance.relancez_prevo_main_page', { lanceur })}</p>`);
     const debut = Date.now();
     while (Date.now() - debut < DELAI_RELANCE_MS) {
       await new Promise((suite) => { setTimeout(suite, INTERVALLE_RELANCE_MS); });
@@ -424,8 +442,8 @@ const Installation = (() => {
         }
       } catch (erreur) { /* le serveur redémarre : on réessaie */ }
     }
-    UI.remplir(zone, UI.html`<p class="erreur-champ" role="alert">Le serveur ne revient pas. Relancez Prévo par ${(fiche && fiche.lanceur) || 'Lancer_GMAO.bat'} dans son dossier,
-      puis ouvrez <b>${(fiche && fiche.adresse_locale) || location.origin + '/'}</b>.</p>`);
+    const adresseLocale = (fiche && fiche.adresse_locale) || location.origin + '/';
+    UI.remplir(zone, UI.html`<p class="erreur-champ" role="alert">${I18n.html('installation.attendre_relance.serveur_revient_pas_relancez', { lanceur, adresseLocale })}</p>`);
     UI.$$('.btn', section).forEach((bouton) => { bouton.disabled = false; });
   }
 
@@ -448,7 +466,7 @@ const Installation = (() => {
     const zone = UI.$('#installation-contenu');
     const reponse = await appeler('fiche');
     const contenu = reponse.statut >= 400 || !reponse.statut ? UI.html`<p class="erreur-champ">${reponse.message}</p>` : InstallationFiche.rendre(reponse.donnees);
-    UI.remplir(zone, [contenu, UI.html`<div class="actions"><a class="btn btn-secondaire" href="#/installation" id="inst-retour-assistant">Retour à l'assistant</a></div>`]);
+    UI.remplir(zone, [contenu, UI.html`<div class="actions"><a class="btn btn-secondaire" href="#/installation" id="inst-retour-assistant">${I18n.t('installation.fiche_seule.retour_assistant')}</a></div>`]);
     UI.$('#inst-retour-assistant').addEventListener('click', (evenement) => { evenement.preventDefault(); location.hash = '#/installation'; location.reload(); });
   }
 

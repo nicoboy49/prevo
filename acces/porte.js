@@ -13,7 +13,22 @@
   'use strict';
 
   const DELAI_ESSAI_MS = 2000;
+  const NOM_CERTIFICAT = 'prevo-ca.crt';
   const racine = document.documentElement;
+
+  // ===========================================================================================
+  // 0. Textes (js/i18n.js et js/i18n/fr.js, chargés avant ce script) : data-i18n de la page, et les deux phrases
+  //    balisées (nom de fichier, début en gras), écrites par I18n.html (balisage du dictionnaire, valeurs échappées)
+  // ===========================================================================================
+
+  function poserLesTextes() {
+    I18n.appliquer(document);
+    document.getElementById('titre-fichier-android').innerHTML = String(
+      I18n.html('porte.etapes_android.choisissez_fichier', { fichier: NOM_CERTIFICAT }));
+    document.getElementById('texte-firefox').innerHTML = String(I18n.html('porte.note_firefox.magasin_certificats'));
+  }
+
+  poserLesTextes();
 
   // ===========================================================================================
   // 1. Adresses et essai
@@ -96,7 +111,7 @@
       const reponse = await fetch('/acces/ca.crt', { method: 'GET', cache: 'no-store', credentials: 'omit' });
       if (reponse.status === 404) {
         const corps = await reponse.json().catch(() => ({}));
-        explication = corps.erreur || 'Aucun certificat à télécharger sur ce serveur : demandez au responsable.';
+        explication = corps.erreur || I18n.t('porte.verifier_autorite.aucun_certificat_telecharger_serveur');
       }
     } catch (erreur) {
       return;                                   // réseau muet : on laisse le bouton, l'erreur se verra au clic
@@ -121,16 +136,15 @@
 
   async function reessayer(bouton) {
     bouton.setAttribute('aria-busy', 'true');
-    dire('Vérification…', true);
+    dire(I18n.t('porte.reessayer.verification'), true);
     const ok = await essayer();
     bouton.removeAttribute('aria-busy');
     if (ok) {
-      dire('Le téléphone fait confiance au PC atelier : ouverture de Prévo…', true);
+      dire(I18n.t('porte.reessayer.telephone_fait_confiance_pc'), true);
       location.replace(adresseCible());
       return;
     }
-    dire('Le téléphone ne fait pas encore confiance au PC atelier. Vérifiez les étapes ci-dessus, en particulier '
-      + 'la dernière avant « Réessayer », puis réessayez.');
+    dire(I18n.t('porte.reessayer.telephone_fait_pas_encore'));
   }
 
   // ===========================================================================================

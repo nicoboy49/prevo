@@ -64,10 +64,12 @@
         "js/modules/parametres-codes.js",
         "js/modules/parametres-sauvegardes.js",
         "js/modules/parametres-solo.js",
-        "js/modules/parametres-zip.js"
+        "js/modules/parametres-zip.js",
+        "js/modules/poste.js",
+        "js/modules/equipe-acces.js"
       ],
       "classe": "D157",
-      "raison": "Contexte de pendant(bouton, contexte, action) des cartes de Paramètres : transmis tel quel à App.signalerErreur, qui ne l'écrit que dans la console (T245)."
+      "raison": "Contexte de pendant(bouton, contexte, action) des cartes de Paramètres, de Ce poste et d'Équipe › Accès : transmis tel quel à App.signalerErreur, qui ne l'écrit que dans la console (T245, T244)."
     },
     {
       "appel": "V",
@@ -324,18 +326,31 @@
     {
       "texte": "à renouveler",
       "fichiers": [
-        "js/modules/wiki-entites.js"
+        "js/modules/wiki-entites.js",
+        "js/modules/equipe-regles.js",
+        "js/modules/equipe-ecrans.js"
       ],
       "classe": "D155",
-      "raison": "État d'une habilitation calculé par Equipe (« valide », « à renouveler », « échue »…) : code compté par l'accueil du wiki, jamais affiché tel quel (T241)."
+      "raison": "État d'une habilitation calculé par Equipe (« valide », « à renouveler », « échue »…) : code compté par l'accueil du wiki, jamais affiché tel quel (T241) ; calculé par Equipe.etatHabilitation et comparé par l'écran Équipe, affiché par equipe.statut_habilitation.* (T244)."
     },
     {
       "texte": "échue",
       "fichiers": [
-        "js/modules/wiki-entites.js"
+        "js/modules/wiki-entites.js",
+        "js/modules/equipe-regles.js",
+        "js/modules/equipe-ecrans.js"
       ],
       "classe": "D155",
-      "raison": "État d'une habilitation calculé par Equipe (« valide », « à renouveler », « échue »…) : code compté par l'accueil du wiki, jamais affiché tel quel (T241)."
+      "raison": "État d'une habilitation calculé par Equipe (« valide », « à renouveler », « échue »…) : code compté par l'accueil du wiki, jamais affiché tel quel (T241) ; calculé par Equipe.etatHabilitation et comparé par l'écran Équipe, affiché par equipe.statut_habilitation.* (T244)."
+    },
+    {
+      "texte": "pas encore valable",
+      "fichiers": [
+        "js/modules/equipe-regles.js",
+        "js/modules/equipe-ecrans.js"
+      ],
+      "classe": "D155",
+      "raison": "État d'une habilitation calculé par Equipe.etatHabilitation (obtention future) et comparé par l'écran Équipe : code, affiché par equipe.statut_habilitation.pas_encore_valable (T244)."
     },
     {
       "texte": "passage au format {} du fichier",
