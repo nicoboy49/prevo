@@ -533,7 +533,10 @@ class TestPerformance(CasNavigateur):
 
     def test_ouverture_sans_ia_aucun_appel_reseau_hors_du_serveur(self):
         """Lot 4 (CS76) : tant que l'IA n'est pas activée, l'ouverture ne fait aucun appel hors du serveur
-        Prévo (ni /api/ia, ni fournisseur) ; même chose en démo (file://) : aucune requête hors du disque."""
+        Prévo (ni /api/ia, ni fournisseur) ; même chose en démo (file://) : aucune requête hors du disque.
+        T305 (active par défaut, Nicolas 06-07/11) : la seule connexion que Prévo ouvre de lui-même est la lecture de
+        https://prevo.pro/version.json, sur le poste du responsable (servie par le contexte des tests, commun.py) ;
+        jamais dans la démo."""
         page = self.nouvelle_page()
         adresses = []
         page.on("request", lambda requete: adresses.append(requete.url))
@@ -543,7 +546,8 @@ class TestPerformance(CasNavigateur):
         page.wait_for_timeout(500)
         self.assertEqual(page.evaluate("[Ia.active(), Ia.etat()]"), [False, "inconnu"])
         self.assertTrue(adresses)
-        self.assertEqual([a for a in adresses if not a.startswith(self.serveur.url + "/")], [])
+        dehors = [a for a in adresses if not a.startswith(self.serveur.url + "/")]
+        self.assertEqual(dehors, ["https://prevo.pro/version.json"] if "https://prevo.pro/version.json" in dehors else [])
         self.assertEqual([a for a in adresses if "/api/ia" in a], [])
 
         demo = self.nouvelle_page()
