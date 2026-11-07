@@ -264,9 +264,10 @@ la maintenance préventive, le magasin de pièces, le planning, les contrôles r
 ses habilitations, les indicateurs et un rapport mensuel.</p>
 <ul>
   <li><b>Vos données restent chez vous.</b> Ce sont 24 fichiers CSV, lisibles dans Excel, rangés dans un
-    dossier de votre choix. Prévo n'appelle aucun service sur Internet, sauf trois options que vous
-    choisissez&nbsp;: l'assistant IA en ligne (si le responsable l'autorise), la dictée vocale (la voix est
-    transcrite par Google ou Microsoft) et le signalement des nouvelles versions.</li>
+    dossier de votre choix. La seule connexion que Prévo ouvre de lui-même vers Internet est la lecture, une fois
+    par jour, du fichier public des versions (<a href="#mise-a-jour">2.9</a>, désactivable)&nbsp;; s'y ajoutent,
+    seulement si vous les utilisez, l'assistant IA en ligne (si le responsable l'autorise) et la dictée vocale (la
+    voix est transcrite par Google ou Microsoft).</li>
   <li><b>Rien à installer</b>&nbsp;: Python est livré dans le zip. Un double-clic lance Prévo et son assistant
     d'installation, qui règle l'accès des postes et des téléphones en trois questions. Pour seulement regarder,
     Chrome ou Edge suffit (démo, mode dossier).</li>
@@ -454,11 +455,17 @@ ce PC dans la box</b>, sinon les étiquettes ne mènent plus nulle part le jour 
 </table></div>
 
 <h3 id="mise-a-jour">2.9 Être prévenu des nouvelles versions</h3>
-<p>Prévo ne se met pas à jour tout seul et n'appelle jamais Internet sans votre accord. Le responsable peut lui
-demander de signaler les nouvelles versions&nbsp;: Paramètres, section «&nbsp;Mises à jour&nbsp;», case
-«&nbsp;Me signaler les nouvelles versions de Prévo&nbsp;» (désactivée par défaut). Prévo lit alors le fichier
+<p>Prévo ne se met pas à jour tout seul. Pour vous signaler les nouvelles versions, il lit le fichier public
 <code>https://prevo.pro/version.json</code> au plus une fois par jour et par poste, sur le poste du responsable
-seulement. Si une version plus récente existe, un bandeau sous l'en-tête de l'accueil du responsable le dit, avec sa
+seulement. Cette vérification est active par défaut&nbsp;; elle se coupe dans Paramètres, section «&nbsp;Mises à
+jour&nbsp;», case «&nbsp;Me signaler les nouvelles versions de Prévo&nbsp;». Tant que le responsable ne l'a pas
+réglée, un bandeau le lui dit une fois sur son accueil (<span class="bouton">Compris</span> le retire).</p>
+<p><b>Ce qui part.</b> Rien d'autre que la demande du fichier&nbsp;: ni identifiant, ni numéro d'installation, ni
+statistique, ni cookie. Comme lors de toute visite d'un site, prevo.pro voit l'adresse internet publique de
+l'atelier, le nom du navigateur et l'adresse par laquelle Prévo est ouvert sur votre réseau, que le navigateur
+ajoute lui-même&nbsp;; son hébergeur peut les garder dans
+ses journaux. La seule connexion que Prévo ouvre de lui-même vers Internet est cette lecture de version.json ; s'y ajoutent, seulement si vous les utilisez, l'assistant IA en ligne et la dictée vocale.</p>
+<p>Si une version plus récente existe, un bandeau sous l'en-tête de l'accueil du responsable le dit, avec sa
 date et ses nouveautés&nbsp;: <span class="bouton">Télécharger</span> ouvre la page de la version,
 <span class="bouton">Ignorer cette version</span> retire le bandeau jusqu'à la version suivante. La ligne
 «&nbsp;Mise à jour&nbsp;» de l'écran «&nbsp;À propos&nbsp;» donne le même état. Rien ne s'installe tout seul&nbsp;: vous
@@ -1397,8 +1404,11 @@ traitements.</p>
     poste&nbsp;; l'informaticien suit la politique de l'entreprise sur les données des salariés.</li>
   <li><b>La dictée</b> envoie la voix à Google ou Microsoft (<a href="#dictee">chapitre 6</a>), poste par poste, avec
     un avertissement à la première utilisation.</li>
-  <li><b>Les nouvelles versions</b>&nbsp;: sur accord du responsable seulement, Prévo lit un fichier sur prevo.pro,
-    sans envoyer aucune donnée (<a href="#mise-a-jour">2.9</a>).</li>
+  <li><b>Les nouvelles versions</b>&nbsp;: une fois par jour, sur le poste du responsable, Prévo lit un fichier public
+    sur prevo.pro, sans identifiant, numéro d'installation ni statistique&nbsp;; prevo.pro voit, comme pour toute
+    visite, l'adresse internet publique de l'atelier, le navigateur et l'adresse locale de Prévo. Désactivable dans
+    Paramètres (<a href="#mise-a-jour">2.9</a>). C'est la seule connexion que Prévo ouvre de lui-même vers
+    Internet.</li>
 </ul>
 
 <h3 id="annuaire">8.10 L'annuaire de l'entreprise</h3>

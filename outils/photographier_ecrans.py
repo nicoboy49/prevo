@@ -564,6 +564,12 @@ class Releveur:
         contexte.set_default_timeout(DELAI_MS)
         contexte.clock.set_fixed_time(instant_fige() / 1000)
         contexte.add_init_script(SCRIPT_SURVEILLANCE)
+        # T305 (vérification de version active par défaut) : aucun relevé ne lit le vrai prevo.pro ; version.json est
+        # servi ici (0.0.0 : aucun bandeau) et le bandeau d'information unique tenu pour lu, comme dans les tests.
+        contexte.route("https://prevo.pro/version.json", lambda route: route.fulfill(
+            status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"},
+            body=json.dumps({"version": "0.0.0", "adresse": "https://prevo.pro/"})))
+        contexte.add_init_script("try { localStorage.setItem('prevo.majInformee', '1'); } catch (erreur) {}")
         if self.langue:
             contexte.add_init_script(SCRIPT_LANGUE % json.dumps(self.langue))
         return contexte

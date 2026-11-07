@@ -63,8 +63,8 @@ const Parametres = (() => {
       decideeParLeServeur: true,
       get libelle() { return I18n.t('parametres.libelle.autoriser_fournisseurs_ia_ligne'); },
       get aide() { return I18n.t('parametres.aide.textes_envoyes_descriptions_comptes'); } },
-    // Mise à jour signalée (ARCHITECTURE.md §21, D120) : le responsable autorise la lecture de prevo.pro/version.json.
-    { cle: 'maj_signalee', type: 'booleen', valeurs: ['0', '1'], defaut: '0', large: true, get section() { return I18n.t('parametres.section.mises_jour'); },
+    // Mise à jour signalée (ARCHITECTURE.md §21, D120 ; T305, D175 : active par défaut) : lecture de prevo.pro/version.json.
+    { cle: 'maj_signalee', type: 'booleen', valeurs: ['0', '1'], defaut: '1', large: true, get section() { return I18n.t('parametres.section.mises_jour'); },
       get libelle() { return I18n.t('parametres.libelle.me_signaler_nouvelles_versions'); },
       get aide() { return I18n.t('parametres.aide.prevo_lit_https_prevo'); } },
     // Mode Solo (ARCHITECTURE.md §22.11, D132) : profil Responsable avec un réglage, pas un quatrième profil.

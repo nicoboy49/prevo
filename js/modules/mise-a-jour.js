@@ -1,11 +1,16 @@
-// Mise à jour signalée (D120, CS118 ; ARCHITECTURE.md §21). Les utilisateurs ne surveillent pas GitHub : si le
-// responsable l'a autorisé dans Paramètres (maj_signalee), Prévo lit https://prevo.pro/version.json au plus une fois
-// par jour et par poste (numéro, date, adresse de téléchargement, nouveautés en deux lignes) et, quand une version
-// plus récente existe, le dit par un bandeau discret sur l'accueil du responsable et une ligne dans « À propos ».
-// Jamais d'installation automatique ; version égale ou plus ancienne, fichier absent, injoignable ou mal formé :
-// rien, sans erreur visible. Rien pour le technicien, le demandeur ni la démo en ligne (App.versionWeb).
-// Numéros SemVer (T216) : une bêta (2.0.0-beta.2) est prévenue de la finale (2.0.0) ; une installation stable
-// n'est jamais prévenue d'une bêta.
+// Mise à jour signalée (D120, CS118 ; ARCHITECTURE.md §21). Les utilisateurs ne surveillent pas GitHub : Prévo lit
+// https://prevo.pro/version.json au plus une fois par jour et par poste (numéro, date, adresse de téléchargement,
+// nouveautés) et, quand une version plus récente existe, le dit par un bandeau discret sur l'accueil du responsable et
+// une ligne dans « À propos ». Jamais d'installation automatique ; version égale ou plus ancienne, fichier absent,
+// injoignable ou mal formé : rien, sans erreur visible. Rien pour le technicien, le demandeur ni la démo en ligne
+// (App.versionWeb). Numéros SemVer (T216) : une bêta (2.0.0-beta.2) est prévenue de la finale (2.0.0) ; une
+// installation stable n'est jamais prévenue d'une bêta.
+// T305 (D174-D176, décisions de Nicolas des 06 et 07/11) : active par défaut (maj_signalee absente = '1'), coupée par
+// maj_signalee = '0' (Paramètres › Mises à jour, texte à côté de la case) ; tant que le responsable n'a rien réglé,
+// un bandeau d'information unique par poste le dit (« Compris ») ; la lecture n'envoie rien que la requête elle-même
+// (credentials omit, aucun Referer, aucune redirection suivie, aucun paramètre) ; l'adresse de téléchargement n'est
+// gardée que vers https://prevo.pro ou https://github.com/nicoboy49/prevo (sinon aucun bandeau) ; nouveautes_en
+// (facultatif) est montré en anglais, sinon nouveautes. C'est la seule connexion que Prévo ouvre de lui-même.
 window.MiseAJour = (function () {
   'use strict';
 
@@ -13,6 +18,9 @@ window.MiseAJour = (function () {
   const PARAMETRE = 'maj_signalee';          // parametres.csv (responsable, Paramètres) : '1' = autorisé
   const CLE_LECTURE = 'prevo.majLecture';    // poste : { date: 'AAAA-MM-JJ', fichier: {…} | null } (une lecture par jour)
   const CLE_IGNOREE = 'prevo.majIgnoree';    // poste : version que le responsable a choisi de ne plus voir
+  const CLE_INFORMEE = 'prevo.majInformee';  // poste : le bandeau d'information unique a été lu (« Compris », T305)
+  const SITE_PREVO = 'prevo.pro';            // D176 : seules adresses de téléchargement gardées (https, hôte exact)
+  const DEPOT_GITHUB = '/nicoboy49/prevo';
   const DELAI_MS = 5000;                     // au-delà, le fichier est tenu pour injoignable (aucune erreur montrée)
   const NOUVEAUTES_MAX = 3;
   const LONGUEUR_MAX = 200;
@@ -83,22 +91,50 @@ window.MiseAJour = (function () {
     return plusRecente(lue, installee) && (lue.length === 3 || installee.length > 3);
   }
 
-  /** Contenu de version.json vérifié et nettoyé : { version, date, adresse, nouveautes } ; null s'il est mal formé. */
+  /** D176 : vrai pour une adresse https de prevo.pro ou du dépôt GitHub de Prévo (hôte exact, sans nom ni mot de
+   *  passe, port par défaut) ; toute autre adresse (http, autre site, sous-domaine, autre dépôt) est refusée. */
+  function adresseDeTelechargementPermise(texte) {
+    let url;
+    try { url = new URL(texte); } catch (erreur) { return false; }
+    if (url.protocol !== 'https:' || url.username || url.password || url.port) return false;
+    if (url.hostname === SITE_PREVO) return true;
+    return url.hostname === 'github.com' && (url.pathname === DEPOT_GITHUB || url.pathname.startsWith(DEPOT_GITHUB + '/'));
+  }
+
+  function nettoyerNouveautes(liste) {
+    return (Array.isArray(liste) ? liste : [])
+      .filter((n) => typeof n === 'string' && n.trim())
+      .slice(0, NOUVEAUTES_MAX)
+      .map((n) => n.replace(/\s+/g, ' ').trim().slice(0, LONGUEUR_MAX));
+  }
+
+  /** Contenu de version.json vérifié et nettoyé : { version, date, adresse, nouveautes, nouveautesEn } ; null s'il est
+   *  mal formé ou si son adresse de téléchargement n'est pas permise (D176). */
   function lireFichier(objet) {
     if (!objet || typeof objet !== 'object') return null;
     const version = typeof objet.version === 'string' ? objet.version.trim() : '';
     const adresseFichier = typeof objet.adresse === 'string' ? objet.adresse.trim() : '';
-    if (!nombres(version) || !/^https:\/\//.test(adresseFichier)) return null;
+    if (!nombres(version) || !adresseDeTelechargementPermise(adresseFichier)) return null;
     const date = typeof objet.date === 'string' && MOTIF_DATE.test(objet.date.trim()) ? objet.date.trim() : '';
-    const nouveautes = (Array.isArray(objet.nouveautes) ? objet.nouveautes : [])
-      .filter((n) => typeof n === 'string' && n.trim())
-      .slice(0, NOUVEAUTES_MAX)
-      .map((n) => n.replace(/\s+/g, ' ').trim().slice(0, LONGUEUR_MAX));
-    return { version, date, adresse: adresseFichier, nouveautes };
+    // nouveautesEn (lu dans nouveautes_en, ou déjà nettoyé dans la mémoire du poste)
+    const nouveautesEn = nettoyerNouveautes(objet.nouveautes_en !== undefined ? objet.nouveautes_en : objet.nouveautesEn);
+    return { version, date, adresse: adresseFichier, nouveautes: nettoyerNouveautes(objet.nouveautes), nouveautesEn };
   }
 
+  /** Nouveautés à montrer : en anglais (nouveautes_en) dans un Prévo affiché en anglais s'il y en a, sinon en
+   *  français (nouveautes), comme Nicolas l'a décidé le 06/11. */
+  function nouveautesAffichees(fichier) {
+    return I18n.langue === 'en' && fichier.nouveautesEn.length ? fichier.nouveautesEn : fichier.nouveautes;
+  }
+
+  // T305 : active sauf maj_signalee = '0' (absente : active, D175).
   function autorisee() {
-    return typeof Donnees !== 'undefined' && String(Donnees.parametre(PARAMETRE, '0')) === '1';
+    return typeof Donnees !== 'undefined' && String(Donnees.parametre(PARAMETRE, '1')).trim() !== '0';
+  }
+
+  // Le responsable n'a encore rien réglé (clé absente ou vide) : le bandeau d'information unique est à montrer.
+  function jamaisReglee() {
+    return typeof Donnees !== 'undefined' && Donnees.parametre(PARAMETRE, '') === '';
   }
 
   function responsable() {
@@ -106,14 +142,18 @@ window.MiseAJour = (function () {
     return Boolean(profil && profil.type === 'responsable');
   }
 
-  /** Vrai quand Prévo a le droit de lire le fichier : poste du responsable, autorisé, jamais en version web. */
+  /** Vrai quand Prévo a le droit de lire le fichier : poste du responsable, autorisé, jamais en version web ni dans la
+   *  démo (atelier fictif en mémoire, index.html ouvert directement : T305, comme avant la vérification par défaut). */
   function active() {
-    return typeof App !== 'undefined' && !App.versionWeb && responsable() && autorisee();
+    return typeof App !== 'undefined' && !App.versionWeb && App.mode !== 'demo' && responsable() && autorisee();
   }
 
   async function telecharger() {
     try {
-      const reponse = await fetch(adresse(), { cache: 'no-store', signal: AbortSignal.timeout(DELAI_MS) });
+      // Rien que la requête : ni cookie ni identifiant (credentials omit), ni adresse de la page (no-referrer), aucune
+      // redirection suivie, aucun paramètre. L'origine (Origin) est ajoutée par le navigateur lui-même (dit dans la doc).
+      const reponse = await fetch(adresse(), { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer',
+        redirect: 'error', signal: AbortSignal.timeout(DELAI_MS) });
       if (!reponse.ok) return null;
       return lireFichier(await reponse.json());
     } catch (erreur) {
@@ -159,11 +199,21 @@ window.MiseAJour = (function () {
   function bandeau(fichier) {
     const bloc = UI.bandeau('info', UI.html`<b>${fichier.date ? I18n.t('mise.bandeau.disponible_date', { version: fichier.version, date: UI.dateFr(fichier.date) })
       : I18n.t('mise.bandeau.disponible', { version: fichier.version })}</b>
-      ${fichier.nouveautes.length ? UI.html`<span class="maj-nouveautes">${fichier.nouveautes.join(' · ')}</span>` : ''}
+      ${nouveautesAffichees(fichier).length ? UI.html`<span class="maj-nouveautes">${nouveautesAffichees(fichier).join(' · ')}</span>` : ''}
       <a href="${fichier.adresse}" target="_blank" rel="noopener" class="maj-telecharger">${I18n.t('mise.bandeau.telecharger')}</a>
       <button type="button" class="btn btn-fantome maj-ignorer">${I18n.t('mise.bandeau.ignorer_version')}</button>`);
     bloc.id = 'maj-bandeau';
     bloc.querySelector('.maj-ignorer').addEventListener('click', () => { ignorer(fichier.version); bloc.remove(); });
+    return bloc;
+  }
+
+  /** T305 : bandeau d'information unique (vérification active sans que le responsable l'ait réglée) ; « Compris » le
+   *  retire pour ce poste ; régler la case dans Paramètres le retire partout. */
+  function bandeauInformation() {
+    const bloc = UI.bandeau('info', UI.html`<span>${I18n.t('mise.information.verification_jour')}</span>
+      <button type="button" class="btn btn-fantome maj-compris">${I18n.t('mise.information.compris')}</button>`);
+    bloc.id = 'maj-information';
+    bloc.querySelector('.maj-compris').addEventListener('click', () => { ecrireMemoire(CLE_INFORMEE, '1'); bloc.remove(); });
     return bloc;
   }
 
@@ -172,6 +222,7 @@ window.MiseAJour = (function () {
     const zone = document.getElementById('maj-zone');
     if (!zone) return;
     zone.replaceChildren();
+    if (active() && jamaisReglee() && lireMemoire(CLE_INFORMEE) !== '1') zone.appendChild(bandeauInformation());
     const fichier = disponible();
     if (fichier) zone.appendChild(bandeau(fichier));
   }
@@ -179,6 +230,7 @@ window.MiseAJour = (function () {
   /** Ligne « Mise à jour » de la page À propos (fragment UI.html). */
   function ligneApropos() {
     if (typeof App !== 'undefined' && App.versionWeb) return UI.html`${I18n.t('mise.ligne_apropos.demo_ligne_aucune_verification')}`;
+    if (typeof App !== 'undefined' && App.mode === 'demo') return UI.html`${I18n.t('mise.ligne_apropos.demo_aucune_verification')}`;
     if (!responsable()) return UI.html`${I18n.t('mise.ligne_apropos.signalee_responsable_accueil_ici')}`;
     if (!autorisee()) return UI.html`${I18n.t('mise.ligne_apropos.non_verifiee_responsable_peut')}`;
     const fichier = disponible();
@@ -196,6 +248,6 @@ window.MiseAJour = (function () {
   }
 
   return { adresse, verifier, disponible, ignorer, afficherSiPossible, ligneApropos, nombres, plusRecente, aSignaler,
-    lireFichier,
-    PARAMETRE, CLE_LECTURE, CLE_IGNOREE };
+    lireFichier, adresseDeTelechargementPermise,
+    PARAMETRE, CLE_LECTURE, CLE_IGNOREE, CLE_INFORMEE };
 })();

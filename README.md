@@ -25,7 +25,10 @@ industrie : parc d'équipements, demandes d'intervention, ordres de travail, mai
 préventif suggéré, magasin de pièces, planning, contrôles réglementaires, indicateurs et rapport mensuel.
 Elle tourne sans installation lourde ni abonnement : les données sont des fichiers CSV lisibles dans
 Excel, stockés dans un dossier de votre choix. Le code est écrit en français, avec des bibliothèques
-embarquées et aucun appel vers Internet (sauf l'assistant IA en ligne, s'il est autorisé et choisi).
+embarquées. La seule connexion que Prévo ouvre de lui-même vers Internet est la lecture du fichier public
+`prevo.pro/version.json`, une fois par jour, pour signaler une nouvelle version (sans identifiant, sans numéro
+d'installation, sans statistique ; désactivable dans Paramètres) ; s'y ajoutent, seulement si vous les utilisez,
+l'assistant IA en ligne et la dictée vocale.
 
 ![Une matinée dans l'atelier avec Prévo : odeur de brûlé, signalement au téléphone en 30 secondes, demande traitée au bureau, ordre de travail créé et planifié (extrait de la vidéo de présentation)](docs/captures/prevo-demo.gif)
 

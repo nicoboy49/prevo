@@ -1779,37 +1779,6 @@ def executable_mkcert():
     return trouver_mkcert()
 
 
-def telecharger_mkcert(empreintes=None, dossier=None, nom=None, adresse=None):
-    """Téléchargement de secours depuis la page des releases ; l'empreinte est vérifiée avant de garder le fichier."""
-    empreintes = empreintes or lire_empreintes_tiers()
-    nom = nom or nom_binaire_mkcert(empreintes['mkcert']['version'])
-    fiche = empreintes['mkcert']['fichiers'].get(nom)
-    if fiche is None:
-        raise ErreurConfiguration(traduisible('mkcert.systeme_non_prevu',
-                                              'Aucun mkcert prévu pour ce système ({systeme}).', systeme=nom))
-    dossier = dossier or DOSSIER_OUTILS_TIERS
-    os.makedirs(dossier, exist_ok=True)
-    cible = os.path.join(dossier, nom)
-    temporaire = cible + '.telechargement'
-    adresse = adresse or (empreintes['mkcert']['source'] + nom)
-    try:
-        with urllib.request.urlopen(adresse, timeout=60) as reponse, open(temporaire, 'wb') as fichier:
-            shutil.copyfileobj(reponse, fichier)
-        verifier_empreinte(temporaire, fiche['sha256'])
-        os.replace(temporaire, cible)
-    except (OSError, urllib.error.URLError) as erreur:
-        raise ErreurConfiguration(traduisible('mkcert.telechargement_impossible',
-                                              'Téléchargement de mkcert impossible ({erreur}) : vérifiez la '
-                                              'connexion à Internet, ou utilisez le zip de Prévo qui le contient.',
-                                              erreur=erreur))
-    finally:
-        if os.path.exists(temporaire):
-            os.remove(temporaire)
-    if not nom.endswith('.exe'):
-        os.chmod(cible, 0o755)
-    return cible
-
-
 def dossier_autorite(config):
     return os.path.join(dossier_acces(config), 'autorite')
 

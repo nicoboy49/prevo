@@ -3269,9 +3269,25 @@ installer.
   (`{"version": "1.2.0", "date": "AAAA-MM-JJ", "adresse": "<release GitHub>", "nouveautes": [≤ 2 puces du CHANGELOG]}`,
   UTF-8, LF) et publié à la racine du site à chaque release, servi avec `Access-Control-Allow-Origin: *` (lecture
   depuis le poste, autre origine ; docs/RELEASE.md).
-- **Lecture** (`js/modules/mise-a-jour.js`, `MiseAJour`, chargé juste après `apropos.js`) : seulement si le paramètre
-  `maj_signalee` vaut `1` (Paramètres, responsable, section « Mises à jour », `0` par défaut), sur le poste du
-  responsable, jamais en version web (`App.versionWeb`) ; `App` appelle `MiseAJour.verifier()` une fois l'application
+- **T305 (D174-D176, décisions de Nicolas des 06 et 07/11)** : **active par défaut**, coupée par `maj_signalee` = `0`
+  (Paramètres › Mises à jour : la case, cochée par défaut, dit à côté ce qui est lu, quand, ce qui part et comment
+  couper ; rien dans l'assistant d'installation). Tant que le responsable n'a rien réglé (clé absente ou vide), un
+  bandeau d'information unique par poste le dit sur son accueil (`#maj-information`, « Compris » : `prevo.majInformee`).
+  Requête minimale : `fetch(adresse, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer',
+  redirect: 'error' })`, sans paramètre ni en-tête ajouté : ni cookie, ni adresse de la page, ni identifiant, numéro
+  d'installation ou statistique. Ce que prevo.pro voit quand même, comme pour toute visite : l'adresse IP publique de
+  l'atelier, le navigateur (User-Agent) et l'en-tête `Origin` que le navigateur ajoute lui-même à une lecture vers un
+  autre site (l'adresse locale de Prévo, par exemple `https://192.168.1.20:8443`, ou `null` en fichier local) : accepté
+  par Nicolas le 07/11 et dit dans le guide (§2.9). Adresse de téléchargement en **liste blanche** (D176,
+  `MiseAJour.adresseDeTelechargementPermise`) : `https://prevo.pro/…` ou `https://github.com/nicoboy49/prevo/…`, hôte
+  exact, sans nom ni mot de passe, port par défaut ; sinon le fichier est ignoré (aucun bandeau). `nouveautes_en`
+  (facultatif, mêmes règles que `nouveautes`) est montré dans un Prévo affiché en anglais, `nouveautes` sinon ;
+  textes toujours affichés comme du texte. Règles du fichier (seule source) : docs/RELEASE.md. La seule connexion que Prévo ouvre de lui-même vers Internet est cette lecture de version.json ; s'y ajoutent, seulement si vous les utilisez, l'assistant IA en ligne et la dictée vocale.
+  Le serveur n'a plus de téléchargement de secours de mkcert (`telecharger_mkcert`, sans appel, retiré par T305 :
+  mkcert est dans le zip depuis 2.0.0-beta.1).
+- **Lecture** (`js/modules/mise-a-jour.js`, `MiseAJour`, chargé juste après `apropos.js`) : sauf si le paramètre
+  `maj_signalee` vaut `0` (Paramètres, responsable, section « Mises à jour », `1` par défaut depuis T305), sur le poste
+  du responsable, jamais en version web (`App.versionWeb`) ; `App` appelle `MiseAJour.verifier()` une fois l'application
   prête (après la marque `prevo:pret`). Au plus une lecture par jour et par poste : `prevo.majLecture` (localStorage)
   garde la date et le résultat, un échec comptant pour la lecture du jour ; `fetch` sans cache, délai 5 s ; le fichier
   est vérifié (version `x.y.z`, adresse `https://`, date `AAAA-MM-JJ` facultative, nouveautés : 3 au plus, 200
