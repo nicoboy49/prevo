@@ -3724,7 +3724,13 @@ le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis
   de la porte et de l'écran de connexion, sans menu : un globe et les langues écrites chacune dans sa langue, aucun mot
   autour (`aria-label` « Langue / Language »). Sans session, la porte sert un seul fichier de plus, `js/i18n-chargeur.js`
   (texte public, il ne lit que le stockage de l'appareil) ; aucune route, aucune donnée, `POLITIQUE_PORTE` inchangée.
-  La porte (http) et l'application (https) n'ont pas le même stockage : un téléphone choisit sa langue à chacune.
+  La porte (http) et l'application (https) n'ont pas le même stockage : la porte passe sa langue à l'application dans
+  l'adresse qu'elle ouvre déjà (T324, Nicolas, 07/11 : `?langue=<code>`, et `langue_neuve=1` si elle vient d'être
+  choisie sur la porte ; `Porte.adresseCible`) ; `js/i18n-chargeur.js` la reprend comme choix du poste quand il n'en a
+  pas, ou quand elle vient d'être choisie (un choix fait ensuite dans l'application n'est pas écrasé), puis retire les
+  deux paramètres de l'adresse (`history.replaceState`) ; valeur hors des langues déclarées : ignorée. Ordre : langue
+  du compte une fois connecté, sinon choix de la porte ou du poste, sinon langue de l'installation. Aucune adresse
+  nouvelle : le serveur sert la même page.
 - **Langue de la console et du journal du serveur** (T297, D157) : français ou anglais selon langue_defaut (fr → fr,
   toute autre langue déclarée → en), sinon la langue du système (`locale.getlocale()`) ; choisie au démarrage
   (`choisir_langue_console`) : un changement dans Paramètres vaut au redémarrage suivant. Chaque message de console est

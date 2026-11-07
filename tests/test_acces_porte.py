@@ -609,6 +609,60 @@ class TestPorteNavigateur(CasPorteNavigateur):
         self.assertIn(TITRE_PORTE, page.inner_text("#confiance"))
         self.assertEqual(page.evaluate("localStorage.getItem('prevo.langue')"), "fr")
 
+    def application_dans_le_telephone(self, adresse, poste=None):
+        """Le téléphone qui fait confiance (autre contexte : le stockage https de l'application) ouvre « adresse » ;
+        poste : prevo.langue déjà gardé par l'application → (page, état)."""
+        contexte, page = self.telephone("Pixel 7", confiance=True)
+        reglages = {"prevo.langue": poste}
+        for cle, valeur in reglages.items():
+            if valeur:
+                contexte.add_init_script("if (location.protocol === 'https:' && !sessionStorage.getItem('t324-%s')) { "
+                                         "sessionStorage.setItem('t324-%s', '1'); localStorage.setItem('%s', '%s'); }"
+                                         % (cle, cle, cle, valeur))
+        page.goto(adresse)
+        attendre(page, "() => ['pret', 'connexion'].includes(document.documentElement.dataset.etat)"
+                       " || Boolean(document.querySelector('#ecran-connexion:not([hidden])'))")
+        etat = page.evaluate("({ lang: document.documentElement.lang, langue: I18n.langue, recherche: location.search,"
+                             " route: location.hash, poste: localStorage.getItem('prevo.langue') })")
+        return page, etat
+
+    def test_langue_choisie_sur_la_porte_reprise_par_l_application(self):
+        """T324 (Nicolas, 07/11) : le choix fait sur la porte (http) passe à l'application (https, autre stockage) dans
+        l'adresse qu'elle ouvre déjà ; ordre : compte, porte, installation ; un choix fait ensuite dans l'application
+        n'est pas écrasé ; aucune adresse nouvelle."""
+        self.autoriser_erreur(self.MOTIF_PING_REFUSE)
+        self.autoriser_erreur(re.compile(r"status of 401"))
+        contexte, porte = self.telephone("Pixel 7")
+        porte.goto(self.atelier.url_porte + "/#/equipement/EQ-0005")
+        self.attendre_confiance(porte)
+        self.assertEqual(porte.evaluate("Porte.adresseCible()"), self.atelier.url_https + "/#/equipement/EQ-0005")
+        self.changer_de_langue(porte, "en")                       # choisie sur la porte, pendant cette visite
+        cible = porte.evaluate("Porte.adresseCible()")
+        self.assertEqual(cible, self.atelier.url_https + "/?langue=en&langue_neuve=1#/equipement/EQ-0005")
+        # Une autre visite (onglet neuf, même téléphone) : la langue retenue passe, sans « neuve ».
+        autre = contexte.new_page()
+        self.surveiller(autre)
+        autre.goto(self.atelier.url_porte + "/")
+        self.attendre_confiance(autre)
+        self.assertEqual(autre.evaluate("Porte.adresseCible()"), self.atelier.url_https + "/?langue=en")
+        # L'application la reprend : anglais d'emblée, choix du poste gardé, paramètres retirés, route intacte.
+        page, etat = self.application_dans_le_telephone(cible)
+        self.assertEqual((etat["lang"], etat["langue"], etat["poste"]), ("en", "en", "en"))
+        self.assertEqual((etat["recherche"], etat["route"]), ("", "#/equipement/EQ-0005"))
+        # Un choix fait ensuite dans l'application (français) n'est pas écrasé par la langue retenue de la porte…
+        page, etat = self.application_dans_le_telephone(self.atelier.url_https + "/?langue=en", poste="fr")
+        self.assertEqual((etat["langue"], etat["poste"], etat["recherche"]), ("fr", "fr", ""))
+        # … mais une langue choisie à l'instant sur la porte passe devant.
+        page, etat = self.application_dans_le_telephone(self.atelier.url_https + "/?langue=en&langue_neuve=1", poste="fr")
+        self.assertEqual((etat["langue"], etat["poste"]), ("en", "en"))
+        # La langue du compte (une fois connecté : T298, test_langue_compte.py) reste devant celle de la porte, qui est
+        # devenue le choix du poste : même règle du chargeur (compte, poste, installation, navigateur).
+        self.assertEqual(page.evaluate("I18n.langueDeLaPage('en', 'fr', ['en-GB'], 'fr')"), "fr")
+        self.assertEqual(page.evaluate("I18n.langueDeLaPage('en', 'fr', ['en-GB'], '')"), "en")
+        # Valeur hors des langues déclarées (ou piégée) : ignorée, retirée de l'adresse, aucune erreur.
+        page, etat = self.application_dans_le_telephone(self.atelier.url_https + "/?langue=zz%22%3E&langue_neuve=1")
+        self.assertEqual((etat["langue"], etat["poste"], etat["recherche"]), ("fr", None, ""))
+
     def test_valeur_abimee_gardee_par_le_telephone_francais_sans_erreur(self):
         self.autoriser_erreur(self.MOTIF_PING_REFUSE)
         contexte, page = self.telephone("Pixel 7")

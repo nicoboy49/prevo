@@ -42,6 +42,12 @@
   // ===========================================================================================
 
   const CLE_LANGUE = 'prevo.langue';
+  // T324 (Nicolas, 07/11) : la porte (http) et l'application (https) n'ont pas le même stockage ; la langue de la porte
+  // passe à l'application dans l'adresse qu'elle ouvre déjà (adresseCible : ?langue=<code>, et langue_neuve=1 si elle
+  // vient d'être choisie ici, pendant cette visite : CLE_CHOISIE_ICI, sessionStorage). Aucune adresse nouvelle.
+  const CLE_CHOISIE_ICI = 'prevo.langue.choisieSurLaPorte';
+  const PARAMETRE_LANGUE = 'langue';
+  const PARAMETRE_LANGUE_NEUVE = 'langue_neuve';
 
   function brancherLangue() {
     const zone = document.getElementById('choix-langue');
@@ -60,6 +66,7 @@
       try {
         if (code === I18n.langueDeLaPage('', '')) localStorage.removeItem(CLE_LANGUE);
         else localStorage.setItem(CLE_LANGUE, code);
+        try { sessionStorage.setItem(CLE_CHOISIE_ICI, code); } catch (erreur) { /* sans mémoire d'onglet : non transmise neuve */ }
       } catch (erreur) {                        // navigation privée stricte, réglage du navigateur
         liste.value = I18n.langue;
         refus.hidden = false;
@@ -84,8 +91,30 @@
     return 'https://' + location.hostname + ':' + portHttps();
   }
 
+  function lireStockage(stockage, cle) {
+    try { return stockage.getItem(cle) || ''; } catch (erreur) { return ''; }
+  }
+
+  /** La langue à passer à l'application ({ code, neuve }) : celle choisie sur la porte pendant cette visite (neuve),
+   *  sinon celle que ce téléphone a retenue sur la porte ; seulement une langue déclarée ; null sinon (T324). */
+  function langueATransmettre() {
+    const declaree = (code) => I18n.langues.some((langue) => langue.code === code);
+    const choisieIci = lireStockage(window.sessionStorage, CLE_CHOISIE_ICI);
+    if (declaree(choisieIci)) return { code: choisieIci, neuve: true };
+    const retenue = lireStockage(window.localStorage, CLE_LANGUE);
+    return declaree(retenue) ? { code: retenue, neuve: false } : null;
+  }
+
+  /** L'application en https, même route ; avec la langue de la porte dans la requête (T324). */
   function adresseCible() {
-    return origineHttps() + location.pathname + location.search + location.hash;
+    const parametres = new URLSearchParams(location.search);
+    const langue = langueATransmettre();
+    if (langue) {
+      parametres.set(PARAMETRE_LANGUE, langue.code);
+      if (langue.neuve) parametres.set(PARAMETRE_LANGUE_NEUVE, '1');
+    }
+    const requete = parametres.toString();
+    return origineHttps() + location.pathname + (requete ? '?' + requete : '') + location.hash;
   }
 
   /** Vrai si l'application en https répond (le téléphone fait confiance au PC atelier). */

@@ -41,12 +41,39 @@
     }
   }
 
+  function ecrire(cle, valeur) {
+    try {
+      localStorage.setItem(cle, valeur);
+    } catch (erreur) { /* stockage refusé : la langue vaut pour cette page seulement */ }
+  }
+
+  // T324 (Nicolas, 07/11) : langue choisie sur la porte des téléphones (acces/porte.js, en http : un autre stockage),
+  // passée dans l'adresse ouverte par la porte (?langue=<code>, langue_neuve=1 si elle vient d'y être choisie). Une
+  // langue déclarée devient le choix de ce poste quand il n'en a pas, ou quand elle vient d'être choisie ; un choix
+  // fait plus tard dans l'application n'est donc pas écrasé. Les deux paramètres sont retirés de l'adresse. La langue
+  // du compte reste devant (ordre : compte, porte ou poste, installation). Valeur hors liste : ignorée.
+  function reprendreLaLangueDeLaPorte() {
+    let parametres;
+    try { parametres = new URLSearchParams(location.search); } catch (erreur) { return; }
+    if (!parametres.has('langue') && !parametres.has('langue_neuve')) return;
+    const code = parametres.get('langue') || '';
+    const neuve = parametres.get('langue_neuve') === '1';
+    if (I18n.langues.some((langue) => langue.code === code) && (neuve || !lire(CLE_LANGUE))) ecrire(CLE_LANGUE, code);
+    parametres.delete('langue');
+    parametres.delete('langue_neuve');
+    const reste = parametres.toString();
+    try {
+      history.replaceState(history.state, '', location.pathname + (reste ? '?' + reste : '') + location.hash);
+    } catch (erreur) { /* adresse laissée telle quelle : sans effet sur la langue */ }
+  }
+
   function balise(adresse) {
     return '<script src="' + adresse.replace(/[&"<>]/g, (caractere) => REMPLACEMENTS[caractere]) + '"><\/script>';
   }
 
   const script = document.currentScript;
   if (document.readyState !== 'loading' || !script || !script.src) return;
+  reprendreLaLangueDeLaPorte();
   // Valeurs vérifiées par I18n : une langue non déclarée ou mal formée donne le français.
   const retenue = lire(CLE_INSTALLATION);
   const installation = I18n.noterInstallation(I18n.installationDeLaPage() || retenue);
