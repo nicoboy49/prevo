@@ -29,7 +29,7 @@ import commun
 from commun import RACINE, ServeurPrevo, comptes_json
 from test_recette_socle import (DERNIERE_VERSION, DONNEES_DU_DEPOT, ERREUR_CSV_ABSENT,
                                 ERREUR_SANS_SESSION, FORMAT_COURANT, MOTIF_AVANT_FORMAT, MOTIF_AVANT_MISE_A_JOUR,
-                                MOTIF_QUOTIDIENNE, SERVEUR, TABLES, VERROU, VERSION_APPLI,
+                                MOTIF_QUOTIDIENNE, PREFIXE_CONSOLE_FORMAT, SERVEUR, TABLES, VERROU, VERSION_APPLI,
                                 CasRecetteSocle, csv_de_la_racine, empreintes, fichiers_de, fichiers_du_jeu,
                                 lignes_en_dictionnaires, lire_table, sans_manifeste, sauvegardes, une_seule,
                                 valeur_comparable)
@@ -120,7 +120,7 @@ class TestBeta2Serveur(CasBeta2):
             copies = sauvegardes(demarre)
             maj = self.verifier_passage(origine, copies, VERSION_APPLI, None)
             self.assertIn("sauvegarde %s faite avant la mise à jour" % maj, console)
-            self.assertNotIn(SERVEUR.PREFIXE_CONSOLE_FORMAT, console)
+            self.assertNotIn(PREFIXE_CONSOLE_FORMAT, console)
             self.assertEqual(VERSION_APPLI, "2.0.0-beta.2")
             self.assertEqual(version_notee(demarre), "2.0.0-beta.2")
             self.assertEqual(csv_de_la_racine(demarre), csv_de_la_racine(origine))     # aucune migration

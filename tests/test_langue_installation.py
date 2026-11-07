@@ -4,14 +4,17 @@ Dans Chromium, mode serveur (serveur.py sur une copie du jeu de démo, profil re
     - réglage « Langue de l'installation » (Paramètres, section Entreprise) : les langues déclarées sous leur nom dans
       leur langue, « fr » par défaut ; English enregistré → langue_defaut = en dans parametres.csv, page rechargée en
       anglais (poste sans choix), réglage relu ; retour au français ;
-    - poste sans choix, langue_defaut = en sur le disque : première page en français, UN rechargement, puis l'anglais ;
-      clé « prevo.langue.installation » écrite, raison du rechargement effacée ; un rechargement de plus : aucun autre ;
+    - poste sans choix, langue_defaut = en sur le disque : l'anglais d'emblée, sans rechargement (T297 : serveur.py pose
+      la langue de l'installation dans index.html, data-langue-installation) ; clé « prevo.langue.installation »
+      écrite ; un rechargement de plus : aucun autre ;
     - poste avec choix : choisi Français dans une installation anglaise, il le garde (clé « prevo.langue » = fr) ;
       English, la langue de l'installation, retire la clé (le poste la suit) ;
     - valeurs inconnues (langue_defaut « de », clés du navigateur « zz » et mal formée) : ignorées, français, aucun
       rechargement ni requête d'une autre langue ;
-    - pas de boucle : clé de l'installation refusée par le navigateur → un seul rechargement, puis la page reste en
-      français, avec un avertissement ; textes des données en français faute du dictionnaire anglais, sans erreur ;
+    - pas de boucle : page servie sans la langue de l'installation (attribut retiré) et clé de l'installation refusée
+      par le navigateur → un seul rechargement, puis la page reste en français, avec un avertissement ; textes des
+      données en français faute du dictionnaire anglais, sans erreur ; avec l'attribut, la même clé refusée : l'anglais
+      d'emblée, aucun rechargement (T297) ;
     - données (inventaire : commentaire et utilisateur du mouvement, profil du journal) dans la langue de
       l'installation, quelle que soit la langue affichée : installation en + écran fr, installation en + écran en,
       installation fr + écran en ;
@@ -226,32 +229,33 @@ class TestLangueInstallation(CasNavigateur):
             self.assertEqual(self.etat(), {"langue": "fr", "lang": "fr", "installation": "fr", "donnees": "fr",
                                            "poste": None, "retenue": "fr", "raison": None})
 
-    def test_poste_sans_choix_langue_de_l_installation_apres_un_seul_rechargement(self):
+    def test_poste_sans_choix_langue_de_l_installation_d_emblee(self):
         with ServeurPrevo() as serveur:
             poser_langue(serveur.dossier, "en")
-            etat = self.ouvrir(serveur, chargements=2)          # français d'abord, puis un rechargement
+            etat = self.ouvrir(serveur)                         # T297 : la page servie dit l'anglais, aucun rechargement
             self.assertEqual(etat, {"langue": "en", "lang": "en", "installation": "en", "donnees": "en",
                                     "poste": None, "retenue": "en", "raison": None})
+            self.assertEqual(self.page.evaluate("document.documentElement.dataset.langueInstallation"), "en")
             self.assertEqual(self.page.evaluate("I18n.t('poste.menu.libelle')"),
                              texte_du_dictionnaire("en", "poste.menu.libelle"))
             # Page rouverte : l'anglais d'emblée, aucun rechargement de plus.
             self.page.reload()
-            self.attendre_chargements(3)
+            self.attendre_chargements(2)
             self.assertEqual(self.etat()["langue"], "en")
 
     def test_poste_avec_choix_garde_son_choix(self):
         self.contexte.add_init_script(CHOIX_UNE_FOIS_JS % "localStorage.setItem('prevo.langue', 'fr');")
         with ServeurPrevo() as serveur:
             poser_langue(serveur.dossier, "en")
-            # Français choisi : il reste ; un rechargement, une fois, pour le dictionnaire anglais (textes des données).
-            etat = self.ouvrir(serveur, chargements=2)
+            # Français choisi : il reste ; le dictionnaire anglais (textes des données) est chargé d'emblée (T297).
+            etat = self.ouvrir(serveur)
             self.assertEqual(etat, {"langue": "fr", "lang": "fr", "installation": "en", "donnees": "en",
                                     "poste": "fr", "retenue": "en", "raison": None})
             # English, la langue de l'installation, choisi à « Ce poste » : la clé est retirée, le poste la suit.
-            etat = self.choisir_au_poste("en", 3)
+            etat = self.choisir_au_poste("en", 2)
             self.assertEqual((etat["langue"], etat["poste"]), ("en", None))
             # Français choisi de nouveau : retenu (il diffère de l'installation), sans autre rechargement.
-            etat = self.choisir_au_poste("fr", 4)
+            etat = self.choisir_au_poste("fr", 3)
             self.assertEqual((etat["langue"], etat["poste"], etat["donnees"]), ("fr", "fr", "en"))
 
     def test_valeurs_inconnues_ignorees(self):
@@ -275,6 +279,13 @@ class TestLangueInstallation(CasNavigateur):
         self.contexte.add_init_script(REFUS_INSTALLATION_JS)
         with ServeurPrevo() as serveur:
             poser_langue(serveur.dossier, "en")
+            # Page servie sans la langue de l'installation (T297 : attribut retiré, comme une page d'un ancien serveur) :
+            # seule la lecture des paramètres l'apprend.
+            def sans_langue_de_la_page(route):
+                reponse = route.fetch()
+                corps = reponse.text().replace('data-langue-installation="en"', 'data-langue-installation=""')
+                route.fulfill(response=reponse, body=corps)
+            self.page.route(serveur.url + "/", sans_langue_de_la_page)
             etat = self.ouvrir(serveur, chargements=2)          # un rechargement, puis plus aucun
             self.assertEqual(etat, {"langue": "fr", "lang": "fr", "installation": "en", "donnees": "fr",
                                     "poste": None, "retenue": None, "raison": "en/en"})
@@ -282,8 +293,18 @@ class TestLangueInstallation(CasNavigateur):
             # Dictionnaire anglais absent : les textes des données restent en français, sans erreur.
             self.assertEqual(self.inventorier(serveur), self.attendus("fr"))
 
+    def test_langue_donnee_par_la_page_sans_stockage_aucun_rechargement(self):
+        """T297 : la page servie dit la langue de l'installation ; la clé refusée par le navigateur ne gêne pas."""
+        self.contexte.add_init_script(REFUS_INSTALLATION_JS)
+        with ServeurPrevo() as serveur:
+            poser_langue(serveur.dossier, "en")
+            etat = self.ouvrir(serveur)
+            self.assertEqual(etat, {"langue": "en", "lang": "en", "installation": "en", "donnees": "en",
+                                    "poste": None, "retenue": None, "raison": None})
+            self.assertEqual(self.inventorier(serveur), self.attendus("en"))
+
     def test_donnees_dans_la_langue_de_l_installation_quelle_que_soit_la_langue_affichee(self):
-        cas = (("en", "fr", 2), ("en", None, 2), ("fr", "en", 1))      # installation, choix du poste, chargements
+        cas = (("en", "fr", 1), ("en", None, 1), ("fr", "en", 1))      # installation, choix du poste, chargements
         for installation, choix, chargements in cas:
             with self.subTest(installation=installation, choix=choix):
                 contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1280, "height": 800})

@@ -37,6 +37,7 @@ import http.server
 import io
 import ipaddress
 import json
+import locale
 import os
 import platform
 import re
@@ -309,8 +310,10 @@ SEMAPHORE_CONNEXIONS = threading.BoundedSemaphore(CONNEXIONS_MAX)
 # « <champ>_valeurs » (avec_codes) ; le navigateur affiche la clé dans sa langue, et le français reçu quand il ne
 # connaît pas le code (StockageServeur.texte, js/stockage-serveur.js). Seules les valeurs écrites dans le français
 # partent avec le code : la réponse n'en dit jamais plus qu'avant.
-# Hors codes, par règle (outils/textes_serveur.py) : la console, le journal du serveur et les lanceurs (D157, Lot 4),
-# les textes écrits dans les données (D156) et les marqueurs relus par le code.
+# La console et le journal du serveur emploient les mêmes messages (T297) : en anglais, afficher écrit leur clé
+# serveur.<code> de js/i18n/en.js (texte_de_la_console). Hors codes, par règle (outils/textes_serveur.py) : ce qui
+# reste écrit en dur pour la console (aide de la ligne de commande, « --aide », journal des requêtes), les lanceurs
+# (D157), les textes écrits dans les données (D156) et les marqueurs relus par le code.
 # Le nom « traduisible » n'est jamais celui d'une variable locale (le contrôle le vérifie) : « texte » l'est souvent.
 MOTIF_VARIABLE_TEXTE = re.compile(r'\{([A-Za-z_][A-Za-z0-9_]*)\}')     # MOTIF_VARIABLE de js/i18n.js
 SUFFIXES_DU_CODE = ('_code', '_valeurs', '_sans_point')              # champs ajoutés à côté d'un message
@@ -473,6 +476,133 @@ def message_fichier_verrouille(chemin):
 # ---------------------------------------------------------------------------
 # Console
 # ---------------------------------------------------------------------------
+# Langue de la console et du journal du serveur (T297 ; D157, Lot 4) : le français ou l'anglais selon langue_defaut de
+# parametres.csv (le français pour « fr », l'anglais pour toute autre langue déclarée) ; sans réglage (première
+# installation), la langue du système (locale de Python : « fr » si elle commence par fr, sinon « en »). Choisie par main
+# au démarrage (choisir_langue_console). Un message de la console s'écrit traduisible('<code>', '<français>', …), comme
+# un message pour le navigateur ; en anglais, afficher écrit la clé serveur.<code> de js/i18n/en.js, lue une fois par
+# lire_textes_anglais (un petit lecteur de la section serveur, aucun eval), et le français si la clé manque. Le reste
+# (chemin, sortie d'un outil, texte calculé) est écrit tel quel.
+LANGUE_CONSOLE_ANGLAISE = 'en'
+FICHIER_TEXTES_ANGLAIS = os.path.join(DOSSIER_APPLICATION, 'js', 'i18n', 'en.js')
+DEBUT_DE_SECTION_JS = '// ==== section '
+SECTION_SERVEUR_JS = '// ==== section serveur ===='
+MOTIF_ENTREE_SERVEUR_JS = re.compile(r"^  'serveur\.([a-z0-9_.]+)': (.*),$")       # une clé par ligne, comme fr.js
+MOTIF_CHAINE_JS = re.compile(r"'((?:[^'\\\n]|\\.)*)'")
+MOTIF_FORME_JS = re.compile(r"\b(zero|one|two|few|many|other): '((?:[^'\\\n]|\\.)*)'")
+MOTIF_ECHAPPEMENT_JS = re.compile(r"\\(u\{[0-9A-Fa-f]{1,6}\}|u[0-9A-Fa-f]{4}|x[0-9A-Fa-f]{2}|.)", re.S)
+ECHAPPEMENTS_JS = {'n': '\n', 'r': '\r', 't': '\t', 'b': '\b', 'f': '\f', 'v': '\v', '0': '\0'}
+CONSOLE = {'langue': 'fr', 'textes': None}       # langue de la console ; textes anglais, lus au premier besoin
+
+
+def langue_du_systeme():
+    """« fr » si la langue du système (locale de Python : celle de Windows, ou LANG) commence par fr, sinon « en »."""
+    try:
+        nom = locale.getlocale()[0] or ''
+    except (ValueError, TypeError, AttributeError):
+        nom = ''
+    return 'fr' if str(nom).lower().startswith('fr') else LANGUE_CONSOLE_ANGLAISE
+
+
+def langue_de_la_console(config=None):
+    """« fr » ou « en » : langue_defaut ramenée à l'une des deux (fr → fr, toute autre langue déclarée → en) ; sans
+    réglage (première installation, parametres.csv absent ou illisible, ou avant la configuration : config None), la
+    langue du système."""
+    code = langue_de_l_installation(config) if config is not None else ''
+    if code:
+        return 'fr' if code.split('-')[0] == 'fr' else LANGUE_CONSOLE_ANGLAISE
+    return langue_du_systeme()
+
+
+def choisir_langue_console(config=None):
+    """Pose la langue de la console (langue_de_la_console) et la rend."""
+    CONSOLE['langue'] = langue_de_la_console(config)
+    return CONSOLE['langue']
+
+
+def chaine_js(brute):
+    """Texte d'une chaîne JavaScript écrite entre apostrophes (sans elles) : \\n, \\', \\u00a0… rendus."""
+    def rendre(trouve):
+        echappe = trouve.group(1)
+        if len(echappe) > 1 and echappe[0] in 'ux':
+            try:
+                return chr(int(echappe[1:].strip('{}'), 16))
+            except ValueError:                  # au-delà de U+10FFFF : laissé tel quel
+                return echappe
+        return ECHAPPEMENTS_JS.get(echappe, echappe)
+    return MOTIF_ECHAPPEMENT_JS.sub(rendre, brute)
+
+
+def lire_textes_anglais(chemin=FICHIER_TEXTES_ANGLAIS):
+    """{code: modèle} de la section serveur de js/i18n/en.js (modèle : texte, ou {catégorie: texte} d'un pluriel),
+    une ligne par clé comme l'écrit le dictionnaire ; {} pour un fichier absent ou illisible."""
+    try:
+        octets = lire_octets(chemin)
+        lignes = octets.decode('utf-8').split('\n') if octets is not None else []
+    except (OSError, UnicodeDecodeError):
+        return {}
+    textes, dans_la_section = {}, False
+    for ligne in lignes:
+        ligne = ligne.rstrip('\r')
+        if ligne.startswith(DEBUT_DE_SECTION_JS):
+            dans_la_section = ligne.strip() == SECTION_SERVEUR_JS
+            continue
+        trouve = MOTIF_ENTREE_SERVEUR_JS.match(ligne) if dans_la_section else None
+        if trouve is None:
+            continue
+        valeur = trouve.group(2)
+        if valeur.startswith('{'):
+            formes = {categorie: chaine_js(texte) for categorie, texte in MOTIF_FORME_JS.findall(valeur)}
+            if 'other' in formes:
+                textes[trouve.group(1)] = formes
+        else:
+            chaine = MOTIF_CHAINE_JS.fullmatch(valeur)
+            if chaine:
+                textes[trouve.group(1)] = chaine_js(chaine.group(1))
+    return textes
+
+
+def forme_du_pluriel_en(n):
+    """Catégorie du pluriel en anglais, celle de Intl.PluralRules('en') pour one et other (1 au singulier)."""
+    try:
+        return 'one' if float(n) == 1 else 'other'
+    except (TypeError, ValueError):
+        return 'other'
+
+
+def texte_en_anglais(message, textes):
+    """Le message (Traduisible) d'après textes (lire_textes_anglais) : son modèle anglais, chaque {nom} remplacé par sa
+    valeur (un Traduisible traduit à son tour, une liste jointe par « , ») ; le français tel quel sans clé anglaise."""
+    modele = textes.get(message.code) if message.code else None
+    if modele is None:
+        return str(message)
+    valeurs = message.valeurs or {}
+    if isinstance(modele, dict):
+        modele = modele.get(forme_du_pluriel_en(valeurs.get('n')), modele['other'])
+
+    def ecrire(valeur):
+        if isinstance(valeur, Traduisible):
+            return texte_en_anglais(valeur, textes)
+        if isinstance(valeur, list):
+            return ', '.join(ecrire(element) for element in valeur)
+        return str(valeur)
+
+    def remplacer(trouve):
+        nom = trouve.group(1)
+        return ecrire(valeurs[nom]) if nom in valeurs else trouve.group(0)
+    texte = MOTIF_VARIABLE_TEXTE.sub(remplacer, modele)
+    return texte.rstrip('.') if message.sans_point else texte
+
+
+def texte_de_la_console(texte):
+    """Ce que la console et le journal du serveur écrivent pour « texte » : un Traduisible dans la langue de la console
+    (en anglais : texte_en_anglais), tout autre texte tel quel."""
+    if CONSOLE['langue'] != LANGUE_CONSOLE_ANGLAISE or not isinstance(texte, Traduisible):
+        return str(texte)
+    if CONSOLE['textes'] is None:
+        CONSOLE['textes'] = lire_textes_anglais()
+    return texte_en_anglais(texte, CONSOLE['textes'])
+
 
 def preparer_console():
     """Évite qu'un caractère non affichable (accent, tiret long…) fasse planter un print."""
@@ -484,7 +614,9 @@ def preparer_console():
 
 
 def afficher(texte):
-    """Affiche une ligne tout de suite (flush) : les tests lisent la console en direct."""
+    """Affiche une ligne tout de suite (flush) : les tests lisent la console en direct. Un Traduisible est écrit dans
+    la langue de la console (texte_de_la_console, T297)."""
+    texte = texte_de_la_console(texte)
     if JOURNAL_SERVEUR is not None:
         JOURNAL_SERVEUR.ecrire(texte)
     if sys.stdout is None:          # lancé sans console (pythonw)
@@ -529,6 +661,12 @@ DOSSIER_PORTE = ('acces',)
 DOSSIER_TEXTES = ('js', 'i18n')            # textes de l'interface par langue, servis aussi par la porte (multilingue)
 PAGE_PORTE = os.path.join(DOSSIER_APPLICATION, 'acces', 'porte.html')
 ATTRIBUT_PORT_HTTPS = 'data-port-https=""'
+# Langue de l'installation (T297) : posée de même dans l'attribut data-langue-installation de la porte (langue_defaut,
+# sinon « fr ») et de index.html (seulement quand langue_defaut est réglée : sans elle, la page garde la langue du
+# navigateur, D150, T296) ; js/i18n-chargeur.js la lit avant toute lecture des données. Toujours un code de langue
+# déclaré et bien formé (MOTIF_CODE de js/i18n.js) : rien d'autre ne peut entrer dans la page.
+ATTRIBUT_LANGUE_INSTALLATION = 'data-langue-installation=""'
+PAGE_APPLICATION = ['index.html']
 CHEMIN_CERTIFICAT_AUTORITE = ['acces', 'ca.crt']
 TYPE_CERTIFICAT_AUTORITE = 'application/x-x509-ca-cert'
 NOM_FICHIER_CERTIFICAT_AUTORITE = 'prevo-ca.crt'
@@ -637,10 +775,14 @@ def lire_configuration(chemin):
         with open(chemin, 'rb') as fichier:
             contenu = json.loads(fichier.read().decode('utf-8-sig'))
     except (OSError, UnicodeDecodeError, ValueError) as erreur:
-        raise ErreurConfiguration('Configuration illisible (%s) : %s. Corrigez le fichier ou supprimez-le pour '
-                                  'repartir des réglages par défaut.' % (chemin, erreur))
+        raise ErreurConfiguration(traduisible('config.illisible',
+                                              'Configuration illisible ({chemin}) : {erreur}. Corrigez le fichier ou '
+                                              'supprimez-le pour repartir des réglages par défaut.',
+                                              chemin=chemin, erreur=erreur))
     if not isinstance(contenu, dict):
-        raise ErreurConfiguration('Configuration illisible (%s) : un objet JSON est attendu.' % chemin)
+        raise ErreurConfiguration(traduisible('config.objet_attendu',
+                                              'Configuration illisible ({chemin}) : un objet JSON est attendu.',
+                                              chemin=chemin))
     genres = {cle: genre for cle, genre, _, _ in CLES_CONFIGURATION}
     for cle, valeur in contenu.items():
         if cle.startswith('_'):
@@ -1851,16 +1993,18 @@ def certificat_du_serveur(config, reglages, mkcert=None):
     if reglages['ecoute'] == '127.0.0.1':
         return None, None
     if not reglages.get('certificat_auto'):
-        raise ErreurConfiguration(
+        raise ErreurConfiguration(traduisible(
+            'config.reseau_sans_certificat',
             'Prévo refuse d\'écouter sur le réseau sans https. Donnez un certificat (« certificat » et « cle ») ou '
-            'laissez Prévo fabriquer le sien (« certificat_auto »: true).')
+            'laissez Prévo fabriquer le sien (« certificat_auto »: true).'))
     try:
         certificat, cle, _ = preparer_certificat_local(config, mkcert or executable_mkcert())
     except ErreurConfiguration as erreur:
-        raise ErreurConfiguration(
-            'Certificat de l\'atelier impossible (%s). Prévo n\'écoute pas sur le réseau sans https : remettez mkcert '
-            'dans le dossier outils-tiers/ (il est dans le zip de Prévo), ou donnez « certificat » et « cle » dans %s.'
-            % (str(erreur).rstrip('.'), NOM_FICHIER_CONFIGURATION))
+        raise ErreurConfiguration(traduisible(
+            'config.certificat_atelier_impossible',
+            'Certificat de l\'atelier impossible ({erreur}). Prévo n\'écoute pas sur le réseau sans https : remettez '
+            'mkcert dans le dossier outils-tiers/ (il est dans le zip de Prévo), ou donnez « certificat » et « cle » '
+            'dans {fichier}.', erreur=forme_sans_point(traduisible_de(erreur)), fichier=NOM_FICHIER_CONFIGURATION))
     return certificat, cle
 
 
@@ -2323,16 +2467,22 @@ def resume_tailscale(detection):
     """Ligne de la console : « prevo.tail1234.ts.net, connecté, clé valable 83 jours », ou « non détecté (raison) »."""
     if not detection or not detection.get('present'):
         raison = (detection or {}).get('raison')
-        return 'non détecté' + (' (%s)' % raison if raison else '')
-    morceaux = [detection.get('nom') or 'sans nom', 'connecté' if detection.get('connecte') else 'déconnecté']
+        if raison:
+            return traduisible('console.tailscale.non_detecte_raison', 'non détecté ({raison})', raison=raison)
+        return traduisible('console.tailscale.non_detecte', 'non détecté')
+    etat = (traduisible('console.tailscale.connecte', 'connecté') if detection.get('connecte')
+            else traduisible('console.tailscale.deconnecte', 'déconnecté'))
     jours = detection.get('jours_avant_expiration')
     if jours is None:
-        morceaux.append('clé sans expiration')
+        cle = traduisible('console.tailscale.cle_sans_expiration', 'clé sans expiration')
     elif jours < 0:
-        morceaux.append('clé expirée')
+        cle = traduisible('console.tailscale.cle_expiree', 'clé expirée')
     else:
-        morceaux.append('clé valable %d jour%s' % (jours, '' if jours == 1 else 's'))
-    return ', '.join(morceaux)
+        cle = traduisible('console.tailscale.cle_valable', {'one': 'clé valable {n} jour', 'other': 'clé valable {n} jours'},
+                          n=jours)
+    return traduisible('console.tailscale.resume', '{nom}, {etat}, {cle}',
+                       nom=detection.get('nom') or traduisible('console.tailscale.sans_nom', 'sans nom'), etat=etat,
+                       cle=cle)
 
 
 def commande_serve_tailscale(port_http):
@@ -2502,6 +2652,8 @@ MOTIF_DEBUT_DE_DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')     # comme MOTI
 FICHIER_LANGUES = os.path.join(DOSSIER_APPLICATION, 'js', 'i18n', 'langues.js')
 MOTIF_LANGUE_DECLAREE = re.compile(r"^I18n\.declarer\(\{\s*code:\s*'([^'\\]+)'", re.MULTILINE)
 LANGUE_PAR_DEFAUT = 'fr'
+PARAMETRE_LANGUE = 'langue_defaut'                                 # ligne de parametres.csv (D149, T295)
+MOTIF_CODE_LANGUE = re.compile(r'[a-z]{2,3}(-[A-Za-z0-9]{2,8})*')   # MOTIF_CODE de js/i18n.js (fr, en, pt-PT…)
 MESSAGE_JEU_DE_DEMO_ILLISIBLE = traduisible('installation.demo_illisible',
                                             'Jeu de démo illisible (js/demo-donnees.js) : commencez vide, ou remettez '
                                             'le fichier du zip.')
@@ -2857,6 +3009,26 @@ def langues_declarees():
     return codes or [LANGUE_PAR_DEFAUT]
 
 
+def langue_de_l_installation(config):
+    """langue_defaut de parametres.csv (D149) quand c'est une langue déclarée et un code bien formé (MOTIF_CODE_LANGUE) ;
+    '' sinon : sans réglage, fichier absent, illisible ou tenu par un autre logiciel. Jamais d'exception : la porte et
+    index.html sont servis quoi qu'il arrive (T297), et la console choisit sa langue avec (langue_de_la_console)."""
+    try:
+        code = valeur_parametre_csv(config, PARAMETRE_LANGUE)
+    except Exception:                       # parametres.csv illisible, tenu par Excel… : comme sans réglage
+        return ''
+    return code if MOTIF_CODE_LANGUE.fullmatch(code) and code in langues_declarees() else ''
+
+
+def poser_langue_de_l_installation(octets, code):
+    """La page (octets) avec « code » dans son attribut data-langue-installation vide (T297) ; inchangée sans code ou
+    pour un code mal formé (jamais posé tel quel dans la page)."""
+    if not code or not MOTIF_CODE_LANGUE.fullmatch(code):
+        return octets
+    attribut = 'data-langue-installation="%s"' % code
+    return octets.replace(ATTRIBUT_LANGUE_INSTALLATION.encode('ascii'), attribut.encode('ascii'), 1)
+
+
 def valeurs_du_mode_solo(technicien_id=''):
     """Lignes de parametres.csv du mode Solo (D132, §22.11) : mode_solo = 1, cloture_une_etape = 1 et, s'il existe,
     solo_technicien_id."""
@@ -3011,12 +3183,14 @@ def relancer_prevo(config, dossier=None):
         subprocess.Popen([sys.executable, '-c', code], cwd=dossier, stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True, **detache)
     except OSError as erreur:
-        afficher('Relance impossible (%s) : relancez Prévo à la main par %s.' % (erreur, os.path.basename(lanceur)))
+        afficher(traduisible('console.relance.impossible',
+                             'Relance impossible ({erreur}) : relancez Prévo à la main par {lanceur}.',
+                             erreur=erreur, lanceur=os.path.basename(lanceur)))
         return False
 
     def arreter():
         time.sleep(DELAI_RELANCE_S)
-        afficher('Prévo se relance depuis %s.' % dossier)
+        afficher(traduisible('console.relance.depuis', 'Prévo se relance depuis {dossier}.', dossier=dossier))
         os._exit(0)
 
     threading.Thread(target=arreter, name='relance', daemon=True).start()
@@ -3232,7 +3406,8 @@ MESSAGE_REGLE_SUR_LE_SERVEUR = traduisible('ia.demande_refusee',
                                            'Demande refusée : seuls « chemin », « methode » et « corps » sont '
                                            'acceptés ; l\'adresse et la clé du fournisseur sont réglées sur le PC '
                                            'serveur.')
-LIBELLES_FOURNISSEURS_IA = {'ollama': 'Ollama', 'openai': 'API compatible OpenAI'}
+LIBELLES_FOURNISSEURS_IA = {'ollama': 'Ollama',
+                            'openai': traduisible('console.ia.openai', 'API compatible OpenAI')}   # console (resume_ia)
 
 
 def adresse_fournisseur(url):
@@ -3380,11 +3555,17 @@ def resume_ia(config):
     reglages = config.reglages
     url = adresse_ia_configuree(reglages)
     cle = cle_ia(reglages)
-    etat_cle = ('clé illisible (caractères ASCII attendus)' if cle and not cle_ia_lisible(cle)
-                else 'clé réglée' if cle else 'sans clé')
-    return '%s, %s ; %s ; fournisseurs en ligne %s.' % (
-        LIBELLES_FOURNISSEURS_IA.get(reglages.get('ia_fournisseur'), 'Ollama'),
-        url or 'adresse invalide (« ia_url »)', etat_cle, 'autorisés' if distant_autorise(config) else 'refusés')
+    if cle and not cle_ia_lisible(cle):
+        etat_cle = traduisible('console.ia.cle_illisible', 'clé illisible (caractères ASCII attendus)')
+    else:
+        etat_cle = traduisible('console.ia.cle_reglee', 'clé réglée') if cle else traduisible('console.ia.sans_cle',
+                                                                                              'sans clé')
+    en_ligne = (traduisible('console.ia.autorises', 'autorisés') if distant_autorise(config)
+                else traduisible('console.ia.refuses', 'refusés'))
+    return traduisible('console.ia.resume', '{fournisseur}, {adresse} ; {cle} ; fournisseurs en ligne {en_ligne}.',
+                       fournisseur=LIBELLES_FOURNISSEURS_IA.get(reglages.get('ia_fournisseur'), 'Ollama'),
+                       adresse=url or traduisible('console.ia.adresse_invalide', 'adresse invalide (« ia_url »)'),
+                       cle=etat_cle, en_ligne=en_ligne)
 
 
 def lire_reponse_fournisseur(reponse):
@@ -3452,9 +3633,9 @@ def creer_contexte_ssl(certificat, cle):
     try:
         contexte.load_cert_chain(certfile=certificat, keyfile=cle)
     except (OSError, ssl.SSLError, ValueError) as erreur:
-        raise SystemExit(traduisible('certificat.illisible',
-                                     'Certificat ou clé illisible ({erreur}) : vérifiez les deux fichiers PEM '
-                                     'passés à --certificat et --cle.', erreur=erreur))
+        raise SystemExit(texte_de_la_console(traduisible('certificat.illisible',
+                                                         'Certificat ou clé illisible ({erreur}) : vérifiez les deux '
+                                                         'fichiers PEM passés à --certificat et --cle.', erreur=erreur)))
     return contexte
 
 
@@ -3680,10 +3861,11 @@ def chemin_public(morceaux, servir_tests):
 
 def fichier_de_la_porte(minuscules):
     """Vrai si la porte sert ce chemin (minuscules) tel quel à un client du réseau (§22.6) : ses fichiers sous acces/
-    (sauf porte.html, toujours rendue avec son port https), le favicon, les polices de la charte et les textes de
-    l'interface (js/i18n.js et js/i18n/, chantier multilingue : textes publics, aucune donnée). Rien d'autre : ni
+    (sauf porte.html, toujours rendue avec son port https), le favicon, les polices de la charte, les textes de
+    l'interface (js/i18n.js et js/i18n/, chantier multilingue : textes publics, aucune donnée) et le chargeur de la
+    langue (js/i18n-chargeur.js, T297 : texte public, il ne lit que le stockage du téléphone). Rien d'autre : ni
     index.html, ni le reste de js/, ni css/ hors polices — aucune donnée, aucun écran de l'application."""
-    if minuscules == ['favicon.svg'] or minuscules == ['js', 'i18n.js']:
+    if minuscules in (['favicon.svg'], ['js', 'i18n.js'], ['js', 'i18n-chargeur.js']):
         return True
     if commence_par(minuscules, ('css', 'polices')) or commence_par(minuscules, DOSSIER_TEXTES):
         return True
@@ -4482,8 +4664,8 @@ def noter_fichiers_abimes(config, abimees=None):
         else:
             os.remove(chemin)
     except (ErreurHttp, OSError) as erreur:
-        afficher(PREFIXE_CONSOLE_SAUVEGARDES + '%s non mis à jour (%s).'
-                 % (NOM_FICHIERS_ABIMES, getattr(erreur, 'message', None) or erreur))
+        afficher(traduisible('console.sauvegardes.non_mis_a_jour', 'Sauvegardes : {fichier} non mis à jour ({erreur}).',
+                             fichier=NOM_FICHIERS_ABIMES, erreur=getattr(erreur, 'message', None) or erreur))
 
 
 def noter_table_importee(config, table, abimee, depuis=None):
@@ -4507,8 +4689,8 @@ def noter_table_importee(config, table, abimee, depuis=None):
         else:
             os.remove(chemin)
     except (ErreurHttp, OSError) as erreur:
-        afficher(PREFIXE_CONSOLE_SAUVEGARDES + '%s non mis à jour (%s).'
-                 % (NOM_FICHIERS_ABIMES, getattr(erreur, 'message', None) or erreur))
+        afficher(traduisible('console.sauvegardes.non_mis_a_jour', 'Sauvegardes : {fichier} non mis à jour ({erreur}).',
+                             fichier=NOM_FICHIERS_ABIMES, erreur=getattr(erreur, 'message', None) or erreur))
 
 
 def faire_sauvegarde_quotidienne(config):
@@ -4770,7 +4952,9 @@ def ecrire_etat_copie_externe(config, etat):
         ecrire_atomique(chemin_etat_copie_externe(config),          # D157 : l'erreur garde son code et ses valeurs
                         (json.dumps(avec_codes(etat), ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
     except (OSError, ErreurHttp) as erreur:
-        afficher('Copie externe des sauvegardes : état non enregistré (%s).' % getattr(erreur, 'message', erreur))
+        afficher(traduisible('console.copie.etat_non_enregistre',
+                             'Copie externe des sauvegardes : état non enregistré ({erreur}).',
+                             erreur=getattr(erreur, 'message', erreur)))
 
 
 def noter_au_journal_serveur(config, texte):
@@ -4778,7 +4962,7 @@ def noter_au_journal_serveur(config, texte):
     pouvoir se relire après coup (D133)."""
     afficher(texte)
     if JOURNAL_SERVEUR is None:
-        JournalServeur(os.path.join(config.dossier_donnees, 'journal-serveur.log')).ecrire(texte)
+        JournalServeur(os.path.join(config.dossier_donnees, 'journal-serveur.log')).ecrire(texte_de_la_console(texte))
 
 
 def est_une_date(nom):
@@ -4874,18 +5058,24 @@ def faire_copie_externe(config):
             nom = copier_vers_l_exterieur(config, cible)
         except ErreurCopieExterne as erreur:
             etat['erreur'] = traduisible_de(erreur)
-            noter_au_journal_serveur(config, 'Copie externe des sauvegardes impossible vers %r : %s' % (cible, erreur))
+            noter_au_journal_serveur(config, traduisible('console.copie.impossible',
+                                                         'Copie externe des sauvegardes impossible vers {cible} : '
+                                                         '{erreur}', cible=repr(cible), erreur=erreur))
         else:
             etat['erreur'] = None
             if nom is not None:
                 etat['derniere_reussie'] = instant_local(config).strftime('%Y-%m-%d')
                 etat['sauvegarde_copiee'] = nom
-                afficher('Copie externe des sauvegardes : sauvegarde du %s à jour dans %r.' % (nom, cible))
+                afficher(traduisible('console.copie.a_jour',
+                                     'Copie externe des sauvegardes : sauvegarde du {nom} à jour dans {cible}.',
+                                     nom=nom, cible=repr(cible)))
                 try:
                     purger_copies_externes(cible)
                 except OSError as erreur:
-                    noter_au_journal_serveur(config, 'Copie externe des sauvegardes : ancienne copie non supprimée '
-                                                     'dans %r (%s).' % (cible, erreur.strerror or erreur))
+                    noter_au_journal_serveur(config, traduisible(
+                        'console.copie.ancienne_non_supprimee',
+                        'Copie externe des sauvegardes : ancienne copie non supprimée dans {cible} ({erreur}).',
+                        cible=repr(cible), erreur=erreur.strerror or erreur))
         ecrire_etat_copie_externe(config, etat)
         return etat
     finally:
@@ -4972,13 +5162,12 @@ CODE_FORMAT_PLUS_RECENT = 'format_plus_recent'
 # une table (« compte » en Solo, « terminer » en Solo ou avec la démo) le vérifient elles-mêmes, avant toute écriture.
 ROUTES_ECRITURE_DES_DONNEES = (('PUT', 'csv/<table>'), ('POST', 'csv/<table>/ajout'), ('PUT', 'documents/<nom>'),
                                ('POST', 'restauration'))
-PREFIXE_CONSOLE_FORMAT = 'Format des données : '
 POSTE_DU_SERVEUR = 'Serveur Prévo'          # colonne « poste » des lignes de journal écrites par le serveur
 CARACTERES_ID_JOURNAL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'     # CARACTERES_ALEATOIRES de js/donnees.js
 OCTETS_HORS_CP1252 = frozenset((0x81, 0x8D, 0x8F, 0x90, 0x9D))      # sans caractère en cp1252 (WHATWG : même code)
-RAISONS_DE_LAISSER = {
-    'entete': 'en-tête illisible : des colonnes du format 1 y manquent',
-    'illisible': 'fichier illisible',
+RAISONS_DE_LAISSER = {          # console du démarrage (signaler_fichiers_laisses)
+    'entete': traduisible('console.format.entete_illisible', 'en-tête illisible : des colonnes du format 1 y manquent'),
+    'illisible': traduisible('console.format.fichier_illisible', 'fichier illisible'),
 }
 # Pertes d'une réécriture (lire_fichier_de_donnees) que le navigateur compte aussi (entree.abime) : celles de la garde
 # « fichier abîmé » (raisons_fichier_abime, T200).
@@ -5234,13 +5423,15 @@ def signaler_fichiers_laisses(etat):
     """Console : fichiers laissés tels quels (jamais réécrits) et fichiers vides, à chaque démarrage."""
     lus = etat['lus']
     for table, raison in etat['laissees']:
-        detail = ('fichier abîmé : %s' % ', '.join(lus[table]['pertes']) if raison == 'contenu'
-                  else RAISONS_DE_LAISSER[raison])
-        afficher(PREFIXE_CONSOLE_FORMAT + '%s laissé tel quel, jamais réécrit (%s). Corrigez le fichier, ou '
-                 'restaurez une sauvegarde.' % (table + '.csv', detail))
+        detail = (traduisible('console.format.fichier_abime', 'fichier abîmé : {pertes}', pertes=lus[table]['pertes'])
+                  if raison == 'contenu' else RAISONS_DE_LAISSER[raison])
+        afficher(traduisible('console.format.laisse_tel_quel',
+                             'Format des données : {fichier} laissé tel quel, jamais réécrit ({detail}). Corrigez le '
+                             'fichier, ou restaurez une sauvegarde.', fichier=table + '.csv', detail=detail))
     if etat['vides']:
-        afficher(PREFIXE_CONSOLE_FORMAT + 'sans aucune ligne, lu comme une table vide : %s.'
-                 % noms_de_fichiers(etat['vides']))
+        afficher(traduisible('console.format.tables_vides',
+                             'Format des données : sans aucune ligne, lu comme une table vide : {fichiers}.',
+                             fichiers=noms_de_fichiers(etat['vides'])))
 
 
 def migrer_donnees_au_demarrage(config):
@@ -5259,9 +5450,10 @@ def migrer_donnees_au_demarrage(config):
         return public                                   # base vide : aucun CSV
     signaler_fichiers_laisses(etat)
     if etat['plus_recent']:
-        afficher(PREFIXE_CONSOLE_FORMAT + 'format %s, plus récent que celui de cette version de Prévo (%d) : données '
-                 'en LECTURE SEULE, rien n\'est enregistré. Mettez Prévo à jour sur ce PC, puis relancez-le.'
-                 % (texte_du_format(etat['base']), VERSION_SCHEMA_CSV))
+        afficher(traduisible('console.format.plus_recent',
+                             'Format des données : format {base}, plus récent que celui de cette version de Prévo '
+                             '({courant}) : données en LECTURE SEULE, rien n\'est enregistré. Mettez Prévo à jour sur '
+                             'ce PC, puis relancez-le.', base=texte_du_format(etat['base']), courant=VERSION_SCHEMA_CSV))
         return public
     if etat['depart'] >= VERSION_SCHEMA_CSV:
         return public
@@ -5272,9 +5464,12 @@ def migrer_donnees_au_demarrage(config):
         traceback.print_exc()
         if public['migration'] != 'faite':
             public['migration'] = 'incomplete' if suivi['sauvegarde'] else 'impossible'
-        afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d arrêté par une erreur interne (%s) ; nouvel essai au '
-                 'prochain démarrage.' % (VERSION_SCHEMA_CSV, 'sauvegarde %s faite juste avant' % suivi['sauvegarde']
-                                          if suivi['sauvegarde'] else 'rien n\'a été écrit'))
+        suite = (traduisible('console.format.sauvegarde_juste_avant', 'sauvegarde {nom} faite juste avant',
+                             nom=suivi['sauvegarde']) if suivi['sauvegarde']
+                 else traduisible('console.format.rien_ecrit', 'rien n\'a été écrit'))
+        afficher(traduisible('console.format.erreur_interne',
+                             'Format des données : passage au format {courant} arrêté par une erreur interne ({suite}) '
+                             '; nouvel essai au prochain démarrage.', courant=VERSION_SCHEMA_CSV, suite=suite))
     return public
 
 
@@ -5291,9 +5486,11 @@ def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
         if 'parametres' not in public['tables_abimees']:
             public['tables_abimees'].append('parametres')
         public['migration'] = 'impossible'
-        afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d impossible : parametres.csv ne se réécrit pas sans '
-                 'perte (%s) ; rien n\'a été écrit. Corrigez parametres.csv, ou restaurez une sauvegarde, puis '
-                 'relancez Prévo.' %(courant, ', '.join(parametres['pertes']) if parametres and parametres['pertes']
+        afficher(traduisible('console.format.parametres_sans_perte',
+                             'Format des données : passage au format {courant} impossible : parametres.csv ne se '
+                             'réécrit pas sans perte ({detail}) ; rien n\'a été écrit. Corrigez parametres.csv, ou '
+                             'restaurez une sauvegarde, puis relancez Prévo.', courant=courant,
+                             detail=parametres['pertes'] if parametres and parametres['pertes']
                              else RAISONS_DE_LAISSER[dict(etat['laissees'])['parametres']]))
         return
 
@@ -5306,9 +5503,10 @@ def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
             copier_tables_dans_sauvegarde(config, nom)
     except (ErreurHttp, OSError) as erreur:
         public['migration'] = 'impossible'
-        afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d impossible : la sauvegarde « %s » n\'a pas pu être '
-                 'faite (%s). Rien n\'a été écrit ; nouvel essai au prochain démarrage.'
-                 % (courant, motif, getattr(erreur, 'message', None) or erreur))
+        afficher(traduisible('console.format.sauvegarde_impossible',
+                             'Format des données : passage au format {courant} impossible : la sauvegarde « {motif} » '
+                             'n\'a pas pu être faite ({erreur}). Rien n\'a été écrit ; nouvel essai au prochain '
+                             'démarrage.', courant=courant, motif=motif, erreur=getattr(erreur, 'message', None) or erreur))
         return
     suivi['sauvegarde'] = nom
 
@@ -5327,11 +5525,14 @@ def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
                 ecrire_fichier_de_donnees(config, table, ecrire_tableau_csv(entete, lignes), sauvegarde_du_jour=False)
         except (ErreurHttp, OSError) as erreur:             # 423 (Excel), et 409 « fichier_abime » (T200) : arrêt propre
             public['migration'], public['table_bloquee'] = 'incomplete', table
-            afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d interrompu : %s.csv ne peut pas être écrit (%s). '
-                     'Fermez Excel (ou le programme qui a ouvert ce fichier) et relancez Prévo : le passage reprendra '
-                     'là (sauvegarde %s faite juste avant ; déjà complétés : %s).'
-                     % (courant, table, getattr(erreur, 'message', None) or erreur, nom,
-                        noms_de_fichiers(suivi['ecrites']) or 'aucun'))
+            afficher(traduisible('console.format.interrompu',
+                                 'Format des données : passage au format {courant} interrompu : {table}.csv ne peut pas '
+                                 'être écrit ({erreur}). Fermez Excel (ou le programme qui a ouvert ce fichier) et '
+                                 'relancez Prévo : le passage reprendra là (sauvegarde {nom} faite juste avant ; déjà '
+                                 'complétés : {completes}).', courant=courant, table=table,
+                                 erreur=getattr(erreur, 'message', None) or erreur, nom=nom,
+                                 completes=noms_de_fichiers(suivi['ecrites'])
+                                 or traduisible('console.format.aucun', 'aucun')))
             return
         if table != 'parametres':
             suivi['ecrites'].append(table)
@@ -5350,14 +5551,18 @@ def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
         if completees:
             actions.append('fichiers complétés au format %d : %s ; %s' % (etape['vers'], ', '.join(completees), suite))
     if version_a_ecrire:
-        afficher(PREFIXE_CONSOLE_FORMAT + 'passage au format %d fait (sauvegarde %s faite juste avant) ; fichiers '
-                 'complétés : %s.' % (courant, nom, noms_de_fichiers(suivi['ecrites']) or 'aucun'))
+        afficher(traduisible('console.format.passage_fait',
+                             'Format des données : passage au format {courant} fait (sauvegarde {nom} faite juste '
+                             'avant) ; fichiers complétés : {completes}.', courant=courant, nom=nom,
+                             completes=noms_de_fichiers(suivi['ecrites']) or traduisible('console.format.aucun', 'aucun')))
     else:
-        afficher(PREFIXE_CONSOLE_FORMAT + 'fichiers complétés au format %d : %s (sauvegarde %s faite juste avant).'
-                 % (courant, noms_de_fichiers(suivi['ecrites']), nom))
+        afficher(traduisible('console.format.fichiers_completes',
+                             'Format des données : fichiers complétés au format {courant} : {completes} (sauvegarde '
+                             '{nom} faite juste avant).', courant=courant, completes=noms_de_fichiers(suivi['ecrites']),
+                             nom=nom))
     if not actions:
         return
-    ecrit, detail = False, 'journal.csv laissé tel quel'
+    ecrit, detail = False, traduisible('console.format.journal_laisse', 'journal.csv laissé tel quel')
     if 'journal' not in laissees:               # illisible : jamais remplacé par un journal neuf
         try:
             with VERROU_ECRITURE:
@@ -5366,7 +5571,8 @@ def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
         except (ErreurHttp, OSError) as erreur:
             detail = getattr(erreur, 'message', None) or erreur
     if not ecrit:
-        afficher(PREFIXE_CONSOLE_FORMAT + 'lignes du journal du passage non écrites (%s).' % detail)
+        afficher(traduisible('console.format.journal_non_ecrit',
+                             'Format des données : lignes du journal du passage non écrites ({detail}).', detail=detail))
 
 
 # ---------------------------------------------------------------------------
@@ -5384,7 +5590,6 @@ def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
 #   4. T206 : fichiers-abimes.json à jour (noter_fichiers_abimes ; fait par la sauvegarde de l'étape 3 si elle a lieu).
 # Aucune de ces étapes n'écrit dans les tables : elles se font aussi en lecture seule (données plus récentes, D169 ;
 # fichiers-abimes.json excepté, laissé tel quel en lecture seule).
-PREFIXE_CONSOLE_SAUVEGARDES = 'Sauvegardes : '
 
 
 def chemin_derniere_version(config):
@@ -5417,19 +5622,25 @@ def sauvegarder_avant_mise_a_jour(config):
             verifier_nom_sauvegarde(nom)
             copier_tables_dans_sauvegarde(config, nom, {'de': de, 'vers': VERSION_APPLICATION})
     except (ErreurHttp, OSError) as erreur:
-        afficher(PREFIXE_CONSOLE_SAUVEGARDES + 'sauvegarde « %s » impossible (%s) ; nouvel essai au prochain démarrage.'
-                 % (MOTIF_AVANT_MISE_A_JOUR, getattr(erreur, 'message', None) or erreur))
+        afficher(traduisible('console.sauvegardes.avant_mise_a_jour_impossible',
+                             'Sauvegardes : sauvegarde « {motif} » impossible ({erreur}) ; nouvel essai au prochain '
+                             'démarrage.', motif=MOTIF_AVANT_MISE_A_JOUR,
+                             erreur=getattr(erreur, 'message', None) or erreur))
         return None
-    afficher(PREFIXE_CONSOLE_SAUVEGARDES + 'version de Prévo précédente : %s, version actuelle : %s ; sauvegarde %s '
-             'faite avant la mise à jour.' % (de or VERSION_INCONNUE, VERSION_APPLICATION, nom))
+    afficher(traduisible('console.sauvegardes.avant_mise_a_jour_faite',
+                         'Sauvegardes : version de Prévo précédente : {precedente}, version actuelle : {actuelle} ; '
+                         'sauvegarde {nom} faite avant la mise à jour.',
+                         precedente=de or traduisible('console.sauvegardes.version_inconnue', 'inconnue'),
+                         actuelle=VERSION_APPLICATION, nom=nom))
     contenu = {'version': VERSION_APPLICATION, 'depuis': maintenant_iso(config)}
     try:
         ecrire_atomique(chemin_derniere_version(config),
                         (json.dumps(contenu, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
     except (ErreurHttp, OSError) as erreur:
-        afficher(PREFIXE_CONSOLE_SAUVEGARDES + '%s non écrit (%s) : une autre sauvegarde « %s » sera faite au prochain '
-                 'démarrage.' % (NOM_DERNIERE_VERSION, getattr(erreur, 'message', None) or erreur,
-                                 MOTIF_AVANT_MISE_A_JOUR))
+        afficher(traduisible('console.sauvegardes.version_non_ecrite',
+                             'Sauvegardes : {fichier} non écrit ({erreur}) : une autre sauvegarde « {motif} » sera '
+                             'faite au prochain démarrage.', fichier=NOM_DERNIERE_VERSION,
+                             erreur=getattr(erreur, 'message', None) or erreur, motif=MOTIF_AVANT_MISE_A_JOUR))
     return nom
 
 
@@ -5440,8 +5651,9 @@ def sauvegarder_le_jour_au_demarrage(config):
         with VERROU_ECRITURE:
             return faire_sauvegarde_du_jour(config)
     except (ErreurHttp, OSError) as erreur:
-        afficher(PREFIXE_CONSOLE_SAUVEGARDES + 'sauvegarde du jour impossible au démarrage (%s) ; elle sera refaite '
-                 'avant la première modification.' % (getattr(erreur, 'message', None) or erreur))
+        afficher(traduisible('console.sauvegardes.jour_impossible',
+                             'Sauvegardes : sauvegarde du jour impossible au démarrage ({erreur}) ; elle sera refaite '
+                             'avant la première modification.', erreur=getattr(erreur, 'message', None) or erreur))
         return None
 
 
@@ -6562,13 +6774,15 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
 
     def page_de_porte(self):
         """acces/porte.html avec le port https de ce serveur dans data-port-https (porte.js interroge
-        https://<même hôte>:<ce port>/api/ping ; le port vient toujours de la page servie)."""
+        https://<même hôte>:<ce port>/api/ping ; le port vient toujours de la page servie) et la langue de
+        l'installation dans data-langue-installation (T297 : langue_defaut, sinon « fr »)."""
         octets = lire_octets(PAGE_PORTE)
         if octets is None:
             raise ErreurHttp(500, traduisible('porte.page_introuvable',
                                               'Page de porte introuvable (acces/porte.html).'))
         attribut = 'data-port-https="%d"' % self.config.port_https
-        return octets.replace(ATTRIBUT_PORT_HTTPS.encode('ascii'), attribut.encode('ascii'), 1)
+        octets = octets.replace(ATTRIBUT_PORT_HTTPS.encode('ascii'), attribut.encode('ascii'), 1)
+        return poser_langue_de_l_installation(octets, langue_de_l_installation(self.config) or LANGUE_PAR_DEFAUT)
 
     def origine_https(self):
         """Origine https de ce serveur vue par ce client (même hôte que la requête, port_https)."""
@@ -7469,6 +7683,8 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         octets = lire_octets(chemin)
         if octets is None:
             raise ErreurHttp(404, traduisible('statique.introuvable', 'Fichier introuvable.'))
+        if [morceau.lower() for morceau in morceaux] == PAGE_APPLICATION:
+            octets = poser_langue_de_l_installation(octets, langue_de_l_installation(self.config))     # T297
         if entetes is None:
             entetes = None if morceaux[0].lower() == 'tests' else self.entetes_securite()
         self.envoyer(200, octets, TYPES_STATIQUES.get(extension(chemin), TYPE_PAR_DEFAUT), entetes)
@@ -7607,12 +7823,14 @@ def ouvrir_ecouteur(port_demande, config, porte=False):
     for port in range(port_demande, port_maximum + 1):
         try:
             if config.ecoute != '0.0.0.0' and port_pris_ailleurs(port):
-                raise OSError('port %d déjà utilisé par un autre programme' % port)
+                raise OSError(traduisible('console.port.deja_utilise', 'port {port} déjà utilisé par un autre '
+                                          'programme', port=port))
             return ServeurPrevo((config.ecoute, port), config, porte), port
         except OSError as erreur:
             derniere_erreur = erreur
-    raise SystemExit('Impossible d\'ouvrir un port entre %d et %d (%s).'
-                     % (port_demande, port_maximum, derniere_erreur))
+    raise SystemExit(texte_de_la_console(traduisible(
+        'console.port.aucun_libre', 'Impossible d\'ouvrir un port entre {premier} et {dernier} ({erreur}).',
+        premier=port_demande, dernier=port_maximum, erreur=traduisible_de(derniere_erreur))))
 
 
 def demarrer_serveur(port_demande, config):
@@ -7624,7 +7842,8 @@ def demarrer_serveur(port_demande, config):
         serveur, port = ouvrir_ecouteur(port_demande, config)
         return [serveur], port
     if config.contexte_ssl is None:
-        raise SystemExit('Prévo n\'écoute pas sur le réseau sans https (certificat absent).')
+        raise SystemExit(texte_de_la_console(traduisible(
+            'console.reseau_sans_certificat', 'Prévo n\'écoute pas sur le réseau sans https (certificat absent).')))
     porte, port = ouvrir_ecouteur(port_demande, config, porte=True)
     try:
         application, config.port_https = ouvrir_ecouteur(config.reglages['port_https'], config)
@@ -7636,41 +7855,57 @@ def demarrer_serveur(port_demande, config):
 
 
 def afficher_accueil(config, port_demande, avertissements=()):
-    afficher('%s %s - serveur local de GMAO' % (NOM_APPLICATION, VERSION_APPLICATION))
+    """Console du démarrage, dans la langue de la console (T297) : une ligne par traduisible, libellés alignés."""
+    afficher(traduisible('console.accueil.titre', '{application} {version} - serveur local de GMAO',
+                         application=NOM_APPLICATION, version=VERSION_APPLICATION))
     if config.port != port_demande:
-        afficher('  Le port %d est occupé : port %d utilisé.' % (port_demande, config.port))
-    afficher('  Sur ce PC        : %s' % config.adresse_locale())
+        afficher(traduisible('console.accueil.port_occupe', '  Le port {demande} est occupé : port {port} utilisé.',
+                             demande=port_demande, port=config.port))
+    afficher(traduisible('console.accueil.sur_ce_pc', '  Sur ce PC        : {adresse}', adresse=config.adresse_locale()))
     adresses = [] if config.ce_pc_seulement else config.adresses_reseau()
     if adresses:
         for adresse in adresses:
-            afficher('  Sur le réseau    : %s   (téléphones, tablettes)' % adresse)
+            afficher(traduisible('console.accueil.sur_le_reseau', '  Sur le réseau    : {adresse}   (téléphones, '
+                                 'tablettes)', adresse=adresse))
     elif not config.ce_pc_seulement:
-        afficher('  Sur le réseau    : aucune adresse trouvée (PC non connecté ?)')
-    afficher('  Données          : %s' % config.dossier_donnees)
+        afficher(traduisible('console.accueil.sans_adresse_reseau',
+                             '  Sur le réseau    : aucune adresse trouvée (PC non connecté ?)'))
+    afficher(traduisible('console.accueil.donnees', '  Données          : {dossier}', dossier=config.dossier_donnees))
     if not config.reglages.get('_present'):
-        afficher('  Installation     : pas encore faite ; l\'assistant est sur %s%s (sur ce PC seulement).'
-                 % (config.adresse_locale(), ROUTE_INSTALLATION))
+        afficher(traduisible('console.accueil.installation_a_faire',
+                             '  Installation     : pas encore faite ; l\'assistant est sur {adresse}{route} (sur ce PC '
+                             'seulement).', adresse=config.adresse_locale(), route=ROUTE_INSTALLATION))
     elif config.reglages.get('comptes') and aucun_responsable_sur(config):
-        afficher('  Installation     : aucun compte responsable ; créez-le avec l\'assistant sur %s%s (sur ce PC '
-                 'seulement).' % (config.adresse_locale(), ROUTE_INSTALLATION))
+        afficher(traduisible('console.accueil.installation_sans_responsable',
+                             '  Installation     : aucun compte responsable ; créez-le avec l\'assistant sur '
+                             '{adresse}{route} (sur ce PC seulement).', adresse=config.adresse_locale(),
+                             route=ROUTE_INSTALLATION))
     if config.ecoute == '127.0.0.1':
-        afficher('  Écoute           : ce PC seulement (127.0.0.1) ; les autres appareils ne joignent pas Prévo.')
+        afficher(traduisible('console.accueil.ecoute_ce_pc', '  Écoute           : ce PC seulement (127.0.0.1) ; les '
+                             'autres appareils ne joignent pas Prévo.'))
     else:
-        afficher('  Écoute           : le réseau (%s), comptes exigés.' % config.ecoute)
+        afficher(traduisible('console.accueil.ecoute_reseau', '  Écoute           : le réseau ({ecoute}), comptes '
+                             'exigés.', ecoute=config.ecoute))
     if config.porte:
         # Jamais l'adresse https elle-même (CS137) : les téléphones passent par la porte, qui les y conduit.
-        afficher('  Application      : en https sur le port %d ; l\'adresse ci-dessus (la porte) y conduit les '
-                 'téléphones%s.' % (config.port_https, ' avec le certificat fabriqué par Prévo'
-                                     if config.reglages.get('_https_auto') else ''))
-    afficher('  Assistant IA     : %s' % resume_ia(config))
+        if config.reglages.get('_https_auto'):
+            afficher(traduisible('console.accueil.application_certificat_prevo',
+                                 '  Application      : en https sur le port {port} ; l\'adresse ci-dessus (la porte) y '
+                                 'conduit les téléphones avec le certificat fabriqué par Prévo.', port=config.port_https))
+        else:
+            afficher(traduisible('console.accueil.application',
+                                 '  Application      : en https sur le port {port} ; l\'adresse ci-dessus (la porte) y '
+                                 'conduit les téléphones.', port=config.port_https))
+    afficher(traduisible('console.accueil.assistant_ia', '  Assistant IA     : {resume}', resume=resume_ia(config)))
     if dossier_copie_externe(config):
-        afficher('  Copie externe    : %s (chaque nuit, %d copies gardées)'
-                 % (dossier_copie_externe(config), COPIES_EXTERNES_GARDEES))
+        afficher(traduisible('console.accueil.copie_externe', '  Copie externe    : {dossier} (chaque nuit, {copies} '
+                             'copies gardées)', dossier=dossier_copie_externe(config), copies=COPIES_EXTERNES_GARDEES))
     if config.tailscale is not None:
-        afficher('  Tailscale        : %s' % resume_tailscale(config.tailscale))
+        afficher(traduisible('console.accueil.tailscale', '  Tailscale        : {resume}',
+                             resume=resume_tailscale(config.tailscale)))
     for avertissement in avertissements:
-        afficher('  ' + avertissement)
-    afficher('  Ctrl+C pour arrêter.')
+        afficher(traduisible('console.accueil.avertissement', '  {avertissement}', avertissement=avertissement))
+    afficher(traduisible('console.accueil.arreter', '  Ctrl+C pour arrêter.'))
 
 
 def lire_arguments(arguments=None):
@@ -7759,16 +7994,21 @@ def reinitialiser_en_ligne_de_commande(config, identifiant):
     try:
         provisoire = reinitialiser_compte(config, identifiant)
     except (ErreurCompte, OSError, ValueError) as erreur:
-        afficher('Réinitialisation impossible : %s' % erreur)
+        afficher(traduisible('console.reinitialiser.impossible', 'Réinitialisation impossible : {erreur}',
+                             erreur=traduisible_de(erreur)))
         sys.exit(1)
     compte = trouver_compte(lire_comptes(config), identifiant)        # T301 : l'identifiant réel du compte
-    afficher('Mot de passe provisoire de « %s » : %s' % (compte['identifiant'] if compte else identifiant, provisoire))
-    afficher('Notez-le : il ne sera plus affiché. Il faudra le changer à la première connexion.')
+    afficher(traduisible('console.reinitialiser.provisoire', 'Mot de passe provisoire de « {identifiant} » : '
+                         '{provisoire}', identifiant=compte['identifiant'] if compte else identifiant,
+                         provisoire=provisoire))
+    afficher(traduisible('console.reinitialiser.notez', 'Notez-le : il ne sera plus affiché. Il faudra le changer à la '
+                         'première connexion.'))
 
 
 def main(arguments=None):
     global JOURNAL_SERVEUR
     preparer_console()
+    choisir_langue_console()                # T297 : avant la configuration, la langue du système
     options = lire_arguments(arguments)
     if options.aide:
         afficher(texte_aide_configuration())
@@ -7778,6 +8018,7 @@ def main(arguments=None):
         config = Configuration(options.donnees, reglages['noms'], options.servir_tests)
         config.reglages = reglages
         creer_dossiers(config)
+        choisir_langue_console(config)      # T297 : langue_defaut de parametres.csv, sinon celle du système
         if options.journal or sys.stdout is None:
             JOURNAL_SERVEUR = JournalServeur(os.path.join(config.dossier_donnees, 'journal-serveur.log'))
         if options.reinitialiser:
@@ -7788,7 +8029,7 @@ def main(arguments=None):
         # Hors de « ce PC » : certificat de la configuration, sinon fabriqué par mkcert ; refus (code 2) sans lui.
         certificat, cle = certificat_du_serveur(config, reglages)
     except ErreurConfiguration as erreur:
-        afficher('Démarrage refusé. %s' % erreur)
+        afficher(traduisible('console.demarrage_refuse', 'Démarrage refusé. {erreur}', erreur=traduisible_de(erreur)))
         sys.exit(CODE_SORTIE_REGLES)
     if certificat:
         config.contexte_ssl = creer_contexte_ssl(certificat, cle)
@@ -7810,7 +8051,7 @@ def main(arguments=None):
     try:
         serveurs[-1].serve_forever()
     except KeyboardInterrupt:
-        afficher('Serveur arrêté.')
+        afficher(traduisible('console.serveur_arrete', 'Serveur arrêté.'))
     finally:
         for serveur in serveurs:
             serveur.server_close()

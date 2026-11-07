@@ -128,6 +128,31 @@ const I18n = (function () {
     return LANGUE_SANS_REGLAGE;
   }
 
+  // Langue de l'installation posée par serveur.py dans la page qu'il sert (T297) : attribut data-langue-installation
+  // de <html>, sur la porte des téléphones (toujours : langue_defaut, sinon « fr ») et sur index.html (seulement quand
+  // langue_defaut est réglée). La page la connaît ainsi avant toute lecture des données (porte, écran de connexion).
+  const ATTRIBUT_INSTALLATION = 'data-langue-installation';
+
+  /** Langue de l'installation donnée par la page (attribut data-langue-installation de <html>), telle quelle, non
+   *  vérifiée ; '' sans elle (page ouverte hors du serveur, base sans réglage). */
+  function installationDeLaPage() {
+    if (typeof document === 'undefined' || !document.documentElement) return '';
+    return document.documentElement.getAttribute(ATTRIBUT_INSTALLATION) || '';
+  }
+
+  /**
+   * Langue à afficher sur cette page (T297) : avec une langue de l'installation donnée par la page, langueAAfficher
+   * (choix du poste, sinon cette langue-là, sinon le français : une valeur non déclarée est ignorée, sans erreur) ; elle
+   * passe avant celle retenue par ce navigateur et la langue du navigateur ne sert pas. Sans elle :
+   * langueAAfficher(choixDuPoste, installationRetenue, languesDuNavigateur). Sert à js/i18n-chargeur.js et aux
+   * sélecteurs de langue (UI.selecteurLangue, acces/porte.js).
+   */
+  function langueDeLaPage(choixDuPoste, installationRetenue, languesDuNavigateur) {
+    const donnee = installationDeLaPage();
+    return donnee ? langueAAfficher(choixDuPoste, donnee)
+      : langueAAfficher(choixDuPoste, installationRetenue, languesDuNavigateur);
+  }
+
   /**
    * Note la langue de l'installation (langue_defaut de parametres.csv, D149), celle des textes écrits dans les
    * données (D156) ; valeur vide, inconnue ou mal formée : le français. Rend le code retenu.
@@ -396,6 +421,8 @@ const I18n = (function () {
     html: html,
     appliquer: appliquer,
     langueAAfficher: langueAAfficher,
+    langueDeLaPage: langueDeLaPage,
+    installationDeLaPage: installationDeLaPage,
     langueDuNavigateur: langueDuNavigateur,
     noterInstallation: noterInstallation,
     /** Code de la langue de l'installation notée ('fr' tant que rien n'en note une autre). */

@@ -1,7 +1,8 @@
 'use strict';
 // Chargeur de la langue active (chantier multilingue, contrat du Lot 2 ; docs/ARCHITECTURE.md §1 et §24.11).
-// Placé dans index.html juste après js/i18n/fr.js et js/i18n/aide/fr.js, avant js/schema.js. Il choisit la langue à
-// afficher (D148, Lot 4, T295 ; I18n.langueAAfficher) : 1. le choix de ce poste ; 2. sinon la langue de l'installation ;
+// Placé dans index.html juste après js/i18n/fr.js et js/i18n/aide/fr.js, avant js/schema.js, et dans acces/porte.html
+// après js/i18n/fr.js, avant acces/porte.js (T297 : la porte le sert sans session). Il choisit la langue à
+// afficher (D148, Lot 4, T295 ; I18n.langueDeLaPage) : 1. le choix de ce poste ; 2. sinon la langue de l'installation ;
 // 3. sinon le français. Chaque valeur est vérifiée contre les langues déclarées par js/i18n/langues.js : absente,
 // non déclarée ou mal formée, stockage refusé, elle est ignorée, sans erreur. Si la langue à afficher n'est pas le
 // français, elle devient la langue active et ses deux fichiers (js/i18n/<code>.js puis js/i18n/aide/<code>.js : toute
@@ -15,8 +16,11 @@
 // écran « Ce poste » et pied du menu ; la langue du compte viendra plus tard). La langue de l'installation vient de
 // localStorage « prevo.langue.installation », écrit par js/app.js chaque fois qu'il lit parametres.csv (langue_defaut,
 // D149) : le chargeur tourne avant toute lecture des données ; si la page n'est pas dans la bonne langue une fois les
-// paramètres lus, js/app.js la recharge une fois. La langue choisie donne aussi l'attribut lang de <html>
-// (I18n.choisir).
+// paramètres lus, js/app.js la recharge une fois. Une page servie par serveur.py avec l'attribut
+// data-langue-installation (T297 : la porte des téléphones, toujours ; index.html quand langue_defaut est réglée, pour
+// l'écran de connexion d'un appareil neuf) donne elle-même la langue de l'installation : elle passe avant celle retenue
+// par ce navigateur, et la langue du navigateur ne sert pas (I18n.langueDeLaPage). La langue choisie donne aussi
+// l'attribut lang de <html> (I18n.choisir).
 // Ajouté à une page déjà analysée (document.write l'effacerait) : rien n'est fait, la page reste en français.
 // Aucun objet global : seulement I18n (js/i18n.js).
 (function () {
@@ -41,12 +45,12 @@
   if (document.readyState !== 'loading' || !script || !script.src) return;
   // Valeurs vérifiées par I18n : une langue non déclarée ou mal formée donne le français.
   const retenue = lire(CLE_INSTALLATION);
-  const installation = I18n.noterInstallation(retenue);
+  const installation = I18n.noterInstallation(I18n.installationDeLaPage() || retenue);
   let languesDuNavigateur = [];
   try {
     languesDuNavigateur = Array.from(navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]);
   } catch (erreur) { /* navigateur sans langue lisible : anglais */ }
-  const code = I18n.langueAAfficher(lire(CLE_LANGUE), retenue, languesDuNavigateur);
+  const code = I18n.langueDeLaPage(lire(CLE_LANGUE), retenue, languesDuNavigateur);
   // Dossier de ce fichier (js/), quelle que soit l'adresse de la page : index.html à la racine, ou une autre page.
   const dossier = script.src.replace(/[?#].*$/, '').replace(/[^/]*$/, '') + 'i18n/';
   let balises = '';

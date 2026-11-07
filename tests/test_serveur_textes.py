@@ -2,8 +2,11 @@
 (outils/textes_serveur.py).
 
 Sans navigateur, bibliothèque standard seulement. Petits fichiers d'essai dans un dossier temporaire ; le vrai
-serveur.py est lu comme module (rien n'est lancé), sauf la dernière classe (un serveur sur un dossier vide). Depuis la
-racine du projet :
+serveur.py est lu comme module (rien n'est lancé), sauf TestReponseDuServeur (un serveur sur un dossier vide) et la
+console (T297 : un serveur sur une copie de la démo en anglais, puis en français). Console dans la langue de
+l'installation (T297) : langue_defaut ramenée à fr ou en, sinon la langue du système (locale simulée) ; afficher
+écrit la clé anglaise de js/i18n/en.js (valeurs traduites à leur tour, pluriel anglais), le français sans elle ;
+chaque message de la console a son anglais. Depuis la racine du projet :
     py -X utf8 -m unittest discover -s tests -p "test_serveur_textes.py" -v
 """
 import ast
@@ -18,13 +21,14 @@ import urllib.error
 import urllib.request
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / 'outils'))
 sys.path.insert(0, str(RACINE / 'tests'))
 import controler_textes as ctl  # noqa: E402
 import textes_serveur as ts  # noqa: E402
-from commun import ServeurPrevo  # noqa: E402
+from commun import DOSSIER_DEMO, ServeurPrevo  # noqa: E402
 
 _specification = importlib.util.spec_from_file_location('serveur_prevo_textes', RACINE / 'serveur.py')
 serveur = importlib.util.module_from_spec(_specification)
@@ -50,7 +54,10 @@ def afficher(texte):
 
 
 def route(nom, n):
-    afficher('Console du démarrage, jamais signalée.')
+    log_message('Journal des requêtes, jamais signalé.')
+    afficher(traduisible('essai.propre', 'Un message propre.'))
+    if nom == 'z':
+        afficher('Console restée en dur.')
     if nom == 'a':
         raise ErreurHttp(400, 'Texte resté en dur ici.')
     if nom == 'b':
@@ -105,7 +112,8 @@ class TestControle(CasDepot):
 
     def test_texte_en_dur_signale_hors_des_regles(self):
         dur = self.messages('dur')
-        self.assertEqual(dur, ['« Texte resté en dur ici. »'])          # ni la console, ni la docstring, ni D156
+        # Ni le journal des requêtes, ni la docstring, ni D156 ; la console, si (T297 : langue de l'installation).
+        self.assertEqual(dur, ['« Console restée en dur. »', '« Texte resté en dur ici. »'])
 
     def test_variables_differentes_entre_l_appel_et_le_francais(self):
         self.assertEqual(self.messages('variables'), ['essai.variables : appel { nom }, français { table }'])
@@ -244,6 +252,118 @@ class TestReponseDuServeur(unittest.TestCase):
         self.assertEqual(statut, 404)
         self.assertEqual(corps, {'erreur': 'Table inconnue : inconnue.', 'erreur_code': 'csv.table_inconnue',
                                  'erreur_valeurs': {'table': 'inconnue'}})
+
+
+# ---------------------------------------------------------------------------
+# Console du serveur dans la langue de l'installation (T297)
+# ---------------------------------------------------------------------------
+
+class TestConsoleDansLaLangue(unittest.TestCase):
+
+    def setUp(self):
+        avant = dict(serveur.CONSOLE)
+        self.addCleanup(serveur.CONSOLE.update, avant)
+        self.dossier = Path(tempfile.mkdtemp(prefix='prevo-console-'))
+        self.addCleanup(shutil.rmtree, self.dossier, ignore_errors=True)
+
+    def config(self, langue=None):
+        """Configuration sur un dossier dont parametres.csv a langue_defaut = langue (sans la ligne pour None)."""
+        donnees = self.dossier / 'donnees'
+        donnees.mkdir(exist_ok=True)
+        lignes = 'cle;valeur\r\nversion_schema;3\r\n' + ('langue_defaut;%s\r\n' % langue if langue else '')
+        (donnees / 'parametres.csv').write_bytes(('\ufeff' + lignes).encode('utf-8'))
+        return serveur.Configuration(str(donnees), [])
+
+    def ecrire(self, message, langue):
+        """Ce que afficher écrit pour message, la console étant dans cette langue."""
+        serveur.CONSOLE['langue'] = langue
+        sortie = io.StringIO()
+        with redirect_stdout(sortie):
+            serveur.afficher(message)
+        return sortie.getvalue().rstrip('\n')
+
+    def test_langue_de_l_installation_ramenee_a_fr_ou_en(self):
+        with mock.patch.object(serveur.locale, 'getlocale', return_value=('fr_FR', 'cp1252')):
+            self.assertEqual(serveur.langue_de_la_console(self.config('en')), 'en')
+            self.assertEqual(serveur.langue_de_la_console(self.config('fr')), 'fr')
+        with mock.patch.object(serveur.locale, 'getlocale', return_value=('en_GB', 'UTF-8')):
+            self.assertEqual(serveur.langue_de_la_console(self.config('fr')), 'fr')
+            self.assertEqual(serveur.choisir_langue_console(self.config('en')), 'en')
+            self.assertEqual(serveur.CONSOLE['langue'], 'en')
+
+    def test_sans_reglage_la_langue_du_systeme(self):
+        cas = ((('fr_FR', 'cp1252'), 'fr'), (('French_France', '1252'), 'fr'), (('fr_CA', 'UTF-8'), 'fr'),
+               (('en_US', 'UTF-8'), 'en'), (('de_DE', 'UTF-8'), 'en'), ((None, None), 'en'))
+        for systeme, attendue in cas:
+            with self.subTest(systeme=systeme), mock.patch.object(serveur.locale, 'getlocale', return_value=systeme):
+                self.assertEqual(serveur.langue_de_la_console(self.config()), attendue)          # sans réglage
+                self.assertEqual(serveur.langue_de_la_console(self.config('de')), attendue)      # non déclarée
+                self.assertEqual(serveur.langue_de_la_console(self.config('x"<b>')), attendue)  # mal formée
+                self.assertEqual(serveur.langue_de_la_console(None), attendue)                  # avant la config
+        (self.dossier / 'donnees' / 'parametres.csv').unlink()
+        with mock.patch.object(serveur.locale, 'getlocale', return_value=('en_US', 'UTF-8')):
+            self.assertEqual(serveur.langue_de_la_console(serveur.Configuration(str(self.dossier / 'donnees'), [])), 'en')
+        with mock.patch.object(serveur.locale, 'getlocale', side_effect=ValueError('locale inconnue')):
+            self.assertEqual(serveur.langue_de_la_console(None), 'en')
+
+    def test_afficher_ecrit_dans_la_langue_de_la_console(self):
+        arret = serveur.traduisible('console.serveur_arrete', 'Serveur arrêté.')
+        self.assertEqual(self.ecrire(arret, 'fr'), 'Serveur arrêté.')
+        self.assertEqual(self.ecrire(arret, 'en'), 'Server stopped.')
+        # Valeurs traduites à leur tour, pluriel anglais.
+        for jours, francais, anglais in ((1, '1 jour', '1 day'), (30, '30 jours', '30 days')):
+            resume = serveur.resume_tailscale({'present': True, 'nom': 'prevo.ts.net', 'connecte': True,
+                                               'jours_avant_expiration': jours})
+            ligne = serveur.traduisible('console.accueil.tailscale', '  Tailscale        : {resume}', resume=resume)
+            self.assertEqual(self.ecrire(ligne, 'fr'), '  Tailscale        : prevo.ts.net, connecté, clé valable ' + francais)
+            self.assertEqual(self.ecrire(ligne, 'en'), '  Tailscale        : prevo.ts.net, connected, key valid for ' + anglais)
+        refus = serveur.traduisible('console.demarrage_refuse', 'Démarrage refusé. {erreur}', erreur=serveur.traduisible(
+            'config.cle_inconnue', 'Configuration : clé inconnue « {cle} » ignorée.', cle='porte'))
+        self.assertEqual(self.ecrire(refus, 'en'), 'Start refused. Configuration: unknown key “porte” ignored.')
+        # Texte qui n'est pas un message, clé anglaise absente : tels quels.
+        self.assertEqual(self.ecrire('12:00:00  127.0.0.1  GET /api/ping 200', 'en'), '12:00:00  127.0.0.1  GET /api/ping 200')
+        self.assertEqual(self.ecrire(serveur.traduisible('essai.sans_anglais', 'Sans anglais.'), 'en'), 'Sans anglais.')
+
+    def test_chaque_message_de_la_console_a_son_anglais(self):
+        anglais = serveur.lire_textes_anglais()
+        francais = ts.entrees_de_la_section(RACINE)
+        console = [cle[len('serveur.'):] for cle in francais if cle.startswith('serveur.console.')]
+        self.assertGreater(len(console), 60)
+        self.assertEqual([code for code in console if code not in anglais], [])
+        self.assertEqual(len(anglais), len(francais))
+        self.assertEqual(anglais['config.cle_inconnue'], 'Configuration: unknown key “{cle}” ignored.')
+        self.assertEqual(anglais['console.tailscale.cle_valable'],
+                         {'one': 'key valid for {n} day', 'other': 'key valid for {n} days'})
+        self.assertEqual(serveur.chaine_js("Pr\u00e9vo\\'s\\u00a0x \\\\ y\\n"), "Prévo's\u00a0x \\ y\n")
+        self.assertEqual(serveur.lire_textes_anglais(str(self.dossier / 'absent.js')), {})
+
+    def demarrer(self, langue):
+        """Console d'un serveur lancé sur une copie de la démo avec langue_defaut = langue."""
+        source = self.dossier / 'source'
+        shutil.copytree(DOSSIER_DEMO, source)
+        with open(source / 'parametres.csv', 'ab') as fichier:
+            fichier.write(('langue_defaut;%s\r\n' % langue).encode('utf-8'))
+        prevo = ServeurPrevo(source=source)
+        prevo.demarrer()
+        self.addCleanup(prevo.arreter)
+        return prevo, prevo.sortie_console()
+
+    def test_console_du_serveur_en_anglais_pour_une_installation_en_anglais(self):
+        prevo, console = self.demarrer('en')
+        for attendu in ('- local CMMS server', '  On this PC       : http://localhost:%d/' % prevo.port,
+                        '  Data             : ', '  Listening        : this PC only (127.0.0.1)',
+                        '  AI assistant     : Ollama, ', '  Ctrl+C to stop.', 'Backups: previous version of Prévo: unknown'):
+            self.assertIn(attendu, console)
+        for francais in ('Sur ce PC', 'Données', 'Écoute', 'pour arrêter', 'Sauvegardes :'):
+            self.assertNotIn(francais, console)
+
+    def test_console_du_serveur_en_francais_pour_une_installation_en_francais(self):
+        prevo, console = self.demarrer('fr')
+        for attendu in ('- serveur local de GMAO', '  Sur ce PC        : http://localhost:%d/' % prevo.port,
+                        '  Écoute           : ce PC seulement (127.0.0.1)', '  Ctrl+C pour arrêter.',
+                        'Sauvegardes : version de Prévo précédente : inconnue'):
+            self.assertIn(attendu, console)
+        self.assertNotIn('On this PC', console)
 
 
 if __name__ == '__main__':

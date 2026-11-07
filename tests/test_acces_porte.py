@@ -24,7 +24,14 @@ certificat de test du faux mkcert ; le téléphone simulé se connecte à l'adre
                    numérotées avec leurs illustrations, profil iPhone (iPhone 14) → étapes iPhone, autre → choix ;
                    « Réessayer » relance l'essai ; lisible à 390 px sans défilement horizontal ;
     adresses       QR de l'accueil et étiquettes sur l'adresse de la porte ; aucune adresse https:<port> ni https://<ip>
-                   dans les textes servis (index.html, js/, css/, acces/) ni dans GUIDE.html.
+                   dans les textes servis (index.html, js/, css/, acces/) ni dans GUIDE.html ;
+    langue         (T297) fichiers servis sans session : ceux d'avant et UN de plus, js/i18n-chargeur.js (rien d'autre de
+                   js/) ; data-langue-installation posé dans la porte (langue_defaut déclarée, sinon « fr ») et dans
+                   index.html (langue_defaut déclarée seulement) ; une valeur non déclarée, mal formée ou piégée : « fr »
+                   à la porte, rien dans index.html ; navigateur : porte en français (installation fr) et en anglais
+                   (installation en) ; sélecteur en haut, visible sans menu (globe, langues écrites dans leur langue,
+                   aucun autre mot), il change la langue et le choix tient au rechargement ; la langue de
+                   l'installation choisie retire le choix ; valeur abîmée gardée par le téléphone : français, sans erreur.
 Aucune commande d'administrateur, aucune sortie du PC (le faux mkcert ne touche pas au magasin de certificats).
 
 Lancer depuis la racine du projet :
@@ -46,8 +53,44 @@ serveur = charger_serveur("serveur_prevo_porte")
 
 PAGE_PORTE = RACINE / "acces" / "porte.html"
 TITRE_PORTE = "Faites confiance au PC atelier"
+CLE_TITRE_PORTE = "porte.confiance.faites_confiance_pc_atelier"
+MOTIF_LANGUE_DE_LA_PAGE = re.compile(r'data-langue-installation="([^"]*)"')
+# Sélecteur de langue de la porte (T297) : options, valeur, texte de la zone hors de la liste, étiquette accessible.
+SELECTEUR_PORTE_JS = """() => {
+  const zone = document.getElementById('choix-langue');
+  const liste = document.getElementById('langue-liste');
+  const autour = [...zone.childNodes].filter((n) => n !== liste).map((n) => n.textContent).join('').trim();
+  return { visible: !zone.hidden, options: [...liste.options].map((o) => [o.value, o.textContent, o.lang]),
+    valeur: liste.value, autour, etiquette: liste.getAttribute('aria-label'), lang: document.documentElement.lang,
+    globe: Boolean(zone.querySelector('svg[aria-hidden="true"]')) };
+}"""
 MOTIF_ADRESSE_HTTPS_IP = re.compile(r"https://(?:\d{1,3}\.){3}\d{1,3}")
 MOTIF_ADRESSE_HTTPS_PORT = re.compile(r"https://[^\s\"'<>()]*:8443")
+
+
+def texte_du_dictionnaire(code, cle):
+    """Valeur de `cle` dans js/i18n/<code>.js, lue dans le fichier (échappements « \\' » retirés)."""
+    source = (RACINE / "js" / "i18n" / (code + ".js")).read_text(encoding="utf-8")
+    trouve = re.search(r"^  '%s': '((?:[^'\\]|\\.)*)',$" % re.escape(cle), source, re.MULTILINE)
+    if not trouve:
+        raise AssertionError("clé %s absente de js/i18n/%s.js" % (cle, code))
+    return re.sub(r"\\(.)", r"\1", trouve.group(1))
+
+
+def langues_declarees():
+    """[(code, nom)] de js/i18n/langues.js, dans l'ordre."""
+    source = (RACINE / "js" / "i18n" / "langues.js").read_text(encoding="utf-8")
+    return re.findall(r"^I18n\.declarer\(\{ code: '([^']+)', nom: '([^']+)'", source, re.MULTILINE)
+
+
+def poser_langue_defaut(cas, dossier, valeur):
+    """langue_defaut = valeur ajoutée à parametres.csv du serveur (lu à chaque page servie) ; remis comme avant à la
+    fin du test."""
+    chemin = Path(dossier) / "parametres.csv"
+    avant = chemin.read_bytes()
+    cas.addCleanup(chemin.write_bytes, avant)
+    base = avant if avant.endswith(b"\n") else avant + b"\r\n"
+    chemin.write_bytes(base + ("langue_defaut;%s\r\n" % valeur).encode("utf-8"))
 
 
 def captures_de_la_page():
@@ -160,6 +203,43 @@ class TestPorte(CasAtelier):
                         self.verifier_page_de_porte(reponse, chemin)
                     else:
                         self.assertIn(reponse.statut, (403, 404))
+
+    def test_la_porte_sert_le_chargeur_de_langue_et_rien_d_autre_de_js(self):
+        """T297 : un seul fichier de plus sans session, le chargeur de la langue (texte public, aucune donnée)."""
+        reponse = self.reseau("/js/i18n-chargeur.js")
+        self.assertEqual(reponse.statut, 200)
+        self.assertTrue(reponse.entetes["content-type"].startswith("text/javascript"))
+        self.assertEqual(reponse.octets, (RACINE / "js" / "i18n-chargeur.js").read_bytes())
+        self.assertEqual(reponse.entetes["content-security-policy"], serveur.POLITIQUE_PORTE % self.atelier.url_https)
+        for chemin in ("/js/app.js", "/js/interface.js", "/js/schema.js", "/js/stockage-serveur.js",
+                       "/js/i18n-chargeur.js.bak", "/js/modules/connexion-ecrans.js", "/css/style.css"):
+            with self.subTest(chemin=chemin):
+                self.verifier_page_de_porte(self.reseau(chemin), chemin)
+
+    def test_langue_de_l_installation_posee_dans_la_porte_et_dans_index(self):
+        """T297 : data-langue-installation, toujours une langue déclarée et bien formée (rien d'autre n'entre)."""
+        self.assertEqual(MOTIF_LANGUE_DE_LA_PAGE.findall(self.reseau("/").texte), ["fr"])       # sans réglage : fr
+        self.assertEqual(MOTIF_LANGUE_DE_LA_PAGE.findall(self.pc("/").texte), [""])             # index : rien
+        self.assertEqual(MOTIF_LANGUE_DE_LA_PAGE.findall(self.https("/").texte), [""])
+        cas = (("en", "en", "en"), ("fr", "fr", "fr"), ("de", "fr", ""), ("EN", "fr", ""),
+               ('x"><script>alert(1)</script>', "fr", ""), ("en-GB", "fr", ""))
+        parametres = self.atelier.dossier / "parametres.csv"
+        avant = parametres.read_bytes()
+        self.addCleanup(parametres.write_bytes, avant)
+        for valeur, porte, index in cas:
+            with self.subTest(langue_defaut=valeur):
+                parametres.write_bytes(avant + ("langue_defaut;%s\r\n" % valeur).encode("utf-8"))
+                page = self.reseau("/inexistant").texte
+                self.assertEqual(MOTIF_LANGUE_DE_LA_PAGE.findall(page), [porte])
+                self.assertNotIn("<script>alert", page)
+                self.assertEqual(MOTIF_LANGUE_DE_LA_PAGE.findall(self.pc("/").texte), [index])
+                self.assertEqual(MOTIF_LANGUE_DE_LA_PAGE.findall(self.pc("/index.html").texte), [index])
+        # parametres.csv illisible (un dossier à sa place) : la porte est servie quand même, en français.
+        parametres.unlink()
+        parametres.mkdir()
+        self.addCleanup(parametres.rmdir)
+        self.assertEqual(MOTIF_LANGUE_DE_LA_PAGE.findall(self.reseau("/").texte), ["fr"])
+        self.assertEqual(self.pc("/").statut, 200)
 
     def test_sans_autorite_locale_ca_crt_repond_404_clair(self):
         with ServeurPrevo() as ce_pc:
@@ -323,6 +403,26 @@ class TestCablageMkcert(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Fichiers que la porte sert sans session (T297 : un seul de plus, js/i18n-chargeur.js)
+# ---------------------------------------------------------------------------
+
+class TestFichiersSansSession(unittest.TestCase):
+
+    def test_un_seul_fichier_de_plus_que_la_porte_d_avant(self):
+        fichiers = [f.relative_to(RACINE).as_posix() for f in RACINE.rglob("*")
+                    if f.is_file() and ".git" not in f.relative_to(RACINE).parts]
+        self.assertGreater(len(fichiers), 300)
+        servis = {chemin for chemin in fichiers if serveur.fichier_de_la_porte(chemin.lower().split("/"))}
+        # La liste d'avant T297 (§22.6, T234) : le favicon, le moteur et les textes, les polices, la porte elle-même.
+        avant = {chemin for chemin in fichiers
+                 if chemin in ("favicon.svg", "js/i18n.js") or chemin.startswith(("js/i18n/", "css/polices/"))
+                 or (chemin.startswith("acces/") and chemin != "acces/porte.html")}
+        self.assertEqual(servis - avant, {"js/i18n-chargeur.js"})
+        self.assertEqual(avant - servis, set())
+        self.assertFalse(any(chemin.startswith(("js/modules/", "donnees/")) for chemin in servis))
+
+
+# ---------------------------------------------------------------------------
 # Aucune adresse https donnée par l'application ni le guide (CS137)
 # ---------------------------------------------------------------------------
 
@@ -444,6 +544,83 @@ class CasPorteNavigateur(CasNavigateur):
 
 
 class TestPorteNavigateur(CasPorteNavigateur):
+
+    def changer_de_langue(self, page, code):
+        """Le sélecteur de la porte : choix retenu, page rechargée, « Faites confiance au PC atelier » de nouveau."""
+        with page.expect_navigation():
+            page.select_option("#langue-liste", code)
+        self.attendre_confiance(page)
+
+    def test_porte_en_francais_selecteur_sans_menu_et_choix_garde(self):
+        """T297 : installation en français ; le sélecteur change la langue sans menu ni mot à lire en français."""
+        self.autoriser_erreur(self.MOTIF_PING_REFUSE)
+        contexte, page = self.telephone("Pixel 7")
+        page.goto(self.atelier.url_porte + "/#/equipement/EQ-0005")
+        self.attendre_confiance(page)
+        selecteur = page.evaluate(SELECTEUR_PORTE_JS)
+        self.assertEqual(selecteur["options"], [[code, nom, code] for code, nom in langues_declarees()])
+        self.assertEqual((selecteur["visible"], selecteur["valeur"], selecteur["lang"]), (True, "fr", "fr"))
+        self.assertEqual(selecteur["autour"], "")                         # le globe et la liste, aucun mot
+        self.assertTrue(selecteur["globe"])
+        self.assertEqual(selecteur["etiquette"], texte_du_dictionnaire("fr", "porte.langue.etiquette"))
+        # Visible sans menu : en haut de la page, au-dessus du titre, zone tactile de 44 px au moins.
+        self.assertTrue(page.is_visible("#langue-liste"))
+        boite = page.locator("#langue-liste").bounding_box()
+        self.assertLess(boite["y"], page.locator(".marque").bounding_box()["y"])
+        self.assertGreaterEqual(boite["height"], 44)
+        self.assertIn(TITRE_PORTE, page.inner_text("#confiance"))
+        # English : la page se recharge en anglais, la route est gardée, le choix tient au rechargement.
+        self.changer_de_langue(page, "en")
+        anglais = texte_du_dictionnaire("en", CLE_TITRE_PORTE)
+        self.assertIn(anglais, page.inner_text("#confiance"))
+        self.assertNotIn(TITRE_PORTE, page.inner_text("body"))
+        self.assertEqual(page.evaluate("[document.documentElement.lang, document.title, localStorage.getItem('prevo.langue')]"),
+                         ["en", texte_du_dictionnaire("en", "porte.page.prevo_bienvenue"), "en"])
+        self.assertEqual(page.evaluate("location.hash"), "#/equipement/EQ-0005")
+        self.assertEqual(page.evaluate(SELECTEUR_PORTE_JS)["etiquette"], texte_du_dictionnaire("en", "porte.langue.etiquette"))
+        page.reload()
+        self.attendre_confiance(page)
+        self.assertIn(anglais, page.inner_text("#confiance"))
+        # Français, la langue de l'installation : le choix est retiré, le téléphone suit l'installation.
+        self.changer_de_langue(page, "fr")
+        self.assertIn(TITRE_PORTE, page.inner_text("#confiance"))
+        self.assertEqual(page.evaluate("[document.documentElement.lang, localStorage.getItem('prevo.langue')]"), ["fr", None])
+        largeurs = page.evaluate("[document.scrollingElement.scrollWidth, document.scrollingElement.clientWidth]")
+        self.assertLessEqual(largeurs[0], largeurs[1], "défilement horizontal : %r" % largeurs)
+
+    def test_porte_d_une_installation_en_anglais(self):
+        """T297 : langue_defaut = en, téléphone en français sans choix : la porte en anglais ; Français choisi : gardé."""
+        self.autoriser_erreur(self.MOTIF_PING_REFUSE)
+        poser_langue_defaut(self, self.atelier.dossier, "en")
+        contexte, page = self.telephone("iPhone 14")
+        page.goto(self.atelier.url_porte + "/")
+        self.attendre_confiance(page)
+        self.assertEqual(page.evaluate("document.documentElement.dataset.langueInstallation"), "en")
+        self.assertIn(texte_du_dictionnaire("en", CLE_TITRE_PORTE), page.inner_text("#confiance"))
+        self.assertIn(texte_du_dictionnaire("en", "porte.etapes.telecharger_certificat"), page.inner_text("#etapes-iphone"))
+        selecteur = page.evaluate(SELECTEUR_PORTE_JS)
+        self.assertEqual((selecteur["valeur"], selecteur["lang"], selecteur["autour"]), ("en", "en", ""))
+        # Message renvoyé par le serveur (sans autorité locale) : par son code, dans la langue de la page.
+        self.assertEqual(page.evaluate("Porte.messageDuServeur({ erreur: 'Français reçu.', erreur_code: 'porte.sans_autorite' })"),
+                         texte_du_dictionnaire("en", "serveur.porte.sans_autorite"))
+        self.assertEqual(page.evaluate("Porte.messageDuServeur({ erreur: 'Français reçu.', erreur_code: 'code.inconnu' })"),
+                         "Français reçu.")
+        self.changer_de_langue(page, "fr")
+        self.assertIn(TITRE_PORTE, page.inner_text("#confiance"))
+        self.assertEqual(page.evaluate("localStorage.getItem('prevo.langue')"), "fr")
+
+    def test_valeur_abimee_gardee_par_le_telephone_francais_sans_erreur(self):
+        self.autoriser_erreur(self.MOTIF_PING_REFUSE)
+        contexte, page = self.telephone("Pixel 7")
+        contexte.add_init_script("localStorage.setItem('prevo.langue', 'zz\"><img src=x onerror=alert(1)>');")
+        requetes = []
+        page.on("request", lambda requete: requetes.append(requete.url))
+        page.goto(self.atelier.url_porte + "/")
+        self.attendre_confiance(page)
+        selecteur = page.evaluate(SELECTEUR_PORTE_JS)
+        self.assertEqual((selecteur["valeur"], selecteur["lang"]), ("fr", "fr"))
+        self.assertIn(TITRE_PORTE, page.inner_text("#confiance"))
+        self.assertEqual([url for url in requetes if "/js/i18n/" in url and not url.endswith(("/langues.js", "/fr.js"))], [])
 
     def test_navigateur_qui_fait_confiance_redirige_en_gardant_la_route(self):
         contexte, page = self.telephone("Pixel 7", confiance=True)

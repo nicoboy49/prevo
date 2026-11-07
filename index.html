@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr" data-etat="chargement">
+<html lang="fr" data-etat="chargement" data-langue-installation="">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -35,7 +35,9 @@
 
 <!-- Page unique de Prévo. Six écrans « plein écran » (chargement, démarrage, base vide, profil, connexion, installation)
      puis la coque de l'application (#app). js/app.js montre l'un d'eux à la fois.
-     Les <span data-icone="…"> et <span data-ui="logo"> sont remplacés par les dessins de UI. -->
+     Les <span data-icone="…"> et <span data-ui="logo"> sont remplacés par les dessins de UI.
+     data-langue-installation (sur <html>) : rempli par serveur.py quand langue_defaut est réglée (T297), lu par
+     js/i18n-chargeur.js avant toute lecture des données (écran de connexion d'un appareil neuf) ; vide en file://. -->
 
 <!-- ===================================================== chargement (visible dès l'ouverture) -->
 <div id="ecran-chargement" class="ecran-plein">
@@ -192,6 +194,9 @@
 <!-- ===================================================== connexion (lot 7 : comptes exigés, jamais l'écran de profil) -->
 <div id="ecran-connexion" class="ecran-plein" hidden>
   <div class="boite-demarrage">
+    <!-- Langue (T297) : globe et liste des langues, chacune écrite dans sa langue, sans aucun mot autour, visible sans
+         menu ; liste remplie par js/modules/connexion-ecrans.js (UI.selecteurLangue) -->
+    <div class="choix-langue" id="connexion-langue"><span data-icone="langue"></span></div>
     <div class="marque">
       <span data-ui="logo" data-classe="grand"></span>
       <div>

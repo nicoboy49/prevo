@@ -98,8 +98,6 @@ EXCEPTIONS = [
      "dossier vide de l'assistant d'installation : les CSV manquent (404, table vide) : voulu, pareil en français"),
     (r"porte › ", r"^erreur console$", r"status of 404 .*\(/acces/ca\.crt\)",
      "porte servie sans autorité locale : /acces/ca.crt répond 404 avec l'explication, voulu (pareil en français)"),
-    (r"porte › ", r".", r".",
-     "porte des téléphones (acces/porte.html) : sans chargeur de langue, dans la langue de l'installation — Lot 4"),
 ]
 
 Probleme = collections.namedtuple("Probleme", "mode profil ecran sorte detail")

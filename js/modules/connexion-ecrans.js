@@ -11,6 +11,7 @@
 // quel (401 « Identifiant ou mot de passe incorrect. », 403, 429 avec le temps restant : bouton désactivé le temps
 // dit). Un mot de passe n'est jamais gardé : les champs sont vidés dès la réponse. Le nom du poste (prevo.poste)
 // n'est plus demandé ici. Textes d'aide : AccesTextes (T169, une seule source).
+// En haut de l'écran, la langue de l'écran (T297 : globe et UI.selecteurLangue, sans menu ni mot à lire).
 // Dépendances : UI, AccesTextes ; aucune lecture de Donnees (les tables ne sont lues qu'après la connexion).
 // Charte : css/modules/connexion.css.
 
@@ -348,6 +349,15 @@ const Connexion = (() => {
     return jetonDeLaRoute(hash) !== '';
   }
 
+  // Langue de l'écran (T297) : en haut, visible sans menu, à côté du globe ; chaque langue écrite dans sa langue, sans
+  // aucun mot autour (UI.selecteurLangue : choix retenu par cet appareil, page rechargée). Posée une seule fois.
+  function placerSelecteurLangue() {
+    const zone = $('connexion-langue');
+    if (!zone || zone.querySelector('select')) return;
+    zone.appendChild(UI.selecteurLangue({ id: 'connexion-langue-liste',
+      libelle: I18n.t('connexion.choix_langue.etiquette') }));
+  }
+
   /**
    * Conduit l'écran (déjà montré par App) jusqu'à une session utilisable. Promesse : la session (camelCase).
    * options : { sessionProvisoire } (session ouverte mais mot de passe à changer : le panneau du mot de passe
@@ -357,6 +367,7 @@ const Connexion = (() => {
   function demander(options) {
     const reglages = options || {};
     poserEcouteurs();
+    placerSelecteurLangue();
     arreterBlocage();
     viderMotsDePasse();
     viderErreurs();

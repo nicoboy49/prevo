@@ -397,6 +397,8 @@ const UI = (function () {
     chevron: '<path d="m9 6 6 6-6 6"/>',
     // Lot 6 (ARCHITECTURE.md §20.1) : wiki de maintenance (livre ouvert)
     wiki: '<path d="M12 6.5C10 5 7 4.5 3.5 5v13.5c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5z"/><path d="M12 6.5V20"/>',
+    // Lot 4 du chantier multilingue (T297) : langue de l'écran (globe neutre, sans drapeau ni mot), écran de connexion
+    langue: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9s1.2-6.5 3.6-9z"/>',
   };
 
   /** Icône SVG au trait par son nom (voir ICONES) ; `classe` ajoute des classes CSS. Inconnue → ''. */
@@ -1587,8 +1589,9 @@ const UI = (function () {
    * Sélecteur de langue (D147, D148) : <select> des langues déclarées (I18n.langues, ordre de js/i18n/langues.js),
    * chacune sous son nom dans sa langue (jamais traduit, sans drapeau), la langue active choisie. Au changement, le
    * choix est retenu par ce navigateur (localStorage « prevo.langue »), puis la page est rechargée : js/i18n-chargeur.js
-   * y charge la langue avant js/schema.js. La langue qu'aurait le poste sans choix (celle de l'installation retenue
-   * par ce navigateur, sinon, sans réglage, la langue du navigateur : I18n.langueAAfficher, T295 et T299) retire la clé : le poste suit alors
+   * y charge la langue avant js/schema.js. La langue qu'aurait le poste sans choix (celle de l'installation donnée par
+   * la page ou retenue par ce navigateur, sinon, sans réglage, la langue du navigateur : I18n.langueDeLaPage, T295,
+   * T297 et T299) retire la clé : le poste suit alors
    * l'installation. Stockage refusé : message court, la liste revient à la langue active, la page reste dans sa langue.
    * Dans la démo (App.mode « demo »), le rechargement efface ce qu'on y a modifié : une confirmation d'abord
    * (UI.confirmer) ; Annuler remet la liste sur la langue active, rien n'est retenu.
@@ -1615,7 +1618,7 @@ const UI = (function () {
         if (!accord) { liste.value = I18n.langue; return; }
       }
       try {
-        const sansChoix = I18n.langueAAfficher('', window.localStorage.getItem(CLE_LANGUE_INSTALLATION),
+        const sansChoix = I18n.langueDeLaPage('', window.localStorage.getItem(CLE_LANGUE_INSTALLATION),
           Array.from(navigator.languages || [navigator.language]));
         if (code === sansChoix) window.localStorage.removeItem(CLE_LANGUE);
         else window.localStorage.setItem(CLE_LANGUE, code);

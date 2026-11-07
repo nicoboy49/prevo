@@ -1,10 +1,12 @@
 <!doctype html>
-<html lang="fr" data-port-https="">
+<html lang="fr" data-port-https="" data-langue-installation="">
 <!-- Porte d'entrée de Prévo (lot 7, ARCHITECTURE.md §22.6 ; D127, CS125, CS137).
      Page autonome, sans donnée : servie par serveur.py sur le port http à tout appareil du réseau. Elle vérifie que le
      téléphone fait confiance au PC atelier (https://<même hôte>:<port https>/api/ping), puis ouvre l'application en
      https sur la même route ; sinon elle guide, écran par écran, l'installation du certificat de l'atelier.
-     data-port-https est rempli par le serveur au moment de servir la page : aucune adresse n'est écrite ici. -->
+     data-port-https est rempli par le serveur au moment de servir la page : aucune adresse n'est écrite ici.
+     data-langue-installation aussi (T297) : la langue de l'installation (langue_defaut, sinon « fr »), qui donne la
+     langue de la page sauf choix de ce téléphone (sélecteur en haut, localStorage « prevo.langue »). -->
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -15,6 +17,14 @@
 </head>
 <body>
 <main class="porte">
+  <!-- Langue (T297) : globe et liste des langues, chacune écrite dans sa langue, sans aucun mot autour ; remplie par
+       porte.js (I18n.langues), visible sans menu. -->
+  <div class="langue" id="choix-langue" hidden>
+    <svg class="globe" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9s1.2-6.5 3.6-9z"/></svg>
+    <select id="langue-liste" aria-label="Langue / Language" data-i18n-attr="aria-label:porte.langue.etiquette"></select>
+  </div>
+  <p class="message langue-refus" id="langue-refus" role="status" hidden data-i18n="porte.langue.choix_non_retenu">Langue non retenue : ce navigateur refuse d'enregistrer ses réglages.</p>
+
   <header class="marque">
     <span class="logo" aria-hidden="true"><img src="/favicon.svg" alt=""></span>
     <div>
@@ -128,11 +138,13 @@
     </section>
   </noscript>
 </main>
-<!-- Traduction (chantier multilingue) : moteur, langues et textes français, servis par la porte (serveur.py,
-     fichier_de_la_porte) ; la langue de la porte sera choisie au Lot 4 (D148) -->
+<!-- Traduction (chantier multilingue) : moteur, langues, textes français et chargeur de la langue à afficher (D148,
+     T297), servis par la porte (serveur.py, fichier_de_la_porte) ; le chargeur écrit ici, avant porte.js, les textes
+     de la langue choisie (js/i18n/<code>.js) -->
 <script src="/js/i18n.js"></script>
 <script src="/js/i18n/langues.js"></script>
 <script src="/js/i18n/fr.js"></script>
+<script src="/js/i18n-chargeur.js"></script>
 <script src="/acces/porte.js"></script>
 </body>
 </html>

@@ -1,11 +1,17 @@
 /* Prévo — écran de connexion (js/modules/connexion-ecrans.js, ARCHITECTURE.md §22.4 ; lot 7, CS124).
    Même boîte centrée que les autres écrans pleins (css/modules/app.css). Uniquement des variables de la charte
    (css/style.css) : aucune couleur codée en dur.
-   Sommaire : 1 écran · 2 panneaux et champs (48 px, PC et téléphone) · 3 bouton de profil du menu. */
+   Sommaire : 1 écran (langue en haut, bandeaux) · 2 panneaux et champs (48 px, PC et téléphone) · 3 bouton de profil
+   du menu. */
 
 /* =========================================================================================
    1. Écran : bandeaux au-dessus du panneau
    ========================================================================================= */
+
+/* Langue de l'écran (T297) : en haut à droite, visible sans menu ; le globe et la liste, zone tactile de 48 px */
+.choix-langue { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.choix-langue .icone { width: 22px; height: 22px; color: var(--texte-2); }
+.choix-langue select { width: auto; max-width: 100%; min-height: 48px; }
 
 #connexion-alertes { display: flex; flex-direction: column; gap: 8px; }
 #connexion-alertes .alerte { margin: 0; }

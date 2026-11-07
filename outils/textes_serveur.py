@@ -21,10 +21,12 @@ Ce qui est contrôlé :
 4. le nom « traduisible » n'est la variable locale d'aucune fonction (elle cacherait la fonction : erreur à
    l'exécution, sur un chemin d'erreur rarement essayé).
 
-Règle des textes hors codes (D157, D156, D155) : docstrings ; arguments des appels de console et de journal
-(APPELS_CONSOLE) ; fonctions entières qui écrivent la console, un lanceur, un script ou les données
-(FONCTIONS_HORS_CODES) ; constantes de même nature (CONSTANTES_HORS_CODES) ; commandes à taper (RE_COMMANDE). Chaque
-entrée dit pourquoi.
+Règle des textes hors codes (D157, D156, D155) : docstrings ; arguments des appels techniques de console
+(APPELS_CONSOLE : ligne de commande, journal des requêtes) ; fonctions entières qui écrivent un lanceur, un script, les
+données ou l'aide de la ligne de commande (FONCTIONS_HORS_CODES) ; constantes de même nature (CONSTANTES_HORS_CODES) ;
+commandes à taper (RE_COMMANDE). Chaque entrée dit pourquoi. La console du serveur et son journal, eux, sont dans la
+langue de l'installation (T297) : leurs textes s'écrivent traduisible(…) comme les messages du navigateur (afficher
+écrit la clé anglaise de js/i18n/en.js pour une installation en anglais).
 """
 import argparse
 import ast
@@ -46,32 +48,20 @@ RE_VARIABLE = re.compile(r'\{([A-Za-z_][A-Za-z0-9_]*)\}')          # MOTIF_VARIA
 # « Ressemble à du texte » : deux mots au moins (le second peut être un guillemet français).
 RE_TEXTE = re.compile(r"[A-Za-zÀ-ÿœŒ]{2,}[’']?\s+[A-Za-zÀ-ÿœŒ«»]")
 
-# Appels dont les arguments vont à la console ou au journal du serveur (D157 : langue de l'installation, Lot 4).
+# Appels techniques dont les arguments vont à la console (D157). Depuis T297, afficher, noter_au_journal_serveur et
+# SystemExit n'y sont plus : la console est dans la langue de l'installation, ses textes sont des traduisible(…).
 APPELS_CONSOLE = {
-    'afficher': 'console',
-    'print': 'console',
-    'noter_au_journal_serveur': 'journal du serveur (journal-serveur.log)',
+    'print': 'console (afficher seulement, qui écrit un texte déjà traduit)',
     'log_message': 'journal des requêtes',
     'ArgumentParser': 'aide de la ligne de commande',
     'add_argument': 'aide de la ligne de commande',
     'error': 'erreur de la ligne de commande (argparse)',
-    'SystemExit': 'arrêt au démarrage, sur la console',
 }
 # Fonctions dont tous les textes sont hors codes.
 FONCTIONS_HORS_CODES = {
     'texte_aide_configuration': 'console : « serveur.py --aide »',
-    'afficher_accueil': 'console du démarrage',
-    'resume_ia': 'console du démarrage (ligne « Assistant IA »)',
-    'resume_tailscale': 'console du démarrage (ligne « Tailscale »)',
-    'lire_configuration': 'console : configuration illisible au démarrage',
-    'certificat_du_serveur': 'console : certificat du démarrage',
-    'reinitialiser_en_ligne_de_commande': 'console : Reinitialiser_mot_de_passe',
-    'main': 'console du démarrage',
     'lire_arguments': 'aide de la ligne de commande',
-    'ouvrir_ecouteur': 'console du démarrage',
-    'demarrer_serveur': 'console du démarrage',
     'relancer_prevo': 'programme Python de la relance (aucun texte affiché)',
-    'arreter': 'console',
     'script_installer_windows': 'lanceur (D157) : script PowerShell écrit pour l\'administrateur',
     'script_retirer_windows': 'lanceur (D157) : script PowerShell',
     'script_session_windows': 'lanceur (D157) : script PowerShell',
@@ -84,19 +74,15 @@ FONCTIONS_HORS_CODES = {
     'libelle_appareil': 'donnée (D156) : libellé de l\'appareil écrit dans appareils.json',
     'ligne_de_journal_de_format': 'donnée (D156) : ligne de journal.csv',
     'migrer_tables': 'erreur de programmation (ValueError, TypeError), jamais montrée',
-    'passer_les_fichiers_au_format_courant': 'console et journal.csv du passage de format (D156)',
-    'signaler_fichiers_laisses': 'console du démarrage',
-    'migrer_donnees_au_demarrage': 'console du démarrage',
-    'sauvegarder_avant_mise_a_jour': 'console du démarrage',
+    'passer_les_fichiers_au_format_courant': 'donnée (D156) : lignes de journal.csv du passage de format (sa console '
+                                             'est en traduisible)',
 }
 # Constantes du module dont tous les textes sont hors codes.
 CONSTANTES_HORS_CODES = {
     'CLES_CONFIGURATION': 'console : aide des clés de configuration (« serveur.py --aide »)',
     'AIDE_CONFIGURATION': 'donnée : commentaire « _aide » écrit dans prevo.config.json',
-    'PREFIXE_CONSOLE_FORMAT': 'console du démarrage',
     'POSTE_DU_SERVEUR': 'donnée (D156) : colonne « poste » de journal.csv',
-    'RAISONS_DE_LAISSER': 'console du démarrage (fichier laissé tel quel)',
-    'LIBELLES_FOURNISSEURS_IA': 'console du démarrage (resume_ia)',
+    'SECTION_SERVEUR_JS': 'marqueur relu par le code (section serveur de js/i18n/en.js, T297), jamais affiché',
     'PHOTOS_DE_DEMANDES': 'marqueur relu par le code (règle d\'un rôle), jamais affiché',
     'DOCUMENTS_DU_DEMANDEUR': 'marqueur relu par le code (règle d\'un rôle), jamais affiché',
     'CHEMINS_TAILSCALE': 'technique : chemins de l\'exécutable',

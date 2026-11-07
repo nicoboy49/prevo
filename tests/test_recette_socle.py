@@ -80,6 +80,7 @@ def charger_serveur():
 
 
 SERVEUR = charger_serveur()
+PREFIXE_CONSOLE_FORMAT = "Format des données : "    # lignes du format sur la console en français (T297)
 
 VERSION_APPLI = re.search(r"const VERSION = '([^']+)';",
                           (RACINE / "js" / "app.js").read_text(encoding="utf-8")).group(1)
@@ -530,7 +531,7 @@ class TestMiseAJourServeur(CasRecetteSocle):
             self.assertIn("sauvegarde %s faite avant la mise à jour" % maj, console)
             # Aucune migration (déjà au format 3) : les données à l'octet près, la version notée.
             self.assertEqual(csv_de_la_racine(demarre), origine)
-            self.assertNotIn(SERVEUR.PREFIXE_CONSOLE_FORMAT, console)
+            self.assertNotIn(PREFIXE_CONSOLE_FORMAT, console)
             note = json.loads(demarre[DERNIERE_VERSION].decode("utf-8"))
             self.assertEqual(note["version"], VERSION_APPLI)
 
@@ -574,7 +575,7 @@ class TestElevesServeurComptes(CasRecetteSocle):
             avant_format = une_seule(copies, MOTIF_AVANT_FORMAT)
             self.assertEqual(sorted(copies), sorted([maj, avant_format, datetime.date.today().isoformat()]))
             self.assertLessEqual(maj[:17], avant_format[:17])
-            self.assertLess(console.index("faite avant la mise à jour"), console.index(SERVEUR.PREFIXE_CONSOLE_FORMAT))
+            self.assertLess(console.index("faite avant la mise à jour"), console.index(PREFIXE_CONSOLE_FORMAT))
             dates = []
             for nom, motif in ((maj, "avant-mise-a-jour"), (avant_format, "avant-format-v3")):
                 self.assertEqual(sans_manifeste(copies[nom]), origine, nom)

@@ -9,6 +9,9 @@
 //
 // Le port https vient de l'attribut data-port-https que serveur.py pose en servant la page : jamais une adresse
 // codée en dur. Sans attribut (page ouverte hors du serveur), l'essai échoue et les étapes s'affichent.
+// Langue (T297 ; D148) : js/i18n-chargeur.js, chargé avant ce script, a choisi la langue de la page (choix de ce
+// téléphone, sinon langue de l'installation posée par serveur.py dans data-langue-installation, sinon le français) et
+// chargé ses textes ; le sélecteur en haut de la page retient le choix du téléphone et recharge la page.
 (function () {
   'use strict';
 
@@ -17,8 +20,9 @@
   const racine = document.documentElement;
 
   // ===========================================================================================
-  // 0. Textes (js/i18n.js et js/i18n/fr.js, chargés avant ce script) : data-i18n de la page, et les deux phrases
-  //    balisées (nom de fichier, début en gras), écrites par I18n.html (balisage du dictionnaire, valeurs échappées)
+  // 0. Textes (js/i18n.js, js/i18n/fr.js et la langue choisie par js/i18n-chargeur.js, chargés avant ce script) :
+  //    data-i18n de la page, et les deux phrases balisées (nom de fichier, début en gras), écrites par I18n.html
+  //    (balisage du dictionnaire, valeurs échappées)
   // ===========================================================================================
 
   function poserLesTextes() {
@@ -29,6 +33,43 @@
   }
 
   poserLesTextes();
+
+  // ===========================================================================================
+  // 0 bis. Sélecteur de langue (T297) : chaque langue déclarée sous son nom dans sa langue (I18n.langues, jamais
+  //    traduit) ; le choix est retenu par ce téléphone (localStorage « prevo.langue », la clé de js/i18n-chargeur.js),
+  //    puis la page est rechargée. Choisir la langue qu'aurait la page sans choix retire la clé (le téléphone suit alors
+  //    l'installation). Stockage refusé : une ligne le dit, la page reste dans sa langue.
+  // ===========================================================================================
+
+  const CLE_LANGUE = 'prevo.langue';
+
+  function brancherLangue() {
+    const zone = document.getElementById('choix-langue');
+    const liste = document.getElementById('langue-liste');
+    const refus = document.getElementById('langue-refus');
+    I18n.langues.forEach((langue) => {
+      const option = new Option(langue.nom, langue.code);
+      option.lang = langue.code;                // lu dans sa langue par un lecteur d'écran
+      liste.appendChild(option);
+    });
+    liste.value = I18n.langue;
+    zone.hidden = false;
+    liste.addEventListener('change', () => {
+      const code = liste.value;
+      if (code === I18n.langue) return;
+      try {
+        if (code === I18n.langueDeLaPage('', '')) localStorage.removeItem(CLE_LANGUE);
+        else localStorage.setItem(CLE_LANGUE, code);
+      } catch (erreur) {                        // navigation privée stricte, réglage du navigateur
+        liste.value = I18n.langue;
+        refus.hidden = false;
+        return;
+      }
+      location.reload();
+    });
+  }
+
+  brancherLangue();
 
   // ===========================================================================================
   // 1. Adresses et essai
@@ -103,15 +144,28 @@
     message.hidden = !texte;
   }
 
+  /** Message d'une réponse du serveur (D157, T297) : la clé serveur.<code> dans la langue de la page (valeurs simples
+   *  seulement), le français reçu quand la page ne connaît pas le code ; '' sans message. */
+  function messageDuServeur(corps) {
+    if (!corps || typeof corps.erreur !== 'string') return '';
+    const code = typeof corps.erreur_code === 'string' ? corps.erreur_code : '';
+    if (!code) return corps.erreur;
+    const valeurs = {};
+    Object.entries(corps.erreur_valeurs && typeof corps.erreur_valeurs === 'object' ? corps.erreur_valeurs : {})
+      .forEach(([nom, valeur]) => { if (typeof valeur === 'string' || typeof valeur === 'number') valeurs[nom] = valeur; });
+    const traduit = I18n.t('serveur.' + code, valeurs);
+    return traduit === 'serveur.' + code ? corps.erreur : traduit;
+  }
+
   /** Sans autorité locale (certificat fourni par l'informaticien), /acces/ca.crt répond 404 avec l'explication :
-   *  le bouton de téléchargement est remplacé par ce texte. */
+   *  le bouton de téléchargement est remplacé par ce texte, dans la langue de la page. */
   async function verifierAutorite() {
     let explication = '';
     try {
       const reponse = await fetch('/acces/ca.crt', { method: 'GET', cache: 'no-store', credentials: 'omit' });
       if (reponse.status === 404) {
         const corps = await reponse.json().catch(() => ({}));
-        explication = corps.erreur || I18n.t('porte.verifier_autorite.aucun_certificat_telecharger_serveur');
+        explication = messageDuServeur(corps) || I18n.t('porte.verifier_autorite.aucun_certificat_telecharger_serveur');
       }
     } catch (erreur) {
       return;                                   // réseau muet : on laisse le bouton, l'erreur se verra au clic
@@ -166,7 +220,7 @@
     montrerConfiance();
   }
 
-  window.Porte = { systemeDuTelephone, adresseCible, origineHttps, essayer };
+  window.Porte = { systemeDuTelephone, adresseCible, origineHttps, essayer, messageDuServeur };
 
   demarrer();
 })();

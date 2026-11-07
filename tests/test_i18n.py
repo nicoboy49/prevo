@@ -5,9 +5,9 @@ Sans navigateur :
     - fichiers : js/i18n/fr.js a un bloc par section du contrat, dans l'ordre et bien formé ; js/i18n/aide/fr.js ;
       js/i18n/langues.js déclare le français puis l'anglais (en-GB, T278) ;
     - chargement : index.html charge js/i18n.js, langues.js, fr.js, aide/fr.js et js/i18n-chargeur.js juste avant
-      js/schema.js ; acces/porte.html charge le moteur, les langues et fr.js avant porte.js ;
-    - serveur.py : js/i18n/… et js/i18n/aide/… dans la liste blanche ; la porte sert js/i18n.js et js/i18n/, rien
-      d'autre de js/ ;
+      js/schema.js ; acces/porte.html charge le moteur, les langues, fr.js et le chargeur (T297) avant porte.js ;
+    - serveur.py : js/i18n/… et js/i18n/aide/… dans la liste blanche ; la porte sert js/i18n.js, js/i18n/ et
+      js/i18n-chargeur.js (T297), rien d'autre de js/ ;
     - release (fichiers_a_inclure) et démo web (construire) : js/i18n.js, js/i18n-chargeur.js et js/i18n/ embarqués.
 Dans Chromium :
     - interpolation {nom} ; pluriels Intl.PluralRules (français : 0 et 1 au singulier, 2 au pluriel ; langue d'essai en
@@ -48,7 +48,7 @@ SECTIONS = ("commun schema valeurs socle planning causes dictee mise aide ordres
             "suggestions import magasin indicateurs rapport accueil equipe acces connexion poste apropos installation "
             "porte parametres sauvegardes zip serveur ia").split()
 SCRIPTS_I18N = ["js/i18n.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js", "js/i18n-chargeur.js"]
-SCRIPTS_PORTE = ["/js/i18n.js", "/js/i18n/langues.js", "/js/i18n/fr.js", "/acces/porte.js"]
+SCRIPTS_PORTE = ["/js/i18n.js", "/js/i18n/langues.js", "/js/i18n/fr.js", "/js/i18n-chargeur.js", "/acces/porte.js"]
 FICHIERS_I18N = ["js/i18n.js", "js/i18n-chargeur.js", "js/i18n/langues.js", "js/i18n/fr.js", "js/i18n/aide/fr.js",
                  "js/i18n/en.js", "js/i18n/aide/en.js"]
 # Langues déclarées par js/i18n/langues.js (T278), dans l'ordre du sélecteur : code, nom dans sa langue, locale, statut.
@@ -166,10 +166,10 @@ class TestServeurEtRelease(unittest.TestCase):
 
     def test_la_porte_sert_les_textes_et_rien_d_autre_de_js(self):
         for chemin in (["js", "i18n.js"], ["js", "i18n", "fr.js"], ["js", "i18n", "langues.js"],
-                       ["js", "i18n", "aide", "fr.js"]):
+                       ["js", "i18n", "aide", "fr.js"], ["js", "i18n-chargeur.js"]):
             with self.subTest(chemin="/".join(chemin)):
                 self.assertTrue(serveur.fichier_de_la_porte(chemin))
-        for chemin in (["js", "app.js"], ["js", "interface.js"], ["js", "schema.js"], ["js", "i18n-chargeur.js"],
+        for chemin in (["js", "app.js"], ["js", "interface.js"], ["js", "schema.js"], ["js", "i18n-chargeur.js.bak"],
                        ["js", "i18n"], ["js", "i18n.js.bak"], ["js", "lib", "qrcode.js"], ["index.html"],
                        ["acces", "porte.html"], ["donnees", "equipements.csv"]):
             with self.subTest(chemin="/".join(chemin)):
