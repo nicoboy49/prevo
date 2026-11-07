@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: "Une faille de sécurité"
-    url: "https://selectis.eu"
-    about: "Ne la décrivez pas dans un ticket public : contactez d'abord SELECTIS, par son site."
-  - name: "Installer Prévo (informaticien)"
+  - name: "A security flaw / Une faille de sécurité"
+    url: "https://github.com/nicoboy49/prevo/security/advisories/new"
+    about: "Do not describe it in a public issue: report it privately here, or write to contact@prevo.pro (see SECURITY.md). / Ne la décrivez pas dans un ticket public : signalez-la en privé ici, ou écrivez à contact@prevo.pro (voir SECURITY.md)."
+  - name: "Install Prévo (IT person) / Installer Prévo (informaticien)"
     url: "https://github.com/nicoboy49/prevo/blob/main/docs/INSTALLATION.md"
-    about: "Configuration, mandataires inverses, démarrage en service, comptes, journaux, sauvegardes."
-  - name: "Hébergement et accompagnement"
+    about: "Configuration, reverse proxies, start as a service, accounts, logs, backups (French: docs/INSTALLATION.fr.md). / Configuration, mandataires inverses, démarrage en service, comptes, journaux, sauvegardes (en français : docs/INSTALLATION.fr.md)."
+  - name: "Hosting and support / Hébergement et accompagnement"
     url: "https://selectis.eu"
-    about: "Prévo hébergé ou une aide à l'installation : sur demande, auprès de SELECTIS."
+    about: "Hosted Prévo or help with installation: on request, from SELECTIS. / Prévo hébergé ou une aide à l'installation : sur demande, auprès de SELECTIS."
