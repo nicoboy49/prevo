@@ -87,7 +87,11 @@ const EquipeAcces = (() => {
       return reponse.text();
     }
     const donnees = await reponse.json().catch(() => null);
-    if (!reponse.ok) throw new Donnees.ErreurStockage(messageDe(donnees, reponse.status));
+    if (!reponse.ok) {
+      const erreur = new Donnees.ErreurStockage(messageDe(donnees, reponse.status));
+      erreur.code = (donnees && typeof donnees.erreur_code === 'string') ? donnees.erreur_code : '';   // T301
+      throw erreur;
+    }
     return donnees || {};
   }
 
@@ -185,6 +189,14 @@ const EquipeAcces = (() => {
   // 3. Comptes
   // ===========================================================================================
 
+  // T301 : à la création seulement, case « C'est une autre personne », cachée tant que le serveur n'a pas trouvé un
+  // compte au même prénom et au même nom (comptes.meme_personne) ; cochée, le compte est créé quand même (« .2 »…).
+  function caseAutrePersonne() {
+    const bloc = UI.champ(definition('autre_personne', 'booleen', I18n.t('equipe.champs_compte.autre_personne')), '0');
+    bloc.hidden = true;
+    return bloc;
+  }
+
   function champsCompte(compte) {
     const valeur = (nom) => (compte ? compte[nom] : undefined);
     const champRole = UI.champ(definition('role', 'choix', I18n.t('equipe.champs_compte.role'), { valeurs: ROLES, obligatoire: true }),
@@ -241,10 +253,18 @@ const EquipeAcces = (() => {
     const cree = await UI.fenetreAction({
       titre: I18n.t('equipe.creer_compte.creer_compte'),
       introduction: I18n.t('equipe.creer_compte.identifiant_prenom_nom_donne'),
-      champs: champsCompte(null),
+      champs: champsCompte(null).concat([caseAutrePersonne()]),
       libelleValider: I18n.t('equipe.creer_compte.creer_le_compte'),
       verifier: verifierCompte,
-      action: async (valeurs) => { resultat = await api.creerCompte(champsEnvoyes(valeurs)); },
+      action: async (valeurs, contenu) => {
+        try {
+          resultat = await api.creerCompte(Object.assign(champsEnvoyes(valeurs), { autre_personne: valeurs.autre_personne === '1' }));
+        } catch (erreur) {
+          if (!erreur || erreur.code !== 'comptes.meme_personne') throw erreur;
+          UI.$('[data-champ="autre_personne"]', contenu).hidden = false;      // le refus nomme le compte existant
+          throw new Donnees.ErreurValidation(erreur.message);
+        }
+      },
     });
     if (!cree || !resultat) return;
     App.marquerSaisie(false);

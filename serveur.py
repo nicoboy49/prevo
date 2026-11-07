@@ -882,10 +882,35 @@ def sans_accents(texte):
     return ''.join(c for c in decompose if not unicodedata.combining(c))
 
 
+# T301 (D164, règle de Nicolas du 06/11 : une même personne n'a jamais deux identifiants, deux personnes jamais le
+# même) : İ, I, ı et i sont une seule lettre pour Prévo (le turc les distingue ; « ı » n'a pas de décomposition).
+PLIAGE_DES_I = str.maketrans({'İ': 'i', 'I': 'i', 'ı': 'i'})
+
+
+def plier_nom(texte):
+    """Nom, prénom ou identifiant ramené à des lettres simples, la seule règle pour les fabriquer et les comparer
+    (T301) : İ, I, ı, i → i ; casse pliée (casefold : ß → ss) ; accents retirés (ş → s, ğ → g, ç → c, ö → o, ü → u,
+    é → e). « Yılmaz » → « yilmaz » ; « IŞIK » et « Işık » → « isik » ; « Élodie » → « elodie »."""
+    return sans_accents((texte or '').translate(PLIAGE_DES_I).casefold())
+
+
+def identifiant_tape(texte):
+    """Identifiant tapé (connexion, réinitialisation, recherche d'un compte) ramené à la forme des identifiants."""
+    return plier_nom((texte or '').strip())
+
+
+def ancienne_forme_identifiant(texte):
+    """L'identifiant que la règle d'avant T301 tirait du texte tapé, segment par segment entre les points (« Işık » →
+    « is-k » : le « ı » devenait un tiret). Les comptes créés avant T301 gardent leur identifiant (jamais renommés)."""
+    return '.'.join(re.sub(r'[^a-z0-9]+', '-', sans_accents(segment).lower()).strip('-')
+                    for segment in (texte or '').strip().split('.'))
+
+
 def identifiant_depuis(prenom, nom, pris):
-    """« Élodie Le Gall » → « elodie.le-gall » ; « .2 », « .3 »… si l'identifiant est déjà pris."""
+    """« Élodie Le Gall » → « elodie.le-gall » ; « Ayşe Işık » → « ayse.isik » (plier_nom, T301) ; « .2 », « .3 »… si
+    l'identifiant est déjà pris."""
     def morceau(texte):
-        texte = re.sub(r'[^a-z0-9]+', '-', sans_accents(texte).lower()).strip('-')
+        texte = re.sub(r'[^a-z0-9]+', '-', plier_nom(texte)).strip('-')
         return texte or 'compte'
     base = morceau(prenom) + '.' + morceau(nom) if nom.strip() else morceau(prenom)
     candidat, numero = base, 2
@@ -894,15 +919,53 @@ def identifiant_depuis(prenom, nom, pris):
     return candidat
 
 
+def comptes_designes(comptes, identifiant):
+    """Comptes que désigne un identifiant tapé (T301) : celui dont l'identifiant est exactement le texte tapé, s'il
+    existe (l'identifiant exact tranche toujours) ; sinon tous ceux que le texte désigne une fois ramené à des lettres
+    simples (« YILMAZ », « Yılmaz », « YİLMAZ » → yilmaz) ou par la règle d'avant T301 (« Işık » → is-k). Plusieurs :
+    Prévo ne choisit jamais un compte à la place de la personne (règle de Nicolas, 07/11 ; trouver_compte,
+    verifier_tentative)."""
+    tape = (identifiant or '').strip()
+    exact = [compte for compte in comptes if compte['identifiant'] == tape]
+    if exact:
+        return exact[:1]
+    formes = {identifiant_tape(tape), ancienne_forme_identifiant(tape)} - {''}
+    return [compte for compte in comptes if plier_nom(compte['identifiant']) in formes]
+
+
 def trouver_compte(comptes, identifiant):
-    identifiant = (identifiant or '').strip().lower()
-    return next((c for c in comptes if c['identifiant'] == identifiant), None)
+    """Le compte que désigne l'identifiant (comptes_designes), ou None : aucun, ou plusieurs (jamais un choix)."""
+    designes = comptes_designes(comptes, identifiant)
+    return designes[0] if len(designes) == 1 else None
+
+
+def erreur_compte_introuvable(comptes, identifiant):
+    """Compte introuvable, ou plusieurs comptes désignés (T301 : l'identifiant exact est demandé ; la liste est donnée
+    au responsable et en ligne de commande sur le PC serveur, jamais à l'écran de connexion)."""
+    designes = comptes_designes(comptes, identifiant)
+    if len(designes) > 1:
+        return ErreurCompte(traduisible('comptes.plusieurs',
+                                        'Plusieurs comptes correspondent à « {identifiant} » : {identifiants}. Donnez '
+                                        'l\'identifiant exact.', identifiant=identifiant,
+                                        identifiants=', '.join(compte['identifiant'] for compte in designes)))
+    return ErreurCompte(traduisible('comptes.introuvable', 'Compte introuvable : {identifiant}.',
+                                    identifiant=identifiant))
+
+
+def meme_personne(comptes, prenom, nom):
+    """Le compte, actif ou non, au même prénom et au même nom une fois ramenés à des lettres simples (forme_de_nom),
+    ou None (T301 : « Ayşe IŞIK » et « Ayşe Işık » sont la même personne)."""
+    voulu = (forme_de_nom(prenom), forme_de_nom(nom))
+    return next((compte for compte in comptes
+                 if (forme_de_nom(compte.get('prenom', '')), forme_de_nom(compte.get('nom', ''))) == voulu), None)
 
 
 def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_changer=False, identifiant=None,
-                 origine=('', '', '')):
+                 origine=('', '', ''), autre_personne=False):
     """Crée un compte (rôle, technicien lié pour un technicien) ; rend le compte créé (sans son empreinte).
-    origine : (adresse, agent, Tailscale) de la ligne du journal (T152 : la requête du responsable), vide sinon."""
+    origine : (adresse, agent, Tailscale) de la ligne du journal (T152 : la requête du responsable), vide sinon.
+    T301 : un compte existe déjà au même prénom et au même nom (meme_personne) → refus (comptes.meme_personne, avec
+    son identifiant), sauf autre_personne (le responsable a coché « C'est une autre personne »)."""
     prenom, nom = (prenom or '').strip(), (nom or '').strip()
     if not prenom:
         raise ErreurCompte(traduisible('comptes.prenom_obligatoire', 'Le prénom est obligatoire.'))
@@ -915,9 +978,16 @@ def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_ch
     with VERROU_ACCES:
         comptes = lire_comptes(config)
         pris = {c['identifiant'] for c in comptes}
+        meme = None if autre_personne else meme_personne(comptes, prenom, nom)
+        if meme is not None:
+            raise ErreurCompte(traduisible('comptes.meme_personne',
+                                           'Un compte existe déjà pour {personne} : « {identifiant} ». Réactivez-le ou '
+                                           'donnez un autre nom ; si c\'est une autre personne, cochez « C\'est une '
+                                           'autre personne ».', personne=(prenom + ' ' + nom).strip(),
+                                           identifiant=meme['identifiant']))
         if identifiant:
-            identifiant = identifiant.strip().lower()
-            if identifiant in pris:
+            identifiant = identifiant_tape(identifiant)
+            if identifiant in {plier_nom(existant) for existant in pris}:
                 raise ErreurCompte(traduisible('comptes.identifiant_pris',
                                                'L\'identifiant « {identifiant} » est déjà pris.',
                                                identifiant=identifiant))
@@ -948,8 +1018,7 @@ def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal=
         comptes = lire_comptes(config)
         compte = trouver_compte(comptes, identifiant)
         if compte is None:
-            raise ErreurCompte(traduisible('comptes.introuvable',
-                                           'Compte introuvable : {identifiant}.', identifiant=identifiant))
+            raise erreur_compte_introuvable(comptes, identifiant)
         compte['algo'], compte['sel'], compte['empreinte'] = hacher_mot_de_passe(nouveau)
         compte['a_changer'] = bool(a_changer)
         compte['modifie_le'] = compte['mot_de_passe_le'] = maintenant_iso(config)
@@ -976,8 +1045,7 @@ def modifier_compte(config, identifiant, origine=('', '', ''), **champs):
         comptes = lire_comptes(config)
         compte = trouver_compte(comptes, identifiant)
         if compte is None:
-            raise ErreurCompte(traduisible('comptes.introuvable',
-                                           'Compte introuvable : {identifiant}.', identifiant=identifiant))
+            raise erreur_compte_introuvable(comptes, identifiant)
         for cle, valeur in champs.items():
             if cle not in permis:
                 raise ErreurCompte(traduisible('comptes.champ_non_modifiable',
@@ -1079,6 +1147,9 @@ QUI_INCONNU = '(inconnu)'               # journal : un identifiant sans compte n
 SEL_FACTICE = bytes(16)                 # empreinte factice d'un identifiant inconnu : même calcul, même durée
 CHAMPS_SESSION = ('identifiant', 'role', 'prenom', 'nom', 'technicien_id', 'a_changer', 'appareil')
 MESSAGE_CONNEXION_REFUSEE = traduisible('sessions.connexion_refusee', 'Identifiant ou mot de passe incorrect.')
+MESSAGE_IDENTIFIANT_AMBIGU = traduisible('sessions.identifiant_ambigu',
+                                         'Plusieurs comptes correspondent à cet identifiant : tapez-le exactement, tel '
+                                         'qu\'il vous a été donné.')
 MESSAGE_SESSION_ABSENTE = traduisible('sessions.absente',
                                       'Connexion nécessaire : votre session est absente ou a expiré.')
 MESSAGE_MOT_DE_PASSE_PROVISOIRE = traduisible('sessions.mot_de_passe_provisoire',
@@ -1187,7 +1258,7 @@ def fermer_session(config, cle):
 def fermer_sessions_de(config, identifiant):
     """Supprime toutes les sessions d'un compte (déconnecter partout, mot de passe changé ou réinitialisé, compte
     désactivé) ; rend leur nombre."""
-    identifiant = (identifiant or '').strip().lower()
+    identifiant = identifiant_tape(identifiant)
     with VERROU_SESSIONS:
         sessions = lire_sessions(config)
         restantes = {cle: session for cle, session in sessions.items() if session.get('identifiant') != identifiant}
@@ -1589,17 +1660,25 @@ def verifier_tentative(config, identifiant, mot_de_passe, origine, refus, journa
     plus par tentative. Chaque tentative va au journal des connexions, jamais le mot de passe.
     origine : (adresse, agent, Tailscale)."""
     adresse, agent, tailscale = origine
-    cle = (identifiant or '').strip().lower()[:LONGUEUR_MAX_IDENTIFIANT]
+    tape = (identifiant or '').strip()[:LONGUEUR_MAX_IDENTIFIANT]
     echecs = config.echecs
     if echecs.adresse_ralentie(adresse, maintenant_s(config)):
         config.dormir(ATTENTE_ADRESSE_S)
-    compte = trouver_compte(comptes_du_serveur(config), cle)
+    designes = comptes_designes(comptes_du_serveur(config), tape)
+    compte = designes[0] if len(designes) == 1 else None
+    # T301 : les essais comptent par compte désigné (« YILMAZ » et « yilmaz » ensemble), sinon par texte ramené.
+    cle = compte['identifiant'] if compte is not None else identifiant_tape(tape)[:LONGUEUR_MAX_IDENTIFIANT]
     qui = compte['identifiant'] if compte is not None else QUI_INCONNU
     reste = echecs.reserver(cle, maintenant_s(config))
     if reste:
         ecrire_journal_acces(config, qui, adresse, agent, 'bloque', tailscale)
         raise erreur_blocage(reste)
-    if compte is not None and compte.get('actif'):
+    if len(designes) > 1:
+        # T301 (règle de Nicolas, 07/11) : plusieurs comptes désignés (anciens comptes nés de « IŞIK » et « Işık ») :
+        # refus sans vérifier aucun mot de passe, l'identifiant exact est demandé ; l'essai compte comme un échec.
+        juste = empreinte_factice(mot_de_passe)              # même attente qu'un mot de passe vérifié ; toujours faux
+        refus = ErreurHttp(refus.statut, MESSAGE_IDENTIFIANT_AMBIGU)
+    elif compte is not None and compte.get('actif'):
         juste = mot_de_passe_juste(compte, mot_de_passe)
     else:
         juste = empreinte_factice(mot_de_passe)
@@ -2749,8 +2828,9 @@ def fiche_acces(config):
 
 
 def forme_de_nom(texte):
-    """Nom ou prénom réduit pour une comparaison : accents, casse et espaces multiples ignorés."""
-    return ' '.join(sans_accents(texte or '').lower().split())
+    """Nom ou prénom réduit pour une comparaison : lettres simples (plier_nom, T301 : İ/ı, casse, accents) et espaces
+    multiples ignorés."""
+    return ' '.join(plier_nom(texte).split())
 
 
 def ecrire_table(config, table, entete, lignes):
@@ -6703,7 +6783,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         if not isinstance(cible, str) or not cible.strip():
             raise ErreurHttp(400, traduisible('sessions.identifiant_attendu',
                                               '« identifiant » : l\'identifiant d\'un compte est attendu.'))
-        cible = cible.strip().lower()
+        cible = identifiant_tape(cible)
         soi_meme = cible == self.session['identifiant']
         if not soi_meme:
             if self.session['role'] != 'responsable':
@@ -6725,16 +6805,22 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.envoyer_json(200, {'comptes': [compte_public(compte) for compte in comptes_du_serveur(self.config)]})
 
     def api_compte_creer(self, segment, corps):
-        """POST /api/acces/comptes (responsable) {prenom, nom, role, technicien_id} : compte créé avec un mot de passe
-        provisoire de 16 caractères, à changer à la première connexion (a_changer), rendu une seule fois dans la
-        réponse : jamais écrit dans un fichier, le journal ou la console."""
+        """POST /api/acces/comptes (responsable) {prenom, nom, role, technicien_id, autre_personne} : compte créé avec un
+        mot de passe provisoire de 16 caractères, à changer à la première connexion (a_changer), rendu une seule fois
+        dans la réponse : jamais écrit dans un fichier, le journal ou la console. T301 : même prénom et même nom qu'un
+        compte existant → 400 comptes.meme_personne, sauf autre_personne vrai."""
         self.exiger_comptes()
-        champs = champs_de_compte(self.config, lire_objet_json(corps), obligatoires=('prenom', 'role'))
+        demande = lire_objet_json(corps)
+        autre_personne = demande.pop('autre_personne', False)       # T301 : case « C'est une autre personne »
+        if not isinstance(autre_personne, bool):
+            raise ErreurHttp(400, traduisible('comptes.autre_personne_booleen',
+                                              '« autre_personne » vaut vrai ou faux.'))
+        champs = champs_de_compte(self.config, demande, obligatoires=('prenom', 'role'))
         provisoire = mot_de_passe_provisoire()
         try:
             compte = creer_compte(self.config, champs['prenom'], champs.get('nom', ''), champs['role'], provisoire,
                                   technicien_id=champs.get('technicien_id', ''), a_changer=True,
-                                  origine=self.origine())
+                                  origine=self.origine(), autre_personne=autre_personne)
         except ErreurCompte as erreur:
             raise ErreurHttp(400, traduisible_de(erreur))
         self.envoyer_json(200, {'compte': compte, 'mot_de_passe_provisoire': provisoire})
@@ -7706,7 +7792,8 @@ def reinitialiser_en_ligne_de_commande(config, identifiant):
     except (ErreurCompte, OSError, ValueError) as erreur:
         afficher('Réinitialisation impossible : %s' % erreur)
         sys.exit(1)
-    afficher('Mot de passe provisoire de « %s » : %s' % (identifiant.strip().lower(), provisoire))
+    compte = trouver_compte(lire_comptes(config), identifiant)        # T301 : l'identifiant réel du compte
+    afficher('Mot de passe provisoire de « %s » : %s' % (compte['identifiant'] if compte else identifiant, provisoire))
     afficher('Notez-le : il ne sera plus affiché. Il faudra le changer à la première connexion.')
 
 

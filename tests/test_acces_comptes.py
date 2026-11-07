@@ -5,7 +5,8 @@ Ce qui est vérifié :
                    PBKDF2 avec le nom de l'algorithme stocké) ; deux comptes au même mot de passe ont des sels et des
                    empreintes différents ; comparaison juste et fausse ;
     règles         11 caractères refusés, 12 acceptés, aucune règle de composition, 257 refusés ;
-    comptes        identifiants « prenom.nom » sans accents, suffixe si pris ; technicien lié obligatoire ; au moins
+    comptes        identifiants « prenom.nom » sans accents, suffixe si pris (même personne refusée sans
+                   autre_personne, T301) ; technicien lié obligatoire ; au moins
                    un responsable actif ; le fichier ne contient jamais le mot de passe en clair ; compte_public sans
                    sel ni empreinte ;
     ligne de cmd   --reinitialiser donne un provisoire de 16 caractères, à changer, qui ouvre le compte ; code 1 sans
@@ -96,7 +97,11 @@ class TestRegles(CasComptes):
 
     def test_identifiants_technicien_lie_et_dernier_responsable(self):
         premier = serveur.creer_compte(self.config, "Élodie", "Le Gall", "responsable", "phrase de passe solide")
-        second = serveur.creer_compte(self.config, "Elodie", "le gall", "demandeur", "phrase de passe solide")
+        # T301 : même prénom et même nom (accents et casse ignorés) : refusé, sauf « C'est une autre personne ».
+        with self.assertRaises(serveur.ErreurCompte):
+            serveur.creer_compte(self.config, "Elodie", "le gall", "demandeur", "phrase de passe solide")
+        second = serveur.creer_compte(self.config, "Elodie", "le gall", "demandeur", "phrase de passe solide",
+                                      autre_personne=True)
         self.assertEqual(premier["identifiant"], "elodie.le-gall")
         self.assertEqual(second["identifiant"], "elodie.le-gall.2")
         self.assertNotIn("empreinte", premier)

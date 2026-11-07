@@ -537,6 +537,10 @@ Lancé sans console (tâche planifiée, `pythonw.exe`), Prévo écrit ce qu'il f
 - **Comptes** : identifiant de la forme `prenom.nom`. Le premier responsable est créé par l'assistant ; les autres
   comptes par le responsable, dans Équipe › Accès (créer, modifier, réinitialiser, désactiver, activer). Il reste
   toujours au moins un responsable actif.
+  L'identifiant s'écrit en lettres simples (« Ayşe Işık » → `ayse.isik`) et se tape sans souci de casse ni de lettres
+  turques (« AYŞE.IŞIK » ouvre `ayse.isik`). Un deuxième compte au même prénom et au même nom est refusé, sauf si vous
+  cochez « C'est une autre personne ». Si un identifiant tapé correspond à plusieurs comptes (anciens comptes au nom
+  écrit de deux façons), Prévo refuse la connexion et demande l'identifiant exact.
 - **Mots de passe** : 12 à 256 caractères, aucune règle de composition (une phrase de passe est conseillée).
   Seule une empreinte salée est gardée (scrypt ; PBKDF2 si le Python n'a pas scrypt), dans
   `donnees/acces/comptes.json`. Un mot de passe provisoire

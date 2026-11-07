@@ -3350,6 +3350,19 @@ navigateur, qui ne les lit pas : les empreintes ne quittent jamais le serveur) :
   "responsable"|"technicien"|"demandeur", "technicien_id", "actif": true, "algo": "scrypt-n15-r8-p3"|
   "pbkdf2-sha256-600000", "sel": base64, "empreinte": base64, "a_changer": bool, "cree_le", "modifie_le",
   "mot_de_passe_le" } ] }`.
+  **Identifiants et noms (T301, D164 ; règle de Nicolas : une même personne n'a jamais deux identifiants, deux
+  personnes jamais le même)** : une seule règle, `plier_nom` (serveur.py) : İ, I, ı, i → i ; casse pliée (casefold,
+  ß → ss) ; accents retirés (ş → s, ğ → g, ç → c, ö → o, ü → u) ; elle fabrique l'identifiant (`identifiant_depuis` :
+  « Ayşe Işık » → `ayse.isik`, « Élodie Le Gall » → `elodie.le-gall`, inchangé) et compare les noms (`forme_de_nom`,
+  lien d'un responsable à sa fiche de technicien). Création : un compte (actif ou non) au même prénom et au même nom
+  ramenés ainsi → 400 `comptes.meme_personne` avec son identifiant, sauf `autre_personne` vrai (case « C'est une autre
+  personne » d'Équipe › Accès, montrée après ce refus) : « .2 ». Identifiant tapé (`comptes_designes`) :
+  l'identifiant exact tranche toujours ; sinon les comptes que le texte désigne ramené par `plier_nom`, ou par la règle
+  d'avant T301 (« Işık » → `is-k` : les comptes créés avant ne sont jamais renommés). Plusieurs comptes désignés :
+  `trouver_compte` n'en rend aucun (réinitialisation : 400 `comptes.plusieurs` avec la liste, pour le responsable ou
+  la ligne de commande) ; à la connexion, 401 `sessions.identifiant_ambigu` (« tapez-le exactement ») sans vérifier
+  aucun mot de passe, l'essai comptant comme un échec (blocage au 10e) ; Prévo ne choisit jamais un compte à la place
+  de la personne. Les essais comptent par compte désigné (« YILMAZ » et « yilmaz » ensemble), sinon par texte ramené.
 - `sessions.json` : `{ "<sha256 du jeton>": { "identifiant", "cree_le", "vu_le", "longue": bool, "agent" } }` —
   seule l'empreinte du jeton est gardée (SHA-256 en hexadécimal) ; dates en heure locale `AAAA-MM-JJTHH:MM:SS`.
 - `appareils.json` : `{ "invitations": [ { "id", "empreinte", "cree_le", "expire_le", "revoquee" } ], "appareils":
