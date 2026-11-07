@@ -20,6 +20,10 @@ Chaque écriture est contrôlée sur le disque (serveur) ou dans l'OPFS du navig
               réglages absents du ZIP gardés (T319) : ZIP de la 1.2 (f3-v1.2.0, sans manifeste) importé dans une base en
               anglais (langue_defaut en, devise GBP) : confirmation qui les nomme, langue et devise gardées, réglages
               présents dans le ZIP pris du ZIP, Prévo toujours en anglais après le rechargement ;
+              mode Solo gardé (T323) : le technicien « moi » suit sa fiche quand une seule fiche du ZIP porte son
+              prénom et son nom (sous un autre identifiant) ; sinon (deux fiches au même nom) la confirmation le dit,
+              « moi » est vidé et Prévo demande au responsable qui il est (Annuler : la question revient à
+              l'ouverture suivante ; une réponse : plus jamais), sans deviner ;
               ZIP au format 2 (f2-v1.1.0, sans manifeste) : confirmation « mises au format 3 », deux tables vidées ;
               base au format 3, lignes intactes, colonne astuce vide, tables du wiki vides ; colonnes inconnues du
               ZIP (jeu colonnes-en-trop) gardées avec leurs valeurs ;
@@ -594,6 +598,81 @@ class TestServeur(CasImport):
             self.assertEqual(page.evaluate("Donnees.parametre('devise', '')"), "GBP")
             self.assertEqual(page.evaluate("Donnees.lignes('equipements').length"),
                              len(lire_csv(f12["equipements.csv"])[1]))
+
+    def importer_dans_une_base_solo(self, techniciens, nom_zip):
+        """Base 2.0 en mode Solo (f3-v2.0.0 : « moi » = TEC-0001, Julien Moreau), « ce PC », responsable ; ZIP de la
+        1.2 (sans réglages du mode Solo) dont techniciens.csv est remplacé par « techniciens » → (serveur, page,
+        informations de la confirmation, parametres écrits)."""
+        f12 = {chemin: o for chemin, o in fichiers_du_jeu("f3-v1.2.0").items() if chemin.endswith(".csv")}
+        f12["techniciens.csv"] = ("\ufeffid;nom;prenom;metier;taux_horaire;capacite_h_semaine;actif\r\n"
+                                  + "".join(ligne + "\r\n" for ligne in techniciens)).encode("utf-8")
+        chemin_zip = ecrire_zip(self.temporaire / nom_zip, f12, avec_manifeste=False)
+        source = self.dossier_source(nom_zip + "-base", fichiers_du_jeu("f3-v2.0.0"))
+        serveur = ServeurPrevo(source=source)
+        serveur.__enter__()
+        self.addCleanup(serveur.__exit__, None, None, None)
+        page = self.ouvrir_parametres(serveur)
+        self.assertEqual(page.evaluate("App.technicienSolo()"), "TEC-0001")
+        self.choisir_zip(page, chemin_zip)
+        info = self.confirmation(page)
+        info["solo"] = page.evaluate("(() => { const e = document.getElementById('solo-moi-import-zip'); "
+                                     "return e ? e.textContent.replace(/\\s+/g, ' ').trim() : null; })()")
+        page.click(BOUTON_REMPLACER)
+        self.texte_fenetre(page, "import-zip-termine")
+        parametres = dict((l["cle"], sans_apostrophe(l["valeur"]))
+                          for l in lire_csv((serveur.dossier / "parametres.csv").read_bytes())[1])
+        return serveur, page, info, parametres
+
+    def recharger(self, page):
+        with page.expect_navigation():
+            page.click("dialog button:has-text('Recharger Prévo')")
+        attendre_pret(page)
+
+    def test_serveur_mode_solo_moi_suit_sa_fiche_quand_elle_est_claire(self):
+        # Julien Moreau est maintenant TEC-0002 dans le ZIP (TEC-0001 est quelqu'un d'autre) : « moi » le suit.
+        serveur, page, info, parametres = self.importer_dans_une_base_solo(
+            ["TEC-0001;Benali;Karim;Mécanicien;42;35;1", "TEC-0002;MOREAU;julien;Électricien;44;35;1"], "solo-clair.zip")
+        self.assertIsNone(info["solo"])
+        self.assertEqual((parametres["mode_solo"], parametres["solo_technicien_id"]), ("1", "TEC-0002"))
+        self.recharger(page)
+        page.wait_for_timeout(500)
+        self.assertIsNone(page.query_selector("#solo-moi-question"))
+        self.assertEqual(page.evaluate("App.technicienSolo()"), "TEC-0002")
+
+    def test_serveur_mode_solo_moi_ambigu_prevo_demande_sans_deviner(self):
+        # Deux fiches « Julien Moreau » dans le ZIP : Prévo ne choisit pas.
+        serveur, page, info, parametres = self.importer_dans_une_base_solo(
+            ["TEC-0001;Moreau;Julien;Électricien;44;35;1", "TEC-0005;Moreau;Julien;Mécanicien;40;35;1",
+             "TEC-0002;Benali;Karim;Mécanicien;42;35;1"], "solo-ambigu.zip")
+        self.assertEqual(info["solo"], "Mode Solo : votre fiche « moi » ne se retrouve pas clairement dans le ZIP ; "
+                                       "Prévo vous demandera qui vous êtes après l'import.")
+        self.assertEqual((parametres["mode_solo"], parametres["solo_technicien_id"]), ("1", ""))
+        self.recharger(page)
+        page.wait_for_selector("#solo-moi-question")
+        self.assertIn("Il ne devine pas", page.inner_text("#solo-moi-question"))
+        page.click("dialog button:has-text('Annuler')")                      # pas de réponse : la question reviendra
+        page.wait_for_selector("#solo-moi-question", state="detached")
+        page.reload()
+        attendre_pret(page)
+        dialogue = page.locator("dialog[open]").last
+        page.wait_for_selector("#solo-moi-question")
+        options = dialogue.locator("select[name=technicien] option").all_inner_texts()
+        self.assertEqual(options[0], "Ma fiche n'y est pas : la créer")
+        self.assertIn("Julien Moreau (TEC-0005)", options)
+        dialogue.locator("select[name=technicien]").select_option("TEC-0005")
+        dialogue.locator("button:has-text(\"C'est moi\")").click()
+        page.wait_for_selector("#solo-moi-question", state="detached")
+        attendre_pret(page)
+        self.assertEqual(page.evaluate("App.technicienSolo()"), "TEC-0005")
+        parametres = dict((l["cle"], sans_apostrophe(l["valeur"]))
+                          for l in lire_csv((serveur.dossier / "parametres.csv").read_bytes())[1])
+        self.assertEqual(parametres["solo_technicien_id"], "TEC-0005")
+        journal = lire_csv((serveur.dossier / "journal.csv").read_bytes())[1]
+        self.assertTrue(journal[-1]["action"].endswith("technicien « moi » du mode Solo choisi"), journal[-1]["action"])
+        page.reload()                                                          # une réponse : plus de question
+        attendre_pret(page)
+        page.wait_for_timeout(500)
+        self.assertIsNone(page.query_selector("#solo-moi-question"))
 
     def test_serveur_technicien_n_a_pas_l_import(self):
         self.autoriser_erreur(ERREUR_TABLE_REFUSEE)

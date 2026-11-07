@@ -1079,6 +1079,9 @@ const App = (() => {
       if (window.performance && typeof performance.mark === 'function') performance.mark('prevo:pret');
       // Mise à jour signalée (D120) : une lecture par jour et par poste, seulement si le responsable l'a autorisée.
       if (typeof MiseAJour !== 'undefined') MiseAJour.verifier();
+      // T323 : mode Solo sans technicien « moi » reconnu (import ZIP, fiche supprimée) : la question, sans deviner.
+      if (modeSolo() && !technicienSolo() && typeof Parametres !== 'undefined' && Parametres.interne.demanderMoiSolo
+          && !Donnees.lectureSeule()) Parametres.interne.demanderMoiSolo();
     }
   }
 

@@ -259,6 +259,7 @@ const ParametresZip = (() => {
       ${lu.abimes.length ? UI.html`<div class="encadre attention" id="abimes-import-zip">${lu.abimes.map((abime) =>
         UI.html`<p data-abime="${abime.table}">${phraseAbime(abime)}</p>`)}</div>` : ''}
       ${problemesMontres(lu)}
+      ${lu.moiADemander ? UI.html`<p id="solo-moi-import-zip">${I18n.t('zip.confirmer.solo_moi_a_demander')}</p>` : ''}
       ${(lu.reglagesGardes || []).length ? UI.html`<p id="reglages-gardes-import-zip">${I18n.t('zip.confirmer.reglages_absents_gardes',
         { n: lu.reglagesGardes.length, reglages: lu.reglagesGardes.map((garde) => garde.libelle).join(', ') })}</p>` : ''}
       <div class="encadre attention" id="avertissement-import-zip"><b>${avertissement()}</b></div>
@@ -395,6 +396,30 @@ const ParametresZip = (() => {
    * gardent la valeur de la base → [{ cle, valeur, libelle }], dans l'ordre de la base. Le reste de parametres.csv
    * (rapports_mensuels, clés inconnues…) suit le ZIP : remplacement complet (D172).
    */
+  /** Prénom et nom d'une fiche de technicien, ramenés pour une comparaison (UI.normaliserRecherche : casse,
+   *  accents, İ/ı). */
+  function formeDuTechnicien(technicien) {
+    return UI.normaliserRecherche(String(technicien.prenom || '').trim() + ' ' + String(technicien.nom || '').trim())
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  /**
+   * T323 (Nicolas, 07/11) : mode Solo gardé de la base (T319) : son technicien « moi » (solo_technicien_id) ne vaut
+   * après l'import que s'il désigne clairement UNE fiche du ZIP au même prénom et au même nom que la fiche « moi » de
+   * la base (sous le même identifiant, ou sous un autre : il suit alors la fiche). Sinon (aucune, plusieurs, fiche
+   * « moi » introuvable dans la base), il est vidé et Prévo demandera une fois au responsable qui est « moi », au lieu
+   * de deviner (Parametres.interne.demanderMoiSolo). Rend vrai quand il faudra demander.
+   */
+  function moiSoloApresImport(gardes, techniciensDuZip) {
+    const garde = gardes.find((candidat) => candidat.cle === 'solo_technicien_id');
+    if (!garde || !texte(garde.valeur)) return false;
+    const moi = Donnees.trouver('techniciens', texte(garde.valeur));
+    const forme = moi ? formeDuTechnicien(moi) : '';
+    const memes = forme ? techniciensDuZip.filter((technicien) => formeDuTechnicien(technicien) === forme) : [];
+    garde.valeur = memes.length === 1 ? texte(memes[0].id) : '';
+    return memes.length !== 1;
+  }
+
   function reglagesGardes(lignesDuZip) {
     const connus = typeof Parametres !== 'undefined' && Parametres.reglagesConnus ? Parametres.reglagesConnus() : [];
     const libelles = new Map(connus.map((reglage) => [reglage.cle, reglage]));
@@ -534,6 +559,7 @@ const ParametresZip = (() => {
     }
     const horsZip = sansDocuments(lu) ? await documentsHorsZip(lu) : null;
     lu.reglagesGardes = reglagesGardes(lu.tables.parametres.lignes);     // T319 : dits à la confirmation, puis écrits
+    lu.moiADemander = moiSoloApresImport(lu.reglagesGardes, lu.tables.techniciens.lignes);   // T323
     if (!(await confirmer(lu, nomFichier, horsZip))) {
       UI.toast(I18n.t('zip.importer.import_zip_annule_rien'), 'info');
       return { ok: false, etape: 'annule' };

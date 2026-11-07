@@ -4211,6 +4211,11 @@ mode Solo) que la base a et que le ZIP n'a pas (export 1.2, bêta 1, bêta 2, d�
 de la 2.0) garde la valeur de la base (`reglagesGardes`), ajouté à la suite des lignes du ZIP et nommé à la
 confirmation (`#reglages-gardes-import-zip`) ; le reste de `parametres.csv` (`rapports_mensuels`, clés inconnues) suit
 le ZIP.
+Mode Solo gardé de la base (T323, Nicolas, 07/11) : le technicien « moi » (`solo_technicien_id`) ne vaut après
+l'import que si une seule fiche du ZIP porte le prénom et le nom de la fiche « moi » de la base (`moiSoloApresImport` :
+même identifiant ou un autre, qu'il suit) ; sinon il est vidé, la confirmation le dit (`#solo-moi-import-zip`), et à
+l'ouverture `Parametres.interne.demanderMoiSolo` (parametres-solo.js, appelé par js/app.js une fois prêt) demande au
+responsable sa fiche, ou d'en créer une ; Prévo ne devine jamais. Annuler : la question revient à l'ouverture suivante.
 
 - **Droits** : la règle de l'export (`ZipDonnees.exportPermis`) : avec les comptes, le responsable seul (bouton absent
   pour les autres rôles, qui n'ouvrent pas Paramètres ; un appel direct est refusé ; le serveur refuse de toute façon

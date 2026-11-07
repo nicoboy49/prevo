@@ -89,6 +89,44 @@ Object.assign(Parametres.interne, (() => {
     await App.reafficher();
   }
 
+  /**
+   * T323 (Nicolas, 07/11) : mode Solo dont le technicien « moi » n'est plus reconnu (vidé par un import ZIP, fiche
+   * supprimée) : Prévo demande au responsable qui est « moi » au lieu de deviner : une fiche de l'équipe, ou une fiche
+   * à créer (prénom, nom). Appelé par js/app.js une fois l'application prête ; Annuler laisse la question pour la
+   * prochaine ouverture. Rend vrai si « moi » a été posé.
+   */
+  async function demanderMoiSolo() {
+    const actifs = Donnees.lignes('techniciens').filter((t) => t.actif !== '0');
+    const liste = UI.champ({ nom: 'technicien', type: 'choix', libelle: I18n.t('parametres.demander_moi_solo.ma_fiche'),
+      valeurs: actifs.map((t) => t.id) }, '');          // l'option vide de la liste : « la créer »
+    UI.$$('option', liste).forEach((option) => {
+      const fiche = actifs.find((t) => t.id === option.value);
+      option.textContent = fiche ? (nomTechnicien(fiche) || fiche.id) + ' (' + fiche.id + ')' : I18n.t('parametres.demander_moi_solo.pas_dans_la_liste');
+    });
+    const fait = await UI.fenetreAction({
+      titre: I18n.t('parametres.demander_moi_solo.qui_est_moi'), libelleValider: I18n.t('parametres.demander_moi_solo.c_est_moi'),
+      introduction: UI.html`<p id="solo-moi-question">${I18n.t('parametres.demander_moi_solo.prevo_ne_devine_pas')}</p>`,
+      champs: [liste,
+        UI.champ({ nom: 'prenom', type: 'texte', libelle: I18n.t('commun.champ.prenom') }, ''),
+        UI.champ({ nom: 'nom', type: 'texte', libelle: I18n.t('parametres.passer_en_solo.nom') }, '')],
+      verifier: (valeurs) => (valeurs.technicien || String(valeurs.nom || '').trim() ? []
+        : [{ nom: 'nom', message: I18n.t('parametres.demander_moi_solo.choisir_ou_creer') }]),
+      action: async (valeurs) => {
+        let technicienId = valeurs.technicien;
+        if (!technicienId) {
+          const existant = technicienExistant(valeurs);
+          technicienId = existant ? existant.id : await Equipe.creerTechnicien({ prenom: valeurs.prenom, nom: valeurs.nom });
+        }
+        await ecrireParametres({ solo_technicien_id: technicienId }, I18n.donnees('parametres.demander_moi_solo.moi_choisi'));   // journal (D156)
+      },
+    });
+    if (!fait) return false;
+    App.marquerSaisie(false);
+    UI.toast(I18n.t('parametres.demander_moi_solo.moi_enregistre'), 'succes');
+    await App.reafficher();
+    return true;
+  }
+
   /** Branche les boutons de la carte ; `pendant(bouton, contexte, action)` : outil de parametres.js. */
   function brancherSolo(conteneur, pendant) {
     const passer = UI.$('#btn-passer-solo', conteneur);
@@ -97,5 +135,5 @@ Object.assign(Parametres.interne, (() => {
     if (quitter) quitter.addEventListener('click', () => pendant(quitter, 'fin du mode Solo', quitterSolo));
   }
 
-  return { carteSolo, brancherSolo };
+  return { carteSolo, brancherSolo, demanderMoiSolo };
 })());
