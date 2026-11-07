@@ -679,7 +679,7 @@ def rediger_lot7():
         "## 5. Prévo 2 : accès et installation",
         "",
         "Ce que la version 2 (lot 7) change pour qui ouvre le dossier des données. Le format des fichiers CSV ne change"
-        " pas. Le détail pour l'informaticien est dans `docs/INSTALLATION.md` (dépôt).",
+        " pas. Le détail pour l'informaticien est dans `docs/INSTALLATION.fr.md` (dépôt ; en anglais : `docs/INSTALLATION.md`).",
         "",
         "### 5.1 Le dossier `acces/` (mode serveur)",
         "",

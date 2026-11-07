@@ -1,91 +1,92 @@
-# Installer Prévo : le guide de l'informaticien
+# Installing Prévo: the IT person's guide
 
-Ce document s'adresse à la personne qui installe Prévo sur un serveur ou sur le PC de l'atelier, et qui veut
-savoir exactement ce qu'il fait. Il vaut à partir de Prévo 2.
+*Version française : [INSTALLATION.fr.md](INSTALLATION.fr.md)*
 
-- Pour les utilisateurs (connexion, téléphones, mode Solo) : [GUIDE.html](../GUIDE.html), chapitres 2 et 8.
-- Pour le contrat technique (API, rôles par route, formats) : [ARCHITECTURE.md](ARCHITECTURE.md), §22.
-- Dans la plupart des ateliers, l'assistant d'installation suffit : il pose trois questions et règle tout ce qui
-  suit. Ce document dit ce qu'il fait, et comment le faire à la main.
+This document is for the person who installs Prévo on a server or on the workshop PC, and who wants to know
+exactly what it does. It applies from Prévo 2 onwards.
 
-## 1. Ce que contient le zip
+- For users (sign-in, phones, Solo mode): [GUIDE.en.html](../GUIDE.en.html), chapters 2 and 8.
+- For the technical contract (API, roles per route, formats): [ARCHITECTURE.md](ARCHITECTURE.md) (in French), §22.
+- In most workshops, the installation wizard is enough: it asks three questions and sets up everything that
+  follows. This document says what it does, and how to do it by hand.
 
-Le zip de la release contient un seul dossier, `prevo-<version>/`. On y trouve :
+## 1. What the zip contains
 
-| Élément | Rôle |
+The release zip contains a single folder, `prevo-<version>/`. In it you will find:
+
+| Item | Purpose |
 | --- | --- |
-| `serveur.py` | Le serveur : un seul fichier Python, bibliothèque standard seulement. |
-| `index.html`, `favicon.svg`, `css/`, `js/` | L'application, servie aux navigateurs. |
-| `acces/` | La porte d'entrée : la page « Faites confiance au PC atelier » et ses illustrations. |
-| `GUIDE.html`, `README.md`, `FICHE_TECHNIQUE_CSV.md` | Le guide, la présentation, le format des fichiers CSV. |
-| `Lancer_GMAO.bat`, `lancer.sh` | Les lanceurs (Windows ; Mac et Linux). |
-| `Reinitialiser_mot_de_passe.bat` | Donne un mot de passe provisoire à un compte (Windows). |
-| `python/` | Python embarqué officiel pour Windows 64 bits : rien à installer sous Windows. |
-| `outils-tiers/` | mkcert 1.4.4 pour Windows 64 bits, avec sa licence : il fabrique le certificat de l'atelier. |
-| `outils/empreintes-tiers.json` | Empreintes SHA-256 de mkcert, vérifiées par `serveur.py` avant tout lancement. |
-| `LICENSE`, `NOTICE` | Licence MIT de Prévo, licences des bibliothèques embarquées. |
+| `serveur.py` | The server: a single Python file, standard library only. |
+| `index.html`, `favicon.svg`, `css/`, `js/` | The application, served to browsers. |
+| `acces/` | The front door: the “Trust the workshop PC” page and its illustrations. |
+| `GUIDE.html`, `README.md`, `FICHE_TECHNIQUE_CSV.md` | The guide, the introduction, the format of the CSV files. |
+| `Lancer_GMAO.bat`, `lancer.sh` | The launchers (Windows; Mac and Linux). |
+| `Reinitialiser_mot_de_passe.bat` | Gives an account a temporary password (Windows). |
+| `python/` | Official embedded Python for 64-bit Windows: nothing to install on Windows. |
+| `outils-tiers/` | mkcert 1.4.4 for 64-bit Windows, with its licence: it makes the workshop certificate. |
+| `outils/empreintes-tiers.json` | SHA-256 fingerprints of mkcert, checked by `serveur.py` before every launch. |
+| `LICENSE`, `NOTICE` | Prévo's MIT licence, the licences of the bundled libraries. |
 
-Le zip ne contient **pas** de dossier `donnees/` : `serveur.py` le crée au premier lancement. Une mise à jour ne
-touche donc jamais aux données. Il ne contient pas non plus ce document (`docs/` reste dans le dépôt).
+The zip does **not** contain a `donnees/` folder: `serveur.py` creates it on first launch. An update
+therefore never touches the data. It does not contain this document either (`docs/` stays in the repository).
 
-Au fil de l'usage, Prévo crée à côté de `serveur.py` :
+As it is used, Prévo creates next to `serveur.py`:
 
-- `prevo.config.json` : la configuration (§4), écrite par l'assistant ;
-- `Installer_demarrage.ps1`, `Retirer_demarrage.ps1`, `Demarrage_session.ps1` (Windows), `prevo.service` (Linux) ou
-  `pro.prevo.serveur.plist` (macOS) : les scripts de démarrage (§8), écrits avant d'être lancés, pour que vous
-  puissiez les lire ;
-- `donnees/` : les 24 fichiers CSV, `documents/` (photos, PDF, rapports figés), `sauvegardes/`, `acces/` (comptes,
-  appareils, journal des connexions, certificat de l'atelier), `journal-serveur.log`, `copie-externe.json`, et
-  `installation.json` pendant l'assistant.
+- `prevo.config.json`: the configuration (§4), written by the wizard;
+- `Installer_demarrage.ps1`, `Retirer_demarrage.ps1`, `Demarrage_session.ps1` (Windows), `prevo.service` (Linux) or
+  `pro.prevo.serveur.plist` (macOS): the start-up scripts (§8), written before they are run, so that you
+  can read them;
+- `donnees/`: the 24 CSV files, `documents/` (photos, PDFs, frozen reports), `sauvegardes/`, `acces/` (accounts,
+  devices, sign-in log, the workshop certificate), `journal-serveur.log`, `copie-externe.json`, and
+  `installation.json` during the wizard.
 
-## 2. Les portées : qui peut joindre Prévo
+## 2. Scopes: who can reach Prévo
 
-Une seule règle : **au-delà de ce PC, comptes et https sont obligatoires.** `serveur.py` la vérifie au démarrage,
-avant d'ouvrir le moindre port. Si la configuration ne la respecte pas, il refuse de démarrer, dit pourquoi sur la
-console et dans `donnees/journal-serveur.log`, et sort avec le code 2. Aucune option ne la contourne.
+One rule: **beyond this PC, accounts and https are mandatory.** `serveur.py` checks it at start-up,
+before opening any port. If the configuration does not respect it, it refuses to start, says why on the
+console and in `donnees/journal-serveur.log`, and exits with code 2. No option bypasses it.
 
-| Portée | Écoute | Comptes | https | Mandataire |
+| Scope | Listens on | Accounts | https | Reverse proxy |
 | --- | --- | --- | --- | --- |
-| Ce PC (défaut) | `127.0.0.1` | non (profils, comme en 1.2) | non | non |
-| Le Wi-Fi de l'atelier | toutes les interfaces | oui | certificat de l'atelier (§6) | non |
-| Aussi hors de l'atelier | toutes les interfaces | oui | certificat de l'atelier | oui, `tailscale serve` (§7.2) |
-| Intranet, derrière un mandataire | `127.0.0.1` | oui | porté par le mandataire | oui (§7) |
+| This PC (default) | `127.0.0.1` | no (profiles, as in 1.2) | no | no |
+| The workshop Wi-Fi | all interfaces | yes | workshop certificate (§6) | no |
+| Also outside the workshop | all interfaces | yes | workshop certificate | yes, `tailscale serve` (§7.2) |
+| Intranet, behind a reverse proxy | `127.0.0.1` | yes | provided by the proxy | yes (§7) |
 
-Les trois parcours de l'assistant :
+The wizard's three paths:
 
-- **Solo** : un PC, une personne. Portée « ce PC », sans compte ni https. Pour un téléphone, Tailscale, et un
-  mot de passe devient obligatoire.
-- **Atelier** : une petite équipe sur le Wi-Fi. Comptes pour le responsable et les techniciens, téléphones des
-  demandeurs enrôlés par QR, certificat fabriqué par Prévo, démarrage avec le PC.
-- **Intranet** : vous installez Prévo derrière le mandataire inverse ou le VPN de l'entreprise, avec votre propre
-  certificat ; chaque personne a un compte, demandeurs compris.
+- **Solo**: one PC, one person. Scope “this PC”, with no account and no https. For a phone, Tailscale, and a
+  password becomes mandatory.
+- **Workshop**: a small team on the Wi-Fi. Accounts for the manager and the technicians, requesters' phones
+  enrolled by QR, certificate made by Prévo, start-up with the PC.
+- **Intranet**: you install Prévo behind the company's reverse proxy or VPN, with your own
+  certificate; everyone has an account, requesters included.
 
-## 3. Installer
+## 3. Installing
 
 ### 3.1 Windows
 
-1. Dézippez le zip dans `C:\Prevo` (conseillé : chemin court, hors du profil d'utilisateur ; le dossier
-   `C:\Prevo\prevo-<version>` obtenu convient tel quel). Ailleurs, l'assistant propose de copier Prévo dans
-   `C:\Prevo` : chaque fichier est copié puis vérifié, l'ancien dossier n'est jamais supprimé.
-2. Double-cliquez sur `Lancer_GMAO.bat`. Il utilise `python\python.exe` du zip, sinon un Python 3.11 ou plus
-   récent déjà installé (`py -3` ou `python`).
-3. Le navigateur du PC s'ouvre sur l'assistant (`http://localhost:8080/#/installation`). Choisissez « Je suis
-   l'informaticien de l'entreprise » : toutes les étapes s'affichent sur une page, rien ne se fait sans clic.
+1. Unzip the zip into `C:\Prevo` (recommended: a short path, outside the user profile; the resulting
+   `C:\Prevo\prevo-<version>` folder is fine as it is). Elsewhere, the wizard offers to copy Prévo into
+   `C:\Prevo`: each file is copied then checked, and the old folder is never deleted.
+2. Double-click `Lancer_GMAO.bat`. It uses the zip's `python\python.exe`, otherwise a Python 3.11 or newer
+   already installed (`py -3` or `python`).
+3. The PC's browser opens on the wizard (`http://localhost:8080/#/installation`). Choose “I am the company's IT
+   person”: all the steps appear on one page, and nothing happens without a click.
 
-Tant que l'installation n'est pas terminée, Prévo n'écoute que sur ce PC. Rien n'est écrit dans
-`prevo.config.json` avant « Terminer » ; Prévo se relance alors avec la configuration.
+Until the installation is finished, Prévo listens only on this PC. Nothing is written to
+`prevo.config.json` before “Finish”; Prévo then restarts with the configuration.
 
-Sans données au départ, la dernière étape demande par quoi commencer (vide, ou les données de démonstration) et la
-**langue de Prévo** (proposée d'après la langue du navigateur : français ou anglais aujourd'hui). « Terminer »
-l'écrit dans `parametres.csv` (`langue_defaut`) : c'est la langue des postes qui n'ont pas choisi la leur et des
-textes que Prévo écrit dans les données ; elle se change ensuite dans Paramètres, section « Entreprise ». Des
-données déjà là (Prévo 1.2) ne sont pas touchées : leur langue reste le français tant que Paramètres ne la change
-pas.
+With no data to start from, the last step asks what to begin with (empty, or the demo data) and the
+**Prévo language** (suggested from the browser's language: French or English today). “Finish”
+writes it to `parametres.csv` (`langue_defaut`): it is the language of the workstations that have not chosen their own and of the
+texts that Prévo writes into the data; it can be changed afterwards in Settings, “Company” section. Data already
+there (Prévo 1.2) is not touched: its language stays French until Settings changes it.
 
-### 3.2 Linux ou macOS
+### 3.2 Linux or macOS
 
-Il faut Python 3.11 ou plus récent (bibliothèque standard seulement). Le zip n'embarque ni Python ni mkcert pour
-ces systèmes.
+Python 3.11 or newer is needed (standard library only). The zip bundles neither Python nor mkcert for
+these systems.
 
 ```sh
 sudo mkdir -p /opt/prevo
@@ -93,103 +94,105 @@ sudo cp -r prevo-<version>/. /opt/prevo/
 cd /opt/prevo && ./lancer.sh --sans-navigateur
 ```
 
-- Prévo n'est sous `/opt/prevo` qu'à titre d'exemple. Évitez un dossier personnel : l'unité systemd de §8.2
-  protège les dossiers personnels (`ProtectHome=yes`).
-- Pour le certificat de l'atelier (§6), placez le mkcert de votre système dans `outils-tiers/`, sous le nom de la
-  page des releases de mkcert (`mkcert-v1.4.4-linux-amd64`, `mkcert-v1.4.4-linux-arm64`,
-  `mkcert-v1.4.4-darwin-arm64`…), et rendez-le exécutable (`chmod +x`). Prévo compare son empreinte à
-  `outils/empreintes-tiers.json` et refuse un fichier différent. Sans mkcert, donnez vos propres fichiers PEM ou
-  passez par un mandataire.
+- Prévo is under `/opt/prevo` only as an example. Avoid a home folder: the systemd unit in §8.2
+  protects home folders (`ProtectHome=yes`).
+- For the workshop certificate (§6), put your system's mkcert in `outils-tiers/`, under the name used on the
+  mkcert releases page (`mkcert-v1.4.4-linux-amd64`, `mkcert-v1.4.4-linux-arm64`,
+  `mkcert-v1.4.4-darwin-arm64`…), and make it executable (`chmod +x`). Prévo compares its fingerprint with
+  `outils/empreintes-tiers.json` and refuses a different file. Without mkcert, supply your own PEM files or
+  use a reverse proxy.
 
-### 3.3 Un serveur sans écran
+### 3.3 A server with no screen
 
-L'assistant ne répond qu'à ce PC lui-même (`127.0.0.1`) : vu du réseau, ses adresses n'existent pas (404).
-Sur un serveur sans navigateur, ouvrez un tunnel SSH depuis votre poste :
+The wizard answers only to the PC itself (`127.0.0.1`): from the network, its addresses do not exist (404).
+On a server with no browser, open an SSH tunnel from your workstation:
 
 ```sh
 ssh -L 8080:127.0.0.1:8080 vous@serveur
 ```
 
-puis ouvrez `http://localhost:8080/#/installation` sur votre poste : pour Prévo, la demande vient de
+then open `http://localhost:8080/#/installation` on your workstation: for Prévo, the request comes from
 `127.0.0.1`.
 
-## 4. La configuration : `prevo.config.json`
+## 4. Configuration: `prevo.config.json`
 
-### 4.1 Où, quand, dans quel ordre
+### 4.1 Where, when, in what order
 
-- **Où** : à côté de `serveur.py` (ou le fichier donné par `--config`). Jamais dans `donnees/` : il n'est ni
-  sauvegardé ni exporté par Prévo. Sauvegardez-le vous-même, et protégez-le s'il contient `ia_cle`.
-- **Qui l'écrit** : l'assistant, à « Terminer » ; puis Paramètres › Accès et installation (depuis le PC serveur),
-  clé par clé. Les clés inconnues et `_aide` sont gardées telles quelles. Vous pouvez aussi l'éditer à la main.
-- **Format** : JSON en UTF-8. Les clés qui commencent par `_` sont des commentaires (`_aide`).
-- **Priorité** : les défauts, puis le fichier, puis la ligne de commande (§5), qui l'emporte.
-- **Quand** : le fichier est lu au démarrage seulement. Après une modification, relancez Prévo.
-- **Erreurs** : une clé inconnue est ignorée et signalée sur la console ; une valeur invalide arrête le démarrage
-  (code 2), avec le nom de la clé.
-- **Liste à jour** : `serveur.py --aide` imprime chaque clé, son type, son défaut et son aide.
+- **Where**: next to `serveur.py` (or the file given by `--config`). Never in `donnees/`: Prévo neither
+  backs it up nor exports it. Back it up yourself, and protect it if it contains `ia_cle`.
+- **Who writes it**: the wizard, at “Finish”; then Settings › Access and installation (from the server PC),
+  key by key. Unknown keys and `_aide` are kept as they are. You can also edit it by hand.
+- **Format**: JSON in UTF-8. Keys that start with `_` are comments (`_aide`).
+- **Priority**: the defaults, then the file, then the command line (§5), which wins.
+- **When**: the file is read at start-up only. After a change, restart Prévo.
+- **Errors**: an unknown key is ignored and reported on the console; an invalid value stops the start-up
+  (code 2), with the name of the key.
+- **Up-to-date list**: `serveur.py --aide` prints each key, its type, its default and its help.
 
-**Le premier compte.** Avec `"comptes": true` écrit à la main et aucun compte responsable encore créé, Prévo
-n'écoute que sur ce PC, n'ouvre aucune session et garde l'assistant joignable **depuis ce PC seulement** : la
-console donne son adresse (`http://localhost:8080/#/installation`), et le navigateur du PC serveur l'ouvre de
-lui-même. Créez-y le compte (étape « Votre compte ») ; dès qu'il existe, l'assistant n'est plus joignable que par
-une session du responsable (Paramètres › Accès et installation).
+**The first account.** With `"comptes": true` written by hand and no manager account created yet, Prévo
+listens only on this PC, opens no session and keeps the wizard reachable **from this PC only**: the
+console gives its address (`http://localhost:8080/#/installation`), and the server PC's browser opens it
+by itself. Create the account there (“Your account” step); as soon as it exists, the wizard can be reached only through
+a manager's session (Settings › Access and installation).
 
-### 4.2 Toutes les clés
+### 4.2 All the keys
 
-Recopie fidèle de `serveur.py --aide` (le défaut est écrit comme dans le fichier JSON) :
+A faithful copy of `serveur.py --aide` (the default is written as in the JSON file):
 
 <!-- cles-configuration:debut -->
 | Clé | Type | Défaut | Effet |
 | --- | --- | --- | --- |
-| `portee` | un parmi ce-pc, atelier, dehors | `"ce-pc"` | D'où Prévo peut être ouvert : ce PC seulement, le Wi-Fi de l'atelier, ou aussi hors de l'atelier. Au-delà de ce PC, mot de passe et https sont obligatoires. |
-| `ecoute` | un parmi 127.0.0.1, 0.0.0.0 | `"127.0.0.1"` | Adresse d'écoute : 127.0.0.1 (ce PC seulement) ou 0.0.0.0 (le réseau). |
-| `port_http` | entier | `8080` | Port de l'application sur ce PC et de la porte d'entrée sur le réseau. Changer de port rend les étiquettes imprimées caduques. |
-| `port_https` | entier | `8443` | Port de l'application en https sur le réseau. |
-| `noms` | liste | `[]` | Noms par lesquels on appelle ce PC, en plus de son adresse et de son nom Windows (nom Tailscale, nom du réseau de l'entreprise). Un nom inconnu est refusé, par sécurité. |
-| `certificat` | texte | `""` | Certificat https du serveur (fichier PEM), avec sa clé. |
-| `cle` | texte | `""` | Clé privée du certificat (fichier PEM). |
-| `certificat_auto` | booleen | `true` | Certificat fabriqué par Prévo pour l'atelier, à faire reconnaître une fois par appareil. |
-| `mandataire` | booleen | `false` | Prévo est derrière un mandataire (tailscale serve, Caddy, nginx, IIS) qui porte le https : les en-têtes X-Forwarded-Proto et X-Forwarded-Host venus de ce PC sont crus. |
-| `comptes` | booleen | `false` | Connexion obligatoire : chaque personne a son compte, ou son appareil enrôlé pour les demandeurs. |
-| `demandeurs_avec_compte` | booleen | `false` | Non : un demandeur donne son nom sur un appareil enrôlé par QR. Oui : chaque demandeur a un mot de passe. |
-| `session_heures` | entier | `12` | Au bout de ce temps sans activité, il faut se reconnecter. |
-| `session_longue_jours` | entier | `30` | Durée de « rester connecté sur cet appareil ». |
-| `invitation_heures` | entier | `24` | Durée de validité d'une invitation d'appareils (1 à 168 heures). |
-| `demarrage` | un parmi aucun, systeme, session | `"aucun"` | Prévo démarre avec le PC (systeme), à l'ouverture de session (session), ou à la main (aucun). |
-| `veille_desactivee` | booleen | `false` | Le PC ne se met plus en veille quand il est sur secteur. |
-| `copie_sauvegardes` | texte | `""` | Dossier où la sauvegarde du jour est copiée chaque nuit (clé USB, NAS, dossier synchronisé) ; vide : aucune copie. |
-| `quota_documents_mo` | entier | `4096` | Place maximale des documents joints, en mégaoctets. |
-| `ia_fournisseur` | un parmi ollama, openai | `"ollama"` | Type du service d'IA : ollama (Ollama) ou openai (toute API compatible OpenAI : LM Studio, Mistral…). |
-| `ia_url` | texte | `"http://localhost:11434"` | Adresse du service d'IA que tous les postes utilisent. Réglée ici seulement, jamais sur un téléphone. |
-| `ia_cle` | texte | `""` | Clé du service d'IA, gardée sur ce PC, jamais envoyée aux navigateurs. La variable d'environnement PREVO_IA_CLE passe avant ; jamais en ligne de commande. |
-| `ia_en_ligne` | booleen | `false` | Autoriser un service d'IA en ligne : les textes envoyés partent chez ce fournisseur. |
+| `portee` | one of ce-pc, atelier, dehors | `"ce-pc"` | Where Prévo can be opened from: this PC only, the workshop Wi-Fi, or also outside the workshop. Beyond this PC, a password and https are mandatory. |
+| `ecoute` | one of 127.0.0.1, 0.0.0.0 | `"127.0.0.1"` | Listening address: 127.0.0.1 (this PC only) or 0.0.0.0 (the network). |
+| `port_http` | integer | `8080` | Port of the application on this PC and of the front door on the network. Changing the port makes printed labels obsolete. |
+| `port_https` | integer | `8443` | Port of the application over https on the network. |
+| `noms` | list | `[]` | Names by which this PC is called, in addition to its address and its Windows name (Tailscale name, company network name). An unknown name is refused, for security. |
+| `certificat` | text | `""` | The server's https certificate (PEM file), with its key. |
+| `cle` | text | `""` | The certificate's private key (PEM file). |
+| `certificat_auto` | boolean | `true` | Certificate made by Prévo for the workshop, to be accepted once per device. |
+| `mandataire` | boolean | `false` | Prévo is behind a reverse proxy (tailscale serve, Caddy, nginx, IIS) that carries the https: the X-Forwarded-Proto and X-Forwarded-Host headers coming from this PC are believed. |
+| `comptes` | boolean | `false` | Sign-in mandatory: each person has an account, or an enrolled device for requesters. |
+| `demandeurs_avec_compte` | boolean | `false` | No: a requester gives their name on a device enrolled by QR. Yes: each requester has a password. |
+| `session_heures` | integer | `12` | After this long without activity, the person must sign in again. |
+| `session_longue_jours` | integer | `30` | Length of “stay signed in on this device”. |
+| `invitation_heures` | integer | `24` | Validity of a device invitation (1 to 168 hours). |
+| `demarrage` | one of aucun, systeme, session | `"aucun"` | Prévo starts with the PC (systeme), at session sign-in (session), or by hand (aucun). |
+| `veille_desactivee` | boolean | `false` | The PC no longer goes to sleep when on mains power. |
+| `copie_sauvegardes` | text | `""` | Folder where the day's backup is copied every night (USB stick, NAS, synchronised folder); empty: no copy. |
+| `quota_documents_mo` | integer | `4096` | Maximum space for attached documents, in megabytes. |
+| `ia_fournisseur` | one of ollama, openai | `"ollama"` | Type of AI service: ollama (Ollama) or openai (any OpenAI-compatible API: LM Studio, Mistral…). |
+| `ia_url` | text | `"http://localhost:11434"` | Address of the AI service that all workstations use. Set here only, never on a phone. |
+| `ia_cle` | text | `""` | Key of the AI service, kept on this PC, never sent to browsers. The PREVO_IA_CLE environment variable takes precedence; never on the command line. |
+| `ia_en_ligne` | boolean | `false` | Allow an online AI service: the texts sent go to that provider. |
 <!-- cles-configuration:fin -->
 
-Précisions :
+`serveur.py --aide` prints this list in French.
 
-- **Ce qui compte au démarrage** : `ecoute`, `comptes`, `certificat` et `cle` (ou `certificat_auto`) et
-  `mandataire`. `portee` résume ces choix pour l'assistant et Paramètres. `demarrage` et `veille_desactivee` notent
-  ce qui a été installé : changer ces deux clés à la main n'installe ni ne retire rien (§8).
-- **Bornes des entiers** : `port_http` : 1 à 65535 ; `port_https` : 1 à 65535 ; `session_heures` : 1 à 720 ;
-  `session_longue_jours` : 1 à 365 ; `invitation_heures` : 1 à 168 ; `quota_documents_mo` : 1 à 1048576.
-- **Ports** : si un port est pris, Prévo prend le suivant libre (jusqu'à 20 plus loin) et le dit sur la console.
-  Derrière un mandataire ou un pare-feu réglé sur un port précis, choisissez un port libre.
-- **`noms`** : en minuscules ; l'en-tête `Host` (et `X-Forwarded-Host` derrière un mandataire) doit être une
-  adresse IP, `localhost`, le nom du PC ou l'un de ces noms. Sinon, refus (403).
-- **`copie_sauvegardes`** : un chemin relatif part du dossier de Prévo. Le dossier doit exister et ne pas être
-  rangé dans `donnees/`.
-- **`quota_documents_mo`** : 4 096 Mo (4 Go) par défaut, autant que le plus gros ZIP que Prévo importe : un export
-  de Prévo, même du mode dossier (qui n'a pas de plafond), se réimporte en mode serveur. Au-delà, l'envoi d'un
-  document (ou l'import d'un ZIP) est refusé, « Dossier des documents plein », et rien n'est écrit. Pour l'agrandir :
-  Paramètres › Accès et installation, sur le PC serveur (section « Comptes des demandeurs, durées de session,
-  documents », puis « Appliquer et relancer »), ou cette clé.
-- **IA** : la clé du service ne passe jamais par l'écran ni par la ligne de commande (elle serait visible dans la
-  liste des processus). Mettez-la dans `ia_cle` (fichier protégé) ou dans la variable d'environnement
-  `PREVO_IA_CLE` du compte qui lance Prévo.
+Notes:
 
-### 4.3 Exemples
+- **What counts at start-up**: `ecoute`, `comptes`, `certificat` and `cle` (or `certificat_auto`) and
+  `mandataire`. `portee` summarises these choices for the wizard and Settings. `demarrage` and `veille_desactivee` record
+  what has been installed: changing these two keys by hand neither installs nor removes anything (§8).
+- **Integer ranges**: `port_http`: 1 to 65535; `port_https`: 1 to 65535; `session_heures`: 1 to 720;
+  `session_longue_jours`: 1 to 365; `invitation_heures`: 1 to 168; `quota_documents_mo`: 1 to 1048576.
+- **Ports**: if a port is taken, Prévo takes the next free one (up to 20 further on) and says so on the console.
+  Behind a reverse proxy or a firewall set for a specific port, choose a free port.
+- **`noms`**: in lower case; the `Host` header (and `X-Forwarded-Host` behind a reverse proxy) must be an
+  IP address, `localhost`, the PC's name or one of these names. Otherwise, refusal (403).
+- **`copie_sauvegardes`**: a relative path starts from Prévo's folder. The folder must exist and must not be
+  inside `donnees/`.
+- **`quota_documents_mo`**: 4,096 MB (4 GB) by default, as much as the largest ZIP that Prévo imports: an export
+  from Prévo, even from folder mode (which has no ceiling), can be re-imported in server mode. Beyond that, uploading a
+  document (or importing a ZIP) is refused, “Documents folder full”, and nothing is written. To increase it:
+  Settings › Access and installation, on the server PC (section “Requester accounts, session lengths,
+  documents”, then “Apply and restart”), or this key.
+- **AI**: the service key never goes through the screen or the command line (it would be visible in the
+  process list). Put it in `ia_cle` (protected file) or in the `PREVO_IA_CLE` environment variable
+  of the account that runs Prévo.
 
-Atelier (ce que l'assistant écrit, réduit aux clés qui changent) :
+### 4.3 Examples
+
+Workshop (what the wizard writes, reduced to the keys that change):
 
 ```json
 {
@@ -202,7 +205,7 @@ Atelier (ce que l'assistant écrit, réduit aux clés qui changent) :
 }
 ```
 
-Intranet derrière un mandataire sur le même serveur (§7) :
+Intranet behind a reverse proxy on the same server (§7):
 
 ```json
 {
@@ -218,8 +221,8 @@ Intranet derrière un mandataire sur le même serveur (§7) :
 }
 ```
 
-Intranet sans mandataire, avec le certificat de l'entreprise (la porte reste en http sur `port_http` et conduit les
-navigateurs à l'application en https sur `port_https`) :
+Intranet without a reverse proxy, with the company certificate (the door stays on http on `port_http` and leads
+browsers to the application over https on `port_https`):
 
 ```json
 {
@@ -234,82 +237,82 @@ navigateurs à l'application en https sur `port_https`) :
 }
 ```
 
-## 5. Ligne de commande
+## 5. Command line
 
-`serveur.py` (Windows : `python\python.exe serveur.py` ; ailleurs : `python3 serveur.py`). Les lanceurs
-`Lancer_GMAO.bat` et `lancer.sh` transmettent ces options.
+`serveur.py` (Windows: `python\python.exe serveur.py`; elsewhere: `python3 serveur.py`). The launchers
+`Lancer_GMAO.bat` and `lancer.sh` pass these options on.
 
-| Option | Effet |
+| Option | Effect |
 | --- | --- |
-| `--port PORT` | Remplace `port_http`. |
-| `--ecoute 127.0.0.1` ou `--ecoute 0.0.0.0` | Remplace `ecoute` (les règles de §2 restent vérifiées). |
-| `--hote NOM` | Ajoute un nom à `noms` (répétable). |
-| `--certificat FICHIER --cle FICHIER` | Remplacent `certificat` et `cle` (fichiers PEM, toujours ensemble). |
-| `--ia-url URL`, `--ia-fournisseur ollama\|openai`, `--ia-en-ligne` | Remplacent `ia_url`, `ia_fournisseur`, `ia_en_ligne`. Jamais la clé. |
-| `--config FICHIER` | Autre fichier de configuration que `prevo.config.json` à côté de `serveur.py`. |
-| `--donnees DOSSIER` | Autre dossier de données que `donnees/` à côté de `serveur.py`. |
-| `--sans-navigateur` | N'ouvre pas le navigateur au démarrage (service, serveur sans écran). |
-| `--journal` | Écrit aussi la console dans `donnees/journal-serveur.log` (automatique sans console). |
-| `--aide` | Imprime chaque clé de la configuration avec son aide, puis s'arrête. |
-| `--reinitialiser IDENTIFIANT` | Donne un mot de passe provisoire à un compte (§9), puis s'arrête. |
-| `--servir-tests` | Pour les tests automatiques seulement ; inutile en usage normal. |
+| `--port PORT` | Replaces `port_http`. |
+| `--ecoute 127.0.0.1` or `--ecoute 0.0.0.0` | Replaces `ecoute` (the rules of §2 are still checked). |
+| `--hote NOM` | Adds a name to `noms` (repeatable). |
+| `--certificat FICHIER --cle FICHIER` | Replace `certificat` and `cle` (PEM files, always together). |
+| `--ia-url URL`, `--ia-fournisseur ollama\|openai`, `--ia-en-ligne` | Replace `ia_url`, `ia_fournisseur`, `ia_en_ligne`. Never the key. |
+| `--config FICHIER` | A configuration file other than `prevo.config.json` next to `serveur.py`. |
+| `--donnees DOSSIER` | A data folder other than `donnees/` next to `serveur.py`. |
+| `--sans-navigateur` | Does not open the browser at start-up (service, server with no screen). |
+| `--journal` | Also writes the console to `donnees/journal-serveur.log` (automatic with no console). |
+| `--aide` | Prints each configuration key with its help, then stops. |
+| `--reinitialiser IDENTIFIANT` | Gives an account a temporary password (§9), then stops. |
+| `--servir-tests` | For automated tests only; not needed in normal use. |
 
-La console et `journal-serveur.log` sont en français ou en anglais selon la langue de Prévo (Paramètres ›
-Entreprise, « Langue de Prévo ») ; avant ce réglage, selon la langue de Windows (ou du système). Un changement vaut au
-redémarrage suivant.
+The console and `journal-serveur.log` are in French or English depending on the Prévo language (Settings ›
+Company, “Prévo language”); before that setting is made, depending on the language of Windows (or of the system). A change applies at
+the next restart.
 
-Le démarrage automatique (§8) lance `serveur.py --sans-navigateur` sans autre option : gardez les données dans
-`donnees/` à côté de `serveur.py`, ou ajoutez vous-même l'option à la tâche ou au service.
+Automatic start-up (§8) runs `serveur.py --sans-navigateur` with no other option: keep the data in
+`donnees/` next to `serveur.py`, or add the option to the task or service yourself.
 
-## 6. Porte d'entrée et certificat de l'atelier
+## 6. Front door and workshop certificate
 
-Hors de la portée « ce PC », Prévo ouvre deux ports :
+Outside the “this PC” scope, Prévo opens two ports:
 
-- **la porte**, en http sur `port_http` (8080) : c'est la seule adresse que Prévo donne (QR de l'accueil,
-  étiquettes, fiche d'accès). Elle ne sert que sa page, ses illustrations et `/acces/ca.crt` ; elle ne lit jamais
-  de donnée. Un navigateur qui fait déjà confiance au PC est conduit aussitôt en https, sur la même page ; sinon, la
-  page « Faites confiance au PC atelier » guide l'installation du certificat (Android, iPhone) ;
-- **l'application**, en https sur `port_https` (8443). Cette adresse n'est jamais à taper.
+- **the door**, over http on `port_http` (8080): this is the only address Prévo gives out (home screen QR,
+  labels, access sheet). It serves only its page, its illustrations and `/acces/ca.crt`; it never reads
+  any data. A browser that already trusts the PC is taken straight to https, on the same page; otherwise, the
+  “Trust the workshop PC” page guides the installation of the certificate (Android, iPhone);
+- **the application**, over https on `port_https` (8443). This address is never to be typed.
 
-Le certificat se règle de trois façons :
+The certificate can be set up in three ways:
 
-1. **Fabriqué par Prévo** (`certificat_auto`, le défaut) : mkcert, piloté par Prévo, crée une autorité propre à
-   l'atelier dans `donnees/acces/autorite/` (`rootCA.pem`, que la porte sert sous le nom `prevo-ca.crt`) et le
-   certificat du serveur dans `donnees/acces/certificat.pem` et `cle.pem`, pour l'adresse IP, le nom du PC,
-   `<nom>.local`, `localhost`, `127.0.0.1` et les `noms`. Il est refait au démarrage si l'adresse ou les noms
-   changent ; les téléphones n'ont rien à refaire. Chaque appareil fait confiance à l'autorité une fois. Ne
-   diffusez jamais `rootCA-key.pem` : avec lui, on fabrique des certificats que vos appareils croiraient. Prévo ne
-   le lit ni ne le sert.
-2. **Vos fichiers PEM** (`certificat` et `cle`, ou `--certificat` et `--cle`) : un certificat de l'entreprise,
-   reconnu par vos appareils. Rien à faire sur les téléphones.
-3. **Un mandataire** (§7) porte le https ; Prévo reste en http sur `127.0.0.1`.
+1. **Made by Prévo** (`certificat_auto`, the default): mkcert, driven by Prévo, creates an authority specific to
+   the workshop in `donnees/acces/autorite/` (`rootCA.pem`, which the door serves under the name `prevo-ca.crt`) and the
+   server certificate in `donnees/acces/certificat.pem` and `cle.pem`, for the IP address, the PC's name,
+   `<nom>.local`, `localhost`, `127.0.0.1` and the `noms`. It is remade at start-up if the address or the names
+   change; phones have nothing to redo. Each device trusts the authority once. Never
+   distribute `rootCA-key.pem`: with it, anyone can make certificates that your devices would believe. Prévo neither
+   reads nor serves it.
+2. **Your PEM files** (`certificat` and `cle`, or `--certificat` and `--cle`): a company certificate,
+   recognised by your devices. Nothing to do on the phones.
+3. **A reverse proxy** (§7) carries the https; Prévo stays on http on `127.0.0.1`.
 
-Sans certificat valable hors de « ce PC », Prévo refuse de démarrer (code 2).
+Without a valid certificate outside “this PC”, Prévo refuses to start (code 2).
 
-Prévo pose ses propres en-têtes de sécurité (`Content-Security-Policy`, `X-Frame-Options`, `Referrer-Policy`,
-`Permissions-Policy`) et `Strict-Transport-Security` (180 jours) pour un nom de `noms` servi en https. Un
-mandataire ne doit pas les remplacer.
+Prévo sets its own security headers (`Content-Security-Policy`, `X-Frame-Options`, `Referrer-Policy`,
+`Permissions-Policy`) and `Strict-Transport-Security` (180 days) for a name in `noms` served over https. A
+reverse proxy must not replace them.
 
-## 7. Derrière un mandataire inverse
+## 7. Behind a reverse proxy
 
-### 7.1 Les règles
+### 7.1 The rules
 
-- Le mandataire tourne **sur le même serveur** que Prévo et le joint en http sur `127.0.0.1:<port_http>`. Prévo
-  ne croit les en-têtes `X-Forwarded-*` que d'une connexion venue de `127.0.0.1` ou `::1`, et seulement avec
-  `"mandataire": true`. Un mandataire installé sur une autre machine n'est pas reconnu : installez un relais local
-  (Caddy, nginx) sur le serveur de Prévo.
-- Le mandataire pose **`X-Forwarded-Proto`** (`https`) et **`X-Forwarded-Host`** (le nom public). Sans eux, la
-  requête est traitée comme venue de ce PC : cookie sans `Secure`, adresses et QR faux. `X-Forwarded-For` donne
-  l'adresse de la personne au journal des connexions (Prévo prend la dernière adresse de la liste).
-- Le nom public est dans **`noms`**, sinon Prévo répond 403 « Nom d'hôte d'origine refusé (X-Forwarded-Host) ».
-- **`"comptes": true`** est obligatoire avec `"mandataire": true`.
-- Laissez passer des requêtes de **50 Mo** (enregistrement d'une table entière, par exemple `ordres_travail.csv` d'une
-  grosse base ; un document ou une photo : 10 Mo au plus) et des réponses qui tardent jusqu'à
-  **120 secondes** (relais de l'IA). Prévo n'utilise pas de WebSocket.
-- Exposer Prévo sur Internet ne se fait que derrière Tailscale, le VPN de l'entreprise ou un mandataire en https.
-  Prévo n'a pas de double facteur : mettez de préférence votre propre contrôle d'accès devant.
+- The proxy runs **on the same server** as Prévo and reaches it over http on `127.0.0.1:<port_http>`. Prévo
+  believes the `X-Forwarded-*` headers only from a connection coming from `127.0.0.1` or `::1`, and only with
+  `"mandataire": true`. A proxy installed on another machine is not recognised: install a local relay
+  (Caddy, nginx) on Prévo's server.
+- The proxy sets **`X-Forwarded-Proto`** (`https`) and **`X-Forwarded-Host`** (the public name). Without them, the
+  request is treated as coming from this PC: cookie without `Secure`, wrong addresses and QR codes. `X-Forwarded-For` gives
+  the person's address to the sign-in log (Prévo takes the last address in the list).
+- The public name is in **`noms`**, otherwise Prévo answers 403 “Origin host name refused (X-Forwarded-Host)”.
+- **`"comptes": true`** is mandatory with `"mandataire": true`.
+- Let through requests of **50 MB** (saving a whole table, for example `ordres_travail.csv` of a
+  large database; a document or a photo: 10 MB at most) and responses that take up to
+  **120 seconds** (AI relay). Prévo uses no WebSocket.
+- Prévo may be exposed on the Internet only behind Tailscale, the company VPN or a proxy over https.
+  Prévo has no two-factor authentication: preferably put your own access control in front.
 
-Configuration de Prévo pour tous les exemples ci-dessous (avec le nom de votre choix) :
+Prévo configuration for all the examples below (with the name of your choice):
 
 ```json
 {
@@ -322,34 +325,34 @@ Configuration de Prévo pour tous les exemples ci-dessous (avec le nom de votre 
 }
 ```
 
-### 7.2 `tailscale serve` (hors de l'atelier)
+### 7.2 `tailscale serve` (outside the workshop)
 
-L'assistant le règle lui-même (étape « Hors de l'atelier »). À la main, sur le serveur connecté à votre réseau
-Tailscale :
+The wizard sets it up itself (“Away from the workshop” step). By hand, on the server connected to your
+Tailscale network:
 
 ```sh
 tailscale serve --bg --https=443 http://127.0.0.1:8080
 tailscale serve status
 ```
 
-Dans `prevo.config.json` : le nom Tailscale du PC dans `noms` (par exemple `pc-atelier.tail1234.ts.net`) et
-`"mandataire": true`. `tailscale serve` porte le https avec un certificat reconnu partout, pose `X-Forwarded-Proto`,
-`X-Forwarded-Host`, `X-Forwarded-For` et `Tailscale-User-Login` : le journal des connexions note le compte Tailscale
-de chaque session. Sous Windows, `tailscale set --unattended=true` le fait tourner sans session ouverte.
-Désactivez l'expiration de clé du serveur dans la console Tailscale.
+In `prevo.config.json`: the PC's Tailscale name in `noms` (for example `pc-atelier.tail1234.ts.net`) and
+`"mandataire": true`. `tailscale serve` carries the https with a certificate recognised everywhere, and sets `X-Forwarded-Proto`,
+`X-Forwarded-Host`, `X-Forwarded-For` and `Tailscale-User-Login`: the sign-in log records the Tailscale account
+of each session. On Windows, `tailscale set --unattended=true` makes it run with no session open.
+Turn off key expiry for the server in the Tailscale console.
 
-En portée « aussi hors de l'atelier », Prévo écoute en plus le réseau de l'atelier avec son certificat
-(`"ecoute": "0.0.0.0"`, `"certificat_auto": true`) : les deux accès coexistent.
+In the scope “also outside the workshop”, Prévo also listens on the workshop network with its own certificate
+(`"ecoute": "0.0.0.0"`, `"certificat_auto": true`): both accesses coexist.
 
 ### 7.3 Caddy
 
 ```caddyfile
 prevo.entreprise.example {
-	# Certificat de l'entreprise ; sans cette ligne, Caddy en demande un à Let's Encrypt
-	# (le nom doit alors être joignable depuis Internet).
+	# Company certificate; without this line, Caddy asks Let's Encrypt for one
+	# (the name must then be reachable from the Internet).
 	tls /etc/prevo/certificat.pem /etc/prevo/cle.pem
 
-	# Caddy pose lui-même X-Forwarded-Proto, X-Forwarded-Host et X-Forwarded-For.
+	# Caddy itself sets X-Forwarded-Proto, X-Forwarded-Host and X-Forwarded-For.
 	reverse_proxy 127.0.0.1:8080
 }
 ```
@@ -364,8 +367,8 @@ server {
     ssl_certificate     /etc/prevo/certificat.pem;
     ssl_certificate_key /etc/prevo/cle.pem;
 
-    client_max_body_size 52m;      # Prévo accepte 50 Mo pour une table, 10 Mo pour un document
-    proxy_read_timeout   180s;     # le relais de l'IA peut répondre en 120 s
+    client_max_body_size 52m;      # Prévo accepts 50 MB for a table, 10 MB for a document
+    proxy_read_timeout   180s;     # the AI relay can take 120 s to answer
 
     location / {
         proxy_pass http://127.0.0.1:8080;
@@ -383,15 +386,15 @@ server {
 }
 ```
 
-### 7.5 IIS (URL Rewrite et ARR)
+### 7.5 IIS (URL Rewrite and ARR)
 
-1. Installez les modules **URL Rewrite** et **Application Request Routing** (ARR) de Microsoft.
-2. Gestionnaire IIS, nœud du serveur, « Application Request Routing Cache », « Server Proxy Settings » : cochez
-   « Enable proxy », mettez le délai (« Time-out ») à 180 secondes et décochez « Include TCP port from client IP »
-   (sinon `X-Forwarded-For` porte un port et Prévo ne lit pas l'adresse).
-3. URL Rewrite, « View Server Variables » : ajoutez `HTTP_X_FORWARDED_PROTO` et `HTTP_X_FORWARDED_HOST`.
-4. Créez un site lié en https à `prevo.entreprise.example` avec le certificat de l'entreprise, et mettez dans son
-   dossier ce `web.config` :
+1. Install Microsoft's **URL Rewrite** and **Application Request Routing** (ARR) modules.
+2. IIS Manager, server node, “Application Request Routing Cache”, “Server Proxy Settings”: tick
+   “Enable proxy”, set the time-out (“Time-out”) to 180 seconds and untick “Include TCP port from client IP”
+   (otherwise `X-Forwarded-For` carries a port and Prévo cannot read the address).
+3. URL Rewrite, “View Server Variables”: add `HTTP_X_FORWARDED_PROTO` and `HTTP_X_FORWARDED_HOST`.
+4. Create a site bound over https to `prevo.entreprise.example` with the company certificate, and put this
+   `web.config` in its folder:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -411,7 +414,7 @@ server {
     </rewrite>
     <security>
       <requestFiltering>
-        <!-- 50 Mo par table (IIS refuse au-delà d'environ 30 Mo par défaut) -->
+        <!-- 50 MB per table (by default IIS refuses anything above about 30 MB) -->
         <requestLimits maxAllowedContentLength="54525952" />
       </requestFiltering>
     </security>
@@ -421,16 +424,16 @@ server {
 
 ### 7.6 Cloudflare Tunnel
 
-Cloudflare Tunnel rend Prévo joignable depuis Internet sans ouvrir de port : réservez-le à une entreprise qui
-l'utilise déjà, avec Cloudflare Access devant Prévo. Cloudflare déchiffre le trafic : c'est un sous-traitant, à
-inscrire au registre des traitements. Cloudflare coupe une réponse qui tarde plus de 100 secondes : une réponse
-d'IA très lente peut échouer.
+Cloudflare Tunnel makes Prévo reachable from the Internet without opening a port: keep it for a company that
+already uses it, with Cloudflare Access in front of Prévo. Cloudflare decrypts the traffic: it is a processor, to be
+entered in the register of processing activities. Cloudflare cuts a response that takes longer than 100 seconds: a very slow AI
+response may fail.
 
-Pour que Prévo reçoive sûrement `X-Forwarded-Proto` et `X-Forwarded-Host`, `cloudflared` passe par un petit relais
-Caddy sur le même serveur :
+So that Prévo reliably receives `X-Forwarded-Proto` and `X-Forwarded-Host`, `cloudflared` goes through a small
+Caddy relay on the same server:
 
 ```yaml
-# Configuration de cloudflared (config.yml)
+# cloudflared configuration (config.yml)
 tunnel: ID-DU-TUNNEL
 credentials-file: /etc/cloudflared/ID-DU-TUNNEL.json
 ingress:
@@ -440,7 +443,7 @@ ingress:
 ```
 
 ```caddyfile
-# Relais local : reçoit cloudflared sur 127.0.0.1:8081, pose les en-têtes, transmet à Prévo
+# Local relay: receives cloudflared on 127.0.0.1:8081, sets the headers, passes on to Prévo
 http://:8081 {
 	bind 127.0.0.1
 	reverse_proxy 127.0.0.1:8080 {
@@ -451,46 +454,46 @@ http://:8081 {
 }
 ```
 
-### 7.7 Vérifier
+### 7.7 Checking
 
-- `curl https://prevo.entreprise.example/api/ping` répond `{"application": "Prévo", …}`. Une réponse 403 « Nom
-  d'hôte d'origine refusé » : le nom manque dans `noms`.
-- Connectez-vous : sur l'accueil du responsable, la carte « Connecter un téléphone » donne
-  `https://prevo.entreprise.example/` ; dans les outils du navigateur, le cookie `id` porte `Secure`.
-- Équipe › Accès › Journal des connexions : la colonne « adresse » montre l'adresse de la personne, pas
+- `curl https://prevo.entreprise.example/api/ping` answers `{"application": "Prévo", …}`. A 403 answer “Origin host
+  name refused”: the name is missing from `noms`.
+- Sign in: on the manager's home screen, the “Connect a phone” card gives
+  `https://prevo.entreprise.example/`; in the browser's tools, the `id` cookie carries `Secure`.
+- Team › Access › Sign-in log: the “adresse” column shows the person's address, not
   `127.0.0.1`.
 
-## 8. Démarrer avec la machine
+## 8. Starting with the machine
 
 ### 8.1 Windows
 
-L'assistant (étape « Démarrage ») écrit `Installer_demarrage.ps1` dans le dossier de Prévo, l'affiche, puis le
-lance avec une seule invite d'administrateur. Le script :
+The wizard (“Startup” step) writes `Installer_demarrage.ps1` into Prévo's folder, displays it, then
+runs it with a single administrator prompt. The script:
 
-- crée la tâche planifiée **`Prevo`** : au démarrage du PC, 30 secondes après, sous le compte Système, sans
-  fenêtre (`python\pythonw.exe serveur.py --sans-navigateur`) ;
-- ajoute la règle de pare-feu entrante **`Prevo`** : profil privé, sous-réseau local, `pythonw.exe`, ports
-  `port_http` et `port_https` ;
-- fait reconnaître l'autorité de l'atelier par Windows (`mkcert -install`) quand Prévo fabrique le certificat ;
-- si `veille_desactivee` : pas de veille ni de veille prolongée sur secteur (écran éteint après 15 minutes), et
-  garde les réglages d'avant dans `donnees\acces\veille-avant.json`.
+- creates the scheduled task **`Prevo`**: at PC start-up, 30 seconds later, under the System account, with no
+  window (`python\pythonw.exe serveur.py --sans-navigateur`);
+- adds the inbound firewall rule **`Prevo`**: private profile, local subnet, `pythonw.exe`, ports
+  `port_http` and `port_https`;
+- has Windows recognise the workshop authority (`mkcert -install`) when Prévo makes the certificate;
+- if `veille_desactivee`: no sleep or hibernation on mains power (screen off after 15 minutes), and
+  keeps the previous settings in `donnees\acces\veille-avant.json`.
 
-Si l'invite d'administrateur est refusée, rien n'est installé ; `Demarrage_session.ps1` propose un repli sans
-droits : une tâche à l'ouverture de session de l'utilisateur (sinon `Prevo.cmd` dans son dossier Démarrage).
+If the administrator prompt is refused, nothing is installed; `Demarrage_session.ps1` offers a fallback that needs no
+rights: a task at the user's sign-in (otherwise `Prevo.cmd` in their Startup folder).
 
-**Retirer** : Paramètres › Accès et installation (démarrage « à la main »), ou `Retirer_demarrage.ps1` en
-administrateur (clic droit, « Exécuter avec PowerShell ») : la tâche et la règle sont retirées, la veille remise
-comme avant.
+**Removing**: Settings › Access and installation (start-up “Manually”), or `Retirer_demarrage.ps1` as
+administrator (right-click, “Run with PowerShell”): the task and the rule are removed, and sleep is put back
+as before.
 
-Commandes utiles (invite d'administrateur) : `schtasks /run /tn Prevo`, `schtasks /end /tn Prevo`,
+Useful commands (administrator prompt): `schtasks /run /tn Prevo`, `schtasks /end /tn Prevo`,
 `schtasks /query /tn Prevo /v`.
 
 ### 8.2 Linux (systemd)
 
-L'assistant écrit `prevo.service` à côté de `serveur.py` et donne les commandes. Exemple pour `/opt/prevo` :
+The wizard writes `prevo.service` next to `serveur.py` and gives the commands. Example for `/opt/prevo`:
 
 ```ini
-# /etc/systemd/system/prevo.service : écrit par Prévo (ARCHITECTURE.md §22.9).
+# /etc/systemd/system/prevo.service: written by Prévo (ARCHITECTURE.md §22.9).
 [Unit]
 Description=Prévo (GMAO)
 After=network-online.target
@@ -520,159 +523,159 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now prevo
 ```
 
-Sous systemd, la console va dans le journal du système (`journalctl -u prevo`). Ajoutez `--journal` à
-`ExecStart` pour avoir aussi `donnees/journal-serveur.log`, que Paramètres › Accès et installation affiche.
-Ouvrez au réseau local `port_http` et `port_https` seulement, par exemple
-`sudo ufw allow from 192.168.1.0/24 to any port 8080,8443 proto tcp`. Retirer :
+Under systemd, the console goes to the system journal (`journalctl -u prevo`). Add `--journal` to
+`ExecStart` to also get `donnees/journal-serveur.log`, which Settings › Access and installation displays.
+Open only `port_http` and `port_https` to the local network, for example
+`sudo ufw allow from 192.168.1.0/24 to any port 8080,8443 proto tcp`. To remove:
 `sudo systemctl disable --now prevo`.
 
 ### 8.3 macOS
 
-L'assistant écrit `pro.prevo.serveur.plist` (agent de lancement, `RunAtLoad`, `KeepAlive`) et la commande
-`launchctl load -w <chemin du fichier>` ; retrait : `launchctl unload -w <chemin du fichier>`.
+The wizard writes `pro.prevo.serveur.plist` (launch agent, `RunAtLoad`, `KeepAlive`) and the command
+`launchctl load -w <path of the file>`; to remove: `launchctl unload -w <path of the file>`.
 
-### 8.4 Sans console
+### 8.4 With no console
 
-Lancé sans console (tâche planifiée, `pythonw.exe`), Prévo écrit ce qu'il fait dans `donnees/journal-serveur.log`
-(5 fichiers de 1 Mo au plus). Paramètres › Accès et installation en montre les 20 dernières lignes.
+Started with no console (scheduled task, `pythonw.exe`), Prévo writes what it does to `donnees/journal-serveur.log`
+(5 files of 1 MB at most). Settings › Access and installation shows the last 20 lines.
 
-## 9. Comptes, rôles et appareils
+## 9. Accounts, roles and devices
 
-- **Comptes** : identifiant de la forme `prenom.nom`. Le premier responsable est créé par l'assistant ; les autres
-  comptes par le responsable, dans Équipe › Accès (créer, modifier, réinitialiser, désactiver, activer). Il reste
-  toujours au moins un responsable actif.
-  L'identifiant s'écrit en lettres simples (« Ayşe Işık » → `ayse.isik`) et se tape sans souci de casse ni de lettres
-  turques (« AYŞE.IŞIK » ouvre `ayse.isik`). Un deuxième compte au même prénom et au même nom est refusé, sauf si vous
-  cochez « C'est une autre personne ». Si un identifiant tapé correspond à plusieurs comptes (anciens comptes au nom
-  écrit de deux façons), Prévo refuse la connexion et demande l'identifiant exact.
-- **Langue de chaque compte** : la personne la choisit dans « Ce poste » (« pour mon compte » : elle la suit sur tous
-  les postes ; « pour ce poste » : ce navigateur seulement), le responsable dans Équipe › Accès ; vide, c'est la
-  langue de l'installation ; à la déconnexion, l'écran revient à la langue du poste ou de l'installation.
-- **Mots de passe** : 12 à 256 caractères, aucune règle de composition (une phrase de passe est conseillée).
-  Seule une empreinte salée est gardée (scrypt ; PBKDF2 si le Python n'a pas scrypt), dans
-  `donnees/acces/comptes.json`. Un mot de passe provisoire
-  s'affiche une seule fois et doit être changé à la première connexion.
-- **Échecs** : même message dans tous les cas ; attente croissante dès le 5e échec de suite, compte bloqué
-  15 minutes au 10e ; une adresse qui dépasse 20 échecs par heure est ralentie.
-- **Sessions** : 12 heures sans activité (`session_heures`) ; 30 jours avec « Rester connecté sur cet appareil »
-  (`session_longue_jours`). Cookie `HttpOnly`, `SameSite=Lax`, `Secure` en https. Un mot de passe changé ferme les
-  autres sessions du compte ; un mot de passe réinitialisé ou un compte désactivé les ferme toutes.
-- **Mot de passe oublié** : aucun courriel. Sur le PC serveur, `Reinitialiser_mot_de_passe.bat` demande
-  l'identifiant et affiche un mot de passe provisoire. Ailleurs : `python3 serveur.py --reinitialiser prenom.nom`,
-  lancé dans le dossier de Prévo par le compte qui fait tourner Prévo (Linux :
-  `sudo -u prevo python3 /opt/prevo/serveur.py --reinitialiser prenom.nom`). Inutile d'arrêter Prévo. Qui a la
-  main sur le serveur a la main sur Prévo.
-- **Désactiver** : Équipe › Accès, « Désactiver ». Le compte reste dans la liste (historique) et ne se connecte
-  plus ; ses sessions sont fermées aussitôt.
-- **Rôles** : demandeur, technicien, responsable, vérifiés par le serveur à chaque requête. Un demandeur ne lit ni
-  les coûts, ni les techniciens, ni les ordres de travail, et n'ajoute que des demandes ; un technicien ne voit ni
-  taux horaire ni prix. L'IA est réservée aux techniciens et au responsable. Table complète :
-  [ARCHITECTURE.md](ARCHITECTURE.md) §22.5.
-- **Appareils des demandeurs** : sans mot de passe, par invitation (Équipe › Accès › Appareils, QR valable 1 heure
-  à 7 jours, `invitation_heures`) ; le téléphone donne un nom et reste reconnu un an, avec les droits du demandeur ;
-  « Révoquer » le coupe dès sa requête suivante. Avec `"demandeurs_avec_compte": true`, l'enrôlement est désactivé
-  et chaque demandeur a un compte.
-- **Dossier `donnees/acces/`** : `comptes.json`, `sessions.json` (empreintes des jetons), `appareils.json`,
-  `journal-acces.csv`, le certificat et l'autorité de l'atelier. Écrit par le serveur seul : ne le modifiez pas à
-  la main, ne le servez pas, ne le joignez jamais à un signalement.
+- **Accounts**: identifier of the form `prenom.nom`. The first manager is created by the wizard; the other
+  accounts by the manager, in Team › Access (create, edit, reset, deactivate, activate). There is
+  always at least one active manager.
+  The identifier is written in plain letters (“Ayşe Işık” → `ayse.isik`) and is typed with no concern for case or Turkish
+  letters (“AYŞE.IŞIK” opens `ayse.isik`). A second account with the same first name and last name is refused, unless you
+  tick “This is a different person”. If a typed identifier matches several accounts (old accounts whose name
+  was written two ways), Prévo refuses the sign-in and asks for the exact identifier.
+- **Language of each account**: the person chooses it in “This workstation” (“For my account”: it follows them on all
+  workstations; “For this workstation only”: this browser only), the manager in Team › Access; empty, it is the
+  installation language; on sign-out, the screen goes back to the workstation's or the installation's language.
+- **Passwords**: 12 to 256 characters, no composition rule (a passphrase is recommended).
+  Only a salted hash is kept (scrypt; PBKDF2 if Python has no scrypt), in
+  `donnees/acces/comptes.json`. A temporary password
+  is shown once only and must be changed at first sign-in.
+- **Failures**: same message in every case; increasing delay from the 5th failure in a row, account locked
+  for 15 minutes at the 10th; an address that exceeds 20 failures per hour is slowed down.
+- **Sessions**: 12 hours without activity (`session_heures`); 30 days with “Stay signed in on this device”
+  (`session_longue_jours`). `HttpOnly` cookie, `SameSite=Lax`, `Secure` over https. A changed password closes the
+  account's other sessions; a reset password or a deactivated account closes them all.
+- **Forgotten password**: no email. On the server PC, `Reinitialiser_mot_de_passe.bat` asks for the
+  identifier and displays a temporary password. Elsewhere: `python3 serveur.py --reinitialiser prenom.nom`,
+  run in Prévo's folder by the account that runs Prévo (Linux:
+  `sudo -u prevo python3 /opt/prevo/serveur.py --reinitialiser prenom.nom`). There is no need to stop Prévo. Whoever has
+  control of the server has control of Prévo.
+- **Deactivating**: Team › Access, “Deactivate”. The account stays in the list (history) and can no longer
+  sign in; its sessions are closed at once.
+- **Roles**: requester, technician, manager, checked by the server on every request. A requester reads neither
+  costs, nor technicians, nor work orders, and adds only requests; a technician sees neither hourly rate nor prices. The AI
+  is reserved for technicians and the manager. Full table:
+  [ARCHITECTURE.md](ARCHITECTURE.md) (in French) §22.5.
+- **Requesters' devices**: no password, by invitation (Team › Access › Devices, QR valid from 1 hour
+  to 7 days, `invitation_heures`); the phone gives a name and stays recognised for a year, with the requester's rights;
+  “Revoke” cuts it off from its next request. With `"demandeurs_avec_compte": true`, enrolment is disabled
+  and each requester has an account.
+- **The `donnees/acces/` folder**: `comptes.json`, `sessions.json` (token hashes), `appareils.json`,
+  `journal-acces.csv`, the workshop certificate and authority. Written by the server alone: do not edit it by
+  hand, do not serve it, never attach it to a bug report.
 
-## 10. Journaux
+## 10. Logs
 
-| Journal | Où | Durée | Contenu |
+| Log | Where | Kept | Content |
 | --- | --- | --- | --- |
-| Connexions | `donnees/acces/journal-acces.csv` | un an, purgé chaque jour | `date;qui;adresse;agent;resultat;tailscale` : connexions, échecs, blocages, déconnexions, invitations, appareils, révocations, comptes créés, modifiés ou réinitialisés |
-| Modifications | `donnees/journal.csv` | sans limite | qui a changé quoi dans les données (l'historique de la maintenance) |
-| Serveur | `donnees/journal-serveur.log` | 5 fichiers de 1 Mo | démarrage, refus, copie externe, erreurs (sans console, ou avec `--journal`) |
+| Sign-ins | `donnees/acces/journal-acces.csv` | one year, purged every day | `date;qui;adresse;agent;resultat;tailscale`: sign-ins, failures, lock-outs, sign-outs, invitations, devices, revocations, accounts created, edited or reset |
+| Changes | `donnees/journal.csv` | no limit | who changed what in the data (the maintenance history) |
+| Server | `donnees/journal-serveur.log` | 5 files of 1 MB | start-up, refusals, external copy, errors (with no console, or with `--journal`) |
 
-Le journal des connexions s'exporte en CSV depuis Équipe › Accès › Journal des connexions (« Exporter (CSV) »).
-Jamais un mot de passe ni un jeton n'y est écrit.
+The sign-in log is exported as CSV from Team › Access › Sign-in log (“Export (CSV)”).
+No password or token is ever written to it.
 
-## 11. Sauvegardes et restauration
+## 11. Backups and restoring
 
-Ce que Prévo fait tout seul (mode serveur) :
+What Prévo does by itself (server mode):
 
-- **Chaque jour**, avant la première modification : `donnees/sauvegardes/AAAA-MM-JJ/`, avec les 24 fichiers CSV et
-  les fichiers de `donnees/acces/` **sauf `sessions.json`** (une session ne se restaure jamais) **et `cle.pem`** (la
-  clé privée du certificat de l'atelier ne quitte pas le PC ; Prévo la refabrique au démarrage si elle manque).
-- **Avant un import, une restauration ou un changement de format** : une sauvegarde complète dont le nom le dit
+- **Every day**, before the first change: `donnees/sauvegardes/AAAA-MM-JJ/`, with the 24 CSV files and
+  the files of `donnees/acces/` **except `sessions.json`** (a session is never restored) **and `cle.pem`** (the
+  private key of the workshop certificate does not leave the PC; Prévo remakes it at start-up if it is missing).
+- **Before an import, a restore or a format change**: a full backup whose name says so
   (`…_avant-import`, `…_avant-restauration`, `…_avant-format-vN`).
-- **Copie externe** (`copie_sauvegardes`) : au démarrage et chaque nuit, à la première modification après 2 h du
-  matin, la sauvegarde du jour est copiée dans `<dossier>/AAAA-MM-JJ/` ; 30 copies gardées. Un échec est noté dans
-  `journal-serveur.log` et affiché sur l'accueil du responsable.
-- **Sauvegardes manuelles** : une par minute au plus, les 60 plus récentes gardées.
+- **External copy** (`copie_sauvegardes`): at start-up and every night, at the first change after 2 a.m., the
+  day's backup is copied to `<folder>/AAAA-MM-JJ/`; 30 copies kept. A failure is noted in
+  `journal-serveur.log` and shown on the manager's home screen.
+- **Manual backups**: one per minute at most, the 60 most recent kept.
 
-Ce qui n'est **pas** dans ces sauvegardes, à sauvegarder avec vos outils :
+What is **not** in these backups, to be backed up with your own tools:
 
-- `documents/` (photos, PDF, rapports figés) : seul « Exporter en ZIP » (Paramètres) les emporte ;
-- `prevo.config.json` ;
-- `donnees/acces/autorite/` : sans elle, une autorité neuve est créée et chaque téléphone doit refaire confiance
-  au PC atelier ;
+- `documents/` (photos, PDFs, frozen reports): only “Export as ZIP” (Settings) takes them;
+- `prevo.config.json`;
+- `donnees/acces/autorite/`: without it, a new authority is created and each phone must trust
+  the workshop PC again;
 - `journal-serveur.log`.
 
-La copie externe contient `comptes.json` (empreintes des mots de passe, jamais les mots de passe) : protégez son
-dossier comme le serveur.
+The external copy contains `comptes.json` (password hashes, never the passwords): protect its
+folder like the server.
 
-**Tester** (Paramètres › Sauvegardes, « Tester ») relit chaque table d'une sauvegarde et compte ses lignes, sans
-rien écrire. **Restaurer…** remet toutes les tables ou une seule, après une copie de sécurité de l'état actuel.
-La restauration ne touche jamais `donnees/acces/` : un compte désactivé ne revient pas avec une vieille
-sauvegarde. Pour remettre les comptes après la perte du serveur, arrêtez Prévo et recopiez à la main les fichiers
-du dossier `acces/` d'une sauvegarde dans `donnees/acces/`.
+**Testing** (Settings › Backups, “Test”) re-reads each table of a backup and counts its rows, without
+writing anything. **Restore…** puts back all the tables or just one, after a safety copy of the current state.
+Restoring never touches `donnees/acces/`: a deactivated account does not come back with an old
+backup. To put accounts back after losing the server, stop Prévo and copy by hand the files
+from a backup's `acces/` folder into `donnees/acces/`.
 
-## 12. Mise à jour et retour arrière
+## 12. Updating and rolling back
 
-**Mettre à jour** :
+**Updating**:
 
-1. Lisez le `CHANGELOG.md` de la nouvelle version.
-2. Paramètres › Sauvegardes, « Sauvegarder maintenant », puis copiez `donnees/` et `prevo.config.json` ailleurs.
-3. Arrêtez Prévo : fermez la fenêtre noire, ou `schtasks /end /tn Prevo`, ou `sudo systemctl stop prevo`.
-4. Copiez le contenu du dossier `prevo-<version>/` du nouveau zip par-dessus le dossier de Prévo, en remplaçant
-   les fichiers. Le zip n'a ni `donnees/` ni `prevo.config.json` : ils restent tels quels. Sous Linux, refaites
+1. Read the new version's `CHANGELOG.md` (in French).
+2. Settings › Backups, “Back up now”, then copy `donnees/` and `prevo.config.json` elsewhere.
+3. Stop Prévo: close the black window, or `schtasks /end /tn Prevo`, or `sudo systemctl stop prevo`.
+4. Copy the contents of the new zip's `prevo-<version>/` folder over Prévo's folder, replacing
+   the files. The zip has neither `donnees/` nor `prevo.config.json`: they stay as they are. On Linux, redo
    `sudo chown -R prevo:prevo /opt/prevo`.
-5. Relancez Prévo. Si le format des fichiers change, Prévo fait d'abord une sauvegarde `…_avant-format-vN`.
+5. Restart Prévo. If the file format changes, Prévo first makes a `…_avant-format-vN` backup.
 
-Depuis Prévo 1.2 : même procédure. L'assistant s'ouvre et voit les fichiers CSV existants : il n'en remplace aucun
-(en Solo, il ajoute seulement le technicien « moi » et les réglages du mode Solo). Les profils mémorisés sur les
-postes sont remplacés par les comptes.
+From Prévo 1.2: same procedure. The wizard opens and sees the existing CSV files: it replaces none of them
+(in Solo, it only adds the technician “me” and the Solo mode settings). The profiles remembered on
+the workstations are replaced by accounts.
 
-**Revenir en arrière** : gardez le zip de la version précédente. Arrêtez Prévo, remettez ses fichiers par-dessus,
-relancez. Si la mise à jour avait changé le format des fichiers, remettez aussi les CSV de la sauvegarde
-`…_avant-format-vN` dans `donnees/` (Prévo arrêté) : les modifications faites depuis sont perdues. Revenir à
-Prévo 1.2, c'est revenir à un serveur sans comptes ni porte d'entrée, qui répond à tout appareil du réseau local
-sans mot de passe : ne le faites que le temps d'un dépannage.
+**Rolling back**: keep the previous version's zip. Stop Prévo, put its files back over the current ones,
+restart. If the update had changed the file format, also put back the CSVs from the
+`…_avant-format-vN` backup into `donnees/` (with Prévo stopped): changes made since are lost. Going back to
+Prévo 1.2 means going back to a server with no accounts or front door, which answers any device on the local network
+without a password: do it only for the duration of a troubleshooting session.
 
-## 13. Annuaire de l'entreprise
+## 13. Company directory
 
-Prévo ne se branche pas sur un annuaire (Active Directory, LDAP, Entra ID, Google Workspace) : pas de connexion
-unique, pas de synchronisation des comptes. C'est un choix : Prévo doit rester installable par un atelier sans
-informaticien. Ce qui existe :
+Prévo does not plug into a directory (Active Directory, LDAP, Entra ID, Google Workspace): no single
+sign-on, no account synchronisation. This is a choice: Prévo must remain installable by a workshop with no
+IT person. What exists:
 
-- des **comptes locaux**, créés par le responsable ou par vous (un par salarié, demandeurs compris avec
-  `"demandeurs_avec_compte": true`) ;
-- l'**export du journal des connexions**, pour votre suivi ;
-- le **mandataire inverse et le VPN de l'entreprise**, pour placer Prévo derrière vos propres contrôles d'accès
-  (par exemple une authentification sur le mandataire, avant la page de connexion de Prévo).
+- **local accounts**, created by the manager or by you (one per employee, requesters included with
+  `"demandeurs_avec_compte": true`);
+- the **export of the sign-in log**, for your own monitoring;
+- the company's **reverse proxy and VPN**, to place Prévo behind your own access controls
+  (for example authentication on the proxy, before Prévo's sign-in page).
 
-## 14. Données personnelles (RGPD)
+## 14. Personal data (GDPR)
 
-Toutes les données restent sur le serveur, dans `donnees/` ; les mots de passe n'y sont qu'en empreinte, le journal
-des connexions est gardé un an, et l'IA (désactivée par défaut) n'envoie rien sans la décision du responsable sur
-le serveur. Le détail pour votre registre des traitements est dans [GUIDE.html](../GUIDE.html), chapitre 8.9 « Vos
-données et le RGPD ».
+All the data stays on the server, in `donnees/`; passwords are there only as hashes, the sign-in log
+is kept for a year, and the AI (off by default) sends nothing without the manager's decision on
+the server. The details for your register of processing activities are in [GUIDE.en.html](../GUIDE.en.html), chapter 8.9 “Your
+data and the GDPR”.
 
-## 15. Désinstaller
+## 15. Uninstalling
 
-1. Gardez les données : copiez `donnees/` et `prevo.config.json` ailleurs (ou « Exporter en ZIP »).
-2. Retirez le démarrage : Paramètres › Accès et installation, ou `Retirer_demarrage.ps1` en administrateur ;
-   supprimez aussi `Prevo.cmd` du dossier Démarrage si le repli sans droits a servi. Linux :
-   `sudo systemctl disable --now prevo`, puis `sudo rm /etc/systemd/system/prevo.service`. macOS :
-   `launchctl unload -w <chemin du fichier plist>`.
-3. Retirez l'autorité de l'atelier de Windows (PowerShell en administrateur) :
+1. Keep the data: copy `donnees/` and `prevo.config.json` elsewhere (or “Export as ZIP”).
+2. Remove the start-up: Settings › Access and installation, or `Retirer_demarrage.ps1` as administrator;
+   also delete `Prevo.cmd` from the Startup folder if the fallback with no rights was used. Linux:
+   `sudo systemctl disable --now prevo`, then `sudo rm /etc/systemd/system/prevo.service`. macOS:
+   `launchctl unload -w <path of the plist file>`.
+3. Remove the workshop authority from Windows (PowerShell as administrator):
 
    ```powershell
    $env:CAROOT = 'C:\Prevo\donnees\acces\autorite'
    & 'C:\Prevo\outils-tiers\mkcert-v1.4.4-windows-amd64.exe' -uninstall
    ```
 
-   Sur chaque téléphone, retirez le certificat de l'atelier dans les réglages où il a été installé.
-4. Si `tailscale serve` a été réglé : `tailscale serve reset`.
-5. Supprimez le dossier de Prévo.
+   On each phone, remove the workshop certificate in the settings where it was installed.
+4. If `tailscale serve` was set up: `tailscale serve reset`.
+5. Delete Prévo's folder.

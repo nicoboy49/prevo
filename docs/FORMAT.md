@@ -137,7 +137,7 @@ Rien n'est migré « vers le bas » : on met l'appli à jour, ou on restaure une
   seulement si celle-ci a réussi (base vide : voir plus bas).
 - La **copie externe nocturne** (lot 7, ARCHITECTURE.md §22.11) est inchangée.
 - Piège : un dossier nommé comme la version de l'appli (`prevo-<version>/`) peut être remplacé par une mise à jour
-  manuelle ; gardez les données hors de ce dossier (voir [INSTALLATION.md](INSTALLATION.md)).
+  manuelle ; gardez les données hors de ce dossier (voir [INSTALLATION.fr.md](INSTALLATION.fr.md)).
 - Mêmes règles en mode dossier, sauf pour une **base vide** (aucun CSV) : le mode dossier note la version dès
   l'ouverture, sans sauvegarde (il n'y a rien à garder) ; le serveur, lui, n'écrit rien au démarrage. La base créée
   ensuite par le navigateur (« Créer une base vide », démo) reçoit donc, en mode serveur, une sauvegarde
