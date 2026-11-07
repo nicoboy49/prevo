@@ -4,6 +4,73 @@
 
 const Apropos = (() => {
 
+  /** Adresses de Prévo, à ce seul endroit (T306 ; réutilisées par la mention « traduction automatique » du Lot 5).
+   *  Les formulaires d'issue GitHub (.github/ISSUE_TEMPLATE/) se pré-remplissent par paramètre portant l'id du champ. */
+  const ADRESSES = Object.freeze({
+    depot: 'https://github.com/nicoboy49/prevo',
+    suggestion: Object.freeze({ fr: '2-proposer-une-amelioration.yml', en: '3-suggest-an-improvement.yml' }),
+    courriel: 'contact@prevo.pro',
+  });
+
+  /** Navigateur réduit à « nom version, système » (« Chrome 130, Windows ») : rien d'autre de l'en-tête du
+   *  navigateur ne part. `ua` = navigator.userAgent, `donneesUa` = navigator.userAgentData (facultatif). */
+  function navigateurReduit(ua, donneesUa) {
+    ua = String(ua || '');
+    let nom = '';
+    let version = '';
+    const marques = donneesUa && Array.isArray(donneesUa.brands) ? donneesUa.brands : [];
+    for (const [marque, libelle] of [['Microsoft Edge', 'Edge'], ['Google Chrome', 'Chrome']]) {
+      const trouvee = marques.find((m) => m && m.brand === marque);
+      if (trouvee && /^\d+/.test(String(trouvee.version))) { nom = libelle; version = String(trouvee.version).match(/^\d+/)[0]; break; }
+    }
+    if (!nom) {
+      for (const [motif, libelle] of [[/(?:Edg|EdgA|EdgiOS)\/(\d+)/, 'Edge'], [/(?:Firefox|FxiOS)\/(\d+)/, 'Firefox'],
+        [/(?:Chrome|CriOS)\/(\d+)/, 'Chrome'], [/Version\/(\d+)[^]*Safari\//, 'Safari']]) {
+        const trouve = ua.match(motif);
+        if (trouve) { nom = libelle; version = trouve[1]; break; }
+      }
+    }
+    if (!nom) return I18n.t('apropos.suggestion.navigateur_inconnu');
+    let systeme = '';
+    const plateforme = donneesUa && typeof donneesUa.platform === 'string' ? donneesUa.platform : '';
+    if (['Windows', 'macOS', 'Linux', 'Android'].includes(plateforme)) systeme = plateforme;
+    else if (/iPhone|iPad|iPod/.test(ua)) systeme = 'iOS';
+    else if (/Android/.test(ua)) systeme = 'Android';
+    else if (/Windows/.test(ua)) systeme = 'Windows';
+    else if (/Macintosh|Mac OS X/.test(ua)) systeme = 'macOS';
+    else if (/Linux|X11/.test(ua)) systeme = 'Linux';
+    return nom + ' ' + version + (systeme ? ', ' + systeme : '');
+  }
+
+  /** Contenu pré-rempli d'une suggestion : version de Prévo, langue active, navigateur réduit. Aucune donnée de la base. */
+  function contexteSuggestion() {
+    return I18n.t('apropos.suggestion.contexte', { version: App.version, langue: I18n.langue,
+      navigateur: navigateurReduit(navigator.userAgent, navigator.userAgentData) });
+  }
+
+  /** Paramètres d'adresse « nom=valeur&… », valeurs encodées. */
+  function requete(parametres) {
+    return Object.keys(parametres).map((nom) => nom + '=' + encodeURIComponent(parametres[nom])).join('&');
+  }
+
+  /** Adresse du formulaire de suggestion sur GitHub (modèle anglais si Prévo est en anglais, sinon français). */
+  function adresseSuggestion() {
+    const modele = I18n.langue === 'en' ? ADRESSES.suggestion.en : ADRESSES.suggestion.fr;
+    return ADRESSES.depot + '/issues/new?' + requete({ template: modele,
+      title: I18n.t('apropos.suggestion.titre_formulaire'), contexte: contexteSuggestion() });
+  }
+
+  /** Repli par e-mail : même contenu. */
+  function adresseCourriel() {
+    return 'mailto:' + ADRESSES.courriel + '?' + requete({ subject: I18n.t('apropos.suggestion.courriel_objet'),
+      body: contexteSuggestion() });
+  }
+
+  /** Lien « Suggérer une amélioration » (nouvel onglet) ; rien ne part tant qu'on ne clique pas. */
+  function lienSuggestion(id) {
+    return UI.html`<a id="${id}" href="${adresseSuggestion()}" target="_blank" rel="noopener noreferrer">${I18n.t('apropos.suggestion.lien')}</a>`;
+  }
+
   /** Crédit (signature) ; lu à l'affichage. */
   function credit() {
     return I18n.t('apropos.credit.developpe_claude_anthropic_demande');
@@ -87,6 +154,8 @@ const Apropos = (() => {
         <article class="carte c6">
           <h2>${I18n.t('apropos.ecran.aide')}</h2>
           <p>${I18n.html('apropos.ecran.ouvrir_guide_utilisation_demarrer')}</p>
+          <p id="apropos-suggestion">${lienSuggestion('apropos-suggestion-lien')} (<a id="apropos-suggestion-courriel" href="${adresseCourriel()}">${I18n.t('apropos.suggestion.lien_courriel')}</a>)</p>
+          <p class="note">${I18n.t('apropos.suggestion.explication')}</p>
         </article>
         <article class="carte c6">
           <h2>${I18n.t('apropos.ecran.bibliotheques_licences')}</h2>
@@ -116,5 +185,5 @@ const Apropos = (() => {
     });
   });
 
-  return { get CREDIT() { return credit(); }, afficher };
+  return { get CREDIT() { return credit(); }, ADRESSES, navigateurReduit, adresseSuggestion, adresseCourriel, lienSuggestion, afficher };
 })();

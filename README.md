@@ -302,3 +302,4 @@ que la police Sora (SIL Open Font License 1.1). Leurs licences sont reproduites 
 
 Nicolas Briand — SELECTIS, formation et maintenance industrielle.
 Site : https://selectis.eu
+Courriel : contact@prevo.pro

@@ -382,11 +382,13 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
 /* Langue de l'écran (D147, T278) : la liste seule, sous « Explications » ; cachée quand le menu n'a que ses icônes
    (l'écran « Ce poste » la propose toujours) */
 .menu-langue select { font-size: .875rem; padding: .4rem .7rem; border-radius: 12px; }
+.menu-suggestion { font-size: .8125rem; padding: 0 .4rem; }
+.menu-suggestion a { color: var(--texte-2); text-decoration: underline; }
 
 /* Menu en icônes seules (replié sur grand écran, ou tablette) */
 .coque.replie .menu-lateral { padding: 16px 10px; align-items: stretch; }
 .coque.replie .menu-tete { flex-direction: column; padding: 4px 0 12px; gap: 10px; }
-.coque.replie .menu-tete .titre, .coque.replie .menu-groupe, .coque.replie .menu-langue { display: none; }
+.coque.replie .menu-tete .titre, .coque.replie .menu-groupe, .coque.replie .menu-langue, .coque.replie .menu-suggestion { display: none; }
 .coque.replie .menu a, .coque.replie .signature, .coque.replie .etat-poste { justify-content: center; padding: 0; }
 .coque.replie .menu a .libelle, .coque.replie .signature .libelle, .coque.replie .etat-poste .libelle {
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
@@ -782,7 +784,7 @@ a.vignette img, button.vignette img { width: 100%; height: 100%; object-fit: cov
   .coque, .coque.replie { grid-template-columns: var(--largeur-menu-icones) minmax(0, 1fr); }
   .menu-lateral { padding: 16px 10px; }
   .menu-tete { flex-direction: column; padding: 4px 0 12px; gap: 10px; }
-  .menu-tete .titre, .menu-groupe, .menu-replier, .menu-langue { display: none; }
+  .menu-tete .titre, .menu-groupe, .menu-replier, .menu-langue, .menu-suggestion { display: none; }
   .menu a, .signature, .etat-poste { justify-content: center; padding: 0; }
   .menu a .libelle, .signature .libelle, .etat-poste .libelle {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;

@@ -1113,6 +1113,9 @@ const App = (() => {
     if (!zone) return;
     UI.remplir(zone, UI.selecteurLangue({ id: 'menu-langue-liste',
       libelle: I18n.t('socle.selecteur_langue.langue_ecran') }));
+    // T306 : « Suggérer une amélioration », sous la langue (l'adresse suit la langue active) ; cachée avec elle.
+    const suggestion = UI.$('#menu-suggestion');
+    if (suggestion) UI.remplir(suggestion, Apropos.lienSuggestion('menu-suggestion-lien'));
   }
 
   function appliquerRepli(replie) {

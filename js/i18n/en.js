@@ -4104,6 +4104,13 @@ I18n.ajouter('en', {
   'apropos.menu.libelle': 'About',
   'apropos.modes.demo': '<b>Demo</b>: a fictional workshop in memory, to discover the tool. Nothing is saved; the ZIP export lets you keep a copy. Its maintenance wiki was built by Claude with Prévo\'s instructions, one agent per work order, in the order of the jobs; the demo calls no AI.',
   'apropos.modes.demo_modele': '<b>Demo</b>: a fictional workshop in memory, to discover the tool. Nothing is saved; the ZIP export lets you keep a copy. Its maintenance wiki was built by Claude ({modele}) with Prévo\'s instructions, one agent per work order, in the order of the jobs; the demo calls no AI.',
+  'apropos.suggestion.contexte': 'Prévo version: {version}\nLanguage: {langue}\nBrowser: {navigateur}',
+  'apropos.suggestion.courriel_objet': 'Suggestion for Prévo',
+  'apropos.suggestion.explication': 'The link opens GitHub in a new tab (a GitHub account is needed) with only the Prévo version, the language and your browser (name, version, system); nothing is sent before you click, and none of your workshop data. No GitHub account: use \'by e-mail\'.',
+  'apropos.suggestion.lien': 'Suggest an improvement',
+  'apropos.suggestion.lien_courriel': 'by e-mail',
+  'apropos.suggestion.navigateur_inconnu': 'unknown browser',
+  'apropos.suggestion.titre_formulaire': '[Improvement] ',
 });
 // ==== fin apropos ====
 

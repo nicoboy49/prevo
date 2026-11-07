@@ -4102,6 +4102,13 @@ I18n.ajouter('fr', {
   'apropos.menu.libelle': 'À propos',
   'apropos.modes.demo': '<b>Démo</b> : un atelier fictif en mémoire, pour découvrir l\'outil. Rien n\'est enregistré ; l\'export ZIP permet de garder une copie. Son wiki de maintenance a été construit par Claude avec la consigne de Prévo, un agent par OT, dans l\'ordre des interventions ; la démo n\'appelle aucune IA.',
   'apropos.modes.demo_modele': '<b>Démo</b> : un atelier fictif en mémoire, pour découvrir l\'outil. Rien n\'est enregistré ; l\'export ZIP permet de garder une copie. Son wiki de maintenance a été construit par Claude ({modele}) avec la consigne de Prévo, un agent par OT, dans l\'ordre des interventions ; la démo n\'appelle aucune IA.',
+  'apropos.suggestion.contexte': 'Version de Prévo : {version}\nLangue : {langue}\nNavigateur : {navigateur}',
+  'apropos.suggestion.courriel_objet': 'Suggestion pour Prévo',
+  'apropos.suggestion.explication': 'Le lien ouvre GitHub dans un nouvel onglet (il faut un compte GitHub) avec seulement la version de Prévo, la langue et votre navigateur (nom, version, système) ; rien n\'est envoyé avant votre clic, et aucune donnée de votre atelier. Sans compte GitHub : « par e-mail ».',
+  'apropos.suggestion.lien': 'Suggérer une amélioration',
+  'apropos.suggestion.lien_courriel': 'par e-mail',
+  'apropos.suggestion.navigateur_inconnu': 'navigateur inconnu',
+  'apropos.suggestion.titre_formulaire': '[Amélioration] ',
 });
 // ==== fin apropos ====
 

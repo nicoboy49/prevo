@@ -462,6 +462,78 @@
       ],
       "classe": "D156",
       "raison": "Marqueur du journal (Donnees.modifier, controles-ecritures.js) relu par l'historique d'un contrôle pour être traduit à l'affichage (T283)."
+    },
+    {
+      "texte": "Chrome",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Edge",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Google Chrome",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Microsoft Edge",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Firefox",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Safari",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Android",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Linux",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
+    },
+    {
+      "texte": "Windows",
+      "fichiers": [
+        "js/modules/apropos.js"
+      ],
+      "classe": "identifiants",
+      "raison": "Nom de navigateur ou de système, reconnu dans navigator.userAgent(Data) et écrit tel quel dans la suggestion (T306) ; un nom propre, jamais traduit."
     }
   ]
 }

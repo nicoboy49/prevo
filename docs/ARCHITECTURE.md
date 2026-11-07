@@ -3306,6 +3306,19 @@ installer.
   absent (404) ou serveur injoignable : rien et aucune erreur JavaScript ; `version.json` de la release (champs,
   nouveautés tirées du CHANGELOG, sans Markdown) ; `test_depot.py` : ordre des modules.
 
+### 21.1 « Suggérer une amélioration » (T306)
+
+Lien visible par tous les profils dans « À propos » (`#apropos-suggestion-lien`, repli `#apropos-suggestion-courriel`)
+et au pied du menu (`#menu-suggestion-lien`, rempli par `placerSelecteurLangue` de `js/app.js`). Il ouvre un nouvel
+onglet (`target="_blank" rel="noopener noreferrer"`) sur le formulaire d'issue GitHub
+`https://github.com/nicoboy49/prevo/issues/new?template=<2-proposer-une-amelioration.yml | 3-suggest-an-improvement.yml>&title=…&contexte=…`
+(modèle anglais si `I18n.langue` vaut `en`) ; `contexte` ne porte que la version de Prévo, la langue active et le
+navigateur réduit à « nom version, système » (`Apropos.navigateurReduit`, `navigator.userAgentData` sinon
+`navigator.userAgent`) : aucune donnée de la base, aucun nom, aucun jeton. Repli : `mailto:contact@prevo.pro` au même
+contenu. Les adresses sont dans `Apropos.ADRESSES` (`js/modules/apropos.js`), un seul endroit, réutilisable par la
+mention « traduction automatique » du Lot 5. Aucune requête au chargement : un lien cliqué, la politique de sécurité
+du contenu ne change pas. Test : `test_suggestion.py`.
+
 ## 22. Contrat du lot 7 — accès et installation (CDC validé le 2026-10-26 : D121–D140, CS119–CS137)
 
 Le lot rend Prévo joignable au-delà du PC sans ouvrir de port sur la box, avec des comptes vérifiés par le

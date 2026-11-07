@@ -1,0 +1,49 @@
+name: "Suggest an improvement"
+description: "An idea to make Prévo serve better in the workshop."
+title: "[Improvement] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not send any real data from your company.**
+
+        **Never paste** a password, a token, a cookie, an AI key, or the contents of the `donnees/acces/` folder or of `prevo.config.json`.
+  - type: textarea
+    id: besoin
+    attributes:
+      label: "Your need in the workshop"
+      description: "What you are trying to do, in your workshop."
+    validations:
+      required: true
+  - type: textarea
+    id: aujourdhui
+    attributes:
+      label: "How do you do it today?"
+      description: "With Prévo, a spreadsheet, a notebook... and what gets in the way."
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: "Your installation (optional)"
+      options:
+        - "Solo (one person, one PC)"
+        - "Workshop (a small team on Wi-Fi)"
+        - "Intranet (installed by the IT person)"
+        - "Folder or demo mode"
+    validations:
+      required: false
+  - type: textarea
+    id: aide
+    attributes:
+      label: "What would help you"
+    validations:
+      required: true
+  - type: textarea
+    id: contexte
+    attributes:
+      label: "Prévo version, language, browser (filled in by Prévo)"
+      description: "Filled in by Prévo's \"Suggest an improvement\" link; you can edit or clear it."
+    validations:
+      required: false
