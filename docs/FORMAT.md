@@ -185,7 +185,9 @@ décompressés (T229) ; `serveur.py` suit les deux qui le concernent (envoi d'un
 L'export les contrôle avant de produire le ZIP : s'il en dépasse une, il dit quoi (fichier, taille, limite) et ne
 produit rien.
 
-**Import** : remplacement complet seulement (pas de fusion).
+**Import** : remplacement complet seulement (pas de fusion), à une exception près : un réglage de Paramètres que
+la base a et que le ZIP n'a pas (ZIP d'une version plus ancienne : langue, devise, réglages de la 2.0) garde la valeur
+de la base ; la confirmation le dit.
 
 - Réservé au **responsable** (ou à toute personne si l'installation n'a pas de comptes).
 - Contrôles avant d'écrire quoi que ce soit : taille totale, nombre d'entrées, taux de compression (bombe de

@@ -17,6 +17,9 @@ Chaque écriture est contrôlée sur le disque (serveur) ou dans l'OPFS du navig
               base commencée vide par l'assistant (T296 : parametres.csv seul, la première ouverture ne propose plus la
               démo) : la démo, ouverte par « Essayer avec les données de démo » et exportée en ZIP, s'y importe
               (Nicolas, 07/11 : la démo doit rester chargeable plus tard) ;
+              réglages absents du ZIP gardés (T319) : ZIP de la 1.2 (f3-v1.2.0, sans manifeste) importé dans une base en
+              anglais (langue_defaut en, devise GBP) : confirmation qui les nomme, langue et devise gardées, réglages
+              présents dans le ZIP pris du ZIP, Prévo toujours en anglais après le rechargement ;
               ZIP au format 2 (f2-v1.1.0, sans manifeste) : confirmation « mises au format 3 », deux tables vidées ;
               base au format 3, lignes intactes, colonne astuce vide, tables du wiki vides ; colonnes inconnues du
               ZIP (jeu colonnes-en-trop) gardées avec leurs valeurs ;
@@ -29,7 +32,8 @@ Chaque écriture est contrôlée sur le disque (serveur) ou dans l'OPFS du navig
               les tables, tables à l'octet, document changé jamais écrit ;
     dossier   OPFS (installer_dossier_simule) : f3-v2.0.0 (avec acces/) + deux documents déjà là ; import d'un ZIP
               (démo + documents, manifeste) : document identique repris, nom pris par un autre contenu → « -2 »,
-              sauvegarde « avant-import-zip » (CSV d'avant, documents/), acces/ intact ; rechargement puis
+              sauvegarde « avant-import-zip » (CSV d'avant, documents/), acces/ intact, réglages du mode Solo de
+              la base gardés (T319 : absents du ZIP) ; rechargement puis
               « Reprendre » ; base en lecture seule (jeu plus-recent) : import refusé, aucun octet écrit ;
     démo      bouton inactif, « indisponible en démo ».
 
@@ -317,7 +321,8 @@ class CasImport(CasNavigateur):
             videes: Array.from(zone.querySelectorAll('[data-videe]')).map((e) => e.dataset.videe),
             origine: texte('origine-import-zip'), formatTexte: texte('format-import-zip'),
             tablesVidees: texte('tables-videes-import-zip'), documentsTexte: texte('documents-import-zip'),
-            problemes: texte('problemes-import-zip'), avertissement: texte('avertissement-import-zip') };
+            problemes: texte('problemes-import-zip'), avertissement: texte('avertissement-import-zip'),
+            reglagesGardes: texte('reglages-gardes-import-zip') };
         }""")
 
     def texte_fenetre(self, page, identifiant):
@@ -544,6 +549,51 @@ class TestServeur(CasImport):
             self.assertEqual(page.evaluate("App.mode"), "serveur")
             self.assertEqual(page.evaluate("Donnees.lignes('equipements').length"), equipements_demo)
             self.assertEqual(len(sauvegardes_de(instantane(serveur.dossier), MOTIF_AVANT_IMPORT_ZIP)), 1)
+
+    def test_serveur_zip_de_la_1_2_dans_une_base_en_anglais_langue_et_devise_gardees(self):
+        # T319 (Nicolas, 07/11) : tout réglage absent du ZIP (langue, devise, réglages de la 2.0) garde la valeur de la
+        # base ; exports 1.2, bêta 1, bêta 2 et démo concernés. Ici : un export de la 1.2 (format 3, sans manifeste).
+        f12 = {chemin: o for chemin, o in fichiers_du_jeu("f3-v1.2.0").items() if chemin.endswith(".csv")}
+        cles_du_zip = [ligne["cle"] for ligne in lire_csv(f12["parametres.csv"])[1]]
+        self.assertNotIn("langue_defaut", cles_du_zip)
+        self.assertNotIn("devise", cles_du_zip)
+        chemin_zip = ecrire_zip(self.temporaire / "prevo-export-1-2.zip", f12, avec_manifeste=False)
+        fichiers = fichiers_demo()
+        fichiers["parametres.csv"] = fichiers["parametres.csv"].rstrip(b"\r\n") + b"\r\nlangue_defaut;en\r\ndevise;GBP\r\n"
+        fichiers["parametres.csv"] = fichiers["parametres.csv"].replace(
+            "entreprise_nom;Atelier des Trois Vallées (démo)".encode("utf-8"), b"entreprise_nom;Base anglaise")
+        self.assertIn(b"entreprise_nom;Base anglaise", fichiers["parametres.csv"])
+        source = self.dossier_source("anglaise", fichiers)
+        contexte = self.navigateur.new_context(locale="en-GB", viewport={"width": 1280, "height": 800})
+        self.addCleanup(contexte.close)
+        contexte.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
+        with ServeurPrevo(source=source, comptes=True) as serveur:
+            serveur.poser_session(contexte, "responsable")
+            page = contexte.new_page()
+            self.surveiller(page)
+            page.goto(serveur.url + "/#/parametres")
+            attendre_pret(page)
+            self.assertEqual(page.evaluate("I18n.langue"), "en")
+            self.choisir_zip(page, chemin_zip)
+            info = self.confirmation(page)
+            self.assertEqual(self.texte_fenetre(page, "reglages-gardes-import-zip"),
+                             "Settings missing from the ZIP, kept as they are here: Installation language, Currency.")
+            self.assertEqual(info["importe"]["parametres"], len(cles_du_zip) + 2)
+            page.click("dialog button:has-text('Replace all the data')")
+            self.texte_fenetre(page, "import-zip-termine")
+            parametres = dict((l["cle"], sans_apostrophe(l["valeur"]))
+                              for l in lire_csv((serveur.dossier / "parametres.csv").read_bytes())[1])
+            self.assertEqual((parametres["langue_defaut"], parametres["devise"]), ("en", "GBP"))     # gardés
+            attendus = dict((l["cle"], sans_apostrophe(l["valeur"])) for l in lire_csv(f12["parametres.csv"])[1])
+            self.assertEqual(parametres["entreprise_nom"], attendus["entreprise_nom"])               # pris du ZIP
+            self.assertEqual(sorted(parametres), sorted(cles_du_zip + ["langue_defaut", "devise"]))
+            with page.expect_navigation():
+                page.click("dialog button:has-text('Reload Prévo')")
+            attendre_pret(page)
+            self.assertEqual((page.evaluate("I18n.langue"), page.evaluate("document.documentElement.lang")), ("en", "en"))
+            self.assertEqual(page.evaluate("Donnees.parametre('devise', '')"), "GBP")
+            self.assertEqual(page.evaluate("Donnees.lignes('equipements').length"),
+                             len(lire_csv(f12["equipements.csv"])[1]))
 
     def test_serveur_technicien_n_a_pas_l_import(self):
         self.autoriser_erreur(ERREUR_TABLE_REFUSEE)
@@ -809,7 +859,16 @@ class TestDossier(CasImport):
             self.assertIn("1 déjà présent(s), repris", termine)
             apres = self.opfs(page)
             documents = {c[len("documents/"):]: o for c, o in apres.items() if c.startswith("documents/")}
-            rendus = self.verifier_donnees(csv_zip, {t: apres[t + ".csv"] for t in TABLES}, documents_a, documents,
+            # T319 : les réglages de la 2.0 que la base a (mode Solo) et que le ZIP n'a pas gardent leur valeur, à la
+            # suite des lignes du ZIP, dans l'ordre de la base ; la confirmation les a nommés.
+            cles_du_zip = {ligne["cle"] for ligne in lire_csv(csv_zip["parametres"])[1]}
+            gardes = [(l["cle"], l["valeur"]) for l in lire_csv(base["parametres.csv"])[1] if l["cle"] not in cles_du_zip]
+            self.assertEqual([cle for cle, _ in gardes], ["mode_solo", "cloture_une_etape", "solo_technicien_id"])
+            self.assertTrue(info["reglagesGardes"].startswith("Réglages absents du ZIP, gardés tels qu'ils sont ici : "),
+                            info["reglagesGardes"])
+            attendus = dict(csv_zip, parametres=csv_zip["parametres"].rstrip(b"\r\n") + b"\r\n"
+                            + b"".join(("%s;%s\r\n" % garde).encode("utf-8") for garde in gardes))
+            rendus = self.verifier_donnees(attendus, {t: apres[t + ".csv"] for t in TABLES}, documents_a, documents,
                                            chemin_zip.name)
             self.assertEqual(rendus["notice-perceuse.pdf"], "notice-perceuse.pdf")
             self.assertEqual(rendus["20261019-101500-photo-tapis.png"], "photo-tapis-2.png")

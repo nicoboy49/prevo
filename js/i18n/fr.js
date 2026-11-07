@@ -4672,6 +4672,7 @@ I18n.ajouter('fr', {
   'zip.confirmer.documents_joints_photos_notices': { one: '{n} document joint (photos, notices, rapports figés) sera ajouté au dossier des documents ; les documents déjà présents sont gardés.', other: '{n} documents joints (photos, notices, rapports figés) seront ajoutés au dossier des documents ; les documents déjà présents sont gardés.' },
   'zip.confirmer.fichier_nom_fichier_origine': 'Fichier <b>{nomFichier}</b>. <span id="origine-import-zip">{origine}</span>',
   'zip.confirmer.importer_zip': 'Importer un ZIP',
+  'zip.confirmer.reglages_absents_gardes': { one: 'Réglage absent du ZIP, gardé tel qu\'il est ici : {reglages}.', other: 'Réglages absents du ZIP, gardés tels qu\'ils sont ici : {reglages}.' },
   'zip.confirmer.remplacer_toutes_donnees': 'Remplacer toutes les données',
   'zip.confirmer.tables_absentes_zip_seront': { one: '{n} table absente du ZIP sera vidée', other: '{n} tables absentes du ZIP seront vidées' },
   'zip.controler_entrees.zip_contient_chemin_dangereux': 'Ce ZIP contient un chemin dangereux : « {afficher} » ({raison}). Il est refusé.',

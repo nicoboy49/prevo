@@ -4148,6 +4148,11 @@ sécurité, il est donc écrit ici). `js/modules/parametres-zip.js` (objet `Para
 relais `blocImportZip` et `brancherImportZip` de `parametres.js`) : bouton « Importer un ZIP… » (`#btn-import-zip`,
 champ caché `#fichier-import-zip`) en bas de la carte « Sauvegardes ». Remplacement complet seulement, jamais de
 fusion ; aucune route serveur nouvelle (D172) : le navigateur lit le ZIP et écrit par l'API et les adaptateurs existants.
+Exception unique (T319, Nicolas, 07/11) : un **réglage** de Paramètres (`Parametres.reglagesConnus` : formulaire et
+mode Solo) que la base a et que le ZIP n'a pas (export 1.2, bêta 1, bêta 2, démo : `langue_defaut`, `devise`, réglages
+de la 2.0) garde la valeur de la base (`reglagesGardes`), ajouté à la suite des lignes du ZIP et nommé à la
+confirmation (`#reglages-gardes-import-zip`) ; le reste de `parametres.csv` (`rapports_mensuels`, clés inconnues) suit
+le ZIP.
 
 - **Droits** : la règle de l'export (`ZipDonnees.exportPermis`) : avec les comptes, le responsable seul (bouton absent
   pour les autres rôles, qui n'ouvrent pas Paramètres ; un appel direct est refusé ; le serveur refuse de toute façon

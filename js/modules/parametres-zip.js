@@ -23,6 +23,8 @@
 //      ZIP sans le préfixe « AAAAMMJJ-HHMMSS- » ; le nom rendu est gardé ; un document existant n'est jamais supprimé ni remplacé (mode dossier : repris s'il est
 //      identique à l'octet, sinon nom suivi de « -2 », « -3 »…) ; échec → arrêt, aucune table touchée ;
 //   5. références réécrites avec les noms rendus (ZipDonnees.CHAMPS_DOCUMENTS et le paramètre rapports_mensuels) ;
+//   T319 : les réglages de Paramètres que la base a et que le ZIP n'a pas (langue_defaut, devise…) gardent leur
+//      valeur (reglagesGardes), dits à la confirmation (#reglages-gardes-import-zip) ;
 //   6. chaque table du format courant remplacée : Donnees.csv.serialiser (protection des cellules, colonnes inconnues
 //      du ZIP gardées), App.adaptateur.enregistrer avec la version fraîche (contrôle de version ; écritures refusées
 //      en lecture seule) et { remplacerFichierAbime: true } (un fichier abîmé est remplacé : T200, l'import est l'une
@@ -169,7 +171,7 @@ const ParametresZip = (() => {
     const lignes = Schema.nomsTables().map((nomTable) => ({
       table: nomTable,
       actuel: Donnees.lignes(nomTable).length,
-      importe: lu.tables[nomTable].lignes.length,
+      importe: lu.tables[nomTable].lignes.length + (nomTable === 'parametres' ? (lu.reglagesGardes || []).length : 0),
       videe: lu.absentes.includes(nomTable),
       abime: lu.abimes.some((abime) => abime.table === nomTable),
     }));
@@ -257,6 +259,8 @@ const ParametresZip = (() => {
       ${lu.abimes.length ? UI.html`<div class="encadre attention" id="abimes-import-zip">${lu.abimes.map((abime) =>
         UI.html`<p data-abime="${abime.table}">${phraseAbime(abime)}</p>`)}</div>` : ''}
       ${problemesMontres(lu)}
+      ${(lu.reglagesGardes || []).length ? UI.html`<p id="reglages-gardes-import-zip">${I18n.t('zip.confirmer.reglages_absents_gardes',
+        { n: lu.reglagesGardes.length, reglages: lu.reglagesGardes.map((garde) => garde.libelle).join(', ') })}</p>` : ''}
       <div class="encadre attention" id="avertissement-import-zip"><b>${avertissement()}</b></div>
     </div>`);
     UI.$('#zone-tables-import-zip', contenu).appendChild(tableauTables(lu));
@@ -361,7 +365,7 @@ const ParametresZip = (() => {
    * Tables à écrire : copies des tables lues, références aux documents réécrites (noms rendus), version_schema au
    * format courant → { <table>: { lignes, colonnesInconnues } } pour chaque table du schéma.
    */
-  function tablesImportees(tables, parNom) {
+  function tablesImportees(tables, parNom, gardes) {
     const renommer = (valeur) => (parNom.has(texte(valeur)) ? parNom.get(texte(valeur)) : valeur);
     const resultat = {};
     Schema.nomsTables().forEach((nomTable) => {
@@ -381,7 +385,28 @@ const ParametresZip = (() => {
     const version = parametres.find((ligne) => ligne.cle === 'version_schema');
     if (version) version.valeur = String(Formats.courant);
     else parametres.push({ cle: 'version_schema', valeur: String(Formats.courant) });
+    (gardes || []).forEach((garde) => parametres.push({ cle: garde.cle, valeur: garde.valeur }));
     return resultat;
+  }
+
+  /**
+   * T319 (Nicolas, 07/11) : les réglages de Paramètres (Parametres.reglagesConnus : formulaire et mode Solo) que la
+   * base a et que le ZIP n'a pas (export 1.2, bêta 1 ou bêta 2, démo : langue_defaut, devise, réglages de la 2.0…)
+   * gardent la valeur de la base → [{ cle, valeur, libelle }], dans l'ordre de la base. Le reste de parametres.csv
+   * (rapports_mensuels, clés inconnues…) suit le ZIP : remplacement complet (D172).
+   */
+  function reglagesGardes(lignesDuZip) {
+    const connus = typeof Parametres !== 'undefined' && Parametres.reglagesConnus ? Parametres.reglagesConnus() : [];
+    const libelles = new Map(connus.map((reglage) => [reglage.cle, reglage]));
+    const vues = new Set(lignesDuZip.map((ligne) => texte(ligne.cle)));
+    const gardes = [];
+    Donnees.lignes('parametres').forEach((ligne) => {
+      const cle = texte(ligne.cle);
+      if (!libelles.has(cle) || vues.has(cle)) return;
+      vues.add(cle);                                     // une clé en double dans la base : la première seulement
+      gardes.push({ cle: cle, valeur: ligne.valeur, libelle: libelles.get(cle).libelle || cle });
+    });
+    return gardes;
   }
 
   // ===========================================================================================
@@ -461,7 +486,7 @@ const ParametresZip = (() => {
     }
     const nomsTables = Schema.nomsTables();
     try {
-      const tables = tablesImportees(lu.tables, documents.parNom);
+      const tables = tablesImportees(lu.tables, documents.parNom, lu.reglagesGardes);
       const abimes = new Map(lu.abimes.map((abime) => [abime.table, abime]));
       for (const nomTable of nomsTables) await remplacerTable(nomTable, tables[nomTable], abimes.get(nomTable));
       const action = 'import ZIP : ' + nomFichier + ', ' + pluriel(nomsTables.length, 'table') + ', '
@@ -508,6 +533,7 @@ const ParametresZip = (() => {
       console.warn('Prévo : rafraîchissement avant l\'import ZIP impossible (' + sansPoint(erreur) + ').', erreur);
     }
     const horsZip = sansDocuments(lu) ? await documentsHorsZip(lu) : null;
+    lu.reglagesGardes = reglagesGardes(lu.tables.parametres.lignes);     // T319 : dits à la confirmation, puis écrits
     if (!(await confirmer(lu, nomFichier, horsZip))) {
       UI.toast(I18n.t('zip.importer.import_zip_annule_rien'), 'info');
       return { ok: false, etape: 'annule' };

@@ -4674,6 +4674,7 @@ I18n.ajouter('en', {
   'zip.confirmer.documents_joints_photos_notices': { one: '{n} attached document (photos, manuals, frozen reports) will be added to the documents folder; the documents already present are kept.', other: '{n} attached documents (photos, manuals, frozen reports) will be added to the documents folder; the documents already present are kept.' },
   'zip.confirmer.fichier_nom_fichier_origine': 'File <b>{nomFichier}</b>. <span id="origine-import-zip">{origine}</span>',
   'zip.confirmer.importer_zip': 'Import a ZIP',
+  'zip.confirmer.reglages_absents_gardes': { one: 'Setting missing from the ZIP, kept as it is here: {reglages}.', other: 'Settings missing from the ZIP, kept as they are here: {reglages}.' },
   'zip.confirmer.remplacer_toutes_donnees': 'Replace all the data',
   'zip.confirmer.tables_absentes_zip_seront': { one: '{n} table missing from the ZIP will be emptied', other: '{n} tables missing from the ZIP will be emptied' },
   'zip.controler_entrees.zip_contient_chemin_dangereux': 'This ZIP contains an unsafe path: “{afficher}” ({raison}). It is refused.',

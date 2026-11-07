@@ -693,5 +693,6 @@ const Parametres = (() => {
   });
 
   // interne : complété par parametres-codes.js (afficherCodes), usage interne au module (pas une API).
-  return { decrireSauvegarde, numeroLigneFichier, interne: {} };
+  // reglagesConnus : les réglages ci-dessus (formulaire et mode Solo), pour l'import ZIP (T319 : gardés s'ils manquent).
+  return { decrireSauvegarde, numeroLigneFichier, reglagesConnus: () => REGLAGES.slice(), interne: {} };
 })();
