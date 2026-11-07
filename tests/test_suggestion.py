@@ -134,7 +134,8 @@ class TestLien(CasSuggestion):
             self.ouvrir(serveur)
             self.a_propos()
             self.page.wait_for_timeout(500)
-            self.assertEqual([u for u in self.requetes if "github" in u or "prevo.pro" in u], [])
+            # prevo.pro/version.json (T305, vérification de version, servie par le contexte des tests) n'est pas le lien.
+            self.assertEqual([u for u in self.requetes if "github" in u], [])
 
 
 class TestReduction(CasSuggestion):
