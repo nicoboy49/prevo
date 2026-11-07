@@ -3701,6 +3701,22 @@ le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis
   (`location.replace`, la route `#/…` gardée) ; échec ⇒ étapes « Faites confiance au PC atelier » du système
   reconnu (`navigator.userAgent` : Android, iPhone/iPad, sinon les deux au choix), numérotées, une par écran du
   téléphone, captures, bouton « Réessayer ».
+- **Langue de la porte et de la connexion** (T297, D148 ; conception validée par Nicolas le 07/11) : serveur.py pose
+  la langue de l'installation dans l'attribut `data-langue-installation` de `porte.html` (langue_defaut déclarée et
+  bien formée, `MOTIF_CODE_LANGUE` + `langues_declarees()`, sinon « fr ») et de `index.html` (seulement quand
+  langue_defaut est réglée ; sans elle, la page garde la langue du navigateur, D150) ; `js/i18n-chargeur.js` la lit
+  (`I18n.langueDeLaPage`) : choix de l'appareil (`prevo.langue`), sinon installation, sinon français. Sélecteur en haut
+  de la porte et de l'écran de connexion, sans menu : un globe et les langues écrites chacune dans sa langue, aucun mot
+  autour (`aria-label` « Langue / Language »). Sans session, la porte sert un seul fichier de plus, `js/i18n-chargeur.js`
+  (texte public, il ne lit que le stockage de l'appareil) ; aucune route, aucune donnée, `POLITIQUE_PORTE` inchangée.
+  La porte (http) et l'application (https) n'ont pas le même stockage : un téléphone choisit sa langue à chacune.
+- **Langue de la console et du journal du serveur** (T297, D157) : français ou anglais selon langue_defaut (fr → fr,
+  toute autre langue déclarée → en), sinon la langue du système (`locale.getlocale()`) ; choisie au démarrage
+  (`choisir_langue_console`) : un changement dans Paramètres vaut au redémarrage suivant. Chaque message de console est
+  un `traduisible` ; en anglais, `afficher` écrit la clé `serveur.<code>` de `js/i18n/en.js` (`lire_textes_anglais`,
+  petit lecteur, aucun eval ; le français si la clé manque). Restent en français : `--aide`, le journal des requêtes,
+  le détail des pertes d'un fichier abîmé. Les lanceurs (`Lancer_GMAO.bat`, `Reinitialiser_mot_de_passe.bat`,
+  `lancer.sh`) écrivent leurs lignes d'avant Python en français puis en anglais.
 - **Adresses données par Prévo** (QR d'accueil, étiquettes, fiche d'accès, guide, `/api/info`) : toujours la porte
   (`http://<adresse>:<port_http>/`) ; l'adresse https n'est jamais affichée.
 - **Certificat local** : `outils-tiers/mkcert.exe` (ou `mkcert` sur Linux/macOS) dont l'empreinte SHA-256 est

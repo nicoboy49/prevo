@@ -27,12 +27,16 @@
 "De la forme prenom.nom, donné par le responsable.": 1,
 "Durée de « rester connecté sur cet appareil ».": 1,
 "Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS": 1,
+"English": 1,
+"Français": 1,
 "Identifiant": 1,
 "Mot de passe": 1,
 "Rester connecté sur cet appareil": 1,
 "Se connecter": 1
 },
-"attributs": {}
+"attributs": {
+"aria-label=Langue / Language": 1
+}
 },
 {
 "profil": "aucun",
@@ -44,13 +48,17 @@
 "De la forme prenom.nom, donné par le responsable.": 1,
 "Durée de « rester connecté sur cet appareil ».": 1,
 "Développé par Claude (Anthropic) à la demande de Nicolas Briand — SELECTIS": 1,
+"English": 1,
+"Français": 1,
 "Identifiant": 1,
 "Identifiant ou mot de passe incorrect.": 1,
 "Mot de passe": 1,
 "Rester connecté sur cet appareil": 1,
 "Se connecter": 1
 },
-"attributs": {}
+"attributs": {
+"aria-label=Langue / Language": 1
+}
 },
 {
 "profil": "aucun",
@@ -61,8 +69,10 @@
 "Aucune autorité locale sur ce serveur : le certificat a été fourni par votre informaticien, demandez-lui comment le faire reconnaître par le téléphone.": 1,
 "Ce certificat ne sert qu'à reconnaître le PC de l'atelier. Il ne donne aucun accès à votre téléphone et peut être retiré à tout moment dans les mêmes réglages.": 1,
 "Choisissez le fichier prevo-ca.crt": 1,
+"English": 1,
 "Faites confiance au PC atelier": 1,
 "Firefox sur Android a son propre magasin de certificats et ignore celui du téléphone. Ouvrez de préférence Prévo avec Chrome (ou le navigateur livré avec le téléphone). Pour rester sur Firefox : menu, Paramètres, « À propos de Firefox », touchez cinq fois le logo, puis dans le menu secret activez « Utiliser les certificats CA tiers ».": 1,
+"Français": 1,
 "GMAO de l'atelier": 1,
 "Il est dans « Téléchargements ». Android confirme : « Certificat CA installé ».": 1,
 "Illustration": 6,
@@ -86,7 +96,8 @@
 "alt=Illustration : la page de Prévo avec le bouton Télécharger le certificat": 1,
 "alt=Illustration : la rubrique Chiffrement et identifiants": 1,
 "alt=Illustration : le fichier prevo-ca.crt dans Téléchargements": 1,
-"alt=Illustration : les Paramètres d'Android avec la rubrique Sécurité et confidentialité": 1
+"alt=Illustration : les Paramètres d'Android avec la rubrique Sécurité et confidentialité": 1,
+"aria-label=Langue / Language": 1
 }
 },
 {
@@ -97,7 +108,9 @@
 "Aucune autorité locale sur ce serveur : le certificat a été fourni par votre informaticien, demandez-lui comment le faire reconnaître par le téléphone.": 1,
 "C'est l'étape qu'on oublie : sans « Autoriser pleinement », Safari refuse encore le PC atelier.": 1,
 "Ce certificat ne sert qu'à reconnaître le PC de l'atelier. Il ne donne aucun accès à votre téléphone et peut être retiré à tout moment dans les mêmes réglages.": 1,
+"English": 1,
 "Faites confiance au PC atelier": 1,
+"Français": 1,
 "GMAO de l'atelier": 1,
 "Illustration": 5,
 "L'iPhone demande son code, puis « Installer » une seconde fois, puis « OK ».": 1,
@@ -119,7 +132,8 @@
 "alt=Illustration : Réglages, Général, Informations": 1,
 "alt=Illustration : Safari demande l'autorisation de télécharger un profil": 1,
 "alt=Illustration : l'écran Installer le profil": 1,
-"alt=Illustration : les Réglages de l'iPhone avec la ligne Profil téléchargé": 1
+"alt=Illustration : les Réglages de l'iPhone avec la ligne Profil téléchargé": 1,
+"aria-label=Langue / Language": 1
 }
 },
 {
@@ -129,14 +143,18 @@
 "texte": {
 "Android": 1,
 "Ce certificat ne sert qu'à reconnaître le PC de l'atelier. Il ne donne aucun accès à votre téléphone et peut être retiré à tout moment dans les mêmes réglages.": 1,
+"English": 1,
 "Faites confiance au PC atelier": 1,
+"Français": 1,
 "GMAO de l'atelier": 1,
 "Prévo": 1,
 "Prévo tourne sur le PC de l'atelier, pas sur Internet. Pour que votre téléphone lui fasse confiance (caméra, micro, mot de passe protégé), il faut installer une fois son certificat. Cinq minutes, une seule fois par téléphone.": 1,
 "Quel téléphone avez-vous ?": 1,
 "iPhone ou iPad": 1
 },
-"attributs": {}
+"attributs": {
+"aria-label=Langue / Language": 1
+}
 },
 {
 "profil": "demandeur",

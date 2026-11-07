@@ -254,6 +254,10 @@ navigateurs à l'application en https sur `port_https`) :
 | `--reinitialiser IDENTIFIANT` | Donne un mot de passe provisoire à un compte (§9), puis s'arrête. |
 | `--servir-tests` | Pour les tests automatiques seulement ; inutile en usage normal. |
 
+La console et `journal-serveur.log` sont en français ou en anglais selon la langue de Prévo (Paramètres ›
+Entreprise, « Langue de Prévo ») ; avant ce réglage, selon la langue de Windows (ou du système). Un changement vaut au
+redémarrage suivant.
+
 Le démarrage automatique (§8) lance `serveur.py --sans-navigateur` sans autre option : gardez les données dans
 `donnees/` à côté de `serveur.py`, ou ajoutez vous-même l'option à la tâche ou au service.
 
