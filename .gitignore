@@ -16,18 +16,17 @@ outils-tiers/
 reference-design/
 /LISEZMOI.md
 
-# --- Site commercial, marketing et études : dans « SIte gmao » (dossier à part), jamais ici
-xxx/
-lancement/
-marketing/
-etudes/
-etudes-site/
-BRIEF_finition_lancement.md
-*.mp4
-
 # --- Python
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# --- Secrets et clés : jamais dans le dépôt (certificats, variables d'environnement)
+*.pem
+.env
+
+# --- Outils des agents (Claude Code)
+.claude/
 
 # --- Résultats de tests (captures, traces)
 tests/resultats/

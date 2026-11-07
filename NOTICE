@@ -1,2 +1,41 @@
-Prévo embarque des bibliothèques tierces (dans js/lib/) et la police Sora, qui restent
-sous leur propre licence : voir js/lib/LICENCES.txt.
+Prévo — free maintenance management (CMMS) for small industrial companies
+Copyright (c) 2026 Nicolas Briand — SELECTIS
+Prévo's own code is released under the MIT License: see LICENSE.
+
+Third-party components, each under its own licence:
+
+  In the repository and in every release (js/lib/, css/polices/), texts in js/lib/LICENCES.txt:
+    - PapaParse 5.7.0 (MIT)
+    - qrcode-generator 2.0.4 (MIT)
+    - jsQR 1.4.0 (Apache-2.0)
+    - Apache ECharts 5.5.1, with zrender 5.6.0 (Apache-2.0)
+    - SheetJS Community Edition 0.20.3 (Apache-2.0)
+    - Sora font (SIL Open Font License 1.1)
+
+  In the Windows release zip only (never in the repository):
+    - Python 3.14 embeddable package, in python/ (Python Software Foundation License; its text is
+      python/LICENSE.txt)
+    - mkcert 1.4.4 for Windows 64-bit, in outils-tiers/ (BSD 3-Clause License; its text is
+      outils-tiers/LICENCE-mkcert.txt)
+
+--------------------------------------------------------------------------------
+
+Prévo — GMAO libre pour les PME industrielles
+Copyright (c) 2026 Nicolas Briand — SELECTIS
+Le code propre de Prévo est sous licence MIT : voir LICENSE.
+
+Composants tiers, chacun sous sa propre licence :
+
+  Dans le dépôt et dans chaque version publiée (js/lib/, css/polices/), textes dans js/lib/LICENCES.txt :
+    - PapaParse 5.7.0 (MIT)
+    - qrcode-generator 2.0.4 (MIT)
+    - jsQR 1.4.0 (Apache-2.0)
+    - Apache ECharts 5.5.1, avec zrender 5.6.0 (Apache-2.0)
+    - SheetJS Community Edition 0.20.3 (Apache-2.0)
+    - Police Sora (SIL Open Font License 1.1)
+
+  Dans le zip Windows de la version publiée seulement (jamais dans le dépôt) :
+    - le paquet Python 3.14 embarquable, dans python/ (licence de la Python Software Foundation ; son texte est
+      python/LICENSE.txt)
+    - mkcert 1.4.4 pour Windows 64 bits, dans outils-tiers/ (licence BSD à 3 clauses ; son texte est
+      outils-tiers/LICENCE-mkcert.txt)

@@ -1,6 +1,14 @@
 # Mettre en ligne la démo de Prévo
 
-Adresse de la démo : **https://prevo.pro**
+Adresse de la démo : **https://prevo.pro/demo/** (l'application elle-même : https://prevo.pro/demo/app/)
+
+> **État au 07/11/2026 (constat B9 du Lot 0).** Depuis la mise en ligne du site vitrine prevo.pro (dépôt séparé), la
+> démo n'est plus à la racine du domaine : elle est publiée **avec le site**, le contenu de `dist/demo-web/` étant
+> copié sous `/demo/app/` par la procédure de ce dépôt-là (le serveur du site est Apache). Dans ce document, l'étape 1
+> (construire la démo) et l'étape 6 (vérifier, avec les adresses `/demo/app/`) restent valables ; les étapes 2 à 5
+> (DNS, nginx, certificat, copie à la racine) décrivent la première mise en ligne (octobre 2026) et ne s'appliquent
+> plus telles quelles. La démo en ligne reste en 1.2.0 jusqu'à la 2.0.0, et ne sera mise à jour qu'une fois, avec la
+> 2.0.0 (décision du 04/11).
 
 But : permettre d'essayer Prévo dans le navigateur avant de le télécharger. La démo en ligne est un
 **site statique** : une copie de l'application (pages, styles, scripts) que le navigateur du visiteur
@@ -181,18 +189,18 @@ ssh <utilisateur>@<IP du VPS> "chmod -R a+rX /var/www/prevo-demo"
 Depuis le PC :
 
 ```
-curl -I https://prevo.pro/
-curl -I http://prevo.pro/
-curl -I https://prevo.pro/serveur.py
-curl -I https://prevo.pro/api/ping
-curl -s https://prevo.pro/js/app.js | findstr VERSION_WEB
+curl -I https://prevo.pro/demo/app/
+curl -I http://prevo.pro/demo/app/
+curl -I https://prevo.pro/demo/app/serveur.py
+curl -I https://prevo.pro/demo/app/api/ping
+curl -s https://prevo.pro/demo/app/js/app.js | findstr "VERSION_WEB VERSION ="
 ```
 
 (sous Mac ou Linux, `grep` à la place de `findstr`.) Attendu, dans l'ordre : `200` ; une redirection
 (`301`) vers https ; `404` (serveur.py n'est pas en ligne) ; `404` (aucune API) ;
 `const VERSION_WEB = true;`.
 
-Puis dans un navigateur, sur https://prevo.pro :
+Puis dans un navigateur, sur https://prevo.pro/demo/app/ :
 
 1. Le cadenas est affiché. L'écran de démarrage ne propose que **« Essayer avec les données de démo »**
    et **« Télécharger Prévo »** (ni dossier, ni dépôt de fichiers CSV, ni mention du mode serveur).
