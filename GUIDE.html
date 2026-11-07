@@ -747,7 +747,7 @@ Avec l'assistant IA, un commentaire peut être proposé avant de figer (voir <a 
 
 <h3 id="ce-poste">4.15 Ce poste</h3>
 <p>Écran ouvert à tous les profils. Ses réglages ne valent <b>que pour ce navigateur</b>&nbsp;: ils ne changent
-rien sur les autres postes.</p>
+rien sur les autres postes (sauf la langue choisie «&nbsp;pour mon compte&nbsp;», ci-dessous).</p>
 <ul>
   <li><b>Identité</b>&nbsp;: nom du poste, profil, stockage, et <span class="bouton">Changer de profil ou de nom de poste…</span>&nbsp;;</li>
   <li><b>Assistant IA</b>&nbsp;: activer ou non, modèle, délai de réponse, <span class="bouton">Tester la
@@ -756,7 +756,11 @@ rien sur les autres postes.</p>
     <a href="#ia-activer">chapitre 5</a>)&nbsp;;</li>
   <li><b>Dictée vocale</b>&nbsp;: la proposer ou non sur ce poste, et l'état détecté (voir <a href="#dictee">chapitre 6</a>)&nbsp;;</li>
   <li><b>Affichage</b>&nbsp;: thème sombre (par défaut) ou clair, pour une pièce lumineuse ou le plein jour.
-    L'impression reste en noir sur blanc&nbsp;;</li>
+    L'impression reste en noir sur blanc. Langue de l'écran&nbsp;: avec un compte (mode serveur, comptes exigés), deux
+    choix&nbsp;: <b>«&nbsp;Pour mon compte&nbsp;»</b>, la langue est enregistrée dans votre compte et vous suit sur
+    tous les postes où vous vous connectez&nbsp;; <b>«&nbsp;Pour ce poste seulement&nbsp;»</b>, elle reste dans ce
+    navigateur (et votre compte n'impose plus la sienne). À la déconnexion, l'écran revient à la langue du poste ou de
+    l'installation, pour la personne suivante. Sans compte, la langue vaut pour ce poste&nbsp;;</li>
   <li><b>Aide à l'écran</b>&nbsp;: la case «&nbsp;Afficher l'explication à la première visite de chaque écran&nbsp;» (cochée
     par défaut) et <span class="bouton">Revoir toutes les explications</span>, qui les fait revenir une fois sur chaque
     écran.</li>
@@ -1215,7 +1219,8 @@ compte.</p>
 Trois onglets&nbsp;:</p>
 <ul>
   <li><b>Comptes</b>&nbsp;: <span class="bouton">Créer un compte</span> (prénom, nom, rôle&nbsp;; un technicien est lié à
-    sa fiche de l'équipe), puis par ligne <span class="bouton">Modifier…</span>, <span class="bouton">Réinitialiser…</span>
+    sa fiche de l'équipe&nbsp;; la langue de la personne, «&nbsp;Langue de l'installation&nbsp;» par défaut, qu'elle
+    peut aussi choisir elle-même dans <a href="#ce-poste">Ce poste</a>), puis par ligne <span class="bouton">Modifier…</span>, <span class="bouton">Réinitialiser…</span>
     (nouveau mot de passe provisoire), <span class="bouton">Désactiver</span> ou <span class="bouton">Activer</span>.
     Le mot de passe provisoire s'affiche une seule fois, dans une fenêtre&nbsp;: notez-le pour la personne, il n'est
     écrit nulle part. Il reste toujours au moins un responsable actif, et un compte désactivé perd ses sessions
@@ -1226,7 +1231,8 @@ Trois onglets&nbsp;:</p>
     <span class="bouton">Révoquer</span> le coupe dès sa requête suivante, et il revoit la page d'invitation. Si
     chaque demandeur a un compte (réglage de l'informaticien), l'enrôlement d'appareils est désactivé.</li>
   <li><b>Journal des connexions</b>&nbsp;: qui s'est connecté, quand, depuis quelle adresse, avec quel navigateur&nbsp;;
-    les échecs, les blocages, les invitations, les révocations, les comptes créés ou réinitialisés. Le journal
+    les échecs, les blocages, les invitations, les révocations, les comptes créés, modifiés ou réinitialisés, les
+    changements de langue («&nbsp;Langue changée (fr → en)&nbsp;»). Le journal
     garde 12 mois et s'exporte en CSV (voir <a href="#rgpd">8.9</a>).</li>
 </ul>
 <figure class="capture">

@@ -8,6 +8,8 @@
 // jeton d'une invitation sont montrés une seule fois, dans une fenêtre, et ne sont jamais mémorisés ni journalisés.
 // Lien d'une invitation : adresse donnée par Prévo pour les QR (App.urlFicheEquipement, donc la porte d'entrée ou
 // l'adresse choisie pour les étiquettes) + chemin rendu par le serveur (/#/enroler/<jeton>).
+// T298 : la langue d'un compte se choisit à sa création et dans « Modifier » (vide : la langue de l'installation) ; le
+// journal montre « Langue changée (fr → en) ».
 // Dépendances : App, UI, Donnees (techniciens liés, erreurs). Charte : css/modules/equipe.css (section 5).
 
 const EquipeAcces = (() => {
@@ -59,6 +61,14 @@ const EquipeAcces = (() => {
     }
   }
   const TONS_RESULTAT = { connexion: 'ok', appareil: 'ok', creation: 'ok', echec: 'ko', bloque: 'ko', revocation: 'attention' };
+
+  /** T298 : « langue:fr>en » (serveur.py, resultat_langue) → « Langue changée (fr → en) » ; '' pour un autre code. */
+  function libelleLangueChangee(valeur) {
+    const trouve = /^langue:([^>]*)>(.*)$/.exec(valeur);
+    if (!trouve) return '';
+    const nom = (code) => (code === 'installation' ? I18n.t('equipe.libelle_resultat.langue_installation') : code);
+    return I18n.t('equipe.libelle_resultat.langue_changee', { avant: nom(trouve[1]), apres: nom(trouve[2]) });
+  }
   const NOM_FICHIER_JOURNAL = 'journal-acces.csv';
   const MARQUE_ORDRE_OCTETS = String.fromCharCode(0xFEFF);
 
@@ -197,6 +207,20 @@ const EquipeAcces = (() => {
     return bloc;
   }
 
+  // T298 : liste « Langue » d'un compte : « Langue de l'installation » (vide) puis les langues déclarées, chacune sous
+  // son nom dans sa langue ; une valeur hors de la liste (écrite à la main dans comptes.json) est montrée vide.
+  function champLangue(compte) {
+    const actuelle = compte && I18n.estDeclaree(compte.langue) ? compte.langue : '';
+    const bloc = UI.champ(definition('langue', 'ref', I18n.t('equipe.champs_compte.langue')), actuelle,
+      { liste: I18n.langues.map((langue) => ({ valeur: langue.code, libelle: langue.nom })),
+        aide: I18n.t('equipe.champs_compte.langue_aide') });
+    UI.$$('option', bloc).forEach((option) => {
+      if (option.value) option.lang = option.value;
+      else option.textContent = I18n.t('equipe.champs_compte.langue_installation');
+    });
+    return bloc;
+  }
+
   function champsCompte(compte) {
     const valeur = (nom) => (compte ? compte[nom] : undefined);
     const champRole = UI.champ(definition('role', 'choix', I18n.t('equipe.champs_compte.role'), { valeurs: ROLES, obligatoire: true }),
@@ -210,6 +234,7 @@ const EquipeAcces = (() => {
       champRole,
       UI.champ(definition('technicien_id', 'ref', I18n.t('equipe.champs_compte.technicien_lie')), valeur('technicien_id'),
         { liste: listeTechniciens(), aide: I18n.t('equipe.champs_compte.compte_technicien_fiche_equipe') }),
+      champLangue(compte),
     ];
   }
 
@@ -228,7 +253,7 @@ const EquipeAcces = (() => {
 
   function champsEnvoyes(valeurs) {
     return { prenom: texte(valeurs.prenom), nom: texte(valeurs.nom), role: texte(valeurs.role),
-      technicien_id: texte(valeurs.technicien_id) };
+      technicien_id: texte(valeurs.technicien_id), langue: texte(valeurs.langue) };
   }
 
   /** Mot de passe provisoire montré une seule fois : à noter et à remettre en main propre. */
@@ -556,7 +581,7 @@ const EquipeAcces = (() => {
 
   function badgeResultat(resultat) {
     const cle = texte(resultat).toLowerCase();
-    return badge(libelleResultat(cle) || texte(resultat), TONS_RESULTAT[cle] || 'neutre');
+    return badge(libelleResultat(cle) || libelleLangueChangee(texte(resultat)) || texte(resultat), TONS_RESULTAT[cle] || 'neutre');
   }
 
   async function afficherJournal(panneau) {

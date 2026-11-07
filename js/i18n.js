@@ -4,8 +4,9 @@
 // Les langues sont déclarées par js/i18n/langues.js (I18n.declarer) ; chaque langue enregistre ses textes par
 // js/i18n/<code>.js (I18n.ajouter, un bloc par section) et son aide longue, à part, par js/i18n/aide/<code>.js (clés
 // aide.*). Le français est la langue de référence et de repli. La langue active (autre que le français) est chargée
-// avant js/schema.js par js/i18n-chargeur.js, qui choisit la langue à afficher (I18n.langueAAfficher : choix du poste,
-// sinon langue de l'installation, sinon langue du navigateur ou anglais, D150) et note la langue de l'installation (I18n.noterInstallation).
+// avant js/schema.js par js/i18n-chargeur.js, qui choisit la langue à afficher (I18n.langueAAfficher : langue du compte
+// connecté, T298 ; sinon choix du poste ; sinon langue de l'installation ; sinon langue du navigateur ou anglais, D150)
+// et note la langue de l'installation (I18n.noterInstallation).
 //
 // Règles :
 // - script classique, sans dépendance, compatible file:// ;
@@ -91,14 +92,16 @@ const I18n = (function () {
   // ===========================================================================================
 
   /**
-   * Langue à afficher (D148, D150, sans la langue du compte) : 1. le choix du poste ; 2. sinon la langue de
-   * l'installation ; 3. sinon, si `languesDuNavigateur` est donné (navigator.languages : « sans réglage », démo ou
-   * première ouverture), la langue du navigateur (langueDuNavigateur, anglais à défaut) ; 4. sinon le français. Chaque
-   * code est vérifié contre les langues déclarées : vide, inconnu ou mal formé, il est ignoré. Sert à
-   * js/i18n-chargeur.js (avant js/schema.js), à js/app.js (paramètres lus : sans 3e argument) et au sélecteur de langue.
+   * Langue à afficher (D148, D150) : 1. la langue du compte connecté (`langueDuCompte`, T298 : localStorage
+   * « prevo.langue.compte », écrite par js/app.js à la connexion, effacée à la déconnexion) ; 2. sinon le choix du
+   * poste ; 3. sinon la langue de l'installation ; 4. sinon, si `languesDuNavigateur` est donné (navigator.languages :
+   * « sans réglage », démo ou première ouverture), la langue du navigateur (langueDuNavigateur, anglais à défaut) ;
+   * 5. sinon le français. Chaque code est vérifié contre les langues déclarées : vide, inconnu ou mal formé, il est
+   * ignoré. Sert à js/i18n-chargeur.js (avant js/schema.js), à js/app.js (paramètres lus : sans 3e argument) et au
+   * sélecteur de langue (sans 4e argument : la langue qu'aurait le poste sans compte).
    */
-  function langueAAfficher(choixDuPoste, installation, languesDuNavigateur) {
-    const retenue = [choixDuPoste, installation].find(estDeclaree);
+  function langueAAfficher(choixDuPoste, installation, languesDuNavigateur, langueDuCompte) {
+    const retenue = [langueDuCompte, choixDuPoste, installation].find(estDeclaree);
     if (retenue) return retenue;
     return Array.isArray(languesDuNavigateur) ? langueDuNavigateur(languesDuNavigateur) : LANGUE_DE_REFERENCE;
   }
@@ -142,15 +145,15 @@ const I18n = (function () {
 
   /**
    * Langue à afficher sur cette page (T297) : avec une langue de l'installation donnée par la page, langueAAfficher
-   * (choix du poste, sinon cette langue-là, sinon le français : une valeur non déclarée est ignorée, sans erreur) ; elle
-   * passe avant celle retenue par ce navigateur et la langue du navigateur ne sert pas. Sans elle :
-   * langueAAfficher(choixDuPoste, installationRetenue, languesDuNavigateur). Sert à js/i18n-chargeur.js et aux
-   * sélecteurs de langue (UI.selecteurLangue, acces/porte.js).
+   * (langue du compte, sinon choix du poste, sinon cette langue-là, sinon le français : une valeur non déclarée est
+   * ignorée, sans erreur) ; elle passe avant celle retenue par ce navigateur et la langue du navigateur ne sert pas.
+   * Sans elle : langueAAfficher(choixDuPoste, installationRetenue, languesDuNavigateur, langueDuCompte). Sert à
+   * js/i18n-chargeur.js, à js/app.js (T298) et aux sélecteurs de langue (UI.selecteurLangue, acces/porte.js).
    */
-  function langueDeLaPage(choixDuPoste, installationRetenue, languesDuNavigateur) {
+  function langueDeLaPage(choixDuPoste, installationRetenue, languesDuNavigateur, langueDuCompte) {
     const donnee = installationDeLaPage();
-    return donnee ? langueAAfficher(choixDuPoste, donnee)
-      : langueAAfficher(choixDuPoste, installationRetenue, languesDuNavigateur);
+    return donnee ? langueAAfficher(choixDuPoste, donnee, undefined, langueDuCompte)
+      : langueAAfficher(choixDuPoste, installationRetenue, languesDuNavigateur, langueDuCompte);
   }
 
   /**
@@ -422,6 +425,8 @@ const I18n = (function () {
     appliquer: appliquer,
     langueAAfficher: langueAAfficher,
     langueDeLaPage: langueDeLaPage,
+    /** Vrai pour un code bien formé et déclaré par js/i18n/langues.js (le français l'est toujours), faux sinon. */
+    estDeclaree: estDeclaree,
     installationDeLaPage: installationDeLaPage,
     langueDuNavigateur: langueDuNavigateur,
     noterInstallation: noterInstallation,

@@ -927,7 +927,11 @@ LONGUEUR_PROVISOIRE = 16
 ALPHABET_PROVISOIRE = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # sans 0/O, 1/l/I
 COLONNES_JOURNAL_ACCES = ['date', 'qui', 'adresse', 'agent', 'resultat', 'tailscale']
 RESULTATS_JOURNAL_ACCES = ('connexion', 'echec', 'bloque', 'deconnexion', 'appareil', 'invitation', 'revocation',
-                           'reinitialisation', 'creation', 'modification')
+                           'reinitialisation', 'creation', 'modification', 'langue')
+# T298 : un changement de la langue d'un compte s'écrit « langue:<avant>><après> » dans la colonne resultat
+# (resultat_langue), « installation » pour la langue de l'installation (aucune langue enregistrée dans le compte) :
+# « langue:fr>en », « langue:installation>en ».
+LANGUE_DE_L_INSTALLATION_AU_JOURNAL = 'installation'
 DUREE_JOURNAL_ACCES_JOURS = 366
 # Jamais sauvegardés : une session ne se restaure jamais ; la clé privée du certificat de l'atelier ne quitte pas le PC
 # (copie externe sur une clé USB ou un NAS) et se refabrique au démarrage si elle manque (preparer_certificat_local).
@@ -1103,12 +1107,15 @@ def meme_personne(comptes, prenom, nom):
 
 
 def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_changer=False, identifiant=None,
-                 origine=('', '', ''), autre_personne=False):
+                 origine=('', '', ''), autre_personne=False, langue=''):
     """Crée un compte (rôle, technicien lié pour un technicien) ; rend le compte créé (sans son empreinte).
     origine : (adresse, agent, Tailscale) de la ligne du journal (T152 : la requête du responsable), vide sinon.
     T301 : un compte existe déjà au même prénom et au même nom (meme_personne) → refus (comptes.meme_personne, avec
-    son identifiant), sauf autre_personne (le responsable a coché « C'est une autre personne »)."""
+    son identifiant), sauf autre_personne (le responsable a coché « C'est une autre personne »).
+    T298 : langue, une langue déclarée (langue_de_compte), écrite seulement si elle est donnée (vide : aucun champ,
+    la langue de l'installation)."""
     prenom, nom = (prenom or '').strip(), (nom or '').strip()
+    langue = langue_de_compte(langue)
     if not prenom:
         raise ErreurCompte(traduisible('comptes.prenom_obligatoire', 'Le prénom est obligatoire.'))
     if role not in ROLES_COMPTES:
@@ -1138,9 +1145,11 @@ def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_ch
         algo, sel, empreinte = hacher_mot_de_passe(mot_de_passe)
         instant = maintenant_iso(config)
         compte = {'identifiant': identifiant, 'prenom': prenom, 'nom': nom, 'role': role,
-                  'technicien_id': technicien_id or '', 'actif': True, 'algo': algo, 'sel': sel,
-                  'empreinte': empreinte, 'a_changer': bool(a_changer), 'cree_le': instant,
-                  'modifie_le': instant, 'mot_de_passe_le': instant}
+                  'technicien_id': technicien_id or ''}
+        if langue:
+            compte['langue'] = langue
+        compte.update({'actif': True, 'algo': algo, 'sel': sel, 'empreinte': empreinte, 'a_changer': bool(a_changer),
+                       'cree_le': instant, 'modifie_le': instant, 'mot_de_passe_le': instant})
         comptes.append(compte)
         ecrire_comptes(config, comptes)
     ecrire_journal_acces(config, identifiant, origine[0], origine[1], 'creation', origine[2])
@@ -1150,6 +1159,73 @@ def creer_compte(config, prenom, nom, role, mot_de_passe, technicien_id='', a_ch
 def compte_public(compte):
     """Le compte sans son sel ni son empreinte (ce qui peut partir vers un navigateur)."""
     return {cle: valeur for cle, valeur in compte.items() if cle not in ('sel', 'empreinte', 'algo')}
+
+
+# Langue d'un compte (T298 ; D148) : champ facultatif « langue » de comptes.json, vide ou absent = la langue de
+# l'installation. Valeur fermée : une langue déclarée par js/i18n/langues.js (langues_declarees), ou vide ; tout le
+# reste est refusé (400 au message comptes.langue_inconnue) et rien n'est écrit. La 2.0.0 bêta 2 relit le fichier sans
+# erreur et garde le champ (elle réécrit chaque compte tel qu'elle l'a lu, champs inconnus compris).
+
+def langue_de_compte(valeur):
+    """La langue reçue pour un compte si elle est acceptée : '' (la langue de l'installation) ou une langue déclarée ;
+    ErreurCompte (comptes.langue_inconnue) pour toute autre valeur, autre type compris."""
+    if valeur == '':
+        return ''
+    declarees = langues_declarees()
+    if not (isinstance(valeur, str) and MOTIF_CODE_LANGUE.fullmatch(valeur) and valeur in declarees):
+        raise ErreurCompte(traduisible('comptes.langue_inconnue',
+                                       'Langue inconnue : « {langue} ». Une langue déclarée ({langues}) est attendue, '
+                                       'ou rien pour la langue de l\'installation.',
+                                       langue=str(valeur)[:20], langues=declarees))
+    return valeur
+
+
+def langue_enregistree(compte):
+    """Langue écrite dans le compte, telle quelle si c'est un texte (20 caractères au plus) ; '' sans elle."""
+    valeur = compte.get('langue', '')
+    return valeur[:20] if isinstance(valeur, str) else ''
+
+
+def langue_publique(valeur):
+    """La langue d'un compte qui part vers le navigateur (session_publique) : une langue déclarée, sinon '' (absente,
+    ou écrite à la main hors de la liste : la langue de l'installation)."""
+    try:
+        return langue_de_compte(valeur)
+    except ErreurCompte:
+        return ''
+
+
+def resultat_langue(avant, apres):
+    """Colonne resultat du journal pour un changement de langue : « langue:fr>en » (installation pour vide)."""
+    return 'langue:%s>%s' % (avant or LANGUE_DE_L_INSTALLATION_AU_JOURNAL, apres or LANGUE_DE_L_INSTALLATION_AU_JOURNAL)
+
+
+def poser_langue(compte, langue):
+    """Écrit la langue dans le compte (vide : le champ est retiré, comme dans un compte qui n'en a jamais eu)."""
+    if langue:
+        compte['langue'] = langue
+    else:
+        compte.pop('langue', None)
+
+
+def changer_langue(config, identifiant, langue, origine=('', '', '')):
+    """Langue du compte connecté, choisie par la personne elle-même (T298 : « Ce poste », pour mon compte) : seul le
+    champ « langue » change, ni le mot de passe, ni les sessions, ni modifie_le (une préférence) ; une ligne
+    « langue:<avant>><après> » au journal quand elle change, aucune écriture sinon. Rend la langue retenue."""
+    langue = langue_de_compte(langue)
+    with VERROU_ACCES:
+        comptes = lire_comptes(config)
+        compte = trouver_compte(comptes, identifiant)
+        if compte is None:
+            raise erreur_compte_introuvable(comptes, identifiant)
+        avant = langue_enregistree(compte)
+        if avant == langue:
+            return langue
+        poser_langue(compte, langue)
+        ecrire_comptes(config, comptes)
+    ecrire_journal_acces(config, compte['identifiant'], origine[0], origine[1], resultat_langue(avant, langue),
+                         origine[2])
+    return langue
 
 
 def changer_mot_de_passe(config, identifiant, nouveau, a_changer=False, journal='modification', origine=('', '', '')):
@@ -1181,20 +1257,28 @@ def reinitialiser_compte(config, identifiant, origine=('', '', '')):
 
 
 def modifier_compte(config, identifiant, origine=('', '', ''), **champs):
-    """Prénom, nom, rôle, technicien lié ou actif ; jamais l'identifiant ni le mot de passe par cette voie."""
-    permis = {'prenom', 'nom', 'role', 'technicien_id', 'actif'}
+    """Prénom, nom, rôle, technicien lié, langue (T298 : langue_de_compte ; vide, le champ est retiré) ou actif ;
+    jamais l'identifiant ni le mot de passe par cette voie. Langue changée : une ligne « langue:<avant>><après> » au
+    journal après celle de la modification."""
+    permis = {'prenom', 'nom', 'role', 'technicien_id', 'actif', 'langue'}
+    if 'langue' in champs:
+        champs['langue'] = langue_de_compte(champs['langue'])
     with VERROU_ACCES:
         comptes = lire_comptes(config)
         compte = trouver_compte(comptes, identifiant)
         if compte is None:
             raise erreur_compte_introuvable(comptes, identifiant)
+        langue_avant = langue_enregistree(compte)
         for cle, valeur in champs.items():
             if cle not in permis:
                 raise ErreurCompte(traduisible('comptes.champ_non_modifiable',
                                                'Champ non modifiable : {champ}.', champ=cle))
             if cle == 'role' and valeur not in ROLES_COMPTES:
                 raise ErreurCompte(traduisible('comptes.role_inconnu', 'Rôle inconnu : {role}.', role=valeur))
-            compte[cle] = bool(valeur) if cle == 'actif' else valeur
+            if cle == 'langue':
+                poser_langue(compte, valeur)
+            else:
+                compte[cle] = bool(valeur) if cle == 'actif' else valeur
         if compte['role'] == 'technicien' and not compte.get('technicien_id'):
             raise ErreurCompte(traduisible('comptes.technicien_obligatoire',
                                            'Un compte de technicien est lié à un technicien de l\'équipe.'))
@@ -1206,6 +1290,9 @@ def modifier_compte(config, identifiant, origine=('', '', ''), **champs):
     if not compte.get('actif'):
         fermer_sessions_apres_changement(config, compte['identifiant'])
     ecrire_journal_acces(config, compte['identifiant'], origine[0], origine[1], 'modification', origine[2])
+    if 'langue' in champs and champs['langue'] != langue_avant:
+        ecrire_journal_acces(config, compte['identifiant'], origine[0], origine[1],
+                             resultat_langue(langue_avant, champs['langue']), origine[2])
     return compte_public(compte)
 
 
@@ -1287,7 +1374,7 @@ TAILLE_MAX_CORPS_JETE = 64 * 1024       # refus avant la lecture du corps : au p
 QUI_INCONNU = '(inconnu)'               # journal : un identifiant sans compte n'est jamais recopié (un mot de passe
                                         # tapé dans la mauvaise case y finirait en clair)
 SEL_FACTICE = bytes(16)                 # empreinte factice d'un identifiant inconnu : même calcul, même durée
-CHAMPS_SESSION = ('identifiant', 'role', 'prenom', 'nom', 'technicien_id', 'a_changer', 'appareil')
+CHAMPS_SESSION = ('identifiant', 'role', 'prenom', 'nom', 'technicien_id', 'a_changer', 'appareil', 'langue')
 MESSAGE_CONNEXION_REFUSEE = traduisible('sessions.connexion_refusee', 'Identifiant ou mot de passe incorrect.')
 MESSAGE_IDENTIFIANT_AMBIGU = traduisible('sessions.identifiant_ambigu',
                                          'Plusieurs comptes correspondent à cet identifiant : tapez-le exactement, tel '
@@ -1431,12 +1518,18 @@ def identite_du_compte(compte, cle, longue):
     """Ce que le serveur sait de la requête : le compte et sa session (empreinte, « rester »), jamais le jeton."""
     return {'identifiant': compte['identifiant'], 'role': compte.get('role', ''), 'prenom': compte.get('prenom', ''),
             'nom': compte.get('nom', ''), 'technicien_id': compte.get('technicien_id', ''),
-            'a_changer': bool(compte.get('a_changer')), 'appareil': False, 'cle': cle, 'longue': bool(longue)}
+            'a_changer': bool(compte.get('a_changer')), 'appareil': False, 'cle': cle, 'longue': bool(longue),
+            'langue': langue_enregistree(compte)}
 
 
 def session_publique(identite):
-    """L'identité telle que GET /api/session la rend (§22.4), ou None."""
-    return None if identite is None else {champ: identite[champ] for champ in CHAMPS_SESSION}
+    """L'identité telle que GET /api/session la rend (§22.4), ou None. T298 : « langue », celle du compte quand c'est
+    une langue déclarée, sinon '' (langue_publique ; toujours '' pour un appareil enrôlé)."""
+    if identite is None:
+        return None
+    publique = {champ: identite.get(champ, '') for champ in CHAMPS_SESSION}
+    publique['langue'] = langue_publique(publique['langue'])
+    return publique
 
 
 def valeurs_cookie(entete, nom):
@@ -1649,7 +1742,7 @@ def identite_de_l_appareil(appareil, cle):
     jamais le jeton."""
     return {'identifiant': 'appareil:' + str(appareil.get('id', '')), 'role': 'demandeur', 'prenom': '',
             'nom': str(appareil.get('nom_demandeur', '')), 'technicien_id': '', 'a_changer': False, 'appareil': True,
-            'cle': cle, 'longue': True}
+            'cle': cle, 'longue': True, 'langue': ''}
 
 
 def verifier_appareil(config, entete_cookie):
@@ -6487,7 +6580,7 @@ def controle_d_ajout(identite, table):
 
 # --- Comptes gérés par le responsable (GET/POST /api/acces/comptes…, §22.4) ----------------------------------------
 
-CHAMPS_COMPTE_MODIFIABLES = ('prenom', 'nom', 'role', 'technicien_id')
+CHAMPS_COMPTE_MODIFIABLES = ('prenom', 'nom', 'role', 'technicien_id', 'langue')       # langue : T298
 ACTIONS_COMPTE = ('modifier', 'reinitialiser', 'desactiver', 'activer')
 
 
@@ -6500,18 +6593,18 @@ def technicien_existe(config, technicien_id):
 
 def champs_de_compte(config, demande, obligatoires=()):
     """Champs d'un compte reçus par /api/acces/comptes (création, modification) : des textes, un rôle connu, un technicien
-    lié présent dans techniciens.csv ; 400 sinon, champ inconnu compris (jamais un mot de passe, un sel ni « actif » par
-    cette voie)."""
+    lié présent dans techniciens.csv, une langue déclarée ou vide (T298, langue_de_compte) ; 400 sinon, champ inconnu
+    compris (jamais un mot de passe, un sel ni « actif » par cette voie)."""
     champs = {}
     for cle, valeur in demande.items():
         if cle not in CHAMPS_COMPTE_MODIFIABLES:
             raise ErreurHttp(400, traduisible('comptes.champ_inconnu',
                                               'Champ inconnu ou non modifiable ici : « {champ} » (prenom, nom, '
-                                              'role, technicien_id).', champ=str(cle)[:60]))
+                                              'role, technicien_id, langue).', champ=str(cle)[:60]))
         if not isinstance(valeur, str):
             raise ErreurHttp(400, traduisible('comptes.texte_attendu',
                                               '« {champ} » : un texte est attendu.', champ=cle))
-        champs[cle] = valeur.strip()
+        champs[cle] = valeur if cle == 'langue' else valeur.strip()      # langue : la valeur exacte (T298)
     for cle in obligatoires:
         if not champs.get(cle):
             raise ErreurHttp(400, traduisible('comptes.champ_obligatoire', '« {champ} » est obligatoire.', champ=cle))
@@ -6523,6 +6616,11 @@ def champs_de_compte(config, demande, obligatoires=()):
         raise ErreurHttp(400, traduisible('comptes.technicien_inconnu',
                                           'Technicien inconnu : « {technicien} » (voir Équipe).',
                                           technicien=champs['technicien_id'][:60]))
+    if 'langue' in champs:
+        try:
+            langue_de_compte(champs['langue'])
+        except ErreurCompte as erreur:
+            raise ErreurHttp(400, traduisible_de(erreur))
     return champs
 
 
@@ -6915,9 +7013,13 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     def api_mot_de_passe(self, segment, corps):
         """POST /api/mot-de-passe {actuel, nouveau} : 200 et une session neuve, toutes les autres sessions du compte
         fermées ; 400 si le nouveau est refusé (12 à 256 caractères, différent de l'actuel) ; 403 si l'actuel est faux
-        (compté comme un échec de connexion) ; 429 pendant un blocage."""
+        (compté comme un échec de connexion) ; 429 pendant un blocage. T298 : {"langue": code} seul, la langue du compte
+        de la session (api_langue_du_compte) ; « langue » avec tout autre champ : 400, rien de changé."""
         self.exiger_comptes()
         demande = lire_objet_json(corps)
+        if 'langue' in demande:
+            self.api_langue_du_compte(demande)
+            return
         actuel, nouveau = demande.get('actuel'), demande.get('nouveau')
         if not (isinstance(actuel, str) and isinstance(nouveau, str)):
             raise ErreurHttp(400, traduisible('sessions.mot_de_passe_champs',
@@ -6938,6 +7040,29 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
             raise ErreurHttp(400, traduisible_de(erreur))
         compte = trouver_compte(comptes_du_serveur(self.config), identifiant)
         self.repondre_avec_session(compte, self.session['longue'])
+
+    def api_langue_du_compte(self, demande):
+        """POST /api/mot-de-passe {"langue": code} (T298, aucune route nouvelle) : la personne connectée change la langue
+        de SON compte (celui de la session, jamais un autre) : une langue déclarée, ou "" pour la langue de
+        l'installation (400 sinon, rien d'écrit) ; ni mot de passe demandé ni session fermée ; 200 et la session à jour.
+        Refus : « langue » avec un autre champ (400 sessions.langue_seule : un changement de mot de passe garde
+        exactement ses règles), appareil enrôlé (403, il n'a pas de compte), mot de passe provisoire (403)."""
+        if set(demande) != {'langue'}:
+            raise ErreurHttp(400, traduisible('sessions.langue_seule',
+                                              'La langue se change seule : « langue » sans « actuel » ni « nouveau » '
+                                              '(ni aucun autre champ).'))
+        if self.session.get('appareil'):
+            raise ErreurHttp(403, traduisible('sessions.langue_appareil',
+                                              'Un appareil enrôlé n\'a pas de compte : sa langue se choisit pour ce '
+                                              'poste.'))
+        if self.session.get('a_changer'):
+            raise ErreurHttp(403, MESSAGE_MOT_DE_PASSE_PROVISOIRE)
+        try:
+            langue = changer_langue(self.config, self.session['identifiant'], demande['langue'], origine=self.origine())
+        except ErreurCompte as erreur:
+            raise ErreurHttp(400, traduisible_de(erreur))
+        self.session['langue'] = langue
+        self.envoyer_json(200, {'comptes': True, 'session': session_publique(self.session)})
 
     def api_enroler(self, segment, corps):
         """POST /api/enroler {invitation, nom} (route publique, D125) : l'appareil est enrôlé, reçoit son cookie
@@ -6988,10 +7113,10 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         self.envoyer_json(200, {'comptes': [compte_public(compte) for compte in comptes_du_serveur(self.config)]})
 
     def api_compte_creer(self, segment, corps):
-        """POST /api/acces/comptes (responsable) {prenom, nom, role, technicien_id, autre_personne} : compte créé avec un
-        mot de passe provisoire de 16 caractères, à changer à la première connexion (a_changer), rendu une seule fois
-        dans la réponse : jamais écrit dans un fichier, le journal ou la console. T301 : même prénom et même nom qu'un
-        compte existant → 400 comptes.meme_personne, sauf autre_personne vrai."""
+        """POST /api/acces/comptes (responsable) {prenom, nom, role, technicien_id, langue, autre_personne} : compte créé
+        avec un mot de passe provisoire de 16 caractères, à changer à la première connexion (a_changer), rendu une seule
+        fois dans la réponse : jamais écrit dans un fichier, le journal ou la console. T301 : même prénom et même nom
+        qu'un compte existant → 400 comptes.meme_personne, sauf autre_personne vrai. T298 : langue facultative."""
         self.exiger_comptes()
         demande = lire_objet_json(corps)
         autre_personne = demande.pop('autre_personne', False)       # T301 : case « C'est une autre personne »
@@ -7003,14 +7128,15 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
         try:
             compte = creer_compte(self.config, champs['prenom'], champs.get('nom', ''), champs['role'], provisoire,
                                   technicien_id=champs.get('technicien_id', ''), a_changer=True,
-                                  origine=self.origine(), autre_personne=autre_personne)
+                                  origine=self.origine(), autre_personne=autre_personne,
+                                  langue=champs.get('langue', ''))
         except ErreurCompte as erreur:
             raise ErreurHttp(400, traduisible_de(erreur))
         self.envoyer_json(200, {'compte': compte, 'mot_de_passe_provisoire': provisoire})
 
     def api_compte_changer(self, identifiant, corps):
-        """POST /api/acces/comptes/<identifiant> (responsable) {"action": "modifier" (prenom, nom, role, technicien_id)
-        | "reinitialiser" | "desactiver" | "activer"} : fonctions de T150 (au moins un responsable actif reste : 400) ;
+        """POST /api/acces/comptes/<identifiant> (responsable) {"action": "modifier" (prenom, nom, role, technicien_id,
+        langue) | "reinitialiser" | "desactiver" | "activer"} : fonctions de T150 (au moins un responsable actif reste : 400) ;
         « reinitialiser » rend le mot de passe provisoire une seule fois ; 404 compte inconnu, 400 action inconnue."""
         self.exiger_comptes()
         demande = lire_objet_json(corps)

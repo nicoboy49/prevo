@@ -2,8 +2,9 @@
 // Chargeur de la langue active (chantier multilingue, contrat du Lot 2 ; docs/ARCHITECTURE.md §1 et §24.11).
 // Placé dans index.html juste après js/i18n/fr.js et js/i18n/aide/fr.js, avant js/schema.js, et dans acces/porte.html
 // après js/i18n/fr.js, avant acces/porte.js (T297 : la porte le sert sans session). Il choisit la langue à
-// afficher (D148, Lot 4, T295 ; I18n.langueDeLaPage) : 1. le choix de ce poste ; 2. sinon la langue de l'installation ;
-// 3. sinon le français. Chaque valeur est vérifiée contre les langues déclarées par js/i18n/langues.js : absente,
+// afficher (D148, Lot 4, T295, T298 ; I18n.langueDeLaPage) : 1. la langue du compte connecté ; 2. sinon le choix de ce
+// poste ; 3. sinon la langue de l'installation ; 4. sinon (installation inconnue) la langue du navigateur ; 5. sinon le
+// français. Chaque valeur est vérifiée contre les langues déclarées par js/i18n/langues.js : absente,
 // non déclarée ou mal formée, stockage refusé, elle est ignorée, sans erreur. Si la langue à afficher n'est pas le
 // français, elle devient la langue active et ses deux fichiers (js/i18n/<code>.js puis js/i18n/aide/<code>.js : toute
 // langue déclarée fournit les deux, sauf « aide: false ») sont écrits dans la page par document.write pendant son
@@ -12,8 +13,10 @@
 // La langue de l'installation est notée (I18n.noterInstallation) : c'est celle des textes écrits dans les données
 // (D156) ; si elle n'est ni le français ni la langue affichée, son dictionnaire (js/i18n/<code>.js, sans l'aide
 // longue) est écrit aussi, pour que I18n.donnees la trouve.
-// Le choix du poste vient de localStorage « prevo.langue », écrit par le sélecteur de langue (UI.selecteurLangue,
-// écran « Ce poste » et pied du menu ; la langue du compte viendra plus tard). La langue de l'installation vient de
+// La langue du compte vient de localStorage « prevo.langue.compte », écrite par js/app.js quand il apprend la session
+// (T298 : GET /api/session, connexion) et effacée sans session de compte (déconnexion, session expirée, appareil
+// enrôlé, sans comptes). Le choix du poste vient de localStorage « prevo.langue », écrit par le sélecteur de langue
+// (UI.selecteurLangue, écran « Ce poste » et pied du menu). La langue de l'installation vient de
 // localStorage « prevo.langue.installation », écrit par js/app.js chaque fois qu'il lit parametres.csv (langue_defaut,
 // D149) : le chargeur tourne avant toute lecture des données ; si la page n'est pas dans la bonne langue une fois les
 // paramètres lus, js/app.js la recharge une fois. Une page servie par serveur.py avec l'attribut
@@ -26,6 +29,7 @@
 (function () {
   const CLE_LANGUE = 'prevo.langue';
   const CLE_INSTALLATION = 'prevo.langue.installation';
+  const CLE_COMPTE = 'prevo.langue.compte';
   const LANGUE_DE_REFERENCE = 'fr';
   const REMPLACEMENTS = { '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' };
 
@@ -50,7 +54,7 @@
   try {
     languesDuNavigateur = Array.from(navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]);
   } catch (erreur) { /* navigateur sans langue lisible : anglais */ }
-  const code = I18n.langueDeLaPage(lire(CLE_LANGUE), retenue, languesDuNavigateur);
+  const code = I18n.langueDeLaPage(lire(CLE_LANGUE), retenue, languesDuNavigateur, lire(CLE_COMPTE));
   // Dossier de ce fichier (js/), quelle que soit l'adresse de la page : index.html à la racine, ou une autre page.
   const dossier = script.src.replace(/[?#].*$/, '').replace(/[^/]*$/, '') + 'i18n/';
   let balises = '';

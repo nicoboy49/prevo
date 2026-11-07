@@ -1,6 +1,7 @@
 'use strict';
 // Poste — écran « Ce poste » (#/poste, tous les profils ; ARCHITECTURE.md §17.7) : identité du poste
-// et profil, assistant IA, dictée, affichage (thème sombre ou clair, langue de l'écran). Les réglages propres au poste
+// et profil, assistant IA, dictée, affichage (thème sombre ou clair, langue de l'écran ; T298 : avec une session de
+// compte, la langue se retient « pour mon compte » ou « pour ce poste »). Les réglages propres au poste
 // restent dans son navigateur (localStorage : prevo.ia, prevo.dictee, prevo.theme, prevo.langue) ; le réglage
 // partagé « fournisseurs d'IA en ligne autorisés » est dans Paramètres (responsable ; en mode serveur, il
 // est décidé sur le PC serveur, comme le fournisseur, son adresse et sa clé).
@@ -523,8 +524,53 @@ const Poste = (() => {
 
   // ===========================================================================================
   // 6. Carte « Affichage » : thème sombre ou clair, appliqué tout de suite ; langue de l'écran (UI.selecteurLangue :
-  //    le choix est retenu par ce navigateur, puis la page est rechargée)
+  //    le choix est retenu par ce navigateur, puis la page est rechargée). T298 : session d'un compte (pas un appareil
+  //    enrôlé), deux choix : « pour mon compte » (enregistrée dans le compte, App.changerLangueDuCompte : elle suit la
+  //    personne sur tous les postes) ou « pour ce poste » (ce navigateur, comme sans comptes ; la langue du compte est
+  //    alors retirée, sinon elle passerait devant). Coché d'abord : « pour mon compte » si le compte a sa langue.
+  //    Changer de choix retient la langue affichée, sans rechargement. Sans comptes, rien ne change.
   // ===========================================================================================
+
+  function avecLangueDuCompte() {
+    const session = App.session;
+    return Boolean(App.comptesExiges() && session && !session.appareil);
+  }
+
+  /** Retient `code` « pour mon compte » (portee 'compte') ou « pour ce poste » ; vrai si c'est fait. */
+  async function retenirLangue(code, portee) {
+    try {
+      if (portee === 'compte') {
+        await App.changerLangueDuCompte(code);
+        return true;
+      }
+      if (App.session.langue) await App.changerLangueDuCompte('');
+    } catch (erreur) {
+      App.signalerErreur(erreur, 'langue du compte');
+      return false;
+    }
+    return UI.retenirLangueDuPoste(code);
+  }
+
+  function brancherPorteeLangue(langue) {
+    const choix = UI.element(UI.html`<fieldset class="poste-themes poste-langue-portee">
+      <legend class="libelle">${I18n.t('poste.langue_compte.retenir')}</legend>
+      <label class="case"><input type="radio" name="poste-langue-portee" value="compte" id="poste-langue-compte"><span>${I18n.t('poste.langue_compte.pour_mon_compte')}</span></label>
+      <label class="case"><input type="radio" name="poste-langue-portee" value="poste" id="poste-langue-poste"><span>${I18n.t('poste.langue_compte.pour_ce_poste')}</span></label>
+    </fieldset>`);
+    langue.replaceChild(choix, langue.querySelector('.aide'));
+    const actuelle = () => (App.session && App.session.langue ? 'compte' : 'poste');
+    UI.$$('input', choix).forEach((bouton) => {
+      bouton.checked = bouton.value === actuelle();
+      bouton.addEventListener('change', async () => {
+        if (!bouton.checked) return;
+        if (await retenirLangue(I18n.langue, bouton.value)) {
+          UI.toast(I18n.t(bouton.value === 'compte' ? 'poste.langue_compte.retenue_compte' : 'poste.langue_compte.retenue_poste'), 'succes');
+        }
+        UI.$$('input', choix).forEach((autre) => { autre.checked = autre.value === actuelle(); });
+      });
+    });
+    return () => UI.$('input:checked', choix).value;
+  }
 
   function carteAffichage() {
     return UI.html`<article class="carte" id="carte-affichage" data-hors-saisie>
@@ -544,7 +590,12 @@ const Poste = (() => {
 
   function brancherAffichage(conteneur) {
     const langue = UI.$('#poste-langue', conteneur);
-    langue.insertBefore(UI.selecteurLangue({ id: 'poste-langue-liste' }), langue.querySelector('.aide'));
+    const reglages = { id: 'poste-langue-liste' };
+    if (avecLangueDuCompte()) {
+      const portee = brancherPorteeLangue(langue);
+      reglages.retenir = (code) => retenirLangue(code, portee());
+    }
+    langue.insertBefore(UI.selecteurLangue(reglages), langue.querySelector('.poste-langue-portee, .aide'));
     const actuel = themeMemorise();
     UI.$$('input[name=theme]', conteneur).forEach((bouton) => {
       bouton.checked = bouton.value === actuel;

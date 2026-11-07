@@ -82,7 +82,7 @@ const Connexion = (() => {
       identifiant: String(identite.identifiant || ''), role: String(identite.role || ''),
       prenom: String(identite.prenom || ''), nom: String(identite.nom || ''),
       technicienId: String(identite.technicien_id || ''), aChanger: Boolean(identite.a_changer),
-      appareil: Boolean(identite.appareil),
+      appareil: Boolean(identite.appareil), langue: String(identite.langue || ''),
     };
   }
 
@@ -387,9 +387,18 @@ const Connexion = (() => {
     if (reponse.statut !== 200 && reponse.statut !== 401) throw new Error(reponse.message);
   }
 
+  /** T298 : langue du compte connecté, POST /api/mot-de-passe {langue} seul (code déclaré, ou '' : la langue de
+   *  l'installation) ; promesse de la session à jour (camelCase) ; refus du serveur : une erreur à son message. */
+  async function changerLangue(code) {
+    const reponse = await appeler('/api/mot-de-passe', { langue: code });
+    if (reponse.statut !== 200 || !reponse.donnees || !reponse.donnees.session) throw new Error(reponse.message);
+    return sessionLue(reponse.donnees.session);
+  }
+
   return {
     demander,
     deconnecter,
+    changerLangue,
     jetonDeLaRoute,
     estRouteEnrolement,
     sessionLue,

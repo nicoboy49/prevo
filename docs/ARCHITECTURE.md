@@ -3378,7 +3378,17 @@ navigateur, qui ne les lit pas : les empreintes ne quittent jamais le serveur) :
 - `comptes.json` : `{ "version": 1, "comptes": [ { "identifiant": "prenom.nom", "prenom", "nom", "role":
   "responsable"|"technicien"|"demandeur", "technicien_id", "actif": true, "algo": "scrypt-n15-r8-p3"|
   "pbkdf2-sha256-600000", "sel": base64, "empreinte": base64, "a_changer": bool, "cree_le", "modifie_le",
-  "mot_de_passe_le" } ] }`.
+  "mot_de_passe_le", "langue"? } ] }`.
+  **Langue du compte (T298, D148)** : champ facultatif `langue`, absent ou vide = la langue de l'installation.
+  Valeur fermée : une langue déclarée par `js/i18n/langues.js` (`langues_declarees`, la valeur exacte : ni espace ni
+  autre casse), ou vide (le champ est alors retiré) ; tout le reste → 400 `comptes.langue_inconnue` (ou
+  `comptes.texte_attendu` pour un non-texte à `/api/acces/comptes`), rien d'écrit (`langue_de_compte`). Elle se
+  change par la personne elle-même (`POST /api/mot-de-passe {"langue"}` seul, §22.4 : seul ce champ change, ni sel, ni
+  empreinte, ni `modifie_le`, aucune session fermée) ou par le responsable (création et `action: modifier` de
+  `/api/acces/comptes…`). Une valeur hors liste écrite à la main est ignorée (`langue_publique` : '' dans la session).
+  La 2.0.0 bêta 2 relit sans erreur un `comptes.json` qui porte `langue` et garde le champ (`compte_public` le laisse
+  passer vers le responsable ; ses réécritures reprennent chaque compte tel qu'il a été lu) ; sans changement de langue,
+  la 2.0.1 ne réécrit pas `comptes.json` (base bêta 2 relue à l'octet près, `tests/test_langue_compte.py`).
   **Identifiants et noms (T301, D164 ; règle de Nicolas : une même personne n'a jamais deux identifiants, deux
   personnes jamais le même)** : une seule règle, `plier_nom` (serveur.py) : İ, I, ı, i → i ; casse pliée (casefold,
   ß → ss) ; accents retirés (ş → s, ğ → g, ç → c, ö → o, ü → u) ; elle fabrique l'identifiant (`identifiant_depuis` :
@@ -3400,7 +3410,10 @@ navigateur, qui ne les lit pas : les empreintes ne quittent jamais le serveur) :
   caractères hexadécimaux tirés au sort, jamais réemployés ; `invitation` = l'id de l'invitation qui a servi.
 - `journal-acces.csv` (`;`, UTF-8 avec BOM, apostrophe de protection) : `date;qui;adresse;agent;resultat;tailscale`,
   `resultat` ∈ `connexion`, `echec`, `bloque`, `deconnexion`, `appareil`, `invitation`, `revocation`,
-  `reinitialisation`, `creation`, `modification` ; lignes de plus de 12 mois purgées à la première écriture du jour.
+  `reinitialisation`, `creation`, `modification`, et `langue:<avant>><après>` (T298 : langue d'un compte changée,
+  `installation` pour vide : `langue:installation>en`, `langue:en>fr` ; après `modification` quand c'est le
+  responsable ; Équipe › Accès › Journal : « Langue changée (installation → en) ») ; lignes de plus de 12 mois purgées
+  à la première écriture du jour.
 
 Mot de passe : 12 à 256 caractères, aucune règle de composition ; échec : délai `min(2^(n-5), 8)` s dès le 5e échec
 consécutif, blocage 15 min au 10e (par compte), ralentissement de 1 s par adresse IP au-delà de 20 échecs par heure ;
@@ -3476,10 +3489,10 @@ Précisions de T153 (appareils enrôlés, D125, CS123) :
 
 | Méthode et chemin | Qui | Réponse |
 | --- | --- | --- |
-| `GET /api/session` | tous | `{"comptes": bool, "session": null \| {"identifiant", "role", "prenom", "nom", "technicien_id", "a_changer", "appareil": bool}}` ; sans comptes : `{"comptes": false, "session": null}` |
+| `GET /api/session` | tous | `{"comptes": bool, "session": null \| {"identifiant", "role", "prenom", "nom", "technicien_id", "a_changer", "appareil": bool, "langue"}}` (`langue` : celle du compte si c'est une langue déclarée, sinon "" ; toujours "" pour un appareil, T298) ; sans comptes : `{"comptes": false, "session": null}` |
 | `POST /api/connexion` | tous | corps `{"identifiant", "mot_de_passe", "rester": bool}` → 200 `{"comptes": true, "session": {…}}` + cookie, 401, 429 ; 400 corps invalide |
 | `POST /api/deconnexion` | session | 200 `{"comptes": true, "session": null}`, cookie effacé (`id=; …; Max-Age=0`) |
-| `POST /api/mot-de-passe` | session | `{"actuel", "nouveau"}` → 200 comme la connexion (session neuve, toutes les autres sessions du compte fermées, « rester » gardé) ; 400 si le nouveau est trop court, trop long ou égal à l'actuel ; 403 si l'actuel est faux (compté comme un échec de connexion) ; 429 pendant un blocage |
+| `POST /api/mot-de-passe` | session | `{"actuel", "nouveau"}` → 200 comme la connexion (session neuve, toutes les autres sessions du compte fermées, « rester » gardé) ; 400 si le nouveau est trop court, trop long ou égal à l'actuel ; 403 si l'actuel est faux (compté comme un échec de connexion) ; 429 pendant un blocage. T298 : `{"langue": code}` **seul** → la langue du compte de la session (jamais un autre), sans mot de passe demandé ni session fermée : 200 `{"comptes": true, "session"}` à jour ; 400 `comptes.langue_inconnue` hors liste (rien d'écrit) ; `langue` avec tout autre champ (`actuel`, `nouveau`…) → 400 `sessions.langue_seule`, rien de changé ni compté ; 403 pour un appareil enrôlé (`sessions.langue_appareil`) et un mot de passe provisoire |
 | `POST /api/enroler` | tous (route publique) | `{"invitation", "nom"}` → 200 `{"comptes": true, "session": {…, "appareil": true}}` + cookie `appareil` (un an) ; 401 invitation inconnue, expirée ou révoquée ; 403 enrôlement désactivé (`demandeurs_avec_compte`) ; 400 corps ou nom invalide |
 | `GET /api/acces/comptes` | responsable | `{"comptes": [ … ]}` par `compte_public` : jamais d'empreinte, de sel ni d'algorithme |
 | `POST /api/acces/comptes` | responsable | `{"prenom", "nom", "role", "technicien_id"}` → 200 `{"compte", "mot_de_passe_provisoire"}` : 16 caractères, `a_changer` vrai, rendu une seule fois (jamais écrit dans un fichier, le journal ni la console) ; 400 champ inconnu ou manquant, rôle inconnu, technicien absent de `techniciens.csv` |
@@ -3579,7 +3592,9 @@ chacun relu sur le serveur à chaque ouverture :
   (`action: modifier`), « Réinitialiser… » (confirmation, `action: reinitialiser`), « Désactiver » (confirmation,
   danger) ou « Activer » ; jamais de désactivation de son propre compte depuis l'écran. Le mot de passe provisoire
   (création, réinitialisation) est montré une seule fois dans une fenêtre (`#acces-mot-de-passe-provisoire`,
-  champ en lecture seule à noter) et n'est ni mémorisé ni réécrit dans la page.
+  champ en lecture seule à noter) et n'est ni mémorisé ni réécrit dans la page. T298 : « Créer un compte » et
+  « Modifier… » ont la liste « Langue » (`langue` : « Langue de l'installation », vide, puis les langues déclarées,
+  chacune sous son nom dans sa langue).
 - **Appareils** : « Inviter un appareil » avec la durée (1 h, 24 h, 3 jours, 7 jours → `heures` de
   `POST /api/acces/invitations`) ; la fenêtre montre une seule fois le QR (`UI.qrSvg`) et le lien
   `<adresse des QR>/#/enroler/<jeton>`, l'adresse étant celle des étiquettes (`App.urlFicheEquipement`, donc
@@ -4573,8 +4588,8 @@ Paramètres, section « Entreprise » (« Langue de l'installation », les langu
 tous les modes ; une ligne de plus, pas une colonne : le format des fichiers (`version_schema`) ne change pas, et le
 serveur l'accepte comme toute clé (`parametres` est une table clé-valeur). Elle sert à deux choses :
 
-- **Langue affichée** (D148, D150, sans la langue du compte) : 1. le choix de ce poste (« prevo.langue ») ; 2. sinon la
-  langue de l'installation ; 3. sans réglage (ni l'un ni l'autre : démo, ou première ouverture avant toute base ; clé
+- **Langue affichée** (D148, D150 ; T298) : 0. la langue du compte connecté (ci-dessous) ; 1. le choix de ce poste
+  (« prevo.langue ») ; 2. sinon la langue de l'installation ; 3. sans réglage (ni l'un ni l'autre : démo, ou première ouverture avant toute base ; clé
   « prevo.langue.installation » absente), la langue du navigateur (`navigator.languages`, dans l'ordre : code exact, puis
   langue sans région ; toute variante `pt-*`, dont `pt-BR`, va à `pt-PT` ; `I18n.langueDuNavigateur`, T299), sinon
   l'anglais ; 4. le français n'est atteint que par `I18n.langueAAfficher` appelée sans les langues du navigateur (`js/app.js`
@@ -4590,6 +4605,18 @@ serveur l'accepte comme toute clé (`parametres` est une table clé-valeur). Ell
   et jamais deux rechargements de suite pour la même (sans `sessionStorage`, aucun). Un changement venu d'un autre
   poste n'interrompt pas une saisie en cours. Démo et fichiers déposés : la langue est notée pour les données, rien
   n'est retenu ni rechargé (un rechargement perdrait les données, qui vivent dans la page).
+- **Langue du compte** (T298) : `GET /api/session` porte la langue du compte (§22.4) ; `js/app.js`
+  (`suivreLangueDuCompte`) l'écrit dans `localStorage` « prevo.langue.compte » dès qu'il connaît la session (ouverture,
+  connexion) et l'efface sans session de compte (déconnexion, session expirée vue par l'appli, appareil enrôlé, sans
+  comptes, modes dossier et démo) ; `js/i18n-chargeur.js` la lit en premier (`I18n.langueAAfficher`, 4e argument,
+  valeur vérifiée contre les langues déclarées). Une page qui n'est pas dans la langue que le chargeur choisirait se
+  recharge une fois, avec la même garde (`rechargerPourLaLangue`) : après la connexion, la langue du compte ; après la
+  déconnexion, celle du poste ou de l'installation (poste ou tablette partagés). La personne choisit sa langue sur
+  « Ce poste », carte Affichage, quand une session de compte est ouverte : « Pour mon compte » (enregistrée dans le
+  compte, `App.changerLangueDuCompte` → `POST /api/mot-de-passe {"langue"}` ; elle la suit sur tous les postes) ou
+  « Pour ce poste seulement » (comme sans comptes ; la langue du compte est alors retirée, sinon elle passerait
+  devant) ; coché d'abord : « pour mon compte » si le compte a sa langue ; changer de choix garde la langue affichée.
+  La liste du menu suit la même règle (au compte s'il a sa langue, sinon au poste). Sans comptes, rien ne change.
 - **Textes écrits dans les données** (D156) : `I18n.donnees` et `I18n.enLangueDesDonnees` écrivent dans la langue de
   l'installation (`I18n.noterInstallation`, `I18n.langueDesDonnees`), quelle que soit la langue de l'écran ; le
   chargeur charge aussi `js/i18n/<code>.js` de l'installation (sans son aide longue) quand elle n'est ni le français

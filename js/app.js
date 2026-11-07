@@ -62,10 +62,12 @@ const App = (() => {
   const CLE_POSTE = 'prevo.poste';
   const CLE_MENU_REPLIE = 'prevo.menuReplie';
   const CLE_VERROU_ONGLET = 'prevo.verrouOnglet';   // sessionStorage : poste du verrou posé par cet onglet
-  // Langue (Lot 4 du chantier multilingue, T295 ; D148, D149) : choix du poste (écrit par UI.selecteurLangue) et
-  // langue de l'installation (écrite ici), lus par js/i18n-chargeur.js avant js/schema.js ; raison du dernier
-  // rechargement pour la langue (sessionStorage, cet onglet : jamais deux de suite pour la même).
+  // Langue (Lot 4 du chantier multilingue, T295, T298 ; D148, D149) : langue du compte connecté et langue de
+  // l'installation (écrites ici), choix du poste (écrit par UI.selecteurLangue), lus par js/i18n-chargeur.js avant
+  // js/schema.js ; raison du dernier rechargement pour la langue (sessionStorage, cet onglet : jamais deux de suite
+  // pour la même).
   const CLE_LANGUE_POSTE = 'prevo.langue';
+  const CLE_LANGUE_COMPTE = 'prevo.langue.compte';
   const CLE_LANGUE_INSTALLATION = 'prevo.langue.installation';
   const CLE_RECHARGEMENT_LANGUE = 'prevo.langue.rechargement';
   const PARAMETRE_LANGUE = 'langue_defaut';
@@ -85,6 +87,7 @@ const App = (() => {
   let profil = null;               // { type, nom, technicienId }
   let comptesExiges = false;       // mode serveur : les comptes sont exigés (lot 7, D124) ; le profil vient de la session
   let session = null;              // mode comptes : session du serveur (camelCase, adaptateur.session()), sinon null
+  let raisonDejaDite = '';         // langue : rechargement déjà refusé (et dit) pour cette raison sur cette page
   let promesseConnexion = null;    // écran de connexion en cours (une seule fois à la fois)
   let poste = '';                  // nom du poste (journal, verrou)
   let adressesReseau = [];         // mode serveur : ['http://192.168.1.10:8080/', …]
@@ -132,6 +135,10 @@ const App = (() => {
 
   function ecrireMemoire(cle, valeur) {
     try { window.localStorage.setItem(cle, valeur); } catch (erreur) { /* sans mémoire : tant pis */ }
+  }
+
+  function effacerMemoire(cle) {
+    try { window.localStorage.removeItem(cle); } catch (erreur) { /* sans mémoire : rien à effacer */ }
   }
 
   // Nom de poste proposé la première fois : « Poste-7KQ2 » (Math.random suffit, pas de crypto).
@@ -450,8 +457,13 @@ const App = (() => {
     tablesDitesAbimees.clear();
     Donnees.initialiser(adaptateur, { poste, profil: '' });
     // Lot 7 (§22.4) : comptes exigés → connexion (ou mot de passe à choisir) AVANT toute lecture de table, sinon
-    // chaque table répondrait 401 (ou 403 avec un mot de passe provisoire : la base paraîtrait vide).
-    if (mode === 'serveur') await ouvrirSession();
+    // chaque table répondrait 401 (ou 403 avec un mot de passe provisoire : la base paraîtrait vide). T298 : la page
+    // qui n'est pas dans la langue du compte (ou qui l'est encore sans session) se recharge, une fois.
+    if (mode === 'serveur') {
+      if (await ouvrirSession()) return;
+    } else {
+      effacerMemoire(CLE_LANGUE_COMPTE);                  // T298 : sans comptes hors du mode serveur
+    }
     montrer('ecran-chargement', 'chargement');
     // /api/info avant les tables (après la session : la route n'est pas publique) : adresses réseau, et l'installation
     // à faire, pour le lien de l'assistant sur les écrans « base vide » et « profil » (§22.10).
@@ -515,6 +527,7 @@ const App = (() => {
   // est notée pour cet onglet et jamais deux rechargements de suite pour la même ; sans sessionStorage, aucun. Démo et
   // fichiers déposés : langue notée, rien de retenu ni de rechargé (les données vivent dans la page). Une saisie en
   // cours (rechargementPermis faux) attend le prochain changement ou la prochaine ouverture. Vrai si la page se recharge.
+  // T298 : la langue du compte connecté passe avant le choix du poste (suivreLangueDuCompte).
   function suivreLangueInstallation(rechargementPermis) {
     const installation = I18n.noterInstallation(Donnees.parametre(PARAMETRE_LANGUE, ''));
     // Pendant l'usage, le profil inscrit au journal suit (D156) ; à l'ouverture, appliquerProfil le pose ensuite.
@@ -524,17 +537,32 @@ const App = (() => {
     // pour l'écran « base vide », qui la demande ; elle est retenue une fois la base créée.
     if (Donnees.baseVide()) return false;
     ecrireMemoire(CLE_LANGUE_INSTALLATION, installation);
-    const attendue = I18n.langueAAfficher(lireMemoire(CLE_LANGUE_POSTE), installation);
-    const raison = attendue + '/' + installation;
+    const attendue = I18n.langueAAfficher(lireMemoire(CLE_LANGUE_POSTE), installation, undefined,
+      langueDuCompte(session));
     try {
-      const derniere = window.sessionStorage.getItem(CLE_RECHARGEMENT_LANGUE);
       if (attendue === I18n.langue && I18n.langueDesDonnees === installation) {
-        if (derniere !== null) window.sessionStorage.removeItem(CLE_RECHARGEMENT_LANGUE);
+        if (window.sessionStorage.getItem(CLE_RECHARGEMENT_LANGUE) !== null) {
+          window.sessionStorage.removeItem(CLE_RECHARGEMENT_LANGUE);
+        }
         return false;
       }
-      if (rechargementPermis === false) return false;
-      if (derniere === raison) {
-        console.warn('Prévo : page déjà rechargée pour la langue « ' + raison + ' » ; elle reste en « ' + I18n.langue + ' ».');
+    } catch (erreur) {               // sans mémoire d'onglet, pas de garde-fou : pas de rechargement
+      return false;
+    }
+    if (rechargementPermis === false) return false;
+    return rechargerPourLaLangue(attendue + '/' + installation);
+  }
+
+  /** Recharge la page pour la langue, une fois : la raison est notée pour cet onglet et jamais deux rechargements de
+   *  suite pour la même (un avertissement à la place, une fois par page) ; sans sessionStorage, aucun. Vrai si la page
+   *  se recharge. */
+  function rechargerPourLaLangue(raison) {
+    try {
+      if (window.sessionStorage.getItem(CLE_RECHARGEMENT_LANGUE) === raison) {
+        if (raisonDejaDite !== raison) {
+          console.warn('Prévo : page déjà rechargée pour la langue « ' + raison + ' » ; elle reste en « ' + I18n.langue + ' ».');
+        }
+        raisonDejaDite = raison;
         return false;
       }
       window.sessionStorage.setItem(CLE_RECHARGEMENT_LANGUE, raison);
@@ -779,11 +807,13 @@ const App = (() => {
 
   // GET /api/session au démarrage : sans comptes (portée « ce PC »), rien ne change ; avec, il faut une session
   // utilisable (connexion, enrôlement d'un appareil, mot de passe provisoire changé) avant de lire les tables.
+  // T298 : vrai si la page se recharge pour la langue (suivreLangueDuCompte), avant la connexion (session absente
+  // ou expirée : la langue du poste ou de l'installation) ou après (la langue du compte).
   async function ouvrirSession() {
     const etat = await adaptateur.session();
     comptesExiges = etat.comptes;
     session = null;
-    if (!comptesExiges) return;
+    if (!comptesExiges) return suivreLangueDuCompte(null);
     // Comptes exigés sans aucun compte responsable (configuration écrite à la main, §22.10) : personne ne peut se
     // connecter ; sur le PC serveur, l'assistant s'ouvre pour créer le premier compte (terminé, la page se recharge).
     if (!etat.session && etat.installationInachevee && pcServeur() && typeof Installation !== 'undefined') {
@@ -792,10 +822,61 @@ const App = (() => {
     }
     if (etat.session && !etat.session.aChanger) {
       session = etat.session;
-      return;
+      return suivreLangueDuCompte(session);
     }
+    if (suivreLangueDuCompte(null)) return true;
     const options = etat.session ? { sessionProvisoire: etat.session } : await motifSansSession();
     await demanderConnexion(options);
+    return suivreLangueDuCompte(session);
+  }
+
+  // Langue du compte (T298 ; D148) : la session porte la langue du compte connecté ('' : la langue de l'installation) ;
+  // retenue pour js/i18n-chargeur.js (localStorage « prevo.langue.compte »), elle passe avant le choix du poste. Sans
+  // session de compte (sans comptes, appareil enrôlé, déconnexion, session expirée), la clé est effacée : la page
+  // revient à la langue du poste ou de l'installation (poste ou tablette partagés). Valeur toujours vérifiée.
+  function langueDuCompte(laSession) {
+    const code = laSession && !laSession.appareil ? laSession.langue : '';
+    return I18n.estDeclaree(code) ? code : '';
+  }
+
+  function noterLangueDuCompte(laSession) {
+    const code = langueDuCompte(laSession);
+    if (code) ecrireMemoire(CLE_LANGUE_COMPTE, code);
+    else effacerMemoire(CLE_LANGUE_COMPTE);
+    return code;
+  }
+
+  /** Note la langue du compte de `laSession` (ou l'efface) ; si la page n'est pas dans la langue que le chargeur
+   *  choisirait alors (I18n.langueDeLaPage, mêmes clés), elle se recharge, une fois. Vrai si la page se recharge. */
+  function suivreLangueDuCompte(laSession) {
+    const compte = noterLangueDuCompte(laSession);
+    let navigateur = [];
+    try {
+      navigateur = Array.from(navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]);
+    } catch (erreur) { /* navigateur sans langue lisible : anglais */ }
+    const attendue = I18n.langueDeLaPage(lireMemoire(CLE_LANGUE_POSTE), lireMemoire(CLE_LANGUE_INSTALLATION),
+      navigateur, compte);
+    return attendue !== I18n.langue && rechargerPourLaLangue(attendue + '/' + I18n.installation);
+  }
+
+  /** T298 : langue du compte connecté changée sur le serveur (Connexion.changerLangue : POST /api/mot-de-passe
+   *  {langue}) ; la session et la clé du chargeur suivent, la page ne se recharge pas. Refus du serveur : levé. */
+  async function changerLangueDuCompte(code) {
+    const nouvelle = await Connexion.changerLangue(code);
+    session = Object.assign({}, session, { langue: nouvelle.langue });
+    noterLangueDuCompte(session);
+  }
+
+  // Liste de langue du menu (T298) : un compte qui a sa langue la change pour le compte ; sinon le choix de ce poste.
+  async function retenirLangueDuMenu(code) {
+    if (!langueDuCompte(session)) return UI.retenirLangueDuPoste(code);
+    try {
+      await changerLangueDuCompte(code);
+      return true;
+    } catch (erreur) {
+      signalerErreur(erreur, 'langue du compte');
+      return false;
+    }
   }
 
   // Sans session, GET /api/session (route publique) ne dit pas si un cookie d'appareil a été refusé : une lecture
@@ -841,12 +922,14 @@ const App = (() => {
   // relues (une autre personne, un autre rôle : d'autres tables lisibles).
   function surSessionAbsente(evenement) {
     if (!comptesExiges || !coqueVisible() || promesseConnexion) return;
+    if (suivreLangueDuCompte(null)) return;              // T298 : l'écran de connexion dans la langue du poste
     const detail = evenement.detail || {};
     reconnecter({ appareilRefuse: Boolean(detail.appareilRefuse), message: detail.message });
   }
 
   async function reconnecter(options) {
     await demanderConnexion(options);
+    if (suivreLangueDuCompte(session)) return;           // T298 : la langue du compte qui vient de se connecter
     appliquerProfil(profilDepuisSession(session));
     montrer('ecran-chargement', 'chargement');
     try {
@@ -872,6 +955,7 @@ const App = (() => {
       return;
     }
     session = null;
+    if (suivreLangueDuCompte(null)) return;              // T298 : la langue du poste ou de l'installation
     await reconnecter({});
   }
 
@@ -1115,7 +1199,7 @@ const App = (() => {
     const zone = UI.$('#menu-langue');
     if (!zone) return;
     UI.remplir(zone, UI.selecteurLangue({ id: 'menu-langue-liste',
-      libelle: I18n.t('socle.selecteur_langue.langue_ecran') }));
+      libelle: I18n.t('socle.selecteur_langue.langue_ecran'), retenir: retenirLangueDuMenu }));
     // T306 : « Suggérer une amélioration », sous la langue (l'adresse suit la langue active) ; cachée avec elle.
     const suggestion = UI.$('#menu-suggestion');
     if (suggestion) UI.remplir(suggestion, Apropos.lienSuggestion('menu-suggestion-lien'));
@@ -1595,6 +1679,7 @@ const App = (() => {
     pcServeur,
     demanderConnexion,
     deconnecter,
+    changerLangueDuCompte,
     exporterZip,
     signalerErreur,
     messageErreur,

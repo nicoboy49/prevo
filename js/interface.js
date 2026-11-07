@@ -1595,7 +1595,8 @@ const UI = (function () {
    * l'installation. Stockage refusé : message court, la liste revient à la langue active, la page reste dans sa langue.
    * Dans la démo (App.mode « demo »), le rechargement efface ce qu'on y a modifié : une confirmation d'abord
    * (UI.confirmer) ; Annuler remet la liste sur la langue active, rien n'est retenu.
-   * reglages : { id, classe, libelle (aria-label, quand aucun <label> visible ne nomme la liste) }.
+   * reglages : { id, classe, libelle (aria-label, quand aucun <label> visible ne nomme la liste), retenir (T298 :
+   * async (code) → vrai si le choix est retenu ; à la place de retenirLangueDuPoste, pour la langue du compte) }.
    */
   function selecteurLangue(reglages) {
     const options = reglages || {};
@@ -1617,19 +1618,29 @@ const UI = (function () {
           titre: I18n.t('socle.selecteur_langue.changer_langue'), oui: I18n.t('socle.selecteur_langue.changer'), danger: true });
         if (!accord) { liste.value = I18n.langue; return; }
       }
-      try {
-        const sansChoix = I18n.langueDeLaPage('', window.localStorage.getItem(CLE_LANGUE_INSTALLATION),
-          Array.from(navigator.languages || [navigator.language]));
-        if (code === sansChoix) window.localStorage.removeItem(CLE_LANGUE);
-        else window.localStorage.setItem(CLE_LANGUE, code);
-      } catch (erreur) {                        // navigation privée stricte, réglage du navigateur
-        liste.value = I18n.langue;
-        toast(I18n.t('socle.selecteur_langue.choix_non_retenu'), 'erreur');
-        return;
-      }
+      const retenu = options.retenir ? await options.retenir(code) : retenirLangueDuPoste(code);
+      if (!retenu) { liste.value = I18n.langue; return; }
       window.location.reload();
     });
     return liste;
+  }
+
+  /**
+   * Retient `code` comme choix de ce poste (localStorage « prevo.langue », lu par js/i18n-chargeur.js), ou retire la
+   * clé quand c'est la langue qu'aurait le poste sans choix (le poste suit alors l'installation) ; vrai si c'est fait.
+   * Stockage refusé : message court, faux. Ne recharge pas la page (UI.selecteurLangue le fait).
+   */
+  function retenirLangueDuPoste(code) {
+    try {
+      const sansChoix = I18n.langueDeLaPage('', window.localStorage.getItem(CLE_LANGUE_INSTALLATION),
+        Array.from(navigator.languages || [navigator.language]));
+      if (code === sansChoix) window.localStorage.removeItem(CLE_LANGUE);
+      else window.localStorage.setItem(CLE_LANGUE, code);
+      return true;
+    } catch (erreur) {                          // navigation privée stricte, réglage du navigateur
+      toast(I18n.t('socle.selecteur_langue.choix_non_retenu'), 'erreur');
+      return false;
+    }
   }
 
   return Object.freeze({
@@ -1650,6 +1661,6 @@ const UI = (function () {
     // fichiers
     redimensionnerPhoto, nomFichierUnique, telecharger,
     // mise en page, langue de l'écran
-    onglets, estTelephone, selecteurLangue, langueDuNavigateur, optionsLangues,
+    onglets, estTelephone, selecteurLangue, retenirLangueDuPoste, langueDuNavigateur, optionsLangues,
   });
 })();

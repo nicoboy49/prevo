@@ -545,6 +545,9 @@ Lancé sans console (tâche planifiée, `pythonw.exe`), Prévo écrit ce qu'il f
   turques (« AYŞE.IŞIK » ouvre `ayse.isik`). Un deuxième compte au même prénom et au même nom est refusé, sauf si vous
   cochez « C'est une autre personne ». Si un identifiant tapé correspond à plusieurs comptes (anciens comptes au nom
   écrit de deux façons), Prévo refuse la connexion et demande l'identifiant exact.
+- **Langue de chaque compte** : la personne la choisit dans « Ce poste » (« pour mon compte » : elle la suit sur tous
+  les postes ; « pour ce poste » : ce navigateur seulement), le responsable dans Équipe › Accès ; vide, c'est la
+  langue de l'installation ; à la déconnexion, l'écran revient à la langue du poste ou de l'installation.
 - **Mots de passe** : 12 à 256 caractères, aucune règle de composition (une phrase de passe est conseillée).
   Seule une empreinte salée est gardée (scrypt ; PBKDF2 si le Python n'a pas scrypt), dans
   `donnees/acces/comptes.json`. Un mot de passe provisoire
