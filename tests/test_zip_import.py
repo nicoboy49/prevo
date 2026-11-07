@@ -14,6 +14,9 @@ Chaque écriture est contrôlée sur le disque (serveur) ou dans l'OPFS du navig
               « avant-import-zip » avec les CSV d'avant à l'octet, documents/ et manifeste, acces/ inchangé ; puis
               rechargement de l'application ;
               technicien connecté : ni Paramètres ni bouton, ParametresZip.importer refusé ;
+              base commencée vide par l'assistant (T296 : parametres.csv seul, la première ouverture ne propose plus la
+              démo) : la démo, ouverte par « Essayer avec les données de démo » et exportée en ZIP, s'y importe
+              (Nicolas, 07/11 : la démo doit rester chargeable plus tard) ;
               ZIP au format 2 (f2-v1.1.0, sans manifeste) : confirmation « mises au format 3 », deux tables vidées ;
               base au format 3, lignes intactes, colonne astuce vide, tables du wiki vides ; colonnes inconnues du
               ZIP (jeu colonnes-en-trop) gardées avec leurs valeurs ;
@@ -71,6 +74,7 @@ NOM_PIEGE = "../acces/comptes.json"
 ERREUR_PING_ABSENT = re.compile(r"status of 404.*/api/ping")              # serveur statique : pas de /api/ping
 ERREUR_DOCUMENT_ABSENT = re.compile(r"status of 404.*/api/documents/vgp-chariot-absent\.pdf")
 ERREUR_TABLE_REFUSEE = re.compile(r"status of 403 .*/api/csv/")
+ERREUR_TABLE_ABSENTE = re.compile(r"status of 404 .*/api/csv/")           # base neuve : table pas encore écrite
 
 ECRIRE_OPFS_JS = """async ([nom, fichiers]) => {
   const racine = await (await navigator.storage.getDirectory()).getDirectoryHandle(nom, { create: true });
@@ -491,6 +495,55 @@ class TestServeur(CasImport):
             self.assertEqual(page.evaluate("Donnees.parametre('rapports_mensuels', '')").split(","),
                              [rendus["rapport-mensuel-2026-08.html"],
                               rendus["20261001-083000-rapport-mensuel-2026-09.html"]])
+
+    def test_serveur_base_commencee_vide_la_demo_exportee_en_zip_s_y_importe(self):
+        # T296 : « Commencer vide » crée parametres.csv ; la première ouverture ne propose plus « démo ou vide ». La démo
+        # reste chargeable plus tard (Nicolas, 07/11) : « Essayer avec les données de démo » (index.html ouvert
+        # directement, ou démo en ligne) › « Exporter en ZIP », puis Paramètres › Sauvegardes › « Importer un ZIP… ».
+        self.autoriser_erreur(ERREUR_TABLE_ABSENTE)                          # 22 tables pas encore créées : 404
+        preregler_profil(self.contexte, "responsable")
+        page = self.page
+        page.goto(url_fichier("index.html"))
+        page.wait_for_function("document.documentElement.dataset.etat === 'demarrage'")
+        page.click("#btn-demo")
+        attendre_pret(page)
+        self.assertEqual(page.evaluate("App.mode"), "demo")
+        equipements_demo = page.evaluate("Donnees.lignes('equipements').length")
+        self.assertGreater(equipements_demo, 0)
+        page.evaluate("location.hash = '#/apropos'")
+        page.wait_for_selector("#bandeau-demo", state="visible")
+        chemin_zip = self.temporaire / "prevo-demo.zip"
+        with page.expect_download() as attente:
+            page.click("#btn-export-demo")
+        attente.value.save_as(str(chemin_zip))
+
+        # La base telle que l'assistant la laisse après « Commencer vide » hors Solo (test_installation_migration,
+        # test_base_absente_vide_hors_solo_parametres_avec_la_langue) : parametres.csv seul.
+        source = self.dossier_source("vide", {"parametres.csv": "﻿cle;valeur\r\nversion_schema;3\r\n"
+                                                                 "langue_defaut;fr\r\n".encode("utf-8")})
+        contexte = self.navigateur.new_context(locale="fr-FR", viewport={"width": 1280, "height": 800})
+        self.addCleanup(contexte.close)
+        contexte.set_default_timeout(self.DELAI_PAR_DEFAUT_MS)
+        with ServeurPrevo(source=source, comptes=True) as serveur:
+            serveur.poser_session(contexte, "responsable")
+            page = contexte.new_page()
+            self.surveiller(page)
+            page.goto(serveur.url + "/#/parametres")
+            attendre_pret(page)                                              # ouverte directement, sans écran « base vide »
+            self.assertFalse(page.is_visible("#ecran-base-vide"))
+            self.assertEqual(page.evaluate("Donnees.lignes('equipements').length"), 0)
+            self.choisir_zip(page, chemin_zip)
+            info = self.confirmation(page)
+            self.assertEqual(info["importe"]["equipements"], equipements_demo)
+            self.assertEqual(info["avertissement"], AVERTISSEMENT)
+            page.click(BOUTON_REMPLACER)
+            self.assertIn("tables remplacées", self.texte_fenetre(page, "import-zip-termine"))
+            with page.expect_navigation():
+                page.click("dialog button:has-text('Recharger Prévo')")
+            attendre_pret(page)
+            self.assertEqual(page.evaluate("App.mode"), "serveur")
+            self.assertEqual(page.evaluate("Donnees.lignes('equipements').length"), equipements_demo)
+            self.assertEqual(len(sauvegardes_de(instantane(serveur.dossier), MOTIF_AVANT_IMPORT_ZIP)), 1)
 
     def test_serveur_technicien_n_a_pas_l_import(self):
         self.autoriser_erreur(ERREUR_TABLE_REFUSEE)
