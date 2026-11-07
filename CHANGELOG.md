@@ -7,8 +7,50 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Ajouté
+
+- **Prévo en anglais** : toute l'interface, l'aide à l'écran, les messages du serveur et sa console existent en
+  français et en anglais (anglais britannique ; nombres, montants et dates au format de la langue). Sélecteur
+  « Français / English » dans « Ce poste » et au pied du menu ; sur la porte des téléphones et l'écran de connexion, un
+  globe et les langues écrites chacune dans sa langue. Le choix fait sur la porte est repris par l'application.
+- **Langue de l'installation** : « Langue de Prévo » dans Paramètres › Entreprise, demandée à la création de la base.
+  C'est la langue des postes qui n'ont rien choisi, de la console du serveur, et des textes que Prévo écrit lui-même
+  dans les données (historique des OT, titres pré-remplis…).
+- **Langue du compte** : sur « Ce poste », chacun garde sa langue « pour mon compte » (sur tous les postes où il se
+  connecte) ou « pour ce poste seulement » ; le responsable la règle à la création du compte et dans Équipe › Accès.
+- **Démo** : elle s'ouvre dans la langue du navigateur (sinon en anglais) ; changer de langue y efface les
+  modifications, et Prévo prévient avant.
+- **Rapport mensuel** : figé dans la langue choisie au moment de le figer.
+- **Assistant IA** : il répond dans la langue de l'écran ; la dictée suit la langue active.
+- **Devise** réglable (EUR par défaut, CHF, GBP, USD, TRY ou un autre code) ; aucun montant n'est converti.
+- **« Suggérer une amélioration »** (À propos et pied du menu) : un formulaire GitHub pré-rempli avec la version, la
+  langue et le navigateur, rien d'autre ; à défaut, contact@prevo.pro.
+- **Saisie gardée** : si la session prend fin pendant une saisie, l'écran de connexion s'affiche sans rien effacer ; le
+  même compte retrouve l'écran et sa saisie, il reste à enregistrer (une autre personne ne la voit pas).
+- **Guide et documentation en anglais** : `GUIDE.en.html` (l'aide à l'écran et « À propos » ouvrent le guide de la
+  langue), README, guide d'installation, feuille de route, guide de contribution (avec « Ajouter ou corriger une
+  langue »), politique de sécurité et code de conduite. La porte des téléphones montre ses illustrations en anglais.
+- **Brouillons** : la déclaration d'un problème et le compte rendu d'un OT sont gardés au fur et à mesure dans le
+  navigateur de l'appareil, pour le compte qui les a tapés : un téléphone resté en veille, dont la page se recharge,
+  les retrouve. Rien n'est envoyé au serveur avant l'enregistrement ; le brouillon est effacé à l'enregistrement, ou
+  au bout de 7 jours.
+
 ### Modifié
 
+- **Signalement des nouvelles versions activé par défaut** : une lecture de `prevo.pro/version.json` par jour et par
+  poste, sans cookie, sans adresse de page et sans redirection ; jamais dans la démo. Un bandeau l'explique une fois ;
+  la case est dans Paramètres › Mises à jour. Le lien « Télécharger » ne mène qu'à prevo.pro ou au dépôt GitHub.
+- **Recherche et tri** : la recherche tolère les lettres turques (« isik » trouve « Işık ») ; le tri suit la langue.
+- **Identifiants des comptes** : une seule règle ramène les noms à des lettres simples (« Ayşe Işık » → ayse.isik) ;
+  un deuxième compte au même nom demande « C'est une autre personne » ; un identifiant qui pourrait désigner deux
+  comptes est refusé à la connexion, qui demande l'identifiant exact. Les comptes existants ne sont pas renommés.
+- **Import ZIP** : les réglages absents du ZIP (langue, devise, réglages de la 2.0) gardent la valeur de la base, et la
+  confirmation les nomme ; en mode Solo, si votre fiche « moi » n'est plus claire après l'import, Prévo vous demande
+  qui vous êtes au lieu de deviner.
+- **« Commencer vide »** ouvre directement une base vide ; la démo peut s'y charger plus tard (démo › Exporter en ZIP,
+  puis Paramètres › Sauvegardes › Importer un ZIP).
+- **Saisies** : « N/A », « NTR » et « nothing to report » sont refusés comme « RAS » ; « yes / no » est compris comme
+  « oui / non ».
 - **ZIP jusqu'à 4 Go** : l'export et l'import lisent et écrivent le ZIP par morceaux, un document à la fois, au lieu
   de tout charger en mémoire. Un ZIP peut maintenant faire 4 Go (4 Go une fois décompressé, 10 000 fichiers au plus ;
   toujours 50 Mo par table et 10 Mo par document).
@@ -145,6 +187,33 @@ devient obligatoire.
   servent plus quand les comptes sont exigés. Les étiquettes QR imprimées en 1.2 restent valables (même adresse,
   même port : la page d'entrée). Lancé sans configuration, le serveur reste en portée « ce PC », comme avant.
 
+## [1.2.1] - 2026-11-04
+
+**Correctif important : protection contre une perte de données sur fichier abîmé.** Mise à jour recommandée pour
+tous les utilisateurs de la 1.2.0 ; rien d'autre ne change (mêmes écrans, même format de données).
+
+**Ce qui pouvait arriver.** Si l'un des fichiers CSV de Prévo était abîmé en dehors de Prévo (une note tapée à
+droite du tableau dans Excel, un guillemet oublié dans le Bloc-notes, une copie ou une synchronisation interrompue),
+Prévo le relisait du mieux qu'il pouvait, puis le réenregistrait à la première modification, parfois dès
+l'ouverture (quand il crée les ordres de travail préventifs du jour) : ce qu'il n'avait pas pu lire était perdu,
+sans avertissement. La sauvegarde du jour gardait l'original.
+
+### Corrigé
+
+- **Un fichier abîmé n'est plus jamais réécrit** : Prévo refuse de l'enregistrer, en mode dossier comme en mode
+  serveur ; seule la restauration d'une sauvegarde peut le remplacer.
+- **Bandeau « Fichier abîmé » dès l'ouverture** : il nomme le fichier et dit quoi faire ; un enregistrement refusé le
+  dit aussi, et la saisie reste dans le formulaire.
+- Le refus couvre toutes les écritures : formulaires, ordres de travail préventifs créés à l'ouverture, journal (une
+  ligne de journal refusée ne fait pas échouer l'action), passage au format (aucune sauvegarde refaite à chaque
+  ouverture) ; le serveur répond 409 `fichier_abime` à une écriture directe (`PUT` ou ajout).
+
+**Si le bandeau apparaît.** Le responsable ferme Excel (ou le programme qui a ouvert le fichier), puis ouvre
+Paramètres › Sauvegardes et clique sur « Restaurer… » devant la sauvegarde du jour, ou celle de la veille si le
+fichier était déjà abîmé (« Une seule table » ne remet que ce fichier ; Prévo copie d'abord l'état actuel dans une
+copie de sécurité). Il peut aussi réparer le fichier : ce qui ne va pas est décrit dans Paramètres › Contrôle de la
+base. Les autres profils préviennent le responsable. Aide : https://github.com/nicoboy49/prevo/issues
+
 ## [1.2.0] - 2026-10-24
 
 Le lot 6 : le wiki de maintenance, l'encyclopédie de l'atelier (le détail est dans
@@ -238,7 +307,10 @@ Première version, qui réunit les lots 1 à 4 du cahier des charges (le détail
   option, guide d'utilisation imprimable, fiche technique des fichiers CSV.
 - Données dans 22 fichiers CSV lisibles dans Excel ; 907 tests automatisés.
 
-[Non publié]: https://github.com/nicoboy49/prevo/compare/v1.2.0...HEAD
+[Non publié]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.2...HEAD
+[2.0.0-beta.2]: https://github.com/nicoboy49/prevo/compare/v2.0.0-beta.1...v2.0.0-beta.2
+[2.0.0-beta.1]: https://github.com/nicoboy49/prevo/compare/v1.2.0...v2.0.0-beta.1
+[1.2.1]: https://github.com/nicoboy49/prevo/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/nicoboy49/prevo/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/nicoboy49/prevo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/nicoboy49/prevo/releases/tag/v1.0.0
