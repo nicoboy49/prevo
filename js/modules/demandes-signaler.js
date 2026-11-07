@@ -22,6 +22,36 @@ Object.assign(Demandes, (() => {
     return App.estDemandeur() ? UI.html`${otId}` : UI.html`<a href="#/ot/${encodeURIComponent(otId)}">${otId}</a>`;
   }
 
+  // T329 : brouillon de la déclaration gardé sur l'appareil (Brouillons, un par auteur) : ses champs (la photo n'y est
+  // jamais : seulement le fait qu'il y en avait une), l'adresse d'où elle a été commencée (?equipement, ?ot).
+  const BROUILLON = 'demande';
+  const CHAMPS_BROUILLON = ['equipement_id', 'symptome', 'impact', 'description'];
+
+  /** Vrai si le brouillon se reprend à cette adresse : même OT d'origine, et pas d'autre équipement demandé. */
+  function brouillonDeCetteAdresse(brouillon, equipementDeLAdresse, otDemande) {
+    return texte(brouillon.ot) === otDemande
+      && (!equipementDeLAdresse || equipementDeLAdresse === texte(brouillon.valeurs.equipement_id));
+  }
+
+  // Brouillon commencé ailleurs (autre équipement scanné, autre OT d'origine) : le reprendre, ou l'abandonner ; une
+  // nouvelle déclaration commencée ici le remplace.
+  function bandeauAutreBrouillon(brouillon) {
+    const equipement = texte(brouillon.valeurs.equipement_id);
+    const bandeau = UI.bandeau('attention', UI.html`
+      ${I18n.t('demandes.brouillon.autre_declaration', { quand: Brouillons.quand(brouillon),
+        equipement: equipement ? libelleEquipement(equipement) : I18n.t('demandes.brouillon.sans_equipement') })}
+      <br><span class="actions"><button type="button" class="btn btn-secondaire brouillon-reprendre">${I18n.t('demandes.brouillon.reprendre')}</button>
+      <button type="button" class="btn btn-fantome brouillon-abandonner">${I18n.t('commun.brouillon.abandonner')}</button></span>`);
+    UI.$('.brouillon-reprendre', bandeau).addEventListener('click', () => {
+      App.naviguer('#/di/nouvelle' + (texte(brouillon.ot) ? '?ot=' + encodeURIComponent(texte(brouillon.ot)) : ''));
+    });
+    UI.$('.brouillon-abandonner', bandeau).addEventListener('click', () => {
+      Brouillons.effacer(BROUILLON);
+      bandeau.remove();
+    });
+    return bandeau;
+  }
+
   function afficherNouvelle(conteneur, parametres) {
     const requete = parametres.requete || new URLSearchParams();
     // ?ot=OT-… : OT préventif d'origine (bouton « Signaler une anomalie » d'un OT préventif).
@@ -29,7 +59,11 @@ Object.assign(Demandes, (() => {
     const otOrigine = otDemande ? Donnees.trouver('ordres_travail', otDemande) : null;
     const origineValable = estOtPreventif(otOrigine);
     // Équipement : ?equipement=…, sinon celui de l'OT d'origine.
-    const equipementDemande = texte(requete.get('equipement')) || (origineValable ? texte(otOrigine.equipement_id) : '');
+    const equipementDeLAdresse = texte(requete.get('equipement'));
+    const brouillon = Brouillons.lire(BROUILLON);
+    const reprendre = Boolean(brouillon) && brouillonDeCetteAdresse(brouillon, equipementDeLAdresse, otDemande);
+    const equipementDemande = (reprendre ? texte(brouillon.valeurs.equipement_id) : '')
+      || equipementDeLAdresse || (origineValable ? texte(otOrigine.equipement_id) : '');
     const libellesSymptomes = codesSymptome().map((entree) => entree.libelle);
     const idSymptome = UI.identifiantUnique('di-symptome');
     const idDescription = UI.identifiantUnique('di-description');
@@ -42,6 +76,7 @@ Object.assign(Demandes, (() => {
           <h1>${I18n.t('demandes.nouvelle.signaler_probleme')}</h1>
           <p>${I18n.t('demandes.nouvelle.cinq_questions_minute_responsable')}</p>
         </div></div>
+        <div class="di-brouillon"></div>
         <div class="di-origine"></div>
         <div class="di-alerte-equipement"></div>
         <form class="form-colonne di-formulaire" novalidate>
@@ -293,6 +328,35 @@ Object.assign(Demandes, (() => {
       return manques.length === 0;
     }
 
+    // --- brouillon gardé sur l'appareil (T329) : repris ici, ou proposé s'il a été commencé ailleurs -------------
+    const zoneBrouillon = UI.$('.di-brouillon', conteneur);
+    let depart = Brouillons.valeurs(formulaire, CHAMPS_BROUILLON);
+    if (reprendre) {
+      const sansBrouillon = equipementDeLAdresse || (origineValable ? texte(otOrigine.equipement_id) : '');
+      depart = { equipement_id: Donnees.trouver('equipements', sansBrouillon) ? sansBrouillon : '' };
+    }
+    if (reprendre) {                       // avant le suivi : reprendre un brouillon ne le rajeunit pas (7 jours)
+      Brouillons.poser(formulaire, { symptome: brouillon.valeurs.symptome, impact: brouillon.valeurs.impact,
+        description: brouillon.valeurs.description });
+    }
+    const suivi = Brouillons.suivre(formulaire, BROUILLON, CHAMPS_BROUILLON, {
+      depart,
+      complement: () => ({ ot: otDemande, photo: Boolean(photo.blob || photo.preparation) }),
+    });
+    if (reprendre) {
+      App.marquerSaisie(true);
+      zoneBrouillon.appendChild(Brouillons.bandeauRepris(brouillon, {
+        avertissement: brouillon.photo ? I18n.t('demandes.brouillon.photo_non_gardee') : '',
+        surAbandon: () => {
+          suivi.terminer();
+          App.marquerSaisie(false);
+          App.reafficher();
+        },
+      }));
+    } else if (brouillon) {
+      zoneBrouillon.appendChild(bandeauAutreBrouillon(brouillon));
+    }
+
     // --- envoi : photo d'abord, puis la demande ---------------------------------------------
     formulaire.addEventListener('submit', async (evenement) => {
       evenement.preventDefault();
@@ -324,6 +388,7 @@ Object.assign(Demandes, (() => {
           ot_origine_id: origineValable ? otDemande : '',
         });
         await tracerIa(id, { impact });
+        suivi.terminer();                                     // T329 : la demande est enregistrée, plus de brouillon
         App.marquerSaisie(false);
         libererApercu();
         afficherConfirmation(conteneur, id);

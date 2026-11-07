@@ -440,7 +440,9 @@ class TestConnexion(CasConnexion):
         page.evaluate("App.adaptateur.listerVersions().catch(() => null)")
         self.attendre_etat("connexion")
         page.wait_for_selector("#connexion-motif", state="visible")
-        self.assertIn("Connexion nécessaire", page.inner_text("#connexion-motif"))
+        # T329 : le message dit quoi faire (le même compte retrouve l'écran et sa saisie : tests/test_saisie_gardee.py).
+        self.assertEqual(page.inner_text("#connexion-motif").strip(),
+                         texte_du_dictionnaire("fr", "socle.session_perdue.reconnectez_vous_meme_compte"))
         self.assertEqual(page.evaluate("location.hash"), "#/parc")
         self.connecter("julien.moreau")                                           # une autre personne, même route
         attendre_pret(page)

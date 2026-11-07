@@ -194,7 +194,8 @@ const App = (() => {
 
   /** Erreur gérée : message à l'utilisateur (toast, messageErreur) et trace console.warn (jamais console.error). */
   function signalerErreur(erreur, contexte) {
-    UI.toast(messageErreur(erreur), 'erreur');
+    // T329 : session perdue, l'écran de connexion est là et dit quoi faire (la saisie reste) : pas de toast en plus.
+    if (!(erreur && erreur.sessionAbsente && promesseConnexion)) UI.toast(messageErreur(erreur), 'erreur');
     console.warn('Prévo' + (contexte ? ' (' + contexte + ')' : '') + ' : ' + ((erreur && erreur.message) || String(erreur)),
       erreur);
   }
@@ -917,18 +918,91 @@ const App = (() => {
     return promesseConnexion;
   }
 
-  // Session absente pendant l'usage (401 relu par stockage-serveur.js : expirée, fermée ailleurs, appareil révoqué) :
-  // l'écran de connexion par-dessus l'écran courant, puis la coque se rouvre sur la même route. Les tables sont
-  // relues (une autre personne, un autre rôle : d'autres tables lisibles).
+  // Session absente pendant l'usage (401 relu par stockage-serveur.js : expirée, fermée par le responsable, mot de
+  // passe changé ailleurs, appareil révoqué) : l'écran de connexion par-dessus l'écran courant.
+  // T329 (décisions de Nicolas du 07/11) : la page ne se recharge plus pour la langue (avant, quand la langue du compte
+  // n'était pas celle du poste, la saisie était perdue sans message) : l'écran de connexion reste dans la langue où la
+  // personne travaillait, avec un message qui dit quoi faire. L'écran courant reste tel quel, saisie comprise ; une
+  // fenêtre ouverte est mise de côté (fermée, gardée dans la page) le temps de la connexion, sinon elle bloquerait
+  // l'écran de connexion. Le même compte, avec les mêmes droits, retrouve l'écran et ses fenêtres tels qu'il les a
+  // laissés, puis enregistre ; un autre compte, ou des droits changés : les fenêtres sont abandonnées (comme
+  // « Annuler ») et l'écran reconstruit (tables relues) : la saisie n'est ni montrée ni enregistrée sous un autre nom.
   function surSessionAbsente(evenement) {
     if (!comptesExiges || !coqueVisible() || promesseConnexion) return;
-    if (suivreLangueDuCompte(null)) return;              // T298 : l'écran de connexion dans la langue du poste
     const detail = evenement.detail || {};
-    reconnecter({ appareilRefuse: Boolean(detail.appareilRefuse), message: detail.message });
+    reprendreApresSessionPerdue(session, Boolean(detail.appareilRefuse));
+  }
+
+  async function reprendreApresSessionPerdue(avant, appareilRefuse) {
+    const defilement = window.scrollY;
+    const actif = document.activeElement;
+    const fenetres = mettreFenetresDeCote();
+    await demanderConnexion(appareilRefuse ? { appareilRefuse }
+      : { message: I18n.t('socle.session_perdue.reconnectez_vous_meme_compte') });
+    if (!memesDroits(avant, session)) {
+      abandonnerFenetres(fenetres);
+      await rouvrirApresConnexion();
+      return;
+    }
+    noterLangueDuCompte(session);
+    montrer('app', 'pret');
+    window.scrollTo(0, defilement);
+    rouvrirFenetres(fenetres);
+    if (!fenetres.length && actif && actif !== document.body && UI.$('#contenu').contains(actif)) {
+      actif.focus({ preventScroll: true });
+    }
+    UI.toast(I18n.t('socle.session_perdue.reconnecte_saisie_gardee'), 'succes');
+  }
+
+  /** Même compte, même rôle, même technicien lié (T329) : la saisie lui est rendue. */
+  function memesDroits(avant, apres) {
+    return Boolean(avant && apres) && avant.identifiant === apres.identifiant && avant.role === apres.role
+      && avant.technicienId === apres.technicienId && Boolean(avant.appareil) === Boolean(apres.appareil);
+  }
+
+  // Fenêtres ouvertes (<dialog>, UI.fenetre) : fermées sans être retirées (aucune réponse donnée), dictée arrêtée.
+  function mettreFenetresDeCote() {
+    const fenetres = UI.$$('dialog[open]');
+    fenetres.forEach((dialogue) => {
+      if (typeof Dictee !== 'undefined') Dictee.arreterDans(dialogue);
+      dialogue.close();
+    });
+    return fenetres;
+  }
+
+  function rouvrirFenetres(fenetres) {
+    fenetres.forEach((dialogue) => { if (dialogue.isConnected && !dialogue.open) dialogue.showModal(); });
+  }
+
+  // Comme Échap : UI.fenetre rend null (« Annuler ») et retire la fenêtre ; une autre fenêtre est retirée.
+  function abandonnerFenetres(fenetres) {
+    fenetres.forEach((dialogue) => {
+      if (!dialogue.isConnected) return;
+      dialogue.dispatchEvent(new Event('cancel', { cancelable: true }));
+      if (dialogue.isConnected) dialogue.remove();
+    });
+  }
+
+  // T329 : portée des brouillons gardés sur l'appareil (js/modules/brouillons.js) : la base et l'auteur, le compte
+  // connecté (un appareil enrôlé : « appareil:<id> ») ou, sans comptes, le profil du poste. '' : aucun brouillon (démo,
+  // lecture seule, personne de connu). Le nom d'un profil sans comptes est déclaratif : qui prend le même profil sur
+  // ce poste voit ses brouillons, comme le reste de ce que fait ce profil.
+  function porteeDesBrouillons() {
+    if ((mode !== 'serveur' && mode !== 'dossier') || !adaptateur || Donnees.lectureSeule()) return '';
+    const base = mode === 'dossier' ? 'dossier:' + String(adaptateur.nomDossier || '') : 'serveur';
+    if (comptesExiges) return session && session.identifiant ? base + '|compte:' + session.identifiant : '';
+    if (!profil) return '';
+    return base + '|profil:' + profil.type + ':' + (profil.technicienId || profil.nom || '');
   }
 
   async function reconnecter(options) {
     await demanderConnexion(options);
+    await rouvrirApresConnexion();
+  }
+
+  // Après une connexion (déconnexion puis connexion, ou autre compte après une session perdue) : la langue du compte,
+  // son profil, les tables relues, la coque rouverte sur la même route.
+  async function rouvrirApresConnexion() {
     if (suivreLangueDuCompte(session)) return;           // T298 : la langue du compte qui vient de se connecter
     appliquerProfil(profilDepuisSession(session));
     montrer('ecran-chargement', 'chargement');
@@ -1163,6 +1237,8 @@ const App = (() => {
       if (window.performance && typeof performance.mark === 'function') performance.mark('prevo:pret');
       // Mise à jour signalée (D120) : une lecture par jour et par poste, seulement si le responsable l'a autorisée.
       if (typeof MiseAJour !== 'undefined') MiseAJour.verifier();
+      // T329 : brouillons de plus de 7 jours effacés de cet appareil (tous les auteurs).
+      if (typeof Brouillons !== 'undefined') Brouillons.purger();
       // T323 : mode Solo sans technicien « moi » reconnu (import ZIP, fiche supprimée) : la question, sans deviner.
       if (modeSolo() && !technicienSolo() && typeof Parametres !== 'undefined' && Parametres.interne.demanderMoiSolo
           && !Donnees.lectureSeule()) Parametres.interne.demanderMoiSolo();
@@ -1680,6 +1756,7 @@ const App = (() => {
     demanderConnexion,
     deconnecter,
     changerLangueDuCompte,
+    porteeDesBrouillons,
     exporterZip,
     signalerErreur,
     messageErreur,

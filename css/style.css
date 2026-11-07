@@ -525,6 +525,9 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
 .alerte > .icone { width: 22px; height: 22px; margin-top: 1px; }
 .alerte .alerte-texte { flex: 1; min-width: 0; }
 .alerte .alerte-texte > :last-child { margin-bottom: 0; }
+/* T329 : brouillon gardé sur l'appareil (texte à recopier, boutons du bandeau) */
+.alerte .brouillon-texte { white-space: pre-wrap; font: inherit; margin: 8px 0; max-height: 12rem; overflow: auto; }
+.alerte .brouillon-abandonner, .alerte .brouillon-effacer, .alerte .brouillon-reprendre { margin-top: 8px; min-height: 44px; }
 .alerte.attention { background: var(--teinte-ambre-faible); border-color: var(--bord-ambre); color: var(--texte-ambre); }
 .alerte.important { background: var(--teinte-rouge-faible); border-color: var(--bord-rouge); color: var(--texte-important); }
 .alerte.succes { background: var(--teinte-vert-faible); border-color: var(--bord-vert); color: var(--texte-vert); }

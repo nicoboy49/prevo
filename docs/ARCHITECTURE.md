@@ -537,11 +537,37 @@ profil s'affiche, puis l'application revient à la route demandée (cas du QR sc
 `type`, `prenom` + `nom` → `nom`, `technicien_id` → `technicienId` ; un appareil enrôlé : le nom saisi, type
 `demandeur`), l'écran de profil de 1.2 ne s'affiche jamais et `prevo.profil` n'est plus écrit (`prevo.poste` reste).
 Un mot de passe provisoire (`a_changer`) est changé avant tout. Pendant l'usage, l'événement `prevo:session-absente`
-(401 relu par `stockage-serveur.js`) ramène l'écran de connexion par-dessus l'écran courant, sans changer la route :
-après la connexion, les tables sont relues et la coque se rouvre sur la même route. Le bouton de profil du menu et
+(401 relu par `stockage-serveur.js`) ramène l'écran de connexion par-dessus l'écran courant, sans changer la route.
+T329 (décisions de Nicolas du 07/11) : la page ne se recharge pas (même quand la langue du compte n'est pas celle du
+poste) ; l'écran de connexion reste dans la langue où la personne travaillait, avec le message
+`socle.session_perdue.reconnectez_vous_meme_compte` ; l'écran courant n'est ni vidé ni reconstruit, et les fenêtres
+ouvertes (`dialog[open]`) sont fermées sans être retirées (sinon, modales, elles rendraient l'écran de connexion
+inerte). Le **même compte avec les mêmes droits** (identifiant, rôle, technicien lié) retrouve l'écran, le défilement
+et ses fenêtres rouvertes telles quelles (toast `socle.session_perdue.reconnecte_saisie_gardee`), puis enregistre ;
+le rafraîchissement habituel relit ensuite les tables. **Un autre compte**, ou des droits changés : les fenêtres sont
+abandonnées (événement `cancel`, comme Échap : `UI.fenetre` rend null), puis les tables sont relues et la coque se
+rouvre sur la même route (dans la langue du nouveau compte) : la saisie n'est ni montrée ni enregistrée sous un autre
+nom. Pendant l'écran de connexion, une erreur 401 n'ajoute pas de toast (`App.signalerErreur`). Le bouton de profil du menu et
 l'entrée « Plus » du téléphone deviennent « se déconnecter » (`POST /api/deconnexion`, puis l'écran de connexion) ;
 `App.changerProfil()` fait de même ; un appareil enrôlé n'a aucun bouton (seul le responsable le révoque). Le menu
 affiche « Prénom Nom · Rôle ». Sans comptes (portée « ce PC »), en modes dossier et démo : rien ne change.
+
+**Brouillons gardés sur l'appareil** (T329, décisions de Nicolas du 07/11 ; `js/modules/brouillons.js`, objet
+`Brouillons`, chargé juste après `poste.js`) : la déclaration de panne (`#/di/nouvelle`) et le compte rendu d'un OT
+(onglet Compte rendu) survivent à un onglet déchargé par le navigateur (téléphone en veille), à un rechargement ou à
+une session perdue. Clé `localStorage` « prevo.brouillon|<base>|<auteur>|<nom> » (`App.porteeDesBrouillons()` : base
+`serveur` ou `dossier:<nom du dossier>` ; auteur `compte:<identifiant>`, `compte:appareil:<id>` pour un appareil enrôlé,
+sans comptes `profil:<type>:<technicien ou nom>` ; '' en démo et en lecture seule : aucun brouillon) ; valeur
+`{ le, valeurs, depart, … }` (noms `demande` et `compte-rendu|<OT>`). Règles : lié au compte qui l'a tapé, jamais montré
+à un autre (la clé porte l'auteur) ; écrit 400 ms après la dernière frappe et aussitôt quand la page passe en
+arrière-plan (`visibilitychange`, `pagehide`), seulement s'il diffère des valeurs enregistrées (`depart`), sinon
+effacé ; effacé à l'enregistrement (`suivi.terminer()`), par « Abandonner le brouillon », ou au bout de 7 jours (lu
+périmé, et `Brouillons.purger()` à l'ouverture, tous auteurs) ; **rien ne part au serveur**. Reprise : bandeau
+« Brouillon repris » ; déclaration commencée pour un autre équipement ou un autre OT d'origine : bandeau « La
+reprendre » (une nouvelle la remplace) ; la photo n'est jamais gardée (le bandeau le dit) ; compte rendu enregistré
+ailleurs depuis (`depart` différent) : avertissement, rien n'est fusionné ; l'OT s'ouvre sur l'onglet Compte rendu ;
+OT devenu non modifiable : texte montré à recopier, « Effacer le brouillon ». Sans comptes, le profil étant
+déclaratif, qui prend le même profil sur le poste voit ses brouillons. Tests : `tests/test_saisie_gardee.py`.
 
 **État prêt** : quand les tables sont chargées et le premier écran affiché,
 `document.documentElement.dataset.etat = 'pret'` et `performance.mark('prevo:pret')` (lus par
@@ -1347,7 +1373,7 @@ embarque) ; elle contient `renderToSVGString`, seule fonction du rendu « serveu
   « Indicateurs » (ordre 50, `indicateurs`), « Équipe » (ordre 85, `equipe`, groupe
   « Administration », avant Paramètres).
 - **Ordre de chargement** (remplace celui du §14.2 ; `ORDRE_MODULES` de `tests/test_depot.py` change
-  avec lui) :
+  avec lui ; T329 : `brouillons.js` juste après `poste.js`, voir « Brouillons gardés sur l'appareil ») :
   ```
   apropos.js  mise-a-jour.js  accueil.js  causes-frequentes.js
   parc-regles.js  parc-arbre.js  parc-formulaires.js  parc-etiquettes.js  parc-fiche.js
@@ -4613,11 +4639,13 @@ serveur l'accepte comme toute clé (`parametres` est une table clé-valeur). Ell
   n'est retenu ni rechargé (un rechargement perdrait les données, qui vivent dans la page).
 - **Langue du compte** (T298) : `GET /api/session` porte la langue du compte (§22.4) ; `js/app.js`
   (`suivreLangueDuCompte`) l'écrit dans `localStorage` « prevo.langue.compte » dès qu'il connaît la session (ouverture,
-  connexion) et l'efface sans session de compte (déconnexion, session expirée vue par l'appli, appareil enrôlé, sans
-  comptes, modes dossier et démo) ; `js/i18n-chargeur.js` la lit en premier (`I18n.langueAAfficher`, 4e argument,
+  connexion) et l'efface sans session de compte (déconnexion, ouverture sans session, appareil enrôlé, sans comptes,
+  modes dossier et démo ; une session perdue pendant l'usage la garde, T329, §8) ;
+  `js/i18n-chargeur.js` la lit en premier (`I18n.langueAAfficher`, 4e argument,
   valeur vérifiée contre les langues déclarées). Une page qui n'est pas dans la langue que le chargeur choisirait se
   recharge une fois, avec la même garde (`rechargerPourLaLangue`) : après la connexion, la langue du compte ; après la
-  déconnexion, celle du poste ou de l'installation (poste ou tablette partagés). La personne choisit sa langue sur
+  déconnexion, celle du poste ou de l'installation (poste ou tablette partagés) ; jamais quand la session se perd
+  pendant l'usage (T329 : la saisie serait perdue ; l'écran de connexion reste dans la langue du compte). La personne choisit sa langue sur
   « Ce poste », carte Affichage, quand une session de compte est ouverte : « Pour mon compte » (enregistrée dans le
   compte, `App.changerLangueDuCompte` → `POST /api/mot-de-passe {"langue"}` ; elle la suit sur tous les postes) ou
   « Pour ce poste seulement » (comme sans comptes ; la langue du compte est alors retirée, sinon elle passerait

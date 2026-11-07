@@ -1262,6 +1262,8 @@ const StockageDossier = (() => {
       mode: 'dossier',
       // Lu à chaque affichage (jamais figé à la création de l'adaptateur).
       get libelle() { return I18n.t('socle.creer.dossier_name', { name: poignee.name }); },
+      // Nom du dossier tel quel (T329 : portée des brouillons gardés sur l'appareil, App.porteeDesBrouillons).
+      get nomDossier() { return poignee.name; },
       charger: proteger(() => I18n.t('socle.creer.lecture_table'), charger),
       enregistrer: proteger(() => I18n.t('socle.creer.enregistrement_table'), enregistrer),
       ajouter: proteger(() => I18n.t('socle.creer.ajout_fichier'), ajouter),

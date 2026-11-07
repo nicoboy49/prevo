@@ -330,6 +330,11 @@ Object.assign(Ordres, (() => {
     return 'preparation';
   }
 
+  // T329 : un brouillon du compte rendu sur cet appareil ouvre l'onglet Compte rendu (repris, ou montré à recopier).
+  function ongletAOuvrir(ot) {
+    return Brouillons.lire(brouillonCompteRendu(ot)) ? 'compte-rendu' : ongletParDefaut(ot);
+  }
+
   function afficherFiche(conteneur, parametres) {
     formulairesFiche = [];
     const ot = Donnees.trouver('ordres_travail', parametres.id);
@@ -365,7 +370,7 @@ Object.assign(Ordres, (() => {
       { id: 'execution', libelle: I18n.t('ordres.fiche.execution'), afficher: (panneau) => afficherExecution(panneau, ot) },
       { id: 'compte-rendu', libelle: I18n.t('ordres.fiche.compte_rendu'), afficher: (panneau) => afficherCompteRendu(panneau, ot) },
       { id: 'historique', libelle: I18n.t('ordres.fiche.historique_equipement'), afficher: (panneau) => afficherHistorique(panneau, ot) },
-    ], { actif: memoire.ongletParOt[ot.id] || ongletParDefaut(ot), libelle: I18n.t('ordres.fiche.parties_ordre_travail'),
+    ], { actif: memoire.ongletParOt[ot.id] || ongletAOuvrir(ot), libelle: I18n.t('ordres.fiche.parties_ordre_travail'),
       surChangement: (id) => { memoire.ongletParOt[ot.id] = id; } });
 
     brancherActionsFiche(racine, ot);
@@ -621,10 +626,59 @@ Object.assign(Ordres, (() => {
     return UI.html`<div class="entete-carte"><h2>${titre}</h2>${explication ? UI.html`<span class="aide">${explication}</span>` : ''}</div>`;
   }
 
+  // T329 : brouillon du compte rendu gardé sur l'appareil (Brouillons), un par OT et par auteur ; repris dans le
+  // formulaire d'un OT modifiable, avec un avertissement si le compte rendu a été enregistré ailleurs depuis (rien
+  // n'est fusionné : la personne relit avant d'enregistrer) ; sinon montré à recopier. Rend le suivi ({ terminer }),
+  // ou null (OT non modifiable).
+  const CHAMPS_COMPTE_RENDU = ['symptome_code', 'cause_code', 'remede_code', 'compte_rendu', 'astuce', 'remise_service'];
+  const brouillonCompteRendu = (ot) => 'compte-rendu|' + ot.id;
+
+  function garderLeCompteRendu(panneau, formulaire, ot, modifiable) {
+    const brouillon = Brouillons.lire(brouillonCompteRendu(ot));
+    if (!modifiable) {
+      if (brouillon) panneau.prepend(bandeauBrouillonNonRepris(brouillon, ot));
+      return null;
+    }
+    const depart = Brouillons.valeurs(formulaire, CHAMPS_COMPTE_RENDU);
+    if (brouillon) Brouillons.poser(formulaire, brouillon.valeurs);   // avant le suivi : il ne rajeunit pas
+    const suivi = Brouillons.suivre(formulaire, brouillonCompteRendu(ot), CHAMPS_COMPTE_RENDU, { depart });
+    if (!brouillon) return suivi;
+    formulaire.dataset.modifie = '1';                  // enregistré avant une transition, comme une saisie
+    App.marquerSaisie(true);
+    const modifieAilleurs = !Brouillons.egales(brouillon.depart, depart, CHAMPS_COMPTE_RENDU);
+    panneau.prepend(Brouillons.bandeauRepris(brouillon, {
+      avertissement: modifieAilleurs ? I18n.t('ordres.brouillon.modifie_ailleurs') : '',
+      surAbandon: () => {
+        suivi.terminer();
+        Brouillons.poser(formulaire, depart);
+        formulaire.dataset.modifie = '0';
+        App.marquerSaisie(false);
+      },
+    }));
+    return suivi;
+  }
+
+  // OT devenu non modifiable (clôturé, annulé, autre profil) : le brouillon n'est pas repris ; son texte est montré
+  // pour être recopié ailleurs, et « Effacer le brouillon » l'efface.
+  function bandeauBrouillonNonRepris(brouillon, ot) {
+    const texteBrouillon = [brouillon.valeurs.compte_rendu, brouillon.valeurs.astuce].map((t) => texte(t)).filter(Boolean)
+      .join('\n\n');
+    const bandeau = UI.bandeau('attention', UI.html`
+      ${I18n.t('ordres.brouillon.non_repris', { quand: Brouillons.quand(brouillon) })}
+      ${texteBrouillon ? UI.html`<pre class="brouillon-texte">${texteBrouillon}</pre>` : ''}
+      <button type="button" class="btn btn-fantome brouillon-effacer">${I18n.t('commun.brouillon.effacer')}</button>`);
+    UI.$('.brouillon-effacer', bandeau).addEventListener('click', () => {
+      Brouillons.effacer(brouillonCompteRendu(ot));
+      bandeau.remove();
+    });
+    return bandeau;
+  }
+
   // Outils prêtés aux fichiers suivants du module (usage interne).
   Object.assign(Ordres.interne, {
     afficherNouveau, afficherFiche, boutonsTransitions, declarerFormulaire, apresEnregistrement, pendant,
     listeErreursHtml, bandeauHabilitation, enteteOnglet, lienOt,
+    garderLeCompteRendu,
   });
 
   return {};

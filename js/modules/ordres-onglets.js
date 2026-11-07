@@ -14,7 +14,7 @@ Object.assign(Ordres, (() => {
     listeTechniciens, libelleArticle, listeCodes, lignesDeLOt, operationsDe, placerChamp, champOt,
     modifierOt, modifierLieeAOt, journaliserHabilitation, optionsHtml, boutonsTransitions,
     declarerFormulaire, apresEnregistrement, pendant, listeErreursHtml, bandeauHabilitation, enteteOnglet,
-    lienOt, detailManque } = Ordres.interne;
+    lienOt, detailManque, garderLeCompteRendu } = Ordres.interne;
 
   // Fonction du fichier chargé APRÈS celui-ci (ordres-pieces.js) : cherchée au moment de l'appel.
   const afficherPiecesSorties = (bloc, ot) => Ordres.interne.afficherPiecesSorties(bloc, ot);
@@ -445,9 +445,11 @@ Object.assign(Ordres, (() => {
     if (equipement && texte(equipement.habilitation_requise)) {
       UI.$('.ot-remise', formulaire).appendChild(UI.element(UI.html`<p class="aide">${Ordres.rappelConsignation()}</p>`));
     }
+    const suivi = garderLeCompteRendu(panneau, formulaire, ot, modifiable);     // T329 : brouillon sur l'appareil
     if (modifiable) {
       const ia = typeof Ia === 'undefined' ? null : brancherIa(formulaire, ot);   // assistant IA (§9 bis)
-      const enregistrer = () => enregistrerCompteRendu(ot, formulaire, ia);
+      const enregistrer = () => enregistrerCompteRendu(ot, formulaire, ia)
+        .then((reussi) => { if (reussi) suivi.terminer(); return reussi; });     // enregistré : plus de brouillon
       declarerFormulaire(formulaire, enregistrer);
       formulaire.addEventListener('submit', async (evenement) => {
         evenement.preventDefault();
