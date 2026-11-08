@@ -24,7 +24,9 @@ Dans le code, `Schema.version` (`js/schema.js`) est le format courant ; il n'a r
 
 Les données sont **27 fichiers CSV** (les 24 du format 3, plus `reserves_controle.csv`, `garanties.csv` et
 `contrats_prestataires.csv`) dans le dossier de données : séparateur `;`, UTF-8 avec BOM, fins de ligne CRLF,
-une apostrophe de tête protège les valeurs qu'Excel abîmerait (ARCHITECTURE.md §3). La liste des fichiers, leurs
+une apostrophe de tête protège les valeurs qu'Excel abîmerait (ARCHITECTURE.md §3). Un fichier absent se lit comme
+une table vide : une base passée du format 3 au format 4 n'a pas encore `garanties.csv` ni `contrats_prestataires.csv`
+(§6, « Ce que le passage écrit sur le disque »). La liste des fichiers, leurs
 colonnes, leurs types, leurs valeurs permises et leurs références sont dans
 [FICHE_TECHNIQUE_CSV.md](../FICHE_TECHNIQUE_CSV.md) : on ne les recopie pas ici.
 
@@ -84,8 +86,8 @@ appareils, journal des connexions), jamais les sessions ni les clés, et ne le r
 |---|---|---|
 | **1** | avant les versions publiées | Les 22 tables du brief (§6), sans les colonnes ci-dessous. `version_schema` absent. |
 | **2** | 1.0, 1.1 | Colonnes `equipements.valeur_remplacement`, `demandes.symptome_code`, `demandes.ot_origine_id`, `ordres_travail.anomalie_constatee` (défaut `0`), en fin de table. |
-| **3** | 1.2.0, 2.0 bêta, 2.0.0, 2.1.0 | Colonne `ordres_travail.astuce` en fin de table ; tables `wiki_pages` et `wiki_journal` (créées vides). 24 tables en tout. |
-| **4** | 2.2 | Colonnes `equipements.cout_arret_h`, `ordres_travail.habilitation_requise`, `habilitations.recyclage_mois`, `habilitations.justificatif`, `habilitations.catalogue_id`, `habilitations.nature_source`, `controles_reglementaires.source_periodicite` (défaut `saisie`), `controles_reglementaires.nature_source`, `controles_reglementaires.catalogue_id`, `controles_reglementaires.catalogue_relu_le`, en fin de table ; tables `reserves_controle` (remplie par la reprise des observations, §6), `garanties` et `contrats_prestataires` (créées vides). 27 tables en tout. |
+| **3** | 1.2.0, 2.0 bêta, 2.0.0, 2.1.0 | Colonne `ordres_travail.astuce` en fin de table ; tables `wiki_pages` et `wiki_journal` (vides : le passage ne crée pas leur fichier, §6). 24 tables en tout. |
+| **4** | 2.2 | Colonnes `equipements.cout_arret_h`, `ordres_travail.habilitation_requise`, `habilitations.recyclage_mois`, `habilitations.justificatif`, `habilitations.catalogue_id`, `habilitations.nature_source`, `controles_reglementaires.source_periodicite` (défaut `saisie`), `controles_reglementaires.nature_source`, `controles_reglementaires.catalogue_id`, `controles_reglementaires.catalogue_relu_le`, en fin de table ; tables `reserves_controle` (remplie par la reprise des observations, §6), `garanties` et `contrats_prestataires` (vides : le passage ne crée pas leur fichier, §6). 27 tables en tout. |
 
 La source de vérité est l'attribut `depuisVersion` dans [js/schema.js](../js/schema.js).
 
@@ -118,6 +120,31 @@ La source de vérité est l'attribut `depuisVersion` dans [js/schema.js](../js/s
   - en **mode serveur**, le **serveur, au démarrage**, avant toute connexion ;
   - en **mode dossier** (fichiers ouverts directement par le navigateur), le **navigateur**, au chargement ;
   - en **démo**, rien n'est écrit.
+- **Ce que le passage écrit sur le disque** : les mêmes fichiers en mode serveur et en mode dossier (serveur :
+  `passer_les_fichiers_au_format_courant` dans `serveur.py` ; dossier : `migrerAuFormatCourant` dans
+  `js/donnees.js`). Une table qu'une étape « crée » n'existe d'abord qu'en mémoire : le passage n'écrit jamais de
+  fichier pour une table vide. Pour le passage 3→4, dans cet ordre :
+  1. la sauvegarde `avant-format-v4` ;
+  2. les fichiers **présents** que l'étape complète, réécrits avec les colonnes nouvelles en fin : `equipements.csv`,
+     `ordres_travail.csv`, `habilitations.csv` et `controles_reglementaires.csv` (un fichier absent n'est pas créé ;
+     un fichier de 0 octet ou abîmé n'est pas réécrit) ;
+  3. `reserves_controle.csv`, **seulement s'il y a au moins une réserve à reprendre** (un contrôle qui a des
+     observations et aucune réserve) : créé avec l'en-tête du format 4 s'il manque, complété sinon. Sans réserve à
+     reprendre (aucun contrôle, observations toutes vides, `controles_reglementaires.csv` absent ou abîmé) : aucun
+     fichier ;
+  4. `parametres.csv` (`version_schema` à 4), puis une ligne de journal par étape dans `journal.csv`.
+
+  **`garanties.csv` et `contrats_prestataires.csv` ne sont jamais créés par le passage**, dans aucun des deux modes.
+  Absents, ils se lisent comme des tables vides (en mode serveur, `GET /api/csv/garanties` répond 404, que le
+  navigateur prend pour une table vide) ; le fichier apparaît à la première écriture de la table (première garantie,
+  premier contrat). Il en va de même des tables des étapes précédentes : `wiki_pages.csv` et `wiki_journal.csv`
+  d'une base au format 2 restent absents après le passage.
+
+  Seule différence entre les deux modes : la **sauvegarde du jour** (`AAAA-MM-JJ`, §8), qui n'appartient pas au
+  passage. Quand elle n'existe pas encore, le serveur la fait au démarrage **après** le passage (elle a les fichiers
+  au format 4), le navigateur avant la première écriture du jour, donc avant la première table que le passage
+  réécrit (elle a les fichiers d'avant). Dans les deux modes, c'est `avant-format-v4` qui garde la base d'avant le
+  passage.
 - **Sauvegarde d'abord** : une sauvegarde `avant-format-vN` est faite avant la première étape ; si elle échoue, rien
   n'est migré et la migration est retentée au démarrage suivant.
 - **Fichier illisible** : un fichier que Prévo ne sait pas lire n'est jamais réécrit.

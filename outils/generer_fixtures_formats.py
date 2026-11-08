@@ -1,4 +1,4 @@
-"""Génère les jeux de fichiers d'exemple des formats de données (tests/fixtures/formats/), T182, T378, T394.
+"""Génère les jeux de fichiers d'exemple des formats de données (tests/fixtures/formats/), T182, T378, T394, T404.
 
 Quatre jeux de base, tirés des fichiers de référence, chaque table réduite à 12 enregistrements :
     f1          tests/fixtures/v1/                      (format 1)
@@ -8,9 +8,10 @@ Quatre jeux de base, tirés des fichiers de référence, chaque table réduite �
 et des variantes stockées comme différences (variante.json + seulement les fichiers qui changent), dont
 f4-v2.2.0 (base au format 4, 27 tables : f3-v2.1.0 complétée PAR CE SCRIPT, jamais par serveur.py ni js/formats.js,
 avec des valeurs dans les colonnes et les tables nouvelles), plus-recent (f4-v2.2.0 au format 5 simulé :
-version_schema 5, colonne nouvelle_colonne_v5, table pieces_v5) et reserves-a-reprendre (f3-v2.1.0 dont
+version_schema 5, colonne nouvelle_colonne_v5, table pieces_v5), reserves-a-reprendre (f3-v2.1.0 dont
 controles_reglementaires.csv est fabriqué pour la reprise des observations en réserves, D183 ; réserves attendues :
-tests/fixtures/formats/LISEZMOI.md).
+tests/fixtures/formats/LISEZMOI.md), et f4-windows-1252 et f4-entete-tronque (T404 : les fichiers abîmés de
+windows-1252 et entete-tronque, même fabrication, dans f4-v2.2.0 : le cas pur, sans passage de format).
 
 Reproductible octet pour octet : mêmes entrées, mêmes sorties (aucune date du jour, aucun hasard ; le sel du
 compte fictif est fixe). Bibliothèque standard seulement ; git doit connaître les étiquettes v1.1.0, v1.2.0 et
@@ -154,6 +155,14 @@ def dates_jjmmaaaa(octets, colonne):
         if m:
             l[i] = "%s/%s/%s" % (m.group(3), m.group(2), m.group(1))
     return ecrire_table(False, entete, lignes, encodage="cp1252")
+
+
+def entete_coupe(octets_ordres):
+    """ordres_travail.csv dont l'en-tête est coupé au milieu du nom de colonne temps_prevu_h (il finit par
+    « temps_pr ») ; les lignes de données, après le premier CRLF, sont gardées telles quelles."""
+    entete = octets_ordres.split(b"\r\n", 1)[0]
+    coupe = entete.index(b"technicien_id") + len(b"technicien_id;temps_pr")
+    return octets_ordres[:coupe] + octets_ordres[len(entete):]
 
 
 def avec_parametres(octets, remplacements, ajouts):
@@ -373,8 +382,6 @@ def definir_variantes(f3, f3_21):
     """{nom: (description, base, supprimer, vider, {fichier: octets})} : seuls les fichiers qui changent.
     f3 : base f3-v1.2.0 ; f3_21 : base f3-v2.1.0."""
     ordres = f3["ordres_travail.csv"]
-    entete_ordres = ordres.split(b"\r\n", 1)[0]
-    coupe = entete_ordres.index(b"technicien_id") + len(b"technicien_id;temps_pr")
     comptes = json.dumps({"version": 1, "comptes": [compte_responsable()]}, ensure_ascii=False, indent=2).encode("utf-8")
     f4 = jeu_f4(f3_21)
     b = "f3-v1.2.0"
@@ -398,7 +405,7 @@ def definir_variantes(f3, f3_21):
         "entete-tronque": (
             "En-tête de ordres_travail.csv coupé au milieu du nom de colonne temps_prevu_h (fichier abîmé) ; les "
             "lignes de données sont intactes et plus larges que l'en-tête.", b, [], [],
-            {"ordres_travail.csv": ordres[:coupe] + ordres[len(entete_ordres):]}),
+            {"ordres_travail.csv": entete_coupe(ordres)}),
         "colonnes-manquantes": (
             "equipements.csv sans les colonnes modele et valeur_remplacement.", b, [], [],
             {"equipements.csv": sans_colonnes(f3["equipements.csv"], {"modele", "valeur_remplacement"})}),
@@ -417,6 +424,17 @@ def definir_variantes(f3, f3_21):
             "equipements.csv enregistré en Windows-1252, sans BOM, dates date_mes en JJ/MM/AAAA, comme après un "
             "enregistrement par Excel.", b, [], [],
             {"equipements.csv": dates_jjmmaaaa(f3["equipements.csv"], "date_mes")}),
+        # Les mêmes fichiers abîmés dans une base au format 4 (T404) : rien à migrer, le cas pur (sans passage de
+        # format, qui réécrirait ou compléterait la base avant tout contrôle).
+        "f4-windows-1252": (
+            "equipements.csv de f4-v2.2.0 enregistré en Windows-1252, sans BOM, dates date_mes en JJ/MM/AAAA, comme "
+            "après un enregistrement par Excel (même fabrication que windows-1252) ; base au format 4, rien à migrer.",
+            "f4-v2.2.0", [], [], {"equipements.csv": dates_jjmmaaaa(f4["equipements.csv"], "date_mes")}),
+        "f4-entete-tronque": (
+            "En-tête de ordres_travail.csv de f4-v2.2.0 coupé au milieu du nom de colonne temps_prevu_h (même "
+            "fabrication que entete-tronque) ; les lignes de données sont intactes et plus larges que l'en-tête ; "
+            "base au format 4, rien à migrer.", "f4-v2.2.0", [], [],
+            {"ordres_travail.csv": entete_coupe(f4["ordres_travail.csv"])}),
         "plus-recent": (
             "Données d'une version plus récente : f4-v2.2.0 (toutes les tables et colonnes du format 4) avec "
             "version_schema 5, colonne inconnue nouvelle_colonne_v5 en fin de ordres_travail.csv, table inconnue "

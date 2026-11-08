@@ -9,15 +9,18 @@ f4-v2.2.0 (T394, base au format 4) : 27 tables aux colonnes exactes du format 4,
 à migrer ni à reprendre, réécrit aux mêmes octets (côté navigateur : tests/test_formats_js.py et
 test_formats_serveur.py), les 20 tables sans colonne nouvelle identiques à f3-v2.1.0, les quatre autres complétées
 sans changer une cellule, les valeurs du format 4 et les réserves du LISEZMOI ; plus-recent : f4-v2.2.0 plus ses ajouts
-du format 5 ; et, si git et les étiquettes v1.1.0, v1.2.0 et v2.1.0 sont là, le générateur rejoué redonne exactement
-les mêmes octets.
+du format 5 ; f4-windows-1252 et f4-entete-tronque (T404) : f4-v2.2.0 avec le seul fichier abîmé de windows-1252 ou
+entete-tronque, même fabrication, base au format 4 (rien à migrer : le cas pur) ; et, si git et les étiquettes v1.1.0,
+v1.2.0 et v2.1.0 sont là, le générateur rejoué redonne exactement les mêmes octets.
 
 Lancer depuis la racine du projet :
     py -X utf8 -m unittest discover -s tests -p "test_formats_fixtures.py" -v
 """
 import base64
+import csv
 import hashlib
 import importlib.util
+import io
 import json
 import re
 import subprocess
@@ -40,9 +43,11 @@ PLAGES_FICTIVES = ("04657100", "06399800")
 
 # jeu -> version_schema attendu (None : absent, soit le format 1)
 VERSION_SCHEMA = {"f1": None, "f2-v1.1.0": "2", "f3-v1.2.0": "3", "f3-v2.0.0": "3", "plus-recent": "5",
-                  "melange": "3", "f3-v2.1.0": "3", "reserves-a-reprendre": "3", "f4-v2.2.0": "4"}
+                  "melange": "3", "f3-v2.1.0": "3", "reserves-a-reprendre": "3", "f4-v2.2.0": "4",
+                  "f4-windows-1252": "4", "f4-entete-tronque": "4"}
 NB_TABLES = {"f2-v1.1.0": 22, "f3-v1.2.0": 24, "f3-v2.0.0": 24, "table-absente": 22, "plus-recent": 28,
-             "f3-v2.1.0": 24, "reserves-a-reprendre": 24, "f4-v2.2.0": 27}
+             "f3-v2.1.0": 24, "reserves-a-reprendre": 24, "f4-v2.2.0": 27, "f4-windows-1252": 27,
+             "f4-entete-tronque": 27}
 # Jeux de la 2.2 (T378), au format 3 : chaque fichier, et la base
 JEUX_DE_LA_2_2 = ("f3-v2.1.0", "reserves-a-reprendre")
 COMMENTAIRE_LEVEE_REPRISE = "levée avant la 2.2, date inconnue"
@@ -90,7 +95,12 @@ RESERVES_DU_F4 = [
      "2026-04-02", "Avertisseur remplacé, essai concluant", ""),
 ]
 # Fichiers sans BOM, par jeu (tous les autres CSV non vides en ont un) ; « * » : aucun CSV n'en a.
-SANS_BOM = {"sans-bom": "*", "windows-1252": {"equipements.csv"}}
+SANS_BOM = {"sans-bom": "*", "windows-1252": {"equipements.csv"}, "f4-windows-1252": {"equipements.csv"}}
+# Jeux dont equipements.csv est en Windows-1252 ; variantes abîmées tirées de f4-v2.2.0 (T404) : jeu → (variante
+# tirée de f3-v1.2.0 faite de même, seul fichier qui change).
+JEUX_WINDOWS_1252 = ("windows-1252", "f4-windows-1252")
+ABIMES_DU_F4 = {"f4-windows-1252": ("windows-1252", "equipements.csv"),
+                "f4-entete-tronque": ("entete-tronque", "ordres_travail.csv")}
 
 
 def etiquettes_presentes():
@@ -176,7 +186,7 @@ class TestJeux(unittest.TestCase):
         self.assertEqual(sorted(JEUX), sorted([
             "f1", "f2-v1.1.0", "f3-v1.2.0", "f3-v2.0.0", "vide", "entete-tronque", "colonnes-manquantes",
             "colonnes-en-trop", "sans-bom", "table-absente", "melange", "windows-1252", "plus-recent", "f3-v2.1.0",
-            "reserves-a-reprendre", "f4-v2.2.0"]))
+            "reserves-a-reprendre", "f4-v2.2.0", "f4-windows-1252", "f4-entete-tronque"]))
 
     def test_chaque_jeu_se_materialise(self):
         for nom in JEUX:
@@ -375,6 +385,47 @@ class TestJeux(unittest.TestCase):
         self.assertEqual([l[:-1] for l in lignes], lignes_f4)
         self.assertEqual([l[-1] for l in lignes], ["v5-%d" % n for n in range(1, len(lignes) + 1)])
 
+    def test_abimes_tires_de_f4_seul_le_fichier_abime_change(self):
+        # T404 : f4-v2.2.0 à l'octet près, sauf le fichier abîmé, fabriqué comme dans la variante tirée de f3-v1.2.0 ;
+        # base au format 4 et autres fichiers au format 4 : aucun passage de format avant le contrôle (le cas pur).
+        f4 = self.jeu(JEU_F4)
+        for nom, (variante_f3, fichier) in sorted(ABIMES_DU_F4.items()):
+            dossier = self.jeu(nom)
+            with self.subTest(jeu=nom):
+                self.assertEqual(lire_variante(nom)["base"], JEU_F4)
+                self.assertEqual(sorted(c.name for c in dossier.glob("*.csv")), sorted(c.name for c in f4.glob("*.csv")))
+                for chemin in sorted(f4.glob("*.csv")):
+                    if chemin.name != fichier:
+                        self.assertEqual((dossier / chemin.name).read_bytes(), chemin.read_bytes(), chemin.name)
+                self.assertNotEqual((dossier / fichier).read_bytes(), (f4 / fichier).read_bytes())
+                self.assertNotEqual((dossier / fichier).read_bytes(), (self.jeu(variante_f3) / fichier).read_bytes())
+                self.assertEqual(serveur.version_de_base(lignes_en_dictionnaires(
+                    (dossier / "parametres.csv").read_bytes())), 4)
+        # f4-entete-tronque : le même en-tête coupé que entete-tronque (habilitation_requise venait après), les lignes
+        # de données de f4-v2.2.0 à l'octet ; en-tête illisible pour le serveur (format 0).
+        tronque = (self.jeu("f4-entete-tronque") / "ordres_travail.csv").read_bytes()
+        entete, corps = tronque.split(b"\r\n", 1)
+        entete_f4, corps_f4 = (f4 / "ordres_travail.csv").read_bytes().split(b"\r\n", 1)
+        self.assertEqual(corps, corps_f4)
+        self.assertTrue(entete.endswith(b"temps_pr") and entete_f4.startswith(entete))
+        self.assertEqual(entete, (self.jeu("entete-tronque") / "ordres_travail.csv").read_bytes().split(b"\r\n", 1)[0])
+        self.assertEqual(serveur.format_du_fichier("ordres_travail", serveur.lire_csv_tolerant(tronque)[0]), 0)
+        # f4-windows-1252 : sans BOM, illisible en UTF-8 ; relu en Windows-1252, les cellules de f4-v2.2.0, dates
+        # date_mes en JJ/MM/AAAA (aucun caractère de ce fichier n'est hors de Windows-1252 : aucun « ? »).
+        octets = (self.jeu("f4-windows-1252") / "equipements.csv").read_bytes()
+        self.assertFalse(octets.startswith(BOM))
+        with self.assertRaises(UnicodeDecodeError):
+            octets.decode("utf-8")
+        lues = list(csv.reader(io.StringIO(octets.decode("cp1252"), newline=""), delimiter=";"))
+        propres = list(csv.reader(io.StringIO((f4 / "equipements.csv").read_bytes().decode("utf-8-sig"), newline=""),
+                                  delimiter=";"))
+        self.assertEqual(lues[0], propres[0])
+        date_mes = lues[0].index("date_mes")
+        self.assertTrue(all(re.fullmatch(r"(\d{2}/\d{2}/\d{4})?", l[date_mes]) for l in lues[1:]))
+        self.assertTrue(any(l[date_mes] for l in lues[1:]))
+        self.assertEqual([[re.sub(r"\A(\d{2})/(\d{2})/(\d{4})\Z", r"\3-\2-\1", c) if i == date_mes else c
+                           for i, c in enumerate(l)] for l in lues[1:]], propres[1:])
+
     def test_controles_a_reprendre_ecrits_comme_prevo(self):
         octets = (self.jeu("reserves-a-reprendre") / "controles_reglementaires.csv").read_bytes()
         entete, lignes = serveur.lire_csv_tolerant(octets)
@@ -433,7 +484,7 @@ class TestJeux(unittest.TestCase):
     def test_donnees_fictives(self):
         for nom in JEUX:
             for chemin in sorted(self.jeu(nom).rglob("*.csv")):
-                texte = chemin.read_bytes().decode("cp1252" if nom == "windows-1252" else "utf-8", "replace")
+                texte = chemin.read_bytes().decode("cp1252" if nom in JEUX_WINDOWS_1252 else "utf-8", "replace")
                 with self.subTest(jeu=nom, fichier=chemin.name):
                     self.assertEqual(numeros_hors_plage(texte), [])
                     for courriel in re.findall(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*", texte):

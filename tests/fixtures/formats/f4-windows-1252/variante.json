@@ -1,0 +1,6 @@
+{
+  "base": "f4-v2.2.0",
+  "description": "equipements.csv de f4-v2.2.0 enregistré en Windows-1252, sans BOM, dates date_mes en JJ/MM/AAAA, comme après un enregistrement par Excel (même fabrication que windows-1252) ; base au format 4, rien à migrer.",
+  "supprimer": [],
+  "vider": []
+}

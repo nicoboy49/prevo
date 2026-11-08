@@ -21,12 +21,14 @@ vérifient que le dossier donnees/ du dépôt n'a pas changé d'un octet pendant
     TestAbimesServeur,        CS140 : melange, colonnes-en-trop, windows-1252 et entete-tronque, dans les deux modes :
     TestAbimesDossier         le responsable ouvre (OT préventifs générés), lit Paramètres › Contrôle de la base,
                               modifie un équipement par le formulaire ; aucune perte silencieuse (chaque cellule
-                              d'origine retrouvée), message ou problème visible, et chaque fichier changé a ses octets
-                              d'origine dans une sauvegarde. Ces jeux sont tirés de f3-v1.2.0 : la base passe aussi au
-                              format 4 (windows-1252 : réécrit en UTF-8 par ce passage, avant le Contrôle ; en mode
-                              serveur, 404 des tables du format 4 que le passage ne crée pas). entete-tronque : parcours
-                              du demandeur (le fichier n'est jamais réécrit) ; le défaut trouvé par la recette (voir plus
-                              bas) est corrigé par T197.
+                              d'origine dans une sauvegarde. melange et colonnes-en-trop sont tirés de f3-v1.2.0 : la
+                              base passe aussi au format 4 (en mode serveur, 404 des tables du format 4 que le passage ne
+                              crée pas). windows-1252 et entete-tronque : les cas purs, f4-windows-1252 et
+                              f4-entete-tronque (T404, tirés de f4-v2.2.0 : aucun passage de format) ; le Contrôle
+                              signale « Windows-1252 », l'état du format du serveur est « rien » ; windows-1252 (tiré de
+                              f3-v1.2.0) garde aussi son parcours avec passage (réécrit en UTF-8 par le passage, avant
+                              le Contrôle, T402). entete-tronque : parcours du demandeur (le fichier n'est jamais
+                              réécrit) ; le défaut trouvé par la recette (voir plus bas) est corrigé par T197.
     TestPlusRecent            CS141 : jeu plus-recent (format 5) dans les deux modes : bandeau de lecture seule, demande
                               et modification d'équipement refusées par l'interface avec un message, AUCUN octet de
                               données modifié (mode dossier : aucun octet du tout), export ZIP possible (format 5).
@@ -695,9 +697,22 @@ class TestFormat1Dossier(CasRecetteSocle):
 # ---------------------------------------------------------------------------
 
 DESIGNATION = "Pompe de refroidissement (recette)"
-# Les jeux abîmés sont tirés de f3-v1.2.0 : le passage au format 4 (démarrage ou ouverture) écrit aussi version_schema.
-CHANGEES_A_L_OUVERTURE = dict(VERSION_SCHEMA_ECRITE)
-CHANGEES_PAR_LE_FORMULAIRE = dict(CHANGEES_A_L_OUVERTURE, **{"equipements.csv": {(EQUIPEMENT, "designation")}})
+# Cas purs (T404) : le fichier abîmé dans une base au format 4 (tirée de f4-v2.2.0), aucun passage de format. Les
+# autres jeux abîmés sont tirés de f3-v1.2.0 : le passage au format 4 (démarrage ou ouverture) écrit aussi
+# version_schema.
+JEU_WINDOWS_1252 = "f4-windows-1252"
+JEU_ENTETE_TRONQUE = "f4-entete-tronque"
+JEUX_ABIMES_SANS_PASSAGE = (JEU_WINDOWS_1252, JEU_ENTETE_TRONQUE)
+MOTIF_AVANT_UN_FORMAT = re.compile(r"_avant-format-v\d+$")
+
+
+def changees(nom_jeu, formulaire=False):
+    """Cellules que l'ouverture (passage au format 4 : version_schema, sauf pour un cas pur) et le formulaire
+    (désignation de EQ-0005) changent : {fichier: {(identifiant, colonne)}}."""
+    resultat = {} if nom_jeu in JEUX_ABIMES_SANS_PASSAGE else dict(VERSION_SCHEMA_ECRITE)
+    if formulaire:
+        resultat["equipements.csv"] = {(EQUIPEMENT, "designation")}
+    return resultat
 
 
 class ParcoursAbimes:
@@ -710,7 +725,7 @@ class ParcoursAbimes:
         controle = self.texte_du_controle()
         self.modifier_equipement(DESIGNATION)
         apres = self.apres()
-        changes = self.verifier_aucune_perte(origine, apres, CHANGEES_PAR_LE_FORMULAIRE)
+        changes = self.verifier_aucune_perte(origine, apres, changees(nom_jeu, formulaire=True))
         self.assertIn("equipements.csv", changes)
         self.verifier_rien_sans_sauvegarde(origine, apres)
         equipement = next(l for l in lignes_en_dictionnaires(apres["equipements.csv"]) if l["id"] == EQUIPEMENT)
@@ -744,7 +759,31 @@ class ParcoursAbimes:
         self.assertEqual(entete[-2:], ["colonne_maison", "note_maison"])
         self.assertEqual(entete[:-2], list(SERVEUR.COLONNES_PAR_TABLE["equipements"]))
 
+    def verifier_sans_passage(self, origine, apres):
+        """Cas pur (base au format 4) : aucun passage de format, ni sauvegarde « avant-format-vN », ni ligne de journal
+        du format ; version_schema toujours au format courant."""
+        self.assertEqual([nom for nom in sauvegardes(apres) if MOTIF_AVANT_UN_FORMAT.search(nom)], [])
+        deja = len(lignes_en_dictionnaires(origine["journal.csv"]))
+        self.assertEqual(actions_du_format(apres.get("journal.csv"), deja), [])
+        self.assertEqual(version_schema(apres["parametres.csv"]), str(FORMAT_COURANT))
+
+    def verifier_utf8_avec_bom_dates_iso(self, octets):
+        self.assertTrue(octets.startswith(BOM))
+        octets.decode("utf-8")
+        dates = [l["date_mes"] for l in lignes_en_dictionnaires(octets) if l["date_mes"]]
+        self.assertTrue(dates and all(re.match(r"^\d{4}-\d{2}-\d{2}$", d) for d in dates), dates)
+
     def verifier_windows_1252(self):
+        """f4-windows-1252 (cas pur, T404) : equipements.csv en Windows-1252 dans une base au format 4, rien à migrer ;
+        le fichier est signalé (Contrôle : « Windows-1252 ») ; le formulaire le réécrit en UTF-8 avec BOM, dates
+        AAAA-MM-JJ, sans perte ; la sauvegarde du jour garde l'original (verifier_rien_sans_sauvegarde)."""
+        origine, apres, controle = self.parcours_du_responsable(JEU_WINDOWS_1252)
+        self.assertIn("Windows-1252", controle)
+        self.assertRaises(UnicodeDecodeError, origine["equipements.csv"].decode, "utf-8")
+        self.verifier_sans_passage(origine, apres)
+        self.verifier_utf8_avec_bom_dates_iso(apres["equipements.csv"])
+
+    def verifier_windows_1252_avec_passage(self):
         """windows-1252 : equipements.csv en Windows-1252 dans une base au format 3 (jeu tiré de f3-v1.2.0) ; le passage
         au format 4 (démarrage du serveur, ouverture du dossier) le réécrit en UTF-8 avec BOM, dates AAAA-MM-JJ, sans
         perte, AVANT que le Contrôle de la base ne le lise : le Contrôle ne signale donc plus « Windows-1252 » (T402) ;
@@ -754,15 +793,12 @@ class ParcoursAbimes:
         self.assertRaises(UnicodeDecodeError, origine["equipements.csv"].decode, "utf-8")
         avant_format = une_seule(sauvegardes(apres), MOTIF_AVANT_FORMAT)
         self.assertEqual(sauvegardes(apres)[avant_format]["equipements.csv"], origine["equipements.csv"])
-        self.assertTrue(apres["equipements.csv"].startswith(BOM))
-        apres["equipements.csv"].decode("utf-8")
-        dates = [l["date_mes"] for l in lignes_en_dictionnaires(apres["equipements.csv"]) if l["date_mes"]]
-        self.assertTrue(dates and all(re.match(r"^\d{4}-\d{2}-\d{2}$", d) for d in dates), dates)
+        self.verifier_utf8_avec_bom_dates_iso(apres["equipements.csv"])
 
     def verifier_entete_tronque_demandeur(self):
-        """entete-tronque, profil demandeur (aucun OT préventif généré) : le fichier abîmé est signalé et n'est
-        jamais réécrit ; la demande s'écrit, après une sauvegarde."""
-        origine = self.ouvrir("entete-tronque", "demandeur")
+        """f4-entete-tronque (cas pur, T404), profil demandeur (aucun OT préventif généré) : le fichier abîmé est
+        signalé et n'est jamais réécrit ; aucun passage de format ; la demande s'écrit, après une sauvegarde."""
+        origine = self.ouvrir(JEU_ENTETE_TRONQUE, "demandeur")
         problemes = self.page.evaluate(PROBLEMES_JS, "ordres_travail")
         self.assertTrue(any(p["gravite"] == "attention" and "plus de valeurs que l'en-tête" in p["message"]
                             for p in problemes), problemes)
@@ -770,8 +806,9 @@ class ParcoursAbimes:
         numero = self.signaler("Bruit anormal au démarrage")
         apres = self.apres()
         self.assertEqual(apres["ordres_travail.csv"], origine["ordres_travail.csv"])
-        self.assertIn("demandes.csv", self.verifier_aucune_perte(origine, apres, CHANGEES_A_L_OUVERTURE))
+        self.assertIn("demandes.csv", self.verifier_aucune_perte(origine, apres, changees(JEU_ENTETE_TRONQUE)))
         self.verifier_rien_sans_sauvegarde(origine, apres)
+        self.verifier_sans_passage(origine, apres)
         self.assertTrue(any(l["id"] == numero for l in lignes_en_dictionnaires(apres["demandes.csv"])))
         return origine, apres
 
@@ -779,10 +816,12 @@ class ParcoursAbimes:
         """DÉFAUT : à l'ouverture par le responsable, la génération des OT préventifs réécrit ordres_travail.csv
         (en-tête coupé), que le passage au format et le serveur laissent « tel quel, jamais réécrit » (FORMAT.md §6 :
         un fichier illisible n'est jamais réécrit) : les valeurs au-delà de l'en-tête (date_debut … astuce de chaque
-        OT) sont perdues, sans bandeau. Attendu : le fichier reste à l'octet près tant qu'il n'est pas corrigé."""
-        origine = self.ouvrir("entete-tronque", "responsable")
+        OT) sont perdues, sans bandeau. Attendu : le fichier reste à l'octet près tant qu'il n'est pas corrigé
+        (f4-entete-tronque, cas pur, T404)."""
+        origine = self.ouvrir(JEU_ENTETE_TRONQUE, "responsable")
         apres = self.apres()
         self.verifier_rien_sans_sauvegarde(origine, apres)                   # vrai : la quotidienne a l'original
+        self.verifier_sans_passage(origine, apres)
         entete, lignes = lire_table(origine["ordres_travail.csv"])
         nouvelles = lire_table(apres["ordres_travail.csv"])[1]
         perdues = sum(1 for rang, ligne in enumerate(lignes) for valeur in ligne[len(entete):]
@@ -795,7 +834,8 @@ class TestAbimesServeur(ParcoursAbimes, CasRecetteSocle):
 
     def ouvrir(self, nom_jeu, profil):
         """Serveur réel sur une copie du jeu ; le profil ouvre l'accueil. Rend les fichiers d'origine."""
-        self.autoriser_erreur(ERREUR_TABLE_DU_FORMAT_4_ABSENTE)      # jeux tirés de f3-v1.2.0
+        if nom_jeu not in JEUX_ABIMES_SANS_PASSAGE:
+            self.autoriser_erreur(ERREUR_TABLE_DU_FORMAT_4_ABSENTE)  # jeux tirés de f3-v1.2.0
         source = self.jeu(nom_jeu)
         origine = fichiers_de(source)
         self.serveur = ServeurPrevo(source=source)
@@ -817,13 +857,17 @@ class TestAbimesServeur(ParcoursAbimes, CasRecetteSocle):
 
     def test_windows_1252_signale_et_reecrit_en_utf8_sans_perte(self):
         self.verifier_windows_1252()
+        self.assertNotIn(PREFIXE_CONSOLE_FORMAT + "passage", self.serveur.sortie_console())
+
+    def test_windows_1252_base_au_format_3_reecrit_par_le_passage_avant_le_controle(self):
+        self.verifier_windows_1252_avec_passage()
 
     def test_entete_tronque_signale_jamais_reecrit_pour_le_demandeur(self):
         self.verifier_entete_tronque_demandeur()
         self.assertIn("ordres_travail.csv laissé tel quel", self.serveur.sortie_console())
-        # Le reste de la base (format 3) est passé au format 4 ; le fichier abîmé, lui, n'est pas touché.
+        # Base au format 4 (cas pur) : rien à faire au démarrage ; le fichier abîmé est signalé.
         etat = requete_json(self.serveur.url + "/api/info")["format"]
-        self.assertEqual((etat["tables_abimees"], etat["migration"]), (["ordres_travail"], "faite"))
+        self.assertEqual((etat["tables_abimees"], etat["migration"]), (["ordres_travail"], "rien"))
 
     def test_entete_tronque_serveur_jamais_reecrit_a_l_ouverture(self):
         self.verifier_entete_tronque_jamais_reecrit()
@@ -852,6 +896,9 @@ class TestAbimesDossier(ParcoursAbimes, CasRecetteSocle):
 
     def test_windows_1252_signale_et_reecrit_en_utf8_sans_perte(self):
         self.verifier_windows_1252()
+
+    def test_windows_1252_base_au_format_3_reecrit_par_le_passage_avant_le_controle(self):
+        self.verifier_windows_1252_avec_passage()
 
     def test_entete_tronque_signale_jamais_reecrit_pour_le_demandeur(self):
         self.verifier_entete_tronque_demandeur()

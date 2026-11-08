@@ -89,7 +89,8 @@ table sans en-tête ni lignes (ou signaler clairement un fichier vide), sans pla
 
 **entete-tronque** : l'en-tête de `ordres_travail.csv` est coupé au milieu du nom de colonne `temps_prevu_h`
 (il finit par `temps_pr`) ; les lignes de données sont intactes et plus larges que l'en-tête. Un lecteur doit
-refuser ou signaler le fichier (colonnes illisibles), sans perdre de données ni écrire un fichier réduit.
+refuser ou signaler le fichier (colonnes illisibles), sans perdre de données ni écrire un fichier réduit. Base au
+format 3 : la 2.2 passe le reste de la base au format 4 (le même fichier abîmé sans passage : `f4-entete-tronque`).
 
 **colonnes-manquantes** : `equipements.csv` sans les colonnes `modele` et `valeur_remplacement`. Un lecteur doit
 les compléter (valeurs vides) et relire les autres colonnes sans décalage.
@@ -110,7 +111,8 @@ changer le numéro de format.
 
 **windows-1252** : `equipements.csv` enregistré en Windows-1252, sans BOM, dates `date_mes` en JJ/MM/AAAA, comme
 après un enregistrement par Excel (les caractères hors Windows-1252 sont devenus `?`). Un lecteur doit détecter
-l'encodage, relire les dates en AAAA-MM-JJ, et réécrire en UTF-8 avec BOM.
+l'encodage, relire les dates en AAAA-MM-JJ, et réécrire en UTF-8 avec BOM. Base au format 3 : en 2.2, le passage au
+format 4 réécrit ce fichier en UTF-8 avant tout contrôle (le même fichier sans passage : `f4-windows-1252`).
 
 **plus-recent** : données d'une version plus récente : f4-v2.2.0 (toutes les tables et colonnes du format 4) avec
 `version_schema;'5` (format 5 simulé : la 2.2 écrit le format 4), une colonne inconnue `nouvelle_colonne_v5` en fin
@@ -173,3 +175,23 @@ Règles de D183 (CONCEPTION-L1 §3.2) pour chaque réserve reprise : `date_contr
 devient `'- Raccord…`, « = Pression… » devient `'= Pression…`, guillemets doublés entre guillemets) ; `id`,
 `controle_id`, dates et `levee` tels quels. `controles_reglementaires.csv` garde ses `observations` et
 `observations_levees` (et `remarque_maison`) ; rejouée, la reprise ne crée rien de plus.
+
+## Fichiers abîmés dans une base au format 4 (variantes de f4-v2.2.0, T404)
+
+`windows-1252` et `entete-tronque` sont tirées de f3-v1.2.0 : une 2.2 qui les ouvre fait d'abord le passage au
+format 4, qui réécrit ou complète la base avant tout contrôle. Ces deux variantes donnent le **cas pur** : le même
+fichier abîmé, fabriqué de la même façon, dans f4-v2.2.0, dont les 26 autres fichiers sont ceux de f4-v2.2.0 à
+l'octet (27 tables, `version_schema;'4`). Rien à migrer ni à reprendre : un lecteur ne doit faire ni sauvegarde
+`avant-format-v4`, ni ligne de journal de passage.
+
+**f4-windows-1252** : `equipements.csv` de f4-v2.2.0 (colonne `cout_arret_h` comprise) enregistré en Windows-1252,
+sans BOM, dates `date_mes` en JJ/MM/AAAA (aucun caractère de ce fichier n'est hors de Windows-1252 : relu en
+Windows-1252, dates remises en AAAA-MM-JJ, il redonne les cellules de f4-v2.2.0). Un lecteur doit détecter et
+signaler l'encodage (Paramètres › Contrôle de la base : « Windows-1252 »), relire les dates en AAAA-MM-JJ, et
+réécrire le fichier en UTF-8 avec BOM à la première écriture de la table, la sauvegarde du jour gardant l'original.
+
+**f4-entete-tronque** : l'en-tête d'`ordres_travail.csv` de f4-v2.2.0 coupé au même endroit que dans
+`entete-tronque` (il finit par `temps_pr` ; `habilitation_requise` venait après) ; les lignes de données sont celles
+de f4-v2.2.0, intactes et plus larges que l'en-tête. Un lecteur doit signaler le fichier et ne jamais le réécrire ;
+le serveur n'a rien à faire au démarrage (`GET /api/info`, `format` : `migration` = `rien`, `tables_abimees` =
+`["ordres_travail"]`).

@@ -111,10 +111,13 @@ DESCRIPTION_FORMAT_4 = (
     "(vides).")
 # Format des fichiers de chaque jeu et format de la base (version_schema) ; les autres jeux : format 3 (2.0 et 2.1).
 FORMAT_DES_JEUX = 3
-FORMAT_DES_FICHIERS = {"f1": 1, "f2-v1.1.0": 2, "f4-v2.2.0": 4, "plus-recent": 4}
-VERSION_DE_BASE = {"f1": 1, "f2-v1.1.0": 2, "f4-v2.2.0": 4, "plus-recent": 5}
+FORMAT_DES_FICHIERS = {"f1": 1, "f2-v1.1.0": 2, "f4-v2.2.0": 4, "plus-recent": 4, "f4-windows-1252": 4,
+                       "f4-entete-tronque": 4}
+VERSION_DE_BASE = {"f1": 1, "f2-v1.1.0": 2, "f4-v2.2.0": 4, "plus-recent": 5, "f4-windows-1252": 4,
+                   "f4-entete-tronque": 4}
 FORMATS_PARTICULIERS = {
     ("entete-tronque", "ordres_travail"): 0,     # en-tête coupé dans temps_prevu_h : colonnes du format 1 manquantes
+    ("f4-entete-tronque", "ordres_travail"): 0,  # le même, dans une base au format 4 (T404)
     ("colonnes-manquantes", "equipements"): 0,   # sans modele (format 1) ni valeur_remplacement
     ("vide", "equipements"): 0,                  # 0 octet : aucun en-tête
     ("melange", "ordres_travail"): 2,            # sans astuce, dans une base au format 3
@@ -129,15 +132,17 @@ LIGNES_DE_JOURNAL = {
 JEUX_CONCORDANTS = ("f1", "f2-v1.1.0", "f3-v1.2.0", "f3-v2.0.0", "sans-bom", "table-absente", "plus-recent",
                     "f3-v2.1.0", "melange", "f4-v2.2.0")
 # Jeux déjà au format 4 ou plus récents (T394) : rien n'est migré, chaque table connue se réécrit aux octets du fichier
-JEUX_SANS_PASSAGE = ("f4-v2.2.0", "plus-recent")
+# (variantes abîmées de f4-v2.2.0, T404 : hors leur fichier abîmé, voir ECARTS_DOCUMENTES et JEUX_ABIMES)
+JEUX_SANS_PASSAGE = ("f4-v2.2.0", "plus-recent", "f4-windows-1252", "f4-entete-tronque")
 # Écarts préexistants entre lecteurs/écrivains (docstring du module) : jeu → (table touchée, nature de l'écart).
 ECARTS_DOCUMENTES = {
     "colonnes-en-trop": ("equipements", "colonnes"),      # A : colonnes inconnues réécrites en fin par serialiser
     "reserves-a-reprendre": ("controles_reglementaires", "colonnes"),     # A : remarque_maison
     "colonnes-manquantes": ("equipements", "colonnes"),   # B : colonnes du schéma toujours écrites par serialiser
     "windows-1252": ("equipements", "valeurs"),           # C : dates normalisées par analyser
+    "f4-windows-1252": ("equipements", "valeurs"),        # C : le même, dans une base au format 4 (T404)
 }
-JEUX_ABIMES = {"vide": "equipements", "entete-tronque": "ordres_travail"}
+JEUX_ABIMES = {"vide": "equipements", "entete-tronque": "ordres_travail", "f4-entete-tronque": "ordres_travail"}
 
 # Reprise des observations en réserves (D183, CS170) : texte fixe du commentaire de levée, colonnes de
 # reserves_controle (note de conception du format 4, §2.2) et réserves attendues des deux jeux de la 2.2, recopiées de
@@ -1531,8 +1536,9 @@ class TestConcordanceNavigateur(JeuxEnCopie, CasNavigateur):
                 self.assertEqual(navigateur["formats"][table], 0)
                 self.assertEqual(navigateur["de"], cote_serveur["de"])
                 self.assertEqual(navigateur["journal"], cote_serveur["journal"])
-                # Base au format 3 : l'étape 3→4 s'applique, des deux côtés
-                self.assertEqual(cote_serveur["journal"], LIGNES_DE_JOURNAL[FORMAT_DES_JEUX])
+                # Base au format 3 : l'étape 3→4 s'applique, des deux côtés ; au format 4 (T404) : rien
+                self.assertEqual(cote_serveur["journal"],
+                                 LIGNES_DE_JOURNAL.get(VERSION_DE_BASE.get(jeu, FORMAT_DES_JEUX), []))
 
 
 if __name__ == "__main__":
