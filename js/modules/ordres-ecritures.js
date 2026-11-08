@@ -2,15 +2,16 @@
 // Ordres (2/7) — écritures du module « Ordres de travail » (ARCHITECTURE.md §10, §14.2 et §14.6) :
 // création d'un OT, modification de ses champs, changement de statut (RG3, puis mise à jour de la
 // gamme d'un préventif clôturé : RG5) et de priorité, OT lié, case « anomalie constatée »,
-// avertissement d'habilitation au journal (RG8), écriture dans les tables liées à un OT (temps,
-// pièces prévues, opérations). Toujours par Donnees.modifier : chaque fonction relit la ligne
-// fraîche et la contrôle. Complète l'objet Ordres créé par ordres-regles.js.
+// RG8 bloquante à l'affectation (refus, ou dérogation du responsable notée au journal : D186, D191),
+// écriture dans les tables liées à un OT (temps, pièces prévues, opérations). Toujours par
+// Donnees.modifier : chaque fonction relit la ligne fraîche et la contrôle. Complète l'objet Ordres
+// créé par ordres-regles.js.
 
 Object.assign(Ordres, (() => {
 
   // Constantes, outils et règles de ordres-regles.js.
-  const { PRIORITES, estVerrouille, verifierPassage, datePrevueParDefaut } = Ordres;
-  const { texte } = Ordres.interne;
+  const { PRIORITES, estVerrouille, verifierPassage, datePrevueParDefaut, marqueurDerogation } = Ordres;
+  const { texte, refusHabilitation, messageRefusHabilitation } = Ordres.interne;
 
   // ===========================================================================================
   // 3. Écritures (Donnees.modifier) — chaque fonction relit la ligne fraîche et la contrôle
@@ -18,6 +19,49 @@ Object.assign(Ordres, (() => {
 
   function ErreurValidation(message) {
     return new Donnees.ErreurValidation(message);
+  }
+
+  // --- RG8 bloquante (D186, D191 ; CS178, CS180 ; conception L2-L3 §7.3 à §7.5) -------------
+  // L'action du journal d'une écriture qui affecte un technicien finit, en cas de dérogation, par le marqueur
+  // fixe d'Ordres.marqueurDerogation (D156). Donnees.modifier lit options.action APRÈS la fonction de mutation :
+  // celle-ci complète l'action (objet `journal`) une fois RG8 tranchée sur la ligne fraîche, d'où l'atomicité.
+  const CHAMPS_AFFECTATION = ['technicien_id', 'date_prevue', 'habilitation_requise'];
+
+  // Le responsable seul peut passer outre : vérifié ici, un technicien qui appelle l'écriture n'y gagne rien (CS178).
+  function profilResponsable() {
+    return typeof App !== 'undefined' && Boolean(App) && typeof App.estResponsable === 'function' && App.estResponsable();
+  }
+
+  /**
+   * RG8 dans une écriture, sur l'OT tel qu'il sera écrit (technicien_id et date_prevue à jour). verification :
+   * celle de verifierPassage(ot, 'Planifié'), dont les autres erreurs comptent aussi ; sans elle, RG8 seule.
+   * options : { passerOutreHabilitation, motifDerogation }, pris en compte pour le responsable seul, motif
+   * obligatoire (QUESTIONS-L2-L6 Q7). → marqueur de dérogation à ajouter à l'action du journal ('' : rien à
+   * déroger). Sinon lève Donnees.ErreurValidation : erreur.habilitation = { otId, technicienId, date,
+   * manquantes } quand RG8 refuse ; erreur.piecesManquantes = celles de verification (ou []).
+   */
+  function controlerAffectation(ot, options, verification) {
+    const passage = verification
+      || { erreurs: [], piecesManquantes: [], habilitation: refusHabilitation(ot, ot.technicien_id, ot.date_prevue) };
+    const refus = passage.habilitation || null;
+    const reglages = options || {};
+    const passerOutre = Boolean(refus) && reglages.passerOutreHabilitation === true && profilResponsable();
+    const marqueur = passerOutre ? marqueurDerogation(refus.technicienId, refus.date, refus.manquantes, reglages.motifDerogation) : '';
+    const erreurs = passage.erreurs.filter((message) => !refus || message !== refus.message);
+    if (refus && !marqueur) erreurs.push(passerOutre ? messageRefusHabilitation(refus, true) : refus.message);
+    if (!erreurs.length) return marqueur;
+    const erreur = ErreurValidation(erreurs.join(' '));
+    erreur.piecesManquantes = passage.piecesManquantes || [];
+    if (refus && !marqueur) {
+      erreur.habilitation = { otId: refus.otId, technicienId: refus.technicienId, date: refus.date, manquantes: refus.manquantes };
+    }
+    throw erreur;
+  }
+
+  // Action du journal suivie du marqueur de dérogation (« … ; dérogation habilitation : … »), s'il y en a un.
+  function avecDerogation(action, marqueur) {
+    if (!marqueur) return action;
+    return texte(action) ? action + ' ; ' + marqueur : marqueur;
   }
 
   // Ligne d'OT dans une copie de table, ou erreur si absente ; `modifiable` refuse un OT verrouillé.
@@ -33,24 +77,33 @@ Object.assign(Ordres, (() => {
   /**
    * Crée un OT et renvoie son identifiant (OT-AAAA-NNNN calculé dans la fonction de mutation).
    * valeurs : equipement_id, titre, type, priorite, origine (manuel, urgence…), et facultatifs.
+   * Avec un technicien : RG8 sur la ligne créée (controlerAffectation) ; options : { passerOutreHabilitation,
+   * motifDerogation } (responsable seul), la dérogation est notée à la fin de l'action du journal.
    */
-  async function creer(valeurs) {
+  async function creer(valeurs, options) {
+    const action = 'création de l\'OT (' + (valeurs.origine || 'manuel') + ')';
+    const journal = { action };
     return Donnees.modifier('ordres_travail', (lignes, outils) => {
       const date = outils.aujourdhui();
       const id = outils.nouvelId(lignes, date);
-      lignes.push(Object.assign({
+      const ligne = Object.assign({
         origine: 'manuel', statut: 'Créé', arret_production: '0', remise_service: '0',
-      }, valeurs, { id, statut: 'Créé', date_creation: outils.maintenant() }));
+      }, valeurs, { id, statut: 'Créé', date_creation: outils.maintenant() });
+      journal.action = avecDerogation(action, controlerAffectation(ligne, options));
+      lignes.push(ligne);
       return id;
-    }, { action: 'création de l\'OT (' + (valeurs.origine || 'manuel') + ')' });
+    }, journal);
   }
 
   /**
    * Modifie des champs d'un OT non verrouillé ; renvoie la liste des champs réellement changés.
    * Un OT « Clôturé techniquement » (sur la ligne fraîche) refuse tout changement : sa clôture
    * (RG4) a été vérifiée ; il faut que le responsable le rouvre pour modifier ses saisies.
+   * RG8 quand technicien_id, date_prevue ou habilitation_requise change (préparation) : controlerAffectation
+   * sur la ligne fraîche modifiée ; options : { passerOutreHabilitation, motifDerogation } (responsable seul).
    */
-  async function modifierOt(otId, changements, action) {
+  async function modifierOt(otId, changements, action, options) {
+    const journal = { action };
     return Donnees.modifier('ordres_travail', (lignes) => {
       const ligne = ligneOt(lignes, otId, true);
       const changes = Object.keys(changements).filter((nom) => texte(ligne[nom]) !== texte(changements[nom]));
@@ -58,18 +111,21 @@ Object.assign(Ordres, (() => {
         throw ErreurValidation(I18n.t('ordres.modifier_ot.ot_cloture_techniquement_sans', { otId }));
       }
       changes.forEach((nom) => { ligne[nom] = changements[nom]; });
+      const affectation = changes.some((nom) => CHAMPS_AFFECTATION.includes(nom));
+      journal.action = affectation ? avecDerogation(action, controlerAffectation(ligne, options)) : action;
       return changes;
-    }, { action });
+    }, journal);
   }
 
   /**
    * Change le statut d'un OT (RG3). Dans la fonction de mutation : le statut lu doit être encore
    * `statutAttendu` (sinon l'OT a bougé sur un autre poste) et le passage est revérifié.
    * complement : { motif_attente } ou { motif_annulation }. Renvoie le statut atteint.
+   * Vers « Planifié », RG8 refuse sauf dérogation : options { passerOutreHabilitation, motifDerogation }.
    * Après une clôture technique réussie d'un OT de gamme : mise à jour de la gamme (RG5).
    */
-  async function changerStatut(otId, statutAttendu, cible, complement) {
-    const statut = await ecrireStatut(otId, statutAttendu, cible, complement);
+  async function changerStatut(otId, statutAttendu, cible, complement, options) {
+    const statut = await ecrireStatut(otId, statutAttendu, cible, complement, options);
     if (statut === 'Clôturé techniquement') await mettreAJourGamme(otId);
     // Lot 6 (§20.5, D104) : l'OT verrouillé entre dans la file du wiki ; un échec n'annule pas la clôture (message).
     if (statut === 'Clôturé administrativement' && typeof Wiki !== 'undefined') await Wiki.mettreEnFile([otId], { annoncer: true });
@@ -77,16 +133,19 @@ Object.assign(Ordres, (() => {
   }
 
   // Le changement de statut lui-même (une seule écriture de ordres_travail).
-  async function ecrireStatut(otId, statutAttendu, cible, complement) {
+  async function ecrireStatut(otId, statutAttendu, cible, complement, options) {
     const ajout = complement || {};
     const motif = ajout.motif_attente || ajout.motif_annulation || '';
+    const action = 'statut ' + statutAttendu + ' → ' + cible + (motif ? ' : ' + motif : '');
+    const journal = { action };
     return Donnees.modifier('ordres_travail', (lignes, outils) => {
       const ligne = ligneOt(lignes, otId, false);
       if (ligne.statut !== statutAttendu) {
         throw ErreurValidation(I18n.t('ordres.ecrire_statut.ot_passe_autre_poste', { otId, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
       }
       const verification = verifierPassage(Object.assign({}, ligne, ajout), cible);
-      if (!verification.ok) throw ErreurValidation(verification.erreurs.join(' '));
+      if (cible === 'Planifié') journal.action = avecDerogation(action, controlerAffectation(ligne, options, verification));
+      else if (!verification.ok) throw ErreurValidation(verification.erreurs.join(' '));
       const maintenant = outils.maintenant();
       if (cible === 'En attente') ligne.motif_attente = ajout.motif_attente;
       if (cible === 'Annulé') ligne.motif_annulation = ajout.motif_annulation;
@@ -96,7 +155,7 @@ Object.assign(Ordres, (() => {
       if (cible === 'Clôturé administrativement') ligne.date_cloture_admin = maintenant;
       ligne.statut = cible;
       return cible;
-    }, { action: 'statut ' + statutAttendu + ' → ' + cible + (motif ? ' : ' + motif : '') });
+    }, journal);
   }
 
   // Avertissement de la dernière clôture technique d'un OT dont la gamme n'a pas pu être mise à
@@ -170,11 +229,6 @@ Object.assign(Ordres, (() => {
       travail_a_faire: origine.travail_a_faire, consignes: origine.consignes,
       date_prevue: datePrevueParDefaut(origine.priorite), ot_lie_id: origine.id,
     });
-  }
-
-  /** Enregistre l'avertissement RG8 au journal (« avertissement habilitation : … »). */
-  async function journaliserHabilitation(otId, message) {
-    return Donnees.journaliser('ordres_travail', otId, 'avertissement habilitation : ' + message);
   }
 
   // Refus d'écrire dans une table liée (temps, pièces, opérations) si l'OT est verrouillé ou
@@ -286,11 +340,13 @@ Object.assign(Ordres, (() => {
   }
 
   // Outils prêtés aux fichiers suivants du module (usage interne).
-  Object.assign(Ordres.interne, { modifierOt, modifierLieeAOt, journaliserHabilitation, changerAnomalie, lireAvertissementGamme });
+  Object.assign(Ordres.interne, { modifierOt, modifierLieeAOt, changerAnomalie, lireAvertissementGamme });
 
   return {
     // écritures (ARCHITECTURE.md §10)
     creer, changerStatut, changerPriorite, creerOtLie,
+    // RG8 bloquante à l'affectation (D186, D191) : aussi pour Planning.planifier
+    controlerAffectation,
     // clôture en une étape (§22.11, D132)
     clore, clotureUneEtape,
   };

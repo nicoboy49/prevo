@@ -10,8 +10,8 @@ Familles (le nom du test le dit) :
     replanifier un OT « Planifié » déplacé change de date sans changer de statut ; « En cours » ne
                 se déplace pas ;
     piece       pièce manquante (RG3) : refus expliqué, puis « Mettre en attente (motif : pièce) » ;
-    habilitation scénario Habilitation du brief rejoué depuis le planning : avertissement affiché et
-                ligne « avertissement habilitation : … » au journal (RG8) ;
+    habilitation scénario Habilitation du brief rejoué depuis le planning : RG8 bloquante (T437, D186),
+                refus expliqué, rien d'écrit ;
     charge      charge et capacité de la semaine = calcul Python, surcharge dite en texte ;
     conflit     statut changé sur un autre poste (fichier modifié) → refus clair ;
     profils     technicien : lecture seule, sa ligne en tête ; demandeur renvoyé à l'accueil ;
@@ -198,19 +198,26 @@ class TestPlanning(CasPlanning):
         self.assertTrue(self.attendre_disque(lambda: ot_sur_disque(self.serveur.dossier, ot_id)["statut"] == "En attente"))
         self.assertTrue(ot_sur_disque(self.serveur.dossier, ot_id)["motif_attente"].startswith("Pièce : "))
 
-    def test_habilitation_avertissement_affiche_et_trace_au_journal(self):
+    def test_habilitation_refus_explique_rien_d_ecrit(self):
+        # RG8 bloquante (T437, D186) : le refus est expliqué dans le bandeau de l'écran (la fenêtre « passer
+        # outre » du responsable est T439) ; l'OT reste « Préparé », sans technicien, rien au journal.
         ot_id = self.scenarios["ot_a_planifier_br"]
         lundi = self.semaine_de(ot_id)
         jour = (datetime.date.fromisoformat(lundi) + datetime.timedelta(days=4)).isoformat()
         technicien = self.scenarios["technicien_br_echue"]
+        avant = self.journal_de(ot_id)
         page = self.ouvrir("#/planning?semaine=" + lundi)
         page.drag_and_drop(".pl-a-planifier " + self.carte(ot_id), self.case(technicien, jour))
-        message = page.wait_for_selector("#pl-message .alerte.attention")
-        self.assertIn("Avertissement habilitation : %s sans BR valide au %s" % (technicien, jour), message.inner_text())
-        self.assertTrue(self.attendre_disque(lambda: ot_sur_disque(self.serveur.dossier, ot_id)["statut"] == "Planifié"))
-        attendu = "avertissement habilitation : %s sans BR valide au %s" % (technicien, jour)
-        self.assertTrue(self.attendre_disque(lambda: any(attendu in action for action in self.journal_de(ot_id))),
-                        self.journal_de(ot_id))
+        message = page.wait_for_selector("#pl-message .alerte.important").inner_text()
+        self.assertIn("n'a pas été planifié", message)
+        self.assertIn("Affectation refusée : ", message)
+        self.assertIn("(%s) n'a pas d'habilitation valide au %s/%s/%s : BR (échue le " % (
+            technicien, jour[8:10], jour[5:7], jour[:4]), message)
+        self.assertIn("Seul le responsable peut passer outre.", message)
+        ligne = ot_sur_disque(self.serveur.dossier, ot_id)
+        self.assertEqual((ligne["statut"], ligne["technicien_id"]), ("Préparé", ""))
+        self.assertEqual(self.journal_de(ot_id), avant)
+        self.assertEqual(page.locator(".pl-a-planifier " + self.carte(ot_id)).count(), 1)
 
     def test_charge_et_surcharge_egales_au_calcul_python(self):
         lundi = self.scenarios["semaine_surcharge"]

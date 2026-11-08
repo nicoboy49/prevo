@@ -4,7 +4,7 @@ règles RG3, RG4, RG7 et RG8 (ARCHITECTURE.md §10), bon de travail.
 Familles (le nom du test le dit) :
     regles      : fonctions pures Ordres.* évaluées dans la page (jeu de démo en mode serveur) ;
     parcours    : OT complet par l'interface, en mode serveur, avec vérification des CSV sur le disque ;
-    habilitation: avertissement RG8 affiché et inscrit dans journal.csv ;
+    habilitation: refus RG8 (T437) affiché, rien d'écrit dans les CSV ;
     liste       : filtres (dont les liens de l'accueil ?filtre=retard / ?filtre=p1), tri, export CSV ;
     impression  : bon de travail dans #impression (émulation « print ») ;
     technicien  : « mes OT » par défaut ; demo : parcours court en file:// ; telephone : 375 px.
@@ -393,7 +393,9 @@ class TestParcours(CasOrdres):
                              ("urgence", "correctif immédiat", "P1", "En cours"))
             self.assertRegex(ligne["date_debut"], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
 
-    def test_habilitation_avertissement_affiche_et_inscrit_au_journal(self):
+    def test_habilitation_refus_affiche_rien_d_ecrit(self):
+        # RG8 bloquante (T437, D186) : l'affectation sans BR valide est refusée par l'écriture ; le message
+        # d'erreur commun le dit (la fenêtre « passer outre » est T438) ; rien n'est écrit, ni l'OT ni le journal.
         page = self.page
         with ServeurPrevo() as serveur:
             self.ouvrir(serveur, "#/ot")
@@ -407,19 +409,20 @@ class TestParcours(CasOrdres):
             self.assertIn("BR", avertissement)
             self.assertIn("TEC-0004", avertissement)
             page.click("#form-preparation button[type=submit]")
-            self.attendre_js("Donnees.trouver('ordres_travail', %r).technicien_id === 'TEC-0004'" % ot_id)
-            # Toujours affiché après l'enregistrement (avertissement, pas de blocage)
-            page.wait_for_selector("#form-preparation .ot-zone-habilitation .alerte")
-            # Le message « tracé au journal » s'affiche une fois l'entrée écrite : on lit alors le fichier
-            # (le lire pendant que le serveur y ajoute une ligne gênerait l'écriture sous Windows).
-            page.wait_for_function("document.getElementById('toast').textContent.includes('tracé au journal')")
-            attendu = "avertissement habilitation : TEC-0004 sans BR valide au 2026-10-21"
-            trouve = [j for j in lire_csv(serveur.dossier, "journal.csv")
-                      if j["id_ligne"] == ot_id and j["action"] == attendu and j["table"] == "ordres_travail"]
-            self.assertEqual(len(trouve), 1, "journal.csv sans « %s » pour %s" % (attendu, ot_id))
-            # Avec un électricien habilité : plus d'avertissement
+            page.wait_for_function("document.getElementById('toast').textContent.includes('Affectation refusée')")
+            toast = page.inner_text("#toast")
+            self.assertIn("(TEC-0004) n'a pas d'habilitation valide au 21/10/2026 : BR (échue le 31/05/2026).", toast)
+            self.assertIn("Seul le responsable peut passer outre.", toast)
+            ligne = next(o for o in lire_csv(serveur.dossier, "ordres_travail.csv") if o["id"] == ot_id)
+            self.assertEqual(ligne["technicien_id"], "")
+            self.assertNotEqual(ligne["date_prevue"], "2026-10-21")
+            self.assertEqual([j["action"] for j in lire_csv(serveur.dossier, "journal.csv")
+                              if j["id_ligne"] == ot_id and "habilitation" in j["action"]], [])
+            # Avec un électricien habilité : plus de bandeau, et la préparation s'enregistre
             page.select_option("#form-preparation [name=technicien_id]", "TEC-0001")
             page.wait_for_function("!document.querySelector('#form-preparation .ot-zone-habilitation .alerte')")
+            page.click("#form-preparation button[type=submit]")
+            self.attendre_js("Donnees.trouver('ordres_travail', %r).technicien_id === 'TEC-0001'" % ot_id)
 
 
 # ---------------------------------------------------------------------------

@@ -276,7 +276,7 @@ class TestControle(CasRg8):
 
 
 # ---------------------------------------------------------------------------
-# Ordres.verifierHabilitation réécrite au-dessus du contrôle : même message ; verifierPassage inchangé
+# Ordres.verifierHabilitation réécrite au-dessus du contrôle : même message ; verifierPassage : RG8 en erreur (T437)
 # ---------------------------------------------------------------------------
 
 class TestVerifierHabilitation(CasRg8):
@@ -300,12 +300,35 @@ class TestVerifierHabilitation(CasRg8):
         self.assertEqual(self.js("() => Ordres.interne.habilitationsManquantes(Donnees.trouver('equipements', 'EQ-0003'), 'TEC-0003', '2026-11-20')"),
                          ["H0V"])
 
-    def test_verifier_passage_garde_l_avertissement(self):
-        # Ici RG8 reste un avertissement de « Planifié » : le blocage est T437.
-        passage = self.js("() => Ordres.verifierPassage(Donnees.trouver('ordres_travail', 'OT-2026-0002'), 'Planifié')")
+    def passage(self, ot, technicien, date=DATE):
+        return self.js("""([ot, technicien, date]) => Ordres.verifierPassage(Object.assign({},
+            Donnees.trouver('ordres_travail', ot), { technicien_id: technicien, date_prevue: date }), 'Planifié')""",
+                       [ot, technicien, date])
+
+    def test_verifier_passage_range_rg8_dans_les_erreurs_sauf_derogation_notee(self):
+        # T437 (D186) : RG8 est une erreur de « Planifié » ; plus aucun avertissement.
+        passage = self.passage("OT-2026-0002", "TEC-0006")
+        self.assertFalse(passage["ok"])
+        self.assertEqual(passage["avertissements"], [])
+        message = ("Affectation refusée : Sans habilitation Nouveau (TEC-0006) n'a pas d'habilitation valide au "
+                   "20/11/2026 : BR (absente). Seul le responsable peut passer outre.")
+        self.assertEqual(passage["erreurs"], [message])
+        self.assertEqual(passage["habilitation"], {
+            "otId": "OT-2026-0002", "technicienId": "TEC-0006", "date": DATE, "message": message,
+            "manquantes": [{"intitule": "BR", "origines": ["equipement"], "raison": "absente", "echeance": "",
+                            "obtention": ""}]})
+        # Les trois raisons, avec leur date (échéance, obtention) au format de l'écran.
+        self.assertIn(": BR (échue le 31/05/2026). Seul", self.passage("OT-2026-0002", "TEC-0004", "2026-11-21")["erreurs"][0])
+        self.assertIn(": BR (pas encore obtenue : valable à partir du 01/12/2026). Seul",
+                      self.passage("OT-2026-0002", "TEC-0002")["erreurs"][0])
+        self.assertIn(": H0V (échue). Seul", self.passage("OT-2026-0004", "TEC-0003")["erreurs"][0])
+        # Dérogation déjà notée au journal (J-…DDDD : OT-2026-0002, TEC-0004, 20/11, BR) : le passage est permis.
+        passage = self.passage("OT-2026-0002", "TEC-0004")
         self.assertTrue(passage["ok"], passage["erreurs"])
-        self.assertEqual(len(passage["avertissements"]), 1)
-        self.assertIn("TEC-0004 sans BR valide au 2026-11-20", passage["avertissements"][0])
+        self.assertIsNone(passage["habilitation"])
+        # Technicien valide, ou OT sans exigence : rien à dire.
+        self.assertIsNone(self.passage("OT-2026-0002", "TEC-0001")["habilitation"])
+        self.assertTrue(self.passage("OT-2026-0001", "TEC-0006")["ok"])
 
 
 # ---------------------------------------------------------------------------

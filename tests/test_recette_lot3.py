@@ -11,8 +11,8 @@ Scénarios (le nom de chaque test contient le mot-clé) :
                   équipements du rôle `equipements_calcul_main`, valeurs AFFICHÉES par l'écran
                   Indicateurs (tableau par équipement, 12 mois) = calcul Python indépendant
                   (tests/test_regles_indicateurs.CalculPython), à l'arrondi d'affichage ;
-    planning      un OT à planifier glissé sur un technicien sans BR valide : planifié, avertissement
-                  d'habilitation affiché ;
+    planning      un OT à planifier glissé sur un technicien sans BR valide : refusé (RG8 bloquante, T437),
+                  refus expliqué, l'OT reste « Préparé » ;
     controle      contrôle réalisé avec un rapport joint → le compteur « Contrôles sous 30 j » baisse ;
     habilitation  habilitation renouvelée → le compteur « Habilitations à renouveler » baisse ;
     etiquettes    planche d'un atelier : une étiquette par équipement suivi, repères en clair ;
@@ -156,7 +156,8 @@ class TestRecetteServeur(CasRecette):
         aujourdhui = datetime.date.fromisoformat(page.evaluate("Donnees.aujourdhui()"))
         self.verifier_calcul_main(page, aujourdhui)
 
-    def test_planning_serveur_habilitation_avertie(self):
+    def test_planning_serveur_habilitation_refusee(self):
+        # RG8 bloquante depuis la 2.2 (T437, D186) : refus expliqué, l'OT reste « Préparé » (passer outre : T439).
         serveur = self.serveur()
         ot_id = self.scenarios["ot_a_planifier_br"]
         ot = next(o for o in lire_csv(serveur.dossier, "ordres_travail.csv") if o["id"] == ot_id)
@@ -167,10 +168,11 @@ class TestRecetteServeur(CasRecette):
         technicien = self.scenarios["technicien_br_echue"]
         page.drag_and_drop(".pl-a-planifier .pl-ot[data-ot='%s']" % ot_id,
                            '.pl-case[data-technicien="%s"][data-date="%s"]' % (technicien, lundi))
-        message = page.wait_for_selector("#pl-message .alerte.attention")
-        self.assertIn("Avertissement habilitation", message.inner_text())
-        self.assertTrue(self.attendre(lambda: next(o for o in lire_csv(serveur.dossier, "ordres_travail.csv")
-                                                   if o["id"] == ot_id)["statut"] == "Planifié"))
+        message = page.wait_for_selector("#pl-message .alerte.important").inner_text()
+        self.assertIn("Affectation refusée", message)
+        self.assertIn("Seul le responsable peut passer outre.", message)
+        self.assertEqual(next(o for o in lire_csv(serveur.dossier, "ordres_travail.csv") if o["id"] == ot_id)["statut"],
+                         "Préparé")
 
     def compteur(self, page, lien):
         self.aller("#/accueil", page)

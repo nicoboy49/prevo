@@ -17,7 +17,7 @@ Scénarios :
                   jsQR = adresse de la porte → téléphone 375 px qui fait confiance au PC atelier → porte →
                   application en https, route gardée → appareil enrôlé (profil déduit, T155) → DI avec photo →
                   visible sur le PC (client 127.0.0.1, responsable), sans rechargement, en moins de 30 s ;
-    habilitation  OT sur AE-03 (BR) affecté au technicien dont la BR est échue → avertissement affiché et tracé ;
+    habilitation  OT sur AE-03 (BR) affecté au technicien dont la BR est échue → refus affiché, rien d'écrit (T437) ;
     sauvegarde    sauvegarde, ligne supprimée sur le disque, restauration par les Paramètres ;
     traversee     PUT /api/documents/../serveur.py refusé ;
     design        360 px sans défilement horizontal, zones tactiles >= 48 px, barre du bas ;
@@ -643,24 +643,28 @@ class TestRecetteHabilitation(CasRecette):
         page.wait_for_selector("#form-preparation .ot-zone-habilitation .alerte")
         self.assertIn("BR", page.inner_text("#form-preparation .ot-zone-habilitation"))
         page.click("#form-preparation button[type=submit]")
-        self.attendre_toast("tracé au journal")
-        return ot_id, "avertissement habilitation : %s sans BR valide au %s" % (TECHNICIEN_BR_ECHUE, date_prevue)
+        # RG8 bloquante (T437, D186) : l'affectation est refusée, rien n'est écrit (passer outre : T438).
+        self.attendre_toast("Affectation refusée")
+        self.assertIn("(%s) n'a pas d'habilitation valide au %s : BR (échue le " % (
+            TECHNICIEN_BR_ECHUE, "/".join(reversed(date_prevue.split("-")))), page.inner_text("#toast"))
+        return ot_id
 
     def test_habilitation_serveur(self):
         with ServeurPrevo() as serveur:
             self.demarrer_serveur_sans_profil(serveur)
-            ot_id, attendu = self.jouer()
+            ot_id = self.jouer()
             _, journal = lire_csv(serveur.dossier / "journal.csv")
-            entrees = [j for j in journal if j["id_ligne"] == ot_id and "habilitation" in j["action"]]
-            self.assertEqual([j["action"] for j in entrees], [attendu])
+            self.assertEqual([j["action"] for j in journal if j["id_ligne"] == ot_id and "habilitation" in j["action"]], [])
+            self.assertEqual(ligne_par_id(serveur.dossier / "ordres_travail.csv", ot_id)["technicien_id"], "")
 
     def test_habilitation_demo(self):
         self.demarrer_demo_sans_profil()
-        ot_id, attendu = self.jouer()
-        entrees = self.page.evaluate("""async (id) => { await Donnees.rechargerTable('journal');
-            return Donnees.lignes('journal').filter((j) => j.id_ligne === id && j.action.includes('habilitation'))
-              .map((j) => j.action); }""", ot_id)
-        self.assertEqual(entrees, [attendu])
+        ot_id = self.jouer()
+        etat = self.page.evaluate("""async (id) => { await Donnees.rechargerTable('journal');
+            await Donnees.rechargerTable('ordres_travail');
+            return { entrees: Donnees.lignes('journal').filter((j) => j.id_ligne === id && j.action.includes('habilitation'))
+              .map((j) => j.action), technicien: Donnees.trouver('ordres_travail', id).technicien_id }; }""", ot_id)
+        self.assertEqual(etat, {"entrees": [], "technicien": ""})
 
 
 # ---------------------------------------------------------------------------

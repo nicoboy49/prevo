@@ -1,7 +1,8 @@
 'use strict';
 // Planning (2/3) — écriture du planning : placer un OT sur un technicien et un jour (ARCHITECTURE.md
 // §15.5 ; brief §7 RG3 et RG8). Une seule écriture de ordres_travail, contrôlée sur la ligne
-// fraîche ; puis l'avertissement d'habilitation (RG8), affiché et inscrit au journal comme au lot 1.
+// fraîche ; RG8 y est bloquante (D186, D191) : refus, ou dérogation du responsable notée à la fin de
+// l'action du journal de cette écriture (Ordres.controlerAffectation, conception L2-L3 §7.3 à §7.5).
 
 Object.assign(Planning, (() => {
 
@@ -23,20 +24,27 @@ Object.assign(Planning, (() => {
   }
 
   /**
-   * Place l'OT `otId` sur le technicien et le jour donnés → { statut, avertissements }.
+   * Place l'OT `otId` sur le technicien et le jour donnés → { statut, avertissements } (avertissements :
+   * toujours vide depuis que RG8 bloque, gardé pour l'écran).
    *   - « Préparé » → « Planifié » : contrôles RG3 refaits sur la ligne fraîche (technicien, date,
-   *     pièces prévues en stock). Pièce manquante → ErreurValidation dont `piecesManquantes` donne
+   *     pièces prévues en stock, RG8). Pièce manquante → ErreurValidation dont `piecesManquantes` donne
    *     le détail (l'écran propose alors « Mettre en attente (motif : pièce) ») ;
-   *   - « Planifié » : nouvelle date ou nouveau technicien, statut inchangé (replanification) ;
+   *   - « Planifié » : nouvelle date ou nouveau technicien, statut inchangé (replanification ; RG8 revue) ;
    *   - tout autre statut est refusé (« Créé » : il faut d'abord préparer l'OT).
+   * RG8 : technicien sans l'habilitation exigée valide à ce jour → ErreurValidation dont `habilitation` =
+   * { otId, technicienId, date, manquantes }, rien n'est écrit ; options : { passerOutreHabilitation,
+   * motifDerogation }, pris en compte pour le responsable seul et avec un motif.
    * statutAttendu : le statut que l'écran affichait ; s'il a changé (autre poste), refus.
    */
-  async function planifier(otId, statutAttendu, technicienId, dateIso) {
+  async function planifier(otId, statutAttendu, technicienId, dateIso, options) {
     const date = texte(dateIso).slice(0, 10);
     verifierDemande(technicienId, date);
     const action = (statutAttendu === 'Préparé' ? 'planification : ' : 'replanification : ')
       + technicienId + ' le ' + date + (statutAttendu === 'Préparé' ? ' (Préparé → Planifié)' : '');
+    // Relu par Donnees.modifier APRÈS la mutation : le marqueur de dérogation y est ajouté (atomique).
+    const journal = { action };
     const statut = await Donnees.modifier('ordres_travail', (lignes) => {
+      journal.action = action;                       // fonction rejouée en cas de conflit : action de départ
       const ligne = lignes.find((candidate) => candidate.id === otId);
       if (!ligne) throw ErreurValidation(I18n.t('planning.planifier.ordre_travail_introuvable', { otId }));
       if (ligne.statut !== statutAttendu) {
@@ -48,30 +56,19 @@ Object.assign(Planning, (() => {
       if (ligne.statut !== 'Préparé' && ligne.statut !== 'Planifié') {
         throw ErreurValidation(I18n.t('planning.planifier.seul_ot_prepare_planifie', { otId, ligneStatut: Schema.libelleValeur('ordres_travail', 'statut', ligne.statut) }));
       }
-      if (ligne.statut === 'Préparé') {
-        const verification = Ordres.verifierPassage(Object.assign({}, ligne, { technicien_id: technicienId, date_prevue: date }), 'Planifié');
-        if (!verification.ok) {
-          const erreur = ErreurValidation(verification.erreurs.join(' '));
-          erreur.piecesManquantes = verification.piecesManquantes || [];
-          throw erreur;
-        }
-        ligne.statut = 'Planifié';
+      const prochaine = Object.assign({}, ligne, { technicien_id: technicienId, date_prevue: date });
+      const deplace = texte(ligne.technicien_id) !== technicienId || texte(ligne.date_prevue).slice(0, 10) !== date;
+      if (ligne.statut === 'Préparé' || deplace) {
+        const verification = ligne.statut === 'Préparé' ? Ordres.verifierPassage(prochaine, 'Planifié') : null;
+        const marqueur = Ordres.controlerAffectation(prochaine, options, verification);
+        if (marqueur) journal.action = action + ' ; ' + marqueur;
       }
+      if (ligne.statut === 'Préparé') ligne.statut = 'Planifié';
       ligne.technicien_id = technicienId;
       ligne.date_prevue = date;
       return ligne.statut;
-    }, { action });
-
-    // RG8 : avertissement (jamais un blocage), affiché par l'écran et tracé au journal.
-    const ot = Donnees.trouver('ordres_travail', otId);
-    const message = Ordres.verifierHabilitation(ot && ot.equipement_id, technicienId, date);
-    const avertissements = [];
-    if (message) {
-      avertissements.push(I18n.t('planning.planifier.avertissement_habilitation', { message }));
-      await Donnees.journaliser('ordres_travail', otId, 'avertissement habilitation : '        // journal : langue de l'installation (D156)
-        + Ordres.verifierHabilitation(ot && ot.equipement_id, technicienId, date, true));
-    }
-    return { statut, avertissements };
+    }, journal);
+    return { statut, avertissements: [] };
   }
 
   return { planifier };

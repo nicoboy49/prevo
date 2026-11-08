@@ -512,16 +512,53 @@ const Ordres = (() => {
     return trouvees[0] || null;
   }
 
+  /** « BR (échue le 31/05/2026) », « H0V (absente) », « BR (pas encore obtenue : valable à partir du 01/12/2026) ». */
+  function libelleManquante(m) {
+    if (m.raison === 'absente') return I18n.t('ordres.refus_habilitation.absente', { intitule: m.intitule });
+    if (m.raison === 'pas_encore_obtenue') {
+      return I18n.t('ordres.refus_habilitation.pas_encore_obtenue', { intitule: m.intitule, date: UI.dateFr(m.obtention) });
+    }
+    return m.echeance ? I18n.t('ordres.refus_habilitation.echue_le', { intitule: m.intitule, date: UI.dateFr(m.echeance) })
+      : I18n.t('ordres.refus_habilitation.echue', { intitule: m.intitule });
+  }
+
+  /** Message du refus RG8 (§7.3) ; sansMotif : le responsable a demandé à passer outre sans motif (Q7). */
+  function messageRefusHabilitation(refus, sansMotif) {
+    const nom = nomTechnicien(refus.technicienId);
+    const date = UI.dateFr(refus.date);
+    const liste = refus.manquantes.map(libelleManquante).join(', ');
+    return sansMotif
+      ? I18n.t('ordres.refus_habilitation.motif_obligatoire', { nomTechnicien: nom, technicienId: refus.technicienId, date, liste })
+      : I18n.t('ordres.refus_habilitation.affectation_refusee', { nomTechnicien: nom, technicienId: refus.technicienId, date, liste });
+  }
+
   /**
-   * Peut-on passer l'OT au statut `cible` ? → { ok, erreurs, avertissements, piecesManquantes }.
+   * RG8 bloquante (D186, D191 ; §7.3) : refus d'affecter technicienId à l'OT (ligne telle qu'elle sera
+   * écrite) à la date (sinon date prévue, sinon aujourd'hui) → { otId, technicienId, date, manquantes,
+   * message }, ou null : pas de technicien, aucune exigence, tout valide, ou dérogation déjà notée au
+   * journal pour ce même OT, technicien, date et habilitations (§7.4).
+   */
+  function refusHabilitation(ot, technicienId, date) {
+    const controle = controleHabilitation(ot, technicienId, date);
+    const otId = texte(ot && ot.id);
+    if (!controle.bloque || derogationAccordee(otId, controle.technicienId, controle.date, controle.manquantes)) return null;
+    const refus = { otId, technicienId: controle.technicienId, date: controle.date, manquantes: controle.manquantes };
+    return Object.assign(refus, { message: messageRefusHabilitation(refus, false) });
+  }
+
+  /**
+   * Peut-on passer l'OT au statut `cible` ? → { ok, erreurs, avertissements, piecesManquantes, habilitation }.
    * `ot` porte les valeurs à jour (ex. motif_attente saisi). Contrôles : tableau RG3, motifs
-   * obligatoires, Planifié (technicien, date prévue, stock des pièces prévues), clôture RG4.
+   * obligatoires, Planifié (technicien, date prévue, stock des pièces prévues, RG8 : habilitation
+   * exigée valide, sinon une erreur, sauf dérogation déjà notée), clôture RG4. habilitation : le refus
+   * RG8 (refusHabilitation, son message est dans erreurs), sinon null ; avertissements : vide depuis T437.
    */
   function verifierPassage(ot, cible) {
     const erreurs = [];
     const avertissements = [];
     let manquantes = [];
-    if (!ot) return { ok: false, erreurs: [I18n.t('ordres.verifier_passage.ordre_travail_introuvable')], avertissements, piecesManquantes: manquantes };
+    let habilitation = null;
+    if (!ot) return { ok: false, erreurs: [I18n.t('ordres.verifier_passage.ordre_travail_introuvable')], avertissements, piecesManquantes: manquantes, habilitation };
     if (!transitionsPossibles(ot).includes(cible)) {
       erreurs.push(estVerrouille(ot)
         ? I18n.t('ordres.verifier_passage.ot_verrouille_reprise_fait', { otStatut: Schema.libelleValeur('ordres_travail', 'statut', ot.statut) })
@@ -535,8 +572,8 @@ const Ordres = (() => {
       if (!texte(ot.date_prevue)) erreurs.push(I18n.t('ordres.verifier_passage.indiquez_date_prevue_onglet'));
       manquantes = piecesManquantes(ot.id);
       manquantes.forEach((piece) => erreurs.push(I18n.t('ordres.verifier_passage.stock_insuffisant', { pieceLibelle: piece.libelle, detailManque: detailManque(piece) })));
-      const habilitation = verifierHabilitation(equipementDe(ot), ot.technicien_id, ot.date_prevue);
-      if (habilitation) avertissements.push(I18n.t('ordres.verifier_passage.avertissement_habilitation', { habilitation }));
+      habilitation = refusHabilitation(ot, ot.technicien_id, ot.date_prevue);
+      if (habilitation) erreurs.push(habilitation.message);
     } else if (cible === 'Clôturé techniquement') {
       const manques = verifierCloture(ot);
       if (manques.length) erreurs.push(I18n.t('ordres.verifier_passage.manque_join', { join: manques.join(' ; ') }));
@@ -545,7 +582,7 @@ const Ordres = (() => {
       const manques = verifierCloture(ot);
       if (manques.length) erreurs.push(I18n.t('ordres.verifier_passage.cloture_technique_plus_complete', { join: manques.join(' ; ') }));
     }
-    return { ok: erreurs.length === 0, erreurs, avertissements, piecesManquantes: manquantes };
+    return { ok: erreurs.length === 0, erreurs, avertissements, piecesManquantes: manquantes, habilitation };
   }
 
   /**
@@ -631,7 +668,7 @@ const Ordres = (() => {
       texte, nombre, arrondi, aujourdhui, estResponsable, estTechnicien, monTechnicienId,
       equipementDe, repereEquipement, cheminLocalisation, listeTechniciens, libelleArticle, listeCodes,
       lignesDeLOt, operationsDe, placerChamp, champOt, statutDeReprise, quantitesPrevues,
-      habilitationsManquantes, detailManque,
+      habilitationsManquantes, detailManque, refusHabilitation, messageRefusHabilitation,
     },
   };
 })();
