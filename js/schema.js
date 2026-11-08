@@ -1,10 +1,12 @@
 'use strict';
-// Schema : description des 24 tables de Prévo (champs, types, identifiants).
+// Schema : description des 27 tables de Prévo (champs, types, identifiants).
 // Contrat : docs/ARCHITECTURE.md §4, §14.1 et §20.2 (format 3 : tables wiki_pages et wiki_journal, colonne
-// ordres_travail.astuce, lot 6). Les champs de chaque table sont d'abord exactement
+// ordres_travail.astuce, lot 6) ; format 4 (version 2.2, docs/FORMAT.md) : tables reserves_controle, garanties et
+// contrats_prestataires, colonnes de equipements, ordres_travail, habilitations et controles_reglementaires.
+// Les champs de chaque table sont d'abord exactement
 // ceux du tableau du brief §6, dans le même ordre (l'ordre des champs = l'ordre des colonnes CSV),
-// puis, en fin de table, les champs ajoutés par la version 2 du format (attribut depuisVersion: 2).
-// Un fichier écrit avant la version 2 n'a pas ces colonnes : la lecture les complète avec la
+// puis, en fin de table, les champs ajoutés par les versions suivantes du format (attribut depuisVersion: N).
+// Un fichier écrit avant la version N n'a pas ces colonnes : la lecture les complète avec la
 // valeur par défaut (simple information) et l'écriture suivante les ajoute en dernière position.
 // Toutes les valeurs en mémoire sont des chaînes : les valeurs par défaut le sont aussi.
 
@@ -68,9 +70,12 @@ const Schema = (function () {
 
   const CRITICITES = ['A', 'B', 'C'];
   const PRIORITES = ['P1', 'P2', 'P3', 'P4'];
+  // Format 4 : nature de la source d'un contrôle ou d'une habilitation (mêmes valeurs dans les deux tables).
+  const NATURES_SOURCE = ['obligation', 'norme', 'recommandation'];
 
   // ---------------------------------------------------------------------------
-  // Les 22 tables du brief §6, dans l'ordre de son tableau, puis wiki_pages et wiki_journal (format 3, lot 6)
+  // Les 22 tables du brief §6, dans l'ordre de son tableau, puis wiki_pages et wiki_journal (format 3, lot 6),
+  // puis reserves_controle, garanties et contrats_prestataires (format 4, version 2.2)
   // ---------------------------------------------------------------------------
 
   const tables = {
@@ -138,6 +143,8 @@ const Schema = (function () {
         depuisVersion(2, champ('valeur_remplacement', 'decimal', {
           synonymes: ['valeur de remplacement', 'valeur à neuf', 'prix de remplacement'],
         })),
+        // Version 4 du format (2.2, D188) : aucun défaut
+        depuisVersion(4, champ('cout_arret_h', 'decimal')),
       ],
     },
 
@@ -213,6 +220,9 @@ const Schema = (function () {
         depuisVersion(2, booleen('anomalie_constatee')),
         // Version 3 du format (ARCHITECTURE.md §20.2, D110) : facultative, jamais exigée à la clôture
         depuisVersion(3, champ('astuce', 'texte_long')),
+        // Version 4 du format (2.2, D191) : intitulés séparés par « , » ou « / », comme
+        // equipements.habilitation_requise
+        depuisVersion(4, champ('habilitation_requise', 'texte')),
       ],
     },
 
@@ -392,6 +402,11 @@ const Schema = (function () {
         champ('date_echeance', 'date', {
           synonymes: ['échéance', 'valable jusqu\'au', 'date d\'expiration', 'expiration'],
         }),
+        // Version 4 du format (2.2, CS172, CS179, D185) : catalogue_id = H01 à H15 du catalogue validé
+        depuisVersion(4, champ('recyclage_mois', 'entier')),
+        depuisVersion(4, champ('justificatif', 'document')),
+        depuisVersion(4, champ('catalogue_id', 'texte')),
+        depuisVersion(4, choix('nature_source', NATURES_SOURCE)),
       ],
     },
 
@@ -439,6 +454,12 @@ const Schema = (function () {
         champ('rapport', 'document'),
         champ('observations', 'texte_long'),
         booleen('observations_levees'),
+        // Version 4 du format (2.2, CS171, D184) : périodicité tirée du catalogue Prévo ou saisie (défaut : avant la
+        // 2.2, toute périodicité a été saisie) ; catalogue_id = C01 à C31, catalogue_relu_le = AAAA-MM-JJ
+        depuisVersion(4, choix('source_periodicite', ['catalogue', 'saisie'], { defaut: 'saisie' })),
+        depuisVersion(4, choix('nature_source', NATURES_SOURCE)),
+        depuisVersion(4, champ('catalogue_id', 'texte')),
+        depuisVersion(4, champ('catalogue_relu_le', 'date')),
       ],
     },
 
@@ -578,6 +599,74 @@ const Schema = (function () {
         champ('motif', 'texte_long'),
       ],
     },
+
+    // Format 4 (version 2.2) : une base plus ancienne n'a pas ces fichiers. Réserves des contrôles (D183) : une
+    // ligne par réserve d'un rapport ; « levee » dit si elle est levée (une réserve reprise des observations levées
+    // de la 2.1 est levée sans date de levée). Identifiants non annuels : la reprise doit donner les mêmes
+    // identifiants dans le navigateur et dans serveur.py, sans date. Pas de champ actif (comme les contrôles).
+    reserves_controle: {
+      fichier: 'reserves_controle.csv',
+      cle: 'id',
+      identifiant: { prefixe: 'RES-', chiffres: 5, annuel: false },
+      ajoutSeul: false,
+      depuisVersion: 4,
+      champs: [
+        identifiantChamp(),
+        reference('controle_id', 'controles_reglementaires', { obligatoire: true }),
+        champ('date_controle', 'date'),
+        champ('texte', 'texte_long', { obligatoire: true }),
+        choix('gravite', ['mineure', 'majeure', 'critique']),
+        champ('echeance_levee', 'date'),
+        booleen('levee'),
+        champ('date_levee', 'date'),
+        champ('commentaire_levee', 'texte_long'),
+        reference('ot_id', 'ordres_travail'),
+      ],
+    },
+
+    // Garanties des équipements (format 4) : une garantie saisie par erreur se désactive (actif), jamais supprimée.
+    garanties: {
+      fichier: 'garanties.csv',
+      cle: 'id',
+      identifiant: { prefixe: 'GAR-', chiffres: 4, annuel: false },
+      ajoutSeul: false,
+      depuisVersion: 4,
+      champs: [
+        identifiantChamp(),
+        reference('equipement_id', 'equipements', { obligatoire: true }),
+        reference('fournisseur_id', 'fournisseurs'),
+        champ('date_debut', 'date'),
+        champ('date_fin', 'date', { obligatoire: true }),
+        champ('conditions', 'texte_long'),
+        champ('document', 'document'),
+        champActif(),
+      ],
+    },
+
+    // Contrats de prestataires (format 4, D190) : equipement_ids = identifiants séparés par « ; » (EQ-0001;EQ-0004),
+    // comme wiki_pages.ot_cites ; perimetre = texte libre ; préavis et reconduction en mois ; montant annuel HT.
+    contrats_prestataires: {
+      fichier: 'contrats_prestataires.csv',
+      cle: 'id',
+      identifiant: { prefixe: 'CTP-', chiffres: 4, annuel: false },
+      ajoutSeul: false,
+      depuisVersion: 4,
+      champs: [
+        identifiantChamp(),
+        reference('fournisseur_id', 'fournisseurs', { obligatoire: true }),
+        champ('objet', 'texte', { obligatoire: true }),
+        champ('equipement_ids', 'texte'),
+        champ('perimetre', 'texte_long'),
+        champ('date_debut', 'date'),
+        champ('date_fin', 'date', { obligatoire: true }),
+        champ('preavis_mois', 'entier'),
+        booleen('reconduction_tacite'),
+        champ('reconduction_mois', 'entier'),
+        champ('montant_annuel', 'decimal'),
+        champ('document', 'document'),
+        champActif(),
+      ],
+    },
   };
 
   // ---------------------------------------------------------------------------
@@ -625,7 +714,7 @@ const Schema = (function () {
     return tableTrouvee.champs.find(function (c) { return c.nom === nomChamp; });
   }
 
-  // Noms des 24 tables, dans l'ordre du brief puis celles ajoutées par les versions du format.
+  // Noms des 27 tables, dans l'ordre du brief puis celles ajoutées par les versions du format.
   function nomsTables() {
     return Object.keys(tables);
   }
@@ -642,7 +731,7 @@ const Schema = (function () {
   }
 
   return {
-    version: 3,                        // version du format des fichiers (ARCHITECTURE.md §14.1, §20.2)
+    version: 4,                        // version du format des fichiers (ARCHITECTURE.md §14.1, §20.2 ; 4 : 2.2)
     tables: tables,
     table: table,
     champ: champDeTable,

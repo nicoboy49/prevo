@@ -1,10 +1,14 @@
-"""Tests de js/schema.js : conformité au brief §6 et à ARCHITECTURE.md §4, §14.1 (format v2) et §20.2 (format 3).
+"""Tests de js/schema.js : conformité au brief §6 et à ARCHITECTURE.md §4, §14.1 (format v2) et §20.2 (format 3),
+et au format 4 de la version 2.2 (note de conception du L1, §2 : noms, ordre, types, défauts et libellés).
 
 Le schéma est chargé dans Chromium (page-vide.html en file://) puis lu avec JSON.stringify(Schema).
 Chaque table commence exactement par les champs du brief §6, suivis exactement des champs du
 tableau d'ARCHITECTURE.md §14.1 (version 2 du format, attribut depuisVersion: 2). Après les 22 tables du
 brief viennent les tables du format 3, wiki_pages et wiki_journal (§20.2, attribut depuisVersion: 3 sur la
-table), et ordres_travail gagne la colonne astuce (depuisVersion: 3, en fin de table).
+table), et ordres_travail gagne la colonne astuce (depuisVersion: 3, en fin de table). Le format 4 ajoute les
+tables reserves_controle, garanties et contrats_prestataires (depuisVersion: 4, après wiki_journal : 27 tables) et,
+en fin de table, des colonnes à equipements, ordres_travail, habilitations et controles_reglementaires
+(depuisVersion: 4).
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_schema.py" -v
 """
@@ -12,7 +16,7 @@ import json
 import re
 import unittest
 
-from commun import RACINE, CasNavigateur, charger_scripts
+from commun import NB_TABLES, RACINE, CasNavigateur, charger_scripts
 
 # ---------------------------------------------------------------------------
 # Lecture du tableau §6 du brief
@@ -102,6 +106,8 @@ IDENTIFIANTS_ATTENDUS = {
     "releves": ("REL-", 6, False), "controles_reglementaires": ("CTR-", 4, False),
     "codes_defaillance": ("CD-", 4, False), "achats": ("ACH-", 4, False),
     "wiki_pages": ("WP-", 4, False), "wiki_journal": ("WJ-", 5, False),
+    "reserves_controle": ("RES-", 5, False), "garanties": ("GAR-", 4, False),
+    "contrats_prestataires": ("CTP-", 4, False),
 }
 
 # Tables ajoutées par le format 3 (ARCHITECTURE.md §20.2) : (champ, type, libellé), dans l'ordre.
@@ -134,6 +140,51 @@ CHAMPS_FORMAT_3 = {
     "ordres_travail": [("astuce", "texte_long", "Astuce pour la prochaine fois")],
 }
 
+# Tables ajoutées par le format 4 (version 2.2, note de conception du L1 §2.2) : (champ, type, libellé français), dans
+# l'ordre ; libellés de montants avec « € » (devise par défaut, UI n'est pas chargé).
+TABLES_FORMAT_4 = {
+    "reserves_controle": [
+        ("id", "id", "Identifiant"), ("controle_id", "ref", "Contrôle"), ("date_controle", "date", "Date du contrôle"),
+        ("texte", "texte_long", "Réserve"), ("gravite", "choix", "Gravité"),
+        ("echeance_levee", "date", "Échéance de levée"), ("levee", "booleen", "Levée"),
+        ("date_levee", "date", "Date de levée"), ("commentaire_levee", "texte_long", "Commentaire de levée"),
+        ("ot_id", "ref", "OT lié"),
+    ],
+    "garanties": [
+        ("id", "id", "Identifiant"), ("equipement_id", "ref", "Équipement"), ("fournisseur_id", "ref", "Fournisseur"),
+        ("date_debut", "date", "Début de garantie"), ("date_fin", "date", "Fin de garantie"),
+        ("conditions", "texte_long", "Conditions"), ("document", "document", "Document"), ("actif", "booleen", "Actif"),
+    ],
+    "contrats_prestataires": [
+        ("id", "id", "Identifiant"), ("fournisseur_id", "ref", "Prestataire"), ("objet", "texte", "Objet du contrat"),
+        ("equipement_ids", "texte", "Équipements concernés"), ("perimetre", "texte_long", "Périmètre"),
+        ("date_debut", "date", "Début"), ("date_fin", "date", "Fin"),
+        ("preavis_mois", "entier", "Préavis de résiliation (mois)"),
+        ("reconduction_tacite", "booleen", "Reconduction tacite"),
+        ("reconduction_mois", "entier", "Durée d'une reconduction (mois)"),
+        ("montant_annuel", "decimal", "Montant annuel (€ HT)"), ("document", "document", "Document"),
+        ("actif", "booleen", "Actif"),
+    ],
+}
+
+# Colonnes ajoutées par le format 4 à des tables existantes (note de conception du L1 §2.1), en fin de table.
+CHAMPS_FORMAT_4 = {
+    "equipements": [("cout_arret_h", "decimal", "Coût d'une heure d'arrêt (€/h)")],
+    "ordres_travail": [("habilitation_requise", "texte", "Habilitation exigée par l'OT")],
+    "habilitations": [("recyclage_mois", "entier", "Recyclage (mois)"), ("justificatif", "document", "Justificatif"),
+                      ("catalogue_id", "texte", "Type du catalogue"), ("nature_source", "choix", "Nature de la source")],
+    "controles_reglementaires": [
+        ("source_periodicite", "choix", "Origine de la périodicité"), ("nature_source", "choix", "Nature de la source"),
+        ("catalogue_id", "texte", "Ligne du catalogue"), ("catalogue_relu_le", "date", "Catalogue relu le")],
+}
+
+# Valeurs par défaut du format 4 (les autres champs nouveaux n'en ont pas).
+DEFAUTS_FORMAT_4 = {
+    ("controles_reglementaires", "source_periodicite"): "saisie", ("reserves_controle", "levee"): "0",
+    ("garanties", "actif"): "1", ("contrats_prestataires", "reconduction_tacite"): "0",
+    ("contrats_prestataires", "actif"): "1",
+}
+
 CHAMPS_PROTEGES = {
     ("equipements", "num_serie"), ("equipements", "repere"),
     ("articles", "reference"), ("articles", "ref_fabricant"), ("fournisseurs", "telephone"),
@@ -150,6 +201,10 @@ OBLIGATOIRES = {
     ("localisations", "libelle"), ("localisations", "type"),
     ("wiki_pages", "type"), ("wiki_pages", "titre"),
     ("wiki_journal", "nature"), ("wiki_journal", "statut"),
+    ("reserves_controle", "controle_id"), ("reserves_controle", "texte"),
+    ("garanties", "equipement_id"), ("garanties", "date_fin"),
+    ("contrats_prestataires", "fournisseur_id"), ("contrats_prestataires", "objet"),
+    ("contrats_prestataires", "date_fin"),
 }
 
 # Valeurs canoniques des listes : (table, champ) -> valeurs, accents compris
@@ -175,29 +230,35 @@ VALEURS_CANONIQUES = {
     ("wiki_journal", "nature"): ["ingestion", "manuel", "décision"],
     ("wiki_journal", "statut"): ["en file", "à valider", "validée", "rejetée", "à refaire", "refusée",
                                   "rien à ajouter", "appliquée"],
+    ("habilitations", "nature_source"): ["obligation", "norme", "recommandation"],                 # format 4
+    ("controles_reglementaires", "source_periodicite"): ["catalogue", "saisie"],                  # format 4
+    ("controles_reglementaires", "nature_source"): ["obligation", "norme", "recommandation"],     # format 4
+    ("reserves_controle", "gravite"): ["mineure", "majeure", "critique"],                         # format 4
 }
 
 # Tous les champs « choix » du schéma doivent figurer ci-dessus (et inversement)
 TYPES_PAR_NOM = {
     "date": ["date_mes", "date_prevue", "derniere_realisation", "prochaine_echeance",
              "date_obtention", "date_echeance", "derniere_date", "prochaine_date",
-             "date_reception"],
+             "date_reception", "catalogue_relu_le", "date_controle", "echeance_levee", "date_levee"],
     "date_heure": ["date_decision", "date_creation", "date_debut", "date_fin",
                    "date_cloture_tech", "date_cloture_admin", "valide_le", "cree_le", "modifie_le",
                    "date_intervention", "traite_le", "decide_le"],
     "booleen": ["actif", "arret_production", "remise_service", "fait", "critique",
-                "observations_levees", "anomalie_constatee", "anterieure"],
+                "observations_levees", "anomalie_constatee", "anterieure", "levee", "reconduction_tacite"],
     "entier": ["ordre", "delai_jours", "periodicite_jours", "avance_jours", "periodicite_mois", "version",
-               "essais"],
+               "essais", "recyclage_mois", "preavis_mois", "reconduction_mois"],
     "decimal": ["heures_fonct_jour", "temps_prevu_h", "duree_arret_h", "cout_soustraitance",
                 "quantite", "quantite_prevue", "heures", "stock", "stock_securite",
                 "point_commande", "qte_commande", "prix_unitaire", "taux_horaire",
                 "capacite_h_semaine", "periodicite_unites", "seuil",
-                "releve_derniere_realisation", "valeur", "valeur_remplacement"],
+                "releve_derniere_realisation", "valeur", "valeur_remplacement", "cout_arret_h", "montant_annuel"],
     "texte_long": ["description", "travail_a_faire", "consignes", "compte_rendu", "consignation",
                    "observations", "commentaire", "motif_decision", "motif_attente",
-                   "motif_annulation", "astuce", "changements", "contradictions", "raisons", "motif"],
-    "document": [],
+                   "motif_annulation", "astuce", "changements", "contradictions", "raisons", "motif",
+                   "commentaire_levee", "conditions", "perimetre"],
+    "texte": ["habilitation_requise", "catalogue_id", "objet", "equipement_ids"],
+    "document": ["justificatif"],
 }
 
 # Types qui dépendent de la table (même nom de champ, types différents)
@@ -212,6 +273,11 @@ TYPES_PAR_TABLE_ET_NOM = {
     ("controles_reglementaires", "rapport"): "document",
     ("journal", "id_ligne"): "texte", ("journal", "table"): "texte",
     ("wiki_pages", "texte"): "texte_long",
+    # Format 4 : dates sans heure (garanties, contrats), une réserve en texte long, documents joints
+    ("garanties", "date_debut"): "date", ("garanties", "date_fin"): "date",
+    ("contrats_prestataires", "date_debut"): "date", ("contrats_prestataires", "date_fin"): "date",
+    ("reserves_controle", "texte"): "texte_long",
+    ("garanties", "document"): "document", ("contrats_prestataires", "document"): "document",
 }
 
 # Références : (table, champ) -> (table visée, champCible, filtre)
@@ -256,6 +322,11 @@ REFERENCES_ATTENDUES = {
     ("wiki_pages", "rattache_a"): ("wiki_pages", None, None),                              # v3
     ("wiki_pages", "derniere_entree"): ("wiki_journal", None, None),                       # v3
     ("wiki_journal", "ot_id"): ("ordres_travail", None, None),                             # v3
+    ("reserves_controle", "controle_id"): ("controles_reglementaires", None, None),        # v4
+    ("reserves_controle", "ot_id"): ("ordres_travail", None, None),                        # v4
+    ("garanties", "equipement_id"): ("equipements", None, None),                           # v4
+    ("garanties", "fournisseur_id"): ("fournisseurs", None, None),                         # v4
+    ("contrats_prestataires", "fournisseur_id"): ("fournisseurs", None, None),             # v4
 }
 
 
@@ -274,7 +345,7 @@ class TestSchema(CasNavigateur):
         return {c["nom"]: c for c in self.tables[nom_table]["champs"]}
 
     def tous_les_champs(self):
-        """Itère sur (nom de table, champ) pour les 24 tables."""
+        """Itère sur (nom de table, champ) pour toutes les tables."""
         for nom_table, table in self.tables.items():
             for champ in table["champs"]:
                 yield nom_table, champ
@@ -284,11 +355,13 @@ class TestSchema(CasNavigateur):
     def test_le_brief_decrit_22_tables(self):
         self.assertEqual(len(self.brief), 22)
 
-    def test_22_tables_dans_l_ordre_du_brief_puis_celles_du_format_3(self):
-        attendu = list(self.brief.keys()) + list(TABLES_FORMAT_3.keys())
+    def test_22_tables_dans_l_ordre_du_brief_puis_celles_des_formats_3_et_4(self):
+        attendu = list(self.brief.keys()) + list(TABLES_FORMAT_3.keys()) + list(TABLES_FORMAT_4.keys())
         self.assertEqual(list(self.tables.keys()), attendu)
-        self.assertEqual(len(self.tables), 24)
+        self.assertEqual(len(self.tables), 27)
         self.assertEqual(self.page.evaluate("Schema.nomsTables()"), attendu)
+        # tests/commun.py lit le schéma comme du texte : il compte les mêmes tables
+        self.assertEqual(NB_TABLES, len(self.tables))
 
     def test_table_du_format_3(self):
         """wiki_pages et wiki_journal (§20.2) : champs, types et libellés exacts ; depuisVersion 3 sur la table ;
@@ -314,6 +387,47 @@ class TestSchema(CasNavigateur):
                 self.assertFalse(champ.get("obligatoire", False))   # un fichier v2 n'a pas la colonne
                 self.assertIn("`" + nom_table + "." + nom + "`", section)
 
+    def test_tables_du_format_4(self):
+        """reserves_controle, garanties, contrats_prestataires : champs, types et libellés français exacts, dans
+        l'ordre ; depuisVersion 4 sur la table (pas sur ses champs) ; jamais en ajout seul."""
+        for nom_table, champs in TABLES_FORMAT_4.items():
+            with self.subTest(table=nom_table):
+                table = self.tables[nom_table]
+                self.assertEqual([(c["nom"], c["type"], c["libelle"]) for c in table["champs"]], champs)
+                self.assertIs(table.get("depuisVersion"), 4)
+                self.assertIs(table["ajoutSeul"], False)
+                self.assertFalse([c["nom"] for c in table["champs"] if "depuisVersion" in c])
+        self.assertEqual(self.tables["reserves_controle"]["libelle"], "Réserves des contrôles")
+        self.assertEqual(self.tables["garanties"]["libelle"], "Garanties")
+        self.assertEqual(self.tables["contrats_prestataires"]["libelle"], "Contrats de prestataires")
+
+    def test_colonnes_du_format_4_en_fin_de_table(self):
+        """Colonnes ajoutées aux tables existantes : type, libellé français, depuisVersion 4, jamais obligatoires
+        (un fichier au format 3 n'a pas la colonne), placées après toutes les autres."""
+        for nom_table, champs in CHAMPS_FORMAT_4.items():
+            noms = [c["nom"] for c in self.tables[nom_table]["champs"]]
+            self.assertEqual(noms[-len(champs):], [nom for nom, _, _ in champs], nom_table)
+            for nom, type_attendu, libelle in champs:
+                with self.subTest(table=nom_table, champ=nom):
+                    champ = self.champs_de(nom_table)[nom]
+                    self.assertEqual((champ["type"], champ["libelle"]), (type_attendu, libelle))
+                    self.assertIs(champ.get("depuisVersion"), 4)
+                    self.assertFalse(champ.get("obligatoire", False))
+
+    def test_defauts_et_libelles_des_valeurs_du_format_4(self):
+        nouveaux = {(t, nom) for t, champs in TABLES_FORMAT_4.items() for nom, _, _ in champs}
+        nouveaux |= {(t, nom) for t, champs in CHAMPS_FORMAT_4.items() for nom, _, _ in champs}
+        trouves = {(t, c["nom"]): c["defaut"] for t, c in self.tous_les_champs()
+                   if (t, c["nom"]) in nouveaux and "defaut" in c}
+        self.assertEqual(trouves, DEFAUTS_FORMAT_4)
+        # Valeurs stockées en français (D155), affichées par valeurs.<table>.<champ>.<valeur>
+        affichees = self.page.evaluate("""() => [
+          Schema.libelleValeur('controles_reglementaires', 'source_periodicite', 'catalogue'),
+          Schema.libelleValeur('controles_reglementaires', 'nature_source', 'obligation'),
+          Schema.libelleValeur('habilitations', 'nature_source', 'recommandation'),
+          Schema.libelleValeur('reserves_controle', 'gravite', 'majeure')]""")
+        self.assertEqual(affichees, ["catalogue Prévo", "obligation réglementaire", "recommandation", "majeure"])
+
     def test_le_tableau_du_format_v2_decrit_4_champs_dans_3_tables(self):
         """Garde-fou de la lecture d'ARCHITECTURE.md §14.1 (sinon les tests ci-dessous ne prouvent rien)."""
         self.assertEqual(self.version_2, {
@@ -324,11 +438,11 @@ class TestSchema(CasNavigateur):
         })
 
     def test_version_du_format(self):
-        self.assertEqual(self.schema["version"], 3)
+        self.assertEqual(self.schema["version"], 4)
 
     def test_champs_du_brief_en_tete_puis_exactement_les_champs_v2(self):
         """Chaque table : les champs du brief §6, dans le même ordre, sont le début exact de la liste ;
-        viennent ensuite exactement les champs du tableau §14.1 (aucun dans les autres tables)."""
+        viennent ensuite exactement les champs du tableau §14.1, puis ceux des formats 3 et 4 (aucun ailleurs)."""
         for nom_table, attendu in self.brief.items():
             with self.subTest(table=nom_table):
                 noms = [c["nom"] for c in self.tables[nom_table]["champs"]]
@@ -336,7 +450,8 @@ class TestSchema(CasNavigateur):
                 self.assertEqual(noms[:len(champs_brief)], champs_brief)
                 champs_v2 = [nom for nom, _, _ in self.version_2.get(nom_table, [])]
                 champs_v3 = [nom for nom, _, _ in CHAMPS_FORMAT_3.get(nom_table, [])]
-                self.assertEqual(noms[len(champs_brief):], champs_v2 + champs_v3)
+                champs_v4 = [nom for nom, _, _ in CHAMPS_FORMAT_4.get(nom_table, [])]
+                self.assertEqual(noms[len(champs_brief):], champs_v2 + champs_v3 + champs_v4)
 
     def test_champs_v2_types_libelles_et_depuis_version(self):
         for nom_table, champs_v2 in self.version_2.items():
@@ -353,8 +468,11 @@ class TestSchema(CasNavigateur):
     def test_seuls_les_champs_v2_portent_depuis_version(self):
         attendus = {(t, nom) for t, champs in self.version_2.items() for nom, _, _ in champs}
         attendus |= {(t, nom) for t, champs in CHAMPS_FORMAT_3.items() for nom, _, _ in champs}
+        attendus |= {(t, nom) for t, champs in CHAMPS_FORMAT_4.items() for nom, _, _ in champs}
         trouves = {(t, c["nom"]) for t, c in self.tous_les_champs() if "depuisVersion" in c}
         self.assertEqual(trouves, attendus)
+        tables_datees = {t: table["depuisVersion"] for t, table in self.tables.items() if "depuisVersion" in table}
+        self.assertEqual(tables_datees, {**{t: 3 for t in TABLES_FORMAT_3}, **{t: 4 for t in TABLES_FORMAT_4}})
 
     def test_chaque_table_a_fichier_libelle_et_cle(self):
         for nom_table, table in self.tables.items():
@@ -391,7 +509,7 @@ class TestSchema(CasNavigateur):
     def test_actif_est_booleen_par_defaut_a_1_partout(self):
         presents = [(t, c) for t, c in self.tous_les_champs() if c["nom"] == "actif"]
         self.assertEqual(sorted(t for t, _ in presents),
-                         ["articles", "equipements", "gammes", "techniciens"])
+                         ["articles", "contrats_prestataires", "equipements", "gammes", "garanties", "techniciens"])
         for nom_table, champ in presents:
             self.assertEqual((champ["type"], champ.get("defaut")), ("booleen", "1"), nom_table)
 
@@ -541,7 +659,7 @@ class TestSchema(CasNavigateur):
         self.assertTrue(self.page.evaluate("Schema.champ('zzz', 'id') === undefined"))
         # un nom hérité d'Object (toString, constructor) n'est pas une table
         self.assertTrue(self.page.evaluate("Schema.table('constructor') === undefined"))
-        self.assertEqual(len(self.page.evaluate("Schema.nomsTables()")), 24)
+        self.assertEqual(len(self.page.evaluate("Schema.nomsTables()")), 27)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 """Tests de js/formats.js (objet Formats) : registre des formats côté navigateur (chantier « socle de données », T183 ;
-ARCHITECTURE.md §1, §5.6, §14.1, §20.2 ; décisions D167, D168 ; CS138, CS139, CS140).
+ARCHITECTURE.md §1, §5.6, §14.1, §20.2 ; format 4 de la 2.2, T382 ; décisions D167, D168 ; CS138, CS139, CS140,
+CS169).
 
 Chaque jeu de tests/fixtures/formats (tests/jeux_formats.py) est copié dans un dossier temporaire (règle du chantier :
 jamais ailleurs), ses CSV sont lus en Python (BOM, « ; », guillemets, CRLF ; UTF-8, sinon Windows-1252), puis, dans
@@ -7,19 +8,23 @@ Chromium (page-vide.html en file://, avec js/lib/papaparse.min.js, js/schema.js,
 base en mémoire est formée comme Prévo la garde (valeurs relues par Donnees.csv.relireValeur : apostrophe de
 protection retirée). Couvre :
     - formatDuFichier de chaque table de chaque jeu : format attendu calculé d'après ce que chaque format ajoute
-      (recopie de §14.1 et §20.2 ci-dessous, indépendante de js/formats.js) ; variantes abîmées : 0 (en-tête tronqué,
-      colonne du format 1 manquante, fichier vide), 2 (ordres_travail sans astuce), null (table inconnue) ;
+      (recopie de §14.1, §20.2 et du format 4 ci-dessous, indépendante de js/formats.js) ; variantes abîmées : 0
+      (en-tête tronqué, colonne du format 1 manquante, fichier vide), 2 (ordres_travail sans astuce), null (table
+      inconnue) ;
     - versionDeBase : f1 1, f2 2, f3 3 (f3-v2.1.0 et reserves-a-reprendre compris), plus-recent 5 ; même règle que
       Donnees.nombre (versionSchemaDe) ;
-    - migrer(base, versionDeBase, 3) : aucune cellule d'origine perdue ni modifiée (champ à champ, colonnes inconnues
-      comprises), colonnes nouvelles en fin avec leur défaut, tables créées vides, une ligne de journal par étape
-      (f1 2, f2 1, f3 0) ; rejouée (versionDeBase relu) : aucun changement, journal vide ; rejouée depuis le format
-      d'origine : même base (étapes idempotentes) ; plus-recent : rien ne change ;
-    - ETAPES : chaîne sans trou de 1 au format courant, descriptions qui citent ce que l'étape ajoute, appliquer pure
-      (l'entrée n'est pas modifiée) et idempotente, cas fabriqués (colonnes inconnues, ligne qui a déjà la colonne,
-      parametres absent, noms avec BOM et espaces) ; texte du journal = marque relue par la suggestion S4 ;
+    - migrer(base, versionDeBase, 4) : aucune cellule d'origine perdue ni modifiée (champ à champ, colonnes inconnues
+      comprises), colonnes nouvelles en fin avec leur défaut (après les colonnes inconnues, qui restent à leur
+      place), tables créées vides, une ligne de journal par étape (f1 3, f2 2, f3 1) ; rejouée (versionDeBase relu) :
+      aucun changement, journal vide ; rejouée depuis le format d'origine : même base (étapes idempotentes) ;
+      plus-recent : rien ne change ;
+    - ETAPES : chaîne sans trou de 1 au format courant, descriptions qui citent ce que l'étape ajoute (celle du
+      format 4 au mot près), appliquer pure (l'entrée n'est pas modifiée) et idempotente, cas fabriqués (colonnes
+      inconnues, ligne qui a déjà la colonne, parametres absent, noms avec BOM et espaces, table du format 4 déjà
+      là) ; texte du journal = marque relue par la suggestion S4 ;
     - colonnes et tables de chaque format, formatDuFichier sur des en-têtes fabriqués (jamais d'exception) ;
     - manifeste : empreintes SHA-256 égales à hashlib.sha256, noms triés, contexte (champs absents omis).
+La reprise des observations en réserves (D183) n'est pas encore là (T386) : reserves_controle est créée vide.
 
 Lancer depuis la racine du projet :
     py -X utf8 -m unittest discover -s tests -p "test_formats_js.py" -v
@@ -33,26 +38,41 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from commun import RACINE, CasNavigateur, charger_scripts
+from commun import NB_TABLES, RACINE, CasNavigateur, charger_scripts
 from jeux_formats import JEUX, copier_jeu
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/formats.js", "js/donnees.js"]
 BOM = b"\xef\xbb\xbf"
 CARACTERE_BOM = chr(0xFEFF)
-FORMAT_COURANT = 3
+FORMAT_COURANT = 4
 
-# Ce que chaque format ajoute : recopie de ARCHITECTURE.md §14.1 (format 2) et §20.2 (format 3), indépendante de
-# js/formats.js et de js/schema.js (le test les compare).
+# Ce que chaque format ajoute : recopie de ARCHITECTURE.md §14.1 (format 2), §20.2 (format 3) et de la note de
+# conception du format 4 (2.2, §2.1 et §2.2), indépendante de js/formats.js et de js/schema.js (le test les compare).
 COLONNES_AJOUTEES = {
     2: {"equipements": ["valeur_remplacement"], "demandes": ["symptome_code", "ot_origine_id"],
         "ordres_travail": ["anomalie_constatee"]},
     3: {"ordres_travail": ["astuce"]},
+    4: {"equipements": ["cout_arret_h"], "ordres_travail": ["habilitation_requise"],
+        "habilitations": ["recyclage_mois", "justificatif", "catalogue_id", "nature_source"],
+        "controles_reglementaires": ["source_periodicite", "nature_source", "catalogue_id", "catalogue_relu_le"]},
 }
-TABLES_AJOUTEES = {2: [], 3: ["wiki_pages", "wiki_journal"]}
+TABLES_AJOUTEES = {2: [], 3: ["wiki_pages", "wiki_journal"], 4: ["reserves_controle", "garanties",
+                                                                 "contrats_prestataires"]}
 DEFAUTS_AJOUTES = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0",
-                   "astuce": ""}
+                   "astuce": "", "cout_arret_h": "", "habilitation_requise": "", "recyclage_mois": "",
+                   "justificatif": "", "catalogue_id": "", "nature_source": "", "source_periodicite": "saisie",
+                   "catalogue_relu_le": ""}
+# Description de l'étape 3→4, au mot près (note de conception du format 4, §2.4 ; la même dans serveur.py).
+DESCRIPTION_FORMAT_4 = (
+    "Format 4 (version 2.2) : colonnes equipements.cout_arret_h, ordres_travail.habilitation_requise, "
+    "habilitations.recyclage_mois, habilitations.justificatif, habilitations.catalogue_id, habilitations.nature_source, "
+    "controles_reglementaires.source_periodicite (défaut saisie), controles_reglementaires.nature_source, "
+    "controles_reglementaires.catalogue_id et controles_reglementaires.catalogue_relu_le en fin de table ; tables "
+    "reserves_controle (observations reprises, une réserve par ligne, D183), garanties et contrats_prestataires "
+    "(vides).")
 
-# Format des fichiers de chaque jeu (les autres : format 3) et format de la base (version_schema ; les autres : 3).
+# Format des fichiers de chaque jeu et format de la base (version_schema) ; les autres jeux : format 3 (2.0 et 2.1).
+FORMAT_DES_JEUX = 3
 FORMAT_DES_FICHIERS = {"f1": 1, "f2-v1.1.0": 2}
 VERSION_DE_BASE = {"f1": 1, "f2-v1.1.0": 2, "plus-recent": 5}
 # Fichiers dont le format n'est pas celui du jeu (variantes abîmées : description dans le variante.json du jeu).
@@ -64,9 +84,15 @@ FORMATS_PARTICULIERS = {
     ("plus-recent", "pieces_v5"): None,          # table inconnue du schéma
 }
 LIGNES_DE_JOURNAL = {
-    1: ["passage au format 2 du fichier", "passage au format 3 du fichier"],
-    2: ["passage au format 3 du fichier"],
+    1: ["passage au format 2 du fichier", "passage au format 3 du fichier", "passage au format 4 du fichier"],
+    2: ["passage au format 3 du fichier", "passage au format 4 du fichier"],
+    3: ["passage au format 4 du fichier"],
 }
+
+
+def tables_ajoutees_apres(format):
+    """Tables que les formats suivants (jusqu'au format courant) ajoutent."""
+    return [table for f in range(format + 1, FORMAT_COURANT + 1) for table in TABLES_AJOUTEES[f]]
 
 # Base en mémoire formée dans la page à partir des cellules lues en Python : { table: { entete, cellules } } →
 # { tables: { table: { entete, lignes: [{ colonne: valeur }] } } }, valeurs relues comme Donnees.csv.analyser
@@ -182,11 +208,18 @@ class TestFormats(CasNavigateur):
         }""")
         schema = self.schema_courant()
         noms = resultat["nomsTables"]
-        tables_du_brief = [nom for nom in noms if nom not in TABLES_AJOUTEES[3]]
+        self.assertEqual(sorted(resultat["parFormat"], key=int), [str(f) for f in range(1, FORMAT_COURANT + 1)])
+        tables_du_brief = [nom for nom in noms if nom not in tables_ajoutees_apres(1)]
         self.assertEqual(len(tables_du_brief), 22)
-        self.assertEqual(resultat["parFormat"]["1"]["tables"], tables_du_brief)
+        self.assertEqual(len(noms), 22 + len(tables_ajoutees_apres(1)))          # 27 au format 4
+        for format in range(1, FORMAT_COURANT + 1):
+            # Tables d'un format : celles du schéma, dans son ordre, moins celles des formats suivants
+            self.assertEqual(resultat["parFormat"][str(format)]["tables"],
+                             [nom for nom in noms if nom not in tables_ajoutees_apres(format)], format)
         self.assertEqual(resultat["parFormat"]["2"]["tables"], tables_du_brief)
-        self.assertEqual(resultat["parFormat"]["3"]["tables"], noms)
+        self.assertEqual(resultat["parFormat"]["3"]["tables"], tables_du_brief + TABLES_AJOUTEES[3])
+        self.assertEqual(noms[-3:], TABLES_AJOUTEES[4])          # après wiki_journal
+        self.assertEqual(resultat["parFormat"][str(FORMAT_COURANT)]["tables"], noms)
         self.assertEqual(resultat["tablesOmis"], noms)
         self.assertEqual(resultat["inconnue"], [])
         self.assertEqual(resultat["wikiAvant"], [])
@@ -196,13 +229,18 @@ class TestFormats(CasNavigateur):
                 # Format courant = tous les champs du schéma, dans son ordre ; format omis = format courant
                 self.assertEqual(colonnes[FORMAT_COURANT], schema[nom]["colonnes"])
                 self.assertEqual(resultat["omis"][nom], schema[nom]["colonnes"])
-                for format in (2, 3):
+                for format in range(2, FORMAT_COURANT + 1):
                     if nom in TABLES_AJOUTEES[format]:
                         self.assertEqual(colonnes[format - 1], [])
                         continue
                     # Le format N = le format N-1 suivi exactement des colonnes que N ajoute (en fin de table)
                     self.assertEqual(colonnes[format],
                                      colonnes[format - 1] + COLONNES_AJOUTEES[format].get(nom, []))
+        # Valeurs par défaut des colonnes ajoutées (celles des tables nouvelles : voir test_schema.py)
+        for format, tables in COLONNES_AJOUTEES.items():
+            for table, ajoutees in tables.items():
+                for colonne in ajoutees:
+                    self.assertEqual(schema[table]["defauts"][colonne], DEFAUTS_AJOUTES[colonne], (table, colonne))
 
     # -----------------------------------------------------------------------------------------------------------
     # formatDuFichier
@@ -227,19 +265,21 @@ class TestFormats(CasNavigateur):
                         attendu = FORMATS_PARTICULIERS[(jeu, table)]
                         vus.add((jeu, table))
                     else:
-                        attendu = format_attendu(table, FORMAT_DES_FICHIERS.get(jeu, FORMAT_COURANT))
+                        attendu = format_attendu(table, FORMAT_DES_FICHIERS.get(jeu, FORMAT_DES_JEUX))
                     self.assertEqual(resultats[jeu][table], attendu)
         self.assertEqual(vus, set(FORMATS_PARTICULIERS), "cas particuliers absents des jeux")
-        # Les tables qui distinguent les formats : f1 → 1, f2 → 2, f3 → 3
+        # Les tables qui distinguent les formats : f1 → 1, f2 → 2, f3 → 3 ; une table que les formats suivants
+        # n'ont pas changée est au format courant (wiki_pages, fournisseurs)
         self.assertEqual([resultats["f1"][t] for t in ("equipements", "demandes", "ordres_travail")], [1, 1, 1])
         self.assertEqual(resultats["f2-v1.1.0"]["ordres_travail"], 2)
         self.assertEqual(resultats["f3-v1.2.0"]["ordres_travail"], 3)
-        self.assertEqual(resultats["f3-v1.2.0"]["wiki_pages"], 3)
+        self.assertEqual(resultats["f3-v1.2.0"]["wiki_pages"], 4)
+        self.assertEqual(resultats["f3-v2.1.0"]["fournisseurs"], 4)
         self.assertEqual(resultats["plus-recent"]["ordres_travail"], 3)
         # Jeux de la 2.2 (T378) : au format 3 (colonne inconnue en fin de controles_reglementaires comprise)
         for jeu in ("f3-v2.1.0", "reserves-a-reprendre"):
-            self.assertEqual(resultats[jeu]["controles_reglementaires"], 3)
-            self.assertEqual(resultats[jeu]["ordres_travail"], 3)
+            for table in ("equipements", "ordres_travail", "habilitations", "controles_reglementaires"):
+                self.assertEqual(resultats[jeu][table], 3, (jeu, table))
         self.assertEqual(self.fichiers["reserves-a-reprendre"]["controles_reglementaires"]["entete"][-1],
                          "remarque_maison")
 
@@ -248,37 +288,53 @@ class TestFormats(CasNavigateur):
           const ot = (format) => Formats.colonnes('ordres_travail', format);
           const etrange = { toString() { throw new Error('illisible'); } };
           return {
-            parFormat: [1, 2, 3].map((format) => Formats.formatDuFichier('ordres_travail', ot(format))),
-            desordre: Formats.formatDuFichier('ordres_travail', ot(3).slice().reverse()),
+            parFormat: [1, 2, 3, 4].map((format) => Formats.formatDuFichier('ordres_travail', ot(format))),
+            desordre: Formats.formatDuFichier('ordres_travail', ot(4).slice().reverse()),
             bomEtEspaces: Formats.formatDuFichier('ordres_travail',
-              [bom + 'id'].concat(ot(3).slice(1).map((nom) => '  ' + nom + ' \\t'))),
+              [bom + 'id'].concat(ot(4).slice(1).map((nom) => '  ' + nom + ' \\t'))),
             enTrop: Formats.formatDuFichier('ordres_travail', ['avant'].concat(ot(2), ['apres', 'astuce'])),
-            sansUneColonneDuFormat1: Formats.formatDuFichier('ordres_travail', ot(3).filter((n) => n !== 'titre')),
+            enTropFormat4: Formats.formatDuFichier('ordres_travail',
+              ['avant'].concat(ot(3), ['apres', 'habilitation_requise'])),
+            sansUneColonneDuFormat1: Formats.formatDuFichier('ordres_travail', ot(4).filter((n) => n !== 'titre')),
             casseDifferente: Formats.formatDuFichier('parametres', ['Cle', 'Valeur']),
             accentsEtSoulignes: Formats.formatDuFichier('ordres_travail',
-              Formats.colonnes('ordres_travail', 3).map((n) => n === 'date_creation' ? 'Date Création' : n)),
+              Formats.colonnes('ordres_travail', 4).map((n) => n === 'date_creation' ? 'Date Création' : n)),
             parametres: Formats.formatDuFichier('parametres', ['cle', 'valeur']),
             wikiComplet: Formats.formatDuFichier('wiki_pages', Formats.colonnes('wiki_pages', 3)),
             wikiIncomplet: Formats.formatDuFichier('wiki_pages', Formats.colonnes('wiki_pages', 3).slice(1)),
             wikiVide: Formats.formatDuFichier('wiki_journal', []),
+            controlesSansUneColonneDuFormat4: Formats.formatDuFichier('controles_reglementaires',
+              Formats.colonnes('controles_reglementaires', 4).filter((n) => n !== 'catalogue_relu_le')),
+            reservesCompletes: Formats.formatDuFichier('reserves_controle', Formats.colonnes('reserves_controle')),
+            reservesIncompletes: Formats.formatDuFichier('reserves_controle',
+              Formats.colonnes('reserves_controle').slice(0, -1)),
+            garantiesVides: Formats.formatDuFichier('garanties', []),
+            contrats: Formats.formatDuFichier('contrats_prestataires', Formats.colonnes('contrats_prestataires', 4)),
             inconnue: Formats.formatDuFichier('pieces_v4', ['id']),
             tableAbsente: Formats.formatDuFichier(undefined, ['id']),
             etranges: [null, undefined, 'id;origine', 42, {}, [null, undefined, 3, {}], [etrange]]
               .map((entete) => Formats.formatDuFichier('ordres_travail', entete)),
           };
         }""", CARACTERE_BOM)
-        self.assertEqual(resultat["parFormat"], [1, 2, 3])
-        self.assertEqual(resultat["desordre"], 3)
-        self.assertEqual(resultat["bomEtEspaces"], 3)
+        self.assertEqual(resultat["parFormat"], [1, 2, 3, 4])
+        self.assertEqual(resultat["desordre"], 4)
+        self.assertEqual(resultat["bomEtEspaces"], 4)
         self.assertEqual(resultat["enTrop"], 3)
+        self.assertEqual(resultat["enTropFormat4"], 4)
         self.assertEqual(resultat["sansUneColonneDuFormat1"], 0)
         # Casse, accents, espaces et soulignés ignorés, comme Donnees.cleEntete (relecture de T183).
-        self.assertEqual(resultat["casseDifferente"], 3)
-        self.assertEqual(resultat["parametres"], 3)
-        self.assertEqual(resultat["accentsEtSoulignes"], 3)
-        self.assertEqual(resultat["wikiComplet"], 3)
+        self.assertEqual(resultat["casseDifferente"], FORMAT_COURANT)
+        self.assertEqual(resultat["parametres"], FORMAT_COURANT)
+        self.assertEqual(resultat["accentsEtSoulignes"], 4)
+        # wiki_pages n'a pas changé depuis le format 3 : son en-tête est aussi celui du format 4
+        self.assertEqual(resultat["wikiComplet"], FORMAT_COURANT)
         self.assertEqual(resultat["wikiIncomplet"], 0)
         self.assertEqual(resultat["wikiVide"], 0)
+        self.assertEqual(resultat["controlesSansUneColonneDuFormat4"], 3)
+        self.assertEqual(resultat["reservesCompletes"], 4)
+        self.assertEqual(resultat["reservesIncompletes"], 0)
+        self.assertEqual(resultat["garantiesVides"], 0)
+        self.assertEqual(resultat["contrats"], 4)
         self.assertIsNone(resultat["inconnue"])
         self.assertIsNone(resultat["tableAbsente"])
         self.assertEqual(resultat["etranges"], [0] * 7)
@@ -299,7 +355,7 @@ class TestFormats(CasNavigateur):
         self.assertEqual(sorted(resultats), JEUX, "chaque jeu a un parametres.csv")
         for jeu in JEUX:
             with self.subTest(jeu=jeu):
-                self.assertEqual(resultats[jeu], VERSION_DE_BASE.get(jeu, FORMAT_COURANT))
+                self.assertEqual(resultats[jeu], VERSION_DE_BASE.get(jeu, FORMAT_DES_JEUX))
         self.assertGreater(resultats["plus-recent"], self.evaluer("() => Formats.courant"))
 
     def test_version_de_base_meme_regle_que_donnees(self):
@@ -374,7 +430,7 @@ class TestFormats(CasNavigateur):
             with self.subTest(jeu=jeu):
                 r = self.migrer_jeu(jeu)
                 avant, apres = r["base"], r["premier"]["base"]
-                de = VERSION_DE_BASE.get(jeu, FORMAT_COURANT)
+                de = VERSION_DE_BASE.get(jeu, FORMAT_DES_JEUX)
                 self.assertEqual(r["de"], de)
                 self.assertTrue(r["entreeIntacte"], "migrer a modifié la base reçue")
                 self.assertEqual(r["premier"]["journal"], LIGNES_DE_JOURNAL.get(de, []))
@@ -386,7 +442,8 @@ class TestFormats(CasNavigateur):
                     self.assertTrue(r["memeObjetSiRien"])
                     self.assertEqual(apres, avant)
                     continue
-                # Colonnes d'origine à leur place, colonnes nouvelles en fin, avec leur défaut
+                # Colonnes d'origine à leur place (inconnues comprises), colonnes nouvelles en fin, après elles,
+                # avec leur défaut
                 for table, contenu in apres["tables"].items():
                     with self.subTest(jeu=jeu, table=table):
                         if table not in avant["tables"]:
@@ -400,10 +457,12 @@ class TestFormats(CasNavigateur):
                                              {c: schema[table]["defauts"][c] for c in nouvelles})
                         self.assertEqual(r["formats"][table], FORMAT_COURANT)
                 self.assertEqual(sorted(apres["tables"]), sorted(schema))
-                self.assertIn("wiki_pages", apres["tables"])
-                self.assertNotIn("wiki_pages", avant["tables"])
+                # Les tables des formats suivants sont créées (vides) ; celles du jeu sont gardées
+                for table in tables_ajoutees_apres(de):
+                    self.assertNotIn(table, avant["tables"])
+                    self.assertIn(table, apres["tables"])
                 self.assertEqual([l["valeur"] for l in apres["tables"]["parametres"]["lignes"]
-                                  if l["cle"] == "version_schema"], ["3"])
+                                  if l["cle"] == "version_schema"], [str(FORMAT_COURANT)])
                 # Rejouée d'après la version relue : aucun changement, journal vide
                 self.assertEqual(r["deRejoue"], FORMAT_COURANT)
                 self.assertEqual(r["rejoue"]["journal"], [])
@@ -417,20 +476,55 @@ class TestFormats(CasNavigateur):
         r1 = self.migrer_jeu("f1")
         apres = r1["premier"]["base"]["tables"]
         self.assertEqual(sorted(r1["base"]["tables"]), ["demandes", "equipements", "ordres_travail", "parametres"])
-        self.assertEqual(len(apres), 24)
-        self.assertEqual(apres["ordres_travail"]["entete"][-2:], ["anomalie_constatee", "astuce"])
+        self.assertEqual(len(apres), NB_TABLES)
+        self.assertEqual(apres["ordres_travail"]["entete"][-3:], ["anomalie_constatee", "astuce", "habilitation_requise"])
         self.assertEqual(apres["demandes"]["entete"][-2:], ["symptome_code", "ot_origine_id"])
-        self.assertEqual(apres["equipements"]["entete"][-1], "valeur_remplacement")
-        self.assertTrue(all(l["anomalie_constatee"] == "0" and l["astuce"] == "" for l in apres["ordres_travail"]["lignes"]))
+        self.assertEqual(apres["equipements"]["entete"][-2:], ["valeur_remplacement", "cout_arret_h"])
+        self.assertTrue(all(l["anomalie_constatee"] == "0" and l["astuce"] == "" and l["habilitation_requise"] == ""
+                            for l in apres["ordres_travail"]["lignes"]))
         self.assertEqual(len(apres["ordres_travail"]["lignes"]), 12)
         r2 = self.migrer_jeu("f2-v1.1.0")
         avant2, apres2 = r2["base"]["tables"], r2["premier"]["base"]["tables"]
         self.assertEqual(len(avant2), 22)
-        self.assertEqual(sorted(set(apres2) - set(avant2)), ["wiki_journal", "wiki_pages"])
-        self.assertEqual(apres2["ordres_travail"]["entete"], avant2["ordres_travail"]["entete"] + ["astuce"])
+        self.assertEqual(sorted(set(apres2) - set(avant2)), sorted(tables_ajoutees_apres(2)))
+        self.assertEqual(apres2["ordres_travail"]["entete"],
+                         avant2["ordres_travail"]["entete"] + ["astuce", "habilitation_requise"])
         for table in avant2:
-            if table != "ordres_travail":
-                self.assertEqual(apres2[table]["entete"], avant2[table]["entete"], table)
+            self.assertEqual(apres2[table]["entete"],
+                             avant2[table]["entete"] + COLONNES_AJOUTEES[3].get(table, [])
+                             + COLONNES_AJOUTEES[4].get(table, []), table)
+
+    def test_migration_f3_au_format_4_detail(self):
+        """Bases 2.1.0 (f3-v2.1.0 et sa variante reserves-a-reprendre) : une étape, 3→4 ; seules equipements,
+        ordres_travail, habilitations et controles_reglementaires changent (colonnes en fin, source_periodicite =
+        saisie, les autres vides) ; les trois tables du format 4 sont créées vides (reprise des réserves : T386) ;
+        la colonne inconnue remarque_maison reste à sa place, AVANT les colonnes du format 4 (règle de 2→3)."""
+        for jeu in ("f3-v2.1.0", "reserves-a-reprendre"):
+            with self.subTest(jeu=jeu):
+                r = self.migrer_jeu(jeu)
+                avant, apres = r["base"]["tables"], r["premier"]["base"]["tables"]
+                self.assertEqual(r["premier"]["journal"], ["passage au format 4 du fichier"])
+                self.assertEqual(r["premier"]["etapes"], [{"de": 3, "vers": 4, "description": DESCRIPTION_FORMAT_4}])
+                self.assertEqual(sorted(set(apres) - set(avant)), sorted(TABLES_AJOUTEES[4]))
+                for table in TABLES_AJOUTEES[4]:
+                    self.assertEqual(apres[table]["lignes"], [], table)
+                for table in avant:
+                    ajoutees = COLONNES_AJOUTEES[4].get(table, [])
+                    if table == "parametres" or ajoutees:
+                        continue
+                    self.assertEqual(apres[table], avant[table], "%s : réécrite sans colonne nouvelle" % table)
+                for table, ajoutees in COLONNES_AJOUTEES[4].items():
+                    self.assertEqual(apres[table]["entete"], avant[table]["entete"] + ajoutees, table)
+                    self.assertTrue(avant[table]["lignes"], "%s : aucune ligne dans le jeu" % table)
+                    for ligne_avant, ligne in zip(avant[table]["lignes"], apres[table]["lignes"]):
+                        self.assertEqual(ligne, dict(ligne_avant, **{c: DEFAUTS_AJOUTES[c] for c in ajoutees}))
+        r = self.migrer_jeu("reserves-a-reprendre")
+        controles = r["premier"]["base"]["tables"]["controles_reglementaires"]
+        self.assertEqual(controles["entete"][-6:], ["observations_levees", "remarque_maison", "source_periodicite",
+                                                    "nature_source", "catalogue_id", "catalogue_relu_le"])
+        self.assertEqual([l["remarque_maison"] for l in controles["lignes"]],
+                         [l["remarque_maison"] for l in r["base"]["tables"]["controles_reglementaires"]["lignes"]])
+        self.assertEqual({l["source_periodicite"] for l in controles["lignes"]}, {"saisie"})
 
     def test_plus_recent_rien_ne_change(self):
         r = self.evaluer("""(fichiers) => {
@@ -461,7 +555,7 @@ class TestFormats(CasNavigateur):
     def test_etapes_chaine_sans_trou_et_descriptions(self):
         etapes = self.evaluer("""() => Formats.ETAPES.map((e) => ({ de: e.de, vers: e.vers, description: e.description,
           appliquer: typeof e.appliquer, figee: Object.isFrozen(e) }))""")
-        self.assertEqual([(e["de"], e["vers"]) for e in etapes], [(1, 2), (2, 3)])
+        self.assertEqual([(e["de"], e["vers"]) for e in etapes], [(1, 2), (2, 3), (3, 4)])
         self.assertEqual(etapes[-1]["vers"], FORMAT_COURANT)
         for etape in etapes:
             with self.subTest(etape=etape["vers"]):
@@ -472,6 +566,7 @@ class TestFormats(CasNavigateur):
                         self.assertIn("%s.%s" % (table, colonne), etape["description"])
                 for table in TABLES_AJOUTEES[etape["vers"]]:
                     self.assertIn(table, etape["description"])
+        self.assertEqual(etapes[2]["description"], DESCRIPTION_FORMAT_4)
 
     def test_ligne_de_journal_relue_par_la_suggestion_s4(self):
         texte = (RACINE / "js" / "modules" / "suggestions-regles.js").read_text(encoding="utf-8")
@@ -567,6 +662,55 @@ class TestFormats(CasNavigateur):
         self.assertEqual(len(r["rien"]["tables"]), 22)
         self.assertEqual(len(r["indefinie"]["tables"]), 24)
 
+    def test_etape_3_4_cas_fabriques(self):
+        """Étape 3→4 générique : colonnes du format 4 en fin d'en-tête, après les colonnes inconnues (à leur place),
+        défaut saisie ; valeur déjà là jamais écrasée ; table du format 4 déjà là gardée telle quelle (lignes
+        comprises) ; tables absentes créées vides ; colonnes avec BOM ou espaces reconnues ; pure et idempotente."""
+        r = self.evaluer("""() => {
+          const colonnes3 = Formats.colonnes('controles_reglementaires', 3);
+          const base = { tables: {
+            controles_reglementaires: { entete: colonnes3.concat(['remarque_maison']), lignes: [
+              Object.assign(Object.fromEntries(colonnes3.map((c) => [c, ''])), { id: 'CTR-0001', remarque_maison: 'r' }),
+              Object.assign(Object.fromEntries(colonnes3.map((c) => [c, ''])),
+                { id: 'CTR-0002', remarque_maison: '', source_periodicite: 'catalogue' }),
+            ] },
+            habilitations: { entete: ['id', 'note', 'intitule', ' Recyclage Mois '], lignes: [
+              { id: 'HAB-0001', note: 'n', intitule: 'B1V', ' Recyclage Mois ': '36' }] },
+            reserves_controle: { entete: ['id', 'controle_id', 'texte'], lignes: [
+              { id: 'RES-00007', controle_id: 'CTR-0001', texte: 'garde-corps' }] },
+            parametres: { entete: ['cle', 'valeur'], lignes: [{ cle: 'version_schema', valeur: '3' }] },
+          } };
+          const avant = JSON.stringify(base);
+          const quatre = Formats.ETAPES[2].appliquer(base);
+          return { intacte: JSON.stringify(base) === avant, quatre, rejouee: Formats.ETAPES[2].appliquer(quatre),
+            rien: Formats.ETAPES[2].appliquer(null), schemaReserves: Formats.colonnes('reserves_controle') };
+        }""")
+        self.assertTrue(r["intacte"])
+        quatre = r["quatre"]["tables"]
+        self.assertEqual(r["rejouee"]["tables"], quatre)
+        controles = quatre["controles_reglementaires"]
+        self.assertEqual(controles["entete"][-5:], ["remarque_maison"] + COLONNES_AJOUTEES[4]["controles_reglementaires"])
+        self.assertEqual([(l["remarque_maison"], l["source_periodicite"], l["nature_source"], l["catalogue_relu_le"])
+                          for l in controles["lignes"]], [("r", "saisie", "", ""), ("", "catalogue", "", "")])
+        # Colonne déjà là (nom avec espaces et majuscules) : reconnue, pas de doublon ; les autres en fin
+        habilitations = quatre["habilitations"]
+        self.assertEqual(habilitations["entete"], ["id", "note", "intitule", " Recyclage Mois ", "technicien_id",
+                                                   "date_obtention", "date_echeance", "justificatif", "catalogue_id",
+                                                   "nature_source"])
+        self.assertEqual(habilitations["lignes"][0][" Recyclage Mois "], "36")
+        self.assertNotIn("recyclage_mois", habilitations["lignes"][0])
+        # Table du format 4 déjà là : lignes gardées, colonnes manquantes en fin (levee : défaut 0)
+        reserves = quatre["reserves_controle"]
+        self.assertEqual(reserves["entete"][:3], ["id", "controle_id", "texte"])
+        self.assertEqual(sorted(reserves["entete"]), sorted(r["schemaReserves"]))
+        self.assertEqual(reserves["lignes"][0]["texte"], "garde-corps")
+        self.assertEqual(reserves["lignes"][0]["levee"], "0")
+        self.assertEqual(len(reserves["lignes"]), 1)
+        self.assertEqual(quatre["garanties"]["lignes"], [])
+        self.assertEqual(quatre["contrats_prestataires"]["lignes"], [])
+        self.assertEqual(quatre["parametres"]["lignes"], [{"cle": "version_schema", "valeur": "4"}])
+        self.assertEqual(len(r["rien"]["tables"]), NB_TABLES)
+
     def test_migrer_etapes_choisies_et_erreurs(self):
         r = self.evaluer("""() => {
           const base = { tables: { ordres_travail: { entete: Formats.colonnes('ordres_travail', 1), lignes: [] } } };
@@ -576,10 +720,11 @@ class TestFormats(CasNavigateur):
             versDeux: { journal: versDeux.journal, entete: versDeux.base.tables.ordres_travail.entete.slice(-1),
               tables: Object.keys(versDeux.base.tables).length,
               version: versDeux.base.tables.parametres.lignes[0].valeur },
-            depuisZero: Formats.migrer(base, 0, 3).journal,
-            depuisDemi: Formats.migrer(base, 2.5, 3).journal,
+            depuisZero: Formats.migrer(base, 0, Formats.courant).journal,
+            depuisDemi: Formats.migrer(base, 2.5, Formats.courant).journal,
+            versTrois: Formats.migrer(base, 1, 3).journal,
             egal: Formats.migrer(base, 2, 2).base === base,
-            cibleTropGrande: erreur(() => Formats.migrer(base, 1, 4)),
+            cibleTropGrande: erreur(() => Formats.migrer(base, 1, Formats.courant + 1)),
             cibleNulle: erreur(() => Formats.migrer(base, 0, 0)),
             cibleDecimale: erreur(() => Formats.migrer(base, 1, 2.5)),
             departIllisible: erreur(() => Formats.migrer(base, NaN, 3)),
@@ -589,7 +734,8 @@ class TestFormats(CasNavigateur):
         self.assertEqual(r["versDeux"], {"journal": ["passage au format 2 du fichier"], "entete": ["anomalie_constatee"],
                                          "tables": 22, "version": "2"})
         self.assertEqual(r["depuisZero"], LIGNES_DE_JOURNAL[1])
-        self.assertEqual(r["depuisDemi"], ["passage au format 3 du fichier"])
+        self.assertEqual(r["depuisDemi"], LIGNES_DE_JOURNAL[2])
+        self.assertEqual(r["versTrois"], LIGNES_DE_JOURNAL[1][:2])
         self.assertTrue(r["egal"])
         for cle in ("cibleTropGrande", "cibleNulle", "cibleDecimale"):
             self.assertRegex(r[cle] or "", r"^RangeError : Formats\.migrer : format cible inconnu", cle)

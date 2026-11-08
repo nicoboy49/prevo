@@ -1,14 +1,20 @@
 'use strict';
 // Formats : registre des formats des fichiers de données (chantier « socle de données », décisions D167 et D168).
 // Contrat : docs/ARCHITECTURE.md §1 (chargé juste après js/schema.js), §4 (schéma), §5.6 (passage au format
-// courant), §14.1 (format 2) et §20.2 (format 3).
+// courant), §14.1 (format 2) et §20.2 (format 3) ; docs/FORMAT.md (format 4).
 // Le format est un entier (Schema.version), distinct de la version de l'application (2.0.0) ; celui d'une base est
 // parametres.version_schema (absent ou illisible : format 1). Tout est dérivé de Schema : une table ou un champ qui
 // porte depuisVersion: N n'existe qu'à partir du format N ; les autres existent depuis le format 1.
 //   - format 1 : les 22 tables du brief, sans les colonnes marquées depuisVersion ;
 //   - format 2 : + equipements.valeur_remplacement, demandes.symptome_code, demandes.ot_origine_id,
 //                ordres_travail.anomalie_constatee (§14.1) ;
-//   - format 3 : + ordres_travail.astuce et les tables wiki_pages, wiki_journal (§20.2).
+//   - format 3 : + ordres_travail.astuce et les tables wiki_pages, wiki_journal (§20.2) ;
+//   - format 4 (2.2) : + equipements.cout_arret_h, ordres_travail.habilitation_requise, quatre colonnes
+//                d'habilitations et quatre de controles_reglementaires, et les tables reserves_controle, garanties,
+//                contrats_prestataires (27 tables).
+// Place des colonnes (toutes les étapes) : les colonnes du fichier, connues ou inconnues du schéma, restent dans leur
+// ordre ; les colonnes que l'étape ajoute vont en fin d'en-tête, après elles, dans l'ordre du schéma (serveur.py fait
+// de même).
 // Les étapes de migration (ETAPES) sont explicites, une par passage de N à N+1, pures (l'entrée n'est jamais
 // modifiée) et idempotentes (rejouée, une étape ne change rien). migrer() les enchaîne et rend une ligne de journal
 // par étape, exactement « passage au format N du fichier » : ce texte est relu par la suggestion S4
@@ -225,6 +231,12 @@ const Formats = (function () {
       + 'en fin de table.'),
     etape(2, 3, 'Format 3 (versions 1.2 et 2.0, §20.2) : colonne ordres_travail.astuce en fin de table, '
       + 'tables wiki_pages et wiki_journal (vides).'),
+    etape(3, 4, 'Format 4 (version 2.2) : colonnes equipements.cout_arret_h, ordres_travail.habilitation_requise, '
+      + 'habilitations.recyclage_mois, habilitations.justificatif, habilitations.catalogue_id, '
+      + 'habilitations.nature_source, controles_reglementaires.source_periodicite (défaut saisie), '
+      + 'controles_reglementaires.nature_source, controles_reglementaires.catalogue_id et '
+      + 'controles_reglementaires.catalogue_relu_le en fin de table ; tables reserves_controle (observations '
+      + 'reprises, une réserve par ligne, D183), garanties et contrats_prestataires (vides).'),
   ]);
 
   // Ligne de journal d'une étape : texte exact relu par la suggestion S4.

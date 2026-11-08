@@ -80,8 +80,9 @@ const StockageDossier = (() => {
   // au format N) ou « _avant-import » (juste avant un import, lot 5). En JavaScript, \d ne reconnaît
   // que 0-9, comme [0-9] côté serveur.
   const MOTIF_NOM_SAUVEGARDE = /^\d{4}-\d{2}-\d{2}(_\d{6}(_avant-restauration|_avant-format-v\d+|_avant-import-zip|_avant-import|_avant-mise-a-jour)?)?$/;
-  // Motifs acceptés par sauvegarder(motif) : liste FERMÉE, la même que MOTIFS_SAUVEGARDE de serveur.py.
-  const MOTIFS_SAUVEGARDE = ['avant-format-v2', 'avant-format-v3', 'avant-import', 'avant-import-zip', 'avant-mise-a-jour'];
+  // Motifs acceptés par sauvegarder(motif) : liste FERMÉE, la même que MOTIFS_SAUVEGARDE de serveur.py (sur une seule
+  // ligne : tests/test_sauvegardes_socle.py la lit comme du texte).
+  const MOTIFS_SAUVEGARDE = ['avant-format-v2', 'avant-format-v3', 'avant-format-v4', 'avant-import', 'avant-import-zip', 'avant-mise-a-jour'];
   // 'html' : rapport mensuel figé (lot 3, ARCHITECTURE.md §15.1).
   // Les mêmes que TYPES_DOCUMENTS de serveur.py (audit F4 : « .doc » et « .xls » ne sont plus acceptés).
   const EXTENSIONS_DOCUMENTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'docx',
