@@ -23,6 +23,11 @@
       "raison": "Consignes envoyées au modèle, jamais affichées (inventaire du Lot 0 : 240 chaînes). Les messages affichés de ce fichier (proposition refusée, check-list ou commentaire refusés) passent par I18n.t, repris à la main (T247)."
     },
     {
+      "chemin": "js/modules/ia-masquage.js",
+      "classe": "D159",
+      "raison": "Masquage avant l'envoi à l'IA (audit I4) : « [téléphone] », « [courriel] » remplacent les numéros et adresses dans le texte envoyé au modèle, jamais affichés (sorti de ia-prompts.js au Lot 5, T374)."
+    },
+    {
       "chemin": "js/demo-donnees.js",
       "classe": "D146",
       "raison": "Jeu de données de démonstration (des données, pas l'interface)."
@@ -180,7 +185,7 @@
         "js/modules/wiki-regles.js"
       ],
       "classe": "D159",
-      "raison": "Vocabulaire de la sécurité (D97) cherché dans les textes du wiki, jamais affiché ; recopié dans la consigne de l'IA : traduit au Lot 5 avec le contrôle « consignes de sécurité » (T241)."
+      "raison": "Vocabulaire de la sécurité (D97) cherché dans les textes du wiki, jamais affiché ; recopié dans la consigne de l'IA ; union des listes par langue (T241, T374)."
     },
     {
       "variable": "VOCABULAIRE_NOUVEAUTE",
@@ -188,7 +193,71 @@
         "js/modules/wiki-regles.js"
       ],
       "classe": "D159",
-      "raison": "Vocabulaire de la nouveauté (D111) cherché dans les textes rédigés par l'IA, jamais affiché ; la rédaction du wiki par l'IA reste en français jusqu'au Lot 5 (T241)."
+      "raison": "Vocabulaire de la nouveauté (D111) cherché dans les textes rédigés par l'IA, jamais affiché ; union des listes par langue (T241, T374)."
+    },
+    {
+      "variable": "FIN_NOUVEAUTE",
+      "fichiers": [
+        "js/modules/wiki-regles.js"
+      ],
+      "classe": "D159",
+      "raison": "Fin de la ligne de la nouveauté de la consigne d'ingestion du wiki (en français, D159), ancre du complément par langue (T374)."
+    },
+    {
+      "variable": "FIN_MOTS_REFUSES",
+      "fichiers": [
+        "js/modules/wiki-regles.js"
+      ],
+      "classe": "D159",
+      "raison": "Fin de la ligne des mots refusés de la consigne d'ingestion du wiki (en français, D159), ancre du complément par langue (T374)."
+    },
+    {
+      "variable": "UNITES",
+      "fichiers": [
+        "js/modules/wiki-texte.js"
+      ],
+      "classe": "D159",
+      "raison": "Unités qui font d'un 19xx ou 20xx une quantité, dans les cinq langues (Lot 5, T374) : jamais affichées."
+    },
+    {
+      "variable": "MOIS",
+      "fichiers": [
+        "js/modules/wiki-texte.js"
+      ],
+      "classe": "D159",
+      "raison": "Noms des mois des cinq langues (Lot 5, T374) : une date ne s'écrit pas dans le wiki ; cherchés, jamais affichés."
+    },
+    {
+      "variable": "MOTS_NOMBRES",
+      "fichiers": [
+        "js/modules/wiki-texte.js"
+      ],
+      "classe": "D159",
+      "raison": "Nombres en lettres des cinq langues (Lot 5, T374) : cherchés dans les textes du wiki, jamais affichés."
+    },
+    {
+      "variable": "COMPTES",
+      "fichiers": [
+        "js/modules/wiki-texte.js"
+      ],
+      "classe": "D159",
+      "raison": "Noms qu'un comptage précède (« 3 fois », « three times », « üç kez »…), dans les cinq langues (Lot 5, T374) : cherchés dans les textes du wiki, jamais affichés."
+    },
+    {
+      "variable": "VOCABULAIRE_NOUVEAUTE_PAR_LANGUE",
+      "fichiers": [
+        "js/modules/wiki-regles.js"
+      ],
+      "classe": "D159",
+      "raison": "Vocabulaire de la nouveauté par langue (Lot 5, T374) : cherché dans les textes rédigés par l'IA, jamais affiché."
+    },
+    {
+      "variable": "VOCABULAIRE_SECURITE_PAR_LANGUE",
+      "fichiers": [
+        "js/modules/wiki-regles.js"
+      ],
+      "classe": "D159",
+      "raison": "Vocabulaire de la sécurité par langue (fr, en, tr, it, pt-PT ; Lot 5, T374) : cherché dans les textes du wiki, jamais affiché ; cité dans la consigne de l'IA de la langue de l'installation."
     },
     {
       "variable": "LEXIQUE",
@@ -238,6 +307,14 @@
       ],
       "classe": "identifiants",
       "raison": "Feuille de style CSS de la page du rapport figé : du code de mise en page, aucun texte affiché (T243)."
+    },
+    {
+      "variable": "COMPLEMENT_CONSIGNE",
+      "fichiers": [
+        "js/modules/wiki-regles.js"
+      ],
+      "classe": "D159",
+      "raison": "Morceaux du complément de la consigne d'ingestion du wiki, en français comme elle (Wiki.consigneDansLaLangue, Lot 5, T374) : envoyés au modèle, jamais affichés."
     }
   ],
   "textes": [

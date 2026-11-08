@@ -228,6 +228,22 @@ class TestVocabulaireDeSecurite(CasControles):
             with self.subTest(faux_ami=phrase):
                 self.assertEqual(self.termes(phrase), [])
 
+    def test_vocabulaire_de_securite_dans_les_langues_du_lot_5(self):
+        """T374 (D159) : le wiki peut être rédigé dans la langue de l'installation ; le contrôle vaut en anglais, turc,
+        italien et portugais, sans refuser les faux amis du métier (roulement grippé, option activée, soupape)."""
+        for phrase in ("Apply lockout/tagout before opening", "Switch off the power first", "Wear safety glasses",
+                       "Kilitleme etiketleme uygulayın", "Önce enerjiyi kesin", "Kişisel koruyucu donanım kullanın",
+                       "Eldiven giyin", "Mettere in sicurezza la macchina", "Usare i DPI", "Togliere la tensione",
+                       "Colocar o cadeado", "Desligar a energia antes", "Usar luvas de proteção"):
+            with self.subTest(phrase=phrase):
+                self.assertNotEqual(self.termes(phrase), [])
+        for phrase in ("Rulman kilitlendi, değiştirildi", "Kısa devre, sigorta değişti", "Wi-Fi abilitato sul pannello",
+                       "The safety valve leaks", "La valvola di sicurezza perde", "A válvula de segurança fuga"):
+            with self.subTest(faux_ami=phrase):
+                self.assertEqual(self.termes(phrase), [])
+        # ı turc : « kısa » reste un mot entier (sinon « k sa ») ; İ, ş, ğ, ç perdent leurs signes.
+        self.assertEqual(self.page.evaluate("Wiki.comparable('Kısa İŞLEM ağır Çok')"), "kisa islem agir cok")
+
     def test_messages_rubriques_et_limites(self):
         self.assertEqual(self.page.evaluate("Wiki.MESSAGE_SECURITE_IA"),
                          "L'IA ne rédige jamais de consigne de sécurité : voir la consignation de l'équipement")
@@ -408,6 +424,19 @@ class TestControles(CasControles):
         self.refus(ajouter_phrase(VALABLE, "Fuite jamais vue avant 2026 [OT-2026-0042]"), "aucune date dans le wiki")
         self.refus(ajouter_phrase(VALABLE, "Le kit posé avant 2025 a tenu [OT-2026-0042]"), "aucune date dans le wiki")
         self.refus(ajouter_phrase(VALABLE, "Garniture changée trente fois [OT-2026-0042]"), "comptage interdit")
+        # T374 (Lot 5) : comptages et mois dans les langues où le wiki peut être rédigé.
+        for phrase in ("Seal replaced three times", "Salmastra sostituita tre volte", "Vedante trocado três vezes",
+                       "Conta-se cinco avarias", "Conta beş arıza", "Sono stati tre guasti"):
+            with self.subTest(comptage=phrase):
+                self.refus(ajouter_phrase(VALABLE, phrase + " [OT-2026-0042]"), "comptage interdit")
+        for phrase in ("Leak found in June", "Perdita trovata a giugno", "Fuga encontrada em junho",
+                       "Sızıntı haziran ayında görüldü"):
+            with self.subTest(mois=phrase):
+                self.refus(ajouter_phrase(VALABLE, phrase + " [OT-2026-0042]"), "aucune date dans le wiki")
+        for phrase in ("The pump may leak at start-up", "Bakım aralığı kısaltıldı", "Check the seal on replacement"):
+            with self.subTest(faux_ami=phrase):
+                raisons = self.controler(ajouter_phrase(VALABLE, phrase + " [OT-2026-0042]"))["raisons"]
+                self.assertFalse(any("aucune date" in r or "comptage interdit" in r for r in raisons), raisons)
         # Un numéro d'OT n'est pas un nombre connu : « 2026 » ne vient que des citations.
         raisons = self.refus(ajouter_phrase(VALABLE, "Compteur à 2026 heures [OT-2026-0042]"),
                              "nombre « 2026 » absent de l'OT intégré et du texte d'avant de cette page")

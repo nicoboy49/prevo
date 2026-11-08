@@ -324,7 +324,10 @@ Object.assign(Demandes, (() => {
     App.ecran({
       id: 'nouvelle-di', route: /^#\/di\/nouvelle$/,
       get titre() { return I18n.t('demandes.ecran.nouvelle_titre'); },
-      menu: { get libelle() { return I18n.t('demandes.menu.signaler'); }, icone: 'ajouter', ordre: 15 },
+      // court : barre du bas des téléphones (cinq onglets ; le libellé entier ne tient pas en anglais ni dans les
+      // langues du Lot 5).
+      menu: { get libelle() { return I18n.t('demandes.menu.signaler'); },
+        get court() { return I18n.t('demandes.menu.signaler_court'); }, icone: 'ajouter', ordre: 15 },
       profils: tousProfils, tables: [],
       afficher: afficherNouvelle,
     });

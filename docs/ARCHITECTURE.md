@@ -22,7 +22,9 @@ css/modules/*.css          mise en page propre à chaque module (une feuille par
 css/polices/               police Sora (OFL)
 js/lib/                    bibliothèques tierces + LICENCES.txt (jamais modifiées)
 js/i18n.js                 I18n      : moteur de traduction (t, html, pluriels, repli, data-i18n ; multilingue)
-js/i18n/langues.js         langues déclarées ; js/i18n/<code>.js : textes d'une langue, un bloc par section
+js/i18n/langues.js         langues déclarées (statut automatique : mention « Traduction automatique — corrections
+                           bienvenues » et formulaire GitHub, Apropos.mentionTraduction ; aide: 'en' : aide longue
+                           prise en anglais, I18n.langueDeLAide, D158 ; Lot 5, T343) ; js/i18n/<code>.js : textes d'une langue, un bloc par section
 js/i18n/aide/<code>.js     aide longue d'une langue (clés aide.*, repli silencieux sur le français)
 js/i18n-chargeur.js        ajoute la langue active (si ce n'est pas le français) avant js/schema.js
 js/schema.js               Schema    : description des 22 tables (champs, types, identifiants)
@@ -64,7 +66,7 @@ chantier « socle de données »),
 `js/stockage-demo.js`, `js/interface.js`, les fichiers de `js/modules/` dans l'ordre exact du
 §15.1 (il remplace, depuis le lot 3, celui du §14.2 ; le lot 3 bis y insère `suggestions-regles.js` et
 `suggestions-ecrans.js` juste après `preventif-calendrier.js`, §16.1 ; le lot 4 insère `ia.js`,
-`ia-prompts.js`, `ia-encadre.js`, `dictee.js`, `poste.js` juste après `causes-frequentes.js`, §17.1 ;
+`ia-masquage.js` (Lot 5, T374 : `Ia.masquer`), `ia-prompts.js`, `ia-encadre.js`, `dictee.js`, `poste.js` juste après `causes-frequentes.js`, §17.1 ;
 le lot 5 ajoute les sept fichiers `import-*.js` à la fin, après `parametres-codes.js`, §18.1, et
 `accueil-bento.js` juste après `accueil.js`, §19 ; le lot 7 insère `aide-ecrans-textes.js`, `aide-ecrans.js` et
 `acces-textes.js` juste après `mise-a-jour.js` (§23, §22.2), `ia-serveur.js` juste après `ia-encadre.js` (§22.12),
@@ -4539,7 +4541,13 @@ signale jamais.
   « Réception ACH- », « Ancien n° : »…) restent fixes ; le détail qui les suit s'écrit dans la langue de
   l'installation (§24.1, `I18n.donnees`), jamais dans celle de l'écran.
 - **D157** : la console et les lanceurs (messages pour qui maintient l'application).
-- **D159** : les consignes envoyées à l'assistant IA restent en français (avec « réponds en <langue> »).
+- **D159** : les consignes envoyées à l'assistant IA restent en français (avec « réponds en <langue> »). Lot 5 (T374) :
+  le wiki est rédigé par l'IA dans la langue de l'installation (`I18n.langueDesDonnees`) ; ses garde-fous valent dans
+  les cinq langues — vocabulaires de la sécurité et de la nouveauté par langue (`Wiki.VOCABULAIRE_*_PAR_LANGUE`, leur
+  union dans `Wiki.VOCABULAIRE_*`), mois, nombres en lettres, comptages et unités (`wiki-texte.js`), forme comparable
+  qui garde le ı turc ; la consigne française est inchangée, celle d'une autre langue cite aussi ses mots refusés ;
+  le masquage avant envoi reconnaît les numéros internationaux (+ ou 00, turcs, portables italiens et britanniques,
+  portugais).
 - **identifiants** : identifiants, noms de fichiers, en-têtes CSV, codes, sélecteurs, reconnus automatiquement par
   l'outil. **titre-initial** : le `<title>` nu de `index.html` avant le chargement des scripts, remplacé ensuite par
   `App.definirTitre`.

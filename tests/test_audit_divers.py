@@ -22,7 +22,7 @@ import zipfile
 from commun import RACINE, CasNavigateur, charger_scripts
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/interface.js",
-           "js/modules/ia.js", "js/modules/ia-prompts.js"]
+           "js/modules/ia.js", "js/modules/ia-masquage.js", "js/modules/ia-prompts.js"]
 
 # Numéro de téléphone français : 0X XX XX XX XX ou +33 / 0033, groupes collés ou séparés par un même caractère.
 # Pas précédé d'un chiffre, d'une lettre, d'un point ou d'une virgule (décimales « 0.0514459929 ») ; sauf une
@@ -117,9 +117,21 @@ class TestMasquage(CasNavigateur):
             with self.subTest(source=source):
                 self.assertEqual(self.masquer(source), attendu)
 
+    def test_masque_les_formats_internationaux(self):
+        """T374 (Lot 5, D159) : indicatif + ou 00 de tout pays, numéros turcs, portables italiens, portugais, portables
+        britanniques."""
+        for numero in ("+90 532 123 45 67", "0532 123 45 67", "0212 555 12 34", "+39 333 123 4567", "333 123 4567",
+                       "+351 912 345 678", "912 345 678", "00351 21 123 4567", "+44 7911 123456", "07911 123456",
+                       "+44 (0)20 7946 0958", "0044 20 7946 0958", "+1 415-555-0132"):
+            with self.subTest(numero=numero):
+                self.assertEqual(self.masquer("appeler " + numero + " demain"), "appeler [téléphone] demain")
+
     def test_laisse_intacts_ot_dates_et_nombres_techniques(self):
         for texte in ("OT-2026-0107", "[OT-2026-0107]", "15 855 h", "0,58 bar", "19/10/2026", "2026-10-19 08:30",
-                      "05.10.2026 08:30", "1 200 tr/min", "réf. 6205-2RS", "jeu 0,05 mm", "SN-000777", "12 345 678"):
+                      "05.10.2026 08:30", "1 200 tr/min", "réf. 6205-2RS", "jeu 0,05 mm", "SN-000777", "12 345 678",
+                      # T374 : rien de ce qui ressemble à un numéro international sans en être un
+                      "1 500 000 €", "3 x 400 V", "230 V 50 Hz", "+5 %", "+20 °C", "10 000 h", "24 000 tr/min",
+                      "1 234 567", "lot 2026-11-08-001"):
             with self.subTest(texte=texte):
                 self.assertEqual(self.masquer(texte), texte)
         self.assertEqual(self.masquer("OT-2026-0107 le 19/10/2026 : 0,58 bar à 15 855 h, appeler 06 39 98 00 12"),

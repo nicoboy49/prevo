@@ -52,31 +52,15 @@ Object.assign(Ia, (() => {
     return valeur === null || valeur === undefined ? '' : String(valeur).trim();
   }
 
-  // Masquage avant l'envoi (audit I4, ARCHITECTURE.md §22.12) : les textes libres d'un atelier (descriptions, comptes
-  // rendus, notes, astuces, pages du wiki) peuvent contenir un numéro de téléphone ou une adresse de courriel ; ils
-  // partent remplacés par « [téléphone] » et « [courriel] ». Numéros français : 0X XX XX XX XX ou +33 X XX XX XX XX
-  // (aussi 0033), groupes collés ou séparés par un même caractère (espace, point ou tiret), « (0) » toléré après +33.
-  // Un même séparateur partout : une date « 05.10.2026 08:30 » ou un OT « OT-2026-0107 » ne ressemble pas à un numéro ;
-  // ni « 15 855 h » ni « 0,58 bar » (pas de 0 suivi de neuf chiffres).
-  const MOTIF_COURRIEL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
-  const MOTIF_TELEPHONE = new RegExp('(?<![\\p{L}\\p{N}])(?:(?:\\+|00)33[ .-]?(?:\\(0\\)[ .-]?)?|0)[1-9]([ .-]?)\\d{2}'
-    + '(?:\\1\\d{2}){3}(?![\\p{L}\\p{N}])', 'gu');
-
-  /** Texte → le même texte, numéros de téléphone et adresses de courriel remplacés (« [téléphone] », « [courriel] »). */
-  function masquer(valeur) {
-    return (valeur === null || valeur === undefined ? '' : String(valeur))
-      .replace(MOTIF_COURRIEL, '[courriel]').replace(MOTIF_TELEPHONE, '[téléphone]');
-  }
-
   // Texte d'une ligne : masqué, espaces et sauts de ligne réduits, longueur bornée. Tout texte d'atelier envoyé à l'IA
   // passe par uneLigne ou bloc (toutes les fonctions, ingestion du wiki et relance comprises).
   function uneLigne(valeur, max) {
-    return masquer(texte(valeur)).replace(/\s+/g, ' ').slice(0, max || CHAMP_MAX);
+    return Ia.masquer(texte(valeur)).replace(/\s+/g, ' ').slice(0, max || CHAMP_MAX);
   }
 
   // Texte de plusieurs lignes (notes, compte rendu) : masqué, fins de ligne normalisées, longueur bornée.
   function bloc(valeur, max) {
-    return masquer(texte(valeur)).replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').slice(0, max || CHAMP_MAX);
+    return Ia.masquer(texte(valeur)).replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').slice(0, max || CHAMP_MAX);
   }
 
   function ligne(libelle, valeur) {
@@ -456,9 +440,8 @@ Object.assign(Ia, (() => {
     ]);
   }
 
-  const ingestionWiki = {
-    langue: 'fr',                             // D159 : la rédaction du wiki par l'IA reste en français (traduite au Lot 5)
-    systeme: systeme('Fonction : ingestionWiki',
+  // Consigne d'ingestion du wiki, en français (D159) ; budget de 9 600 caractères (test_wiki_ingestion).
+  const SYSTEME_INGESTION_WIKI = systeme('Fonction : ingestionWiki',
       'intègre l\'ordre de travail (OT) ci-dessous au wiki de l\'atelier. Prévo calcule les faits (pannes, '
         + 'interventions, pièces, stock) ; tu rédiges seulement les textes reçus :\n'
         + '- « En bref » de la machine (type « équipement ») : ce qu\'il faut savoir d\'abord de cette machine, ses '
@@ -550,7 +533,16 @@ Object.assign(Ia, (() => {
       '{"rien_a_ajouter": false, "pages": [{"action": "modifier", "titre": "…", "type": "équipement | composant | '
         + 'savoir-faire", "rattache_a": "", "rubriques": [{"rubrique": "…", "phrases": [{"texte": "…", "ot": '
         + '["OT-AAAA-NNNN"]}]}]}, {"action": "creer", "titre": "…", "type": "savoir-faire", "rattache_a": "…", '
-        + '"rubriques": […]}], "contradictions": [{"page": "…", "phrase": "…", "observation": "…", "ot": ["OT-AAAA-NNNN"]}]}'),
+        + '"rubriques": […]}], "contradictions": [{"page": "…", "phrase": "…", "observation": "…", "ot": ["OT-AAAA-NNNN"]}]}');
+
+  // Lot 5 (T374) : dans une autre langue d'installation, la consigne cite aussi ses mots (Wiki.consigneDansLaLangue).
+  const systemeIngestionWiki = (code) => (typeof Wiki !== 'undefined' && Wiki.consigneDansLaLangue
+    ? Wiki.consigneDansLaLangue(SYSTEME_INGESTION_WIKI, code) : SYSTEME_INGESTION_WIKI);
+
+  const ingestionWiki = {
+    // D159, Lot 5 (T374) : rédigé dans la langue de l'installation (D156) ; garde-fous valables dans les 5 langues.
+    get langue() { return I18n.langueDesDonnees; },
+    get systeme() { return systemeIngestionWiki(I18n.langueDesDonnees); },
     utilisateur(d) {
       const pages = liste(d.pages);
       const dates = new Map();
@@ -695,6 +687,5 @@ Object.assign(Ia, (() => {
     valider: Object.freeze({ codes: codesProposes, impact, checkList: checkListe, commentaire }),
     codesConnus, consigneLangue,
     jetonsRapport,
-    masquer,
   };
 })());

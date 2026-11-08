@@ -1068,7 +1068,7 @@ I18n.ajouter('en', {
   'ordres.liste.ordres_travail': 'Work orders',
   'ordres.liste.ot_urgence': 'Emergency WO',
   'ordres.liste.preparer_planifier_executer_cloturer': 'Prepare, schedule, carry out and close jobs.',
-  'ordres.menu.court': 'Work orders',
+  'ordres.menu.court': 'Orders',
   'ordres.menu.libelle': 'Work orders',
   'ordres.mettre_ajour_gamme.module_preventif_pas_charge': 'the Preventive module is not loaded.',
   'ordres.mettre_ajour_gamme.ot_bien_cloture_mais': 'WO {otId} is closed, but task list {gamme_id} was not updated ({raisonErreur}): check its last completed date on the task list record.',
@@ -1331,6 +1331,7 @@ I18n.ajouter('en', {
   'demandes.liste.traiter_nouvelles': 'To deal with (new)',
   'demandes.menu.demandes': 'Requests',
   'demandes.menu.signaler': 'Report a problem',
+  'demandes.menu.signaler_court': 'Report',
   'demandes.message_deja_traitee.demande_deja_ete_traitee': 'This request has already been dealt with on another workstation',
   'demandes.nom_du_profil.responsable': 'Manager',
   'demandes.nouvelle.1_quel_equipement': '1. Which equipment?',
@@ -4134,6 +4135,9 @@ I18n.ajouter('en', {
   'apropos.suggestion.lien_courriel': 'by e-mail',
   'apropos.suggestion.navigateur_inconnu': 'unknown browser',
   'apropos.suggestion.titre_formulaire': '[Improvement] ',
+  'apropos.traduction.automatique': 'Machine translation',
+  'apropos.traduction.corrections': 'corrections welcome',
+  'apropos.traduction.titre_formulaire': '[Translation] ',
 });
 // ==== fin apropos ====
 

@@ -1329,6 +1329,7 @@ I18n.ajouter('fr', {
   'demandes.liste.traiter_nouvelles': 'À traiter (nouvelles)',
   'demandes.menu.demandes': 'Demandes',
   'demandes.menu.signaler': 'Signaler',
+  'demandes.menu.signaler_court': 'Signaler',
   'demandes.message_deja_traitee.demande_deja_ete_traitee': 'Cette demande a déjà été traitée sur un autre poste',
   'demandes.nom_du_profil.responsable': 'Responsable',
   'demandes.nouvelle.1_quel_equipement': '1. Quel équipement ?',
@@ -4132,6 +4133,9 @@ I18n.ajouter('fr', {
   'apropos.suggestion.lien_courriel': 'par e-mail',
   'apropos.suggestion.navigateur_inconnu': 'navigateur inconnu',
   'apropos.suggestion.titre_formulaire': '[Amélioration] ',
+  'apropos.traduction.automatique': 'Traduction automatique',
+  'apropos.traduction.corrections': 'corrections bienvenues',
+  'apropos.traduction.titre_formulaire': '[Traduction] ',
 });
 // ==== fin apropos ====
 

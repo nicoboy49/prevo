@@ -20,11 +20,23 @@
    1. Police et variables
    ========================================================================================= */
 
+/* Sora, sous-ensembles latin et latin-ext (@fontsource-variable/sora 5.2.5, OFL ; D162, Lot 5 : ğ, İ, ş du
+   turc, lettres du portugais et de l'italien) : chaque lettre est prise dans le fichier dont la plage la contient ; latin-ext AVANT latin (ordre de
+   fontsource) : un caractère des deux plages (U+2020, accents combinants) est pris dans latin, la dernière
+   règle déclarée étant consultée la première ; latin-ext ne se charge que pour ses lettres propres. */
+@font-face {
+  font-family: Sora;
+  src: url(polices/sora-latin-ext-wght-normal.woff2) format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 @font-face {
   font-family: Sora;
   src: url(polices/sora-latin-wght-normal.woff2) format('woff2');
   font-weight: 100 800;
   font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 :root {
@@ -383,6 +395,7 @@ legend { padding: 0 .4rem; font-weight: 700; color: var(--texte); }
    (l'écran « Ce poste » la propose toujours) */
 .menu-langue select { font-size: .875rem; padding: .4rem .7rem; border-radius: 12px; }
 .menu-suggestion { font-size: .8125rem; padding: 0 .4rem; }
+.menu-suggestion:empty { display: none; }   /* T343 : la mention de traduction n'existe que pour une langue automatique */
 .menu-suggestion a { color: var(--texte-2); text-decoration: underline; display: inline-flex; align-items: center; min-height: 44px; }   /* zone tactile de 44 px (test_bento) */
 
 /* Menu en icônes seules (replié sur grand écran, ou tablette) */

@@ -9,6 +9,7 @@ const Apropos = (() => {
   const ADRESSES = Object.freeze({
     depot: 'https://github.com/nicoboy49/prevo',
     suggestion: Object.freeze({ fr: '2-proposer-une-amelioration.yml', en: '3-suggest-an-improvement.yml' }),
+    traduction: '4-corriger-une-traduction.yml',          // Lot 5 (T343, CS161) : formulaire bilingue
     courriel: 'contact@prevo.pro',
   });
 
@@ -69,6 +70,18 @@ const Apropos = (() => {
   /** Lien « Suggérer une amélioration » (nouvel onglet) ; rien ne part tant qu'on ne clique pas. */
   function lienSuggestion(id) {
     return UI.html`<a id="${id}" href="${adresseSuggestion()}" target="_blank" rel="noopener noreferrer">${I18n.t('apropos.suggestion.lien')}</a>`;
+  }
+
+  /** Mention d'une langue traduite automatiquement (Lot 5, T343, CS161 ; statut « automatique » dans js/i18n/langues.js) :
+   *  « Traduction automatique — corrections bienvenues », le lien ouvrant (nouvel onglet) le formulaire d'issue
+   *  « Corriger une traduction » pré-rempli avec la langue et le même contexte que la suggestion. '' pour une autre
+   *  langue (français, anglais). Rien ne part tant qu'on ne clique pas. */
+  function mentionTraduction(id) {
+    const langue = I18n.langues.find((declaree) => declaree.code === I18n.langue);
+    if (!langue || langue.statut !== 'automatique') return '';
+    const adresse = ADRESSES.depot + '/issues/new?' + requete({ template: ADRESSES.traduction,
+      title: I18n.t('apropos.traduction.titre_formulaire'), langue: langue.code, contexte: contexteSuggestion() });
+    return UI.html`<span class="mention-traduction">${I18n.t('apropos.traduction.automatique')} — <a id="${id}" href="${adresse}" target="_blank" rel="noopener noreferrer">${I18n.t('apropos.traduction.corrections')}</a></span>`;
   }
 
   /** Crédit (signature) ; lu à l'affichage. */
@@ -156,6 +169,7 @@ const Apropos = (() => {
           <p>${I18n.html('apropos.ecran.ouvrir_guide_utilisation_demarrer', { guide: UI.adresseGuide() })}</p>
           <p id="apropos-suggestion">${lienSuggestion('apropos-suggestion-lien')} (<a id="apropos-suggestion-courriel" href="${adresseCourriel()}">${I18n.t('apropos.suggestion.lien_courriel')}</a>)</p>
           <p class="note">${I18n.t('apropos.suggestion.explication')}</p>
+          ${mentionTraduction('apropos-traduction-lien') ? UI.html`<p class="note" id="apropos-traduction">${mentionTraduction('apropos-traduction-lien')}</p>` : ''}
         </article>
         <article class="carte c6">
           <h2>${I18n.t('apropos.ecran.bibliotheques_licences')}</h2>
@@ -185,5 +199,6 @@ const Apropos = (() => {
     });
   });
 
-  return { get CREDIT() { return credit(); }, ADRESSES, navigateurReduit, adresseSuggestion, adresseCourriel, lienSuggestion, afficher };
+  return { get CREDIT() { return credit(); }, ADRESSES, navigateurReduit, adresseSuggestion, adresseCourriel, lienSuggestion,
+    mentionTraduction, afficher };
 })();

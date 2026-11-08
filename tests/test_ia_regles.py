@@ -35,7 +35,7 @@ from faux_wiki import lire_message
 
 CLE = "sk-test-cle-ia-prevo-5f3a9c"
 SCRIPTS_REGLES = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js", "js/interface.js",
-                  "js/modules/ia.js", "js/modules/ia-prompts.js", "js/modules/ia-encadre.js", "js/modules/ia-serveur.js"]
+                  "js/modules/ia.js", "js/modules/ia-masquage.js", "js/modules/ia-prompts.js", "js/modules/ia-encadre.js", "js/modules/ia-serveur.js"]
 FONCTIONS = ["reformulerDI", "compteRendu", "codes", "checkList", "commentaireRapport"]
 # Valeurs « interdites » glissées dans les données passées à Ia.demander : elles ne doivent jamais partir.
 MARQUEURS_INTERDITS = ["77.77", "987.65", "photo-secrete.jpg", "notice-secrete.pdf"]
@@ -993,6 +993,18 @@ class TestConsigneDeLangue(CasDemoIa):
         }""")
         self.assertEqual(langues, {"wiki": "Réponds en français (fr).", "wikiForce": "Réponds en anglais (en).",
                                    "rapport": "Réponds en français (fr).", "ecran": "Réponds en anglais (en)."})
+        # T374 (Lot 5, D159) : le wiki est rédigé dans la langue de l'installation (celle des données), quelle que soit
+        # celle de l'écran ; ici une installation anglaise.
+        wiki_installation = page.evaluate("""() => {
+          const d = { ot: { id: 'OT-2026-0001', dateIntervention: '2026-03-10 10:00', type: 'correctif immédiat', titre: 'T',
+              equipement: { repere: 'PO-02', designation: 'Pompe' } }, pages: [], catalogue: [] };
+          const avant = I18n.installation;
+          I18n.noterInstallation('en');
+          const fin = Ia.requete('ingestionWiki', d).messages[0].content.split('\\n\\n').pop();
+          I18n.noterInstallation(avant);
+          return fin;
+        }""")
+        self.assertEqual(wiki_installation, "Réponds en anglais (en).")
 
 
 # ---------------------------------------------------------------------------

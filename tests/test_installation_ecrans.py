@@ -549,7 +549,8 @@ class TestLangueDePrevo(CasInstallation):
         self.assertEqual(page.evaluate("I18n.langue"), "en")     # l'assistant dans la langue de la page (navigateur)
         self.solo_jusqu_au_recapitulatif()
         liste = page.evaluate(LISTE_LANGUE_JS)
-        self.assertEqual(liste["options"], [["fr", "Français", "fr"], ["en", "English", "en"]])
+        self.assertEqual(liste["options"], [["fr", "Français", "fr"], ["en", "English", "en"],
+                                            ["tr", "Türkçe", "tr"], ["it", "Italiano", "it"], ["pt-PT", "Português", "pt-PT"]])
         self.assertEqual(liste["valeur"], "en")
         self.assertEqual(liste["libelle"], texte_du_dictionnaire("en", "installation.formulaire_recapitulatif.langue_prevo"))
         self.assertEqual(liste["aide"], texte_du_dictionnaire("en", "installation.formulaire_recapitulatif.langue_prevo_aide"))

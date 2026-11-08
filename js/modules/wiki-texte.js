@@ -60,14 +60,32 @@ Object.assign(Wiki, (() => {
   const MOTIF_LIEN = /\[\[([^[\]]+)\]\]/g;
   const MOTIF_NOMBRE = /\d+(?:[.,]\d+)*/g;
   const MOTS_NOMBRES = ['deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze',
-    'treize', 'quatorze', 'quinze', 'seize', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'cent'];
+    'treize', 'quatorze', 'quinze', 'seize', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'cent',
+    // Lot 5 (T374) : anglais, turc, italien, portugais (forme comparable)
+    'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'twenty', 'thirty',
+    'hundred', 'iki', 'uc', 'dort', 'bes', 'alti', 'yedi', 'sekiz', 'dokuz', 'yirmi', 'otuz', 'yuz',
+    'due', 'tre', 'quattro', 'cinque', 'sei', 'sette', 'otto', 'nove', 'dieci', 'venti', 'trenta', 'cento',
+    'dois', 'duas', 'tres', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'vinte', 'trinta', 'cem'];
+  const COMPTES = ['fois', 'ot', 'interventions?', 'pannes?', 'cas', 'remplacements?',
+    'times', 'work orders?', 'wos?', 'failures?', 'breakdowns?', 'cases', 'replacements?',
+    'kez', 'kere', 'defa', 'is emri', 'ariza', 'vaka', 'degisim', 'mudahale',
+    'volte', 'odl', 'interventi', 'guasti', 'casi', 'sostituzioni',
+    'vezes', 'intervencoes', 'avarias', 'casos', 'substituicoes'];
   const MOTIF_COMPTAGE = new RegExp('(?:^| )(?:\\d+|' + MOTS_NOMBRES.join('|')
-    + ') (?:fois|ot|interventions?|pannes?|cas|remplacements?)(?= |$)');
+    + ') (?:' + COMPTES.join('|') + ')(?= |$)');
   const MOIS = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'aout', 'septembre', 'octobre',
-    'novembre', 'decembre'];
+    'novembre', 'decembre',
+    // Lot 5 (T374). Mois qui sont aussi des mots courants, écartés (refus à tort) : « may » (anglais), « ocak »
+    // (fourneau), « ekim » (semis), « aralik » (intervalle, fréquent en maintenance) en turc.
+    'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+    'subat', 'mart', 'nisan', 'mayis', 'haziran', 'temmuz', 'agustos', 'eylul', 'kasim',
+    'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre',
+    'dicembre', 'janeiro', 'fevereiro', 'abril', 'maio', 'junho', 'julho', 'setembro', 'outubro', 'novembro',
+    'dezembro'];
   const MOTIF_MOIS = new RegExp('(?:^| )(?:' + MOIS.join('|') + ')(?= |$)');
   // Unités qui font d'un 19xx ou 20xx une quantité ; pas d'unité d'une lettre ambiguë (« en 2026 a été… »).
-  const UNITES = 'h|heures?|bars?|mm|cm|km|kg|tr|tours?|litres?|kw|kva|mn|min|minutes?|secondes?|pieces?|cycles?';
+  const UNITES = 'h|heures?|bars?|mm|cm|km|kg|tr|tours?|litres?|kw|kva|mn|min|minutes?|secondes?|pieces?|cycles?'
+    + '|hours?|hrs?|liters?|rpm|turns?|parts?|saat|dakika|devir|parca|ore|litri|giri|pezzi|horas?|litros?|voltas?|pecas';
   const MOTIF_ANNEE = new RegExp('(?:^| )(?:19|20)\\d{2}(?= |$)(?! (?:' + UNITES + ')(?: |$))');
   const MOTIF_DATE_CHIFFRES = /(?:^|[^\d/.-])(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{2,4}|\d{2}[/.]\d{2})(?![\d/.])/;
   const MOTIF_NUMERO_OT = /\bOT-\d{4}-\d{4,}\b/g;

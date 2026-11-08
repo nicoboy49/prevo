@@ -63,6 +63,9 @@ Prévo affiche tous ses textes par ses dictionnaires ; le français est la réf�
 | Langues déclarées (code, nom dans sa langue, locale, statut) | `js/i18n/langues.js` |
 | Termes métier (un terme français = une traduction, partout) | [docs/GLOSSAIRE.md](docs/GLOSSAIRE.md) |
 
+**Signaler une traduction fausse** sans toucher au code : le formulaire « Corriger une traduction » sur GitHub
+(Prévo y renvoie, avec la langue et sa version, pour chaque langue traduite automatiquement).
+
 **Corriger une traduction** : changez la valeur dans `js/i18n/<code>.js`, jamais la clé. Gardez les `{variables}`
 telles quelles, et les formes de pluriel que demande la langue (par exemple `{ one: '…', other: '…' }`). Puis
 vérifiez :

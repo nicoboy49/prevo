@@ -69,6 +69,15 @@ const I18n = (function () {
     return declarees.find((langue) => langue.code === code) || null;
   }
 
+  /** Langue où prendre l'aide longue (clés aide.*) de `code` quand elle n'en a pas (« aide: '<code>' » dans
+   *  langues.js, D158) : une autre langue déclarée, autre que le français ; null sinon (repli habituel : français). */
+  function langueDeLAide(code) {
+    const langue = declaration(code);
+    const aide = langue && langue.aide;
+    return typeof aide === 'string' && aide !== code && aide !== LANGUE_DE_REFERENCE && Boolean(declaration(aide))
+      ? aide : null;
+  }
+
   // Code bien formé et déclaré (le français l'est toujours) ; toute autre valeur (vide, inconnue, mal formée) : faux.
   function estDeclaree(code) {
     return typeof code === 'string' && MOTIF_CODE.test(code) && (code === LANGUE_DE_REFERENCE || Boolean(declaration(code)));
@@ -183,6 +192,12 @@ const I18n = (function () {
     }
     const active = dictionnaires[langueActive];
     if (active && cle in active) return { valeur: active[cle], langue: langueActive };
+    // D158 (Lot 5, T343) : une langue sans aide longue traduite qui déclare « aide: '<code>' » (tr, it, pt-PT :
+    // l'anglais) prend les clés aide.* dans cette langue-là, sans avertissement, avant le français.
+    const repliAide = cle.indexOf(PREFIXE_AIDE) === 0 ? langueDeLAide(langueActive) : null;
+    if (repliAide && dictionnaires[repliAide] && cle in dictionnaires[repliAide]) {
+      return { valeur: dictionnaires[repliAide][cle], langue: repliAide };
+    }
     const reference = dictionnaires[LANGUE_DE_REFERENCE];
     if (reference && cle in reference) {
       if (langueActive !== LANGUE_DE_REFERENCE && cle.indexOf(PREFIXE_AIDE) !== 0) {
@@ -427,6 +442,7 @@ const I18n = (function () {
     langueDeLaPage: langueDeLaPage,
     /** Vrai pour un code bien formé et déclaré par js/i18n/langues.js (le français l'est toujours), faux sinon. */
     estDeclaree: estDeclaree,
+    langueDeLAide: langueDeLAide,
     installationDeLaPage: installationDeLaPage,
     langueDuNavigateur: langueDuNavigateur,
     noterInstallation: noterInstallation,

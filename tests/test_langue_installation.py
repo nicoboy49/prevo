@@ -200,7 +200,8 @@ class TestLangueInstallation(CasNavigateur):
                 section: [...document.querySelectorAll('#form-parametres > *')].slice(0, 4).map((e) => e.tagName === 'H3'
                   ? 'h3:' + e.textContent.trim() : e.dataset.champ) };
             }""", CHAMP_LANGUE)
-            self.assertEqual(champ["options"], [["", "—", ""], ["fr", "Français", "fr"], ["en", "English", "en"]])
+            self.assertEqual(champ["options"], [["", "—", ""], ["fr", "Français", "fr"], ["en", "English", "en"],
+                                                ["tr", "Türkçe", "tr"], ["it", "Italiano", "it"], ["pt-PT", "Português", "pt-PT"]])
             self.assertEqual(champ["valeur"], "fr")                                          # défaut
             self.assertEqual(champ["libelle"], texte_du_dictionnaire("fr", "parametres.libelle.langue_installation"))
             self.assertEqual(champ["aide"], texte_du_dictionnaire("fr", "parametres.aide.langue_proposee_postes_textes"))
@@ -360,7 +361,8 @@ class TestLangueInstallation(CasNavigateur):
         with ServeurPrevo(source=None) as serveur:
             self.page.goto(serveur.url + "/")
             liste = self.liste_base_vide()
-            self.assertEqual(liste["options"], [["fr", "Français", "fr"], ["en", "English", "en"]])
+            self.assertEqual(liste["options"], [["fr", "Français", "fr"], ["en", "English", "en"],
+                                                ["tr", "Türkçe", "tr"], ["it", "Italiano", "it"], ["pt-PT", "Português", "pt-PT"]])
             self.assertEqual(liste["valeur"], "fr")                                          # navigateur fr-FR
             self.assertEqual(liste["libelle"], texte_du_dictionnaire("fr", "socle.ecran_base_vide.langue_prevo"))
             self.assertEqual(liste["aide"], texte_du_dictionnaire("fr", "socle.ecran_base_vide.langue_prevo_aide"))

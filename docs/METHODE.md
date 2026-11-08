@@ -40,18 +40,18 @@ The human validates: the requirements and every product decision; security-relat
 - Green tests show that the cases written pass, not that no other defect exists. Independent review reduces this risk without removing it.
 - Performance figures come from one machine and one data set.
 - Some checks only real equipment can give (phones, a remote connection, a real network). They go through acceptance runs by the human, and their results are recorded only once done.
-- 2.0.0 has just been released: it has not yet been proven in the field for long. Version 1.2.1 remains available.
+- 2.0.0 and 2.1.0 have just been released: they have not yet been proven in the field for long. Version 1.2.1 remains available.
 
 ## 7. Figures
 
 | Figure | Value | Source |
 |---|---|---|
-| Commits in the repository | 476, from 2026-10-19 to 2026-11-08 | `git rev-list --count v2.0.0` |
-| Lot tags | 13 (`lot-1` to `lot-7`, `lot-3-bis`; `lot-i18n-1` to `lot-i18n-4` and `lot-i18n-6` for the multilingual work, whose Lot 5 comes next) | `git tag` |
+| Commits in the repository | 529, from 2026-10-19 to 2026-11-08 | `git rev-list --count v2.1.0` |
+| Lot tags | 14 (`lot-1` to `lot-7`, `lot-3-bis`; `lot-i18n-1` to `lot-i18n-6` for the multilingual work) | `git tag` |
 | Tests at the end of lot 1 | 411 | PILOTAGE.md §4 |
 | Tests at the end of lot 7 | 1,762 (full run: 39 minutes) | PILOTAGE.md §13 |
-| Last complete suite | 2,350 tests in 157 files, on 2.0.0 | complete run of 2026-11-08 |
-| Releases | 1.0.0 (2026-10-21), 1.1.0 (2026-10-22), 1.2.0 (2026-10-24 per CHANGELOG), 1.2.1 (2026-11-04), 2.0.0 beta 1 (2026-10-28), beta 2 (2026-11-05), 2.0.0 (2026-11-08) | CHANGELOG.md, git tags |
+| Last complete suite | 2,362 tests in 158 files, on 2.1.0 | complete run of 2026-11-08 |
+| Releases | 1.0.0 (2026-10-21), 1.1.0 (2026-10-22), 1.2.0 (2026-10-24 per CHANGELOG), 1.2.1 (2026-11-04), 2.0.0 beta 1 (2026-10-28), beta 2 (2026-11-05), 2.0.0 (2026-11-08), 2.1.0 (2026-11-08) | CHANGELOG.md, git tags |
 | Lot 1 organisation | 19 tasks, 7 waves, 4 reviews, 5 critical defects | PILOTAGE.md §2 and §3 |
 | Lot 7 organisation | 33 tasks in 12 waves, 45 commits | PILOTAGE.md §13 |
 | Dependencies added in lot 7 | none | PILOTAGE.md §13 |
@@ -74,4 +74,4 @@ The full list (eleven points) is in section 14 of [PILOTAGE.md](PILOTAGE.md).
 
 ---
 
-*Figures dated 2026-11-08 (Prévo 2.0.0). More detail, in French: [PILOTAGE.md](PILOTAGE.md). Project: <https://github.com/nicoboy49/prevo>.*
+*Figures dated 2026-11-08 (Prévo 2.1.0). More detail, in French: [PILOTAGE.md](PILOTAGE.md). Project: <https://github.com/nicoboy49/prevo>.*

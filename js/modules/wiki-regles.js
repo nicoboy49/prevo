@@ -67,24 +67,75 @@ const Wiki = (() => {
   // début de mot (« consign* » : consigner, consignation, consigne…) ; les autres sont des mots ou des
   // expressions entiers (« epi » ne doit pas refuser « épisodique », ni « vat » « Vatican »).
   // Un mot de la liste peut refuser à tort une puce anodine : on préfère refuser (le responsable reformule).
-  const VOCABULAIRE_SECURITE = Object.freeze([
-    'consign*', 'deconsign*', 'cadenas*', 'habilit*', 'electrocut*', 'lockout*',
-    'vat', 'epi', 'loto', 'gant', 'gants',
-    'absence de tension', 'hors tension',
-    'equipement de protection', 'equipements de protection', 'lunettes de protection',
-    'couper l alimentation', 'coupez l alimentation', 'couper le courant', 'coupez le courant',
-    'couper l energie', 'coupez l energie', 'couper l air', 'couper la pression', 'dissiper l energie',
-    'mise en securite', 'mettre en securite', 'regle de securite', 'regles de securite',
-    'mesure de securite', 'mesures de securite', 'pour votre securite',
-  ]);
+  // Par langue (Lot 5, T374, D159) : le wiki peut être rédigé dans la langue de l'installation ; le contrôle
+  // vaut pour toutes (union ci-dessous) ; la consigne de l'IA cite le français et la langue de l'installation.
+  // Turc en forme comparable (ı → i, ş → s, ğ → g) ; jamais « kilit* » seul (« kilitlendi » : roulement grippé) ;
+  // italien : jamais « abilitat* » (« abilitato » : option activée) ; portugais : consign*, habilit*, epi, loto valent.
+  const VOCABULAIRE_SECURITE_PAR_LANGUE = Object.freeze({
+    fr: Object.freeze(['consign*', 'deconsign*', 'cadenas*', 'habilit*', 'electrocut*', 'lockout*', 'vat', 'epi',
+      'loto', 'gant', 'gants', 'absence de tension', 'hors tension', 'equipement de protection',
+      'equipements de protection', 'lunettes de protection', 'couper l alimentation', 'coupez l alimentation',
+      'couper le courant', 'coupez le courant', 'couper l energie', 'coupez l energie', 'couper l air',
+      'couper la pression', 'dissiper l energie', 'mise en securite', 'mettre en securite', 'regle de securite',
+      'regles de securite', 'mesure de securite', 'mesures de securite', 'pour votre securite']),
+    en: Object.freeze(['tagout*', 'lock out', 'tag out', 'padlock*', 'deenergi*', 'de energise', 'de energize',
+      'zero energy', 'switch off the power', 'turn off the power', 'cut the power', 'isolate the power',
+      'isolate the supply', 'safe isolation', 'ppe', 'protective equipment', 'safety glasses', 'safety goggles',
+      'glove', 'gloves', 'electric shock', 'live parts', 'no voltage', 'test for dead', 'authorised person',
+      'authorized person', 'permit to work', 'safety rule', 'safety rules', 'safety measure', 'safety measures',
+      'for your safety', 'make safe', 'safety procedure', 'safety instructions']),
+    tr: Object.freeze(['kilitleme etiketleme', 'kilit etiket*', 'asma kilit*', 'enerjiyi kes*', 'elektrigi kes*',
+      'enerji izolasyon*', 'gerilimsiz*', 'gerilim yok*', 'kkd', 'kisisel koruyucu*', 'koruyucu ekipman*',
+      'koruyucu gozluk*', 'eldiven*', 'elektrik carpma*', 'yetki belgesi', 'is guvenligi', 'guvenlik kural*',
+      'guvenlik onlem*', 'guvenliginiz icin', 'emniyete al*']),
+    it: Object.freeze(['lucchett*', 'messa in sicurezza', 'mettere in sicurezza', 'sezionament*', 'sezionare',
+      'togliere tensione', 'togliere la tensione', 'assenza di tensione', 'fuori tensione', 'dpi',
+      'dispositivi di protezione', 'occhiali di protezione', 'guanto', 'guanti', 'folgorazione', 'elettrocuzione',
+      'abilitazione', 'patentino', 'norme di sicurezza', 'misure di sicurezza', 'regola di sicurezza',
+      'regole di sicurezza', 'per la tua sicurezza', 'per la vostra sicurezza', 'scaricare l energia']),
+    'pt-PT': Object.freeze(['cadeado*', 'bloqueio e etiquetagem', 'desligar a energia', 'cortar a energia',
+      'cortar a corrente', 'desligar a corrente', 'ausencia de tensao', 'sem tensao', 'fora de tensao',
+      'equipamento de protecao', 'equipamentos de protecao', 'oculos de protecao', 'luva', 'luvas', 'eletrocuss*',
+      'choque eletrico', 'regra de seguranca', 'regras de seguranca', 'medida de seguranca',
+      'medidas de seguranca', 'para sua seguranca', 'colocar em seguranca', 'por em seguranca']),
+  });
+  const VOCABULAIRE_SECURITE = Object.freeze([].concat(...Object.values(VOCABULAIRE_SECURITE_PAR_LANGUE)));
 
   // Vocabulaire de la nouveauté (D111), en forme comparable, mots ou expressions entiers : une phrase qui ne
   // repose que sur un OT antérieur aux faits de sa page ne peut pas présenter son information comme la plus récente.
-  const VOCABULAIRE_NOUVEAUTE = Object.freeze([
-    'desormais', 'dorenavant', 'maintenant', 'actuellement', 'a present', 'aujourd hui', 'recemment',
-    'dernierement', 'depuis peu', 'le plus recent', 'la plus recente', 'les plus recents', 'les plus recentes',
-    'dernier', 'derniere', 'derniers', 'dernieres', 'nouvelle cause', 'nouveau remede',
-  ]);
+  // Par langue (Lot 5, T374), comme la sécurité : union ci-dessous.
+  const VOCABULAIRE_NOUVEAUTE_PAR_LANGUE = Object.freeze({
+    fr: Object.freeze(['desormais', 'dorenavant', 'maintenant', 'actuellement', 'a present', 'aujourd hui',
+      'recemment', 'dernierement', 'depuis peu', 'le plus recent', 'la plus recente', 'les plus recents',
+      'les plus recentes', 'dernier', 'derniere', 'derniers', 'dernieres', 'nouvelle cause', 'nouveau remede']),
+    en: Object.freeze(['now', 'nowadays', 'currently', 'recently', 'lately', 'from now on', 'henceforth', 'today',
+      'latest', 'most recent', 'newest', 'new cause', 'new remedy', 'new fix']),
+    tr: Object.freeze(['artik', 'bundan boyle', 'simdi', 'su anda', 'halen', 'son zamanlarda', 'yakin zamanda',
+      'bugun', 'en son', 'en yeni', 'yeni neden', 'yeni cozum']),
+    it: Object.freeze(['ormai', 'd ora in poi', 'adesso', 'attualmente', 'oggi', 'recentemente', 'di recente',
+      'ultimamente', 'il piu recente', 'la piu recente', 'ultimo', 'ultima', 'ultimi', 'ultime', 'nuova causa',
+      'nuovo rimedio']),
+    'pt-PT': Object.freeze(['doravante', 'agora', 'atualmente', 'hoje', 'ultimamente', 'o mais recente',
+      'a mais recente', 'ultimos', 'ultimas', 'nova causa', 'novo remedio', 'nova solucao']),
+  });
+  const VOCABULAIRE_NOUVEAUTE = Object.freeze([].concat(...Object.values(VOCABULAIRE_NOUVEAUTE_PAR_LANGUE)));
+
+  // Consigne d'ingestion du wiki dans la langue de l'installation (Lot 5, T374) : la consigne française (D159) reste
+  // telle quelle en français ; dans une autre langue, sa ligne des mots refusés et celle de la nouveauté citent aussi
+  // les mots de cette langue (forme comparable ; « … » : tout mot qui commence ainsi).
+  const FIN_MOTS_REFUSES = 'pour votre sécurité ;\n';
+  const FIN_NOUVEAUTE = '« dernier »…).';
+  const COMPLEMENT_CONSIGNE = Object.freeze({ racine: '…', securite: 'pour votre sécurité ; dans la langue de la '
+    + 'réponse aussi : ', nouveaute: '« dernier »… ; ni ' });
+  function consigneDansLaLangue(consigne, code) {
+    const securite = code !== 'fr' && VOCABULAIRE_SECURITE_PAR_LANGUE[code];
+    if (!securite) return consigne;
+    const mots = (liste) => liste.map((e) => (e.endsWith('*') ? e.slice(0, -1) + COMPLEMENT_CONSIGNE.racine : e))
+      .join(', ');
+    return consigne
+      .replace(FIN_MOTS_REFUSES, COMPLEMENT_CONSIGNE.securite + mots(securite) + ' ;\n')
+      .replace(FIN_NOUVEAUTE, COMPLEMENT_CONSIGNE.nouveaute + mots(VOCABULAIRE_NOUVEAUTE_PAR_LANGUE[code] || []) + ').');
+  }
 
   // Raison du refus d'un texte qui touche à la sécurité (IA, à la main) : lue à l'affichage, jamais figée.
   function messageSecuriteIa() {
@@ -103,7 +154,7 @@ const Wiki = (() => {
 
   /** Forme comparable : minuscules, sans accents, ponctuation et apostrophes devenues des espaces. */
   function comparable(valeur) {
-    return texte(valeur).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+    return texte(valeur).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/ı/g, 'i')   // ı turc (Lot 5)
       .replace(/œ/g, 'oe').replace(/æ/g, 'ae').replace(/[^a-z0-9]+/g, ' ').trim();
   }
 
@@ -147,6 +198,7 @@ const Wiki = (() => {
 
   return {
     SEUILS, RUBRIQUES, RUBRIQUES_REECRITES, LIMITES, VOCABULAIRE_SECURITE, VOCABULAIRE_NOUVEAUTE,
+    VOCABULAIRE_SECURITE_PAR_LANGUE, VOCABULAIRE_NOUVEAUTE_PAR_LANGUE, consigneDansLaLangue,
     get MESSAGE_SECURITE_IA() { return messageSecuriteIa(); },
     get MESSAGE_SECURITE_MAIN() { return messageSecuriteMain(); },
     comparable, citations, sansCitations, nombreDeMots, termesDeSecurite,

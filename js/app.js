@@ -51,7 +51,7 @@
 
 const App = (() => {
 
-  const VERSION = '2.0.0';
+  const VERSION = '2.1.0';
   const DATE_VERSION = '2026-11-08';
   // Version web (démo en ligne, docs/DEPLOIEMENT_DEMO.md) : faux dans le dépôt et dans la release ;
   // outils/construire_demo_web.py le passe à vrai dans sa copie (dist/demo-web/). Vrai : l'écran de
@@ -1282,6 +1282,9 @@ const App = (() => {
     // T306 : « Suggérer une amélioration », sous la langue (l'adresse suit la langue active) ; cachée avec elle.
     const suggestion = UI.$('#menu-suggestion');
     if (suggestion) UI.remplir(suggestion, Apropos.lienSuggestion('menu-suggestion-lien'));
+    // T343 (CS161) : langue traduite automatiquement → « Traduction automatique — corrections bienvenues ».
+    const traduction = UI.$('#menu-traduction');
+    if (traduction) UI.remplir(traduction, Apropos.mentionTraduction('menu-traduction-lien'));
   }
 
   function appliquerRepli(replie) {

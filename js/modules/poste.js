@@ -596,6 +596,12 @@ const Poste = (() => {
       reglages.retenir = (code) => retenirLangue(code, portee());
     }
     langue.insertBefore(UI.selecteurLangue(reglages), langue.querySelector('.poste-langue-portee, .aide'));
+    // T343 (CS161) : sous la liste, pour une langue traduite automatiquement.
+    const mention = Apropos.mentionTraduction('poste-traduction-lien');
+    if (mention) {
+      const note = UI.element(UI.html`<p class="note" id="poste-traduction">${mention}</p>`);
+      langue.insertBefore(note, langue.querySelector('.poste-langue-portee, .aide'));
+    }
     const actuel = themeMemorise();
     UI.$$('input[name=theme]', conteneur).forEach((bouton) => {
       bouton.checked = bouton.value === actuel;
