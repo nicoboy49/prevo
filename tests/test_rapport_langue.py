@@ -87,7 +87,8 @@ class TestRapportLangue(CasNavigateur):
         mois = self.ouvrir_onglet()
         self.assertTrue(mois)
         options = self.page.evaluate("[...document.querySelectorAll('#rapports-langue option')].map((o) => [o.value, o.textContent])")
-        self.assertEqual(options, [["fr", "Français"], ["en", "English"]])
+        self.assertEqual(options, [["fr", "Français"], ["en", "English"], ["tr", "Türkçe"], ["it", "Italiano"],
+                                   ["pt-PT", "Português"]])                     # Lot 5 (T375)
         self.assertEqual(self.page.input_value("#rapports-langue"), "fr")           # proposée : langue de l'installation
         document = self.figer(mois, "en")
         self.assertEqual(self.page.evaluate(SCRIPT_EN_JS), 1)

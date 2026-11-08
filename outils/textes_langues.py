@@ -304,7 +304,8 @@ def rapport(comparaison):
         if len(liste) > PLAFOND:
             lignes.append('  … et %d de plus' % (len(liste) - PLAFOND))
     if c.repli_aide:
-        lignes.append('Avertissement (%s) : %d clé(s) de l\'aide longue sans traduction, prises en français sans '
-                      'avertissement (%s %s) — voulu, ne compte pas' % (
+        lignes.append('Avertissement (%s) : %d clé(s) de l\'aide longue sans traduction, prises sans avertissement en '
+                      'français, ou dans la langue que désigne « aide » dans js/i18n/langues.js (D158 : l\'anglais pour '
+                      'tr, it, pt-PT) (%s %s) — voulu, ne compte pas' % (
                           c.code, len(c.repli_aide), aide, 'sans clé' if aide in c.fichiers else 'absent'))
     return lignes

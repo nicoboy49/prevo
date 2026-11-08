@@ -596,9 +596,11 @@ class TestLangueDuCompteEcrans(CasNavigateur):
         dialogue = self.page.locator("dialog[open]").last
         # Créer : liste « Langue », la langue de l'installation d'abord, puis chaque langue sous son nom.
         self.page.click("#acces-creer-compte")
+        # Chaque langue déclarée par js/i18n/langues.js (le Lot 5 en ajoute trois), sous son nom, dans l'ordre.
+        declarees = self.page.evaluate("I18n.langues.map((l) => [l.code, l.nom, l.code])")
+        self.assertEqual([c for c, _, _ in declarees][:2], ["fr", "en"])
         self.assertEqual(self.page.evaluate(LISTE_LANGUE_JS),
-                         [["", texte_du_dictionnaire("fr", "equipe.champs_compte.langue_installation"), ""],
-                          ["fr", "Français", "fr"], ["en", "English", "en"]])
+                         [["", texte_du_dictionnaire("fr", "equipe.champs_compte.langue_installation"), ""]] + declarees)
         self.assertEqual(dialogue.locator("select[name=langue]").input_value(), "")
         dialogue.locator("input[name=prenom]").fill("Ana")
         dialogue.locator("input[name=nom]").fill("Silva")

@@ -53,7 +53,11 @@ FICHIERS_I18N = ["js/i18n.js", "js/i18n-chargeur.js", "js/i18n/langues.js", "js/
                  "js/i18n/en.js", "js/i18n/aide/en.js"]
 # Langues déclarées par js/i18n/langues.js (T278), dans l'ordre du sélecteur : code, nom dans sa langue, locale, statut.
 LANGUES = [{"code": "fr", "nom": "Français", "locale": "fr-FR", "statut": "reference"},
-           {"code": "en", "nom": "English", "locale": "en-GB", "statut": "complete"}]
+           {"code": "en", "nom": "English", "locale": "en-GB", "statut": "complete"},
+           # Lot 5 (T375) : traductions automatiques, aide longue en anglais (D158)
+           {"code": "tr", "nom": "Türkçe", "locale": "tr-TR", "statut": "automatique", "aide": "en"},
+           {"code": "it", "nom": "Italiano", "locale": "it-IT", "statut": "automatique", "aide": "en"},
+           {"code": "pt-PT", "nom": "Português", "locale": "pt-PT", "statut": "automatique", "aide": "en"}]
 CODES = [langue["code"] for langue in LANGUES]
 ERREUR_PING_ABSENT = re.compile(r"status of 404.*/api/ping")      # serveur statique : pas de /api/ping
 ERREUR_SANS_AUTORITE = re.compile(r"status of 404.*/acces/ca\.crt")   # porte sans autorité locale (MESSAGE_SANS_AUTORITE)
@@ -147,8 +151,8 @@ class TestFichiers(unittest.TestCase):
         self.assertIn("I18n.ajouter('fr', {\n", aide)
         langues = (RACINE / "js" / "i18n" / "langues.js").read_text(encoding="utf-8")
         declarations = re.findall(r"^I18n\.declarer\(\{ code: '([^']*)', nom: '([^']*)', locale: '([^']*)', "
-                                  r"statut: '([^']*)' \}\);$", langues, re.MULTILINE)
-        self.assertEqual(declarations, [tuple(langue.values()) for langue in LANGUES])
+                                  r"statut: '([^']*)'(?:, aide: '([^']*)')? \}\);$", langues, re.MULTILINE)
+        self.assertEqual(declarations, [tuple(langue.values()) + ("",) * (5 - len(langue)) for langue in LANGUES])
         self.assertEqual(langues.count("I18n.declarer("), len(LANGUES))
 
     def test_index_charge_la_traduction_juste_avant_le_schema(self):

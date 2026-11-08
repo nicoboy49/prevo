@@ -7,3 +7,8 @@
 // sélecteur de langue (UI.selecteurLangue). Anglais : britannique, en-GB (D151 ; Lot 3, T278).
 I18n.declarer({ code: 'fr', nom: 'Français', locale: 'fr-FR', statut: 'reference' });
 I18n.declarer({ code: 'en', nom: 'English', locale: 'en-GB', statut: 'complete' });
+// Lot 5 (2.1.0) : traductions automatiques (mention « Traduction automatique — corrections bienvenues », CS161) ;
+// pas d'aide longue traduite : elle s'affiche en anglais (aide: 'en', D158), le guide aussi (GUIDE.en.html).
+I18n.declarer({ code: 'tr', nom: 'Türkçe', locale: 'tr-TR', statut: 'automatique', aide: 'en' });
+I18n.declarer({ code: 'it', nom: 'Italiano', locale: 'it-IT', statut: 'automatique', aide: 'en' });
+I18n.declarer({ code: 'pt-PT', nom: 'Português', locale: 'pt-PT', statut: 'automatique', aide: 'en' });
