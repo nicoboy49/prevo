@@ -19,7 +19,8 @@ ouvert en Python (zipfile) et contrôlé entièrement (verifier_export) :
                  disque à l'octet. Technicien et demandeur connectés : aucun bouton d'export (accueil, Paramètres,
                  feuille « Plus »), App.exporterZip refusé avec la phrase d'explication, aucun téléchargement ;
     dossier      jeu f3-v2.0.0 (avec acces/comptes.json) et un document non cité copiés dans l'OPFS ; documents et
-                 rapports écrits par Prévo (App.adaptateur.ecrireDocument, Donnees.modifier) ; CSV du ZIP = dossier ;
+                 rapports écrits par Prévo (App.adaptateur.ecrireDocument, Donnees.modifier) ; CSV du ZIP = dossier
+                 (une table nouvelle du format 4 pas encore écrite : en-tête seul dans le ZIP, T399) ;
     démo         mêmes ajouts en mémoire, bouton du bandeau de la démo ; CSV d'un format plus récent déposés :
                  lecture seule, l'export reste permis (format du jeu plus-recent, colonne inconnue gardée) ;
     repli        crypto.subtle retiré de la page : Formats.manifeste rend les empreintes de hashlib.sha256 (vide,
@@ -45,6 +46,7 @@ from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attend
                     installer_dossier_simule, preregler_profil, url_fichier)
 from commun import FORMAT_COURANT, NB_TABLES, format_du_jeu
 from jeux_formats import copier_jeu
+from test_formats_js import TABLES_AJOUTEES
 
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
 VERSION_APPLI = re.search(r"const VERSION = '([^']+)';", (RACINE / "js" / "app.js").read_text(encoding="utf-8")).group(1)
@@ -61,6 +63,9 @@ NOM_DOSSIER = "donnees-zip-export"
 ERREUR_PING_ABSENT = re.compile(r"status of 404.*/api/ping")              # serveur statique : pas de /api/ping
 ERREUR_DOCUMENT_ABSENT = re.compile(r"status of 404.*/api/documents/vgp-chariot-absent\.pdf")
 ERREUR_TABLE_REFUSEE = re.compile(r"status of 403 .*/api/csv/")          # demandeur connecté : tables refusées
+# Base au format 3 servie par serveur.py : le passage au format 4 ne crée pas les tables nouvelles absentes
+# (CONCEPTION-L1 §3.3 ; reserves_controle le sera par la reprise côté serveur, T390 et T392) : 404 à leur lecture.
+ERREUR_TABLE_NOUVELLE_ABSENTE = re.compile(r"status of 404 .*/api/csv/(%s)\b" % "|".join(TABLES_AJOUTEES[4]))
 
 # Pages sans crypto.subtle, comme en http par le réseau (contexte non sécurisé, ARCHITECTURE.md §2).
 SANS_SUBTLE_JS = """(() => {
@@ -358,6 +363,7 @@ class TestServeur(CasExport):
     def test_serveur_fichier_abime_marque_au_manifeste_de_l_export(self):
         """T210 : un CSV abîmé (jeu entete-tronque : ordres_travail.csv) porte « abime »: true dans le manifeste de
         l'export, comme dans les sauvegardes (T206) ; les autres fichiers n'ont pas la clé ; octets du disque."""
+        self.autoriser_erreur(ERREUR_TABLE_NOUVELLE_ABSENTE)                 # jeu au format 3
         with tempfile.TemporaryDirectory(prefix="prevo-zip-export-") as temporaire:
             source = copier_jeu("entete-tronque", Path(temporaire) / "donnees")
             with ServeurPrevo(source=source) as serveur:
@@ -463,10 +469,17 @@ class TestDossier(CasExport):
             self.verifier_export(nom_zip, noms, entrees, DOCUMENTS_PAR_PREVO, MANQUANTS_PAR_PREVO, "dossier",
                                  FORMAT_COURANT)
             self.verifier_message_manquants(page, len(DOCUMENTS_PAR_PREVO))
-            # Les CSV du ZIP sont ceux du dossier, à l'octet.
+            # Les CSV du ZIP sont ceux du dossier, à l'octet. Jeu au format 3 : une table nouvelle du format 4 que
+            # rien n'a encore écrite (reserves_controle tant que le passage du mode dossier ne fait pas la reprise,
+            # T391) n'est pas dans le dossier ; l'export la donne vide (en-tête du format courant seul).
             sur_le_disque = {nom: base64.b64decode(valeur)
                              for nom, valeur in page.evaluate(LIRE_OPFS_CSV_JS, NOM_DOSSIER).items()}
             for nom in noms_csv_attendus():
+                if nom not in sur_le_disque:
+                    self.assertIn(nom[:-4], TABLES_AJOUTEES[4], nom)
+                    entete_seule = (DOSSIER_DEMO / nom).read_bytes().split(b"\r\n")[0] + b"\r\n"
+                    self.assertEqual(entrees[nom], entete_seule, nom)
+                    continue
                 self.assertEqual(entrees[nom], sur_le_disque[nom], nom)
 
 

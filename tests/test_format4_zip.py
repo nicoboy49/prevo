@@ -20,8 +20,9 @@ Les ZIP sont fabriqués ici, dans un dossier temporaire, comme un export de la 2
               en-tête seul, cellules des contrôles inchangées (colonnes du format 4 à leur défaut), version_schema
               4, une ligne de journal, sauvegarde « avant-import-zip » qui garde l'ancienne base (réserve, garantie
               et contrat compris) ; ZIP au format 5 : refusé, aucun octet écrit ;
-    serveur   ServeurPrevo, mêmes contrôles sur le disque. Sauté tant que serveur.py ne connaît pas
-              reserves_controle (format 4 déclaré côté serveur : T385).
+    serveur   ServeurPrevo, mêmes contrôles sur le disque ; le document est rangé sous le nom horodaté du serveur
+              (« AAAAMMJJ-HHMMSS-notice-compresseur.pdf »). Joué sans saut depuis le format 4 côté serveur (T385,
+              T399).
 
 Lancer depuis la racine du projet (à travers le verrou du navigateur) :
     py -X utf8 -m unittest discover -s tests -p "test_format4_zip.py" -v
@@ -43,7 +44,7 @@ from test_formats_js import (COLONNES_AJOUTEES, COLONNES_RESERVES, DEFAUTS_AJOUT
                              reserve_complete)
 from test_zip_import import (BOUTON_REMPLACER, ECRIRE_OPFS_JS, ERREUR_PING_ABSENT, INSTANTANE_OPFS_JS,
                              MOTIF_AVANT_IMPORT_ZIP, TABLES, CasImport, contenu_sauvegarde, en_base64, fichiers_demo,
-                             fichiers_du_jeu, instantane, lire_csv, octets_pdf, sauvegardes_de)
+                             fichiers_du_jeu, instantane, lire_csv, octets_pdf, sans_prefixe, sauvegardes_de)
 from test_zip_lecture import AIDE_JS, SCRIPTS, serveur
 
 JEUX_2_1 = ("reserves-a-reprendre", "f3-v2.1.0")
@@ -53,7 +54,6 @@ VIDEES = ["contrats_prestataires", "garanties"]                                 
 CHAMPS_TEXTE_RESERVES = ("texte", "commentaire_levee")    # écrits comme un champ texte (apostrophe de protection)
 DOCUMENT_2_1 = ("notice-compresseur.pdf", octets_pdf("notice du compresseur, export 2.1"))
 NOM_DOSSIER = "donnees-format4-zip"
-SERVEUR_AU_FORMAT_4 = "reserves_controle" in serveur.TABLES
 # Base cible : une garantie et un contrat fabriqués (EQ-0001 et FOU-0001 existent dans la démo), que l'import vide.
 LIGNE_GARANTIE = "GAR-0001;EQ-0001;FOU-0001;2025-01-15;2027-01-15;Pièces et main-d'œuvre, retour atelier;;1\r\n"
 LIGNE_CONTRAT = ("CTP-0001;FOU-0001;Entretien des compresseurs;EQ-0001;Visites trimestrielles;2026-01-01;2026-12-31;"
@@ -230,6 +230,9 @@ class TestLecture(CasNavigateur):
 
 class CasFormat4(CasImport):
 
+    # Mode serveur : serveur.py range un document sous un nom horodaté (« AAAAMMJJ-HHMMSS-<nom> », test_zip_import).
+    NOM_HORODATE = False
+
     def verifier_confirmation(self, info, jeu):
         self.assertEqual((info["format"], info["migre"], info["documents"]), (str(FORMAT_2_1), "1", 1))
         self.assertIn("Prévo 2.1.0", info["origine"])
@@ -267,7 +270,14 @@ class CasFormat4(CasImport):
         self.assertRegex(lire_csv(fichiers["journal.csv"])[1][-1]["action"],
                          r"^import ZIP : %s, %d tables, 1 document ; sauvegarde \d{4}-\d{2}-\d{2}_\d{6}_avant-import-zip "
                          r"faite juste avant$" % (re.escape(nom_zip), NB_TABLES))
-        self.assertEqual(fichiers["documents/" + DOCUMENT_2_1[0]], DOCUMENT_2_1[1])
+        # Le document du ZIP : seul nouveau document, à l'octet, sous son nom (horodaté en mode serveur).
+        nouveaux = {chemin[len("documents/"):]: octets for chemin, octets in fichiers.items()
+                    if chemin.startswith("documents/") and chemin not in avant}
+        self.assertEqual(list(nouveaux.values()), [DOCUMENT_2_1[1]])
+        nom = next(iter(nouveaux))
+        self.assertEqual(sans_prefixe(nom) if self.NOM_HORODATE else nom, DOCUMENT_2_1[0])
+        if self.NOM_HORODATE:
+            self.assertNotEqual(nom, DOCUMENT_2_1[0])
         # La sauvegarde faite juste avant garde l'ancienne base, tables nouvelles comprises (rien de perdu).
         noms = sauvegardes_de(fichiers, MOTIF_AVANT_IMPORT_ZIP)
         self.assertEqual(len(noms), 1, noms)
@@ -339,9 +349,9 @@ class TestDossier(CasFormat4):
 # Mode serveur
 # ---------------------------------------------------------------------------
 
-@unittest.skipUnless(SERVEUR_AU_FORMAT_4, "serveur.py ne connaît pas encore reserves_controle (format 4 côté serveur : "
-                                          "T385)")
 class TestServeur(CasFormat4):
+
+    NOM_HORODATE = True
 
     def demarrer(self):
         source = self.temporaire / "base"

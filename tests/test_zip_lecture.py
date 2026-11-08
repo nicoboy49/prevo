@@ -14,6 +14,10 @@ l'étiquette v2.0.0-beta.2, avec les options de chaque version. La page est test
                manifeste), en File, ArrayBuffer et Blob ; variantes (stocké, ZIP64 local, dossier documents/) ; format 2
                et format 1 migrés en mémoire, lignes intactes champ à champ ; fichier au format 2 dans une base au
                format 3 ; tables absentes ; 10 000 entrées ; aucune écriture ni requête pendant la lecture ;
+               depuis le format 4 (2.2, T399) : l'export de cette version est fait de la démo (seule base au format
+               courant du dépôt), lu sans migration ; les exports 1.2 à 2.1 (jeux aux formats 1 à 3) sont mis au
+               format courant : tables nouvelles annoncées (info), vides et dans `absentes`, sauf reserves_controle
+               remplie par la reprise des observations (D183), colonnes du format 4 à leur défaut ;
     refusés  : chemins hostiles (../x.csv, /x.csv, C:/x.csv, documents/../../x.csv, a\\b.csv, segment vide, caractère
                de contrôle…) ; noms non admis (acces/comptes.json, virus.exe…) ; doublons ; bombe (60 Mo de zéros) ;
                taille réelle plus grande que la taille annoncée ; contenu abîmé (CRC) ; 10 001 entrées ; CSV de 51 Mo ;
@@ -56,6 +60,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from commun import FORMAT_COURANT, FORMAT_PLUS_RECENT, RACINE, CasNavigateur, charger_scripts, format_du_jeu  # noqa: E402
 from jeux_formats import copier_jeu  # noqa: E402
+from test_formats_js import DEFAUTS_AJOUTES, tables_ajoutees_apres  # noqa: E402
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/formats.js", "js/donnees.js",
            "js/modules/zip-tables.js", "js/modules/zip-flux.js", "js/modules/zip-lecture.js"]
@@ -70,8 +75,13 @@ DOCUMENTS = {
     "documents/20260101-120000-notice.pdf": b"%PDF-1.4\n% notice fictive\n" * 10,
     "documents/rapport-mensuel-2026-10.html": "<!DOCTYPE html><title>Rapport</title><p>Octobre</p>".encode("utf-8"),
 }
-# Valeur par défaut des colonnes que les formats 2 et 3 ajoutent (js/schema.js) : anomalie_constatee est un booléen.
-DEFAUTS = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0", "astuce": ""}
+# Valeur par défaut des colonnes que les formats 2 à 4 ajoutent (recopie de test_formats_js) : anomalie_constatee est
+# un booléen, controles_reglementaires.source_periodicite vaut « saisie » (format 4).
+DEFAUTS = DEFAUTS_AJOUTES
+DOSSIER_DEMO = RACINE / "donnees" / "demo"
+# Reprise des observations en réserves au passage au format 4 (D183) : dans f2-v1.1.0, f3-v1.2.0 et f3-v2.0.0, seul
+# CTR-0004 a des observations (une ligne, non levées) → une réserve ; f1 n'a pas de contrôles → aucune.
+RESERVES_REPRISES = {"f1": 0, "f2-v1.1.0": 1, "f3-v1.2.0": 1, "f3-v2.0.0": 1, "table-absente": 1}
 
 
 def charger_serveur():
@@ -147,6 +157,14 @@ def _jeu(nom):
 def fichiers_du_jeu(nom, avec_acces=False):
     """{chemin : octets} d'une copie du jeu (dossier temporaire) ; sans acces/, que l'export n'emporte jamais."""
     return {chemin: octets for chemin, octets in _jeu(nom) if avec_acces or not chemin.startswith("acces/")}
+
+
+def fichiers_du_format_courant():
+    """{nom : octets} des CSV du jeu de démo (données fictives, lues sans être modifiées), seule base au format courant
+    du dépôt : ce qu'exporte cette version (les jeux de tests/fixtures/formats sont aux formats 1 à 3)."""
+    fichiers = {chemin.name: chemin.read_bytes() for chemin in sorted(DOSSIER_DEMO.glob("*.csv"))}
+    assert b"\r\nversion_schema;'%d\r\n" % FORMAT_COURANT in fichiers["parametres.csv"]
+    return fichiers
 
 
 def manifeste(fichiers, format=FORMAT_COURANT, **autres):
@@ -355,6 +373,24 @@ class CasZip(CasNavigateur):
                 self.verifier_cellules_gardees(nom_fichier, avant, reecrits[nom_fichier])
         return resultat
 
+    def verifier_tables_nouvelles(self, resultat, nom_jeu):
+        """Tables qu'ajoutent les formats suivant celui du ZIP : annoncées (problème « info »), vides, sauf
+        reserves_controle quand la reprise des observations (D183) l'a remplie ; celle-là n'est pas dans `absentes`
+        (l'import ne la vide pas, T393). Rend les tables nouvelles restées vides, dans l'ordre du schéma."""
+        self.assertTrue(resultat["migre"])
+        self.assertEqual(resultat["tables"]["reserves_controle"]["lignes"], RESERVES_REPRISES[nom_jeu])
+        graves = {p["table"]: p["gravite"] for p in resultat["problemes"] if p["type"] == "table"}
+        vides = []
+        for table in tables_ajoutees_apres(resultat["formatOrigine"]):
+            self.assertEqual(graves.get(table), "info", table)
+            if table == "reserves_controle" and RESERVES_REPRISES[nom_jeu]:
+                self.assertNotIn(table, resultat["absentes"])
+                continue
+            self.assertEqual(resultat["tables"][table]["lignes"], 0, table)
+            self.assertIn(table, resultat["absentes"])
+            vides.append(table)
+        return vides
+
 
 # ---------------------------------------------------------------------------
 # ZIP acceptés
@@ -363,7 +399,8 @@ class CasZip(CasNavigateur):
 class TestZipAcceptes(CasZip):
 
     def test_export_complet_avec_manifeste_exact(self):
-        fichiers = dict(fichiers_du_jeu("f3-v2.0.0"), **DOCUMENTS)
+        # Export de cette version : base au format courant (la démo, seule du dépôt), lue sans migration.
+        fichiers = dict(fichiers_du_format_courant(), **DOCUMENTS)
         contenu_manifeste = manifeste(fichiers, manquants=["photo-perdue.jpg"])
         resultat = self.accepte(octets_zip(dict(fichiers, **{"documents/": b"", "manifeste.json": contenu_manifeste})))
         self.assertEqual(resultat["formatOrigine"], FORMAT_COURANT)
@@ -384,15 +421,14 @@ class TestZipAcceptes(CasZip):
             with self.subTest(jeu=nom_jeu):
                 resultat = self.accepte(octets_zip(dict(fichiers_du_jeu(nom_jeu), **DOCUMENTS)))
                 self.assertIsNone(resultat["manifeste"])
-                self.assertEqual(resultat["formatOrigine"], FORMAT_COURANT)
-                self.assertFalse(resultat["migre"])
-                self.assertEqual(resultat["absentes"], [])
+                self.assertEqual(resultat["formatOrigine"], format_du_jeu(nom_jeu))        # 3 : mis au format courant
+                self.assertEqual(resultat["absentes"], self.verifier_tables_nouvelles(resultat, nom_jeu))
                 self.assertEqual(len(resultat["documents"]), len(DOCUMENTS))
 
     def test_zip_fait_par_zipflux_et_formats_manifeste_comme_l_export(self):
         """Comme l'export depuis T228 : ZipFlux.ecrivain et Formats.manifeste ; deflate, puis stocké ; lu en
-        ArrayBuffer et en Blob."""
-        fichiers = dict(fichiers_du_jeu("f3-v1.2.0"), **DOCUMENTS)
+        ArrayBuffer et en Blob. Base au format courant (la démo), comme l'export de cette version."""
+        fichiers = dict(fichiers_du_format_courant(), **DOCUMENTS)
         en_base64 = {nom: base64.b64encode(octets).decode("ascii") for nom, octets in fichiers.items()}
         for stocker in (False, True):
             with self.subTest(stocker=stocker):
@@ -443,9 +479,8 @@ class TestZipAcceptes(CasZip):
                 for resultat in resultats:
                     self.assertTrue(resultat["ok"], resultat["refus"])
                     self.assertEqual(resultat["manifeste"], json.loads(manifeste_zip) if avec_manifeste else None)
-                    self.assertEqual(resultat["formatOrigine"], FORMAT_COURANT)
-                    self.assertFalse(resultat["migre"])
-                    self.assertEqual(resultat["absentes"], [])
+                    self.assertEqual(resultat["formatOrigine"], format_du_jeu(nom_jeu))    # 3 : mis au format courant
+                    self.assertEqual(resultat["absentes"], self.verifier_tables_nouvelles(resultat, nom_jeu))
                     self.assertEqual({d["nom"]: base64.b64decode(d["base64"]) for d in resultat["documents"]},
                                      {nom[len("documents/"):]: o for nom, o in DOCUMENTS.items()})
                     for nom_fichier, contenu in attendus.items():
@@ -468,11 +503,10 @@ class TestZipAcceptes(CasZip):
 
     def test_zip_au_format_2_migre_lignes_intactes(self):
         resultat = self.verifier_migration("f2-v1.1.0", 2)
-        self.assertEqual(resultat["absentes"], ["wiki_pages", "wiki_journal"])
-        for nom_table in ("wiki_pages", "wiki_journal"):
-            self.assertEqual(resultat["tables"][nom_table]["lignes"], 0)
-            self.assertIn({"gravite": "info", "type": "table", "table": nom_table},
-                          [{c: p[c] for c in ("gravite", "type", "table")} for p in resultat["problemes"]])
+        # Tables des formats 3 et 4 : vides (info), sauf reserves_controle, remplie par la reprise (D183).
+        vides = self.verifier_tables_nouvelles(resultat, "f2-v1.1.0")
+        self.assertEqual(vides, ["wiki_pages", "wiki_journal", "garanties", "contrats_prestataires"])
+        self.assertEqual(resultat["absentes"], vides)
 
     def test_zip_au_format_1_migre_tables_absentes_listees(self):
         resultat = self.verifier_migration("f1", 1)
@@ -482,6 +516,7 @@ class TestZipAcceptes(CasZip):
         graves = {p["table"]: p["gravite"] for p in resultat["problemes"] if p["type"] == "table"}
         self.assertEqual(graves["localisations"], "attention")      # existait au format 1 : l'import la videra
         self.assertEqual(graves["wiki_pages"], "info")              # n'existait pas au format 1
+        self.verifier_tables_nouvelles(resultat, "f1")             # sans contrôles : aucune réserve reprise
 
     def test_fichier_au_format_2_dans_une_base_au_format_3(self):
         # Comme Donnees.etatDuFormat : le plus petit format des fichiers compte (jeu « melange »).
@@ -491,9 +526,11 @@ class TestZipAcceptes(CasZip):
         self.assertIn("astuce", resultat["tables"]["ordres_travail"]["entete"])
 
     def test_tables_absentes_vides_et_signalees(self):
+        # Jeu au format 3 (24 tables moins deux) : mis au format courant, tables du format 4 en plus (info).
         resultat = self.accepte(octets_zip(fichiers_du_jeu("table-absente")))
-        self.assertFalse(resultat["migre"])
-        self.assertEqual(resultat["absentes"], ["articles", "wiki_pages"])
+        self.assertEqual(resultat["formatOrigine"], 3)
+        vides = self.verifier_tables_nouvelles(resultat, "table-absente")
+        self.assertEqual(resultat["absentes"], ["articles", "wiki_pages"] + vides)
         colonnes = self.page.evaluate("Formats.colonnes('articles')")
         self.assertEqual(resultat["tables"]["articles"], {"entete": colonnes, "lignes": 0, "inconnues": []})
         attention = [p["table"] for p in resultat["problemes"] if p["type"] == "table" and p["gravite"] == "attention"]

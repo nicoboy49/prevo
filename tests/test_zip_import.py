@@ -24,9 +24,12 @@ Chaque écriture est contrôlée sur le disque (serveur) ou dans l'OPFS du navig
               prénom et son nom (sous un autre identifiant) ; sinon (deux fiches au même nom) la confirmation le dit,
               « moi » est vidé et Prévo demande au responsable qui il est (Annuler : la question revient à
               l'ouverture suivante ; une réponse : plus jamais), sans deviner ;
-              ZIP au format 2 (f2-v1.1.0, sans manifeste) : confirmation « mises au format courant », deux tables vidées ;
-              base au format courant, lignes intactes, colonne astuce vide, tables du wiki vides ; colonnes inconnues du
-              ZIP (jeu colonnes-en-trop) gardées avec leurs valeurs ;
+              ZIP au format 2 (f2-v1.1.0, sans manifeste) : confirmation « mises au format courant », quatre tables
+              vidées (wiki, garanties, contrats) ; base au format courant, lignes intactes, colonnes des formats 3 et 4
+              à leur défaut, tables du wiki, garanties et contrats vides, une réserve reprise des observations (D183) ;
+              colonnes inconnues du ZIP (jeu colonnes-en-trop) gardées avec leurs valeurs ;
+              depuis le format 4 (T399) : une base au format 3 (jeux f3) servie par serveur.py n'a pas les tables
+              nouvelles sur le disque (404 permis à leur lecture, comptées 0, absentes de la sauvegarde) ;
               annulation à la confirmation : aucun octet changé ; ZIP hostile (« ../x.csv ») et ZIP plus récent
               (format courant + 1) : refus, aucun octet changé ;
               échec simulé pendant l'écriture de ordres_travail : tables remises à l'octet depuis la sauvegarde,
@@ -62,6 +65,7 @@ from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attend
                     preregler_profil, url_fichier)
 from commun import FORMAT_COURANT, FORMAT_PLUS_RECENT, NB_TABLES, format_du_jeu
 from jeux_formats import copier_jeu
+from test_formats_js import COLONNES_AJOUTEES, DEFAUTS_AJOUTES, TABLES_AJOUTEES
 from test_zip_lecture import MIO, meme_crc32_autre_contenu, octets_pseudo_aleatoires
 
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
@@ -84,6 +88,9 @@ ERREUR_PING_ABSENT = re.compile(r"status of 404.*/api/ping")              # serv
 ERREUR_DOCUMENT_ABSENT = re.compile(r"status of 404.*/api/documents/vgp-chariot-absent\.pdf")
 ERREUR_TABLE_REFUSEE = re.compile(r"status of 403 .*/api/csv/")
 ERREUR_TABLE_ABSENTE = re.compile(r"status of 404 .*/api/csv/")           # base neuve : table pas encore écrite
+# Base au format 3 (jeux f3) servie par serveur.py : le passage au format 4 ne crée pas les tables nouvelles absentes
+# (CONCEPTION-L1 §3.3 ; reserves_controle le sera par la reprise côté serveur, T390 et T392) : 404 à leur lecture.
+ERREUR_TABLE_NOUVELLE_ABSENTE = re.compile(r"status of 404 .*/api/csv/(%s)\b" % "|".join(TABLES_AJOUTEES[4]))
 
 ECRIRE_OPFS_JS = """async ([nom, fichiers]) => {
   const racine = await (await navigator.storage.getDirectory()).getDirectoryHandle(nom, { create: true });
@@ -407,10 +414,14 @@ class TestServeur(CasImport):
         return dossier
 
     def csv_du_dossier(self, dossier):
-        return {table: (Path(dossier) / (table + ".csv")).read_bytes() for table in TABLES}
+        """{table : octets} des CSV du dossier ; une table absente du disque (table nouvelle d'une base au format 3,
+        pas créée par le passage au format 4) n'y est pas."""
+        return {table: (Path(dossier) / (table + ".csv")).read_bytes() for table in TABLES
+                if (Path(dossier) / (table + ".csv")).is_file()}
 
     def test_serveur_aller_retour_export_puis_import_memes_donnees_documents_sauvegarde_acces(self):
         self.autoriser_erreur(ERREUR_DOCUMENT_ABSENT)
+        self.autoriser_erreur(ERREUR_TABLE_NOUVELLE_ABSENTE)                 # base B au format 3 (f3-v1.2.0)
         # 1. Base A exportée par le responsable (vrai bouton).
         csv_a, documents_a = base_a()
         source_a = self.dossier_source("a", dict(csv_a, **{"documents/" + nom: o for nom, o in documents_a.items()}))
@@ -443,15 +454,16 @@ class TestServeur(CasImport):
             csv_b = self.csv_du_dossier(serveur.dossier)
             self.choisir_zip(page, chemin_zip)
             info = self.confirmation(page)
-            self.assertEqual((info["format"], info["migre"], info["documents"]), ("3", "0", 6))
-            self.assertEqual(info["actuel"], {table: len(lire_csv(csv_b[table])[1]) for table in TABLES})
+            self.assertEqual((info["format"], info["migre"], info["documents"]), (str(FORMAT_COURANT), "0", 6))
+            self.assertEqual(info["actuel"], {table: len(lire_csv(csv_b[table])[1]) if table in csv_b else 0
+                                              for table in TABLES})
             self.assertEqual(info["importe"], {table: len(lire_csv(csv_zip[table])[1]) for table in TABLES})
             self.assertEqual(info["videes"], [])
             self.assertIsNone(info["tablesVidees"])
             self.assertRegex(info["origine"], r"^Exporté le \d{2}/\d{2}/\d{4} à \d{2}:\d{2} par Prévo "
                                               r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)? "     # T221 : bêta (2.0.0-beta.2)
                                               r"\(mode serveur\)\.$")
-            self.assertEqual(info["formatTexte"], "Format des données : 3 (format de cette version).")
+            self.assertEqual(info["formatTexte"], "Format des données : %d (format de cette version)." % FORMAT_COURANT)
             self.assertIn("6 documents joints", info["documentsTexte"])
             self.assertIn("vgp-chariot-absent.pdf", info["problemes"])       # cité, introuvable à l'export
             self.assertEqual(info["avertissement"], AVERTISSEMENT)
@@ -479,8 +491,8 @@ class TestServeur(CasImport):
             self.assertEqual(len(noms), 1, noms)
             self.assertIn(noms[0], termine)
             sauvegarde = contenu_sauvegarde(apres, noms[0])
-            for table in TABLES:
-                self.assertEqual(sauvegarde[table + ".csv"], avant[table + ".csv"], table)
+            for table in TABLES:                                             # table absente d'avant : absente aussi
+                self.assertEqual(sauvegarde.get(table + ".csv"), avant.get(table + ".csv"), table)
             self.assertEqual(sauvegarde["documents/ancien.pdf"], ancien)
             self.assertEqual(sauvegarde["acces/comptes.json"], avant["acces/comptes.json"])
             self.assertEqual(json.loads(sauvegarde["manifeste.json"])["motif"], "avant-import-zip")
@@ -609,6 +621,7 @@ class TestServeur(CasImport):
                                   + "".join(ligne + "\r\n" for ligne in techniciens)).encode("utf-8")
         chemin_zip = ecrire_zip(self.temporaire / nom_zip, f12, avec_manifeste=False)
         source = self.dossier_source(nom_zip + "-base", fichiers_du_jeu("f3-v2.0.0"))
+        self.autoriser_erreur(ERREUR_TABLE_NOUVELLE_ABSENTE)                 # base au format 3
         serveur = ServeurPrevo(source=source)
         serveur.__enter__()
         self.addCleanup(serveur.__exit__, None, None, None)
@@ -698,10 +711,16 @@ class TestServeur(CasImport):
             self.assertEqual(page.evaluate("window.__resultat.then((r) => r.etape)"), "refus")
             self.assertEqual(instantane(serveur.dossier), avant)
 
-    def test_serveur_zip_au_format_2_mis_au_format_3_donnees_intactes(self):
+    def test_serveur_zip_au_format_2_mis_au_format_courant_donnees_intactes(self):
         f2 = {chemin: o for chemin, o in fichiers_du_jeu("f2-v1.1.0").items() if chemin.endswith(".csv")}
         self.assertEqual(len(f2), 22)
         chemin_zip = ecrire_zip(self.temporaire / "prevo-export-2025-10-01.zip", f2, avec_manifeste=False)
+        # Tables des formats 3 et 4 vidées par l'import, sauf reserves_controle : la reprise des observations (D183)
+        # en tire une réserve par ligne (f2-v1.1.0 : CTR-0004 seul, une ligne, non levée).
+        videes = sorted(TABLES_AJOUTEES[3] + [t for t in TABLES_AJOUTEES[4] if t != "reserves_controle"])
+        controles_f2 = [l for l in lire_csv(f2["controles_reglementaires.csv"])[1] if l["observations"].strip()]
+        reserves = [(c["id"], sans_apostrophe(c["observations"]).strip(), c["derniere_date"], "0") for c in controles_f2]
+        self.assertEqual(len(reserves), 1)
         with ServeurPrevo() as serveur:
             page = self.ouvrir_parametres(serveur)
             self.choisir_zip(page, chemin_zip)
@@ -710,10 +729,12 @@ class TestServeur(CasImport):
             self.assertEqual(info["formatTexte"], "Format des données : 2 ; elles seront mises au format %d (format de "
                                                   "cette version) à l'import." % FORMAT_COURANT)
             self.assertIn("sans manifeste", info["origine"])
-            self.assertEqual(sorted(info["videes"]), ["wiki_journal", "wiki_pages"])
-            self.assertIn("2 tables absentes du ZIP seront vidées", info["tablesVidees"])
+            self.assertEqual(sorted(info["videes"]), videes)
+            self.assertIn("%d tables absentes du ZIP seront vidées" % len(videes), info["tablesVidees"])
             self.assertIn("wiki_pages.csv", info["tablesVidees"])
+            self.assertNotIn("reserves_controle.csv", info["tablesVidees"])
             self.assertEqual(info["importe"]["wiki_pages"], 0)
+            self.assertEqual(info["importe"]["reserves_controle"], len(reserves))
             self.assertGreater(info["actuel"]["wiki_pages"], 0)
             self.assertIn("Aucun document joint", info["documentsTexte"])
             page.click(BOUTON_REMPLACER)
@@ -723,13 +744,18 @@ class TestServeur(CasImport):
         self.assertIn(("version_schema;'%d" % FORMAT_COURANT).encode(), ecrits["parametres"])
         for table in TABLES:
             entete, lignes = lire_csv(ecrits[table])
+            if table == "reserves_controle":
+                self.assertEqual([(l["controle_id"], sans_apostrophe(l["texte"]), l["date_controle"], l["levee"])
+                                  for l in lignes], reserves)
+                continue
             if table + ".csv" not in f2:
-                self.assertEqual(lignes, [], table)                        # tables du format 3 : vides
+                self.assertEqual(lignes, [], table)                        # tables des formats 3 et 4 : vides
                 continue
             entete_f2, lignes_f2 = lire_csv(f2[table + ".csv"])
             self.assertEqual(entete[:len(entete_f2)], entete_f2, table)
             nouvelles = entete[len(entete_f2):]
-            self.assertEqual(nouvelles, ["astuce"] if table == "ordres_travail" else [], table)
+            self.assertEqual(nouvelles, COLONNES_AJOUTEES[3].get(table, []) + COLONNES_AJOUTEES[4].get(table, []),
+                             table)
             if table == "journal":
                 self.assertRegex(lignes.pop()["action"], r"^import ZIP : prevo-export-2025-10-01\.zip, " + str(NB_TABLES) + r" tables, "
                                                          r"0 document ; sauvegarde .*_avant-import-zip faite juste avant$")
@@ -741,13 +767,14 @@ class TestServeur(CasImport):
                     self.assertEqual(sans_apostrophe(ligne[colonne]), sans_apostrophe(ligne_f2[colonne]),
                                      "%s ligne %d colonne %s" % (table, rang + 2, colonne))
                 for colonne in nouvelles:
-                    self.assertEqual(ligne[colonne], "", (table, rang, colonne))
+                    self.assertEqual(ligne[colonne], DEFAUTS_AJOUTES[colonne], (table, rang, colonne))
 
     def test_serveur_colonnes_inconnues_du_zip_gardees(self):
         # Jeu colonnes-en-trop : colonne_maison au milieu d'equipements.csv, note_maison à la fin. Remplacer la table
         # ne doit rien perdre : les colonnes du schéma, puis les colonnes inconnues, chaque valeur gardée.
+        # ZIP au format 3 : equipements mis au format courant (cout_arret_h, format 4, vide) avant les colonnes inconnues.
         zip_csv = {c: o for c, o in fichiers_du_jeu("colonnes-en-trop").items() if c.endswith(".csv")}
-        schema, _ = lire_csv(fichiers_du_jeu("f3-v1.2.0")["equipements.csv"])
+        schema, _ = lire_csv(fichiers_demo()["equipements.csv"])           # en-tête du format courant
         chemin_zip = ecrire_zip(self.temporaire / "colonnes-en-trop.zip", zip_csv)
         with ServeurPrevo() as serveur:
             page = self.ouvrir_parametres(serveur)
@@ -762,6 +789,8 @@ class TestServeur(CasImport):
         self.assertTrue(any(ligne["colonne_maison"] for ligne in lignes_zip))
         for ligne, ligne_zip in zip(lignes, lignes_zip):
             self.assertEqual({c: ligne[c] for c in entete_zip}, ligne_zip)
+            self.assertEqual({c: ligne[c] for c in entete if c not in entete_zip},
+                             {c: DEFAUTS_AJOUTES[c] for c in COLONNES_AJOUTEES[4]["equipements"]})
 
     def test_serveur_annulation_zip_hostile_ou_plus_recent_aucun_octet_change(self):
         f3 = {chemin: o for chemin, o in fichiers_du_jeu("f3-v1.2.0").items() if chemin.endswith(".csv")}
@@ -817,9 +846,14 @@ class TestServeur(CasImport):
             self.assertIn("remises dans leur état d'avant, depuis la sauvegarde « %s »" % noms[0], message)
             self.assertIn(copies[0], message)
             # La copie de sécurité garde l'état interrompu : equipements (écrit avant ordres_travail) est celui du ZIP,
-            # ordres_travail celui d'avant (jamais écrit).
+            # mis au format courant (ZIP au format 3 : cout_arret_h ajoutée, vide), ordres_travail celui d'avant
+            # (jamais écrit).
             interrompu = contenu_sauvegarde(apres, copies[0])
-            self.assertEqual(interrompu["equipements.csv"], f3["equipements.csv"])
+            entete_f3, lignes_f3 = lire_csv(f3["equipements.csv"])
+            entete_i, lignes_i = lire_csv(interrompu["equipements.csv"])
+            self.assertEqual(entete_i, entete_f3 + COLONNES_AJOUTEES[4]["equipements"])
+            self.assertEqual([{c: l[c] for c in entete_f3} for l in lignes_i], lignes_f3)
+            self.assertEqual({l["cout_arret_h"] for l in lignes_i}, {DEFAUTS_AJOUTES["cout_arret_h"]})
             self.assertNotEqual(interrompu["equipements.csv"], avant["equipements.csv"])
             self.assertEqual(interrompu["ordres_travail.csv"], avant["ordres_travail.csv"])
             # Le document déjà copié reste ; acces/ et le reste du dossier documents sont inchangés.
@@ -932,7 +966,7 @@ class TestDossier(CasImport):
             avant = self.opfs(page)
             self.choisir_zip(page, chemin_zip)
             info = self.confirmation(page)
-            self.assertEqual((info["format"], info["migre"], info["documents"]), ("3", "0", 6))
+            self.assertEqual((info["format"], info["migre"], info["documents"]), (str(FORMAT_COURANT), "0", 6))
             self.assertIn("Exporté le 04/11/2026 à 09:30 par Prévo 2.0.1 (mode dossier).", info["origine"])
             page.click(BOUTON_REMPLACER)
             termine = self.texte_fenetre(page, "import-zip-termine")
@@ -960,8 +994,8 @@ class TestDossier(CasImport):
             self.assertEqual(len(noms), 1, noms)
             self.assertIn(noms[0], termine)
             sauvegarde = contenu_sauvegarde(apres, noms[0])
-            for table in TABLES:
-                self.assertEqual(sauvegarde[table + ".csv"], avant[table + ".csv"], table)
+            for table in TABLES:                     # table absente d'avant (base au format 3) : absente aussi
+                self.assertEqual(sauvegarde.get(table + ".csv"), avant.get(table + ".csv"), table)
             self.assertEqual(sauvegarde["documents/photo-tapis.png"], base["documents/photo-tapis.png"])
             self.assertEqual(sauvegarde["documents/notice-perceuse.pdf"], base["documents/notice-perceuse.pdf"])
             self.assertEqual(json.loads(sauvegarde["manifeste.json"])["motif"], "avant-import-zip")
