@@ -869,11 +869,11 @@ class ParcoursPlusRecent:
         self.page.click("#btn-sauvegarder")
         self.assertIn("version plus récente de Prévo", self.attendre_toast("lecture seule"))
         nom_zip, noms, entrees, _ = self.exporter()
-        self.verifier_zip_export(nom_zip, noms, entrees, {}, mode, 4)
-        self.assertNotIn("pieces_v4.csv", noms)
-        self.assertIn(b"nouvelle_colonne_v4", entrees["ordres_travail.csv"].split(b"\r\n", 1)[0])
+        self.verifier_zip_export(nom_zip, noms, entrees, {}, mode, format_du_jeu("plus-recent"))
+        self.assertNotIn("pieces_v%d.csv" % format_du_jeu("plus-recent"), noms)
+        self.assertIn(("nouvelle_colonne_v%d" % format_du_jeu("plus-recent")).encode(), entrees["ordres_travail.csv"].split(b"\r\n", 1)[0])
         for chemin, octets in csv_de_la_racine(self.origine).items():
-            if chemin != "pieces_v4.csv":
+            if chemin != "pieces_v%d.csv" % format_du_jeu("plus-recent"):
                 self.assertEqual(entrees[chemin], octets, chemin)
 
 

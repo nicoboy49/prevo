@@ -789,7 +789,7 @@ class TestZipRefuses(CasZip):
     def test_noms_non_admis(self):
         for nom in ("acces/comptes.json", "acces/", "virus.exe", "documents/virus.exe", "documents/con.txt",
                     "documents/photo pompe.jpg", "documents/sous/photo.jpg", "sous/equipements.csv",
-                    "Ordres_travail.csv", "pieces_v4.csv", "__MACOSX/", "lisezmoi.txt", "documents/.cache.txt"):
+                    "Ordres_travail.csv", "pieces_v%d.csv" % format_du_jeu("plus-recent"), "__MACOSX/", "lisezmoi.txt", "documents/.cache.txt"):
             with self.subTest(nom=nom):
                 self.refus(octets_zip(dict(csv_de_base(), **{nom: b"" if nom.endswith("/") else b"x"})),
                            "ne vient pas d'un export de Prévo", "« %s »" % nom)
@@ -940,7 +940,7 @@ class TestZipRefuses(CasZip):
 
     def test_format_plus_recent(self):
         recent = fichiers_du_jeu("plus-recent")
-        self.assertIn("pieces_v4.csv", recent)                  # table inconnue : le format, plus parlant, prime
+        self.assertIn("pieces_v%d.csv" % format_du_jeu("plus-recent"), recent)                  # table inconnue : le format, plus parlant, prime
         self.refus(octets_zip(recent), "version plus récente de Prévo", "format %d" % format_du_jeu("plus-recent"), "jusqu'au format %d" % FORMAT_COURANT,
                    "Mettez Prévo à jour")
         fichiers = fichiers_du_jeu("f3-v1.2.0")

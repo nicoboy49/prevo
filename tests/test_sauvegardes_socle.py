@@ -414,10 +414,10 @@ class TestAvantMiseAJour(CasDossier):
             self.assertIn(datetime.date.today().isoformat(), noms)
             contenu = fichiers_de(serveur.dossier / "sauvegardes" / mise_a_jour)
             del contenu["manifeste.json"]
-            # Les tables du schéma, octet pour octet (pieces_v4.csv, table inconnue, n'est pas une table à sauvegarder).
+            # Les tables du schéma, octet pour octet (pieces_vN.csv, table inconnue, n'est pas une table à sauvegarder).
             self.assertEqual(contenu, {chemin: octets for chemin, octets in origine.items()
                                        if chemin[:-len(".csv")] in SERVEUR.TABLES})
-            self.assertIn("pieces_v4.csv", origine)
+            self.assertIn("pieces_v%d.csv" % format_du_jeu("plus-recent"), origine)
             self.verifier_manifeste(serveur.dossier / "sauvegardes" / mise_a_jour, "avant-mise-a-jour", format_du_jeu("plus-recent"),
                                     complement={"de": None, "vers": SERVEUR.VERSION_APPLICATION})
             self.assertEqual(csv_a_la_racine(fichiers_de(serveur.dossier)), origine)     # aucune table écrite

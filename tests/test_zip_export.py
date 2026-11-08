@@ -484,8 +484,8 @@ class TestDemo(CasExport):
         page.wait_for_selector("#btn-export-accueil")
         nom_zip, noms, entrees = self.exporter(page, "#btn-export-accueil")
         self.verifier_export(nom_zip, noms, entrees, {}, [], "demo", format_du_jeu("plus-recent"))
-        self.assertNotIn("pieces_v4.csv", noms)
-        self.assertIn(b"nouvelle_colonne_v4", entrees["ordres_travail.csv"].split(b"\r\n", 1)[0])
+        self.assertNotIn("pieces_v%d.csv" % format_du_jeu("plus-recent"), noms)
+        self.assertIn(("nouvelle_colonne_v%d" % format_du_jeu("plus-recent")).encode(), entrees["ordres_travail.csv"].split(b"\r\n", 1)[0])
         self.assertIn(("version_schema;'%d" % format_du_jeu("plus-recent")).encode(), entrees["parametres.csv"])
         self.assertEqual(self.attendre_toast(page, "Export téléchargé"), "Export téléchargé : %d fichiers CSV." % NB_TABLES)
 
