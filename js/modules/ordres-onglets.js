@@ -12,7 +12,7 @@ Object.assign(Ordres, (() => {
   const { estVerrouille, verifierHabilitation, piecesManquantes, cout, nomTechnicien } = Ordres;
   const { texte, nombre, arrondi, aujourdhui, estResponsable, estTechnicien, monTechnicienId, equipementDe,
     listeTechniciens, libelleArticle, listeCodes, lignesDeLOt, operationsDe, placerChamp, champOt,
-    modifierOt, modifierLieeAOt, journaliserHabilitation, optionsHtml, boutonsTransitions,
+    modifierOt, modifierLieeAOt, optionsHtml, boutonsTransitions,
     declarerFormulaire, apresEnregistrement, pendant, listeErreursHtml, bandeauHabilitation, enteteOnglet,
     lienOt, detailManque, garderLeCompteRendu } = Ordres.interne;
 
@@ -114,7 +114,6 @@ Object.assign(Ordres, (() => {
     const affectation = changes.includes('technicien_id') || changes.includes('date_prevue');
     const habilitation = verifierHabilitation(ot.equipement_id, valeurs.technicien_id, valeurs.date_prevue);
     if (affectation && habilitation) {
-      await journaliserHabilitation(ot.id, verifierHabilitation(ot.equipement_id, valeurs.technicien_id, valeurs.date_prevue, true));
       return I18n.t('ordres.enregistrer_preparation.preparation_enregistree_avertissement_habilitation', { habilitation });
     }
     return true;

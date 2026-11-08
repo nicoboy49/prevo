@@ -14,7 +14,7 @@ Object.assign(Ordres, (() => {
     creer, changerStatut, changerPriorite, creerOtLie } = Ordres;
   const { ETAPES, STATUTS_CLOTURES, memoire, texte, aujourdhui, estResponsable, estTechnicien,
     equipementDe, repereEquipement, cheminLocalisation, listeTechniciens, placerChamp, champOt,
-    statutDeReprise, habilitationsManquantes, journaliserHabilitation, optionsHtml, badgeRetard,
+    statutDeReprise, habilitationsManquantes, optionsHtml, badgeRetard,
     badgeAnomalie, origineHtml, changerAnomalie, lireAvertissementGamme, detailManque } = Ordres.interne;
 
   // Fonctions des fichiers chargés APRÈS celui-ci (ordres-onglets.js, ordres-impression.js) :
@@ -122,8 +122,6 @@ Object.assign(Ordres, (() => {
         type: urgence ? 'correctif immédiat' : valeurs.type, priorite: urgence ? 'P1' : valeurs.priorite,
         travail_a_faire: valeurs.travail_a_faire, technicien_id: valeurs.technicien_id, date_prevue: valeurs.date_prevue,
       });
-      const habilitation = verifierHabilitation(selecteur.valeur(), valeurs.technicien_id, valeurs.date_prevue, true);   // journal (D156)
-      if (habilitation) await journaliserHabilitation(id, habilitation);
       App.marquerSaisie(false);
       UI.toast(I18n.t('ordres.valider_nouvel_ot.ordre_travail_cree', { id }), 'succes');
       App.naviguer('#/ot/' + encodeURIComponent(id));

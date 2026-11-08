@@ -292,6 +292,26 @@ class TestRg8Ecritures(CasNavigateur):
         self.assertFalse(any("dérogation" in action or "habilitation" in action for action in self.actions(OT_A_PLANIFIER)))
         self.assertEqual(self.ot(OT_A_PLANIFIER)["technicien_id"], nouveau)
 
+    # -- fiche de l'OT : aucune erreur JavaScript (T447, après le retrait de journaliserHabilitation) ------
+
+    def ouvrir_fiche(self, ot_id):
+        self.page.goto(self.serveur.url + "/#/ot/" + ot_id)
+        attendre_pret(self.page)
+        self.page.wait_for_load_state("networkidle")
+        self.assertIn(ot_id, self.page.inner_text("body"))
+
+    def test_fiche_d_un_ot_dont_l_habilitation_manque_sans_erreur_javascript(self):
+        self.ouvrir()
+        ot_id = self.nouvel_ot("T447 — fiche")
+        # Affectation refusée sans dérogation : la fiche de l'OT s'ouvre.
+        self.refuse("interne", "modifierOt", ot_id, {"technicien_id": TEC_ECHUE, "date_prevue": DATE}, "préparation")
+        self.ouvrir_fiche(ot_id)
+        # Dérogation du responsable, notée au journal par l'écriture elle-même : la fiche s'ouvre.
+        self.accepte("interne", "modifierOt", ot_id, {"technicien_id": TEC_ECHUE, "date_prevue": DATE}, "préparation", DEROGER)
+        self.assertIn("dérogation habilitation", self.actions(ot_id)[-1])
+        self.ouvrir_fiche(ot_id)
+        self.ouvrir_fiche(OT_EXIGEE)
+
 
 if __name__ == "__main__":
     unittest.main()
