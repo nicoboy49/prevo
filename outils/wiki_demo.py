@@ -121,7 +121,8 @@ FACTEUR_CROISSANCE_SUITE = 1.578
 SCRIPTS = [
     'js/i18n.js', 'js/i18n/langues.js', 'js/i18n/fr.js', 'js/i18n/aide/fr.js',
     'js/lib/papaparse.min.js','js/schema.js', 'js/donnees.js', 'js/stockage-demo.js', 'js/interface.js',
-    'js/modules/causes-frequentes.js', 'js/modules/indicateurs-regles.js', 'js/modules/ia.js', 'js/modules/ia-prompts.js',
+    'js/modules/causes-frequentes.js', 'js/modules/indicateurs-regles.js', 'js/modules/ia.js',
+    'js/modules/ia-masquage.js', 'js/modules/ia-prompts.js',
     'js/modules/wiki-regles.js', 'js/modules/wiki-calculs.js', 'js/modules/wiki-entites.js', 'js/modules/wiki-texte.js',
     'js/modules/wiki-recherche.js',
     'js/modules/wiki-ingestion.js', 'js/modules/wiki-journal.js',
