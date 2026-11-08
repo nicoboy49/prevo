@@ -82,6 +82,7 @@ from pathlib import Path
 
 from commun import (RACINE, SCRIPT_SANS_AIDE, SCRIPTS_TRADUCTION, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule,
                     preregler_profil)
+from commun import NB_TABLES
 
 RECETTE = os.environ.get("PREVO_RECETTE_LOURDE") == "1"
 ESSAI = os.environ.get("PREVO_RECETTE_ESSAI") == "1"            # petits volumes : vérifie le déroulé, rien de plus
@@ -610,7 +611,7 @@ class TestZipParMorceaux(unittest.TestCase):
         self.assertEqual(page.locator("#import-zip-echec, #import-zip-refus").count(), 0,
                          page.inner_text("dialog") if page.locator("dialog").count() else "")
         termine = re.sub(r"\s+", " ", page.inner_text("#import-zip-termine"))
-        self.assertIn("24 tables remplacées, %d documents" % documents, termine)
+        self.assertIn("%d tables remplacées, %d documents" % (NB_TABLES, documents), termine)
         return termine
 
     def ouvrir_serveur(self, navigateur, serveur):
@@ -686,8 +687,8 @@ class TestZipParMorceaux(unittest.TestCase):
             if table == "journal":
                 self.assertTrue(obtenu.startswith(attendu), tzl.premier_ecart(obtenu, attendu))
                 self.assertRegex(obtenu[len(attendu):].decode("utf-8"),
-                                 r"^[^\r\n]*;parametres;[^\r\n]*import ZIP : %s, 24 tables[^\r\n]*\r\n$"
-                                 % re.escape(nom_zip))
+                                 r"^[^\r\n]*;parametres;[^\r\n]*import ZIP : %s, %d tables[^\r\n]*\r\n$"
+                                 % (re.escape(nom_zip), NB_TABLES))
             else:
                 self.assertTrue(obtenu == attendu, table + " : " + tzl.premier_ecart(obtenu, attendu))
         return rendus
@@ -696,8 +697,8 @@ class TestZipParMorceaux(unittest.TestCase):
         journal = len(decrit["csv"]["journal.csv"])
         contenu = self.opfs(page, {"journal.csv": journal})
         self.assertEqual(contenu["journal.csv"]["debut"], sha256(decrit["csv"]["journal.csv"]))
-        self.assertRegex(contenu["journal.csv"]["suite"], r"^[^\r\n]*;parametres;[^\r\n]*import ZIP : %s, 24 tables"
-                                                          r"[^\r\n]*\r\n$" % re.escape(nom_zip))
+        self.assertRegex(contenu["journal.csv"]["suite"], r"^[^\r\n]*;parametres;[^\r\n]*import ZIP : %s, %d tables"
+                                                          r"[^\r\n]*\r\n$" % (re.escape(nom_zip), NB_TABLES))
         for table in tzl.TABLES:
             if table != "journal":
                 self.assertEqual(contenu[table + ".csv"]["sha256"], sha256(decrit["csv"][table + ".csv"]), table)
@@ -838,7 +839,7 @@ class TestZipParMorceaux(unittest.TestCase):
         chemin, decrit = self.etape("01_t212_a_serveur",
                                     lambda: self.export_serveur_t212("01_t212_a_serveur", PHOTOS_T212[0], MIO,
                                                                      "photo-a"))
-        self.assertEqual(decrit["entrees"], 25 + PHOTOS_T212[0])
+        self.assertEqual(decrit["entrees"], NB_TABLES + 1 + PHOTOS_T212[0])
         ETAT["zip_t212_a"] = (chemin, decrit)
         # Le même export dans un contexte incognito, comme T212 (CasNavigateur) : tout y reste en mémoire.
         chemin_i, _ = self.etape("01_t212_a_serveur_incognito", lambda: self.export_serveur_t212(
@@ -874,11 +875,11 @@ class TestZipParMorceaux(unittest.TestCase):
         chemin_2.unlink()
 
     def test_03_t212_cas_b_export_serveur_9950_entrees(self):
-        # 24 CSV + manifeste : photos jusqu'à 9 913 entrées (T212 : 9 950 avec les 37 documents de la grosse base), sur
+        # NB_TABLES CSV + manifeste : photos jusqu'à 9 913 entrées (T212 : 9 950 avec les 37 documents de la grosse base), sur
         # le jeu de charge de 20 000 OT (assez de demandes pour les citer).
         chemin, decrit = self.etape("03_t212_b_serveur", lambda: self.export_serveur_t212(
             "03_t212_b_serveur", PHOTOS_T212[1], 34 * 1024 + 512, "photo-b", volume="300,20000"))
-        self.assertEqual(decrit["entrees"], 25 + PHOTOS_T212[1])
+        self.assertEqual(decrit["entrees"], NB_TABLES + 1 + PHOTOS_T212[1])
         chemin.unlink()
 
     def test_04_grosse_base_de_t212_donnees_seules(self):
@@ -902,7 +903,7 @@ class TestZipParMorceaux(unittest.TestCase):
         shutil.rmtree(self.temporaire / "profil-04", ignore_errors=True)
         decrit = decrire_zip(chemin)
         noter("04_grosse_base_donnees_seules", {"zip": resume_zip(decrit), "export": dict(mesure, **export)})
-        self.assertEqual((decrit["entrees"], len(decrit["documents"])), (25, 0))
+        self.assertEqual((decrit["entrees"], len(decrit["documents"])), (NB_TABLES + 1, 0))
         self.assertGreater(len(decrit["csv"]["journal.csv"]), 40 * MIO)
         chemin.unlink()
 

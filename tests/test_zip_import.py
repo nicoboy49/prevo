@@ -24,11 +24,11 @@ Chaque écriture est contrôlée sur le disque (serveur) ou dans l'OPFS du navig
               prénom et son nom (sous un autre identifiant) ; sinon (deux fiches au même nom) la confirmation le dit,
               « moi » est vidé et Prévo demande au responsable qui il est (Annuler : la question revient à
               l'ouverture suivante ; une réponse : plus jamais), sans deviner ;
-              ZIP au format 2 (f2-v1.1.0, sans manifeste) : confirmation « mises au format 3 », deux tables vidées ;
-              base au format 3, lignes intactes, colonne astuce vide, tables du wiki vides ; colonnes inconnues du
+              ZIP au format 2 (f2-v1.1.0, sans manifeste) : confirmation « mises au format courant », deux tables vidées ;
+              base au format courant, lignes intactes, colonne astuce vide, tables du wiki vides ; colonnes inconnues du
               ZIP (jeu colonnes-en-trop) gardées avec leurs valeurs ;
               annulation à la confirmation : aucun octet changé ; ZIP hostile (« ../x.csv ») et ZIP plus récent
-              (format 4) : refus, aucun octet changé ;
+              (format courant + 1) : refus, aucun octet changé ;
               échec simulé pendant l'écriture de ordres_travail : tables remises à l'octet depuis la sauvegarde,
               message qui la nomme ;
               deux passes (T205) : documents relus depuis le ZIP et écrits un par un (jamais deux gardés à la fois) ;
@@ -60,11 +60,12 @@ from pathlib import Path
 
 from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule,
                     preregler_profil, url_fichier)
+from commun import FORMAT_COURANT, FORMAT_PLUS_RECENT, NB_TABLES, format_du_jeu
 from jeux_formats import copier_jeu
 from test_zip_lecture import MIO, meme_crc32_autre_contenu, octets_pseudo_aleatoires
 
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
-TABLES = sorted(chemin.stem for chemin in DOSSIER_DEMO.glob("*.csv"))         # les 24 tables du format 3
+TABLES = sorted(chemin.stem for chemin in DOSSIER_DEMO.glob("*.csv"))         # les tables du format courant (NB_TABLES)
 CHAMPS_DOCUMENTS = {"equipements": "document", "demandes": "photo", "controles_reglementaires": "rapport"}
 AVERTISSEMENT = ("Toutes les données actuelles seront remplacées ; une sauvegarde complète, documents compris, est "
                  "faite juste avant ; les comptes et l'accès ne sont pas touchés.")
@@ -240,7 +241,7 @@ def base_a():
     return fichiers, dict(DOCUMENTS_A)
 
 
-def manifeste(fichiers, format=3):
+def manifeste(fichiers, format=FORMAT_COURANT):
     """Octets d'un manifeste exact (comme Formats.manifeste) des fichiers donnés."""
     contenu = {"application": "Prévo", "version_appli": "2.0.1", "format": format, "date": "2026-11-04T09:30:00",
                "motif": "export", "mode": "dossier",
@@ -362,9 +363,9 @@ class CasImport(CasNavigateur):
                 self.assertEqual(len(lignes_o), len(lignes_a) + 1)
                 derniere = lignes_o.pop()
                 self.assertEqual(derniere["table"], "parametres")
-                self.assertRegex(derniere["action"], r"^import ZIP : %s, 24 tables, %d documents? ; sauvegarde "
+                self.assertRegex(derniere["action"], r"^import ZIP : %s, %d tables, %d documents? ; sauvegarde "
                                  r"\d{4}-\d{2}-\d{2}_\d{6}_avant-import-zip faite juste avant$"
-                                 % (re.escape(nom_zip), len(documents_zip)))
+                                 % (re.escape(nom_zip), NB_TABLES, len(documents_zip)))
             self.assertEqual(len(lignes_o), len(lignes_a), table)
             for rang, (ligne_a, ligne_o) in enumerate(zip(lignes_a, lignes_o)):
                 for colonne in entete_a:
@@ -456,7 +457,7 @@ class TestServeur(CasImport):
             self.assertEqual(info["avertissement"], AVERTISSEMENT)
             page.click(BOUTON_REMPLACER)
             termine = self.texte_fenetre(page, "import-zip-termine")
-            self.assertIn("24 tables remplacées, 6 documents", termine)
+            self.assertIn("%d tables remplacées, 6 documents" % NB_TABLES, termine)
             apres = instantane(serveur.dossier)
 
             # Données : champ à champ, références vers les noms rendus par le serveur (horodatés, « -2 » au besoin).
@@ -471,7 +472,7 @@ class TestServeur(CasImport):
             self.assertIn("photo-tapis-2.png", demandes)                     # même nom demandé : « -2 »
             self.assertEqual(documents_b["ancien.pdf"], ancien)              # jamais supprimé
             self.assertEqual(len(documents_b), len(documents_zip) + 1)
-            self.assertIn(b"version_schema;'3", apres["parametres.csv"])
+            self.assertIn(("version_schema;'%d" % FORMAT_COURANT).encode(), apres["parametres.csv"])
 
             # Sauvegarde « avant-import-zip » : CSV d'avant à l'octet, documents/, comptes, manifeste.
             noms = sauvegardes_de(apres, MOTIF_AVANT_IMPORT_ZIP)
@@ -706,8 +707,8 @@ class TestServeur(CasImport):
             self.choisir_zip(page, chemin_zip)
             info = self.confirmation(page)
             self.assertEqual((info["format"], info["migre"], info["documents"]), ("2", "1", 0))
-            self.assertEqual(info["formatTexte"], "Format des données : 2 ; elles seront mises au format 3 (format de "
-                                                  "cette version) à l'import.")
+            self.assertEqual(info["formatTexte"], "Format des données : 2 ; elles seront mises au format %d (format de "
+                                                  "cette version) à l'import." % FORMAT_COURANT)
             self.assertIn("sans manifeste", info["origine"])
             self.assertEqual(sorted(info["videes"]), ["wiki_journal", "wiki_pages"])
             self.assertIn("2 tables absentes du ZIP seront vidées", info["tablesVidees"])
@@ -719,7 +720,7 @@ class TestServeur(CasImport):
             self.texte_fenetre(page, "import-zip-termine")
             ecrits = {table: (serveur.dossier / (table + ".csv")).read_bytes() for table in TABLES}
 
-        self.assertIn(b"version_schema;'3", ecrits["parametres"])
+        self.assertIn(("version_schema;'%d" % FORMAT_COURANT).encode(), ecrits["parametres"])
         for table in TABLES:
             entete, lignes = lire_csv(ecrits[table])
             if table + ".csv" not in f2:
@@ -730,7 +731,7 @@ class TestServeur(CasImport):
             nouvelles = entete[len(entete_f2):]
             self.assertEqual(nouvelles, ["astuce"] if table == "ordres_travail" else [], table)
             if table == "journal":
-                self.assertRegex(lignes.pop()["action"], r"^import ZIP : prevo-export-2025-10-01\.zip, 24 tables, "
+                self.assertRegex(lignes.pop()["action"], r"^import ZIP : prevo-export-2025-10-01\.zip, " + str(NB_TABLES) + r" tables, "
                                                          r"0 document ; sauvegarde .*_avant-import-zip faite juste avant$")
             self.assertEqual(len(lignes), len(lignes_f2), table)
             for rang, (ligne, ligne_f2) in enumerate(zip(lignes, lignes_f2)):
@@ -768,8 +769,8 @@ class TestServeur(CasImport):
         hostile = ecrire_zip(self.temporaire / "hostile.zip", dict(f3, **{"../x.csv": b"id;nom\r\n"}),
                              avec_manifeste=False)
         recent = ecrire_zip(self.temporaire / "recent.zip", f3, avec_manifeste=False)
-        with zipfile.ZipFile(recent, "a") as archive:          # même ZIP, manifeste au format 4
-            archive.writestr("manifeste.json", manifeste(f3, format=4))
+        with zipfile.ZipFile(recent, "a") as archive:          # même ZIP, manifeste au format plus récent
+            archive.writestr("manifeste.json", manifeste(f3, format=FORMAT_PLUS_RECENT))
         with ServeurPrevo() as serveur:
             page = self.ouvrir_parametres(serveur)
             avant = instantane(serveur.dossier)
@@ -782,7 +783,7 @@ class TestServeur(CasImport):
             self.assertEqual(instantane(serveur.dossier), avant)
             # ZIP hostile, puis ZIP plus récent : refus, rien d'écrit.
             for chemin, attendus in ((hostile, ["chemin dangereux", "« ../x.csv »", "Rien n'a été écrit."]),
-                                     (recent, ["version plus récente de Prévo", "format 4", "Rien n'a été écrit."])):
+                                     (recent, ["version plus récente de Prévo", "format %d" % FORMAT_PLUS_RECENT, "Rien n'a été écrit."])):
                 with self.subTest(zip=chemin.name):
                     self.choisir_zip(page, chemin)
                     texte = self.texte_fenetre(page, "import-zip-refus")
@@ -989,7 +990,7 @@ class TestDossier(CasImport):
             page.click("#btn-import-zip")
             texte = self.texte_fenetre(page, "import-zip-refus")
             self.assertIn("Import ZIP refusé.", texte)
-            self.assertIn("version plus récente de Prévo (format 4", texte)
+            self.assertIn("version plus récente de Prévo (format %d" % format_du_jeu("plus-recent"), texte)
             self.assertIn("lecture seule", texte)
             self.fermer_fenetre(page, "import-zip-refus")
             page.wait_for_function("!document.getElementById('btn-import-zip').disabled")

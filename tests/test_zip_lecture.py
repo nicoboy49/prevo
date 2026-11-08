@@ -54,13 +54,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from commun import RACINE, CasNavigateur, charger_scripts  # noqa: E402
+from commun import FORMAT_COURANT, FORMAT_PLUS_RECENT, RACINE, CasNavigateur, charger_scripts, format_du_jeu  # noqa: E402
 from jeux_formats import copier_jeu  # noqa: E402
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/formats.js", "js/donnees.js",
            "js/modules/zip-tables.js", "js/modules/zip-flux.js", "js/modules/zip-lecture.js"]
 ZIP_JSZIP = RACINE / "tests" / "fixtures" / "zip-jszip"
-FORMAT_COURANT = 3
 MIO = 1024 * 1024
 DATE = (2026, 11, 4, 12, 0, 0)
 CLES_ACCEPTE = ["abimes", "absentes", "documents", "format", "formatOrigine", "manifeste", "migre", "ok", "problemes",
@@ -942,11 +941,11 @@ class TestZipRefuses(CasZip):
     def test_format_plus_recent(self):
         recent = fichiers_du_jeu("plus-recent")
         self.assertIn("pieces_v4.csv", recent)                  # table inconnue : le format, plus parlant, prime
-        self.refus(octets_zip(recent), "version plus récente de Prévo", "format 4", "jusqu'au format 3",
+        self.refus(octets_zip(recent), "version plus récente de Prévo", "format %d" % format_du_jeu("plus-recent"), "jusqu'au format %d" % FORMAT_COURANT,
                    "Mettez Prévo à jour")
         fichiers = fichiers_du_jeu("f3-v1.2.0")
-        self.refus(octets_zip(dict(fichiers, **{"manifeste.json": manifeste(fichiers, format=4)})),
-                   "version plus récente de Prévo", "format 4")
+        self.refus(octets_zip(dict(fichiers, **{"manifeste.json": manifeste(fichiers, format=FORMAT_PLUS_RECENT)})),
+                   "version plus récente de Prévo", "format %d" % FORMAT_PLUS_RECENT)
 
     def test_zip_sans_csv_de_table(self):
         for nom, entrees in {"documents seuls": dict({"documents/": b""}, **DOCUMENTS),

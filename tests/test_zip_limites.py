@@ -46,11 +46,12 @@ from pathlib import Path
 
 from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret, charger_scripts,
                     installer_dossier_simule, preregler_profil)
+from commun import NB_TABLES
 import test_zip_import as tzi
 
 MIO = 1024 * 1024
 BOM = codecs.BOM_UTF8
-TABLES = tzi.TABLES                                             # les 24 tables du format 3
+TABLES = tzi.TABLES                                             # les tables du format courant (NB_TABLES)
 ZIP_LECTURE = RACINE / "js" / "modules" / "zip-lecture.js"
 ZIP_FLUX = RACINE / "js" / "modules" / "zip-flux.js"
 ZIP_DONNEES = RACINE / "js" / "modules" / "zip-donnees.js"
@@ -189,7 +190,7 @@ def ecrire_dossier(dossier, fichiers):
 
 
 def grosse_base(dossier):
-    """{chemin: octets} de la grosse base (24 CSV et documents/), écrite aussi dans `dossier`."""
+    """{chemin: octets} de la grosse base (NB_TABLES CSV et documents/), écrite aussi dans `dossier`."""
     charge = Path(tempfile.mkdtemp(prefix="prevo-charge-"))
     try:
         subprocess.run([sys.executable, "-X", "utf8", str(GENERATEUR), "--volume", "500,20000", "--sortie", str(charge)],
@@ -476,7 +477,7 @@ class TestAllerRetour(CasNavigateur):
         page.click(tzi.BOUTON_REMPLACER)
         page.wait_for_selector("#import-zip-termine", timeout=LONG_MS)
         termine = re.sub(r"\s+", " ", page.inner_text("#import-zip-termine"))
-        self.assertIn("24 tables remplacées, %d documents" % documents, termine)
+        self.assertIn("%d tables remplacées, %d documents" % (NB_TABLES, documents), termine)
         return termine
 
     def export_du_serveur(self):
@@ -524,8 +525,8 @@ class TestAllerRetour(CasNavigateur):
             if table == "journal":
                 self.assertTrue(obtenu.startswith(attendu), premier_ecart(obtenu, attendu))
                 suite = obtenu[len(attendu):].decode("utf-8")
-                self.assertRegex(suite, r"^[^\r\n]*;parametres;[^\r\n]*import ZIP : %s, 24 tables[^\r\n]*\r\n$"
-                                 % re.escape(nom_zip))
+                self.assertRegex(suite, r"^[^\r\n]*;parametres;[^\r\n]*import ZIP : %s, %d tables[^\r\n]*\r\n$"
+                                 % (re.escape(nom_zip), NB_TABLES))
             else:
                 self.assertTrue(obtenu == attendu, table + " : " + premier_ecart(obtenu, attendu))
         return rendus
@@ -552,8 +553,8 @@ class TestAllerRetour(CasNavigateur):
         journal = len(entrees["journal.csv"])
         opfs = self.empreintes(page, {"journal.csv": journal})
         self.assertEqual(opfs["journal.csv"]["debut"], sha256(entrees["journal.csv"]))
-        self.assertRegex(opfs["journal.csv"]["suite"], r"^[^\r\n]*;parametres;[^\r\n]*import ZIP : %s, 24 tables"
-                                                       r"[^\r\n]*\r\n$" % re.escape(nom_zip))
+        self.assertRegex(opfs["journal.csv"]["suite"], r"^[^\r\n]*;parametres;[^\r\n]*import ZIP : %s, %d tables"
+                                                       r"[^\r\n]*\r\n$" % (re.escape(nom_zip), NB_TABLES))
         for table in TABLES:
             if table != "journal":
                 self.assertEqual(opfs[table + ".csv"]["sha256"], sha256(entrees[table + ".csv"]), table)

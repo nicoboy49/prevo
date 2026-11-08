@@ -9,9 +9,9 @@ documents dans le ZIP : refus), js/modules/parametres-zip.js (confirmation, aucu
 Base A (deux modes) : la démo avec des documents cités dans les trois colonnes et deux rapports figés (base_a de
 test_zip_import : 6 documents présents, 2 références sans document : un absent, un nom piégé), plus un document que rien
 ne cite. Le responsable clique sur « Exporter les données seules (sans les documents) » :
-    - ZIP prevo-export-AAAA-MM-JJ-sans-documents.zip : les 24 CSV et manifeste.json, aucune entrée documents/ ;
+    - ZIP prevo-export-AAAA-MM-JJ-sans-documents.zip : les CSV (NB_TABLES) et manifeste.json, aucune entrée documents/ ;
       manifeste exact (clés dans l'ordre, « documents »: « exclus » juste avant « fichiers », pas de « manquants ») ;
-      message « Export téléchargé : 24 fichiers CSV, sans les documents (données seules). » ;
+      message « Export téléchargé : NB_TABLES fichiers CSV, sans les documents (données seules). » ;
     - (serveur) le même ZIP avec un document ajouté (et décrit au manifeste) : refusé, rien n'est écrit ;
     - réimport dans la même base : confirmation « Ce ZIP ne contient pas les documents : les 6 documents déjà présents
       sont gardés tels quels ; 2 documents cités par les données importées n'existent pas ici. » ; après l'import, le
@@ -33,7 +33,7 @@ import re
 import unittest
 import zipfile
 
-from commun import RACINE, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule, preregler_profil
+from commun import NB_TABLES, RACINE, ServeurPrevo, ServeurStatique, attendre_pret, installer_dossier_simule, preregler_profil
 from test_zip_export import NOTER_TOASTS_JS
 from test_zip_import import (BOUTON_REMPLACER, ECRIRE_OPFS_JS, ERREUR_DOCUMENT_ABSENT, ERREUR_PING_ABSENT,
                              INSTANTANE_OPFS_JS, TABLES, CasImport, base_a, en_base64, lire_csv, octets_pdf)
@@ -41,7 +41,7 @@ from test_zip_import import (BOUTON_REMPLACER, ECRIRE_OPFS_JS, ERREUR_DOCUMENT_A
 NOM_DOSSIER = "donnees-zip-donnees-seules"
 MOTIF_NOM_ZIP = re.compile(r"^prevo-export-\d{4}-\d{2}-\d{2}-sans-documents\.zip$")
 CLES_MANIFESTE = ["application", "version_appli", "format", "date", "motif", "mode", "documents", "fichiers"]
-MESSAGE_EXPORT = "Export téléchargé : 24 fichiers CSV, sans les documents (données seules)."
+MESSAGE_EXPORT = "Export téléchargé : %d fichiers CSV, sans les documents (données seules)." % NB_TABLES
 CONFIRMATION = ("Ce ZIP ne contient pas les documents : les 6 documents déjà présents sont gardés tels quels ; "
                 "2 documents cités par les données importées n'existent pas ici.")
 FIN = "sans les documents (données seules : aucun document existant supprimé ni remplacé)"

@@ -17,9 +17,9 @@ par les boutons #btn-export-zip et #btn-export-donnees-seules de Paramètres (Ap
                   complet de l'étape c), trois boutons dans l'ordre ; « Annuler » : aucun ZIP construit ni téléchargé,
                   aucune autre fenêtre (pas de refus), aucun message ; la croix (App.exporterZip) : résultat `annule`,
                   `fichiers` vide, pas de refus ;
-               b. « Exporter les données seules » : prevo-export-AAAA-MM-JJ-sans-documents.zip, 24 CSV et
+               b. « Exporter les données seules » : prevo-export-AAAA-MM-JJ-sans-documents.zip, NB_TABLES CSV et
                   manifeste.json, aucune entrée documents/, « documents »: « exclus », message des données seules ;
-               c. « Continuer l'export complet » : prevo-export-AAAA-MM-JJ.zip, 24 CSV, les 53 documents (noms, tailles
+               c. « Continuer l'export complet » : prevo-export-AAAA-MM-JJ.zip, NB_TABLES CSV, les 53 documents (noms, tailles
                   et SHA-256 de la source), manifeste.json sans « documents » ni « manquants », message des 53
                   documents ;
                d. « Exporter les données seules (sans les documents) » : aucune fenêtre, ZIP sans les documents.
@@ -41,7 +41,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from commun import CasNavigateur, ServeurPrevo, attendre_pret, charger_scripts, preregler_profil
+from commun import NB_TABLES, CasNavigateur, ServeurPrevo, attendre_pret, charger_scripts, preregler_profil
 from test_zip_export import NOTER_TOASTS_JS
 from test_zip_import import TABLES, fichiers_demo
 from test_zip_limites import ESPION_ZIP_JS, LIMITES, ecrire_dossier, octets_fictifs, poser_documents
@@ -54,8 +54,8 @@ TITRE = "Export ZIP volumineux"
 BOUTONS = ["Annuler", "Continuer l'export complet", "Exporter les données seules"]
 MOTIF_ZIP_COMPLET = re.compile(r"^prevo-export-\d{4}-\d{2}-\d{2}\.zip$")
 MOTIF_ZIP_SANS_DOCUMENTS = re.compile(r"^prevo-export-\d{4}-\d{2}-\d{2}-sans-documents\.zip$")
-MESSAGE_DONNEES_SEULES = "Export téléchargé : 24 fichiers CSV, sans les documents (données seules)."
-MESSAGE_COMPLET = "Export téléchargé : 24 fichiers CSV et 53 document(s)."
+MESSAGE_DONNEES_SEULES = "Export téléchargé : %d fichiers CSV, sans les documents (données seules)." % NB_TABLES
+MESSAGE_COMPLET = "Export téléchargé : %d fichiers CSV et 53 document(s)." % NB_TABLES
 CSV = sorted(table + ".csv" for table in TABLES)
 
 # Titres de toutes les fenêtres ouvertes (<dialog> ajoutés), dans l'ordre : UI est gelé, on observe le DOM.

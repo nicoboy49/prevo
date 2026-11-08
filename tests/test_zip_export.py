@@ -4,7 +4,7 @@ crypto.subtle).
 
 Chaque export est déclenché par un vrai bouton (téléchargement capturé par page.expect_download), puis le ZIP est
 ouvert en Python (zipfile) et contrôlé entièrement (verifier_export) :
-    - les 24 CSV à la racine (BOM UTF-8), les documents attendus sous documents/ octet pour octet, manifeste.json, et
+    - les CSV (NB_TABLES) à la racine (BOM UTF-8), les documents attendus sous documents/ octet pour octet, manifeste.json, et
       rien d'autre (ni sauvegardes/, ni document non cité, ni aucun chemin acces/, absolu ou avec « .. ») ;
     - manifeste.json exact : clés dans l'ordre, application « Prévo », version_appli = VERSION de js/app.js, format de
       la base, date « AAAA-MM-JJTHH:MM:SS » du jour du nom du fichier, motif « export », mode, fichiers = toutes les
@@ -15,13 +15,13 @@ ouvert en Python (zipfile) et contrôlé entièrement (verifier_export) :
                  cité par equipements.document, une photo (nom horodaté du serveur) par demandes.photo, un rapport de
                  contrôle par controles_reglementaires.rapport, deux rapports figés cités par rapports_mensuels (dont
                  un au nom horodaté), un document non cité, un document cité absent et un nom piégé
-                 « ../acces/comptes.json » ; le responsable exporte par Paramètres ; les 24 CSV du ZIP sont ceux du
+                 « ../acces/comptes.json » ; le responsable exporte par Paramètres ; les CSV du ZIP sont ceux du
                  disque à l'octet. Technicien et demandeur connectés : aucun bouton d'export (accueil, Paramètres,
                  feuille « Plus »), App.exporterZip refusé avec la phrase d'explication, aucun téléchargement ;
     dossier      jeu f3-v2.0.0 (avec acces/comptes.json) et un document non cité copiés dans l'OPFS ; documents et
                  rapports écrits par Prévo (App.adaptateur.ecrireDocument, Donnees.modifier) ; CSV du ZIP = dossier ;
     démo         mêmes ajouts en mémoire, bouton du bandeau de la démo ; CSV d'un format plus récent déposés :
-                 lecture seule, l'export reste permis (format 4, colonne inconnue gardée) ;
+                 lecture seule, l'export reste permis (format du jeu plus-recent, colonne inconnue gardée) ;
     repli        crypto.subtle retiré de la page : Formats.manifeste rend les empreintes de hashlib.sha256 (vide,
                  « abc », 1 Mio, octets 0 à 255, longueurs aux bords d'un bloc, sous-tableau) ; export de la démo
                  sans crypto.subtle : manifeste exact.
@@ -43,11 +43,11 @@ from pathlib import Path
 
 from commun import (RACINE, CasNavigateur, ServeurPrevo, ServeurStatique, attendre_pret, charger_scripts,
                     installer_dossier_simule, preregler_profil, url_fichier)
+from commun import FORMAT_COURANT, NB_TABLES, format_du_jeu
 from jeux_formats import copier_jeu
 
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
 VERSION_APPLI = re.search(r"const VERSION = '([^']+)';", (RACINE / "js" / "app.js").read_text(encoding="utf-8")).group(1)
-FORMAT_COURANT = 3
 BOM = b"\xef\xbb\xbf"
 CLES_MANIFESTE = ["application", "version_appli", "format", "date", "motif", "mode", "fichiers"]
 MOTIF_NOM_ZIP = re.compile(r"^prevo-export-(\d{4}-\d{2}-\d{2})\.zip$")
@@ -145,7 +145,7 @@ def page_rapport(mois):
 
 
 def noms_csv_attendus():
-    """Les 24 fichiers CSV de Prévo (ceux du jeu de démo)."""
+    """Les fichiers CSV de Prévo (NB_TABLES) (ceux du jeu de démo)."""
     return sorted(chemin.name for chemin in DOSSIER_DEMO.glob("*.csv"))
 
 
@@ -250,7 +250,7 @@ class CasExport(CasNavigateur):
 
     def verifier_message_manquants(self, page, nombre_documents):
         texte = self.attendre_toast(page, "Export téléchargé")
-        self.assertIn("Export téléchargé : 24 fichiers CSV et %d document(s)" % nombre_documents, texte)
+        self.assertIn("Export téléchargé : %d fichiers CSV et %d document(s)" % (NB_TABLES, nombre_documents), texte)
         self.assertIn("2 document(s) introuvable(s) : %s, vgp-chariot-absent.pdf" % NOM_PIEGE, texte)
         self.assertIn("manifeste.json", texte)
 
@@ -483,11 +483,11 @@ class TestDemo(CasExport):
         self.assertEqual(page.evaluate("ZipDonnees.exportPermis()"), {"permis": True, "raison": ""})
         page.wait_for_selector("#btn-export-accueil")
         nom_zip, noms, entrees = self.exporter(page, "#btn-export-accueil")
-        self.verifier_export(nom_zip, noms, entrees, {}, [], "demo", 4)
+        self.verifier_export(nom_zip, noms, entrees, {}, [], "demo", format_du_jeu("plus-recent"))
         self.assertNotIn("pieces_v4.csv", noms)
         self.assertIn(b"nouvelle_colonne_v4", entrees["ordres_travail.csv"].split(b"\r\n", 1)[0])
-        self.assertIn(b"version_schema;'4", entrees["parametres.csv"])
-        self.assertEqual(self.attendre_toast(page, "Export téléchargé"), "Export téléchargé : 24 fichiers CSV.")
+        self.assertIn(("version_schema;'%d" % format_du_jeu("plus-recent")).encode(), entrees["parametres.csv"])
+        self.assertEqual(self.attendre_toast(page, "Export téléchargé"), "Export téléchargé : %d fichiers CSV." % NB_TABLES)
 
 
 class TestRepliSha256(CasNavigateur):
