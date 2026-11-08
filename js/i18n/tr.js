@@ -3764,7 +3764,7 @@ I18n.ajouter('tr', {
   'equipe.champs_compte.langue': 'Dil',
   'equipe.champs_compte.langue_aide': 'Bu kişinin bağlandığı tüm iş istasyonlarında Prévo dili; kişi bunu “Bu iş istasyonu” bölümünden kendisi de seçebilir.',
   'equipe.champs_compte.langue_installation': 'Kurulum dili',
-  'equipe.champs_compte.nom': 'Soyad',
+  'equipe.champs_compte.nom': 'Soyadı',
   'equipe.champs_compte.responsable_tout_reglages_compris': 'Sorumlu: her şey, ayarlar dahil. Teknisyen: müdahaleler, saat ücreti ve fiyat olmadan. Talep eden: sorun bildirme ve taleplerini izleme.',
   'equipe.champs_compte.role': 'Rol',
   'equipe.champs_compte.technicien_lie': 'Bağlı teknisyen',
