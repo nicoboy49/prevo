@@ -9,10 +9,11 @@ Ce qui est vérifié, sans navigateur :
                        est dans tests/test_sauvegardes_abimes_serveur.py) ; « avant-… »
                        anciennes, manuelles et noms étrangers (date impossible, fichier, autre nom) jamais touchés ;
                        aucune rotation sans nouvelle quotidienne ; au démarrage du serveur réel (date du jour) aussi ;
-    avant-mise-a-jour  premier démarrage sur une copie de f2-v1.1.0 et de f3-v1.2.0 sans derniere-version.json :
-                       sauvegarde aux octets d'ORIGINE (avant le passage au format 3), manifeste « de » = « inconnue »,
-                       « vers » = version courante, derniere-version.json écrit, sauvegarde du jour faite APRÈS le
-                       passage ; second démarrage : aucun octet changé ; autre version notée : nouvelle sauvegarde ;
+    avant-mise-a-jour  premier démarrage sur une copie de f2-v1.1.0, de f3-v1.2.0 et de f4-v2.2.0 (déjà au format
+                       courant : sans passage, T402) sans derniere-version.json : sauvegarde aux octets d'ORIGINE
+                       (avant le passage au format 4), manifeste « de » = « inconnue », « vers » = version courante,
+                       derniere-version.json écrit, sauvegarde du jour faite APRÈS le passage ; second démarrage :
+                       aucun octet changé ; autre version notée (base au format courant) : nouvelle sauvegarde ;
                        même version : aucune ; base vide : rien ; fichier illisible : « inconnue » ; sauvegarde
                        impossible : un message, derniere-version.json pas écrit ; lecture seule : faite quand même ;
     manifeste          dans chaque sauvegarde (quotidienne, manuelle, à motif, avant-restauration) : champs de
@@ -327,9 +328,11 @@ class TestRotation(CasDossier):
 
 class TestAvantMiseAJour(CasDossier):
 
-    def premier_demarrage(self, nom_jeu, ajouts_au_format_3):
-        """Premier démarrage du serveur réel sur une copie du jeu, sans derniere-version.json ; contrôles communs.
-        Rend la copie du dossier de données après ce démarrage."""
+    def premier_demarrage(self, nom_jeu):
+        """Premier démarrage du serveur réel sur une copie du jeu, sans derniere-version.json ; contrôles communs
+        (passage au format courant si le jeu est plus ancien). Rend la copie du dossier de données après ce démarrage."""
+        format_d_origine = format_du_jeu(nom_jeu)
+        avec_passage = format_d_origine < FORMAT_COURANT
         source = copier_jeu(nom_jeu, self.racine / nom_jeu / "donnees")
         origine = fichiers_de(source)
         self.assertNotIn("derniere-version.json", origine)
@@ -345,7 +348,6 @@ class TestAvantMiseAJour(CasDossier):
         contenu = fichiers_de(copie / "sauvegardes" / mise_a_jour)
         del contenu["manifeste.json"]
         self.assertEqual(contenu, origine)
-        format_d_origine = 2 if ajouts_au_format_3 else 3
         self.verifier_manifeste(copie / "sauvegardes" / mise_a_jour, "avant-mise-a-jour", format_d_origine,
                                 complement={"de": None, "vers": SERVEUR.VERSION_APPLICATION})
         self.assertIn("sauvegarde %s faite avant la mise à jour" % mise_a_jour, console)
@@ -355,10 +357,11 @@ class TestAvantMiseAJour(CasDossier):
         self.assertEqual(notee["version"], SERVEUR.VERSION_APPLICATION)
         self.assertRegex(notee["depuis"], MOTIF_DATE_ISO)
         self.assertEqual(notee["depuis"][:10], aujourd_hui)
-        # 2. Le passage au format 3 (T185), ou rien pour un jeu déjà au format 3.
-        format_v3 = [nom for nom in noms if nom.endswith("_avant-format-v3")]
-        self.assertEqual(len(format_v3), 1 if ajouts_au_format_3 else 0, noms)
-        if ajouts_au_format_3:
+        # 2. Le passage au format courant (T185, une seule sauvegarde « avant-format-vN » quel que soit le format de
+        # départ), ou rien pour un jeu déjà au format courant.
+        avant_format = [nom for nom in noms if nom.endswith("_avant-format-v%d" % FORMAT_COURANT)]
+        self.assertEqual(len(avant_format), 1 if avec_passage else 0, noms)
+        if avec_passage:
             self.assertLess(console.index(mise_a_jour), console.index("Format des données"))
             self.assertNotEqual(apres["ordres_travail.csv"], origine["ordres_travail.csv"])
         else:
@@ -369,20 +372,24 @@ class TestAvantMiseAJour(CasDossier):
         del quotidienne["manifeste.json"]
         self.assertEqual(quotidienne, csv_a_la_racine(apres))
         self.verifier_manifeste(copie / "sauvegardes" / aujourd_hui, "quotidienne", FORMAT_COURANT)
-        self.assertEqual(sorted(noms), sorted([aujourd_hui, mise_a_jour] + format_v3))
+        self.assertEqual(sorted(noms), sorted([aujourd_hui, mise_a_jour] + avant_format))
         return copie
 
     def test_f2_premier_demarrage_puis_second_sans_effet(self):
-        copie = self.premier_demarrage("f2-v1.1.0", ajouts_au_format_3=True)
+        copie = self.premier_demarrage("f2-v1.1.0")
         avant_second = fichiers_de(copie)
         with commun.ServeurPrevo(source=copie) as second:
             self.assertEqual(fichiers_de(second.dossier), avant_second)       # ni sauvegarde, ni fichier réécrit
 
-    def test_f3_premier_demarrage_sans_passage_de_format(self):
-        self.premier_demarrage("f3-v1.2.0", ajouts_au_format_3=False)
+    def test_f3_premier_demarrage_passage_au_format_4(self):
+        self.premier_demarrage("f3-v1.2.0")
+
+    def test_f4_premier_demarrage_sans_passage_de_format(self):
+        self.premier_demarrage("f4-v2.2.0")
 
     def test_autre_version_notee_nouvelle_sauvegarde_meme_version_aucune(self):
-        source = copier_jeu("f3-v1.2.0", self.racine / "autre" / "donnees")
+        # Base déjà au format courant (f4-v2.2.0) : seules les sauvegardes liées à la version sont en jeu.
+        source = copier_jeu("f4-v2.2.0", self.racine / "autre" / "donnees")
         (source / "derniere-version.json").write_text(
             json.dumps({"version": "1.2.0", "depuis": "2025-03-01T08:00:00"}), encoding="utf-8")
         with commun.ServeurPrevo(source=source) as serveur:
@@ -393,7 +400,7 @@ class TestAvantMiseAJour(CasDossier):
             notee = json.loads((serveur.dossier / "derniere-version.json").read_text(encoding="utf-8"))
             self.assertEqual(notee["version"], SERVEUR.VERSION_APPLICATION)
         # La version courante déjà notée : aucune sauvegarde « avant-mise-a-jour » (la quotidienne, oui).
-        source = copier_jeu("f3-v1.2.0", self.racine / "meme" / "donnees")
+        source = copier_jeu("f4-v2.2.0", self.racine / "meme" / "donnees")
         meme = json.dumps({"version": SERVEUR.VERSION_APPLICATION, "depuis": "2026-01-01T08:00:00"}).encode("utf-8")
         (source / "derniere-version.json").write_bytes(meme)
         with commun.ServeurPrevo(source=source) as serveur:

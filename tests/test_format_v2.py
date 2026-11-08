@@ -36,20 +36,23 @@ from commun import DOSSIER_DEMO, RACINE, SCRIPTS_TRADUCTION, CasNavigateur, Serv
 DOSSIER_V1 = RACINE / "tests" / "fixtures" / "v1"
 BOM = b"\xef\xbb\xbf"
 
-# Les quatre fichiers de référence et les colonnes que les versions 2 et 3 ajoutent à chacun (§14.1 ; lot 6 :
-# la colonne astuce des OT, §20.10), toujours en fin de ligne, dans l'ordre du schéma.
+# Les quatre fichiers de référence et les colonnes que les versions 2, 3 et 4 ajoutent à chacun (§14.1 ; lot 6 :
+# la colonne astuce des OT, §20.10 ; 2.2 : cout_arret_h, D188, et habilitation_requise des OT, D191), toujours
+# en fin de ligne, dans l'ordre du schéma.
 COLONNES_V2 = {
-    "equipements": ["valeur_remplacement"],
+    "equipements": ["valeur_remplacement", "cout_arret_h"],
     "demandes": ["symptome_code", "ot_origine_id"],
-    "ordres_travail": ["anomalie_constatee", "astuce"],
+    "ordres_travail": ["anomalie_constatee", "astuce", "habilitation_requise"],
     "parametres": [],
 }
 # Valeur par défaut de chaque nouveau champ (js/schema.js) : anomalie_constatee est un booléen faux.
-DEFAUTS_V2 = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0", "astuce": ""}
+DEFAUTS_V2 = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0", "astuce": "",
+              "cout_arret_h": "", "habilitation_requise": ""}
 LIBELLES_TABLES = {"equipements": "Équipements", "demandes": "Demandes d'intervention",
                    "ordres_travail": "Ordres de travail"}
 MESSAGE_INFO = "ajoutée par la version %d du format, écrite au prochain enregistrement"
-VERSION_COLONNE = {"astuce": 3}   # depuisVersion du schéma (js/schema.js) ; les autres colonnes : version 2
+# depuisVersion du schéma (js/schema.js) ; les autres colonnes : version 2
+VERSION_COLONNE = {"astuce": 3, "cout_arret_h": 4, "habilitation_requise": 4}
 
 SCRIPTS = ["js/lib/papaparse.min.js", "js/schema.js", "js/donnees.js"]
 SCRIPTS_SERVEUR = SCRIPTS_TRADUCTION + SCRIPTS + ["js/stockage-serveur.js"]   # moteur de traduction d'abord (Lot 2)
@@ -206,7 +209,7 @@ class TestLectureFichiersV1(CasNavigateur):
             [ligne[:position] + ligne[position + 1:] for ligne in lignes])
         resultat = self.analyser("equipements", BOM + tampon.getvalue().encode("utf-8"))
         colonnes = sorted((p["gravite"], p["champ"]) for p in resultat["problemes"] if p["type"] == "colonne")
-        self.assertEqual(colonnes, [("attention", "marque"), ("info", "valeur_remplacement")])
+        self.assertEqual(colonnes, [("attention", "marque"), ("info", "cout_arret_h"), ("info", "valeur_remplacement")])
         self.assertEqual([p["gravite"] for p in resultat["problemes"] if p["type"] != "colonne"], [])
 
     def test_reecriture_ajoute_les_colonnes_v2_en_fin_et_garde_toutes_les_cellules(self):
@@ -310,18 +313,22 @@ class TestFormatV2ModeServeur(CasNavigateur):
         # Avant : une information par colonne v2 absente, rien d'autre ; après : la table réécrite
         # n'est plus signalée, les deux autres le restent (elles n'ont pas encore été enregistrées).
         self.assertEqual(sorted(avant), sorted([["info", "equipements", "valeur_remplacement"],
+                                                ["info", "equipements", "cout_arret_h"],
                                                 ["info", "demandes", "symptome_code"],
                                                 ["info", "demandes", "ot_origine_id"],
                                                 ["info", "ordres_travail", "anomalie_constatee"],
-                                                ["info", "ordres_travail", "astuce"]]))
+                                                ["info", "ordres_travail", "astuce"],
+                                                ["info", "ordres_travail", "habilitation_requise"]]))
         self.assertEqual(sorted(apres), sorted([["info", "demandes", "symptome_code"],
                                                 ["info", "demandes", "ot_origine_id"],
                                                 ["info", "ordres_travail", "anomalie_constatee"],
-                                                ["info", "ordres_travail", "astuce"]]))
-        # Sur le disque : format §3.1, valeur_remplacement en dernière colonne, le reste identique au v1.
+                                                ["info", "ordres_travail", "astuce"],
+                                                ["info", "ordres_travail", "habilitation_requise"]]))
+        # Sur le disque : format §3.1, valeur_remplacement puis cout_arret_h (format 4) en dernières colonnes,
+        # le reste identique au v1.
         verifier_format_ecriture(self, octets, "equipements.csv")
         lignes_ecrites = lire_lignes_csv(octets)
-        self.assertEqual(lignes_ecrites[0][-1], "valeur_remplacement")
+        self.assertEqual(lignes_ecrites[0][-2:], ["valeur_remplacement", "cout_arret_h"])
         verifier_v1_plus_colonnes(self, lignes_v1, lignes_ecrites, "equipements",
                                   {(1, "designation"): nouvelle_designation})
         # Les tables non modifiées ne sont pas réécrites ; le journal ne note que le champ modifié.
@@ -358,9 +365,11 @@ class TestFormatV2ModeServeur(CasNavigateur):
                                       {(1, "symptome_code"): "S01", (1, "ot_origine_id"): ot_id})
 
             # 2. Retouche « dans un tableur » : virgule française et espace, oui/x, espaces autour d'un code.
-            equipements[1][-1] = "12 500,75"
-            ordres[1][-2] = "non"      # anomalie_constatee, avant la colonne astuce (lot 6)
-            ordres[2][-2] = "x"
+            # Cellules repérées par le nom de colonne : astuce (lot 6) et les colonnes du format 4 suivent.
+            equipements[1][equipements[0].index("valeur_remplacement")] = "12 500,75"
+            anomalie = ordres[0].index("anomalie_constatee")
+            ordres[1][anomalie] = "non"
+            ordres[2][anomalie] = "x"
             demandes[1][-2] = " S02 "
             ecrire_lignes_csv(dossier / "equipements.csv", equipements)
             ecrire_lignes_csv(dossier / "ordres_travail.csv", ordres)

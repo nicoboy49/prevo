@@ -7,26 +7,29 @@ Chaque parcours travaille sur une COPIE d'un jeu de tests/fixtures/formats/ (tes
 temporaire, ou dans l'OPFS du navigateur de test (mode dossier simulé) ; CS167 : setUpModule et tearDownModule
 vérifient que le dossier donnees/ du dépôt n'a pas changé d'un octet pendant la recette.
 
-    TestMiseAJourServeur      CS143, CS138 : f3-v1.2.0 sans derniere-version.json (une installation 1.2) ; premier
-                              démarrage de la 2.0 : sauvegarde « avant-mise-a-jour » aux octets d'origine, aucune
-                              migration (format 3), version notée ; le responsable ouvre l'accueil sans bandeau, voit
-                              la sauvegarde dans Paramètres et signale une demande par l'interface ; aucune perte.
+    TestMiseAJourServeur      CS143, CS138 : f4-v2.2.0 (base au format courant, T402) sans derniere-version.json ; premier
+                              démarrage : sauvegarde « avant-mise-a-jour » aux octets d'origine, aucune migration,
+                              version notée ; le responsable ouvre l'accueil sans bandeau, voit la sauvegarde dans
+                              Paramètres et signale une demande par l'interface ; aucune perte.
     TestElevesServeurComptes  CS138, CS139, CS143 : f2-v1.1.0 (données d'élèves des versions 1.0 et 1.1) avec
-                              acces/comptes.json ; démarrage : « avant-mise-a-jour » PUIS « avant-format-v3 », toutes
-                              deux aux octets d'origine, tables migrées sans perte champ à champ, ligne de journal ;
+                              acces/comptes.json ; démarrage : « avant-mise-a-jour » PUIS « avant-format-v4 », toutes
+                              deux aux octets d'origine, tables migrées sans perte champ à champ, lignes de journal ;
                               connexion du responsable puis d'un technicien par l'écran de connexion : aucun bandeau,
                               OT préventifs générés comme d'habitude (une seule fois).
-    TestFormat1Dossier        CS138, CS139, CS143 : f1 en mode dossier : sauvegardes, passage 1 → 2 → 3, deux lignes
-                              de journal, aucune perte ; seconde ouverture : rien d'écrit (verrou.txt mis à part).
+    TestFormat1Dossier        CS138, CS139, CS143 : f1 en mode dossier : sauvegardes, passage 1 → 2 → 3 → 4, trois
+                              lignes de journal, aucune perte ; seconde ouverture : rien d'écrit (verrou.txt mis à part).
     TestAbimesServeur,        CS140 : melange, colonnes-en-trop, windows-1252 et entete-tronque, dans les deux modes :
     TestAbimesDossier         le responsable ouvre (OT préventifs générés), lit Paramètres › Contrôle de la base,
                               modifie un équipement par le formulaire ; aucune perte silencieuse (chaque cellule
                               d'origine retrouvée), message ou problème visible, et chaque fichier changé a ses octets
-                              d'origine dans une sauvegarde. entete-tronque : parcours du demandeur (le fichier n'est
-                              jamais réécrit) ; le défaut trouvé par la recette (voir plus bas) est corrigé par T197.
-    TestPlusRecent            CS141 : jeu plus-recent (format 4) dans les deux modes : bandeau de lecture seule, demande
+                              d'origine dans une sauvegarde. Ces jeux sont tirés de f3-v1.2.0 : la base passe aussi au
+                              format 4 (windows-1252 : réécrit en UTF-8 par ce passage, avant le Contrôle ; en mode
+                              serveur, 404 des tables du format 4 que le passage ne crée pas). entete-tronque : parcours
+                              du demandeur (le fichier n'est jamais réécrit) ; le défaut trouvé par la recette (voir plus
+                              bas) est corrigé par T197.
+    TestPlusRecent            CS141 : jeu plus-recent (format 5) dans les deux modes : bandeau de lecture seule, demande
                               et modification d'équipement refusées par l'interface avec un message, AUCUN octet de
-                              données modifié (mode dossier : aucun octet du tout), export ZIP possible (format 4).
+                              données modifié (mode dossier : aucun octet du tout), export ZIP possible (format 5).
     TestRotation              CS142 : fausses sauvegardes anciennes, horloge simulée (serveur du processus,
                               config.horloge ; navigateur, contexte.clock) : quotidiennes de plus de 30 jours supprimées
                               à la sauvegarde du jour, « avant-… », manuelles et noms étrangers jamais touchés ;
@@ -91,13 +94,17 @@ MANIFESTE = "manifeste.json"
 NOM_DOSSIER = "donnees-recette-socle"
 EQUIPEMENT = "EQ-0005"                       # PO-02 : présent dans tous les jeux sauf f1
 MOTIF_AVANT_MISE_A_JOUR = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-mise-a-jour$")
-MOTIF_AVANT_FORMAT = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v3$")
+MOTIF_AVANT_FORMAT = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}_avant-format-v%d$" % FORMAT_COURANT)
+# Base déjà au format courant (T394) : les parcours « sans passage de format ».
+JEU_SANS_PASSAGE = "f4-v2.2.0"
 MOTIF_QUOTIDIENNE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MOTIF_DATE_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
 MOTIF_DATE_JMA = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")
 CLES_MANIFESTE_EXPORT = ["application", "version_appli", "format", "date", "motif", "mode", "fichiers"]
-# Valeur par défaut des colonnes que les formats 2 et 3 ajoutent (js/schema.js).
-DEFAUTS = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0", "astuce": ""}
+# Valeur par défaut des colonnes que les formats 2, 3 et 4 ajoutent (js/schema.js).
+DEFAUTS = {"valeur_remplacement": "", "symptome_code": "", "ot_origine_id": "", "anomalie_constatee": "0", "astuce": "",
+           "cout_arret_h": "", "habilitation_requise": "", "recyclage_mois": "", "justificatif": "", "catalogue_id": "",
+           "nature_source": "", "source_periodicite": "saisie", "catalogue_relu_le": ""}
 TABLES = list(SERVEUR.TABLES)                # les tables du format courant, dans l'ordre du schéma
 VERSION_SCHEMA_ECRITE = {"parametres.csv": {("version_schema", "valeur")}}     # seule cellule que le passage change
 
@@ -105,6 +112,9 @@ VERSION_SCHEMA_ECRITE = {"parametres.csv": {("version_schema", "valeur")}}     #
 ERREUR_PING_ABSENT = re.compile(r"status of 404.*/api/ping")      # serveur statique (mode dossier) : pas de /api/ping
 ERREUR_CSV_ABSENT = re.compile(r"status of 404.*/api/csv/")       # mode serveur : table absente = table vide
 ERREUR_SANS_SESSION = re.compile(r"status of 401")                 # comptes exigés : sonde avant la connexion
+# Mode serveur, base d'avant le format 4 : le passage ne crée pas une table absente (garanties et contrats_prestataires,
+# reserves_controle sans réserve à reprendre ; CONCEPTION-L1 §3.3) ; elle reste absente (404) jusqu'à sa première écriture.
+ERREUR_TABLE_DU_FORMAT_4_ABSENTE = re.compile(r"status of 404.*/api/csv/(garanties|contrats_prestataires|reserves_controle)\b")
 
 # Tous les messages montrés (UI.toast), dans l'ordre : un message peut en remplacer un autre très vite.
 # (UI.toast remplit la zone #toast à chaque message, même répété : chaque remplissage est noté.)
@@ -513,10 +523,10 @@ class CasRecetteSocle(CasNavigateur):
 
 class TestMiseAJourServeur(CasRecetteSocle):
 
-    def test_f3_v1_2_0_premier_demarrage_sauvegarde_puis_accueil_sans_bandeau_et_demande(self):
-        source = self.jeu("f3-v1.2.0")
+    def test_f4_v2_2_0_premier_demarrage_sauvegarde_puis_accueil_sans_bandeau_et_demande(self):
+        source = self.jeu(JEU_SANS_PASSAGE)
         origine = fichiers_de(source)
-        self.assertNotIn(DERNIERE_VERSION, origine)                       # une installation 1.2 : rien de noté
+        self.assertNotIn(DERNIERE_VERSION, origine)                       # aucune version notée (comme une 1.2)
         with ServeurPrevo(source=source) as serveur:
             demarre = fichiers_de(serveur.dossier)
             console = serveur.sortie_console()
@@ -528,7 +538,7 @@ class TestMiseAJourServeur(CasRecetteSocle):
                                     {"de": None, "vers": VERSION_APPLI})
             self.assertEqual(sorted(copies), sorted([maj, datetime.date.today().isoformat()]))
             self.assertIn("sauvegarde %s faite avant la mise à jour" % maj, console)
-            # Aucune migration (déjà au format 3) : les données à l'octet près, la version notée.
+            # Aucune migration (déjà au format courant) : les données à l'octet près, la version notée.
             self.assertEqual(csv_de_la_racine(demarre), origine)
             self.assertNotIn(PREFIXE_CONSOLE_FORMAT, console)
             note = json.loads(demarre[DERNIERE_VERSION].decode("utf-8"))
@@ -557,8 +567,8 @@ class TestMiseAJourServeur(CasRecetteSocle):
 
 class TestElevesServeurComptes(CasRecetteSocle):
 
-    def test_f2_v1_1_0_avec_comptes_mise_a_jour_puis_format_3_connexions_et_ot_preventifs(self):
-        self.autoriser_erreur(ERREUR_CSV_ABSENT)                         # wiki_pages, wiki_journal : absentes
+    def test_f2_v1_1_0_avec_comptes_mise_a_jour_puis_format_4_connexions_et_ot_preventifs(self):
+        self.autoriser_erreur(ERREUR_CSV_ABSENT)         # wiki_pages, wiki_journal, garanties, contrats… : absentes
         self.autoriser_erreur(ERREUR_SANS_SESSION)
         source = self.jeu("f2-v1.1.0")
         (source / "acces").mkdir()
@@ -568,7 +578,7 @@ class TestElevesServeurComptes(CasRecetteSocle):
             demarre = fichiers_de(serveur.dossier)
             console = serveur.sortie_console()
 
-            # « avant-mise-a-jour » PUIS « avant-format-v3 », toutes deux aux octets d'origine (acces/ compris).
+            # « avant-mise-a-jour » PUIS « avant-format-v4 », toutes deux aux octets d'origine (acces/ compris).
             copies = sauvegardes(demarre)
             maj = une_seule(copies, MOTIF_AVANT_MISE_A_JOUR)
             avant_format = une_seule(copies, MOTIF_AVANT_FORMAT)
@@ -576,21 +586,23 @@ class TestElevesServeurComptes(CasRecetteSocle):
             self.assertLessEqual(maj[:17], avant_format[:17])
             self.assertLess(console.index("faite avant la mise à jour"), console.index(PREFIXE_CONSOLE_FORMAT))
             dates = []
-            for nom, motif in ((maj, "avant-mise-a-jour"), (avant_format, "avant-format-v3")):
+            for nom, motif in ((maj, "avant-mise-a-jour"), (avant_format, "avant-format-v%d" % FORMAT_COURANT)):
                 self.assertEqual(sans_manifeste(copies[nom]), origine, nom)
                 dates.append(self.verifier_manifeste(copies[nom], motif, 2, "serveur")["date"])
             self.assertLessEqual(dates[0], dates[1])
 
             # Tables migrées sans perte, champ à champ ; ligne de journal du serveur ; acces/ intact.
             self.assertEqual(version_schema(demarre["parametres.csv"]), str(FORMAT_COURANT))
+            # Format 4 : colonnes en fin de equipements, ordres_travail, habilitations et controles_reglementaires.
             self.assertEqual(self.verifier_aucune_perte(origine, demarre, VERSION_SCHEMA_ECRITE),
-                             ["journal.csv", "ordres_travail.csv", "parametres.csv"])
-            self.assertEqual(lire_table(demarre["ordres_travail.csv"])[0][-1], "astuce")
+                             ["controles_reglementaires.csv", "equipements.csv", "habilitations.csv", "journal.csv",
+                              "ordres_travail.csv", "parametres.csv"])
+            self.assertEqual(lire_table(demarre["ordres_travail.csv"])[0][-2:], ["astuce", "habilitation_requise"])
             self.assertNotIn("wiki_pages.csv", demarre)
             journal = actions_du_format(demarre["journal.csv"], len(lignes_en_dictionnaires(origine["journal.csv"])))
             self.assertEqual([(l["action"], l["poste"]) for l in journal],
-                             [("passage au format 3 du fichier ; sauvegarde %s faite juste avant" % avant_format,
-                               "Serveur Prévo")])
+                             [("passage au format %d du fichier ; sauvegarde %s faite juste avant" % (n, avant_format),
+                               "Serveur Prévo") for n in (3, 4)])
             self.assertEqual(demarre["acces/comptes.json"], origine["acces/comptes.json"])
             ot_apres_demarrage = len(lignes_en_dictionnaires(demarre["ordres_travail.csv"]))
 
@@ -638,25 +650,25 @@ class TestFormat1Dossier(CasRecetteSocle):
         super().setUp()
         self.demarrer_statique()
 
-    def test_f1_sauvegardes_passage_1_2_3_journal_sans_perte_puis_seconde_ouverture_sans_ecriture(self):
+    def test_f1_sauvegardes_passage_1_a_4_journal_sans_perte_puis_seconde_ouverture_sans_ecriture(self):
         origine = fichiers_du_jeu("f1")
         self.assertEqual(version_schema(origine["parametres.csv"]), "1")
         self.ouvrir_dossier(origine, "responsable")
         apres = self.instantane()
 
-        # Sauvegardes : « avant-mise-a-jour » et « avant-format-v3 » aux octets d'origine (la quotidienne aussi).
+        # Sauvegardes : « avant-mise-a-jour » et « avant-format-v4 » aux octets d'origine (la quotidienne aussi).
         copies = sauvegardes(apres)
         maj = une_seule(copies, MOTIF_AVANT_MISE_A_JOUR)
         avant_format = une_seule(copies, MOTIF_AVANT_FORMAT)
         for nom, contenu in copies.items():
             self.assertTrue(nom in (maj, avant_format) or MOTIF_QUOTIDIENNE.match(nom), sorted(copies))
             self.assertEqual(sans_manifeste(contenu), origine, nom)
-        self.verifier_manifeste(copies[avant_format], "avant-format-v3", 1, "dossier")
-        # Passage 1 → 2 → 3 : deux lignes de journal ; aucune perte, colonnes ajoutées à leur valeur par défaut.
+        self.verifier_manifeste(copies[avant_format], "avant-format-v%d" % FORMAT_COURANT, 1, "dossier")
+        # Passage 1 → 2 → 3 → 4 : trois lignes de journal ; aucune perte, colonnes ajoutées à leur valeur par défaut.
         self.assertEqual(version_schema(apres["parametres.csv"]), str(FORMAT_COURANT))
         self.assertEqual([l["action"] for l in actions_du_format(apres["journal.csv"])],
                          ["passage au format %d du fichier ; sauvegarde %s faite juste avant" % (n, avant_format)
-                          for n in (2, 3)])
+                          for n in range(2, FORMAT_COURANT + 1)])
         self.assertEqual(self.verifier_aucune_perte(origine, apres, VERSION_SCHEMA_ECRITE),
                          ["demandes.csv", "equipements.csv", "ordres_travail.csv", "parametres.csv"])
         self.verifier_rien_sans_sauvegarde(origine, apres)
@@ -669,7 +681,7 @@ class TestFormat1Dossier(CasRecetteSocle):
         self.page.wait_for_function("(t) => document.getElementById('contenu').innerText.includes(t)",
                                     arg=valeur_comparable(premier["designation"]))
         carte = self.carte_des_sauvegardes()
-        self.assertIn("Avant format 3", carte)
+        self.assertIn("Avant format %d" % FORMAT_COURANT, carte)
         self.assertIn("Avant la mise à jour de Prévo", carte)
 
         # Seconde ouverture : rien n'est écrit (verrou.txt mis à part).
@@ -683,7 +695,9 @@ class TestFormat1Dossier(CasRecetteSocle):
 # ---------------------------------------------------------------------------
 
 DESIGNATION = "Pompe de refroidissement (recette)"
-CHANGEES_PAR_LE_FORMULAIRE = {"equipements.csv": {(EQUIPEMENT, "designation")}}
+# Les jeux abîmés sont tirés de f3-v1.2.0 : le passage au format 4 (démarrage ou ouverture) écrit aussi version_schema.
+CHANGEES_A_L_OUVERTURE = dict(VERSION_SCHEMA_ECRITE)
+CHANGEES_PAR_LE_FORMULAIRE = dict(CHANGEES_A_L_OUVERTURE, **{"equipements.csv": {(EQUIPEMENT, "designation")}})
 
 
 class ParcoursAbimes:
@@ -704,18 +718,20 @@ class ParcoursAbimes:
         return origine, apres, controle
 
     def verifier_melange(self):
-        """melange : ordres_travail.csv au format 2 dans une base au format 3 → complété (sauvegarde avant, ligne de
-        journal « fichiers complétés »), version_schema inchangé ; la sauvegarde se voit dans Paramètres."""
+        """melange : ordres_travail.csv au format 2 dans une base au format 3 → complété au format 3 (ligne de journal
+        « fichiers complétés »), puis toute la base passée au format 4 (ligne « passage au format 4 »), après une seule
+        sauvegarde ; la sauvegarde se voit dans Paramètres."""
         origine, apres, _ = self.parcours_du_responsable("melange")
-        self.assertEqual(lire_table(apres["ordres_travail.csv"])[0][-1], "astuce")
+        self.assertEqual(lire_table(apres["ordres_travail.csv"])[0][-2:], ["astuce", "habilitation_requise"])
         self.assertEqual(version_schema(apres["parametres.csv"]), str(FORMAT_COURANT))
         avant_format = une_seule(sauvegardes(apres), MOTIF_AVANT_FORMAT)
         self.assertEqual(sauvegardes(apres)[avant_format]["ordres_travail.csv"], origine["ordres_travail.csv"])
         deja = len(lignes_en_dictionnaires(origine["journal.csv"]))
+        suite = "sauvegarde %s faite juste avant" % avant_format
         self.assertEqual([l["action"] for l in actions_du_format(apres["journal.csv"], deja)],
-                         ["fichiers complétés au format 3 : ordres_travail ; sauvegarde %s faite juste avant"
-                          % avant_format])
-        self.assertIn("Avant format 3", self.carte_des_sauvegardes())
+                         ["fichiers complétés au format 3 : ordres_travail ; " + suite,
+                          "passage au format 4 du fichier ; " + suite])
+        self.assertIn("Avant format %d" % FORMAT_COURANT, self.carte_des_sauvegardes())
 
     def verifier_colonnes_en_trop(self):
         """colonnes-en-trop : les colonnes inconnues sont signalées (Contrôle), gardées avec leurs valeurs à la
@@ -729,10 +745,15 @@ class ParcoursAbimes:
         self.assertEqual(entete[:-2], list(SERVEUR.COLONNES_PAR_TABLE["equipements"]))
 
     def verifier_windows_1252(self):
-        """windows-1252 : le fichier est signalé (Contrôle) ; réécrit en UTF-8 avec BOM, dates AAAA-MM-JJ, sans perte ;
-        la sauvegarde du jour garde l'original."""
-        origine, apres, controle = self.parcours_du_responsable("windows-1252")
-        self.assertIn("Windows-1252", controle)
+        """windows-1252 : equipements.csv en Windows-1252 dans une base au format 3 (jeu tiré de f3-v1.2.0) ; le passage
+        au format 4 (démarrage du serveur, ouverture du dossier) le réécrit en UTF-8 avec BOM, dates AAAA-MM-JJ, sans
+        perte, AVANT que le Contrôle de la base ne le lise : le Contrôle ne signale donc plus « Windows-1252 » (T402) ;
+        la sauvegarde « avant-format-v4 » garde l'original."""
+        origine, apres, _ = self.parcours_du_responsable("windows-1252")
+        self.assertFalse(origine["equipements.csv"].startswith(BOM))
+        self.assertRaises(UnicodeDecodeError, origine["equipements.csv"].decode, "utf-8")
+        avant_format = une_seule(sauvegardes(apres), MOTIF_AVANT_FORMAT)
+        self.assertEqual(sauvegardes(apres)[avant_format]["equipements.csv"], origine["equipements.csv"])
         self.assertTrue(apres["equipements.csv"].startswith(BOM))
         apres["equipements.csv"].decode("utf-8")
         dates = [l["date_mes"] for l in lignes_en_dictionnaires(apres["equipements.csv"]) if l["date_mes"]]
@@ -749,7 +770,7 @@ class ParcoursAbimes:
         numero = self.signaler("Bruit anormal au démarrage")
         apres = self.apres()
         self.assertEqual(apres["ordres_travail.csv"], origine["ordres_travail.csv"])
-        self.assertIn("demandes.csv", self.verifier_aucune_perte(origine, apres))
+        self.assertIn("demandes.csv", self.verifier_aucune_perte(origine, apres, CHANGEES_A_L_OUVERTURE))
         self.verifier_rien_sans_sauvegarde(origine, apres)
         self.assertTrue(any(l["id"] == numero for l in lignes_en_dictionnaires(apres["demandes.csv"])))
         return origine, apres
@@ -774,6 +795,7 @@ class TestAbimesServeur(ParcoursAbimes, CasRecetteSocle):
 
     def ouvrir(self, nom_jeu, profil):
         """Serveur réel sur une copie du jeu ; le profil ouvre l'accueil. Rend les fichiers d'origine."""
+        self.autoriser_erreur(ERREUR_TABLE_DU_FORMAT_4_ABSENTE)      # jeux tirés de f3-v1.2.0
         source = self.jeu(nom_jeu)
         origine = fichiers_de(source)
         self.serveur = ServeurPrevo(source=source)
@@ -788,7 +810,7 @@ class TestAbimesServeur(ParcoursAbimes, CasRecetteSocle):
 
     def test_melange_complete_au_demarrage_sans_perte(self):
         self.verifier_melange()
-        self.assertIn("fichiers complétés au format 3", self.serveur.sortie_console())
+        self.assertIn("passage au format %d fait" % FORMAT_COURANT, self.serveur.sortie_console())
 
     def test_colonnes_en_trop_signalees_et_gardees(self):
         self.verifier_colonnes_en_trop()
@@ -799,8 +821,9 @@ class TestAbimesServeur(ParcoursAbimes, CasRecetteSocle):
     def test_entete_tronque_signale_jamais_reecrit_pour_le_demandeur(self):
         self.verifier_entete_tronque_demandeur()
         self.assertIn("ordres_travail.csv laissé tel quel", self.serveur.sortie_console())
+        # Le reste de la base (format 3) est passé au format 4 ; le fichier abîmé, lui, n'est pas touché.
         etat = requete_json(self.serveur.url + "/api/info")["format"]
-        self.assertEqual((etat["tables_abimees"], etat["migration"]), (["ordres_travail"], "rien"))
+        self.assertEqual((etat["tables_abimees"], etat["migration"]), (["ordres_travail"], "faite"))
 
     def test_entete_tronque_serveur_jamais_reecrit_a_l_ouverture(self):
         self.verifier_entete_tronque_jamais_reecrit()
@@ -938,7 +961,7 @@ class TestRotation(CasRecetteSocle):
     def test_rotation_serveur_horloge_simulee(self):
         """Serveur du processus (serveur.py importé) avec config.horloge : démarrage le 15 juin (ce que fait main),
         puis le responsable signale une demande le 16 juin (première écriture du jour) et sauvegarde à la main."""
-        donnees = self.jeu("f3-v1.2.0")
+        donnees = self.jeu(JEU_SANS_PASSAGE)          # aucune sauvegarde « avant-format-vN » au démarrage
         (donnees / DERNIERE_VERSION).write_text(json.dumps({"version": VERSION_APPLI, "depuis": "2026-06-01T08:00:00"}),
                                                 encoding="utf-8")
         manuelles = ["2025-01-03_080000", "2026-05-01_120000"]
@@ -993,7 +1016,7 @@ class TestRotation(CasRecetteSocle):
         quotidienne puis la rotation ; « Sauvegarder maintenant » avec 60 manuelles supprime la plus ancienne."""
         self.demarrer_statique()
         self.contexte.clock.install(time="2026-06-15T09:00:00")
-        fichiers = fichiers_du_jeu("f3-v1.2.0")
+        fichiers = fichiers_du_jeu(JEU_SANS_PASSAGE)  # rien d'écrit à l'ouverture (aucun passage de format)
         fichiers[DERNIERE_VERSION] = json.dumps({"version": VERSION_APPLI, "depuis": "2026-06-01T08:00:00"}).encode()
         debut = datetime.datetime(2026, 1, 1, 8, 0, 0)
         manuelles = [(debut + datetime.timedelta(hours=h)).strftime("%Y-%m-%d_%H%M%S") for h in range(60)]
@@ -1028,6 +1051,7 @@ class TestExportServeur(CasRecetteSocle):
 
     def test_export_complet_sans_acces_puis_relu_par_zip_lecture(self):
         self.autoriser_erreur(ERREUR_SANS_SESSION)
+        self.autoriser_erreur(ERREUR_TABLE_DU_FORMAT_4_ABSENTE)          # f3-v2.0.0 passé au format 4 au démarrage
         source = self.jeu("f3-v2.0.0")
         self.assertTrue((source / "acces" / "comptes.json").is_file())
         rapport = ('<!doctype html><html lang="fr"><meta charset="utf-8"><title>Rapport 2026-10</title>'
@@ -1057,8 +1081,16 @@ class TestExportServeur(CasRecetteSocle):
             self.page.goto("about:blank")
         documents = {cite: notice, "rapport-mensuel-2026-10.html": rapport}
         self.verifier_zip_export(nom_zip, noms, entrees, documents, "serveur", FORMAT_COURANT)
+        # Tables du format 4 que le passage du démarrage ne crée pas (CONCEPTION-L1 §3.3) : dans le ZIP, en-tête seul.
+        absentes = [table for table in TABLES if table + ".csv" not in avant_export]
+        self.assertTrue(absentes and set(absentes) <= {"garanties", "contrats_prestataires", "reserves_controle"},
+                        absentes)
         for table in TABLES:
-            self.assertEqual(entrees[table + ".csv"], avant_export[table + ".csv"], table)
+            if table in absentes:
+                self.assertEqual(lire_table(entrees[table + ".csv"]), (list(SERVEUR.COLONNES_PAR_TABLE[table]), []),
+                                 table)
+            else:
+                self.assertEqual(entrees[table + ".csv"], avant_export[table + ".csv"], table)
 
         # Relu par ZipLecture.lire dans une page, comme le fichier choisi par l'utilisateur.
         lecteur = self.contexte.new_page()
@@ -1073,7 +1105,7 @@ class TestExportServeur(CasRecetteSocle):
                          (None, FORMAT_COURANT, FORMAT_COURANT, False, "export", []))
         self.assertEqual(sorted(lu["documents"]), sorted([nom, len(octets)] for nom, octets in documents.items()))
         self.assertEqual(lu["problemes"], [])
-        self.assertEqual(lu["tables"], {table: len(lire_table(avant_export[table + ".csv"])[1]) for table in TABLES})
+        self.assertEqual(lu["tables"], {table: len(lire_table(entrees[table + ".csv"])[1]) for table in TABLES})
 
 
 if __name__ == "__main__":

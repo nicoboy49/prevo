@@ -212,6 +212,16 @@ const StockageServeur = (() => {
     return donnees;
   }
 
+  // Lit et jette le corps d'une réponse dont seul le code compte (404 « fichier absent ») : un corps jamais lu laisse la
+  // requête inachevée pour le navigateur (réseau jamais au repos : T402, tables du format 4 absentes en mode serveur).
+  async function jeterCorps(reponse) {
+    try {
+      await reponse.arrayBuffer();
+    } catch (erreur) {
+      /* corps illisible ou requête abandonnée : rien à garder */
+    }
+  }
+
   async function lireOctets(reponse) {
     try {
       return new Uint8Array(await reponse.arrayBuffer());
@@ -296,6 +306,7 @@ const StockageServeur = (() => {
       // ARCHITECTURE.md §22.5) : table que le rôle de la session ne lit pas (demandeur) : vue comme absente, sans
       // erreur, pour que le chargement des tables (Donnees.chargerTout) aboutisse ; /api/versions ne la liste pas.
       if ((reponse.status === 404 || reponse.status === 403) && Schema.nomsTables().indexOf(table) !== -1) {
+        await jeterCorps(reponse);
         return { octets: null, version: null };
       }
       if (reponse.status >= 400) { throw await erreurDepuisReponse(reponse); }
@@ -374,7 +385,7 @@ const StockageServeur = (() => {
 
     async function lireDocument(nom) {
       const reponse = await appeler(urlDocument(nom), { method: 'GET' });
-      if (reponse.status === 404) { return null; }
+      if (reponse.status === 404) { await jeterCorps(reponse); return null; }
       if (reponse.status >= 400) { throw await erreurDepuisReponse(reponse); }
       try {
         return await reponse.blob();
