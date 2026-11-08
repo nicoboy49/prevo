@@ -355,7 +355,9 @@ class TestServeur(CasApp):
             attendre_pret(page)
             contenu = self.texte("#contenu")
             self.assertIn(CREDIT, contenu)
-            self.assertIn("2.0.0", contenu)
+            # La version de js/app.js (lue, jamais écrite en dur : « 2.0.0 » passait en 2.0.0-beta.2, échouait en 2.1.0).
+            version = re.search(r"const VERSION = '([^']+)';", (RACINE / "js" / "app.js").read_text(encoding="utf-8")).group(1)
+            self.assertIn(version, contenu)
             self.assertIn("Les profils adaptent les écrans, ce n'est pas une sécurité", contenu)
             self.assertIn("Usage sur réseau local uniquement, sans authentification", contenu)
             # Lot 4 : assistant IA et dictée décrits, lien vers le guide (servi par serveur.py)
