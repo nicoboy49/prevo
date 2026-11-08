@@ -993,6 +993,18 @@ class TestConsigneDeLangue(CasDemoIa):
         }""")
         self.assertEqual(langues, {"wiki": "Réponds en français (fr).", "wikiForce": "Réponds en anglais (en).",
                                    "rapport": "Réponds en français (fr).", "ecran": "Réponds en anglais (en)."})
+        # T374 (Lot 5, D159) : le wiki est rédigé dans la langue de l'installation (celle des données), quelle que soit
+        # celle de l'écran ; ici une installation anglaise.
+        wiki_installation = page.evaluate("""() => {
+          const d = { ot: { id: 'OT-2026-0001', dateIntervention: '2026-03-10 10:00', type: 'correctif immédiat', titre: 'T',
+              equipement: { repere: 'PO-02', designation: 'Pompe' } }, pages: [], catalogue: [] };
+          const avant = I18n.installation;
+          I18n.noterInstallation('en');
+          const fin = Ia.requete('ingestionWiki', d).messages[0].content.split('\\n\\n').pop();
+          I18n.noterInstallation(avant);
+          return fin;
+        }""")
+        self.assertEqual(wiki_installation, "Réponds en anglais (en).")
 
 
 # ---------------------------------------------------------------------------

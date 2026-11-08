@@ -61,11 +61,18 @@ Object.assign(Ia, (() => {
   const MOTIF_COURRIEL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
   const MOTIF_TELEPHONE = new RegExp('(?<![\\p{L}\\p{N}])(?:(?:\\+|00)33[ .-]?(?:\\(0\\)[ .-]?)?|0)[1-9]([ .-]?)\\d{2}'
     + '(?:\\1\\d{2}){3}(?![\\p{L}\\p{N}])', 'gu');
+  // Lot 5 (T374, D159) : formats internationaux. Indicatif « + » ou « 00 » (tous pays) suivi d'au moins 7 chiffres en
+  // groupes (« (0) » toléré) ; numéros nationaux sans indicatif : turcs 0XXX XXX XX XX, portables italiens
+  // 3XX XXX XXXX, portugais 9XX XXX XXX ou 2XX XXX XXX, portables britanniques 07XXX XXXXXX.
+  const MOTIF_TELEPHONE_INTERNATIONAL = new RegExp('(?<![\\p{L}\\p{N}])(?:(?:\\+|00)[1-9]\\d{0,2}(?:[ .-]?\\(0\\))?'
+    + '[ .-]?\\d{1,4}(?:[ .-]?\\d{2,4}){2,4}|0[2-5]\\d{2}([ .-]?)\\d{3}\\1\\d{2}\\1\\d{2}'
+    + '|3\\d{2}([ .-]?)\\d{3}\\2\\d{4}|[29]\\d{2}([ .-]?)\\d{3}\\3\\d{3}|07\\d{3}[ .-]?\\d{6})(?![\\p{L}\\p{N}])', 'gu');
 
   /** Texte → le même texte, numéros de téléphone et adresses de courriel remplacés (« [téléphone] », « [courriel] »). */
   function masquer(valeur) {
     return (valeur === null || valeur === undefined ? '' : String(valeur))
-      .replace(MOTIF_COURRIEL, '[courriel]').replace(MOTIF_TELEPHONE, '[téléphone]');
+      .replace(MOTIF_COURRIEL, '[courriel]').replace(MOTIF_TELEPHONE, '[téléphone]')
+      .replace(MOTIF_TELEPHONE_INTERNATIONAL, '[téléphone]');
   }
 
   // Texte d'une ligne : masqué, espaces et sauts de ligne réduits, longueur bornée. Tout texte d'atelier envoyé à l'IA
@@ -456,9 +463,8 @@ Object.assign(Ia, (() => {
     ]);
   }
 
-  const ingestionWiki = {
-    langue: 'fr',                             // D159 : la rédaction du wiki par l'IA reste en français (traduite au Lot 5)
-    systeme: systeme('Fonction : ingestionWiki',
+  // Consigne d'ingestion du wiki, en français (D159) ; budget de 9 600 caractères (test_wiki_ingestion).
+  const SYSTEME_INGESTION_WIKI = systeme('Fonction : ingestionWiki',
       'intègre l\'ordre de travail (OT) ci-dessous au wiki de l\'atelier. Prévo calcule les faits (pannes, '
         + 'interventions, pièces, stock) ; tu rédiges seulement les textes reçus :\n'
         + '- « En bref » de la machine (type « équipement ») : ce qu\'il faut savoir d\'abord de cette machine, ses '
@@ -550,7 +556,29 @@ Object.assign(Ia, (() => {
       '{"rien_a_ajouter": false, "pages": [{"action": "modifier", "titre": "…", "type": "équipement | composant | '
         + 'savoir-faire", "rattache_a": "", "rubriques": [{"rubrique": "…", "phrases": [{"texte": "…", "ot": '
         + '["OT-AAAA-NNNN"]}]}]}, {"action": "creer", "titre": "…", "type": "savoir-faire", "rattache_a": "…", '
-        + '"rubriques": […]}], "contradictions": [{"page": "…", "phrase": "…", "observation": "…", "ot": ["OT-AAAA-NNNN"]}]}'),
+        + '"rubriques": […]}], "contradictions": [{"page": "…", "phrase": "…", "observation": "…", "ot": ["OT-AAAA-NNNN"]}]}');
+
+  // Lot 5 (T374) : dans une autre langue d'installation, la ligne des mots refusés et celle de la nouveauté citent
+  // aussi les mots de cette langue (Wiki.VOCABULAIRE_*_PAR_LANGUE, forme comparable ; « … » : tout mot qui commence
+  // ainsi). En français, la consigne est inchangée.
+  const FIN_MOTS_REFUSES = 'pour votre sécurité ;\n';
+  const FIN_NOUVEAUTE = '« dernier »…).';
+  function systemeIngestionWiki(code) {
+    const vocabulaire = (nom) => (typeof Wiki !== 'undefined' && Wiki[nom] && Wiki[nom][code]) || null;
+    const securite = code !== 'fr' && vocabulaire('VOCABULAIRE_SECURITE_PAR_LANGUE');
+    const nouveaute = code !== 'fr' && vocabulaire('VOCABULAIRE_NOUVEAUTE_PAR_LANGUE');
+    if (!securite) return SYSTEME_INGESTION_WIKI;
+    const mots = (liste) => liste.map((e) => (e.endsWith('*') ? e.slice(0, -1) + '…' : e)).join(', ');
+    return SYSTEME_INGESTION_WIKI
+      .replace(FIN_MOTS_REFUSES, 'pour votre sécurité ; dans la langue de la réponse aussi : ' + mots(securite) + ' ;\n')
+      .replace(FIN_NOUVEAUTE, '« dernier »… ; ni ' + mots(nouveaute || []) + ').');
+  }
+
+  const ingestionWiki = {
+    // D159, Lot 5 (T374) : le wiki est rédigé dans la langue de l'installation (celle des textes écrits dans les
+    // données, D156), maintenant que ses garde-fous (sécurité, nouveauté, dates, comptages) valent dans les 5 langues.
+    get langue() { return I18n.langueDesDonnees; },
+    get systeme() { return systemeIngestionWiki(I18n.langueDesDonnees); },
     utilisateur(d) {
       const pages = liste(d.pages);
       const dates = new Map();

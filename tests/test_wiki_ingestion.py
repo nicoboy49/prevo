@@ -695,12 +695,34 @@ class TestDonneesEtFile(CasIngestion):
             || '';
           const forme = ' ' + Wiki.comparable(ligne) + ' ';
           const mots = forme.trim().split(' ');
-          return { ligne, entrees: Wiki.VOCABULAIRE_SECURITE.length, manquantes: Wiki.VOCABULAIRE_SECURITE.filter((entree) =>
-            (entree.endsWith('*') ? !mots.some((mot) => mot.startsWith(entree.slice(0, -1))) : !forme.includes(' ' + entree + ' '))) };
+          return { ligne, entrees: Wiki.VOCABULAIRE_SECURITE_PAR_LANGUE.fr.length, manquantes: Wiki.VOCABULAIRE_SECURITE_PAR_LANGUE.fr.filter((entree) =>
+            (entree.endsWith('*') ? !forme.includes(' ' + entree.slice(0, -1)) : !forme.includes(' ' + entree + ' '))) };   // racine d'un ou de plusieurs mots (T374)
         }""")
         self.assertTrue(resultat["ligne"].startswith("- mots refusés dans toute phrase, même pour rapporter un fait de l'OT : "))
         self.assertGreater(resultat["entrees"], 30)
         self.assertEqual(resultat["manquantes"], [])
+        # T374 (Lot 5) : dans une autre langue d'installation, la même ligne cite aussi les mots de cette langue, et la
+        # consigne française reste celle d'origine (budget de longueur).
+        autres = self.page.evaluate("""() => {
+          const avant = I18n.installation, francaise = Ia.PROMPTS.ingestionWiki.systeme, sortie = {};
+          for (const code of Object.keys(Wiki.VOCABULAIRE_SECURITE_PAR_LANGUE).filter((c) => c !== 'fr')) {
+            if (!I18n.estDeclaree(code)) I18n.declarer({ code, nom: code, locale: code, statut: 'automatique' });
+            I18n.ajouter(code, {});
+            I18n.noterInstallation(code);
+            const consigne = Ia.PROMPTS.ingestionWiki.systeme;
+            const ligne = consigne.split('\\n').find((l) => l.startsWith('- mots refusés dans toute phrase')) || '';
+            const forme = ' ' + Wiki.comparable(ligne) + ' ';
+            sortie[code] = { langue: Ia.PROMPTS.ingestionWiki.langue, manquantes: Wiki.VOCABULAIRE_SECURITE_PAR_LANGUE[code]
+              .filter((e) => (e.endsWith('*') ? !forme.includes(' ' + e.slice(0, -1)) : !forme.includes(' ' + e + ' '))) };
+          }
+          I18n.noterInstallation(avant);
+          return { sortie, inchangee: Ia.PROMPTS.ingestionWiki.systeme === francaise };
+        }""")
+        self.assertTrue(autres["inchangee"])
+        self.assertEqual(sorted(autres["sortie"]), ["en", "it", "pt-PT", "tr"])
+        for code, resultat_langue in autres["sortie"].items():
+            with self.subTest(langue=code):
+                self.assertEqual(resultat_langue, {"langue": code, "manquantes": []})
         systeme = self.page.evaluate(REQUETE_JS, "OT-2026-0001")["messages"][0]["content"]
         # T140, M2 : « en tête de SA page » — la fiche de la machine est en tête de sa page ; un savoir-faire d'article ne
         # montre en tête que la liste des machines où l'article est monté (« la consignation de chacune est en tête de sa

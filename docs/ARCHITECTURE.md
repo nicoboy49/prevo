@@ -4541,7 +4541,13 @@ signale jamais.
   « Réception ACH- », « Ancien n° : »…) restent fixes ; le détail qui les suit s'écrit dans la langue de
   l'installation (§24.1, `I18n.donnees`), jamais dans celle de l'écran.
 - **D157** : la console et les lanceurs (messages pour qui maintient l'application).
-- **D159** : les consignes envoyées à l'assistant IA restent en français (avec « réponds en <langue> »).
+- **D159** : les consignes envoyées à l'assistant IA restent en français (avec « réponds en <langue> »). Lot 5 (T374) :
+  le wiki est rédigé par l'IA dans la langue de l'installation (`I18n.langueDesDonnees`) ; ses garde-fous valent dans
+  les cinq langues — vocabulaires de la sécurité et de la nouveauté par langue (`Wiki.VOCABULAIRE_*_PAR_LANGUE`, leur
+  union dans `Wiki.VOCABULAIRE_*`), mois, nombres en lettres, comptages et unités (`wiki-texte.js`), forme comparable
+  qui garde le ı turc ; la consigne française est inchangée, celle d'une autre langue cite aussi ses mots refusés ;
+  le masquage avant envoi reconnaît les numéros internationaux (+ ou 00, turcs, portables italiens et britanniques,
+  portugais).
 - **identifiants** : identifiants, noms de fichiers, en-têtes CSV, codes, sélecteurs, reconnus automatiquement par
   l'outil. **titre-initial** : le `<title>` nu de `index.html` avant le chargement des scripts, remplacé ensuite par
   `App.definirTitre`.
