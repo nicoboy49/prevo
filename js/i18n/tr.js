@@ -4934,7 +4934,7 @@ I18n.ajouter('tr', {
   'serveur.console.accueil.sur_ce_pc': '  Bu PC\'de         : {adresse}',
   'serveur.console.accueil.sur_le_reseau': '  Ağda             : {adresse}   (telefonlar, tabletler)',
   'serveur.console.accueil.tailscale': '  Tailscale        : {resume}',
-  'serveur.console.accueil.titre': '{application} {version} - yerel BYS sunucusu',
+  'serveur.console.accueil.titre': '{application} {version} - yerel BYBS sunucusu',
   'serveur.console.copie.a_jour': 'Yedeklerin harici kopyası: {nom} yedeği {cible} içinde güncel.',
   'serveur.console.copie.ancienne_non_supprimee': 'Yedeklerin harici kopyası: eski kopya {cible} içinden silinmedi ({erreur}).',
   'serveur.console.copie.etat_non_enregistre': 'Yedeklerin harici kopyası: durum kaydedilmedi ({erreur}).',
