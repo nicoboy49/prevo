@@ -101,6 +101,9 @@ du jeu (ou une liste triée de lignes, ou un code) qui a la propriété annoncé
     equipement_panne_unique          BA-01 : une seule panne dans tout l'historique
     technicien_br_valide             TEC-0001 : BR valide à la date de référence
     technicien_br_echue              TEC-0004 : BR échue à la date de référence
+  2.2 (T444) : habilitations (CONCEPTION-L2-L3 §6)
+    ot_habilitation_exigee           OT « Préparé » de CV-03, sans technicien, qui exige H0V (habilitation_requise de l'OT)
+    technicien_caces_sans_autorisation  TEC-0004 : un CACES R489 sans autorisation de conduite (rappel CS179)
   Causes fréquentes (ARCHITECTURE.md §14.5, minimum 5 cas)
     causes_equipement                PO-02 : au moins 5 correctifs clôturés de ce symptôme sur l'équipement
     causes_equipement_symptome       S01 (fuite) ; au moins 2 causes, la plus fréquente C01 (garniture usée)
@@ -697,14 +700,25 @@ TECHNICIENS_DEMO = [    # (nom, prénom, métier, taux horaire)
     ('Moreau', 'Julien', ELEC, 44), ('Benali', 'Karim', MECA, 42),
     ('Lambert', 'Sophie', AUTO, 48), ('Garnier', 'Thomas', POLY, 38)]
 
-HABILITATIONS_DEMO = [  # (numéro du technicien, intitulé, obtention, échéance)
-    (1, 'BR', '2025-03-10', '2028-03-10'), (1, 'B2V', '2025-03-10', '2028-03-10'),
-    (1, 'H0V', '2025-03-10', '2028-03-10'),
-    (2, 'CACES R489', '2021-12-02', '2026-12-02'),      # expire dans 44 jours : à renouveler
-    (2, 'H0V', '2024-05-14', '2027-05-14'),
-    (3, 'BR', '2025-09-22', '2028-09-22'), (3, 'H0V', '2025-09-22', '2028-09-22'),
-    (4, 'BR', '2023-06-01', '2026-05-31'),              # ÉCHUE à la date de référence
-    (4, 'CACES R489', '2024-02-20', '2029-02-20'), (4, 'H0V', '2025-11-10', '2028-11-10')]
+CATALOGUE_HABILITATIONS = RACINE / 'docs' / 'catalogue' / 'habilitations-fr.json'   # catalogue validé (T444)
+
+HABILITATIONS_DEMO = [  # (numéro du technicien, intitulé, obtention, échéance, type du catalogue)
+    (1, 'BR', '2025-03-10', '2028-03-10', 'H02'), (1, 'B2V', '2025-03-10', '2028-03-10', 'H02'),
+    (1, 'H0V', '2025-03-10', '2028-03-10', 'H01'),
+    (2, 'CACES R489', '2021-12-02', '2026-12-02', 'H12'),      # expire dans 44 jours : à renouveler
+    (2, 'Autorisation de conduite', '2022-01-17', '', 'H14'),  # employeur, sans échéance : distincte du CACES
+    (2, 'H0V', '2024-05-14', '2027-05-14', 'H01'),
+    (3, 'BR', '2025-09-22', '2028-09-22', 'H02'), (3, 'H0V', '2025-09-22', '2028-09-22', 'H01'),
+    (4, 'BR', '2023-06-01', '2026-05-31', 'H02'),              # ÉCHUE à la date de référence
+    (4, 'CACES R489', '2024-02-20', '2029-02-20', 'H12'),      # sans autorisation de conduite : rappel (CS179)
+    (4, 'H0V', '2025-11-10', '2028-11-10', 'H01')]
+
+
+def types_habilitations():
+    """Types du catalogue validé docs/catalogue/habilitations-fr.json, par identifiant."""
+    lignes = json.loads(CATALOGUE_HABILITATIONS.read_text(encoding='utf-8'))['lignes']
+    return {ligne['id']: ligne for ligne in lignes}
+
 
 NOMS_SUPPLEMENTAIRES = [    # techniciens ajoutés par le jeu de charge
     ('Colin', 'Maxime'), ('Perrin', 'Élodie'), ('Fabre', 'Nicolas'), ('Roche', 'Aurélie'),
@@ -1749,13 +1763,19 @@ def generer_techniciens(ctx):
                                 'taux': taux})
     habilitations = list(HABILITATIONS_DEMO)
     for numero in range(5, len(techniciens) + 1):
-        habilitations += [(numero, 'BR', '2025-01-10', '2028-01-10'), (numero, 'H0V', '2025-01-10', '2028-01-10')]
-    for numero, intitule, obtention, echeance in habilitations:
+        habilitations += [(numero, 'BR', '2025-01-10', '2028-01-10', 'H02'),
+                          (numero, 'H0V', '2025-01-10', '2028-01-10', 'H01')]
+    types = types_habilitations()
+    for numero, intitule, obtention, echeance, type_id in habilitations:
         technicien = ctx.techniciens[numero - 1]
+        type_ = types[type_id]
         creer_ligne(ctx, 'habilitations', technicien_id=technicien['id'], intitule=intitule,
-                    date_obtention=obtention, date_echeance=echeance)
-        ctx.habilitations.setdefault((technicien['id'], intitule.lower()), []).append(
-            (jour_depuis_texte(obtention), jour_depuis_texte(echeance)))
+                    date_obtention=obtention, date_echeance=echeance,
+                    recyclage_mois=type_['duree_mois'] or '', catalogue_id=type_id,
+                    nature_source=type_['nature_source'])
+        if echeance:                       # sans échéance (autorisation de conduite) : aucune validité à contrôler
+            ctx.habilitations.setdefault((technicien['id'], intitule.lower()), []).append(
+                (jour_depuis_texte(obtention), jour_depuis_texte(echeance)))
 
 
 def habilitation_valide(ctx, technicien_id, intitule, jour):
@@ -2891,11 +2911,13 @@ def etat_courant_demo(ctx):
         demandeur='Camille Girard', delai_decision=50, date_prevue=jour + timedelta(days=2),
         technicien=ctx.techniciens[2], temps_prevu=2.0, pieces=[])
     ctx.marquer('ot_statut_planifie', ot)
-    # Préparé, pas en retard (priorité P4).
-    creer_correctif(
+    # Préparé, pas en retard (priorité P4). L'OT exige H0V (T444) : aucun OT ajouté, les identifiants ne bougent pas.
+    _demande, ot = creer_correctif(
         ctx, equipement['CV-03'], trouver_scenario('convoyeur', 'C03', 'S02'), instant(jour - timedelta(days=7), 8.7),
         'gêne', 'Préparé', texte_di='La courroie du convoyeur CV-03 patine, bruit de glissement au démarrage.',
         demandeur='Inès Marchand', pieces=[('cour_htd', 1)], temps_prevu=1.0)
+    ot['habilitation_requise'] = 'H0V'
+    ctx.marquer('ot_habilitation_exigee', ot)
     # Préparé et EN RETARD (priorité P4, échéance dépassée).
     _demande, ot = creer_correctif(
         ctx, equipement['VE-02'], trouver_scenario('ventilation', 'C05', 'S08'), instant(jour - timedelta(days=21), 9.1),
@@ -4500,6 +4522,7 @@ def scenarios_du_jeu(ctx):
     scenarios['equipement_panne_unique'] = ctx.equipement['BA-01']['id']
     scenarios['technicien_br_valide'] = ctx.techniciens[0]['id']
     scenarios['technicien_br_echue'] = ctx.techniciens[3]['id']
+    scenarios['technicien_caces_sans_autorisation'] = ctx.techniciens[3]['id']
     for role, (repere, symptome) in CAUSES_DEMO.items():
         scenarios[role] = ctx.equipement[repere]['id']
         scenarios[role + '_symptome'] = symptome

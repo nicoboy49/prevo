@@ -64,7 +64,8 @@ ROLES_LOT3 = ('controle_en_retard', 'controle_a_planifier', 'controle_observatio
               'technicien_surcharge', 'semaine_surcharge', 'ot_a_planifier', 'ot_a_planifier_br',
               'ot_a_planifier_piece_manquante', 'panne_attente_pieces', 'panne_sans_duree',
               'equipements_calcul_main',
-              'controle_reserves', 'reserve_en_retard', 'reserve_levee', 'reserve_a_echeance')    # + T417 (2.2)
+              'controle_reserves', 'reserve_en_retard', 'reserve_levee', 'reserve_a_echeance',    # + T417 (2.2)
+              'ot_habilitation_exigee', 'technicien_caces_sans_autorisation')    # + T444 (2.2)
 LUNDIS_PLANNING = [JOUR_REFERENCE + timedelta(weeks=rang) for rang in range(4)]   # 4 semaines du planning
 DEBUT_3_MOIS = date(2026, 7, 19)          # pannes dont l'historique des statuts est au journal
 DEBUT_12_MOIS = date(2025, 10, 20)        # période « 12-mois » (§15.3) : même jour 12 mois plus tôt + 1 jour
@@ -739,7 +740,7 @@ class TestContenuDemo(unittest.TestCase):
         self.assertEqual(len(br4), 1)
         self.assertLess(br4[0]['date_echeance'], DATE_REFERENCE)
         bientot = [h for h in self.t['habilitations']
-                   if h['technicien_id'] != 'TEC-0004'
+                   if h['technicien_id'] != 'TEC-0004' and h['date_echeance']
                    and 0 <= (jour(h['date_echeance']) - JOUR_REFERENCE).days < 60]
         self.assertEqual(len(bientot), 1, bientot)
 
@@ -1090,11 +1091,12 @@ class TestContenuDemo(unittest.TestCase):
         for c in controles:                      # alignés sur le catalogue validé (T417, D193)
             self.assertEqual((c['source_periodicite'], c['nature_source'], c['catalogue_relu_le']),
                              ('catalogue', 'obligation', '2026-11-08'))
-        for table, champs in (('equipements', ['cout_arret_h']), ('ordres_travail', ['habilitation_requise']),
-                              ('habilitations', ['recyclage_mois', 'justificatif', 'catalogue_id', 'nature_source'])):
-            for ligne in self.t[table]:
-                for champ in champs:
-                    self.assertEqual(ligne[champ], '', '%s.%s' % (table, champ))
+        for ligne in self.t['equipements']:
+            self.assertEqual(ligne['cout_arret_h'], '', 'equipements.cout_arret_h')
+        for ligne in self.t['habilitations']:         # le justificatif reste vide : aucun document en démo
+            self.assertEqual(ligne['justificatif'], '', 'habilitations.justificatif')
+        exigees = [o['id'] for o in self.t['ordres_travail'] if o['habilitation_requise']]
+        self.assertEqual(exigees, [scenarios_demo()['ot_habilitation_exigee']])        # un seul OT, aucun OT ajouté (T444)
 
     def test_controles_reglementaires(self):
         controles = self.t['controles_reglementaires']
@@ -1383,6 +1385,36 @@ class TestScenariosDemo(unittest.TestCase):
         echue = br(self.ligne('techniciens', 'technicien_br_echue')['id'])
         self.assertTrue(echue)
         self.assertTrue(all(h['date_echeance'] < DATE_REFERENCE for h in echue))
+
+    def test_habilitations_catalogue_recyclage_et_conduite(self):
+        """T444 (CS172, CS179, CS180) : type, recyclage et nature viennent du catalogue validé ; échéance = obtention + recyclage."""
+        catalogue = {l['id']: l for l in json.loads(
+            (RACINE / 'docs' / 'catalogue' / 'habilitations-fr.json').read_text(encoding='utf-8'))['lignes']}
+        habilitations = self.t['habilitations']
+        attendu = {'BR': 'H02', 'B2V': 'H02', 'H0V': 'H01', 'CACES R489': 'H12', 'Autorisation de conduite': 'H14'}
+        for h in habilitations:
+            type_ = catalogue[h['catalogue_id']]
+            self.assertEqual(h['catalogue_id'], attendu[h['intitule']], h['id'])
+            self.assertEqual(h['nature_source'], type_['nature_source'], h['id'])
+            self.assertEqual(h['recyclage_mois'], str(type_['duree_mois'] or ''), h['id'])
+            if h['recyclage_mois'] and h['id'] != 'HAB-0009':      # HAB-0009 : la BR échue de TEC-0004
+                obtention = jour(h['date_obtention'])
+                total = obtention.year * 12 + obtention.month - 1 + int(h['recyclage_mois'])
+                self.assertEqual(h['date_echeance'][:7], '%04d-%02d' % (total // 12, total % 12 + 1), h['id'])
+        self.assertEqual({h['recyclage_mois'] for h in habilitations if h['intitule'] == 'CACES R489'}, {'60'})
+        self.assertEqual({h['recyclage_mois'] for h in habilitations if h['intitule'] in ('BR', 'B2V', 'H0V')}, {'36'})
+        conduite = [h for h in habilitations if h['intitule'] == 'Autorisation de conduite']
+        self.assertEqual([(h['technicien_id'], h['date_echeance'], h['recyclage_mois'], h['nature_source'])
+                          for h in conduite], [('TEC-0002', '', '', 'obligation')])
+        self.assertEqual(self.par_id['techniciens']['TEC-0002']['nom'], 'Benali')
+        self.assertTrue(any(h['technicien_id'] == 'TEC-0002' and h['intitule'] == 'CACES R489' for h in habilitations))
+        sans = self.ligne('techniciens', 'technicien_caces_sans_autorisation')
+        self.assertEqual(sans['nom'], 'Garnier')
+        mes = [h for h in habilitations if h['technicien_id'] == sans['id']]
+        self.assertTrue(any(h['intitule'] == 'CACES R489' for h in mes))
+        self.assertFalse(any(h['intitule'] == 'Autorisation de conduite' for h in mes))
+        ot = self.ot('ot_habilitation_exigee')
+        self.assertEqual((ot['habilitation_requise'], ot['statut'], ot['technicien_id']), ('H0V', 'Préparé', ''))
 
     # -- causes fréquentes
 

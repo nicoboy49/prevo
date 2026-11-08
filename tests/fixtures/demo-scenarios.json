@@ -70,6 +70,7 @@
     "OT-2026-0203"
   ],
   "ot_fuite_garniture_po02": "OT-2026-0175",
+  "ot_habilitation_exigee": "OT-2026-0198",
   "ot_p1_ouvert": "OT-2026-0212",
   "ot_preventif_cloture": "OT-2025-0001",
   "ot_preventif_ouvert": "OT-2026-0203",
@@ -101,5 +102,6 @@
   },
   "technicien_br_echue": "TEC-0004",
   "technicien_br_valide": "TEC-0001",
+  "technicien_caces_sans_autorisation": "TEC-0004",
   "technicien_surcharge": "TEC-0002"
 }
