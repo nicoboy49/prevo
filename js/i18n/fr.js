@@ -4771,6 +4771,7 @@ I18n.ajouter('fr', {
   'zip.brancher.import_zip_refuse': 'Import ZIP refusé',
   'zip.completer_absentes.absent_zip_import_videra': 'est absent du ZIP ; l\'import videra cette table.',
   'zip.completer_absentes.existait_pas_format_table': 'n\'existait pas au format {formatOrigine} ; la table sera vide après l\'import.',
+  'zip.completer_absentes.existait_pas_format_remplie': { one: 'n\'existait pas au format {formatOrigine} ; la table aura {n} ligne après l\'import, reprise des données du ZIP au passage au format {format}.', other: 'n\'existait pas au format {formatOrigine} ; la table aura {n} lignes après l\'import, reprises des données du ZIP au passage au format {format}.' },
   'zip.confirmer.aucun_document_joint_zip': 'Aucun document joint dans ce ZIP ; les documents déjà présents sont gardés.',
   'zip.confirmer.documents_joints_photos_notices': { one: '{n} document joint (photos, notices, rapports figés) sera ajouté au dossier des documents ; les documents déjà présents sont gardés.', other: '{n} documents joints (photos, notices, rapports figés) seront ajoutés au dossier des documents ; les documents déjà présents sont gardés.' },
   'zip.confirmer.fichier_nom_fichier_origine': 'Fichier <b>{nomFichier}</b>. <span id="origine-import-zip">{origine}</span>',

@@ -4775,6 +4775,7 @@ I18n.ajouter('it', {
   'zip.brancher.import_zip_refuse': 'Importazione ZIP rifiutata',
   'zip.completer_absentes.absent_zip_import_videra': 'è assente dallo ZIP; l\'importazione svuoterà questa tabella.',
   'zip.completer_absentes.existait_pas_format_table': 'non esisteva nel formato {formatOrigine}; la tabella sarà vuota dopo l\'importazione.',
+  'zip.completer_absentes.existait_pas_format_remplie': { one: 'non esisteva nel formato {formatOrigine}; la tabella avrà {n} riga dopo l\'importazione, ripresa dai dati dello ZIP nel passaggio al formato {format}.', other: 'non esisteva nel formato {formatOrigine}; la tabella avrà {n} righe dopo l\'importazione, riprese dai dati dello ZIP nel passaggio al formato {format}.' },
   'zip.confirmer.aucun_document_joint_zip': 'Nessun documento allegato in questo ZIP; i documenti già presenti vengono conservati.',
   'zip.confirmer.documents_joints_photos_notices': { one: '{n} documento allegato (foto, manuali, rapporti finalizzati) sarà aggiunto alla cartella dei documenti; i documenti già presenti vengono conservati.', other: '{n} documenti allegati (foto, manuali, rapporti finalizzati) saranno aggiunti alla cartella dei documenti; i documenti già presenti vengono conservati.' },
   'zip.confirmer.fichier_nom_fichier_origine': 'File <b>{nomFichier}</b>. <span id="origine-import-zip">{origine}</span>',

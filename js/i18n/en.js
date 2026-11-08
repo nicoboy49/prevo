@@ -4773,6 +4773,7 @@ I18n.ajouter('en', {
   'zip.brancher.import_zip_refuse': 'ZIP import refused',
   'zip.completer_absentes.absent_zip_import_videra': 'is missing from the ZIP; the import will empty this table.',
   'zip.completer_absentes.existait_pas_format_table': 'did not exist in format {formatOrigine}; the table will be empty after the import.',
+  'zip.completer_absentes.existait_pas_format_remplie': { one: 'did not exist in format {formatOrigine}; the table will have {n} row after the import, taken from the ZIP data when it is brought to format {format}.', other: 'did not exist in format {formatOrigine}; the table will have {n} rows after the import, taken from the ZIP data when it is brought to format {format}.' },
   'zip.confirmer.aucun_document_joint_zip': 'No attached documents in this ZIP; the documents already present are kept.',
   'zip.confirmer.documents_joints_photos_notices': { one: '{n} attached document (photos, manuals, frozen reports) will be added to the documents folder; the documents already present are kept.', other: '{n} attached documents (photos, manuals, frozen reports) will be added to the documents folder; the documents already present are kept.' },
   'zip.confirmer.fichier_nom_fichier_origine': 'File <b>{nomFichier}</b>. <span id="origine-import-zip">{origine}</span>',

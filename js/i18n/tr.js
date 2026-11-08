@@ -4776,6 +4776,7 @@ I18n.ajouter('tr', {
   'zip.brancher.import_zip_refuse': 'ZIP içe aktarma reddedildi',
   'zip.completer_absentes.absent_zip_import_videra': 'ZIP\'te yok; içe aktarma bu tabloyu boşaltacak.',
   'zip.completer_absentes.existait_pas_format_table': '{formatOrigine} biçiminde yoktu; tablo içe aktarmadan sonra boş olacak.',
+  'zip.completer_absentes.existait_pas_format_remplie': { one: '{formatOrigine} biçiminde yoktu; içe aktarmadan sonra tabloda, {format} biçimine geçişte ZIP verilerinden alınan {n} satır olacak.', other: '{formatOrigine} biçiminde yoktu; içe aktarmadan sonra tabloda, {format} biçimine geçişte ZIP verilerinden alınan {n} satır olacak.' },
   'zip.confirmer.aucun_document_joint_zip': 'Bu ZIP\'te ekli belge yok; mevcut belgeler korunur.',
   'zip.confirmer.documents_joints_photos_notices': { one: '{n} ekli belge (fotoğraflar, kılavuzlar, kesinleşmiş raporlar) belgeler klasörüne eklenecek; mevcut belgeler korunur.', other: '{n} ekli belge (fotoğraflar, kılavuzlar, kesinleşmiş raporlar) belgeler klasörüne eklenecek; mevcut belgeler korunur.' },
   'zip.confirmer.fichier_nom_fichier_origine': '<b>{nomFichier}</b> dosyası. <span id="origine-import-zip">{origine}</span>',

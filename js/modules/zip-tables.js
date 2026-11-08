@@ -23,7 +23,9 @@
 //     plus petit format des fichiers non vides (comme Donnees.etatDuFormat) ; migre : vrai si les tables ont été
 //     passées au format courant en mémoire (Formats.migrer) ;
 //   - absentes : tables absentes du ZIP (l'import les videra), dans l'ordre du schéma : une table vide chacune (sauf
-//     parametres quand la migration la crée) et un problème ;
+//     parametres quand la migration la crée) et un problème. T393 : une table nouvelle (absente du format d'origine)
+//     que la migration a remplie (reserves_controle, réserves reprises des observations des contrôles, D183) n'est
+//     pas vidée par l'import : elle n'est pas dans `absentes` ; son problème (info) dit combien de lignes elle aura ;
 //   - problemes : problèmes de lecture des CSV, puis tables absentes (forme des problèmes de Donnees, §5.2).
 // Dépendances : Schema, Formats, Donnees (csv.analyser).
 
@@ -83,24 +85,31 @@ const ZipTables = (function () {
   }
 
   // Tables absentes du ZIP : un problème chacune, et une table vide (en-tête du format courant) si la migration ne
-  // l'a pas déjà créée (elle crée parametres avec sa ligne version_schema).
+  // l'a pas déjà créée (elle crée parametres avec sa ligne version_schema). Une table nouvelle que la migration a
+  // remplie (étape 3→4 : reserves_controle, D183) n'est pas vidée par l'import : hors de `absentes` (T393).
   function completerAbsentes(tables, presentes, formatOrigine) {
     const absentes = [];
     const problemes = [];
     for (const nomTable of Schema.nomsTables()) {
       if (presentes.indexOf(nomTable) >= 0) { continue; }
       const description = Schema.table(nomTable);
-      absentes.push(nomTable);
       if (!Object.prototype.hasOwnProperty.call(tables, nomTable)) {
         tables[nomTable] = { entete: Formats.colonnes(nomTable), lignes: [], colonnesInconnues: [] };
       } else if (!Array.isArray(tables[nomTable].colonnesInconnues)) {
         tables[nomTable].colonnesInconnues = [];
       }
       const nouvelle = Formats.tables(formatOrigine).indexOf(nomTable) < 0;
-      problemes.push(probleme(nouvelle ? 'info' : 'attention', 'table', nomTable, description.libelle + ' : '
-        + description.fichier + (nouvelle
-          ? ' ' + I18n.t('zip.completer_absentes.existait_pas_format_table', { formatOrigine })
-          : ' ' + I18n.t('zip.completer_absentes.absent_zip_import_videra'))));
+      const remplies = nouvelle ? tables[nomTable].lignes.length : 0;
+      if (!remplies) { absentes.push(nomTable); }
+      let suite = I18n.t('zip.completer_absentes.absent_zip_import_videra');
+      if (remplies) {
+        suite = I18n.t('zip.completer_absentes.existait_pas_format_remplie',
+          { formatOrigine, n: remplies, format: Formats.courant });
+      } else if (nouvelle) {
+        suite = I18n.t('zip.completer_absentes.existait_pas_format_table', { formatOrigine });
+      }
+      problemes.push(probleme(nouvelle ? 'info' : 'attention', 'table', nomTable,
+        description.libelle + ' : ' + description.fichier + ' ' + suite));
     }
     return { absentes: absentes, problemes: problemes };
   }
