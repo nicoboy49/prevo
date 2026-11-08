@@ -189,7 +189,8 @@ const Equipe = (() => {
    */
   function intitulePropose(type) {
     const ligne = versType(type);
-    if (!ligne || ligne.famille === 'Électricité') return '';
+    // Famille du catalogue (donnée en français) reconnue par une expression régulière, pas une chaîne (conception §1.3).
+    if (!ligne || /^Électricité$/.test(texte(ligne.famille))) return '';
     return texte(ligne.type).split('–')[0].trim();
   }
 
