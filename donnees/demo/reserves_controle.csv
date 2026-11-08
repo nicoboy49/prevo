@@ -1,2 +1,4 @@
 ﻿id;controle_id;date_controle;texte;gravite;echeance_levee;levee;date_levee;commentaire_levee;ot_id
 RES-00001;CTR-0004;2025-04-03;Purgeur automatique du réservoir défectueux : à remplacer avant la prochaine inspection.;;;0;;;
+RES-00002;CTR-0003;2025-11-12;Différentiel 30 mA du tableau de l'atelier à remplacer.;;;1;2025-12-09;Différentiel remplacé, essai de déclenchement conforme.;OT-2025-0026
+RES-00003;CTR-0003;2025-11-12;Schéma unifilaire du tableau général à mettre à jour.;;2026-12-15;0;;;

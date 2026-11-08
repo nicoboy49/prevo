@@ -63,7 +63,8 @@ MAINTENANT = DATE_REFERENCE + ' 09:00'                         # il est 9 h à l
 ROLES_LOT3 = ('controle_en_retard', 'controle_a_planifier', 'controle_observations', 'controle_a_jour',
               'technicien_surcharge', 'semaine_surcharge', 'ot_a_planifier', 'ot_a_planifier_br',
               'ot_a_planifier_piece_manquante', 'panne_attente_pieces', 'panne_sans_duree',
-              'equipements_calcul_main')
+              'equipements_calcul_main',
+              'controle_reserves', 'reserve_en_retard', 'reserve_levee', 'reserve_a_echeance')    # + T417 (2.2)
 LUNDIS_PLANNING = [JOUR_REFERENCE + timedelta(weeks=rang) for rang in range(4)]   # 4 semaines du planning
 DEBUT_3_MOIS = date(2026, 7, 19)          # pannes dont l'historique des statuts est au journal
 DEBUT_12_MOIS = date(2025, 10, 20)        # période « 12-mois » (§15.3) : même jour 12 mois plus tôt + 1 jour
@@ -1077,7 +1078,7 @@ class TestContenuDemo(unittest.TestCase):
         controles = self.t['controles_reglementaires']
         reserves = self.t['reserves_controle']
         avec_observations = [c for c in controles if c['observations'].strip()]
-        self.assertEqual(len(reserves), 1)
+        self.assertEqual(len(reserves), 3)      # RA-01 (reprise) + deux d'AE-01 (T417)
         reserve = reserves[0]
         self.assertEqual(reserve['id'], 'RES-00001')
         self.assertEqual(reserve['controle_id'], avec_observations[0]['id'])
@@ -1086,9 +1087,9 @@ class TestContenuDemo(unittest.TestCase):
         self.assertEqual((reserve['levee'], reserve['date_levee'], reserve['commentaire_levee']), ('0', '', ''))
         for champ in ('gravite', 'echeance_levee', 'ot_id'):
             self.assertEqual(reserve[champ], '')
-        for c in controles:
-            self.assertEqual((c['source_periodicite'], c['nature_source'], c['catalogue_id'], c['catalogue_relu_le']),
-                             ('saisie', '', '', ''))
+        for c in controles:                      # alignés sur le catalogue validé (T417, D193)
+            self.assertEqual((c['source_periodicite'], c['nature_source'], c['catalogue_relu_le']),
+                             ('catalogue', 'obligation', '2026-11-08'))
         for table, champs in (('equipements', ['cout_arret_h']), ('ordres_travail', ['habilitation_requise']),
                               ('habilitations', ['recyclage_mois', 'justificatif', 'catalogue_id', 'nature_source'])):
             for ligne in self.t[table]:
@@ -1468,13 +1469,44 @@ class TestDemoLot3(unittest.TestCase):
             return trouves[0]
 
         chariot = seul('chariot')                    # VGP des chariots élévateurs : 6 mois (art. 23 a)
-        self.assertEqual((chariot['periodicite_mois'], chariot['texte_reference']),
-                         ('6', 'Arrêté du 1er mars 2004 (VGP), art. 23'))
+        self.assertEqual((chariot['periodicite_mois'], chariot['texte_reference'], chariot['catalogue_id']),
+                         ('6', 'Arrêté du 1er mars 2004, art. 20 II et art. 23 a)', 'C03'))
         self.assertEqual(chariot['id'], self.s['controle_en_retard'])
-        self.assertEqual(seul('électrique')['texte_reference'],
-                         'Code du travail, art. R4226-16 ; arrêté du 26 décembre 2011')
-        self.assertEqual(seul('pont roulant')['periodicite_mois'], '12')
-        self.assertEqual(seul('réservoir')['periodicite_mois'], '36')
+        electrique = seul('électrique')
+        self.assertEqual((electrique['texte_reference'], electrique['catalogue_id']),
+                         ('Code du travail, art. R4226-16 et R4226-17 ; arrêté du 26 décembre 2011, art. 3', 'C12'))
+        self.assertEqual((seul('pont roulant')['periodicite_mois'], seul('pont roulant')['catalogue_id']), ('12', 'C01'))
+        reservoir = seul('réservoir')              # D193 : 48 mois (36 mois = première inspection)
+        self.assertEqual((reservoir['periodicite_mois'], reservoir['catalogue_id'], reservoir['texte_reference']),
+                         ('48', 'C14', "Code de l'environnement, art. R557-14-1 (champ) ; arrêté du 20 novembre 2017, art. 14 et 15"))
+        frigo = seul('étanchéité')                 # D193 : selon la charge, 5 à < 50 t éq. CO2 = C16, 12 mois
+        self.assertEqual((frigo['periodicite_mois'], frigo['catalogue_id']), ('12', 'C16'))
+        self.assertIn('5 à < 50 t éq. CO2', frigo['nature'])
+        self.assertIn('Règlement (UE) 2024/573', frigo['texte_reference'])
+        aeration = [c for c in controles if c['catalogue_id'] == 'C20'][0]
+        self.assertIn('arrêté du 8 octobre 1987', aeration['texte_reference'])
+        self.assertEqual(aeration['periodicite_mois'], '12')
+
+    def test_reserves_de_la_demo_t417(self):
+        """Réserves du jeu corrigé : RA-01 en retard (échéance par défaut = contrôle + 30 jours), AE-01 une levée
+        avec son OT réglementaire clôturé, une ouverte à échéance saisie à venir ; observations de RA-01 gardées."""
+        reserves = {r['id']: r for r in self.t['reserves_controle']}
+        en_retard, levee, a_echeance = (reserves[self.s[k]] for k in ('reserve_en_retard', 'reserve_levee',
+                                                                      'reserve_a_echeance'))
+        controles = {c['id']: c for c in self.t['controles_reglementaires']}
+        ra01 = controles[self.s['controle_observations']]
+        self.assertEqual((en_retard['controle_id'], en_retard['date_controle'], en_retard['levee'], en_retard['echeance_levee']),
+                         (ra01['id'], '2025-04-03', '0', ''))
+        self.assertEqual(en_retard['texte'], ra01['observations'])
+        self.assertLess(jour(en_retard['date_controle']) + timedelta(days=30), JOUR_REFERENCE)
+        self.assertEqual({levee['controle_id'], a_echeance['controle_id']}, {self.s['controle_reserves']})
+        self.assertEqual(controles[self.s['controle_reserves']]['derniere_date'], '2025-11-12')
+        self.assertEqual((levee['levee'], levee['date_levee']), ('1', '2025-12-09'))
+        self.assertTrue(levee['commentaire_levee'])
+        ot = next(o for o in self.t['ordres_travail'] if o['id'] == levee['ot_id'])
+        self.assertEqual((ot['type'], ot['statut'].startswith('Clôturé')), ('réglementaire', True))
+        self.assertEqual((a_echeance['levee'], a_echeance['ot_id']), ('0', ''))
+        self.assertGreater(jour(a_echeance['echeance_levee']), JOUR_REFERENCE)
 
     # -- planning des 4 semaines (§15.5)
 

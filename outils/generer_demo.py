@@ -115,6 +115,11 @@ du jeu (ou une liste triée de lignes, ou un code) qui a la propriété annoncé
     controle_observations            inspection du réservoir RA-01 : observations non levées
     controle_a_planifier             installations électriques (AE-01) : prochaine date dans moins de 30 jours
     controle_a_jour                  VGP du pont roulant PT-01 : à jour
+  2.2 (T417) : réserves des contrôles (D193, CONCEPTION-L2-L3 §3)
+    controle_reserves                contrôle d'AE-01 (12/11/2025) : une réserve levée avec son OT, une ouverte à échéance à venir
+    reserve_en_retard                réserve du purgeur de RA-01 (03/04/2025) : ouverte, échéance par défaut passée
+    reserve_levee                    réserve d'AE-01 levée le 09/12/2025 (levee 1, commentaire, OT réglementaire clôturé lié)
+    reserve_a_echeance               réserve ouverte d'AE-01 : échéance saisie le 15/12/2026, à venir
   Lot 3 : planning des 4 semaines qui commencent à la date de référence (§15.5)
     technicien_surcharge             TEC-0002 : plus d'heures prévues que sa capacité dans la semaine_surcharge
     semaine_surcharge                lundi (AAAA-MM-JJ) de la semaine en surcharge : l'arrêt programmé
@@ -1513,22 +1518,32 @@ COMPTEURS_DEMO = [      # clé, repère, libellé, unité, valeur au premier rel
 # qui renvoie à l'art. 20 II), 12 mois pour le pont roulant ; installations électriques : vérification
 # PÉRIODIQUE (art. R4226-16 ; R4226-14 est la vérification initiale) et son arrêté du 26 décembre 2011.
 ORGANISME_1 = 'Bureau Alpin de Contrôle (démo)'
+CATALOGUE_CONTROLES = RACINE / 'docs' / 'catalogue' / 'controles-fr.json'   # catalogue validé (D193)
+# (repère, identifiant du catalogue, organisme, date du dernier contrôle, observations, observations levées ?).
+# Nature, référence et périodicité viennent du catalogue validé : PT-01 C01, CH-01 C03, AE-01 C12, RA-01 C14 (48 mois ;
+# 36 mois = première inspection), GF-01 C16 (5 à < 50 t éq. CO2, 12 mois), VE-02 C20 (arrêté du 8 octobre 1987).
 CONTROLES_DEMO = [
-    ('PT-01', 'Vérification générale périodique du pont roulant', 'Arrêté du 1er mars 2004 (VGP), art. 23', 12,
-     ORGANISME_1, '2026-02-10', '', 1),
-    ('CH-01', 'Vérification générale périodique du chariot élévateur', 'Arrêté du 1er mars 2004 (VGP), art. 23', 6,
-     ORGANISME_1, '2026-03-18', '', 1),
-    ('AE-01', 'Vérification périodique des installations électriques',
-     'Code du travail, art. R4226-16 ; arrêté du 26 décembre 2011', 12,
-     'Certif-Elec Services (démo)', '2025-11-12', '', 1),
-    ('RA-01', "Inspection périodique du réservoir d'air comprimé", 'Arrêté du 20 novembre 2017', 36,
-     'Bureau Alpin de Contrôle (démo)', '2025-04-03',
+    ('PT-01', 'C01', ORGANISME_1, '2026-02-10', '', 1),
+    ('CH-01', 'C03', ORGANISME_1, '2026-03-18', '', 1),
+    ('AE-01', 'C12', 'Certif-Elec Services (démo)', '2025-11-12', '', 1),
+    ('RA-01', 'C14', 'Bureau Alpin de Contrôle (démo)', '2025-04-03',
      'Purgeur automatique du réservoir défectueux : à remplacer avant la prochaine inspection.', 0),
-    ('GF-01', "Contrôle d'étanchéité du circuit frigorifique", 'Règlement (UE) 2024/573', 12,
-     'Frigo-Contrôle Sud (démo)', '2026-03-24', '', 1),
-    ('VE-02', "Contrôle de l'aération et de l'assainissement des locaux", 'Code du travail, art. R4222-20', 12,
-     ORGANISME_1, '2026-06-02', '', 1),
+    ('GF-01', 'C16', 'Frigo-Contrôle Sud (démo)', '2026-03-24', '', 1),
+    ('VE-02', 'C20', ORGANISME_1, '2026-06-02', '', 1),
 ]
+# Réserves relevées au contrôle d'AE-01 du 12/11/2025 (T417) : une levée (avec l'OT réglementaire du contrôle), une
+# ouverte dont l'échéance saisie est à venir. Dates fixes, aucun tirage.
+RESERVES_AE01 = [
+    {'texte': "Différentiel 30 mA du tableau de l'atelier à remplacer.", 'levee': 1, 'date_levee': '2025-12-09',
+     'commentaire_levee': "Différentiel remplacé, essai de déclenchement conforme."},
+    {'texte': 'Schéma unifilaire du tableau général à mettre à jour.', 'levee': 0, 'echeance_levee': '2026-12-15'},
+]
+
+
+def ligne_catalogue(identifiant):
+    """Ligne du catalogue validé des contrôles (docs/catalogue/controles-fr.json) pour un identifiant Cnn."""
+    lignes = json.loads(CATALOGUE_CONTROLES.read_text(encoding='utf-8'))['lignes']
+    return next(ligne for ligne in lignes if ligne['id'] == identifiant)
 # Contrôles dont la dernière date a été recalée au lot 3 (chariot : passage de 12 à 6 mois, dernière VGP
 # en mars 2026 pour rester en retard). L'OT réglementaire de cette VGP tire son hasard dans le
 # générateur du lot 3 : le reste du jeu reste identique.
@@ -2107,7 +2122,9 @@ def est_gamme_echue(ctx, gamme):
 def generer_controles(ctx):
     """Contrôles réglementaires. Dans le jeu de charge, ils portent sur des équipements de même famille."""
     familles_par_repere = {e['repere']: e['famille'] for e in EQUIPEMENTS_DEMO}
-    for rang, (repere, nature, texte_reference, periodicite, organisme, derniere, observations, levees)             in enumerate(CONTROLES_DEMO):
+    for rang, (repere, catalogue_id, organisme, derniere, observations, levees) in enumerate(CONTROLES_DEMO):
+        catalogue = ligne_catalogue(catalogue_id)
+        nature, texte_reference, periodicite = catalogue['nature'], catalogue['reference'], catalogue['periodicite_mois']
         if repere not in ctx.equipement:
             famille = familles_par_repere[repere]
             parc = [e for e in ctx.equipements if e['famille'] == famille]
@@ -2122,9 +2139,11 @@ def generer_controles(ctx):
                     organisme=organisme, derniere_date=derniere,
                     prochaine_date=texte_date(ajouter_mois(derniere_date, periodicite)),
                     observations=observations, observations_levees=levees,
-                    source_periodicite='saisie')
+                    source_periodicite='catalogue', nature_source=catalogue['nature_source'],
+                    catalogue_id=catalogue_id, catalogue_relu_le=catalogue['relu_le'])
         ctx.controles.append({'eq': equipement, 'nature': nature, 'organisme': organisme,
-                              'derniere': derniere, 'observations': observations,
+                              'derniere': derniere, 'observations': observations, 'repere': repere,
+                              'ligne': ctx.base['controles_reglementaires'][-1], 'ot': None,
                               'recale_lot3': repere in CONTROLES_RECALES_LOT3})
 
 
@@ -2152,6 +2171,20 @@ def generer_reserves(ctx):
                 creer_ligne(ctx, 'reserves_controle', controle_id=identifiant,
                             date_controle=controle['derniere_date'], texte=texte, levee='1' if levee else '0',
                             commentaire_levee=COMMENTAIRE_LEVEE_REPRISE if levee else '')
+
+
+def generer_reserves_ae01(ctx):
+    """Réserves d'AE-01 (T417), après l'attribution des identifiants : la levée est liée à l'OT réglementaire du
+    contrôle (clôturé), l'ouverte a une échéance saisie à venir."""
+    controle = next(c for c in ctx.controles if c['repere'] == 'AE-01')
+    if controle['ot'] is None:
+        return
+    for reserve in RESERVES_AE01:
+        creer_ligne(ctx, 'reserves_controle', controle_id=controle['ligne']['id'], date_controle=controle['derniere'],
+                    texte=reserve['texte'], levee=reserve['levee'], date_levee=reserve.get('date_levee', ''),
+                    commentaire_levee=reserve.get('commentaire_levee', ''),
+                    echeance_levee=reserve.get('echeance_levee', ''),
+                    ot_id=controle['ot']['id'] if reserve['levee'] else '')
 
 
 def generer_parametres(ctx):
@@ -2500,9 +2533,11 @@ def generer_ot_reglementaires_et_ameliorations(ctx):
         if ctx.debut <= jour <= ctx.fin_historique:
             observation = (" Observation de l'organisme à lever : " + controle['observations']
                            if controle['observations'] else ' Aucune observation.')
+            if controle['repere'] == 'AE-01':
+                observation = " Réserves relevées par l'organisme : %s" % ' '.join(r['texte'] for r in RESERVES_AE01)
             # Contrôle recalé au lot 3 : son OT tire son hasard à part (le reste du jeu ne bouge pas).
             with hasard_du_lot3(ctx) if controle['recale_lot3'] else nullcontext():
-                creer_ot_manuel(
+                controle['ot'] = creer_ot_manuel(
                     ctx, controle['eq'], controle['nature'], 'Accompagner l\'organisme de contrôle et récupérer le rapport.',
                     jour, 1.0, [POLY, MECA], 'Contrôle réalisé par %s, rapport reçu.%s' % (controle['organisme'], observation),
                     'réglementaire', 'C99', 'R10', cout_soustraitance=ctx.rng.randrange(250, 650, 50))
@@ -4473,6 +4508,12 @@ def scenarios_du_jeu(ctx):
     for statut, role in zip(STATUTS_CONTROLE, ('controle_en_retard', 'controle_observations',
                                                'controle_a_planifier', 'controle_a_jour')):
         scenarios[role] = [c['id'] for c in base['controles_reglementaires'] if statut_controle(c, ctx.ref) == statut][0]
+    reserves = {r['texte']: r for r in base['reserves_controle']}
+    scenarios['reserve_en_retard'] = [r['id'] for r in base['reserves_controle']
+                                      if r['controle_id'] == scenarios['controle_observations']][0]
+    scenarios['controle_reserves'] = reserves[RESERVES_AE01[0]['texte']]['controle_id']
+    scenarios['reserve_levee'] = reserves[RESERVES_AE01[0]['texte']]['id']
+    scenarios['reserve_a_echeance'] = reserves[RESERVES_AE01[1]['texte']]['id']
     surcharge = surcharges_du_planning(ctx)[0]          # la seule (vérifié par verifier_demo_lot3)
     scenarios['technicien_surcharge'], scenarios['semaine_surcharge'] = surcharge
     scenarios['equipements_calcul_main'] = sorted(ctx.equipement[repere]['id'] for repere in EQUIPEMENTS_CALCUL_MAIN)
@@ -4785,6 +4826,7 @@ def construire_jeu(mois=MOIS_PAR_DEFAUT, volume=None, dossier_wiki=None):
         with hasard_du_lot3bis(ctx):
             completer_demo_lot3bis(ctx)
     attribuer_identifiants_historique(ctx)
+    generer_reserves_ae01(ctx)
     if not volume:
         with hasard_du_lot6(ctx):
             ajouter_ot_de_scenario_lot6(ctx)
