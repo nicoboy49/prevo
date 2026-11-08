@@ -333,34 +333,183 @@ const Ordres = (() => {
     return manques;
   }
 
-  /** Habilitations requises par un équipement (« BR, B2V » ou « BR / H0V ») : tableau. */
-  function habilitationsRequises(equipement) {
-    return texte(equipement && equipement.habilitation_requise).split(/[,/]/).map((h) => h.trim()).filter(Boolean);
+  // --- RG8 : habilitations exigées par l'OT (D186, D191 ; conception L2-L3 §7.1, §7.2, §7.5) ----
+  // Codes (aucun texte : les écrans les traduisent ; le marqueur du journal les écrit en français, D156).
+  // Raisons d'une habilitation exigée non valide à la date : aucune ligne pour cet intitulé (absente),
+  // des lignes toutes échues ou à échéance illisible (echue), une ligne obtenue après la date (pas_encore_obtenue).
+  const RAISONS_HABILITATION = Object.freeze(['absente', 'echue', 'pas_encore_obtenue']);
+  // Origine d'une exigence : la colonne habilitation_requise de l'équipement, ou celle de l'OT.
+  const ORIGINES_HABILITATION = Object.freeze(['equipement', 'ot']);
+  // Marqueur fixe du journal (D156), relu ici et par les écrans :
+  // « dérogation habilitation : TEC-0004 le 2026-11-20 sans BR (échue), H0V (absente) ; motif : <texte> ».
+  const MOTIF_DEROGATION = /(?:^|\s)dérogation habilitation : (\S+) le (\d{4}-\d{2}-\d{2}) sans (.+?) ; motif : ([\s\S]+)$/;
+  const MOTIF_MANQUANTE = /^(.+?)(?: \((?:(absente)|(échue)|(pas encore obtenue))\))?$/;
+
+  // Intitulé comparable et date lue : les fonctions d'Equipe (cherchées à l'appel, equipe-regles.js est
+  // chargé après) ; une seule règle pour RG8 et pour l'écran Équipe (QUESTIONS-L2-L6 Q11).
+  function cleIntitule(intitule) { return Equipe.interne.cleIntitule(intitule); }
+  function dateLue(valeur) { return Equipe.interne.dateIso(valeur); }
+
+  function ligneOt(ot) {
+    return typeof ot === 'string' ? Donnees.trouver('ordres_travail', ot) : ot;
   }
 
-  /** Habilitations requises qui manquent au technicien à la date donnée (tableau, vide si tout va bien). */
-  function habilitationsManquantes(equipement, technicienId, date) {
-    const habilitations = Donnees.lignes('habilitations').filter((h) => h.technicien_id === technicienId);
-    return habilitationsRequises(equipement).filter((requise) => !habilitations.some((h) =>
-      texte(h.intitule).toLowerCase() === requise.toLowerCase()
-      && (!texte(h.date_obtention) || h.date_obtention.slice(0, 10) <= date)
-      && (!texte(h.date_echeance) || date <= h.date_echeance.slice(0, 10))));
+  /** Intitulés d'une colonne habilitation_requise (« BR, B2V » ou « BR / H0V ») : tableau. */
+  function intitulesDe(valeur) {
+    return texte(valeur).split(/[,/]/).map((h) => h.trim()).filter(Boolean);
+  }
+
+  /** Exigences de l'équipement puis de l'OT, lues chacune sur sa ligne (jamais fusionnées), doublons
+   *  (casse et espaces ignorés) réunis : [{ intitule, origines }] (première écriture gardée). */
+  function exigencesDe(equipement, ot) {
+    const parCle = new Map();
+    [[equipement, 'equipement'], [ot, 'ot']].forEach(([ligne, origine]) => {
+      intitulesDe(ligne && ligne.habilitation_requise).forEach((intitule) => {
+        const cle = cleIntitule(intitule);
+        if (!cle) return;
+        const exigence = parCle.get(cle) || { intitule, origines: [] };
+        if (!exigence.origines.includes(origine)) exigence.origines.push(origine);
+        parCle.set(cle, exigence);
+      });
+    });
+    return Array.from(parCle.values());
+  }
+
+  /** État d'une ligne d'habilitation au jour (bornes comprises ; obtention ou échéance vide : pas de borne,
+   *  Q10 ; échéance illisible : échue, comme Equipe.etatHabilitation) : 'valide', 'echue' ou 'pas_encore_obtenue'. */
+  function etatAuJour(habilitation, jour) {
+    const echeance = dateLue(habilitation.date_echeance);
+    if (texte(habilitation.date_echeance) && !echeance) return 'echue';
+    const obtention = dateLue(habilitation.date_obtention);
+    if (obtention && obtention > jour) return 'pas_encore_obtenue';
+    if (echeance && echeance < jour) return 'echue';
+    return 'valide';
+  }
+
+  /** Exigence non valide au jour → { intitule, origines, raison, echeance, obtention }, sinon null.
+   *  echeance : la plus lointaine des lignes échues (lisible) ; obtention : la plus proche des lignes à venir. */
+  function manquanteAuJour(exigence, lignes, jour) {
+    const cle = cleIntitule(exigence.intitule);
+    const siennes = lignes.filter((h) => cleIntitule(h.intitule) === cle);
+    const etats = siennes.map((h) => etatAuJour(h, jour));
+    if (etats.includes('valide')) return null;
+    const manquante = { intitule: exigence.intitule, origines: exigence.origines.slice(), raison: 'absente', echeance: '', obtention: '' };
+    const aVenir = siennes.filter((h, i) => etats[i] === 'pas_encore_obtenue').map((h) => dateLue(h.date_obtention)).sort();
+    if (aVenir.length) return Object.assign(manquante, { raison: 'pas_encore_obtenue', obtention: aVenir[0] });
+    if (siennes.length) {
+      const echues = siennes.map((h) => dateLue(h.date_echeance)).filter(Boolean).sort();
+      return Object.assign(manquante, { raison: 'echue', echeance: echues.length ? echues[echues.length - 1] : '' });
+    }
+    return manquante;
+  }
+
+  /** Contrôle d'exigences au jour (ISO) pour un technicien. Sans technicien : rien à contrôler. */
+  function controleAuJour(exigees, technicienId, jour) {
+    const id = texte(technicienId);
+    const lignes = id ? Donnees.lignes('habilitations').filter((h) => texte(h.technicien_id) === id) : [];
+    const manquantes = id ? exigees.map((exigence) => manquanteAuJour(exigence, lignes, jour)).filter(Boolean) : [];
+    return { exigees, manquantes, bloque: manquantes.length > 0, technicienId: id, date: jour };
   }
 
   /**
-   * RG8 : message d'avertissement si le technicien n'a pas une habilitation requise valide à la
-   * date (date prévue, sinon aujourd'hui), sinon null. equipement : ligne ou identifiant.
-   * Ex. « TEC-0004 sans BR valide au 2026-10-21 ». pourLesDonnees : texte écrit au journal (« avertissement
-   * habilitation : … »), dans la langue de l'installation (D156) ; sinon celle de l'écran.
+   * Habilitations exigées par un OT (ligne ou identifiant) : habilitation_requise de son équipement ∪
+   * habilitation_requise de l'OT (séparateurs « , » et « / », casse et espaces ignorés) →
+   * [{ intitule, origines: ['equipement' | 'ot', …] }]. Un OT sans exigence rend [] : il n'est jamais bloqué.
+   */
+  function habilitationsExigees(ot) {
+    const ligne = ligneOt(ot);
+    return ligne ? exigencesDe(equipementDe(ligne), ligne) : [];
+  }
+
+  /**
+   * RG8 (D186, D191) : le technicien a-t-il, à la date (date donnée, sinon date prévue de l'OT, sinon
+   * aujourd'hui), une ligne valide pour chaque habilitation exigée ? → { exigees, manquantes, bloque,
+   * technicienId, date }. manquantes : [{ intitule, origines, raison ('absente' | 'echue' |
+   * 'pas_encore_obtenue'), echeance, obtention }] ; bloque : au moins une manquante. Sans exigence ou sans
+   * technicien : bloque faux.
+   */
+  function controleHabilitation(ot, technicienId, date) {
+    const ligne = ligneOt(ot);
+    const jour = dateLue(date) || dateLue(ligne && ligne.date_prevue) || aujourdhui();
+    return controleAuJour(habilitationsExigees(ligne), technicienId, jour);
+  }
+
+  /** Habilitations exigées par un équipement qui manquent au technicien au jour (intitulés ; vide si tout va bien). */
+  function habilitationsManquantes(equipement, technicienId, date) {
+    const jour = dateLue(date) || aujourdhui();
+    return controleAuJour(exigencesDe(equipement, null), technicienId, jour).manquantes.map((m) => m.intitule);
+  }
+
+  /**
+   * RG8 sur l'exigence d'un équipement (ligne ou identifiant), écrite au-dessus du même contrôle que
+   * controleHabilitation : message si une habilitation exigée n'est pas valide à la date (sinon
+   * aujourd'hui), sinon null. Ex. « TEC-0004 sans BR valide au 2026-10-21 ». pourLesDonnees : texte écrit
+   * au journal, dans la langue de l'installation (D156) ; sinon celle de l'écran.
    */
   function verifierHabilitation(equipement, technicienId, dateReference, pourLesDonnees) {
     const ligne = typeof equipement === 'string' ? Donnees.trouver('equipements', equipement) : equipement;
-    if (!ligne || !technicienId) return null;
-    const date = texte(dateReference).slice(0, 10) || aujourdhui();
+    if (!ligne || !texte(technicienId)) return null;
+    const date = dateLue(dateReference) || aujourdhui();
     const manquantes = habilitationsManquantes(ligne, technicienId, date);
     if (!manquantes.length) return null;
     if (pourLesDonnees) return I18n.donnees('ordres.verifier_habilitation.sans_valide', { technicienId, join: manquantes.join(', '), date });
     return I18n.t('ordres.verifier_habilitation.sans_valide', { technicienId, join: manquantes.join(', '), date });
+  }
+
+  /**
+   * Marqueur fixe de dérogation (D156), en fin de l'action du journal de l'écriture (§7.5) :
+   * « dérogation habilitation : TEC-0004 le 2026-11-20 sans BR (échue), H0V (absente) ; motif : … ».
+   * manquantes : celles de controleHabilitation (ou des intitulés). Motif obligatoire (QUESTIONS-L2-L6
+   * Q7), espaces et retours à la ligne réduits à une espace. Rend '' sans technicien, date, manquante ou motif.
+   */
+  function marqueurDerogation(technicienId, date, manquantes, motif) {
+    const id = texte(technicienId);
+    const jour = dateLue(date);
+    const liste = (manquantes || []).map((m) => (typeof m === 'string' ? { intitule: m } : m || {}))
+      .filter((m) => texte(m.intitule));
+    const propre = texte(motif).replace(/\s+/g, ' ');
+    if (!id || !jour || !liste.length || !propre) return '';
+    const action = 'dérogation habilitation : ' + id + ' le ' + jour + ' sans '
+      + liste.map((m) => texte(m.intitule) + (m.raison === 'echue' ? ' (échue)' : m.raison === 'absente' ? ' (absente)'
+        : m.raison === 'pas_encore_obtenue' ? ' (pas encore obtenue)' : '')).join(', ')
+      + ' ; motif : ' + propre;
+    return action;
+  }
+
+  /** Relit le marqueur d'une action du journal → { technicienId, date, manquantes: [{ intitule, raison }],
+   *  motif }, ou null (pas de marqueur, ou marqueur sans motif). raison : code, '' si le marqueur n'en dit pas. */
+  function lireDerogation(action) {
+    const trouve = MOTIF_DEROGATION.exec(texte(action));
+    if (!trouve || !texte(trouve[4])) return null;
+    const manquantes = trouve[3].split(', ').map((morceau) => {
+      const m = MOTIF_MANQUANTE.exec(morceau.trim());
+      const raison = m[2] ? 'absente' : m[3] ? 'echue' : m[4] ? 'pas_encore_obtenue' : '';
+      return { intitule: m[1].trim(), raison };
+    }).filter((m) => m.intitule);
+    return manquantes.length ? { technicienId: trouve[1], date: trouve[2], manquantes, motif: texte(trouve[4]) } : null;
+  }
+
+  /**
+   * Dérogation déjà notée au journal pour le même OT, le même technicien, la même date et les mêmes
+   * habilitations (ensemble des intitulés, casse et espaces ignorés ; raisons non comparées) → l'entrée du
+   * journal la plus récente, sinon null (§7.4 : préparer puis « Planifier » ne redemande pas).
+   */
+  function derogationAccordee(otId, technicienId, date, manquantes) {
+    const ot = texte(otId);
+    const id = texte(technicienId);
+    const jour = dateLue(date);
+    const attendues = new Set((manquantes || []).map((m) => cleIntitule(typeof m === 'string' ? m : m && m.intitule)).filter(Boolean));
+    if (!ot || !id || !jour || !attendues.size) return null;
+    const memes = (derogation) => {
+      const cles = new Set(derogation.manquantes.map((m) => cleIntitule(m.intitule)));
+      return cles.size === attendues.size && Array.from(cles).every((cle) => attendues.has(cle));
+    };
+    const trouvees = Donnees.lignes('journal').filter((entree) => {
+      if (texte(entree.table) !== 'ordres_travail' || texte(entree.id_ligne) !== ot) return false;
+      const derogation = lireDerogation(entree.action);
+      return Boolean(derogation && derogation.technicienId === id && derogation.date === jour && memes(derogation));
+    }).sort((a, b) => texte(b.date_heure).localeCompare(texte(a.date_heure)) || texte(b.id).localeCompare(texte(a.id)));
+    return trouvees[0] || null;
   }
 
   /**
@@ -466,11 +615,13 @@ const Ordres = (() => {
   }
 
   return {
-    STATUTS, TYPES, PRIORITES, rappelConsignation,
+    STATUTS, TYPES, PRIORITES, rappelConsignation, RAISONS_HABILITATION, ORIGINES_HABILITATION,
     // règles pures (ARCHITECTURE.md §10)
     transitionsPossibles, verifierPassage, verifierCloture, cout, verifierHabilitation, estOuvert, enRetard,
     estVerrouille, estCorrectif, estRienASignaler, piecesManquantes, filtrer, datePrevueParDefaut,
     dateFinDansLeFutur,
+    // RG8 (D186, D191) : exigences de l'OT, contrôle, dérogation du responsable (marqueur du journal)
+    habilitationsExigees, controleHabilitation, marqueurDerogation, lireDerogation, derogationAccordee,
     // affichage (les écritures, l'export et le bon de travail sont ajoutés par les fichiers suivants)
     libelleEquipement, nomTechnicien,
     // Usage interne au module : outils prêtés aux fichiers ordres-*.js, qui y ajoutent les leurs
