@@ -46,7 +46,7 @@ L'humain valide : le cahier des charges et chaque décision de produit ; les cho
 
 | Chiffre | Valeur | Source |
 |---|---|---|
-| Commits du dépôt | 474, du 19/10/2026 au 08/11/2026 | `git rev-list --count v2.0.0` |
+| Commits du dépôt | 476, du 19/10/2026 au 08/11/2026 | `git rev-list --count v2.0.0` |
 | Étiquettes de lot | 13 (`lot-1` à `lot-7`, `lot-3-bis` ; `lot-i18n-1` à `lot-i18n-4` et `lot-i18n-6` pour le chantier multilingue, dont le Lot 5 vient ensuite) | `git tag` |
 | Tests à la fin du lot 1 | 411 | PILOTAGE.md §4 |
 | Tests à la fin du lot 7 | 1 762 (suite jouée en 39 minutes) | PILOTAGE.md §13 |
