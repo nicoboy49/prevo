@@ -42,6 +42,7 @@ import re
 import shutil
 import tempfile
 import unittest
+import xml.dom.minidom
 from pathlib import Path
 from unittest import mock
 
@@ -96,6 +97,32 @@ def poser_langue_defaut(cas, dossier, valeur):
 def captures_de_la_page():
     """Chemins des illustrations référencées par acces/porte.html, dans l'ordre."""
     return re.findall(r'src="(/acces/captures/[^"]+)"', PAGE_PORTE.read_text(encoding="utf-8"))
+
+
+SOURCES_ILLUSTRATIONS_JS = """(selecteur) => [...document.querySelectorAll(selecteur + ' img')]
+  .map((image) => [image.getAttribute('src'), image.complete && image.naturalWidth > 0])"""
+
+
+class TestIllustrationsAnglaises(unittest.TestCase):
+    """T341 (Lot 6) : chaque illustration de la porte a sa version anglaise (acces/captures/en/, même nom, mêmes
+    formes), sans texte français ; la porte la prend dans toute autre langue que le français."""
+
+    def test_chaque_illustration_a_sa_version_anglaise(self):
+        dossier = RACINE / "acces" / "captures"
+        francaises = sorted(chemin.name for chemin in dossier.glob("*.svg"))
+        self.assertGreaterEqual(len(francaises), 11)
+        self.assertEqual(sorted(chemin.name for chemin in (dossier / "en").glob("*.svg")), francaises)
+        for nom in francaises:
+            with self.subTest(illustration=nom):
+                francais = (dossier / nom).read_text(encoding="utf-8")
+                anglais = (dossier / "en" / nom).read_text(encoding="utf-8")
+                xml.dom.minidom.parseString(anglais)                   # SVG bien formé (un « & » nu l'empêche)
+                sans_textes = lambda svg: re.sub(r"(<text\b[^>]*>)[^<]*(</text>)", r"\1\2", svg)
+                self.assertEqual(sans_textes(anglais), sans_textes(francais), "mêmes formes, seuls les textes changent")
+                textes = re.findall(r"<text\b[^>]*>([^<]*)</text>", anglais)
+                francais_restant = [texte for texte in textes
+                                    if re.search(r"[éèêàâçùûîôœ]", texte.replace("Prévo", ""))]
+                self.assertEqual(francais_restant, [])
 
 
 # ---------------------------------------------------------------------------
@@ -605,9 +632,18 @@ class TestPorteNavigateur(CasPorteNavigateur):
                          texte_du_dictionnaire("en", "serveur.porte.sans_autorite"))
         self.assertEqual(page.evaluate("Porte.messageDuServeur({ erreur: 'Français reçu.', erreur_code: 'code.inconnu' })"),
                          "Français reçu.")
+        # T341 : les illustrations en anglais, toutes lues ; en français, les illustrations françaises.
+        page.wait_for_function("[...document.querySelectorAll('#etapes-iphone img')].every((i) => i.complete)")
+        sources = page.evaluate(SOURCES_ILLUSTRATIONS_JS, "#etapes-iphone")
+        self.assertGreaterEqual(len(sources), 5)
+        self.assertEqual([s for s, lue in sources if not (lue and s.startswith("/acces/captures/en/"))], [])
         self.changer_de_langue(page, "fr")
         self.assertIn(TITRE_PORTE, page.inner_text("#confiance"))
         self.assertEqual(page.evaluate("localStorage.getItem('prevo.langue')"), "fr")
+        page.wait_for_function("[...document.querySelectorAll('#etapes-iphone img')].every((i) => i.complete)")
+        sources = page.evaluate(SOURCES_ILLUSTRATIONS_JS, "#etapes-iphone")
+        self.assertEqual([s for s, lue in sources
+                          if not (lue and s.startswith("/acces/captures/") and "/en/" not in s)], [])
 
     def application_dans_le_telephone(self, adresse, poste=None):
         """Le téléphone qui fait confiance (autre contexte : le stockage https de l'application) ouvre « adresse » ;

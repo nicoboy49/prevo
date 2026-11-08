@@ -30,6 +30,13 @@
     document.getElementById('titre-fichier-android').innerHTML = String(
       I18n.html('porte.etapes_android.choisissez_fichier', { fichier: NOM_CERTIFICAT }));
     document.getElementById('texte-firefox').innerHTML = String(I18n.html('porte.note_firefox.magasin_certificats'));
+    // T341 : les illustrations (écrans d'Android et d'iPhone dessinés) existent en français et en anglais
+    // (acces/captures/en/, mêmes noms) ; toute autre langue que le français prend l'anglais, comme le guide (T338).
+    if (I18n.langue !== 'fr') {
+      document.querySelectorAll('img[src^="/acces/captures/"]').forEach((image) => {
+        image.setAttribute('src', image.getAttribute('src').replace('/acces/captures/', '/acces/captures/en/'));
+      });
+    }
   }
 
   poserLesTextes();

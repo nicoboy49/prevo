@@ -3803,7 +3803,9 @@ le fournisseur réglé sur le PC serveur et un fournisseur en ligne reste soumis
   https + pathname + search + hash)` ; système par `navigator.userAgent` (`android` ; `iPhone|iPad|iPod` ou
   `Macintosh` tactile ⇒ iPhone ; sinon choix) ; sans autorité (`/acces/ca.crt` 404), le bouton de téléchargement est
   remplacé par l'explication. Illustrations `acces/captures/<systeme>-<n>-<etape>.svg` (schémas, à remplacer par les
-  captures de recette sous le même nom). Tests : `tests/atelier.py` (`ServeurAtelier` : 0.0.0.0, comptes, faux mkcert
+  captures de recette sous le même nom) ; leur version anglaise, même nom, dans `acces/captures/en/`, prise par la
+  porte dans toute autre langue que le français (T341 ; D163 révisée le 08/11 : les illustrations suivent la langue
+  de la porte). Tests : `tests/atelier.py` (`ServeurAtelier` : 0.0.0.0, comptes, faux mkcert
   pour l'adresse réseau du PC, le téléphone simulé se connecte à cette adresse et le PC à 127.0.0.1 ; aucune sortie du
   PC), `tests/test_acces_porte.py`.
 
