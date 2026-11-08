@@ -3,7 +3,7 @@
 Ce document décrit **comment les données de Prévo sont versionnées, migrées, sauvegardées, exportées et importées**.
 Il s'adresse à un informaticien ou à un contributeur. Le détail de chaque colonne est dans
 [FICHE_TECHNIQUE_CSV.md](../FICHE_TECHNIQUE_CSV.md) (générée depuis [js/schema.js](../js/schema.js)) ; l'architecture du
-code est dans [ARCHITECTURE.md](ARCHITECTURE.md) (§3, §5.6, §8, §14.1 et §20.2).
+code est dans [ARCHITECTURE.md](ARCHITECTURE.md) (§3, §5.6, §8, §14.1, §20.2 et §25).
 
 Ce qui est écrit ici au présent existe dans le code. Ce qui est écrit au futur, ou marqué « prévu », est un **plan** :
 rien n'est créé tant que la version concernée n'est pas développée.
@@ -13,16 +13,17 @@ rien n'est créé tant que la version concernée n'est pas développée.
 | Notion | Forme | Exemple | À quoi elle sert |
 |---|---|---|---|
 | **Version de l'appli** | semver `x.y.z` | `2.0.0` | Ce que l'utilisateur télécharge ; affichée dans « À propos », comparée par le bandeau de mise à jour. |
-| **Version du format** | entier | `3` | La forme des fichiers de données (tables, colonnes). C'est elle qui décide d'une migration. |
+| **Version du format** | entier | `4` | La forme des fichiers de données (tables, colonnes). C'est elle qui décide d'une migration. |
 | **Empreinte d'un fichier** | SHA-256 tronqué | `3f2a…` | Contrôle de concurrence : « ce fichier a-t-il changé depuis que je l'ai lu ? ». Sans rapport avec le format. |
 | **Version de l'API** | entier | `1` | Le contrat entre le navigateur et `serveur.py` (`/api/…`). |
 
-Une nouvelle version de l'appli n'implique pas un nouveau format : 1.2.0, les bêtas de la 2.0 et la 2.0.0 partagent le format 3.
+Une nouvelle version de l'appli n'implique pas un nouveau format : 1.2.0, les bêtas de la 2.0, la 2.0.0 et la 2.1.0 partagent le format 3.
 Dans le code, `Schema.version` (`js/schema.js`) est le format courant ; il n'a rien à voir avec la version de l'appli.
 
-## 2. Le format 3 (format courant)
+## 2. Le format 4 (format courant)
 
-Les données sont **24 fichiers CSV** dans le dossier de données : séparateur `;`, UTF-8 avec BOM, fins de ligne CRLF,
+Les données sont **27 fichiers CSV** (les 24 du format 3, plus `reserves_controle.csv`, `garanties.csv` et
+`contrats_prestataires.csv`) dans le dossier de données : séparateur `;`, UTF-8 avec BOM, fins de ligne CRLF,
 une apostrophe de tête protège les valeurs qu'Excel abîmerait (ARCHITECTURE.md §3). La liste des fichiers, leurs
 colonnes, leurs types, leurs valeurs permises et leurs références sont dans
 [FICHE_TECHNIQUE_CSV.md](../FICHE_TECHNIQUE_CSV.md) : on ne les recopie pas ici.
@@ -34,7 +35,8 @@ appareils, journal des connexions), jamais les sessions ni les clés, et ne le r
 ## 3. Règles d'écriture
 
 - Une table = un fichier CSV nommé comme dans le schéma (`equipements.csv`). Les colonnes sont écrites dans l'ordre du
-  schéma ; **les colonnes ajoutées par un format sont toujours en fin de table**.
+  schéma ; **les colonnes ajoutées par un format sont toujours en fin de table**, y compris après les colonnes
+  inconnues que l'utilisateur a ajoutées (qui restent à leur place, avant elles).
 - À la lecture, Prévo est tolérant (ARCHITECTURE.md §3.3) : un fichier modifié dans Excel, avec des colonnes dans un
   autre ordre ou des colonnes en plus, reste lisible. Les colonnes inconnues sont conservées à l'écriture.
 - Aucune ligne de métadonnées et aucune colonne technique n'est ajoutée dans les CSV : un tableur les casserait, et
@@ -82,16 +84,34 @@ appareils, journal des connexions), jamais les sessions ni les clés, et ne le r
 |---|---|---|
 | **1** | avant les versions publiées | Les 22 tables du brief (§6), sans les colonnes ci-dessous. `version_schema` absent. |
 | **2** | 1.0, 1.1 | Colonnes `equipements.valeur_remplacement`, `demandes.symptome_code`, `demandes.ot_origine_id`, `ordres_travail.anomalie_constatee` (défaut `0`), en fin de table. |
-| **3** | 1.2.0, 2.0 bêta, 2.0.0 | Colonne `ordres_travail.astuce` en fin de table ; tables `wiki_pages` et `wiki_journal` (créées vides). 24 tables en tout. |
+| **3** | 1.2.0, 2.0 bêta, 2.0.0, 2.1.0 | Colonne `ordres_travail.astuce` en fin de table ; tables `wiki_pages` et `wiki_journal` (créées vides). 24 tables en tout. |
+| **4** | 2.2 | Colonnes `equipements.cout_arret_h`, `ordres_travail.habilitation_requise`, `habilitations.recyclage_mois`, `habilitations.justificatif`, `habilitations.catalogue_id`, `habilitations.nature_source`, `controles_reglementaires.source_periodicite` (défaut `saisie`), `controles_reglementaires.nature_source`, `controles_reglementaires.catalogue_id`, `controles_reglementaires.catalogue_relu_le`, en fin de table ; tables `reserves_controle` (remplie par la reprise des observations, §6), `garanties` et `contrats_prestataires` (créées vides). 27 tables en tout. |
 
 La source de vérité est l'attribut `depuisVersion` dans [js/schema.js](../js/schema.js).
 
 ## 6. Migrations
 
-- **Registre d'étapes** : une étape par passage de N à N+1 (1→2, 2→3), dans `Formats.ETAPES` (navigateur) et
+- **Registre d'étapes** : une étape par passage de N à N+1 (1→2, 2→3, 3→4), dans `Formats.ETAPES` (navigateur) et
   `ETAPES_FORMAT` (serveur, miroir exact). Chaque étape est **pure** (l'entrée n'est pas modifiée), **idempotente**
-  (rejouée, elle ne change rien) et **additive** : elle ajoute des colonnes en fin de table ou des tables vides, et
-  pose `version_schema`. Les colonnes et tables inconnues sont gardées telles quelles.
+  (rejouée, elle ne change rien) et **additive** : elle ajoute des colonnes en fin de table ou des tables, et
+  pose `version_schema`. Les colonnes et tables inconnues sont gardées telles quelles. Les étapes 1→2 et 2→3 ne
+  créent que des tables vides ; **l'étape 3→4 crée aussi une table et la remplit** (voir « Reprise des
+  observations »). Règle nouvelle : une étape peut remplir ce qu'elle crée, à condition de rester additive (rien
+  d'existant n'est changé ni retiré) et idempotente.
+- **Reprise des observations (étape 3→4, D183)** : avant la 2.2, les réserves d'un contrôle réglementaire étaient un
+  texte libre, `controles_reglementaires.observations` (une réserve par ligne), avec `observations_levees`. L'étape
+  crée `reserves_controle` et y reprend ce texte, **contrôle par contrôle** : un contrôle qui a des observations et
+  **aucune réserve** reçoit une réserve par ligne non vide (`date_controle` = `derniere_date`, `levee` = 1 si les
+  observations étaient levées, avec le commentaire fixe « levée avant la 2.2, date inconnue » et une date de levée
+  vide ; gravité, échéance et OT vides). Les identifiants `RES-00001`… continuent après le plus grand déjà présent.
+  `observations` et `observations_levees` ne sont pas modifiées (une 2.1 en lecture seule les montre toujours).
+  La règle est la même dans le navigateur et dans le serveur, à l'octet près. Elle est **idempotente par contrôle**
+  (pas « table vide ») : rejouée, ou après une interruption, elle ne reprend que les contrôles qui n'ont pas encore
+  de réserve, sans doublon. Un `controles_reglementaires` ou un `reserves_controle` abîmé n'est jamais réécrit :
+  rien n'est repris, et la reprise se fait au premier passage qui retrouve le fichier lisible. Ordre des écritures :
+  sauvegarde `avant-format-v4`, tables complétées, `reserves_controle`, puis `version_schema` à 4 en dernier : une
+  base à 4 a donc eu sa reprise. Une interruption (fichier tenu par Excel) laisse `version_schema` en arrière, et le
+  démarrage suivant reprend. Aucune ligne de journal par réserve.
 - **Journal** : chaque étape ajoute au journal la ligne « passage au format N du fichier ; sauvegarde … faite juste
   avant ». Ce texte est relu par une suggestion de l'appli : il ne doit pas changer.
 - **Qui l'exécute** :
@@ -101,8 +121,8 @@ La source de vérité est l'attribut `depuisVersion` dans [js/schema.js](../js/s
 - **Sauvegarde d'abord** : une sauvegarde `avant-format-vN` est faite avant la première étape ; si elle échoue, rien
   n'est migré et la migration est retentée au démarrage suivant.
 - **Fichier illisible** : un fichier que Prévo ne sait pas lire n'est jamais réécrit.
-- **Règle pour l'avenir** : un nouveau format reste **additif** tant que possible. Les versions 1.2 et 2.0 bêta
-  rouvrent des fichiers d'un format plus récent sans garde : toute modification non additive (renommer ou retirer une
+- **Règle pour l'avenir** : un nouveau format reste **additif** tant que possible. Les versions 1.2.x et 2.0.0-beta.1
+  rouvrent des fichiers d'un format plus récent sans garde (§7) : toute modification non additive (renommer ou retirer une
   colonne, changer le sens d'une valeur) les ferait écrire des données fausses.
 
 ## 7. Données d'un format plus récent que l'appli : lecture seule
@@ -114,12 +134,29 @@ Si la base (ou un fichier) porte un format supérieur au format courant de l'app
 
 Rien n'est migré « vers le bas » : on met l'appli à jour, ou on restaure une sauvegarde.
 
+**Compatibilité avec les versions plus anciennes** (une base au format 4 rouverte par une ancienne version) :
+
+- La 2.0.0-beta.2, la 2.0.0 et la 2.1.0 ont la garde : lecture seule, 409 `format_plus_recent` côté serveur.
+- **Les 1.2.x et la 2.0.0-beta.1 n'ont pas cette garde.** Elles écriraient dans une base au format 4 : les colonnes
+  inconnues sont gardées, les tables nouvelles ignorées, et une nouvelle réalisation de contrôle remplacerait
+  `observations` sans toucher aux réserves. À éviter : mettre l'appli à jour avant de rouvrir une base 2.2.
+- Une 2.1 qui démarre sur une base au format 4 fait ses sauvegardes de démarrage (`avant-mise-a-jour`, quotidienne)
+  avec **ses 24 tables seulement** : cette sauvegarde est incomplète (sans `reserves_controle`, `garanties` ni
+  `contrats_prestataires`) et son manifeste annonce pourtant le format 4. La sauvegarde `avant-format-v4`, faite par
+  la 2.2 avant le passage, est, elle, complète.
+- Un ZIP exporté par la 2.2 est refusé par une 2.1 (format plus récent) ; une 2.2 ouvre un format 5 en lecture seule.
+
+**Écart connu entre navigateur et serveur (écart A)** : une colonne inconnue d'un fichier (par exemple
+`remarque_maison` dans `controles_reglementaires`) n'a pas la même place selon qui réécrit le fichier. Le navigateur
+la range après toutes les colonnes du schéma ; le serveur garde l'en-tête tel quel, donc avant les colonnes que
+l'étape 3→4 ajoute en fin. Seule la place de la colonne diffère : aucune valeur n'est perdue ni changée.
+
 ## 8. Sauvegardes
 
 | Déclencheur | Nom (motif) | Purgée automatiquement ? |
 |---|---|---|
 | Avant la première écriture du jour, et au démarrage du serveur | `AAAA-MM-JJ` (quotidienne) | Oui, après **30 jours** |
-| Avant une migration | `avant-format-vN` | Non |
+| Avant une migration | `avant-format-vN` (`avant-format-v4` pour le passage à la 2.2) | Non |
 | Avant un import ZIP (avec `documents/`) | `avant-import-zip` | Non |
 | Au premier démarrage d'une nouvelle version de l'appli (comparée à la version notée) | `avant-mise-a-jour` | Non |
 | À la demande (Paramètres) | `AAAA-MM-JJ_HHMMSS` (manuelle) | Oui, les 60 dernières gardées |
@@ -151,9 +188,9 @@ Chaque sauvegarde et chaque export ZIP contient un `manifeste.json` :
 {
   "application": "Prévo",
   "version_appli": "2.0.0",
-  "format": 3,
+  "format": 4,
   "date": "2026-11-04T09:30:00",
-  "motif": "avant-format-v3",
+  "motif": "avant-format-v4",
   "mode": "serveur",
   "fichiers": [ { "nom": "equipements.csv", "octets": 1234, "sha256": "…" } ]
 }
@@ -206,21 +243,21 @@ de la base ; la confirmation le dit.
   état, bandeau « Fichier abîmé » compris.
 - Le navigateur lit le ZIP et écrit par le chemin habituel : aucune route serveur nouvelle.
 
-## 11. Ajouter un format 4 (liste de contrôle)
+## 11. Ajouter un format 5 (liste de contrôle)
 
-1. **Schéma** : dans [js/schema.js](../js/schema.js), marquer les nouveaux champs `depuisVersion(4, …)` (toujours en fin
-   de table) et les nouvelles tables `depuisVersion: 4` ; passer `Schema.version` à 4. Rester additif (§6).
-2. **Étape de migration** : ajouter `etape(3, 4, '…')` dans `ETAPES` de [js/formats.js](../js/formats.js) **et** son
-   miroir `EtapeDeFormat(3, 4, '…')` dans `ETAPES_FORMAT` de [serveur.py](../serveur.py), avec `VERSION_SCHEMA_CSV`,
+1. **Schéma** : dans [js/schema.js](../js/schema.js), marquer les nouveaux champs `depuisVersion(5, …)` (toujours en fin
+   de table) et les nouvelles tables `depuisVersion: 5` ; passer `Schema.version` à 5. Rester additif (§6) ; si l'étape remplit une table qu'elle crée, la règle de reprise est par ligne source et idempotente (§6, reprise des observations).
+2. **Étape de migration** : ajouter `etape(4, 5, '…')` dans `ETAPES` de [js/formats.js](../js/formats.js) **et** son
+   miroir `EtapeDeFormat(4, 5, '…')` dans `ETAPES_FORMAT` de [serveur.py](../serveur.py), avec `VERSION_SCHEMA_CSV`,
    `PREMIER_FORMAT_DES_TABLES`, `PREMIER_FORMAT_DES_COLONNES`, `DEFAUTS_DES_CHAMPS`, `COLONNES_PAR_TABLE` et
    `COLONNES_DES_FORMATS_SUIVANTS`. Les deux descriptions doivent être identiques.
-3. **Jeu d'essai** : ajouter un jeu au format 3 dans `tests/jeux_formats.py` et sa notice dans
+3. **Jeu d'essai** : ajouter un jeu au format 4 dans `tests/jeux_formats.py` (le jeu `plus-recent` passe au format 6) et sa notice dans
    `tests/fixtures/formats/LISEZMOI.md`.
-4. **Motif de sauvegarde** : déclarer `avant-format-v4` (liste des motifs de `serveur.py` et du navigateur).
+4. **Motif de sauvegarde** : déclarer `avant-format-v5` (liste des motifs de `serveur.py` et du navigateur).
 5. **Fiche technique** : régénérer [FICHE_TECHNIQUE_CSV.md](../FICHE_TECHNIQUE_CSV.md) depuis le schéma.
-6. **Tests** : étape 3→4 (pure, idempotente), chaîne 1→4 sans trou, parité navigateur/serveur
-   (`tests/test_formats_js.py`, `tests/test_formats_serveur.py`), lecture seule d'un format 5 simulé.
-7. **Documentation** : mettre à jour les tableaux des §5 et §12 de ce document, et ARCHITECTURE.md §20.2.
+6. **Tests** : étape 4→5 (pure, idempotente), chaîne 1→5 sans trou, parité navigateur/serveur
+   (`tests/test_formats_js.py`, `tests/test_formats_serveur.py`), lecture seule d'un format 6 simulé.
+7. **Documentation** : mettre à jour les tableaux des §5 et §12 de ce document, et ARCHITECTURE.md §25.
 
 ## 12. Plan des versions à venir (2.1 à 2.4)
 
@@ -229,18 +266,21 @@ indiquée, par une étape de migration additive (§6), et seulement si cette ver
 peuvent encore changer. Ces fonctions aident au suivi ; la responsabilité reste celle de l'employeur, et les
 périodicités réglementaires seront sourcées et modifiables.
 
-**Ce qui existe déjà (format 3) et ne sera donc pas recréé :**
+**Ce qui existe déjà (format 4) et ne sera donc pas recréé :**
 
 - Compteurs d'heures et relevés : tables `compteurs` et `releves`, `gammes.declencheur` (`compteur`, `seuil`),
   `gammes.compteur_id`, `gammes.periodicite_unites`, `gammes.releve_derniere_realisation`. La 2.3 s'appuie dessus.
 - Habilitations : table `habilitations` (`date_obtention`, `date_echeance`) et `equipements.habilitation_requise`.
 - Contrôles réglementaires : table `controles_reglementaires` (périodicité, organisme, rapport, `observations`,
-  `observations_levees`).
+  `observations_levees`), et depuis le format 4 `source_periodicite`, `nature_source`, `catalogue_id`,
+  `catalogue_relu_le` ; réserves : table `reserves_controle` ; habilitations : `recyclage_mois`, `justificatif`,
+  `catalogue_id`, `nature_source` ; `ordres_travail.habilitation_requise`.
+- Garanties et contrats : tables `garanties` et `contrats_prestataires` (format 4).
 - Pièces de rechange : `articles` (`stock`, `stock_securite`, `point_commande`, `qte_commande`), `article_equipement`
   (lien aux machines), `mouvements_stock`, `achats`.
 - Consignation : texte libre `equipements.consignation`.
-- Coût de l'arrêt : `ordres_travail.arret_production`, `ordres_travail.duree_arret_h` et
-  `equipements.valeur_remplacement`.
+- Coût de l'arrêt : `ordres_travail.arret_production`, `ordres_travail.duree_arret_h`,
+  `equipements.valeur_remplacement` et, depuis le format 4, `equipements.cout_arret_h`.
 - Fiche machine : `equipements.marque`, `modele`, `num_serie`, `date_mes`, `document`.
 
 **Ce qui est prévu :**

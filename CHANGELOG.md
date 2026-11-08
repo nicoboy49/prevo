@@ -7,6 +7,16 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Modifié
+
+- **Format de données 4** (préparation de la 2.2, rien de visible encore à l'écran) : la base passe de 24 à 27
+  fichiers, avec de nouvelles colonnes (coût d'une heure d'arrêt, habilitation exigée par un OT, recyclage et
+  justificatif des habilitations, origine de la périodicité des contrôles) et trois tables : `reserves_controle`,
+  `garanties` et `contrats_prestataires`. Au premier lancement, Prévo fait une sauvegarde `avant-format-v4`, puis
+  reprend le texte des observations de chaque contrôle réglementaire en réserves, une par ligne (les observations
+  sont conservées, la reprise ne se fait qu'une fois par contrôle). Une 2.1 qui rouvre cette base la lit en lecture
+  seule ; une 1.2.x ou une 2.0.0 bêta 1 n'a pas cette garde : mettez-les à jour avant de rouvrir une base 2.2.
+
 ## [2.1.0] - 2026-11-08
 
 Lot 5 du chantier multilingue : turc, italien et portugais du Portugal.

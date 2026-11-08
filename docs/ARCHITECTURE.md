@@ -172,7 +172,7 @@ Propriété garantie (testée) : `relire(champ, écrire(champ, v)) === v` pour t
 
 ```js
 const Schema = {
-  version: 2,                          // version du format des fichiers (§14.1) ; 1 au lot 1
+  version: 4,                          // version du format des fichiers (§14.1, §20.2, §25) ; 1 au lot 1
   tables: {
     equipements: {
       fichier: 'equipements.csv', libelle: 'Équipements',
@@ -188,8 +188,8 @@ const Schema = {
         // …
       ],
     },
-    // … 22 tables : d'abord exactement les champs du §6 du brief, dans le même ordre,
-    // puis, en fin de table, les champs ajoutés par le format v2 (depuisVersion: 2, §14.1)
+    // … 27 tables (22 du brief, 2 du format 3, 3 du format 4) : d'abord exactement les champs du §6 du brief, dans
+    // le même ordre, puis, en fin de table, les champs ajoutés par les formats 2 à 4 (depuisVersion: 2, 3 ou 4)
   },
 };
 ```
@@ -197,8 +197,8 @@ Types : `id`, `texte`, `texte_long`, `entier`, `decimal`, `date`, `date_heure`, 
 `choix` (avec `valeurs`), `ref` (avec `table`, et `champCible` si ce n'est pas la clé — ex. les
 `*_code` des OT visent `codes_defaillance.code` filtré par `famille`, attribut `filtre`), `document`
 (nom de fichier dans `donnees/documents/`). Champs facultatifs : `libelle` (toujours renseigné ; texte du dictionnaire, voir plus bas), `obligatoire`, `defaut`, `protege`, `synonymes` (pour l'assistant d'import futur),
-`depuisVersion` (version du format qui a ajouté le champ : `2` pour les quatre champs du §14.1 ;
-absent pour les champs du brief).
+`depuisVersion` (version du format qui a ajouté le champ : `2` pour les quatre champs du §14.1, `3` pour
+`astuce` (§20.2), `4` pour les dix du §25 ; absent pour les champs du brief).
 
 **Libellés traduits (Lot 2 multilingue, §24).** Les `libelle` ne sont plus écrits dans `js/schema.js` : à la fin du
 fichier, une boucle remplace chacun par un accesseur énumérable qui lit `schema.<table>.<champ>` à chaque lecture
@@ -353,7 +353,7 @@ qui ne le font pas relire) : depuis le lot 4, les onglets Suggestions et Décisi
 
 ### 5.6 Passage au format courant : `migrerAuFormatCourant` (socle de données, D167-D169)
 Vocabulaire, historique des formats, sauvegardes et ZIP : **[FORMAT.md](FORMAT.md)** (référence). Ici, seulement le
-contrat de `Donnees`. Le registre d'étapes (1→2, 2→3 ; pures, idempotentes, additives) est `Formats.ETAPES`
+contrat de `Donnees`. Le registre d'étapes (1→2, 2→3, 3→4 ; pures, idempotentes, additives) est `Formats.ETAPES`
 (`js/formats.js`) ; son miroir Python est `ETAPES_FORMAT` dans `serveur.py`.
 - `Donnees.etatDuFormat()` rend le format de départ (le plus petit entre `parametres.version_schema` et la
   signature de chaque fichier) et le format courant ; `Donnees.lectureSeule()` dit si la base est d'un format plus
@@ -368,6 +368,11 @@ contrat de `Donnees`. Le registre d'étapes (1→2, 2→3 ; pures, idempotentes,
   Un fichier illisible n'est jamais réécrit. Démo : rien n'est écrit.
 - **Format plus récent que l'appli** : lecture seule. Le navigateur lève `ErreurLectureSeule` pour toute écriture
   (événement `lectureSeule`) ; le serveur répond 409 `format_plus_recent`.
+- **Étape 3→4 (2.2, §25)** : seule étape qui remplit une table qu'elle crée (`reserves_controle`, reprise des
+  observations, D183). En mode dossier c'est une phase de plus de `migrerAuFormatCourant`, après les tables
+  complétées et avant `version_schema` ; en mode serveur la même phase de `passer_les_fichiers_au_format_courant`.
+  Elle passe par la garde « fichier abîmé » ; un conflit (423, Excel) interrompt le passage, `version_schema`
+  n'avance pas et le démarrage suivant reprend.
 - « Créer une base vide » écrit directement `version_schema` au format courant ; le jeu de démo le porte déjà.
 - Deux postes ouverts ensemble sur une base ancienne peuvent faire chacun leur sauvegarde (deux copies identiques,
   sans gravité) ; un seul écrit la version.
@@ -4676,3 +4681,47 @@ assistant et mode dossier : `remplirBaseVide` écrit `version_schema` et `langue
 aux lignes du jeu de démo). Tant que la base est vide, `suivreLangueInstallation` ne retient ni ne recharge rien : la
 page reste dans la langue du navigateur (sans cela, en mode dossier, un rechargement perdait le dossier choisi) ; la
 base créée, la langue choisie s'applique (un rechargement s'il le faut). Une base existante n'est jamais touchée.
+
+---
+
+## 25. Format 4 (2.2) : réserves, garanties, contrats, catalogues (D182-D193, CS169-CS180)
+
+Référence des règles de migration, de sauvegarde et de compatibilité : **[FORMAT.md](FORMAT.md)** (§2, §5, §6, §7).
+Ici, le contrat du code. Le format 4 ne change aucun écran à lui seul : il pose les données que les lots suivants de
+la 2.2 afficheront.
+
+- `Schema.version` = **4** ; **27 tables** : les 24 du format 3 puis `reserves_controle`, `garanties` et
+  `contrats_prestataires` (`depuisVersion: 4`, dans cet ordre, après `wiki_journal`). Le détail des colonnes est dans
+  `js/schema.js` et [FICHE_TECHNIQUE_CSV.md](../FICHE_TECHNIQUE_CSV.md) ; `serveur.py` en est le miroir exact
+  (`TABLES`, `COLONNES_PAR_TABLE`, `PREMIER_FORMAT_DES_TABLES`, `PREMIER_FORMAT_DES_COLONNES`, `DEFAUTS_DES_CHAMPS`,
+  `COLONNES_DES_FORMATS_SUIVANTS`, `ETAPES_FORMAT`), comparé au navigateur par `tests/test_formats_serveur.py` et
+  `tests/test_formats_js.py`.
+- **Colonnes ajoutées** (en fin de table, après les colonnes inconnues) : `equipements.cout_arret_h` ;
+  `ordres_travail.habilitation_requise` ; `habilitations.recyclage_mois`, `justificatif`, `catalogue_id`,
+  `nature_source` ; `controles_reglementaires.source_periodicite` (défaut `saisie`), `nature_source`, `catalogue_id`,
+  `catalogue_relu_le`. Attention : `habilitation_requise` existe dans `equipements` et dans `ordres_travail` ; un code
+  qui fusionne les deux objets (`Object.assign`) écraserait l'une par l'autre.
+- **`reserves_controle`** (`RES-` + 5 chiffres, identifiant non annuel pour que la reprise donne les mêmes identifiants
+  des deux côtés) : une ligne par réserve ; `controle_id`, `date_controle`, `texte`, `gravite`, `echeance_levee`,
+  `levee` (0 ou 1), `date_levee`, `commentaire_levee`, `ot_id`. **`garanties`** (`GAR-` + 4 chiffres) et
+  **`contrats_prestataires`** (`CTP-` + 4 chiffres, `equipement_ids` séparés par « ; ») ont un `actif` : on désactive,
+  on ne supprime pas (FORMAT.md §3).
+- **Reprise des observations (D183)** : `Formats.reservesReprises` (`js/formats.js`) et `reserves_reprises`
+  (`serveur.py`), mêmes réserves aux mêmes octets. Règle par contrôle (un contrôle avec observations et sans réserve
+  reçoit une réserve par ligne non vide), idempotente, jamais « table vide » ; la constante de commentaire
+  `COMMENTAIRE_LEVEE_REPRISE` est la même des deux côtés. Pièges de parité : le serveur travaille sur les cellules
+  du fichier (apostrophe de protection relue avant la découpe), le navigateur sur les valeurs en mémoire ; découpe
+  des lignes sur `\r\n`, `\r` ou `\n` seulement ; numéros lus par `RES-[0-9]+`, écrits sur au moins 5 chiffres ;
+  dates et booléens lus par des copies de `Donnees.normaliser` (tests de concordance).
+- **Qui l'exécute** : fonction pure de l'étape (import ZIP, tests) ; mode dossier (`migrerAuFormatCourant`) ; mode
+  serveur (au démarrage, avant toute connexion) ; la démo naît déjà au format 4. Sauvegarde `avant-format-v4` d'abord,
+  `version_schema` écrit en dernier (§5.6).
+- **Export et import ZIP** : `ZipDonnees.CHAMPS_DOCUMENTS` est dérivé du schéma (les champs `document` des tables
+  nouvelles et `habilitations.justificatif` sont donc exportés) ; l'import d'un ZIP de la 2.1 le passe au format 4
+  (réserves reprises) sans annoncer la table nouvelle comme « vidée » ; un ZIP du format 5 est refusé.
+- **Compatibilité** : la 2.2 ouvre un format 5 en lecture seule ; une 2.0.0-beta.2, 2.0.0 ou 2.1.0 ouvre un format 4
+  en lecture seule (sauvegardes de démarrage limitées à leurs 24 tables) ; une 1.2.x ou 2.0.0-beta.1 n'a pas de
+  garde (FORMAT.md §7).
+- **Écarts connus** (tests `expectedFailure` de `tests/test_formats_serveur.py`) : place d'une colonne inconnue de
+  `controles_reglementaires` (écart A, navigateur et serveur ne la rangent pas au même endroit) ; colonnes
+  manquantes complétées en fin par l'étape (B) ; dates d'Excel normalisées par le navigateur seulement (C).
