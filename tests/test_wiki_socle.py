@@ -5,8 +5,8 @@
                pas) ; le module Wiki, ses seuils (D100, §20.1) et les limites des textes rédigés (refonte 2,
                D100 révisée 2, §20.12 : Wiki.LIMITES par type et par rubrique, d'où viennent phrasesMax et motsMax
                d'un savoir-faire ; « En bref » 3 phrases et 60 mots, D100 révisée 3, D117, T142) existent ;
-    format 3 : la démo porte version_schema = 3, les tables wiki_pages et wiki_journal (vides au socle) et la
-               colonne astuce des OT ; l'export ZIP contient les 24 tables, en-têtes exacts ;
+    format courant : la démo porte version_schema = format courant, les tables wiki_pages et wiki_journal (vides au socle) et la
+               colonne astuce des OT ; l'export ZIP contient toutes les tables, en-têtes exacts ;
     modules  : la synthèse de la première version a disparu (Wiki.controlerSynthese, Wiki.afficherSynthese,
                consigne syntheseWiki) ; Wiki.page(id) rend la page d'un équipement ; Wiki.entite (encyclopédie,
                §20.12, T135) est chargé par l'application et prend son profil quand on ne lui en donne pas ;
@@ -20,7 +20,7 @@ import io
 import unittest
 import zipfile
 
-from commun import DOSSIER_DEMO, CasNavigateur, attendre_pret, preregler_profil, url_fichier
+from commun import FORMAT_COURANT, NB_TABLES, DOSSIER_DEMO, CasNavigateur, attendre_pret, preregler_profil, url_fichier
 
 BOM = b"\xef\xbb\xbf"
 ENTETES = {
@@ -118,8 +118,8 @@ class TestWikiSocle(CasNavigateur):
 
     def test_demo_au_format_3_et_export_zip(self):
         self.ouvrir_demo("responsable")
-        self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), "3")
-        self.assertEqual(self.page.evaluate("Schema.version"), 3)
+        self.assertEqual(self.page.evaluate("Donnees.parametre('version_schema')"), str(FORMAT_COURANT))
+        self.assertEqual(self.page.evaluate("Schema.version"), FORMAT_COURANT)
         self.assertEqual(self.page.evaluate("Schema.nomsTables().slice(-2)"), ["wiki_pages", "wiki_journal"])
         # Depuis T139 (D119), la démo a son wiki figé : autant de lignes que les CSV de donnees/demo.
         for table in ("wiki_pages", "wiki_journal"):
@@ -134,7 +134,7 @@ class TestWikiSocle(CasNavigateur):
             self.page.click("#btn-export-accueil")
         with zipfile.ZipFile(attente.value.path()) as archive:
             noms = [n for n in archive.namelist() if n.endswith(".csv")]
-            self.assertEqual(len(noms), 24)
+            self.assertEqual(len(noms), NB_TABLES)
             self.assertNotIn("wiki_syntheses.csv", noms)
             for nom, entete in ENTETES.items():
                 with self.subTest(fichier=nom):

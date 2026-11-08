@@ -12,7 +12,7 @@ import hashlib
 import re
 import unittest
 
-from commun import CasNavigateur, RACINE, ServeurStatique, installer_dossier_simule
+from commun import NB_TABLES, CasNavigateur, RACINE, ServeurStatique, installer_dossier_simule
 
 PAGE = "/tests/fixtures/page-stockage-dossier.html"
 NOM_DOSSIER_SIMULE = "donnees-test"
@@ -542,7 +542,7 @@ class TestStockageDossier(CasNavigateur):
         self.choisir_dossier()
         avant = self.reussir("listerVersions")
         noms = self.page.evaluate("Schema.nomsTables()")
-        self.assertEqual(len(noms), 24)
+        self.assertEqual(len(noms), NB_TABLES)
         self.assertEqual(sorted(avant.keys()), sorted(noms))
         self.assertTrue(all(v is None for v in avant.values()))
 

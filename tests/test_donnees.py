@@ -26,7 +26,7 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from commun import DOSSIER_DEMO, RACINE, CasNavigateur, charger_scripts, scenarios_demo
+from commun import NB_TABLES, DOSSIER_DEMO, RACINE, CasNavigateur, charger_scripts, scenarios_demo
 
 # Identifiants des objets de scénario du jeu de démo (outils/generer_demo.py, ARCHITECTURE.md §14.8).
 SCENARIOS = scenarios_demo()
@@ -157,7 +157,7 @@ class TestChargementDemo(CasDonnees):
           return { absentes: charge.tablesAbsentes.length, baseVide: Donnees.baseVide(),
                    lignes: Donnees.lignes('equipements').length, problemes: Donnees.problemes().length };
         }""")
-        self.assertEqual(resultat, {"absentes": 24, "baseVide": True, "lignes": 0, "problemes": 0})
+        self.assertEqual(resultat, {"absentes": NB_TABLES, "baseVide": True, "lignes": 0, "problemes": 0})
 
     def test_decalage_des_dates(self):
         di = ligne_demo("demandes", SCENARIOS["di_plus_ancienne"])       # première ligne du fichier
@@ -788,7 +788,7 @@ class TestStockEtRafraichissement(CasDonnees):
           };
         }""")
         self.assertEqual(resultat["noms"], resultat["attendus"])
-        self.assertEqual(len(resultat["noms"]), 24)
+        self.assertEqual(len(resultat["noms"]), NB_TABLES)
         self.assertTrue(resultat["tousOctets"])
         self.assertTrue(resultat["avecBom"])
         self.assertTrue(resultat["memesLignes"])
@@ -863,7 +863,7 @@ class TestStockageDemo(CasDonnees):
         self.assertEqual(resultat["conflitEntete"]["nom"], "ErreurConflit")
         self.assertEqual(resultat["journal"], "﻿id;action\r\nJ-1;un\r\nJ-2;deux\r\n")
         self.assertEqual(resultat["tableInconnue"]["nom"], "ErreurStockage")
-        self.assertEqual(resultat["nombreVersions"], 24)
+        self.assertEqual(resultat["nombreVersions"], NB_TABLES)
         self.assertIsNone(resultat["versionEquipements"])
         self.assertEqual(resultat["versionTechniciens"], "v2")
         self.assertEqual(resultat["nomDocument"], "photo-1.jpg")
@@ -896,7 +896,7 @@ class TestStockageDemo(CasDonnees):
                    mode: depot.adaptateur.mode };
         }""")
         self.assertEqual(resultat["ignores"], ["notes.txt", "inconnue.csv", "equipements.csv"])
-        self.assertEqual(resultat["absentes"], 23)                # les 24 tables, sauf equipements
+        self.assertEqual(resultat["absentes"], NB_TABLES - 1)                # toutes les tables, sauf equipements
         self.assertEqual(resultat["equipements"], resultat["attendus"])
         self.assertEqual(resultat["mode"], "demo")
 
@@ -919,7 +919,7 @@ class TestPerformance(CasDonnees):
             self.assertEqual(processus.returncode, 0, processus.stderr.decode("utf-8", "replace"))
             fichiers = {chemin.stem: base64.b64encode(chemin.read_bytes()).decode("ascii")
                         for chemin in sorted(Path(dossier).glob("*.csv"))}
-        self.assertEqual(len(fichiers), 24)
+        self.assertEqual(len(fichiers), NB_TABLES)
 
         resultat = self.js("""async (fichiers) => {
           const tables = {};

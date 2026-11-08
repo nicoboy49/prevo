@@ -14,7 +14,7 @@ ISO, décimaux à virgule, booléens, listes fermées D86, repères « 007 », D
 dans le fichier, références créées D88 a, introuvables refusées, stock initial, gammes et opérations,
 habilitations « Prénom Nom » / « Nom Prénom », codes par famille tolérante, mise à jour non demandée),
 Import.rapportRefus (format §3.1), délégation de l'historique, et la base IDENTIQUE À L'OCTET après
-l'aperçu : les 24 CSV sur le disque (mode serveur) et Donnees.instantane().
+l'aperçu : tous les CSV sur le disque (mode serveur) et Donnees.instantane().
 
 Lancer depuis la racine du projet :
     py -m unittest discover -s tests -p "test_import_regles.py" -v
@@ -30,7 +30,7 @@ import unicodedata
 import unittest
 from pathlib import Path
 
-from commun import CasNavigateur, ServeurPrevo, attendre_pret, charger_scripts, preregler_profil
+from commun import NB_TABLES, CasNavigateur, ServeurPrevo, attendre_pret, charger_scripts, preregler_profil
 
 RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_DEMO = RACINE / "donnees" / "demo"
@@ -1160,7 +1160,7 @@ class TestRapportRefus(CasImport):
 
 
 class TestBaseInchangee(CasNavigateur):
-    """Mode serveur, application complète : l'aperçu n'écrit rien (23 CSV identiques à l'octet)."""
+    """Mode serveur, application complète : l'aperçu n'écrit rien (tous les CSV identiques à l'octet)."""
 
     def test_aucune_ecriture_ni_sur_le_disque_ni_en_memoire(self):
         with ServeurPrevo() as serveur:
@@ -1173,7 +1173,7 @@ class TestBaseInchangee(CasNavigateur):
             self.page.wait_for_load_state("networkidle")
             # Les écritures du démarrage de l'application (s'il y en a) sont faites : l'aperçu part de là.
             avant = empreintes()
-            self.assertEqual(len(avant), 24)
+            self.assertEqual(len(avant), NB_TABLES)
             ecritures.clear()
             instantane ="() => Object.entries(Donnees.instantane()).map(([t, o]) => t + ':' + Array.from(o).join(','))"
             memoire_avant = self.page.evaluate(instantane)

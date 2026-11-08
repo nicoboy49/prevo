@@ -28,7 +28,7 @@ import sys
 import time
 import unittest
 
-from commun import (RACINE, CasNavigateur, ServeurPrevo, attendre_pret, charger_scripts,
+from commun import (NB_TABLES, RACINE, CasNavigateur, ServeurPrevo, attendre_pret, charger_scripts,
                     preregler_profil, url_fichier)
 from faux_fournisseur_ia import FauxFournisseur
 from faux_wiki import lire_message
@@ -82,7 +82,7 @@ def regler_ia(contexte, **reglages):
         % json.dumps(json.dumps(valeur)))
 
 
-# Contenu texte des 24 fichiers en mémoire (Donnees.instantane() rend des octets).
+# Contenu texte des fichiers en mémoire (Donnees.instantane() rend des octets).
 FICHIERS_JS = """() => Object.fromEntries(Object.entries(Donnees.instantane())
   .map(([nom, octets]) => [nom, new TextDecoder().decode(octets)]))"""
 
@@ -788,7 +788,7 @@ class TestDemanderDirect(CasDemoIa):
         jeu = page.evaluate(DONNEES_DEMO_JS)
         page.evaluate("(id) => Ia.tracerUtilisation('ordres_travail', id, 'compte_rendu', 'faux')", jeu["otId"])
         fichiers = page.evaluate(FICHIERS_JS)
-        self.assertEqual(len(fichiers), 24)
+        self.assertEqual(len(fichiers), NB_TABLES)
         self.assertIn(";ordres_travail;%s;proposition IA utilisée (faux) : compte_rendu" % jeu["otId"], fichiers["journal"])
         for nom, contenu in fichiers.items():
             with self.subTest(fichier=nom):
