@@ -5440,9 +5440,13 @@ def etat_copie_externe_public(config):
 #      valeur par défaut du champ ; une table absente n'est pas créée ; une table à l'en-tête illisible (format 0), ou
 #      d'un format plus ancien qu'une réécriture ferait perdre en partie (structure abîmée, valeurs au-delà de
 #      l'en-tête, noms de colonnes en double), n'est jamais réécrite : laissée telle quelle et signalée ;
+#   3 bis. si le passage comprend l'étape qui crée reserves_controle (3→4) : les observations des contrôles sans
+#      réserve y sont reprises (reserves_du_passage, D183), décidées sur l'état lu au démarrage ; la table, créée ou
+#      complétée d'un coup, compte parmi les fichiers complétés de cette étape (console, journal) ;
 #   4. puis version_schema (parametres.csv, créé s'il manque) ; 5. puis une ligne de journal par étape (journal.csv),
 #      mêmes textes que le navigateur. Un fichier tenu par un autre programme (Excel, 423) arrête le passage : ce qui
-#      est écrit l'est en entier, version_schema n'avance pas, le démarrage suivant reprend (étapes idempotentes).
+#      est écrit l'est en entier, version_schema n'avance pas, le démarrage suivant reprend (étapes idempotentes ;
+#      3 bis avant 4 : version_schema au format 4 ⇒ reprise faite).
 # Données d'un format plus récent (version_schema > format courant, D169) : rien n'est écrit, et jusqu'au prochain
 # démarrage toute écriture de données est refusée (409, code « format_plus_recent ») ; les lectures et la sauvegarde
 # manuelle restent permises. L'état est gardé dans config.format_donnees et rendu par GET /api/info (« format »).
@@ -5705,6 +5709,41 @@ def ecrire_journal_du_format(config, lu, lignes):
     return True
 
 
+TABLE_DES_RESERVES = 'reserves_controle'
+TABLE_DES_CONTROLES = 'controles_reglementaires'
+
+
+def reserves_du_passage(lus, laissees):
+    """Phase « 3 bis » du passage (note de conception du format 4, §3.3 à §3.5 ; reprendreObservationsEnReserves de
+    js/donnees.js), sur l'état lu au démarrage (etat_des_fichiers : lus, et les tables laissées) : (en-tête, lignes)
+    de reserves_controle.csv à écrire d'un coup — ses lignes existantes, cellules telles quelles, puis les réserves
+    reprises (reserves_reprises) — ou None s'il n'y a rien à reprendre. Rien non plus si controles_reglementaires est
+    absent, illisible, abîmé ou à l'en-tête illisible, ni si reserves_controle est présent mais illisible, abîmé ou à
+    l'en-tête illisible ; absent ou vide : créé avec l'en-tête du format courant. Idempotente : un contrôle qui a déjà
+    une réserve ne reçoit rien."""
+    def relisible(table):                   # relisiblePourReprise : lisible, sans perte à la réécriture, en-tête lu
+        return table not in laissees and not lus[table]['pertes']
+
+    controles, reserves = lus.get(TABLE_DES_CONTROLES), lus.get(TABLE_DES_RESERVES)
+    if controles is None or not relisible(TABLE_DES_CONTROLES):
+        return None
+    if TABLE_DES_RESERVES in laissees or (reserves is not None and not relisible(TABLE_DES_RESERVES)):
+        return None
+    neuve = reserves is None or reserves['vide']
+    nouvelles = reserves_reprises(lignes_en_dictionnaires(controles), [] if neuve else lignes_en_dictionnaires(reserves))
+    if not nouvelles:
+        return None
+    if neuve:
+        entete, lignes = colonnes_du_format(TABLE_DES_RESERVES), []
+    else:
+        entete = list(reserves['entete'])
+        lignes = [cellules_alignees(cellules, len(entete)) for cellules in reserves['lignes']]
+    for nouvelle in nouvelles:              # colonnes nommées comme l'en-tête ; colonne inconnue : ''
+        cellules = {colonne_de_champ(entete, champ) or champ: cellule for champ, cellule in nouvelle.items()}
+        lignes.append([cellules.get(colonne, '') for colonne in entete])
+    return entete, lignes
+
+
 def noms_de_fichiers(tables):
     """« a.csv, b.csv » pour un message de la console."""
     return ', '.join(table + '.csv' for table in tables)
@@ -5806,11 +5845,20 @@ def passer_les_fichiers_au_format_courant(config, etat, public, suivi):
     etapes = etapes_du_passage(etat['depart'], {table: lus[table]['entete'] for table in lisibles})
     a_ecrire = [table for table in lisibles
                 if table != 'parametres' and any(table in etape['tables'] for etape in etapes)]
-    for table in a_ecrire + (['parametres'] if version_a_ecrire else []):
+    # 3 bis. Puis reserves_controle, si le passage comprend l'étape qui la crée et qu'il y a des réserves à reprendre
+    # (D183) : elle compte parmi les tables de cette étape (journal « fichiers complétés au format 4 : … »).
+    etape_des_reserves = next((etape for etape in etapes
+                               if etape['vers'] == premier_format_de_table(TABLE_DES_RESERVES)), None)
+    reprise = reserves_du_passage(lus, laissees) if etape_des_reserves else None
+    if reprise and TABLE_DES_RESERVES not in etape_des_reserves['tables']:
+        etape_des_reserves['tables'].append(TABLE_DES_RESERVES)
+    for table in a_ecrire + ([TABLE_DES_RESERVES] if reprise else []) + (['parametres'] if version_a_ecrire else []):
         if table == 'parametres':
             entete, lignes = parametres_au_format_courant(parametres)         # 4. version_schema
-        else:
+        elif table in a_ecrire:
             entete, lignes = table_au_format_courant(table, lus[table])
+        else:
+            entete, lignes = reprise                                            # 3 bis. reserves_controle
         try:
             with VERROU_ECRITURE:
                 ecrire_fichier_de_donnees(config, table, ecrire_tableau_csv(entete, lignes), sauvegarde_du_jour=False)
