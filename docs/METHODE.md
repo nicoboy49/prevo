@@ -46,7 +46,7 @@ The human validates: the requirements and every product decision; security-relat
 
 | Figure | Value | Source |
 |---|---|---|
-| Commits in the repository | 474, from 2026-10-19 to 2026-11-08 | `git rev-list --count v2.0.0` |
+| Commits in the repository | 476, from 2026-10-19 to 2026-11-08 | `git rev-list --count v2.0.0` |
 | Lot tags | 13 (`lot-1` to `lot-7`, `lot-3-bis`; `lot-i18n-1` to `lot-i18n-4` and `lot-i18n-6` for the multilingual work, whose Lot 5 comes next) | `git tag` |
 | Tests at the end of lot 1 | 411 | PILOTAGE.md §4 |
 | Tests at the end of lot 7 | 1,762 (full run: 39 minutes) | PILOTAGE.md §13 |
