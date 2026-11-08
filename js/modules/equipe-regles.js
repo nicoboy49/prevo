@@ -157,10 +157,108 @@ const Equipe = (() => {
       || UI.comparerTextes(texte(a.habilitation.intitule), texte(b.habilitation.intitule)));
   }
 
+  // ===========================================================================================
+  // 3. Types d'habilitation du catalogue (CS172, CS179) : règles pures, aucun texte affiché
+  // ===========================================================================================
+
+  /** Types du catalogue (CatalogueFR.habilitations) ; [] si le catalogue n'est pas chargé. */
+  function typesHabilitation() {
+    return (typeof CatalogueFR !== 'undefined' && CatalogueFR && Array.isArray(CatalogueFR.habilitations))
+      ? CatalogueFR.habilitations : [];
+  }
+
+  /** Ligne du catalogue d'identifiant H01 à H15 (casse et espaces ignorés), ou null. */
+  function typeHabilitation(id) {
+    const cle = texte(id).toUpperCase();
+    return (cle && typesHabilitation().find((type) => type.id === cle)) || null;
+  }
+
+  // Un type peut être passé comme ligne du catalogue ou comme identifiant.
+  function versType(type) {
+    return (type && typeof type === 'object') ? type : typeHabilitation(type);
+  }
+
+  /** Type d'une habilitation (par son catalogue_id), ou null. */
+  function typeDe(habilitation) {
+    return habilitation ? typeHabilitation(habilitation.catalogue_id) : null;
+  }
+
+  /**
+   * Intitulé proposé : la partie du type avant « – » (« CACES R489 »). Vide pour l'électricité :
+   * l'intitulé y est le symbole du titre (BR, B2V…), que le catalogue ne peut pas deviner.
+   */
+  function intitulePropose(type) {
+    const ligne = versType(type);
+    if (!ligne || ligne.famille === 'Électricité') return '';
+    return texte(ligne.type).split('–')[0].trim();
+  }
+
+  /** Valeurs proposées à la création d'après un type ; recyclage_mois vide si le type n'en a pas (H14). */
+  function valeursDepuisType(type) {
+    const ligne = versType(type);
+    if (!ligne) return { intitule: '', recyclage_mois: '', catalogue_id: '', nature_source: '' };
+    const mois = Number.isInteger(ligne.duree_mois) && ligne.duree_mois > 0 ? ligne.duree_mois : '';
+    return { intitule: intitulePropose(ligne), recyclage_mois: mois, catalogue_id: ligne.id, nature_source: texte(ligne.nature_source) };
+  }
+
+  /** Échéance proposée = obtention + recyclage (Controles.ajouterMois, cherché à l'appel) ; '' si inconnue. */
+  function echeanceProposee(obtention, recyclageMois) {
+    const mois = Number(recyclageMois);
+    const jour = dateIso(obtention);
+    if (!jour || !Number.isInteger(mois) || mois <= 0 || typeof Controles === 'undefined') return '';
+    return Controles.ajouterMois(jour, mois);
+  }
+
+  /** { propose, egal } : durée du type de l'habilitation et si son recyclage la suit (sans durée de type : rien à comparer). */
+  function recyclageDuType(habilitation) {
+    const type = typeDe(habilitation);
+    const propose = type && Number.isInteger(type.duree_mois) ? type.duree_mois : null;
+    if (propose === null) return { propose: null, egal: true };
+    return { propose, egal: Number(habilitation.recyclage_mois) === propose };
+  }
+
+  /** H14 : l'autorisation de conduite de l'employeur, distincte des CACES. */
+  function estAutorisationDeConduite(type) {
+    const ligne = versType(type);
+    return !!ligne && ligne.id === 'H14';
+  }
+
+  /** H06 à H13 : famille CACES. */
+  function estCaces(type) {
+    const ligne = versType(type);
+    return !!ligne && ligne.famille === 'CACES';
+  }
+
+  function compteVraiment(habilitation, jour) {
+    const statut = etatHabilitation(habilitation, jour).statut;
+    return statut === 'valide' || statut === 'à renouveler';
+  }
+
+  /**
+   * CACES valables d'un technicien (ceux qui comptent) quand aucune autorisation de conduite
+   * valable ne les accompagne : rappel CS179. → lignes d'habilitation ([] si une autorisation compte).
+   */
+  function cacesSansAutorisation(technicienId, aujourdhui) {
+    const jour = dateDuJour(aujourdhui);
+    const quiComptent = habilitationsQuiComptent(technicienId).filter((h) => compteVraiment(h, jour));
+    if (quiComptent.some((h) => estAutorisationDeConduite(typeDe(h)))) return [];
+    return quiComptent.filter((h) => estCaces(typeDe(h)));
+  }
+
+  /** CACES du technicien qui ont un justificatif (à reprendre pour l'autorisation), le plus récent d'abord. */
+  function justificatifsReprenables(technicienId) {
+    return Donnees.lignes('habilitations')
+      .filter((h) => texte(h.technicien_id) === texte(technicienId) && texte(h.justificatif) && estCaces(typeDe(h)))
+      .sort((a, b) => texte(b.date_obtention).localeCompare(texte(a.date_obtention)));
+  }
+
   return {
     STATUTS_HABILITATION,
     // règles pures (ARCHITECTURE.md §15.8)
     etatHabilitation, habilitationsQuiComptent, aRenouveler,
+    // types d'habilitation du catalogue (2.2)
+    typesHabilitation, typeHabilitation, typeDe, valeursDepuisType, intitulePropose, echeanceProposee,
+    recyclageDuType, estAutorisationDeConduite, estCaces, cacesSansAutorisation, justificatifsReprenables,
     // Usage interne au module (pas une API).
     interne: { texte, dateIso, dateDuJour, cleIntitule, estActif, nomComplet },
   };
