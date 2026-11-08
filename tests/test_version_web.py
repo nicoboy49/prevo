@@ -58,10 +58,11 @@ TITRE_DONNEES_DEMO = "Où sont les données de cette démo ?"
 NOTE_DONNEES_DEMO = ("Nulle part : elles vivent dans cette page et disparaissent quand vous la fermez. Sur votre "
                      "installation, ce sont des fichiers CSV sur votre PC, lisibles dans Excel.")
 ADRESSE_RELEASES = "https://github.com/nicoboy49/prevo/releases/latest"
-LISTE_BLANCHE_WEB = ["GUIDE.html", "css", "favicon.svg", "index.html", "js"]
+LISTE_BLANCHE_WEB = ["GUIDE.en.html", "GUIDE.html", "css", "favicon.svg", "index.html", "js"]
 DRAPEAU_DEPOT = "const VERSION_WEB = false;"
 DRAPEAU_WEB = "const VERSION_WEB = true;"
-CONTENU_RELEASE = ["FICHE_TECHNIQUE_CSV.md", "GUIDE.html", "LICENSE", "Lancer_GMAO.bat", "NOTICE", "README.md",
+CONTENU_RELEASE = ["FICHE_TECHNIQUE_CSV.md", "GUIDE.en.html", "GUIDE.html", "LICENSE", "Lancer_GMAO.bat", "NOTICE",
+                   "README.fr.md", "README.md",
                    "Reinitialiser_mot_de_passe.bat", "acces", "css", "favicon.svg", "index.html", "js", "lancer.sh",
                    "outils", "serveur.py"]
 # outils/ : seulement la liste des empreintes des binaires tiers (lot 7, §22.14), que serveur.py lit pour vérifier mkcert.
@@ -150,7 +151,7 @@ class TestConstructionDemoWeb(OutilsConstruction, unittest.TestCase):
     def test_construction_liste_blanche_seulement(self):
         sortie = self.dossier_demo_web()
         self.assertEqual(sorted(p.name for p in sortie.iterdir()), LISTE_BLANCHE_WEB)
-        attendus = sorted(["GUIDE.html", "favicon.svg", "index.html"] + fichiers_du_depot("css", "js"))
+        attendus = sorted(["GUIDE.en.html", "GUIDE.html", "favicon.svg", "index.html"] + fichiers_du_depot("css", "js"))
         self.assertEqual(sorted(p.relative_to(sortie).as_posix() for p in sortie.rglob("*") if p.is_file()), attendus)
         for nom in ("tests", "outils", "docs", "donnees", "serveur.py", "README.md", "Lancer_GMAO.bat"):
             self.assertFalse((sortie / nom).exists(), nom + " ne doit pas être dans la démo web")

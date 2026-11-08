@@ -29,7 +29,7 @@ suit le [versionnage sémantique](https://semver.org/lang/fr/).
   même compte retrouve l'écran et sa saisie, il reste à enregistrer (une autre personne ne la voit pas).
 - **Guide et documentation en anglais** : `GUIDE.en.html` (l'aide à l'écran et « À propos » ouvrent le guide de la
   langue), README, guide d'installation, feuille de route, guide de contribution (avec « Ajouter ou corriger une
-  langue »), politique de sécurité et code de conduite. La porte des téléphones montre ses illustrations en anglais.
+  langue »), politique de sécurité et code de conduite.
 - **Brouillons** : la déclaration d'un problème et le compte rendu d'un OT sont gardés au fur et à mesure dans le
   navigateur de l'appareil, pour le compte qui les a tapés : un téléphone resté en veille, dont la page se recharge,
   les retrouve. Rien n'est envoyé au serveur avant l'enregistrement ; le brouillon est effacé à l'enregistrement, ou

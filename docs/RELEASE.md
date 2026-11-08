@@ -17,8 +17,8 @@ git worktree remove ../prevo-v2.0.0-beta.2
 - `git worktree add` crée à côté du dépôt une copie exacte de l'étiquette, sans toucher au dossier de
   travail ; `git worktree remove` la supprime ensuite.
 - Le zip est écrit dans `dist/prevo-<version>.zip` (version lue dans la copie, `js/app.js`). Il ne
-  contient que l'application, les lanceurs, `GUIDE.html`, `README.md`, `LICENSE`, `NOTICE` et
-  `FICHE_TECHNIQUE_CSV.md` ; jamais les tests, les outils, `docs/` ni les données.
+  contient que l'application, les lanceurs, `GUIDE.html` et `GUIDE.en.html`, `README.md` et `README.fr.md`,
+  `LICENSE`, `NOTICE` et `FICHE_TECHNIQUE_CSV.md` ; jamais les tests, les outils, `docs/` ni les données.
 - Deux constructions de la même étiquette donnent exactement les mêmes octets.
 - Le script refuse une copie dont la version web est activée : la release n'est jamais la démo en
   ligne.
@@ -31,11 +31,11 @@ Cette section est la **seule source** des règles de `version.json` (décision d
 applique à chaque sortie.
 
 Le script écrit aussi `dist/version.json` à côté du zip : le numéro, la date, l'adresse de la release GitHub et
-les deux premières nouveautés du CHANGELOG de cette version. Prévo le lit (si le responsable l'a autorisé dans
-Paramètres, au plus une fois par jour et par poste, ARCHITECTURE.md §21) pour signaler la nouvelle version sur
-l'accueil du responsable et dans « À propos ». Prévo ne fait qu'une simple lecture du fichier : il n'envoie rien
-(ni identifiant, ni numéro d'installation, ni statistique, ni cookie), seulement sur le poste du responsable, jamais
-dans la démo en ligne.
+les deux premières nouveautés du CHANGELOG de cette version. Prévo le lit (activé par défaut depuis la 2.0.0,
+désactivable dans Paramètres › Mises à jour ; au plus une fois par jour et par poste, ARCHITECTURE.md §21) pour
+signaler la nouvelle version sur l'accueil du responsable et dans « À propos ». Prévo ne fait qu'une simple lecture
+du fichier : il n'envoie rien (ni identifiant, ni numéro d'installation, ni statistique, ni cookie, ni adresse de
+page), jamais dans la démo en ligne.
 
 ### À chaque release
 

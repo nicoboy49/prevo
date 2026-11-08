@@ -271,7 +271,8 @@ ses habilitations, les indicateurs et un rapport mensuel.</p>
   <li><b>Rien à installer</b>&nbsp;: Python est livré dans le zip. Un double-clic lance Prévo et son assistant
     d'installation, qui règle l'accès des postes et des téléphones en trois questions. Pour seulement regarder,
     Chrome ou Edge suffit (démo, mode dossier).</li>
-  <li><b>Tout est en français</b>, et chaque écran s'adapte au rôle de la personne&nbsp;: demandeur,
+  <li><b>En français ou en anglais</b>, au choix de chacun, et chaque écran s'adapte au rôle de la personne&nbsp;:
+    demandeur,
     technicien ou responsable. Au-delà du PC qui héberge Prévo, chaque personne a son compte et tout passe en
     https&nbsp;; les téléphones des demandeurs se reconnaissent par un QR d'invitation, sans mot de passe.</li>
 </ul>
@@ -405,7 +406,7 @@ conseillé à un atelier.</p>
 le VPN de l'entreprise, avec son propre certificat&nbsp;; chaque personne, demandeurs compris, a un compte. Après la
 première question, l'assistant lui montre toutes les étapes sur une page, sans rien d'automatique. Le détail
 (configuration, mandataires nginx, Caddy, IIS, Cloudflare Tunnel, services, comptes, journal, sauvegardes) est dans
-<code>docs/INSTALLATION.md</code>.</p>
+<code>docs/INSTALLATION.fr.md</code>.</p>
 
 <h3 id="pare-feu">2.6 Le pare-feu de Windows</h3>
 <p>Pour que les postes et les téléphones joignent le PC serveur, Windows doit laisser passer Prévo. Quand Prévo
@@ -1276,7 +1277,7 @@ remplacées par de vraies photos d'écran après la recette sur un Android et un
 porte sert sous le nom <code>prevo-ca.crt</code>). Vous pouvez à la place fournir votre propre certificat (deux
 fichiers PEM&nbsp;: étape «&nbsp;Certificat&nbsp;» de l'assistant, ou options <code>--certificat</code> et
 <code>--cle</code>)&nbsp;: les téléphones n'ont alors rien à reconnaître&nbsp;; ou laisser le https au mandataire
-inverse de l'entreprise (<code>docs/INSTALLATION.md</code>). Ne donnez jamais le fichier <code>rootCA-key.pem</code>&nbsp;:
+inverse de l'entreprise (<code>docs/INSTALLATION.fr.md</code>). Ne donnez jamais le fichier <code>rootCA-key.pem</code>&nbsp;:
 avec lui, quelqu'un pourrait fabriquer des certificats que vos appareils croiraient. Prévo ne le lit ni ne le sert.</p>
 
 <h3 id="confiance-android">8.4 Sur un téléphone Android</h3>
@@ -1439,7 +1440,7 @@ Python et doit rester installable par un atelier sans informaticien. Ce qui exis
     si vous le réglez ainsi)&nbsp;;</li>
   <li>l'<b>export du journal des connexions</b>, pour votre suivi&nbsp;;</li>
   <li>le <b>mandataire inverse</b> et le <b>VPN de l'entreprise</b>, pour mettre Prévo derrière vos propres contrôles
-    d'accès (<code>docs/INSTALLATION.md</code>).</li>
+    d'accès (<code>docs/INSTALLATION.fr.md</code>).</li>
 </ul>
 <p>Si un annuaire est indispensable chez vous, dites-le avant de choisir Prévo&nbsp;: ce n'est pas une case à cocher.</p>
 <a class="haut" href="#sommaire">Retour au sommaire</a>

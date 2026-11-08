@@ -1,7 +1,7 @@
 """Construit la démo en ligne de Prévo : dist/demo-web/ (brief de lancement, point 7 ; mise en ligne :
 docs/DEPLOIEMENT_DEMO.md).
 
-Le dossier produit ne contient que la liste blanche : index.html, favicon.svg, GUIDE.html, css/ et js/
+Le dossier produit ne contient que la liste blanche : index.html, favicon.svg, GUIDE.html, GUIDE.en.html, css/ et js/
 (jamais serveur.py, les lanceurs, les données, les tests ni les outils ; ni fichier caché ni cache
 Python). Dans SA copie de js/app.js, la constante VERSION_WEB passe de false à true : l'écran de
 démarrage ne propose alors que la démo et « Télécharger Prévo », et l'assistant IA reste visible sans
@@ -27,7 +27,7 @@ from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
 SORTIE_PAR_DEFAUT = RACINE / "dist" / "demo-web"
-FICHIERS = ["index.html", "favicon.svg", "GUIDE.html"]
+FICHIERS = ["index.html", "favicon.svg", "GUIDE.html", "GUIDE.en.html"]   # T338 : guide anglais
 DOSSIERS = ["css", "js"]
 LISTE_BLANCHE = FICHIERS + DOSSIERS
 FICHIER_DRAPEAU = Path("js") / "app.js"

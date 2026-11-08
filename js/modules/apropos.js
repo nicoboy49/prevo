@@ -153,7 +153,7 @@ const Apropos = (() => {
         </article>
         <article class="carte c6">
           <h2>${I18n.t('apropos.ecran.aide')}</h2>
-          <p>${I18n.html('apropos.ecran.ouvrir_guide_utilisation_demarrer')}</p>
+          <p>${I18n.html('apropos.ecran.ouvrir_guide_utilisation_demarrer', { guide: UI.adresseGuide() })}</p>
           <p id="apropos-suggestion">${lienSuggestion('apropos-suggestion-lien')} (<a id="apropos-suggestion-courriel" href="${adresseCourriel()}">${I18n.t('apropos.suggestion.lien_courriel')}</a>)</p>
           <p class="note">${I18n.t('apropos.suggestion.explication')}</p>
         </article>

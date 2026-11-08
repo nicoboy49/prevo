@@ -4106,7 +4106,7 @@ I18n.ajouter('fr', {
   'apropos.ecran.lire_texte_complet_licences': 'Lire le texte complet des licences',
   'apropos.ecran.lots_1_4_parc': 'Lots 1 à 4 : parc, demandes, ordres de travail, préventif et préventif suggéré, magasin, planning, contrôles réglementaires, équipe, indicateurs et rapport mensuel, assistant IA, dictée',
   'apropos.ecran.mise_jour': 'Mise à jour',
-  'apropos.ecran.ouvrir_guide_utilisation_demarrer': '<a href="GUIDE.html" target="_blank" rel="noopener">Ouvrir le guide d\'utilisation</a> : démarrer, chaque module, assistant IA, dictée, https, sauvegardes. Il s\'imprime.',
+  'apropos.ecran.ouvrir_guide_utilisation_demarrer': '<a href="{guide}" target="_blank" rel="noopener">Ouvrir le guide d\'utilisation</a> : démarrer, chaque module, assistant IA, dictée, https, sauvegardes. Il s\'imprime.',
   'apropos.ecran.prevo_gmao': 'Prévo — GMAO',
   'apropos.ecran.profils_adaptent_ecrans_pas': 'Les profils adaptent les écrans, ce n\'est pas une sécurité : n\'importe qui peut choisir le profil Responsable.',
   'apropos.ecran.propos_prevo': 'À propos de Prévo',

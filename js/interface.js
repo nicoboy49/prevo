@@ -246,6 +246,12 @@ const UI = (function () {
     return Number(texte);
   }
 
+  /** Guide d'utilisation de la langue active (T338) : GUIDE.html en français, GUIDE.en.html sinon (la seule autre
+   *  version du guide ; les langues de la 2.1 ouvrent aussi le guide anglais). */
+  function adresseGuide() {
+    return I18n.langue === 'fr' ? 'GUIDE.html' : 'GUIDE.en.html';
+  }
+
   /** '2026-03-15' (ou '2026-03-15 08:05') → '15/03/2026'. Valeur vide → ''. Autre format : rendu tel quel. */
   function dateFr(valeur) {
     if (valeur === null || valeur === undefined || valeur === '') return '';
@@ -1647,7 +1653,7 @@ const UI = (function () {
     // sélecteurs et HTML sûr
     $, $$, echapper, html, brut, estSur, remplir, element, identifiantUnique, normaliserRecherche, comparerTextes,
     // formats français
-    dateFr, dateHeureFr, nombreFr, euro, montant: euro, devise, deviseConnue, nomDevise, symboleDevise, heures, enNombre,
+    adresseGuide, dateFr, dateHeureFr, nombreFr, euro, montant: euro, devise, deviseConnue, nomDevise, symboleDevise, heures, enNombre,
     // badges, icônes, logo
     badgePriorite, badgeStatut, badgeValeur, icone, nomsIcones, logo,
     // notifications

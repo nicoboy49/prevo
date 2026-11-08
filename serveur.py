@@ -6,8 +6,9 @@ serveur.py — serveur local de la GMAO « Prévo ».
 Rôle : servir l'application (fichiers HTML/CSS/JS) et une petite API HTTP qui lit et écrit
 les fichiers CSV du dossier de données, les documents (photos, PDF…) et les sauvegardes.
 
-Fichiers servis (liste blanche) : « / » (= index.html), index.html, favicon.svg, GUIDE.html
-s'il existe, et tout ce qui est sous css/ et js/. Tout le reste du dossier (brief, README,
+Fichiers servis (liste blanche) : « / » (= index.html), index.html, favicon.svg, GUIDE.html et
+GUIDE.en.html (guide anglais, T338) s'ils existent, et tout ce qui est sous css/ et js/. Tout le
+reste du dossier (brief, README,
 docs/, tests/, outils/, serveur.py, lanceurs…) répond 404. L'option --servir-tests sert en
 plus tests/fixtures/ (pages utilisées par les tests automatiques).
 
@@ -277,7 +278,7 @@ TYPE_PAR_DEFAUT = 'application/octet-stream'
 # Liste blanche des fichiers statiques (ARCHITECTURE.md §14.7). Tout le reste répond 404.
 # Les noms sont en minuscules : la comparaison ignore la casse, car Windows (NTFS) ne
 # distingue pas « Index.html » de « index.html » ni « CSS/ » de « css/ ».
-FICHIERS_PUBLICS = ('index.html', 'favicon.svg', 'guide.html')     # à la racine seulement
+FICHIERS_PUBLICS = ('index.html', 'favicon.svg', 'guide.html', 'guide.en.html')   # à la racine seulement (T338 : guide anglais)
 DOSSIERS_PUBLICS = (('css',), ('js',), ('acces',))                   # avec tout leur contenu ; acces/ : la porte (§22.6)
 DOSSIER_FIXTURES = ('tests', 'fixtures')                             # seulement avec --servir-tests
 
@@ -7784,7 +7785,7 @@ class GestionnaireRequetes(http.server.BaseHTTPRequestHandler):
     # --- Fichiers statiques ------------------------------------------------
 
     def servir_statique(self, morceaux, entetes=None):
-        """Sert un fichier de la liste blanche (index.html, favicon.svg, GUIDE.html, css/, js/, acces/ ;
+        """Sert un fichier de la liste blanche (index.html, favicon.svg, GUIDE.html, GUIDE.en.html, css/, js/, acces/ ;
         tests/fixtures/ avec --servir-tests) et /acces/ca.crt (certificat public de l'autorité, §22.6). Jamais
         donnees/ ni les fichiers cachés. « entetes » : ceux de la porte ; sinon ceux de l'application."""
         if morceaux == ['']:
@@ -8037,7 +8038,7 @@ def afficher_accueil(config, port_demande, avertissements=()):
 def lire_arguments(arguments=None):
     analyseur = argparse.ArgumentParser(
         description='Serveur local de la GMAO Prévo. Sert index.html, favicon.svg, '
-                    'GUIDE.html, css/, js/ et acces/ (la porte d\'entrée) ; tout autre fichier répond 404.')
+                    'GUIDE.html, GUIDE.en.html, css/, js/ et acces/ (la porte d\'entrée) ; tout autre fichier répond 404.')
     analyseur.add_argument('--port', type=int, default=None,
                            help='port d\'écoute (défaut 8080 ; le suivant si occupé) ; sur le réseau, celui de la '
                                 'porte d\'entrée, l\'application étant en https sur « port_https » (8443)')

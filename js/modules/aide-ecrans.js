@@ -88,7 +88,7 @@ const AideEcrans = (() => {
       <p class="aide-ecran-essayez">${I18n.html('aide.encart.essayez', { essayez: c.essayez })}</p>
       <div class="aide-ecran-actions">
         <button type="button" class="btn btn-secondaire aide-ecran-compris">${I18n.t('aide.encart.compris')}</button>
-        <a class="aide-ecran-guide" href="GUIDE.html#${c.ancre}" target="_blank" rel="noopener">${I18n.html('aide.encart.en_savoir_plus')}</a>
+        <a class="aide-ecran-guide" href="${UI.adresseGuide()}#${c.ancre}" target="_blank" rel="noopener">${I18n.html('aide.encart.en_savoir_plus')}</a>
       </div>`);
     encart.id = ID_ENCART;
     encart.classList.add('aide-ecran');

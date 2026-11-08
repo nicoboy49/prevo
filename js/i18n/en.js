@@ -4108,7 +4108,7 @@ I18n.ajouter('en', {
   'apropos.ecran.lire_texte_complet_licences': 'Read the full text of the licences',
   'apropos.ecran.lots_1_4_parc': 'Phases 1 to 4: equipment register, requests, work orders, preventive maintenance and suggested preventive maintenance, stores, schedule, statutory inspections, team, indicators and monthly report, AI assistant, dictation',
   'apropos.ecran.mise_jour': 'Update',
-  'apropos.ecran.ouvrir_guide_utilisation_demarrer': '<a href="GUIDE.html" target="_blank" rel="noopener">Open the user guide</a>: getting started, each module, AI assistant, dictation, HTTPS, backups. It can be printed.',
+  'apropos.ecran.ouvrir_guide_utilisation_demarrer': '<a href="{guide}" target="_blank" rel="noopener">Open the user guide</a>: getting started, each module, AI assistant, dictation, HTTPS, backups. It can be printed.',
   'apropos.ecran.prevo_gmao': 'Prévo — CMMS',
   'apropos.ecran.profils_adaptent_ecrans_pas': 'Profiles adapt the screens, they are not a security measure: anyone can choose the Manager profile.',
   'apropos.ecran.propos_prevo': 'About Prévo',
