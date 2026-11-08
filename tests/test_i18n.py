@@ -66,7 +66,11 @@ ESPION_AVERTISSEMENTS_JS = "() => { window.avertissements = []; console.warn = (
                            "{ window.avertissements.push(morceaux.join(' ')); }; }"
 
 # Langue d'essai écrite dans la copie servie (jamais dans le dépôt) ; locale « pl » : catégories one, few, many, other.
-DECLARATION_ESSAI = "I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'pl', statut: 'automatique' });\n"
+DECLARATION_ESSAI = ("I18n.declarer({ code: 'xx', nom: 'Essai', locale: 'pl', statut: 'automatique' });\n"
+                     # T343 (D158) : langue d'essai sans aide longue, qui la prend en anglais (comme tr, it, pt-PT).
+                     "I18n.declarer({ code: 'yy', nom: 'Essai Y', locale: 'tr', statut: 'automatique', aide: 'en' });\n")
+FICHIER_ESSAI_Y = ("'use strict';\n// Langue d'essai « yy » de tests/test_i18n.py (copie servie seulement), aide longue en anglais.\n"
+                   "I18n.ajouter('yy', {\n  'essai.chargement': 'Texte de la langue d\\'essai Y',\n});\n")
 FICHIER_ESSAI = ("'use strict';\n// Langue d'essai de tests/test_i18n.py (copie servie seulement).\n"
                  "I18n.ajouter('xx', {\n  'essai.appliquer': 'Appliqué en xx',\n"
                  "  'essai.chargement': 'Texte de la langue d\\'essai',\n});\n")
@@ -110,6 +114,7 @@ def preparer_copie(racine):
         fichier.write(AJOUT_FR)
     (i18n / "xx.js").write_text(FICHIER_ESSAI, encoding="utf-8", newline="\n")
     (i18n / "aide" / "xx.js").write_text(AIDE_ESSAI, encoding="utf-8", newline="\n")
+    (i18n / "yy.js").write_text(FICHIER_ESSAI_Y, encoding="utf-8", newline="\n")     # sans aide/yy.js (D158)
     (racine / "js" / "sonde-i18n.js").write_text(SONDE, encoding="utf-8", newline="\n")
     page = (racine / "index.html").read_text(encoding="utf-8")
     schema = '<script src="js/schema.js"></script>'
@@ -329,6 +334,38 @@ class TestMoteur(CasNavigateur):
         self.assertEqual(resultat["absente"], "aide.essai.absente")
         self.assertEqual(len(self.avertissements()), 1)
 
+    def test_aide_prise_dans_la_langue_que_la_declaration_designe(self):
+        """T343 (D158) : « aide: 'en' » → clés aide.* prises en anglais, sans avertissement, avant le français ; une clé
+        aide.* traduite dans la langue active passe avant ; « aide » invalide (français, non déclarée, elle-même) →
+        repli habituel sur le français ; les autres clés ne passent jamais par l'anglais."""
+        self.ouvrir()
+        resultat = self.page.evaluate("""() => {
+          I18n.ajouter('fr', { 'aide.essai.texte': 'Aide française', 'aide.essai.propre': 'Propre en français',
+                               'aide.essai.seulement_fr': 'Seulement en français', 'essai.ecran': 'Écran français' });
+          I18n.declarer({ code: 'en', nom: 'English', locale: 'en-GB', statut: 'complete' });
+          I18n.ajouter('en', { 'aide.essai.texte': 'English help', 'aide.essai.propre': 'Own in English',
+                               'essai.ecran': 'English screen' });
+          I18n.declarer({ code: 'yy', nom: 'Y', locale: 'tr', statut: 'automatique', aide: 'en' });
+          I18n.ajouter('yy', { 'aide.essai.propre': 'Kendi yardımı' });
+          const repli = [];
+          for (const aide of ['fr', 'zz', 'yy', false]) {
+            I18n.declarer({ code: 'ww', nom: 'W', locale: 'tr', statut: 'automatique', aide });
+            repli.push(I18n.langueDeLAide('ww'));
+          }
+          I18n.choisir('yy');
+          const avant = window.avertissements.length;
+          const textes = [I18n.t('aide.essai.texte'), I18n.t('aide.essai.propre'), I18n.t('aide.essai.seulement_fr')];
+          const apresAide = window.avertissements.length;
+          const ecran = I18n.t('essai.ecran');
+          return { langue: I18n.langueDeLAide('yy'), repli, textes, avant, apresAide, ecran };
+        }""")
+        self.assertEqual(resultat["langue"], "en")
+        self.assertEqual(resultat["repli"], [None, None, "yy", None])
+        self.assertEqual(resultat["textes"], ["English help", "Kendi yardımı", "Seulement en français"])
+        self.assertEqual(resultat["apresAide"], resultat["avant"])              # aide.* : aucun avertissement
+        self.assertEqual(resultat["ecran"], "Écran français")                   # hors aide.* : jamais l'anglais
+        self.assertEqual(len(self.avertissements()), 1)                         # la clé d'écran absente en « yy »
+
     def test_html_balisage_garde_valeurs_echappees_pour_ui(self):
         self.ouvrir("js/interface.js")
         resultat = self.page.evaluate("""() => {
@@ -497,6 +534,36 @@ class TestChargement(CasNavigateur):
             # L'ordre d'exécution est prouvé par la sonde ; celui des requêtes ne dit rien (le navigateur lit en avance).
             charges = {url.split("/js/", 1)[1] for url in requetes if "/js/" in url}
             self.assertTrue({"i18n/xx.js", "i18n/aide/xx.js"} <= charges, charges)
+
+    def test_langue_sans_aide_longue_charge_l_anglais_et_l_affiche(self):
+        """T343 (D158) : langue « yy » déclarée avec aide: 'en' (comme tr, it, pt-PT) : yy.js, en.js et aide/en.js chargés,
+        jamais aide/yy.js ; une clé de l'aide longue s'affiche en anglais ; une ligne d'information dans la console."""
+        self.autoriser_erreur(ERREUR_PING_ABSENT)
+        page = self.page
+        requetes, infos = [], []
+        page.on("request", lambda requete: requetes.append(requete.url))
+        page.on("console", lambda message: infos.append(message.text) if message.type == "info" else None)
+        with ServeurStatique(self.dossier) as statique:
+            page.goto(statique.url + "/index.html")
+            self.attendre_etat(page, "demarrage")
+            page.evaluate("localStorage.setItem('prevo.langue', 'yy')")
+            requetes.clear()
+            page.reload()
+            self.attendre_etat(page, "demarrage")
+            etat = page.evaluate("""() => {
+              const cle = 'aide.ecran.accueil.titre';
+              return { langue: I18n.langue, texte: I18n.t('essai.chargement'), aide: I18n.t(cle),
+                       anglais: I18n.enLangue('en', () => I18n.t(cle)), francais: I18n.reference(cle) };
+            }""")
+            page.evaluate("localStorage.removeItem('prevo.langue')")
+        charges = {url.split("/js/", 1)[1] for url in requetes if "/js/i18n/" in url}
+        self.assertEqual(etat["langue"], "yy")
+        self.assertEqual(etat["texte"], "Texte de la langue d'essai Y")
+        self.assertTrue({"i18n/yy.js", "i18n/en.js", "i18n/aide/en.js"} <= charges, charges)
+        self.assertNotIn("i18n/aide/yy.js", charges)
+        self.assertEqual(etat["aide"], etat["anglais"])
+        self.assertNotEqual(etat["aide"], etat["francais"])
+        self.assertIn("Prévo : pas d'aide longue en « yy » ; elle s'affiche en « en ».", infos)
 
     def test_langue_d_essai_prise_avant_le_schema_en_file(self):
         self.contexte.add_init_script("try { localStorage.setItem('prevo.langue', 'xx'); } catch (erreur) {}")

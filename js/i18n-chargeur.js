@@ -86,13 +86,23 @@
   const dossier = script.src.replace(/[?#].*$/, '').replace(/[^/]*$/, '') + 'i18n/';
   let balises = '';
   let avecAide = true;
+  let aideDans = null;
+  const ecrits = new Set();
+  const charger = (fichier) => { if (!ecrits.has(fichier)) { ecrits.add(fichier); balises += balise(dossier + fichier); } };
   if (code !== LANGUE_DE_REFERENCE) {
-    avecAide = I18n.langues.find((langue) => langue.code === code).aide !== false;
+    // « aide: '<code>' » (D158, Lot 5 : tr, it, pt-PT → anglais) : pas d'aide longue dans cette langue ; les deux
+    // fichiers de l'autre langue sont chargés (son dictionnaire entier aussi : I18n le croirait complet sinon).
+    aideDans = I18n.langueDeLAide(code);
+    avecAide = !aideDans && I18n.langues.find((langue) => langue.code === code).aide !== false;
     I18n.choisir(code);
-    balises += balise(dossier + code + '.js') + (avecAide ? balise(dossier + 'aide/' + code + '.js') : '');
+    charger(code + '.js');
+    if (avecAide) charger('aide/' + code + '.js');
+    if (aideDans) { charger(aideDans + '.js'); charger('aide/' + aideDans + '.js'); }
   }
-  if (installation !== LANGUE_DE_REFERENCE && installation !== code) balises += balise(dossier + installation + '.js');
+  if (installation !== LANGUE_DE_REFERENCE && installation !== code) charger(installation + '.js');
   if (balises) document.write(balises);
-  // Langue sans aide longue traduite (« aide: false » dans langues.js) : une seule ligne, une fois (T308, Nicolas).
-  if (!avecAide) console.info('Prévo : pas d\'aide longue en « ' + code + ' » ; elle s\'affiche en français.');
+  // Langue sans aide longue traduite : une seule ligne, une fois (T308, Nicolas) ; en français (« aide: false ») ou
+  // dans la langue que la déclaration désigne.
+  if (aideDans) console.info('Prévo : pas d\'aide longue en « ' + code + ' » ; elle s\'affiche en « ' + aideDans + ' ».');
+  else if (!avecAide) console.info('Prévo : pas d\'aide longue en « ' + code + ' » ; elle s\'affiche en français.');
 })();
